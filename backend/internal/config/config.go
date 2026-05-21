@@ -49,7 +49,7 @@ type ProtectConfig struct {
 
 type TranslateConfig struct {
 	Concurrency     int         `yaml:"concurrency"`
-	BatchSize       int         `yaml:"batch_size"`        // 一次合并发送的段数；<=1 表示禁用批量
+	BatchSize       int         `yaml:"batch_size"` // 一次合并发送的段数；<=1 表示禁用批量
 	RateLimitPerSec int         `yaml:"rate_limit_per_sec"`
 	Retry           RetryConfig `yaml:"retry"`
 }
@@ -113,7 +113,7 @@ func Default() *Config {
 				"base_url":        "https://api.openai.com/v1",
 				"model":           "gpt-4o-mini",
 				"temperature":     0.2,
-				"max_tokens":      2048,
+				"max_tokens":      0,
 				"timeout":         "60s",
 				"response_format": "json_schema",
 			},

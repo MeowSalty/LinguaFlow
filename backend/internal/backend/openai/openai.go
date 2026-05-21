@@ -143,7 +143,7 @@ func factory(opts map[string]any) (backend.Backend, error) {
 		client:         openaigo.NewClient(clientOpts...),
 		model:          stringOpt(opts, "model", "gpt-4o-mini"),
 		temperature:    float64Opt(opts, "temperature", 0.2),
-		maxTokens:      int64Opt(opts, "max_tokens", 2048),
+		maxTokens:      int64Opt(opts, "max_tokens", 0),
 		responseFormat: rf,
 	}
 	if t, err := durationOpt(opts, "timeout", 60*time.Second); err == nil {

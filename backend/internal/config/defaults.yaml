@@ -19,7 +19,7 @@ backends:
       base_url: https://api.openai.com/v1   # 改为 Ollama / 自定义网关只需换 URL
       model: gpt-4o-mini
       temperature: 0.2
-      max_tokens: 2048
+      max_tokens: 2048                      # 若为 0 或移除该项，则由 API 自行决定
       timeout: 60s
       response_format: json_schema          # json_schema | json_object | none（本地网关不支持时设 none）
   # - name: ollama-local
