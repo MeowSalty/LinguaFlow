@@ -49,6 +49,48 @@ func TestTerminal_NoTotalSkipsBar(t *testing.T) {
 	}
 }
 
+func TestTerminal_TickerRedrawsWithoutSegments(t *testing.T) {
+	var buf bytes.Buffer
+	// 用 5ms ticker 让 250ms 窗口内能触发若干次重绘；
+	// 实际写入次数受 progressbar 80ms throttle 限制，理论上限 ~3 次。
+	r := newTerminalWithInterval(&buf, 5*time.Millisecond)
+	r.StageStart("translate", 100)
+	time.Sleep(250 * time.Millisecond) // 故意不调 SegmentDone
+	_ = r.Close()
+
+	// StageStart 一次写入 + 至少 1 次 ticker 触发的重绘 = ≥ 2 次出现 "translate"。
+	if got := bytes.Count(buf.Bytes(), []byte("translate")); got < 2 {
+		t.Errorf("expected >=2 redraws containing stage name, got %d in %q", got, buf.String())
+	}
+}
+
+func TestTerminal_CloseStopsTicker(t *testing.T) {
+	var buf bytes.Buffer
+	r := newTerminalWithInterval(&buf, 5*time.Millisecond)
+	r.StageStart("x", 10)
+	_ = r.Close()
+	n := buf.Len()
+	time.Sleep(50 * time.Millisecond)
+	// Close 后 ticker 应已退出，buf 不再增长。
+	if got := buf.Len(); got != n {
+		t.Errorf("buf grew after Close: before=%d after=%d", n, got)
+	}
+}
+
+func TestTerminal_NoTotalTickerSilent(t *testing.T) {
+	var buf bytes.Buffer
+	r := newTerminalWithInterval(&buf, 5*time.Millisecond)
+	r.StageStart("split", 0) // total<=0：不创建 bar，ticker 应空转
+	time.Sleep(40 * time.Millisecond)
+	afterStart := buf.Len()
+	_ = r.Close()
+	// 等待区间内不应有任何 bar 重绘输出；唯一写入是 StageStart 的提示行。
+	if afterStart != len("▶ split\n") {
+		t.Errorf("unexpected buf len after sleep: got %d, want %d, buf=%q",
+			afterStart, len("▶ split\n"), buf.String())
+	}
+}
+
 func TestLog_EmitsByCount(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))

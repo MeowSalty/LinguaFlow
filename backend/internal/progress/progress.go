@@ -31,12 +31,19 @@ type Reporter interface {
 type Nop struct{}
 
 func (Nop) StageStart(string, int) {}
-func (Nop) SegmentDone()            {}
-func (Nop) StageDone()              {}
-func (Nop) Close() error            { return nil }
+func (Nop) SegmentDone()           {}
+func (Nop) StageDone()             {}
+func (Nop) Close() error           { return nil }
+
+// defaultRefreshEvery 是 refreshLoop 周期重绘的默认间隔。
+// 选 250ms：> progressbar 内部 80ms throttle，且足够让 elapsed time 看起来连续。
+const defaultRefreshEvery = 250 * time.Millisecond
 
 // terminalReporter 通过 schollz/progressbar/v3 在 TTY 上渲染单条进度条。
 // 同一时刻至多一条 bar；StageStart 切换阶段时会 Finish 上一条。
+//
+// 额外起一个 refreshLoop goroutine 以 refreshEvery 周期调 bar.Add(0)
+// 强制重绘，避免在长时间无 SegmentDone 时 elapsed time 静止不动。
 type terminalReporter struct {
 	w  io.Writer
 	mu sync.Mutex
@@ -44,11 +51,28 @@ type terminalReporter struct {
 	bar *progressbar.ProgressBar
 	// stageName 用于诊断与渲染描述。
 	stageName string
+
+	refreshEvery time.Duration
+	done         chan struct{}
+	wg           sync.WaitGroup
+	closeOnce    sync.Once
 }
 
 // NewTerminal 创建终端进度条 Reporter。w 通常是 os.Stderr。
 func NewTerminal(w io.Writer) Reporter {
-	return &terminalReporter{w: w}
+	return newTerminalWithInterval(w, defaultRefreshEvery)
+}
+
+// newTerminalWithInterval 是 NewTerminal 的内部入口，仅供测试注入小 interval。
+func newTerminalWithInterval(w io.Writer, every time.Duration) *terminalReporter {
+	r := &terminalReporter{
+		w:            w,
+		refreshEvery: every,
+		done:         make(chan struct{}),
+	}
+	r.wg.Add(1)
+	go r.refreshLoop()
+	return r
 }
 
 func (r *terminalReporter) StageStart(name string, total int) {
@@ -94,10 +118,38 @@ func (r *terminalReporter) StageDone() {
 }
 
 func (r *terminalReporter) Close() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.finishLocked()
+	r.closeOnce.Do(func() {
+		close(r.done)
+		r.wg.Wait()
+		r.mu.Lock()
+		r.finishLocked()
+		r.mu.Unlock()
+	})
 	return nil
+}
+
+// refreshLoop 周期性强制重绘进度条，避免长时间无 SegmentDone 时画面冻结。
+// 锁序：先持 r.mu 取 bar 引用，释锁后再调 bar.Add，避免与库内部锁嵌套。
+func (r *terminalReporter) refreshLoop() {
+	defer r.wg.Done()
+	t := time.NewTicker(r.refreshEvery)
+	defer t.Stop()
+	for {
+		select {
+		case <-r.done:
+			return
+		case <-t.C:
+			r.mu.Lock()
+			bar := r.bar
+			r.mu.Unlock()
+			if bar == nil {
+				continue
+			}
+			// Add(0) 因 OptionShowCount/OptionShowIts 开启而走 render 路径；
+			// bar 已 Finish 时库内 state.finished 守卫使 render 早退。
+			_ = bar.Add(0)
+		}
+	}
 }
 
 // finishLocked 关闭当前 bar；调用前需持有 r.mu。
