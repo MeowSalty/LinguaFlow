@@ -15,11 +15,12 @@ import (
 
 // appCtx 持有全局可变项：日志、配置路径，由子命令读取。
 type appCtx struct {
-	configPath string
-	logLevel   string
-	logFormat  string
-	verbose    bool
-	logger     *slog.Logger
+	configPath   string
+	logLevel     string
+	logFormat    string
+	verbose      bool
+	progressMode string // auto | bar | log | none
+	logger       *slog.Logger
 }
 
 func newRoot() (*cobra.Command, *appCtx) {
@@ -44,6 +45,7 @@ func newRoot() (*cobra.Command, *appCtx) {
 	root.PersistentFlags().StringVar(&rt.logLevel, "log-level", "info", "日志级别 debug|info|warn|error")
 	root.PersistentFlags().StringVar(&rt.logFormat, "log-format", "text", "日志格式 text|json")
 	root.PersistentFlags().BoolVarP(&rt.verbose, "verbose", "v", false, "等同于 --log-level=debug")
+	root.PersistentFlags().StringVar(&rt.progressMode, "progress", "auto", "进度反馈 auto|bar|log|none")
 
 	root.AddCommand(newTranslateCmd(rt))
 	root.AddCommand(newInitCmd())

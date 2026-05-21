@@ -14,6 +14,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline/stages"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
@@ -23,14 +24,19 @@ import (
 type Engine struct {
 	cfg      *config.Config
 	logger   *slog.Logger
+	reporter progress.Reporter
 	selector backend.Selector
 	renderer *prompt.Renderer
 }
 
-// New 按配置构造 Engine。失败时返回 (nil, error)。
-func New(cfg *config.Config, logger *slog.Logger) (*Engine, error) {
+// New 按配置构造 Engine。reporter 可为 nil（fallback 为 progress.Nop）。
+// 失败时返回 (nil, error)。
+func New(cfg *config.Config, logger *slog.Logger, reporter progress.Reporter) (*Engine, error) {
 	if logger == nil {
 		logger = slog.Default()
+	}
+	if reporter == nil {
+		reporter = progress.Nop{}
 	}
 	sel, err := backend.NewSelector(cfg.Backends)
 	if err != nil {
@@ -41,7 +47,7 @@ func New(cfg *config.Config, logger *slog.Logger) (*Engine, error) {
 		_ = sel.Close()
 		return nil, err
 	}
-	return &Engine{cfg: cfg, logger: logger, selector: sel, renderer: rend}, nil
+	return &Engine{cfg: cfg, logger: logger, reporter: reporter, selector: sel, renderer: rend}, nil
 }
 
 // Close 释放后端连接。
@@ -79,7 +85,11 @@ func (e *Engine) Translate(ctx context.Context, job TranslateJob) error {
 	}
 
 	e.logger.Info("parsed document",
-		"path", job.InputPath, "format", doc.Format, "segments", len(doc.Segments))
+		"path", job.InputPath,
+		"format", doc.Format,
+		"segments", len(doc.Segments),
+		"source_lang", doc.SourceLang,
+		"target_lang", doc.TargetLang)
 
 	pipe := e.buildPipeline()
 	e.logger.Info("pipeline start", "stages", stageNames(pipe.Stages()))
@@ -125,6 +135,7 @@ func (e *Engine) buildPipeline() *pipeline.Pipeline {
 		Concurrency: pc.Translate.Concurrency,
 		BatchSize:   pc.Translate.BatchSize,
 		Logger:      e.logger,
+		Reporter:    e.reporter,
 	})
 	if pc.Protect.Enabled {
 		s = append(s, stages.NewUnprotect(protector))

@@ -12,6 +12,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
@@ -24,6 +25,7 @@ import (
 //   - 批量翻译（BatchSize > 1 时把多段拼成一次 LLM 调用）
 //   - 占位符完整性校验 + 单段补救重试
 //   - 单段失败时保留原文 + warn 日志，不阻塞整体
+//   - 段级进度上报（Reporter；nil 时 fallback 为 progress.Nop）
 //
 // 协议：user message 是 JSON envelope（见 prompt 包），模型回复 {"translations":{"<id>":"<text>"}}。
 type Translate struct {
@@ -36,9 +38,18 @@ type Translate struct {
 	Concurrency int
 	BatchSize   int // <=1 表示禁用批量
 	Logger      *slog.Logger
+	Reporter    progress.Reporter
 }
 
 func (*Translate) Name() string { return "translate" }
+
+// reporter 返回非 nil 的 progress.Reporter；Reporter 字段为空时回退 Nop。
+func (s *Translate) reporter() progress.Reporter {
+	if s.Reporter == nil {
+		return progress.Nop{}
+	}
+	return s.Reporter
+}
 
 func (s *Translate) Run(ctx context.Context, doc *pipeline.Document) error {
 	logger := s.Logger
@@ -72,6 +83,16 @@ func (s *Translate) Run(ctx context.Context, doc *pipeline.Document) error {
 		end := min(i+bs, len(pending))
 		batches = append(batches, pending[i:end])
 	}
+
+	logger.Info("translating",
+		"segments", len(pending),
+		"batches", len(batches),
+		"concurrency", s.Concurrency,
+		"batch_size", bs)
+
+	rep := s.reporter()
+	rep.StageStart("translate", len(pending))
+	defer rep.StageDone()
 
 	return runConcurrent(ctx, len(batches), s.Concurrency, func(ctx context.Context, bidx int) error {
 		return s.processBatch(ctx, doc, batches[bidx], logger)
@@ -155,18 +176,21 @@ func (s *Translate) processBatch(ctx context.Context, doc *pipeline.Document, id
 		"completion_tokens", resp.Usage.CompletionTokens)
 
 	// 写回并对每段做占位符校验；缺失的段单独补救（走 translateSingle 的 S5 路径）。
+	rep := s.reporter()
 	for k, idx := range idxs {
 		seg := &doc.Segments[idx]
 		seg.Target = trans[wantIDs[k]]
 		if missing := protect.MissingPlaceholders(seg); len(missing) > 0 {
 			logger.Warn("batch segment placeholders missing, single-retry",
 				"seg", seg.ID, "missing", missing)
+			// translateSingle 内部会在结束时上报本段进度；此处不发，避免双计数。
 			if err := s.translateSingle(ctx, doc, idx, logger); err != nil {
 				return err
 			}
 			continue
 		}
 		s.addTM(ctx, doc, seg, logger)
+		rep.SegmentDone()
 	}
 	return nil
 }
@@ -182,7 +206,15 @@ func (s *Translate) fallbackSingles(ctx context.Context, doc *pipeline.Document,
 }
 
 // translateSingle 翻译单段（走 JSON 协议，含 S5 占位符补救）。
-func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document, idx int, logger *slog.Logger) error {
+// 任何 return nil 路径都表示这段处理结束（无论译完、保留原文，还是补救失败），
+// 因此函数末尾通过 defer 上报一次进度；返回非 nil error 则不计入进度（stage 终止）。
+func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document, idx int, logger *slog.Logger) (retErr error) {
+	defer func() {
+		if retErr == nil {
+			s.reporter().SegmentDone()
+		}
+	}()
+
 	seg := &doc.Segments[idx]
 
 	if s.Limiter != nil {

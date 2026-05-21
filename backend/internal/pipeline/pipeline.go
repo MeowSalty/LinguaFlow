@@ -26,11 +26,11 @@ func (p *Pipeline) Run(ctx context.Context, doc *Document) error {
 			return ctx.Err()
 		default:
 		}
-		p.logger.Debug("stage start", "stage", s.Name(), "segments", len(doc.Segments))
+		p.logger.Info("stage start", "stage", s.Name(), "segments", len(doc.Segments))
 		if err := s.Run(ctx, doc); err != nil {
 			return fmt.Errorf("stage %q: %w", s.Name(), err)
 		}
-		p.logger.Debug("stage done", "stage", s.Name())
+		p.logger.Info("stage done", "stage", s.Name())
 	}
 	return nil
 }
