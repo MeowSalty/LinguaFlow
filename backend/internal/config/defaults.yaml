@@ -42,6 +42,7 @@ pipeline:
   translate:
     concurrency: 4
     batch_size: 1                           # >1 时把多段合并为一次 LLM 调用，吞吐显著提升
+    fallback_shrink: 0.5                    # 整批失败时下一级 batch = floor(cur*shrink) 并发重试；0 = 直接降到单段
     rate_limit_per_sec: 5
     retry:
       max_attempts: 3

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"math"
 	"strconv"
 	"strings"
 
@@ -23,22 +24,24 @@ import (
 //   - 令牌桶限速（Limiter）
 //   - 指数退避重试（Retry）
 //   - 批量翻译（BatchSize > 1 时把多段拼成一次 LLM 调用）
+//   - 批失败时按 FallbackShrink 系数递归缩小子批并发重试（直到收敛到单段）
 //   - 占位符完整性校验 + 单段补救重试
 //   - 单段失败时保留原文 + warn 日志，不阻塞整体
 //   - 段级进度上报（Reporter；nil 时 fallback 为 progress.Nop）
 //
 // 协议：user message 是 JSON envelope（见 prompt 包），模型回复 {"translations":{"<id>":"<text>"}}。
 type Translate struct {
-	Selector    backend.Selector
-	Renderer    *prompt.Renderer
-	Glossary    glossary.Glossary
-	TM          tm.TranslationMemory
-	Limiter     backend.RateLimiter
-	Retry       backend.RetryPolicy
-	Concurrency int
-	BatchSize   int // <=1 表示禁用批量
-	Logger      *slog.Logger
-	Reporter    progress.Reporter
+	Selector       backend.Selector
+	Renderer       *prompt.Renderer
+	Glossary       glossary.Glossary
+	TM             tm.TranslationMemory
+	Limiter        backend.RateLimiter
+	Retry          backend.RetryPolicy
+	Concurrency    int
+	BatchSize      int     // <=1 表示禁用批量
+	FallbackShrink float64 // (0,1) 启用递归缩小；0 表示失败后直接降到单段
+	Logger         *slog.Logger
+	Reporter       progress.Reporter
 }
 
 func (*Translate) Name() string { return "translate" }
@@ -95,13 +98,13 @@ func (s *Translate) Run(ctx context.Context, doc *pipeline.Document) error {
 	defer rep.StageDone()
 
 	return runConcurrent(ctx, len(batches), s.Concurrency, func(ctx context.Context, bidx int) error {
-		return s.processBatch(ctx, doc, batches[bidx], logger)
+		return s.processBatchAtSize(ctx, doc, batches[bidx], bs, logger)
 	})
 }
 
-// processBatch 处理一批 idx。len==1 或 BatchSize<=1 时走单段路径；
-// 否则尝试批量发送，失败则降级为顺序单段。
-func (s *Translate) processBatch(ctx context.Context, doc *pipeline.Document, idxs []int, logger *slog.Logger) error {
+// processBatchAtSize 处理一批 idx（len(idxs) <= curSize）。len==1 或 BatchSize<=1 时走单段路径；
+// 否则尝试批量发送，失败时按 FallbackShrink 缩小子批并发递归，直到收敛到单段。
+func (s *Translate) processBatchAtSize(ctx context.Context, doc *pipeline.Document, idxs []int, curSize int, logger *slog.Logger) error {
 	if len(idxs) == 1 || s.BatchSize <= 1 {
 		return s.translateSingle(ctx, doc, idxs[0], logger)
 	}
@@ -157,17 +160,17 @@ func (s *Translate) processBatch(ctx context.Context, doc *pipeline.Document, id
 		return rerr
 	})
 	if err != nil {
-		logger.Warn("batch translate failed, falling back to single-segment",
+		logger.Warn("batch translate failed, shrinking or falling back",
 			"backend", b.Name(), "batch_size", len(idxs), "err", err)
-		return s.fallbackSingles(ctx, doc, idxs, logger)
+		return s.shrinkOrFallback(ctx, doc, idxs, curSize, logger)
 	}
 
 	trans, perr := parseBatchResponse(resp.Text, wantIDs)
 	if perr != nil {
-		logger.Warn("batch response parse failed, falling back to single-segment",
+		logger.Warn("batch response parse failed, shrinking or falling back",
 			"backend", b.Name(), "batch_size", len(idxs), "err", perr,
 			"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200))
-		return s.fallbackSingles(ctx, doc, idxs, logger)
+		return s.shrinkOrFallback(ctx, doc, idxs, curSize, logger)
 	}
 
 	logger.Debug("batch translated",
@@ -193,6 +196,45 @@ func (s *Translate) processBatch(ctx context.Context, doc *pipeline.Document, id
 		rep.SegmentDone()
 	}
 	return nil
+}
+
+// shrinkOrFallback 根据 FallbackShrink 决定：
+//   - 缩小到 >=2 的子批并发递归（每个子批又可能继续缩小）
+//   - 否则坍缩到 fallbackSingles（顺序单段）
+func (s *Translate) shrinkOrFallback(ctx context.Context, doc *pipeline.Document, idxs []int, curSize int, logger *slog.Logger) error {
+	nextSize := shrinkNext(curSize, s.FallbackShrink)
+	if nextSize < 2 {
+		return s.fallbackSingles(ctx, doc, idxs, logger)
+	}
+	var sub [][]int
+	for i := 0; i < len(idxs); i += nextSize {
+		end := min(i+nextSize, len(idxs))
+		sub = append(sub, idxs[i:end])
+	}
+	logger.Info("shrinking batch and retrying",
+		"from", curSize, "to", nextSize, "sub_batches", len(sub), "shrink", s.FallbackShrink)
+	return runConcurrent(ctx, len(sub), s.Concurrency, func(ctx context.Context, bidx int) error {
+		return s.processBatchAtSize(ctx, doc, sub[bidx], nextSize, logger)
+	})
+}
+
+// shrinkNext 计算下一级 batch 大小。
+//   - shrink <= 0 或 NaN/Inf：返回 0（调用方据此走 fallbackSingles）
+//   - shrink >= 1：返回 0（Validate 本应已拦截，但保险起见）
+//   - 否则 next = floor(cur * shrink)；若 >= cur 则强制 cur-1，避免不收敛
+//   - next < 2 也返回 0（再缩等同单段，由调用方坍缩处理）
+func shrinkNext(cur int, shrink float64) int {
+	if shrink <= 0 || shrink >= 1 || math.IsNaN(shrink) || math.IsInf(shrink, 0) {
+		return 0
+	}
+	next := int(math.Floor(float64(cur) * shrink))
+	if next >= cur {
+		next = cur - 1
+	}
+	if next < 2 {
+		return 0
+	}
+	return next
 }
 
 // fallbackSingles 顺序对 idxs 中每段调 translateSingle。

@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"fmt"
+	"math"
+	"time"
+)
 
 // Config 是 LinguaFlow 的根配置。字段顺序与 linguaflow.example.yaml 对齐。
 type Config struct {
@@ -49,7 +53,8 @@ type ProtectConfig struct {
 
 type TranslateConfig struct {
 	Concurrency     int         `yaml:"concurrency"`
-	BatchSize       int         `yaml:"batch_size"` // 一次合并发送的段数；<=1 表示禁用批量
+	BatchSize       int         `yaml:"batch_size"`      // 一次合并发送的段数；<=1 表示禁用批量
+	FallbackShrink  float64     `yaml:"fallback_shrink"` // 整批失败时下一级 batch = floor(cur*shrink)；0 = 直接降到单段；必须 <1
 	RateLimitPerSec int         `yaml:"rate_limit_per_sec"`
 	Retry           RetryConfig `yaml:"retry"`
 }
@@ -124,6 +129,7 @@ func Default() *Config {
 			Translate: TranslateConfig{
 				Concurrency:     4,
 				BatchSize:       1,
+				FallbackShrink:  0.5,
 				RateLimitPerSec: 5,
 				Retry:           RetryConfig{MaxAttempts: 3, Backoff: time.Second},
 			},
@@ -156,6 +162,11 @@ func (c *Config) Validate() error {
 	}
 	if c.Pipeline.Translate.Concurrency < 1 {
 		c.Pipeline.Translate.Concurrency = 1
+	}
+	if shrink := c.Pipeline.Translate.FallbackShrink; math.IsNaN(shrink) || math.IsInf(shrink, 0) || shrink < 0 {
+		c.Pipeline.Translate.FallbackShrink = 0
+	} else if shrink >= 1 {
+		return fmt.Errorf("pipeline.translate.fallback_shrink must be < 1, got %v", shrink)
 	}
 	if c.Pipeline.Split.MaxChars < 1 {
 		c.Pipeline.Split.MaxChars = 1200

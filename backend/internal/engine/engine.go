@@ -132,10 +132,11 @@ func (e *Engine) buildPipeline() *pipeline.Pipeline {
 			MaxAttempts: pc.Translate.Retry.MaxAttempts,
 			Backoff:     pc.Translate.Retry.Backoff,
 		},
-		Concurrency: pc.Translate.Concurrency,
-		BatchSize:   pc.Translate.BatchSize,
-		Logger:      e.logger,
-		Reporter:    e.reporter,
+		Concurrency:    pc.Translate.Concurrency,
+		BatchSize:      pc.Translate.BatchSize,
+		FallbackShrink: pc.Translate.FallbackShrink,
+		Logger:         e.logger,
+		Reporter:       e.reporter,
 	})
 	if pc.Protect.Enabled {
 		s = append(s, stages.NewUnprotect(protector))

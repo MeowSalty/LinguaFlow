@@ -1,6 +1,7 @@
 package stages
 
 import (
+	"math"
 	"reflect"
 	"strings"
 	"testing"
@@ -112,5 +113,45 @@ func TestJSONObjectSlice_FindsNested(t *testing.T) {
 	}
 	if got != `{"a":{"b":1}}` {
 		t.Fatalf("unexpected slice: %q", got)
+	}
+}
+
+func TestShrinkNext(t *testing.T) {
+	cases := []struct {
+		name   string
+		cur    int
+		shrink float64
+		want   int
+	}{
+		// 禁用：shrink 非法时一律返回 0
+		{"shrink_zero", 40, 0, 0},
+		{"shrink_negative", 40, -0.5, 0},
+		{"shrink_one", 40, 1, 0},
+		{"shrink_gt_one", 40, 1.5, 0},
+		{"shrink_nan", 40, math.NaN(), 0},
+		{"shrink_inf", 40, math.Inf(1), 0},
+
+		// 正常缩小：floor(cur*shrink)
+		{"half_40", 40, 0.5, 20},
+		{"half_31", 31, 0.5, 15},
+		{"third_30", 30, 1.0 / 3.0, 10},
+		{"quarter_40", 40, 0.25, 10},
+
+		// 收敛到 1 的边界：next<1 视作 0 走 single
+		{"cur_2_half", 2, 0.5, 0},
+		{"cur_3_half", 3, 0.5, 0}, // floor(1.5)=1 → 视为 0
+		{"cur_4_half", 4, 0.5, 2},
+
+		// 接近 1 的 shrink：防不收敛，强制 cur-1
+		{"near_one_5", 5, 0.99, 4},
+		{"near_one_10", 10, 0.95, 9},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := shrinkNext(tc.cur, tc.shrink)
+			if got != tc.want {
+				t.Errorf("shrinkNext(%d, %v) = %d, want %d", tc.cur, tc.shrink, got, tc.want)
+			}
+		})
 	}
 }
