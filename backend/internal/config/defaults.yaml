@@ -1,0 +1,88 @@
+# LinguaFlow 示例配置
+# 由 `linguaflow init` 生成。所有字段均可被 CLI flag 覆盖。
+# 优先级：flag > env > yaml > 内置默认值。
+
+version: 1
+
+# 源/目标语言。source_lang 设为 auto 表示自动检测（MVP 由 CLI --from 决定）
+source_lang: auto
+target_lang: zh
+
+# AI 后端定义。第一项为默认；其余按 priority 顺序作为回退。
+backends:
+  - name: openai-default
+    type: openai
+    enabled: true
+    priority: 100
+    options:
+      api_key: ${OPENAI_API_KEY}            # 支持 ${ENV} 展开
+      base_url: https://api.openai.com/v1   # 改为 Ollama / 自定义网关只需换 URL
+      model: gpt-4o-mini
+      temperature: 0.2
+      max_tokens: 2048
+      timeout: 60s
+      response_format: json_schema          # json_schema | json_object | none（本地网关不支持时设 none）
+  # - name: ollama-local
+  #   type: ollama
+  #   enabled: false
+  #   priority: 50
+  #   options:
+  #     base_url: http://127.0.0.1:11434
+  #     model: qwen2.5:7b
+
+# 处理管线。每个 stage 可单独启用/禁用。
+pipeline:
+  split:
+    enabled: true
+    strategy: paragraph                     # MVP 仅支持 paragraph
+    max_chars: 1200                         # 超长段强制再切
+  protect:
+    enabled: true
+    rules: [code, link, placeholder, xml]
+  translate:
+    concurrency: 4
+    batch_size: 1                           # >1 时把多段合并为一次 LLM 调用，吞吐显著提升
+    rate_limit_per_sec: 5
+    retry:
+      max_attempts: 3
+      backoff: 1s
+  postprocess:
+    enabled: true
+    trim_spaces: true
+
+# 提示词模板。system_template 留空使用内置默认（基于 text/template）。
+# user_template 已废弃：本协议下 user 消息由 prompt 包按 JSON envelope 序列化生成，
+# 留空即可；如果显式填了非空值，启动会报错。
+prompt:
+  system_template: ""
+  user_template: ""
+  vars:
+    style: "concise, technical"
+    audience: "developers"
+
+# 术语表（MVP 仅占位，enabled=false）
+glossary:
+  enabled: false
+  path: ./glossary.csv
+
+# 翻译记忆（MVP 仅占位）
+translation_memory:
+  enabled: false
+  driver: sqlite
+  dsn: ./.linguaflow/tm.db
+
+# Lua 插件（MVP 仅占位）
+plugins:
+  enabled: false
+  scripts: []
+
+# 输出
+output:
+  mode: overwrite                           # overwrite | side_by_side
+  preserve_extension: true
+  incremental: false                        # 按段落 hash 跳过已译
+
+# 日志
+log:
+  level: info                               # debug | info | warn | error
+  format: text                              # text | json
