@@ -76,8 +76,20 @@ type PromptConfig struct {
 }
 
 type GlossaryConfig struct {
-	Enabled bool   `yaml:"enabled"`
-	Path    string `yaml:"path"`
+	Enabled   bool            `yaml:"enabled"`
+	Path      string          `yaml:"path"`
+	Bootstrap BootstrapConfig `yaml:"bootstrap"`
+}
+
+// BootstrapConfig 控制术语自举：在翻译前用 LLM 抽取并翻译领域术语。
+//
+// Enabled 与 Glossary.Enabled 同时为 true 才生效，否则抽取出的术语无处可去。
+// Save 控制翻译完成后是否把增量术语回写到 Glossary.Path。
+type BootstrapConfig struct {
+	Enabled          bool `yaml:"enabled"`
+	Save             bool `yaml:"save"`
+	MaxTermsPerBatch int  `yaml:"max_terms_per_batch"`
+	MinSourceLen     int  `yaml:"min_source_len"`
 }
 
 type TMConfig struct {
@@ -138,7 +150,16 @@ func Default() *Config {
 		Prompt: PromptConfig{
 			Vars: map[string]any{"style": "concise, technical", "audience": "developers"},
 		},
-		Glossary:          GlossaryConfig{Enabled: false, Path: "./glossary.csv"},
+		Glossary: GlossaryConfig{
+			Enabled: false,
+			Path:    "./glossary.csv",
+			Bootstrap: BootstrapConfig{
+				Enabled:          false,
+				Save:             true,
+				MaxTermsPerBatch: 20,
+				MinSourceLen:     2,
+			},
+		},
 		TranslationMemory: TMConfig{Enabled: false, Driver: "sqlite", DSN: "./.linguaflow/tm.db"},
 		Plugins:           PluginsConfig{Enabled: false},
 		Output:            OutputConfig{Mode: "overwrite", PreserveExtension: true, Incremental: false},
@@ -170,6 +191,12 @@ func (c *Config) Validate() error {
 	}
 	if c.Pipeline.Split.MaxChars < 1 {
 		c.Pipeline.Split.MaxChars = 1200
+	}
+	if c.Glossary.Bootstrap.MaxTermsPerBatch < 1 {
+		c.Glossary.Bootstrap.MaxTermsPerBatch = 20
+	}
+	if c.Glossary.Bootstrap.MinSourceLen < 1 {
+		c.Glossary.Bootstrap.MinSourceLen = 2
 	}
 	return nil
 }

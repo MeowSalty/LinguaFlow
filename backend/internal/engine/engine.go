@@ -22,11 +22,13 @@ import (
 
 // Engine 封装一次进程内的翻译能力。它持有 Selector / Renderer 等可复用组件。
 type Engine struct {
-	cfg      *config.Config
-	logger   *slog.Logger
-	reporter progress.Reporter
-	selector backend.Selector
-	renderer *prompt.Renderer
+	cfg               *config.Config
+	logger            *slog.Logger
+	reporter          progress.Reporter
+	selector          backend.Selector
+	renderer          *prompt.Renderer
+	bootstrapRenderer *prompt.BootstrapRenderer
+	glossary          glossary.Glossary
 }
 
 // New 按配置构造 Engine。reporter 可为 nil（fallback 为 progress.Nop）。
@@ -47,7 +49,29 @@ func New(cfg *config.Config, logger *slog.Logger, reporter progress.Reporter) (*
 		_ = sel.Close()
 		return nil, err
 	}
-	return &Engine{cfg: cfg, logger: logger, reporter: reporter, selector: sel, renderer: rend}, nil
+	glos, err := glossary.New(cfg.Glossary)
+	if err != nil {
+		_ = sel.Close()
+		return nil, fmt.Errorf("engine: build glossary: %w", err)
+	}
+	e := &Engine{
+		cfg:      cfg,
+		logger:   logger,
+		reporter: reporter,
+		selector: sel,
+		renderer: rend,
+		glossary: glos,
+	}
+	// 仅在 bootstrap 真要启用时编译模板，避免无关错误干扰常规路径。
+	if cfg.Glossary.Enabled && cfg.Glossary.Bootstrap.Enabled {
+		br, err := prompt.NewBootstrapRenderer()
+		if err != nil {
+			_ = sel.Close()
+			return nil, fmt.Errorf("engine: build bootstrap renderer: %w", err)
+		}
+		e.bootstrapRenderer = br
+	}
+	return e, nil
 }
 
 // Close 释放后端连接。
@@ -102,6 +126,9 @@ func (e *Engine) Translate(ctx context.Context, job TranslateJob) error {
 		return err
 	}
 
+	// 自举完成后按配置回写术语表。失败仅 warn——译文已写出。
+	e.maybeSaveGlossary(ctx)
+
 	e.logger.Info("output written",
 		"path", job.OutputPath,
 		"segments", len(doc.Segments),
@@ -114,6 +141,10 @@ func (e *Engine) buildPipeline() *pipeline.Pipeline {
 
 	protector := protect.FromRules(pc.Protect.Rules)
 	limiter := backend.NewRateLimiter(pc.Translate.RateLimitPerSec)
+	retry := backend.RetryPolicy{
+		MaxAttempts: pc.Translate.Retry.MaxAttempts,
+		Backoff:     pc.Translate.Retry.Backoff,
+	}
 
 	var s []pipeline.Stage
 	if pc.Split.Enabled {
@@ -122,16 +153,28 @@ func (e *Engine) buildPipeline() *pipeline.Pipeline {
 	if pc.Protect.Enabled {
 		s = append(s, stages.NewProtect(protector))
 	}
+	if e.cfg.Glossary.Enabled && e.cfg.Glossary.Bootstrap.Enabled && e.bootstrapRenderer != nil {
+		s = append(s, &stages.Bootstrap{
+			Selector:         e.selector,
+			Renderer:         e.bootstrapRenderer,
+			Glossary:         e.glossary,
+			Limiter:          limiter,
+			Retry:            retry,
+			Concurrency:      pc.Translate.Concurrency,
+			BatchSize:        pc.Translate.BatchSize,
+			MaxTermsPerBatch: e.cfg.Glossary.Bootstrap.MaxTermsPerBatch,
+			MinSourceLen:     e.cfg.Glossary.Bootstrap.MinSourceLen,
+			Logger:           e.logger,
+			Reporter:         e.reporter,
+		})
+	}
 	s = append(s, &stages.Translate{
-		Selector: e.selector,
-		Renderer: e.renderer,
-		Glossary: glossary.Nop{},
-		TM:       tm.Nop{},
-		Limiter:  limiter,
-		Retry: backend.RetryPolicy{
-			MaxAttempts: pc.Translate.Retry.MaxAttempts,
-			Backoff:     pc.Translate.Retry.Backoff,
-		},
+		Selector:       e.selector,
+		Renderer:       e.renderer,
+		Glossary:       e.glossary,
+		TM:             tm.Nop{},
+		Limiter:        limiter,
+		Retry:          retry,
 		Concurrency:    pc.Translate.Concurrency,
 		BatchSize:      pc.Translate.BatchSize,
 		FallbackShrink: pc.Translate.FallbackShrink,
@@ -142,6 +185,28 @@ func (e *Engine) buildPipeline() *pipeline.Pipeline {
 		s = append(s, stages.NewUnprotect(protector))
 	}
 	return pipeline.New(e.logger, s...)
+}
+
+// maybeSaveGlossary 在 bootstrap.save=true 且 glossary 实现 Saver 时回写到磁盘。
+// FileGlossary 还会通过 Dirty() 跳过无变化情况，避免无意义的文件写。
+func (e *Engine) maybeSaveGlossary(ctx context.Context) {
+	if !e.cfg.Glossary.Enabled || !e.cfg.Glossary.Bootstrap.Save {
+		return
+	}
+	type dirtyChecker interface{ Dirty() bool }
+	if dc, ok := e.glossary.(dirtyChecker); ok && !dc.Dirty() {
+		e.logger.Debug("glossary unchanged, skip save")
+		return
+	}
+	saver, ok := e.glossary.(glossary.Saver)
+	if !ok {
+		return
+	}
+	if err := saver.Save(ctx); err != nil {
+		e.logger.Warn("glossary save failed", "err", err)
+		return
+	}
+	e.logger.Info("glossary saved", "path", e.cfg.Glossary.Path)
 }
 
 func stageNames(ss []pipeline.Stage) []string {

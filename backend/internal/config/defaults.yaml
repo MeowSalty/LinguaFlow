@@ -61,10 +61,17 @@ prompt:
     style: "concise, technical"
     audience: "developers"
 
-# 术语表（MVP 仅占位，enabled=false）
+# 术语表
+# enabled=false 时返回 Nop 实现，所有 Lookup/Add 都是空操作。
+# enabled=true 时从 path 加载 CSV，CSV 列为 source,target,case_sensitive,notes（首行表头可选）。
 glossary:
   enabled: false
   path: ./glossary.csv
+  bootstrap:
+    enabled: false              # 翻译时用 LLM 抽取并翻译领域术语；要求 glossary.enabled=true
+    save: true                  # 自举完成后把增量术语回写到 path
+    max_terms_per_batch: 20     # 每批 LLM 抽取的术语数量上限
+    min_source_len: 2           # 长度小于此值的术语丢弃（过滤噪声）
 
 # 翻译记忆（MVP 仅占位）
 translation_memory:
