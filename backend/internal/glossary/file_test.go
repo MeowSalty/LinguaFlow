@@ -45,7 +45,7 @@ func TestFileGlossary_LoadSaveRoundTrip(t *testing.T) {
 
 func TestFileGlossary_LookupCaseSensitivity(t *testing.T) {
 	g := &FileGlossary{path: "x", bySource: map[string]int{}}
-	_ = g.Add(context.Background(),
+	_, _ = g.Add(context.Background(),
 		Entry{Source: "API", Target: "接口", CaseSensitive: true},
 		Entry{Source: "pipeline", Target: "流水线", CaseSensitive: false},
 	)
@@ -64,7 +64,7 @@ func TestFileGlossary_LookupCaseSensitivity(t *testing.T) {
 
 func TestFileGlossary_LongTermFirst(t *testing.T) {
 	g := &FileGlossary{path: "x", bySource: map[string]int{}}
-	_ = g.Add(context.Background(),
+	_, _ = g.Add(context.Background(),
 		Entry{Source: "Gemini", Target: "哈基米"},
 		Entry{Source: "Gemini API", Target: "哈基米接口"},
 	)
@@ -79,9 +79,9 @@ func TestFileGlossary_LongTermFirst(t *testing.T) {
 
 func TestFileGlossary_AddStrictMerge(t *testing.T) {
 	g := &FileGlossary{path: "x", bySource: map[string]int{}}
-	_ = g.Add(context.Background(), Entry{Source: "Foo", Target: "原始译文"})
-	_ = g.Add(context.Background(), Entry{Source: "foo", Target: "覆盖尝试"}) // 大小写不敏感，同 key
-	_ = g.Add(context.Background(), Entry{Source: "Foo", Target: "再次覆盖"})
+	_, _ = g.Add(context.Background(), Entry{Source: "Foo", Target: "原始译文"})
+	_, _ = g.Add(context.Background(), Entry{Source: "foo", Target: "覆盖尝试"}) // 大小写不敏感，同 key
+	_, _ = g.Add(context.Background(), Entry{Source: "Foo", Target: "再次覆盖"})
 
 	if g.Len() != 1 {
 		t.Fatalf("want 1 entry after strict merge, got %d", g.Len())
@@ -97,15 +97,15 @@ func TestFileGlossary_AddDirtyFlag(t *testing.T) {
 	if g.Dirty() {
 		t.Error("empty should not be dirty")
 	}
-	_ = g.Add(context.Background(), Entry{Source: "x", Target: "x"})
+	_, _ = g.Add(context.Background(), Entry{Source: "x", Target: "x"})
 	if !g.Dirty() {
 		t.Error("after add should be dirty")
 	}
 	// 重复添加不应翻 dirty（已经 dirty 没事，但严格合并 no-op 不该再设）
 	g2 := &FileGlossary{path: "x", bySource: map[string]int{}}
-	_ = g2.Add(context.Background(), Entry{Source: "x", Target: "x"})
+	_, _ = g2.Add(context.Background(), Entry{Source: "x", Target: "x"})
 	g2.dirty = false
-	_ = g2.Add(context.Background(), Entry{Source: "x", Target: "x"})
+	_, _ = g2.Add(context.Background(), Entry{Source: "x", Target: "x"})
 	if g2.Dirty() {
 		t.Error("duplicate add should not set dirty")
 	}
@@ -142,7 +142,7 @@ func TestFileGlossary_SaveCreatesDirAtomic(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sub", "deep", "g.csv")
 	g := &FileGlossary{path: path, bySource: map[string]int{}}
-	_ = g.Add(context.Background(), Entry{Source: "x", Target: "ε"})
+	_, _ = g.Add(context.Background(), Entry{Source: "x", Target: "ε"})
 	if err := g.Save(context.Background()); err != nil {
 		t.Fatalf("save: %v", err)
 	}
@@ -163,7 +163,74 @@ func TestNopImplementsGlossary(t *testing.T) {
 	if hits, err := g.Lookup(context.Background(), "anything", "", ""); err != nil || hits != nil {
 		t.Errorf("Nop.Lookup should be empty, got %#v %v", hits, err)
 	}
-	if err := g.Add(context.Background(), Entry{Source: "x", Target: "y"}); err != nil {
-		t.Errorf("Nop.Add should be no-op, got %v", err)
+	if res, err := g.Add(context.Background(), Entry{Source: "x", Target: "y"}); err != nil || len(res.Added) != 0 || len(res.Skipped) != 0 {
+		t.Errorf("Nop.Add should be no-op, got res=%#v err=%v", res, err)
+	}
+}
+
+func TestFileGlossary_AddReportsConflictWithExisting(t *testing.T) {
+	g := &FileGlossary{path: "x", bySource: map[string]int{}}
+	if _, err := g.Add(context.Background(), Entry{Source: "thread pool", Target: "线程池"}); err != nil {
+		t.Fatalf("first add: %v", err)
+	}
+	res, err := g.Add(context.Background(), Entry{Source: "thread pool", Target: "并发池"})
+	if err != nil {
+		t.Fatalf("second add: %v", err)
+	}
+	if len(res.Added) != 0 {
+		t.Errorf("conflict should not write, got Added=%#v", res.Added)
+	}
+	if len(res.Skipped) != 1 {
+		t.Fatalf("want 1 Skipped, got %d: %#v", len(res.Skipped), res.Skipped)
+	}
+	sk := res.Skipped[0]
+	if sk.Reason != SkipReasonExists {
+		t.Errorf("Reason want %q, got %q", SkipReasonExists, sk.Reason)
+	}
+	if sk.Proposed.Target != "并发池" {
+		t.Errorf("Proposed.Target want %q, got %q", "并发池", sk.Proposed.Target)
+	}
+	if sk.Existing.Target != "线程池" {
+		t.Errorf("Existing.Target want %q, got %q", "线程池", sk.Existing.Target)
+	}
+}
+
+func TestFileGlossary_AddSameTargetIsNoop(t *testing.T) {
+	g := &FileGlossary{path: "x", bySource: map[string]int{}}
+	if _, err := g.Add(context.Background(), Entry{Source: "foo", Target: "甲"}); err != nil {
+		t.Fatalf("first add: %v", err)
+	}
+	res, err := g.Add(context.Background(), Entry{Source: "foo", Target: "甲"})
+	if err != nil {
+		t.Fatalf("duplicate add: %v", err)
+	}
+	if len(res.Added) != 0 {
+		t.Errorf("noop should not Add, got %#v", res.Added)
+	}
+	if len(res.Skipped) != 0 {
+		t.Errorf("identical target should not be reported as conflict, got %#v", res.Skipped)
+	}
+}
+
+func TestFileGlossary_AddReportsEmptySkipped(t *testing.T) {
+	g := &FileGlossary{path: "x", bySource: map[string]int{}}
+	res, err := g.Add(context.Background(),
+		Entry{Source: "", Target: "x"},
+		Entry{Source: "y", Target: ""},
+		Entry{Source: "z", Target: "z"},
+	)
+	if err != nil {
+		t.Fatalf("add: %v", err)
+	}
+	if len(res.Added) != 1 || res.Added[0].Source != "z" {
+		t.Errorf("only the valid entry should be added, got %#v", res.Added)
+	}
+	if len(res.Skipped) != 2 {
+		t.Fatalf("want 2 empty Skipped, got %d: %#v", len(res.Skipped), res.Skipped)
+	}
+	for _, sk := range res.Skipped {
+		if sk.Reason != SkipReasonEmpty {
+			t.Errorf("Reason want %q, got %q", SkipReasonEmpty, sk.Reason)
+		}
 	}
 }

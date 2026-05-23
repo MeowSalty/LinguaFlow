@@ -121,9 +121,15 @@ func (g *FileGlossary) Lookup(_ context.Context, text, _, _ string) ([]Entry, er
 }
 
 // Add 严格合并：source 已存在则跳过，不覆盖人工修订；新条目追加。
-func (g *FileGlossary) Add(_ context.Context, entries ...Entry) error {
+//
+// 返回 AddResult 详述处理结果：成功写入的条目放入 Added；source 已存在且 target
+// 不同的写入 Skipped（Reason=exists, Existing 填表中已有版本），调用方可据此做下游
+// 修正（例如把本批译文里的 Proposed.Target 替换为 Existing.Target）。
+// Proposed.Target 与 Existing.Target 完全相等时视作 noop，既不进 Added 也不进 Skipped。
+func (g *FileGlossary) Add(_ context.Context, entries ...Entry) (AddResult, error) {
+	var result AddResult
 	if len(entries) == 0 {
-		return nil
+		return result, nil
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
@@ -133,19 +139,31 @@ func (g *FileGlossary) Add(_ context.Context, entries ...Entry) error {
 		e.Target = strings.TrimSpace(e.Target)
 		e.Notes = strings.TrimSpace(e.Notes)
 		if e.Source == "" || e.Target == "" {
+			result.Skipped = append(result.Skipped, SkippedEntry{Proposed: e, Reason: SkipReasonEmpty})
 			continue
 		}
-		if _, exists := g.bySource[normKey(e)]; exists {
+		if idx, exists := g.bySource[normKey(e)]; exists {
+			existing := g.entries[idx]
+			if existing.Target == e.Target {
+				// 完全相同的提议视作 noop，不报冲突。
+				continue
+			}
+			result.Skipped = append(result.Skipped, SkippedEntry{
+				Proposed: e,
+				Existing: existing,
+				Reason:   SkipReasonExists,
+			})
 			continue
 		}
 		g.addLocked(e)
+		result.Added = append(result.Added, e)
 		added = true
 	}
 	if added {
 		g.sortLocked()
 		g.dirty = true
 	}
-	return nil
+	return result, nil
 }
 
 // Save 原子写出当前所有 entries 到 path。表头固定为 csvHeader。

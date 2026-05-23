@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
@@ -49,6 +50,12 @@ type Translate struct {
 	InlineBootstrap           bool
 	MaxBootstrapTermsPerBatch int // 给 prompt 的术语数量上限；<=0 默认 20
 	MinBootstrapSourceLen     int // 抽出的术语短于此值则丢弃；<=0 默认 2
+	// InlineConflictStrategy 控制并发下后到 worker 提交同 source 不同 target 时的处理：
+	//   - config.InlineConflictRewriteLocal（默认）：把本批译文里的冲突 target 字面值
+	//     替换为权威表中已有版本，CJK 直替、拉丁系按词边界、歧义仅 Warn 不动。
+	//   - config.InlineConflictOff：完全不处理，沿用旧行为。
+	// 空字符串视同 off（防止配置未透传时崩溃）。
+	InlineConflictStrategy string
 }
 
 func (*Translate) Name() string { return "translate" }
@@ -188,7 +195,7 @@ func (s *Translate) processBatchAtSize(ctx context.Context, doc *pipeline.Docume
 		"completion_tokens", resp.Usage.CompletionTokens,
 		"inline_glossary", len(glosEntries))
 
-	s.absorbInlineGlossary(ctx, glosEntries, logger)
+	s.absorbInlineGlossary(ctx, glosEntries, trans, doc.TargetLang, logger)
 
 	// 写回并对每段做占位符校验；缺失的段单独补救（走 translateSingle 的 S5 路径）。
 	rep := s.reporter()
@@ -324,13 +331,15 @@ func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document,
 		seg.Target = seg.Source
 		return nil
 	}
-	seg.Target = trans[prompt.SingleID]
 	logger.Debug("segment translated",
 		"seg", seg.ID, "backend", b.Name(),
 		"prompt_tokens", resp.Usage.PromptTokens,
 		"completion_tokens", resp.Usage.CompletionTokens,
 		"inline_glossary", len(glosEntries))
-	s.absorbInlineGlossary(ctx, glosEntries, logger)
+	// 先吸收术语并就地修正冲突，再写回 seg.Target——保证 absorbInlineGlossary 能
+	// 对 trans 做并发冲突修正，避免文档内同一术语翻译不一致。
+	s.absorbInlineGlossary(ctx, glosEntries, trans, doc.TargetLang, logger)
+	seg.Target = trans[prompt.SingleID]
 
 	// 占位符完整性校验：缺失则追加补救指令重试一次。
 	if missing := protect.MissingPlaceholders(seg); len(missing) > 0 {
@@ -358,8 +367,8 @@ func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document,
 			seg.Target = seg.Source
 			return nil
 		}
+		s.absorbInlineGlossary(ctx, glos2, trans2, doc.TargetLang, logger)
 		seg.Target = trans2[prompt.SingleID]
-		s.absorbInlineGlossary(ctx, glos2, logger)
 		if still := protect.MissingPlaceholders(seg); len(still) > 0 {
 			logger.Warn("placeholders still missing after retry, keep source",
 				"seg", seg.ID, "backend", b.Name(), "missing", still)
@@ -564,10 +573,22 @@ func (s *Translate) maxBootstrapTerms() int {
 	return 20
 }
 
-// absorbInlineGlossary 把 LLM 在 translate 响应中携带的 glossary 条目写入运行时 Glossary。
-// 过短/空 source 被丢弃；严格合并保证已存在的 source 不被覆盖。任何 Add 错误仅 warn。
-// 调用时即便 InlineBootstrap=false 也安全（entries 为空时整体 no-op）。
-func (s *Translate) absorbInlineGlossary(ctx context.Context, entries []prompt.BootstrapEntry, logger *slog.Logger) {
+// absorbInlineGlossary 把 LLM 在 translate 响应中携带的 glossary 条目写入运行时 Glossary，
+// 并在并发冲突时就地修正本批 translations，避免文档内同一术语翻译不一致。
+//
+// 工作流：过滤候选 → 批量 Add → 处理 Skipped。FileGlossary 的 First-Wins 严格合并会让
+// 后到 worker 提交的 source 被丢弃，但其本批译文已经写了被丢弃的 target；这里通过
+// glossary.SafeReplace 把这些字面值改写为权威表里的版本。CJK 直替、拉丁系按词边界、
+// 歧义场景仅 Warn 不动。InlineConflictStrategy == off 时跳过修正，沿用旧行为。
+//
+// translations 会被原地改写——调用方必须在拿到本函数返回后再写回 doc.Segments[*].Target。
+func (s *Translate) absorbInlineGlossary(
+	ctx context.Context,
+	entries []prompt.BootstrapEntry,
+	translations map[string]string,
+	targetLang string,
+	logger *slog.Logger,
+) {
 	if !s.InlineBootstrap || len(entries) == 0 || s.Glossary == nil {
 		return
 	}
@@ -575,7 +596,7 @@ func (s *Translate) absorbInlineGlossary(ctx context.Context, entries []prompt.B
 	if minLen < 1 {
 		minLen = 2
 	}
-	added := 0
+	candidates := make([]glossary.Entry, 0, len(entries))
 	for _, e := range entries {
 		if len([]rune(e.Source)) < minLen {
 			continue
@@ -583,18 +604,79 @@ func (s *Translate) absorbInlineGlossary(ctx context.Context, entries []prompt.B
 		if e.Source == "" || e.Target == "" {
 			continue
 		}
-		if err := s.Glossary.Add(ctx, glossary.Entry{
+		candidates = append(candidates, glossary.Entry{
 			Source: e.Source,
 			Target: e.Target,
 			Notes:  e.Notes,
-		}); err != nil {
-			logger.Warn("inline glossary add failed", "source", e.Source, "err", err)
+		})
+	}
+	if len(candidates) == 0 {
+		return
+	}
+	result, err := s.Glossary.Add(ctx, candidates...)
+	if err != nil {
+		// FileGlossary 现实现不会返 error，但为接口健壮考虑保留分支：err 不阻断翻译。
+		logger.Warn("inline glossary add failed", "err", err)
+	}
+	if len(result.Added) > 0 {
+		logger.Debug("inline glossary absorbed",
+			"added", len(result.Added),
+			"skipped", len(result.Skipped),
+			"received", len(entries))
+	}
+
+	if s.InlineConflictStrategy != config.InlineConflictRewriteLocal {
+		return
+	}
+	if len(result.Skipped) == 0 || len(translations) == 0 {
+		return
+	}
+	s.rewriteConflictsInBatch(result.Skipped, translations, targetLang, logger)
+}
+
+// rewriteConflictsInBatch 遍历 Skipped 列表，把本批译文里 worker 自己用的 target 字面值
+// 替换为权威表里已有的版本。仅处理 Reason == SkipReasonExists 且 target 不同的项。
+func (s *Translate) rewriteConflictsInBatch(
+	skipped []glossary.SkippedEntry,
+	translations map[string]string,
+	targetLang string,
+	logger *slog.Logger,
+) {
+	for _, sk := range skipped {
+		if sk.Reason != glossary.SkipReasonExists {
 			continue
 		}
-		added++
-	}
-	if added > 0 {
-		logger.Debug("inline glossary absorbed", "added", added, "received", len(entries))
+		from := sk.Proposed.Target
+		to := sk.Existing.Target
+		if from == "" || from == to {
+			continue
+		}
+		rewrote := 0
+		var warns []string
+		for id, text := range translations {
+			newText, replaced, warn := glossary.SafeReplace(text, from, to, targetLang)
+			if replaced {
+				translations[id] = newText
+				rewrote++
+			}
+			if warn != "" {
+				warns = append(warns, warn)
+			}
+		}
+		if rewrote > 0 {
+			logger.Info("inline glossary conflict: rewrote local target",
+				"source", sk.Proposed.Source,
+				"from", from,
+				"to", to,
+				"rewrites", rewrote)
+		}
+		if len(warns) > 0 {
+			logger.Warn("inline glossary conflict: ambiguous match",
+				"source", sk.Proposed.Source,
+				"proposed_target", from,
+				"authoritative_target", to,
+				"details", warns)
+		}
 	}
 }
 

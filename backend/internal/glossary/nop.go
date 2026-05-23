@@ -9,6 +9,6 @@ func (Nop) Lookup(context.Context, string, string, string) ([]Entry, error) {
 	return nil, nil
 }
 
-func (Nop) Add(context.Context, ...Entry) error {
-	return nil
+func (Nop) Add(context.Context, ...Entry) (AddResult, error) {
+	return AddResult{}, nil
 }

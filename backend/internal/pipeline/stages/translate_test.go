@@ -1,10 +1,17 @@
 package stages
 
 import (
+	"context"
+	"io"
+	"log/slog"
 	"math"
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 )
 
 func TestParseBatchResponse_OK(t *testing.T) {
@@ -214,5 +221,133 @@ func TestShrinkNext(t *testing.T) {
 				t.Errorf("shrinkNext(%d, %v) = %d, want %d", tc.cur, tc.shrink, got, tc.want)
 			}
 		})
+	}
+}
+
+func quietLogger() *slog.Logger {
+	return slog.New(slog.NewTextHandler(io.Discard, nil))
+}
+
+// TestAbsorbInlineGlossary_RewritesConflictInBatch 验证并发冲突场景下的核心修复：
+// Worker B 提议 A→A2，但全局表已被 Worker A 抢先写入 A→A1；本批 translations
+// 里的 "A2" 字面值应被 rewrite-local 策略改写为 "A1"。
+func TestAbsorbInlineGlossary_RewritesConflictInBatch(t *testing.T) {
+	g := glossary.NewMemory()
+	// 模拟 Worker A 已经先写入。
+	if _, err := g.Add(context.Background(), glossary.Entry{Source: "thread pool", Target: "线程池"}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	s := &Translate{
+		Glossary:                  g,
+		InlineBootstrap:           true,
+		MinBootstrapSourceLen:     2,
+		MaxBootstrapTermsPerBatch: 20,
+		InlineConflictStrategy:    config.InlineConflictRewriteLocal,
+	}
+	// Worker B 的本批响应：translations 用了 "并发池"；glossary 项也提议 thread pool→并发池。
+	entries := []prompt.BootstrapEntry{
+		{Source: "thread pool", Target: "并发池"},
+	}
+	translations := map[string]string{
+		"1": "并发池是一种常见模式。",
+		"2": "另一个段提到并发池时也应同步。",
+	}
+	s.absorbInlineGlossary(context.Background(), entries, translations, "zh", quietLogger())
+
+	for id, want := range map[string]string{
+		"1": "线程池是一种常见模式。",
+		"2": "另一个段提到线程池时也应同步。",
+	} {
+		if got := translations[id]; got != want {
+			t.Errorf("translations[%s] = %q, want %q", id, got, want)
+		}
+	}
+	// Glossary 应当还是 Worker A 的版本。
+	hits, _ := g.Lookup(context.Background(), "thread pool here", "", "")
+	if len(hits) != 1 || hits[0].Target != "线程池" {
+		t.Errorf("authoritative target should remain 线程池, got %#v", hits)
+	}
+}
+
+// TestAbsorbInlineGlossary_StrategyOffKeepsConflict 验证 off 策略保留旧行为。
+func TestAbsorbInlineGlossary_StrategyOffKeepsConflict(t *testing.T) {
+	g := glossary.NewMemory()
+	_, _ = g.Add(context.Background(), glossary.Entry{Source: "thread pool", Target: "线程池"})
+	s := &Translate{
+		Glossary:                  g,
+		InlineBootstrap:           true,
+		MinBootstrapSourceLen:     2,
+		MaxBootstrapTermsPerBatch: 20,
+		InlineConflictStrategy:    config.InlineConflictOff,
+	}
+	entries := []prompt.BootstrapEntry{
+		{Source: "thread pool", Target: "并发池"},
+	}
+	translations := map[string]string{"1": "并发池保留原样。"}
+	s.absorbInlineGlossary(context.Background(), entries, translations, "zh", quietLogger())
+	if translations["1"] != "并发池保留原样。" {
+		t.Errorf("strategy=off should not rewrite, got %q", translations["1"])
+	}
+}
+
+// TestAbsorbInlineGlossary_NoConflictNoChange 没有冲突时 translations 不应被动。
+func TestAbsorbInlineGlossary_NoConflictNoChange(t *testing.T) {
+	g := glossary.NewMemory()
+	s := &Translate{
+		Glossary:                  g,
+		InlineBootstrap:           true,
+		MinBootstrapSourceLen:     2,
+		MaxBootstrapTermsPerBatch: 20,
+		InlineConflictStrategy:    config.InlineConflictRewriteLocal,
+	}
+	entries := []prompt.BootstrapEntry{
+		{Source: "thread pool", Target: "线程池"},
+	}
+	translations := map[string]string{"1": "线程池入门。"}
+	s.absorbInlineGlossary(context.Background(), entries, translations, "zh", quietLogger())
+	if translations["1"] != "线程池入门。" {
+		t.Errorf("no conflict should not rewrite, got %q", translations["1"])
+	}
+}
+
+// TestAbsorbInlineGlossary_SameTargetIsNoop 验证同 target 不进 Skipped，不会误改译文。
+func TestAbsorbInlineGlossary_SameTargetIsNoop(t *testing.T) {
+	g := glossary.NewMemory()
+	_, _ = g.Add(context.Background(), glossary.Entry{Source: "thread pool", Target: "线程池"})
+	s := &Translate{
+		Glossary:                  g,
+		InlineBootstrap:           true,
+		MinBootstrapSourceLen:     2,
+		MaxBootstrapTermsPerBatch: 20,
+		InlineConflictStrategy:    config.InlineConflictRewriteLocal,
+	}
+	entries := []prompt.BootstrapEntry{
+		{Source: "thread pool", Target: "线程池"}, // 与已有完全相同
+	}
+	translations := map[string]string{"1": "线程池上线。"}
+	s.absorbInlineGlossary(context.Background(), entries, translations, "zh", quietLogger())
+	if translations["1"] != "线程池上线。" {
+		t.Errorf("identical target should noop, got %q", translations["1"])
+	}
+}
+
+// TestAbsorbInlineGlossary_ProposedTargetMissingInTranslations 译文里找不到冲突 target 时不 panic 也不报错。
+func TestAbsorbInlineGlossary_ProposedTargetMissingInTranslations(t *testing.T) {
+	g := glossary.NewMemory()
+	_, _ = g.Add(context.Background(), glossary.Entry{Source: "thread pool", Target: "线程池"})
+	s := &Translate{
+		Glossary:                  g,
+		InlineBootstrap:           true,
+		MinBootstrapSourceLen:     2,
+		MaxBootstrapTermsPerBatch: 20,
+		InlineConflictStrategy:    config.InlineConflictRewriteLocal,
+	}
+	entries := []prompt.BootstrapEntry{
+		{Source: "thread pool", Target: "并发池"},
+	}
+	translations := map[string]string{"1": "本段未提到该术语。"}
+	s.absorbInlineGlossary(context.Background(), entries, translations, "zh", quietLogger())
+	if translations["1"] != "本段未提到该术语。" {
+		t.Errorf("text without target should be unchanged, got %q", translations["1"])
 	}
 }

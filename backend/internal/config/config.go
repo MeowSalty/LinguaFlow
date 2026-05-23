@@ -90,11 +90,19 @@ type GlossaryConfig struct {
 //
 // 任一非 off 模式都隐含要求 Glossary.Enabled=true，Validate 会自动设上。
 // Save 控制结束后是否把增量回写到 Glossary.Path；off 模式下没有 dirty 自然不会写。
+//
+// InlineConflictStrategy 仅 inline 模式下生效，控制并发 worker 给同一 source 提交不同
+// target 时的处理方式：First-Wins 保证全局术语表里只保留先到的版本，但后到 worker 的
+// 译文已经用了被丢弃的版本，会导致文档内同一术语翻译不一致。
+//   - rewrite-local（默认）：后到 worker 把本批译文里自己用的 target 字面值替换为
+//     权威表中的版本；CJK 直接替换，拉丁系按词边界，歧义场景仅 Warn 不动。
+//   - off：完全不处理，沿用旧行为（First-Wins + 不一致译文）。
 type BootstrapConfig struct {
-	Mode             string `yaml:"mode"`
-	Save             bool   `yaml:"save"`
-	MaxTermsPerBatch int    `yaml:"max_terms_per_batch"`
-	MinSourceLen     int    `yaml:"min_source_len"`
+	Mode                   string `yaml:"mode"`
+	Save                   bool   `yaml:"save"`
+	MaxTermsPerBatch       int    `yaml:"max_terms_per_batch"`
+	MinSourceLen           int    `yaml:"min_source_len"`
+	InlineConflictStrategy string `yaml:"inline_conflict_strategy"`
 }
 
 // Bootstrap 模式常量。
@@ -102,6 +110,12 @@ const (
 	BootstrapModeOff    = "off"
 	BootstrapModePre    = "pre"
 	BootstrapModeInline = "inline"
+)
+
+// Inline 模式下并发术语冲突的处理策略。
+const (
+	InlineConflictOff          = "off"
+	InlineConflictRewriteLocal = "rewrite-local"
 )
 
 type TMConfig struct {
@@ -166,10 +180,11 @@ func Default() *Config {
 			Enabled: false,
 			Path:    "./glossary.csv",
 			Bootstrap: BootstrapConfig{
-				Mode:             BootstrapModeOff,
-				Save:             true,
-				MaxTermsPerBatch: 20,
-				MinSourceLen:     2,
+				Mode:                   BootstrapModeOff,
+				Save:                   true,
+				MaxTermsPerBatch:       20,
+				MinSourceLen:           2,
+				InlineConflictStrategy: InlineConflictRewriteLocal,
 			},
 		},
 		TranslationMemory: TMConfig{Enabled: false, Driver: "sqlite", DSN: "./.linguaflow/tm.db"},
@@ -221,6 +236,15 @@ func (c *Config) Validate() error {
 	if c.Glossary.Bootstrap.Mode != BootstrapModeOff {
 		// 自举要落到 Glossary，强制开启。
 		c.Glossary.Enabled = true
+	}
+	switch c.Glossary.Bootstrap.InlineConflictStrategy {
+	case "":
+		c.Glossary.Bootstrap.InlineConflictStrategy = InlineConflictRewriteLocal
+	case InlineConflictOff, InlineConflictRewriteLocal:
+		// ok
+	default:
+		return fmt.Errorf("glossary.bootstrap.inline_conflict_strategy must be one of off|rewrite-local, got %q",
+			c.Glossary.Bootstrap.InlineConflictStrategy)
 	}
 	return nil
 }

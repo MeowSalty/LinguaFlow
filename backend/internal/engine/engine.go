@@ -187,6 +187,7 @@ func (e *Engine) buildPipeline() *pipeline.Pipeline {
 		InlineBootstrap:           inlineBootstrap,
 		MaxBootstrapTermsPerBatch: e.cfg.Glossary.Bootstrap.MaxTermsPerBatch,
 		MinBootstrapSourceLen:     e.cfg.Glossary.Bootstrap.MinSourceLen,
+		InlineConflictStrategy:    e.cfg.Glossary.Bootstrap.InlineConflictStrategy,
 	})
 	if pc.Protect.Enabled {
 		s = append(s, stages.NewUnprotect(protector))

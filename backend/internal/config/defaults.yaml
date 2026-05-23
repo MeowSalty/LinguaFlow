@@ -75,6 +75,10 @@ glossary:
     save: true                  # 自举完成后把增量术语回写到 path（off 模式下无变更，不会写）
     max_terms_per_batch: 20     # 每批 LLM 抽取/返回的术语数量上限
     min_source_len: 2           # 长度小于此值的术语丢弃（过滤噪声）
+    inline_conflict_strategy: rewrite-local  # off | rewrite-local
+                                #   rewrite-local（默认）: inline 模式下，后到的 worker 把本批译文里冲突的 target 字面值
+                                #                          改写为权威表里的版本，避免文档内同一术语翻译不一致
+                                #   off                  : 完全不处理，沿用 First-Wins 旧行为
 
 # 翻译记忆（MVP 仅占位）
 translation_memory:

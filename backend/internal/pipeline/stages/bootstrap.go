@@ -182,27 +182,31 @@ func (s *Bootstrap) processBatch(ctx context.Context, texts []string, doc *pipel
 		return 0, perr
 	}
 
-	added := 0
+	// 批量化 Add：一次性把本批所有候选交给 Glossary，减少锁竞争；
+	// 结果里 Added 即为真正写入数，Skipped 由 stage 间日志承载（不需要修正译文，
+	// 因为 bootstrap stage 此时还没有 translations）。
+	candidates := make([]glossary.Entry, 0, len(parsed))
 	for _, e := range parsed {
 		if len([]rune(e.Source)) < s.MinSourceLen {
 			continue
 		}
-		entry := glossary.Entry{
+		candidates = append(candidates, glossary.Entry{
 			Source: e.Source,
 			Target: e.Target,
 			Notes:  e.Notes,
-		}
-		if err := s.Glossary.Add(ctx, entry); err != nil {
-			logger.Warn("glossary add failed", "source", e.Source, "err", err)
-			continue
-		}
-		added++
+		})
 	}
+	res, addErr := s.Glossary.Add(ctx, candidates...)
+	if addErr != nil {
+		logger.Warn("glossary add failed", "err", addErr)
+	}
+	added := len(res.Added)
 	logger.Debug("bootstrap batch ok",
 		"backend", b.Name(),
 		"batch_segments", len(texts),
 		"parsed", len(parsed),
 		"added", added,
+		"skipped", len(res.Skipped),
 		"prompt_tokens", resp.Usage.PromptTokens,
 		"completion_tokens", resp.Usage.CompletionTokens)
 	return added, nil
