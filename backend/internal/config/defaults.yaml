@@ -35,6 +35,18 @@ backends:
   #     timeout: 60s
   #     response_format: json_schema    # 用 tool use 强制结构化输出;json_object|none 亦可
   #     enable_prompt_cache: true       # system block 加 ephemeral 缓存,长文翻译省 token
+  # - name: google-default
+  #   type: google
+  #   enabled: false
+  #   priority: 70
+  #   options:
+  #     api_key: ${GOOGLE_API_KEY}
+  #     base_url: ""                    # 留空走 SDK 默认 https://generativelanguage.googleapis.com/;可指向自建网关
+  #     model: gemini-2.5-flash
+  #     temperature: 0.2
+  #     max_tokens: 8192                # 默认 8192;覆盖批量翻译 + glossary
+  #     timeout: 60s
+  #     response_format: json_schema    # 走 ResponseJsonSchema 强制结构化;json_object|none 亦可
 
 # 处理管线。每个 stage 可单独启用/禁用。
 pipeline:

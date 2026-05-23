@@ -5,6 +5,7 @@ package engine
 // CLI 层只需 import "engine"，无需逐个 import 各 parser / backend。
 import (
 	_ "github.com/MeowSalty/LinguaFlow/backend/internal/backend/anthropic"
+	_ "github.com/MeowSalty/LinguaFlow/backend/internal/backend/google"
 	_ "github.com/MeowSalty/LinguaFlow/backend/internal/backend/openai"
 	_ "github.com/MeowSalty/LinguaFlow/backend/internal/parser/jsonp"
 	_ "github.com/MeowSalty/LinguaFlow/backend/internal/parser/markdown"
