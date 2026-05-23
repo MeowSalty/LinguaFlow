@@ -133,7 +133,7 @@ func factory(opts map[string]any) (backend.Backend, error) {
 	if u, ok := opts["base_url"].(string); ok && u != "" {
 		clientOpts = append(clientOpts, option.WithBaseURL(u))
 	}
-	rf := stringOpt(opts, "response_format", respFmtJSONSchema)
+	rf := backend.StringOpt(opts, "response_format", respFmtJSONSchema)
 	switch rf {
 	case respFmtJSONSchema, respFmtJSONObject, respFmtNone:
 	default:
@@ -141,70 +141,17 @@ func factory(opts map[string]any) (backend.Backend, error) {
 	}
 	b := &Backend{
 		client:         openaigo.NewClient(clientOpts...),
-		model:          stringOpt(opts, "model", "gpt-4o-mini"),
-		temperature:    float64Opt(opts, "temperature", 0.2),
-		maxTokens:      int64Opt(opts, "max_tokens", 0),
+		model:          backend.StringOpt(opts, "model", "gpt-4o-mini"),
+		temperature:    backend.Float64Opt(opts, "temperature", 0.2),
+		maxTokens:      backend.Int64Opt(opts, "max_tokens", 0),
 		responseFormat: rf,
 	}
-	if t, err := durationOpt(opts, "timeout", 60*time.Second); err == nil {
+	if t, err := backend.DurationOpt(opts, "timeout", 60*time.Second); err == nil {
 		b.timeout = t
 	} else {
 		return nil, err
 	}
 	return b, nil
-}
-
-func stringOpt(m map[string]any, k, def string) string {
-	if v, ok := m[k].(string); ok && v != "" {
-		return v
-	}
-	return def
-}
-
-func int64Opt(m map[string]any, k string, def int64) int64 {
-	switch v := m[k].(type) {
-	case int:
-		return int64(v)
-	case int64:
-		return v
-	case float64:
-		return int64(v)
-	}
-	return def
-}
-
-func float64Opt(m map[string]any, k string, def float64) float64 {
-	switch v := m[k].(type) {
-	case float64:
-		return v
-	case float32:
-		return float64(v)
-	case int:
-		return float64(v)
-	case int64:
-		return float64(v)
-	}
-	return def
-}
-
-func durationOpt(m map[string]any, k string, def time.Duration) (time.Duration, error) {
-	v, ok := m[k]
-	if !ok {
-		return def, nil
-	}
-	switch x := v.(type) {
-	case string:
-		d, err := time.ParseDuration(x)
-		if err != nil {
-			return 0, fmt.Errorf("openai: invalid %s %q: %w", k, x, err)
-		}
-		return d, nil
-	case int:
-		return time.Duration(x) * time.Second, nil
-	case float64:
-		return time.Duration(x) * time.Second, nil
-	}
-	return def, nil
 }
 
 func init() {
