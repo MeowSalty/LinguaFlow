@@ -29,6 +29,19 @@ backends:
   #   options:
   #     base_url: http://127.0.0.1:11434
   #     model: qwen2.5:7b
+  # - name: anthropic-default
+  #   type: anthropic
+  #   enabled: false
+  #   priority: 80
+  #   options:
+  #     api_key: ${ANTHROPIC_API_KEY}
+  #     base_url: ""                    # 留空走 SDK 默认;支持自建代理
+  #     model: claude-sonnet-4-5
+  #     temperature: 0.2
+  #     max_tokens: 8192                # Anthropic 必填,覆盖典型批量翻译 + glossary
+  #     timeout: 60s
+  #     response_format: json_schema    # 用 tool use 强制结构化输出;json_object|none 亦可
+  #     enable_prompt_cache: true       # system block 加 ephemeral 缓存,长文翻译省 token
 
 # 处理管线。每个 stage 可单独启用/禁用。
 pipeline:
