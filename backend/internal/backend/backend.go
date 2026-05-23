@@ -1,5 +1,4 @@
 // Package backend 定义 AI 后端抽象、工厂注册表与选择器。
-// MVP 默认仅实现 OpenAI 兼容后端；Ollama 等以占位形式注册。
 package backend
 
 import (
