@@ -30,6 +30,8 @@ import (
 //   - 段级进度上报（Reporter；nil 时 fallback 为 progress.Nop）
 //
 // 协议：user message 是 JSON envelope（见 prompt 包），模型回复 {"translations":{"<id>":"<text>"}}。
+// 当 InlineBootstrap=true 时，回复同时携带 {"glossary":[{"source","target","notes"},...]}，
+// 解析后立刻 Add 到运行时 Glossary；严格合并去重，已存在的 source 不会被覆盖。
 type Translate struct {
 	Selector       backend.Selector
 	Renderer       *prompt.Renderer
@@ -42,6 +44,11 @@ type Translate struct {
 	FallbackShrink float64 // (0,1) 启用递归缩小；0 表示失败后直接降到单段
 	Logger         *slog.Logger
 	Reporter       progress.Reporter
+
+	// Inline 模式：翻译时同时让 LLM 抽术语。
+	InlineBootstrap           bool
+	MaxBootstrapTermsPerBatch int // 给 prompt 的术语数量上限；<=0 默认 20
+	MinBootstrapSourceLen     int // 抽出的术语短于此值则丢弃；<=0 默认 2
 }
 
 func (*Translate) Name() string { return "translate" }
@@ -129,14 +136,16 @@ func (s *Translate) processBatchAtSize(ctx context.Context, doc *pipeline.Docume
 	prev, next := prompt.BuildContextRange(doc, minIdx, maxIdx)
 
 	data := prompt.Data{
-		SourceLang:  doc.SourceLang,
-		TargetLang:  doc.TargetLang,
-		Segments:    inputs,
-		PrevContext: prev,
-		NextContext: next,
-		Glossary:    glos,
-		TMHints:     tmHints,
-		Vars:        doc.Vars,
+		SourceLang:        doc.SourceLang,
+		TargetLang:        doc.TargetLang,
+		Segments:          inputs,
+		PrevContext:       prev,
+		NextContext:       next,
+		Glossary:          glos,
+		TMHints:           tmHints,
+		Vars:              doc.Vars,
+		InlineBootstrap:   s.InlineBootstrap,
+		MaxBootstrapTerms: s.maxBootstrapTerms(),
 	}
 	sys, usr, err := s.Renderer.Render(data)
 	if err != nil {
@@ -150,7 +159,7 @@ func (s *Translate) processBatchAtSize(ctx context.Context, doc *pipeline.Docume
 	req := backend.Request{
 		System:     sys,
 		User:       usr,
-		JSONSchema: translationsSchema(wantIDs),
+		JSONSchema: translationsSchema(wantIDs, s.InlineBootstrap),
 	}
 
 	var resp *backend.Response
@@ -165,7 +174,7 @@ func (s *Translate) processBatchAtSize(ctx context.Context, doc *pipeline.Docume
 		return s.shrinkOrFallback(ctx, doc, idxs, curSize, logger)
 	}
 
-	trans, perr := parseBatchResponse(resp.Text, wantIDs)
+	trans, glosEntries, perr := parseBatchResponse(resp.Text, wantIDs)
 	if perr != nil {
 		logger.Warn("batch response parse failed, shrinking or falling back",
 			"backend", b.Name(), "batch_size", len(idxs), "err", perr,
@@ -176,7 +185,10 @@ func (s *Translate) processBatchAtSize(ctx context.Context, doc *pipeline.Docume
 	logger.Debug("batch translated",
 		"backend", b.Name(), "batch_size", len(idxs),
 		"prompt_tokens", resp.Usage.PromptTokens,
-		"completion_tokens", resp.Usage.CompletionTokens)
+		"completion_tokens", resp.Usage.CompletionTokens,
+		"inline_glossary", len(glosEntries))
+
+	s.absorbInlineGlossary(ctx, glosEntries, logger)
 
 	// 写回并对每段做占位符校验；缺失的段单独补救（走 translateSingle 的 S5 路径）。
 	rep := s.reporter()
@@ -269,14 +281,16 @@ func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document,
 	prev, next := prompt.BuildContext(doc, idx)
 
 	data := prompt.Data{
-		SourceLang:  doc.SourceLang,
-		TargetLang:  doc.TargetLang,
-		Source:      seg.Source,
-		PrevContext: prev,
-		NextContext: next,
-		Glossary:    glos,
-		TMHints:     tmHints,
-		Vars:        doc.Vars,
+		SourceLang:        doc.SourceLang,
+		TargetLang:        doc.TargetLang,
+		Source:            seg.Source,
+		PrevContext:       prev,
+		NextContext:       next,
+		Glossary:          glos,
+		TMHints:           tmHints,
+		Vars:              doc.Vars,
+		InlineBootstrap:   s.InlineBootstrap,
+		MaxBootstrapTerms: s.maxBootstrapTerms(),
 	}
 	sys, usr, err := s.Renderer.Render(data)
 	if err != nil {
@@ -291,7 +305,7 @@ func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document,
 	req := backend.Request{
 		System:     sys,
 		User:       usr,
-		JSONSchema: translationsSchema(wantIDs),
+		JSONSchema: translationsSchema(wantIDs, s.InlineBootstrap),
 	}
 
 	resp, err := s.callOnce(ctx, b, req)
@@ -302,7 +316,7 @@ func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document,
 		return nil
 	}
 
-	trans, perr := parseBatchResponse(resp.Text, wantIDs)
+	trans, glosEntries, perr := parseBatchResponse(resp.Text, wantIDs)
 	if perr != nil {
 		logger.Warn("single response parse failed, keep source",
 			"seg", seg.ID, "backend", b.Name(), "err", perr,
@@ -314,7 +328,9 @@ func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document,
 	logger.Debug("segment translated",
 		"seg", seg.ID, "backend", b.Name(),
 		"prompt_tokens", resp.Usage.PromptTokens,
-		"completion_tokens", resp.Usage.CompletionTokens)
+		"completion_tokens", resp.Usage.CompletionTokens,
+		"inline_glossary", len(glosEntries))
+	s.absorbInlineGlossary(ctx, glosEntries, logger)
 
 	// 占位符完整性校验：缺失则追加补救指令重试一次。
 	if missing := protect.MissingPlaceholders(seg); len(missing) > 0 {
@@ -335,7 +351,7 @@ func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document,
 			seg.Target = seg.Source
 			return nil
 		}
-		trans2, perr2 := parseBatchResponse(resp2.Text, wantIDs)
+		trans2, glos2, perr2 := parseBatchResponse(resp2.Text, wantIDs)
 		if perr2 != nil {
 			logger.Warn("placeholder retry response parse failed, keep source",
 				"seg", seg.ID, "backend", b.Name(), "err", perr2)
@@ -343,6 +359,7 @@ func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document,
 			return nil
 		}
 		seg.Target = trans2[prompt.SingleID]
+		s.absorbInlineGlossary(ctx, glos2, logger)
 		if still := protect.MissingPlaceholders(seg); len(still) > 0 {
 			logger.Warn("placeholders still missing after retry, keep source",
 				"seg", seg.ID, "backend", b.Name(), "missing", still)
@@ -426,31 +443,33 @@ func (s *Translate) addTM(ctx context.Context, doc *pipeline.Document, seg *pipe
 }
 
 // parseBatchResponse 解析 {"translations":{"<id>":"<text>", ...}} 并校验 wantIDs 完整。
+// 当响应携带 inline 抽取的 {"glossary":[...]} 时，一并解析返回；缺失视作空切片。
 // 容错：模型有时把 JSON 包在 ```json … ``` 围栏里或夹带前后说明文字，
 // 这里用 jsonObjectSlice 抽出第一段完整的 JSON 对象。
-func parseBatchResponse(text string, wantIDs []string) (map[string]string, error) {
+func parseBatchResponse(text string, wantIDs []string) (map[string]string, []prompt.BootstrapEntry, error) {
 	body := jsonObjectSlice(text)
 	if body == "" {
-		return nil, fmt.Errorf("no JSON object found in response")
+		return nil, nil, fmt.Errorf("no JSON object found in response")
 	}
 	var env struct {
-		Translations map[string]string `json:"translations"`
+		Translations map[string]string       `json:"translations"`
+		Glossary     []prompt.BootstrapEntry `json:"glossary"`
 	}
 	if err := json.Unmarshal([]byte(body), &env); err != nil {
-		return nil, fmt.Errorf("unmarshal translations: %w", err)
+		return nil, nil, fmt.Errorf("unmarshal translations: %w", err)
 	}
 	if env.Translations == nil {
-		return nil, errors.New("response missing \"translations\" field")
+		return nil, nil, errors.New("response missing \"translations\" field")
 	}
 	for _, id := range wantIDs {
 		if _, ok := env.Translations[id]; !ok {
-			return nil, fmt.Errorf("missing translation for id %q", id)
+			return nil, nil, fmt.Errorf("missing translation for id %q", id)
 		}
 	}
 	if len(env.Translations) != len(wantIDs) {
-		return nil, fmt.Errorf("expected %d translations, got %d", len(wantIDs), len(env.Translations))
+		return nil, nil, fmt.Errorf("expected %d translations, got %d", len(wantIDs), len(env.Translations))
 	}
-	return env.Translations, nil
+	return env.Translations, env.Glossary, nil
 }
 
 // jsonObjectSlice 从 text 中截取首个 { 到与之配对的 } 之间的子串。
@@ -495,25 +514,87 @@ func jsonObjectSlice(text string) string {
 
 // translationsSchema 按 wantIDs 生成 OpenAI 严格 JSON Schema：
 // 要求 translations 下的属性集合与 wantIDs 完全一致。
-func translationsSchema(wantIDs []string) map[string]any {
+// 当 includeGlossary=true 时，在外层属性里再加一个 "glossary" 数组，要求 items 严格匹配
+// {source,target,notes}；外层 required 同步加入 "glossary"。
+func translationsSchema(wantIDs []string, includeGlossary bool) map[string]any {
 	props := make(map[string]any, len(wantIDs))
 	for _, id := range wantIDs {
 		props[id] = map[string]any{"type": "string"}
 	}
 	required := make([]string, len(wantIDs))
 	copy(required, wantIDs)
-	return map[string]any{
-		"type": "object",
-		"properties": map[string]any{
-			"translations": map[string]any{
-				"type":                 "object",
-				"properties":           props,
-				"required":             required,
+	outerProps := map[string]any{
+		"translations": map[string]any{
+			"type":                 "object",
+			"properties":           props,
+			"required":             required,
+			"additionalProperties": false,
+		},
+	}
+	outerRequired := []string{"translations"}
+	if includeGlossary {
+		outerProps["glossary"] = map[string]any{
+			"type": "array",
+			"items": map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"source": map[string]any{"type": "string"},
+					"target": map[string]any{"type": "string"},
+					"notes":  map[string]any{"type": "string"},
+				},
+				"required":             []string{"source", "target", "notes"},
 				"additionalProperties": false,
 			},
-		},
-		"required":             []string{"translations"},
+		}
+		outerRequired = append(outerRequired, "glossary")
+	}
+	return map[string]any{
+		"type":                 "object",
+		"properties":           outerProps,
+		"required":             outerRequired,
 		"additionalProperties": false,
+	}
+}
+
+// maxBootstrapTerms 返回传给 prompt 的 inline 术语上限；<=0 用默认 20。
+func (s *Translate) maxBootstrapTerms() int {
+	if s.MaxBootstrapTermsPerBatch > 0 {
+		return s.MaxBootstrapTermsPerBatch
+	}
+	return 20
+}
+
+// absorbInlineGlossary 把 LLM 在 translate 响应中携带的 glossary 条目写入运行时 Glossary。
+// 过短/空 source 被丢弃；严格合并保证已存在的 source 不被覆盖。任何 Add 错误仅 warn。
+// 调用时即便 InlineBootstrap=false 也安全（entries 为空时整体 no-op）。
+func (s *Translate) absorbInlineGlossary(ctx context.Context, entries []prompt.BootstrapEntry, logger *slog.Logger) {
+	if !s.InlineBootstrap || len(entries) == 0 || s.Glossary == nil {
+		return
+	}
+	minLen := s.MinBootstrapSourceLen
+	if minLen < 1 {
+		minLen = 2
+	}
+	added := 0
+	for _, e := range entries {
+		if len([]rune(e.Source)) < minLen {
+			continue
+		}
+		if e.Source == "" || e.Target == "" {
+			continue
+		}
+		if err := s.Glossary.Add(ctx, glossary.Entry{
+			Source: e.Source,
+			Target: e.Target,
+			Notes:  e.Notes,
+		}); err != nil {
+			logger.Warn("inline glossary add failed", "source", e.Source, "err", err)
+			continue
+		}
+		added++
+	}
+	if added > 0 {
+		logger.Debug("inline glossary absorbed", "added", added, "received", len(entries))
 	}
 }
 

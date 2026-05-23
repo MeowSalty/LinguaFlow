@@ -68,9 +68,12 @@ glossary:
   enabled: false
   path: ./glossary.csv
   bootstrap:
-    enabled: false              # 翻译时用 LLM 抽取并翻译领域术语；要求 glossary.enabled=true
-    save: true                  # 自举完成后把增量术语回写到 path
-    max_terms_per_batch: 20     # 每批 LLM 抽取的术语数量上限
+    mode: off                   # off | pre | inline
+                                #   pre   : 翻译前独立扫一遍抽取术语，整篇文档都能用上
+                                #   inline: 翻译时让 LLM 顺带返回术语，只对后续 batch 生效，省一次扫描
+                                # 任一非 off 模式会自动启用 glossary。
+    save: true                  # 自举完成后把增量术语回写到 path（off 模式下无变更，不会写）
+    max_terms_per_batch: 20     # 每批 LLM 抽取/返回的术语数量上限
     min_source_len: 2           # 长度小于此值的术语丢弃（过滤噪声）
 
 # 翻译记忆（MVP 仅占位）

@@ -23,3 +23,11 @@ Output rules:
 {{if .Glossary}}7{{else}}6{{end}}. Reference translations for similar past segments (use only if relevant):
 {{range .TMHints}}   - {{.Source}} -> {{.Target}}  (score={{printf "%.2f" .Score}})
 {{end}}{{- end}}
+{{- if .InlineBootstrap}}
+
+Additional task — glossary extraction:
+- In addition to "translations", your reply MUST include a "glossary" field: an array of {source,target,notes} for domain-specific terms worth pinning for future consistency.
+- Cover proper nouns, product/library names, technical acronyms, multi-word noun phrases. Exclude common verbs, generic single words, numbers, and placeholder tokens of the form __LF_NNNNNN__.
+- Return AT MOST {{.MaxBootstrapTerms}} entries per response. "notes" is required (use "" if none). Each "source" must appear verbatim in at least one input segment.
+- If no qualifying terms are found, return "glossary": [].
+{{- end}}

@@ -50,15 +50,17 @@ type SegmentInput struct {
 // 单段模式：Source 非空，Segments 为空；Render 内部归一化为 [{ID:SingleID, Source:Source}]。
 // 批量模式：Segments 非空，Source 为空。
 type Data struct {
-	SourceLang  string
-	TargetLang  string
-	Source      string
-	Segments    []SegmentInput
-	PrevContext string
-	NextContext string
-	Glossary    []GlossaryEntry
-	TMHints     []TMHint
-	Vars        map[string]any
+	SourceLang        string
+	TargetLang        string
+	Source            string
+	Segments          []SegmentInput
+	PrevContext       string
+	NextContext       string
+	Glossary          []GlossaryEntry
+	TMHints           []TMHint
+	Vars              map[string]any
+	InlineBootstrap   bool // 是否在 system prompt 中追加 inline 抽取指令（mode=inline 时由 translate stage 设为 true）
+	MaxBootstrapTerms int  // inline 模式每批返回上限；仅在 InlineBootstrap=true 时有效
 }
 
 // Renderer 持有已编译的 system 模板。user 由 Render 直接 JSON 序列化生成，无模板。

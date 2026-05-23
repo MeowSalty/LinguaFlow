@@ -62,8 +62,8 @@ func New(cfg *config.Config, logger *slog.Logger, reporter progress.Reporter) (*
 		renderer: rend,
 		glossary: glos,
 	}
-	// 仅在 bootstrap 真要启用时编译模板，避免无关错误干扰常规路径。
-	if cfg.Glossary.Enabled && cfg.Glossary.Bootstrap.Enabled {
+	// 仅在 bootstrap=pre 模式时编译模板；inline 模式由 translate stage 复用主模板的条件块。
+	if cfg.Glossary.Enabled && cfg.Glossary.Bootstrap.Mode == config.BootstrapModePre {
 		br, err := prompt.NewBootstrapRenderer()
 		if err != nil {
 			_ = sel.Close()
@@ -153,7 +153,11 @@ func (e *Engine) buildPipeline() *pipeline.Pipeline {
 	if pc.Protect.Enabled {
 		s = append(s, stages.NewProtect(protector))
 	}
-	if e.cfg.Glossary.Enabled && e.cfg.Glossary.Bootstrap.Enabled && e.bootstrapRenderer != nil {
+
+	bootstrapMode := e.cfg.Glossary.Bootstrap.Mode
+	inlineBootstrap := e.cfg.Glossary.Enabled && bootstrapMode == config.BootstrapModeInline
+
+	if e.cfg.Glossary.Enabled && bootstrapMode == config.BootstrapModePre && e.bootstrapRenderer != nil {
 		s = append(s, &stages.Bootstrap{
 			Selector:         e.selector,
 			Renderer:         e.bootstrapRenderer,
@@ -169,17 +173,20 @@ func (e *Engine) buildPipeline() *pipeline.Pipeline {
 		})
 	}
 	s = append(s, &stages.Translate{
-		Selector:       e.selector,
-		Renderer:       e.renderer,
-		Glossary:       e.glossary,
-		TM:             tm.Nop{},
-		Limiter:        limiter,
-		Retry:          retry,
-		Concurrency:    pc.Translate.Concurrency,
-		BatchSize:      pc.Translate.BatchSize,
-		FallbackShrink: pc.Translate.FallbackShrink,
-		Logger:         e.logger,
-		Reporter:       e.reporter,
+		Selector:                  e.selector,
+		Renderer:                  e.renderer,
+		Glossary:                  e.glossary,
+		TM:                        tm.Nop{},
+		Limiter:                   limiter,
+		Retry:                     retry,
+		Concurrency:               pc.Translate.Concurrency,
+		BatchSize:                 pc.Translate.BatchSize,
+		FallbackShrink:            pc.Translate.FallbackShrink,
+		Logger:                    e.logger,
+		Reporter:                  e.reporter,
+		InlineBootstrap:           inlineBootstrap,
+		MaxBootstrapTermsPerBatch: e.cfg.Glossary.Bootstrap.MaxTermsPerBatch,
+		MinBootstrapSourceLen:     e.cfg.Glossary.Bootstrap.MinSourceLen,
 	})
 	if pc.Protect.Enabled {
 		s = append(s, stages.NewUnprotect(protector))
