@@ -10,4 +10,5 @@ import (
 	_ "github.com/MeowSalty/LinguaFlow/backend/internal/parser/jsonp"
 	_ "github.com/MeowSalty/LinguaFlow/backend/internal/parser/markdown"
 	_ "github.com/MeowSalty/LinguaFlow/backend/internal/parser/subtitle"
+	_ "github.com/MeowSalty/LinguaFlow/backend/internal/parser/text"
 )
