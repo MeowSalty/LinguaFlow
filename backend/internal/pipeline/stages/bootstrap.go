@@ -12,6 +12,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 )
 
 // Bootstrap 在 translate 之前用 LLM 抽取并翻译领域术语，把增量写入运行时 Glossary。
@@ -29,6 +30,9 @@ type Bootstrap struct {
 	MinSourceLen     int
 	Logger           *slog.Logger
 	Reporter         progress.Reporter
+
+	// Repair 控制 LLM 响应解析的主动修复行为；零值等同 prompt.ParseBootstrapResponse 旧行为。
+	Repair repair.Options
 }
 
 func (*Bootstrap) Name() string { return "bootstrap" }
@@ -174,12 +178,17 @@ func (s *Bootstrap) processBatch(ctx context.Context, texts []string, doc *pipel
 		return 0, callErr
 	}
 
-	parsed, perr := prompt.ParseBootstrapResponse(resp.Text)
+	parsed, parseRepaired, perr := repair.TryRepairBootstrap(resp.Text, s.Repair)
 	if perr != nil {
 		logger.Warn("bootstrap parse failed",
 			"backend", b.Name(), "err", perr,
-			"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200))
+			"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200),
+			"repaired", parseRepaired)
 		return 0, perr
+	}
+	if len(parseRepaired) > 0 {
+		logger.Info("bootstrap response repaired",
+			"backend", b.Name(), "ops", parseRepaired)
 	}
 
 	// 批量化 Add：一次性把本批所有候选交给 Glossary，减少锁竞争；

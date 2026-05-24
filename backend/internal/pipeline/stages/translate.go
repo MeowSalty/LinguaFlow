@@ -17,6 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
@@ -56,6 +57,11 @@ type Translate struct {
 	//   - config.InlineConflictOff：完全不处理，沿用旧行为。
 	// 空字符串视同 off（防止配置未透传时崩溃）。
 	InlineConflictStrategy string
+
+	// Repair 控制 LLM 响应解析失败 / 部分缺失时的主动修复行为。零值等于不修复
+	// （行为与旧 strict 路径一致）；启用后，processBatchAtSize 改走 lenient 解析，
+	// 在 fatal / partial 时分别决定 shrink 或仅对缺失段单独重试。
+	Repair repair.Options
 }
 
 func (*Translate) Name() string { return "translate" }
@@ -181,27 +187,81 @@ func (s *Translate) processBatchAtSize(ctx context.Context, doc *pipeline.Docume
 		return s.shrinkOrFallback(ctx, doc, idxs, curSize, logger)
 	}
 
-	trans, glosEntries, perr := parseBatchResponse(resp.Text, wantIDs)
-	if perr != nil {
+	res := parseBatchResponseLenient(resp.Text, wantIDs, s.Repair)
+
+	// L4 升级重试：lenient 解析仍 fatal 时，附加反例 reminder 重试一次。
+	// 成本受控：每个 batch 最多 1 次升级重试，避免 token 爆炸 / 死循环。
+	if res.ParseErr != nil && s.Repair.PromptUpgrade {
+		reminder := repair.BuildRetryReminder(nil, res.ParseErr, headSnippet(resp.Text, 200))
+		req2 := req
+		req2.System = req.System + reminder
+		if resp2, err2 := s.callOnce(ctx, b, req2); err2 == nil {
+			res2 := parseBatchResponseLenient(resp2.Text, wantIDs, s.Repair)
+			if res2.ParseErr == nil {
+				logger.Info("batch response recovered by prompt upgrade",
+					"backend", b.Name(), "repaired", res2.Repaired)
+				resp = resp2
+				res = res2
+			}
+		}
+	}
+
+	if res.ParseErr != nil {
 		logger.Warn("batch response parse failed, shrinking or falling back",
-			"backend", b.Name(), "batch_size", len(idxs), "err", perr,
-			"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200))
+			"backend", b.Name(), "batch_size", len(idxs), "err", res.ParseErr,
+			"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200),
+			"repaired", res.Repaired)
 		return s.shrinkOrFallback(ctx, doc, idxs, curSize, logger)
 	}
+
+	// Partial 决策：缺失率超阈值时仍走 shrink，避免 1 个成功 + 99 个 single 的爆炸。
+	missingRatio := 0.0
+	if len(wantIDs) > 0 {
+		missingRatio = float64(len(res.Missing)) / float64(len(wantIDs))
+	}
+	if len(res.Missing) > 0 && (!s.Repair.Partial || missingRatio >= s.Repair.PartialThreshold) {
+		logger.Warn("partial recovery exceeded threshold, shrinking instead",
+			"backend", b.Name(), "missing", len(res.Missing), "total", len(wantIDs),
+			"threshold", s.Repair.PartialThreshold, "partial_enabled", s.Repair.Partial)
+		return s.shrinkOrFallback(ctx, doc, idxs, curSize, logger)
+	}
+
+	if len(res.Repaired) > 0 {
+		logger.Info("batch response repaired", "backend", b.Name(), "ops", res.Repaired,
+			"missing", len(res.Missing))
+	}
+
+	trans, glosEntries := res.Trans, res.Glos
 
 	logger.Debug("batch translated",
 		"backend", b.Name(), "batch_size", len(idxs),
 		"prompt_tokens", resp.Usage.PromptTokens,
 		"completion_tokens", resp.Usage.CompletionTokens,
-		"inline_glossary", len(glosEntries))
+		"inline_glossary", len(glosEntries),
+		"missing", len(res.Missing))
 
 	s.absorbInlineGlossary(ctx, glosEntries, trans, doc.TargetLang, logger)
 
 	// 写回并对每段做占位符校验；缺失的段单独补救（走 translateSingle 的 S5 路径）。
+	// Partial 路径下 trans 可能不包含全部 ID——缺失的 ID 收集到 missingIdxs 再单跑。
 	rep := s.reporter()
+	var missingIdxs []int
 	for k, idx := range idxs {
 		seg := &doc.Segments[idx]
-		seg.Target = trans[wantIDs[k]]
+		text, ok := trans[wantIDs[k]]
+		if !ok {
+			missingIdxs = append(missingIdxs, idx)
+			continue
+		}
+		// L3 占位符归一化：仅 normalize seg.Protected 中已知 key 的变体。
+		if s.Repair.PlaceholderNormalize {
+			if normText, normalized := repair.NormalizePlaceholders(text, seg.Protected); len(normalized) > 0 {
+				logger.Info("placeholders normalized",
+					"seg", seg.ID, "normalized", normalized)
+				text = normText
+			}
+		}
+		seg.Target = text
 		if missing := protect.MissingPlaceholders(seg); len(missing) > 0 {
 			logger.Warn("batch segment placeholders missing, single-retry",
 				"seg", seg.ID, "missing", missing)
@@ -213,6 +273,12 @@ func (s *Translate) processBatchAtSize(ctx context.Context, doc *pipeline.Docume
 		}
 		s.addTM(ctx, doc, seg, logger)
 		rep.SegmentDone()
+	}
+	for _, idx := range missingIdxs {
+		// translateSingle 内部自带 SegmentDone；这些段进度由 single 路径上报，不在批路径双计。
+		if err := s.translateSingle(ctx, doc, idx, logger); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -336,20 +402,34 @@ func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document,
 		"prompt_tokens", resp.Usage.PromptTokens,
 		"completion_tokens", resp.Usage.CompletionTokens,
 		"inline_glossary", len(glosEntries))
-	// 先吸收术语并就地修正冲突，再写回 seg.Target——保证 absorbInlineGlossary 能
-	// 对 trans 做并发冲突修正，避免文档内同一术语翻译不一致。
+	// 先吸收术语并就地修正冲突，再做占位符 normalize / 写回 seg.Target——保证
+	// absorbInlineGlossary 能对 trans 做并发冲突修正，避免文档内同一术语翻译不一致。
 	s.absorbInlineGlossary(ctx, glosEntries, trans, doc.TargetLang, logger)
-	seg.Target = trans[prompt.SingleID]
+	target := trans[prompt.SingleID]
+	if s.Repair.PlaceholderNormalize {
+		if normText, normalized := repair.NormalizePlaceholders(target, seg.Protected); len(normalized) > 0 {
+			logger.Info("placeholders normalized",
+				"seg", seg.ID, "normalized", normalized)
+			target = normText
+		}
+	}
+	seg.Target = target
 
 	// 占位符完整性校验：缺失则追加补救指令重试一次。
 	if missing := protect.MissingPlaceholders(seg); len(missing) > 0 {
 		logger.Warn("placeholders missing in translation, retrying with reminder",
 			"seg", seg.ID, "backend", b.Name(), "missing", missing)
-		reminder := fmt.Sprintf(
-			"\n\nIMPORTANT: your previous JSON translation omitted these placeholders: %s. "+
-				"Reproduce ALL of them verbatim in the translation, preserving their original positions. "+
-				"Reply with the same JSON envelope schema as before.",
-			strings.Join(missing, ", "))
+		var reminder string
+		if s.Repair.PromptUpgrade {
+			// L4：用 repair 包提供的反例 reminder，包含 missing 列表与上次响应头摘录。
+			reminder = repair.BuildRetryReminder(missing, nil, headSnippet(resp.Text, 200))
+		} else {
+			reminder = fmt.Sprintf(
+				"\n\nIMPORTANT: your previous JSON translation omitted these placeholders: %s. "+
+					"Reproduce ALL of them verbatim in the translation, preserving their original positions. "+
+					"Reply with the same JSON envelope schema as before.",
+				strings.Join(missing, ", "))
+		}
 		req2 := req
 		req2.System = req.System + reminder
 
@@ -368,7 +448,15 @@ func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document,
 			return nil
 		}
 		s.absorbInlineGlossary(ctx, glos2, trans2, doc.TargetLang, logger)
-		seg.Target = trans2[prompt.SingleID]
+		target2 := trans2[prompt.SingleID]
+		if s.Repair.PlaceholderNormalize {
+			if normText, normalized := repair.NormalizePlaceholders(target2, seg.Protected); len(normalized) > 0 {
+				logger.Info("placeholders normalized after retry",
+					"seg", seg.ID, "normalized", normalized)
+				target2 = normText
+			}
+		}
+		seg.Target = target2
 		if still := protect.MissingPlaceholders(seg); len(still) > 0 {
 			logger.Warn("placeholders still missing after retry, keep source",
 				"seg", seg.ID, "backend", b.Name(), "missing", still)
@@ -455,6 +543,9 @@ func (s *Translate) addTM(ctx context.Context, doc *pipeline.Document, seg *pipe
 // 当响应携带 inline 抽取的 {"glossary":[...]} 时，一并解析返回；缺失视作空切片。
 // 容错：模型有时把 JSON 包在 ```json … ``` 围栏里或夹带前后说明文字，
 // 这里用 jsonObjectSlice 抽出第一段完整的 JSON 对象。
+//
+// 这是严格语义：缺一 ID 即 err、多一 ID 即 err；调用方包括 translateSingle 的 S5
+// 占位符补救路径仍依赖该行为。批量主路径走 parseBatchResponseLenient（允许 partial）。
 func parseBatchResponse(text string, wantIDs []string) (map[string]string, []prompt.BootstrapEntry, error) {
 	body := jsonObjectSlice(text)
 	if body == "" {
@@ -479,6 +570,14 @@ func parseBatchResponse(text string, wantIDs []string) (map[string]string, []pro
 		return nil, nil, fmt.Errorf("expected %d translations, got %d", len(wantIDs), len(env.Translations))
 	}
 	return env.Translations, env.Glossary, nil
+}
+
+// parseBatchResponseLenient 是 parseBatchResponse 的"宽容"版本：委托 repair.TryRepair
+// 做多层结构修复 + schema 容错，允许 wantIDs 部分缺失（写入 Result.Missing），
+// 不把"多余 ID"视为错误。Result.Fatal=true 时调用方应走 shrinkOrFallback；否则
+// 根据 Result.Missing 决定是否仅对缺失段单独重跑。
+func parseBatchResponseLenient(text string, wantIDs []string, opt repair.Options) repair.Result {
+	return repair.TryRepair(text, wantIDs, opt)
 }
 
 // jsonObjectSlice 从 text 中截取首个 { 到与之配对的 } 之间的子串。

@@ -7,11 +7,14 @@ import (
 	"math"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 )
 
 func TestParseBatchResponse_OK(t *testing.T) {
@@ -265,7 +268,7 @@ func TestAbsorbInlineGlossary_RewritesConflictInBatch(t *testing.T) {
 	// Glossary 应当还是 Worker A 的版本。
 	hits, _ := g.Lookup(context.Background(), "thread pool here", "", "")
 	if len(hits) != 1 || hits[0].Target != "线程池" {
-		t.Errorf("authoritative target should remain 线程池, got %#v", hits)
+		t.Errorf("authoritative target should remain 线程池，got %#v", hits)
 	}
 }
 
@@ -349,5 +352,264 @@ func TestAbsorbInlineGlossary_ProposedTargetMissingInTranslations(t *testing.T) 
 	s.absorbInlineGlossary(context.Background(), entries, translations, "zh", quietLogger())
 	if translations["1"] != "本段未提到该术语。" {
 		t.Errorf("text without target should be unchanged, got %q", translations["1"])
+	}
+}
+
+// ---------- 集成测试：partial recovery / normalize 救回 / L4 升级重试 ----------
+//
+// 复用 bootstrap_test.go 中已有的 fakeBackend / fakeSelector：
+//   - fakeBackend{responses: []string, errs: []error} 按调用序号返回内容
+//   - fakeSelector 把单 backend 挂给 selector
+
+// countingReporter 计算 SegmentDone 调用次数；用于检测 partial 路径是否双计进度。
+type countingReporter struct {
+	stageStartCalls int32
+	segmentDones    int32
+	stageDoneCalls  int32
+}
+
+func (r *countingReporter) StageStart(string, int) { atomic.AddInt32(&r.stageStartCalls, 1) }
+func (r *countingReporter) SegmentDone()           { atomic.AddInt32(&r.segmentDones, 1) }
+func (r *countingReporter) StageDone()             { atomic.AddInt32(&r.stageDoneCalls, 1) }
+func (r *countingReporter) Close() error           { return nil }
+
+func newTestRenderer(t *testing.T) *prompt.Renderer {
+	t.Helper()
+	r, err := prompt.NewRenderer(config.PromptConfig{})
+	if err != nil {
+		t.Fatalf("renderer: %v", err)
+	}
+	return r
+}
+
+func newTestDoc(n int) *pipeline.Document {
+	segs := make([]pipeline.Segment, n)
+	for i := 0; i < n; i++ {
+		segs[i] = pipeline.Segment{
+			ID:     "seg-" + itoa(i),
+			Source: "source-" + itoa(i),
+		}
+	}
+	return &pipeline.Document{
+		Segments:   segs,
+		SourceLang: "en",
+		TargetLang: "zh",
+	}
+}
+
+func itoa(i int) string {
+	if i == 0 {
+		return "0"
+	}
+	var buf [20]byte
+	pos := len(buf)
+	neg := i < 0
+	if neg {
+		i = -i
+	}
+	for i > 0 {
+		pos--
+		buf[pos] = byte('0' + i%10)
+		i /= 10
+	}
+	if neg {
+		pos--
+		buf[pos] = '-'
+	}
+	return string(buf[pos:])
+}
+
+func defaultRepairOpts() repair.Options {
+	return repair.Options{
+		JSONStructural:       true,
+		SchemaAliases:        true,
+		Partial:              true,
+		PartialThreshold:     0.5,
+		PlaceholderNormalize: true,
+		PromptUpgrade:        true,
+	}
+}
+
+// TestProcessBatch_PartialRecovery_BelowThreshold 验证 partial 模式下，缺失少量 ID
+// 时已成功段直接写回，缺失段仅触发额外 LLM 调用，不走 shrink。
+func TestProcessBatch_PartialRecovery_BelowThreshold(t *testing.T) {
+	doc := newTestDoc(4)
+	rep := &countingReporter{}
+
+	fb := &fakeBackend{
+		name: "fake",
+		responses: []string{
+			// 第 1 次（batch）：缺 "4"
+			`{"translations":{"1":"a","2":"b","3":"c"}}`,
+			// 第 2 次（translateSingle for seg 3）：用 SingleID "0"
+			`{"translations":{"0":"d"}}`,
+		},
+	}
+	s := &Translate{
+		Selector:    &fakeSelector{b: fb},
+		Renderer:    newTestRenderer(t),
+		BatchSize:   4,
+		Concurrency: 1,
+		Logger:      quietLogger(),
+		Reporter:    rep,
+		Repair:      defaultRepairOpts(),
+	}
+	if err := s.Run(context.Background(), doc); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	for i, want := range []string{"a", "b", "c", "d"} {
+		if got := doc.Segments[i].Target; got != want {
+			t.Errorf("seg %d: target=%q want %q", i, got, want)
+		}
+	}
+	if got := int(fb.idx.Load()); got != 2 {
+		t.Errorf("backend calls: %d want 2 (1 batch + 1 single)", got)
+	}
+	// 4 段都应该恰好被 SegmentDone 一次：成功 3 段在 batch path、缺失 1 段在 translateSingle 内 defer。
+	if got := atomic.LoadInt32(&rep.segmentDones); got != 4 {
+		t.Errorf("SegmentDone calls=%d want 4 (no double-count, no missing)", got)
+	}
+}
+
+// TestProcessBatch_PartialRecovery_AboveThresholdShrinks 缺失率超阈值时走 shrink，
+// 不应触发 N 次 translateSingle。FallbackShrink=0 时直接坍缩到单段。
+func TestProcessBatch_PartialRecovery_AboveThresholdShrinks(t *testing.T) {
+	doc := newTestDoc(4)
+	rep := &countingReporter{}
+
+	fb := &fakeBackend{
+		name: "fake",
+		responses: []string{
+			// 第 1 次 batch：仅返回 1 个 → 缺失率 0.75 > 0.5 阈值 → shrink
+			`{"translations":{"1":"a"}}`,
+			// 后续 4 次 single 都返回完整
+			`{"translations":{"0":"x0"}}`,
+			`{"translations":{"0":"x1"}}`,
+			`{"translations":{"0":"x2"}}`,
+			`{"translations":{"0":"x3"}}`,
+		},
+	}
+	s := &Translate{
+		Selector:       &fakeSelector{b: fb},
+		Renderer:       newTestRenderer(t),
+		BatchSize:      4,
+		Concurrency:    1,
+		FallbackShrink: 0,
+		Logger:         quietLogger(),
+		Reporter:       rep,
+		Repair:         defaultRepairOpts(),
+	}
+	if err := s.Run(context.Background(), doc); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	// 预期：1 次 batch（partial 超阈值）+ 4 次 single = 5 次后端调用
+	if got := int(fb.idx.Load()); got != 5 {
+		t.Errorf("backend calls: %d want 5 (1 batch shrink-trigger + 4 single fallback)", got)
+	}
+	if got := atomic.LoadInt32(&rep.segmentDones); got != 4 {
+		t.Errorf("SegmentDone calls=%d want 4", got)
+	}
+}
+
+// TestProcessBatch_PlaceholderNormalizeAvoidsRetry 占位符变体被 normalize 修复后，
+// 不应触发占位符补救重试（不应新增 LLM 调用）。
+func TestProcessBatch_PlaceholderNormalizeAvoidsRetry(t *testing.T) {
+	doc := newTestDoc(1)
+	doc.Segments[0].Protected = map[string]string{"__LF_000001__": "<code>"}
+	doc.Segments[0].Source = "hello __LF_000001__"
+
+	rep := &countingReporter{}
+	fb := &fakeBackend{
+		name: "fake",
+		responses: []string{
+			// LLM 返回小写占位符，应被 normalize 救回
+			`{"translations":{"0":"你好 __lf_000001__"}}`,
+		},
+	}
+	s := &Translate{
+		Selector:    &fakeSelector{b: fb},
+		Renderer:    newTestRenderer(t),
+		BatchSize:   1,
+		Concurrency: 1,
+		Logger:      quietLogger(),
+		Reporter:    rep,
+		Repair:      defaultRepairOpts(),
+	}
+	if err := s.Run(context.Background(), doc); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if got := int(fb.idx.Load()); got != 1 {
+		t.Errorf("backend calls: %d want 1 (normalize should avoid second call)", got)
+	}
+	if doc.Segments[0].Target != "你好 __LF_000001__" {
+		t.Errorf("target normalize failed: %q", doc.Segments[0].Target)
+	}
+}
+
+// TestProcessBatch_PromptUpgradeRecovers 第一次返回 fatal JSON，第二次返回合法。
+// PromptUpgrade=true 时应触发反例 reminder 重试，整 batch 在第二次成功——
+// 不应走 shrink。
+func TestProcessBatch_PromptUpgradeRecovers(t *testing.T) {
+	doc := newTestDoc(2)
+	rep := &countingReporter{}
+
+	fb := &fakeBackend{
+		name: "fake",
+		responses: []string{
+			"I don't want to follow JSON schema today",
+			`{"translations":{"1":"a","2":"b"}}`,
+		},
+	}
+	s := &Translate{
+		Selector:    &fakeSelector{b: fb},
+		Renderer:    newTestRenderer(t),
+		BatchSize:   2,
+		Concurrency: 1,
+		Logger:      quietLogger(),
+		Reporter:    rep,
+		Repair:      defaultRepairOpts(),
+	}
+	if err := s.Run(context.Background(), doc); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if doc.Segments[0].Target != "a" || doc.Segments[1].Target != "b" {
+		t.Errorf("targets: %q, %q", doc.Segments[0].Target, doc.Segments[1].Target)
+	}
+	if got := int(fb.idx.Load()); got != 2 {
+		t.Errorf("backend calls: %d want 2 (1 fatal + 1 upgrade-retry)", got)
+	}
+}
+
+// TestProcessBatch_PromptUpgradeDisabledFallsBack 升级重试关闭时，fatal JSON 直接进 shrink。
+func TestProcessBatch_PromptUpgradeDisabledFallsBack(t *testing.T) {
+	doc := newTestDoc(2)
+	rep := &countingReporter{}
+
+	fb := &fakeBackend{
+		name: "fake",
+		responses: []string{
+			"not json",
+			`{"translations":{"0":"x0"}}`,
+			`{"translations":{"0":"x1"}}`,
+		},
+	}
+	opts := defaultRepairOpts()
+	opts.PromptUpgrade = false
+	s := &Translate{
+		Selector:       &fakeSelector{b: fb},
+		Renderer:       newTestRenderer(t),
+		BatchSize:      2,
+		Concurrency:    1,
+		FallbackShrink: 0,
+		Logger:         quietLogger(),
+		Reporter:       rep,
+		Repair:         opts,
+	}
+	if err := s.Run(context.Background(), doc); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	// 预期：1 次 batch + 2 次 single fallback = 3 次调用
+	if got := int(fb.idx.Load()); got != 3 {
+		t.Errorf("backend calls: %d want 3 (1 batch fatal + 2 single fallback)", got)
 	}
 }

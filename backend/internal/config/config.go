@@ -52,16 +52,32 @@ type ProtectConfig struct {
 }
 
 type TranslateConfig struct {
-	Concurrency     int         `yaml:"concurrency"`
-	BatchSize       int         `yaml:"batch_size"`      // 一次合并发送的段数；<=1 表示禁用批量
-	FallbackShrink  float64     `yaml:"fallback_shrink"` // 整批失败时下一级 batch = floor(cur*shrink)；0 = 直接降到单段；必须 <1
-	RateLimitPerSec int         `yaml:"rate_limit_per_sec"`
-	Retry           RetryConfig `yaml:"retry"`
+	Concurrency     int          `yaml:"concurrency"`
+	BatchSize       int          `yaml:"batch_size"`      // 一次合并发送的段数；<=1 表示禁用批量
+	FallbackShrink  float64      `yaml:"fallback_shrink"` // 整批失败时下一级 batch = floor(cur*shrink)；0 = 直接降到单段；必须 <1
+	RateLimitPerSec int          `yaml:"rate_limit_per_sec"`
+	Retry           RetryConfig  `yaml:"retry"`
+	Repair          RepairConfig `yaml:"repair"`
 }
 
 type RetryConfig struct {
 	MaxAttempts int           `yaml:"max_attempts"`
 	Backoff     time.Duration `yaml:"backoff"`
+}
+
+// RepairConfig 控制 LLM 响应解析失败 / 部分缺失时的"主动修复"行为。
+//
+// 各子开关默认开启（见 Default）；Enabled=false 时强制全部清零，调用方可一键关闭。
+// 修复算子无错时是 no-op，对正常响应零成本；主要受益场景是 Anthropic Tool Use 模拟、
+// Google 等非 strict JSON Schema 后端。
+type RepairConfig struct {
+	Enabled              bool    `yaml:"enabled"`
+	JSONStructural       bool    `yaml:"json_structural"`       // L1: BOM 剥离、多对象合并、尾随逗号、控制字符、括号补齐
+	SchemaAliases        bool    `yaml:"schema_aliases"`        // L2: translation/result/output/data.translations 同义化为 translations
+	Partial              bool    `yaml:"partial"`               // L2: 部分 ID 缺失时仅对缺失段重试，而非整批 shrink
+	PartialThreshold     float64 `yaml:"partial_threshold"`     // (0,1]; 缺失率 ≥ 阈值时仍走 shrink，避免单段爆炸
+	PlaceholderNormalize bool    `yaml:"placeholder_normalize"` // L3: 占位符大小写/下划线变体归一（仅 normalize 已知 key 的变体）
+	PromptUpgrade        bool    `yaml:"prompt_upgrade"`        // L4: 解析失败或占位符仍缺失时附加反例 reminder 重试一次
 }
 
 type PostprocessConfig struct {
@@ -118,6 +134,22 @@ const (
 	InlineConflictRewriteLocal = "rewrite-local"
 )
 
+// normalize 规范化 RepairConfig：
+//   - Enabled=false 时强制清零所有子开关，调用方据此短路所有修复逻辑
+//   - PartialThreshold 不在 (0,1] 时归 0.5（最常见默认）
+func (r *RepairConfig) normalize() {
+	if !r.Enabled {
+		r.JSONStructural = false
+		r.SchemaAliases = false
+		r.Partial = false
+		r.PlaceholderNormalize = false
+		r.PromptUpgrade = false
+	}
+	if r.PartialThreshold <= 0 || r.PartialThreshold > 1 || math.IsNaN(r.PartialThreshold) {
+		r.PartialThreshold = 0.5
+	}
+}
+
 type TMConfig struct {
 	Enabled bool   `yaml:"enabled"`
 	Driver  string `yaml:"driver"`
@@ -170,6 +202,15 @@ func Default() *Config {
 				FallbackShrink:  0.5,
 				RateLimitPerSec: 5,
 				Retry:           RetryConfig{MaxAttempts: 3, Backoff: time.Second},
+				Repair: RepairConfig{
+					Enabled:              true,
+					JSONStructural:       true,
+					SchemaAliases:        true,
+					Partial:              true,
+					PartialThreshold:     0.5,
+					PlaceholderNormalize: true,
+					PromptUpgrade:        true,
+				},
 			},
 			Postprocess: PostprocessConfig{Enabled: true, TrimSpaces: true},
 		},
@@ -219,6 +260,7 @@ func (c *Config) Validate() error {
 	if c.Pipeline.Split.MaxChars < 1 {
 		c.Pipeline.Split.MaxChars = 1200
 	}
+	c.Pipeline.Translate.Repair.normalize()
 	if c.Glossary.Bootstrap.MaxTermsPerBatch < 1 {
 		c.Glossary.Bootstrap.MaxTermsPerBatch = 20
 	}

@@ -17,6 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
@@ -156,6 +157,7 @@ func (e *Engine) buildPipeline() *pipeline.Pipeline {
 
 	bootstrapMode := e.cfg.Glossary.Bootstrap.Mode
 	inlineBootstrap := e.cfg.Glossary.Enabled && bootstrapMode == config.BootstrapModeInline
+	repairOpts := toRepairOptions(pc.Translate.Repair)
 
 	if e.cfg.Glossary.Enabled && bootstrapMode == config.BootstrapModePre && e.bootstrapRenderer != nil {
 		s = append(s, &stages.Bootstrap{
@@ -170,6 +172,7 @@ func (e *Engine) buildPipeline() *pipeline.Pipeline {
 			MinSourceLen:     e.cfg.Glossary.Bootstrap.MinSourceLen,
 			Logger:           e.logger,
 			Reporter:         e.reporter,
+			Repair:           repairOpts,
 		})
 	}
 	s = append(s, &stages.Translate{
@@ -188,6 +191,7 @@ func (e *Engine) buildPipeline() *pipeline.Pipeline {
 		MaxBootstrapTermsPerBatch: e.cfg.Glossary.Bootstrap.MaxTermsPerBatch,
 		MinBootstrapSourceLen:     e.cfg.Glossary.Bootstrap.MinSourceLen,
 		InlineConflictStrategy:    e.cfg.Glossary.Bootstrap.InlineConflictStrategy,
+		Repair:                    repairOpts,
 	})
 	if pc.Protect.Enabled {
 		s = append(s, stages.NewUnprotect(protector))
@@ -232,4 +236,18 @@ func firstNonEmpty(xs ...string) string {
 		}
 	}
 	return ""
+}
+
+// toRepairOptions 把 config 层的 RepairConfig 翻成 repair 包消费的 Options。
+// config.RepairConfig.normalize() 已在 Validate 阶段处理 Enabled=false 的短路与
+// PartialThreshold 边界，这里只做字段映射。
+func toRepairOptions(c config.RepairConfig) repair.Options {
+	return repair.Options{
+		JSONStructural:       c.JSONStructural,
+		SchemaAliases:        c.SchemaAliases,
+		Partial:              c.Partial,
+		PartialThreshold:     c.PartialThreshold,
+		PlaceholderNormalize: c.PlaceholderNormalize,
+		PromptUpgrade:        c.PromptUpgrade,
+	}
 }
