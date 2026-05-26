@@ -40,3 +40,31 @@ func TestValidateTranslatePlan_InvalidBackendOrder(t *testing.T) {
 		t.Fatal("expected validate error for invalid plan backend_order")
 	}
 }
+
+func TestValidateServerConfig_Defaults(t *testing.T) {
+	cfg := Default()
+	cfg.Server.Host = ""
+	cfg.Server.Port = 0
+	cfg.Server.DataDir = ""
+	cfg.Server.ShutdownTimeout = 0
+	cfg.Server.CORS.AllowedOrigins = nil
+
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if cfg.Server.Host != "0.0.0.0" {
+		t.Fatalf("host=%q want 0.0.0.0", cfg.Server.Host)
+	}
+	if cfg.Server.Port != 8080 {
+		t.Fatalf("port=%d want 8080", cfg.Server.Port)
+	}
+	if cfg.Server.DataDir != "./data" {
+		t.Fatalf("data_dir=%q want ./data", cfg.Server.DataDir)
+	}
+	if cfg.Server.ShutdownTimeout <= 0 {
+		t.Fatalf("shutdown_timeout=%v want > 0", cfg.Server.ShutdownTimeout)
+	}
+	if len(cfg.Server.CORS.AllowedOrigins) != 1 || cfg.Server.CORS.AllowedOrigins[0] != "*" {
+		t.Fatalf("allowed_origins=%v want [*]", cfg.Server.CORS.AllowedOrigins)
+	}
+}

@@ -145,3 +145,13 @@ output:
 log:
   level: info                               # debug | info | warn | error
   format: text                              # text | json
+
+# Web Service（阶段一最小骨架）
+server:
+  host: 0.0.0.0
+  port: 8080
+  data_dir: ./data
+  auto_migrate: true
+  shutdown_timeout: 10s
+  cors:
+    allowed_origins: ["*"]

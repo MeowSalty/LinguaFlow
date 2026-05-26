@@ -3,6 +3,9 @@ package config
 import (
 	"fmt"
 	"math"
+	"net"
+	"path/filepath"
+	"strconv"
 	"time"
 )
 
@@ -23,6 +26,7 @@ type Config struct {
 
 	Output OutputConfig `yaml:"output"`
 	Log    LogConfig    `yaml:"log"`
+	Server ServerConfig `yaml:"server"`
 }
 
 type BackendConfig struct {
@@ -200,6 +204,31 @@ type LogConfig struct {
 	Format string `yaml:"format"`
 }
 
+type ServerConfig struct {
+	Host            string        `yaml:"host"`
+	Port            int           `yaml:"port"`
+	DataDir         string        `yaml:"data_dir"`
+	AutoMigrate     bool          `yaml:"auto_migrate"`
+	ShutdownTimeout time.Duration `yaml:"shutdown_timeout"`
+	CORS            CORSConfig    `yaml:"cors"`
+}
+
+type CORSConfig struct {
+	AllowedOrigins []string `yaml:"allowed_origins"`
+}
+
+func (c ServerConfig) Address() string {
+	return net.JoinHostPort(c.Host, strconv.Itoa(c.Port))
+}
+
+func (c ServerConfig) DatabasePath() string {
+	return filepath.Join(c.DataDir, "linguaflow.db")
+}
+
+func (c ServerConfig) DatabaseDSN() string {
+	return c.DatabasePath() + "?_pragma=foreign_keys(1)"
+}
+
 // Default 返回内置默认配置。loader 在解析 yaml 前以此为基底合并。
 func Default() *Config {
 	return &Config{
@@ -260,6 +289,16 @@ func Default() *Config {
 		Plugins:           PluginsConfig{Enabled: false},
 		Output:            OutputConfig{Mode: "overwrite", PreserveExtension: true, Incremental: false},
 		Log:               LogConfig{Level: "info", Format: "text"},
+		Server: ServerConfig{
+			Host:            "0.0.0.0",
+			Port:            8080,
+			DataDir:         "./data",
+			AutoMigrate:     true,
+			ShutdownTimeout: 10 * time.Second,
+			CORS: CORSConfig{
+				AllowedOrigins: []string{"*"},
+			},
+		},
 	}
 }
 
@@ -324,6 +363,21 @@ func (c *Config) Validate() error {
 	default:
 		return fmt.Errorf("glossary.bootstrap.inline_conflict_strategy must be one of off|rewrite-local, got %q",
 			c.Glossary.Bootstrap.InlineConflictStrategy)
+	}
+	if c.Server.Host == "" {
+		c.Server.Host = "0.0.0.0"
+	}
+	if c.Server.Port < 1 || c.Server.Port > 65535 {
+		c.Server.Port = 8080
+	}
+	if c.Server.DataDir == "" {
+		c.Server.DataDir = "./data"
+	}
+	if c.Server.ShutdownTimeout <= 0 {
+		c.Server.ShutdownTimeout = 10 * time.Second
+	}
+	if len(c.Server.CORS.AllowedOrigins) == 0 {
+		c.Server.CORS.AllowedOrigins = []string{"*"}
 	}
 	return nil
 }

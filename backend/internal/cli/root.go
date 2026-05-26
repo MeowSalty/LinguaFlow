@@ -47,6 +47,7 @@ func newRoot() (*cobra.Command, *appCtx) {
 	root.PersistentFlags().BoolVarP(&rt.verbose, "verbose", "v", false, "等同于 --log-level=debug")
 	root.PersistentFlags().StringVar(&rt.progressMode, "progress", "auto", "进度反馈 auto|bar|log|none")
 
+	root.AddCommand(newServeCmd(rt))
 	root.AddCommand(newTranslateCmd(rt))
 	root.AddCommand(newInitCmd())
 	root.AddCommand(newVersionCmd())
