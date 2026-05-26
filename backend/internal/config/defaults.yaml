@@ -69,6 +69,21 @@ pipeline:
     # 留空 backend_order 时，默认按全局 backends 的 priority 顺序作为回退链。
     # backend_mode: prepend
     # backend_order: [anthropic-default, openai-default]
+    # 高级模式：显式定义多轮翻译计划。留空则沿用上面的简单模式
+    # （单轮 batch + fallback_shrink）。配置后，本轮未成功的段会流入下一轮，
+    # 不再在同一轮内按 shrink 递归缩批。
+    # plan:
+    #   - name: bulk
+    #     batch_size: 40
+    #     concurrency: 4
+    #     backend_mode: restrict
+    #     backend_order: [google-default]
+    #   - name: retry
+    #     batch_size: 10
+    #     backend_order: [openai-default]
+    #   - name: final-single
+    #     batch_size: 1
+    #     concurrency: 1
     retry:
       max_attempts: 3
       backoff: 1s

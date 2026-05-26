@@ -227,6 +227,20 @@ func TestShrinkNext(t *testing.T) {
 	}
 }
 
+func TestBuildContinuousPendingBatches(t *testing.T) {
+	got := buildContinuousPendingBatches([]int{0, 1, 2, 5, 6, 10}, 4)
+	want := [][]int{{0, 1, 2}, {5, 6}, {10}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("batches=%v want %v", got, want)
+	}
+
+	got = buildContinuousPendingBatches([]int{0, 1, 2, 3, 8, 9, 12}, 2)
+	want = [][]int{{0, 1}, {2, 3}, {8, 9}, {12}}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("batches=%v want %v", got, want)
+	}
+}
+
 func quietLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
@@ -611,5 +625,83 @@ func TestProcessBatch_PromptUpgradeDisabledFallsBack(t *testing.T) {
 	// 预期：1 次 batch + 2 次 single fallback = 3 次调用
 	if got := int(fb.idx.Load()); got != 3 {
 		t.Errorf("backend calls: %d want 3 (1 batch fatal + 2 single fallback)", got)
+	}
+}
+
+func TestTranslatePlan_UsesLongestContinuousRunsAndNextRoundFallback(t *testing.T) {
+	doc := newTestDoc(7)
+	doc.Segments[3].Skip = true
+	doc.Segments[3].Source = "skipped"
+
+	fb := &fakeBackend{
+		name: "fake",
+		responses: []string{
+			`{"translations":{"1":"a0","2":"a1","3":"a2"}}`,
+			`{"translations":{"1":"b4","2":"b5"}}`,
+			`{"translations":{"0":"c6"}}`,
+		},
+	}
+	s := &Translate{
+		Selector:    &fakeSelector{b: fb},
+		Renderer:    newTestRenderer(t),
+		BatchSize:   3,
+		Concurrency: 1,
+		Logger:      quietLogger(),
+		Reporter:    &countingReporter{},
+		Plan: []config.TranslateRoundConfig{
+			{Name: "bulk", BatchSize: 3, Concurrency: 1},
+			{Name: "single", BatchSize: 1, Concurrency: 1},
+		},
+		Repair: defaultRepairOpts(),
+	}
+	if err := s.Run(context.Background(), doc); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	for i, want := range []string{"a0", "a1", "a2", "skipped", "b4", "b5", "c6"} {
+		if got := doc.Segments[i].Target; got != want {
+			t.Fatalf("seg %d target=%q want %q", i, got, want)
+		}
+	}
+	if got := int(fb.idx.Load()); got != 3 {
+		t.Fatalf("backend calls=%d want 3", got)
+	}
+	if len(fb.requests) < 3 {
+		t.Fatalf("requests=%d want >=3", len(fb.requests))
+	}
+	if !strings.Contains(fb.requests[0].User, "source-0") || !strings.Contains(fb.requests[0].User, "source-2") {
+		t.Fatalf("first request should contain first continuous run, got %q", fb.requests[0].User)
+	}
+	if strings.Contains(fb.requests[0].User, "source-4") {
+		t.Fatalf("first request should not mix separated runs, got %q", fb.requests[0].User)
+	}
+	if !strings.Contains(fb.requests[2].User, "source-6") {
+		t.Fatalf("third request should be second-round single fallback, got %q", fb.requests[2].User)
+	}
+}
+
+func TestTranslatePlan_ExhaustedRoundsKeepSource(t *testing.T) {
+	doc := newTestDoc(2)
+	fb := &fakeBackend{
+		name:      "fake",
+		responses: []string{`{"translations":{"1":"ok"}}`},
+	}
+	s := &Translate{
+		Selector:    &fakeSelector{b: fb},
+		Renderer:    newTestRenderer(t),
+		BatchSize:   2,
+		Concurrency: 1,
+		Logger:      quietLogger(),
+		Reporter:    &countingReporter{},
+		Plan:        []config.TranslateRoundConfig{{Name: "only", BatchSize: 2, Concurrency: 1}},
+		Repair:      defaultRepairOpts(),
+	}
+	if err := s.Run(context.Background(), doc); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if doc.Segments[0].Target != "ok" {
+		t.Fatalf("seg0=%q want ok", doc.Segments[0].Target)
+	}
+	if doc.Segments[1].Target != doc.Segments[1].Source {
+		t.Fatalf("seg1=%q want source fallback %q", doc.Segments[1].Target, doc.Segments[1].Source)
 	}
 }

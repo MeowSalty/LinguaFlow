@@ -52,14 +52,33 @@ type ProtectConfig struct {
 }
 
 type TranslateConfig struct {
-	Concurrency     int          `yaml:"concurrency"`
-	BatchSize       int          `yaml:"batch_size"`      // 一次合并发送的段数；<=1 表示禁用批量
-	FallbackShrink  float64      `yaml:"fallback_shrink"` // 整批失败时下一级 batch = floor(cur*shrink)；0 = 直接降到单段；必须 <1
-	RateLimitPerSec int          `yaml:"rate_limit_per_sec"`
-	BackendMode     string       `yaml:"backend_mode"`
-	BackendOrder    []string     `yaml:"backend_order"`
-	Retry           RetryConfig  `yaml:"retry"`
-	Repair          RepairConfig `yaml:"repair"`
+	Concurrency     int                    `yaml:"concurrency"`
+	BatchSize       int                    `yaml:"batch_size"`      // 一次合并发送的段数；<=1 表示禁用批量
+	FallbackShrink  float64                `yaml:"fallback_shrink"` // 整批失败时下一级 batch = floor(cur*shrink)；0 = 直接降到单段；必须 <1
+	RateLimitPerSec int                    `yaml:"rate_limit_per_sec"`
+	BackendMode     string                 `yaml:"backend_mode"`
+	BackendOrder    []string               `yaml:"backend_order"`
+	Plan            []TranslateRoundConfig `yaml:"plan"`
+	Retry           RetryConfig            `yaml:"retry"`
+	Repair          RepairConfig           `yaml:"repair"`
+}
+
+// TranslateRoundConfig 描述一轮显式的翻译计划。
+//
+// 语义：本轮只处理上一轮遗留的 pending 段，成功段出队，未成功段留给下一轮。
+// 为保证上下文连续性，批次始终由“连续待翻译段”组成；如果没有连续段能凑满
+// BatchSize，则发送当前最长连续段。
+//
+// 零值继承 TranslateConfig 的同名字段：
+//   - BatchSize <= 0   → 继承 translate.batch_size（再兜底为 1）
+//   - Concurrency <= 0 → 继承 translate.concurrency（再兜底为 1）
+//   - BackendMode == "" && BackendOrder 为空 → 继承全局 translate 后端策略
+type TranslateRoundConfig struct {
+	Name         string   `yaml:"name"`
+	BatchSize    int      `yaml:"batch_size"`
+	Concurrency  int      `yaml:"concurrency"`
+	BackendMode  string   `yaml:"backend_mode"`
+	BackendOrder []string `yaml:"backend_order"`
 }
 
 type RetryConfig struct {
@@ -272,6 +291,9 @@ func (c *Config) Validate() error {
 	if err := validateBackendOrder("pipeline.translate", c.Backends, c.Pipeline.Translate.BackendMode, c.Pipeline.Translate.BackendOrder); err != nil {
 		return err
 	}
+	if err := validateTranslatePlan(c.Backends, &c.Pipeline.Translate); err != nil {
+		return err
+	}
 	c.Pipeline.Translate.Repair.normalize()
 	if c.Glossary.Bootstrap.MaxTermsPerBatch < 1 {
 		c.Glossary.Bootstrap.MaxTermsPerBatch = 20
@@ -302,6 +324,36 @@ func (c *Config) Validate() error {
 	default:
 		return fmt.Errorf("glossary.bootstrap.inline_conflict_strategy must be one of off|rewrite-local, got %q",
 			c.Glossary.Bootstrap.InlineConflictStrategy)
+	}
+	return nil
+}
+
+func validateTranslatePlan(backends []BackendConfig, tc *TranslateConfig) error {
+	for i := range tc.Plan {
+		r := &tc.Plan[i]
+		if r.BatchSize < 1 {
+			if tc.BatchSize > 0 {
+				r.BatchSize = tc.BatchSize
+			} else {
+				r.BatchSize = 1
+			}
+		}
+		if r.Concurrency < 1 {
+			if tc.Concurrency > 0 {
+				r.Concurrency = tc.Concurrency
+			} else {
+				r.Concurrency = 1
+			}
+		}
+		if r.BackendMode == "" {
+			r.BackendMode = tc.BackendMode
+		}
+		if len(r.BackendOrder) == 0 && len(tc.BackendOrder) > 0 {
+			r.BackendOrder = append([]string(nil), tc.BackendOrder...)
+		}
+		if err := validateBackendOrder(fmt.Sprintf("pipeline.translate.plan[%d]", i), backends, r.BackendMode, r.BackendOrder); err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
@@ -46,6 +48,7 @@ type Translate struct {
 	FallbackShrink float64 // (0,1) 启用递归缩小；0 表示失败后直接降到单段
 	BackendMode    string
 	BackendOrder   []string
+	Plan           []config.TranslateRoundConfig
 	Logger         *slog.Logger
 	Reporter       progress.Reporter
 
@@ -77,7 +80,11 @@ func (s *Translate) reporter() progress.Reporter {
 }
 
 func (s *Translate) plannedBackends(ctx context.Context) ([]backend.Backend, error) {
-	return s.Selector.Plan(ctx, s.BackendMode, s.BackendOrder)
+	return s.plannedBackendsFor(ctx, s.BackendMode, s.BackendOrder)
+}
+
+func (s *Translate) plannedBackendsFor(ctx context.Context, mode string, order []string) ([]backend.Backend, error) {
+	return s.Selector.Plan(ctx, mode, order)
 }
 
 func (s *Translate) Run(ctx context.Context, doc *pipeline.Document) error {
@@ -123,9 +130,349 @@ func (s *Translate) Run(ctx context.Context, doc *pipeline.Document) error {
 	rep.StageStart("translate", len(pending))
 	defer rep.StageDone()
 
+	if len(s.Plan) > 0 {
+		return s.runPlannedRounds(ctx, doc, pending, logger)
+	}
+
 	return runConcurrent(ctx, len(batches), s.Concurrency, func(ctx context.Context, bidx int) error {
 		return s.processBatchAtSize(ctx, doc, batches[bidx], bs, logger)
 	})
+}
+
+type runtimeRound struct {
+	Name         string
+	BatchSize    int
+	Concurrency  int
+	BackendMode  string
+	BackendOrder []string
+}
+
+func (s *Translate) runPlannedRounds(ctx context.Context, doc *pipeline.Document, pending []int, logger *slog.Logger) error {
+	rounds := s.runtimeRounds()
+	remaining := append([]int(nil), pending...)
+	rep := s.reporter()
+
+	for ridx, round := range rounds {
+		if len(remaining) == 0 {
+			break
+		}
+		batches := buildContinuousPendingBatches(remaining, round.BatchSize)
+		logger.Info("translate round start",
+			"round", ridx+1,
+			"name", round.Name,
+			"pending", len(remaining),
+			"batches", len(batches),
+			"batch_size", round.BatchSize,
+			"concurrency", round.Concurrency,
+			"backend_mode", round.BackendMode,
+			"backend_order", round.BackendOrder)
+
+		var (
+			mu          sync.Mutex
+			nextPending []int
+		)
+		if err := runConcurrent(ctx, len(batches), round.Concurrency, func(ctx context.Context, bidx int) error {
+			unresolved, err := s.processBatchInRound(ctx, doc, batches[bidx], round, logger)
+			if err != nil {
+				return err
+			}
+			if len(unresolved) == 0 {
+				return nil
+			}
+			mu.Lock()
+			nextPending = append(nextPending, unresolved...)
+			mu.Unlock()
+			return nil
+		}); err != nil {
+			return err
+		}
+
+		sort.Ints(nextPending)
+		logger.Info("translate round done",
+			"round", ridx+1,
+			"name", round.Name,
+			"resolved", len(remaining)-len(nextPending),
+			"pending_next", len(nextPending))
+		remaining = nextPending
+	}
+
+	for _, idx := range remaining {
+		doc.Segments[idx].Target = doc.Segments[idx].Source
+		rep.SegmentDone()
+	}
+	if len(remaining) > 0 {
+		logger.Warn("translate plan exhausted, keep source for unresolved segments", "count", len(remaining))
+	}
+	return nil
+}
+
+func (s *Translate) runtimeRounds() []runtimeRound {
+	rounds := make([]runtimeRound, 0, len(s.Plan))
+	for i, r := range s.Plan {
+		name := r.Name
+		if name == "" {
+			name = fmt.Sprintf("round-%d", i+1)
+		}
+		batchSize := r.BatchSize
+		if batchSize < 1 {
+			batchSize = max(s.BatchSize, 1)
+		}
+		concurrency := r.Concurrency
+		if concurrency < 1 {
+			concurrency = max(s.Concurrency, 1)
+		}
+		mode := r.BackendMode
+		if mode == "" {
+			mode = s.BackendMode
+		}
+		order := append([]string(nil), r.BackendOrder...)
+		if len(order) == 0 && len(s.BackendOrder) > 0 {
+			order = append(order, s.BackendOrder...)
+		}
+		rounds = append(rounds, runtimeRound{
+			Name:         name,
+			BatchSize:    batchSize,
+			Concurrency:  concurrency,
+			BackendMode:  mode,
+			BackendOrder: order,
+		})
+	}
+	return rounds
+}
+
+func buildContinuousPendingBatches(pending []int, target int) [][]int {
+	if len(pending) == 0 {
+		return nil
+	}
+	target = max(target, 1)
+	runs := make([][]int, 0)
+	start := 0
+	for i := 1; i <= len(pending); i++ {
+		if i == len(pending) || pending[i] != pending[i-1]+1 {
+			run := append([]int(nil), pending[start:i]...)
+			runs = append(runs, run)
+			start = i
+		}
+	}
+
+	batches := make([][]int, 0, len(pending))
+	leftovers := make([][]int, 0, len(runs))
+	for _, run := range runs {
+		for len(run) >= target {
+			batches = append(batches, append([]int(nil), run[:target]...))
+			run = run[target:]
+		}
+		if len(run) > 0 {
+			leftovers = append(leftovers, append([]int(nil), run...))
+		}
+	}
+	sort.SliceStable(leftovers, func(i, j int) bool {
+		if len(leftovers[i]) == len(leftovers[j]) {
+			return leftovers[i][0] < leftovers[j][0]
+		}
+		return len(leftovers[i]) > len(leftovers[j])
+	})
+	batches = append(batches, leftovers...)
+	return batches
+}
+
+func (s *Translate) processBatchInRound(ctx context.Context, doc *pipeline.Document, idxs []int, round runtimeRound, logger *slog.Logger) ([]int, error) {
+	if len(idxs) == 1 || round.BatchSize <= 1 {
+		ok, err := s.translateSingleInRound(ctx, doc, idxs[0], round, logger)
+		if err != nil {
+			return nil, err
+		}
+		if ok {
+			return nil, nil
+		}
+		return append([]int(nil), idxs...), nil
+	}
+
+	if s.Limiter != nil {
+		if err := s.Limiter.Wait(ctx); err != nil {
+			return nil, err
+		}
+	}
+
+	glos, tmHints := s.lookupHints(ctx, doc, idxs, logger)
+	inputs := make([]prompt.SegmentInput, len(idxs))
+	wantIDs := make([]string, len(idxs))
+	for k, idx := range idxs {
+		id := strconv.Itoa(k + 1)
+		inputs[k] = prompt.SegmentInput{ID: id, Source: doc.Segments[idx].Source}
+		wantIDs[k] = id
+	}
+	prev, next := prompt.BuildContextRange(doc, idxs[0], idxs[len(idxs)-1])
+	data := prompt.Data{
+		SourceLang:        doc.SourceLang,
+		TargetLang:        doc.TargetLang,
+		Segments:          inputs,
+		PrevContext:       prev,
+		NextContext:       next,
+		Glossary:          glos,
+		TMHints:           tmHints,
+		Vars:              doc.Vars,
+		InlineBootstrap:   s.InlineBootstrap,
+		MaxBootstrapTerms: s.maxBootstrapTerms(),
+	}
+	sys, usr, err := s.Renderer.Render(data)
+	if err != nil {
+		return nil, fmt.Errorf("render batch prompt (%d segs): %w", len(idxs), err)
+	}
+	req := backend.Request{System: sys, User: usr, JSONSchema: translationsSchema(wantIDs, s.InlineBootstrap)}
+	backends, err := s.plannedBackendsFor(ctx, round.BackendMode, round.BackendOrder)
+	if err != nil {
+		return nil, err
+	}
+	var (
+		resp    *backend.Response
+		res     repair.Result
+		picked  backend.Backend
+		lastErr error
+	)
+	for _, b := range backends {
+		resp, err = s.callOnce(ctx, b, req)
+		if err != nil {
+			logger.Warn("batch translate failed, trying next backend",
+				"backend", b.Name(), "batch_size", len(idxs), "round", round.Name, "err", err)
+			lastErr = err
+			continue
+		}
+		res = parseBatchResponseLenient(resp.Text, wantIDs, s.Repair)
+		if res.ParseErr != nil && s.Repair.PromptUpgrade {
+			reminder := repair.BuildRetryReminder(nil, res.ParseErr, headSnippet(resp.Text, 200))
+			req2 := req
+			req2.System = req.System + reminder
+			if resp2, err2 := s.callOnce(ctx, b, req2); err2 == nil {
+				res2 := parseBatchResponseLenient(resp2.Text, wantIDs, s.Repair)
+				if res2.ParseErr == nil {
+					resp = resp2
+					res = res2
+				}
+			}
+		}
+		if res.ParseErr != nil {
+			logger.Warn("batch response parse failed, trying next backend",
+				"backend", b.Name(), "batch_size", len(idxs), "round", round.Name, "err", res.ParseErr,
+				"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200), "repaired", res.Repaired)
+			lastErr = res.ParseErr
+			continue
+		}
+		picked = b
+		break
+	}
+	if picked == nil {
+		if lastErr != nil {
+			logger.Warn("all backends failed for planned batch, defer to next round", "batch_size", len(idxs), "round", round.Name, "err", lastErr)
+		}
+		return append([]int(nil), idxs...), nil
+	}
+
+	trans, glosEntries := res.Trans, res.Glos
+	s.absorbInlineGlossary(ctx, glosEntries, trans, doc.TargetLang, logger)
+	rep := s.reporter()
+	unresolved := make([]int, 0)
+	for k, idx := range idxs {
+		seg := &doc.Segments[idx]
+		text, ok := trans[wantIDs[k]]
+		if !ok {
+			seg.Target = ""
+			unresolved = append(unresolved, idx)
+			continue
+		}
+		if s.Repair.PlaceholderNormalize {
+			if normText, normalized := repair.NormalizePlaceholders(text, seg.Protected); len(normalized) > 0 {
+				logger.Info("placeholders normalized", "seg", seg.ID, "normalized", normalized)
+				text = normText
+			}
+		}
+		seg.Target = text
+		if missing := protect.MissingPlaceholders(seg); len(missing) > 0 {
+			logger.Warn("planned batch segment placeholders missing, defer to next round", "seg", seg.ID, "missing", missing, "round", round.Name)
+			seg.Target = ""
+			unresolved = append(unresolved, idx)
+			continue
+		}
+		s.addTM(ctx, doc, seg, logger)
+		rep.SegmentDone()
+	}
+	return unresolved, nil
+}
+
+func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Document, idx int, round runtimeRound, logger *slog.Logger) (bool, error) {
+	seg := &doc.Segments[idx]
+	if s.Limiter != nil {
+		if err := s.Limiter.Wait(ctx); err != nil {
+			return false, err
+		}
+	}
+	glos, tmHints := s.lookupHints(ctx, doc, []int{idx}, logger)
+	prev, next := prompt.BuildContext(doc, idx)
+	data := prompt.Data{
+		SourceLang:        doc.SourceLang,
+		TargetLang:        doc.TargetLang,
+		Source:            seg.Source,
+		PrevContext:       prev,
+		NextContext:       next,
+		Glossary:          glos,
+		TMHints:           tmHints,
+		Vars:              doc.Vars,
+		InlineBootstrap:   s.InlineBootstrap,
+		MaxBootstrapTerms: s.maxBootstrapTerms(),
+	}
+	sys, usr, err := s.Renderer.Render(data)
+	if err != nil {
+		return false, fmt.Errorf("render prompt for seg %s: %w", seg.ID, err)
+	}
+	wantIDs := []string{prompt.SingleID}
+	req := backend.Request{System: sys, User: usr, JSONSchema: translationsSchema(wantIDs, s.InlineBootstrap)}
+	backends, err := s.plannedBackendsFor(ctx, round.BackendMode, round.BackendOrder)
+	if err != nil {
+		return false, err
+	}
+	var (
+		resp        *backend.Response
+		trans       map[string]string
+		glosEntries []prompt.BootstrapEntry
+		picked      backend.Backend
+	)
+	for _, b := range backends {
+		resp, err = s.callOnce(ctx, b, req)
+		if err != nil {
+			logger.Warn("translate failed, trying next backend", "seg", seg.ID, "backend", b.Name(), "round", round.Name, "err", err)
+			continue
+		}
+		var perr error
+		trans, glosEntries, perr = parseBatchResponse(resp.Text, wantIDs)
+		if perr != nil {
+			logger.Warn("single response parse failed, trying next backend", "seg", seg.ID, "backend", b.Name(), "round", round.Name, "err", perr,
+				"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200))
+			continue
+		}
+		picked = b
+		break
+	}
+	if picked == nil {
+		seg.Target = ""
+		return false, nil
+	}
+	s.absorbInlineGlossary(ctx, glosEntries, trans, doc.TargetLang, logger)
+	target := trans[prompt.SingleID]
+	if s.Repair.PlaceholderNormalize {
+		if normText, normalized := repair.NormalizePlaceholders(target, seg.Protected); len(normalized) > 0 {
+			logger.Info("placeholders normalized", "seg", seg.ID, "normalized", normalized)
+			target = normText
+		}
+	}
+	seg.Target = target
+	if missing := protect.MissingPlaceholders(seg); len(missing) > 0 {
+		logger.Warn("placeholders missing in planned single, defer to next round", "seg", seg.ID, "backend", picked.Name(), "round", round.Name, "missing", missing)
+		seg.Target = ""
+		return false, nil
+	}
+	s.addTM(ctx, doc, seg, logger)
+	s.reporter().SegmentDone()
+	return true, nil
 }
 
 // processBatchAtSize 处理一批 idx（len(idxs) <= curSize）。len==1 或 BatchSize<=1 时走单段路径；

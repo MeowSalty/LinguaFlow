@@ -189,6 +189,7 @@ func (e *Engine) buildPipeline() *pipeline.Pipeline {
 		FallbackShrink:            pc.Translate.FallbackShrink,
 		BackendMode:               e.cfg.Pipeline.Translate.BackendMode,
 		BackendOrder:              e.cfg.Pipeline.Translate.BackendOrder,
+		Plan:                      e.cfg.Pipeline.Translate.Plan,
 		Logger:                    e.logger,
 		Reporter:                  e.reporter,
 		InlineBootstrap:           inlineBootstrap,
