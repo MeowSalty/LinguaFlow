@@ -89,3 +89,35 @@ func (s *Server) RetryJob(w http.ResponseWriter, r *http.Request, _ ComponentsPa
 func (s *Server) DownloadJobResult(w http.ResponseWriter, r *http.Request, _ ComponentsParametersJobId) {
 	s.requireAuth(http.HandlerFunc(s.handleDownloadJobResult)).ServeHTTP(w, r)
 }
+
+func (s *Server) ListActivity(w http.ResponseWriter, r *http.Request, _ ListActivityParams) {
+	s.requireAuth(http.HandlerFunc(s.handleListActivity)).ServeHTTP(w, r)
+}
+
+func (s *Server) ApproveJob(w http.ResponseWriter, r *http.Request, _ ComponentsParametersJobId) {
+	s.requireAuth(http.HandlerFunc(s.handleApproveJob)).ServeHTTP(w, r)
+}
+
+func (s *Server) RetranslateRejectedSegments(w http.ResponseWriter, r *http.Request, _ ComponentsParametersJobId) {
+	s.requireAuth(http.HandlerFunc(s.handleRetranslateRejected)).ServeHTTP(w, r)
+}
+
+func (s *Server) ListJobSegments(w http.ResponseWriter, r *http.Request, _ ComponentsParametersJobId, _ ListJobSegmentsParams) {
+	s.requireAuth(http.HandlerFunc(s.handleListJobSegments)).ServeHTTP(w, r)
+}
+
+func (s *Server) EditSegment(w http.ResponseWriter, r *http.Request, _ ComponentsParametersExtraSegmentId) {
+	s.requireAuth(http.HandlerFunc(s.handleEditSegment)).ServeHTTP(w, r)
+}
+
+func (s *Server) ApproveSegment(w http.ResponseWriter, r *http.Request, _ ComponentsParametersExtraSegmentId) {
+	s.requireAuth(http.HandlerFunc(s.handleApproveSegment)).ServeHTTP(w, r)
+}
+
+func (s *Server) RejectSegment(w http.ResponseWriter, r *http.Request, _ ComponentsParametersExtraSegmentId) {
+	s.requireAuth(http.HandlerFunc(s.handleRejectSegment)).ServeHTTP(w, r)
+}
+
+func (s *Server) GetStatsSummary(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleStatsSummary)).ServeHTTP(w, r)
+}

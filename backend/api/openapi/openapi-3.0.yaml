@@ -1,10 +1,22 @@
 components:
     parameters:
+        Cursor:
+            in: query
+            name: cursor
+            schema:
+                type: string
         JobId:
             in: path
             name: jobId
             required: true
             schema:
+                minimum: 1
+                type: integer
+        Limit:
+            in: query
+            name: limit
+            schema:
+                maximum: 100
                 minimum: 1
                 type: integer
         OrgId:
@@ -17,6 +29,13 @@ components:
         ProjectId:
             in: path
             name: projectId
+            required: true
+            schema:
+                minimum: 1
+                type: integer
+        SegmentId:
+            in: path
+            name: segmentId
             required: true
             schema:
                 minimum: 1
@@ -70,6 +89,25 @@ components:
             schema:
                 minimum: 1
                 type: integer
+        components_parameters_extra_Cursor:
+            in: query
+            name: cursor
+            schema:
+                type: string
+        components_parameters_extra_Limit:
+            in: query
+            name: limit
+            schema:
+                maximum: 100
+                minimum: 1
+                type: integer
+        components_parameters_extra_SegmentId:
+            in: path
+            name: segmentId
+            required: true
+            schema:
+                minimum: 1
+                type: integer
     responses:
         Problem:
             $ref: '#/components/responses/components_responses_Problem'
@@ -80,6 +118,47 @@ components:
                         $ref: '#/components/schemas/components_schemas_common_Problem'
             description: 错误响应
     schemas:
+        Activity:
+            properties:
+                action:
+                    type: string
+                actor:
+                    $ref: '#/components/schemas/User'
+                created_at:
+                    format: date-time
+                    type: string
+                id:
+                    type: integer
+                message:
+                    type: string
+                metadata:
+                    additionalProperties: true
+                    type: object
+                resource_id:
+                    type: integer
+                resource_type:
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+            required:
+                - id
+                - action
+                - resource_type
+                - created_at
+                - updated_at
+            type: object
+        ActivityListResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_Activity'
+                    type: array
+                next_cursor:
+                    type: string
+            required:
+                - items
+            type: object
         AddOrganizationMemberRequest:
             properties:
                 role:
@@ -328,6 +407,66 @@ components:
                 - password
                 - email
             type: object
+        Segment:
+            properties:
+                created_at:
+                    format: date-time
+                    type: string
+                id:
+                    type: integer
+                review_comment:
+                    type: string
+                reviewed_by:
+                    $ref: '#/components/schemas/User'
+                segment_index:
+                    type: integer
+                source_text:
+                    type: string
+                status:
+                    type: string
+                sub_job_id:
+                    type: integer
+                target_text:
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+            required:
+                - id
+                - sub_job_id
+                - segment_index
+                - source_text
+                - status
+                - created_at
+                - updated_at
+            type: object
+        SegmentDecisionRequest:
+            additionalProperties: false
+            properties:
+                comment:
+                    type: string
+            type: object
+        SegmentEditRequest:
+            additionalProperties: false
+            properties:
+                comment:
+                    type: string
+                target_text:
+                    type: string
+            required:
+                - target_text
+            type: object
+        SegmentListResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_Segment'
+                    type: array
+                next_cursor:
+                    type: string
+            required:
+                - items
+            type: object
         SubJob:
             properties:
                 created_at:
@@ -401,6 +540,31 @@ components:
                     type: string
             required:
                 - role
+            type: object
+        UsageStats:
+            properties:
+                api_calls:
+                    type: integer
+                completed_jobs:
+                    type: integer
+                failed_jobs:
+                    type: integer
+                input_tokens:
+                    type: integer
+                output_tokens:
+                    type: integer
+                segment_count:
+                    type: integer
+                usage_records:
+                    type: integer
+            required:
+                - api_calls
+                - input_tokens
+                - output_tokens
+                - segment_count
+                - usage_records
+                - completed_jobs
+                - failed_jobs
             type: object
         User:
             properties:
@@ -502,6 +666,47 @@ components:
                 - title
                 - status
             type: object
+        components_schemas_job_Activity:
+            properties:
+                action:
+                    type: string
+                actor:
+                    $ref: '#/components/schemas/User'
+                created_at:
+                    format: date-time
+                    type: string
+                id:
+                    type: integer
+                message:
+                    type: string
+                metadata:
+                    additionalProperties: true
+                    type: object
+                resource_id:
+                    type: integer
+                resource_type:
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+            required:
+                - id
+                - action
+                - resource_type
+                - created_at
+                - updated_at
+            type: object
+        components_schemas_job_ActivityListResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_Activity'
+                    type: array
+                next_cursor:
+                    type: string
+            required:
+                - items
+            type: object
         components_schemas_job_Job:
             properties:
                 completed_sub_jobs:
@@ -583,6 +788,66 @@ components:
             required:
                 - items
             type: object
+        components_schemas_job_Segment:
+            properties:
+                created_at:
+                    format: date-time
+                    type: string
+                id:
+                    type: integer
+                review_comment:
+                    type: string
+                reviewed_by:
+                    $ref: '#/components/schemas/User'
+                segment_index:
+                    type: integer
+                source_text:
+                    type: string
+                status:
+                    type: string
+                sub_job_id:
+                    type: integer
+                target_text:
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+            required:
+                - id
+                - sub_job_id
+                - segment_index
+                - source_text
+                - status
+                - created_at
+                - updated_at
+            type: object
+        components_schemas_job_SegmentDecisionRequest:
+            additionalProperties: false
+            properties:
+                comment:
+                    type: string
+            type: object
+        components_schemas_job_SegmentEditRequest:
+            additionalProperties: false
+            properties:
+                comment:
+                    type: string
+                target_text:
+                    type: string
+            required:
+                - target_text
+            type: object
+        components_schemas_job_SegmentListResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_Segment'
+                    type: array
+                next_cursor:
+                    type: string
+            required:
+                - items
+            type: object
         components_schemas_job_SubJob:
             properties:
                 created_at:
@@ -637,6 +902,31 @@ components:
                 - id
                 - filename
                 - status
+            type: object
+        components_schemas_job_UsageStats:
+            properties:
+                api_calls:
+                    type: integer
+                completed_jobs:
+                    type: integer
+                failed_jobs:
+                    type: integer
+                input_tokens:
+                    type: integer
+                output_tokens:
+                    type: integer
+                segment_count:
+                    type: integer
+                usage_records:
+                    type: integer
+            required:
+                - api_calls
+                - input_tokens
+                - output_tokens
+                - segment_count
+                - usage_records
+                - completed_jobs
+                - failed_jobs
             type: object
         components_schemas_organization_AddOrganizationMemberRequest:
             properties:
@@ -780,6 +1070,24 @@ info:
     version: 0.1.0
 openapi: 3.0.3
 paths:
+    /activity:
+        get:
+            operationId: ListActivity
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_ActivityListResponse'
+                    description: 活动审计日志
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 获取活动审计日志
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_extra_Cursor'
+            - $ref: '#/components/parameters/components_parameters_extra_Limit'
     /auth/login:
         post:
             operationId: LoginAuth
@@ -871,6 +1179,23 @@ paths:
             summary: 获取任务详情
         parameters:
             - $ref: '#/components/parameters/components_parameters_JobId'
+    /jobs/{jobId}/approve:
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_JobId'
+        post:
+            operationId: ApproveJob
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_Job'
+                    description: 任务详情
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 批量通过任务审校
     /jobs/{jobId}/cancel:
         parameters:
             - $ref: '#/components/parameters/components_parameters_JobId'
@@ -906,6 +1231,23 @@ paths:
             summary: 下载任务输出
         parameters:
             - $ref: '#/components/parameters/components_parameters_JobId'
+    /jobs/{jobId}/retranslate:
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_JobId'
+        post:
+            operationId: RetranslateRejectedSegments
+            responses:
+                "202":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_Job'
+                    description: 已重新入队
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 重译被驳回段
     /jobs/{jobId}/retry:
         parameters:
             - $ref: '#/components/parameters/components_parameters_JobId'
@@ -923,6 +1265,25 @@ paths:
             security:
                 - bearerAuth: []
             summary: 重试失败子任务
+    /jobs/{jobId}/segments:
+        get:
+            operationId: ListJobSegments
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_SegmentListResponse'
+                    description: 段列表
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 获取任务段列表
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_JobId'
+            - $ref: '#/components/parameters/components_parameters_extra_Cursor'
+            - $ref: '#/components/parameters/components_parameters_extra_Limit'
     /jobs/{jobId}/subjobs:
         get:
             operationId: ListJobSubJobs
@@ -1136,6 +1497,88 @@ paths:
             security:
                 - bearerAuth: []
             summary: 创建多文件翻译任务
+    /segments/{segmentId}:
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_extra_SegmentId'
+        put:
+            operationId: EditSegment
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/components_schemas_job_SegmentEditRequest'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_Segment'
+                    description: 段详情
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 编辑段译文
+    /segments/{segmentId}/approve:
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_extra_SegmentId'
+        post:
+            operationId: ApproveSegment
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/components_schemas_job_SegmentDecisionRequest'
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_Segment'
+                    description: 段详情
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 通过段译文
+    /segments/{segmentId}/reject:
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_extra_SegmentId'
+        post:
+            operationId: RejectSegment
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/components_schemas_job_SegmentDecisionRequest'
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_Segment'
+                    description: 段详情
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 驳回段译文
+    /stats/summary:
+        get:
+            operationId: GetStatsSummary
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_UsageStats'
+                    description: 用量统计
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 获取用量统计汇总
     /users/me:
         get:
             operationId: GetCurrentUser
@@ -1144,7 +1587,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/components_schemas_user_User'
+                                $ref: '#/components/schemas/User'
                     description: 当前用户
                 default:
                     $ref: '#/components/responses/components_responses_Problem'
@@ -1164,7 +1607,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/components_schemas_user_User'
+                                $ref: '#/components/schemas/User'
                     description: 更新后的用户
                 default:
                     $ref: '#/components/responses/components_responses_Problem'

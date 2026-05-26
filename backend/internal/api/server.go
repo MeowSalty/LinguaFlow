@@ -30,6 +30,9 @@ type Server struct {
 	projectSvc  *service.ProjectService
 	glossarySvc *service.GlossaryService
 	jobService  *service.JobService
+	reviewSvc   *service.ReviewService
+	statsSvc    *service.StatsService
+	auditSvc    *service.AuditService
 	jobStore    *filestore.LocalStore
 	jobQueue    *worker.Queue
 	jobRunner   *worker.Runner
@@ -54,6 +57,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 	s.projectSvc = service.NewProjectService(client, s.userService, s.backendSvc)
 	s.glossarySvc = service.NewGlossaryService(client, s.projectSvc)
 	s.jobService = service.NewJobService(client, s.projectSvc)
+	s.reviewSvc = service.NewReviewService(client, s.projectSvc)
+	s.statsSvc = service.NewStatsService(client, s.projectSvc)
+	s.auditSvc = service.NewAuditService(client, s.userService, s.projectSvc)
 	jobStore, err := filestore.NewLocal(filepath.Join(cfg.Server.DataDir, "jobs"))
 	if err != nil {
 		return nil, err

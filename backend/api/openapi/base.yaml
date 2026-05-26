@@ -39,6 +39,22 @@ paths:
     $ref: './paths/jobs.yaml#/jobRetry'
   /jobs/{jobId}/download:
     $ref: './paths/jobs.yaml#/jobDownload'
+  /jobs/{jobId}/segments:
+    $ref: './paths/review.yaml#/jobSegments'
+  /jobs/{jobId}/approve:
+    $ref: './paths/review.yaml#/jobApprove'
+  /jobs/{jobId}/retranslate:
+    $ref: './paths/review.yaml#/jobRetranslate'
+  /segments/{segmentId}:
+    $ref: './paths/review.yaml#/segmentById'
+  /segments/{segmentId}/approve:
+    $ref: './paths/review.yaml#/segmentApprove'
+  /segments/{segmentId}/reject:
+    $ref: './paths/review.yaml#/segmentReject'
+  /stats/summary:
+    $ref: './paths/stats.yaml#/statsSummary'
+  /activity:
+    $ref: './paths/stats.yaml#/activity'
 components:
   securitySchemes:
     bearerAuth:
@@ -54,6 +70,12 @@ components:
       $ref: './components/parameters.yaml#/JobId'
     SubJobId:
       $ref: './components/parameters.yaml#/SubJobId'
+    SegmentId:
+      $ref: './components/parameters_extra.yaml#/SegmentId'
+    Cursor:
+      $ref: './components/parameters_extra.yaml#/Cursor'
+    Limit:
+      $ref: './components/parameters_extra.yaml#/Limit'
   responses:
     Problem:
       $ref: './components/responses.yaml#/Problem'
@@ -104,3 +126,17 @@ components:
       $ref: './components/schemas/job.yaml#/SubJob'
     SubJobListResponse:
       $ref: './components/schemas/job.yaml#/SubJobListResponse'
+    Segment:
+      $ref: './components/schemas/job.yaml#/Segment'
+    SegmentListResponse:
+      $ref: './components/schemas/job.yaml#/SegmentListResponse'
+    SegmentEditRequest:
+      $ref: './components/schemas/job.yaml#/SegmentEditRequest'
+    SegmentDecisionRequest:
+      $ref: './components/schemas/job.yaml#/SegmentDecisionRequest'
+    UsageStats:
+      $ref: './components/schemas/job.yaml#/UsageStats'
+    Activity:
+      $ref: './components/schemas/job.yaml#/Activity'
+    ActivityListResponse:
+      $ref: './components/schemas/job.yaml#/ActivityListResponse'
