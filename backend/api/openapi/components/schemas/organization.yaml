@@ -1,0 +1,75 @@
+Organization:
+  type: object
+  required: [id, name, slug]
+  properties:
+    id:
+      type: integer
+    name:
+      type: string
+    slug:
+      type: string
+    display_name:
+      type: string
+    description:
+      type: string
+
+OrganizationRequest:
+  type: object
+  required: [name, slug]
+  properties:
+    name:
+      type: string
+    slug:
+      type: string
+    display_name:
+      type: string
+    description:
+      type: string
+
+OrganizationListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/Organization'
+
+OrganizationMember:
+  type: object
+  required: [id, role, user]
+  properties:
+    id:
+      type: integer
+    role:
+      type: string
+      enum: [owner, admin, member]
+    user:
+      $ref: './user.yaml#/User'
+
+OrganizationMemberListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/OrganizationMember'
+
+AddOrganizationMemberRequest:
+  type: object
+  required: [username]
+  properties:
+    username:
+      type: string
+    role:
+      type: string
+      enum: [owner, admin, member]
+
+UpdateOrganizationMemberRequest:
+  type: object
+  required: [role]
+  properties:
+    role:
+      type: string
+      enum: [owner, admin, member]

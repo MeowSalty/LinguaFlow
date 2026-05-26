@@ -1,0 +1,15 @@
+OrgId:
+  name: orgId
+  in: path
+  required: true
+  schema:
+    type: integer
+    minimum: 1
+
+UserId:
+  name: userId
+  in: path
+  required: true
+  schema:
+    type: integer
+    minimum: 1

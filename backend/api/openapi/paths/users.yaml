@@ -1,0 +1,53 @@
+currentUser:
+  get:
+    operationId: GetCurrentUser
+    summary: 获取当前用户
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 当前用户
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/User'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  put:
+    operationId: UpdateCurrentUser
+    summary: 更新当前用户资料
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/UpdateCurrentUserRequest'
+    responses:
+      '200':
+        description: 更新后的用户
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/User'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+currentUserPassword:
+  put:
+    operationId: ChangeCurrentUserPassword
+    summary: 修改当前用户密码
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/ChangePasswordRequest'
+    responses:
+      '204':
+        description: 密码已更新
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

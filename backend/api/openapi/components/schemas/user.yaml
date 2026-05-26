@@ -1,0 +1,35 @@
+User:
+  type: object
+  required: [id, username, email, role, active]
+  properties:
+    id:
+      type: integer
+    username:
+      type: string
+    email:
+      type: string
+      format: email
+    display_name:
+      type: string
+    role:
+      type: string
+    active:
+      type: boolean
+
+UpdateCurrentUserRequest:
+  type: object
+  properties:
+    display_name:
+      type: string
+    email:
+      type: string
+      format: email
+
+ChangePasswordRequest:
+  type: object
+  required: [current_password, new_password]
+  properties:
+    current_password:
+      type: string
+    new_password:
+      type: string

@@ -1,0 +1,72 @@
+openapi: 3.0.3
+info:
+  title: LinguaFlow Web Service API
+  version: 0.1.0
+servers:
+  - url: /api/v1
+paths:
+  /auth/register:
+    $ref: './paths/auth.yaml#/register'
+  /auth/login:
+    $ref: './paths/auth.yaml#/login'
+  /auth/refresh:
+    $ref: './paths/auth.yaml#/refresh'
+  /auth/logout:
+    $ref: './paths/auth.yaml#/logout'
+  /users/me:
+    $ref: './paths/users.yaml#/currentUser'
+  /users/me/password:
+    $ref: './paths/users.yaml#/currentUserPassword'
+  /orgs:
+    $ref: './paths/organizations.yaml#/organizations'
+  /orgs/{orgId}:
+    $ref: './paths/organizations.yaml#/organizationById'
+  /orgs/{orgId}/members:
+    $ref: './paths/organizations.yaml#/organizationMembers'
+  /orgs/{orgId}/members/{userId}:
+    $ref: './paths/organizations.yaml#/organizationMemberByUserId'
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: './components/security-schemes.yaml#/bearerAuth'
+  parameters:
+    OrgId:
+      $ref: './components/parameters.yaml#/OrgId'
+    UserId:
+      $ref: './components/parameters.yaml#/UserId'
+  responses:
+    Problem:
+      $ref: './components/responses.yaml#/Problem'
+  schemas:
+    Problem:
+      $ref: './components/schemas/common.yaml#/Problem'
+    User:
+      $ref: './components/schemas/user.yaml#/User'
+    RegisterRequest:
+      $ref: './components/schemas/auth.yaml#/RegisterRequest'
+    LoginRequest:
+      $ref: './components/schemas/auth.yaml#/LoginRequest'
+    RefreshRequest:
+      $ref: './components/schemas/auth.yaml#/RefreshRequest'
+    LogoutRequest:
+      $ref: './components/schemas/auth.yaml#/LogoutRequest'
+    AuthSession:
+      $ref: './components/schemas/auth.yaml#/AuthSession'
+    UpdateCurrentUserRequest:
+      $ref: './components/schemas/user.yaml#/UpdateCurrentUserRequest'
+    ChangePasswordRequest:
+      $ref: './components/schemas/user.yaml#/ChangePasswordRequest'
+    Organization:
+      $ref: './components/schemas/organization.yaml#/Organization'
+    OrganizationRequest:
+      $ref: './components/schemas/organization.yaml#/OrganizationRequest'
+    OrganizationListResponse:
+      $ref: './components/schemas/organization.yaml#/OrganizationListResponse'
+    OrganizationMember:
+      $ref: './components/schemas/organization.yaml#/OrganizationMember'
+    OrganizationMemberListResponse:
+      $ref: './components/schemas/organization.yaml#/OrganizationMemberListResponse'
+    AddOrganizationMemberRequest:
+      $ref: './components/schemas/organization.yaml#/AddOrganizationMemberRequest'
+    UpdateOrganizationMemberRequest:
+      $ref: './components/schemas/organization.yaml#/UpdateOrganizationMemberRequest'
