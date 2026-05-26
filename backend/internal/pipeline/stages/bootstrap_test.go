@@ -49,6 +49,9 @@ type fakeSelector struct{ b backend.Backend }
 func (s *fakeSelector) Pick(context.Context, string) (backend.Backend, error) {
 	return s.b, nil
 }
+func (s *fakeSelector) Plan(context.Context, string, []string) ([]backend.Backend, error) {
+	return []backend.Backend{s.b}, nil
+}
 func (s *fakeSelector) All() []backend.Backend { return []backend.Backend{s.b} }
 func (s *fakeSelector) Close() error           { return nil }
 

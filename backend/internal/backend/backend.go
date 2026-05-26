@@ -88,6 +88,7 @@ func Build(cfg config.BackendConfig) (Backend, error) {
 // Selector 按优先级选择已启用的后端，并支持简单回退。
 type Selector interface {
 	Pick(ctx context.Context, hint string) (Backend, error)
+	Plan(ctx context.Context, mode string, order []string) ([]Backend, error)
 	All() []Backend
 	Close() error
 }
@@ -137,6 +138,39 @@ func (s *prioritySelector) Pick(_ context.Context, hint string) (Backend, error)
 		return nil, ErrNoBackend
 	}
 	return s.entries[0].backend, nil
+}
+
+func (s *prioritySelector) Plan(_ context.Context, mode string, order []string) ([]Backend, error) {
+	if len(s.entries) == 0 {
+		return nil, ErrNoBackend
+	}
+	if len(order) == 0 {
+		return s.All(), nil
+	}
+	byName := make(map[string]Backend, len(s.entries))
+	for _, e := range s.entries {
+		byName[e.name] = e.backend
+	}
+	planned := make([]Backend, 0, len(s.entries))
+	used := make(map[string]struct{}, len(order))
+	for _, name := range order {
+		b, ok := byName[name]
+		if !ok {
+			return nil, fmt.Errorf("backend: unknown backend %q", name)
+		}
+		planned = append(planned, b)
+		used[name] = struct{}{}
+	}
+	if mode == config.BackendModeRestrict {
+		return planned, nil
+	}
+	for _, e := range s.entries {
+		if _, ok := used[e.name]; ok {
+			continue
+		}
+		planned = append(planned, e.backend)
+	}
+	return planned, nil
 }
 
 func (s *prioritySelector) All() []Backend {

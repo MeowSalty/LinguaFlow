@@ -44,6 +44,8 @@ type Translate struct {
 	Concurrency    int
 	BatchSize      int     // <=1 表示禁用批量
 	FallbackShrink float64 // (0,1) 启用递归缩小；0 表示失败后直接降到单段
+	BackendMode    string
+	BackendOrder   []string
 	Logger         *slog.Logger
 	Reporter       progress.Reporter
 
@@ -72,6 +74,10 @@ func (s *Translate) reporter() progress.Reporter {
 		return progress.Nop{}
 	}
 	return s.Reporter
+}
+
+func (s *Translate) plannedBackends(ctx context.Context) ([]backend.Backend, error) {
+	return s.Selector.Plan(ctx, s.BackendMode, s.BackendOrder)
 }
 
 func (s *Translate) Run(ctx context.Context, doc *pipeline.Document) error {
@@ -165,76 +171,84 @@ func (s *Translate) processBatchAtSize(ctx context.Context, doc *pipeline.Docume
 		return fmt.Errorf("render batch prompt (%d segs): %w", len(idxs), err)
 	}
 
-	b, err := s.Selector.Pick(ctx, "")
-	if err != nil {
-		return err
-	}
 	req := backend.Request{
 		System:     sys,
 		User:       usr,
 		JSONSchema: translationsSchema(wantIDs, s.InlineBootstrap),
 	}
 
-	var resp *backend.Response
-	err = backend.WithRetry(ctx, s.Retry, func() error {
-		var rerr error
-		resp, rerr = b.Translate(ctx, req)
-		return rerr
-	})
+	backends, err := s.plannedBackends(ctx)
 	if err != nil {
-		logger.Warn("batch translate failed, shrinking or falling back",
-			"backend", b.Name(), "batch_size", len(idxs), "err", err)
-		return s.shrinkOrFallback(ctx, doc, idxs, curSize, logger)
+		return err
 	}
+	var (
+		resp    *backend.Response
+		res     repair.Result
+		picked  backend.Backend
+		lastErr error
+	)
+	for _, b := range backends {
+		resp, err = s.callOnce(ctx, b, req)
+		if err != nil {
+			logger.Warn("batch translate failed, trying next backend",
+				"backend", b.Name(), "batch_size", len(idxs), "err", err)
+			lastErr = err
+			continue
+		}
+		res = parseBatchResponseLenient(resp.Text, wantIDs, s.Repair)
 
-	res := parseBatchResponseLenient(resp.Text, wantIDs, s.Repair)
-
-	// L4 升级重试：lenient 解析仍 fatal 时，附加反例 reminder 重试一次。
-	// 成本受控：每个 batch 最多 1 次升级重试，避免 token 爆炸 / 死循环。
-	if res.ParseErr != nil && s.Repair.PromptUpgrade {
-		reminder := repair.BuildRetryReminder(nil, res.ParseErr, headSnippet(resp.Text, 200))
-		req2 := req
-		req2.System = req.System + reminder
-		if resp2, err2 := s.callOnce(ctx, b, req2); err2 == nil {
-			res2 := parseBatchResponseLenient(resp2.Text, wantIDs, s.Repair)
-			if res2.ParseErr == nil {
-				logger.Info("batch response recovered by prompt upgrade",
-					"backend", b.Name(), "repaired", res2.Repaired)
-				resp = resp2
-				res = res2
+		if res.ParseErr != nil && s.Repair.PromptUpgrade {
+			reminder := repair.BuildRetryReminder(nil, res.ParseErr, headSnippet(resp.Text, 200))
+			req2 := req
+			req2.System = req.System + reminder
+			if resp2, err2 := s.callOnce(ctx, b, req2); err2 == nil {
+				res2 := parseBatchResponseLenient(resp2.Text, wantIDs, s.Repair)
+				if res2.ParseErr == nil {
+					logger.Info("batch response recovered by prompt upgrade",
+						"backend", b.Name(), "repaired", res2.Repaired)
+					resp = resp2
+					res = res2
+				}
 			}
 		}
+		if res.ParseErr != nil {
+			logger.Warn("batch response parse failed, trying next backend",
+				"backend", b.Name(), "batch_size", len(idxs), "err", res.ParseErr,
+				"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200),
+				"repaired", res.Repaired)
+			lastErr = res.ParseErr
+			continue
+		}
+		missingRatio := 0.0
+		if len(wantIDs) > 0 {
+			missingRatio = float64(len(res.Missing)) / float64(len(wantIDs))
+		}
+		if len(res.Missing) > 0 && (!s.Repair.Partial || missingRatio >= s.Repair.PartialThreshold) {
+			logger.Warn("partial recovery exceeded threshold, trying next backend",
+				"backend", b.Name(), "missing", len(res.Missing), "total", len(wantIDs),
+				"threshold", s.Repair.PartialThreshold, "partial_enabled", s.Repair.Partial)
+			lastErr = fmt.Errorf("partial recovery exceeded threshold")
+			continue
+		}
+		picked = b
+		break
 	}
-
-	if res.ParseErr != nil {
-		logger.Warn("batch response parse failed, shrinking or falling back",
-			"backend", b.Name(), "batch_size", len(idxs), "err", res.ParseErr,
-			"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200),
-			"repaired", res.Repaired)
-		return s.shrinkOrFallback(ctx, doc, idxs, curSize, logger)
-	}
-
-	// Partial 决策：缺失率超阈值时仍走 shrink，避免 1 个成功 + 99 个 single 的爆炸。
-	missingRatio := 0.0
-	if len(wantIDs) > 0 {
-		missingRatio = float64(len(res.Missing)) / float64(len(wantIDs))
-	}
-	if len(res.Missing) > 0 && (!s.Repair.Partial || missingRatio >= s.Repair.PartialThreshold) {
-		logger.Warn("partial recovery exceeded threshold, shrinking instead",
-			"backend", b.Name(), "missing", len(res.Missing), "total", len(wantIDs),
-			"threshold", s.Repair.PartialThreshold, "partial_enabled", s.Repair.Partial)
+	if picked == nil {
+		if lastErr != nil {
+			logger.Warn("all backends failed for batch, shrinking or falling back", "batch_size", len(idxs), "err", lastErr)
+		}
 		return s.shrinkOrFallback(ctx, doc, idxs, curSize, logger)
 	}
 
 	if len(res.Repaired) > 0 {
-		logger.Info("batch response repaired", "backend", b.Name(), "ops", res.Repaired,
+		logger.Info("batch response repaired", "backend", picked.Name(), "ops", res.Repaired,
 			"missing", len(res.Missing))
 	}
 
 	trans, glosEntries := res.Trans, res.Glos
 
 	logger.Debug("batch translated",
-		"backend", b.Name(), "batch_size", len(idxs),
+		"backend", picked.Name(), "batch_size", len(idxs),
 		"prompt_tokens", resp.Usage.PromptTokens,
 		"completion_tokens", resp.Usage.CompletionTokens,
 		"inline_glossary", len(glosEntries),
@@ -370,35 +384,46 @@ func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document,
 		return fmt.Errorf("render prompt for seg %s: %w", seg.ID, err)
 	}
 
-	b, err := s.Selector.Pick(ctx, "")
-	if err != nil {
-		return err
-	}
 	wantIDs := []string{prompt.SingleID}
 	req := backend.Request{
 		System:     sys,
 		User:       usr,
 		JSONSchema: translationsSchema(wantIDs, s.InlineBootstrap),
 	}
-
-	resp, err := s.callOnce(ctx, b, req)
+	backends, err := s.plannedBackends(ctx)
 	if err != nil {
-		logger.Warn("translate failed, keep source",
-			"seg", seg.ID, "backend", b.Name(), "err", err)
-		seg.Target = seg.Source
-		return nil
+		return err
 	}
-
-	trans, glosEntries, perr := parseBatchResponse(resp.Text, wantIDs)
-	if perr != nil {
-		logger.Warn("single response parse failed, keep source",
-			"seg", seg.ID, "backend", b.Name(), "err", perr,
-			"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200))
+	var (
+		resp        *backend.Response
+		trans       map[string]string
+		glosEntries []prompt.BootstrapEntry
+		picked      backend.Backend
+	)
+	for _, b := range backends {
+		resp, err = s.callOnce(ctx, b, req)
+		if err != nil {
+			logger.Warn("translate failed, trying next backend",
+				"seg", seg.ID, "backend", b.Name(), "err", err)
+			continue
+		}
+		var perr error
+		trans, glosEntries, perr = parseBatchResponse(resp.Text, wantIDs)
+		if perr != nil {
+			logger.Warn("single response parse failed, trying next backend",
+				"seg", seg.ID, "backend", b.Name(), "err", perr,
+				"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200))
+			continue
+		}
+		picked = b
+		break
+	}
+	if picked == nil {
 		seg.Target = seg.Source
 		return nil
 	}
 	logger.Debug("segment translated",
-		"seg", seg.ID, "backend", b.Name(),
+		"seg", seg.ID, "backend", picked.Name(),
 		"prompt_tokens", resp.Usage.PromptTokens,
 		"completion_tokens", resp.Usage.CompletionTokens,
 		"inline_glossary", len(glosEntries))
@@ -418,7 +443,7 @@ func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document,
 	// 占位符完整性校验：缺失则追加补救指令重试一次。
 	if missing := protect.MissingPlaceholders(seg); len(missing) > 0 {
 		logger.Warn("placeholders missing in translation, retrying with reminder",
-			"seg", seg.ID, "backend", b.Name(), "missing", missing)
+			"seg", seg.ID, "backend", picked.Name(), "missing", missing)
 		var reminder string
 		if s.Repair.PromptUpgrade {
 			// L4：用 repair 包提供的反例 reminder，包含 missing 列表与上次响应头摘录。
@@ -433,17 +458,17 @@ func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document,
 		req2 := req
 		req2.System = req.System + reminder
 
-		resp2, err2 := s.callOnce(ctx, b, req2)
+		resp2, err2 := s.callOnce(ctx, picked, req2)
 		if err2 != nil {
 			logger.Warn("placeholder retry failed, keep source",
-				"seg", seg.ID, "backend", b.Name(), "err", err2)
+				"seg", seg.ID, "backend", picked.Name(), "err", err2)
 			seg.Target = seg.Source
 			return nil
 		}
 		trans2, glos2, perr2 := parseBatchResponse(resp2.Text, wantIDs)
 		if perr2 != nil {
 			logger.Warn("placeholder retry response parse failed, keep source",
-				"seg", seg.ID, "backend", b.Name(), "err", perr2)
+				"seg", seg.ID, "backend", picked.Name(), "err", perr2)
 			seg.Target = seg.Source
 			return nil
 		}
@@ -459,7 +484,7 @@ func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document,
 		seg.Target = target2
 		if still := protect.MissingPlaceholders(seg); len(still) > 0 {
 			logger.Warn("placeholders still missing after retry, keep source",
-				"seg", seg.ID, "backend", b.Name(), "missing", still)
+				"seg", seg.ID, "backend", picked.Name(), "missing", still)
 			seg.Target = seg.Source
 			return nil
 		}

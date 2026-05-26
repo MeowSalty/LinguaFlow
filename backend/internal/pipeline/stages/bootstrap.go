@@ -26,6 +26,8 @@ type Bootstrap struct {
 	Retry            backend.RetryPolicy
 	Concurrency      int
 	BatchSize        int
+	BackendMode      string
+	BackendOrder     []string
 	MaxTermsPerBatch int
 	MinSourceLen     int
 	Logger           *slog.Logger
@@ -155,70 +157,72 @@ func (s *Bootstrap) processBatch(ctx context.Context, texts []string, doc *pipel
 		return 0, err
 	}
 
-	b, err := s.Selector.Pick(ctx, "")
-	if err != nil {
-		logger.Warn("bootstrap pick backend failed", "err", err)
-		return 0, err
-	}
-
 	req := backend.Request{
 		System:         sys,
 		User:           usr,
 		ResponseFormat: "json_schema",
 		JSONSchema:     prompt.BootstrapSchema(),
 	}
-	var resp *backend.Response
-	callErr := backend.WithRetry(ctx, s.Retry, func() error {
-		var rerr error
-		resp, rerr = b.Translate(ctx, req)
-		return rerr
-	})
-	if callErr != nil {
-		logger.Warn("bootstrap LLM call failed", "backend", b.Name(), "err", callErr)
-		return 0, callErr
+	backends, err := s.Selector.Plan(ctx, s.BackendMode, s.BackendOrder)
+	if err != nil {
+		logger.Warn("bootstrap resolve backends failed", "err", err)
+		return 0, err
 	}
-
-	parsed, parseRepaired, perr := repair.TryRepairBootstrap(resp.Text, s.Repair)
-	if perr != nil {
-		logger.Warn("bootstrap parse failed",
-			"backend", b.Name(), "err", perr,
-			"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200),
-			"repaired", parseRepaired)
-		return 0, perr
-	}
-	if len(parseRepaired) > 0 {
-		logger.Info("bootstrap response repaired",
-			"backend", b.Name(), "ops", parseRepaired)
-	}
-
-	// 批量化 Add：一次性把本批所有候选交给 Glossary，减少锁竞争；
-	// 结果里 Added 即为真正写入数，Skipped 由 stage 间日志承载（不需要修正译文，
-	// 因为 bootstrap stage 此时还没有 translations）。
-	candidates := make([]glossary.Entry, 0, len(parsed))
-	for _, e := range parsed {
-		if len([]rune(e.Source)) < s.MinSourceLen {
+	var lastErr error
+	for _, b := range backends {
+		var resp *backend.Response
+		callErr := backend.WithRetry(ctx, s.Retry, func() error {
+			var rerr error
+			resp, rerr = b.Translate(ctx, req)
+			return rerr
+		})
+		if callErr != nil {
+			logger.Warn("bootstrap LLM call failed", "backend", b.Name(), "err", callErr)
+			lastErr = callErr
 			continue
 		}
-		candidates = append(candidates, glossary.Entry{
-			Source: e.Source,
-			Target: e.Target,
-			Notes:  e.Notes,
-		})
+
+		parsed, parseRepaired, perr := repair.TryRepairBootstrap(resp.Text, s.Repair)
+		if perr != nil {
+			logger.Warn("bootstrap parse failed",
+				"backend", b.Name(), "err", perr,
+				"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200),
+				"repaired", parseRepaired)
+			lastErr = perr
+			continue
+		}
+		if len(parseRepaired) > 0 {
+			logger.Info("bootstrap response repaired",
+				"backend", b.Name(), "ops", parseRepaired)
+		}
+
+		candidates := make([]glossary.Entry, 0, len(parsed))
+		for _, e := range parsed {
+			if len([]rune(e.Source)) < s.MinSourceLen {
+				continue
+			}
+			candidates = append(candidates, glossary.Entry{
+				Source: e.Source,
+				Target: e.Target,
+				Notes:  e.Notes,
+			})
+		}
+		res, addErr := s.Glossary.Add(ctx, candidates...)
+		if addErr != nil {
+			logger.Warn("glossary add failed", "err", addErr)
+		}
+		added := len(res.Added)
+		logger.Debug("bootstrap batch ok",
+			"backend", b.Name(),
+			"batch_segments", len(texts),
+			"parsed", len(parsed),
+			"added", added,
+			"skipped", len(res.Skipped),
+			"prompt_tokens", resp.Usage.PromptTokens,
+			"completion_tokens", resp.Usage.CompletionTokens)
+		return added, nil
 	}
-	res, addErr := s.Glossary.Add(ctx, candidates...)
-	if addErr != nil {
-		logger.Warn("glossary add failed", "err", addErr)
-	}
-	added := len(res.Added)
-	logger.Debug("bootstrap batch ok",
-		"backend", b.Name(),
-		"batch_segments", len(texts),
-		"parsed", len(parsed),
-		"added", added,
-		"skipped", len(res.Skipped),
-		"prompt_tokens", resp.Usage.PromptTokens,
-		"completion_tokens", resp.Usage.CompletionTokens)
-	return added, nil
+	return 0, lastErr
 }
 
 // collectExisting 把所有 texts 上的 Lookup 命中合并去重，作为 existing 提示给 LLM。

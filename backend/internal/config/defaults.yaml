@@ -62,6 +62,13 @@ pipeline:
     batch_size: 1                           # >1 时把多段合并为一次 LLM 调用，吞吐显著提升
     fallback_shrink: 0.5                    # 整批失败时下一级 batch = floor(cur*shrink) 并发重试；0 = 直接降到单段
     rate_limit_per_sec: 5
+    # 阶段级后端顺序控制：
+    #   - backend_mode: prepend | restrict
+    #   - prepend : 先按 backend_order 尝试，再补齐其余全局 backends
+    #   - restrict: 只允许使用 backend_order 中列出的后端
+    # 留空 backend_order 时，默认按全局 backends 的 priority 顺序作为回退链。
+    # backend_mode: prepend
+    # backend_order: [anthropic-default, openai-default]
     retry:
       max_attempts: 3
       backoff: 1s
@@ -90,6 +97,10 @@ glossary:
                                 #   pre   : 翻译前独立扫一遍抽取术语，整篇文档都能用上
                                 #   inline: 翻译时让 LLM 顺带返回术语，只对后续 batch 生效，省一次扫描
                                 # 任一非 off 模式会自动启用 glossary。
+    # bootstrap 也可单独覆盖后端候选顺序。
+    # 例如只允许它使用更便宜的模型：
+    # backend_mode: restrict
+    # backend_order: [google-default]
     save: true                  # 自举完成后把增量术语回写到 path（off 模式下无变更，不会写）
     max_terms_per_batch: 20     # 每批 LLM 抽取/返回的术语数量上限
     min_source_len: 2           # 长度小于此值的术语丢弃（过滤噪声）

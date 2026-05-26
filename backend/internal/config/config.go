@@ -56,6 +56,8 @@ type TranslateConfig struct {
 	BatchSize       int          `yaml:"batch_size"`      // 一次合并发送的段数；<=1 表示禁用批量
 	FallbackShrink  float64      `yaml:"fallback_shrink"` // 整批失败时下一级 batch = floor(cur*shrink)；0 = 直接降到单段；必须 <1
 	RateLimitPerSec int          `yaml:"rate_limit_per_sec"`
+	BackendMode     string       `yaml:"backend_mode"`
+	BackendOrder    []string     `yaml:"backend_order"`
 	Retry           RetryConfig  `yaml:"retry"`
 	Repair          RepairConfig `yaml:"repair"`
 }
@@ -114,11 +116,13 @@ type GlossaryConfig struct {
 //     权威表中的版本；CJK 直接替换，拉丁系按词边界，歧义场景仅 Warn 不动。
 //   - off：完全不处理，沿用旧行为（First-Wins + 不一致译文）。
 type BootstrapConfig struct {
-	Mode                   string `yaml:"mode"`
-	Save                   bool   `yaml:"save"`
-	MaxTermsPerBatch       int    `yaml:"max_terms_per_batch"`
-	MinSourceLen           int    `yaml:"min_source_len"`
-	InlineConflictStrategy string `yaml:"inline_conflict_strategy"`
+	Mode                   string   `yaml:"mode"`
+	Save                   bool     `yaml:"save"`
+	MaxTermsPerBatch       int      `yaml:"max_terms_per_batch"`
+	MinSourceLen           int      `yaml:"min_source_len"`
+	BackendMode            string   `yaml:"backend_mode"`
+	BackendOrder           []string `yaml:"backend_order"`
+	InlineConflictStrategy string   `yaml:"inline_conflict_strategy"`
 }
 
 // Bootstrap 模式常量。
@@ -132,6 +136,11 @@ const (
 const (
 	InlineConflictOff          = "off"
 	InlineConflictRewriteLocal = "rewrite-local"
+)
+
+const (
+	BackendModePrepend  = "prepend"
+	BackendModeRestrict = "restrict"
 )
 
 // normalize 规范化 RepairConfig：
@@ -260,12 +269,18 @@ func (c *Config) Validate() error {
 	if c.Pipeline.Split.MaxChars < 1 {
 		c.Pipeline.Split.MaxChars = 1200
 	}
+	if err := validateBackendOrder("pipeline.translate", c.Backends, c.Pipeline.Translate.BackendMode, c.Pipeline.Translate.BackendOrder); err != nil {
+		return err
+	}
 	c.Pipeline.Translate.Repair.normalize()
 	if c.Glossary.Bootstrap.MaxTermsPerBatch < 1 {
 		c.Glossary.Bootstrap.MaxTermsPerBatch = 20
 	}
 	if c.Glossary.Bootstrap.MinSourceLen < 1 {
 		c.Glossary.Bootstrap.MinSourceLen = 2
+	}
+	if err := validateBackendOrder("glossary.bootstrap", c.Backends, c.Glossary.Bootstrap.BackendMode, c.Glossary.Bootstrap.BackendOrder); err != nil {
+		return err
 	}
 	switch c.Glossary.Bootstrap.Mode {
 	case "":
@@ -287,6 +302,38 @@ func (c *Config) Validate() error {
 	default:
 		return fmt.Errorf("glossary.bootstrap.inline_conflict_strategy must be one of off|rewrite-local, got %q",
 			c.Glossary.Bootstrap.InlineConflictStrategy)
+	}
+	return nil
+}
+
+func validateBackendOrder(path string, backends []BackendConfig, mode string, order []string) error {
+	enabled := make(map[string]struct{}, len(backends))
+	for _, b := range backends {
+		if b.Enabled {
+			enabled[b.Name] = struct{}{}
+		}
+	}
+	switch mode {
+	case "", BackendModePrepend, BackendModeRestrict:
+		// ok
+	default:
+		return fmt.Errorf("%s.backend_mode must be one of prepend|restrict, got %q", path, mode)
+	}
+	if mode == BackendModeRestrict && len(order) == 0 {
+		return fmt.Errorf("%s.backend_order must not be empty when backend_mode=restrict", path)
+	}
+	seen := make(map[string]struct{}, len(order))
+	for _, name := range order {
+		if name == "" {
+			return fmt.Errorf("%s.backend_order must not contain empty backend names", path)
+		}
+		if _, ok := seen[name]; ok {
+			return fmt.Errorf("%s.backend_order contains duplicate backend %q", path, name)
+		}
+		seen[name] = struct{}{}
+		if _, ok := enabled[name]; !ok {
+			return fmt.Errorf("%s.backend_order references unknown or disabled backend %q", path, name)
+		}
 	}
 	return nil
 }
