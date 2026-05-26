@@ -25,6 +25,20 @@ paths:
     $ref: './paths/organizations.yaml#/organizationMembers'
   /orgs/{orgId}/members/{userId}:
     $ref: './paths/organizations.yaml#/organizationMemberByUserId'
+  /projects/{projectId}/jobs:
+    $ref: './paths/jobs.yaml#/projectJobs'
+  /jobs/{jobId}:
+    $ref: './paths/jobs.yaml#/jobById'
+  /jobs/{jobId}/subjobs:
+    $ref: './paths/jobs.yaml#/jobSubJobs'
+  /jobs/{jobId}/subjobs/{subJobId}:
+    $ref: './paths/jobs.yaml#/jobSubJobById'
+  /jobs/{jobId}/cancel:
+    $ref: './paths/jobs.yaml#/jobCancel'
+  /jobs/{jobId}/retry:
+    $ref: './paths/jobs.yaml#/jobRetry'
+  /jobs/{jobId}/download:
+    $ref: './paths/jobs.yaml#/jobDownload'
 components:
   securitySchemes:
     bearerAuth:
@@ -34,6 +48,12 @@ components:
       $ref: './components/parameters.yaml#/OrgId'
     UserId:
       $ref: './components/parameters.yaml#/UserId'
+    ProjectId:
+      $ref: './components/parameters.yaml#/ProjectId'
+    JobId:
+      $ref: './components/parameters.yaml#/JobId'
+    SubJobId:
+      $ref: './components/parameters.yaml#/SubJobId'
   responses:
     Problem:
       $ref: './components/responses.yaml#/Problem'
@@ -70,3 +90,17 @@ components:
       $ref: './components/schemas/organization.yaml#/AddOrganizationMemberRequest'
     UpdateOrganizationMemberRequest:
       $ref: './components/schemas/organization.yaml#/UpdateOrganizationMemberRequest'
+    JobCreateRequest:
+      $ref: './components/schemas/job.yaml#/JobCreateRequest'
+    JobCreateResponse:
+      $ref: './components/schemas/job.yaml#/JobCreateResponse'
+    Job:
+      $ref: './components/schemas/job.yaml#/Job'
+    JobListResponse:
+      $ref: './components/schemas/job.yaml#/JobListResponse'
+    SubJobSummary:
+      $ref: './components/schemas/job.yaml#/SubJobSummary'
+    SubJob:
+      $ref: './components/schemas/job.yaml#/SubJob'
+    SubJobListResponse:
+      $ref: './components/schemas/job.yaml#/SubJobListResponse'

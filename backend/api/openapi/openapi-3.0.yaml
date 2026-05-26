@@ -1,8 +1,29 @@
 components:
     parameters:
+        JobId:
+            in: path
+            name: jobId
+            required: true
+            schema:
+                minimum: 1
+                type: integer
         OrgId:
             in: path
             name: orgId
+            required: true
+            schema:
+                minimum: 1
+                type: integer
+        ProjectId:
+            in: path
+            name: projectId
+            required: true
+            schema:
+                minimum: 1
+                type: integer
+        SubJobId:
+            in: path
+            name: subJobId
             required: true
             schema:
                 minimum: 1
@@ -14,9 +35,30 @@ components:
             schema:
                 minimum: 1
                 type: integer
+        components_parameters_JobId:
+            in: path
+            name: jobId
+            required: true
+            schema:
+                minimum: 1
+                type: integer
         components_parameters_OrgId:
             in: path
             name: orgId
+            required: true
+            schema:
+                minimum: 1
+                type: integer
+        components_parameters_ProjectId:
+            in: path
+            name: projectId
+            required: true
+            schema:
+                minimum: 1
+                type: integer
+        components_parameters_SubJobId:
+            in: path
+            name: subJobId
             required: true
             schema:
                 minimum: 1
@@ -84,6 +126,87 @@ components:
             required:
                 - current_password
                 - new_password
+            type: object
+        Job:
+            properties:
+                completed_sub_jobs:
+                    type: integer
+                created_at:
+                    format: date-time
+                    type: string
+                error_message:
+                    type: string
+                failed_sub_jobs:
+                    type: integer
+                id:
+                    type: integer
+                input_path:
+                    type: string
+                output_path:
+                    type: string
+                project_id:
+                    type: integer
+                source_lang:
+                    type: string
+                status:
+                    type: string
+                sub_job_count:
+                    type: integer
+                sub_jobs:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_SubJob'
+                    type: array
+                target_lang:
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+            required:
+                - id
+                - project_id
+                - status
+                - sub_job_count
+                - completed_sub_jobs
+                - failed_sub_jobs
+                - source_lang
+                - target_lang
+                - sub_jobs
+            type: object
+        JobCreateRequest:
+            additionalProperties: false
+            properties:
+                source_lang:
+                    type: string
+                target_lang:
+                    type: string
+            type: object
+        JobCreateResponse:
+            properties:
+                created_at:
+                    format: date-time
+                    type: string
+                job_id:
+                    type: integer
+                status:
+                    type: string
+                sub_jobs:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_SubJobSummary'
+                    type: array
+            required:
+                - job_id
+                - status
+                - sub_jobs
+                - created_at
+            type: object
+        JobListResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_Job'
+                    type: array
+            required:
+                - items
             type: object
         LoginRequest:
             properties:
@@ -205,6 +328,61 @@ components:
                 - password
                 - email
             type: object
+        SubJob:
+            properties:
+                created_at:
+                    format: date-time
+                    type: string
+                error_message:
+                    type: string
+                id:
+                    type: integer
+                input_filename:
+                    type: string
+                input_format:
+                    type: string
+                input_path:
+                    type: string
+                output_path:
+                    type: string
+                segment_count:
+                    type: integer
+                status:
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+            required:
+                - id
+                - status
+                - input_filename
+                - input_format
+                - input_path
+                - output_path
+                - segment_count
+            type: object
+        SubJobListResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_SubJob'
+                    type: array
+            required:
+                - items
+            type: object
+        SubJobSummary:
+            properties:
+                filename:
+                    type: string
+                id:
+                    type: integer
+                status:
+                    type: string
+            required:
+                - id
+                - filename
+                - status
+            type: object
         UpdateCurrentUserRequest:
             properties:
                 display_name:
@@ -322,6 +500,142 @@ components:
                     type: string
             required:
                 - title
+                - status
+            type: object
+        components_schemas_job_Job:
+            properties:
+                completed_sub_jobs:
+                    type: integer
+                created_at:
+                    format: date-time
+                    type: string
+                error_message:
+                    type: string
+                failed_sub_jobs:
+                    type: integer
+                id:
+                    type: integer
+                input_path:
+                    type: string
+                output_path:
+                    type: string
+                project_id:
+                    type: integer
+                source_lang:
+                    type: string
+                status:
+                    type: string
+                sub_job_count:
+                    type: integer
+                sub_jobs:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_SubJob'
+                    type: array
+                target_lang:
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+            required:
+                - id
+                - project_id
+                - status
+                - sub_job_count
+                - completed_sub_jobs
+                - failed_sub_jobs
+                - source_lang
+                - target_lang
+                - sub_jobs
+            type: object
+        components_schemas_job_JobCreateRequest:
+            additionalProperties: false
+            properties:
+                source_lang:
+                    type: string
+                target_lang:
+                    type: string
+            type: object
+        components_schemas_job_JobCreateResponse:
+            properties:
+                created_at:
+                    format: date-time
+                    type: string
+                job_id:
+                    type: integer
+                status:
+                    type: string
+                sub_jobs:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_SubJobSummary'
+                    type: array
+            required:
+                - job_id
+                - status
+                - sub_jobs
+                - created_at
+            type: object
+        components_schemas_job_JobListResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_Job'
+                    type: array
+            required:
+                - items
+            type: object
+        components_schemas_job_SubJob:
+            properties:
+                created_at:
+                    format: date-time
+                    type: string
+                error_message:
+                    type: string
+                id:
+                    type: integer
+                input_filename:
+                    type: string
+                input_format:
+                    type: string
+                input_path:
+                    type: string
+                output_path:
+                    type: string
+                segment_count:
+                    type: integer
+                status:
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+            required:
+                - id
+                - status
+                - input_filename
+                - input_format
+                - input_path
+                - output_path
+                - segment_count
+            type: object
+        components_schemas_job_SubJobListResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_SubJob'
+                    type: array
+            required:
+                - items
+            type: object
+        components_schemas_job_SubJobSummary:
+            properties:
+                filename:
+                    type: string
+                id:
+                    type: integer
+                status:
+                    type: string
+            required:
+                - id
+                - filename
                 - status
             type: object
         components_schemas_organization_AddOrganizationMemberRequest:
@@ -540,6 +854,110 @@ paths:
                 default:
                     $ref: '#/components/responses/components_responses_Problem'
             summary: 注册用户并签发会话
+    /jobs/{jobId}:
+        get:
+            operationId: GetJob
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_Job'
+                    description: 任务详情
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 获取任务详情
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_JobId'
+    /jobs/{jobId}/cancel:
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_JobId'
+        post:
+            operationId: CancelJob
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_Job'
+                    description: 取消后的任务
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 取消任务
+    /jobs/{jobId}/download:
+        get:
+            operationId: DownloadJobResult
+            responses:
+                "200":
+                    content:
+                        application/octet-stream:
+                            schema:
+                                format: binary
+                                type: string
+                    description: 下载结果文件
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 下载任务输出
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_JobId'
+    /jobs/{jobId}/retry:
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_JobId'
+        post:
+            operationId: RetryJob
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_Job'
+                    description: 重试后的任务
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 重试失败子任务
+    /jobs/{jobId}/subjobs:
+        get:
+            operationId: ListJobSubJobs
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_SubJobListResponse'
+                    description: 子任务列表
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 获取任务子任务列表
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_JobId'
+    /jobs/{jobId}/subjobs/{subJobId}:
+        get:
+            operationId: GetJobSubJob
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_SubJob'
+                    description: 子任务详情
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 获取单个子任务详情
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_JobId'
+            - $ref: '#/components/parameters/components_parameters_SubJobId'
     /orgs:
         get:
             operationId: ListOrganizations
@@ -683,6 +1101,41 @@ paths:
             security:
                 - bearerAuth: []
             summary: 修改组织成员角色
+    /projects/{projectId}/jobs:
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_ProjectId'
+        post:
+            operationId: CreateProjectJob
+            requestBody:
+                content:
+                    multipart/form-data:
+                        schema:
+                            properties:
+                                files:
+                                    items:
+                                        format: binary
+                                        type: string
+                                    type: array
+                                source_lang:
+                                    type: string
+                                target_lang:
+                                    type: string
+                            required:
+                                - files
+                            type: object
+                required: true
+            responses:
+                "202":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_JobCreateResponse'
+                    description: 任务已创建
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 创建多文件翻译任务
     /users/me:
         get:
             operationId: GetCurrentUser

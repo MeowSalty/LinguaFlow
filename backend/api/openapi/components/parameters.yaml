@@ -13,3 +13,27 @@ UserId:
   schema:
     type: integer
     minimum: 1
+
+ProjectId:
+  name: projectId
+  in: path
+  required: true
+  schema:
+    type: integer
+    minimum: 1
+
+JobId:
+  name: jobId
+  in: path
+  required: true
+  schema:
+    type: integer
+    minimum: 1
+
+SubJobId:
+  name: subJobId
+  in: path
+  required: true
+  schema:
+    type: integer
+    minimum: 1

@@ -1,0 +1,117 @@
+JobCreateRequest:
+  type: object
+  properties:
+    source_lang:
+      type: string
+    target_lang:
+      type: string
+  additionalProperties: false
+
+JobCreateResponse:
+  type: object
+  required: [job_id, status, sub_jobs, created_at]
+  properties:
+    job_id:
+      type: integer
+    status:
+      type: string
+    sub_jobs:
+      type: array
+      items:
+        $ref: '#/SubJobSummary'
+    created_at:
+      type: string
+      format: date-time
+
+Job:
+  type: object
+  required: [id, project_id, status, sub_job_count, completed_sub_jobs, failed_sub_jobs, source_lang, target_lang, sub_jobs]
+  properties:
+    id:
+      type: integer
+    project_id:
+      type: integer
+    status:
+      type: string
+    sub_job_count:
+      type: integer
+    completed_sub_jobs:
+      type: integer
+    failed_sub_jobs:
+      type: integer
+    source_lang:
+      type: string
+    target_lang:
+      type: string
+    input_path:
+      type: string
+    output_path:
+      type: string
+    error_message:
+      type: string
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+    sub_jobs:
+      type: array
+      items:
+        $ref: '#/SubJob'
+
+JobListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/Job'
+
+SubJobSummary:
+  type: object
+  required: [id, filename, status]
+  properties:
+    id:
+      type: integer
+    filename:
+      type: string
+    status:
+      type: string
+
+SubJob:
+  type: object
+  required: [id, status, input_filename, input_format, input_path, output_path, segment_count]
+  properties:
+    id:
+      type: integer
+    status:
+      type: string
+    input_filename:
+      type: string
+    input_format:
+      type: string
+    input_path:
+      type: string
+    output_path:
+      type: string
+    segment_count:
+      type: integer
+    error_message:
+      type: string
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+
+SubJobListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/SubJob'
