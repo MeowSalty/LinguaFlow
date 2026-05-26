@@ -6,12 +6,15 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"path/filepath"
 	"sync/atomic"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/worker"
 )
 
 const readinessPingTimeout = 2 * time.Second
@@ -23,11 +26,18 @@ type Server struct {
 	entClient   *ent.Client
 	authService *service.AuthService
 	userService *service.UserService
+	backendSvc  *service.BackendService
+	projectSvc  *service.ProjectService
+	glossarySvc *service.GlossaryService
+	jobService  *service.JobService
+	jobStore    *filestore.LocalStore
+	jobQueue    *worker.Queue
+	jobRunner   *worker.Runner
 	httpServer  *http.Server
 	ready       atomic.Bool
 }
 
-func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.Client) *Server {
+func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.Client) (*Server, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -40,17 +50,42 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 		authService: service.NewAuthService(client, service.AuthConfigFromServer(cfg.Server)),
 	}
 	s.userService = service.NewUserService(client, s.authService)
+	s.backendSvc = service.NewBackendService(client, s.userService)
+	s.projectSvc = service.NewProjectService(client, s.userService, s.backendSvc)
+	s.glossarySvc = service.NewGlossaryService(client, s.projectSvc)
+	s.jobService = service.NewJobService(client, s.projectSvc)
+	jobStore, err := filestore.NewLocal(filepath.Join(cfg.Server.DataDir, "jobs"))
+	if err != nil {
+		return nil, err
+	}
+	s.jobStore = jobStore
+	queueSize := cfg.Pipeline.Translate.Concurrency * 8
+	if queueSize < 16 {
+		queueSize = 16
+	}
+	s.jobQueue = worker.NewQueue(queueSize)
+	s.jobRunner = worker.NewRunner(cfg, logger, client, s.projectSvc, s.jobService, jobStore, s.jobQueue)
 	s.httpServer = &http.Server{
 		Addr:              cfg.Server.Address(),
 		Handler:           s.newRouter(),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
 	}
-	return s
+	return s, nil
 }
 
 func (s *Server) Run(ctx context.Context) error {
 	serveErr := make(chan error, 1)
+	if s.jobRunner != nil {
+		if err := s.jobRunner.Recover(ctx); err != nil {
+			return err
+		}
+		go func() {
+			if err := s.jobRunner.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+				s.logger.Error("job runner stopped with error", "err", err)
+			}
+		}()
+	}
 	s.ready.Store(true)
 
 	go func() {

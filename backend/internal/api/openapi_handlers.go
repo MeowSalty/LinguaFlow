@@ -61,3 +61,31 @@ func (s *Server) UpdateOrganizationMember(w http.ResponseWriter, r *http.Request
 func (s *Server) DeleteOrganizationMember(w http.ResponseWriter, r *http.Request, _ ComponentsParametersOrgId, _ ComponentsParametersUserId) {
 	s.requireAuth(http.HandlerFunc(s.handleDeleteOrgMember)).ServeHTTP(w, r)
 }
+
+func (s *Server) CreateProjectJob(w http.ResponseWriter, r *http.Request, _ ComponentsParametersProjectId) {
+	s.requireAuth(http.HandlerFunc(s.handleCreateProjectJob)).ServeHTTP(w, r)
+}
+
+func (s *Server) GetJob(w http.ResponseWriter, r *http.Request, _ ComponentsParametersJobId) {
+	s.requireAuth(http.HandlerFunc(s.handleGetJob)).ServeHTTP(w, r)
+}
+
+func (s *Server) ListJobSubJobs(w http.ResponseWriter, r *http.Request, _ ComponentsParametersJobId) {
+	s.requireAuth(http.HandlerFunc(s.handleListJobSubJobs)).ServeHTTP(w, r)
+}
+
+func (s *Server) GetJobSubJob(w http.ResponseWriter, r *http.Request, _ ComponentsParametersJobId, _ ComponentsParametersSubJobId) {
+	s.requireAuth(http.HandlerFunc(s.handleGetJobSubJob)).ServeHTTP(w, r)
+}
+
+func (s *Server) CancelJob(w http.ResponseWriter, r *http.Request, _ ComponentsParametersJobId) {
+	s.requireAuth(http.HandlerFunc(s.handleCancelJob)).ServeHTTP(w, r)
+}
+
+func (s *Server) RetryJob(w http.ResponseWriter, r *http.Request, _ ComponentsParametersJobId) {
+	s.requireAuth(http.HandlerFunc(s.handleRetryJob)).ServeHTTP(w, r)
+}
+
+func (s *Server) DownloadJobResult(w http.ResponseWriter, r *http.Request, _ ComponentsParametersJobId) {
+	s.requireAuth(http.HandlerFunc(s.handleDownloadJobResult)).ServeHTTP(w, r)
+}

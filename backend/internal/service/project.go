@@ -1,0 +1,620 @@
+package service
+
+import (
+	"context"
+	"errors"
+	"strings"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/projectbackend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+)
+
+const (
+	ProjectResourceScopeProject      = "project"
+	ProjectResourceScopeOrganization = "organization"
+
+	StageTranslate = "translate"
+	StageBootstrap = "bootstrap"
+
+	BackendModeInherit = "inherit"
+)
+
+var (
+	ErrProjectNotFound      = errors.New("project not found")
+	ErrProjectOwnerConflict = errors.New("project owner conflict")
+	ErrResourceScopeInvalid = errors.New("resource scope invalid")
+	ErrStageInvalid         = errors.New("stage invalid")
+	ErrBackendModeInvalid   = errors.New("backend mode invalid")
+	ErrBackendOrderInvalid  = errors.New("backend order invalid")
+)
+
+type ProjectService struct {
+	client   *ent.Client
+	users    *UserService
+	backends *BackendService
+}
+
+type CreateProjectInput struct {
+	Name          string
+	OwnerUserID   *int
+	OwnerOrgID    *int
+	ResourceScope string
+	Config        map[string]any
+	SourceLang    string
+	TargetLang    string
+}
+
+type UpdateProjectInput struct {
+	Name          string
+	ResourceScope string
+	Config        map[string]any
+	SourceLang    string
+	TargetLang    string
+}
+
+type ProjectBackendBindingInput struct {
+	Source    string
+	BackendID int
+}
+
+type ProjectBackendBinding struct {
+	OrderIndex int
+	Source     string
+	BackendID  int
+	Name       string
+	Type       string
+	Priority   int
+	Options    map[string]any
+}
+
+type StageBackendOverrideInput struct {
+	Stage        string
+	BackendMode  string
+	BackendOrder []string
+}
+
+type StageBackendOverrideView struct {
+	Stage        string
+	BackendMode  string
+	BackendOrder []string
+}
+
+type ProjectBackendSettings struct {
+	Backends       []ProjectBackendBinding
+	StageOverrides map[string]StageBackendOverrideView
+}
+
+func NewProjectService(client *ent.Client, users *UserService, backends *BackendService) *ProjectService {
+	return &ProjectService{client: client, users: users, backends: backends}
+}
+
+func (s *ProjectService) CreateProject(ctx context.Context, actorUserID int, input CreateProjectInput) (*ent.Project, error) {
+	normalized, err := s.normalizeCreateInput(ctx, actorUserID, input)
+	if err != nil {
+		return nil, err
+	}
+	create := s.client.Project.Create().
+		SetName(normalized.Name).
+		SetResourceScope(normalized.ResourceScope).
+		SetConfig(cloneMap(normalized.Config)).
+		SetSourceLang(normalized.SourceLang).
+		SetTargetLang(normalized.TargetLang)
+	if normalized.OwnerUserID != nil {
+		create.SetOwnerUserID(*normalized.OwnerUserID)
+	}
+	if normalized.OwnerOrgID != nil {
+		create.SetOwnerOrgID(*normalized.OwnerOrgID)
+	}
+	created, err := create.Save(ctx)
+	if err != nil {
+		if ent.IsConstraintError(err) {
+			return nil, ErrInvalidInput
+		}
+		return nil, err
+	}
+	return created, nil
+}
+
+func (s *ProjectService) ListProjectsForUser(ctx context.Context, actorUserID int) ([]*ent.Project, error) {
+	return s.client.Project.Query().
+		Where(project.Or(
+			project.OwnerUserIDEQ(actorUserID),
+			project.HasOwnerOrgWith(organization.HasMembershipsWith(orgmembership.HasUserWith(user.IDEQ(actorUserID)))),
+		)).
+		Order(ent.Asc(project.FieldID)).
+		All(ctx)
+}
+
+func (s *ProjectService) GetProject(ctx context.Context, actorUserID, projectID int) (*ent.Project, error) {
+	return s.requireProjectAccess(ctx, actorUserID, projectID, false)
+}
+
+func (s *ProjectService) UpdateProject(ctx context.Context, actorUserID, projectID int, input UpdateProjectInput) (*ent.Project, error) {
+	current, err := s.requireProjectAccess(ctx, actorUserID, projectID, true)
+	if err != nil {
+		return nil, err
+	}
+	normalized, err := s.normalizeUpdateInput(current, input)
+	if err != nil {
+		return nil, err
+	}
+	updated, err := s.client.Project.UpdateOneID(projectID).
+		SetName(normalized.Name).
+		SetResourceScope(normalized.ResourceScope).
+		SetConfig(cloneMap(normalized.Config)).
+		SetSourceLang(normalized.SourceLang).
+		SetTargetLang(normalized.TargetLang).
+		Save(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, ErrProjectNotFound
+		}
+		return nil, err
+	}
+	return updated, nil
+}
+
+func (s *ProjectService) DeleteProject(ctx context.Context, actorUserID, projectID int) error {
+	if _, err := s.requireProjectAccess(ctx, actorUserID, projectID, true); err != nil {
+		return err
+	}
+	return s.client.Project.DeleteOneID(projectID).Exec(ctx)
+}
+
+func (s *ProjectService) SetBackendOrder(ctx context.Context, actorUserID, projectID int, bindings []ProjectBackendBindingInput) ([]ProjectBackendBinding, error) {
+	projectRow, err := s.requireProjectAccess(ctx, actorUserID, projectID, true)
+	if err != nil {
+		return nil, err
+	}
+	accessible, err := s.backends.resolveAccessibleBackends(ctx, projectRow)
+	if err != nil {
+		return nil, err
+	}
+	resolved, err := validateBindingInputs(bindings, accessible)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+	if _, err = tx.ProjectBackend.Delete().Where(projectbackend.HasProjectWith(project.IDEQ(projectID))).Exec(ctx); err != nil {
+		return nil, err
+	}
+	for i, item := range resolved {
+		if _, err = tx.ProjectBackend.Create().
+			SetProjectID(projectID).
+			SetOrderIndex(i).
+			SetSource(projectbackend.Source(item.Source)).
+			SetBackendID(item.BackendID).
+			Save(ctx); err != nil {
+			return nil, err
+		}
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return buildBindingViews(resolved), nil
+}
+
+func (s *ProjectService) GetBackendSettings(ctx context.Context, actorUserID, projectID int) (*ProjectBackendSettings, error) {
+	projectRow, err := s.requireProjectAccess(ctx, actorUserID, projectID, false)
+	if err != nil {
+		return nil, err
+	}
+	bindings, err := s.loadProjectBindings(ctx, projectRow)
+	if err != nil {
+		return nil, err
+	}
+	overrides, err := s.loadStageOverrides(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	return &ProjectBackendSettings{Backends: bindings, StageOverrides: overrides}, nil
+}
+
+func (s *ProjectService) SetStageBackendOverride(ctx context.Context, actorUserID, projectID int, input StageBackendOverrideInput) (*StageBackendOverrideView, error) {
+	projectRow, err := s.requireProjectAccess(ctx, actorUserID, projectID, true)
+	if err != nil {
+		return nil, err
+	}
+	stage, err := normalizeStage(input.Stage)
+	if err != nil {
+		return nil, err
+	}
+	mode, err := normalizeBackendMode(input.BackendMode)
+	if err != nil {
+		return nil, err
+	}
+	accessible, err := s.backends.resolveAccessibleBackends(ctx, projectRow)
+	if err != nil {
+		return nil, err
+	}
+	order, err := validateOverrideOrder(mode, input.BackendOrder, accessible)
+	if err != nil {
+		return nil, err
+	}
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+	if _, err = tx.StageBackendOverride.Delete().
+		Where(stagebackendoverride.HasProjectWith(project.IDEQ(projectID)), stagebackendoverride.StageEQ(stagebackendoverride.Stage(stage))).
+		Exec(ctx); err != nil {
+		return nil, err
+	}
+	created, err := tx.StageBackendOverride.Create().
+		SetProjectID(projectID).
+		SetStage(stagebackendoverride.Stage(stage)).
+		SetBackendMode(stagebackendoverride.BackendMode(mode)).
+		SetBackendOrder(cloneStrings(order)).
+		Save(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	return &StageBackendOverrideView{Stage: string(created.Stage), BackendMode: string(created.BackendMode), BackendOrder: cloneStrings(created.BackendOrder)}, nil
+}
+
+func (s *ProjectService) ResolveStagePlan(ctx context.Context, actorUserID, projectID int, stage string) ([]ProjectBackendBinding, error) {
+	projectRow, err := s.requireProjectAccess(ctx, actorUserID, projectID, false)
+	if err != nil {
+		return nil, err
+	}
+	normalizedStage, err := normalizeStage(stage)
+	if err != nil {
+		return nil, err
+	}
+	accessible, err := s.backends.resolveAccessibleBackends(ctx, projectRow)
+	if err != nil {
+		return nil, err
+	}
+	defaultBindings, err := s.loadProjectBindings(ctx, projectRow)
+	if err != nil {
+		return nil, err
+	}
+	override, err := s.client.StageBackendOverride.Query().
+		Where(stagebackendoverride.HasProjectWith(project.IDEQ(projectID)), stagebackendoverride.StageEQ(stagebackendoverride.Stage(normalizedStage))).
+		Only(ctx)
+	if err != nil && !ent.IsNotFound(err) {
+		return nil, err
+	}
+	if ent.IsNotFound(err) || string(override.BackendMode) == BackendModeInherit {
+		return defaultBindings, nil
+	}
+	byName, err := uniqueBackendNameMap(accessible)
+	if err != nil {
+		return nil, err
+	}
+	selected := make([]resolvedBackend, 0, len(override.BackendOrder))
+	for _, name := range override.BackendOrder {
+		item, ok := byName[name]
+		if !ok {
+			return nil, ErrBackendOrderInvalid
+		}
+		selected = append(selected, item)
+	}
+	if string(override.BackendMode) == config.BackendModeRestrict {
+		return buildBindingViews(selected), nil
+	}
+	used := make(map[string]struct{}, len(selected))
+	for _, item := range selected {
+		used[backendBindingKey(item.Source, item.BackendID)] = struct{}{}
+	}
+	for _, binding := range defaultBindings {
+		key := backendBindingKey(binding.Source, binding.BackendID)
+		if _, ok := used[key]; ok {
+			continue
+		}
+		selected = append(selected, resolvedBackend{
+			Source:    binding.Source,
+			BackendID: binding.BackendID,
+			Name:      binding.Name,
+			Type:      binding.Type,
+			Priority:  binding.Priority,
+			Options:   cloneMap(binding.Options),
+		})
+	}
+	return buildBindingViews(selected), nil
+}
+
+func (s *ProjectService) requireProjectAccess(ctx context.Context, actorUserID, projectID int, write bool) (*ent.Project, error) {
+	projectRow, err := s.client.Project.Get(ctx, projectID)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, ErrProjectNotFound
+		}
+		return nil, err
+	}
+	switch {
+	case projectRow.OwnerUserID != nil:
+		if *projectRow.OwnerUserID != actorUserID {
+			return nil, ErrForbidden
+		}
+	case projectRow.OwnerOrgID != nil:
+		minRole := OrgRoleMember
+		if write {
+			minRole = OrgRoleAdmin
+		}
+		if _, err := s.users.requireMembership(ctx, actorUserID, *projectRow.OwnerOrgID, minRole); err != nil {
+			return nil, err
+		}
+	default:
+		return nil, ErrProjectOwnerConflict
+	}
+	return projectRow, nil
+}
+
+func (s *ProjectService) normalizeCreateInput(ctx context.Context, actorUserID int, input CreateProjectInput) (CreateProjectInput, error) {
+	name := strings.TrimSpace(input.Name)
+	if name == "" {
+		return CreateProjectInput{}, ErrInvalidInput
+	}
+	ownerUserID := input.OwnerUserID
+	ownerOrgID := input.OwnerOrgID
+	if ownerUserID == nil && ownerOrgID == nil {
+		ownerUserID = &actorUserID
+	}
+	if ownerUserID != nil && ownerOrgID != nil {
+		return CreateProjectInput{}, ErrProjectOwnerConflict
+	}
+	if ownerUserID != nil && *ownerUserID != actorUserID {
+		return CreateProjectInput{}, ErrForbidden
+	}
+	if ownerOrgID != nil {
+		if _, err := s.users.requireMembership(ctx, actorUserID, *ownerOrgID, OrgRoleAdmin); err != nil {
+			return CreateProjectInput{}, err
+		}
+	}
+	scope, err := normalizeResourceScope(input.ResourceScope, ownerOrgID != nil)
+	if err != nil {
+		return CreateProjectInput{}, err
+	}
+	return CreateProjectInput{
+		Name:          name,
+		OwnerUserID:   ownerUserID,
+		OwnerOrgID:    ownerOrgID,
+		ResourceScope: scope,
+		Config:        cloneMap(input.Config),
+		SourceLang:    normalizeLangOrDefault(input.SourceLang, "auto"),
+		TargetLang:    normalizeLangOrDefault(input.TargetLang, "zh"),
+	}, nil
+}
+
+func (s *ProjectService) normalizeUpdateInput(current *ent.Project, input UpdateProjectInput) (UpdateProjectInput, error) {
+	name := strings.TrimSpace(input.Name)
+	if name == "" {
+		name = current.Name
+	}
+	scope, err := normalizeResourceScope(input.ResourceScope, current.OwnerOrgID != nil)
+	if err != nil {
+		return UpdateProjectInput{}, err
+	}
+	configValue := cloneMap(input.Config)
+	if len(configValue) == 0 {
+		configValue = cloneMap(current.Config)
+	}
+	return UpdateProjectInput{
+		Name:          name,
+		ResourceScope: scope,
+		Config:        configValue,
+		SourceLang:    normalizeLangOrDefault(input.SourceLang, current.SourceLang),
+		TargetLang:    normalizeLangOrDefault(input.TargetLang, current.TargetLang),
+	}, nil
+}
+
+func (s *ProjectService) loadProjectBindings(ctx context.Context, projectRow *ent.Project) ([]ProjectBackendBinding, error) {
+	rows, err := s.client.ProjectBackend.Query().
+		Where(projectbackend.HasProjectWith(project.IDEQ(projectRow.ID))).
+		Order(ent.Asc(projectbackend.FieldOrderIndex), ent.Asc(projectbackend.FieldID)).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	accessible, err := s.backends.resolveAccessibleBackends(ctx, projectRow)
+	if err != nil {
+		return nil, err
+	}
+	byKey := make(map[string]resolvedBackend, len(accessible))
+	for _, item := range accessible {
+		byKey[backendBindingKey(item.Source, item.BackendID)] = item
+	}
+	out := make([]ProjectBackendBinding, 0, len(rows))
+	for _, row := range rows {
+		item, ok := byKey[backendBindingKey(string(row.Source), row.BackendID)]
+		if !ok {
+			return nil, ErrBackendNotFound
+		}
+		out = append(out, ProjectBackendBinding{
+			OrderIndex: row.OrderIndex,
+			Source:     item.Source,
+			BackendID:  item.BackendID,
+			Name:       item.Name,
+			Type:       item.Type,
+			Priority:   item.Priority,
+			Options:    cloneMap(item.Options),
+		})
+	}
+	return out, nil
+}
+
+func (s *ProjectService) loadStageOverrides(ctx context.Context, projectID int) (map[string]StageBackendOverrideView, error) {
+	rows, err := s.client.StageBackendOverride.Query().
+		Where(stagebackendoverride.HasProjectWith(project.IDEQ(projectID))).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]StageBackendOverrideView, len(rows))
+	for _, row := range rows {
+		out[string(row.Stage)] = StageBackendOverrideView{
+			Stage:        string(row.Stage),
+			BackendMode:  string(row.BackendMode),
+			BackendOrder: cloneStrings(row.BackendOrder),
+		}
+	}
+	return out, nil
+}
+
+func validateBindingInputs(bindings []ProjectBackendBindingInput, accessible []resolvedBackend) ([]resolvedBackend, error) {
+	if len(bindings) == 0 {
+		return []resolvedBackend{}, nil
+	}
+	byKey := make(map[string]resolvedBackend, len(accessible))
+	for _, item := range accessible {
+		byKey[backendBindingKey(item.Source, item.BackendID)] = item
+	}
+	seen := make(map[string]struct{}, len(bindings))
+	out := make([]resolvedBackend, 0, len(bindings))
+	for _, binding := range bindings {
+		source := strings.ToLower(strings.TrimSpace(binding.Source))
+		if source != BackendSourceUser && source != BackendSourceOrg {
+			return nil, ErrBackendSourceInvalid
+		}
+		key := backendBindingKey(source, binding.BackendID)
+		if _, dup := seen[key]; dup {
+			return nil, ErrBackendOrderInvalid
+		}
+		item, ok := byKey[key]
+		if !ok {
+			return nil, ErrBackendNotFound
+		}
+		seen[key] = struct{}{}
+		out = append(out, item)
+	}
+	return out, nil
+}
+
+func validateOverrideOrder(mode string, names []string, accessible []resolvedBackend) ([]string, error) {
+	if mode == BackendModeInherit {
+		return []string{}, nil
+	}
+	byName, err := uniqueBackendNameMap(accessible)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]struct{}, len(names))
+	out := make([]string, 0, len(names))
+	for _, raw := range names {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			return nil, ErrBackendOrderInvalid
+		}
+		if _, ok := byName[name]; !ok {
+			return nil, ErrBackendOrderInvalid
+		}
+		if _, dup := seen[name]; dup {
+			return nil, ErrBackendOrderInvalid
+		}
+		seen[name] = struct{}{}
+		out = append(out, name)
+	}
+	return out, nil
+}
+
+func uniqueBackendNameMap(accessible []resolvedBackend) (map[string]resolvedBackend, error) {
+	byName := make(map[string]resolvedBackend, len(accessible))
+	for _, item := range accessible {
+		if existing, ok := byName[item.Name]; ok {
+			if existing.BackendID != item.BackendID || existing.Source != item.Source {
+				return nil, ErrBackendNameAmbiguous
+			}
+		}
+		byName[item.Name] = item
+	}
+	return byName, nil
+}
+
+func buildBindingViews(in []resolvedBackend) []ProjectBackendBinding {
+	out := make([]ProjectBackendBinding, 0, len(in))
+	for i, item := range in {
+		out = append(out, ProjectBackendBinding{
+			OrderIndex: i,
+			Source:     item.Source,
+			BackendID:  item.BackendID,
+			Name:       item.Name,
+			Type:       item.Type,
+			Priority:   item.Priority,
+			Options:    cloneMap(item.Options),
+		})
+	}
+	return out
+}
+
+func normalizeResourceScope(raw string, orgOwned bool) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "":
+		if orgOwned {
+			return ProjectResourceScopeOrganization, nil
+		}
+		return ProjectResourceScopeProject, nil
+	case ProjectResourceScopeProject:
+		return ProjectResourceScopeProject, nil
+	case ProjectResourceScopeOrganization:
+		if !orgOwned {
+			return "", ErrResourceScopeInvalid
+		}
+		return ProjectResourceScopeOrganization, nil
+	default:
+		return "", ErrResourceScopeInvalid
+	}
+}
+
+func normalizeStage(raw string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case StageTranslate:
+		return StageTranslate, nil
+	case StageBootstrap:
+		return StageBootstrap, nil
+	default:
+		return "", ErrStageInvalid
+	}
+}
+
+func normalizeBackendMode(raw string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "", BackendModeInherit:
+		return BackendModeInherit, nil
+	case config.BackendModePrepend:
+		return config.BackendModePrepend, nil
+	case config.BackendModeRestrict:
+		return config.BackendModeRestrict, nil
+	default:
+		return "", ErrBackendModeInvalid
+	}
+}
+
+func normalizeLangOrDefault(raw, fallback string) string {
+	v := strings.TrimSpace(raw)
+	if v == "" {
+		return fallback
+	}
+	return v
+}
+
+func cloneStrings(in []string) []string {
+	if len(in) == 0 {
+		return []string{}
+	}
+	out := make([]string, len(in))
+	copy(out, in)
+	return out
+}

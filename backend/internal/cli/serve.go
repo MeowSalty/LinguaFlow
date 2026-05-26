@@ -94,6 +94,9 @@ func runServe(ctx context.Context, rt *appCtx, opts serveOptions) error {
 		"database_path", dbPath,
 		"auto_migrate", cfg.Server.AutoMigrate)
 
-	server := api.NewServer(cfg, rt.logger, db, client)
+	server, err := api.NewServer(cfg, rt.logger, db, client)
+	if err != nil {
+		return err
+	}
 	return server.Run(ctx)
 }

@@ -30,11 +30,25 @@ type Engine struct {
 	renderer          *prompt.Renderer
 	bootstrapRenderer *prompt.BootstrapRenderer
 	glossary          glossary.Glossary
+	tm                tm.TranslationMemory
+}
+
+type RuntimeResources struct {
+	Glossary glossary.Glossary
+	TM       tm.TranslationMemory
+}
+
+type TranslateResult struct {
+	SegmentCount int
 }
 
 // New 按配置构造 Engine。reporter 可为 nil（fallback 为 progress.Nop）。
 // 失败时返回 (nil, error)。
 func New(cfg *config.Config, logger *slog.Logger, reporter progress.Reporter) (*Engine, error) {
+	return NewWithRuntime(cfg, logger, reporter, RuntimeResources{})
+}
+
+func NewWithRuntime(cfg *config.Config, logger *slog.Logger, reporter progress.Reporter, resources RuntimeResources) (*Engine, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -50,10 +64,17 @@ func New(cfg *config.Config, logger *slog.Logger, reporter progress.Reporter) (*
 		_ = sel.Close()
 		return nil, err
 	}
-	glos, err := glossary.New(cfg.Glossary)
-	if err != nil {
-		_ = sel.Close()
-		return nil, fmt.Errorf("engine: build glossary: %w", err)
+	glos := resources.Glossary
+	if glos == nil {
+		glos, err = glossary.New(cfg.Glossary)
+		if err != nil {
+			_ = sel.Close()
+			return nil, fmt.Errorf("engine: build glossary: %w", err)
+		}
+	}
+	translationMemory := resources.TM
+	if translationMemory == nil {
+		translationMemory = tm.Nop{}
 	}
 	e := &Engine{
 		cfg:      cfg,
@@ -62,6 +83,7 @@ func New(cfg *config.Config, logger *slog.Logger, reporter progress.Reporter) (*
 		selector: sel,
 		renderer: rend,
 		glossary: glos,
+		tm:       translationMemory,
 	}
 	// 仅在 bootstrap=pre 模式时编译模板；inline 模式由 translate stage 复用主模板的条件块。
 	if cfg.Glossary.Enabled && cfg.Glossary.Bootstrap.Mode == config.BootstrapModePre {
@@ -80,22 +102,29 @@ func (e *Engine) Close() error { return e.selector.Close() }
 
 // Translate 执行一次翻译任务。
 func (e *Engine) Translate(ctx context.Context, job TranslateJob) error {
+	_, err := e.TranslateWithResult(ctx, job)
+	return err
+}
+
+func (e *Engine) TranslateWithResult(ctx context.Context, job TranslateJob) (TranslateResult, error) {
 	start := time.Now()
+	var result TranslateResult
 
 	p, err := parser.DetectByExt(job.InputPath)
 	if err != nil {
-		return err
+		return result, err
 	}
 
 	f, err := os.Open(job.InputPath)
 	if err != nil {
-		return fmt.Errorf("engine: open input: %w", err)
+		return result, fmt.Errorf("engine: open input: %w", err)
 	}
 	doc, parseErr := p.Parse(ctx, f)
 	_ = f.Close()
 	if parseErr != nil {
-		return fmt.Errorf("engine: parse: %w", parseErr)
+		return result, fmt.Errorf("engine: parse: %w", parseErr)
 	}
+	result.SegmentCount = len(doc.Segments)
 
 	// 语言：CLI flag 优先，再用 config 默认
 	doc.SourceLang = firstNonEmpty(job.SourceLang, e.cfg.SourceLang)
@@ -119,12 +148,12 @@ func (e *Engine) Translate(ctx context.Context, job TranslateJob) error {
 	pipe := e.buildPipeline()
 	e.logger.Info("pipeline start", "stages", stageNames(pipe.Stages()))
 	if err := pipe.Run(ctx, doc); err != nil {
-		return err
+		return result, err
 	}
 
 	w := output.New(e.cfg.Output, p, job.OutputPath)
 	if err := w.Write(ctx, doc); err != nil {
-		return err
+		return result, err
 	}
 
 	// 自举完成后按配置回写术语表。失败仅 warn——译文已写出。
@@ -134,7 +163,7 @@ func (e *Engine) Translate(ctx context.Context, job TranslateJob) error {
 		"path", job.OutputPath,
 		"segments", len(doc.Segments),
 		"duration", time.Since(start).Round(time.Millisecond))
-	return nil
+	return result, nil
 }
 
 func (e *Engine) buildPipeline() *pipeline.Pipeline {
@@ -181,7 +210,7 @@ func (e *Engine) buildPipeline() *pipeline.Pipeline {
 		Selector:                  e.selector,
 		Renderer:                  e.renderer,
 		Glossary:                  e.glossary,
-		TM:                        tm.Nop{},
+		TM:                        e.tm,
 		Limiter:                   limiter,
 		Retry:                     retry,
 		Concurrency:               pc.Translate.Concurrency,
