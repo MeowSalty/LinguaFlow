@@ -11,17 +11,20 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
 
 const readinessPingTimeout = 2 * time.Second
 
 type Server struct {
-	config     *config.Config
-	logger     *slog.Logger
-	db         *sql.DB
-	entClient  *ent.Client
-	httpServer *http.Server
-	ready      atomic.Bool
+	config      *config.Config
+	logger      *slog.Logger
+	db          *sql.DB
+	entClient   *ent.Client
+	authService *service.AuthService
+	userService *service.UserService
+	httpServer  *http.Server
+	ready       atomic.Bool
 }
 
 func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.Client) *Server {
@@ -30,11 +33,13 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 	}
 
 	s := &Server{
-		config:    cfg,
-		logger:    logger,
-		db:        db,
-		entClient: client,
+		config:      cfg,
+		logger:      logger,
+		db:          db,
+		entClient:   client,
+		authService: service.NewAuthService(client, service.AuthConfigFromServer(cfg.Server)),
 	}
+	s.userService = service.NewUserService(client, s.authService)
 	s.httpServer = &http.Server{
 		Addr:              cfg.Server.Address(),
 		Handler:           s.newRouter(),

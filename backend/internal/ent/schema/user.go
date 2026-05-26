@@ -16,9 +16,12 @@ func (User) Mixin() []ent.Mixin {
 
 func (User) Fields() []ent.Field {
 	return []ent.Field{
+		field.String("username").NotEmpty().Unique(),
+		field.String("password_hash").NotEmpty().Sensitive(),
 		field.String("email").NotEmpty().Unique(),
 		field.String("display_name").Optional(),
-		field.String("status").Default("active"),
+		field.String("role").Default("user"),
+		field.Bool("active").Default(true),
 	}
 }
 
@@ -26,5 +29,7 @@ func (User) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("jobs", Job.Type),
 		edge.To("reviewed_segments", Segment.Type),
+		edge.To("refresh_tokens", RefreshToken.Type),
+		edge.To("memberships", OrgMembership.Type),
 	}
 }

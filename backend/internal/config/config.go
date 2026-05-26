@@ -209,6 +209,10 @@ type ServerConfig struct {
 	Port            int           `yaml:"port"`
 	DataDir         string        `yaml:"data_dir"`
 	AutoMigrate     bool          `yaml:"auto_migrate"`
+	JWTSecret       string        `yaml:"jwt_secret"`
+	JWTIssuer       string        `yaml:"jwt_issuer"`
+	JWTExpiry       time.Duration `yaml:"jwt_expiry"`
+	RefreshExpiry   time.Duration `yaml:"refresh_token_expiry"`
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout"`
 	CORS            CORSConfig    `yaml:"cors"`
 }
@@ -294,6 +298,10 @@ func Default() *Config {
 			Port:            8080,
 			DataDir:         "./data",
 			AutoMigrate:     true,
+			JWTSecret:       "dev-insecure-secret-change-me",
+			JWTIssuer:       "linguaflow",
+			JWTExpiry:       time.Hour,
+			RefreshExpiry:   30 * 24 * time.Hour,
 			ShutdownTimeout: 10 * time.Second,
 			CORS: CORSConfig{
 				AllowedOrigins: []string{"*"},
@@ -372,6 +380,18 @@ func (c *Config) Validate() error {
 	}
 	if c.Server.DataDir == "" {
 		c.Server.DataDir = "./data"
+	}
+	if c.Server.JWTSecret == "" {
+		c.Server.JWTSecret = "dev-insecure-secret-change-me"
+	}
+	if c.Server.JWTIssuer == "" {
+		c.Server.JWTIssuer = "linguaflow"
+	}
+	if c.Server.JWTExpiry <= 0 {
+		c.Server.JWTExpiry = time.Hour
+	}
+	if c.Server.RefreshExpiry <= 0 {
+		c.Server.RefreshExpiry = 30 * 24 * time.Hour
 	}
 	if c.Server.ShutdownTimeout <= 0 {
 		c.Server.ShutdownTimeout = 10 * time.Second

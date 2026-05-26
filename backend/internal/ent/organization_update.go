@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 )
@@ -63,6 +64,46 @@ func (_u *OrganizationUpdate) SetNillableSlug(v *string) *OrganizationUpdate {
 	return _u
 }
 
+// SetDisplayName sets the "display_name" field.
+func (_u *OrganizationUpdate) SetDisplayName(v string) *OrganizationUpdate {
+	_u.mutation.SetDisplayName(v)
+	return _u
+}
+
+// SetNillableDisplayName sets the "display_name" field if the given value is not nil.
+func (_u *OrganizationUpdate) SetNillableDisplayName(v *string) *OrganizationUpdate {
+	if v != nil {
+		_u.SetDisplayName(*v)
+	}
+	return _u
+}
+
+// ClearDisplayName clears the value of the "display_name" field.
+func (_u *OrganizationUpdate) ClearDisplayName() *OrganizationUpdate {
+	_u.mutation.ClearDisplayName()
+	return _u
+}
+
+// SetDescription sets the "description" field.
+func (_u *OrganizationUpdate) SetDescription(v string) *OrganizationUpdate {
+	_u.mutation.SetDescription(v)
+	return _u
+}
+
+// SetNillableDescription sets the "description" field if the given value is not nil.
+func (_u *OrganizationUpdate) SetNillableDescription(v *string) *OrganizationUpdate {
+	if v != nil {
+		_u.SetDescription(*v)
+	}
+	return _u
+}
+
+// ClearDescription clears the value of the "description" field.
+func (_u *OrganizationUpdate) ClearDescription() *OrganizationUpdate {
+	_u.mutation.ClearDescription()
+	return _u
+}
+
 // AddProjectIDs adds the "projects" edge to the Project entity by IDs.
 func (_u *OrganizationUpdate) AddProjectIDs(ids ...int) *OrganizationUpdate {
 	_u.mutation.AddProjectIDs(ids...)
@@ -76,6 +117,21 @@ func (_u *OrganizationUpdate) AddProjects(v ...*Project) *OrganizationUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.AddProjectIDs(ids...)
+}
+
+// AddMembershipIDs adds the "memberships" edge to the OrgMembership entity by IDs.
+func (_u *OrganizationUpdate) AddMembershipIDs(ids ...int) *OrganizationUpdate {
+	_u.mutation.AddMembershipIDs(ids...)
+	return _u
+}
+
+// AddMemberships adds the "memberships" edges to the OrgMembership entity.
+func (_u *OrganizationUpdate) AddMemberships(v ...*OrgMembership) *OrganizationUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddMembershipIDs(ids...)
 }
 
 // Mutation returns the OrganizationMutation object of the builder.
@@ -102,6 +158,27 @@ func (_u *OrganizationUpdate) RemoveProjects(v ...*Project) *OrganizationUpdate 
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveProjectIDs(ids...)
+}
+
+// ClearMemberships clears all "memberships" edges to the OrgMembership entity.
+func (_u *OrganizationUpdate) ClearMemberships() *OrganizationUpdate {
+	_u.mutation.ClearMemberships()
+	return _u
+}
+
+// RemoveMembershipIDs removes the "memberships" edge to OrgMembership entities by IDs.
+func (_u *OrganizationUpdate) RemoveMembershipIDs(ids ...int) *OrganizationUpdate {
+	_u.mutation.RemoveMembershipIDs(ids...)
+	return _u
+}
+
+// RemoveMemberships removes "memberships" edges to OrgMembership entities.
+func (_u *OrganizationUpdate) RemoveMemberships(v ...*OrgMembership) *OrganizationUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveMembershipIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -176,6 +253,18 @@ func (_u *OrganizationUpdate) sqlSave(ctx context.Context) (_node int, err error
 	if value, ok := _u.mutation.Slug(); ok {
 		_spec.SetField(organization.FieldSlug, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.DisplayName(); ok {
+		_spec.SetField(organization.FieldDisplayName, field.TypeString, value)
+	}
+	if _u.mutation.DisplayNameCleared() {
+		_spec.ClearField(organization.FieldDisplayName, field.TypeString)
+	}
+	if value, ok := _u.mutation.Description(); ok {
+		_spec.SetField(organization.FieldDescription, field.TypeString, value)
+	}
+	if _u.mutation.DescriptionCleared() {
+		_spec.ClearField(organization.FieldDescription, field.TypeString)
+	}
 	if _u.mutation.ProjectsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -214,6 +303,51 @@ func (_u *OrganizationUpdate) sqlSave(ctx context.Context) (_node int, err error
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(project.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.MembershipsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.MembershipsTable,
+			Columns: []string{organization.MembershipsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(orgmembership.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedMembershipsIDs(); len(nodes) > 0 && !_u.mutation.MembershipsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.MembershipsTable,
+			Columns: []string{organization.MembershipsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(orgmembership.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.MembershipsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.MembershipsTable,
+			Columns: []string{organization.MembershipsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(orgmembership.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -275,6 +409,46 @@ func (_u *OrganizationUpdateOne) SetNillableSlug(v *string) *OrganizationUpdateO
 	return _u
 }
 
+// SetDisplayName sets the "display_name" field.
+func (_u *OrganizationUpdateOne) SetDisplayName(v string) *OrganizationUpdateOne {
+	_u.mutation.SetDisplayName(v)
+	return _u
+}
+
+// SetNillableDisplayName sets the "display_name" field if the given value is not nil.
+func (_u *OrganizationUpdateOne) SetNillableDisplayName(v *string) *OrganizationUpdateOne {
+	if v != nil {
+		_u.SetDisplayName(*v)
+	}
+	return _u
+}
+
+// ClearDisplayName clears the value of the "display_name" field.
+func (_u *OrganizationUpdateOne) ClearDisplayName() *OrganizationUpdateOne {
+	_u.mutation.ClearDisplayName()
+	return _u
+}
+
+// SetDescription sets the "description" field.
+func (_u *OrganizationUpdateOne) SetDescription(v string) *OrganizationUpdateOne {
+	_u.mutation.SetDescription(v)
+	return _u
+}
+
+// SetNillableDescription sets the "description" field if the given value is not nil.
+func (_u *OrganizationUpdateOne) SetNillableDescription(v *string) *OrganizationUpdateOne {
+	if v != nil {
+		_u.SetDescription(*v)
+	}
+	return _u
+}
+
+// ClearDescription clears the value of the "description" field.
+func (_u *OrganizationUpdateOne) ClearDescription() *OrganizationUpdateOne {
+	_u.mutation.ClearDescription()
+	return _u
+}
+
 // AddProjectIDs adds the "projects" edge to the Project entity by IDs.
 func (_u *OrganizationUpdateOne) AddProjectIDs(ids ...int) *OrganizationUpdateOne {
 	_u.mutation.AddProjectIDs(ids...)
@@ -288,6 +462,21 @@ func (_u *OrganizationUpdateOne) AddProjects(v ...*Project) *OrganizationUpdateO
 		ids[i] = v[i].ID
 	}
 	return _u.AddProjectIDs(ids...)
+}
+
+// AddMembershipIDs adds the "memberships" edge to the OrgMembership entity by IDs.
+func (_u *OrganizationUpdateOne) AddMembershipIDs(ids ...int) *OrganizationUpdateOne {
+	_u.mutation.AddMembershipIDs(ids...)
+	return _u
+}
+
+// AddMemberships adds the "memberships" edges to the OrgMembership entity.
+func (_u *OrganizationUpdateOne) AddMemberships(v ...*OrgMembership) *OrganizationUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddMembershipIDs(ids...)
 }
 
 // Mutation returns the OrganizationMutation object of the builder.
@@ -314,6 +503,27 @@ func (_u *OrganizationUpdateOne) RemoveProjects(v ...*Project) *OrganizationUpda
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveProjectIDs(ids...)
+}
+
+// ClearMemberships clears all "memberships" edges to the OrgMembership entity.
+func (_u *OrganizationUpdateOne) ClearMemberships() *OrganizationUpdateOne {
+	_u.mutation.ClearMemberships()
+	return _u
+}
+
+// RemoveMembershipIDs removes the "memberships" edge to OrgMembership entities by IDs.
+func (_u *OrganizationUpdateOne) RemoveMembershipIDs(ids ...int) *OrganizationUpdateOne {
+	_u.mutation.RemoveMembershipIDs(ids...)
+	return _u
+}
+
+// RemoveMemberships removes "memberships" edges to OrgMembership entities.
+func (_u *OrganizationUpdateOne) RemoveMemberships(v ...*OrgMembership) *OrganizationUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveMembershipIDs(ids...)
 }
 
 // Where appends a list predicates to the OrganizationUpdate builder.
@@ -418,6 +628,18 @@ func (_u *OrganizationUpdateOne) sqlSave(ctx context.Context) (_node *Organizati
 	if value, ok := _u.mutation.Slug(); ok {
 		_spec.SetField(organization.FieldSlug, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.DisplayName(); ok {
+		_spec.SetField(organization.FieldDisplayName, field.TypeString, value)
+	}
+	if _u.mutation.DisplayNameCleared() {
+		_spec.ClearField(organization.FieldDisplayName, field.TypeString)
+	}
+	if value, ok := _u.mutation.Description(); ok {
+		_spec.SetField(organization.FieldDescription, field.TypeString, value)
+	}
+	if _u.mutation.DescriptionCleared() {
+		_spec.ClearField(organization.FieldDescription, field.TypeString)
+	}
 	if _u.mutation.ProjectsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -456,6 +678,51 @@ func (_u *OrganizationUpdateOne) sqlSave(ctx context.Context) (_node *Organizati
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(project.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.MembershipsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.MembershipsTable,
+			Columns: []string{organization.MembershipsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(orgmembership.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedMembershipsIDs(); len(nodes) > 0 && !_u.mutation.MembershipsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.MembershipsTable,
+			Columns: []string{organization.MembershipsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(orgmembership.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.MembershipsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.MembershipsTable,
+			Columns: []string{organization.MembershipsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(orgmembership.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

@@ -18,6 +18,8 @@ func (s *Server) newRouter() http.Handler {
 
 	r.Get("/health", s.handleHealth)
 	r.Get("/health/ready", s.handleReady)
+	apiV1 := chi.NewRouter()
+	r.Mount("/api/v1", HandlerFromMux(s, apiV1))
 	return r
 }
 

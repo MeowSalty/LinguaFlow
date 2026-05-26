@@ -17,7 +17,9 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
@@ -30,10 +32,14 @@ type Client struct {
 	Schema *migrate.Schema
 	// Job is the client for interacting with the Job builders.
 	Job *JobClient
+	// OrgMembership is the client for interacting with the OrgMembership builders.
+	OrgMembership *OrgMembershipClient
 	// Organization is the client for interacting with the Organization builders.
 	Organization *OrganizationClient
 	// Project is the client for interacting with the Project builders.
 	Project *ProjectClient
+	// RefreshToken is the client for interacting with the RefreshToken builders.
+	RefreshToken *RefreshTokenClient
 	// Segment is the client for interacting with the Segment builders.
 	Segment *SegmentClient
 	// SubJob is the client for interacting with the SubJob builders.
@@ -52,8 +58,10 @@ func NewClient(opts ...Option) *Client {
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.Job = NewJobClient(c.config)
+	c.OrgMembership = NewOrgMembershipClient(c.config)
 	c.Organization = NewOrganizationClient(c.config)
 	c.Project = NewProjectClient(c.config)
+	c.RefreshToken = NewRefreshTokenClient(c.config)
 	c.Segment = NewSegmentClient(c.config)
 	c.SubJob = NewSubJobClient(c.config)
 	c.User = NewUserClient(c.config)
@@ -147,14 +155,16 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	cfg := c.config
 	cfg.driver = tx
 	return &Tx{
-		ctx:          ctx,
-		config:       cfg,
-		Job:          NewJobClient(cfg),
-		Organization: NewOrganizationClient(cfg),
-		Project:      NewProjectClient(cfg),
-		Segment:      NewSegmentClient(cfg),
-		SubJob:       NewSubJobClient(cfg),
-		User:         NewUserClient(cfg),
+		ctx:           ctx,
+		config:        cfg,
+		Job:           NewJobClient(cfg),
+		OrgMembership: NewOrgMembershipClient(cfg),
+		Organization:  NewOrganizationClient(cfg),
+		Project:       NewProjectClient(cfg),
+		RefreshToken:  NewRefreshTokenClient(cfg),
+		Segment:       NewSegmentClient(cfg),
+		SubJob:        NewSubJobClient(cfg),
+		User:          NewUserClient(cfg),
 	}, nil
 }
 
@@ -172,14 +182,16 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg := c.config
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
-		ctx:          ctx,
-		config:       cfg,
-		Job:          NewJobClient(cfg),
-		Organization: NewOrganizationClient(cfg),
-		Project:      NewProjectClient(cfg),
-		Segment:      NewSegmentClient(cfg),
-		SubJob:       NewSubJobClient(cfg),
-		User:         NewUserClient(cfg),
+		ctx:           ctx,
+		config:        cfg,
+		Job:           NewJobClient(cfg),
+		OrgMembership: NewOrgMembershipClient(cfg),
+		Organization:  NewOrganizationClient(cfg),
+		Project:       NewProjectClient(cfg),
+		RefreshToken:  NewRefreshTokenClient(cfg),
+		Segment:       NewSegmentClient(cfg),
+		SubJob:        NewSubJobClient(cfg),
+		User:          NewUserClient(cfg),
 	}, nil
 }
 
@@ -209,7 +221,8 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.Job, c.Organization, c.Project, c.Segment, c.SubJob, c.User,
+		c.Job, c.OrgMembership, c.Organization, c.Project, c.RefreshToken, c.Segment,
+		c.SubJob, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -219,7 +232,8 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.Job, c.Organization, c.Project, c.Segment, c.SubJob, c.User,
+		c.Job, c.OrgMembership, c.Organization, c.Project, c.RefreshToken, c.Segment,
+		c.SubJob, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -230,10 +244,14 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
 	case *JobMutation:
 		return c.Job.mutate(ctx, m)
+	case *OrgMembershipMutation:
+		return c.OrgMembership.mutate(ctx, m)
 	case *OrganizationMutation:
 		return c.Organization.mutate(ctx, m)
 	case *ProjectMutation:
 		return c.Project.mutate(ctx, m)
+	case *RefreshTokenMutation:
+		return c.RefreshToken.mutate(ctx, m)
 	case *SegmentMutation:
 		return c.Segment.mutate(ctx, m)
 	case *SubJobMutation:
@@ -426,6 +444,171 @@ func (c *JobClient) mutate(ctx context.Context, m *JobMutation) (Value, error) {
 	}
 }
 
+// OrgMembershipClient is a client for the OrgMembership schema.
+type OrgMembershipClient struct {
+	config
+}
+
+// NewOrgMembershipClient returns a client for the OrgMembership from the given config.
+func NewOrgMembershipClient(c config) *OrgMembershipClient {
+	return &OrgMembershipClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `orgmembership.Hooks(f(g(h())))`.
+func (c *OrgMembershipClient) Use(hooks ...Hook) {
+	c.hooks.OrgMembership = append(c.hooks.OrgMembership, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `orgmembership.Intercept(f(g(h())))`.
+func (c *OrgMembershipClient) Intercept(interceptors ...Interceptor) {
+	c.inters.OrgMembership = append(c.inters.OrgMembership, interceptors...)
+}
+
+// Create returns a builder for creating a OrgMembership entity.
+func (c *OrgMembershipClient) Create() *OrgMembershipCreate {
+	mutation := newOrgMembershipMutation(c.config, OpCreate)
+	return &OrgMembershipCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of OrgMembership entities.
+func (c *OrgMembershipClient) CreateBulk(builders ...*OrgMembershipCreate) *OrgMembershipCreateBulk {
+	return &OrgMembershipCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *OrgMembershipClient) MapCreateBulk(slice any, setFunc func(*OrgMembershipCreate, int)) *OrgMembershipCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &OrgMembershipCreateBulk{err: fmt.Errorf("calling to OrgMembershipClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*OrgMembershipCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &OrgMembershipCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for OrgMembership.
+func (c *OrgMembershipClient) Update() *OrgMembershipUpdate {
+	mutation := newOrgMembershipMutation(c.config, OpUpdate)
+	return &OrgMembershipUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *OrgMembershipClient) UpdateOne(_m *OrgMembership) *OrgMembershipUpdateOne {
+	mutation := newOrgMembershipMutation(c.config, OpUpdateOne, withOrgMembership(_m))
+	return &OrgMembershipUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *OrgMembershipClient) UpdateOneID(id int) *OrgMembershipUpdateOne {
+	mutation := newOrgMembershipMutation(c.config, OpUpdateOne, withOrgMembershipID(id))
+	return &OrgMembershipUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for OrgMembership.
+func (c *OrgMembershipClient) Delete() *OrgMembershipDelete {
+	mutation := newOrgMembershipMutation(c.config, OpDelete)
+	return &OrgMembershipDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *OrgMembershipClient) DeleteOne(_m *OrgMembership) *OrgMembershipDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *OrgMembershipClient) DeleteOneID(id int) *OrgMembershipDeleteOne {
+	builder := c.Delete().Where(orgmembership.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &OrgMembershipDeleteOne{builder}
+}
+
+// Query returns a query builder for OrgMembership.
+func (c *OrgMembershipClient) Query() *OrgMembershipQuery {
+	return &OrgMembershipQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeOrgMembership},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a OrgMembership entity by its id.
+func (c *OrgMembershipClient) Get(ctx context.Context, id int) (*OrgMembership, error) {
+	return c.Query().Where(orgmembership.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *OrgMembershipClient) GetX(ctx context.Context, id int) *OrgMembership {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryOrganization queries the organization edge of a OrgMembership.
+func (c *OrgMembershipClient) QueryOrganization(_m *OrgMembership) *OrganizationQuery {
+	query := (&OrganizationClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(orgmembership.Table, orgmembership.FieldID, id),
+			sqlgraph.To(organization.Table, organization.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, orgmembership.OrganizationTable, orgmembership.OrganizationColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryUser queries the user edge of a OrgMembership.
+func (c *OrgMembershipClient) QueryUser(_m *OrgMembership) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(orgmembership.Table, orgmembership.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, orgmembership.UserTable, orgmembership.UserColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *OrgMembershipClient) Hooks() []Hook {
+	return c.hooks.OrgMembership
+}
+
+// Interceptors returns the client interceptors.
+func (c *OrgMembershipClient) Interceptors() []Interceptor {
+	return c.inters.OrgMembership
+}
+
+func (c *OrgMembershipClient) mutate(ctx context.Context, m *OrgMembershipMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&OrgMembershipCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&OrgMembershipUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&OrgMembershipUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&OrgMembershipDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown OrgMembership mutation op: %q", m.Op())
+	}
+}
+
 // OrganizationClient is a client for the Organization schema.
 type OrganizationClient struct {
 	config
@@ -543,6 +726,22 @@ func (c *OrganizationClient) QueryProjects(_m *Organization) *ProjectQuery {
 			sqlgraph.From(organization.Table, organization.FieldID, id),
 			sqlgraph.To(project.Table, project.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, organization.ProjectsTable, organization.ProjectsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryMemberships queries the memberships edge of a Organization.
+func (c *OrganizationClient) QueryMemberships(_m *Organization) *OrgMembershipQuery {
+	query := (&OrgMembershipClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(organization.Table, organization.FieldID, id),
+			sqlgraph.To(orgmembership.Table, orgmembership.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, organization.MembershipsTable, organization.MembershipsColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -737,6 +936,155 @@ func (c *ProjectClient) mutate(ctx context.Context, m *ProjectMutation) (Value, 
 		return (&ProjectDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown Project mutation op: %q", m.Op())
+	}
+}
+
+// RefreshTokenClient is a client for the RefreshToken schema.
+type RefreshTokenClient struct {
+	config
+}
+
+// NewRefreshTokenClient returns a client for the RefreshToken from the given config.
+func NewRefreshTokenClient(c config) *RefreshTokenClient {
+	return &RefreshTokenClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `refreshtoken.Hooks(f(g(h())))`.
+func (c *RefreshTokenClient) Use(hooks ...Hook) {
+	c.hooks.RefreshToken = append(c.hooks.RefreshToken, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `refreshtoken.Intercept(f(g(h())))`.
+func (c *RefreshTokenClient) Intercept(interceptors ...Interceptor) {
+	c.inters.RefreshToken = append(c.inters.RefreshToken, interceptors...)
+}
+
+// Create returns a builder for creating a RefreshToken entity.
+func (c *RefreshTokenClient) Create() *RefreshTokenCreate {
+	mutation := newRefreshTokenMutation(c.config, OpCreate)
+	return &RefreshTokenCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of RefreshToken entities.
+func (c *RefreshTokenClient) CreateBulk(builders ...*RefreshTokenCreate) *RefreshTokenCreateBulk {
+	return &RefreshTokenCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *RefreshTokenClient) MapCreateBulk(slice any, setFunc func(*RefreshTokenCreate, int)) *RefreshTokenCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &RefreshTokenCreateBulk{err: fmt.Errorf("calling to RefreshTokenClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*RefreshTokenCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &RefreshTokenCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for RefreshToken.
+func (c *RefreshTokenClient) Update() *RefreshTokenUpdate {
+	mutation := newRefreshTokenMutation(c.config, OpUpdate)
+	return &RefreshTokenUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *RefreshTokenClient) UpdateOne(_m *RefreshToken) *RefreshTokenUpdateOne {
+	mutation := newRefreshTokenMutation(c.config, OpUpdateOne, withRefreshToken(_m))
+	return &RefreshTokenUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *RefreshTokenClient) UpdateOneID(id int) *RefreshTokenUpdateOne {
+	mutation := newRefreshTokenMutation(c.config, OpUpdateOne, withRefreshTokenID(id))
+	return &RefreshTokenUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for RefreshToken.
+func (c *RefreshTokenClient) Delete() *RefreshTokenDelete {
+	mutation := newRefreshTokenMutation(c.config, OpDelete)
+	return &RefreshTokenDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *RefreshTokenClient) DeleteOne(_m *RefreshToken) *RefreshTokenDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *RefreshTokenClient) DeleteOneID(id int) *RefreshTokenDeleteOne {
+	builder := c.Delete().Where(refreshtoken.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &RefreshTokenDeleteOne{builder}
+}
+
+// Query returns a query builder for RefreshToken.
+func (c *RefreshTokenClient) Query() *RefreshTokenQuery {
+	return &RefreshTokenQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeRefreshToken},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a RefreshToken entity by its id.
+func (c *RefreshTokenClient) Get(ctx context.Context, id int) (*RefreshToken, error) {
+	return c.Query().Where(refreshtoken.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *RefreshTokenClient) GetX(ctx context.Context, id int) *RefreshToken {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryUser queries the user edge of a RefreshToken.
+func (c *RefreshTokenClient) QueryUser(_m *RefreshToken) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(refreshtoken.Table, refreshtoken.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, refreshtoken.UserTable, refreshtoken.UserColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *RefreshTokenClient) Hooks() []Hook {
+	return c.hooks.RefreshToken
+}
+
+// Interceptors returns the client interceptors.
+func (c *RefreshTokenClient) Interceptors() []Interceptor {
+	return c.inters.RefreshToken
+}
+
+func (c *RefreshTokenClient) mutate(ctx context.Context, m *RefreshTokenMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&RefreshTokenCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&RefreshTokenUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&RefreshTokenUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&RefreshTokenDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown RefreshToken mutation op: %q", m.Op())
 	}
 }
 
@@ -1210,6 +1558,38 @@ func (c *UserClient) QueryReviewedSegments(_m *User) *SegmentQuery {
 	return query
 }
 
+// QueryRefreshTokens queries the refresh_tokens edge of a User.
+func (c *UserClient) QueryRefreshTokens(_m *User) *RefreshTokenQuery {
+	query := (&RefreshTokenClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(refreshtoken.Table, refreshtoken.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.RefreshTokensTable, user.RefreshTokensColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryMemberships queries the memberships edge of a User.
+func (c *UserClient) QueryMemberships(_m *User) *OrgMembershipQuery {
+	query := (&OrgMembershipClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(orgmembership.Table, orgmembership.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.MembershipsTable, user.MembershipsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *UserClient) Hooks() []Hook {
 	return c.hooks.User
@@ -1238,9 +1618,11 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		Job, Organization, Project, Segment, SubJob, User []ent.Hook
+		Job, OrgMembership, Organization, Project, RefreshToken, Segment, SubJob,
+		User []ent.Hook
 	}
 	inters struct {
-		Job, Organization, Project, Segment, SubJob, User []ent.Interceptor
+		Job, OrgMembership, Organization, Project, RefreshToken, Segment, SubJob,
+		User []ent.Interceptor
 	}
 )

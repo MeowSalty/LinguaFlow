@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestValidateTranslatePlan_InheritsDefaults(t *testing.T) {
 	cfg := Default()
@@ -46,6 +49,10 @@ func TestValidateServerConfig_Defaults(t *testing.T) {
 	cfg.Server.Host = ""
 	cfg.Server.Port = 0
 	cfg.Server.DataDir = ""
+	cfg.Server.JWTSecret = ""
+	cfg.Server.JWTIssuer = ""
+	cfg.Server.JWTExpiry = 0
+	cfg.Server.RefreshExpiry = 0
 	cfg.Server.ShutdownTimeout = 0
 	cfg.Server.CORS.AllowedOrigins = nil
 
@@ -60,6 +67,18 @@ func TestValidateServerConfig_Defaults(t *testing.T) {
 	}
 	if cfg.Server.DataDir != "./data" {
 		t.Fatalf("data_dir=%q want ./data", cfg.Server.DataDir)
+	}
+	if cfg.Server.JWTSecret == "" {
+		t.Fatal("jwt_secret should be defaulted")
+	}
+	if cfg.Server.JWTIssuer != "linguaflow" {
+		t.Fatalf("jwt_issuer=%q want linguaflow", cfg.Server.JWTIssuer)
+	}
+	if cfg.Server.JWTExpiry != time.Hour {
+		t.Fatalf("jwt_expiry=%v want 1h", cfg.Server.JWTExpiry)
+	}
+	if cfg.Server.RefreshExpiry != 30*24*time.Hour {
+		t.Fatalf("refresh_token_expiry=%v want 720h", cfg.Server.RefreshExpiry)
 	}
 	if cfg.Server.ShutdownTimeout <= 0 {
 		t.Fatalf("shutdown_timeout=%v want > 0", cfg.Server.ShutdownTimeout)

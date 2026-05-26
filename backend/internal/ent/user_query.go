@@ -13,7 +13,9 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
@@ -27,6 +29,8 @@ type UserQuery struct {
 	predicates           []predicate.User
 	withJobs             *JobQuery
 	withReviewedSegments *SegmentQuery
+	withRefreshTokens    *RefreshTokenQuery
+	withMemberships      *OrgMembershipQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -100,6 +104,50 @@ func (_q *UserQuery) QueryReviewedSegments() *SegmentQuery {
 			sqlgraph.From(user.Table, user.FieldID, selector),
 			sqlgraph.To(segment.Table, segment.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, user.ReviewedSegmentsTable, user.ReviewedSegmentsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryRefreshTokens chains the current query on the "refresh_tokens" edge.
+func (_q *UserQuery) QueryRefreshTokens() *RefreshTokenQuery {
+	query := (&RefreshTokenClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(refreshtoken.Table, refreshtoken.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.RefreshTokensTable, user.RefreshTokensColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryMemberships chains the current query on the "memberships" edge.
+func (_q *UserQuery) QueryMemberships() *OrgMembershipQuery {
+	query := (&OrgMembershipClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(orgmembership.Table, orgmembership.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.MembershipsTable, user.MembershipsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -301,6 +349,8 @@ func (_q *UserQuery) Clone() *UserQuery {
 		predicates:           append([]predicate.User{}, _q.predicates...),
 		withJobs:             _q.withJobs.Clone(),
 		withReviewedSegments: _q.withReviewedSegments.Clone(),
+		withRefreshTokens:    _q.withRefreshTokens.Clone(),
+		withMemberships:      _q.withMemberships.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -326,6 +376,28 @@ func (_q *UserQuery) WithReviewedSegments(opts ...func(*SegmentQuery)) *UserQuer
 		opt(query)
 	}
 	_q.withReviewedSegments = query
+	return _q
+}
+
+// WithRefreshTokens tells the query-builder to eager-load the nodes that are connected to
+// the "refresh_tokens" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithRefreshTokens(opts ...func(*RefreshTokenQuery)) *UserQuery {
+	query := (&RefreshTokenClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withRefreshTokens = query
+	return _q
+}
+
+// WithMemberships tells the query-builder to eager-load the nodes that are connected to
+// the "memberships" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithMemberships(opts ...func(*OrgMembershipQuery)) *UserQuery {
+	query := (&OrgMembershipClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withMemberships = query
 	return _q
 }
 
@@ -407,9 +479,11 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	var (
 		nodes       = []*User{}
 		_spec       = _q.querySpec()
-		loadedTypes = [2]bool{
+		loadedTypes = [4]bool{
 			_q.withJobs != nil,
 			_q.withReviewedSegments != nil,
+			_q.withRefreshTokens != nil,
+			_q.withMemberships != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -441,6 +515,20 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 		if err := _q.loadReviewedSegments(ctx, query, nodes,
 			func(n *User) { n.Edges.ReviewedSegments = []*Segment{} },
 			func(n *User, e *Segment) { n.Edges.ReviewedSegments = append(n.Edges.ReviewedSegments, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withRefreshTokens; query != nil {
+		if err := _q.loadRefreshTokens(ctx, query, nodes,
+			func(n *User) { n.Edges.RefreshTokens = []*RefreshToken{} },
+			func(n *User, e *RefreshToken) { n.Edges.RefreshTokens = append(n.Edges.RefreshTokens, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withMemberships; query != nil {
+		if err := _q.loadMemberships(ctx, query, nodes,
+			func(n *User) { n.Edges.Memberships = []*OrgMembership{} },
+			func(n *User, e *OrgMembership) { n.Edges.Memberships = append(n.Edges.Memberships, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -504,6 +592,68 @@ func (_q *UserQuery) loadReviewedSegments(ctx context.Context, query *SegmentQue
 		node, ok := nodeids[*fk]
 		if !ok {
 			return fmt.Errorf(`unexpected referenced foreign-key "user_reviewed_segments" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadRefreshTokens(ctx context.Context, query *RefreshTokenQuery, nodes []*User, init func(*User), assign func(*User, *RefreshToken)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	query.withFKs = true
+	query.Where(predicate.RefreshToken(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.RefreshTokensColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.user_refresh_tokens
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "user_refresh_tokens" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "user_refresh_tokens" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadMemberships(ctx context.Context, query *OrgMembershipQuery, nodes []*User, init func(*User), assign func(*User, *OrgMembership)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	query.withFKs = true
+	query.Where(predicate.OrgMembership(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.MembershipsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.user_memberships
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "user_memberships" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "user_memberships" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}

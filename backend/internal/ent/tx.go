@@ -14,10 +14,14 @@ type Tx struct {
 	config
 	// Job is the client for interacting with the Job builders.
 	Job *JobClient
+	// OrgMembership is the client for interacting with the OrgMembership builders.
+	OrgMembership *OrgMembershipClient
 	// Organization is the client for interacting with the Organization builders.
 	Organization *OrganizationClient
 	// Project is the client for interacting with the Project builders.
 	Project *ProjectClient
+	// RefreshToken is the client for interacting with the RefreshToken builders.
+	RefreshToken *RefreshTokenClient
 	// Segment is the client for interacting with the Segment builders.
 	Segment *SegmentClient
 	// SubJob is the client for interacting with the SubJob builders.
@@ -156,8 +160,10 @@ func (tx *Tx) Client() *Client {
 
 func (tx *Tx) init() {
 	tx.Job = NewJobClient(tx.config)
+	tx.OrgMembership = NewOrgMembershipClient(tx.config)
 	tx.Organization = NewOrganizationClient(tx.config)
 	tx.Project = NewProjectClient(tx.config)
+	tx.RefreshToken = NewRefreshTokenClient(tx.config)
 	tx.Segment = NewSegmentClient(tx.config)
 	tx.SubJob = NewSubJobClient(tx.config)
 	tx.User = NewUserClient(tx.config)

@@ -40,13 +40,51 @@ var (
 			},
 		},
 	}
+	// OrgMembershipsColumns holds the columns for the "org_memberships" table.
+	OrgMembershipsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "role", Type: field.TypeString, Default: "member"},
+		{Name: "organization_memberships", Type: field.TypeInt},
+		{Name: "user_memberships", Type: field.TypeInt},
+	}
+	// OrgMembershipsTable holds the schema information for the "org_memberships" table.
+	OrgMembershipsTable = &schema.Table{
+		Name:       "org_memberships",
+		Columns:    OrgMembershipsColumns,
+		PrimaryKey: []*schema.Column{OrgMembershipsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "org_memberships_organizations_memberships",
+				Columns:    []*schema.Column{OrgMembershipsColumns[4]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "org_memberships_users_memberships",
+				Columns:    []*schema.Column{OrgMembershipsColumns[5]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "orgmembership_organization_memberships_user_memberships",
+				Unique:  true,
+				Columns: []*schema.Column{OrgMembershipsColumns[4], OrgMembershipsColumns[5]},
+			},
+		},
+	}
 	// OrganizationsColumns holds the columns for the "organizations" table.
 	OrganizationsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
-		{Name: "name", Type: field.TypeString},
+		{Name: "name", Type: field.TypeString, Unique: true},
 		{Name: "slug", Type: field.TypeString, Unique: true},
+		{Name: "display_name", Type: field.TypeString, Nullable: true},
+		{Name: "description", Type: field.TypeString, Nullable: true},
 	}
 	// OrganizationsTable holds the schema information for the "organizations" table.
 	OrganizationsTable = &schema.Table{
@@ -74,6 +112,30 @@ var (
 				Symbol:     "projects_organizations_projects",
 				Columns:    []*schema.Column{ProjectsColumns[6]},
 				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+	}
+	// RefreshTokensColumns holds the columns for the "refresh_tokens" table.
+	RefreshTokensColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "token_hash", Type: field.TypeString, Unique: true},
+		{Name: "expires_at", Type: field.TypeTime},
+		{Name: "revoked_at", Type: field.TypeTime, Nullable: true},
+		{Name: "user_refresh_tokens", Type: field.TypeInt},
+	}
+	// RefreshTokensTable holds the schema information for the "refresh_tokens" table.
+	RefreshTokensTable = &schema.Table{
+		Name:       "refresh_tokens",
+		Columns:    RefreshTokensColumns,
+		PrimaryKey: []*schema.Column{RefreshTokensColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "refresh_tokens_users_refresh_tokens",
+				Columns:    []*schema.Column{RefreshTokensColumns[6]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 		},
@@ -141,9 +203,12 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "username", Type: field.TypeString, Unique: true},
+		{Name: "password_hash", Type: field.TypeString},
 		{Name: "email", Type: field.TypeString, Unique: true},
 		{Name: "display_name", Type: field.TypeString, Nullable: true},
-		{Name: "status", Type: field.TypeString, Default: "active"},
+		{Name: "role", Type: field.TypeString, Default: "user"},
+		{Name: "active", Type: field.TypeBool, Default: true},
 	}
 	// UsersTable holds the schema information for the "users" table.
 	UsersTable = &schema.Table{
@@ -154,8 +219,10 @@ var (
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		JobsTable,
+		OrgMembershipsTable,
 		OrganizationsTable,
 		ProjectsTable,
+		RefreshTokensTable,
 		SegmentsTable,
 		SubJobsTable,
 		UsersTable,
@@ -165,7 +232,10 @@ var (
 func init() {
 	JobsTable.ForeignKeys[0].RefTable = ProjectsTable
 	JobsTable.ForeignKeys[1].RefTable = UsersTable
+	OrgMembershipsTable.ForeignKeys[0].RefTable = OrganizationsTable
+	OrgMembershipsTable.ForeignKeys[1].RefTable = UsersTable
 	ProjectsTable.ForeignKeys[0].RefTable = OrganizationsTable
+	RefreshTokensTable.ForeignKeys[0].RefTable = UsersTable
 	SegmentsTable.ForeignKeys[0].RefTable = SubJobsTable
 	SegmentsTable.ForeignKeys[1].RefTable = UsersTable
 	SubJobsTable.ForeignKeys[0].RefTable = JobsTable

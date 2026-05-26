@@ -9,11 +9,17 @@ import (
 // Job is the predicate function for job builders.
 type Job func(*sql.Selector)
 
+// OrgMembership is the predicate function for orgmembership builders.
+type OrgMembership func(*sql.Selector)
+
 // Organization is the predicate function for organization builders.
 type Organization func(*sql.Selector)
 
 // Project is the predicate function for project builders.
 type Project func(*sql.Selector)
+
+// RefreshToken is the predicate function for refreshtoken builders.
+type RefreshToken func(*sql.Selector)
 
 // Segment is the predicate function for segment builders.
 type Segment func(*sql.Selector)

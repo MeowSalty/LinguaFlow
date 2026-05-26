@@ -7,7 +7,9 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
@@ -37,6 +39,25 @@ func init() {
 	jobDescStatus := jobFields[0].Descriptor()
 	// job.DefaultStatus holds the default value on creation for the status field.
 	job.DefaultStatus = jobDescStatus.Default.(string)
+	orgmembershipMixin := schema.OrgMembership{}.Mixin()
+	orgmembershipMixinFields0 := orgmembershipMixin[0].Fields()
+	_ = orgmembershipMixinFields0
+	orgmembershipFields := schema.OrgMembership{}.Fields()
+	_ = orgmembershipFields
+	// orgmembershipDescCreatedAt is the schema descriptor for created_at field.
+	orgmembershipDescCreatedAt := orgmembershipMixinFields0[0].Descriptor()
+	// orgmembership.DefaultCreatedAt holds the default value on creation for the created_at field.
+	orgmembership.DefaultCreatedAt = orgmembershipDescCreatedAt.Default.(func() time.Time)
+	// orgmembershipDescUpdatedAt is the schema descriptor for updated_at field.
+	orgmembershipDescUpdatedAt := orgmembershipMixinFields0[1].Descriptor()
+	// orgmembership.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	orgmembership.DefaultUpdatedAt = orgmembershipDescUpdatedAt.Default.(func() time.Time)
+	// orgmembership.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	orgmembership.UpdateDefaultUpdatedAt = orgmembershipDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// orgmembershipDescRole is the schema descriptor for role field.
+	orgmembershipDescRole := orgmembershipFields[0].Descriptor()
+	// orgmembership.DefaultRole holds the default value on creation for the role field.
+	orgmembership.DefaultRole = orgmembershipDescRole.Default.(string)
 	organizationMixin := schema.Organization{}.Mixin()
 	organizationMixinFields0 := organizationMixin[0].Fields()
 	_ = organizationMixinFields0
@@ -87,6 +108,25 @@ func init() {
 	projectDescTargetLang := projectFields[2].Descriptor()
 	// project.DefaultTargetLang holds the default value on creation for the target_lang field.
 	project.DefaultTargetLang = projectDescTargetLang.Default.(string)
+	refreshtokenMixin := schema.RefreshToken{}.Mixin()
+	refreshtokenMixinFields0 := refreshtokenMixin[0].Fields()
+	_ = refreshtokenMixinFields0
+	refreshtokenFields := schema.RefreshToken{}.Fields()
+	_ = refreshtokenFields
+	// refreshtokenDescCreatedAt is the schema descriptor for created_at field.
+	refreshtokenDescCreatedAt := refreshtokenMixinFields0[0].Descriptor()
+	// refreshtoken.DefaultCreatedAt holds the default value on creation for the created_at field.
+	refreshtoken.DefaultCreatedAt = refreshtokenDescCreatedAt.Default.(func() time.Time)
+	// refreshtokenDescUpdatedAt is the schema descriptor for updated_at field.
+	refreshtokenDescUpdatedAt := refreshtokenMixinFields0[1].Descriptor()
+	// refreshtoken.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	refreshtoken.DefaultUpdatedAt = refreshtokenDescUpdatedAt.Default.(func() time.Time)
+	// refreshtoken.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	refreshtoken.UpdateDefaultUpdatedAt = refreshtokenDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// refreshtokenDescTokenHash is the schema descriptor for token_hash field.
+	refreshtokenDescTokenHash := refreshtokenFields[0].Descriptor()
+	// refreshtoken.TokenHashValidator is a validator for the "token_hash" field. It is called by the builders before save.
+	refreshtoken.TokenHashValidator = refreshtokenDescTokenHash.Validators[0].(func(string) error)
 	segmentMixin := schema.Segment{}.Mixin()
 	segmentMixinFields0 := segmentMixin[0].Fields()
 	_ = segmentMixinFields0
@@ -148,12 +188,24 @@ func init() {
 	user.DefaultUpdatedAt = userDescUpdatedAt.Default.(func() time.Time)
 	// user.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	user.UpdateDefaultUpdatedAt = userDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// userDescUsername is the schema descriptor for username field.
+	userDescUsername := userFields[0].Descriptor()
+	// user.UsernameValidator is a validator for the "username" field. It is called by the builders before save.
+	user.UsernameValidator = userDescUsername.Validators[0].(func(string) error)
+	// userDescPasswordHash is the schema descriptor for password_hash field.
+	userDescPasswordHash := userFields[1].Descriptor()
+	// user.PasswordHashValidator is a validator for the "password_hash" field. It is called by the builders before save.
+	user.PasswordHashValidator = userDescPasswordHash.Validators[0].(func(string) error)
 	// userDescEmail is the schema descriptor for email field.
-	userDescEmail := userFields[0].Descriptor()
+	userDescEmail := userFields[2].Descriptor()
 	// user.EmailValidator is a validator for the "email" field. It is called by the builders before save.
 	user.EmailValidator = userDescEmail.Validators[0].(func(string) error)
-	// userDescStatus is the schema descriptor for status field.
-	userDescStatus := userFields[2].Descriptor()
-	// user.DefaultStatus holds the default value on creation for the status field.
-	user.DefaultStatus = userDescStatus.Default.(string)
+	// userDescRole is the schema descriptor for role field.
+	userDescRole := userFields[4].Descriptor()
+	// user.DefaultRole holds the default value on creation for the role field.
+	user.DefaultRole = userDescRole.Default.(string)
+	// userDescActive is the schema descriptor for active field.
+	userDescActive := userFields[5].Descriptor()
+	// user.DefaultActive holds the default value on creation for the active field.
+	user.DefaultActive = userDescActive.Default.(bool)
 }

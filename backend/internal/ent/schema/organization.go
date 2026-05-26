@@ -16,13 +16,16 @@ func (Organization) Mixin() []ent.Mixin {
 
 func (Organization) Fields() []ent.Field {
 	return []ent.Field{
-		field.String("name").NotEmpty(),
+		field.String("name").NotEmpty().Unique(),
 		field.String("slug").NotEmpty().Unique(),
+		field.String("display_name").Optional(),
+		field.String("description").Optional(),
 	}
 }
 
 func (Organization) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("projects", Project.Type),
+		edge.To("memberships", OrgMembership.Type),
 	}
 }

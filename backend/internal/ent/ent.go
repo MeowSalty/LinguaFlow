@@ -14,7 +14,9 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
@@ -78,12 +80,14 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			job.Table:          job.ValidColumn,
-			organization.Table: organization.ValidColumn,
-			project.Table:      project.ValidColumn,
-			segment.Table:      segment.ValidColumn,
-			subjob.Table:       subjob.ValidColumn,
-			user.Table:         user.ValidColumn,
+			job.Table:           job.ValidColumn,
+			orgmembership.Table: orgmembership.ValidColumn,
+			organization.Table:  organization.ValidColumn,
+			project.Table:       project.ValidColumn,
+			refreshtoken.Table:  refreshtoken.ValidColumn,
+			segment.Table:       segment.ValidColumn,
+			subjob.Table:        subjob.ValidColumn,
+			user.Table:          user.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

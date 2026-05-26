@@ -152,6 +152,10 @@ server:
   port: 8080
   data_dir: ./data
   auto_migrate: true
+  jwt_secret: ${LINGUAFLOW_JWT_SECRET:-dev-insecure-secret-change-me}
+  jwt_issuer: linguaflow
+  jwt_expiry: 1h
+  refresh_token_expiry: 720h
   shutdown_timeout: 10s
   cors:
     allowed_origins: ["*"]
