@@ -178,7 +178,15 @@ func (r *Runner) processSubJob(ctx context.Context, exec *service.JobExecution, 
 		_ = r.jobs.MarkSubJobFailed(ctx, sub.ID, err)
 		return nil
 	}
-	return r.jobs.MarkSubJobCompleted(ctx, sub.ID, outputRel, result.SegmentCount)
+	segments := make([]service.CompletedSegment, 0, len(result.Segments))
+	for _, item := range result.Segments {
+		segments = append(segments, service.CompletedSegment{
+			Index:      item.Index,
+			SourceText: item.SourceText,
+			TargetText: item.TargetText,
+		})
+	}
+	return r.jobs.MarkSubJobCompletedWithSegments(ctx, sub.ID, outputRel, result.SegmentCount, segments)
 }
 
 func (r *Runner) buildJobConfig(ctx context.Context, exec *service.JobExecution) (*config.Config, error) {

@@ -9,6 +9,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 )
 
@@ -43,6 +44,12 @@ type JobExecution struct {
 	Project     *ent.Project
 	SubJobs     []*ent.SubJob
 	ActorUserID int
+}
+
+type CompletedSegment struct {
+	Index      int
+	SourceText string
+	TargetText string
 }
 
 func NewJobService(client *ent.Client, projects *ProjectService) *JobService {
@@ -133,17 +140,95 @@ func (s *JobService) MarkSubJobRunning(ctx context.Context, subJobID int) error 
 }
 
 func (s *JobService) MarkSubJobCompleted(ctx context.Context, subJobID int, outputPath string, segmentCount int) error {
-	update := s.client.SubJob.UpdateOneID(subJobID).
-		SetStatus(SubJobStatusCompleted).
-		SetOutputPath(strings.TrimSpace(outputPath)).
-		SetSegmentCount(segmentCount).
-		ClearErrorMessage()
-	if err := update.Exec(ctx); err != nil {
+	return s.MarkSubJobCompletedWithSegments(ctx, subJobID, outputPath, segmentCount, nil)
+}
+
+func (s *JobService) MarkSubJobCompletedWithSegments(ctx context.Context, subJobID int, outputPath string, segmentCount int, segments []CompletedSegment) error {
+	subJobRow, err := s.client.SubJob.Query().
+		Where(subjob.IDEQ(subJobID)).
+		WithJob(func(q *ent.JobQuery) { q.WithProject().WithCreatedBy() }).
+		Only(ctx)
+	if err != nil {
 		if ent.IsNotFound(err) {
 			return ErrSubJobNotFound
 		}
 		return err
 	}
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return err
+	}
+	committed := false
+	defer func() {
+		if !committed {
+			_ = tx.Rollback()
+		}
+	}()
+	if err := tx.SubJob.UpdateOneID(subJobID).
+		SetStatus(SubJobStatusCompleted).
+		SetOutputPath(strings.TrimSpace(outputPath)).
+		SetSegmentCount(segmentCount).
+		ClearErrorMessage().
+		Exec(ctx); err != nil {
+		if ent.IsNotFound(err) {
+			return ErrSubJobNotFound
+		}
+		return err
+	}
+	if _, err := tx.Segment.Delete().Where(segment.HasSubJobWith(subjob.IDEQ(subJobID))).Exec(ctx); err != nil {
+		return err
+	}
+	if len(segments) > 0 {
+		builders := make([]*ent.SegmentCreate, 0, len(segments))
+		for i, item := range segments {
+			idx := item.Index
+			if idx < 0 {
+				idx = i
+			}
+			sourceText := strings.TrimSpace(item.SourceText)
+			if sourceText == "" {
+				sourceText = " "
+			}
+			builders = append(builders, tx.Segment.Create().
+				SetSubJobID(subJobID).
+				SetSegmentIndex(idx).
+				SetSourceText(sourceText).
+				SetTargetText(item.TargetText).
+				SetStatus(SegmentStatusTranslated))
+		}
+		if _, err := tx.Segment.CreateBulk(builders...).Save(ctx); err != nil {
+			return err
+		}
+	}
+	jobRow, err := subJobRow.Edges.JobOrErr()
+	if err != nil {
+		return err
+	}
+	projectRow, err := jobRow.Edges.ProjectOrErr()
+	if err != nil {
+		return err
+	}
+	usage := tx.UsageRecord.Create().
+		SetProjectID(projectRow.ID).
+		SetJobID(jobRow.ID).
+		SetSource("job").
+		SetSegmentCount(segmentCount).
+		SetAPICalls(segmentCount)
+	if jobRow.Edges.CreatedBy != nil {
+		usage.SetUserID(jobRow.Edges.CreatedBy.ID)
+	} else if projectRow.OwnerUserID != nil {
+		usage.SetUserID(*projectRow.OwnerUserID)
+	}
+	if projectRow.OwnerOrgID != nil {
+		usage.SetOrganizationID(*projectRow.OwnerOrgID)
+	}
+	if err := usage.Exec(ctx); err != nil {
+		return err
+	}
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+	committed = true
 	return nil
 }
 

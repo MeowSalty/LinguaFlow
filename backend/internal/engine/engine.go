@@ -38,8 +38,15 @@ type RuntimeResources struct {
 	TM       tm.TranslationMemory
 }
 
+type SegmentResult struct {
+	Index      int
+	SourceText string
+	TargetText string
+}
+
 type TranslateResult struct {
 	SegmentCount int
+	Segments     []SegmentResult
 }
 
 // New 按配置构造 Engine。reporter 可为 nil（fallback 为 progress.Nop）。
@@ -149,6 +156,18 @@ func (e *Engine) TranslateWithResult(ctx context.Context, job TranslateJob) (Tra
 	e.logger.Info("pipeline start", "stages", stageNames(pipe.Stages()))
 	if err := pipe.Run(ctx, doc); err != nil {
 		return result, err
+	}
+	result.Segments = make([]SegmentResult, 0, len(doc.Segments))
+	for i, seg := range doc.Segments {
+		source := seg.OriginalSource
+		if source == "" {
+			source = seg.Source
+		}
+		result.Segments = append(result.Segments, SegmentResult{
+			Index:      i,
+			SourceText: source,
+			TargetText: seg.Target,
+		})
 	}
 
 	w := output.New(e.cfg.Output, p, job.OutputPath)
