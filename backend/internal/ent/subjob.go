@@ -26,8 +26,14 @@ type SubJob struct {
 	Status string `json:"status,omitempty"`
 	// InputFilename holds the value of the "input_filename" field.
 	InputFilename string `json:"input_filename,omitempty"`
+	// InputFormat holds the value of the "input_format" field.
+	InputFormat string `json:"input_format,omitempty"`
+	// InputPath holds the value of the "input_path" field.
+	InputPath string `json:"input_path,omitempty"`
 	// OutputPath holds the value of the "output_path" field.
 	OutputPath string `json:"output_path,omitempty"`
+	// SegmentCount holds the value of the "segment_count" field.
+	SegmentCount int `json:"segment_count,omitempty"`
 	// ErrorMessage holds the value of the "error_message" field.
 	ErrorMessage *string `json:"error_message,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
@@ -73,9 +79,9 @@ func (*SubJob) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case subjob.FieldID:
+		case subjob.FieldID, subjob.FieldSegmentCount:
 			values[i] = new(sql.NullInt64)
-		case subjob.FieldStatus, subjob.FieldInputFilename, subjob.FieldOutputPath, subjob.FieldErrorMessage:
+		case subjob.FieldStatus, subjob.FieldInputFilename, subjob.FieldInputFormat, subjob.FieldInputPath, subjob.FieldOutputPath, subjob.FieldErrorMessage:
 			values[i] = new(sql.NullString)
 		case subjob.FieldCreatedAt, subjob.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -126,11 +132,29 @@ func (_m *SubJob) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.InputFilename = value.String
 			}
+		case subjob.FieldInputFormat:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field input_format", values[i])
+			} else if value.Valid {
+				_m.InputFormat = value.String
+			}
+		case subjob.FieldInputPath:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field input_path", values[i])
+			} else if value.Valid {
+				_m.InputPath = value.String
+			}
 		case subjob.FieldOutputPath:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field output_path", values[i])
 			} else if value.Valid {
 				_m.OutputPath = value.String
+			}
+		case subjob.FieldSegmentCount:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field segment_count", values[i])
+			} else if value.Valid {
+				_m.SegmentCount = int(value.Int64)
 			}
 		case subjob.FieldErrorMessage:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -204,8 +228,17 @@ func (_m *SubJob) String() string {
 	builder.WriteString("input_filename=")
 	builder.WriteString(_m.InputFilename)
 	builder.WriteString(", ")
+	builder.WriteString("input_format=")
+	builder.WriteString(_m.InputFormat)
+	builder.WriteString(", ")
+	builder.WriteString("input_path=")
+	builder.WriteString(_m.InputPath)
+	builder.WriteString(", ")
 	builder.WriteString("output_path=")
 	builder.WriteString(_m.OutputPath)
+	builder.WriteString(", ")
+	builder.WriteString("segment_count=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SegmentCount))
 	builder.WriteString(", ")
 	if v := _m.ErrorMessage; v != nil {
 		builder.WriteString("error_message=")

@@ -17,6 +17,13 @@ func (Job) Mixin() []ent.Mixin {
 func (Job) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("status").Default("pending"),
+		field.Int("sub_job_count").Default(0).NonNegative(),
+		field.Int("completed_sub_jobs").Default(0).NonNegative(),
+		field.Int("failed_sub_jobs").Default(0).NonNegative(),
+		field.String("source_lang").Default("auto"),
+		field.String("target_lang").Default("zh"),
+		field.JSON("config", map[string]any{}).
+			Default(func() map[string]any { return map[string]any{} }),
 		field.String("input_path").Optional(),
 		field.String("output_path").Optional(),
 		field.String("error_message").Optional().Nillable(),

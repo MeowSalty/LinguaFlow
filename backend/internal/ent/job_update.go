@@ -51,6 +51,103 @@ func (_u *JobUpdate) SetNillableStatus(v *string) *JobUpdate {
 	return _u
 }
 
+// SetSubJobCount sets the "sub_job_count" field.
+func (_u *JobUpdate) SetSubJobCount(v int) *JobUpdate {
+	_u.mutation.ResetSubJobCount()
+	_u.mutation.SetSubJobCount(v)
+	return _u
+}
+
+// SetNillableSubJobCount sets the "sub_job_count" field if the given value is not nil.
+func (_u *JobUpdate) SetNillableSubJobCount(v *int) *JobUpdate {
+	if v != nil {
+		_u.SetSubJobCount(*v)
+	}
+	return _u
+}
+
+// AddSubJobCount adds value to the "sub_job_count" field.
+func (_u *JobUpdate) AddSubJobCount(v int) *JobUpdate {
+	_u.mutation.AddSubJobCount(v)
+	return _u
+}
+
+// SetCompletedSubJobs sets the "completed_sub_jobs" field.
+func (_u *JobUpdate) SetCompletedSubJobs(v int) *JobUpdate {
+	_u.mutation.ResetCompletedSubJobs()
+	_u.mutation.SetCompletedSubJobs(v)
+	return _u
+}
+
+// SetNillableCompletedSubJobs sets the "completed_sub_jobs" field if the given value is not nil.
+func (_u *JobUpdate) SetNillableCompletedSubJobs(v *int) *JobUpdate {
+	if v != nil {
+		_u.SetCompletedSubJobs(*v)
+	}
+	return _u
+}
+
+// AddCompletedSubJobs adds value to the "completed_sub_jobs" field.
+func (_u *JobUpdate) AddCompletedSubJobs(v int) *JobUpdate {
+	_u.mutation.AddCompletedSubJobs(v)
+	return _u
+}
+
+// SetFailedSubJobs sets the "failed_sub_jobs" field.
+func (_u *JobUpdate) SetFailedSubJobs(v int) *JobUpdate {
+	_u.mutation.ResetFailedSubJobs()
+	_u.mutation.SetFailedSubJobs(v)
+	return _u
+}
+
+// SetNillableFailedSubJobs sets the "failed_sub_jobs" field if the given value is not nil.
+func (_u *JobUpdate) SetNillableFailedSubJobs(v *int) *JobUpdate {
+	if v != nil {
+		_u.SetFailedSubJobs(*v)
+	}
+	return _u
+}
+
+// AddFailedSubJobs adds value to the "failed_sub_jobs" field.
+func (_u *JobUpdate) AddFailedSubJobs(v int) *JobUpdate {
+	_u.mutation.AddFailedSubJobs(v)
+	return _u
+}
+
+// SetSourceLang sets the "source_lang" field.
+func (_u *JobUpdate) SetSourceLang(v string) *JobUpdate {
+	_u.mutation.SetSourceLang(v)
+	return _u
+}
+
+// SetNillableSourceLang sets the "source_lang" field if the given value is not nil.
+func (_u *JobUpdate) SetNillableSourceLang(v *string) *JobUpdate {
+	if v != nil {
+		_u.SetSourceLang(*v)
+	}
+	return _u
+}
+
+// SetTargetLang sets the "target_lang" field.
+func (_u *JobUpdate) SetTargetLang(v string) *JobUpdate {
+	_u.mutation.SetTargetLang(v)
+	return _u
+}
+
+// SetNillableTargetLang sets the "target_lang" field if the given value is not nil.
+func (_u *JobUpdate) SetNillableTargetLang(v *string) *JobUpdate {
+	if v != nil {
+		_u.SetTargetLang(*v)
+	}
+	return _u
+}
+
+// SetConfig sets the "config" field.
+func (_u *JobUpdate) SetConfig(v map[string]interface{}) *JobUpdate {
+	_u.mutation.SetConfig(v)
+	return _u
+}
+
 // SetInputPath sets the "input_path" field.
 func (_u *JobUpdate) SetInputPath(v string) *JobUpdate {
 	_u.mutation.SetInputPath(v)
@@ -232,6 +329,21 @@ func (_u *JobUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *JobUpdate) check() error {
+	if v, ok := _u.mutation.SubJobCount(); ok {
+		if err := job.SubJobCountValidator(v); err != nil {
+			return &ValidationError{Name: "sub_job_count", err: fmt.Errorf(`ent: validator failed for field "Job.sub_job_count": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CompletedSubJobs(); ok {
+		if err := job.CompletedSubJobsValidator(v); err != nil {
+			return &ValidationError{Name: "completed_sub_jobs", err: fmt.Errorf(`ent: validator failed for field "Job.completed_sub_jobs": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.FailedSubJobs(); ok {
+		if err := job.FailedSubJobsValidator(v); err != nil {
+			return &ValidationError{Name: "failed_sub_jobs", err: fmt.Errorf(`ent: validator failed for field "Job.failed_sub_jobs": %w`, err)}
+		}
+	}
 	if _u.mutation.ProjectCleared() && len(_u.mutation.ProjectIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Job.project"`)
 	}
@@ -255,6 +367,33 @@ func (_u *JobUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(job.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SubJobCount(); ok {
+		_spec.SetField(job.FieldSubJobCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedSubJobCount(); ok {
+		_spec.AddField(job.FieldSubJobCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.CompletedSubJobs(); ok {
+		_spec.SetField(job.FieldCompletedSubJobs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCompletedSubJobs(); ok {
+		_spec.AddField(job.FieldCompletedSubJobs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.FailedSubJobs(); ok {
+		_spec.SetField(job.FieldFailedSubJobs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFailedSubJobs(); ok {
+		_spec.AddField(job.FieldFailedSubJobs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.SourceLang(); ok {
+		_spec.SetField(job.FieldSourceLang, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.TargetLang(); ok {
+		_spec.SetField(job.FieldTargetLang, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Config(); ok {
+		_spec.SetField(job.FieldConfig, field.TypeJSON, value)
 	}
 	if value, ok := _u.mutation.InputPath(); ok {
 		_spec.SetField(job.FieldInputPath, field.TypeString, value)
@@ -414,6 +553,103 @@ func (_u *JobUpdateOne) SetNillableStatus(v *string) *JobUpdateOne {
 	if v != nil {
 		_u.SetStatus(*v)
 	}
+	return _u
+}
+
+// SetSubJobCount sets the "sub_job_count" field.
+func (_u *JobUpdateOne) SetSubJobCount(v int) *JobUpdateOne {
+	_u.mutation.ResetSubJobCount()
+	_u.mutation.SetSubJobCount(v)
+	return _u
+}
+
+// SetNillableSubJobCount sets the "sub_job_count" field if the given value is not nil.
+func (_u *JobUpdateOne) SetNillableSubJobCount(v *int) *JobUpdateOne {
+	if v != nil {
+		_u.SetSubJobCount(*v)
+	}
+	return _u
+}
+
+// AddSubJobCount adds value to the "sub_job_count" field.
+func (_u *JobUpdateOne) AddSubJobCount(v int) *JobUpdateOne {
+	_u.mutation.AddSubJobCount(v)
+	return _u
+}
+
+// SetCompletedSubJobs sets the "completed_sub_jobs" field.
+func (_u *JobUpdateOne) SetCompletedSubJobs(v int) *JobUpdateOne {
+	_u.mutation.ResetCompletedSubJobs()
+	_u.mutation.SetCompletedSubJobs(v)
+	return _u
+}
+
+// SetNillableCompletedSubJobs sets the "completed_sub_jobs" field if the given value is not nil.
+func (_u *JobUpdateOne) SetNillableCompletedSubJobs(v *int) *JobUpdateOne {
+	if v != nil {
+		_u.SetCompletedSubJobs(*v)
+	}
+	return _u
+}
+
+// AddCompletedSubJobs adds value to the "completed_sub_jobs" field.
+func (_u *JobUpdateOne) AddCompletedSubJobs(v int) *JobUpdateOne {
+	_u.mutation.AddCompletedSubJobs(v)
+	return _u
+}
+
+// SetFailedSubJobs sets the "failed_sub_jobs" field.
+func (_u *JobUpdateOne) SetFailedSubJobs(v int) *JobUpdateOne {
+	_u.mutation.ResetFailedSubJobs()
+	_u.mutation.SetFailedSubJobs(v)
+	return _u
+}
+
+// SetNillableFailedSubJobs sets the "failed_sub_jobs" field if the given value is not nil.
+func (_u *JobUpdateOne) SetNillableFailedSubJobs(v *int) *JobUpdateOne {
+	if v != nil {
+		_u.SetFailedSubJobs(*v)
+	}
+	return _u
+}
+
+// AddFailedSubJobs adds value to the "failed_sub_jobs" field.
+func (_u *JobUpdateOne) AddFailedSubJobs(v int) *JobUpdateOne {
+	_u.mutation.AddFailedSubJobs(v)
+	return _u
+}
+
+// SetSourceLang sets the "source_lang" field.
+func (_u *JobUpdateOne) SetSourceLang(v string) *JobUpdateOne {
+	_u.mutation.SetSourceLang(v)
+	return _u
+}
+
+// SetNillableSourceLang sets the "source_lang" field if the given value is not nil.
+func (_u *JobUpdateOne) SetNillableSourceLang(v *string) *JobUpdateOne {
+	if v != nil {
+		_u.SetSourceLang(*v)
+	}
+	return _u
+}
+
+// SetTargetLang sets the "target_lang" field.
+func (_u *JobUpdateOne) SetTargetLang(v string) *JobUpdateOne {
+	_u.mutation.SetTargetLang(v)
+	return _u
+}
+
+// SetNillableTargetLang sets the "target_lang" field if the given value is not nil.
+func (_u *JobUpdateOne) SetNillableTargetLang(v *string) *JobUpdateOne {
+	if v != nil {
+		_u.SetTargetLang(*v)
+	}
+	return _u
+}
+
+// SetConfig sets the "config" field.
+func (_u *JobUpdateOne) SetConfig(v map[string]interface{}) *JobUpdateOne {
+	_u.mutation.SetConfig(v)
 	return _u
 }
 
@@ -611,6 +847,21 @@ func (_u *JobUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *JobUpdateOne) check() error {
+	if v, ok := _u.mutation.SubJobCount(); ok {
+		if err := job.SubJobCountValidator(v); err != nil {
+			return &ValidationError{Name: "sub_job_count", err: fmt.Errorf(`ent: validator failed for field "Job.sub_job_count": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.CompletedSubJobs(); ok {
+		if err := job.CompletedSubJobsValidator(v); err != nil {
+			return &ValidationError{Name: "completed_sub_jobs", err: fmt.Errorf(`ent: validator failed for field "Job.completed_sub_jobs": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.FailedSubJobs(); ok {
+		if err := job.FailedSubJobsValidator(v); err != nil {
+			return &ValidationError{Name: "failed_sub_jobs", err: fmt.Errorf(`ent: validator failed for field "Job.failed_sub_jobs": %w`, err)}
+		}
+	}
 	if _u.mutation.ProjectCleared() && len(_u.mutation.ProjectIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "Job.project"`)
 	}
@@ -651,6 +902,33 @@ func (_u *JobUpdateOne) sqlSave(ctx context.Context) (_node *Job, err error) {
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(job.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SubJobCount(); ok {
+		_spec.SetField(job.FieldSubJobCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedSubJobCount(); ok {
+		_spec.AddField(job.FieldSubJobCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.CompletedSubJobs(); ok {
+		_spec.SetField(job.FieldCompletedSubJobs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedCompletedSubJobs(); ok {
+		_spec.AddField(job.FieldCompletedSubJobs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.FailedSubJobs(); ok {
+		_spec.SetField(job.FieldFailedSubJobs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedFailedSubJobs(); ok {
+		_spec.AddField(job.FieldFailedSubJobs, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.SourceLang(); ok {
+		_spec.SetField(job.FieldSourceLang, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.TargetLang(); ok {
+		_spec.SetField(job.FieldTargetLang, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Config(); ok {
+		_spec.SetField(job.FieldConfig, field.TypeJSON, value)
 	}
 	if value, ok := _u.mutation.InputPath(); ok {
 		_spec.SetField(job.FieldInputPath, field.TypeString, value)

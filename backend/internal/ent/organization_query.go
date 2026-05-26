@@ -12,21 +12,27 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 )
 
 // OrganizationQuery is the builder for querying Organization entities.
 type OrganizationQuery struct {
 	config
-	ctx             *QueryContext
-	order           []organization.OrderOption
-	inters          []Interceptor
-	predicates      []predicate.Organization
-	withProjects    *ProjectQuery
-	withMemberships *OrgMembershipQuery
+	ctx                 *QueryContext
+	order               []organization.OrderOption
+	inters              []Interceptor
+	predicates          []predicate.Organization
+	withProjects        *ProjectQuery
+	withMemberships     *OrgMembershipQuery
+	withOrgBackends     *OrgBackendQuery
+	withGlossaryEntries *GlossaryEntryQuery
+	withTmEntries       *TMEntryQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -100,6 +106,72 @@ func (_q *OrganizationQuery) QueryMemberships() *OrgMembershipQuery {
 			sqlgraph.From(organization.Table, organization.FieldID, selector),
 			sqlgraph.To(orgmembership.Table, orgmembership.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, organization.MembershipsTable, organization.MembershipsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryOrgBackends chains the current query on the "org_backends" edge.
+func (_q *OrganizationQuery) QueryOrgBackends() *OrgBackendQuery {
+	query := (&OrgBackendClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(organization.Table, organization.FieldID, selector),
+			sqlgraph.To(orgbackend.Table, orgbackend.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, organization.OrgBackendsTable, organization.OrgBackendsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryGlossaryEntries chains the current query on the "glossary_entries" edge.
+func (_q *OrganizationQuery) QueryGlossaryEntries() *GlossaryEntryQuery {
+	query := (&GlossaryEntryClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(organization.Table, organization.FieldID, selector),
+			sqlgraph.To(glossaryentry.Table, glossaryentry.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, organization.GlossaryEntriesTable, organization.GlossaryEntriesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryTmEntries chains the current query on the "tm_entries" edge.
+func (_q *OrganizationQuery) QueryTmEntries() *TMEntryQuery {
+	query := (&TMEntryClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(organization.Table, organization.FieldID, selector),
+			sqlgraph.To(tmentry.Table, tmentry.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, organization.TmEntriesTable, organization.TmEntriesColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -294,13 +366,16 @@ func (_q *OrganizationQuery) Clone() *OrganizationQuery {
 		return nil
 	}
 	return &OrganizationQuery{
-		config:          _q.config,
-		ctx:             _q.ctx.Clone(),
-		order:           append([]organization.OrderOption{}, _q.order...),
-		inters:          append([]Interceptor{}, _q.inters...),
-		predicates:      append([]predicate.Organization{}, _q.predicates...),
-		withProjects:    _q.withProjects.Clone(),
-		withMemberships: _q.withMemberships.Clone(),
+		config:              _q.config,
+		ctx:                 _q.ctx.Clone(),
+		order:               append([]organization.OrderOption{}, _q.order...),
+		inters:              append([]Interceptor{}, _q.inters...),
+		predicates:          append([]predicate.Organization{}, _q.predicates...),
+		withProjects:        _q.withProjects.Clone(),
+		withMemberships:     _q.withMemberships.Clone(),
+		withOrgBackends:     _q.withOrgBackends.Clone(),
+		withGlossaryEntries: _q.withGlossaryEntries.Clone(),
+		withTmEntries:       _q.withTmEntries.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -326,6 +401,39 @@ func (_q *OrganizationQuery) WithMemberships(opts ...func(*OrgMembershipQuery)) 
 		opt(query)
 	}
 	_q.withMemberships = query
+	return _q
+}
+
+// WithOrgBackends tells the query-builder to eager-load the nodes that are connected to
+// the "org_backends" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *OrganizationQuery) WithOrgBackends(opts ...func(*OrgBackendQuery)) *OrganizationQuery {
+	query := (&OrgBackendClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withOrgBackends = query
+	return _q
+}
+
+// WithGlossaryEntries tells the query-builder to eager-load the nodes that are connected to
+// the "glossary_entries" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *OrganizationQuery) WithGlossaryEntries(opts ...func(*GlossaryEntryQuery)) *OrganizationQuery {
+	query := (&GlossaryEntryClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withGlossaryEntries = query
+	return _q
+}
+
+// WithTmEntries tells the query-builder to eager-load the nodes that are connected to
+// the "tm_entries" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *OrganizationQuery) WithTmEntries(opts ...func(*TMEntryQuery)) *OrganizationQuery {
+	query := (&TMEntryClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withTmEntries = query
 	return _q
 }
 
@@ -407,9 +515,12 @@ func (_q *OrganizationQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 	var (
 		nodes       = []*Organization{}
 		_spec       = _q.querySpec()
-		loadedTypes = [2]bool{
+		loadedTypes = [5]bool{
 			_q.withProjects != nil,
 			_q.withMemberships != nil,
+			_q.withOrgBackends != nil,
+			_q.withGlossaryEntries != nil,
+			_q.withTmEntries != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -444,6 +555,27 @@ func (_q *OrganizationQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 			return nil, err
 		}
 	}
+	if query := _q.withOrgBackends; query != nil {
+		if err := _q.loadOrgBackends(ctx, query, nodes,
+			func(n *Organization) { n.Edges.OrgBackends = []*OrgBackend{} },
+			func(n *Organization, e *OrgBackend) { n.Edges.OrgBackends = append(n.Edges.OrgBackends, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withGlossaryEntries; query != nil {
+		if err := _q.loadGlossaryEntries(ctx, query, nodes,
+			func(n *Organization) { n.Edges.GlossaryEntries = []*GlossaryEntry{} },
+			func(n *Organization, e *GlossaryEntry) { n.Edges.GlossaryEntries = append(n.Edges.GlossaryEntries, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withTmEntries; query != nil {
+		if err := _q.loadTmEntries(ctx, query, nodes,
+			func(n *Organization) { n.Edges.TmEntries = []*TMEntry{} },
+			func(n *Organization, e *TMEntry) { n.Edges.TmEntries = append(n.Edges.TmEntries, e) }); err != nil {
+			return nil, err
+		}
+	}
 	return nodes, nil
 }
 
@@ -457,7 +589,9 @@ func (_q *OrganizationQuery) loadProjects(ctx context.Context, query *ProjectQue
 			init(nodes[i])
 		}
 	}
-	query.withFKs = true
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(project.FieldOwnerOrgID)
+	}
 	query.Where(predicate.Project(func(s *sql.Selector) {
 		s.Where(sql.InValues(s.C(organization.ProjectsColumn), fks...))
 	}))
@@ -466,13 +600,13 @@ func (_q *OrganizationQuery) loadProjects(ctx context.Context, query *ProjectQue
 		return err
 	}
 	for _, n := range neighbors {
-		fk := n.organization_projects
+		fk := n.OwnerOrgID
 		if fk == nil {
-			return fmt.Errorf(`foreign-key "organization_projects" is nil for node %v`, n.ID)
+			return fmt.Errorf(`foreign-key "owner_org_id" is nil for node %v`, n.ID)
 		}
 		node, ok := nodeids[*fk]
 		if !ok {
-			return fmt.Errorf(`unexpected referenced foreign-key "organization_projects" returned %v for node %v`, *fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "owner_org_id" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}
@@ -504,6 +638,103 @@ func (_q *OrganizationQuery) loadMemberships(ctx context.Context, query *OrgMemb
 		node, ok := nodeids[*fk]
 		if !ok {
 			return fmt.Errorf(`unexpected referenced foreign-key "organization_memberships" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *OrganizationQuery) loadOrgBackends(ctx context.Context, query *OrgBackendQuery, nodes []*Organization, init func(*Organization), assign func(*Organization, *OrgBackend)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*Organization)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	query.withFKs = true
+	query.Where(predicate.OrgBackend(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(organization.OrgBackendsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.organization_org_backends
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "organization_org_backends" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "organization_org_backends" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *OrganizationQuery) loadGlossaryEntries(ctx context.Context, query *GlossaryEntryQuery, nodes []*Organization, init func(*Organization), assign func(*Organization, *GlossaryEntry)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*Organization)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(glossaryentry.FieldOrganizationID)
+	}
+	query.Where(predicate.GlossaryEntry(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(organization.GlossaryEntriesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.OrganizationID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "organization_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "organization_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *OrganizationQuery) loadTmEntries(ctx context.Context, query *TMEntryQuery, nodes []*Organization, init func(*Organization), assign func(*Organization, *TMEntry)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*Organization)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(tmentry.FieldOrganizationID)
+	}
+	query.Where(predicate.TMEntry(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(organization.TmEntriesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.OrganizationID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "organization_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "organization_id" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}

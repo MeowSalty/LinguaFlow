@@ -41,9 +41,15 @@ type OrganizationEdges struct {
 	Projects []*Project `json:"projects,omitempty"`
 	// Memberships holds the value of the memberships edge.
 	Memberships []*OrgMembership `json:"memberships,omitempty"`
+	// OrgBackends holds the value of the org_backends edge.
+	OrgBackends []*OrgBackend `json:"org_backends,omitempty"`
+	// GlossaryEntries holds the value of the glossary_entries edge.
+	GlossaryEntries []*GlossaryEntry `json:"glossary_entries,omitempty"`
+	// TmEntries holds the value of the tm_entries edge.
+	TmEntries []*TMEntry `json:"tm_entries,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [2]bool
+	loadedTypes [5]bool
 }
 
 // ProjectsOrErr returns the Projects value or an error if the edge
@@ -62,6 +68,33 @@ func (e OrganizationEdges) MembershipsOrErr() ([]*OrgMembership, error) {
 		return e.Memberships, nil
 	}
 	return nil, &NotLoadedError{edge: "memberships"}
+}
+
+// OrgBackendsOrErr returns the OrgBackends value or an error if the edge
+// was not loaded in eager-loading.
+func (e OrganizationEdges) OrgBackendsOrErr() ([]*OrgBackend, error) {
+	if e.loadedTypes[2] {
+		return e.OrgBackends, nil
+	}
+	return nil, &NotLoadedError{edge: "org_backends"}
+}
+
+// GlossaryEntriesOrErr returns the GlossaryEntries value or an error if the edge
+// was not loaded in eager-loading.
+func (e OrganizationEdges) GlossaryEntriesOrErr() ([]*GlossaryEntry, error) {
+	if e.loadedTypes[3] {
+		return e.GlossaryEntries, nil
+	}
+	return nil, &NotLoadedError{edge: "glossary_entries"}
+}
+
+// TmEntriesOrErr returns the TmEntries value or an error if the edge
+// was not loaded in eager-loading.
+func (e OrganizationEdges) TmEntriesOrErr() ([]*TMEntry, error) {
+	if e.loadedTypes[4] {
+		return e.TmEntries, nil
+	}
+	return nil, &NotLoadedError{edge: "tm_entries"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -153,6 +186,21 @@ func (_m *Organization) QueryProjects() *ProjectQuery {
 // QueryMemberships queries the "memberships" edge of the Organization entity.
 func (_m *Organization) QueryMemberships() *OrgMembershipQuery {
 	return NewOrganizationClient(_m.config).QueryMemberships(_m)
+}
+
+// QueryOrgBackends queries the "org_backends" edge of the Organization entity.
+func (_m *Organization) QueryOrgBackends() *OrgBackendQuery {
+	return NewOrganizationClient(_m.config).QueryOrgBackends(_m)
+}
+
+// QueryGlossaryEntries queries the "glossary_entries" edge of the Organization entity.
+func (_m *Organization) QueryGlossaryEntries() *GlossaryEntryQuery {
+	return NewOrganizationClient(_m.config).QueryGlossaryEntries(_m)
+}
+
+// QueryTmEntries queries the "tm_entries" edge of the Organization entity.
+func (_m *Organization) QueryTmEntries() *TMEntryQuery {
+	return NewOrganizationClient(_m.config).QueryTmEntries(_m)
 }
 
 // Update returns a builder for updating this Organization.

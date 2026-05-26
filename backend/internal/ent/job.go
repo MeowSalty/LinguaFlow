@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -25,6 +26,18 @@ type Job struct {
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 	// Status holds the value of the "status" field.
 	Status string `json:"status,omitempty"`
+	// SubJobCount holds the value of the "sub_job_count" field.
+	SubJobCount int `json:"sub_job_count,omitempty"`
+	// CompletedSubJobs holds the value of the "completed_sub_jobs" field.
+	CompletedSubJobs int `json:"completed_sub_jobs,omitempty"`
+	// FailedSubJobs holds the value of the "failed_sub_jobs" field.
+	FailedSubJobs int `json:"failed_sub_jobs,omitempty"`
+	// SourceLang holds the value of the "source_lang" field.
+	SourceLang string `json:"source_lang,omitempty"`
+	// TargetLang holds the value of the "target_lang" field.
+	TargetLang string `json:"target_lang,omitempty"`
+	// Config holds the value of the "config" field.
+	Config map[string]interface{} `json:"config,omitempty"`
 	// InputPath holds the value of the "input_path" field.
 	InputPath string `json:"input_path,omitempty"`
 	// OutputPath holds the value of the "output_path" field.
@@ -88,9 +101,11 @@ func (*Job) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case job.FieldID:
+		case job.FieldConfig:
+			values[i] = new([]byte)
+		case job.FieldID, job.FieldSubJobCount, job.FieldCompletedSubJobs, job.FieldFailedSubJobs:
 			values[i] = new(sql.NullInt64)
-		case job.FieldStatus, job.FieldInputPath, job.FieldOutputPath, job.FieldErrorMessage:
+		case job.FieldStatus, job.FieldSourceLang, job.FieldTargetLang, job.FieldInputPath, job.FieldOutputPath, job.FieldErrorMessage:
 			values[i] = new(sql.NullString)
 		case job.FieldCreatedAt, job.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -136,6 +151,44 @@ func (_m *Job) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field status", values[i])
 			} else if value.Valid {
 				_m.Status = value.String
+			}
+		case job.FieldSubJobCount:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field sub_job_count", values[i])
+			} else if value.Valid {
+				_m.SubJobCount = int(value.Int64)
+			}
+		case job.FieldCompletedSubJobs:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field completed_sub_jobs", values[i])
+			} else if value.Valid {
+				_m.CompletedSubJobs = int(value.Int64)
+			}
+		case job.FieldFailedSubJobs:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field failed_sub_jobs", values[i])
+			} else if value.Valid {
+				_m.FailedSubJobs = int(value.Int64)
+			}
+		case job.FieldSourceLang:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field source_lang", values[i])
+			} else if value.Valid {
+				_m.SourceLang = value.String
+			}
+		case job.FieldTargetLang:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field target_lang", values[i])
+			} else if value.Valid {
+				_m.TargetLang = value.String
+			}
+		case job.FieldConfig:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field config", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Config); err != nil {
+					return fmt.Errorf("unmarshal field config: %w", err)
+				}
 			}
 		case job.FieldInputPath:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -229,6 +282,24 @@ func (_m *Job) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)
+	builder.WriteString(", ")
+	builder.WriteString("sub_job_count=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SubJobCount))
+	builder.WriteString(", ")
+	builder.WriteString("completed_sub_jobs=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CompletedSubJobs))
+	builder.WriteString(", ")
+	builder.WriteString("failed_sub_jobs=")
+	builder.WriteString(fmt.Sprintf("%v", _m.FailedSubJobs))
+	builder.WriteString(", ")
+	builder.WriteString("source_lang=")
+	builder.WriteString(_m.SourceLang)
+	builder.WriteString(", ")
+	builder.WriteString("target_lang=")
+	builder.WriteString(_m.TargetLang)
+	builder.WriteString(", ")
+	builder.WriteString("config=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Config))
 	builder.WriteString(", ")
 	builder.WriteString("input_path=")
 	builder.WriteString(_m.InputPath)

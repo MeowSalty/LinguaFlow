@@ -11,10 +11,15 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/projectbackend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
 // ProjectUpdate is the builder for updating Project entities.
@@ -50,6 +55,66 @@ func (_u *ProjectUpdate) SetNillableName(v *string) *ProjectUpdate {
 	return _u
 }
 
+// SetOwnerUserID sets the "owner_user_id" field.
+func (_u *ProjectUpdate) SetOwnerUserID(v int) *ProjectUpdate {
+	_u.mutation.SetOwnerUserID(v)
+	return _u
+}
+
+// SetNillableOwnerUserID sets the "owner_user_id" field if the given value is not nil.
+func (_u *ProjectUpdate) SetNillableOwnerUserID(v *int) *ProjectUpdate {
+	if v != nil {
+		_u.SetOwnerUserID(*v)
+	}
+	return _u
+}
+
+// ClearOwnerUserID clears the value of the "owner_user_id" field.
+func (_u *ProjectUpdate) ClearOwnerUserID() *ProjectUpdate {
+	_u.mutation.ClearOwnerUserID()
+	return _u
+}
+
+// SetOwnerOrgID sets the "owner_org_id" field.
+func (_u *ProjectUpdate) SetOwnerOrgID(v int) *ProjectUpdate {
+	_u.mutation.SetOwnerOrgID(v)
+	return _u
+}
+
+// SetNillableOwnerOrgID sets the "owner_org_id" field if the given value is not nil.
+func (_u *ProjectUpdate) SetNillableOwnerOrgID(v *int) *ProjectUpdate {
+	if v != nil {
+		_u.SetOwnerOrgID(*v)
+	}
+	return _u
+}
+
+// ClearOwnerOrgID clears the value of the "owner_org_id" field.
+func (_u *ProjectUpdate) ClearOwnerOrgID() *ProjectUpdate {
+	_u.mutation.ClearOwnerOrgID()
+	return _u
+}
+
+// SetResourceScope sets the "resource_scope" field.
+func (_u *ProjectUpdate) SetResourceScope(v string) *ProjectUpdate {
+	_u.mutation.SetResourceScope(v)
+	return _u
+}
+
+// SetNillableResourceScope sets the "resource_scope" field if the given value is not nil.
+func (_u *ProjectUpdate) SetNillableResourceScope(v *string) *ProjectUpdate {
+	if v != nil {
+		_u.SetResourceScope(*v)
+	}
+	return _u
+}
+
+// SetConfig sets the "config" field.
+func (_u *ProjectUpdate) SetConfig(v map[string]interface{}) *ProjectUpdate {
+	_u.mutation.SetConfig(v)
+	return _u
+}
+
 // SetSourceLang sets the "source_lang" field.
 func (_u *ProjectUpdate) SetSourceLang(v string) *ProjectUpdate {
 	_u.mutation.SetSourceLang(v)
@@ -78,15 +143,74 @@ func (_u *ProjectUpdate) SetNillableTargetLang(v *string) *ProjectUpdate {
 	return _u
 }
 
-// SetOrganizationID sets the "organization" edge to the Organization entity by ID.
-func (_u *ProjectUpdate) SetOrganizationID(id int) *ProjectUpdate {
-	_u.mutation.SetOrganizationID(id)
+// SetOwnerUser sets the "owner_user" edge to the User entity.
+func (_u *ProjectUpdate) SetOwnerUser(v *User) *ProjectUpdate {
+	return _u.SetOwnerUserID(v.ID)
+}
+
+// SetOwnerOrg sets the "owner_org" edge to the Organization entity.
+func (_u *ProjectUpdate) SetOwnerOrg(v *Organization) *ProjectUpdate {
+	return _u.SetOwnerOrgID(v.ID)
+}
+
+// AddProjectBackendIDs adds the "project_backends" edge to the ProjectBackend entity by IDs.
+func (_u *ProjectUpdate) AddProjectBackendIDs(ids ...int) *ProjectUpdate {
+	_u.mutation.AddProjectBackendIDs(ids...)
 	return _u
 }
 
-// SetOrganization sets the "organization" edge to the Organization entity.
-func (_u *ProjectUpdate) SetOrganization(v *Organization) *ProjectUpdate {
-	return _u.SetOrganizationID(v.ID)
+// AddProjectBackends adds the "project_backends" edges to the ProjectBackend entity.
+func (_u *ProjectUpdate) AddProjectBackends(v ...*ProjectBackend) *ProjectUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddProjectBackendIDs(ids...)
+}
+
+// AddStageBackendOverrideIDs adds the "stage_backend_overrides" edge to the StageBackendOverride entity by IDs.
+func (_u *ProjectUpdate) AddStageBackendOverrideIDs(ids ...int) *ProjectUpdate {
+	_u.mutation.AddStageBackendOverrideIDs(ids...)
+	return _u
+}
+
+// AddStageBackendOverrides adds the "stage_backend_overrides" edges to the StageBackendOverride entity.
+func (_u *ProjectUpdate) AddStageBackendOverrides(v ...*StageBackendOverride) *ProjectUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddStageBackendOverrideIDs(ids...)
+}
+
+// AddGlossaryEntryIDs adds the "glossary_entries" edge to the GlossaryEntry entity by IDs.
+func (_u *ProjectUpdate) AddGlossaryEntryIDs(ids ...int) *ProjectUpdate {
+	_u.mutation.AddGlossaryEntryIDs(ids...)
+	return _u
+}
+
+// AddGlossaryEntries adds the "glossary_entries" edges to the GlossaryEntry entity.
+func (_u *ProjectUpdate) AddGlossaryEntries(v ...*GlossaryEntry) *ProjectUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddGlossaryEntryIDs(ids...)
+}
+
+// AddTmEntryIDs adds the "tm_entries" edge to the TMEntry entity by IDs.
+func (_u *ProjectUpdate) AddTmEntryIDs(ids ...int) *ProjectUpdate {
+	_u.mutation.AddTmEntryIDs(ids...)
+	return _u
+}
+
+// AddTmEntries adds the "tm_entries" edges to the TMEntry entity.
+func (_u *ProjectUpdate) AddTmEntries(v ...*TMEntry) *ProjectUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddTmEntryIDs(ids...)
 }
 
 // AddJobIDs adds the "jobs" edge to the Job entity by IDs.
@@ -109,10 +233,100 @@ func (_u *ProjectUpdate) Mutation() *ProjectMutation {
 	return _u.mutation
 }
 
-// ClearOrganization clears the "organization" edge to the Organization entity.
-func (_u *ProjectUpdate) ClearOrganization() *ProjectUpdate {
-	_u.mutation.ClearOrganization()
+// ClearOwnerUser clears the "owner_user" edge to the User entity.
+func (_u *ProjectUpdate) ClearOwnerUser() *ProjectUpdate {
+	_u.mutation.ClearOwnerUser()
 	return _u
+}
+
+// ClearOwnerOrg clears the "owner_org" edge to the Organization entity.
+func (_u *ProjectUpdate) ClearOwnerOrg() *ProjectUpdate {
+	_u.mutation.ClearOwnerOrg()
+	return _u
+}
+
+// ClearProjectBackends clears all "project_backends" edges to the ProjectBackend entity.
+func (_u *ProjectUpdate) ClearProjectBackends() *ProjectUpdate {
+	_u.mutation.ClearProjectBackends()
+	return _u
+}
+
+// RemoveProjectBackendIDs removes the "project_backends" edge to ProjectBackend entities by IDs.
+func (_u *ProjectUpdate) RemoveProjectBackendIDs(ids ...int) *ProjectUpdate {
+	_u.mutation.RemoveProjectBackendIDs(ids...)
+	return _u
+}
+
+// RemoveProjectBackends removes "project_backends" edges to ProjectBackend entities.
+func (_u *ProjectUpdate) RemoveProjectBackends(v ...*ProjectBackend) *ProjectUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveProjectBackendIDs(ids...)
+}
+
+// ClearStageBackendOverrides clears all "stage_backend_overrides" edges to the StageBackendOverride entity.
+func (_u *ProjectUpdate) ClearStageBackendOverrides() *ProjectUpdate {
+	_u.mutation.ClearStageBackendOverrides()
+	return _u
+}
+
+// RemoveStageBackendOverrideIDs removes the "stage_backend_overrides" edge to StageBackendOverride entities by IDs.
+func (_u *ProjectUpdate) RemoveStageBackendOverrideIDs(ids ...int) *ProjectUpdate {
+	_u.mutation.RemoveStageBackendOverrideIDs(ids...)
+	return _u
+}
+
+// RemoveStageBackendOverrides removes "stage_backend_overrides" edges to StageBackendOverride entities.
+func (_u *ProjectUpdate) RemoveStageBackendOverrides(v ...*StageBackendOverride) *ProjectUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveStageBackendOverrideIDs(ids...)
+}
+
+// ClearGlossaryEntries clears all "glossary_entries" edges to the GlossaryEntry entity.
+func (_u *ProjectUpdate) ClearGlossaryEntries() *ProjectUpdate {
+	_u.mutation.ClearGlossaryEntries()
+	return _u
+}
+
+// RemoveGlossaryEntryIDs removes the "glossary_entries" edge to GlossaryEntry entities by IDs.
+func (_u *ProjectUpdate) RemoveGlossaryEntryIDs(ids ...int) *ProjectUpdate {
+	_u.mutation.RemoveGlossaryEntryIDs(ids...)
+	return _u
+}
+
+// RemoveGlossaryEntries removes "glossary_entries" edges to GlossaryEntry entities.
+func (_u *ProjectUpdate) RemoveGlossaryEntries(v ...*GlossaryEntry) *ProjectUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveGlossaryEntryIDs(ids...)
+}
+
+// ClearTmEntries clears all "tm_entries" edges to the TMEntry entity.
+func (_u *ProjectUpdate) ClearTmEntries() *ProjectUpdate {
+	_u.mutation.ClearTmEntries()
+	return _u
+}
+
+// RemoveTmEntryIDs removes the "tm_entries" edge to TMEntry entities by IDs.
+func (_u *ProjectUpdate) RemoveTmEntryIDs(ids ...int) *ProjectUpdate {
+	_u.mutation.RemoveTmEntryIDs(ids...)
+	return _u
+}
+
+// RemoveTmEntries removes "tm_entries" edges to TMEntry entities.
+func (_u *ProjectUpdate) RemoveTmEntries(v ...*TMEntry) *ProjectUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveTmEntryIDs(ids...)
 }
 
 // ClearJobs clears all "jobs" edges to the Job entity.
@@ -179,8 +393,15 @@ func (_u *ProjectUpdate) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "Project.name": %w`, err)}
 		}
 	}
-	if _u.mutation.OrganizationCleared() && len(_u.mutation.OrganizationIDs()) > 0 {
-		return errors.New(`ent: clearing a required unique edge "Project.organization"`)
+	if v, ok := _u.mutation.OwnerUserID(); ok {
+		if err := project.OwnerUserIDValidator(v); err != nil {
+			return &ValidationError{Name: "owner_user_id", err: fmt.Errorf(`ent: validator failed for field "Project.owner_user_id": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.OwnerOrgID(); ok {
+		if err := project.OwnerOrgIDValidator(v); err != nil {
+			return &ValidationError{Name: "owner_org_id", err: fmt.Errorf(`ent: validator failed for field "Project.owner_org_id": %w`, err)}
+		}
 	}
 	return nil
 }
@@ -203,18 +424,53 @@ func (_u *ProjectUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(project.FieldName, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.ResourceScope(); ok {
+		_spec.SetField(project.FieldResourceScope, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Config(); ok {
+		_spec.SetField(project.FieldConfig, field.TypeJSON, value)
+	}
 	if value, ok := _u.mutation.SourceLang(); ok {
 		_spec.SetField(project.FieldSourceLang, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.TargetLang(); ok {
 		_spec.SetField(project.FieldTargetLang, field.TypeString, value)
 	}
-	if _u.mutation.OrganizationCleared() {
+	if _u.mutation.OwnerUserCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   project.OrganizationTable,
-			Columns: []string{project.OrganizationColumn},
+			Table:   project.OwnerUserTable,
+			Columns: []string{project.OwnerUserColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.OwnerUserIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   project.OwnerUserTable,
+			Columns: []string{project.OwnerUserColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.OwnerOrgCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   project.OwnerOrgTable,
+			Columns: []string{project.OwnerOrgColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
@@ -222,15 +478,195 @@ func (_u *ProjectUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.OrganizationIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.OwnerOrgIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   project.OrganizationTable,
-			Columns: []string{project.OrganizationColumn},
+			Table:   project.OwnerOrgTable,
+			Columns: []string{project.OwnerOrgColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ProjectBackendsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.ProjectBackendsTable,
+			Columns: []string{project.ProjectBackendsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(projectbackend.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedProjectBackendsIDs(); len(nodes) > 0 && !_u.mutation.ProjectBackendsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.ProjectBackendsTable,
+			Columns: []string{project.ProjectBackendsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(projectbackend.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ProjectBackendsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.ProjectBackendsTable,
+			Columns: []string{project.ProjectBackendsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(projectbackend.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.StageBackendOverridesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.StageBackendOverridesTable,
+			Columns: []string{project.StageBackendOverridesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(stagebackendoverride.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedStageBackendOverridesIDs(); len(nodes) > 0 && !_u.mutation.StageBackendOverridesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.StageBackendOverridesTable,
+			Columns: []string{project.StageBackendOverridesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(stagebackendoverride.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.StageBackendOverridesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.StageBackendOverridesTable,
+			Columns: []string{project.StageBackendOverridesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(stagebackendoverride.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.GlossaryEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.GlossaryEntriesTable,
+			Columns: []string{project.GlossaryEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(glossaryentry.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedGlossaryEntriesIDs(); len(nodes) > 0 && !_u.mutation.GlossaryEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.GlossaryEntriesTable,
+			Columns: []string{project.GlossaryEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(glossaryentry.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.GlossaryEntriesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.GlossaryEntriesTable,
+			Columns: []string{project.GlossaryEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(glossaryentry.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.TmEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.TmEntriesTable,
+			Columns: []string{project.TmEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(tmentry.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedTmEntriesIDs(); len(nodes) > 0 && !_u.mutation.TmEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.TmEntriesTable,
+			Columns: []string{project.TmEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(tmentry.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.TmEntriesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.TmEntriesTable,
+			Columns: []string{project.TmEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(tmentry.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -323,6 +759,66 @@ func (_u *ProjectUpdateOne) SetNillableName(v *string) *ProjectUpdateOne {
 	return _u
 }
 
+// SetOwnerUserID sets the "owner_user_id" field.
+func (_u *ProjectUpdateOne) SetOwnerUserID(v int) *ProjectUpdateOne {
+	_u.mutation.SetOwnerUserID(v)
+	return _u
+}
+
+// SetNillableOwnerUserID sets the "owner_user_id" field if the given value is not nil.
+func (_u *ProjectUpdateOne) SetNillableOwnerUserID(v *int) *ProjectUpdateOne {
+	if v != nil {
+		_u.SetOwnerUserID(*v)
+	}
+	return _u
+}
+
+// ClearOwnerUserID clears the value of the "owner_user_id" field.
+func (_u *ProjectUpdateOne) ClearOwnerUserID() *ProjectUpdateOne {
+	_u.mutation.ClearOwnerUserID()
+	return _u
+}
+
+// SetOwnerOrgID sets the "owner_org_id" field.
+func (_u *ProjectUpdateOne) SetOwnerOrgID(v int) *ProjectUpdateOne {
+	_u.mutation.SetOwnerOrgID(v)
+	return _u
+}
+
+// SetNillableOwnerOrgID sets the "owner_org_id" field if the given value is not nil.
+func (_u *ProjectUpdateOne) SetNillableOwnerOrgID(v *int) *ProjectUpdateOne {
+	if v != nil {
+		_u.SetOwnerOrgID(*v)
+	}
+	return _u
+}
+
+// ClearOwnerOrgID clears the value of the "owner_org_id" field.
+func (_u *ProjectUpdateOne) ClearOwnerOrgID() *ProjectUpdateOne {
+	_u.mutation.ClearOwnerOrgID()
+	return _u
+}
+
+// SetResourceScope sets the "resource_scope" field.
+func (_u *ProjectUpdateOne) SetResourceScope(v string) *ProjectUpdateOne {
+	_u.mutation.SetResourceScope(v)
+	return _u
+}
+
+// SetNillableResourceScope sets the "resource_scope" field if the given value is not nil.
+func (_u *ProjectUpdateOne) SetNillableResourceScope(v *string) *ProjectUpdateOne {
+	if v != nil {
+		_u.SetResourceScope(*v)
+	}
+	return _u
+}
+
+// SetConfig sets the "config" field.
+func (_u *ProjectUpdateOne) SetConfig(v map[string]interface{}) *ProjectUpdateOne {
+	_u.mutation.SetConfig(v)
+	return _u
+}
+
 // SetSourceLang sets the "source_lang" field.
 func (_u *ProjectUpdateOne) SetSourceLang(v string) *ProjectUpdateOne {
 	_u.mutation.SetSourceLang(v)
@@ -351,15 +847,74 @@ func (_u *ProjectUpdateOne) SetNillableTargetLang(v *string) *ProjectUpdateOne {
 	return _u
 }
 
-// SetOrganizationID sets the "organization" edge to the Organization entity by ID.
-func (_u *ProjectUpdateOne) SetOrganizationID(id int) *ProjectUpdateOne {
-	_u.mutation.SetOrganizationID(id)
+// SetOwnerUser sets the "owner_user" edge to the User entity.
+func (_u *ProjectUpdateOne) SetOwnerUser(v *User) *ProjectUpdateOne {
+	return _u.SetOwnerUserID(v.ID)
+}
+
+// SetOwnerOrg sets the "owner_org" edge to the Organization entity.
+func (_u *ProjectUpdateOne) SetOwnerOrg(v *Organization) *ProjectUpdateOne {
+	return _u.SetOwnerOrgID(v.ID)
+}
+
+// AddProjectBackendIDs adds the "project_backends" edge to the ProjectBackend entity by IDs.
+func (_u *ProjectUpdateOne) AddProjectBackendIDs(ids ...int) *ProjectUpdateOne {
+	_u.mutation.AddProjectBackendIDs(ids...)
 	return _u
 }
 
-// SetOrganization sets the "organization" edge to the Organization entity.
-func (_u *ProjectUpdateOne) SetOrganization(v *Organization) *ProjectUpdateOne {
-	return _u.SetOrganizationID(v.ID)
+// AddProjectBackends adds the "project_backends" edges to the ProjectBackend entity.
+func (_u *ProjectUpdateOne) AddProjectBackends(v ...*ProjectBackend) *ProjectUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddProjectBackendIDs(ids...)
+}
+
+// AddStageBackendOverrideIDs adds the "stage_backend_overrides" edge to the StageBackendOverride entity by IDs.
+func (_u *ProjectUpdateOne) AddStageBackendOverrideIDs(ids ...int) *ProjectUpdateOne {
+	_u.mutation.AddStageBackendOverrideIDs(ids...)
+	return _u
+}
+
+// AddStageBackendOverrides adds the "stage_backend_overrides" edges to the StageBackendOverride entity.
+func (_u *ProjectUpdateOne) AddStageBackendOverrides(v ...*StageBackendOverride) *ProjectUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddStageBackendOverrideIDs(ids...)
+}
+
+// AddGlossaryEntryIDs adds the "glossary_entries" edge to the GlossaryEntry entity by IDs.
+func (_u *ProjectUpdateOne) AddGlossaryEntryIDs(ids ...int) *ProjectUpdateOne {
+	_u.mutation.AddGlossaryEntryIDs(ids...)
+	return _u
+}
+
+// AddGlossaryEntries adds the "glossary_entries" edges to the GlossaryEntry entity.
+func (_u *ProjectUpdateOne) AddGlossaryEntries(v ...*GlossaryEntry) *ProjectUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddGlossaryEntryIDs(ids...)
+}
+
+// AddTmEntryIDs adds the "tm_entries" edge to the TMEntry entity by IDs.
+func (_u *ProjectUpdateOne) AddTmEntryIDs(ids ...int) *ProjectUpdateOne {
+	_u.mutation.AddTmEntryIDs(ids...)
+	return _u
+}
+
+// AddTmEntries adds the "tm_entries" edges to the TMEntry entity.
+func (_u *ProjectUpdateOne) AddTmEntries(v ...*TMEntry) *ProjectUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddTmEntryIDs(ids...)
 }
 
 // AddJobIDs adds the "jobs" edge to the Job entity by IDs.
@@ -382,10 +937,100 @@ func (_u *ProjectUpdateOne) Mutation() *ProjectMutation {
 	return _u.mutation
 }
 
-// ClearOrganization clears the "organization" edge to the Organization entity.
-func (_u *ProjectUpdateOne) ClearOrganization() *ProjectUpdateOne {
-	_u.mutation.ClearOrganization()
+// ClearOwnerUser clears the "owner_user" edge to the User entity.
+func (_u *ProjectUpdateOne) ClearOwnerUser() *ProjectUpdateOne {
+	_u.mutation.ClearOwnerUser()
 	return _u
+}
+
+// ClearOwnerOrg clears the "owner_org" edge to the Organization entity.
+func (_u *ProjectUpdateOne) ClearOwnerOrg() *ProjectUpdateOne {
+	_u.mutation.ClearOwnerOrg()
+	return _u
+}
+
+// ClearProjectBackends clears all "project_backends" edges to the ProjectBackend entity.
+func (_u *ProjectUpdateOne) ClearProjectBackends() *ProjectUpdateOne {
+	_u.mutation.ClearProjectBackends()
+	return _u
+}
+
+// RemoveProjectBackendIDs removes the "project_backends" edge to ProjectBackend entities by IDs.
+func (_u *ProjectUpdateOne) RemoveProjectBackendIDs(ids ...int) *ProjectUpdateOne {
+	_u.mutation.RemoveProjectBackendIDs(ids...)
+	return _u
+}
+
+// RemoveProjectBackends removes "project_backends" edges to ProjectBackend entities.
+func (_u *ProjectUpdateOne) RemoveProjectBackends(v ...*ProjectBackend) *ProjectUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveProjectBackendIDs(ids...)
+}
+
+// ClearStageBackendOverrides clears all "stage_backend_overrides" edges to the StageBackendOverride entity.
+func (_u *ProjectUpdateOne) ClearStageBackendOverrides() *ProjectUpdateOne {
+	_u.mutation.ClearStageBackendOverrides()
+	return _u
+}
+
+// RemoveStageBackendOverrideIDs removes the "stage_backend_overrides" edge to StageBackendOverride entities by IDs.
+func (_u *ProjectUpdateOne) RemoveStageBackendOverrideIDs(ids ...int) *ProjectUpdateOne {
+	_u.mutation.RemoveStageBackendOverrideIDs(ids...)
+	return _u
+}
+
+// RemoveStageBackendOverrides removes "stage_backend_overrides" edges to StageBackendOverride entities.
+func (_u *ProjectUpdateOne) RemoveStageBackendOverrides(v ...*StageBackendOverride) *ProjectUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveStageBackendOverrideIDs(ids...)
+}
+
+// ClearGlossaryEntries clears all "glossary_entries" edges to the GlossaryEntry entity.
+func (_u *ProjectUpdateOne) ClearGlossaryEntries() *ProjectUpdateOne {
+	_u.mutation.ClearGlossaryEntries()
+	return _u
+}
+
+// RemoveGlossaryEntryIDs removes the "glossary_entries" edge to GlossaryEntry entities by IDs.
+func (_u *ProjectUpdateOne) RemoveGlossaryEntryIDs(ids ...int) *ProjectUpdateOne {
+	_u.mutation.RemoveGlossaryEntryIDs(ids...)
+	return _u
+}
+
+// RemoveGlossaryEntries removes "glossary_entries" edges to GlossaryEntry entities.
+func (_u *ProjectUpdateOne) RemoveGlossaryEntries(v ...*GlossaryEntry) *ProjectUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveGlossaryEntryIDs(ids...)
+}
+
+// ClearTmEntries clears all "tm_entries" edges to the TMEntry entity.
+func (_u *ProjectUpdateOne) ClearTmEntries() *ProjectUpdateOne {
+	_u.mutation.ClearTmEntries()
+	return _u
+}
+
+// RemoveTmEntryIDs removes the "tm_entries" edge to TMEntry entities by IDs.
+func (_u *ProjectUpdateOne) RemoveTmEntryIDs(ids ...int) *ProjectUpdateOne {
+	_u.mutation.RemoveTmEntryIDs(ids...)
+	return _u
+}
+
+// RemoveTmEntries removes "tm_entries" edges to TMEntry entities.
+func (_u *ProjectUpdateOne) RemoveTmEntries(v ...*TMEntry) *ProjectUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveTmEntryIDs(ids...)
 }
 
 // ClearJobs clears all "jobs" edges to the Job entity.
@@ -465,8 +1110,15 @@ func (_u *ProjectUpdateOne) check() error {
 			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "Project.name": %w`, err)}
 		}
 	}
-	if _u.mutation.OrganizationCleared() && len(_u.mutation.OrganizationIDs()) > 0 {
-		return errors.New(`ent: clearing a required unique edge "Project.organization"`)
+	if v, ok := _u.mutation.OwnerUserID(); ok {
+		if err := project.OwnerUserIDValidator(v); err != nil {
+			return &ValidationError{Name: "owner_user_id", err: fmt.Errorf(`ent: validator failed for field "Project.owner_user_id": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.OwnerOrgID(); ok {
+		if err := project.OwnerOrgIDValidator(v); err != nil {
+			return &ValidationError{Name: "owner_org_id", err: fmt.Errorf(`ent: validator failed for field "Project.owner_org_id": %w`, err)}
+		}
 	}
 	return nil
 }
@@ -506,18 +1158,53 @@ func (_u *ProjectUpdateOne) sqlSave(ctx context.Context) (_node *Project, err er
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(project.FieldName, field.TypeString, value)
 	}
+	if value, ok := _u.mutation.ResourceScope(); ok {
+		_spec.SetField(project.FieldResourceScope, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Config(); ok {
+		_spec.SetField(project.FieldConfig, field.TypeJSON, value)
+	}
 	if value, ok := _u.mutation.SourceLang(); ok {
 		_spec.SetField(project.FieldSourceLang, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.TargetLang(); ok {
 		_spec.SetField(project.FieldTargetLang, field.TypeString, value)
 	}
-	if _u.mutation.OrganizationCleared() {
+	if _u.mutation.OwnerUserCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   project.OrganizationTable,
-			Columns: []string{project.OrganizationColumn},
+			Table:   project.OwnerUserTable,
+			Columns: []string{project.OwnerUserColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.OwnerUserIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   project.OwnerUserTable,
+			Columns: []string{project.OwnerUserColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.OwnerOrgCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   project.OwnerOrgTable,
+			Columns: []string{project.OwnerOrgColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
@@ -525,15 +1212,195 @@ func (_u *ProjectUpdateOne) sqlSave(ctx context.Context) (_node *Project, err er
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.OrganizationIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.OwnerOrgIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   project.OrganizationTable,
-			Columns: []string{project.OrganizationColumn},
+			Table:   project.OwnerOrgTable,
+			Columns: []string{project.OwnerOrgColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ProjectBackendsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.ProjectBackendsTable,
+			Columns: []string{project.ProjectBackendsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(projectbackend.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedProjectBackendsIDs(); len(nodes) > 0 && !_u.mutation.ProjectBackendsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.ProjectBackendsTable,
+			Columns: []string{project.ProjectBackendsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(projectbackend.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ProjectBackendsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.ProjectBackendsTable,
+			Columns: []string{project.ProjectBackendsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(projectbackend.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.StageBackendOverridesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.StageBackendOverridesTable,
+			Columns: []string{project.StageBackendOverridesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(stagebackendoverride.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedStageBackendOverridesIDs(); len(nodes) > 0 && !_u.mutation.StageBackendOverridesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.StageBackendOverridesTable,
+			Columns: []string{project.StageBackendOverridesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(stagebackendoverride.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.StageBackendOverridesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.StageBackendOverridesTable,
+			Columns: []string{project.StageBackendOverridesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(stagebackendoverride.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.GlossaryEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.GlossaryEntriesTable,
+			Columns: []string{project.GlossaryEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(glossaryentry.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedGlossaryEntriesIDs(); len(nodes) > 0 && !_u.mutation.GlossaryEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.GlossaryEntriesTable,
+			Columns: []string{project.GlossaryEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(glossaryentry.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.GlossaryEntriesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.GlossaryEntriesTable,
+			Columns: []string{project.GlossaryEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(glossaryentry.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.TmEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.TmEntriesTable,
+			Columns: []string{project.TmEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(tmentry.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedTmEntriesIDs(); len(nodes) > 0 && !_u.mutation.TmEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.TmEntriesTable,
+			Columns: []string{project.TmEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(tmentry.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.TmEntriesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.TmEntriesTable,
+			Columns: []string{project.TmEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(tmentry.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

@@ -491,6 +491,75 @@ func HasMembershipsWith(preds ...predicate.OrgMembership) predicate.Organization
 	})
 }
 
+// HasOrgBackends applies the HasEdge predicate on the "org_backends" edge.
+func HasOrgBackends() predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, OrgBackendsTable, OrgBackendsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasOrgBackendsWith applies the HasEdge predicate on the "org_backends" edge with a given conditions (other predicates).
+func HasOrgBackendsWith(preds ...predicate.OrgBackend) predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := newOrgBackendsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasGlossaryEntries applies the HasEdge predicate on the "glossary_entries" edge.
+func HasGlossaryEntries() predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, GlossaryEntriesTable, GlossaryEntriesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasGlossaryEntriesWith applies the HasEdge predicate on the "glossary_entries" edge with a given conditions (other predicates).
+func HasGlossaryEntriesWith(preds ...predicate.GlossaryEntry) predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := newGlossaryEntriesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasTmEntries applies the HasEdge predicate on the "tm_entries" edge.
+func HasTmEntries() predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, TmEntriesTable, TmEntriesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasTmEntriesWith applies the HasEdge predicate on the "tm_entries" edge with a given conditions (other predicates).
+func HasTmEntriesWith(preds ...predicate.TMEntry) predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := newTmEntriesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.Organization) predicate.Organization {
 	return predicate.Organization(sql.AndPredicates(predicates...))

@@ -18,7 +18,10 @@ func (SubJob) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("status").Default("pending"),
 		field.String("input_filename").Optional(),
+		field.String("input_format").Optional(),
+		field.String("input_path").Optional(),
 		field.String("output_path").Optional(),
+		field.Int("segment_count").Default(0).NonNegative(),
 		field.String("error_message").Optional().Nillable(),
 	}
 }

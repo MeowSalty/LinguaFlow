@@ -78,6 +78,34 @@ func (_c *SubJobCreate) SetNillableInputFilename(v *string) *SubJobCreate {
 	return _c
 }
 
+// SetInputFormat sets the "input_format" field.
+func (_c *SubJobCreate) SetInputFormat(v string) *SubJobCreate {
+	_c.mutation.SetInputFormat(v)
+	return _c
+}
+
+// SetNillableInputFormat sets the "input_format" field if the given value is not nil.
+func (_c *SubJobCreate) SetNillableInputFormat(v *string) *SubJobCreate {
+	if v != nil {
+		_c.SetInputFormat(*v)
+	}
+	return _c
+}
+
+// SetInputPath sets the "input_path" field.
+func (_c *SubJobCreate) SetInputPath(v string) *SubJobCreate {
+	_c.mutation.SetInputPath(v)
+	return _c
+}
+
+// SetNillableInputPath sets the "input_path" field if the given value is not nil.
+func (_c *SubJobCreate) SetNillableInputPath(v *string) *SubJobCreate {
+	if v != nil {
+		_c.SetInputPath(*v)
+	}
+	return _c
+}
+
 // SetOutputPath sets the "output_path" field.
 func (_c *SubJobCreate) SetOutputPath(v string) *SubJobCreate {
 	_c.mutation.SetOutputPath(v)
@@ -88,6 +116,20 @@ func (_c *SubJobCreate) SetOutputPath(v string) *SubJobCreate {
 func (_c *SubJobCreate) SetNillableOutputPath(v *string) *SubJobCreate {
 	if v != nil {
 		_c.SetOutputPath(*v)
+	}
+	return _c
+}
+
+// SetSegmentCount sets the "segment_count" field.
+func (_c *SubJobCreate) SetSegmentCount(v int) *SubJobCreate {
+	_c.mutation.SetSegmentCount(v)
+	return _c
+}
+
+// SetNillableSegmentCount sets the "segment_count" field if the given value is not nil.
+func (_c *SubJobCreate) SetNillableSegmentCount(v *int) *SubJobCreate {
+	if v != nil {
+		_c.SetSegmentCount(*v)
 	}
 	return _c
 }
@@ -179,6 +221,10 @@ func (_c *SubJobCreate) defaults() {
 		v := subjob.DefaultStatus
 		_c.mutation.SetStatus(v)
 	}
+	if _, ok := _c.mutation.SegmentCount(); !ok {
+		v := subjob.DefaultSegmentCount
+		_c.mutation.SetSegmentCount(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -191,6 +237,14 @@ func (_c *SubJobCreate) check() error {
 	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "SubJob.status"`)}
+	}
+	if _, ok := _c.mutation.SegmentCount(); !ok {
+		return &ValidationError{Name: "segment_count", err: errors.New(`ent: missing required field "SubJob.segment_count"`)}
+	}
+	if v, ok := _c.mutation.SegmentCount(); ok {
+		if err := subjob.SegmentCountValidator(v); err != nil {
+			return &ValidationError{Name: "segment_count", err: fmt.Errorf(`ent: validator failed for field "SubJob.segment_count": %w`, err)}
+		}
 	}
 	if len(_c.mutation.JobIDs()) == 0 {
 		return &ValidationError{Name: "job", err: errors.New(`ent: missing required edge "SubJob.job"`)}
@@ -237,9 +291,21 @@ func (_c *SubJobCreate) createSpec() (*SubJob, *sqlgraph.CreateSpec) {
 		_spec.SetField(subjob.FieldInputFilename, field.TypeString, value)
 		_node.InputFilename = value
 	}
+	if value, ok := _c.mutation.InputFormat(); ok {
+		_spec.SetField(subjob.FieldInputFormat, field.TypeString, value)
+		_node.InputFormat = value
+	}
+	if value, ok := _c.mutation.InputPath(); ok {
+		_spec.SetField(subjob.FieldInputPath, field.TypeString, value)
+		_node.InputPath = value
+	}
 	if value, ok := _c.mutation.OutputPath(); ok {
 		_spec.SetField(subjob.FieldOutputPath, field.TypeString, value)
 		_node.OutputPath = value
+	}
+	if value, ok := _c.mutation.SegmentCount(); ok {
+		_spec.SetField(subjob.FieldSegmentCount, field.TypeInt, value)
+		_node.SegmentCount = value
 	}
 	if value, ok := _c.mutation.ErrorMessage(); ok {
 		_spec.SetField(subjob.FieldErrorMessage, field.TypeString, value)

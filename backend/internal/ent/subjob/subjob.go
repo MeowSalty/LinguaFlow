@@ -22,8 +22,14 @@ const (
 	FieldStatus = "status"
 	// FieldInputFilename holds the string denoting the input_filename field in the database.
 	FieldInputFilename = "input_filename"
+	// FieldInputFormat holds the string denoting the input_format field in the database.
+	FieldInputFormat = "input_format"
+	// FieldInputPath holds the string denoting the input_path field in the database.
+	FieldInputPath = "input_path"
 	// FieldOutputPath holds the string denoting the output_path field in the database.
 	FieldOutputPath = "output_path"
+	// FieldSegmentCount holds the string denoting the segment_count field in the database.
+	FieldSegmentCount = "segment_count"
 	// FieldErrorMessage holds the string denoting the error_message field in the database.
 	FieldErrorMessage = "error_message"
 	// EdgeJob holds the string denoting the job edge name in mutations.
@@ -55,7 +61,10 @@ var Columns = []string{
 	FieldUpdatedAt,
 	FieldStatus,
 	FieldInputFilename,
+	FieldInputFormat,
+	FieldInputPath,
 	FieldOutputPath,
+	FieldSegmentCount,
 	FieldErrorMessage,
 }
 
@@ -89,6 +98,10 @@ var (
 	UpdateDefaultUpdatedAt func() time.Time
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
+	// DefaultSegmentCount holds the default value on creation for the "segment_count" field.
+	DefaultSegmentCount int
+	// SegmentCountValidator is a validator for the "segment_count" field. It is called by the builders before save.
+	SegmentCountValidator func(int) error
 )
 
 // OrderOption defines the ordering options for the SubJob queries.
@@ -119,9 +132,24 @@ func ByInputFilename(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldInputFilename, opts...).ToFunc()
 }
 
+// ByInputFormat orders the results by the input_format field.
+func ByInputFormat(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldInputFormat, opts...).ToFunc()
+}
+
+// ByInputPath orders the results by the input_path field.
+func ByInputPath(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldInputPath, opts...).ToFunc()
+}
+
 // ByOutputPath orders the results by the output_path field.
 func ByOutputPath(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldOutputPath, opts...).ToFunc()
+}
+
+// BySegmentCount orders the results by the segment_count field.
+func BySegmentCount(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSegmentCount, opts...).ToFunc()
 }
 
 // ByErrorMessage orders the results by the error_message field.

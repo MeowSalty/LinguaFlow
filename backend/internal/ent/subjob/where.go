@@ -75,9 +75,24 @@ func InputFilename(v string) predicate.SubJob {
 	return predicate.SubJob(sql.FieldEQ(FieldInputFilename, v))
 }
 
+// InputFormat applies equality check predicate on the "input_format" field. It's identical to InputFormatEQ.
+func InputFormat(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldEQ(FieldInputFormat, v))
+}
+
+// InputPath applies equality check predicate on the "input_path" field. It's identical to InputPathEQ.
+func InputPath(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldEQ(FieldInputPath, v))
+}
+
 // OutputPath applies equality check predicate on the "output_path" field. It's identical to OutputPathEQ.
 func OutputPath(v string) predicate.SubJob {
 	return predicate.SubJob(sql.FieldEQ(FieldOutputPath, v))
+}
+
+// SegmentCount applies equality check predicate on the "segment_count" field. It's identical to SegmentCountEQ.
+func SegmentCount(v int) predicate.SubJob {
+	return predicate.SubJob(sql.FieldEQ(FieldSegmentCount, v))
 }
 
 // ErrorMessage applies equality check predicate on the "error_message" field. It's identical to ErrorMessageEQ.
@@ -305,6 +320,156 @@ func InputFilenameContainsFold(v string) predicate.SubJob {
 	return predicate.SubJob(sql.FieldContainsFold(FieldInputFilename, v))
 }
 
+// InputFormatEQ applies the EQ predicate on the "input_format" field.
+func InputFormatEQ(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldEQ(FieldInputFormat, v))
+}
+
+// InputFormatNEQ applies the NEQ predicate on the "input_format" field.
+func InputFormatNEQ(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldNEQ(FieldInputFormat, v))
+}
+
+// InputFormatIn applies the In predicate on the "input_format" field.
+func InputFormatIn(vs ...string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldIn(FieldInputFormat, vs...))
+}
+
+// InputFormatNotIn applies the NotIn predicate on the "input_format" field.
+func InputFormatNotIn(vs ...string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldNotIn(FieldInputFormat, vs...))
+}
+
+// InputFormatGT applies the GT predicate on the "input_format" field.
+func InputFormatGT(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldGT(FieldInputFormat, v))
+}
+
+// InputFormatGTE applies the GTE predicate on the "input_format" field.
+func InputFormatGTE(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldGTE(FieldInputFormat, v))
+}
+
+// InputFormatLT applies the LT predicate on the "input_format" field.
+func InputFormatLT(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldLT(FieldInputFormat, v))
+}
+
+// InputFormatLTE applies the LTE predicate on the "input_format" field.
+func InputFormatLTE(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldLTE(FieldInputFormat, v))
+}
+
+// InputFormatContains applies the Contains predicate on the "input_format" field.
+func InputFormatContains(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldContains(FieldInputFormat, v))
+}
+
+// InputFormatHasPrefix applies the HasPrefix predicate on the "input_format" field.
+func InputFormatHasPrefix(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldHasPrefix(FieldInputFormat, v))
+}
+
+// InputFormatHasSuffix applies the HasSuffix predicate on the "input_format" field.
+func InputFormatHasSuffix(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldHasSuffix(FieldInputFormat, v))
+}
+
+// InputFormatIsNil applies the IsNil predicate on the "input_format" field.
+func InputFormatIsNil() predicate.SubJob {
+	return predicate.SubJob(sql.FieldIsNull(FieldInputFormat))
+}
+
+// InputFormatNotNil applies the NotNil predicate on the "input_format" field.
+func InputFormatNotNil() predicate.SubJob {
+	return predicate.SubJob(sql.FieldNotNull(FieldInputFormat))
+}
+
+// InputFormatEqualFold applies the EqualFold predicate on the "input_format" field.
+func InputFormatEqualFold(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldEqualFold(FieldInputFormat, v))
+}
+
+// InputFormatContainsFold applies the ContainsFold predicate on the "input_format" field.
+func InputFormatContainsFold(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldContainsFold(FieldInputFormat, v))
+}
+
+// InputPathEQ applies the EQ predicate on the "input_path" field.
+func InputPathEQ(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldEQ(FieldInputPath, v))
+}
+
+// InputPathNEQ applies the NEQ predicate on the "input_path" field.
+func InputPathNEQ(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldNEQ(FieldInputPath, v))
+}
+
+// InputPathIn applies the In predicate on the "input_path" field.
+func InputPathIn(vs ...string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldIn(FieldInputPath, vs...))
+}
+
+// InputPathNotIn applies the NotIn predicate on the "input_path" field.
+func InputPathNotIn(vs ...string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldNotIn(FieldInputPath, vs...))
+}
+
+// InputPathGT applies the GT predicate on the "input_path" field.
+func InputPathGT(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldGT(FieldInputPath, v))
+}
+
+// InputPathGTE applies the GTE predicate on the "input_path" field.
+func InputPathGTE(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldGTE(FieldInputPath, v))
+}
+
+// InputPathLT applies the LT predicate on the "input_path" field.
+func InputPathLT(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldLT(FieldInputPath, v))
+}
+
+// InputPathLTE applies the LTE predicate on the "input_path" field.
+func InputPathLTE(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldLTE(FieldInputPath, v))
+}
+
+// InputPathContains applies the Contains predicate on the "input_path" field.
+func InputPathContains(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldContains(FieldInputPath, v))
+}
+
+// InputPathHasPrefix applies the HasPrefix predicate on the "input_path" field.
+func InputPathHasPrefix(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldHasPrefix(FieldInputPath, v))
+}
+
+// InputPathHasSuffix applies the HasSuffix predicate on the "input_path" field.
+func InputPathHasSuffix(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldHasSuffix(FieldInputPath, v))
+}
+
+// InputPathIsNil applies the IsNil predicate on the "input_path" field.
+func InputPathIsNil() predicate.SubJob {
+	return predicate.SubJob(sql.FieldIsNull(FieldInputPath))
+}
+
+// InputPathNotNil applies the NotNil predicate on the "input_path" field.
+func InputPathNotNil() predicate.SubJob {
+	return predicate.SubJob(sql.FieldNotNull(FieldInputPath))
+}
+
+// InputPathEqualFold applies the EqualFold predicate on the "input_path" field.
+func InputPathEqualFold(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldEqualFold(FieldInputPath, v))
+}
+
+// InputPathContainsFold applies the ContainsFold predicate on the "input_path" field.
+func InputPathContainsFold(v string) predicate.SubJob {
+	return predicate.SubJob(sql.FieldContainsFold(FieldInputPath, v))
+}
+
 // OutputPathEQ applies the EQ predicate on the "output_path" field.
 func OutputPathEQ(v string) predicate.SubJob {
 	return predicate.SubJob(sql.FieldEQ(FieldOutputPath, v))
@@ -378,6 +543,46 @@ func OutputPathEqualFold(v string) predicate.SubJob {
 // OutputPathContainsFold applies the ContainsFold predicate on the "output_path" field.
 func OutputPathContainsFold(v string) predicate.SubJob {
 	return predicate.SubJob(sql.FieldContainsFold(FieldOutputPath, v))
+}
+
+// SegmentCountEQ applies the EQ predicate on the "segment_count" field.
+func SegmentCountEQ(v int) predicate.SubJob {
+	return predicate.SubJob(sql.FieldEQ(FieldSegmentCount, v))
+}
+
+// SegmentCountNEQ applies the NEQ predicate on the "segment_count" field.
+func SegmentCountNEQ(v int) predicate.SubJob {
+	return predicate.SubJob(sql.FieldNEQ(FieldSegmentCount, v))
+}
+
+// SegmentCountIn applies the In predicate on the "segment_count" field.
+func SegmentCountIn(vs ...int) predicate.SubJob {
+	return predicate.SubJob(sql.FieldIn(FieldSegmentCount, vs...))
+}
+
+// SegmentCountNotIn applies the NotIn predicate on the "segment_count" field.
+func SegmentCountNotIn(vs ...int) predicate.SubJob {
+	return predicate.SubJob(sql.FieldNotIn(FieldSegmentCount, vs...))
+}
+
+// SegmentCountGT applies the GT predicate on the "segment_count" field.
+func SegmentCountGT(v int) predicate.SubJob {
+	return predicate.SubJob(sql.FieldGT(FieldSegmentCount, v))
+}
+
+// SegmentCountGTE applies the GTE predicate on the "segment_count" field.
+func SegmentCountGTE(v int) predicate.SubJob {
+	return predicate.SubJob(sql.FieldGTE(FieldSegmentCount, v))
+}
+
+// SegmentCountLT applies the LT predicate on the "segment_count" field.
+func SegmentCountLT(v int) predicate.SubJob {
+	return predicate.SubJob(sql.FieldLT(FieldSegmentCount, v))
+}
+
+// SegmentCountLTE applies the LTE predicate on the "segment_count" field.
+func SegmentCountLTE(v int) predicate.SubJob {
+	return predicate.SubJob(sql.FieldLTE(FieldSegmentCount, v))
 }
 
 // ErrorMessageEQ applies the EQ predicate on the "error_message" field.

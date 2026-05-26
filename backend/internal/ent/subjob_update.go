@@ -70,6 +70,46 @@ func (_u *SubJobUpdate) ClearInputFilename() *SubJobUpdate {
 	return _u
 }
 
+// SetInputFormat sets the "input_format" field.
+func (_u *SubJobUpdate) SetInputFormat(v string) *SubJobUpdate {
+	_u.mutation.SetInputFormat(v)
+	return _u
+}
+
+// SetNillableInputFormat sets the "input_format" field if the given value is not nil.
+func (_u *SubJobUpdate) SetNillableInputFormat(v *string) *SubJobUpdate {
+	if v != nil {
+		_u.SetInputFormat(*v)
+	}
+	return _u
+}
+
+// ClearInputFormat clears the value of the "input_format" field.
+func (_u *SubJobUpdate) ClearInputFormat() *SubJobUpdate {
+	_u.mutation.ClearInputFormat()
+	return _u
+}
+
+// SetInputPath sets the "input_path" field.
+func (_u *SubJobUpdate) SetInputPath(v string) *SubJobUpdate {
+	_u.mutation.SetInputPath(v)
+	return _u
+}
+
+// SetNillableInputPath sets the "input_path" field if the given value is not nil.
+func (_u *SubJobUpdate) SetNillableInputPath(v *string) *SubJobUpdate {
+	if v != nil {
+		_u.SetInputPath(*v)
+	}
+	return _u
+}
+
+// ClearInputPath clears the value of the "input_path" field.
+func (_u *SubJobUpdate) ClearInputPath() *SubJobUpdate {
+	_u.mutation.ClearInputPath()
+	return _u
+}
+
 // SetOutputPath sets the "output_path" field.
 func (_u *SubJobUpdate) SetOutputPath(v string) *SubJobUpdate {
 	_u.mutation.SetOutputPath(v)
@@ -87,6 +127,27 @@ func (_u *SubJobUpdate) SetNillableOutputPath(v *string) *SubJobUpdate {
 // ClearOutputPath clears the value of the "output_path" field.
 func (_u *SubJobUpdate) ClearOutputPath() *SubJobUpdate {
 	_u.mutation.ClearOutputPath()
+	return _u
+}
+
+// SetSegmentCount sets the "segment_count" field.
+func (_u *SubJobUpdate) SetSegmentCount(v int) *SubJobUpdate {
+	_u.mutation.ResetSegmentCount()
+	_u.mutation.SetSegmentCount(v)
+	return _u
+}
+
+// SetNillableSegmentCount sets the "segment_count" field if the given value is not nil.
+func (_u *SubJobUpdate) SetNillableSegmentCount(v *int) *SubJobUpdate {
+	if v != nil {
+		_u.SetSegmentCount(*v)
+	}
+	return _u
+}
+
+// AddSegmentCount adds value to the "segment_count" field.
+func (_u *SubJobUpdate) AddSegmentCount(v int) *SubJobUpdate {
+	_u.mutation.AddSegmentCount(v)
 	return _u
 }
 
@@ -206,6 +267,11 @@ func (_u *SubJobUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *SubJobUpdate) check() error {
+	if v, ok := _u.mutation.SegmentCount(); ok {
+		if err := subjob.SegmentCountValidator(v); err != nil {
+			return &ValidationError{Name: "segment_count", err: fmt.Errorf(`ent: validator failed for field "SubJob.segment_count": %w`, err)}
+		}
+	}
 	if _u.mutation.JobCleared() && len(_u.mutation.JobIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "SubJob.job"`)
 	}
@@ -236,11 +302,29 @@ func (_u *SubJobUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if _u.mutation.InputFilenameCleared() {
 		_spec.ClearField(subjob.FieldInputFilename, field.TypeString)
 	}
+	if value, ok := _u.mutation.InputFormat(); ok {
+		_spec.SetField(subjob.FieldInputFormat, field.TypeString, value)
+	}
+	if _u.mutation.InputFormatCleared() {
+		_spec.ClearField(subjob.FieldInputFormat, field.TypeString)
+	}
+	if value, ok := _u.mutation.InputPath(); ok {
+		_spec.SetField(subjob.FieldInputPath, field.TypeString, value)
+	}
+	if _u.mutation.InputPathCleared() {
+		_spec.ClearField(subjob.FieldInputPath, field.TypeString)
+	}
 	if value, ok := _u.mutation.OutputPath(); ok {
 		_spec.SetField(subjob.FieldOutputPath, field.TypeString, value)
 	}
 	if _u.mutation.OutputPathCleared() {
 		_spec.ClearField(subjob.FieldOutputPath, field.TypeString)
+	}
+	if value, ok := _u.mutation.SegmentCount(); ok {
+		_spec.SetField(subjob.FieldSegmentCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedSegmentCount(); ok {
+		_spec.AddField(subjob.FieldSegmentCount, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.ErrorMessage(); ok {
 		_spec.SetField(subjob.FieldErrorMessage, field.TypeString, value)
@@ -382,6 +466,46 @@ func (_u *SubJobUpdateOne) ClearInputFilename() *SubJobUpdateOne {
 	return _u
 }
 
+// SetInputFormat sets the "input_format" field.
+func (_u *SubJobUpdateOne) SetInputFormat(v string) *SubJobUpdateOne {
+	_u.mutation.SetInputFormat(v)
+	return _u
+}
+
+// SetNillableInputFormat sets the "input_format" field if the given value is not nil.
+func (_u *SubJobUpdateOne) SetNillableInputFormat(v *string) *SubJobUpdateOne {
+	if v != nil {
+		_u.SetInputFormat(*v)
+	}
+	return _u
+}
+
+// ClearInputFormat clears the value of the "input_format" field.
+func (_u *SubJobUpdateOne) ClearInputFormat() *SubJobUpdateOne {
+	_u.mutation.ClearInputFormat()
+	return _u
+}
+
+// SetInputPath sets the "input_path" field.
+func (_u *SubJobUpdateOne) SetInputPath(v string) *SubJobUpdateOne {
+	_u.mutation.SetInputPath(v)
+	return _u
+}
+
+// SetNillableInputPath sets the "input_path" field if the given value is not nil.
+func (_u *SubJobUpdateOne) SetNillableInputPath(v *string) *SubJobUpdateOne {
+	if v != nil {
+		_u.SetInputPath(*v)
+	}
+	return _u
+}
+
+// ClearInputPath clears the value of the "input_path" field.
+func (_u *SubJobUpdateOne) ClearInputPath() *SubJobUpdateOne {
+	_u.mutation.ClearInputPath()
+	return _u
+}
+
 // SetOutputPath sets the "output_path" field.
 func (_u *SubJobUpdateOne) SetOutputPath(v string) *SubJobUpdateOne {
 	_u.mutation.SetOutputPath(v)
@@ -399,6 +523,27 @@ func (_u *SubJobUpdateOne) SetNillableOutputPath(v *string) *SubJobUpdateOne {
 // ClearOutputPath clears the value of the "output_path" field.
 func (_u *SubJobUpdateOne) ClearOutputPath() *SubJobUpdateOne {
 	_u.mutation.ClearOutputPath()
+	return _u
+}
+
+// SetSegmentCount sets the "segment_count" field.
+func (_u *SubJobUpdateOne) SetSegmentCount(v int) *SubJobUpdateOne {
+	_u.mutation.ResetSegmentCount()
+	_u.mutation.SetSegmentCount(v)
+	return _u
+}
+
+// SetNillableSegmentCount sets the "segment_count" field if the given value is not nil.
+func (_u *SubJobUpdateOne) SetNillableSegmentCount(v *int) *SubJobUpdateOne {
+	if v != nil {
+		_u.SetSegmentCount(*v)
+	}
+	return _u
+}
+
+// AddSegmentCount adds value to the "segment_count" field.
+func (_u *SubJobUpdateOne) AddSegmentCount(v int) *SubJobUpdateOne {
+	_u.mutation.AddSegmentCount(v)
 	return _u
 }
 
@@ -531,6 +676,11 @@ func (_u *SubJobUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *SubJobUpdateOne) check() error {
+	if v, ok := _u.mutation.SegmentCount(); ok {
+		if err := subjob.SegmentCountValidator(v); err != nil {
+			return &ValidationError{Name: "segment_count", err: fmt.Errorf(`ent: validator failed for field "SubJob.segment_count": %w`, err)}
+		}
+	}
 	if _u.mutation.JobCleared() && len(_u.mutation.JobIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "SubJob.job"`)
 	}
@@ -578,11 +728,29 @@ func (_u *SubJobUpdateOne) sqlSave(ctx context.Context) (_node *SubJob, err erro
 	if _u.mutation.InputFilenameCleared() {
 		_spec.ClearField(subjob.FieldInputFilename, field.TypeString)
 	}
+	if value, ok := _u.mutation.InputFormat(); ok {
+		_spec.SetField(subjob.FieldInputFormat, field.TypeString, value)
+	}
+	if _u.mutation.InputFormatCleared() {
+		_spec.ClearField(subjob.FieldInputFormat, field.TypeString)
+	}
+	if value, ok := _u.mutation.InputPath(); ok {
+		_spec.SetField(subjob.FieldInputPath, field.TypeString, value)
+	}
+	if _u.mutation.InputPathCleared() {
+		_spec.ClearField(subjob.FieldInputPath, field.TypeString)
+	}
 	if value, ok := _u.mutation.OutputPath(); ok {
 		_spec.SetField(subjob.FieldOutputPath, field.TypeString, value)
 	}
 	if _u.mutation.OutputPathCleared() {
 		_spec.ClearField(subjob.FieldOutputPath, field.TypeString)
+	}
+	if value, ok := _u.mutation.SegmentCount(); ok {
+		_spec.SetField(subjob.FieldSegmentCount, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedSegmentCount(); ok {
+		_spec.AddField(subjob.FieldSegmentCount, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.ErrorMessage(); ok {
 		_spec.SetField(subjob.FieldErrorMessage, field.TypeString, value)

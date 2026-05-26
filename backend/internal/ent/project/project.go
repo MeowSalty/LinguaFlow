@@ -20,23 +20,76 @@ const (
 	FieldUpdatedAt = "updated_at"
 	// FieldName holds the string denoting the name field in the database.
 	FieldName = "name"
+	// FieldOwnerUserID holds the string denoting the owner_user_id field in the database.
+	FieldOwnerUserID = "owner_user_id"
+	// FieldOwnerOrgID holds the string denoting the owner_org_id field in the database.
+	FieldOwnerOrgID = "owner_org_id"
+	// FieldResourceScope holds the string denoting the resource_scope field in the database.
+	FieldResourceScope = "resource_scope"
+	// FieldConfig holds the string denoting the config field in the database.
+	FieldConfig = "config"
 	// FieldSourceLang holds the string denoting the source_lang field in the database.
 	FieldSourceLang = "source_lang"
 	// FieldTargetLang holds the string denoting the target_lang field in the database.
 	FieldTargetLang = "target_lang"
-	// EdgeOrganization holds the string denoting the organization edge name in mutations.
-	EdgeOrganization = "organization"
+	// EdgeOwnerUser holds the string denoting the owner_user edge name in mutations.
+	EdgeOwnerUser = "owner_user"
+	// EdgeOwnerOrg holds the string denoting the owner_org edge name in mutations.
+	EdgeOwnerOrg = "owner_org"
+	// EdgeProjectBackends holds the string denoting the project_backends edge name in mutations.
+	EdgeProjectBackends = "project_backends"
+	// EdgeStageBackendOverrides holds the string denoting the stage_backend_overrides edge name in mutations.
+	EdgeStageBackendOverrides = "stage_backend_overrides"
+	// EdgeGlossaryEntries holds the string denoting the glossary_entries edge name in mutations.
+	EdgeGlossaryEntries = "glossary_entries"
+	// EdgeTmEntries holds the string denoting the tm_entries edge name in mutations.
+	EdgeTmEntries = "tm_entries"
 	// EdgeJobs holds the string denoting the jobs edge name in mutations.
 	EdgeJobs = "jobs"
 	// Table holds the table name of the project in the database.
 	Table = "projects"
-	// OrganizationTable is the table that holds the organization relation/edge.
-	OrganizationTable = "projects"
-	// OrganizationInverseTable is the table name for the Organization entity.
+	// OwnerUserTable is the table that holds the owner_user relation/edge.
+	OwnerUserTable = "projects"
+	// OwnerUserInverseTable is the table name for the User entity.
+	// It exists in this package in order to avoid circular dependency with the "user" package.
+	OwnerUserInverseTable = "users"
+	// OwnerUserColumn is the table column denoting the owner_user relation/edge.
+	OwnerUserColumn = "owner_user_id"
+	// OwnerOrgTable is the table that holds the owner_org relation/edge.
+	OwnerOrgTable = "projects"
+	// OwnerOrgInverseTable is the table name for the Organization entity.
 	// It exists in this package in order to avoid circular dependency with the "organization" package.
-	OrganizationInverseTable = "organizations"
-	// OrganizationColumn is the table column denoting the organization relation/edge.
-	OrganizationColumn = "organization_projects"
+	OwnerOrgInverseTable = "organizations"
+	// OwnerOrgColumn is the table column denoting the owner_org relation/edge.
+	OwnerOrgColumn = "owner_org_id"
+	// ProjectBackendsTable is the table that holds the project_backends relation/edge.
+	ProjectBackendsTable = "project_backends"
+	// ProjectBackendsInverseTable is the table name for the ProjectBackend entity.
+	// It exists in this package in order to avoid circular dependency with the "projectbackend" package.
+	ProjectBackendsInverseTable = "project_backends"
+	// ProjectBackendsColumn is the table column denoting the project_backends relation/edge.
+	ProjectBackendsColumn = "project_project_backends"
+	// StageBackendOverridesTable is the table that holds the stage_backend_overrides relation/edge.
+	StageBackendOverridesTable = "stage_backend_overrides"
+	// StageBackendOverridesInverseTable is the table name for the StageBackendOverride entity.
+	// It exists in this package in order to avoid circular dependency with the "stagebackendoverride" package.
+	StageBackendOverridesInverseTable = "stage_backend_overrides"
+	// StageBackendOverridesColumn is the table column denoting the stage_backend_overrides relation/edge.
+	StageBackendOverridesColumn = "project_stage_backend_overrides"
+	// GlossaryEntriesTable is the table that holds the glossary_entries relation/edge.
+	GlossaryEntriesTable = "glossary_entries"
+	// GlossaryEntriesInverseTable is the table name for the GlossaryEntry entity.
+	// It exists in this package in order to avoid circular dependency with the "glossaryentry" package.
+	GlossaryEntriesInverseTable = "glossary_entries"
+	// GlossaryEntriesColumn is the table column denoting the glossary_entries relation/edge.
+	GlossaryEntriesColumn = "project_id"
+	// TmEntriesTable is the table that holds the tm_entries relation/edge.
+	TmEntriesTable = "tm_entries"
+	// TmEntriesInverseTable is the table name for the TMEntry entity.
+	// It exists in this package in order to avoid circular dependency with the "tmentry" package.
+	TmEntriesInverseTable = "tm_entries"
+	// TmEntriesColumn is the table column denoting the tm_entries relation/edge.
+	TmEntriesColumn = "project_id"
 	// JobsTable is the table that holds the jobs relation/edge.
 	JobsTable = "jobs"
 	// JobsInverseTable is the table name for the Job entity.
@@ -52,25 +105,18 @@ var Columns = []string{
 	FieldCreatedAt,
 	FieldUpdatedAt,
 	FieldName,
+	FieldOwnerUserID,
+	FieldOwnerOrgID,
+	FieldResourceScope,
+	FieldConfig,
 	FieldSourceLang,
 	FieldTargetLang,
-}
-
-// ForeignKeys holds the SQL foreign-keys that are owned by the "projects"
-// table and are not defined as standalone fields in the schema.
-var ForeignKeys = []string{
-	"organization_projects",
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
 func ValidColumn(column string) bool {
 	for i := range Columns {
 		if column == Columns[i] {
-			return true
-		}
-	}
-	for i := range ForeignKeys {
-		if column == ForeignKeys[i] {
 			return true
 		}
 	}
@@ -86,6 +132,14 @@ var (
 	UpdateDefaultUpdatedAt func() time.Time
 	// NameValidator is a validator for the "name" field. It is called by the builders before save.
 	NameValidator func(string) error
+	// OwnerUserIDValidator is a validator for the "owner_user_id" field. It is called by the builders before save.
+	OwnerUserIDValidator func(int) error
+	// OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
+	OwnerOrgIDValidator func(int) error
+	// DefaultResourceScope holds the default value on creation for the "resource_scope" field.
+	DefaultResourceScope string
+	// DefaultConfig holds the default value on creation for the "config" field.
+	DefaultConfig func() map[string]interface{}
 	// DefaultSourceLang holds the default value on creation for the "source_lang" field.
 	DefaultSourceLang string
 	// DefaultTargetLang holds the default value on creation for the "target_lang" field.
@@ -115,6 +169,21 @@ func ByName(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldName, opts...).ToFunc()
 }
 
+// ByOwnerUserID orders the results by the owner_user_id field.
+func ByOwnerUserID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOwnerUserID, opts...).ToFunc()
+}
+
+// ByOwnerOrgID orders the results by the owner_org_id field.
+func ByOwnerOrgID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldOwnerOrgID, opts...).ToFunc()
+}
+
+// ByResourceScope orders the results by the resource_scope field.
+func ByResourceScope(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldResourceScope, opts...).ToFunc()
+}
+
 // BySourceLang orders the results by the source_lang field.
 func BySourceLang(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldSourceLang, opts...).ToFunc()
@@ -125,10 +194,73 @@ func ByTargetLang(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTargetLang, opts...).ToFunc()
 }
 
-// ByOrganizationField orders the results by organization field.
-func ByOrganizationField(field string, opts ...sql.OrderTermOption) OrderOption {
+// ByOwnerUserField orders the results by owner_user field.
+func ByOwnerUserField(field string, opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newOrganizationStep(), sql.OrderByField(field, opts...))
+		sqlgraph.OrderByNeighborTerms(s, newOwnerUserStep(), sql.OrderByField(field, opts...))
+	}
+}
+
+// ByOwnerOrgField orders the results by owner_org field.
+func ByOwnerOrgField(field string, opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newOwnerOrgStep(), sql.OrderByField(field, opts...))
+	}
+}
+
+// ByProjectBackendsCount orders the results by project_backends count.
+func ByProjectBackendsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newProjectBackendsStep(), opts...)
+	}
+}
+
+// ByProjectBackends orders the results by project_backends terms.
+func ByProjectBackends(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newProjectBackendsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByStageBackendOverridesCount orders the results by stage_backend_overrides count.
+func ByStageBackendOverridesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newStageBackendOverridesStep(), opts...)
+	}
+}
+
+// ByStageBackendOverrides orders the results by stage_backend_overrides terms.
+func ByStageBackendOverrides(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newStageBackendOverridesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByGlossaryEntriesCount orders the results by glossary_entries count.
+func ByGlossaryEntriesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newGlossaryEntriesStep(), opts...)
+	}
+}
+
+// ByGlossaryEntries orders the results by glossary_entries terms.
+func ByGlossaryEntries(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newGlossaryEntriesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByTmEntriesCount orders the results by tm_entries count.
+func ByTmEntriesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newTmEntriesStep(), opts...)
+	}
+}
+
+// ByTmEntries orders the results by tm_entries terms.
+func ByTmEntries(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newTmEntriesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
 
@@ -145,11 +277,46 @@ func ByJobs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newJobsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
-func newOrganizationStep() *sqlgraph.Step {
+func newOwnerUserStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(OrganizationInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.M2O, true, OrganizationTable, OrganizationColumn),
+		sqlgraph.To(OwnerUserInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, OwnerUserTable, OwnerUserColumn),
+	)
+}
+func newOwnerOrgStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(OwnerOrgInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, OwnerOrgTable, OwnerOrgColumn),
+	)
+}
+func newProjectBackendsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(ProjectBackendsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, ProjectBackendsTable, ProjectBackendsColumn),
+	)
+}
+func newStageBackendOverridesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(StageBackendOverridesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, StageBackendOverridesTable, StageBackendOverridesColumn),
+	)
+}
+func newGlossaryEntriesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(GlossaryEntriesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, GlossaryEntriesTable, GlossaryEntriesColumn),
+	)
+}
+func newTmEntriesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(TmEntriesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, TmEntriesTable, TmEntriesColumn),
 	)
 }
 func newJobsStep() *sqlgraph.Step {

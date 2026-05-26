@@ -12,14 +12,20 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/projectbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
 )
 
 // ent aliases to avoid import conflicts in user's code.
@@ -80,14 +86,20 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			job.Table:           job.ValidColumn,
-			orgmembership.Table: orgmembership.ValidColumn,
-			organization.Table:  organization.ValidColumn,
-			project.Table:       project.ValidColumn,
-			refreshtoken.Table:  refreshtoken.ValidColumn,
-			segment.Table:       segment.ValidColumn,
-			subjob.Table:        subjob.ValidColumn,
-			user.Table:          user.ValidColumn,
+			glossaryentry.Table:        glossaryentry.ValidColumn,
+			job.Table:                  job.ValidColumn,
+			orgbackend.Table:           orgbackend.ValidColumn,
+			orgmembership.Table:        orgmembership.ValidColumn,
+			organization.Table:         organization.ValidColumn,
+			project.Table:              project.ValidColumn,
+			projectbackend.Table:       projectbackend.ValidColumn,
+			refreshtoken.Table:         refreshtoken.ValidColumn,
+			segment.Table:              segment.ValidColumn,
+			stagebackendoverride.Table: stagebackendoverride.ValidColumn,
+			subjob.Table:               subjob.ValidColumn,
+			tmentry.Table:              tmentry.ValidColumn,
+			user.Table:                 user.ValidColumn,
+			userbackend.Table:          userbackend.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

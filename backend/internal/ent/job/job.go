@@ -20,6 +20,18 @@ const (
 	FieldUpdatedAt = "updated_at"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
+	// FieldSubJobCount holds the string denoting the sub_job_count field in the database.
+	FieldSubJobCount = "sub_job_count"
+	// FieldCompletedSubJobs holds the string denoting the completed_sub_jobs field in the database.
+	FieldCompletedSubJobs = "completed_sub_jobs"
+	// FieldFailedSubJobs holds the string denoting the failed_sub_jobs field in the database.
+	FieldFailedSubJobs = "failed_sub_jobs"
+	// FieldSourceLang holds the string denoting the source_lang field in the database.
+	FieldSourceLang = "source_lang"
+	// FieldTargetLang holds the string denoting the target_lang field in the database.
+	FieldTargetLang = "target_lang"
+	// FieldConfig holds the string denoting the config field in the database.
+	FieldConfig = "config"
 	// FieldInputPath holds the string denoting the input_path field in the database.
 	FieldInputPath = "input_path"
 	// FieldOutputPath holds the string denoting the output_path field in the database.
@@ -63,6 +75,12 @@ var Columns = []string{
 	FieldCreatedAt,
 	FieldUpdatedAt,
 	FieldStatus,
+	FieldSubJobCount,
+	FieldCompletedSubJobs,
+	FieldFailedSubJobs,
+	FieldSourceLang,
+	FieldTargetLang,
+	FieldConfig,
 	FieldInputPath,
 	FieldOutputPath,
 	FieldErrorMessage,
@@ -99,6 +117,24 @@ var (
 	UpdateDefaultUpdatedAt func() time.Time
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
+	// DefaultSubJobCount holds the default value on creation for the "sub_job_count" field.
+	DefaultSubJobCount int
+	// SubJobCountValidator is a validator for the "sub_job_count" field. It is called by the builders before save.
+	SubJobCountValidator func(int) error
+	// DefaultCompletedSubJobs holds the default value on creation for the "completed_sub_jobs" field.
+	DefaultCompletedSubJobs int
+	// CompletedSubJobsValidator is a validator for the "completed_sub_jobs" field. It is called by the builders before save.
+	CompletedSubJobsValidator func(int) error
+	// DefaultFailedSubJobs holds the default value on creation for the "failed_sub_jobs" field.
+	DefaultFailedSubJobs int
+	// FailedSubJobsValidator is a validator for the "failed_sub_jobs" field. It is called by the builders before save.
+	FailedSubJobsValidator func(int) error
+	// DefaultSourceLang holds the default value on creation for the "source_lang" field.
+	DefaultSourceLang string
+	// DefaultTargetLang holds the default value on creation for the "target_lang" field.
+	DefaultTargetLang string
+	// DefaultConfig holds the default value on creation for the "config" field.
+	DefaultConfig func() map[string]interface{}
 )
 
 // OrderOption defines the ordering options for the Job queries.
@@ -122,6 +158,31 @@ func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByStatus orders the results by the status field.
 func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStatus, opts...).ToFunc()
+}
+
+// BySubJobCount orders the results by the sub_job_count field.
+func BySubJobCount(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSubJobCount, opts...).ToFunc()
+}
+
+// ByCompletedSubJobs orders the results by the completed_sub_jobs field.
+func ByCompletedSubJobs(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCompletedSubJobs, opts...).ToFunc()
+}
+
+// ByFailedSubJobs orders the results by the failed_sub_jobs field.
+func ByFailedSubJobs(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFailedSubJobs, opts...).ToFunc()
+}
+
+// BySourceLang orders the results by the source_lang field.
+func BySourceLang(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSourceLang, opts...).ToFunc()
+}
+
+// ByTargetLang orders the results by the target_lang field.
+func ByTargetLang(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTargetLang, opts...).ToFunc()
 }
 
 // ByInputPath orders the results by the input_path field.

@@ -27,5 +27,8 @@ func (Organization) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("projects", Project.Type),
 		edge.To("memberships", OrgMembership.Type),
+		edge.To("org_backends", OrgBackend.Type),
+		edge.To("glossary_entries", GlossaryEntry.Type),
+		edge.To("tm_entries", TMEntry.Type),
 	}
 }

@@ -8,12 +8,59 @@ import (
 )
 
 var (
+	// GlossaryEntriesColumns holds the columns for the "glossary_entries" table.
+	GlossaryEntriesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "scope_key", Type: field.TypeString},
+		{Name: "source_key", Type: field.TypeString},
+		{Name: "source", Type: field.TypeString},
+		{Name: "target", Type: field.TypeString},
+		{Name: "case_sensitive", Type: field.TypeBool, Default: false},
+		{Name: "notes", Type: field.TypeString, Nullable: true},
+		{Name: "organization_id", Type: field.TypeInt, Nullable: true},
+		{Name: "project_id", Type: field.TypeInt, Nullable: true},
+	}
+	// GlossaryEntriesTable holds the schema information for the "glossary_entries" table.
+	GlossaryEntriesTable = &schema.Table{
+		Name:       "glossary_entries",
+		Columns:    GlossaryEntriesColumns,
+		PrimaryKey: []*schema.Column{GlossaryEntriesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "glossary_entries_organizations_glossary_entries",
+				Columns:    []*schema.Column{GlossaryEntriesColumns[9]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "glossary_entries_projects_glossary_entries",
+				Columns:    []*schema.Column{GlossaryEntriesColumns[10]},
+				RefColumns: []*schema.Column{ProjectsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "glossaryentry_scope_key_source_key",
+				Unique:  true,
+				Columns: []*schema.Column{GlossaryEntriesColumns[3], GlossaryEntriesColumns[4]},
+			},
+		},
+	}
 	// JobsColumns holds the columns for the "jobs" table.
 	JobsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "status", Type: field.TypeString, Default: "pending"},
+		{Name: "sub_job_count", Type: field.TypeInt, Default: 0},
+		{Name: "completed_sub_jobs", Type: field.TypeInt, Default: 0},
+		{Name: "failed_sub_jobs", Type: field.TypeInt, Default: 0},
+		{Name: "source_lang", Type: field.TypeString, Default: "auto"},
+		{Name: "target_lang", Type: field.TypeString, Default: "zh"},
+		{Name: "config", Type: field.TypeJSON},
 		{Name: "input_path", Type: field.TypeString, Nullable: true},
 		{Name: "output_path", Type: field.TypeString, Nullable: true},
 		{Name: "error_message", Type: field.TypeString, Nullable: true},
@@ -28,15 +75,47 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "jobs_projects_jobs",
-				Columns:    []*schema.Column{JobsColumns[7]},
+				Columns:    []*schema.Column{JobsColumns[13]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "jobs_users_jobs",
-				Columns:    []*schema.Column{JobsColumns[8]},
+				Columns:    []*schema.Column{JobsColumns[14]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
+			},
+		},
+	}
+	// OrgBackendsColumns holds the columns for the "org_backends" table.
+	OrgBackendsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "name", Type: field.TypeString},
+		{Name: "backend_type", Type: field.TypeEnum, Enums: []string{"openai", "anthropic", "google"}},
+		{Name: "priority", Type: field.TypeInt, Default: 0},
+		{Name: "options", Type: field.TypeJSON},
+		{Name: "organization_org_backends", Type: field.TypeInt},
+	}
+	// OrgBackendsTable holds the schema information for the "org_backends" table.
+	OrgBackendsTable = &schema.Table{
+		Name:       "org_backends",
+		Columns:    OrgBackendsColumns,
+		PrimaryKey: []*schema.Column{OrgBackendsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "org_backends_organizations_org_backends",
+				Columns:    []*schema.Column{OrgBackendsColumns[7]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "orgbackend_name_organization_org_backends",
+				Unique:  true,
+				Columns: []*schema.Column{OrgBackendsColumns[3], OrgBackendsColumns[7]},
 			},
 		},
 	}
@@ -98,9 +177,12 @@ var (
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "name", Type: field.TypeString},
+		{Name: "resource_scope", Type: field.TypeString, Default: "project"},
+		{Name: "config", Type: field.TypeJSON},
 		{Name: "source_lang", Type: field.TypeString, Default: "auto"},
 		{Name: "target_lang", Type: field.TypeString, Default: "zh"},
-		{Name: "organization_projects", Type: field.TypeInt},
+		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
+		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
 	}
 	// ProjectsTable holds the schema information for the "projects" table.
 	ProjectsTable = &schema.Table{
@@ -110,9 +192,51 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "projects_organizations_projects",
-				Columns:    []*schema.Column{ProjectsColumns[6]},
+				Columns:    []*schema.Column{ProjectsColumns[8]},
 				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "projects_users_owned_projects",
+				Columns:    []*schema.Column{ProjectsColumns[9]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
+	// ProjectBackendsColumns holds the columns for the "project_backends" table.
+	ProjectBackendsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "order_index", Type: field.TypeInt},
+		{Name: "source", Type: field.TypeEnum, Enums: []string{"user", "org"}},
+		{Name: "backend_id", Type: field.TypeInt},
+		{Name: "project_project_backends", Type: field.TypeInt},
+	}
+	// ProjectBackendsTable holds the schema information for the "project_backends" table.
+	ProjectBackendsTable = &schema.Table{
+		Name:       "project_backends",
+		Columns:    ProjectBackendsColumns,
+		PrimaryKey: []*schema.Column{ProjectBackendsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "project_backends_projects_project_backends",
+				Columns:    []*schema.Column{ProjectBackendsColumns[6]},
+				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "projectbackend_order_index_project_project_backends",
+				Unique:  true,
+				Columns: []*schema.Column{ProjectBackendsColumns[3], ProjectBackendsColumns[6]},
+			},
+			{
+				Name:    "projectbackend_source_backend_id_project_project_backends",
+				Unique:  true,
+				Columns: []*schema.Column{ProjectBackendsColumns[4], ProjectBackendsColumns[5], ProjectBackendsColumns[6]},
 			},
 		},
 	}
@@ -173,6 +297,37 @@ var (
 			},
 		},
 	}
+	// StageBackendOverridesColumns holds the columns for the "stage_backend_overrides" table.
+	StageBackendOverridesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "stage", Type: field.TypeEnum, Enums: []string{"translate", "bootstrap"}},
+		{Name: "backend_mode", Type: field.TypeEnum, Enums: []string{"inherit", "prepend", "restrict"}, Default: "inherit"},
+		{Name: "backend_order", Type: field.TypeJSON},
+		{Name: "project_stage_backend_overrides", Type: field.TypeInt},
+	}
+	// StageBackendOverridesTable holds the schema information for the "stage_backend_overrides" table.
+	StageBackendOverridesTable = &schema.Table{
+		Name:       "stage_backend_overrides",
+		Columns:    StageBackendOverridesColumns,
+		PrimaryKey: []*schema.Column{StageBackendOverridesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "stage_backend_overrides_projects_stage_backend_overrides",
+				Columns:    []*schema.Column{StageBackendOverridesColumns[6]},
+				RefColumns: []*schema.Column{ProjectsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "stagebackendoverride_stage_project_stage_backend_overrides",
+				Unique:  true,
+				Columns: []*schema.Column{StageBackendOverridesColumns[3], StageBackendOverridesColumns[6]},
+			},
+		},
+	}
 	// SubJobsColumns holds the columns for the "sub_jobs" table.
 	SubJobsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -180,7 +335,10 @@ var (
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "status", Type: field.TypeString, Default: "pending"},
 		{Name: "input_filename", Type: field.TypeString, Nullable: true},
+		{Name: "input_format", Type: field.TypeString, Nullable: true},
+		{Name: "input_path", Type: field.TypeString, Nullable: true},
 		{Name: "output_path", Type: field.TypeString, Nullable: true},
+		{Name: "segment_count", Type: field.TypeInt, Default: 0},
 		{Name: "error_message", Type: field.TypeString, Nullable: true},
 		{Name: "job_sub_jobs", Type: field.TypeInt},
 	}
@@ -192,9 +350,51 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "sub_jobs_jobs_sub_jobs",
-				Columns:    []*schema.Column{SubJobsColumns[7]},
+				Columns:    []*schema.Column{SubJobsColumns[10]},
 				RefColumns: []*schema.Column{JobsColumns[0]},
 				OnDelete:   schema.NoAction,
+			},
+		},
+	}
+	// TmEntriesColumns holds the columns for the "tm_entries" table.
+	TmEntriesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "scope_key", Type: field.TypeString},
+		{Name: "source_hash", Type: field.TypeString},
+		{Name: "source_text", Type: field.TypeString},
+		{Name: "target_text", Type: field.TypeString},
+		{Name: "source_lang", Type: field.TypeString},
+		{Name: "target_lang", Type: field.TypeString},
+		{Name: "usage_count", Type: field.TypeInt, Default: 0},
+		{Name: "organization_id", Type: field.TypeInt, Nullable: true},
+		{Name: "project_id", Type: field.TypeInt, Nullable: true},
+	}
+	// TmEntriesTable holds the schema information for the "tm_entries" table.
+	TmEntriesTable = &schema.Table{
+		Name:       "tm_entries",
+		Columns:    TmEntriesColumns,
+		PrimaryKey: []*schema.Column{TmEntriesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "tm_entries_organizations_tm_entries",
+				Columns:    []*schema.Column{TmEntriesColumns[10]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "tm_entries_projects_tm_entries",
+				Columns:    []*schema.Column{TmEntriesColumns[11]},
+				RefColumns: []*schema.Column{ProjectsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "tmentry_scope_key_source_hash_source_lang_target_lang",
+				Unique:  true,
+				Columns: []*schema.Column{TmEntriesColumns[3], TmEntriesColumns[4], TmEntriesColumns[7], TmEntriesColumns[8]},
 			},
 		},
 	}
@@ -216,27 +416,74 @@ var (
 		Columns:    UsersColumns,
 		PrimaryKey: []*schema.Column{UsersColumns[0]},
 	}
+	// UserBackendsColumns holds the columns for the "user_backends" table.
+	UserBackendsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "name", Type: field.TypeString},
+		{Name: "backend_type", Type: field.TypeEnum, Enums: []string{"openai", "anthropic", "google"}},
+		{Name: "priority", Type: field.TypeInt, Default: 0},
+		{Name: "options", Type: field.TypeJSON},
+		{Name: "user_user_backends", Type: field.TypeInt},
+	}
+	// UserBackendsTable holds the schema information for the "user_backends" table.
+	UserBackendsTable = &schema.Table{
+		Name:       "user_backends",
+		Columns:    UserBackendsColumns,
+		PrimaryKey: []*schema.Column{UserBackendsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "user_backends_users_user_backends",
+				Columns:    []*schema.Column{UserBackendsColumns[7]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "userbackend_name_user_user_backends",
+				Unique:  true,
+				Columns: []*schema.Column{UserBackendsColumns[3], UserBackendsColumns[7]},
+			},
+		},
+	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		GlossaryEntriesTable,
 		JobsTable,
+		OrgBackendsTable,
 		OrgMembershipsTable,
 		OrganizationsTable,
 		ProjectsTable,
+		ProjectBackendsTable,
 		RefreshTokensTable,
 		SegmentsTable,
+		StageBackendOverridesTable,
 		SubJobsTable,
+		TmEntriesTable,
 		UsersTable,
+		UserBackendsTable,
 	}
 )
 
 func init() {
+	GlossaryEntriesTable.ForeignKeys[0].RefTable = OrganizationsTable
+	GlossaryEntriesTable.ForeignKeys[1].RefTable = ProjectsTable
 	JobsTable.ForeignKeys[0].RefTable = ProjectsTable
 	JobsTable.ForeignKeys[1].RefTable = UsersTable
+	OrgBackendsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	OrgMembershipsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	OrgMembershipsTable.ForeignKeys[1].RefTable = UsersTable
 	ProjectsTable.ForeignKeys[0].RefTable = OrganizationsTable
+	ProjectsTable.ForeignKeys[1].RefTable = UsersTable
+	ProjectBackendsTable.ForeignKeys[0].RefTable = ProjectsTable
 	RefreshTokensTable.ForeignKeys[0].RefTable = UsersTable
 	SegmentsTable.ForeignKeys[0].RefTable = SubJobsTable
 	SegmentsTable.ForeignKeys[1].RefTable = UsersTable
+	StageBackendOverridesTable.ForeignKeys[0].RefTable = ProjectsTable
 	SubJobsTable.ForeignKeys[0].RefTable = JobsTable
+	TmEntriesTable.ForeignKeys[0].RefTable = OrganizationsTable
+	TmEntriesTable.ForeignKeys[1].RefTable = ProjectsTable
+	UserBackendsTable.ForeignKeys[0].RefTable = UsersTable
 }

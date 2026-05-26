@@ -30,6 +30,12 @@ const (
 	EdgeProjects = "projects"
 	// EdgeMemberships holds the string denoting the memberships edge name in mutations.
 	EdgeMemberships = "memberships"
+	// EdgeOrgBackends holds the string denoting the org_backends edge name in mutations.
+	EdgeOrgBackends = "org_backends"
+	// EdgeGlossaryEntries holds the string denoting the glossary_entries edge name in mutations.
+	EdgeGlossaryEntries = "glossary_entries"
+	// EdgeTmEntries holds the string denoting the tm_entries edge name in mutations.
+	EdgeTmEntries = "tm_entries"
 	// Table holds the table name of the organization in the database.
 	Table = "organizations"
 	// ProjectsTable is the table that holds the projects relation/edge.
@@ -38,7 +44,7 @@ const (
 	// It exists in this package in order to avoid circular dependency with the "project" package.
 	ProjectsInverseTable = "projects"
 	// ProjectsColumn is the table column denoting the projects relation/edge.
-	ProjectsColumn = "organization_projects"
+	ProjectsColumn = "owner_org_id"
 	// MembershipsTable is the table that holds the memberships relation/edge.
 	MembershipsTable = "org_memberships"
 	// MembershipsInverseTable is the table name for the OrgMembership entity.
@@ -46,6 +52,27 @@ const (
 	MembershipsInverseTable = "org_memberships"
 	// MembershipsColumn is the table column denoting the memberships relation/edge.
 	MembershipsColumn = "organization_memberships"
+	// OrgBackendsTable is the table that holds the org_backends relation/edge.
+	OrgBackendsTable = "org_backends"
+	// OrgBackendsInverseTable is the table name for the OrgBackend entity.
+	// It exists in this package in order to avoid circular dependency with the "orgbackend" package.
+	OrgBackendsInverseTable = "org_backends"
+	// OrgBackendsColumn is the table column denoting the org_backends relation/edge.
+	OrgBackendsColumn = "organization_org_backends"
+	// GlossaryEntriesTable is the table that holds the glossary_entries relation/edge.
+	GlossaryEntriesTable = "glossary_entries"
+	// GlossaryEntriesInverseTable is the table name for the GlossaryEntry entity.
+	// It exists in this package in order to avoid circular dependency with the "glossaryentry" package.
+	GlossaryEntriesInverseTable = "glossary_entries"
+	// GlossaryEntriesColumn is the table column denoting the glossary_entries relation/edge.
+	GlossaryEntriesColumn = "organization_id"
+	// TmEntriesTable is the table that holds the tm_entries relation/edge.
+	TmEntriesTable = "tm_entries"
+	// TmEntriesInverseTable is the table name for the TMEntry entity.
+	// It exists in this package in order to avoid circular dependency with the "tmentry" package.
+	TmEntriesInverseTable = "tm_entries"
+	// TmEntriesColumn is the table column denoting the tm_entries relation/edge.
+	TmEntriesColumn = "organization_id"
 )
 
 // Columns holds all SQL columns for organization fields.
@@ -147,6 +174,48 @@ func ByMemberships(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newMembershipsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByOrgBackendsCount orders the results by org_backends count.
+func ByOrgBackendsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newOrgBackendsStep(), opts...)
+	}
+}
+
+// ByOrgBackends orders the results by org_backends terms.
+func ByOrgBackends(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newOrgBackendsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByGlossaryEntriesCount orders the results by glossary_entries count.
+func ByGlossaryEntriesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newGlossaryEntriesStep(), opts...)
+	}
+}
+
+// ByGlossaryEntries orders the results by glossary_entries terms.
+func ByGlossaryEntries(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newGlossaryEntriesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByTmEntriesCount orders the results by tm_entries count.
+func ByTmEntriesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newTmEntriesStep(), opts...)
+	}
+}
+
+// ByTmEntries orders the results by tm_entries terms.
+func ByTmEntries(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newTmEntriesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newProjectsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -159,5 +228,26 @@ func newMembershipsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(MembershipsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, MembershipsTable, MembershipsColumn),
+	)
+}
+func newOrgBackendsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(OrgBackendsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, OrgBackendsTable, OrgBackendsColumn),
+	)
+}
+func newGlossaryEntriesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(GlossaryEntriesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, GlossaryEntriesTable, GlossaryEntriesColumn),
+	)
+}
+func newTmEntriesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(TmEntriesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, TmEntriesTable, TmEntriesColumn),
 	)
 }

@@ -31,5 +31,7 @@ func (User) Edges() []ent.Edge {
 		edge.To("reviewed_segments", Segment.Type),
 		edge.To("refresh_tokens", RefreshToken.Type),
 		edge.To("memberships", OrgMembership.Type),
+		edge.To("user_backends", UserBackend.Type),
+		edge.To("owned_projects", Project.Type),
 	}
 }

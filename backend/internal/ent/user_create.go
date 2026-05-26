@@ -12,9 +12,11 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
 )
 
 // UserCreate is the builder for creating a User entity.
@@ -170,6 +172,36 @@ func (_c *UserCreate) AddMemberships(v ...*OrgMembership) *UserCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddMembershipIDs(ids...)
+}
+
+// AddUserBackendIDs adds the "user_backends" edge to the UserBackend entity by IDs.
+func (_c *UserCreate) AddUserBackendIDs(ids ...int) *UserCreate {
+	_c.mutation.AddUserBackendIDs(ids...)
+	return _c
+}
+
+// AddUserBackends adds the "user_backends" edges to the UserBackend entity.
+func (_c *UserCreate) AddUserBackends(v ...*UserBackend) *UserCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddUserBackendIDs(ids...)
+}
+
+// AddOwnedProjectIDs adds the "owned_projects" edge to the Project entity by IDs.
+func (_c *UserCreate) AddOwnedProjectIDs(ids ...int) *UserCreate {
+	_c.mutation.AddOwnedProjectIDs(ids...)
+	return _c
+}
+
+// AddOwnedProjects adds the "owned_projects" edges to the Project entity.
+func (_c *UserCreate) AddOwnedProjects(v ...*Project) *UserCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddOwnedProjectIDs(ids...)
 }
 
 // Mutation returns the UserMutation object of the builder.
@@ -378,6 +410,38 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(orgmembership.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.UserBackendsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.UserBackendsTable,
+			Columns: []string{user.UserBackendsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.OwnedProjectsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.OwnedProjectsTable,
+			Columns: []string{user.OwnedProjectsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(project.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

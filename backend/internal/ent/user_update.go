@@ -14,9 +14,11 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
 )
 
 // UserUpdate is the builder for updating User entities.
@@ -188,6 +190,36 @@ func (_u *UserUpdate) AddMemberships(v ...*OrgMembership) *UserUpdate {
 	return _u.AddMembershipIDs(ids...)
 }
 
+// AddUserBackendIDs adds the "user_backends" edge to the UserBackend entity by IDs.
+func (_u *UserUpdate) AddUserBackendIDs(ids ...int) *UserUpdate {
+	_u.mutation.AddUserBackendIDs(ids...)
+	return _u
+}
+
+// AddUserBackends adds the "user_backends" edges to the UserBackend entity.
+func (_u *UserUpdate) AddUserBackends(v ...*UserBackend) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddUserBackendIDs(ids...)
+}
+
+// AddOwnedProjectIDs adds the "owned_projects" edge to the Project entity by IDs.
+func (_u *UserUpdate) AddOwnedProjectIDs(ids ...int) *UserUpdate {
+	_u.mutation.AddOwnedProjectIDs(ids...)
+	return _u
+}
+
+// AddOwnedProjects adds the "owned_projects" edges to the Project entity.
+func (_u *UserUpdate) AddOwnedProjects(v ...*Project) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddOwnedProjectIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdate) Mutation() *UserMutation {
 	return _u.mutation
@@ -275,6 +307,48 @@ func (_u *UserUpdate) RemoveMemberships(v ...*OrgMembership) *UserUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveMembershipIDs(ids...)
+}
+
+// ClearUserBackends clears all "user_backends" edges to the UserBackend entity.
+func (_u *UserUpdate) ClearUserBackends() *UserUpdate {
+	_u.mutation.ClearUserBackends()
+	return _u
+}
+
+// RemoveUserBackendIDs removes the "user_backends" edge to UserBackend entities by IDs.
+func (_u *UserUpdate) RemoveUserBackendIDs(ids ...int) *UserUpdate {
+	_u.mutation.RemoveUserBackendIDs(ids...)
+	return _u
+}
+
+// RemoveUserBackends removes "user_backends" edges to UserBackend entities.
+func (_u *UserUpdate) RemoveUserBackends(v ...*UserBackend) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveUserBackendIDs(ids...)
+}
+
+// ClearOwnedProjects clears all "owned_projects" edges to the Project entity.
+func (_u *UserUpdate) ClearOwnedProjects() *UserUpdate {
+	_u.mutation.ClearOwnedProjects()
+	return _u
+}
+
+// RemoveOwnedProjectIDs removes the "owned_projects" edge to Project entities by IDs.
+func (_u *UserUpdate) RemoveOwnedProjectIDs(ids ...int) *UserUpdate {
+	_u.mutation.RemoveOwnedProjectIDs(ids...)
+	return _u
+}
+
+// RemoveOwnedProjects removes "owned_projects" edges to Project entities.
+func (_u *UserUpdate) RemoveOwnedProjects(v ...*Project) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveOwnedProjectIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -549,6 +623,96 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.UserBackendsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.UserBackendsTable,
+			Columns: []string{user.UserBackendsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedUserBackendsIDs(); len(nodes) > 0 && !_u.mutation.UserBackendsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.UserBackendsTable,
+			Columns: []string{user.UserBackendsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.UserBackendsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.UserBackendsTable,
+			Columns: []string{user.UserBackendsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.OwnedProjectsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.OwnedProjectsTable,
+			Columns: []string{user.OwnedProjectsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(project.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedOwnedProjectsIDs(); len(nodes) > 0 && !_u.mutation.OwnedProjectsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.OwnedProjectsTable,
+			Columns: []string{user.OwnedProjectsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(project.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.OwnedProjectsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.OwnedProjectsTable,
+			Columns: []string{user.OwnedProjectsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(project.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{user.Label}
@@ -725,6 +889,36 @@ func (_u *UserUpdateOne) AddMemberships(v ...*OrgMembership) *UserUpdateOne {
 	return _u.AddMembershipIDs(ids...)
 }
 
+// AddUserBackendIDs adds the "user_backends" edge to the UserBackend entity by IDs.
+func (_u *UserUpdateOne) AddUserBackendIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.AddUserBackendIDs(ids...)
+	return _u
+}
+
+// AddUserBackends adds the "user_backends" edges to the UserBackend entity.
+func (_u *UserUpdateOne) AddUserBackends(v ...*UserBackend) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddUserBackendIDs(ids...)
+}
+
+// AddOwnedProjectIDs adds the "owned_projects" edge to the Project entity by IDs.
+func (_u *UserUpdateOne) AddOwnedProjectIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.AddOwnedProjectIDs(ids...)
+	return _u
+}
+
+// AddOwnedProjects adds the "owned_projects" edges to the Project entity.
+func (_u *UserUpdateOne) AddOwnedProjects(v ...*Project) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddOwnedProjectIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdateOne) Mutation() *UserMutation {
 	return _u.mutation
@@ -812,6 +1006,48 @@ func (_u *UserUpdateOne) RemoveMemberships(v ...*OrgMembership) *UserUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveMembershipIDs(ids...)
+}
+
+// ClearUserBackends clears all "user_backends" edges to the UserBackend entity.
+func (_u *UserUpdateOne) ClearUserBackends() *UserUpdateOne {
+	_u.mutation.ClearUserBackends()
+	return _u
+}
+
+// RemoveUserBackendIDs removes the "user_backends" edge to UserBackend entities by IDs.
+func (_u *UserUpdateOne) RemoveUserBackendIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.RemoveUserBackendIDs(ids...)
+	return _u
+}
+
+// RemoveUserBackends removes "user_backends" edges to UserBackend entities.
+func (_u *UserUpdateOne) RemoveUserBackends(v ...*UserBackend) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveUserBackendIDs(ids...)
+}
+
+// ClearOwnedProjects clears all "owned_projects" edges to the Project entity.
+func (_u *UserUpdateOne) ClearOwnedProjects() *UserUpdateOne {
+	_u.mutation.ClearOwnedProjects()
+	return _u
+}
+
+// RemoveOwnedProjectIDs removes the "owned_projects" edge to Project entities by IDs.
+func (_u *UserUpdateOne) RemoveOwnedProjectIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.RemoveOwnedProjectIDs(ids...)
+	return _u
+}
+
+// RemoveOwnedProjects removes "owned_projects" edges to Project entities.
+func (_u *UserUpdateOne) RemoveOwnedProjects(v ...*Project) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveOwnedProjectIDs(ids...)
 }
 
 // Where appends a list predicates to the UserUpdate builder.
@@ -1109,6 +1345,96 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(orgmembership.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.UserBackendsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.UserBackendsTable,
+			Columns: []string{user.UserBackendsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedUserBackendsIDs(); len(nodes) > 0 && !_u.mutation.UserBackendsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.UserBackendsTable,
+			Columns: []string{user.UserBackendsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.UserBackendsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.UserBackendsTable,
+			Columns: []string{user.UserBackendsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.OwnedProjectsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.OwnedProjectsTable,
+			Columns: []string{user.OwnedProjectsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(project.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedOwnedProjectsIDs(); len(nodes) > 0 && !_u.mutation.OwnedProjectsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.OwnedProjectsTable,
+			Columns: []string{user.OwnedProjectsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(project.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.OwnedProjectsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.OwnedProjectsTable,
+			Columns: []string{user.OwnedProjectsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(project.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

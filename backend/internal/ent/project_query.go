@@ -12,22 +12,31 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/projectbackend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
 // ProjectQuery is the builder for querying Project entities.
 type ProjectQuery struct {
 	config
-	ctx              *QueryContext
-	order            []project.OrderOption
-	inters           []Interceptor
-	predicates       []predicate.Project
-	withOrganization *OrganizationQuery
-	withJobs         *JobQuery
-	withFKs          bool
+	ctx                       *QueryContext
+	order                     []project.OrderOption
+	inters                    []Interceptor
+	predicates                []predicate.Project
+	withOwnerUser             *UserQuery
+	withOwnerOrg              *OrganizationQuery
+	withProjectBackends       *ProjectBackendQuery
+	withStageBackendOverrides *StageBackendOverrideQuery
+	withGlossaryEntries       *GlossaryEntryQuery
+	withTmEntries             *TMEntryQuery
+	withJobs                  *JobQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -64,8 +73,30 @@ func (_q *ProjectQuery) Order(o ...project.OrderOption) *ProjectQuery {
 	return _q
 }
 
-// QueryOrganization chains the current query on the "organization" edge.
-func (_q *ProjectQuery) QueryOrganization() *OrganizationQuery {
+// QueryOwnerUser chains the current query on the "owner_user" edge.
+func (_q *ProjectQuery) QueryOwnerUser() *UserQuery {
+	query := (&UserClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(project.Table, project.FieldID, selector),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, project.OwnerUserTable, project.OwnerUserColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryOwnerOrg chains the current query on the "owner_org" edge.
+func (_q *ProjectQuery) QueryOwnerOrg() *OrganizationQuery {
 	query := (&OrganizationClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
@@ -78,7 +109,95 @@ func (_q *ProjectQuery) QueryOrganization() *OrganizationQuery {
 		step := sqlgraph.NewStep(
 			sqlgraph.From(project.Table, project.FieldID, selector),
 			sqlgraph.To(organization.Table, organization.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, project.OrganizationTable, project.OrganizationColumn),
+			sqlgraph.Edge(sqlgraph.M2O, true, project.OwnerOrgTable, project.OwnerOrgColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryProjectBackends chains the current query on the "project_backends" edge.
+func (_q *ProjectQuery) QueryProjectBackends() *ProjectBackendQuery {
+	query := (&ProjectBackendClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(project.Table, project.FieldID, selector),
+			sqlgraph.To(projectbackend.Table, projectbackend.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, project.ProjectBackendsTable, project.ProjectBackendsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryStageBackendOverrides chains the current query on the "stage_backend_overrides" edge.
+func (_q *ProjectQuery) QueryStageBackendOverrides() *StageBackendOverrideQuery {
+	query := (&StageBackendOverrideClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(project.Table, project.FieldID, selector),
+			sqlgraph.To(stagebackendoverride.Table, stagebackendoverride.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, project.StageBackendOverridesTable, project.StageBackendOverridesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryGlossaryEntries chains the current query on the "glossary_entries" edge.
+func (_q *ProjectQuery) QueryGlossaryEntries() *GlossaryEntryQuery {
+	query := (&GlossaryEntryClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(project.Table, project.FieldID, selector),
+			sqlgraph.To(glossaryentry.Table, glossaryentry.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, project.GlossaryEntriesTable, project.GlossaryEntriesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryTmEntries chains the current query on the "tm_entries" edge.
+func (_q *ProjectQuery) QueryTmEntries() *TMEntryQuery {
+	query := (&TMEntryClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(project.Table, project.FieldID, selector),
+			sqlgraph.To(tmentry.Table, tmentry.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, project.TmEntriesTable, project.TmEntriesColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -295,27 +414,87 @@ func (_q *ProjectQuery) Clone() *ProjectQuery {
 		return nil
 	}
 	return &ProjectQuery{
-		config:           _q.config,
-		ctx:              _q.ctx.Clone(),
-		order:            append([]project.OrderOption{}, _q.order...),
-		inters:           append([]Interceptor{}, _q.inters...),
-		predicates:       append([]predicate.Project{}, _q.predicates...),
-		withOrganization: _q.withOrganization.Clone(),
-		withJobs:         _q.withJobs.Clone(),
+		config:                    _q.config,
+		ctx:                       _q.ctx.Clone(),
+		order:                     append([]project.OrderOption{}, _q.order...),
+		inters:                    append([]Interceptor{}, _q.inters...),
+		predicates:                append([]predicate.Project{}, _q.predicates...),
+		withOwnerUser:             _q.withOwnerUser.Clone(),
+		withOwnerOrg:              _q.withOwnerOrg.Clone(),
+		withProjectBackends:       _q.withProjectBackends.Clone(),
+		withStageBackendOverrides: _q.withStageBackendOverrides.Clone(),
+		withGlossaryEntries:       _q.withGlossaryEntries.Clone(),
+		withTmEntries:             _q.withTmEntries.Clone(),
+		withJobs:                  _q.withJobs.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
 	}
 }
 
-// WithOrganization tells the query-builder to eager-load the nodes that are connected to
-// the "organization" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *ProjectQuery) WithOrganization(opts ...func(*OrganizationQuery)) *ProjectQuery {
+// WithOwnerUser tells the query-builder to eager-load the nodes that are connected to
+// the "owner_user" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *ProjectQuery) WithOwnerUser(opts ...func(*UserQuery)) *ProjectQuery {
+	query := (&UserClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withOwnerUser = query
+	return _q
+}
+
+// WithOwnerOrg tells the query-builder to eager-load the nodes that are connected to
+// the "owner_org" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *ProjectQuery) WithOwnerOrg(opts ...func(*OrganizationQuery)) *ProjectQuery {
 	query := (&OrganizationClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
-	_q.withOrganization = query
+	_q.withOwnerOrg = query
+	return _q
+}
+
+// WithProjectBackends tells the query-builder to eager-load the nodes that are connected to
+// the "project_backends" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *ProjectQuery) WithProjectBackends(opts ...func(*ProjectBackendQuery)) *ProjectQuery {
+	query := (&ProjectBackendClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withProjectBackends = query
+	return _q
+}
+
+// WithStageBackendOverrides tells the query-builder to eager-load the nodes that are connected to
+// the "stage_backend_overrides" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *ProjectQuery) WithStageBackendOverrides(opts ...func(*StageBackendOverrideQuery)) *ProjectQuery {
+	query := (&StageBackendOverrideClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withStageBackendOverrides = query
+	return _q
+}
+
+// WithGlossaryEntries tells the query-builder to eager-load the nodes that are connected to
+// the "glossary_entries" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *ProjectQuery) WithGlossaryEntries(opts ...func(*GlossaryEntryQuery)) *ProjectQuery {
+	query := (&GlossaryEntryClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withGlossaryEntries = query
+	return _q
+}
+
+// WithTmEntries tells the query-builder to eager-load the nodes that are connected to
+// the "tm_entries" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *ProjectQuery) WithTmEntries(opts ...func(*TMEntryQuery)) *ProjectQuery {
+	query := (&TMEntryClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withTmEntries = query
 	return _q
 }
 
@@ -407,19 +586,17 @@ func (_q *ProjectQuery) prepareQuery(ctx context.Context) error {
 func (_q *ProjectQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Project, error) {
 	var (
 		nodes       = []*Project{}
-		withFKs     = _q.withFKs
 		_spec       = _q.querySpec()
-		loadedTypes = [2]bool{
-			_q.withOrganization != nil,
+		loadedTypes = [7]bool{
+			_q.withOwnerUser != nil,
+			_q.withOwnerOrg != nil,
+			_q.withProjectBackends != nil,
+			_q.withStageBackendOverrides != nil,
+			_q.withGlossaryEntries != nil,
+			_q.withTmEntries != nil,
 			_q.withJobs != nil,
 		}
 	)
-	if _q.withOrganization != nil {
-		withFKs = true
-	}
-	if withFKs {
-		_spec.Node.Columns = append(_spec.Node.Columns, project.ForeignKeys...)
-	}
 	_spec.ScanValues = func(columns []string) ([]any, error) {
 		return (*Project).scanValues(nil, columns)
 	}
@@ -438,9 +615,45 @@ func (_q *ProjectQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Proj
 	if len(nodes) == 0 {
 		return nodes, nil
 	}
-	if query := _q.withOrganization; query != nil {
-		if err := _q.loadOrganization(ctx, query, nodes, nil,
-			func(n *Project, e *Organization) { n.Edges.Organization = e }); err != nil {
+	if query := _q.withOwnerUser; query != nil {
+		if err := _q.loadOwnerUser(ctx, query, nodes, nil,
+			func(n *Project, e *User) { n.Edges.OwnerUser = e }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withOwnerOrg; query != nil {
+		if err := _q.loadOwnerOrg(ctx, query, nodes, nil,
+			func(n *Project, e *Organization) { n.Edges.OwnerOrg = e }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withProjectBackends; query != nil {
+		if err := _q.loadProjectBackends(ctx, query, nodes,
+			func(n *Project) { n.Edges.ProjectBackends = []*ProjectBackend{} },
+			func(n *Project, e *ProjectBackend) { n.Edges.ProjectBackends = append(n.Edges.ProjectBackends, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withStageBackendOverrides; query != nil {
+		if err := _q.loadStageBackendOverrides(ctx, query, nodes,
+			func(n *Project) { n.Edges.StageBackendOverrides = []*StageBackendOverride{} },
+			func(n *Project, e *StageBackendOverride) {
+				n.Edges.StageBackendOverrides = append(n.Edges.StageBackendOverrides, e)
+			}); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withGlossaryEntries; query != nil {
+		if err := _q.loadGlossaryEntries(ctx, query, nodes,
+			func(n *Project) { n.Edges.GlossaryEntries = []*GlossaryEntry{} },
+			func(n *Project, e *GlossaryEntry) { n.Edges.GlossaryEntries = append(n.Edges.GlossaryEntries, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withTmEntries; query != nil {
+		if err := _q.loadTmEntries(ctx, query, nodes,
+			func(n *Project) { n.Edges.TmEntries = []*TMEntry{} },
+			func(n *Project, e *TMEntry) { n.Edges.TmEntries = append(n.Edges.TmEntries, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -454,14 +667,46 @@ func (_q *ProjectQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Proj
 	return nodes, nil
 }
 
-func (_q *ProjectQuery) loadOrganization(ctx context.Context, query *OrganizationQuery, nodes []*Project, init func(*Project), assign func(*Project, *Organization)) error {
+func (_q *ProjectQuery) loadOwnerUser(ctx context.Context, query *UserQuery, nodes []*Project, init func(*Project), assign func(*Project, *User)) error {
 	ids := make([]int, 0, len(nodes))
 	nodeids := make(map[int][]*Project)
 	for i := range nodes {
-		if nodes[i].organization_projects == nil {
+		if nodes[i].OwnerUserID == nil {
 			continue
 		}
-		fk := *nodes[i].organization_projects
+		fk := *nodes[i].OwnerUserID
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	query.Where(user.IDIn(ids...))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nodeids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "owner_user_id" returned %v`, n.ID)
+		}
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
+	}
+	return nil
+}
+func (_q *ProjectQuery) loadOwnerOrg(ctx context.Context, query *OrganizationQuery, nodes []*Project, init func(*Project), assign func(*Project, *Organization)) error {
+	ids := make([]int, 0, len(nodes))
+	nodeids := make(map[int][]*Project)
+	for i := range nodes {
+		if nodes[i].OwnerOrgID == nil {
+			continue
+		}
+		fk := *nodes[i].OwnerOrgID
 		if _, ok := nodeids[fk]; !ok {
 			ids = append(ids, fk)
 		}
@@ -478,11 +723,139 @@ func (_q *ProjectQuery) loadOrganization(ctx context.Context, query *Organizatio
 	for _, n := range neighbors {
 		nodes, ok := nodeids[n.ID]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "organization_projects" returned %v`, n.ID)
+			return fmt.Errorf(`unexpected foreign-key "owner_org_id" returned %v`, n.ID)
 		}
 		for i := range nodes {
 			assign(nodes[i], n)
 		}
+	}
+	return nil
+}
+func (_q *ProjectQuery) loadProjectBackends(ctx context.Context, query *ProjectBackendQuery, nodes []*Project, init func(*Project), assign func(*Project, *ProjectBackend)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*Project)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	query.withFKs = true
+	query.Where(predicate.ProjectBackend(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(project.ProjectBackendsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.project_project_backends
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "project_project_backends" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "project_project_backends" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *ProjectQuery) loadStageBackendOverrides(ctx context.Context, query *StageBackendOverrideQuery, nodes []*Project, init func(*Project), assign func(*Project, *StageBackendOverride)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*Project)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	query.withFKs = true
+	query.Where(predicate.StageBackendOverride(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(project.StageBackendOverridesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.project_stage_backend_overrides
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "project_stage_backend_overrides" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "project_stage_backend_overrides" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *ProjectQuery) loadGlossaryEntries(ctx context.Context, query *GlossaryEntryQuery, nodes []*Project, init func(*Project), assign func(*Project, *GlossaryEntry)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*Project)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(glossaryentry.FieldProjectID)
+	}
+	query.Where(predicate.GlossaryEntry(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(project.GlossaryEntriesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.ProjectID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "project_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "project_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *ProjectQuery) loadTmEntries(ctx context.Context, query *TMEntryQuery, nodes []*Project, init func(*Project), assign func(*Project, *TMEntry)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*Project)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(tmentry.FieldProjectID)
+	}
+	query.Where(predicate.TMEntry(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(project.TmEntriesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.ProjectID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "project_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "project_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
 	}
 	return nil
 }
@@ -542,6 +915,12 @@ func (_q *ProjectQuery) querySpec() *sqlgraph.QuerySpec {
 			if fields[i] != project.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
+		}
+		if _q.withOwnerUser != nil {
+			_spec.Node.AddColumnOnce(project.FieldOwnerUserID)
+		}
+		if _q.withOwnerOrg != nil {
+			_spec.Node.AddColumnOnce(project.FieldOwnerOrgID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {

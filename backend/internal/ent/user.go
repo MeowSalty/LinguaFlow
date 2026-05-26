@@ -49,9 +49,13 @@ type UserEdges struct {
 	RefreshTokens []*RefreshToken `json:"refresh_tokens,omitempty"`
 	// Memberships holds the value of the memberships edge.
 	Memberships []*OrgMembership `json:"memberships,omitempty"`
+	// UserBackends holds the value of the user_backends edge.
+	UserBackends []*UserBackend `json:"user_backends,omitempty"`
+	// OwnedProjects holds the value of the owned_projects edge.
+	OwnedProjects []*Project `json:"owned_projects,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [4]bool
+	loadedTypes [6]bool
 }
 
 // JobsOrErr returns the Jobs value or an error if the edge
@@ -88,6 +92,24 @@ func (e UserEdges) MembershipsOrErr() ([]*OrgMembership, error) {
 		return e.Memberships, nil
 	}
 	return nil, &NotLoadedError{edge: "memberships"}
+}
+
+// UserBackendsOrErr returns the UserBackends value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) UserBackendsOrErr() ([]*UserBackend, error) {
+	if e.loadedTypes[4] {
+		return e.UserBackends, nil
+	}
+	return nil, &NotLoadedError{edge: "user_backends"}
+}
+
+// OwnedProjectsOrErr returns the OwnedProjects value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) OwnedProjectsOrErr() ([]*Project, error) {
+	if e.loadedTypes[5] {
+		return e.OwnedProjects, nil
+	}
+	return nil, &NotLoadedError{edge: "owned_projects"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -203,6 +225,16 @@ func (_m *User) QueryRefreshTokens() *RefreshTokenQuery {
 // QueryMemberships queries the "memberships" edge of the User entity.
 func (_m *User) QueryMemberships() *OrgMembershipQuery {
 	return NewUserClient(_m.config).QueryMemberships(_m)
+}
+
+// QueryUserBackends queries the "user_backends" edge of the User entity.
+func (_m *User) QueryUserBackends() *UserBackendQuery {
+	return NewUserClient(_m.config).QueryUserBackends(_m)
+}
+
+// QueryOwnedProjects queries the "owned_projects" edge of the User entity.
+func (_m *User) QueryOwnedProjects() *ProjectQuery {
+	return NewUserClient(_m.config).QueryOwnedProjects(_m)
 }
 
 // Update returns a builder for updating this User.

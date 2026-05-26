@@ -70,6 +70,21 @@ func Name(v string) predicate.Project {
 	return predicate.Project(sql.FieldEQ(FieldName, v))
 }
 
+// OwnerUserID applies equality check predicate on the "owner_user_id" field. It's identical to OwnerUserIDEQ.
+func OwnerUserID(v int) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldOwnerUserID, v))
+}
+
+// OwnerOrgID applies equality check predicate on the "owner_org_id" field. It's identical to OwnerOrgIDEQ.
+func OwnerOrgID(v int) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldOwnerOrgID, v))
+}
+
+// ResourceScope applies equality check predicate on the "resource_scope" field. It's identical to ResourceScopeEQ.
+func ResourceScope(v string) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldResourceScope, v))
+}
+
 // SourceLang applies equality check predicate on the "source_lang" field. It's identical to SourceLangEQ.
 func SourceLang(v string) predicate.Project {
 	return predicate.Project(sql.FieldEQ(FieldSourceLang, v))
@@ -225,6 +240,131 @@ func NameContainsFold(v string) predicate.Project {
 	return predicate.Project(sql.FieldContainsFold(FieldName, v))
 }
 
+// OwnerUserIDEQ applies the EQ predicate on the "owner_user_id" field.
+func OwnerUserIDEQ(v int) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldOwnerUserID, v))
+}
+
+// OwnerUserIDNEQ applies the NEQ predicate on the "owner_user_id" field.
+func OwnerUserIDNEQ(v int) predicate.Project {
+	return predicate.Project(sql.FieldNEQ(FieldOwnerUserID, v))
+}
+
+// OwnerUserIDIn applies the In predicate on the "owner_user_id" field.
+func OwnerUserIDIn(vs ...int) predicate.Project {
+	return predicate.Project(sql.FieldIn(FieldOwnerUserID, vs...))
+}
+
+// OwnerUserIDNotIn applies the NotIn predicate on the "owner_user_id" field.
+func OwnerUserIDNotIn(vs ...int) predicate.Project {
+	return predicate.Project(sql.FieldNotIn(FieldOwnerUserID, vs...))
+}
+
+// OwnerUserIDIsNil applies the IsNil predicate on the "owner_user_id" field.
+func OwnerUserIDIsNil() predicate.Project {
+	return predicate.Project(sql.FieldIsNull(FieldOwnerUserID))
+}
+
+// OwnerUserIDNotNil applies the NotNil predicate on the "owner_user_id" field.
+func OwnerUserIDNotNil() predicate.Project {
+	return predicate.Project(sql.FieldNotNull(FieldOwnerUserID))
+}
+
+// OwnerOrgIDEQ applies the EQ predicate on the "owner_org_id" field.
+func OwnerOrgIDEQ(v int) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldOwnerOrgID, v))
+}
+
+// OwnerOrgIDNEQ applies the NEQ predicate on the "owner_org_id" field.
+func OwnerOrgIDNEQ(v int) predicate.Project {
+	return predicate.Project(sql.FieldNEQ(FieldOwnerOrgID, v))
+}
+
+// OwnerOrgIDIn applies the In predicate on the "owner_org_id" field.
+func OwnerOrgIDIn(vs ...int) predicate.Project {
+	return predicate.Project(sql.FieldIn(FieldOwnerOrgID, vs...))
+}
+
+// OwnerOrgIDNotIn applies the NotIn predicate on the "owner_org_id" field.
+func OwnerOrgIDNotIn(vs ...int) predicate.Project {
+	return predicate.Project(sql.FieldNotIn(FieldOwnerOrgID, vs...))
+}
+
+// OwnerOrgIDIsNil applies the IsNil predicate on the "owner_org_id" field.
+func OwnerOrgIDIsNil() predicate.Project {
+	return predicate.Project(sql.FieldIsNull(FieldOwnerOrgID))
+}
+
+// OwnerOrgIDNotNil applies the NotNil predicate on the "owner_org_id" field.
+func OwnerOrgIDNotNil() predicate.Project {
+	return predicate.Project(sql.FieldNotNull(FieldOwnerOrgID))
+}
+
+// ResourceScopeEQ applies the EQ predicate on the "resource_scope" field.
+func ResourceScopeEQ(v string) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldResourceScope, v))
+}
+
+// ResourceScopeNEQ applies the NEQ predicate on the "resource_scope" field.
+func ResourceScopeNEQ(v string) predicate.Project {
+	return predicate.Project(sql.FieldNEQ(FieldResourceScope, v))
+}
+
+// ResourceScopeIn applies the In predicate on the "resource_scope" field.
+func ResourceScopeIn(vs ...string) predicate.Project {
+	return predicate.Project(sql.FieldIn(FieldResourceScope, vs...))
+}
+
+// ResourceScopeNotIn applies the NotIn predicate on the "resource_scope" field.
+func ResourceScopeNotIn(vs ...string) predicate.Project {
+	return predicate.Project(sql.FieldNotIn(FieldResourceScope, vs...))
+}
+
+// ResourceScopeGT applies the GT predicate on the "resource_scope" field.
+func ResourceScopeGT(v string) predicate.Project {
+	return predicate.Project(sql.FieldGT(FieldResourceScope, v))
+}
+
+// ResourceScopeGTE applies the GTE predicate on the "resource_scope" field.
+func ResourceScopeGTE(v string) predicate.Project {
+	return predicate.Project(sql.FieldGTE(FieldResourceScope, v))
+}
+
+// ResourceScopeLT applies the LT predicate on the "resource_scope" field.
+func ResourceScopeLT(v string) predicate.Project {
+	return predicate.Project(sql.FieldLT(FieldResourceScope, v))
+}
+
+// ResourceScopeLTE applies the LTE predicate on the "resource_scope" field.
+func ResourceScopeLTE(v string) predicate.Project {
+	return predicate.Project(sql.FieldLTE(FieldResourceScope, v))
+}
+
+// ResourceScopeContains applies the Contains predicate on the "resource_scope" field.
+func ResourceScopeContains(v string) predicate.Project {
+	return predicate.Project(sql.FieldContains(FieldResourceScope, v))
+}
+
+// ResourceScopeHasPrefix applies the HasPrefix predicate on the "resource_scope" field.
+func ResourceScopeHasPrefix(v string) predicate.Project {
+	return predicate.Project(sql.FieldHasPrefix(FieldResourceScope, v))
+}
+
+// ResourceScopeHasSuffix applies the HasSuffix predicate on the "resource_scope" field.
+func ResourceScopeHasSuffix(v string) predicate.Project {
+	return predicate.Project(sql.FieldHasSuffix(FieldResourceScope, v))
+}
+
+// ResourceScopeEqualFold applies the EqualFold predicate on the "resource_scope" field.
+func ResourceScopeEqualFold(v string) predicate.Project {
+	return predicate.Project(sql.FieldEqualFold(FieldResourceScope, v))
+}
+
+// ResourceScopeContainsFold applies the ContainsFold predicate on the "resource_scope" field.
+func ResourceScopeContainsFold(v string) predicate.Project {
+	return predicate.Project(sql.FieldContainsFold(FieldResourceScope, v))
+}
+
 // SourceLangEQ applies the EQ predicate on the "source_lang" field.
 func SourceLangEQ(v string) predicate.Project {
 	return predicate.Project(sql.FieldEQ(FieldSourceLang, v))
@@ -355,21 +495,136 @@ func TargetLangContainsFold(v string) predicate.Project {
 	return predicate.Project(sql.FieldContainsFold(FieldTargetLang, v))
 }
 
-// HasOrganization applies the HasEdge predicate on the "organization" edge.
-func HasOrganization() predicate.Project {
+// HasOwnerUser applies the HasEdge predicate on the "owner_user" edge.
+func HasOwnerUser() predicate.Project {
 	return predicate.Project(func(s *sql.Selector) {
 		step := sqlgraph.NewStep(
 			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, OrganizationTable, OrganizationColumn),
+			sqlgraph.Edge(sqlgraph.M2O, true, OwnerUserTable, OwnerUserColumn),
 		)
 		sqlgraph.HasNeighbors(s, step)
 	})
 }
 
-// HasOrganizationWith applies the HasEdge predicate on the "organization" edge with a given conditions (other predicates).
-func HasOrganizationWith(preds ...predicate.Organization) predicate.Project {
+// HasOwnerUserWith applies the HasEdge predicate on the "owner_user" edge with a given conditions (other predicates).
+func HasOwnerUserWith(preds ...predicate.User) predicate.Project {
 	return predicate.Project(func(s *sql.Selector) {
-		step := newOrganizationStep()
+		step := newOwnerUserStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasOwnerOrg applies the HasEdge predicate on the "owner_org" edge.
+func HasOwnerOrg() predicate.Project {
+	return predicate.Project(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, OwnerOrgTable, OwnerOrgColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasOwnerOrgWith applies the HasEdge predicate on the "owner_org" edge with a given conditions (other predicates).
+func HasOwnerOrgWith(preds ...predicate.Organization) predicate.Project {
+	return predicate.Project(func(s *sql.Selector) {
+		step := newOwnerOrgStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasProjectBackends applies the HasEdge predicate on the "project_backends" edge.
+func HasProjectBackends() predicate.Project {
+	return predicate.Project(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, ProjectBackendsTable, ProjectBackendsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasProjectBackendsWith applies the HasEdge predicate on the "project_backends" edge with a given conditions (other predicates).
+func HasProjectBackendsWith(preds ...predicate.ProjectBackend) predicate.Project {
+	return predicate.Project(func(s *sql.Selector) {
+		step := newProjectBackendsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasStageBackendOverrides applies the HasEdge predicate on the "stage_backend_overrides" edge.
+func HasStageBackendOverrides() predicate.Project {
+	return predicate.Project(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, StageBackendOverridesTable, StageBackendOverridesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasStageBackendOverridesWith applies the HasEdge predicate on the "stage_backend_overrides" edge with a given conditions (other predicates).
+func HasStageBackendOverridesWith(preds ...predicate.StageBackendOverride) predicate.Project {
+	return predicate.Project(func(s *sql.Selector) {
+		step := newStageBackendOverridesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasGlossaryEntries applies the HasEdge predicate on the "glossary_entries" edge.
+func HasGlossaryEntries() predicate.Project {
+	return predicate.Project(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, GlossaryEntriesTable, GlossaryEntriesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasGlossaryEntriesWith applies the HasEdge predicate on the "glossary_entries" edge with a given conditions (other predicates).
+func HasGlossaryEntriesWith(preds ...predicate.GlossaryEntry) predicate.Project {
+	return predicate.Project(func(s *sql.Selector) {
+		step := newGlossaryEntriesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasTmEntries applies the HasEdge predicate on the "tm_entries" edge.
+func HasTmEntries() predicate.Project {
+	return predicate.Project(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, TmEntriesTable, TmEntriesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasTmEntriesWith applies the HasEdge predicate on the "tm_entries" edge with a given conditions (other predicates).
+func HasTmEntriesWith(preds ...predicate.TMEntry) predicate.Project {
+	return predicate.Project(func(s *sql.Selector) {
+		step := newTmEntriesStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

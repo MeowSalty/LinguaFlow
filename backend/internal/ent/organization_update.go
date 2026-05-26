@@ -11,10 +11,13 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 )
 
 // OrganizationUpdate is the builder for updating Organization entities.
@@ -134,6 +137,51 @@ func (_u *OrganizationUpdate) AddMemberships(v ...*OrgMembership) *OrganizationU
 	return _u.AddMembershipIDs(ids...)
 }
 
+// AddOrgBackendIDs adds the "org_backends" edge to the OrgBackend entity by IDs.
+func (_u *OrganizationUpdate) AddOrgBackendIDs(ids ...int) *OrganizationUpdate {
+	_u.mutation.AddOrgBackendIDs(ids...)
+	return _u
+}
+
+// AddOrgBackends adds the "org_backends" edges to the OrgBackend entity.
+func (_u *OrganizationUpdate) AddOrgBackends(v ...*OrgBackend) *OrganizationUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddOrgBackendIDs(ids...)
+}
+
+// AddGlossaryEntryIDs adds the "glossary_entries" edge to the GlossaryEntry entity by IDs.
+func (_u *OrganizationUpdate) AddGlossaryEntryIDs(ids ...int) *OrganizationUpdate {
+	_u.mutation.AddGlossaryEntryIDs(ids...)
+	return _u
+}
+
+// AddGlossaryEntries adds the "glossary_entries" edges to the GlossaryEntry entity.
+func (_u *OrganizationUpdate) AddGlossaryEntries(v ...*GlossaryEntry) *OrganizationUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddGlossaryEntryIDs(ids...)
+}
+
+// AddTmEntryIDs adds the "tm_entries" edge to the TMEntry entity by IDs.
+func (_u *OrganizationUpdate) AddTmEntryIDs(ids ...int) *OrganizationUpdate {
+	_u.mutation.AddTmEntryIDs(ids...)
+	return _u
+}
+
+// AddTmEntries adds the "tm_entries" edges to the TMEntry entity.
+func (_u *OrganizationUpdate) AddTmEntries(v ...*TMEntry) *OrganizationUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddTmEntryIDs(ids...)
+}
+
 // Mutation returns the OrganizationMutation object of the builder.
 func (_u *OrganizationUpdate) Mutation() *OrganizationMutation {
 	return _u.mutation
@@ -179,6 +227,69 @@ func (_u *OrganizationUpdate) RemoveMemberships(v ...*OrgMembership) *Organizati
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveMembershipIDs(ids...)
+}
+
+// ClearOrgBackends clears all "org_backends" edges to the OrgBackend entity.
+func (_u *OrganizationUpdate) ClearOrgBackends() *OrganizationUpdate {
+	_u.mutation.ClearOrgBackends()
+	return _u
+}
+
+// RemoveOrgBackendIDs removes the "org_backends" edge to OrgBackend entities by IDs.
+func (_u *OrganizationUpdate) RemoveOrgBackendIDs(ids ...int) *OrganizationUpdate {
+	_u.mutation.RemoveOrgBackendIDs(ids...)
+	return _u
+}
+
+// RemoveOrgBackends removes "org_backends" edges to OrgBackend entities.
+func (_u *OrganizationUpdate) RemoveOrgBackends(v ...*OrgBackend) *OrganizationUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveOrgBackendIDs(ids...)
+}
+
+// ClearGlossaryEntries clears all "glossary_entries" edges to the GlossaryEntry entity.
+func (_u *OrganizationUpdate) ClearGlossaryEntries() *OrganizationUpdate {
+	_u.mutation.ClearGlossaryEntries()
+	return _u
+}
+
+// RemoveGlossaryEntryIDs removes the "glossary_entries" edge to GlossaryEntry entities by IDs.
+func (_u *OrganizationUpdate) RemoveGlossaryEntryIDs(ids ...int) *OrganizationUpdate {
+	_u.mutation.RemoveGlossaryEntryIDs(ids...)
+	return _u
+}
+
+// RemoveGlossaryEntries removes "glossary_entries" edges to GlossaryEntry entities.
+func (_u *OrganizationUpdate) RemoveGlossaryEntries(v ...*GlossaryEntry) *OrganizationUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveGlossaryEntryIDs(ids...)
+}
+
+// ClearTmEntries clears all "tm_entries" edges to the TMEntry entity.
+func (_u *OrganizationUpdate) ClearTmEntries() *OrganizationUpdate {
+	_u.mutation.ClearTmEntries()
+	return _u
+}
+
+// RemoveTmEntryIDs removes the "tm_entries" edge to TMEntry entities by IDs.
+func (_u *OrganizationUpdate) RemoveTmEntryIDs(ids ...int) *OrganizationUpdate {
+	_u.mutation.RemoveTmEntryIDs(ids...)
+	return _u
+}
+
+// RemoveTmEntries removes "tm_entries" edges to TMEntry entities.
+func (_u *OrganizationUpdate) RemoveTmEntries(v ...*TMEntry) *OrganizationUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveTmEntryIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -355,6 +466,141 @@ func (_u *OrganizationUpdate) sqlSave(ctx context.Context) (_node int, err error
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.OrgBackendsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.OrgBackendsTable,
+			Columns: []string{organization.OrgBackendsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(orgbackend.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedOrgBackendsIDs(); len(nodes) > 0 && !_u.mutation.OrgBackendsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.OrgBackendsTable,
+			Columns: []string{organization.OrgBackendsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(orgbackend.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.OrgBackendsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.OrgBackendsTable,
+			Columns: []string{organization.OrgBackendsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(orgbackend.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.GlossaryEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.GlossaryEntriesTable,
+			Columns: []string{organization.GlossaryEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(glossaryentry.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedGlossaryEntriesIDs(); len(nodes) > 0 && !_u.mutation.GlossaryEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.GlossaryEntriesTable,
+			Columns: []string{organization.GlossaryEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(glossaryentry.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.GlossaryEntriesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.GlossaryEntriesTable,
+			Columns: []string{organization.GlossaryEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(glossaryentry.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.TmEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.TmEntriesTable,
+			Columns: []string{organization.TmEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(tmentry.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedTmEntriesIDs(); len(nodes) > 0 && !_u.mutation.TmEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.TmEntriesTable,
+			Columns: []string{organization.TmEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(tmentry.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.TmEntriesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.TmEntriesTable,
+			Columns: []string{organization.TmEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(tmentry.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{organization.Label}
@@ -479,6 +725,51 @@ func (_u *OrganizationUpdateOne) AddMemberships(v ...*OrgMembership) *Organizati
 	return _u.AddMembershipIDs(ids...)
 }
 
+// AddOrgBackendIDs adds the "org_backends" edge to the OrgBackend entity by IDs.
+func (_u *OrganizationUpdateOne) AddOrgBackendIDs(ids ...int) *OrganizationUpdateOne {
+	_u.mutation.AddOrgBackendIDs(ids...)
+	return _u
+}
+
+// AddOrgBackends adds the "org_backends" edges to the OrgBackend entity.
+func (_u *OrganizationUpdateOne) AddOrgBackends(v ...*OrgBackend) *OrganizationUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddOrgBackendIDs(ids...)
+}
+
+// AddGlossaryEntryIDs adds the "glossary_entries" edge to the GlossaryEntry entity by IDs.
+func (_u *OrganizationUpdateOne) AddGlossaryEntryIDs(ids ...int) *OrganizationUpdateOne {
+	_u.mutation.AddGlossaryEntryIDs(ids...)
+	return _u
+}
+
+// AddGlossaryEntries adds the "glossary_entries" edges to the GlossaryEntry entity.
+func (_u *OrganizationUpdateOne) AddGlossaryEntries(v ...*GlossaryEntry) *OrganizationUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddGlossaryEntryIDs(ids...)
+}
+
+// AddTmEntryIDs adds the "tm_entries" edge to the TMEntry entity by IDs.
+func (_u *OrganizationUpdateOne) AddTmEntryIDs(ids ...int) *OrganizationUpdateOne {
+	_u.mutation.AddTmEntryIDs(ids...)
+	return _u
+}
+
+// AddTmEntries adds the "tm_entries" edges to the TMEntry entity.
+func (_u *OrganizationUpdateOne) AddTmEntries(v ...*TMEntry) *OrganizationUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddTmEntryIDs(ids...)
+}
+
 // Mutation returns the OrganizationMutation object of the builder.
 func (_u *OrganizationUpdateOne) Mutation() *OrganizationMutation {
 	return _u.mutation
@@ -524,6 +815,69 @@ func (_u *OrganizationUpdateOne) RemoveMemberships(v ...*OrgMembership) *Organiz
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveMembershipIDs(ids...)
+}
+
+// ClearOrgBackends clears all "org_backends" edges to the OrgBackend entity.
+func (_u *OrganizationUpdateOne) ClearOrgBackends() *OrganizationUpdateOne {
+	_u.mutation.ClearOrgBackends()
+	return _u
+}
+
+// RemoveOrgBackendIDs removes the "org_backends" edge to OrgBackend entities by IDs.
+func (_u *OrganizationUpdateOne) RemoveOrgBackendIDs(ids ...int) *OrganizationUpdateOne {
+	_u.mutation.RemoveOrgBackendIDs(ids...)
+	return _u
+}
+
+// RemoveOrgBackends removes "org_backends" edges to OrgBackend entities.
+func (_u *OrganizationUpdateOne) RemoveOrgBackends(v ...*OrgBackend) *OrganizationUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveOrgBackendIDs(ids...)
+}
+
+// ClearGlossaryEntries clears all "glossary_entries" edges to the GlossaryEntry entity.
+func (_u *OrganizationUpdateOne) ClearGlossaryEntries() *OrganizationUpdateOne {
+	_u.mutation.ClearGlossaryEntries()
+	return _u
+}
+
+// RemoveGlossaryEntryIDs removes the "glossary_entries" edge to GlossaryEntry entities by IDs.
+func (_u *OrganizationUpdateOne) RemoveGlossaryEntryIDs(ids ...int) *OrganizationUpdateOne {
+	_u.mutation.RemoveGlossaryEntryIDs(ids...)
+	return _u
+}
+
+// RemoveGlossaryEntries removes "glossary_entries" edges to GlossaryEntry entities.
+func (_u *OrganizationUpdateOne) RemoveGlossaryEntries(v ...*GlossaryEntry) *OrganizationUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveGlossaryEntryIDs(ids...)
+}
+
+// ClearTmEntries clears all "tm_entries" edges to the TMEntry entity.
+func (_u *OrganizationUpdateOne) ClearTmEntries() *OrganizationUpdateOne {
+	_u.mutation.ClearTmEntries()
+	return _u
+}
+
+// RemoveTmEntryIDs removes the "tm_entries" edge to TMEntry entities by IDs.
+func (_u *OrganizationUpdateOne) RemoveTmEntryIDs(ids ...int) *OrganizationUpdateOne {
+	_u.mutation.RemoveTmEntryIDs(ids...)
+	return _u
+}
+
+// RemoveTmEntries removes "tm_entries" edges to TMEntry entities.
+func (_u *OrganizationUpdateOne) RemoveTmEntries(v ...*TMEntry) *OrganizationUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveTmEntryIDs(ids...)
 }
 
 // Where appends a list predicates to the OrganizationUpdate builder.
@@ -723,6 +1077,141 @@ func (_u *OrganizationUpdateOne) sqlSave(ctx context.Context) (_node *Organizati
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(orgmembership.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.OrgBackendsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.OrgBackendsTable,
+			Columns: []string{organization.OrgBackendsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(orgbackend.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedOrgBackendsIDs(); len(nodes) > 0 && !_u.mutation.OrgBackendsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.OrgBackendsTable,
+			Columns: []string{organization.OrgBackendsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(orgbackend.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.OrgBackendsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.OrgBackendsTable,
+			Columns: []string{organization.OrgBackendsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(orgbackend.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.GlossaryEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.GlossaryEntriesTable,
+			Columns: []string{organization.GlossaryEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(glossaryentry.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedGlossaryEntriesIDs(); len(nodes) > 0 && !_u.mutation.GlossaryEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.GlossaryEntriesTable,
+			Columns: []string{organization.GlossaryEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(glossaryentry.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.GlossaryEntriesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.GlossaryEntriesTable,
+			Columns: []string{organization.GlossaryEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(glossaryentry.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.TmEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.TmEntriesTable,
+			Columns: []string{organization.TmEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(tmentry.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedTmEntriesIDs(); len(nodes) > 0 && !_u.mutation.TmEntriesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.TmEntriesTable,
+			Columns: []string{organization.TmEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(tmentry.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.TmEntriesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.TmEntriesTable,
+			Columns: []string{organization.TmEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(tmentry.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

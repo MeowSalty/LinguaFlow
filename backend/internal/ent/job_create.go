@@ -65,6 +65,82 @@ func (_c *JobCreate) SetNillableStatus(v *string) *JobCreate {
 	return _c
 }
 
+// SetSubJobCount sets the "sub_job_count" field.
+func (_c *JobCreate) SetSubJobCount(v int) *JobCreate {
+	_c.mutation.SetSubJobCount(v)
+	return _c
+}
+
+// SetNillableSubJobCount sets the "sub_job_count" field if the given value is not nil.
+func (_c *JobCreate) SetNillableSubJobCount(v *int) *JobCreate {
+	if v != nil {
+		_c.SetSubJobCount(*v)
+	}
+	return _c
+}
+
+// SetCompletedSubJobs sets the "completed_sub_jobs" field.
+func (_c *JobCreate) SetCompletedSubJobs(v int) *JobCreate {
+	_c.mutation.SetCompletedSubJobs(v)
+	return _c
+}
+
+// SetNillableCompletedSubJobs sets the "completed_sub_jobs" field if the given value is not nil.
+func (_c *JobCreate) SetNillableCompletedSubJobs(v *int) *JobCreate {
+	if v != nil {
+		_c.SetCompletedSubJobs(*v)
+	}
+	return _c
+}
+
+// SetFailedSubJobs sets the "failed_sub_jobs" field.
+func (_c *JobCreate) SetFailedSubJobs(v int) *JobCreate {
+	_c.mutation.SetFailedSubJobs(v)
+	return _c
+}
+
+// SetNillableFailedSubJobs sets the "failed_sub_jobs" field if the given value is not nil.
+func (_c *JobCreate) SetNillableFailedSubJobs(v *int) *JobCreate {
+	if v != nil {
+		_c.SetFailedSubJobs(*v)
+	}
+	return _c
+}
+
+// SetSourceLang sets the "source_lang" field.
+func (_c *JobCreate) SetSourceLang(v string) *JobCreate {
+	_c.mutation.SetSourceLang(v)
+	return _c
+}
+
+// SetNillableSourceLang sets the "source_lang" field if the given value is not nil.
+func (_c *JobCreate) SetNillableSourceLang(v *string) *JobCreate {
+	if v != nil {
+		_c.SetSourceLang(*v)
+	}
+	return _c
+}
+
+// SetTargetLang sets the "target_lang" field.
+func (_c *JobCreate) SetTargetLang(v string) *JobCreate {
+	_c.mutation.SetTargetLang(v)
+	return _c
+}
+
+// SetNillableTargetLang sets the "target_lang" field if the given value is not nil.
+func (_c *JobCreate) SetNillableTargetLang(v *string) *JobCreate {
+	if v != nil {
+		_c.SetTargetLang(*v)
+	}
+	return _c
+}
+
+// SetConfig sets the "config" field.
+func (_c *JobCreate) SetConfig(v map[string]interface{}) *JobCreate {
+	_c.mutation.SetConfig(v)
+	return _c
+}
+
 // SetInputPath sets the "input_path" field.
 func (_c *JobCreate) SetInputPath(v string) *JobCreate {
 	_c.mutation.SetInputPath(v)
@@ -199,6 +275,30 @@ func (_c *JobCreate) defaults() {
 		v := job.DefaultStatus
 		_c.mutation.SetStatus(v)
 	}
+	if _, ok := _c.mutation.SubJobCount(); !ok {
+		v := job.DefaultSubJobCount
+		_c.mutation.SetSubJobCount(v)
+	}
+	if _, ok := _c.mutation.CompletedSubJobs(); !ok {
+		v := job.DefaultCompletedSubJobs
+		_c.mutation.SetCompletedSubJobs(v)
+	}
+	if _, ok := _c.mutation.FailedSubJobs(); !ok {
+		v := job.DefaultFailedSubJobs
+		_c.mutation.SetFailedSubJobs(v)
+	}
+	if _, ok := _c.mutation.SourceLang(); !ok {
+		v := job.DefaultSourceLang
+		_c.mutation.SetSourceLang(v)
+	}
+	if _, ok := _c.mutation.TargetLang(); !ok {
+		v := job.DefaultTargetLang
+		_c.mutation.SetTargetLang(v)
+	}
+	if _, ok := _c.mutation.Config(); !ok {
+		v := job.DefaultConfig()
+		_c.mutation.SetConfig(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -211,6 +311,39 @@ func (_c *JobCreate) check() error {
 	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "Job.status"`)}
+	}
+	if _, ok := _c.mutation.SubJobCount(); !ok {
+		return &ValidationError{Name: "sub_job_count", err: errors.New(`ent: missing required field "Job.sub_job_count"`)}
+	}
+	if v, ok := _c.mutation.SubJobCount(); ok {
+		if err := job.SubJobCountValidator(v); err != nil {
+			return &ValidationError{Name: "sub_job_count", err: fmt.Errorf(`ent: validator failed for field "Job.sub_job_count": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.CompletedSubJobs(); !ok {
+		return &ValidationError{Name: "completed_sub_jobs", err: errors.New(`ent: missing required field "Job.completed_sub_jobs"`)}
+	}
+	if v, ok := _c.mutation.CompletedSubJobs(); ok {
+		if err := job.CompletedSubJobsValidator(v); err != nil {
+			return &ValidationError{Name: "completed_sub_jobs", err: fmt.Errorf(`ent: validator failed for field "Job.completed_sub_jobs": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.FailedSubJobs(); !ok {
+		return &ValidationError{Name: "failed_sub_jobs", err: errors.New(`ent: missing required field "Job.failed_sub_jobs"`)}
+	}
+	if v, ok := _c.mutation.FailedSubJobs(); ok {
+		if err := job.FailedSubJobsValidator(v); err != nil {
+			return &ValidationError{Name: "failed_sub_jobs", err: fmt.Errorf(`ent: validator failed for field "Job.failed_sub_jobs": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.SourceLang(); !ok {
+		return &ValidationError{Name: "source_lang", err: errors.New(`ent: missing required field "Job.source_lang"`)}
+	}
+	if _, ok := _c.mutation.TargetLang(); !ok {
+		return &ValidationError{Name: "target_lang", err: errors.New(`ent: missing required field "Job.target_lang"`)}
+	}
+	if _, ok := _c.mutation.Config(); !ok {
+		return &ValidationError{Name: "config", err: errors.New(`ent: missing required field "Job.config"`)}
 	}
 	if len(_c.mutation.ProjectIDs()) == 0 {
 		return &ValidationError{Name: "project", err: errors.New(`ent: missing required edge "Job.project"`)}
@@ -252,6 +385,30 @@ func (_c *JobCreate) createSpec() (*Job, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(job.FieldStatus, field.TypeString, value)
 		_node.Status = value
+	}
+	if value, ok := _c.mutation.SubJobCount(); ok {
+		_spec.SetField(job.FieldSubJobCount, field.TypeInt, value)
+		_node.SubJobCount = value
+	}
+	if value, ok := _c.mutation.CompletedSubJobs(); ok {
+		_spec.SetField(job.FieldCompletedSubJobs, field.TypeInt, value)
+		_node.CompletedSubJobs = value
+	}
+	if value, ok := _c.mutation.FailedSubJobs(); ok {
+		_spec.SetField(job.FieldFailedSubJobs, field.TypeInt, value)
+		_node.FailedSubJobs = value
+	}
+	if value, ok := _c.mutation.SourceLang(); ok {
+		_spec.SetField(job.FieldSourceLang, field.TypeString, value)
+		_node.SourceLang = value
+	}
+	if value, ok := _c.mutation.TargetLang(); ok {
+		_spec.SetField(job.FieldTargetLang, field.TypeString, value)
+		_node.TargetLang = value
+	}
+	if value, ok := _c.mutation.Config(); ok {
+		_spec.SetField(job.FieldConfig, field.TypeJSON, value)
+		_node.Config = value
 	}
 	if value, ok := _c.mutation.InputPath(); ok {
 		_spec.SetField(job.FieldInputPath, field.TypeString, value)

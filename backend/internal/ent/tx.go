@@ -12,22 +12,34 @@ import (
 // Tx is a transactional client that is created by calling Client.Tx().
 type Tx struct {
 	config
+	// GlossaryEntry is the client for interacting with the GlossaryEntry builders.
+	GlossaryEntry *GlossaryEntryClient
 	// Job is the client for interacting with the Job builders.
 	Job *JobClient
+	// OrgBackend is the client for interacting with the OrgBackend builders.
+	OrgBackend *OrgBackendClient
 	// OrgMembership is the client for interacting with the OrgMembership builders.
 	OrgMembership *OrgMembershipClient
 	// Organization is the client for interacting with the Organization builders.
 	Organization *OrganizationClient
 	// Project is the client for interacting with the Project builders.
 	Project *ProjectClient
+	// ProjectBackend is the client for interacting with the ProjectBackend builders.
+	ProjectBackend *ProjectBackendClient
 	// RefreshToken is the client for interacting with the RefreshToken builders.
 	RefreshToken *RefreshTokenClient
 	// Segment is the client for interacting with the Segment builders.
 	Segment *SegmentClient
+	// StageBackendOverride is the client for interacting with the StageBackendOverride builders.
+	StageBackendOverride *StageBackendOverrideClient
 	// SubJob is the client for interacting with the SubJob builders.
 	SubJob *SubJobClient
+	// TMEntry is the client for interacting with the TMEntry builders.
+	TMEntry *TMEntryClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
+	// UserBackend is the client for interacting with the UserBackend builders.
+	UserBackend *UserBackendClient
 
 	// lazily loaded.
 	client     *Client
@@ -159,14 +171,20 @@ func (tx *Tx) Client() *Client {
 }
 
 func (tx *Tx) init() {
+	tx.GlossaryEntry = NewGlossaryEntryClient(tx.config)
 	tx.Job = NewJobClient(tx.config)
+	tx.OrgBackend = NewOrgBackendClient(tx.config)
 	tx.OrgMembership = NewOrgMembershipClient(tx.config)
 	tx.Organization = NewOrganizationClient(tx.config)
 	tx.Project = NewProjectClient(tx.config)
+	tx.ProjectBackend = NewProjectBackendClient(tx.config)
 	tx.RefreshToken = NewRefreshTokenClient(tx.config)
 	tx.Segment = NewSegmentClient(tx.config)
+	tx.StageBackendOverride = NewStageBackendOverrideClient(tx.config)
 	tx.SubJob = NewSubJobClient(tx.config)
+	tx.TMEntry = NewTMEntryClient(tx.config)
 	tx.User = NewUserClient(tx.config)
+	tx.UserBackend = NewUserBackendClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.
@@ -176,7 +194,7 @@ func (tx *Tx) init() {
 // of them in order to commit or rollback the transaction.
 //
 // If a closed transaction is embedded in one of the generated entities, and the entity
-// applies a query, for example: Job.QueryXXX(), the query will be executed
+// applies a query, for example: GlossaryEntry.QueryXXX(), the query will be executed
 // through the driver which created this transaction.
 //
 // Note that txDriver is not goroutine safe.

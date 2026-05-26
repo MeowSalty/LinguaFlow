@@ -10,9 +10,12 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 )
 
 // OrganizationCreate is the builder for creating a Organization entity.
@@ -118,6 +121,51 @@ func (_c *OrganizationCreate) AddMemberships(v ...*OrgMembership) *OrganizationC
 		ids[i] = v[i].ID
 	}
 	return _c.AddMembershipIDs(ids...)
+}
+
+// AddOrgBackendIDs adds the "org_backends" edge to the OrgBackend entity by IDs.
+func (_c *OrganizationCreate) AddOrgBackendIDs(ids ...int) *OrganizationCreate {
+	_c.mutation.AddOrgBackendIDs(ids...)
+	return _c
+}
+
+// AddOrgBackends adds the "org_backends" edges to the OrgBackend entity.
+func (_c *OrganizationCreate) AddOrgBackends(v ...*OrgBackend) *OrganizationCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddOrgBackendIDs(ids...)
+}
+
+// AddGlossaryEntryIDs adds the "glossary_entries" edge to the GlossaryEntry entity by IDs.
+func (_c *OrganizationCreate) AddGlossaryEntryIDs(ids ...int) *OrganizationCreate {
+	_c.mutation.AddGlossaryEntryIDs(ids...)
+	return _c
+}
+
+// AddGlossaryEntries adds the "glossary_entries" edges to the GlossaryEntry entity.
+func (_c *OrganizationCreate) AddGlossaryEntries(v ...*GlossaryEntry) *OrganizationCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddGlossaryEntryIDs(ids...)
+}
+
+// AddTmEntryIDs adds the "tm_entries" edge to the TMEntry entity by IDs.
+func (_c *OrganizationCreate) AddTmEntryIDs(ids ...int) *OrganizationCreate {
+	_c.mutation.AddTmEntryIDs(ids...)
+	return _c
+}
+
+// AddTmEntries adds the "tm_entries" edges to the TMEntry entity.
+func (_c *OrganizationCreate) AddTmEntries(v ...*TMEntry) *OrganizationCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddTmEntryIDs(ids...)
 }
 
 // Mutation returns the OrganizationMutation object of the builder.
@@ -264,6 +312,54 @@ func (_c *OrganizationCreate) createSpec() (*Organization, *sqlgraph.CreateSpec)
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(orgmembership.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.OrgBackendsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.OrgBackendsTable,
+			Columns: []string{organization.OrgBackendsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(orgbackend.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.GlossaryEntriesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.GlossaryEntriesTable,
+			Columns: []string{organization.GlossaryEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(glossaryentry.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.TmEntriesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.TmEntriesTable,
+			Columns: []string{organization.TmEntriesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(tmentry.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

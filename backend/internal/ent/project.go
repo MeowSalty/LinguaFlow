@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
 // Project is the model entity for the Project schema.
@@ -24,43 +26,107 @@ type Project struct {
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 	// Name holds the value of the "name" field.
 	Name string `json:"name,omitempty"`
+	// OwnerUserID holds the value of the "owner_user_id" field.
+	OwnerUserID *int `json:"owner_user_id,omitempty"`
+	// OwnerOrgID holds the value of the "owner_org_id" field.
+	OwnerOrgID *int `json:"owner_org_id,omitempty"`
+	// ResourceScope holds the value of the "resource_scope" field.
+	ResourceScope string `json:"resource_scope,omitempty"`
+	// Config holds the value of the "config" field.
+	Config map[string]interface{} `json:"config,omitempty"`
 	// SourceLang holds the value of the "source_lang" field.
 	SourceLang string `json:"source_lang,omitempty"`
 	// TargetLang holds the value of the "target_lang" field.
 	TargetLang string `json:"target_lang,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the ProjectQuery when eager-loading is set.
-	Edges                 ProjectEdges `json:"edges"`
-	organization_projects *int
-	selectValues          sql.SelectValues
+	Edges        ProjectEdges `json:"edges"`
+	selectValues sql.SelectValues
 }
 
 // ProjectEdges holds the relations/edges for other nodes in the graph.
 type ProjectEdges struct {
-	// Organization holds the value of the organization edge.
-	Organization *Organization `json:"organization,omitempty"`
+	// OwnerUser holds the value of the owner_user edge.
+	OwnerUser *User `json:"owner_user,omitempty"`
+	// OwnerOrg holds the value of the owner_org edge.
+	OwnerOrg *Organization `json:"owner_org,omitempty"`
+	// ProjectBackends holds the value of the project_backends edge.
+	ProjectBackends []*ProjectBackend `json:"project_backends,omitempty"`
+	// StageBackendOverrides holds the value of the stage_backend_overrides edge.
+	StageBackendOverrides []*StageBackendOverride `json:"stage_backend_overrides,omitempty"`
+	// GlossaryEntries holds the value of the glossary_entries edge.
+	GlossaryEntries []*GlossaryEntry `json:"glossary_entries,omitempty"`
+	// TmEntries holds the value of the tm_entries edge.
+	TmEntries []*TMEntry `json:"tm_entries,omitempty"`
 	// Jobs holds the value of the jobs edge.
 	Jobs []*Job `json:"jobs,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [2]bool
+	loadedTypes [7]bool
 }
 
-// OrganizationOrErr returns the Organization value or an error if the edge
+// OwnerUserOrErr returns the OwnerUser value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
-func (e ProjectEdges) OrganizationOrErr() (*Organization, error) {
-	if e.Organization != nil {
-		return e.Organization, nil
+func (e ProjectEdges) OwnerUserOrErr() (*User, error) {
+	if e.OwnerUser != nil {
+		return e.OwnerUser, nil
 	} else if e.loadedTypes[0] {
+		return nil, &NotFoundError{label: user.Label}
+	}
+	return nil, &NotLoadedError{edge: "owner_user"}
+}
+
+// OwnerOrgOrErr returns the OwnerOrg value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e ProjectEdges) OwnerOrgOrErr() (*Organization, error) {
+	if e.OwnerOrg != nil {
+		return e.OwnerOrg, nil
+	} else if e.loadedTypes[1] {
 		return nil, &NotFoundError{label: organization.Label}
 	}
-	return nil, &NotLoadedError{edge: "organization"}
+	return nil, &NotLoadedError{edge: "owner_org"}
+}
+
+// ProjectBackendsOrErr returns the ProjectBackends value or an error if the edge
+// was not loaded in eager-loading.
+func (e ProjectEdges) ProjectBackendsOrErr() ([]*ProjectBackend, error) {
+	if e.loadedTypes[2] {
+		return e.ProjectBackends, nil
+	}
+	return nil, &NotLoadedError{edge: "project_backends"}
+}
+
+// StageBackendOverridesOrErr returns the StageBackendOverrides value or an error if the edge
+// was not loaded in eager-loading.
+func (e ProjectEdges) StageBackendOverridesOrErr() ([]*StageBackendOverride, error) {
+	if e.loadedTypes[3] {
+		return e.StageBackendOverrides, nil
+	}
+	return nil, &NotLoadedError{edge: "stage_backend_overrides"}
+}
+
+// GlossaryEntriesOrErr returns the GlossaryEntries value or an error if the edge
+// was not loaded in eager-loading.
+func (e ProjectEdges) GlossaryEntriesOrErr() ([]*GlossaryEntry, error) {
+	if e.loadedTypes[4] {
+		return e.GlossaryEntries, nil
+	}
+	return nil, &NotLoadedError{edge: "glossary_entries"}
+}
+
+// TmEntriesOrErr returns the TmEntries value or an error if the edge
+// was not loaded in eager-loading.
+func (e ProjectEdges) TmEntriesOrErr() ([]*TMEntry, error) {
+	if e.loadedTypes[5] {
+		return e.TmEntries, nil
+	}
+	return nil, &NotLoadedError{edge: "tm_entries"}
 }
 
 // JobsOrErr returns the Jobs value or an error if the edge
 // was not loaded in eager-loading.
 func (e ProjectEdges) JobsOrErr() ([]*Job, error) {
-	if e.loadedTypes[1] {
+	if e.loadedTypes[6] {
 		return e.Jobs, nil
 	}
 	return nil, &NotLoadedError{edge: "jobs"}
@@ -71,14 +137,14 @@ func (*Project) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case project.FieldID:
+		case project.FieldConfig:
+			values[i] = new([]byte)
+		case project.FieldID, project.FieldOwnerUserID, project.FieldOwnerOrgID:
 			values[i] = new(sql.NullInt64)
-		case project.FieldName, project.FieldSourceLang, project.FieldTargetLang:
+		case project.FieldName, project.FieldResourceScope, project.FieldSourceLang, project.FieldTargetLang:
 			values[i] = new(sql.NullString)
 		case project.FieldCreatedAt, project.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
-		case project.ForeignKeys[0]: // organization_projects
-			values[i] = new(sql.NullInt64)
 		default:
 			values[i] = new(sql.UnknownType)
 		}
@@ -118,6 +184,34 @@ func (_m *Project) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Name = value.String
 			}
+		case project.FieldOwnerUserID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field owner_user_id", values[i])
+			} else if value.Valid {
+				_m.OwnerUserID = new(int)
+				*_m.OwnerUserID = int(value.Int64)
+			}
+		case project.FieldOwnerOrgID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field owner_org_id", values[i])
+			} else if value.Valid {
+				_m.OwnerOrgID = new(int)
+				*_m.OwnerOrgID = int(value.Int64)
+			}
+		case project.FieldResourceScope:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field resource_scope", values[i])
+			} else if value.Valid {
+				_m.ResourceScope = value.String
+			}
+		case project.FieldConfig:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field config", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.Config); err != nil {
+					return fmt.Errorf("unmarshal field config: %w", err)
+				}
+			}
 		case project.FieldSourceLang:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field source_lang", values[i])
@@ -129,13 +223,6 @@ func (_m *Project) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field target_lang", values[i])
 			} else if value.Valid {
 				_m.TargetLang = value.String
-			}
-		case project.ForeignKeys[0]:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for edge-field organization_projects", value)
-			} else if value.Valid {
-				_m.organization_projects = new(int)
-				*_m.organization_projects = int(value.Int64)
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -150,9 +237,34 @@ func (_m *Project) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
 }
 
-// QueryOrganization queries the "organization" edge of the Project entity.
-func (_m *Project) QueryOrganization() *OrganizationQuery {
-	return NewProjectClient(_m.config).QueryOrganization(_m)
+// QueryOwnerUser queries the "owner_user" edge of the Project entity.
+func (_m *Project) QueryOwnerUser() *UserQuery {
+	return NewProjectClient(_m.config).QueryOwnerUser(_m)
+}
+
+// QueryOwnerOrg queries the "owner_org" edge of the Project entity.
+func (_m *Project) QueryOwnerOrg() *OrganizationQuery {
+	return NewProjectClient(_m.config).QueryOwnerOrg(_m)
+}
+
+// QueryProjectBackends queries the "project_backends" edge of the Project entity.
+func (_m *Project) QueryProjectBackends() *ProjectBackendQuery {
+	return NewProjectClient(_m.config).QueryProjectBackends(_m)
+}
+
+// QueryStageBackendOverrides queries the "stage_backend_overrides" edge of the Project entity.
+func (_m *Project) QueryStageBackendOverrides() *StageBackendOverrideQuery {
+	return NewProjectClient(_m.config).QueryStageBackendOverrides(_m)
+}
+
+// QueryGlossaryEntries queries the "glossary_entries" edge of the Project entity.
+func (_m *Project) QueryGlossaryEntries() *GlossaryEntryQuery {
+	return NewProjectClient(_m.config).QueryGlossaryEntries(_m)
+}
+
+// QueryTmEntries queries the "tm_entries" edge of the Project entity.
+func (_m *Project) QueryTmEntries() *TMEntryQuery {
+	return NewProjectClient(_m.config).QueryTmEntries(_m)
 }
 
 // QueryJobs queries the "jobs" edge of the Project entity.
@@ -191,6 +303,22 @@ func (_m *Project) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("name=")
 	builder.WriteString(_m.Name)
+	builder.WriteString(", ")
+	if v := _m.OwnerUserID; v != nil {
+		builder.WriteString("owner_user_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.OwnerOrgID; v != nil {
+		builder.WriteString("owner_org_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	builder.WriteString("resource_scope=")
+	builder.WriteString(_m.ResourceScope)
+	builder.WriteString(", ")
+	builder.WriteString("config=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Config))
 	builder.WriteString(", ")
 	builder.WriteString("source_lang=")
 	builder.WriteString(_m.SourceLang)

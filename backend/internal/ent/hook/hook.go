@@ -9,6 +9,18 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 )
 
+// The GlossaryEntryFunc type is an adapter to allow the use of ordinary
+// function as GlossaryEntry mutator.
+type GlossaryEntryFunc func(context.Context, *ent.GlossaryEntryMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f GlossaryEntryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.GlossaryEntryMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GlossaryEntryMutation", m)
+}
+
 // The JobFunc type is an adapter to allow the use of ordinary
 // function as Job mutator.
 type JobFunc func(context.Context, *ent.JobMutation) (ent.Value, error)
@@ -19,6 +31,18 @@ func (f JobFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) 
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.JobMutation", m)
+}
+
+// The OrgBackendFunc type is an adapter to allow the use of ordinary
+// function as OrgBackend mutator.
+type OrgBackendFunc func(context.Context, *ent.OrgBackendMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f OrgBackendFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.OrgBackendMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.OrgBackendMutation", m)
 }
 
 // The OrgMembershipFunc type is an adapter to allow the use of ordinary
@@ -57,6 +81,18 @@ func (f ProjectFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ProjectMutation", m)
 }
 
+// The ProjectBackendFunc type is an adapter to allow the use of ordinary
+// function as ProjectBackend mutator.
+type ProjectBackendFunc func(context.Context, *ent.ProjectBackendMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ProjectBackendFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ProjectBackendMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ProjectBackendMutation", m)
+}
+
 // The RefreshTokenFunc type is an adapter to allow the use of ordinary
 // function as RefreshToken mutator.
 type RefreshTokenFunc func(context.Context, *ent.RefreshTokenMutation) (ent.Value, error)
@@ -81,6 +117,18 @@ func (f SegmentFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SegmentMutation", m)
 }
 
+// The StageBackendOverrideFunc type is an adapter to allow the use of ordinary
+// function as StageBackendOverride mutator.
+type StageBackendOverrideFunc func(context.Context, *ent.StageBackendOverrideMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f StageBackendOverrideFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.StageBackendOverrideMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StageBackendOverrideMutation", m)
+}
+
 // The SubJobFunc type is an adapter to allow the use of ordinary
 // function as SubJob mutator.
 type SubJobFunc func(context.Context, *ent.SubJobMutation) (ent.Value, error)
@@ -93,6 +141,18 @@ func (f SubJobFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, erro
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SubJobMutation", m)
 }
 
+// The TMEntryFunc type is an adapter to allow the use of ordinary
+// function as TMEntry mutator.
+type TMEntryFunc func(context.Context, *ent.TMEntryMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f TMEntryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.TMEntryMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.TMEntryMutation", m)
+}
+
 // The UserFunc type is an adapter to allow the use of ordinary
 // function as User mutator.
 type UserFunc func(context.Context, *ent.UserMutation) (ent.Value, error)
@@ -103,6 +163,18 @@ func (f UserFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error)
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UserMutation", m)
+}
+
+// The UserBackendFunc type is an adapter to allow the use of ordinary
+// function as UserBackend mutator.
+type UserBackendFunc func(context.Context, *ent.UserBackendMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f UserBackendFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.UserBackendMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UserBackendMutation", m)
 }
 
 // Condition is a hook condition function.

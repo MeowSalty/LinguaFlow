@@ -6,8 +6,14 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
+// GlossaryEntry is the predicate function for glossaryentry builders.
+type GlossaryEntry func(*sql.Selector)
+
 // Job is the predicate function for job builders.
 type Job func(*sql.Selector)
+
+// OrgBackend is the predicate function for orgbackend builders.
+type OrgBackend func(*sql.Selector)
 
 // OrgMembership is the predicate function for orgmembership builders.
 type OrgMembership func(*sql.Selector)
@@ -18,14 +24,26 @@ type Organization func(*sql.Selector)
 // Project is the predicate function for project builders.
 type Project func(*sql.Selector)
 
+// ProjectBackend is the predicate function for projectbackend builders.
+type ProjectBackend func(*sql.Selector)
+
 // RefreshToken is the predicate function for refreshtoken builders.
 type RefreshToken func(*sql.Selector)
 
 // Segment is the predicate function for segment builders.
 type Segment func(*sql.Selector)
 
+// StageBackendOverride is the predicate function for stagebackendoverride builders.
+type StageBackendOverride func(*sql.Selector)
+
 // SubJob is the predicate function for subjob builders.
 type SubJob func(*sql.Selector)
 
+// TMEntry is the predicate function for tmentry builders.
+type TMEntry func(*sql.Selector)
+
 // User is the predicate function for user builders.
 type User func(*sql.Selector)
+
+// UserBackend is the predicate function for userbackend builders.
+type UserBackend func(*sql.Selector)
