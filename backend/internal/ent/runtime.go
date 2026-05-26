@@ -5,6 +5,7 @@ package ent
 import (
 	"time"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
@@ -18,6 +19,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
 )
@@ -26,6 +28,37 @@ import (
 // (default values, validators, hooks and policies) and stitches it
 // to their package variables.
 func init() {
+	activitylogMixin := schema.ActivityLog{}.Mixin()
+	activitylogMixinFields0 := activitylogMixin[0].Fields()
+	_ = activitylogMixinFields0
+	activitylogFields := schema.ActivityLog{}.Fields()
+	_ = activitylogFields
+	// activitylogDescCreatedAt is the schema descriptor for created_at field.
+	activitylogDescCreatedAt := activitylogMixinFields0[0].Descriptor()
+	// activitylog.DefaultCreatedAt holds the default value on creation for the created_at field.
+	activitylog.DefaultCreatedAt = activitylogDescCreatedAt.Default.(func() time.Time)
+	// activitylogDescUpdatedAt is the schema descriptor for updated_at field.
+	activitylogDescUpdatedAt := activitylogMixinFields0[1].Descriptor()
+	// activitylog.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	activitylog.DefaultUpdatedAt = activitylogDescUpdatedAt.Default.(func() time.Time)
+	// activitylog.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	activitylog.UpdateDefaultUpdatedAt = activitylogDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// activitylogDescAction is the schema descriptor for action field.
+	activitylogDescAction := activitylogFields[0].Descriptor()
+	// activitylog.ActionValidator is a validator for the "action" field. It is called by the builders before save.
+	activitylog.ActionValidator = activitylogDescAction.Validators[0].(func(string) error)
+	// activitylogDescResourceType is the schema descriptor for resource_type field.
+	activitylogDescResourceType := activitylogFields[1].Descriptor()
+	// activitylog.ResourceTypeValidator is a validator for the "resource_type" field. It is called by the builders before save.
+	activitylog.ResourceTypeValidator = activitylogDescResourceType.Validators[0].(func(string) error)
+	// activitylogDescResourceID is the schema descriptor for resource_id field.
+	activitylogDescResourceID := activitylogFields[2].Descriptor()
+	// activitylog.ResourceIDValidator is a validator for the "resource_id" field. It is called by the builders before save.
+	activitylog.ResourceIDValidator = activitylogDescResourceID.Validators[0].(func(int) error)
+	// activitylogDescMetadata is the schema descriptor for metadata field.
+	activitylogDescMetadata := activitylogFields[4].Descriptor()
+	// activitylog.DefaultMetadata holds the default value on creation for the metadata field.
+	activitylog.DefaultMetadata = activitylogDescMetadata.Default.(func() map[string]interface{})
 	glossaryentryMixin := schema.GlossaryEntry{}.Mixin()
 	glossaryentryMixinFields0 := glossaryentryMixin[0].Fields()
 	_ = glossaryentryMixinFields0
@@ -396,6 +429,49 @@ func init() {
 	tmentryDescOrganizationID := tmentryFields[8].Descriptor()
 	// tmentry.OrganizationIDValidator is a validator for the "organization_id" field. It is called by the builders before save.
 	tmentry.OrganizationIDValidator = tmentryDescOrganizationID.Validators[0].(func(int) error)
+	usagerecordMixin := schema.UsageRecord{}.Mixin()
+	usagerecordMixinFields0 := usagerecordMixin[0].Fields()
+	_ = usagerecordMixinFields0
+	usagerecordFields := schema.UsageRecord{}.Fields()
+	_ = usagerecordFields
+	// usagerecordDescCreatedAt is the schema descriptor for created_at field.
+	usagerecordDescCreatedAt := usagerecordMixinFields0[0].Descriptor()
+	// usagerecord.DefaultCreatedAt holds the default value on creation for the created_at field.
+	usagerecord.DefaultCreatedAt = usagerecordDescCreatedAt.Default.(func() time.Time)
+	// usagerecordDescUpdatedAt is the schema descriptor for updated_at field.
+	usagerecordDescUpdatedAt := usagerecordMixinFields0[1].Descriptor()
+	// usagerecord.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	usagerecord.DefaultUpdatedAt = usagerecordDescUpdatedAt.Default.(func() time.Time)
+	// usagerecord.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	usagerecord.UpdateDefaultUpdatedAt = usagerecordDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// usagerecordDescSource is the schema descriptor for source field.
+	usagerecordDescSource := usagerecordFields[0].Descriptor()
+	// usagerecord.DefaultSource holds the default value on creation for the source field.
+	usagerecord.DefaultSource = usagerecordDescSource.Default.(string)
+	// usagerecordDescAPICalls is the schema descriptor for api_calls field.
+	usagerecordDescAPICalls := usagerecordFields[1].Descriptor()
+	// usagerecord.DefaultAPICalls holds the default value on creation for the api_calls field.
+	usagerecord.DefaultAPICalls = usagerecordDescAPICalls.Default.(int)
+	// usagerecord.APICallsValidator is a validator for the "api_calls" field. It is called by the builders before save.
+	usagerecord.APICallsValidator = usagerecordDescAPICalls.Validators[0].(func(int) error)
+	// usagerecordDescInputTokens is the schema descriptor for input_tokens field.
+	usagerecordDescInputTokens := usagerecordFields[2].Descriptor()
+	// usagerecord.DefaultInputTokens holds the default value on creation for the input_tokens field.
+	usagerecord.DefaultInputTokens = usagerecordDescInputTokens.Default.(int)
+	// usagerecord.InputTokensValidator is a validator for the "input_tokens" field. It is called by the builders before save.
+	usagerecord.InputTokensValidator = usagerecordDescInputTokens.Validators[0].(func(int) error)
+	// usagerecordDescOutputTokens is the schema descriptor for output_tokens field.
+	usagerecordDescOutputTokens := usagerecordFields[3].Descriptor()
+	// usagerecord.DefaultOutputTokens holds the default value on creation for the output_tokens field.
+	usagerecord.DefaultOutputTokens = usagerecordDescOutputTokens.Default.(int)
+	// usagerecord.OutputTokensValidator is a validator for the "output_tokens" field. It is called by the builders before save.
+	usagerecord.OutputTokensValidator = usagerecordDescOutputTokens.Validators[0].(func(int) error)
+	// usagerecordDescSegmentCount is the schema descriptor for segment_count field.
+	usagerecordDescSegmentCount := usagerecordFields[4].Descriptor()
+	// usagerecord.DefaultSegmentCount holds the default value on creation for the segment_count field.
+	usagerecord.DefaultSegmentCount = usagerecordDescSegmentCount.Default.(int)
+	// usagerecord.SegmentCountValidator is a validator for the "segment_count" field. It is called by the builders before save.
+	usagerecord.SegmentCountValidator = usagerecordDescSegmentCount.Validators[0].(func(int) error)
 	userMixin := schema.User{}.Mixin()
 	userMixinFields0 := userMixin[0].Fields()
 	_ = userMixinFields0

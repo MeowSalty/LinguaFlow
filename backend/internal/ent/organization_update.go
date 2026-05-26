@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgbackend"
@@ -18,6 +19,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 )
 
 // OrganizationUpdate is the builder for updating Organization entities.
@@ -182,6 +184,36 @@ func (_u *OrganizationUpdate) AddTmEntries(v ...*TMEntry) *OrganizationUpdate {
 	return _u.AddTmEntryIDs(ids...)
 }
 
+// AddActivityLogIDs adds the "activity_logs" edge to the ActivityLog entity by IDs.
+func (_u *OrganizationUpdate) AddActivityLogIDs(ids ...int) *OrganizationUpdate {
+	_u.mutation.AddActivityLogIDs(ids...)
+	return _u
+}
+
+// AddActivityLogs adds the "activity_logs" edges to the ActivityLog entity.
+func (_u *OrganizationUpdate) AddActivityLogs(v ...*ActivityLog) *OrganizationUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddActivityLogIDs(ids...)
+}
+
+// AddUsageRecordIDs adds the "usage_records" edge to the UsageRecord entity by IDs.
+func (_u *OrganizationUpdate) AddUsageRecordIDs(ids ...int) *OrganizationUpdate {
+	_u.mutation.AddUsageRecordIDs(ids...)
+	return _u
+}
+
+// AddUsageRecords adds the "usage_records" edges to the UsageRecord entity.
+func (_u *OrganizationUpdate) AddUsageRecords(v ...*UsageRecord) *OrganizationUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddUsageRecordIDs(ids...)
+}
+
 // Mutation returns the OrganizationMutation object of the builder.
 func (_u *OrganizationUpdate) Mutation() *OrganizationMutation {
 	return _u.mutation
@@ -290,6 +322,48 @@ func (_u *OrganizationUpdate) RemoveTmEntries(v ...*TMEntry) *OrganizationUpdate
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveTmEntryIDs(ids...)
+}
+
+// ClearActivityLogs clears all "activity_logs" edges to the ActivityLog entity.
+func (_u *OrganizationUpdate) ClearActivityLogs() *OrganizationUpdate {
+	_u.mutation.ClearActivityLogs()
+	return _u
+}
+
+// RemoveActivityLogIDs removes the "activity_logs" edge to ActivityLog entities by IDs.
+func (_u *OrganizationUpdate) RemoveActivityLogIDs(ids ...int) *OrganizationUpdate {
+	_u.mutation.RemoveActivityLogIDs(ids...)
+	return _u
+}
+
+// RemoveActivityLogs removes "activity_logs" edges to ActivityLog entities.
+func (_u *OrganizationUpdate) RemoveActivityLogs(v ...*ActivityLog) *OrganizationUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveActivityLogIDs(ids...)
+}
+
+// ClearUsageRecords clears all "usage_records" edges to the UsageRecord entity.
+func (_u *OrganizationUpdate) ClearUsageRecords() *OrganizationUpdate {
+	_u.mutation.ClearUsageRecords()
+	return _u
+}
+
+// RemoveUsageRecordIDs removes the "usage_records" edge to UsageRecord entities by IDs.
+func (_u *OrganizationUpdate) RemoveUsageRecordIDs(ids ...int) *OrganizationUpdate {
+	_u.mutation.RemoveUsageRecordIDs(ids...)
+	return _u
+}
+
+// RemoveUsageRecords removes "usage_records" edges to UsageRecord entities.
+func (_u *OrganizationUpdate) RemoveUsageRecords(v ...*UsageRecord) *OrganizationUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveUsageRecordIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -601,6 +675,96 @@ func (_u *OrganizationUpdate) sqlSave(ctx context.Context) (_node int, err error
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.ActivityLogsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.ActivityLogsTable,
+			Columns: []string{organization.ActivityLogsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(activitylog.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedActivityLogsIDs(); len(nodes) > 0 && !_u.mutation.ActivityLogsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.ActivityLogsTable,
+			Columns: []string{organization.ActivityLogsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(activitylog.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ActivityLogsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.ActivityLogsTable,
+			Columns: []string{organization.ActivityLogsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(activitylog.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.UsageRecordsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.UsageRecordsTable,
+			Columns: []string{organization.UsageRecordsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedUsageRecordsIDs(); len(nodes) > 0 && !_u.mutation.UsageRecordsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.UsageRecordsTable,
+			Columns: []string{organization.UsageRecordsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.UsageRecordsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.UsageRecordsTable,
+			Columns: []string{organization.UsageRecordsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{organization.Label}
@@ -770,6 +934,36 @@ func (_u *OrganizationUpdateOne) AddTmEntries(v ...*TMEntry) *OrganizationUpdate
 	return _u.AddTmEntryIDs(ids...)
 }
 
+// AddActivityLogIDs adds the "activity_logs" edge to the ActivityLog entity by IDs.
+func (_u *OrganizationUpdateOne) AddActivityLogIDs(ids ...int) *OrganizationUpdateOne {
+	_u.mutation.AddActivityLogIDs(ids...)
+	return _u
+}
+
+// AddActivityLogs adds the "activity_logs" edges to the ActivityLog entity.
+func (_u *OrganizationUpdateOne) AddActivityLogs(v ...*ActivityLog) *OrganizationUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddActivityLogIDs(ids...)
+}
+
+// AddUsageRecordIDs adds the "usage_records" edge to the UsageRecord entity by IDs.
+func (_u *OrganizationUpdateOne) AddUsageRecordIDs(ids ...int) *OrganizationUpdateOne {
+	_u.mutation.AddUsageRecordIDs(ids...)
+	return _u
+}
+
+// AddUsageRecords adds the "usage_records" edges to the UsageRecord entity.
+func (_u *OrganizationUpdateOne) AddUsageRecords(v ...*UsageRecord) *OrganizationUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddUsageRecordIDs(ids...)
+}
+
 // Mutation returns the OrganizationMutation object of the builder.
 func (_u *OrganizationUpdateOne) Mutation() *OrganizationMutation {
 	return _u.mutation
@@ -878,6 +1072,48 @@ func (_u *OrganizationUpdateOne) RemoveTmEntries(v ...*TMEntry) *OrganizationUpd
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveTmEntryIDs(ids...)
+}
+
+// ClearActivityLogs clears all "activity_logs" edges to the ActivityLog entity.
+func (_u *OrganizationUpdateOne) ClearActivityLogs() *OrganizationUpdateOne {
+	_u.mutation.ClearActivityLogs()
+	return _u
+}
+
+// RemoveActivityLogIDs removes the "activity_logs" edge to ActivityLog entities by IDs.
+func (_u *OrganizationUpdateOne) RemoveActivityLogIDs(ids ...int) *OrganizationUpdateOne {
+	_u.mutation.RemoveActivityLogIDs(ids...)
+	return _u
+}
+
+// RemoveActivityLogs removes "activity_logs" edges to ActivityLog entities.
+func (_u *OrganizationUpdateOne) RemoveActivityLogs(v ...*ActivityLog) *OrganizationUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveActivityLogIDs(ids...)
+}
+
+// ClearUsageRecords clears all "usage_records" edges to the UsageRecord entity.
+func (_u *OrganizationUpdateOne) ClearUsageRecords() *OrganizationUpdateOne {
+	_u.mutation.ClearUsageRecords()
+	return _u
+}
+
+// RemoveUsageRecordIDs removes the "usage_records" edge to UsageRecord entities by IDs.
+func (_u *OrganizationUpdateOne) RemoveUsageRecordIDs(ids ...int) *OrganizationUpdateOne {
+	_u.mutation.RemoveUsageRecordIDs(ids...)
+	return _u
+}
+
+// RemoveUsageRecords removes "usage_records" edges to UsageRecord entities.
+func (_u *OrganizationUpdateOne) RemoveUsageRecords(v ...*UsageRecord) *OrganizationUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveUsageRecordIDs(ids...)
 }
 
 // Where appends a list predicates to the OrganizationUpdate builder.
@@ -1212,6 +1448,96 @@ func (_u *OrganizationUpdateOne) sqlSave(ctx context.Context) (_node *Organizati
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(tmentry.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ActivityLogsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.ActivityLogsTable,
+			Columns: []string{organization.ActivityLogsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(activitylog.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedActivityLogsIDs(); len(nodes) > 0 && !_u.mutation.ActivityLogsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.ActivityLogsTable,
+			Columns: []string{organization.ActivityLogsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(activitylog.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ActivityLogsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.ActivityLogsTable,
+			Columns: []string{organization.ActivityLogsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(activitylog.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.UsageRecordsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.UsageRecordsTable,
+			Columns: []string{organization.UsageRecordsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedUsageRecordsIDs(); len(nodes) > 0 && !_u.mutation.UsageRecordsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.UsageRecordsTable,
+			Columns: []string{organization.UsageRecordsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.UsageRecordsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.UsageRecordsTable,
+			Columns: []string{organization.UsageRecordsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

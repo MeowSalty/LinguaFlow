@@ -47,9 +47,13 @@ type OrganizationEdges struct {
 	GlossaryEntries []*GlossaryEntry `json:"glossary_entries,omitempty"`
 	// TmEntries holds the value of the tm_entries edge.
 	TmEntries []*TMEntry `json:"tm_entries,omitempty"`
+	// ActivityLogs holds the value of the activity_logs edge.
+	ActivityLogs []*ActivityLog `json:"activity_logs,omitempty"`
+	// UsageRecords holds the value of the usage_records edge.
+	UsageRecords []*UsageRecord `json:"usage_records,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [5]bool
+	loadedTypes [7]bool
 }
 
 // ProjectsOrErr returns the Projects value or an error if the edge
@@ -95,6 +99,24 @@ func (e OrganizationEdges) TmEntriesOrErr() ([]*TMEntry, error) {
 		return e.TmEntries, nil
 	}
 	return nil, &NotLoadedError{edge: "tm_entries"}
+}
+
+// ActivityLogsOrErr returns the ActivityLogs value or an error if the edge
+// was not loaded in eager-loading.
+func (e OrganizationEdges) ActivityLogsOrErr() ([]*ActivityLog, error) {
+	if e.loadedTypes[5] {
+		return e.ActivityLogs, nil
+	}
+	return nil, &NotLoadedError{edge: "activity_logs"}
+}
+
+// UsageRecordsOrErr returns the UsageRecords value or an error if the edge
+// was not loaded in eager-loading.
+func (e OrganizationEdges) UsageRecordsOrErr() ([]*UsageRecord, error) {
+	if e.loadedTypes[6] {
+		return e.UsageRecords, nil
+	}
+	return nil, &NotLoadedError{edge: "usage_records"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -201,6 +223,16 @@ func (_m *Organization) QueryGlossaryEntries() *GlossaryEntryQuery {
 // QueryTmEntries queries the "tm_entries" edge of the Organization entity.
 func (_m *Organization) QueryTmEntries() *TMEntryQuery {
 	return NewOrganizationClient(_m.config).QueryTmEntries(_m)
+}
+
+// QueryActivityLogs queries the "activity_logs" edge of the Organization entity.
+func (_m *Organization) QueryActivityLogs() *ActivityLogQuery {
+	return NewOrganizationClient(_m.config).QueryActivityLogs(_m)
+}
+
+// QueryUsageRecords queries the "usage_records" edge of the Organization entity.
+func (_m *Organization) QueryUsageRecords() *UsageRecordQuery {
+	return NewOrganizationClient(_m.config).QueryUsageRecords(_m)
 }
 
 // Update returns a builder for updating this Organization.

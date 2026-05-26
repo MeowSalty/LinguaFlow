@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
@@ -20,6 +21,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/projectbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
@@ -37,6 +39,8 @@ type ProjectQuery struct {
 	withGlossaryEntries       *GlossaryEntryQuery
 	withTmEntries             *TMEntryQuery
 	withJobs                  *JobQuery
+	withActivityLogs          *ActivityLogQuery
+	withUsageRecords          *UsageRecordQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -220,6 +224,50 @@ func (_q *ProjectQuery) QueryJobs() *JobQuery {
 			sqlgraph.From(project.Table, project.FieldID, selector),
 			sqlgraph.To(job.Table, job.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, project.JobsTable, project.JobsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryActivityLogs chains the current query on the "activity_logs" edge.
+func (_q *ProjectQuery) QueryActivityLogs() *ActivityLogQuery {
+	query := (&ActivityLogClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(project.Table, project.FieldID, selector),
+			sqlgraph.To(activitylog.Table, activitylog.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, project.ActivityLogsTable, project.ActivityLogsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryUsageRecords chains the current query on the "usage_records" edge.
+func (_q *ProjectQuery) QueryUsageRecords() *UsageRecordQuery {
+	query := (&UsageRecordClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(project.Table, project.FieldID, selector),
+			sqlgraph.To(usagerecord.Table, usagerecord.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, project.UsageRecordsTable, project.UsageRecordsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -426,6 +474,8 @@ func (_q *ProjectQuery) Clone() *ProjectQuery {
 		withGlossaryEntries:       _q.withGlossaryEntries.Clone(),
 		withTmEntries:             _q.withTmEntries.Clone(),
 		withJobs:                  _q.withJobs.Clone(),
+		withActivityLogs:          _q.withActivityLogs.Clone(),
+		withUsageRecords:          _q.withUsageRecords.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -509,6 +559,28 @@ func (_q *ProjectQuery) WithJobs(opts ...func(*JobQuery)) *ProjectQuery {
 	return _q
 }
 
+// WithActivityLogs tells the query-builder to eager-load the nodes that are connected to
+// the "activity_logs" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *ProjectQuery) WithActivityLogs(opts ...func(*ActivityLogQuery)) *ProjectQuery {
+	query := (&ActivityLogClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withActivityLogs = query
+	return _q
+}
+
+// WithUsageRecords tells the query-builder to eager-load the nodes that are connected to
+// the "usage_records" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *ProjectQuery) WithUsageRecords(opts ...func(*UsageRecordQuery)) *ProjectQuery {
+	query := (&UsageRecordClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withUsageRecords = query
+	return _q
+}
+
 // GroupBy is used to group vertices by one or more fields/columns.
 // It is often used with aggregate functions, like: count, max, mean, min, sum.
 //
@@ -587,7 +659,7 @@ func (_q *ProjectQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Proj
 	var (
 		nodes       = []*Project{}
 		_spec       = _q.querySpec()
-		loadedTypes = [7]bool{
+		loadedTypes = [9]bool{
 			_q.withOwnerUser != nil,
 			_q.withOwnerOrg != nil,
 			_q.withProjectBackends != nil,
@@ -595,6 +667,8 @@ func (_q *ProjectQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Proj
 			_q.withGlossaryEntries != nil,
 			_q.withTmEntries != nil,
 			_q.withJobs != nil,
+			_q.withActivityLogs != nil,
+			_q.withUsageRecords != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -661,6 +735,20 @@ func (_q *ProjectQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Proj
 		if err := _q.loadJobs(ctx, query, nodes,
 			func(n *Project) { n.Edges.Jobs = []*Job{} },
 			func(n *Project, e *Job) { n.Edges.Jobs = append(n.Edges.Jobs, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withActivityLogs; query != nil {
+		if err := _q.loadActivityLogs(ctx, query, nodes,
+			func(n *Project) { n.Edges.ActivityLogs = []*ActivityLog{} },
+			func(n *Project, e *ActivityLog) { n.Edges.ActivityLogs = append(n.Edges.ActivityLogs, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withUsageRecords; query != nil {
+		if err := _q.loadUsageRecords(ctx, query, nodes,
+			func(n *Project) { n.Edges.UsageRecords = []*UsageRecord{} },
+			func(n *Project, e *UsageRecord) { n.Edges.UsageRecords = append(n.Edges.UsageRecords, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -885,6 +973,68 @@ func (_q *ProjectQuery) loadJobs(ctx context.Context, query *JobQuery, nodes []*
 		node, ok := nodeids[*fk]
 		if !ok {
 			return fmt.Errorf(`unexpected referenced foreign-key "project_jobs" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *ProjectQuery) loadActivityLogs(ctx context.Context, query *ActivityLogQuery, nodes []*Project, init func(*Project), assign func(*Project, *ActivityLog)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*Project)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	query.withFKs = true
+	query.Where(predicate.ActivityLog(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(project.ActivityLogsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.project_activity_logs
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "project_activity_logs" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "project_activity_logs" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *ProjectQuery) loadUsageRecords(ctx context.Context, query *UsageRecordQuery, nodes []*Project, init func(*Project), assign func(*Project, *UsageRecord)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*Project)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	query.withFKs = true
+	query.Where(predicate.UsageRecord(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(project.UsageRecordsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.project_usage_records
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "project_usage_records" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "project_usage_records" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}

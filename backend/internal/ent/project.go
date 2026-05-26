@@ -60,9 +60,13 @@ type ProjectEdges struct {
 	TmEntries []*TMEntry `json:"tm_entries,omitempty"`
 	// Jobs holds the value of the jobs edge.
 	Jobs []*Job `json:"jobs,omitempty"`
+	// ActivityLogs holds the value of the activity_logs edge.
+	ActivityLogs []*ActivityLog `json:"activity_logs,omitempty"`
+	// UsageRecords holds the value of the usage_records edge.
+	UsageRecords []*UsageRecord `json:"usage_records,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [7]bool
+	loadedTypes [9]bool
 }
 
 // OwnerUserOrErr returns the OwnerUser value or an error if the edge
@@ -130,6 +134,24 @@ func (e ProjectEdges) JobsOrErr() ([]*Job, error) {
 		return e.Jobs, nil
 	}
 	return nil, &NotLoadedError{edge: "jobs"}
+}
+
+// ActivityLogsOrErr returns the ActivityLogs value or an error if the edge
+// was not loaded in eager-loading.
+func (e ProjectEdges) ActivityLogsOrErr() ([]*ActivityLog, error) {
+	if e.loadedTypes[7] {
+		return e.ActivityLogs, nil
+	}
+	return nil, &NotLoadedError{edge: "activity_logs"}
+}
+
+// UsageRecordsOrErr returns the UsageRecords value or an error if the edge
+// was not loaded in eager-loading.
+func (e ProjectEdges) UsageRecordsOrErr() ([]*UsageRecord, error) {
+	if e.loadedTypes[8] {
+		return e.UsageRecords, nil
+	}
+	return nil, &NotLoadedError{edge: "usage_records"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -270,6 +292,16 @@ func (_m *Project) QueryTmEntries() *TMEntryQuery {
 // QueryJobs queries the "jobs" edge of the Project entity.
 func (_m *Project) QueryJobs() *JobQuery {
 	return NewProjectClient(_m.config).QueryJobs(_m)
+}
+
+// QueryActivityLogs queries the "activity_logs" edge of the Project entity.
+func (_m *Project) QueryActivityLogs() *ActivityLogQuery {
+	return NewProjectClient(_m.config).QueryActivityLogs(_m)
+}
+
+// QueryUsageRecords queries the "usage_records" edge of the Project entity.
+func (_m *Project) QueryUsageRecords() *UsageRecordQuery {
+	return NewProjectClient(_m.config).QueryUsageRecords(_m)
 }
 
 // Update returns a builder for updating this Project.

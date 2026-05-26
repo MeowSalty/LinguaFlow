@@ -6,6 +6,9 @@ import (
 	"entgo.io/ent/dialect/sql"
 )
 
+// ActivityLog is the predicate function for activitylog builders.
+type ActivityLog func(*sql.Selector)
+
 // GlossaryEntry is the predicate function for glossaryentry builders.
 type GlossaryEntry func(*sql.Selector)
 
@@ -41,6 +44,9 @@ type SubJob func(*sql.Selector)
 
 // TMEntry is the predicate function for tmentry builders.
 type TMEntry func(*sql.Selector)
+
+// UsageRecord is the predicate function for usagerecord builders.
+type UsageRecord func(*sql.Selector)
 
 // User is the predicate function for user builders.
 type User func(*sql.Selector)

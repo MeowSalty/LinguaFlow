@@ -53,9 +53,13 @@ type UserEdges struct {
 	UserBackends []*UserBackend `json:"user_backends,omitempty"`
 	// OwnedProjects holds the value of the owned_projects edge.
 	OwnedProjects []*Project `json:"owned_projects,omitempty"`
+	// ActivityLogs holds the value of the activity_logs edge.
+	ActivityLogs []*ActivityLog `json:"activity_logs,omitempty"`
+	// UsageRecords holds the value of the usage_records edge.
+	UsageRecords []*UsageRecord `json:"usage_records,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [6]bool
+	loadedTypes [8]bool
 }
 
 // JobsOrErr returns the Jobs value or an error if the edge
@@ -110,6 +114,24 @@ func (e UserEdges) OwnedProjectsOrErr() ([]*Project, error) {
 		return e.OwnedProjects, nil
 	}
 	return nil, &NotLoadedError{edge: "owned_projects"}
+}
+
+// ActivityLogsOrErr returns the ActivityLogs value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) ActivityLogsOrErr() ([]*ActivityLog, error) {
+	if e.loadedTypes[6] {
+		return e.ActivityLogs, nil
+	}
+	return nil, &NotLoadedError{edge: "activity_logs"}
+}
+
+// UsageRecordsOrErr returns the UsageRecords value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) UsageRecordsOrErr() ([]*UsageRecord, error) {
+	if e.loadedTypes[7] {
+		return e.UsageRecords, nil
+	}
+	return nil, &NotLoadedError{edge: "usage_records"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -235,6 +257,16 @@ func (_m *User) QueryUserBackends() *UserBackendQuery {
 // QueryOwnedProjects queries the "owned_projects" edge of the User entity.
 func (_m *User) QueryOwnedProjects() *ProjectQuery {
 	return NewUserClient(_m.config).QueryOwnedProjects(_m)
+}
+
+// QueryActivityLogs queries the "activity_logs" edge of the User entity.
+func (_m *User) QueryActivityLogs() *ActivityLogQuery {
+	return NewUserClient(_m.config).QueryActivityLogs(_m)
+}
+
+// QueryUsageRecords queries the "usage_records" edge of the User entity.
+func (_m *User) QueryUsageRecords() *UsageRecordQuery {
+	return NewUserClient(_m.config).QueryUsageRecords(_m)
 }
 
 // Update returns a builder for updating this User.

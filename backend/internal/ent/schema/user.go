@@ -33,5 +33,7 @@ func (User) Edges() []ent.Edge {
 		edge.To("memberships", OrgMembership.Type),
 		edge.To("user_backends", UserBackend.Type),
 		edge.To("owned_projects", Project.Type),
+		edge.To("activity_logs", ActivityLog.Type),
+		edge.To("usage_records", UsageRecord.Type),
 	}
 }

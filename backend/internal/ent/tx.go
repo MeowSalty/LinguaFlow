@@ -12,6 +12,8 @@ import (
 // Tx is a transactional client that is created by calling Client.Tx().
 type Tx struct {
 	config
+	// ActivityLog is the client for interacting with the ActivityLog builders.
+	ActivityLog *ActivityLogClient
 	// GlossaryEntry is the client for interacting with the GlossaryEntry builders.
 	GlossaryEntry *GlossaryEntryClient
 	// Job is the client for interacting with the Job builders.
@@ -36,6 +38,8 @@ type Tx struct {
 	SubJob *SubJobClient
 	// TMEntry is the client for interacting with the TMEntry builders.
 	TMEntry *TMEntryClient
+	// UsageRecord is the client for interacting with the UsageRecord builders.
+	UsageRecord *UsageRecordClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
 	// UserBackend is the client for interacting with the UserBackend builders.
@@ -171,6 +175,7 @@ func (tx *Tx) Client() *Client {
 }
 
 func (tx *Tx) init() {
+	tx.ActivityLog = NewActivityLogClient(tx.config)
 	tx.GlossaryEntry = NewGlossaryEntryClient(tx.config)
 	tx.Job = NewJobClient(tx.config)
 	tx.OrgBackend = NewOrgBackendClient(tx.config)
@@ -183,6 +188,7 @@ func (tx *Tx) init() {
 	tx.StageBackendOverride = NewStageBackendOverrideClient(tx.config)
 	tx.SubJob = NewSubJobClient(tx.config)
 	tx.TMEntry = NewTMEntryClient(tx.config)
+	tx.UsageRecord = NewUsageRecordClient(tx.config)
 	tx.User = NewUserClient(tx.config)
 	tx.UserBackend = NewUserBackendClient(tx.config)
 }
@@ -194,7 +200,7 @@ func (tx *Tx) init() {
 // of them in order to commit or rollback the transaction.
 //
 // If a closed transaction is embedded in one of the generated entities, and the entity
-// applies a query, for example: GlossaryEntry.QueryXXX(), the query will be executed
+// applies a query, for example: ActivityLog.QueryXXX(), the query will be executed
 // through the driver which created this transaction.
 //
 // Note that txDriver is not goroutine safe.

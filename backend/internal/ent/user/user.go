@@ -42,6 +42,10 @@ const (
 	EdgeUserBackends = "user_backends"
 	// EdgeOwnedProjects holds the string denoting the owned_projects edge name in mutations.
 	EdgeOwnedProjects = "owned_projects"
+	// EdgeActivityLogs holds the string denoting the activity_logs edge name in mutations.
+	EdgeActivityLogs = "activity_logs"
+	// EdgeUsageRecords holds the string denoting the usage_records edge name in mutations.
+	EdgeUsageRecords = "usage_records"
 	// Table holds the table name of the user in the database.
 	Table = "users"
 	// JobsTable is the table that holds the jobs relation/edge.
@@ -86,6 +90,20 @@ const (
 	OwnedProjectsInverseTable = "projects"
 	// OwnedProjectsColumn is the table column denoting the owned_projects relation/edge.
 	OwnedProjectsColumn = "owner_user_id"
+	// ActivityLogsTable is the table that holds the activity_logs relation/edge.
+	ActivityLogsTable = "activity_logs"
+	// ActivityLogsInverseTable is the table name for the ActivityLog entity.
+	// It exists in this package in order to avoid circular dependency with the "activitylog" package.
+	ActivityLogsInverseTable = "activity_logs"
+	// ActivityLogsColumn is the table column denoting the activity_logs relation/edge.
+	ActivityLogsColumn = "user_activity_logs"
+	// UsageRecordsTable is the table that holds the usage_records relation/edge.
+	UsageRecordsTable = "usage_records"
+	// UsageRecordsInverseTable is the table name for the UsageRecord entity.
+	// It exists in this package in order to avoid circular dependency with the "usagerecord" package.
+	UsageRecordsInverseTable = "usage_records"
+	// UsageRecordsColumn is the table column denoting the usage_records relation/edge.
+	UsageRecordsColumn = "user_usage_records"
 )
 
 // Columns holds all SQL columns for user fields.
@@ -261,6 +279,34 @@ func ByOwnedProjects(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newOwnedProjectsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByActivityLogsCount orders the results by activity_logs count.
+func ByActivityLogsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newActivityLogsStep(), opts...)
+	}
+}
+
+// ByActivityLogs orders the results by activity_logs terms.
+func ByActivityLogs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newActivityLogsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByUsageRecordsCount orders the results by usage_records count.
+func ByUsageRecordsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newUsageRecordsStep(), opts...)
+	}
+}
+
+// ByUsageRecords orders the results by usage_records terms.
+func ByUsageRecords(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newUsageRecordsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newJobsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -301,5 +347,19 @@ func newOwnedProjectsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(OwnedProjectsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, OwnedProjectsTable, OwnedProjectsColumn),
+	)
+}
+func newActivityLogsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(ActivityLogsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, ActivityLogsTable, ActivityLogsColumn),
+	)
+}
+func newUsageRecordsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(UsageRecordsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, UsageRecordsTable, UsageRecordsColumn),
 	)
 }

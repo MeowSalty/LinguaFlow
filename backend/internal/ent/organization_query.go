@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgbackend"
@@ -19,6 +20,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 )
 
 // OrganizationQuery is the builder for querying Organization entities.
@@ -33,6 +35,8 @@ type OrganizationQuery struct {
 	withOrgBackends     *OrgBackendQuery
 	withGlossaryEntries *GlossaryEntryQuery
 	withTmEntries       *TMEntryQuery
+	withActivityLogs    *ActivityLogQuery
+	withUsageRecords    *UsageRecordQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -172,6 +176,50 @@ func (_q *OrganizationQuery) QueryTmEntries() *TMEntryQuery {
 			sqlgraph.From(organization.Table, organization.FieldID, selector),
 			sqlgraph.To(tmentry.Table, tmentry.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, organization.TmEntriesTable, organization.TmEntriesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryActivityLogs chains the current query on the "activity_logs" edge.
+func (_q *OrganizationQuery) QueryActivityLogs() *ActivityLogQuery {
+	query := (&ActivityLogClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(organization.Table, organization.FieldID, selector),
+			sqlgraph.To(activitylog.Table, activitylog.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, organization.ActivityLogsTable, organization.ActivityLogsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryUsageRecords chains the current query on the "usage_records" edge.
+func (_q *OrganizationQuery) QueryUsageRecords() *UsageRecordQuery {
+	query := (&UsageRecordClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(organization.Table, organization.FieldID, selector),
+			sqlgraph.To(usagerecord.Table, usagerecord.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, organization.UsageRecordsTable, organization.UsageRecordsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -376,6 +424,8 @@ func (_q *OrganizationQuery) Clone() *OrganizationQuery {
 		withOrgBackends:     _q.withOrgBackends.Clone(),
 		withGlossaryEntries: _q.withGlossaryEntries.Clone(),
 		withTmEntries:       _q.withTmEntries.Clone(),
+		withActivityLogs:    _q.withActivityLogs.Clone(),
+		withUsageRecords:    _q.withUsageRecords.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -434,6 +484,28 @@ func (_q *OrganizationQuery) WithTmEntries(opts ...func(*TMEntryQuery)) *Organiz
 		opt(query)
 	}
 	_q.withTmEntries = query
+	return _q
+}
+
+// WithActivityLogs tells the query-builder to eager-load the nodes that are connected to
+// the "activity_logs" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *OrganizationQuery) WithActivityLogs(opts ...func(*ActivityLogQuery)) *OrganizationQuery {
+	query := (&ActivityLogClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withActivityLogs = query
+	return _q
+}
+
+// WithUsageRecords tells the query-builder to eager-load the nodes that are connected to
+// the "usage_records" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *OrganizationQuery) WithUsageRecords(opts ...func(*UsageRecordQuery)) *OrganizationQuery {
+	query := (&UsageRecordClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withUsageRecords = query
 	return _q
 }
 
@@ -515,12 +587,14 @@ func (_q *OrganizationQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 	var (
 		nodes       = []*Organization{}
 		_spec       = _q.querySpec()
-		loadedTypes = [5]bool{
+		loadedTypes = [7]bool{
 			_q.withProjects != nil,
 			_q.withMemberships != nil,
 			_q.withOrgBackends != nil,
 			_q.withGlossaryEntries != nil,
 			_q.withTmEntries != nil,
+			_q.withActivityLogs != nil,
+			_q.withUsageRecords != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -573,6 +647,20 @@ func (_q *OrganizationQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 		if err := _q.loadTmEntries(ctx, query, nodes,
 			func(n *Organization) { n.Edges.TmEntries = []*TMEntry{} },
 			func(n *Organization, e *TMEntry) { n.Edges.TmEntries = append(n.Edges.TmEntries, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withActivityLogs; query != nil {
+		if err := _q.loadActivityLogs(ctx, query, nodes,
+			func(n *Organization) { n.Edges.ActivityLogs = []*ActivityLog{} },
+			func(n *Organization, e *ActivityLog) { n.Edges.ActivityLogs = append(n.Edges.ActivityLogs, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withUsageRecords; query != nil {
+		if err := _q.loadUsageRecords(ctx, query, nodes,
+			func(n *Organization) { n.Edges.UsageRecords = []*UsageRecord{} },
+			func(n *Organization, e *UsageRecord) { n.Edges.UsageRecords = append(n.Edges.UsageRecords, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -735,6 +823,68 @@ func (_q *OrganizationQuery) loadTmEntries(ctx context.Context, query *TMEntryQu
 		node, ok := nodeids[*fk]
 		if !ok {
 			return fmt.Errorf(`unexpected referenced foreign-key "organization_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *OrganizationQuery) loadActivityLogs(ctx context.Context, query *ActivityLogQuery, nodes []*Organization, init func(*Organization), assign func(*Organization, *ActivityLog)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*Organization)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	query.withFKs = true
+	query.Where(predicate.ActivityLog(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(organization.ActivityLogsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.organization_activity_logs
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "organization_activity_logs" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "organization_activity_logs" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *OrganizationQuery) loadUsageRecords(ctx context.Context, query *UsageRecordQuery, nodes []*Organization, init func(*Organization), assign func(*Organization, *UsageRecord)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*Organization)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	query.withFKs = true
+	query.Where(predicate.UsageRecord(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(organization.UsageRecordsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.organization_usage_records
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "organization_usage_records" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "organization_usage_records" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}

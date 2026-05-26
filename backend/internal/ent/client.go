@@ -15,6 +15,7 @@ import (
 	"entgo.io/ent/dialect"
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
@@ -27,6 +28,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
 )
@@ -36,6 +38,8 @@ type Client struct {
 	config
 	// Schema is the client for creating, migrating and dropping schema.
 	Schema *migrate.Schema
+	// ActivityLog is the client for interacting with the ActivityLog builders.
+	ActivityLog *ActivityLogClient
 	// GlossaryEntry is the client for interacting with the GlossaryEntry builders.
 	GlossaryEntry *GlossaryEntryClient
 	// Job is the client for interacting with the Job builders.
@@ -60,6 +64,8 @@ type Client struct {
 	SubJob *SubJobClient
 	// TMEntry is the client for interacting with the TMEntry builders.
 	TMEntry *TMEntryClient
+	// UsageRecord is the client for interacting with the UsageRecord builders.
+	UsageRecord *UsageRecordClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
 	// UserBackend is the client for interacting with the UserBackend builders.
@@ -75,6 +81,7 @@ func NewClient(opts ...Option) *Client {
 
 func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
+	c.ActivityLog = NewActivityLogClient(c.config)
 	c.GlossaryEntry = NewGlossaryEntryClient(c.config)
 	c.Job = NewJobClient(c.config)
 	c.OrgBackend = NewOrgBackendClient(c.config)
@@ -87,6 +94,7 @@ func (c *Client) init() {
 	c.StageBackendOverride = NewStageBackendOverrideClient(c.config)
 	c.SubJob = NewSubJobClient(c.config)
 	c.TMEntry = NewTMEntryClient(c.config)
+	c.UsageRecord = NewUsageRecordClient(c.config)
 	c.User = NewUserClient(c.config)
 	c.UserBackend = NewUserBackendClient(c.config)
 }
@@ -181,6 +189,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	return &Tx{
 		ctx:                  ctx,
 		config:               cfg,
+		ActivityLog:          NewActivityLogClient(cfg),
 		GlossaryEntry:        NewGlossaryEntryClient(cfg),
 		Job:                  NewJobClient(cfg),
 		OrgBackend:           NewOrgBackendClient(cfg),
@@ -193,6 +202,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		StageBackendOverride: NewStageBackendOverrideClient(cfg),
 		SubJob:               NewSubJobClient(cfg),
 		TMEntry:              NewTMEntryClient(cfg),
+		UsageRecord:          NewUsageRecordClient(cfg),
 		User:                 NewUserClient(cfg),
 		UserBackend:          NewUserBackendClient(cfg),
 	}, nil
@@ -214,6 +224,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	return &Tx{
 		ctx:                  ctx,
 		config:               cfg,
+		ActivityLog:          NewActivityLogClient(cfg),
 		GlossaryEntry:        NewGlossaryEntryClient(cfg),
 		Job:                  NewJobClient(cfg),
 		OrgBackend:           NewOrgBackendClient(cfg),
@@ -226,6 +237,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		StageBackendOverride: NewStageBackendOverrideClient(cfg),
 		SubJob:               NewSubJobClient(cfg),
 		TMEntry:              NewTMEntryClient(cfg),
+		UsageRecord:          NewUsageRecordClient(cfg),
 		User:                 NewUserClient(cfg),
 		UserBackend:          NewUserBackendClient(cfg),
 	}, nil
@@ -234,7 +246,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 // Debug returns a new debug-client. It's used to get verbose logging on specific operations.
 //
 //	client.Debug().
-//		GlossaryEntry.
+//		ActivityLog.
 //		Query().
 //		Count(ctx)
 func (c *Client) Debug() *Client {
@@ -257,9 +269,10 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.GlossaryEntry, c.Job, c.OrgBackend, c.OrgMembership, c.Organization,
-		c.Project, c.ProjectBackend, c.RefreshToken, c.Segment, c.StageBackendOverride,
-		c.SubJob, c.TMEntry, c.User, c.UserBackend,
+		c.ActivityLog, c.GlossaryEntry, c.Job, c.OrgBackend, c.OrgMembership,
+		c.Organization, c.Project, c.ProjectBackend, c.RefreshToken, c.Segment,
+		c.StageBackendOverride, c.SubJob, c.TMEntry, c.UsageRecord, c.User,
+		c.UserBackend,
 	} {
 		n.Use(hooks...)
 	}
@@ -269,9 +282,10 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.GlossaryEntry, c.Job, c.OrgBackend, c.OrgMembership, c.Organization,
-		c.Project, c.ProjectBackend, c.RefreshToken, c.Segment, c.StageBackendOverride,
-		c.SubJob, c.TMEntry, c.User, c.UserBackend,
+		c.ActivityLog, c.GlossaryEntry, c.Job, c.OrgBackend, c.OrgMembership,
+		c.Organization, c.Project, c.ProjectBackend, c.RefreshToken, c.Segment,
+		c.StageBackendOverride, c.SubJob, c.TMEntry, c.UsageRecord, c.User,
+		c.UserBackend,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -280,6 +294,8 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 // Mutate implements the ent.Mutator interface.
 func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 	switch m := m.(type) {
+	case *ActivityLogMutation:
+		return c.ActivityLog.mutate(ctx, m)
 	case *GlossaryEntryMutation:
 		return c.GlossaryEntry.mutate(ctx, m)
 	case *JobMutation:
@@ -304,12 +320,211 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.SubJob.mutate(ctx, m)
 	case *TMEntryMutation:
 		return c.TMEntry.mutate(ctx, m)
+	case *UsageRecordMutation:
+		return c.UsageRecord.mutate(ctx, m)
 	case *UserMutation:
 		return c.User.mutate(ctx, m)
 	case *UserBackendMutation:
 		return c.UserBackend.mutate(ctx, m)
 	default:
 		return nil, fmt.Errorf("ent: unknown mutation type %T", m)
+	}
+}
+
+// ActivityLogClient is a client for the ActivityLog schema.
+type ActivityLogClient struct {
+	config
+}
+
+// NewActivityLogClient returns a client for the ActivityLog from the given config.
+func NewActivityLogClient(c config) *ActivityLogClient {
+	return &ActivityLogClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `activitylog.Hooks(f(g(h())))`.
+func (c *ActivityLogClient) Use(hooks ...Hook) {
+	c.hooks.ActivityLog = append(c.hooks.ActivityLog, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `activitylog.Intercept(f(g(h())))`.
+func (c *ActivityLogClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ActivityLog = append(c.inters.ActivityLog, interceptors...)
+}
+
+// Create returns a builder for creating a ActivityLog entity.
+func (c *ActivityLogClient) Create() *ActivityLogCreate {
+	mutation := newActivityLogMutation(c.config, OpCreate)
+	return &ActivityLogCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ActivityLog entities.
+func (c *ActivityLogClient) CreateBulk(builders ...*ActivityLogCreate) *ActivityLogCreateBulk {
+	return &ActivityLogCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ActivityLogClient) MapCreateBulk(slice any, setFunc func(*ActivityLogCreate, int)) *ActivityLogCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ActivityLogCreateBulk{err: fmt.Errorf("calling to ActivityLogClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ActivityLogCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ActivityLogCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ActivityLog.
+func (c *ActivityLogClient) Update() *ActivityLogUpdate {
+	mutation := newActivityLogMutation(c.config, OpUpdate)
+	return &ActivityLogUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ActivityLogClient) UpdateOne(_m *ActivityLog) *ActivityLogUpdateOne {
+	mutation := newActivityLogMutation(c.config, OpUpdateOne, withActivityLog(_m))
+	return &ActivityLogUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ActivityLogClient) UpdateOneID(id int) *ActivityLogUpdateOne {
+	mutation := newActivityLogMutation(c.config, OpUpdateOne, withActivityLogID(id))
+	return &ActivityLogUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ActivityLog.
+func (c *ActivityLogClient) Delete() *ActivityLogDelete {
+	mutation := newActivityLogMutation(c.config, OpDelete)
+	return &ActivityLogDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ActivityLogClient) DeleteOne(_m *ActivityLog) *ActivityLogDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ActivityLogClient) DeleteOneID(id int) *ActivityLogDeleteOne {
+	builder := c.Delete().Where(activitylog.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ActivityLogDeleteOne{builder}
+}
+
+// Query returns a query builder for ActivityLog.
+func (c *ActivityLogClient) Query() *ActivityLogQuery {
+	return &ActivityLogQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeActivityLog},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ActivityLog entity by its id.
+func (c *ActivityLogClient) Get(ctx context.Context, id int) (*ActivityLog, error) {
+	return c.Query().Where(activitylog.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ActivityLogClient) GetX(ctx context.Context, id int) *ActivityLog {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryActor queries the actor edge of a ActivityLog.
+func (c *ActivityLogClient) QueryActor(_m *ActivityLog) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(activitylog.Table, activitylog.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, activitylog.ActorTable, activitylog.ActorColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryOrganization queries the organization edge of a ActivityLog.
+func (c *ActivityLogClient) QueryOrganization(_m *ActivityLog) *OrganizationQuery {
+	query := (&OrganizationClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(activitylog.Table, activitylog.FieldID, id),
+			sqlgraph.To(organization.Table, organization.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, activitylog.OrganizationTable, activitylog.OrganizationColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryProject queries the project edge of a ActivityLog.
+func (c *ActivityLogClient) QueryProject(_m *ActivityLog) *ProjectQuery {
+	query := (&ProjectClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(activitylog.Table, activitylog.FieldID, id),
+			sqlgraph.To(project.Table, project.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, activitylog.ProjectTable, activitylog.ProjectColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryJob queries the job edge of a ActivityLog.
+func (c *ActivityLogClient) QueryJob(_m *ActivityLog) *JobQuery {
+	query := (&JobClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(activitylog.Table, activitylog.FieldID, id),
+			sqlgraph.To(job.Table, job.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, activitylog.JobTable, activitylog.JobColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *ActivityLogClient) Hooks() []Hook {
+	return c.hooks.ActivityLog
+}
+
+// Interceptors returns the client interceptors.
+func (c *ActivityLogClient) Interceptors() []Interceptor {
+	return c.inters.ActivityLog
+}
+
+func (c *ActivityLogClient) mutate(ctx context.Context, m *ActivityLogMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ActivityLogCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ActivityLogUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ActivityLogUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ActivityLogDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ActivityLog mutation op: %q", m.Op())
 	}
 }
 
@@ -627,6 +842,38 @@ func (c *JobClient) QuerySubJobs(_m *Job) *SubJobQuery {
 			sqlgraph.From(job.Table, job.FieldID, id),
 			sqlgraph.To(subjob.Table, subjob.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, job.SubJobsTable, job.SubJobsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryActivityLogs queries the activity_logs edge of a Job.
+func (c *JobClient) QueryActivityLogs(_m *Job) *ActivityLogQuery {
+	query := (&ActivityLogClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(job.Table, job.FieldID, id),
+			sqlgraph.To(activitylog.Table, activitylog.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, job.ActivityLogsTable, job.ActivityLogsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryUsageRecords queries the usage_records edge of a Job.
+func (c *JobClient) QueryUsageRecords(_m *Job) *UsageRecordQuery {
+	query := (&UsageRecordClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(job.Table, job.FieldID, id),
+			sqlgraph.To(usagerecord.Table, usagerecord.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, job.UsageRecordsTable, job.UsageRecordsColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -1161,6 +1408,38 @@ func (c *OrganizationClient) QueryTmEntries(_m *Organization) *TMEntryQuery {
 	return query
 }
 
+// QueryActivityLogs queries the activity_logs edge of a Organization.
+func (c *OrganizationClient) QueryActivityLogs(_m *Organization) *ActivityLogQuery {
+	query := (&ActivityLogClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(organization.Table, organization.FieldID, id),
+			sqlgraph.To(activitylog.Table, activitylog.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, organization.ActivityLogsTable, organization.ActivityLogsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryUsageRecords queries the usage_records edge of a Organization.
+func (c *OrganizationClient) QueryUsageRecords(_m *Organization) *UsageRecordQuery {
+	query := (&UsageRecordClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(organization.Table, organization.FieldID, id),
+			sqlgraph.To(usagerecord.Table, usagerecord.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, organization.UsageRecordsTable, organization.UsageRecordsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *OrganizationClient) Hooks() []Hook {
 	return c.hooks.Organization
@@ -1399,6 +1678,38 @@ func (c *ProjectClient) QueryJobs(_m *Project) *JobQuery {
 			sqlgraph.From(project.Table, project.FieldID, id),
 			sqlgraph.To(job.Table, job.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, project.JobsTable, project.JobsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryActivityLogs queries the activity_logs edge of a Project.
+func (c *ProjectClient) QueryActivityLogs(_m *Project) *ActivityLogQuery {
+	query := (&ActivityLogClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(project.Table, project.FieldID, id),
+			sqlgraph.To(activitylog.Table, activitylog.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, project.ActivityLogsTable, project.ActivityLogsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryUsageRecords queries the usage_records edge of a Project.
+func (c *ProjectClient) QueryUsageRecords(_m *Project) *UsageRecordQuery {
+	query := (&UsageRecordClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(project.Table, project.FieldID, id),
+			sqlgraph.To(usagerecord.Table, usagerecord.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, project.UsageRecordsTable, project.UsageRecordsColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -2373,6 +2684,203 @@ func (c *TMEntryClient) mutate(ctx context.Context, m *TMEntryMutation) (Value, 
 	}
 }
 
+// UsageRecordClient is a client for the UsageRecord schema.
+type UsageRecordClient struct {
+	config
+}
+
+// NewUsageRecordClient returns a client for the UsageRecord from the given config.
+func NewUsageRecordClient(c config) *UsageRecordClient {
+	return &UsageRecordClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `usagerecord.Hooks(f(g(h())))`.
+func (c *UsageRecordClient) Use(hooks ...Hook) {
+	c.hooks.UsageRecord = append(c.hooks.UsageRecord, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `usagerecord.Intercept(f(g(h())))`.
+func (c *UsageRecordClient) Intercept(interceptors ...Interceptor) {
+	c.inters.UsageRecord = append(c.inters.UsageRecord, interceptors...)
+}
+
+// Create returns a builder for creating a UsageRecord entity.
+func (c *UsageRecordClient) Create() *UsageRecordCreate {
+	mutation := newUsageRecordMutation(c.config, OpCreate)
+	return &UsageRecordCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of UsageRecord entities.
+func (c *UsageRecordClient) CreateBulk(builders ...*UsageRecordCreate) *UsageRecordCreateBulk {
+	return &UsageRecordCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *UsageRecordClient) MapCreateBulk(slice any, setFunc func(*UsageRecordCreate, int)) *UsageRecordCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &UsageRecordCreateBulk{err: fmt.Errorf("calling to UsageRecordClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*UsageRecordCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &UsageRecordCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for UsageRecord.
+func (c *UsageRecordClient) Update() *UsageRecordUpdate {
+	mutation := newUsageRecordMutation(c.config, OpUpdate)
+	return &UsageRecordUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *UsageRecordClient) UpdateOne(_m *UsageRecord) *UsageRecordUpdateOne {
+	mutation := newUsageRecordMutation(c.config, OpUpdateOne, withUsageRecord(_m))
+	return &UsageRecordUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *UsageRecordClient) UpdateOneID(id int) *UsageRecordUpdateOne {
+	mutation := newUsageRecordMutation(c.config, OpUpdateOne, withUsageRecordID(id))
+	return &UsageRecordUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for UsageRecord.
+func (c *UsageRecordClient) Delete() *UsageRecordDelete {
+	mutation := newUsageRecordMutation(c.config, OpDelete)
+	return &UsageRecordDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *UsageRecordClient) DeleteOne(_m *UsageRecord) *UsageRecordDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *UsageRecordClient) DeleteOneID(id int) *UsageRecordDeleteOne {
+	builder := c.Delete().Where(usagerecord.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &UsageRecordDeleteOne{builder}
+}
+
+// Query returns a query builder for UsageRecord.
+func (c *UsageRecordClient) Query() *UsageRecordQuery {
+	return &UsageRecordQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeUsageRecord},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a UsageRecord entity by its id.
+func (c *UsageRecordClient) Get(ctx context.Context, id int) (*UsageRecord, error) {
+	return c.Query().Where(usagerecord.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *UsageRecordClient) GetX(ctx context.Context, id int) *UsageRecord {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryUser queries the user edge of a UsageRecord.
+func (c *UsageRecordClient) QueryUser(_m *UsageRecord) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(usagerecord.Table, usagerecord.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, usagerecord.UserTable, usagerecord.UserColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryOrganization queries the organization edge of a UsageRecord.
+func (c *UsageRecordClient) QueryOrganization(_m *UsageRecord) *OrganizationQuery {
+	query := (&OrganizationClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(usagerecord.Table, usagerecord.FieldID, id),
+			sqlgraph.To(organization.Table, organization.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, usagerecord.OrganizationTable, usagerecord.OrganizationColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryProject queries the project edge of a UsageRecord.
+func (c *UsageRecordClient) QueryProject(_m *UsageRecord) *ProjectQuery {
+	query := (&ProjectClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(usagerecord.Table, usagerecord.FieldID, id),
+			sqlgraph.To(project.Table, project.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, usagerecord.ProjectTable, usagerecord.ProjectColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryJob queries the job edge of a UsageRecord.
+func (c *UsageRecordClient) QueryJob(_m *UsageRecord) *JobQuery {
+	query := (&JobClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(usagerecord.Table, usagerecord.FieldID, id),
+			sqlgraph.To(job.Table, job.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, usagerecord.JobTable, usagerecord.JobColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *UsageRecordClient) Hooks() []Hook {
+	return c.hooks.UsageRecord
+}
+
+// Interceptors returns the client interceptors.
+func (c *UsageRecordClient) Interceptors() []Interceptor {
+	return c.inters.UsageRecord
+}
+
+func (c *UsageRecordClient) mutate(ctx context.Context, m *UsageRecordMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&UsageRecordCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&UsageRecordUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&UsageRecordUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&UsageRecordDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown UsageRecord mutation op: %q", m.Op())
+	}
+}
+
 // UserClient is a client for the User schema.
 type UserClient struct {
 	config
@@ -2577,6 +3085,38 @@ func (c *UserClient) QueryOwnedProjects(_m *User) *ProjectQuery {
 	return query
 }
 
+// QueryActivityLogs queries the activity_logs edge of a User.
+func (c *UserClient) QueryActivityLogs(_m *User) *ActivityLogQuery {
+	query := (&ActivityLogClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(activitylog.Table, activitylog.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.ActivityLogsTable, user.ActivityLogsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryUsageRecords queries the usage_records edge of a User.
+func (c *UserClient) QueryUsageRecords(_m *User) *UsageRecordQuery {
+	query := (&UsageRecordClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(usagerecord.Table, usagerecord.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.UsageRecordsTable, user.UsageRecordsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *UserClient) Hooks() []Hook {
 	return c.hooks.User
@@ -2754,13 +3294,13 @@ func (c *UserBackendClient) mutate(ctx context.Context, m *UserBackendMutation) 
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		GlossaryEntry, Job, OrgBackend, OrgMembership, Organization, Project,
-		ProjectBackend, RefreshToken, Segment, StageBackendOverride, SubJob, TMEntry,
-		User, UserBackend []ent.Hook
+		ActivityLog, GlossaryEntry, Job, OrgBackend, OrgMembership, Organization,
+		Project, ProjectBackend, RefreshToken, Segment, StageBackendOverride, SubJob,
+		TMEntry, UsageRecord, User, UserBackend []ent.Hook
 	}
 	inters struct {
-		GlossaryEntry, Job, OrgBackend, OrgMembership, Organization, Project,
-		ProjectBackend, RefreshToken, Segment, StageBackendOverride, SubJob, TMEntry,
-		User, UserBackend []ent.Interceptor
+		ActivityLog, GlossaryEntry, Job, OrgBackend, OrgMembership, Organization,
+		Project, ProjectBackend, RefreshToken, Segment, StageBackendOverride, SubJob,
+		TMEntry, UsageRecord, User, UserBackend []ent.Interceptor
 	}
 )

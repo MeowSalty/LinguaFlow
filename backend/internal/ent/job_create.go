@@ -10,9 +10,11 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
@@ -226,6 +228,36 @@ func (_c *JobCreate) AddSubJobs(v ...*SubJob) *JobCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddSubJobIDs(ids...)
+}
+
+// AddActivityLogIDs adds the "activity_logs" edge to the ActivityLog entity by IDs.
+func (_c *JobCreate) AddActivityLogIDs(ids ...int) *JobCreate {
+	_c.mutation.AddActivityLogIDs(ids...)
+	return _c
+}
+
+// AddActivityLogs adds the "activity_logs" edges to the ActivityLog entity.
+func (_c *JobCreate) AddActivityLogs(v ...*ActivityLog) *JobCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddActivityLogIDs(ids...)
+}
+
+// AddUsageRecordIDs adds the "usage_records" edge to the UsageRecord entity by IDs.
+func (_c *JobCreate) AddUsageRecordIDs(ids ...int) *JobCreate {
+	_c.mutation.AddUsageRecordIDs(ids...)
+	return _c
+}
+
+// AddUsageRecords adds the "usage_records" edges to the UsageRecord entity.
+func (_c *JobCreate) AddUsageRecords(v ...*UsageRecord) *JobCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddUsageRecordIDs(ids...)
 }
 
 // Mutation returns the JobMutation object of the builder.
@@ -465,6 +497,38 @@ func (_c *JobCreate) createSpec() (*Job, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(subjob.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.ActivityLogsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.ActivityLogsTable,
+			Columns: []string{job.ActivityLogsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(activitylog.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.UsageRecordsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   job.UsageRecordsTable,
+			Columns: []string{job.UsageRecordsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

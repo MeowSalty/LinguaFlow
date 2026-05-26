@@ -40,5 +40,7 @@ func (Job) Edges() []ent.Edge {
 			Ref("jobs").
 			Unique(),
 		edge.To("sub_jobs", SubJob.Type),
+		edge.To("activity_logs", ActivityLog.Type),
+		edge.To("usage_records", UsageRecord.Type),
 	}
 }

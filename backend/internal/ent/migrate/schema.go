@@ -8,6 +8,53 @@ import (
 )
 
 var (
+	// ActivityLogsColumns holds the columns for the "activity_logs" table.
+	ActivityLogsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "action", Type: field.TypeString},
+		{Name: "resource_type", Type: field.TypeString},
+		{Name: "resource_id", Type: field.TypeInt, Nullable: true},
+		{Name: "message", Type: field.TypeString, Nullable: true},
+		{Name: "metadata", Type: field.TypeJSON},
+		{Name: "job_activity_logs", Type: field.TypeInt, Nullable: true},
+		{Name: "organization_activity_logs", Type: field.TypeInt, Nullable: true},
+		{Name: "project_activity_logs", Type: field.TypeInt, Nullable: true},
+		{Name: "user_activity_logs", Type: field.TypeInt, Nullable: true},
+	}
+	// ActivityLogsTable holds the schema information for the "activity_logs" table.
+	ActivityLogsTable = &schema.Table{
+		Name:       "activity_logs",
+		Columns:    ActivityLogsColumns,
+		PrimaryKey: []*schema.Column{ActivityLogsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "activity_logs_jobs_activity_logs",
+				Columns:    []*schema.Column{ActivityLogsColumns[8]},
+				RefColumns: []*schema.Column{JobsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "activity_logs_organizations_activity_logs",
+				Columns:    []*schema.Column{ActivityLogsColumns[9]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "activity_logs_projects_activity_logs",
+				Columns:    []*schema.Column{ActivityLogsColumns[10]},
+				RefColumns: []*schema.Column{ProjectsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "activity_logs_users_activity_logs",
+				Columns:    []*schema.Column{ActivityLogsColumns[11]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
 	// GlossaryEntriesColumns holds the columns for the "glossary_entries" table.
 	GlossaryEntriesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -398,6 +445,54 @@ var (
 			},
 		},
 	}
+	// UsageRecordsColumns holds the columns for the "usage_records" table.
+	UsageRecordsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "source", Type: field.TypeString, Default: "job"},
+		{Name: "api_calls", Type: field.TypeInt, Default: 0},
+		{Name: "input_tokens", Type: field.TypeInt, Default: 0},
+		{Name: "output_tokens", Type: field.TypeInt, Default: 0},
+		{Name: "segment_count", Type: field.TypeInt, Default: 0},
+		{Name: "note", Type: field.TypeString, Nullable: true},
+		{Name: "job_usage_records", Type: field.TypeInt, Nullable: true},
+		{Name: "organization_usage_records", Type: field.TypeInt, Nullable: true},
+		{Name: "project_usage_records", Type: field.TypeInt, Nullable: true},
+		{Name: "user_usage_records", Type: field.TypeInt, Nullable: true},
+	}
+	// UsageRecordsTable holds the schema information for the "usage_records" table.
+	UsageRecordsTable = &schema.Table{
+		Name:       "usage_records",
+		Columns:    UsageRecordsColumns,
+		PrimaryKey: []*schema.Column{UsageRecordsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "usage_records_jobs_usage_records",
+				Columns:    []*schema.Column{UsageRecordsColumns[9]},
+				RefColumns: []*schema.Column{JobsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "usage_records_organizations_usage_records",
+				Columns:    []*schema.Column{UsageRecordsColumns[10]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "usage_records_projects_usage_records",
+				Columns:    []*schema.Column{UsageRecordsColumns[11]},
+				RefColumns: []*schema.Column{ProjectsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "usage_records_users_usage_records",
+				Columns:    []*schema.Column{UsageRecordsColumns[12]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
 	// UsersColumns holds the columns for the "users" table.
 	UsersColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -450,6 +545,7 @@ var (
 	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
+		ActivityLogsTable,
 		GlossaryEntriesTable,
 		JobsTable,
 		OrgBackendsTable,
@@ -462,12 +558,17 @@ var (
 		StageBackendOverridesTable,
 		SubJobsTable,
 		TmEntriesTable,
+		UsageRecordsTable,
 		UsersTable,
 		UserBackendsTable,
 	}
 )
 
 func init() {
+	ActivityLogsTable.ForeignKeys[0].RefTable = JobsTable
+	ActivityLogsTable.ForeignKeys[1].RefTable = OrganizationsTable
+	ActivityLogsTable.ForeignKeys[2].RefTable = ProjectsTable
+	ActivityLogsTable.ForeignKeys[3].RefTable = UsersTable
 	GlossaryEntriesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	GlossaryEntriesTable.ForeignKeys[1].RefTable = ProjectsTable
 	JobsTable.ForeignKeys[0].RefTable = ProjectsTable
@@ -485,5 +586,9 @@ func init() {
 	SubJobsTable.ForeignKeys[0].RefTable = JobsTable
 	TmEntriesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	TmEntriesTable.ForeignKeys[1].RefTable = ProjectsTable
+	UsageRecordsTable.ForeignKeys[0].RefTable = JobsTable
+	UsageRecordsTable.ForeignKeys[1].RefTable = OrganizationsTable
+	UsageRecordsTable.ForeignKeys[2].RefTable = ProjectsTable
+	UsageRecordsTable.ForeignKeys[3].RefTable = UsersTable
 	UserBackendsTable.ForeignKeys[0].RefTable = UsersTable
 }

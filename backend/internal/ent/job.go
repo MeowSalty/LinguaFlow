@@ -60,9 +60,13 @@ type JobEdges struct {
 	CreatedBy *User `json:"created_by,omitempty"`
 	// SubJobs holds the value of the sub_jobs edge.
 	SubJobs []*SubJob `json:"sub_jobs,omitempty"`
+	// ActivityLogs holds the value of the activity_logs edge.
+	ActivityLogs []*ActivityLog `json:"activity_logs,omitempty"`
+	// UsageRecords holds the value of the usage_records edge.
+	UsageRecords []*UsageRecord `json:"usage_records,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [3]bool
+	loadedTypes [5]bool
 }
 
 // ProjectOrErr returns the Project value or an error if the edge
@@ -94,6 +98,24 @@ func (e JobEdges) SubJobsOrErr() ([]*SubJob, error) {
 		return e.SubJobs, nil
 	}
 	return nil, &NotLoadedError{edge: "sub_jobs"}
+}
+
+// ActivityLogsOrErr returns the ActivityLogs value or an error if the edge
+// was not loaded in eager-loading.
+func (e JobEdges) ActivityLogsOrErr() ([]*ActivityLog, error) {
+	if e.loadedTypes[3] {
+		return e.ActivityLogs, nil
+	}
+	return nil, &NotLoadedError{edge: "activity_logs"}
+}
+
+// UsageRecordsOrErr returns the UsageRecords value or an error if the edge
+// was not loaded in eager-loading.
+func (e JobEdges) UsageRecordsOrErr() ([]*UsageRecord, error) {
+	if e.loadedTypes[4] {
+		return e.UsageRecords, nil
+	}
+	return nil, &NotLoadedError{edge: "usage_records"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -249,6 +271,16 @@ func (_m *Job) QueryCreatedBy() *UserQuery {
 // QuerySubJobs queries the "sub_jobs" edge of the Job entity.
 func (_m *Job) QuerySubJobs() *SubJobQuery {
 	return NewJobClient(_m.config).QuerySubJobs(_m)
+}
+
+// QueryActivityLogs queries the "activity_logs" edge of the Job entity.
+func (_m *Job) QueryActivityLogs() *ActivityLogQuery {
+	return NewJobClient(_m.config).QueryActivityLogs(_m)
+}
+
+// QueryUsageRecords queries the "usage_records" edge of the Job entity.
+func (_m *Job) QueryUsageRecords() *UsageRecordQuery {
+	return NewJobClient(_m.config).QueryUsageRecords(_m)
 }
 
 // Update returns a builder for updating this Job.

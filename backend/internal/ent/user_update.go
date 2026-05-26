@@ -11,12 +11,14 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
 )
@@ -220,6 +222,36 @@ func (_u *UserUpdate) AddOwnedProjects(v ...*Project) *UserUpdate {
 	return _u.AddOwnedProjectIDs(ids...)
 }
 
+// AddActivityLogIDs adds the "activity_logs" edge to the ActivityLog entity by IDs.
+func (_u *UserUpdate) AddActivityLogIDs(ids ...int) *UserUpdate {
+	_u.mutation.AddActivityLogIDs(ids...)
+	return _u
+}
+
+// AddActivityLogs adds the "activity_logs" edges to the ActivityLog entity.
+func (_u *UserUpdate) AddActivityLogs(v ...*ActivityLog) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddActivityLogIDs(ids...)
+}
+
+// AddUsageRecordIDs adds the "usage_records" edge to the UsageRecord entity by IDs.
+func (_u *UserUpdate) AddUsageRecordIDs(ids ...int) *UserUpdate {
+	_u.mutation.AddUsageRecordIDs(ids...)
+	return _u
+}
+
+// AddUsageRecords adds the "usage_records" edges to the UsageRecord entity.
+func (_u *UserUpdate) AddUsageRecords(v ...*UsageRecord) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddUsageRecordIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdate) Mutation() *UserMutation {
 	return _u.mutation
@@ -349,6 +381,48 @@ func (_u *UserUpdate) RemoveOwnedProjects(v ...*Project) *UserUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveOwnedProjectIDs(ids...)
+}
+
+// ClearActivityLogs clears all "activity_logs" edges to the ActivityLog entity.
+func (_u *UserUpdate) ClearActivityLogs() *UserUpdate {
+	_u.mutation.ClearActivityLogs()
+	return _u
+}
+
+// RemoveActivityLogIDs removes the "activity_logs" edge to ActivityLog entities by IDs.
+func (_u *UserUpdate) RemoveActivityLogIDs(ids ...int) *UserUpdate {
+	_u.mutation.RemoveActivityLogIDs(ids...)
+	return _u
+}
+
+// RemoveActivityLogs removes "activity_logs" edges to ActivityLog entities.
+func (_u *UserUpdate) RemoveActivityLogs(v ...*ActivityLog) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveActivityLogIDs(ids...)
+}
+
+// ClearUsageRecords clears all "usage_records" edges to the UsageRecord entity.
+func (_u *UserUpdate) ClearUsageRecords() *UserUpdate {
+	_u.mutation.ClearUsageRecords()
+	return _u
+}
+
+// RemoveUsageRecordIDs removes the "usage_records" edge to UsageRecord entities by IDs.
+func (_u *UserUpdate) RemoveUsageRecordIDs(ids ...int) *UserUpdate {
+	_u.mutation.RemoveUsageRecordIDs(ids...)
+	return _u
+}
+
+// RemoveUsageRecords removes "usage_records" edges to UsageRecord entities.
+func (_u *UserUpdate) RemoveUsageRecords(v ...*UsageRecord) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveUsageRecordIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -713,6 +787,96 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.ActivityLogsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ActivityLogsTable,
+			Columns: []string{user.ActivityLogsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(activitylog.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedActivityLogsIDs(); len(nodes) > 0 && !_u.mutation.ActivityLogsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ActivityLogsTable,
+			Columns: []string{user.ActivityLogsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(activitylog.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ActivityLogsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ActivityLogsTable,
+			Columns: []string{user.ActivityLogsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(activitylog.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.UsageRecordsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.UsageRecordsTable,
+			Columns: []string{user.UsageRecordsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedUsageRecordsIDs(); len(nodes) > 0 && !_u.mutation.UsageRecordsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.UsageRecordsTable,
+			Columns: []string{user.UsageRecordsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.UsageRecordsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.UsageRecordsTable,
+			Columns: []string{user.UsageRecordsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{user.Label}
@@ -919,6 +1083,36 @@ func (_u *UserUpdateOne) AddOwnedProjects(v ...*Project) *UserUpdateOne {
 	return _u.AddOwnedProjectIDs(ids...)
 }
 
+// AddActivityLogIDs adds the "activity_logs" edge to the ActivityLog entity by IDs.
+func (_u *UserUpdateOne) AddActivityLogIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.AddActivityLogIDs(ids...)
+	return _u
+}
+
+// AddActivityLogs adds the "activity_logs" edges to the ActivityLog entity.
+func (_u *UserUpdateOne) AddActivityLogs(v ...*ActivityLog) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddActivityLogIDs(ids...)
+}
+
+// AddUsageRecordIDs adds the "usage_records" edge to the UsageRecord entity by IDs.
+func (_u *UserUpdateOne) AddUsageRecordIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.AddUsageRecordIDs(ids...)
+	return _u
+}
+
+// AddUsageRecords adds the "usage_records" edges to the UsageRecord entity.
+func (_u *UserUpdateOne) AddUsageRecords(v ...*UsageRecord) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddUsageRecordIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdateOne) Mutation() *UserMutation {
 	return _u.mutation
@@ -1048,6 +1242,48 @@ func (_u *UserUpdateOne) RemoveOwnedProjects(v ...*Project) *UserUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveOwnedProjectIDs(ids...)
+}
+
+// ClearActivityLogs clears all "activity_logs" edges to the ActivityLog entity.
+func (_u *UserUpdateOne) ClearActivityLogs() *UserUpdateOne {
+	_u.mutation.ClearActivityLogs()
+	return _u
+}
+
+// RemoveActivityLogIDs removes the "activity_logs" edge to ActivityLog entities by IDs.
+func (_u *UserUpdateOne) RemoveActivityLogIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.RemoveActivityLogIDs(ids...)
+	return _u
+}
+
+// RemoveActivityLogs removes "activity_logs" edges to ActivityLog entities.
+func (_u *UserUpdateOne) RemoveActivityLogs(v ...*ActivityLog) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveActivityLogIDs(ids...)
+}
+
+// ClearUsageRecords clears all "usage_records" edges to the UsageRecord entity.
+func (_u *UserUpdateOne) ClearUsageRecords() *UserUpdateOne {
+	_u.mutation.ClearUsageRecords()
+	return _u
+}
+
+// RemoveUsageRecordIDs removes the "usage_records" edge to UsageRecord entities by IDs.
+func (_u *UserUpdateOne) RemoveUsageRecordIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.RemoveUsageRecordIDs(ids...)
+	return _u
+}
+
+// RemoveUsageRecords removes "usage_records" edges to UsageRecord entities.
+func (_u *UserUpdateOne) RemoveUsageRecords(v ...*UsageRecord) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveUsageRecordIDs(ids...)
 }
 
 // Where appends a list predicates to the UserUpdate builder.
@@ -1435,6 +1671,96 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(project.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ActivityLogsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ActivityLogsTable,
+			Columns: []string{user.ActivityLogsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(activitylog.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedActivityLogsIDs(); len(nodes) > 0 && !_u.mutation.ActivityLogsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ActivityLogsTable,
+			Columns: []string{user.ActivityLogsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(activitylog.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ActivityLogsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ActivityLogsTable,
+			Columns: []string{user.ActivityLogsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(activitylog.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.UsageRecordsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.UsageRecordsTable,
+			Columns: []string{user.UsageRecordsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedUsageRecordsIDs(); len(nodes) > 0 && !_u.mutation.UsageRecordsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.UsageRecordsTable,
+			Columns: []string{user.UsageRecordsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.UsageRecordsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.UsageRecordsTable,
+			Columns: []string{user.UsageRecordsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
