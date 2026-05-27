@@ -12,6 +12,12 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    NCard: typeof import('naive-ui')['NCard']
+    NConfigProvider: typeof import('naive-ui')['NConfigProvider']
+    NLayout: typeof import('naive-ui')['NLayout']
+    NLayoutContent: typeof import('naive-ui')['NLayoutContent']
+    NLayoutHeader: typeof import('naive-ui')['NLayoutHeader']
+    NMessageProvider: typeof import('naive-ui')['NMessageProvider']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
   }
@@ -19,6 +25,12 @@ declare module 'vue' {
 
 // For TSX support
 declare global {
+  const NCard: typeof import('naive-ui')['NCard']
+  const NConfigProvider: typeof import('naive-ui')['NConfigProvider']
+  const NLayout: typeof import('naive-ui')['NLayout']
+  const NLayoutContent: typeof import('naive-ui')['NLayoutContent']
+  const NLayoutHeader: typeof import('naive-ui')['NLayoutHeader']
+  const NMessageProvider: typeof import('naive-ui')['NMessageProvider']
   const RouterLink: typeof import('vue-router')['RouterLink']
   const RouterView: typeof import('vue-router')['RouterView']
 }
