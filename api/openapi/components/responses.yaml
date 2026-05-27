@@ -1,0 +1,6 @@
+Problem:
+  description: 错误响应
+  content:
+    application/problem+json:
+      schema:
+        $ref: './schemas/common.yaml#/Problem'

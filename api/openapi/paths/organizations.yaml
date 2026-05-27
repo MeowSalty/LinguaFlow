@@ -1,0 +1,146 @@
+organizations:
+  get:
+    operationId: ListOrganizations
+    summary: 列出当前用户所属组织
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 组织列表
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/OrganizationListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  post:
+    operationId: CreateOrganization
+    summary: 创建组织
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/OrganizationRequest'
+    responses:
+      '201':
+        description: 已创建组织
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/Organization'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+organizationById:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/OrgId'
+  get:
+    operationId: GetOrganization
+    summary: 获取组织详情
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 组织详情
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/Organization'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  put:
+    operationId: UpdateOrganization
+    summary: 更新组织信息
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/OrganizationRequest'
+    responses:
+      '200':
+        description: 更新后的组织
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/Organization'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+organizationMembers:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/OrgId'
+  get:
+    operationId: ListOrganizationMembers
+    summary: 获取组织成员列表
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 成员列表
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/OrganizationMemberListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  post:
+    operationId: AddOrganizationMember
+    summary: 添加组织成员
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/AddOrganizationMemberRequest'
+    responses:
+      '201':
+        description: 已添加成员
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/OrganizationMember'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+organizationMemberByUserId:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/OrgId'
+    - $ref: '../base.yaml#/components/parameters/UserId'
+  put:
+    operationId: UpdateOrganizationMember
+    summary: 修改组织成员角色
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/UpdateOrganizationMemberRequest'
+    responses:
+      '200':
+        description: 更新后的成员
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/OrganizationMember'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  delete:
+    operationId: DeleteOrganizationMember
+    summary: 移除组织成员
+    security:
+      - bearerAuth: []
+    responses:
+      '204':
+        description: 已移除成员
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

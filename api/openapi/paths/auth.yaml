@@ -1,0 +1,77 @@
+register:
+  post:
+    operationId: RegisterAuth
+    summary: 注册用户并签发会话
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/RegisterRequest'
+    responses:
+      '201':
+        description: 已创建
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/AuthSession'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+login:
+  post:
+    operationId: LoginAuth
+    summary: 用户登录
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/LoginRequest'
+    responses:
+      '200':
+        description: 登录成功
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/AuthSession'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+refresh:
+  post:
+    operationId: RefreshAuth
+    summary: 刷新访问令牌
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/RefreshRequest'
+    responses:
+      '200':
+        description: 刷新成功
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/AuthSession'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+logout:
+  post:
+    operationId: LogoutAuth
+    summary: 登出并撤销刷新令牌
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/LogoutRequest'
+    responses:
+      '204':
+        description: 已登出
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

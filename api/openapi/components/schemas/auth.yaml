@@ -1,0 +1,55 @@
+RegisterRequest:
+  type: object
+  required: [username, password, email]
+  properties:
+    username:
+      type: string
+    password:
+      type: string
+    email:
+      type: string
+      format: email
+    display_name:
+      type: string
+
+LoginRequest:
+  type: object
+  required: [username, password]
+  properties:
+    username:
+      type: string
+    password:
+      type: string
+
+RefreshRequest:
+  type: object
+  required: [refresh_token]
+  properties:
+    refresh_token:
+      type: string
+
+LogoutRequest:
+  type: object
+  required: [refresh_token]
+  properties:
+    refresh_token:
+      type: string
+
+AuthSession:
+  type: object
+  required: [access_token, refresh_token, token_type, expires_at, refresh_expires_at, user]
+  properties:
+    access_token:
+      type: string
+    refresh_token:
+      type: string
+    token_type:
+      type: string
+    expires_at:
+      type: string
+      format: date-time
+    refresh_expires_at:
+      type: string
+      format: date-time
+    user:
+      $ref: './user.yaml#/User'
