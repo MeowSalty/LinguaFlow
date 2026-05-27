@@ -25,57 +25,57 @@ const (
 	BearerAuthScopes = "bearerAuth.Scopes"
 )
 
-// Defines values for ComponentsSchemasOrganizationAddOrganizationMemberRequestRole.
+// Defines values for AddOrganizationMemberRequestRole.
 const (
-	ComponentsSchemasOrganizationAddOrganizationMemberRequestRoleAdmin  ComponentsSchemasOrganizationAddOrganizationMemberRequestRole = "admin"
-	ComponentsSchemasOrganizationAddOrganizationMemberRequestRoleMember ComponentsSchemasOrganizationAddOrganizationMemberRequestRole = "member"
-	ComponentsSchemasOrganizationAddOrganizationMemberRequestRoleOwner  ComponentsSchemasOrganizationAddOrganizationMemberRequestRole = "owner"
+	AddOrganizationMemberRequestRoleAdmin  AddOrganizationMemberRequestRole = "admin"
+	AddOrganizationMemberRequestRoleMember AddOrganizationMemberRequestRole = "member"
+	AddOrganizationMemberRequestRoleOwner  AddOrganizationMemberRequestRole = "owner"
 )
 
-// Valid indicates whether the value is a known member of the ComponentsSchemasOrganizationAddOrganizationMemberRequestRole enum.
-func (e ComponentsSchemasOrganizationAddOrganizationMemberRequestRole) Valid() bool {
+// Valid indicates whether the value is a known member of the AddOrganizationMemberRequestRole enum.
+func (e AddOrganizationMemberRequestRole) Valid() bool {
 	switch e {
-	case ComponentsSchemasOrganizationAddOrganizationMemberRequestRoleAdmin:
+	case AddOrganizationMemberRequestRoleAdmin:
 		return true
-	case ComponentsSchemasOrganizationAddOrganizationMemberRequestRoleMember:
+	case AddOrganizationMemberRequestRoleMember:
 		return true
-	case ComponentsSchemasOrganizationAddOrganizationMemberRequestRoleOwner:
+	case AddOrganizationMemberRequestRoleOwner:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for ComponentsSchemasOrganizationOrganizationMemberRole.
+// Defines values for OrganizationMemberRole.
 const (
-	ComponentsSchemasOrganizationOrganizationMemberRoleAdmin  ComponentsSchemasOrganizationOrganizationMemberRole = "admin"
-	ComponentsSchemasOrganizationOrganizationMemberRoleMember ComponentsSchemasOrganizationOrganizationMemberRole = "member"
-	ComponentsSchemasOrganizationOrganizationMemberRoleOwner  ComponentsSchemasOrganizationOrganizationMemberRole = "owner"
+	OrganizationMemberRoleAdmin  OrganizationMemberRole = "admin"
+	OrganizationMemberRoleMember OrganizationMemberRole = "member"
+	OrganizationMemberRoleOwner  OrganizationMemberRole = "owner"
 )
 
-// Valid indicates whether the value is a known member of the ComponentsSchemasOrganizationOrganizationMemberRole enum.
-func (e ComponentsSchemasOrganizationOrganizationMemberRole) Valid() bool {
+// Valid indicates whether the value is a known member of the OrganizationMemberRole enum.
+func (e OrganizationMemberRole) Valid() bool {
 	switch e {
-	case ComponentsSchemasOrganizationOrganizationMemberRoleAdmin:
+	case OrganizationMemberRoleAdmin:
 		return true
-	case ComponentsSchemasOrganizationOrganizationMemberRoleMember:
+	case OrganizationMemberRoleMember:
 		return true
-	case ComponentsSchemasOrganizationOrganizationMemberRoleOwner:
+	case OrganizationMemberRoleOwner:
 		return true
 	default:
 		return false
 	}
 }
 
-// Defines values for ComponentsSchemasOrganizationUpdateOrganizationMemberRequestRole.
+// Defines values for UpdateOrganizationMemberRequestRole.
 const (
-	Admin  ComponentsSchemasOrganizationUpdateOrganizationMemberRequestRole = "admin"
-	Member ComponentsSchemasOrganizationUpdateOrganizationMemberRequestRole = "member"
-	Owner  ComponentsSchemasOrganizationUpdateOrganizationMemberRequestRole = "owner"
+	Admin  UpdateOrganizationMemberRequestRole = "admin"
+	Member UpdateOrganizationMemberRequestRole = "member"
+	Owner  UpdateOrganizationMemberRequestRole = "owner"
 )
 
-// Valid indicates whether the value is a known member of the ComponentsSchemasOrganizationUpdateOrganizationMemberRequestRole enum.
-func (e ComponentsSchemasOrganizationUpdateOrganizationMemberRequestRole) Valid() bool {
+// Valid indicates whether the value is a known member of the UpdateOrganizationMemberRequestRole enum.
+func (e UpdateOrganizationMemberRequestRole) Valid() bool {
 	switch e {
 	case Admin:
 		return true
@@ -88,60 +88,8 @@ func (e ComponentsSchemasOrganizationUpdateOrganizationMemberRequestRole) Valid(
 	}
 }
 
-// User defines model for User.
-type User struct {
-	Active      bool                `json:"active"`
-	DisplayName *string             `json:"display_name,omitempty"`
-	Email       openapi_types.Email `json:"email"`
-	Id          int                 `json:"id"`
-	Role        string              `json:"role"`
-	Username    string              `json:"username"`
-}
-
-// ComponentsSchemasAuthAuthSession defines model for components_schemas_auth_AuthSession.
-type ComponentsSchemasAuthAuthSession struct {
-	AccessToken      string                    `json:"access_token"`
-	ExpiresAt        time.Time                 `json:"expires_at"`
-	RefreshExpiresAt time.Time                 `json:"refresh_expires_at"`
-	RefreshToken     string                    `json:"refresh_token"`
-	TokenType        string                    `json:"token_type"`
-	User             ComponentsSchemasUserUser `json:"user"`
-}
-
-// ComponentsSchemasAuthLoginRequest defines model for components_schemas_auth_LoginRequest.
-type ComponentsSchemasAuthLoginRequest struct {
-	Password string `json:"password"`
-	Username string `json:"username"`
-}
-
-// ComponentsSchemasAuthLogoutRequest defines model for components_schemas_auth_LogoutRequest.
-type ComponentsSchemasAuthLogoutRequest struct {
-	RefreshToken string `json:"refresh_token"`
-}
-
-// ComponentsSchemasAuthRefreshRequest defines model for components_schemas_auth_RefreshRequest.
-type ComponentsSchemasAuthRefreshRequest struct {
-	RefreshToken string `json:"refresh_token"`
-}
-
-// ComponentsSchemasAuthRegisterRequest defines model for components_schemas_auth_RegisterRequest.
-type ComponentsSchemasAuthRegisterRequest struct {
-	DisplayName *string             `json:"display_name,omitempty"`
-	Email       openapi_types.Email `json:"email"`
-	Password    string              `json:"password"`
-	Username    string              `json:"username"`
-}
-
-// ComponentsSchemasCommonProblem defines model for components_schemas_common_Problem.
-type ComponentsSchemasCommonProblem struct {
-	Detail *string `json:"detail,omitempty"`
-	Status int     `json:"status"`
-	Title  string  `json:"title"`
-	Type   *string `json:"type,omitempty"`
-}
-
-// ComponentsSchemasJobActivity defines model for components_schemas_job_Activity.
-type ComponentsSchemasJobActivity struct {
+// Activity defines model for Activity.
+type Activity struct {
 	Action       string                  `json:"action"`
 	Actor        *User                   `json:"actor,omitempty"`
 	CreatedAt    time.Time               `json:"created_at"`
@@ -153,40 +101,134 @@ type ComponentsSchemasJobActivity struct {
 	UpdatedAt    time.Time               `json:"updated_at"`
 }
 
-// ComponentsSchemasJobActivityListResponse defines model for components_schemas_job_ActivityListResponse.
-type ComponentsSchemasJobActivityListResponse struct {
-	Items      []ComponentsSchemasJobActivity `json:"items"`
-	NextCursor *string                        `json:"next_cursor,omitempty"`
+// ActivityListResponse defines model for ActivityListResponse.
+type ActivityListResponse struct {
+	Items      []Activity `json:"items"`
+	NextCursor *string    `json:"next_cursor,omitempty"`
 }
 
-// ComponentsSchemasJobJob defines model for components_schemas_job_Job.
-type ComponentsSchemasJobJob struct {
-	CompletedSubJobs int                          `json:"completed_sub_jobs"`
-	CreatedAt        *time.Time                   `json:"created_at,omitempty"`
-	ErrorMessage     *string                      `json:"error_message,omitempty"`
-	FailedSubJobs    int                          `json:"failed_sub_jobs"`
-	Id               int                          `json:"id"`
-	InputPath        *string                      `json:"input_path,omitempty"`
-	OutputPath       *string                      `json:"output_path,omitempty"`
-	ProjectId        int                          `json:"project_id"`
-	SourceLang       string                       `json:"source_lang"`
-	Status           string                       `json:"status"`
-	SubJobCount      int                          `json:"sub_job_count"`
-	SubJobs          []ComponentsSchemasJobSubJob `json:"sub_jobs"`
-	TargetLang       string                       `json:"target_lang"`
-	UpdatedAt        *time.Time                   `json:"updated_at,omitempty"`
+// AddOrganizationMemberRequest defines model for AddOrganizationMemberRequest.
+type AddOrganizationMemberRequest struct {
+	Role     *AddOrganizationMemberRequestRole `json:"role,omitempty"`
+	Username string                            `json:"username"`
 }
 
-// ComponentsSchemasJobJobCreateResponse defines model for components_schemas_job_JobCreateResponse.
-type ComponentsSchemasJobJobCreateResponse struct {
-	CreatedAt time.Time                           `json:"created_at"`
-	JobId     int                                 `json:"job_id"`
-	Status    string                              `json:"status"`
-	SubJobs   []ComponentsSchemasJobSubJobSummary `json:"sub_jobs"`
+// AddOrganizationMemberRequestRole defines model for AddOrganizationMemberRequest.Role.
+type AddOrganizationMemberRequestRole string
+
+// AuthSession defines model for AuthSession.
+type AuthSession struct {
+	AccessToken      string    `json:"access_token"`
+	ExpiresAt        time.Time `json:"expires_at"`
+	RefreshExpiresAt time.Time `json:"refresh_expires_at"`
+	RefreshToken     string    `json:"refresh_token"`
+	TokenType        string    `json:"token_type"`
+	User             User      `json:"user"`
 }
 
-// ComponentsSchemasJobSegment defines model for components_schemas_job_Segment.
-type ComponentsSchemasJobSegment struct {
+// ChangePasswordRequest defines model for ChangePasswordRequest.
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+// Job defines model for Job.
+type Job struct {
+	CompletedSubJobs int        `json:"completed_sub_jobs"`
+	CreatedAt        *time.Time `json:"created_at,omitempty"`
+	ErrorMessage     *string    `json:"error_message,omitempty"`
+	FailedSubJobs    int        `json:"failed_sub_jobs"`
+	Id               int        `json:"id"`
+	InputPath        *string    `json:"input_path,omitempty"`
+	OutputPath       *string    `json:"output_path,omitempty"`
+	ProjectId        int        `json:"project_id"`
+	SourceLang       string     `json:"source_lang"`
+	Status           string     `json:"status"`
+	SubJobCount      int        `json:"sub_job_count"`
+	SubJobs          []SubJob   `json:"sub_jobs"`
+	TargetLang       string     `json:"target_lang"`
+	UpdatedAt        *time.Time `json:"updated_at,omitempty"`
+}
+
+// JobCreateResponse defines model for JobCreateResponse.
+type JobCreateResponse struct {
+	CreatedAt time.Time       `json:"created_at"`
+	JobId     int             `json:"job_id"`
+	Status    string          `json:"status"`
+	SubJobs   []SubJobSummary `json:"sub_jobs"`
+}
+
+// LoginRequest defines model for LoginRequest.
+type LoginRequest struct {
+	Password string `json:"password"`
+	Username string `json:"username"`
+}
+
+// LogoutRequest defines model for LogoutRequest.
+type LogoutRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+// Organization defines model for Organization.
+type Organization struct {
+	Description *string `json:"description,omitempty"`
+	DisplayName *string `json:"display_name,omitempty"`
+	Id          int     `json:"id"`
+	Name        string  `json:"name"`
+	Slug        string  `json:"slug"`
+}
+
+// OrganizationListResponse defines model for OrganizationListResponse.
+type OrganizationListResponse struct {
+	Items []Organization `json:"items"`
+}
+
+// OrganizationMember defines model for OrganizationMember.
+type OrganizationMember struct {
+	Id   int                    `json:"id"`
+	Role OrganizationMemberRole `json:"role"`
+	User User                   `json:"user"`
+}
+
+// OrganizationMemberRole defines model for OrganizationMember.Role.
+type OrganizationMemberRole string
+
+// OrganizationMemberListResponse defines model for OrganizationMemberListResponse.
+type OrganizationMemberListResponse struct {
+	Items []OrganizationMember `json:"items"`
+}
+
+// OrganizationRequest defines model for OrganizationRequest.
+type OrganizationRequest struct {
+	Description *string `json:"description,omitempty"`
+	DisplayName *string `json:"display_name,omitempty"`
+	Name        string  `json:"name"`
+	Slug        string  `json:"slug"`
+}
+
+// Problem defines model for Problem.
+type Problem struct {
+	Detail *string `json:"detail,omitempty"`
+	Status int     `json:"status"`
+	Title  string  `json:"title"`
+	Type   *string `json:"type,omitempty"`
+}
+
+// RefreshRequest defines model for RefreshRequest.
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+// RegisterRequest defines model for RegisterRequest.
+type RegisterRequest struct {
+	DisplayName *string             `json:"display_name,omitempty"`
+	Email       openapi_types.Email `json:"email"`
+	Password    string              `json:"password"`
+	Username    string              `json:"username"`
+}
+
+// Segment defines model for Segment.
+type Segment struct {
 	CreatedAt     time.Time `json:"created_at"`
 	Id            int       `json:"id"`
 	ReviewComment *string   `json:"review_comment,omitempty"`
@@ -199,25 +241,25 @@ type ComponentsSchemasJobSegment struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
-// ComponentsSchemasJobSegmentDecisionRequest defines model for components_schemas_job_SegmentDecisionRequest.
-type ComponentsSchemasJobSegmentDecisionRequest struct {
+// SegmentDecisionRequest defines model for SegmentDecisionRequest.
+type SegmentDecisionRequest struct {
 	Comment *string `json:"comment,omitempty"`
 }
 
-// ComponentsSchemasJobSegmentEditRequest defines model for components_schemas_job_SegmentEditRequest.
-type ComponentsSchemasJobSegmentEditRequest struct {
+// SegmentEditRequest defines model for SegmentEditRequest.
+type SegmentEditRequest struct {
 	Comment    *string `json:"comment,omitempty"`
 	TargetText string  `json:"target_text"`
 }
 
-// ComponentsSchemasJobSegmentListResponse defines model for components_schemas_job_SegmentListResponse.
-type ComponentsSchemasJobSegmentListResponse struct {
-	Items      []ComponentsSchemasJobSegment `json:"items"`
-	NextCursor *string                       `json:"next_cursor,omitempty"`
+// SegmentListResponse defines model for SegmentListResponse.
+type SegmentListResponse struct {
+	Items      []Segment `json:"items"`
+	NextCursor *string   `json:"next_cursor,omitempty"`
 }
 
-// ComponentsSchemasJobSubJob defines model for components_schemas_job_SubJob.
-type ComponentsSchemasJobSubJob struct {
+// SubJob defines model for SubJob.
+type SubJob struct {
 	CreatedAt     *time.Time `json:"created_at,omitempty"`
 	ErrorMessage  *string    `json:"error_message,omitempty"`
 	Id            int        `json:"id"`
@@ -230,20 +272,34 @@ type ComponentsSchemasJobSubJob struct {
 	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
 }
 
-// ComponentsSchemasJobSubJobListResponse defines model for components_schemas_job_SubJobListResponse.
-type ComponentsSchemasJobSubJobListResponse struct {
-	Items []ComponentsSchemasJobSubJob `json:"items"`
+// SubJobListResponse defines model for SubJobListResponse.
+type SubJobListResponse struct {
+	Items []SubJob `json:"items"`
 }
 
-// ComponentsSchemasJobSubJobSummary defines model for components_schemas_job_SubJobSummary.
-type ComponentsSchemasJobSubJobSummary struct {
+// SubJobSummary defines model for SubJobSummary.
+type SubJobSummary struct {
 	Filename string `json:"filename"`
 	Id       int    `json:"id"`
 	Status   string `json:"status"`
 }
 
-// ComponentsSchemasJobUsageStats defines model for components_schemas_job_UsageStats.
-type ComponentsSchemasJobUsageStats struct {
+// UpdateCurrentUserRequest defines model for UpdateCurrentUserRequest.
+type UpdateCurrentUserRequest struct {
+	DisplayName *string              `json:"display_name,omitempty"`
+	Email       *openapi_types.Email `json:"email,omitempty"`
+}
+
+// UpdateOrganizationMemberRequest defines model for UpdateOrganizationMemberRequest.
+type UpdateOrganizationMemberRequest struct {
+	Role UpdateOrganizationMemberRequestRole `json:"role"`
+}
+
+// UpdateOrganizationMemberRequestRole defines model for UpdateOrganizationMemberRequest.Role.
+type UpdateOrganizationMemberRequestRole string
+
+// UsageStats defines model for UsageStats.
+type UsageStats struct {
 	ApiCalls      int `json:"api_calls"`
 	CompletedJobs int `json:"completed_jobs"`
 	FailedJobs    int `json:"failed_jobs"`
@@ -253,74 +309,8 @@ type ComponentsSchemasJobUsageStats struct {
 	UsageRecords  int `json:"usage_records"`
 }
 
-// ComponentsSchemasOrganizationAddOrganizationMemberRequest defines model for components_schemas_organization_AddOrganizationMemberRequest.
-type ComponentsSchemasOrganizationAddOrganizationMemberRequest struct {
-	Role     *ComponentsSchemasOrganizationAddOrganizationMemberRequestRole `json:"role,omitempty"`
-	Username string                                                         `json:"username"`
-}
-
-// ComponentsSchemasOrganizationAddOrganizationMemberRequestRole defines model for ComponentsSchemasOrganizationAddOrganizationMemberRequest.Role.
-type ComponentsSchemasOrganizationAddOrganizationMemberRequestRole string
-
-// ComponentsSchemasOrganizationOrganization defines model for components_schemas_organization_Organization.
-type ComponentsSchemasOrganizationOrganization struct {
-	Description *string `json:"description,omitempty"`
-	DisplayName *string `json:"display_name,omitempty"`
-	Id          int     `json:"id"`
-	Name        string  `json:"name"`
-	Slug        string  `json:"slug"`
-}
-
-// ComponentsSchemasOrganizationOrganizationListResponse defines model for components_schemas_organization_OrganizationListResponse.
-type ComponentsSchemasOrganizationOrganizationListResponse struct {
-	Items []ComponentsSchemasOrganizationOrganization `json:"items"`
-}
-
-// ComponentsSchemasOrganizationOrganizationMember defines model for components_schemas_organization_OrganizationMember.
-type ComponentsSchemasOrganizationOrganizationMember struct {
-	Id   int                                                 `json:"id"`
-	Role ComponentsSchemasOrganizationOrganizationMemberRole `json:"role"`
-	User ComponentsSchemasUserUser                           `json:"user"`
-}
-
-// ComponentsSchemasOrganizationOrganizationMemberRole defines model for ComponentsSchemasOrganizationOrganizationMember.Role.
-type ComponentsSchemasOrganizationOrganizationMemberRole string
-
-// ComponentsSchemasOrganizationOrganizationMemberListResponse defines model for components_schemas_organization_OrganizationMemberListResponse.
-type ComponentsSchemasOrganizationOrganizationMemberListResponse struct {
-	Items []ComponentsSchemasOrganizationOrganizationMember `json:"items"`
-}
-
-// ComponentsSchemasOrganizationOrganizationRequest defines model for components_schemas_organization_OrganizationRequest.
-type ComponentsSchemasOrganizationOrganizationRequest struct {
-	Description *string `json:"description,omitempty"`
-	DisplayName *string `json:"display_name,omitempty"`
-	Name        string  `json:"name"`
-	Slug        string  `json:"slug"`
-}
-
-// ComponentsSchemasOrganizationUpdateOrganizationMemberRequest defines model for components_schemas_organization_UpdateOrganizationMemberRequest.
-type ComponentsSchemasOrganizationUpdateOrganizationMemberRequest struct {
-	Role ComponentsSchemasOrganizationUpdateOrganizationMemberRequestRole `json:"role"`
-}
-
-// ComponentsSchemasOrganizationUpdateOrganizationMemberRequestRole defines model for ComponentsSchemasOrganizationUpdateOrganizationMemberRequest.Role.
-type ComponentsSchemasOrganizationUpdateOrganizationMemberRequestRole string
-
-// ComponentsSchemasUserChangePasswordRequest defines model for components_schemas_user_ChangePasswordRequest.
-type ComponentsSchemasUserChangePasswordRequest struct {
-	CurrentPassword string `json:"current_password"`
-	NewPassword     string `json:"new_password"`
-}
-
-// ComponentsSchemasUserUpdateCurrentUserRequest defines model for components_schemas_user_UpdateCurrentUserRequest.
-type ComponentsSchemasUserUpdateCurrentUserRequest struct {
-	DisplayName *string              `json:"display_name,omitempty"`
-	Email       *openapi_types.Email `json:"email,omitempty"`
-}
-
-// ComponentsSchemasUserUser defines model for components_schemas_user_User.
-type ComponentsSchemasUserUser struct {
+// User defines model for User.
+type User struct {
 	Active      bool                `json:"active"`
 	DisplayName *string             `json:"display_name,omitempty"`
 	Email       openapi_types.Email `json:"email"`
@@ -329,43 +319,40 @@ type ComponentsSchemasUserUser struct {
 	Username    string              `json:"username"`
 }
 
-// ComponentsParametersJobId defines model for components_parameters_JobId.
-type ComponentsParametersJobId = int
+// Cursor defines model for Cursor.
+type Cursor = string
 
-// ComponentsParametersOrgId defines model for components_parameters_OrgId.
-type ComponentsParametersOrgId = int
+// JobId defines model for JobId.
+type JobId = int
 
-// ComponentsParametersProjectId defines model for components_parameters_ProjectId.
-type ComponentsParametersProjectId = int
+// Limit defines model for Limit.
+type Limit = int
 
-// ComponentsParametersSubJobId defines model for components_parameters_SubJobId.
-type ComponentsParametersSubJobId = int
+// OrgId defines model for OrgId.
+type OrgId = int
 
-// ComponentsParametersUserId defines model for components_parameters_UserId.
-type ComponentsParametersUserId = int
+// ProjectId defines model for ProjectId.
+type ProjectId = int
 
-// ComponentsParametersExtraCursor defines model for components_parameters_extra_Cursor.
-type ComponentsParametersExtraCursor = string
+// SegmentId defines model for SegmentId.
+type SegmentId = int
 
-// ComponentsParametersExtraLimit defines model for components_parameters_extra_Limit.
-type ComponentsParametersExtraLimit = int
+// SubJobId defines model for SubJobId.
+type SubJobId = int
 
-// ComponentsParametersExtraSegmentId defines model for components_parameters_extra_SegmentId.
-type ComponentsParametersExtraSegmentId = int
-
-// ComponentsResponsesProblem defines model for components_responses_Problem.
-type ComponentsResponsesProblem = ComponentsSchemasCommonProblem
+// UserId defines model for UserId.
+type UserId = int
 
 // ListActivityParams defines parameters for ListActivity.
 type ListActivityParams struct {
-	Cursor *ComponentsParametersExtraCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
-	Limit  *ComponentsParametersExtraLimit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // ListJobSegmentsParams defines parameters for ListJobSegments.
 type ListJobSegmentsParams struct {
-	Cursor *ComponentsParametersExtraCursor `form:"cursor,omitempty" json:"cursor,omitempty"`
-	Limit  *ComponentsParametersExtraLimit  `form:"limit,omitempty" json:"limit,omitempty"`
+	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
 // CreateProjectJobMultipartBody defines parameters for CreateProjectJob.
@@ -376,46 +363,46 @@ type CreateProjectJobMultipartBody struct {
 }
 
 // LoginAuthJSONRequestBody defines body for LoginAuth for application/json ContentType.
-type LoginAuthJSONRequestBody = ComponentsSchemasAuthLoginRequest
+type LoginAuthJSONRequestBody = LoginRequest
 
 // LogoutAuthJSONRequestBody defines body for LogoutAuth for application/json ContentType.
-type LogoutAuthJSONRequestBody = ComponentsSchemasAuthLogoutRequest
+type LogoutAuthJSONRequestBody = LogoutRequest
 
 // RefreshAuthJSONRequestBody defines body for RefreshAuth for application/json ContentType.
-type RefreshAuthJSONRequestBody = ComponentsSchemasAuthRefreshRequest
+type RefreshAuthJSONRequestBody = RefreshRequest
 
 // RegisterAuthJSONRequestBody defines body for RegisterAuth for application/json ContentType.
-type RegisterAuthJSONRequestBody = ComponentsSchemasAuthRegisterRequest
+type RegisterAuthJSONRequestBody = RegisterRequest
 
 // CreateOrganizationJSONRequestBody defines body for CreateOrganization for application/json ContentType.
-type CreateOrganizationJSONRequestBody = ComponentsSchemasOrganizationOrganizationRequest
+type CreateOrganizationJSONRequestBody = OrganizationRequest
 
 // UpdateOrganizationJSONRequestBody defines body for UpdateOrganization for application/json ContentType.
-type UpdateOrganizationJSONRequestBody = ComponentsSchemasOrganizationOrganizationRequest
+type UpdateOrganizationJSONRequestBody = OrganizationRequest
 
 // AddOrganizationMemberJSONRequestBody defines body for AddOrganizationMember for application/json ContentType.
-type AddOrganizationMemberJSONRequestBody = ComponentsSchemasOrganizationAddOrganizationMemberRequest
+type AddOrganizationMemberJSONRequestBody = AddOrganizationMemberRequest
 
 // UpdateOrganizationMemberJSONRequestBody defines body for UpdateOrganizationMember for application/json ContentType.
-type UpdateOrganizationMemberJSONRequestBody = ComponentsSchemasOrganizationUpdateOrganizationMemberRequest
+type UpdateOrganizationMemberJSONRequestBody = UpdateOrganizationMemberRequest
 
 // CreateProjectJobMultipartRequestBody defines body for CreateProjectJob for multipart/form-data ContentType.
 type CreateProjectJobMultipartRequestBody CreateProjectJobMultipartBody
 
 // EditSegmentJSONRequestBody defines body for EditSegment for application/json ContentType.
-type EditSegmentJSONRequestBody = ComponentsSchemasJobSegmentEditRequest
+type EditSegmentJSONRequestBody = SegmentEditRequest
 
 // ApproveSegmentJSONRequestBody defines body for ApproveSegment for application/json ContentType.
-type ApproveSegmentJSONRequestBody = ComponentsSchemasJobSegmentDecisionRequest
+type ApproveSegmentJSONRequestBody = SegmentDecisionRequest
 
 // RejectSegmentJSONRequestBody defines body for RejectSegment for application/json ContentType.
-type RejectSegmentJSONRequestBody = ComponentsSchemasJobSegmentDecisionRequest
+type RejectSegmentJSONRequestBody = SegmentDecisionRequest
 
 // UpdateCurrentUserJSONRequestBody defines body for UpdateCurrentUser for application/json ContentType.
-type UpdateCurrentUserJSONRequestBody = ComponentsSchemasUserUpdateCurrentUserRequest
+type UpdateCurrentUserJSONRequestBody = UpdateCurrentUserRequest
 
 // ChangeCurrentUserPasswordJSONRequestBody defines body for ChangeCurrentUserPassword for application/json ContentType.
-type ChangeCurrentUserPasswordJSONRequestBody = ComponentsSchemasUserChangePasswordRequest
+type ChangeCurrentUserPasswordJSONRequestBody = ChangePasswordRequest
 
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
@@ -436,31 +423,31 @@ type ServerInterface interface {
 	RegisterAuth(w http.ResponseWriter, r *http.Request)
 	// 获取任务详情
 	// (GET /jobs/{jobId})
-	GetJob(w http.ResponseWriter, r *http.Request, jobId ComponentsParametersJobId)
+	GetJob(w http.ResponseWriter, r *http.Request, jobId JobId)
 	// 批量通过任务审校
 	// (POST /jobs/{jobId}/approve)
-	ApproveJob(w http.ResponseWriter, r *http.Request, jobId ComponentsParametersJobId)
+	ApproveJob(w http.ResponseWriter, r *http.Request, jobId JobId)
 	// 取消任务
 	// (POST /jobs/{jobId}/cancel)
-	CancelJob(w http.ResponseWriter, r *http.Request, jobId ComponentsParametersJobId)
+	CancelJob(w http.ResponseWriter, r *http.Request, jobId JobId)
 	// 下载任务输出
 	// (GET /jobs/{jobId}/download)
-	DownloadJobResult(w http.ResponseWriter, r *http.Request, jobId ComponentsParametersJobId)
+	DownloadJobResult(w http.ResponseWriter, r *http.Request, jobId JobId)
 	// 重译被驳回段
 	// (POST /jobs/{jobId}/retranslate)
-	RetranslateRejectedSegments(w http.ResponseWriter, r *http.Request, jobId ComponentsParametersJobId)
+	RetranslateRejectedSegments(w http.ResponseWriter, r *http.Request, jobId JobId)
 	// 重试失败子任务
 	// (POST /jobs/{jobId}/retry)
-	RetryJob(w http.ResponseWriter, r *http.Request, jobId ComponentsParametersJobId)
+	RetryJob(w http.ResponseWriter, r *http.Request, jobId JobId)
 	// 获取任务段列表
 	// (GET /jobs/{jobId}/segments)
-	ListJobSegments(w http.ResponseWriter, r *http.Request, jobId ComponentsParametersJobId, params ListJobSegmentsParams)
+	ListJobSegments(w http.ResponseWriter, r *http.Request, jobId JobId, params ListJobSegmentsParams)
 	// 获取任务子任务列表
 	// (GET /jobs/{jobId}/subjobs)
-	ListJobSubJobs(w http.ResponseWriter, r *http.Request, jobId ComponentsParametersJobId)
+	ListJobSubJobs(w http.ResponseWriter, r *http.Request, jobId JobId)
 	// 获取单个子任务详情
 	// (GET /jobs/{jobId}/subjobs/{subJobId})
-	GetJobSubJob(w http.ResponseWriter, r *http.Request, jobId ComponentsParametersJobId, subJobId ComponentsParametersSubJobId)
+	GetJobSubJob(w http.ResponseWriter, r *http.Request, jobId JobId, subJobId SubJobId)
 	// 列出当前用户所属组织
 	// (GET /orgs)
 	ListOrganizations(w http.ResponseWriter, r *http.Request)
@@ -469,34 +456,34 @@ type ServerInterface interface {
 	CreateOrganization(w http.ResponseWriter, r *http.Request)
 	// 获取组织详情
 	// (GET /orgs/{orgId})
-	GetOrganization(w http.ResponseWriter, r *http.Request, orgId ComponentsParametersOrgId)
+	GetOrganization(w http.ResponseWriter, r *http.Request, orgId OrgId)
 	// 更新组织信息
 	// (PUT /orgs/{orgId})
-	UpdateOrganization(w http.ResponseWriter, r *http.Request, orgId ComponentsParametersOrgId)
+	UpdateOrganization(w http.ResponseWriter, r *http.Request, orgId OrgId)
 	// 获取组织成员列表
 	// (GET /orgs/{orgId}/members)
-	ListOrganizationMembers(w http.ResponseWriter, r *http.Request, orgId ComponentsParametersOrgId)
+	ListOrganizationMembers(w http.ResponseWriter, r *http.Request, orgId OrgId)
 	// 添加组织成员
 	// (POST /orgs/{orgId}/members)
-	AddOrganizationMember(w http.ResponseWriter, r *http.Request, orgId ComponentsParametersOrgId)
+	AddOrganizationMember(w http.ResponseWriter, r *http.Request, orgId OrgId)
 	// 移除组织成员
 	// (DELETE /orgs/{orgId}/members/{userId})
-	DeleteOrganizationMember(w http.ResponseWriter, r *http.Request, orgId ComponentsParametersOrgId, userId ComponentsParametersUserId)
+	DeleteOrganizationMember(w http.ResponseWriter, r *http.Request, orgId OrgId, userId UserId)
 	// 修改组织成员角色
 	// (PUT /orgs/{orgId}/members/{userId})
-	UpdateOrganizationMember(w http.ResponseWriter, r *http.Request, orgId ComponentsParametersOrgId, userId ComponentsParametersUserId)
+	UpdateOrganizationMember(w http.ResponseWriter, r *http.Request, orgId OrgId, userId UserId)
 	// 创建多文件翻译任务
 	// (POST /projects/{projectId}/jobs)
-	CreateProjectJob(w http.ResponseWriter, r *http.Request, projectId ComponentsParametersProjectId)
+	CreateProjectJob(w http.ResponseWriter, r *http.Request, projectId ProjectId)
 	// 编辑段译文
 	// (PUT /segments/{segmentId})
-	EditSegment(w http.ResponseWriter, r *http.Request, segmentId ComponentsParametersExtraSegmentId)
+	EditSegment(w http.ResponseWriter, r *http.Request, segmentId SegmentId)
 	// 通过段译文
 	// (POST /segments/{segmentId}/approve)
-	ApproveSegment(w http.ResponseWriter, r *http.Request, segmentId ComponentsParametersExtraSegmentId)
+	ApproveSegment(w http.ResponseWriter, r *http.Request, segmentId SegmentId)
 	// 驳回段译文
 	// (POST /segments/{segmentId}/reject)
-	RejectSegment(w http.ResponseWriter, r *http.Request, segmentId ComponentsParametersExtraSegmentId)
+	RejectSegment(w http.ResponseWriter, r *http.Request, segmentId SegmentId)
 	// 获取用量统计汇总
 	// (GET /stats/summary)
 	GetStatsSummary(w http.ResponseWriter, r *http.Request)
@@ -547,55 +534,55 @@ func (_ Unimplemented) RegisterAuth(w http.ResponseWriter, r *http.Request) {
 
 // 获取任务详情
 // (GET /jobs/{jobId})
-func (_ Unimplemented) GetJob(w http.ResponseWriter, r *http.Request, jobId ComponentsParametersJobId) {
+func (_ Unimplemented) GetJob(w http.ResponseWriter, r *http.Request, jobId JobId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // 批量通过任务审校
 // (POST /jobs/{jobId}/approve)
-func (_ Unimplemented) ApproveJob(w http.ResponseWriter, r *http.Request, jobId ComponentsParametersJobId) {
+func (_ Unimplemented) ApproveJob(w http.ResponseWriter, r *http.Request, jobId JobId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // 取消任务
 // (POST /jobs/{jobId}/cancel)
-func (_ Unimplemented) CancelJob(w http.ResponseWriter, r *http.Request, jobId ComponentsParametersJobId) {
+func (_ Unimplemented) CancelJob(w http.ResponseWriter, r *http.Request, jobId JobId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // 下载任务输出
 // (GET /jobs/{jobId}/download)
-func (_ Unimplemented) DownloadJobResult(w http.ResponseWriter, r *http.Request, jobId ComponentsParametersJobId) {
+func (_ Unimplemented) DownloadJobResult(w http.ResponseWriter, r *http.Request, jobId JobId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // 重译被驳回段
 // (POST /jobs/{jobId}/retranslate)
-func (_ Unimplemented) RetranslateRejectedSegments(w http.ResponseWriter, r *http.Request, jobId ComponentsParametersJobId) {
+func (_ Unimplemented) RetranslateRejectedSegments(w http.ResponseWriter, r *http.Request, jobId JobId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // 重试失败子任务
 // (POST /jobs/{jobId}/retry)
-func (_ Unimplemented) RetryJob(w http.ResponseWriter, r *http.Request, jobId ComponentsParametersJobId) {
+func (_ Unimplemented) RetryJob(w http.ResponseWriter, r *http.Request, jobId JobId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // 获取任务段列表
 // (GET /jobs/{jobId}/segments)
-func (_ Unimplemented) ListJobSegments(w http.ResponseWriter, r *http.Request, jobId ComponentsParametersJobId, params ListJobSegmentsParams) {
+func (_ Unimplemented) ListJobSegments(w http.ResponseWriter, r *http.Request, jobId JobId, params ListJobSegmentsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // 获取任务子任务列表
 // (GET /jobs/{jobId}/subjobs)
-func (_ Unimplemented) ListJobSubJobs(w http.ResponseWriter, r *http.Request, jobId ComponentsParametersJobId) {
+func (_ Unimplemented) ListJobSubJobs(w http.ResponseWriter, r *http.Request, jobId JobId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // 获取单个子任务详情
 // (GET /jobs/{jobId}/subjobs/{subJobId})
-func (_ Unimplemented) GetJobSubJob(w http.ResponseWriter, r *http.Request, jobId ComponentsParametersJobId, subJobId ComponentsParametersSubJobId) {
+func (_ Unimplemented) GetJobSubJob(w http.ResponseWriter, r *http.Request, jobId JobId, subJobId SubJobId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -613,61 +600,61 @@ func (_ Unimplemented) CreateOrganization(w http.ResponseWriter, r *http.Request
 
 // 获取组织详情
 // (GET /orgs/{orgId})
-func (_ Unimplemented) GetOrganization(w http.ResponseWriter, r *http.Request, orgId ComponentsParametersOrgId) {
+func (_ Unimplemented) GetOrganization(w http.ResponseWriter, r *http.Request, orgId OrgId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // 更新组织信息
 // (PUT /orgs/{orgId})
-func (_ Unimplemented) UpdateOrganization(w http.ResponseWriter, r *http.Request, orgId ComponentsParametersOrgId) {
+func (_ Unimplemented) UpdateOrganization(w http.ResponseWriter, r *http.Request, orgId OrgId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // 获取组织成员列表
 // (GET /orgs/{orgId}/members)
-func (_ Unimplemented) ListOrganizationMembers(w http.ResponseWriter, r *http.Request, orgId ComponentsParametersOrgId) {
+func (_ Unimplemented) ListOrganizationMembers(w http.ResponseWriter, r *http.Request, orgId OrgId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // 添加组织成员
 // (POST /orgs/{orgId}/members)
-func (_ Unimplemented) AddOrganizationMember(w http.ResponseWriter, r *http.Request, orgId ComponentsParametersOrgId) {
+func (_ Unimplemented) AddOrganizationMember(w http.ResponseWriter, r *http.Request, orgId OrgId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // 移除组织成员
 // (DELETE /orgs/{orgId}/members/{userId})
-func (_ Unimplemented) DeleteOrganizationMember(w http.ResponseWriter, r *http.Request, orgId ComponentsParametersOrgId, userId ComponentsParametersUserId) {
+func (_ Unimplemented) DeleteOrganizationMember(w http.ResponseWriter, r *http.Request, orgId OrgId, userId UserId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // 修改组织成员角色
 // (PUT /orgs/{orgId}/members/{userId})
-func (_ Unimplemented) UpdateOrganizationMember(w http.ResponseWriter, r *http.Request, orgId ComponentsParametersOrgId, userId ComponentsParametersUserId) {
+func (_ Unimplemented) UpdateOrganizationMember(w http.ResponseWriter, r *http.Request, orgId OrgId, userId UserId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // 创建多文件翻译任务
 // (POST /projects/{projectId}/jobs)
-func (_ Unimplemented) CreateProjectJob(w http.ResponseWriter, r *http.Request, projectId ComponentsParametersProjectId) {
+func (_ Unimplemented) CreateProjectJob(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // 编辑段译文
 // (PUT /segments/{segmentId})
-func (_ Unimplemented) EditSegment(w http.ResponseWriter, r *http.Request, segmentId ComponentsParametersExtraSegmentId) {
+func (_ Unimplemented) EditSegment(w http.ResponseWriter, r *http.Request, segmentId SegmentId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // 通过段译文
 // (POST /segments/{segmentId}/approve)
-func (_ Unimplemented) ApproveSegment(w http.ResponseWriter, r *http.Request, segmentId ComponentsParametersExtraSegmentId) {
+func (_ Unimplemented) ApproveSegment(w http.ResponseWriter, r *http.Request, segmentId SegmentId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
 // 驳回段译文
 // (POST /segments/{segmentId}/reject)
-func (_ Unimplemented) RejectSegment(w http.ResponseWriter, r *http.Request, segmentId ComponentsParametersExtraSegmentId) {
+func (_ Unimplemented) RejectSegment(w http.ResponseWriter, r *http.Request, segmentId SegmentId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -813,7 +800,7 @@ func (siw *ServerInterfaceWrapper) GetJob(w http.ResponseWriter, r *http.Request
 	var err error
 
 	// ------------- Path parameter "jobId" -------------
-	var jobId ComponentsParametersJobId
+	var jobId JobId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "jobId", chi.URLParam(r, "jobId"), &jobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
 	if err != nil {
@@ -844,7 +831,7 @@ func (siw *ServerInterfaceWrapper) ApproveJob(w http.ResponseWriter, r *http.Req
 	var err error
 
 	// ------------- Path parameter "jobId" -------------
-	var jobId ComponentsParametersJobId
+	var jobId JobId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "jobId", chi.URLParam(r, "jobId"), &jobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
 	if err != nil {
@@ -875,7 +862,7 @@ func (siw *ServerInterfaceWrapper) CancelJob(w http.ResponseWriter, r *http.Requ
 	var err error
 
 	// ------------- Path parameter "jobId" -------------
-	var jobId ComponentsParametersJobId
+	var jobId JobId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "jobId", chi.URLParam(r, "jobId"), &jobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
 	if err != nil {
@@ -906,7 +893,7 @@ func (siw *ServerInterfaceWrapper) DownloadJobResult(w http.ResponseWriter, r *h
 	var err error
 
 	// ------------- Path parameter "jobId" -------------
-	var jobId ComponentsParametersJobId
+	var jobId JobId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "jobId", chi.URLParam(r, "jobId"), &jobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
 	if err != nil {
@@ -937,7 +924,7 @@ func (siw *ServerInterfaceWrapper) RetranslateRejectedSegments(w http.ResponseWr
 	var err error
 
 	// ------------- Path parameter "jobId" -------------
-	var jobId ComponentsParametersJobId
+	var jobId JobId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "jobId", chi.URLParam(r, "jobId"), &jobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
 	if err != nil {
@@ -968,7 +955,7 @@ func (siw *ServerInterfaceWrapper) RetryJob(w http.ResponseWriter, r *http.Reque
 	var err error
 
 	// ------------- Path parameter "jobId" -------------
-	var jobId ComponentsParametersJobId
+	var jobId JobId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "jobId", chi.URLParam(r, "jobId"), &jobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
 	if err != nil {
@@ -999,7 +986,7 @@ func (siw *ServerInterfaceWrapper) ListJobSegments(w http.ResponseWriter, r *htt
 	var err error
 
 	// ------------- Path parameter "jobId" -------------
-	var jobId ComponentsParametersJobId
+	var jobId JobId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "jobId", chi.URLParam(r, "jobId"), &jobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
 	if err != nil {
@@ -1049,7 +1036,7 @@ func (siw *ServerInterfaceWrapper) ListJobSubJobs(w http.ResponseWriter, r *http
 	var err error
 
 	// ------------- Path parameter "jobId" -------------
-	var jobId ComponentsParametersJobId
+	var jobId JobId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "jobId", chi.URLParam(r, "jobId"), &jobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
 	if err != nil {
@@ -1080,7 +1067,7 @@ func (siw *ServerInterfaceWrapper) GetJobSubJob(w http.ResponseWriter, r *http.R
 	var err error
 
 	// ------------- Path parameter "jobId" -------------
-	var jobId ComponentsParametersJobId
+	var jobId JobId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "jobId", chi.URLParam(r, "jobId"), &jobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
 	if err != nil {
@@ -1089,7 +1076,7 @@ func (siw *ServerInterfaceWrapper) GetJobSubJob(w http.ResponseWriter, r *http.R
 	}
 
 	// ------------- Path parameter "subJobId" -------------
-	var subJobId ComponentsParametersSubJobId
+	var subJobId SubJobId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "subJobId", chi.URLParam(r, "subJobId"), &subJobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
 	if err != nil {
@@ -1160,7 +1147,7 @@ func (siw *ServerInterfaceWrapper) GetOrganization(w http.ResponseWriter, r *htt
 	var err error
 
 	// ------------- Path parameter "orgId" -------------
-	var orgId ComponentsParametersOrgId
+	var orgId OrgId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "orgId", chi.URLParam(r, "orgId"), &orgId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
 	if err != nil {
@@ -1191,7 +1178,7 @@ func (siw *ServerInterfaceWrapper) UpdateOrganization(w http.ResponseWriter, r *
 	var err error
 
 	// ------------- Path parameter "orgId" -------------
-	var orgId ComponentsParametersOrgId
+	var orgId OrgId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "orgId", chi.URLParam(r, "orgId"), &orgId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
 	if err != nil {
@@ -1222,7 +1209,7 @@ func (siw *ServerInterfaceWrapper) ListOrganizationMembers(w http.ResponseWriter
 	var err error
 
 	// ------------- Path parameter "orgId" -------------
-	var orgId ComponentsParametersOrgId
+	var orgId OrgId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "orgId", chi.URLParam(r, "orgId"), &orgId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
 	if err != nil {
@@ -1253,7 +1240,7 @@ func (siw *ServerInterfaceWrapper) AddOrganizationMember(w http.ResponseWriter, 
 	var err error
 
 	// ------------- Path parameter "orgId" -------------
-	var orgId ComponentsParametersOrgId
+	var orgId OrgId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "orgId", chi.URLParam(r, "orgId"), &orgId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
 	if err != nil {
@@ -1284,7 +1271,7 @@ func (siw *ServerInterfaceWrapper) DeleteOrganizationMember(w http.ResponseWrite
 	var err error
 
 	// ------------- Path parameter "orgId" -------------
-	var orgId ComponentsParametersOrgId
+	var orgId OrgId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "orgId", chi.URLParam(r, "orgId"), &orgId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
 	if err != nil {
@@ -1293,7 +1280,7 @@ func (siw *ServerInterfaceWrapper) DeleteOrganizationMember(w http.ResponseWrite
 	}
 
 	// ------------- Path parameter "userId" -------------
-	var userId ComponentsParametersUserId
+	var userId UserId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "userId", chi.URLParam(r, "userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
 	if err != nil {
@@ -1324,7 +1311,7 @@ func (siw *ServerInterfaceWrapper) UpdateOrganizationMember(w http.ResponseWrite
 	var err error
 
 	// ------------- Path parameter "orgId" -------------
-	var orgId ComponentsParametersOrgId
+	var orgId OrgId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "orgId", chi.URLParam(r, "orgId"), &orgId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
 	if err != nil {
@@ -1333,7 +1320,7 @@ func (siw *ServerInterfaceWrapper) UpdateOrganizationMember(w http.ResponseWrite
 	}
 
 	// ------------- Path parameter "userId" -------------
-	var userId ComponentsParametersUserId
+	var userId UserId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "userId", chi.URLParam(r, "userId"), &userId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
 	if err != nil {
@@ -1364,7 +1351,7 @@ func (siw *ServerInterfaceWrapper) CreateProjectJob(w http.ResponseWriter, r *ht
 	var err error
 
 	// ------------- Path parameter "projectId" -------------
-	var projectId ComponentsParametersProjectId
+	var projectId ProjectId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
 	if err != nil {
@@ -1395,7 +1382,7 @@ func (siw *ServerInterfaceWrapper) EditSegment(w http.ResponseWriter, r *http.Re
 	var err error
 
 	// ------------- Path parameter "segmentId" -------------
-	var segmentId ComponentsParametersExtraSegmentId
+	var segmentId SegmentId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "segmentId", chi.URLParam(r, "segmentId"), &segmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
 	if err != nil {
@@ -1426,7 +1413,7 @@ func (siw *ServerInterfaceWrapper) ApproveSegment(w http.ResponseWriter, r *http
 	var err error
 
 	// ------------- Path parameter "segmentId" -------------
-	var segmentId ComponentsParametersExtraSegmentId
+	var segmentId SegmentId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "segmentId", chi.URLParam(r, "segmentId"), &segmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
 	if err != nil {
@@ -1457,7 +1444,7 @@ func (siw *ServerInterfaceWrapper) RejectSegment(w http.ResponseWriter, r *http.
 	var err error
 
 	// ------------- Path parameter "segmentId" -------------
-	var segmentId ComponentsParametersExtraSegmentId
+	var segmentId SegmentId
 
 	err = runtime.BindStyledParameterWithOptions("simple", "segmentId", chi.URLParam(r, "segmentId"), &segmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
 	if err != nil {
@@ -1772,56 +1759,55 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
+	"AA==",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
