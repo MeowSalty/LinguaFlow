@@ -1,0 +1,63 @@
+version: '3'
+
+vars:
+  FRONTEND_DIR: frontend
+  BACKEND_DIR: backend
+  OPENAPI_SCHEMA: api/openapi/openapi-3.0.yaml
+  FRONTEND_OPENAPI_TYPES: src/api/types.d.ts
+
+tasks:
+  default:
+    desc: 查看可用任务列表
+    cmds:
+      - task --list
+
+  frontend:install:
+    desc: 安装前端依赖
+    dir: '{{.FRONTEND_DIR}}'
+    cmds:
+      - pnpm install
+
+  frontend:dev:
+    desc: 启动前端开发服务器
+    dir: '{{.FRONTEND_DIR}}'
+    cmds:
+      - pnpm dev
+
+  frontend:build:
+    desc: 构建前端应用
+    deps:
+      - frontend:openapi:generate
+    dir: '{{.FRONTEND_DIR}}'
+    cmds:
+      - pnpm build
+
+  frontend:type-check:
+    desc: 执行前端 TypeScript 类型检查
+    deps:
+      - frontend:openapi:generate
+    dir: '{{.FRONTEND_DIR}}'
+    cmds:
+      - pnpm type-check
+
+  frontend:lint:
+    desc: 执行前端代码检查
+    dir: '{{.FRONTEND_DIR}}'
+    cmds:
+      - pnpm lint
+
+  frontend:format:
+    desc: 格式化前端源码
+    dir: '{{.FRONTEND_DIR}}'
+    cmds:
+      - pnpm format
+
+  frontend:openapi:generate:
+    desc: 使用 openapi-typescript 生成前端 OpenAPI TypeScript 定义
+    dir: '{{.FRONTEND_DIR}}'
+    sources:
+      - '../{{.OPENAPI_SCHEMA}}'
+    generates:
+      - '{{.FRONTEND_OPENAPI_TYPES}}'
+    cmds:
+      - pnpm exec openapi-typescript ../{{.OPENAPI_SCHEMA}} -o {{.FRONTEND_OPENAPI_TYPES}}
