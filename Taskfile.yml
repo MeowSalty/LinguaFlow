@@ -3,14 +3,33 @@ version: '3'
 vars:
   FRONTEND_DIR: frontend
   BACKEND_DIR: backend
+  OPENAPI_ENTRY: api/openapi/base.yaml
   OPENAPI_SCHEMA: api/openapi/openapi-3.0.yaml
   FRONTEND_OPENAPI_TYPES: src/api/types.d.ts
+  BACKEND_BINARY: bin/linguaflow
 
 tasks:
   default:
     desc: 查看可用任务列表
     cmds:
       - task --list
+
+  openapi:bundle:
+    desc: 合并多文件 OpenAPI 规范为单文件
+    sources:
+      - '{{.OPENAPI_ENTRY}}'
+      - 'api/openapi/**/*.yaml'
+    generates:
+      - '{{.OPENAPI_SCHEMA}}'
+    cmds:
+      - pnpm --package=@redocly/cli dlx redocly bundle {{.OPENAPI_ENTRY}} -o {{.OPENAPI_SCHEMA}}
+
+  openapi:generate:
+    desc: 生成前端和后端 OpenAPI 代码
+    deps:
+      - openapi:bundle
+      - frontend:openapi:generate
+      - backend:openapi:generate
 
   frontend:install:
     desc: 安装前端依赖
@@ -54,6 +73,8 @@ tasks:
 
   frontend:openapi:generate:
     desc: 使用 openapi-typescript 生成前端 OpenAPI TypeScript 定义
+    deps:
+      - openapi:bundle
     dir: '{{.FRONTEND_DIR}}'
     sources:
       - '../{{.OPENAPI_SCHEMA}}'
@@ -61,3 +82,73 @@ tasks:
       - '{{.FRONTEND_OPENAPI_TYPES}}'
     cmds:
       - pnpm exec openapi-typescript ../{{.OPENAPI_SCHEMA}} -o {{.FRONTEND_OPENAPI_TYPES}}
+
+  backend:install:
+    desc: 下载后端 Go 模块依赖
+    dir: '{{.BACKEND_DIR}}'
+    cmds:
+      - go mod download
+
+  backend:dev:
+    desc: 启动后端开发服务器
+    dir: '{{.BACKEND_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow serve
+
+  backend:build:
+    desc: 构建后端 CLI/服务程序
+    dir: '{{.BACKEND_DIR}}'
+    cmds:
+      - go build -o {{.BACKEND_BINARY}} ./cmd/linguaflow
+
+  backend:test:
+    desc: 执行后端测试
+    dir: '{{.BACKEND_DIR}}'
+    cmds:
+      - go test ./...
+
+  backend:test:race:
+    desc: 执行后端竞态检测测试
+    dir: '{{.BACKEND_DIR}}'
+    cmds:
+      - go test -race ./...
+
+  backend:lint:
+    desc: 执行后端静态检查
+    dir: '{{.BACKEND_DIR}}'
+    cmds:
+      - go vet ./...
+
+  backend:format:
+    desc: 格式化后端 Go 源码
+    dir: '{{.BACKEND_DIR}}'
+    cmds:
+      - go fmt ./...
+
+  backend:generate:
+    desc: 生成后端代码（OpenAPI、ent 等）
+    deps:
+      - backend:openapi:generate
+      - backend:ent:generate
+
+  backend:openapi:generate:
+    desc: 生成后端 OpenAPI Go 代码
+    deps:
+      - openapi:bundle
+    dir: '{{.BACKEND_DIR}}'
+    sources:
+      - '../{{.OPENAPI_SCHEMA}}'
+      - 'internal/api/openapi_generate.go'
+    generates:
+      - 'internal/api/openapi.gen.go'
+    cmds:
+      - go generate ./internal/api
+
+  backend:ent:generate:
+    desc: 生成后端 ent 代码
+    dir: '{{.BACKEND_DIR}}'
+    sources:
+      - 'internal/ent/generate.go'
+      - 'internal/ent/schema/**/*.go'
+    cmds:
+      - go generate ./internal/ent
