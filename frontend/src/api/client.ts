@@ -15,7 +15,7 @@ export interface TokenStorage {
 }
 
 export interface ApiClientOptions extends Omit<ClientOptions, 'baseUrl'> {
-  /** API 根地址；不传时默认使用 `/api`。 */
+  /** API 根地址;不传时默认使用 `/api/v1`。 */
   baseUrl?: string
   /** 自定义 Token 存储，默认使用 `window.localStorage`。 */
   tokenStorage?: TokenStorage
@@ -23,9 +23,10 @@ export interface ApiClientOptions extends Omit<ClientOptions, 'baseUrl'> {
   getAccessToken?: () => string | null | undefined
 }
 
-const DEFAULT_API_BASE_URL = '/api'
+const DEFAULT_API_BASE_URL = '/api/v1'
 const ACCESS_TOKEN_STORAGE_KEY = 'linguaflow.access_token'
 const REFRESH_TOKEN_STORAGE_KEY = 'linguaflow.refresh_token'
+const API_BASE_URL_STORAGE_KEY = 'linguaflow.api_base_url'
 const AUTH_TOKEN_SKIP_PATHS = new Set(['/auth/register', '/auth/login', '/auth/refresh'])
 
 const getDefaultTokenStorage = (): TokenStorage | undefined => {
@@ -56,6 +57,7 @@ const resolveAccessTokenReader = (
 export const authTokenStorageKeys = {
   accessToken: ACCESS_TOKEN_STORAGE_KEY,
   refreshToken: REFRESH_TOKEN_STORAGE_KEY,
+  apiBaseUrl: API_BASE_URL_STORAGE_KEY,
 } as const
 
 export const getAccessToken = (tokenStorage = getDefaultTokenStorage()): string | null => {
@@ -100,6 +102,30 @@ export const clearAuthTokens = (tokenStorage = getDefaultTokenStorage()): void =
   tokenStorage?.removeItem(REFRESH_TOKEN_STORAGE_KEY)
 }
 
+export const readStoredApiBaseUrl = (
+  tokenStorage = getDefaultTokenStorage(),
+): string | null => {
+  return tokenStorage?.getItem(API_BASE_URL_STORAGE_KEY) ?? null
+}
+
+export const writeStoredApiBaseUrl = (
+  baseUrl: string,
+  tokenStorage = getDefaultTokenStorage(),
+): void => {
+  tokenStorage?.setItem(API_BASE_URL_STORAGE_KEY, baseUrl)
+}
+
+export const clearStoredApiBaseUrl = (tokenStorage = getDefaultTokenStorage()): void => {
+  tokenStorage?.removeItem(API_BASE_URL_STORAGE_KEY)
+}
+
+type UnauthorizedHandler = () => void
+let _onUnauthorized: UnauthorizedHandler | null = null
+
+export const setUnauthorizedHandler = (handler: UnauthorizedHandler | null): void => {
+  _onUnauthorized = handler
+}
+
 export const createAuthMiddleware = (
   readAccessToken = resolveAccessTokenReader(getDefaultTokenStorage()),
 ): Middleware => ({
@@ -119,6 +145,13 @@ export const createAuthMiddleware = (
 
     return new Request(request, { headers })
   },
+  onResponse({ response, schemaPath }) {
+    if (response.status === 401 && !AUTH_TOKEN_SKIP_PATHS.has(schemaPath)) {
+      _onUnauthorized?.()
+    }
+
+    return undefined
+  },
 })
 
 export const createApiClient = (options: ApiClientOptions = {}): ApiClient => {
@@ -134,18 +167,48 @@ export const createApiClient = (options: ApiClientOptions = {}): ApiClient => {
   return client
 }
 
-export const apiClient = createApiClient()
+let _client: ApiClient = createApiClient({
+  baseUrl: readStoredApiBaseUrl() ?? undefined,
+})
+
+/**
+ * 运行时切换 API 根地址。会重建内部 client，并把新地址持久化到 localStorage。
+ * 通过 Proxy 暴露的 `apiClient` 会自动指向新实例，调用方无需重新获取。
+ */
+export const setApiBaseUrl = (baseUrl: string): void => {
+  const normalized = resolveApiBaseUrl(baseUrl)
+  _client = createApiClient({ baseUrl: normalized })
+  writeStoredApiBaseUrl(normalized)
+}
+
+export const apiClient = new Proxy({} as ApiClient, {
+  get: (_target, prop) => Reflect.get(_client as object, prop),
+  has: (_target, prop) => Reflect.has(_client as object, prop),
+}) as ApiClient
+
+const buildRequestFailureError = (
+  fallbackMessage: string,
+  error?: unknown,
+  response?: Response,
+): Error => {
+  if (error) {
+    return error as Error
+  }
+  const status = response?.status
+  const reason = status ? `服务器返回 ${status}` : '请求未送达，请检查网络或服务器地址'
+  return new Error(`${fallbackMessage}(${reason})`)
+}
 
 export const loginWithPassword = async (
   credentials: ApiSchemas['LoginRequest'],
   client = apiClient,
 ): Promise<AuthSession> => {
-  const { data, error } = await client.POST('/auth/login', {
+  const { data, error, response } = await client.POST('/auth/login', {
     body: credentials,
   })
 
-  if (error) {
-    throw error
+  if (!data) {
+    throw buildRequestFailureError('登录失败', error, response)
   }
 
   setAuthSession(data)
@@ -157,12 +220,12 @@ export const registerAndLogin = async (
   payload: ApiSchemas['RegisterRequest'],
   client = apiClient,
 ): Promise<AuthSession> => {
-  const { data, error } = await client.POST('/auth/register', {
+  const { data, error, response } = await client.POST('/auth/register', {
     body: payload,
   })
 
-  if (error) {
-    throw error
+  if (!data) {
+    throw buildRequestFailureError('注册失败', error, response)
   }
 
   setAuthSession(data)
@@ -178,14 +241,14 @@ export const refreshAuthSession = async (
     throw new Error('Refresh token is missing.')
   }
 
-  const { data, error } = await client.POST('/auth/refresh', {
+  const { data, error, response } = await client.POST('/auth/refresh', {
     body: {
       refresh_token: refreshToken,
     },
   })
 
-  if (error) {
-    throw error
+  if (!data) {
+    throw buildRequestFailureError('刷新会话失败', error, response)
   }
 
   setAuthSession(data)
@@ -212,4 +275,16 @@ export const logout = async (
   } finally {
     clearAuthTokens()
   }
+}
+
+export const fetchCurrentUser = async (
+  client = apiClient,
+): Promise<ApiSchemas['User']> => {
+  const { data, error, response } = await client.GET('/users/me')
+
+  if (!data) {
+    throw buildRequestFailureError('获取当前用户失败', error, response)
+  }
+
+  return data
 }

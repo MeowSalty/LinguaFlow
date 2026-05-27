@@ -12,12 +12,19 @@ export {}
 /* prettier-ignore */
 declare module 'vue' {
   export interface GlobalComponents {
+    NAvatar: typeof import('naive-ui')['NAvatar']
+    NButton: typeof import('naive-ui')['NButton']
     NCard: typeof import('naive-ui')['NCard']
     NConfigProvider: typeof import('naive-ui')['NConfigProvider']
+    NDropdown: typeof import('naive-ui')['NDropdown']
+    NForm: typeof import('naive-ui')['NForm']
+    NFormItem: typeof import('naive-ui')['NFormItem']
+    NInput: typeof import('naive-ui')['NInput']
     NLayout: typeof import('naive-ui')['NLayout']
     NLayoutContent: typeof import('naive-ui')['NLayoutContent']
     NLayoutHeader: typeof import('naive-ui')['NLayoutHeader']
     NMessageProvider: typeof import('naive-ui')['NMessageProvider']
+    NTag: typeof import('naive-ui')['NTag']
     RouterLink: typeof import('vue-router')['RouterLink']
     RouterView: typeof import('vue-router')['RouterView']
   }
@@ -25,12 +32,19 @@ declare module 'vue' {
 
 // For TSX support
 declare global {
+  const NAvatar: typeof import('naive-ui')['NAvatar']
+  const NButton: typeof import('naive-ui')['NButton']
   const NCard: typeof import('naive-ui')['NCard']
   const NConfigProvider: typeof import('naive-ui')['NConfigProvider']
+  const NDropdown: typeof import('naive-ui')['NDropdown']
+  const NForm: typeof import('naive-ui')['NForm']
+  const NFormItem: typeof import('naive-ui')['NFormItem']
+  const NInput: typeof import('naive-ui')['NInput']
   const NLayout: typeof import('naive-ui')['NLayout']
   const NLayoutContent: typeof import('naive-ui')['NLayoutContent']
   const NLayoutHeader: typeof import('naive-ui')['NLayoutHeader']
   const NMessageProvider: typeof import('naive-ui')['NMessageProvider']
+  const NTag: typeof import('naive-ui')['NTag']
   const RouterLink: typeof import('vue-router')['RouterLink']
   const RouterView: typeof import('vue-router')['RouterView']
 }

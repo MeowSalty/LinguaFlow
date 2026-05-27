@@ -1,0 +1,37 @@
+import type { Router } from 'vue-router'
+
+import { useAuthStore } from '@/stores/auth'
+import { useServiceStore } from '@/stores/service'
+
+const PUBLIC_PATHS = new Set(['/login', '/register', '/service'])
+const AUTH_ENTRY_PATHS = new Set(['/login', '/register'])
+
+export const installRouterGuards = (router: Router): void => {
+  router.beforeEach((to) => {
+    const service = useServiceStore()
+    const auth = useAuthStore()
+
+    const isPublic = to.meta.public === true || PUBLIC_PATHS.has(to.path)
+
+    if (!service.hasSelected && to.path !== '/service') {
+      return {
+        path: '/service',
+        query: to.fullPath !== '/' ? { redirect: to.fullPath } : {},
+      }
+    }
+
+    if (auth.isAuthenticated && AUTH_ENTRY_PATHS.has(to.path)) {
+      const redirect = typeof to.query.redirect === 'string' ? to.query.redirect : null
+      return redirect ? { path: redirect } : { path: '/' }
+    }
+
+    if (!auth.isAuthenticated && !isPublic) {
+      return {
+        path: '/login',
+        query: { redirect: to.fullPath },
+      }
+    }
+
+    return undefined
+  })
+}
