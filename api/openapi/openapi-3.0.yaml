@@ -1,0 +1,1635 @@
+components:
+    parameters:
+        Cursor:
+            in: query
+            name: cursor
+            schema:
+                type: string
+        JobId:
+            in: path
+            name: jobId
+            required: true
+            schema:
+                minimum: 1
+                type: integer
+        Limit:
+            in: query
+            name: limit
+            schema:
+                maximum: 100
+                minimum: 1
+                type: integer
+        OrgId:
+            in: path
+            name: orgId
+            required: true
+            schema:
+                minimum: 1
+                type: integer
+        ProjectId:
+            in: path
+            name: projectId
+            required: true
+            schema:
+                minimum: 1
+                type: integer
+        SegmentId:
+            in: path
+            name: segmentId
+            required: true
+            schema:
+                minimum: 1
+                type: integer
+        SubJobId:
+            in: path
+            name: subJobId
+            required: true
+            schema:
+                minimum: 1
+                type: integer
+        UserId:
+            in: path
+            name: userId
+            required: true
+            schema:
+                minimum: 1
+                type: integer
+        components_parameters_JobId:
+            in: path
+            name: jobId
+            required: true
+            schema:
+                minimum: 1
+                type: integer
+        components_parameters_OrgId:
+            in: path
+            name: orgId
+            required: true
+            schema:
+                minimum: 1
+                type: integer
+        components_parameters_ProjectId:
+            in: path
+            name: projectId
+            required: true
+            schema:
+                minimum: 1
+                type: integer
+        components_parameters_SubJobId:
+            in: path
+            name: subJobId
+            required: true
+            schema:
+                minimum: 1
+                type: integer
+        components_parameters_UserId:
+            in: path
+            name: userId
+            required: true
+            schema:
+                minimum: 1
+                type: integer
+        components_parameters_extra_Cursor:
+            in: query
+            name: cursor
+            schema:
+                type: string
+        components_parameters_extra_Limit:
+            in: query
+            name: limit
+            schema:
+                maximum: 100
+                minimum: 1
+                type: integer
+        components_parameters_extra_SegmentId:
+            in: path
+            name: segmentId
+            required: true
+            schema:
+                minimum: 1
+                type: integer
+    responses:
+        Problem:
+            $ref: '#/components/responses/components_responses_Problem'
+        components_responses_Problem:
+            content:
+                application/problem+json:
+                    schema:
+                        $ref: '#/components/schemas/components_schemas_common_Problem'
+            description: 错误响应
+    schemas:
+        Activity:
+            properties:
+                action:
+                    type: string
+                actor:
+                    $ref: '#/components/schemas/User'
+                created_at:
+                    format: date-time
+                    type: string
+                id:
+                    type: integer
+                message:
+                    type: string
+                metadata:
+                    additionalProperties: true
+                    type: object
+                resource_id:
+                    type: integer
+                resource_type:
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+            required:
+                - id
+                - action
+                - resource_type
+                - created_at
+                - updated_at
+            type: object
+        ActivityListResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_Activity'
+                    type: array
+                next_cursor:
+                    type: string
+            required:
+                - items
+            type: object
+        AddOrganizationMemberRequest:
+            properties:
+                role:
+                    enum:
+                        - owner
+                        - admin
+                        - member
+                    type: string
+                username:
+                    type: string
+            required:
+                - username
+            type: object
+        AuthSession:
+            properties:
+                access_token:
+                    type: string
+                expires_at:
+                    format: date-time
+                    type: string
+                refresh_expires_at:
+                    format: date-time
+                    type: string
+                refresh_token:
+                    type: string
+                token_type:
+                    type: string
+                user:
+                    $ref: '#/components/schemas/components_schemas_user_User'
+            required:
+                - access_token
+                - refresh_token
+                - token_type
+                - expires_at
+                - refresh_expires_at
+                - user
+            type: object
+        ChangePasswordRequest:
+            properties:
+                current_password:
+                    type: string
+                new_password:
+                    type: string
+            required:
+                - current_password
+                - new_password
+            type: object
+        Job:
+            properties:
+                completed_sub_jobs:
+                    type: integer
+                created_at:
+                    format: date-time
+                    type: string
+                error_message:
+                    type: string
+                failed_sub_jobs:
+                    type: integer
+                id:
+                    type: integer
+                input_path:
+                    type: string
+                output_path:
+                    type: string
+                project_id:
+                    type: integer
+                source_lang:
+                    type: string
+                status:
+                    type: string
+                sub_job_count:
+                    type: integer
+                sub_jobs:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_SubJob'
+                    type: array
+                target_lang:
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+            required:
+                - id
+                - project_id
+                - status
+                - sub_job_count
+                - completed_sub_jobs
+                - failed_sub_jobs
+                - source_lang
+                - target_lang
+                - sub_jobs
+            type: object
+        JobCreateRequest:
+            additionalProperties: false
+            properties:
+                source_lang:
+                    type: string
+                target_lang:
+                    type: string
+            type: object
+        JobCreateResponse:
+            properties:
+                created_at:
+                    format: date-time
+                    type: string
+                job_id:
+                    type: integer
+                status:
+                    type: string
+                sub_jobs:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_SubJobSummary'
+                    type: array
+            required:
+                - job_id
+                - status
+                - sub_jobs
+                - created_at
+            type: object
+        JobListResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_Job'
+                    type: array
+            required:
+                - items
+            type: object
+        LoginRequest:
+            properties:
+                password:
+                    type: string
+                username:
+                    type: string
+            required:
+                - username
+                - password
+            type: object
+        LogoutRequest:
+            properties:
+                refresh_token:
+                    type: string
+            required:
+                - refresh_token
+            type: object
+        Organization:
+            properties:
+                description:
+                    type: string
+                display_name:
+                    type: string
+                id:
+                    type: integer
+                name:
+                    type: string
+                slug:
+                    type: string
+            required:
+                - id
+                - name
+                - slug
+            type: object
+        OrganizationListResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_organization_Organization'
+                    type: array
+            required:
+                - items
+            type: object
+        OrganizationMember:
+            properties:
+                id:
+                    type: integer
+                role:
+                    enum:
+                        - owner
+                        - admin
+                        - member
+                    type: string
+                user:
+                    $ref: '#/components/schemas/components_schemas_user_User'
+            required:
+                - id
+                - role
+                - user
+            type: object
+        OrganizationMemberListResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_organization_OrganizationMember'
+                    type: array
+            required:
+                - items
+            type: object
+        OrganizationRequest:
+            properties:
+                description:
+                    type: string
+                display_name:
+                    type: string
+                name:
+                    type: string
+                slug:
+                    type: string
+            required:
+                - name
+                - slug
+            type: object
+        Problem:
+            properties:
+                detail:
+                    type: string
+                status:
+                    type: integer
+                title:
+                    type: string
+                type:
+                    type: string
+            required:
+                - title
+                - status
+            type: object
+        RefreshRequest:
+            properties:
+                refresh_token:
+                    type: string
+            required:
+                - refresh_token
+            type: object
+        RegisterRequest:
+            properties:
+                display_name:
+                    type: string
+                email:
+                    format: email
+                    type: string
+                password:
+                    type: string
+                username:
+                    type: string
+            required:
+                - username
+                - password
+                - email
+            type: object
+        Segment:
+            properties:
+                created_at:
+                    format: date-time
+                    type: string
+                id:
+                    type: integer
+                review_comment:
+                    type: string
+                reviewed_by:
+                    $ref: '#/components/schemas/User'
+                segment_index:
+                    type: integer
+                source_text:
+                    type: string
+                status:
+                    type: string
+                sub_job_id:
+                    type: integer
+                target_text:
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+            required:
+                - id
+                - sub_job_id
+                - segment_index
+                - source_text
+                - status
+                - created_at
+                - updated_at
+            type: object
+        SegmentDecisionRequest:
+            additionalProperties: false
+            properties:
+                comment:
+                    type: string
+            type: object
+        SegmentEditRequest:
+            additionalProperties: false
+            properties:
+                comment:
+                    type: string
+                target_text:
+                    type: string
+            required:
+                - target_text
+            type: object
+        SegmentListResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_Segment'
+                    type: array
+                next_cursor:
+                    type: string
+            required:
+                - items
+            type: object
+        SubJob:
+            properties:
+                created_at:
+                    format: date-time
+                    type: string
+                error_message:
+                    type: string
+                id:
+                    type: integer
+                input_filename:
+                    type: string
+                input_format:
+                    type: string
+                input_path:
+                    type: string
+                output_path:
+                    type: string
+                segment_count:
+                    type: integer
+                status:
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+            required:
+                - id
+                - status
+                - input_filename
+                - input_format
+                - input_path
+                - output_path
+                - segment_count
+            type: object
+        SubJobListResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_SubJob'
+                    type: array
+            required:
+                - items
+            type: object
+        SubJobSummary:
+            properties:
+                filename:
+                    type: string
+                id:
+                    type: integer
+                status:
+                    type: string
+            required:
+                - id
+                - filename
+                - status
+            type: object
+        UpdateCurrentUserRequest:
+            properties:
+                display_name:
+                    type: string
+                email:
+                    format: email
+                    type: string
+            type: object
+        UpdateOrganizationMemberRequest:
+            properties:
+                role:
+                    enum:
+                        - owner
+                        - admin
+                        - member
+                    type: string
+            required:
+                - role
+            type: object
+        UsageStats:
+            properties:
+                api_calls:
+                    type: integer
+                completed_jobs:
+                    type: integer
+                failed_jobs:
+                    type: integer
+                input_tokens:
+                    type: integer
+                output_tokens:
+                    type: integer
+                segment_count:
+                    type: integer
+                usage_records:
+                    type: integer
+            required:
+                - api_calls
+                - input_tokens
+                - output_tokens
+                - segment_count
+                - usage_records
+                - completed_jobs
+                - failed_jobs
+            type: object
+        User:
+            properties:
+                active:
+                    type: boolean
+                display_name:
+                    type: string
+                email:
+                    format: email
+                    type: string
+                id:
+                    type: integer
+                role:
+                    type: string
+                username:
+                    type: string
+            required:
+                - id
+                - username
+                - email
+                - role
+                - active
+            type: object
+        components_schemas_auth_AuthSession:
+            properties:
+                access_token:
+                    type: string
+                expires_at:
+                    format: date-time
+                    type: string
+                refresh_expires_at:
+                    format: date-time
+                    type: string
+                refresh_token:
+                    type: string
+                token_type:
+                    type: string
+                user:
+                    $ref: '#/components/schemas/components_schemas_user_User'
+            required:
+                - access_token
+                - refresh_token
+                - token_type
+                - expires_at
+                - refresh_expires_at
+                - user
+            type: object
+        components_schemas_auth_LoginRequest:
+            properties:
+                password:
+                    type: string
+                username:
+                    type: string
+            required:
+                - username
+                - password
+            type: object
+        components_schemas_auth_LogoutRequest:
+            properties:
+                refresh_token:
+                    type: string
+            required:
+                - refresh_token
+            type: object
+        components_schemas_auth_RefreshRequest:
+            properties:
+                refresh_token:
+                    type: string
+            required:
+                - refresh_token
+            type: object
+        components_schemas_auth_RegisterRequest:
+            properties:
+                display_name:
+                    type: string
+                email:
+                    format: email
+                    type: string
+                password:
+                    type: string
+                username:
+                    type: string
+            required:
+                - username
+                - password
+                - email
+            type: object
+        components_schemas_common_Problem:
+            properties:
+                detail:
+                    type: string
+                status:
+                    type: integer
+                title:
+                    type: string
+                type:
+                    type: string
+            required:
+                - title
+                - status
+            type: object
+        components_schemas_job_Activity:
+            properties:
+                action:
+                    type: string
+                actor:
+                    $ref: '#/components/schemas/User'
+                created_at:
+                    format: date-time
+                    type: string
+                id:
+                    type: integer
+                message:
+                    type: string
+                metadata:
+                    additionalProperties: true
+                    type: object
+                resource_id:
+                    type: integer
+                resource_type:
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+            required:
+                - id
+                - action
+                - resource_type
+                - created_at
+                - updated_at
+            type: object
+        components_schemas_job_ActivityListResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_Activity'
+                    type: array
+                next_cursor:
+                    type: string
+            required:
+                - items
+            type: object
+        components_schemas_job_Job:
+            properties:
+                completed_sub_jobs:
+                    type: integer
+                created_at:
+                    format: date-time
+                    type: string
+                error_message:
+                    type: string
+                failed_sub_jobs:
+                    type: integer
+                id:
+                    type: integer
+                input_path:
+                    type: string
+                output_path:
+                    type: string
+                project_id:
+                    type: integer
+                source_lang:
+                    type: string
+                status:
+                    type: string
+                sub_job_count:
+                    type: integer
+                sub_jobs:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_SubJob'
+                    type: array
+                target_lang:
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+            required:
+                - id
+                - project_id
+                - status
+                - sub_job_count
+                - completed_sub_jobs
+                - failed_sub_jobs
+                - source_lang
+                - target_lang
+                - sub_jobs
+            type: object
+        components_schemas_job_JobCreateRequest:
+            additionalProperties: false
+            properties:
+                source_lang:
+                    type: string
+                target_lang:
+                    type: string
+            type: object
+        components_schemas_job_JobCreateResponse:
+            properties:
+                created_at:
+                    format: date-time
+                    type: string
+                job_id:
+                    type: integer
+                status:
+                    type: string
+                sub_jobs:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_SubJobSummary'
+                    type: array
+            required:
+                - job_id
+                - status
+                - sub_jobs
+                - created_at
+            type: object
+        components_schemas_job_JobListResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_Job'
+                    type: array
+            required:
+                - items
+            type: object
+        components_schemas_job_Segment:
+            properties:
+                created_at:
+                    format: date-time
+                    type: string
+                id:
+                    type: integer
+                review_comment:
+                    type: string
+                reviewed_by:
+                    $ref: '#/components/schemas/User'
+                segment_index:
+                    type: integer
+                source_text:
+                    type: string
+                status:
+                    type: string
+                sub_job_id:
+                    type: integer
+                target_text:
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+            required:
+                - id
+                - sub_job_id
+                - segment_index
+                - source_text
+                - status
+                - created_at
+                - updated_at
+            type: object
+        components_schemas_job_SegmentDecisionRequest:
+            additionalProperties: false
+            properties:
+                comment:
+                    type: string
+            type: object
+        components_schemas_job_SegmentEditRequest:
+            additionalProperties: false
+            properties:
+                comment:
+                    type: string
+                target_text:
+                    type: string
+            required:
+                - target_text
+            type: object
+        components_schemas_job_SegmentListResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_Segment'
+                    type: array
+                next_cursor:
+                    type: string
+            required:
+                - items
+            type: object
+        components_schemas_job_SubJob:
+            properties:
+                created_at:
+                    format: date-time
+                    type: string
+                error_message:
+                    type: string
+                id:
+                    type: integer
+                input_filename:
+                    type: string
+                input_format:
+                    type: string
+                input_path:
+                    type: string
+                output_path:
+                    type: string
+                segment_count:
+                    type: integer
+                status:
+                    type: string
+                updated_at:
+                    format: date-time
+                    type: string
+            required:
+                - id
+                - status
+                - input_filename
+                - input_format
+                - input_path
+                - output_path
+                - segment_count
+            type: object
+        components_schemas_job_SubJobListResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_job_SubJob'
+                    type: array
+            required:
+                - items
+            type: object
+        components_schemas_job_SubJobSummary:
+            properties:
+                filename:
+                    type: string
+                id:
+                    type: integer
+                status:
+                    type: string
+            required:
+                - id
+                - filename
+                - status
+            type: object
+        components_schemas_job_UsageStats:
+            properties:
+                api_calls:
+                    type: integer
+                completed_jobs:
+                    type: integer
+                failed_jobs:
+                    type: integer
+                input_tokens:
+                    type: integer
+                output_tokens:
+                    type: integer
+                segment_count:
+                    type: integer
+                usage_records:
+                    type: integer
+            required:
+                - api_calls
+                - input_tokens
+                - output_tokens
+                - segment_count
+                - usage_records
+                - completed_jobs
+                - failed_jobs
+            type: object
+        components_schemas_organization_AddOrganizationMemberRequest:
+            properties:
+                role:
+                    enum:
+                        - owner
+                        - admin
+                        - member
+                    type: string
+                username:
+                    type: string
+            required:
+                - username
+            type: object
+        components_schemas_organization_Organization:
+            properties:
+                description:
+                    type: string
+                display_name:
+                    type: string
+                id:
+                    type: integer
+                name:
+                    type: string
+                slug:
+                    type: string
+            required:
+                - id
+                - name
+                - slug
+            type: object
+        components_schemas_organization_OrganizationListResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_organization_Organization'
+                    type: array
+            required:
+                - items
+            type: object
+        components_schemas_organization_OrganizationMember:
+            properties:
+                id:
+                    type: integer
+                role:
+                    enum:
+                        - owner
+                        - admin
+                        - member
+                    type: string
+                user:
+                    $ref: '#/components/schemas/components_schemas_user_User'
+            required:
+                - id
+                - role
+                - user
+            type: object
+        components_schemas_organization_OrganizationMemberListResponse:
+            properties:
+                items:
+                    items:
+                        $ref: '#/components/schemas/components_schemas_organization_OrganizationMember'
+                    type: array
+            required:
+                - items
+            type: object
+        components_schemas_organization_OrganizationRequest:
+            properties:
+                description:
+                    type: string
+                display_name:
+                    type: string
+                name:
+                    type: string
+                slug:
+                    type: string
+            required:
+                - name
+                - slug
+            type: object
+        components_schemas_organization_UpdateOrganizationMemberRequest:
+            properties:
+                role:
+                    enum:
+                        - owner
+                        - admin
+                        - member
+                    type: string
+            required:
+                - role
+            type: object
+        components_schemas_user_ChangePasswordRequest:
+            properties:
+                current_password:
+                    type: string
+                new_password:
+                    type: string
+            required:
+                - current_password
+                - new_password
+            type: object
+        components_schemas_user_UpdateCurrentUserRequest:
+            properties:
+                display_name:
+                    type: string
+                email:
+                    format: email
+                    type: string
+            type: object
+        components_schemas_user_User:
+            properties:
+                active:
+                    type: boolean
+                display_name:
+                    type: string
+                email:
+                    format: email
+                    type: string
+                id:
+                    type: integer
+                role:
+                    type: string
+                username:
+                    type: string
+            required:
+                - id
+                - username
+                - email
+                - role
+                - active
+            type: object
+    securitySchemes:
+        bearerAuth:
+            $ref: '#/components/securitySchemes/components_security-schemes_bearerAuth'
+        components_security-schemes_bearerAuth:
+            bearerFormat: JWT
+            scheme: bearer
+            type: http
+info:
+    title: LinguaFlow Web Service API
+    version: 0.1.0
+openapi: 3.0.3
+paths:
+    /activity:
+        get:
+            operationId: ListActivity
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_ActivityListResponse'
+                    description: 活动审计日志
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 获取活动审计日志
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_extra_Cursor'
+            - $ref: '#/components/parameters/components_parameters_extra_Limit'
+    /auth/login:
+        post:
+            operationId: LoginAuth
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/components_schemas_auth_LoginRequest'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_auth_AuthSession'
+                    description: 登录成功
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            summary: 用户登录
+    /auth/logout:
+        post:
+            operationId: LogoutAuth
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/components_schemas_auth_LogoutRequest'
+                required: true
+            responses:
+                "204":
+                    description: 已登出
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 登出并撤销刷新令牌
+    /auth/refresh:
+        post:
+            operationId: RefreshAuth
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/components_schemas_auth_RefreshRequest'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_auth_AuthSession'
+                    description: 刷新成功
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            summary: 刷新访问令牌
+    /auth/register:
+        post:
+            operationId: RegisterAuth
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/components_schemas_auth_RegisterRequest'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_auth_AuthSession'
+                    description: 已创建
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            summary: 注册用户并签发会话
+    /jobs/{jobId}:
+        get:
+            operationId: GetJob
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_Job'
+                    description: 任务详情
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 获取任务详情
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_JobId'
+    /jobs/{jobId}/approve:
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_JobId'
+        post:
+            operationId: ApproveJob
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_Job'
+                    description: 任务详情
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 批量通过任务审校
+    /jobs/{jobId}/cancel:
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_JobId'
+        post:
+            operationId: CancelJob
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_Job'
+                    description: 取消后的任务
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 取消任务
+    /jobs/{jobId}/download:
+        get:
+            operationId: DownloadJobResult
+            responses:
+                "200":
+                    content:
+                        application/octet-stream:
+                            schema:
+                                format: binary
+                                type: string
+                    description: 下载结果文件
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 下载任务输出
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_JobId'
+    /jobs/{jobId}/retranslate:
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_JobId'
+        post:
+            operationId: RetranslateRejectedSegments
+            responses:
+                "202":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_Job'
+                    description: 已重新入队
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 重译被驳回段
+    /jobs/{jobId}/retry:
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_JobId'
+        post:
+            operationId: RetryJob
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_Job'
+                    description: 重试后的任务
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 重试失败子任务
+    /jobs/{jobId}/segments:
+        get:
+            operationId: ListJobSegments
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_SegmentListResponse'
+                    description: 段列表
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 获取任务段列表
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_JobId'
+            - $ref: '#/components/parameters/components_parameters_extra_Cursor'
+            - $ref: '#/components/parameters/components_parameters_extra_Limit'
+    /jobs/{jobId}/subjobs:
+        get:
+            operationId: ListJobSubJobs
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_SubJobListResponse'
+                    description: 子任务列表
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 获取任务子任务列表
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_JobId'
+    /jobs/{jobId}/subjobs/{subJobId}:
+        get:
+            operationId: GetJobSubJob
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_SubJob'
+                    description: 子任务详情
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 获取单个子任务详情
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_JobId'
+            - $ref: '#/components/parameters/components_parameters_SubJobId'
+    /orgs:
+        get:
+            operationId: ListOrganizations
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_organization_OrganizationListResponse'
+                    description: 组织列表
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 列出当前用户所属组织
+        post:
+            operationId: CreateOrganization
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/components_schemas_organization_OrganizationRequest'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_organization_Organization'
+                    description: 已创建组织
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 创建组织
+    /orgs/{orgId}:
+        get:
+            operationId: GetOrganization
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_organization_Organization'
+                    description: 组织详情
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 获取组织详情
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_OrgId'
+        put:
+            operationId: UpdateOrganization
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/components_schemas_organization_OrganizationRequest'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_organization_Organization'
+                    description: 更新后的组织
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 更新组织信息
+    /orgs/{orgId}/members:
+        get:
+            operationId: ListOrganizationMembers
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_organization_OrganizationMemberListResponse'
+                    description: 成员列表
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 获取组织成员列表
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_OrgId'
+        post:
+            operationId: AddOrganizationMember
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/components_schemas_organization_AddOrganizationMemberRequest'
+                required: true
+            responses:
+                "201":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_organization_OrganizationMember'
+                    description: 已添加成员
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 添加组织成员
+    /orgs/{orgId}/members/{userId}:
+        delete:
+            operationId: DeleteOrganizationMember
+            responses:
+                "204":
+                    description: 已移除成员
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 移除组织成员
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_OrgId'
+            - $ref: '#/components/parameters/components_parameters_UserId'
+        put:
+            operationId: UpdateOrganizationMember
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/components_schemas_organization_UpdateOrganizationMemberRequest'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_organization_OrganizationMember'
+                    description: 更新后的成员
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 修改组织成员角色
+    /projects/{projectId}/jobs:
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_ProjectId'
+        post:
+            operationId: CreateProjectJob
+            requestBody:
+                content:
+                    multipart/form-data:
+                        schema:
+                            properties:
+                                files:
+                                    items:
+                                        format: binary
+                                        type: string
+                                    type: array
+                                source_lang:
+                                    type: string
+                                target_lang:
+                                    type: string
+                            required:
+                                - files
+                            type: object
+                required: true
+            responses:
+                "202":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_JobCreateResponse'
+                    description: 任务已创建
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 创建多文件翻译任务
+    /segments/{segmentId}:
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_extra_SegmentId'
+        put:
+            operationId: EditSegment
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/components_schemas_job_SegmentEditRequest'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_Segment'
+                    description: 段详情
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 编辑段译文
+    /segments/{segmentId}/approve:
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_extra_SegmentId'
+        post:
+            operationId: ApproveSegment
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/components_schemas_job_SegmentDecisionRequest'
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_Segment'
+                    description: 段详情
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 通过段译文
+    /segments/{segmentId}/reject:
+        parameters:
+            - $ref: '#/components/parameters/components_parameters_extra_SegmentId'
+        post:
+            operationId: RejectSegment
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/components_schemas_job_SegmentDecisionRequest'
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_Segment'
+                    description: 段详情
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 驳回段译文
+    /stats/summary:
+        get:
+            operationId: GetStatsSummary
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/components_schemas_job_UsageStats'
+                    description: 用量统计
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 获取用量统计汇总
+    /users/me:
+        get:
+            operationId: GetCurrentUser
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/User'
+                    description: 当前用户
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 获取当前用户
+        put:
+            operationId: UpdateCurrentUser
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/components_schemas_user_UpdateCurrentUserRequest'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/User'
+                    description: 更新后的用户
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 更新当前用户资料
+    /users/me/password:
+        put:
+            operationId: ChangeCurrentUserPassword
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/components_schemas_user_ChangePasswordRequest'
+                required: true
+            responses:
+                "204":
+                    description: 密码已更新
+                default:
+                    $ref: '#/components/responses/components_responses_Problem'
+            security:
+                - bearerAuth: []
+            summary: 修改当前用户密码
+servers:
+    - url: /api/v1

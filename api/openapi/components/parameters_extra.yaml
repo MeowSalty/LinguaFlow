@@ -1,0 +1,23 @@
+SegmentId:
+  name: segmentId
+  in: path
+  required: true
+  schema:
+    type: integer
+    minimum: 1
+
+Cursor:
+  name: cursor
+  in: query
+  required: false
+  schema:
+    type: string
+
+Limit:
+  name: limit
+  in: query
+  required: false
+  schema:
+    type: integer
+    minimum: 1
+    maximum: 100

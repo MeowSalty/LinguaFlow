@@ -1,0 +1,34 @@
+statsSummary:
+  get:
+    operationId: GetStatsSummary
+    summary: 获取用量统计汇总
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 用量统计
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/UsageStats'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+activity:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/Cursor'
+    - $ref: '../base.yaml#/components/parameters/Limit'
+  get:
+    operationId: ListActivity
+    summary: 获取活动审计日志
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 活动审计日志
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/ActivityListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

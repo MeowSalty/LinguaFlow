@@ -1,0 +1,142 @@
+openapi: 3.0.3
+info:
+  title: LinguaFlow Web Service API
+  version: 0.1.0
+servers:
+  - url: /api/v1
+paths:
+  /auth/register:
+    $ref: './paths/auth.yaml#/register'
+  /auth/login:
+    $ref: './paths/auth.yaml#/login'
+  /auth/refresh:
+    $ref: './paths/auth.yaml#/refresh'
+  /auth/logout:
+    $ref: './paths/auth.yaml#/logout'
+  /users/me:
+    $ref: './paths/users.yaml#/currentUser'
+  /users/me/password:
+    $ref: './paths/users.yaml#/currentUserPassword'
+  /orgs:
+    $ref: './paths/organizations.yaml#/organizations'
+  /orgs/{orgId}:
+    $ref: './paths/organizations.yaml#/organizationById'
+  /orgs/{orgId}/members:
+    $ref: './paths/organizations.yaml#/organizationMembers'
+  /orgs/{orgId}/members/{userId}:
+    $ref: './paths/organizations.yaml#/organizationMemberByUserId'
+  /projects/{projectId}/jobs:
+    $ref: './paths/jobs.yaml#/projectJobs'
+  /jobs/{jobId}:
+    $ref: './paths/jobs.yaml#/jobById'
+  /jobs/{jobId}/subjobs:
+    $ref: './paths/jobs.yaml#/jobSubJobs'
+  /jobs/{jobId}/subjobs/{subJobId}:
+    $ref: './paths/jobs.yaml#/jobSubJobById'
+  /jobs/{jobId}/cancel:
+    $ref: './paths/jobs.yaml#/jobCancel'
+  /jobs/{jobId}/retry:
+    $ref: './paths/jobs.yaml#/jobRetry'
+  /jobs/{jobId}/download:
+    $ref: './paths/jobs.yaml#/jobDownload'
+  /jobs/{jobId}/segments:
+    $ref: './paths/review.yaml#/jobSegments'
+  /jobs/{jobId}/approve:
+    $ref: './paths/review.yaml#/jobApprove'
+  /jobs/{jobId}/retranslate:
+    $ref: './paths/review.yaml#/jobRetranslate'
+  /segments/{segmentId}:
+    $ref: './paths/review.yaml#/segmentById'
+  /segments/{segmentId}/approve:
+    $ref: './paths/review.yaml#/segmentApprove'
+  /segments/{segmentId}/reject:
+    $ref: './paths/review.yaml#/segmentReject'
+  /stats/summary:
+    $ref: './paths/stats.yaml#/statsSummary'
+  /activity:
+    $ref: './paths/stats.yaml#/activity'
+components:
+  securitySchemes:
+    bearerAuth:
+      $ref: './components/security-schemes.yaml#/bearerAuth'
+  parameters:
+    OrgId:
+      $ref: './components/parameters.yaml#/OrgId'
+    UserId:
+      $ref: './components/parameters.yaml#/UserId'
+    ProjectId:
+      $ref: './components/parameters.yaml#/ProjectId'
+    JobId:
+      $ref: './components/parameters.yaml#/JobId'
+    SubJobId:
+      $ref: './components/parameters.yaml#/SubJobId'
+    SegmentId:
+      $ref: './components/parameters_extra.yaml#/SegmentId'
+    Cursor:
+      $ref: './components/parameters_extra.yaml#/Cursor'
+    Limit:
+      $ref: './components/parameters_extra.yaml#/Limit'
+  responses:
+    Problem:
+      $ref: './components/responses.yaml#/Problem'
+  schemas:
+    Problem:
+      $ref: './components/schemas/common.yaml#/Problem'
+    User:
+      $ref: './components/schemas/user.yaml#/User'
+    RegisterRequest:
+      $ref: './components/schemas/auth.yaml#/RegisterRequest'
+    LoginRequest:
+      $ref: './components/schemas/auth.yaml#/LoginRequest'
+    RefreshRequest:
+      $ref: './components/schemas/auth.yaml#/RefreshRequest'
+    LogoutRequest:
+      $ref: './components/schemas/auth.yaml#/LogoutRequest'
+    AuthSession:
+      $ref: './components/schemas/auth.yaml#/AuthSession'
+    UpdateCurrentUserRequest:
+      $ref: './components/schemas/user.yaml#/UpdateCurrentUserRequest'
+    ChangePasswordRequest:
+      $ref: './components/schemas/user.yaml#/ChangePasswordRequest'
+    Organization:
+      $ref: './components/schemas/organization.yaml#/Organization'
+    OrganizationRequest:
+      $ref: './components/schemas/organization.yaml#/OrganizationRequest'
+    OrganizationListResponse:
+      $ref: './components/schemas/organization.yaml#/OrganizationListResponse'
+    OrganizationMember:
+      $ref: './components/schemas/organization.yaml#/OrganizationMember'
+    OrganizationMemberListResponse:
+      $ref: './components/schemas/organization.yaml#/OrganizationMemberListResponse'
+    AddOrganizationMemberRequest:
+      $ref: './components/schemas/organization.yaml#/AddOrganizationMemberRequest'
+    UpdateOrganizationMemberRequest:
+      $ref: './components/schemas/organization.yaml#/UpdateOrganizationMemberRequest'
+    JobCreateRequest:
+      $ref: './components/schemas/job.yaml#/JobCreateRequest'
+    JobCreateResponse:
+      $ref: './components/schemas/job.yaml#/JobCreateResponse'
+    Job:
+      $ref: './components/schemas/job.yaml#/Job'
+    JobListResponse:
+      $ref: './components/schemas/job.yaml#/JobListResponse'
+    SubJobSummary:
+      $ref: './components/schemas/job.yaml#/SubJobSummary'
+    SubJob:
+      $ref: './components/schemas/job.yaml#/SubJob'
+    SubJobListResponse:
+      $ref: './components/schemas/job.yaml#/SubJobListResponse'
+    Segment:
+      $ref: './components/schemas/job.yaml#/Segment'
+    SegmentListResponse:
+      $ref: './components/schemas/job.yaml#/SegmentListResponse'
+    SegmentEditRequest:
+      $ref: './components/schemas/job.yaml#/SegmentEditRequest'
+    SegmentDecisionRequest:
+      $ref: './components/schemas/job.yaml#/SegmentDecisionRequest'
+    UsageStats:
+      $ref: './components/schemas/job.yaml#/UsageStats'
+    Activity:
+      $ref: './components/schemas/job.yaml#/Activity'
+    ActivityListResponse:
+      $ref: './components/schemas/job.yaml#/ActivityListResponse'

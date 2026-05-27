@@ -1,0 +1,12 @@
+Problem:
+  type: object
+  required: [title, status]
+  properties:
+    type:
+      type: string
+    title:
+      type: string
+    status:
+      type: integer
+    detail:
+      type: string

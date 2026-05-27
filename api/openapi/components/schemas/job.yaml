@@ -1,0 +1,228 @@
+JobCreateRequest:
+  type: object
+  properties:
+    source_lang:
+      type: string
+    target_lang:
+      type: string
+  additionalProperties: false
+
+JobCreateResponse:
+  type: object
+  required: [job_id, status, sub_jobs, created_at]
+  properties:
+    job_id:
+      type: integer
+    status:
+      type: string
+    sub_jobs:
+      type: array
+      items:
+        $ref: '#/SubJobSummary'
+    created_at:
+      type: string
+      format: date-time
+
+Job:
+  type: object
+  required: [id, project_id, status, sub_job_count, completed_sub_jobs, failed_sub_jobs, source_lang, target_lang, sub_jobs]
+  properties:
+    id:
+      type: integer
+    project_id:
+      type: integer
+    status:
+      type: string
+    sub_job_count:
+      type: integer
+    completed_sub_jobs:
+      type: integer
+    failed_sub_jobs:
+      type: integer
+    source_lang:
+      type: string
+    target_lang:
+      type: string
+    input_path:
+      type: string
+    output_path:
+      type: string
+    error_message:
+      type: string
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+    sub_jobs:
+      type: array
+      items:
+        $ref: '#/SubJob'
+
+JobListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/Job'
+
+SubJobSummary:
+  type: object
+  required: [id, filename, status]
+  properties:
+    id:
+      type: integer
+    filename:
+      type: string
+    status:
+      type: string
+
+SubJob:
+  type: object
+  required: [id, status, input_filename, input_format, input_path, output_path, segment_count]
+  properties:
+    id:
+      type: integer
+    status:
+      type: string
+    input_filename:
+      type: string
+    input_format:
+      type: string
+    input_path:
+      type: string
+    output_path:
+      type: string
+    segment_count:
+      type: integer
+    error_message:
+      type: string
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+
+SubJobListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/SubJob'
+
+Segment:
+  type: object
+  required: [id, sub_job_id, segment_index, source_text, status, created_at, updated_at]
+  properties:
+    id:
+      type: integer
+    sub_job_id:
+      type: integer
+    segment_index:
+      type: integer
+    source_text:
+      type: string
+    target_text:
+      type: string
+    status:
+      type: string
+    review_comment:
+      type: string
+    reviewed_by:
+      $ref: '../../base.yaml#/components/schemas/User'
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+
+SegmentListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/Segment'
+    next_cursor:
+      type: string
+
+SegmentEditRequest:
+  type: object
+  required: [target_text]
+  properties:
+    target_text:
+      type: string
+    comment:
+      type: string
+  additionalProperties: false
+
+SegmentDecisionRequest:
+  type: object
+  properties:
+    comment:
+      type: string
+  additionalProperties: false
+
+UsageStats:
+  type: object
+  required: [api_calls, input_tokens, output_tokens, segment_count, usage_records, completed_jobs, failed_jobs]
+  properties:
+    api_calls:
+      type: integer
+    input_tokens:
+      type: integer
+    output_tokens:
+      type: integer
+    segment_count:
+      type: integer
+    usage_records:
+      type: integer
+    completed_jobs:
+      type: integer
+    failed_jobs:
+      type: integer
+
+Activity:
+  type: object
+  required: [id, action, resource_type, created_at, updated_at]
+  properties:
+    id:
+      type: integer
+    action:
+      type: string
+    resource_type:
+      type: string
+    resource_id:
+      type: integer
+    message:
+      type: string
+    metadata:
+      type: object
+      additionalProperties: true
+    actor:
+      $ref: '../../base.yaml#/components/schemas/User'
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+
+ActivityListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/Activity'
+    next_cursor:
+      type: string
