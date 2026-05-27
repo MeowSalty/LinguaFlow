@@ -2,6 +2,10 @@ package api
 
 import "net/http"
 
+func (s *Server) Ping(w http.ResponseWriter, r *http.Request) {
+	s.handlePing(w, r)
+}
+
 func (s *Server) RegisterAuth(w http.ResponseWriter, r *http.Request) {
 	s.handleRegister(w, r)
 }

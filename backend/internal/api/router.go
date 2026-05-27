@@ -8,8 +8,9 @@ import (
 )
 
 type healthResponse struct {
-	Status string `json:"status"`
-	Error  string `json:"error,omitempty"`
+	Status  string `json:"status"`
+	Service string `json:"service,omitempty"`
+	Error   string `json:"error,omitempty"`
 }
 
 func (s *Server) newRouter() http.Handler {
@@ -29,6 +30,10 @@ func (s *Server) newRouter() http.Handler {
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, healthResponse{Status: "ok"})
+}
+
+func (s *Server) handlePing(w http.ResponseWriter, _ *http.Request) {
+	writeJSON(w, http.StatusOK, healthResponse{Status: "ok", Service: s.config.Server.ServiceName})
 }
 
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {

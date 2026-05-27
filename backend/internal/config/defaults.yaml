@@ -150,6 +150,7 @@ log:
 server:
   host: 0.0.0.0
   port: 8080
+  service_name: linguaflow
   data_dir: ./data
   auto_migrate: true
   jwt_secret: ${LINGUAFLOW_JWT_SECRET:-dev-insecure-secret-change-me}
