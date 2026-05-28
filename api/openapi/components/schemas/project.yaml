@@ -1,0 +1,153 @@
+Project:
+  type: object
+  required: [id, name, resource_scope, source_lang, target_lang]
+  properties:
+    id:
+      type: integer
+    name:
+      type: string
+    resource_scope:
+      type: string
+      enum: [project, organization]
+    owner_user_id:
+      type: integer
+    owner_org_id:
+      type: integer
+    config:
+      type: object
+      additionalProperties: true
+    source_lang:
+      type: string
+    target_lang:
+      type: string
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+
+ProjectListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/Project'
+
+CreateProjectRequest:
+  type: object
+  required: [name]
+  properties:
+    name:
+      type: string
+    owner_org_id:
+      type: integer
+    resource_scope:
+      type: string
+      enum: [project, organization]
+    config:
+      type: object
+      additionalProperties: true
+    source_lang:
+      type: string
+    target_lang:
+      type: string
+  additionalProperties: false
+
+UpdateProjectRequest:
+  type: object
+  properties:
+    name:
+      type: string
+    resource_scope:
+      type: string
+      enum: [project, organization]
+    config:
+      type: object
+      additionalProperties: true
+    source_lang:
+      type: string
+    target_lang:
+      type: string
+  additionalProperties: false
+
+ProjectBackendBinding:
+  type: object
+  required: [order_index, source, backend_id, name, type, priority]
+  properties:
+    order_index:
+      type: integer
+    source:
+      type: string
+    backend_id:
+      type: integer
+    name:
+      type: string
+    type:
+      type: string
+    priority:
+      type: integer
+    options:
+      type: object
+      additionalProperties: true
+
+StageBackendOverride:
+  type: object
+  required: [stage, backend_mode]
+  properties:
+    stage:
+      type: string
+    backend_mode:
+      type: string
+      enum: [inherit, prepend, restrict]
+    backend_order:
+      type: array
+      items:
+        type: string
+
+SetBackendOrderRequest:
+  type: object
+  required: [bindings]
+  properties:
+    bindings:
+      type: array
+      items:
+        type: object
+        required: [source, backend_id]
+        properties:
+          source:
+            type: string
+            enum: [user, org]
+          backend_id:
+            type: integer
+  additionalProperties: false
+
+SetStageOverrideRequest:
+  type: object
+  required: [stage, backend_mode]
+  properties:
+    stage:
+      type: string
+    backend_mode:
+      type: string
+      enum: [inherit, prepend, restrict]
+    backend_order:
+      type: array
+      items:
+        type: string
+  additionalProperties: false
+
+ProjectBackendSettings:
+  type: object
+  required: [backends]
+  properties:
+    backends:
+      type: array
+      items:
+        $ref: '#/ProjectBackendBinding'
+    stage_overrides:
+      type: object
+      additionalProperties:
+        $ref: '#/StageBackendOverride'

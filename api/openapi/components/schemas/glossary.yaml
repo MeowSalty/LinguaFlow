@@ -1,0 +1,76 @@
+GlossaryEntry:
+  type: object
+  required: [id, source, target, case_sensitive]
+  properties:
+    id:
+      type: integer
+    source:
+      type: string
+    target:
+      type: string
+    case_sensitive:
+      type: boolean
+    notes:
+      type: string
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+
+GlossaryListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/GlossaryEntry'
+
+CreateGlossaryEntryRequest:
+  type: object
+  required: [source, target]
+  properties:
+    source:
+      type: string
+    target:
+      type: string
+    case_sensitive:
+      type: boolean
+      default: false
+    notes:
+      type: string
+  additionalProperties: false
+
+UpdateGlossaryEntryRequest:
+  type: object
+  required: [source, target]
+  properties:
+    source:
+      type: string
+    target:
+      type: string
+    case_sensitive:
+      type: boolean
+    notes:
+      type: string
+  additionalProperties: false
+
+GlossaryImportResult:
+  type: object
+  required: [added]
+  properties:
+    added:
+      type: integer
+    skipped:
+      type: array
+      items:
+        type: object
+        properties:
+          line:
+            type: integer
+          source:
+            type: string
+          reason:
+            type: string

@@ -1,0 +1,67 @@
+Backend:
+  type: object
+  required: [id, source, name, type, priority]
+  properties:
+    id:
+      type: integer
+    source:
+      type: string
+      enum: [user, org]
+    name:
+      type: string
+    type:
+      type: string
+      enum: [openai, anthropic, google]
+    priority:
+      type: integer
+    options:
+      type: object
+      additionalProperties: true
+    options_visible:
+      type: boolean
+    owner_user_id:
+      type: integer
+    owner_org_id:
+      type: integer
+
+BackendListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/Backend'
+
+CreateBackendRequest:
+  type: object
+  required: [name, type]
+  properties:
+    name:
+      type: string
+    type:
+      type: string
+      enum: [openai, anthropic, google]
+    priority:
+      type: integer
+      default: 0
+    options:
+      type: object
+      additionalProperties: true
+  additionalProperties: false
+
+UpdateBackendRequest:
+  type: object
+  required: [name, type]
+  properties:
+    name:
+      type: string
+    type:
+      type: string
+      enum: [openai, anthropic, google]
+    priority:
+      type: integer
+    options:
+      type: object
+      additionalProperties: true
+  additionalProperties: false

@@ -1,0 +1,120 @@
+projectGlossary:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+  get:
+    operationId: ListGlossaryEntries
+    summary: 列出术语条目
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 术语表列表
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/glossary.yaml#/GlossaryListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  post:
+    operationId: CreateGlossaryEntry
+    summary: 创建术语条目
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/glossary.yaml#/CreateGlossaryEntryRequest'
+    responses:
+      '201':
+        description: 创建成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/glossary.yaml#/GlossaryEntry'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+glossaryEntryById:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+    - $ref: '../base.yaml#/components/parameters/EntryId'
+  put:
+    operationId: UpdateGlossaryEntry
+    summary: 更新术语条目
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/glossary.yaml#/UpdateGlossaryEntryRequest'
+    responses:
+      '200':
+        description: 更新成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/glossary.yaml#/GlossaryEntry'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  delete:
+    operationId: DeleteGlossaryEntry
+    summary: 删除术语条目
+    security:
+      - bearerAuth: []
+    responses:
+      '204':
+        description: 删除成功
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+glossaryImport:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+  post:
+    operationId: ImportGlossaryCSV
+    summary: CSV 导入术语表
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            required: [file]
+            properties:
+              file:
+                type: string
+                format: binary
+    responses:
+      '200':
+        description: 导入结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/glossary.yaml#/GlossaryImportResult'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+glossaryExport:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+  get:
+    operationId: ExportGlossaryCSV
+    summary: CSV 导出术语表
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: CSV 文件
+        content:
+          text/csv:
+            schema:
+              type: string
+              format: binary
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
