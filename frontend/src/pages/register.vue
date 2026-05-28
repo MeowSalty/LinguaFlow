@@ -92,12 +92,12 @@ const onSubmit = async () => {
       display_name: formValue.display_name.trim() || undefined,
       password: formValue.password,
     })
-    message.success('注册成功,欢迎使用 LinguaFlow')
+    message.success('注册成功，欢迎使用 LinguaFlow')
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : null
     await router.push(redirect ?? '/')
   } catch (error) {
     console.error(error)
-    message.error(extractErrorMessage(error, '注册失败,请稍后重试'))
+    message.error(extractErrorMessage(error, '注册失败，请稍后重试'))
   } finally {
     submitting.value = false
   }
@@ -134,11 +134,7 @@ const onSubmit = async () => {
         </NFormItem>
 
         <NFormItem label="显示名(可选)" path="display_name">
-          <NInput
-            v-model:value="formValue.display_name"
-            placeholder="留空则使用用户名"
-            clearable
-          />
+          <NInput v-model:value="formValue.display_name" placeholder="留空则使用用户名" clearable />
         </NFormItem>
 
         <NFormItem label="密码" path="password">
@@ -161,20 +157,14 @@ const onSubmit = async () => {
           />
         </NFormItem>
 
-        <NButton
-          attr-type="submit"
-          type="primary"
-          size="large"
-          block
-          :loading="submitting"
-        >
+        <NButton attr-type="submit" type="primary" size="large" block :loading="submitting">
           注册并登录
         </NButton>
       </NForm>
     </NCard>
 
     <div class="mt-6 text-center text-xs text-slate-500">
-      已经有账号了?
+      已经有账号了？
       <RouterLink to="/login" class="text-brand-500 no-underline hover:underline">
         去登录
       </RouterLink>

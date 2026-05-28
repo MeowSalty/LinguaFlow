@@ -26,16 +26,12 @@ const userOptions = computed<DropdownOption[]>(() => [
     key: 'username-info',
     type: 'render',
     render: () =>
-      h(
-        'div',
-        { class: 'px-3 py-2 min-w-[180px]' },
-        [
-          h('div', { class: 'text-sm font-medium text-slate-900' }, displayName.value),
-          auth.user?.email
-            ? h('div', { class: 'text-xs text-slate-500 mt-0.5' }, auth.user.email)
-            : null,
-        ],
-      ),
+      h('div', { class: 'px-3 py-2 min-w-[180px]' }, [
+        h('div', { class: 'text-sm font-medium text-slate-900' }, displayName.value),
+        auth.user?.email
+          ? h('div', { class: 'text-xs text-slate-500 mt-0.5' }, auth.user.email)
+          : null,
+      ]),
   },
   { type: 'divider', key: 'divider-1' },
   { label: '切换服务器', key: 'switch-service' },
@@ -50,7 +46,7 @@ const onSelectUserAction = async (key: string | number) => {
       await router.push({ path: '/login' })
     } catch (error) {
       console.error(error)
-      message.error('退出登录失败,请重试')
+      message.error('退出登录失败，请重试')
     }
   } else if (key === 'switch-service') {
     await router.push({ path: '/service' })
@@ -63,10 +59,7 @@ const onSelectUserAction = async (key: string | number) => {
     <header
       class="sticky top-0 z-10 flex h-16 items-center gap-8 border-b border-slate-200 bg-white/80 px-8 backdrop-blur"
     >
-      <RouterLink
-        to="/"
-        class="text-xl font-bold tracking-tight text-brand-500 no-underline"
-      >
+      <RouterLink to="/" class="text-xl font-bold tracking-tight text-brand-500 no-underline">
         LinguaFlow
       </RouterLink>
 
@@ -76,7 +69,7 @@ const onSelectUserAction = async (key: string | number) => {
           class="text-slate-600 no-underline transition-colors hover:text-brand-500"
           active-class="!text-brand-500 font-semibold"
         >
-          首页
+          工作台
         </RouterLink>
         <RouterLink
           to="/about"
@@ -102,11 +95,7 @@ const onSelectUserAction = async (key: string | number) => {
             type="button"
             class="flex items-center gap-2 rounded-full border border-slate-200 bg-white px-2 py-1 transition-colors hover:border-brand-500"
           >
-            <NAvatar
-              round
-              size="small"
-              :style="{ backgroundColor: '#18a058' }"
-            >
+            <NAvatar round size="small" :style="{ backgroundColor: '#18a058' }">
               {{ initial }}
             </NAvatar>
             <span class="pr-2 text-sm text-slate-700">{{ displayName }}</span>

@@ -1,11 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 
-import {
-  clearStoredApiBaseUrl,
-  readStoredApiBaseUrl,
-  setApiBaseUrl,
-} from '@/api/client'
+import { clearStoredApiBaseUrl, readStoredApiBaseUrl, setApiBaseUrl } from '@/api/client'
 
 const DEFAULT_BASE_URL = '/api/v1'
 

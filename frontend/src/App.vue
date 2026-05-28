@@ -6,7 +6,15 @@ const isBlank = computed(() => route.meta.layout === 'blank')
 </script>
 
 <template>
-  <NConfigProvider :theme-overrides="{ common: { primaryColor: '#18a058', primaryColorHover: '#36ad6a', primaryColorPressed: '#0c7a43' } }">
+  <NConfigProvider
+    :theme-overrides="{
+      common: {
+        primaryColor: '#18a058',
+        primaryColorHover: '#36ad6a',
+        primaryColorPressed: '#0c7a43',
+      },
+    }"
+  >
     <NMessageProvider>
       <RouterView v-slot="{ Component }">
         <component :is="Component" v-if="isBlank" />

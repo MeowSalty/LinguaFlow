@@ -37,11 +37,10 @@ const rules: FormRules = {
           return true
         }
         try {
-           
           new URL(trimmed)
           return true
         } catch {
-          return new Error('请填写合法的 URL,例如 https://linguaflow.example.com/api/v1')
+          return new Error('请填写合法的 URL，例如 https://linguaflow.example.com/api/v1')
         }
       },
     },
@@ -90,19 +89,15 @@ const onSubmit = async () => {
           />
         </NFormItem>
 
-        <NButton
-          attr-type="submit"
-          type="primary"
-          size="large"
-          block
-          :loading="submitting"
-        >
+        <NButton attr-type="submit" type="primary" size="large" block :loading="submitting">
           连接
         </NButton>
       </NForm>
 
       <p class="mt-5 text-center text-xs text-slate-500">
-        留空或填写 <code class="rounded bg-slate-100 px-1 py-0.5 text-slate-700">/api/v1</code> 将使用当前页面的同源地址
+        留空或填写
+        <code class="rounded bg-slate-100 px-1 py-0.5 text-slate-700">/api/v1</code>
+        将使用当前页面的同源地址
       </p>
     </NCard>
   </BlankLayout>

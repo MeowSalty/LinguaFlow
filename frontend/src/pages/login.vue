@@ -27,12 +27,8 @@ const formValue = reactive({
 })
 
 const rules: FormRules = {
-  username: [
-    { required: true, trigger: ['blur', 'input'], message: '请输入用户名' },
-  ],
-  password: [
-    { required: true, trigger: ['blur', 'input'], message: '请输入密码' },
-  ],
+  username: [{ required: true, trigger: ['blur', 'input'], message: '请输入用户名' }],
+  password: [{ required: true, trigger: ['blur', 'input'], message: '请输入密码' }],
 }
 
 interface ApiProblem {
@@ -107,13 +103,7 @@ const onSubmit = async () => {
           />
         </NFormItem>
 
-        <NButton
-          attr-type="submit"
-          type="primary"
-          size="large"
-          block
-          :loading="submitting"
-        >
+        <NButton attr-type="submit" type="primary" size="large" block :loading="submitting">
           登录
         </NButton>
       </NForm>
@@ -126,10 +116,7 @@ const onSubmit = async () => {
       >
         切换服务器 · <span class="text-slate-400">{{ service.baseUrl }}</span>
       </RouterLink>
-      <RouterLink
-        to="/register"
-        class="text-brand-500 no-underline hover:underline"
-      >
+      <RouterLink to="/register" class="text-brand-500 no-underline hover:underline">
         没有账号?去注册
       </RouterLink>
     </div>

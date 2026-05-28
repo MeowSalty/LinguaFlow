@@ -17,10 +17,7 @@ defineProps<{
         >
           LinguaFlow
         </RouterLink>
-        <h1
-          v-if="title"
-          class="mt-6 text-2xl font-semibold tracking-tight text-slate-900"
-        >
+        <h1 v-if="title" class="mt-6 text-2xl font-semibold tracking-tight text-slate-900">
           {{ title }}
         </h1>
         <p v-if="subtitle" class="mt-2 text-sm text-slate-500">
