@@ -1,0 +1,142 @@
+userBackends:
+  post:
+    operationId: CreateUserBackend
+    summary: 创建个人后端
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/backend.yaml#/CreateBackendRequest'
+    responses:
+      '201':
+        description: 创建成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/backend.yaml#/Backend'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  get:
+    operationId: ListUserBackends
+    summary: 列出个人后端
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 后端列表
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/backend.yaml#/BackendListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+userBackendById:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/BackendId'
+  put:
+    operationId: UpdateUserBackend
+    summary: 更新个人后端
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/backend.yaml#/UpdateBackendRequest'
+    responses:
+      '200':
+        description: 更新成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/backend.yaml#/Backend'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  delete:
+    operationId: DeleteUserBackend
+    summary: 删除个人后端
+    security:
+      - bearerAuth: []
+    responses:
+      '204':
+        description: 删除成功
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+orgBackends:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/OrgId'
+  post:
+    operationId: CreateOrgBackend
+    summary: 创建组织后端
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/backend.yaml#/CreateBackendRequest'
+    responses:
+      '201':
+        description: 创建成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/backend.yaml#/Backend'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  get:
+    operationId: ListOrgBackends
+    summary: 列出组织后端
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 后端列表
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/backend.yaml#/BackendListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+orgBackendById:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/OrgId'
+    - $ref: '../base.yaml#/components/parameters/BackendId'
+  put:
+    operationId: UpdateOrgBackend
+    summary: 更新组织后端
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/backend.yaml#/UpdateBackendRequest'
+    responses:
+      '200':
+        description: 更新成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/backend.yaml#/Backend'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  delete:
+    operationId: DeleteOrgBackend
+    summary: 删除组织后端
+    security:
+      - bearerAuth: []
+    responses:
+      '204':
+        description: 删除成功
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

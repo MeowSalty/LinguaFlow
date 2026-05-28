@@ -274,6 +274,428 @@ paths:
           description: 已移除成员
         default:
           $ref: '#/components/responses/Problem'
+  /backends:
+    post:
+      operationId: CreateUserBackend
+      summary: 创建个人后端
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBackendRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Backend'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: ListUserBackends
+      summary: 列出个人后端
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 后端列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackendListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /backends/{backendId}:
+    parameters:
+      - $ref: '#/components/parameters/BackendId'
+    put:
+      operationId: UpdateUserBackend
+      summary: 更新个人后端
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBackendRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Backend'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteUserBackend
+      summary: 删除个人后端
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
+  /orgs/{orgId}/backends:
+    parameters:
+      - $ref: '#/components/parameters/OrgId'
+    post:
+      operationId: CreateOrgBackend
+      summary: 创建组织后端
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBackendRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Backend'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: ListOrgBackends
+      summary: 列出组织后端
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 后端列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackendListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /orgs/{orgId}/backends/{backendId}:
+    parameters:
+      - $ref: '#/components/parameters/OrgId'
+      - $ref: '#/components/parameters/BackendId'
+    put:
+      operationId: UpdateOrgBackend
+      summary: 更新组织后端
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBackendRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Backend'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteOrgBackend
+      summary: 删除组织后端
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects:
+    post:
+      operationId: CreateProject
+      summary: 创建项目
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: ListProjects
+      summary: 列出项目
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 项目列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      operationId: GetProject
+      summary: 获取项目详情
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 项目详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: UpdateProject
+      summary: 更新项目
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProjectRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteProject
+      summary: 删除项目
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/backends:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      operationId: GetProjectBackends
+      summary: 获取项目后端设置
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 后端设置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectBackendSettings'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: SetProjectBackendOrder
+      summary: 设置项目后端顺序
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetBackendOrderRequest'
+      responses:
+        '200':
+          description: 设置成功
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectBackendBinding'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/stages/{stage}/override:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/Stage'
+    put:
+      operationId: SetStageBackendOverride
+      summary: 设置阶段后端覆盖
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetStageOverrideRequest'
+      responses:
+        '200':
+          description: 设置成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StageBackendOverride'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/stages/{stage}/plan:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/Stage'
+    get:
+      operationId: GetStagePlan
+      summary: 查询阶段执行计划
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 阶段执行计划
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProjectBackendBinding'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/glossary:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      operationId: ListGlossaryEntries
+      summary: 列出术语条目
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 术语表列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossaryListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateGlossaryEntry
+      summary: 创建术语条目
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGlossaryEntryRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossaryEntry'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/glossary/{entryId}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/EntryId'
+    put:
+      operationId: UpdateGlossaryEntry
+      summary: 更新术语条目
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGlossaryEntryRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossaryEntry'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteGlossaryEntry
+      summary: 删除术语条目
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/glossary/import:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      operationId: ImportGlossaryCSV
+      summary: CSV 导入术语表
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 导入结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossaryImportResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/glossary/export:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      operationId: ExportGlossaryCSV
+      summary: CSV 导出术语表
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: CSV 文件
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        default:
+          $ref: '#/components/responses/Problem'
   /projects/{projectId}/jobs:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -610,6 +1032,29 @@ components:
       schema:
         type: integer
         minimum: 1
+    BackendId:
+      name: backendId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    EntryId:
+      name: entryId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    Stage:
+      name: stage
+      in: path
+      required: true
+      schema:
+        type: string
+        enum:
+          - translate
+          - bootstrap
     SegmentId:
       name: segmentId
       in: path
@@ -1109,3 +1554,350 @@ components:
             $ref: '#/components/schemas/Activity'
         next_cursor:
           type: string
+    Backend:
+      type: object
+      required:
+        - id
+        - source
+        - name
+        - type
+        - priority
+      properties:
+        id:
+          type: integer
+        source:
+          type: string
+          enum:
+            - user
+            - org
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+            - openai
+            - anthropic
+            - google
+        priority:
+          type: integer
+        options:
+          type: object
+          additionalProperties: true
+        options_visible:
+          type: boolean
+        owner_user_id:
+          type: integer
+        owner_org_id:
+          type: integer
+    BackendListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Backend'
+    CreateBackendRequest:
+      type: object
+      required:
+        - name
+        - type
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+            - openai
+            - anthropic
+            - google
+        priority:
+          type: integer
+          default: 0
+        options:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+    UpdateBackendRequest:
+      type: object
+      required:
+        - name
+        - type
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+            - openai
+            - anthropic
+            - google
+        priority:
+          type: integer
+        options:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+    Project:
+      type: object
+      required:
+        - id
+        - name
+        - resource_scope
+        - source_lang
+        - target_lang
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        resource_scope:
+          type: string
+          enum:
+            - project
+            - organization
+        owner_user_id:
+          type: integer
+        owner_org_id:
+          type: integer
+        config:
+          type: object
+          additionalProperties: true
+        source_lang:
+          type: string
+        target_lang:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ProjectListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'
+    CreateProjectRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        owner_org_id:
+          type: integer
+        resource_scope:
+          type: string
+          enum:
+            - project
+            - organization
+        config:
+          type: object
+          additionalProperties: true
+        source_lang:
+          type: string
+        target_lang:
+          type: string
+      additionalProperties: false
+    UpdateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        resource_scope:
+          type: string
+          enum:
+            - project
+            - organization
+        config:
+          type: object
+          additionalProperties: true
+        source_lang:
+          type: string
+        target_lang:
+          type: string
+      additionalProperties: false
+    ProjectBackendBinding:
+      type: object
+      required:
+        - order_index
+        - source
+        - backend_id
+        - name
+        - type
+        - priority
+      properties:
+        order_index:
+          type: integer
+        source:
+          type: string
+        backend_id:
+          type: integer
+        name:
+          type: string
+        type:
+          type: string
+        priority:
+          type: integer
+        options:
+          type: object
+          additionalProperties: true
+    StageBackendOverride:
+      type: object
+      required:
+        - stage
+        - backend_mode
+      properties:
+        stage:
+          type: string
+        backend_mode:
+          type: string
+          enum:
+            - inherit
+            - prepend
+            - restrict
+        backend_order:
+          type: array
+          items:
+            type: string
+    SetBackendOrderRequest:
+      type: object
+      required:
+        - bindings
+      properties:
+        bindings:
+          type: array
+          items:
+            type: object
+            required:
+              - source
+              - backend_id
+            properties:
+              source:
+                type: string
+                enum:
+                  - user
+                  - org
+              backend_id:
+                type: integer
+      additionalProperties: false
+    SetStageOverrideRequest:
+      type: object
+      required:
+        - stage
+        - backend_mode
+      properties:
+        stage:
+          type: string
+        backend_mode:
+          type: string
+          enum:
+            - inherit
+            - prepend
+            - restrict
+        backend_order:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+    ProjectBackendSettings:
+      type: object
+      required:
+        - backends
+      properties:
+        backends:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectBackendBinding'
+        stage_overrides:
+          type: object
+          additionalProperties:
+            $ref: '#/components/schemas/StageBackendOverride'
+    GlossaryEntry:
+      type: object
+      required:
+        - id
+        - source
+        - target
+        - case_sensitive
+      properties:
+        id:
+          type: integer
+        source:
+          type: string
+        target:
+          type: string
+        case_sensitive:
+          type: boolean
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    GlossaryListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/GlossaryEntry'
+    CreateGlossaryEntryRequest:
+      type: object
+      required:
+        - source
+        - target
+      properties:
+        source:
+          type: string
+        target:
+          type: string
+        case_sensitive:
+          type: boolean
+          default: false
+        notes:
+          type: string
+      additionalProperties: false
+    UpdateGlossaryEntryRequest:
+      type: object
+      required:
+        - source
+        - target
+      properties:
+        source:
+          type: string
+        target:
+          type: string
+        case_sensitive:
+          type: boolean
+        notes:
+          type: string
+      additionalProperties: false
+    GlossaryImportResult:
+      type: object
+      required:
+        - added
+      properties:
+        added:
+          type: integer
+        skipped:
+          type: array
+          items:
+            type: object
+            properties:
+              line:
+                type: integer
+              source:
+                type: string
+              reason:
+                type: string
