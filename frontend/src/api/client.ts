@@ -102,9 +102,7 @@ export const clearAuthTokens = (tokenStorage = getDefaultTokenStorage()): void =
   tokenStorage?.removeItem(REFRESH_TOKEN_STORAGE_KEY)
 }
 
-export const readStoredApiBaseUrl = (
-  tokenStorage = getDefaultTokenStorage(),
-): string | null => {
+export const readStoredApiBaseUrl = (tokenStorage = getDefaultTokenStorage()): string | null => {
   return tokenStorage?.getItem(API_BASE_URL_STORAGE_KEY) ?? null
 }
 
@@ -155,7 +153,12 @@ export const createAuthMiddleware = (
 })
 
 export const createApiClient = (options: ApiClientOptions = {}): ApiClient => {
-  const { baseUrl, tokenStorage = getDefaultTokenStorage(), getAccessToken, ...clientOptions } = options
+  const {
+    baseUrl,
+    tokenStorage = getDefaultTokenStorage(),
+    getAccessToken,
+    ...clientOptions
+  } = options
   const readAccessToken = resolveAccessTokenReader(tokenStorage, getAccessToken)
   const client = createClient<ApiPaths>({
     ...clientOptions,
@@ -277,13 +280,36 @@ export const logout = async (
   }
 }
 
-export const fetchCurrentUser = async (
-  client = apiClient,
-): Promise<ApiSchemas['User']> => {
+export const fetchCurrentUser = async (client = apiClient): Promise<ApiSchemas['User']> => {
   const { data, error, response } = await client.GET('/users/me')
 
   if (!data) {
     throw buildRequestFailureError('获取当前用户失败', error, response)
+  }
+
+  return data
+}
+
+export const fetchStatsSummary = async (client = apiClient): Promise<ApiSchemas['UsageStats']> => {
+  const { data, error, response } = await client.GET('/stats/summary')
+
+  if (!data) {
+    throw buildRequestFailureError('获取用量统计失败', error, response)
+  }
+
+  return data
+}
+
+export const fetchActivity = async (
+  params?: { cursor?: string; limit?: number },
+  client = apiClient,
+): Promise<ApiSchemas['ActivityListResponse']> => {
+  const { data, error, response } = await client.GET('/activity', {
+    params: { query: params },
+  })
+
+  if (!data) {
+    throw buildRequestFailureError('获取活动日志失败', error, response)
   }
 
   return data

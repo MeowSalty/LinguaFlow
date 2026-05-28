@@ -1,56 +1,130 @@
 <script setup lang="ts">
 import { useAuthStore } from '@/stores/auth'
+import { useStatsStore } from '@/stores/stats'
+import StatsCard from '@/components/dashboard/StatsCard.vue'
+import ActivityFeed from '@/components/dashboard/ActivityFeed.vue'
+import JobStatusOverview from '@/components/dashboard/JobStatusOverview.vue'
 
 const auth = useAuthStore()
+const stats = useStatsStore()
 
 const greeting = computed(() => {
   const name = auth.user?.display_name?.trim() || auth.user?.username
-  return name ? `欢迎回来,${name}` : '欢迎使用 LinguaFlow'
+  return name ? `欢迎回来, ${name}` : '欢迎使用 LinguaFlow'
+})
+
+// 页面加载时获取数据
+onMounted(() => {
+  stats.loadAll()
 })
 </script>
 
 <template>
   <div class="space-y-6">
+    <!-- 欢迎区域 -->
     <NCard :bordered="false" class="shadow-sm shadow-slate-200/60">
       <div class="flex flex-col gap-2">
         <h1 class="text-2xl font-semibold tracking-tight text-slate-900">
           {{ greeting }}
         </h1>
         <p class="text-sm text-slate-500">
-          这是 LinguaFlow 的工作台首页。后续会在此展示翻译任务、用量统计与活动记录。
+          这是 LinguaFlow 的工作台首页，查看您的翻译任务统计和最近活动。
         </p>
       </div>
     </NCard>
 
-    <div class="grid grid-cols-1 gap-6 md:grid-cols-3">
-      <NCard title="账户信息" :bordered="false" class="shadow-sm shadow-slate-200/60">
-        <dl class="space-y-2 text-sm">
-          <div class="flex items-center justify-between">
-            <dt class="text-slate-500">用户名</dt>
-            <dd class="font-medium text-slate-900">{{ auth.user?.username ?? '-' }}</dd>
+    <!-- 统计卡片区域 -->
+    <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+      <StatsCard
+        title="API 调用"
+        :value="stats.stats?.api_calls ?? 0"
+        icon="🔗"
+        :loading="stats.statsLoading"
+      />
+      <StatsCard
+        title="输入 Token"
+        :value="stats.stats?.input_tokens ?? 0"
+        icon="📥"
+        :loading="stats.statsLoading"
+      />
+      <StatsCard
+        title="输出 Token"
+        :value="stats.stats?.output_tokens ?? 0"
+        icon="📤"
+        :loading="stats.statsLoading"
+      />
+      <StatsCard
+        title="任务段数"
+        :value="stats.stats?.segment_count ?? 0"
+        icon="📊"
+        :loading="stats.statsLoading"
+      />
+    </div>
+
+    <!-- 主要内容区域 -->
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-5">
+      <div class="lg:col-span-3">
+        <ActivityFeed />
+      </div>
+      <div class="lg:col-span-2">
+        <JobStatusOverview />
+      </div>
+    </div>
+
+    <!-- 快速操作区域 -->
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <NCard
+        hoverable
+        :bordered="false"
+        class="cursor-pointer shadow-sm shadow-slate-200/60 transition-shadow hover:shadow-md hover:shadow-slate-200/80"
+      >
+        <div class="flex items-center gap-3">
+          <div
+            class="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50 text-brand-500"
+          >
+            ➕
           </div>
-          <div class="flex items-center justify-between">
-            <dt class="text-slate-500">邮箱</dt>
-            <dd class="font-medium text-slate-900">{{ auth.user?.email ?? '-' }}</dd>
+          <div>
+            <div class="font-medium text-slate-900">新建任务</div>
+            <div class="text-xs text-slate-500">创建一个新的翻译任务</div>
           </div>
-          <div class="flex items-center justify-between">
-            <dt class="text-slate-500">角色</dt>
-            <dd>
-              <NTag size="small" :bordered="false">{{ auth.user?.role ?? '-' }}</NTag>
-            </dd>
-          </div>
-        </dl>
+        </div>
       </NCard>
 
-      <NCard title="快速操作" :bordered="false" class="shadow-sm shadow-slate-200/60">
-        <p class="text-sm text-slate-500">导入文档,即可发起一个新的翻译任务。</p>
-        <NButton type="primary" class="mt-4" disabled>新建翻译任务</NButton>
+      <NCard
+        hoverable
+        :bordered="false"
+        class="cursor-pointer shadow-sm shadow-slate-200/60 transition-shadow hover:shadow-md hover:shadow-slate-200/80"
+      >
+        <div class="flex items-center gap-3">
+          <div
+            class="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-500"
+          >
+            📋
+          </div>
+          <div>
+            <div class="font-medium text-slate-900">查看任务</div>
+            <div class="text-xs text-slate-500">查看所有翻译任务</div>
+          </div>
+        </div>
       </NCard>
 
-      <NCard title="提示" :bordered="false" class="shadow-sm shadow-slate-200/60">
-        <p class="text-sm text-slate-500">
-          需要更换连接的 LinguaFlow 服务器,请点击右上角头像菜单中的「切换服务器」。
-        </p>
+      <NCard
+        hoverable
+        :bordered="false"
+        class="cursor-pointer shadow-sm shadow-slate-200/60 transition-shadow hover:shadow-md hover:shadow-slate-200/80"
+      >
+        <div class="flex items-center gap-3">
+          <div
+            class="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-50 text-purple-500"
+          >
+            🏢
+          </div>
+          <div>
+            <div class="font-medium text-slate-900">管理组织</div>
+            <div class="text-xs text-slate-500">管理您的组织设置</div>
+          </div>
+        </div>
       </NCard>
     </div>
   </div>
