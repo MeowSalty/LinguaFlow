@@ -66,6 +66,98 @@ func (s *Server) DeleteOrganizationMember(w http.ResponseWriter, r *http.Request
 	s.requireAuth(http.HandlerFunc(s.handleDeleteOrgMember)).ServeHTTP(w, r)
 }
 
+func (s *Server) ListUserBackends(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleListUserBackends)).ServeHTTP(w, r)
+}
+
+func (s *Server) CreateUserBackend(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleCreateUserBackend)).ServeHTTP(w, r)
+}
+
+func (s *Server) DeleteUserBackend(w http.ResponseWriter, r *http.Request, _ BackendId) {
+	s.requireAuth(http.HandlerFunc(s.handleDeleteUserBackend)).ServeHTTP(w, r)
+}
+
+func (s *Server) UpdateUserBackend(w http.ResponseWriter, r *http.Request, _ BackendId) {
+	s.requireAuth(http.HandlerFunc(s.handleUpdateUserBackend)).ServeHTTP(w, r)
+}
+
+func (s *Server) ListOrgBackends(w http.ResponseWriter, r *http.Request, _ OrgId) {
+	s.requireAuth(http.HandlerFunc(s.handleListOrgBackends)).ServeHTTP(w, r)
+}
+
+func (s *Server) CreateOrgBackend(w http.ResponseWriter, r *http.Request, _ OrgId) {
+	s.requireAuth(http.HandlerFunc(s.handleCreateOrgBackend)).ServeHTTP(w, r)
+}
+
+func (s *Server) DeleteOrgBackend(w http.ResponseWriter, r *http.Request, _ OrgId, _ BackendId) {
+	s.requireAuth(http.HandlerFunc(s.handleDeleteOrgBackend)).ServeHTTP(w, r)
+}
+
+func (s *Server) UpdateOrgBackend(w http.ResponseWriter, r *http.Request, _ OrgId, _ BackendId) {
+	s.requireAuth(http.HandlerFunc(s.handleUpdateOrgBackend)).ServeHTTP(w, r)
+}
+
+func (s *Server) ListProjects(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleListProjects)).ServeHTTP(w, r)
+}
+
+func (s *Server) CreateProject(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleCreateProject)).ServeHTTP(w, r)
+}
+
+func (s *Server) DeleteProject(w http.ResponseWriter, r *http.Request, _ ProjectId) {
+	s.requireAuth(http.HandlerFunc(s.handleDeleteProject)).ServeHTTP(w, r)
+}
+
+func (s *Server) GetProject(w http.ResponseWriter, r *http.Request, _ ProjectId) {
+	s.requireAuth(http.HandlerFunc(s.handleGetProject)).ServeHTTP(w, r)
+}
+
+func (s *Server) UpdateProject(w http.ResponseWriter, r *http.Request, _ ProjectId) {
+	s.requireAuth(http.HandlerFunc(s.handleUpdateProject)).ServeHTTP(w, r)
+}
+
+func (s *Server) GetProjectBackends(w http.ResponseWriter, r *http.Request, _ ProjectId) {
+	s.requireAuth(http.HandlerFunc(s.handleGetProjectBackends)).ServeHTTP(w, r)
+}
+
+func (s *Server) SetProjectBackendOrder(w http.ResponseWriter, r *http.Request, _ ProjectId) {
+	s.requireAuth(http.HandlerFunc(s.handleSetProjectBackendOrder)).ServeHTTP(w, r)
+}
+
+func (s *Server) ListGlossaryEntries(w http.ResponseWriter, r *http.Request, _ ProjectId) {
+	s.requireAuth(http.HandlerFunc(s.handleListGlossaryEntries)).ServeHTTP(w, r)
+}
+
+func (s *Server) CreateGlossaryEntry(w http.ResponseWriter, r *http.Request, _ ProjectId) {
+	s.requireAuth(http.HandlerFunc(s.handleCreateGlossaryEntry)).ServeHTTP(w, r)
+}
+
+func (s *Server) ExportGlossaryCSV(w http.ResponseWriter, r *http.Request, _ ProjectId) {
+	s.requireAuth(http.HandlerFunc(s.handleExportGlossaryCSV)).ServeHTTP(w, r)
+}
+
+func (s *Server) ImportGlossaryCSV(w http.ResponseWriter, r *http.Request, _ ProjectId) {
+	s.requireAuth(http.HandlerFunc(s.handleImportGlossaryCSV)).ServeHTTP(w, r)
+}
+
+func (s *Server) DeleteGlossaryEntry(w http.ResponseWriter, r *http.Request, _ ProjectId, _ EntryId) {
+	s.requireAuth(http.HandlerFunc(s.handleDeleteGlossaryEntry)).ServeHTTP(w, r)
+}
+
+func (s *Server) UpdateGlossaryEntry(w http.ResponseWriter, r *http.Request, _ ProjectId, _ EntryId) {
+	s.requireAuth(http.HandlerFunc(s.handleUpdateGlossaryEntry)).ServeHTTP(w, r)
+}
+
+func (s *Server) SetStageBackendOverride(w http.ResponseWriter, r *http.Request, _ ProjectId, _ Stage) {
+	s.requireAuth(http.HandlerFunc(s.handleSetStageBackendOverride)).ServeHTTP(w, r)
+}
+
+func (s *Server) GetStagePlan(w http.ResponseWriter, r *http.Request, _ ProjectId, _ Stage) {
+	s.requireAuth(http.HandlerFunc(s.handleGetStagePlan)).ServeHTTP(w, r)
+}
+
 func (s *Server) CreateProjectJob(w http.ResponseWriter, r *http.Request, _ ProjectId) {
 	s.requireAuth(http.HandlerFunc(s.handleCreateProjectJob)).ServeHTTP(w, r)
 }

@@ -71,6 +71,15 @@ func writeProjectServiceError(w http.ResponseWriter, err error) {
 		writeProblem(w, http.StatusBadRequest, "invalid_input", err.Error())
 	case errors.Is(err, service.ErrBackendNotFound):
 		writeProblem(w, http.StatusNotFound, "not_found", "资源不存在")
+	case errors.Is(err, service.ErrBackendExists):
+		writeProblem(w, http.StatusConflict, "conflict", "后端已存在")
+	case errors.Is(err, service.ErrBackendTypeInvalid),
+		errors.Is(err, service.ErrBackendSourceInvalid):
+		writeProblem(w, http.StatusBadRequest, "invalid_input", err.Error())
+	case errors.Is(err, service.ErrGlossaryEntryNotFound):
+		writeProblem(w, http.StatusNotFound, "not_found", "术语条目不存在")
+	case errors.Is(err, service.ErrGlossaryEntryExists):
+		writeProblem(w, http.StatusConflict, "conflict", "术语条目已存在")
 	default:
 		writeServiceError(w, err)
 	}

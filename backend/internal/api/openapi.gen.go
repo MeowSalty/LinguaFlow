@@ -46,6 +46,84 @@ func (e AddOrganizationMemberRequestRole) Valid() bool {
 	}
 }
 
+// Defines values for BackendSource.
+const (
+	BackendSourceOrg  BackendSource = "org"
+	BackendSourceUser BackendSource = "user"
+)
+
+// Valid indicates whether the value is a known member of the BackendSource enum.
+func (e BackendSource) Valid() bool {
+	switch e {
+	case BackendSourceOrg:
+		return true
+	case BackendSourceUser:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for BackendType.
+const (
+	BackendTypeAnthropic BackendType = "anthropic"
+	BackendTypeGoogle    BackendType = "google"
+	BackendTypeOpenai    BackendType = "openai"
+)
+
+// Valid indicates whether the value is a known member of the BackendType enum.
+func (e BackendType) Valid() bool {
+	switch e {
+	case BackendTypeAnthropic:
+		return true
+	case BackendTypeGoogle:
+		return true
+	case BackendTypeOpenai:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateBackendRequestType.
+const (
+	CreateBackendRequestTypeAnthropic CreateBackendRequestType = "anthropic"
+	CreateBackendRequestTypeGoogle    CreateBackendRequestType = "google"
+	CreateBackendRequestTypeOpenai    CreateBackendRequestType = "openai"
+)
+
+// Valid indicates whether the value is a known member of the CreateBackendRequestType enum.
+func (e CreateBackendRequestType) Valid() bool {
+	switch e {
+	case CreateBackendRequestTypeAnthropic:
+		return true
+	case CreateBackendRequestTypeGoogle:
+		return true
+	case CreateBackendRequestTypeOpenai:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for CreateProjectRequestResourceScope.
+const (
+	CreateProjectRequestResourceScopeOrganization CreateProjectRequestResourceScope = "organization"
+	CreateProjectRequestResourceScopeProject      CreateProjectRequestResourceScope = "project"
+)
+
+// Valid indicates whether the value is a known member of the CreateProjectRequestResourceScope enum.
+func (e CreateProjectRequestResourceScope) Valid() bool {
+	switch e {
+	case CreateProjectRequestResourceScopeOrganization:
+		return true
+	case CreateProjectRequestResourceScopeProject:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for OrganizationMemberRole.
 const (
 	OrganizationMemberRoleAdmin  OrganizationMemberRole = "admin"
@@ -67,6 +145,105 @@ func (e OrganizationMemberRole) Valid() bool {
 	}
 }
 
+// Defines values for ProjectResourceScope.
+const (
+	ProjectResourceScopeOrganization ProjectResourceScope = "organization"
+	ProjectResourceScopeProject      ProjectResourceScope = "project"
+)
+
+// Valid indicates whether the value is a known member of the ProjectResourceScope enum.
+func (e ProjectResourceScope) Valid() bool {
+	switch e {
+	case ProjectResourceScopeOrganization:
+		return true
+	case ProjectResourceScopeProject:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SetBackendOrderRequestBindingsSource.
+const (
+	SetBackendOrderRequestBindingsSourceOrg  SetBackendOrderRequestBindingsSource = "org"
+	SetBackendOrderRequestBindingsSourceUser SetBackendOrderRequestBindingsSource = "user"
+)
+
+// Valid indicates whether the value is a known member of the SetBackendOrderRequestBindingsSource enum.
+func (e SetBackendOrderRequestBindingsSource) Valid() bool {
+	switch e {
+	case SetBackendOrderRequestBindingsSourceOrg:
+		return true
+	case SetBackendOrderRequestBindingsSourceUser:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SetStageOverrideRequestBackendMode.
+const (
+	SetStageOverrideRequestBackendModeInherit  SetStageOverrideRequestBackendMode = "inherit"
+	SetStageOverrideRequestBackendModePrepend  SetStageOverrideRequestBackendMode = "prepend"
+	SetStageOverrideRequestBackendModeRestrict SetStageOverrideRequestBackendMode = "restrict"
+)
+
+// Valid indicates whether the value is a known member of the SetStageOverrideRequestBackendMode enum.
+func (e SetStageOverrideRequestBackendMode) Valid() bool {
+	switch e {
+	case SetStageOverrideRequestBackendModeInherit:
+		return true
+	case SetStageOverrideRequestBackendModePrepend:
+		return true
+	case SetStageOverrideRequestBackendModeRestrict:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for StageBackendOverrideBackendMode.
+const (
+	StageBackendOverrideBackendModeInherit  StageBackendOverrideBackendMode = "inherit"
+	StageBackendOverrideBackendModePrepend  StageBackendOverrideBackendMode = "prepend"
+	StageBackendOverrideBackendModeRestrict StageBackendOverrideBackendMode = "restrict"
+)
+
+// Valid indicates whether the value is a known member of the StageBackendOverrideBackendMode enum.
+func (e StageBackendOverrideBackendMode) Valid() bool {
+	switch e {
+	case StageBackendOverrideBackendModeInherit:
+		return true
+	case StageBackendOverrideBackendModePrepend:
+		return true
+	case StageBackendOverrideBackendModeRestrict:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateBackendRequestType.
+const (
+	Anthropic UpdateBackendRequestType = "anthropic"
+	Google    UpdateBackendRequestType = "google"
+	Openai    UpdateBackendRequestType = "openai"
+)
+
+// Valid indicates whether the value is a known member of the UpdateBackendRequestType enum.
+func (e UpdateBackendRequestType) Valid() bool {
+	switch e {
+	case Anthropic:
+		return true
+	case Google:
+		return true
+	case Openai:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for UpdateOrganizationMemberRequestRole.
 const (
 	Admin  UpdateOrganizationMemberRequestRole = "admin"
@@ -82,6 +259,42 @@ func (e UpdateOrganizationMemberRequestRole) Valid() bool {
 	case Member:
 		return true
 	case Owner:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for UpdateProjectRequestResourceScope.
+const (
+	UpdateProjectRequestResourceScopeOrganization UpdateProjectRequestResourceScope = "organization"
+	UpdateProjectRequestResourceScopeProject      UpdateProjectRequestResourceScope = "project"
+)
+
+// Valid indicates whether the value is a known member of the UpdateProjectRequestResourceScope enum.
+func (e UpdateProjectRequestResourceScope) Valid() bool {
+	switch e {
+	case UpdateProjectRequestResourceScopeOrganization:
+		return true
+	case UpdateProjectRequestResourceScopeProject:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for Stage.
+const (
+	Bootstrap Stage = "bootstrap"
+	Translate Stage = "translate"
+)
+
+// Valid indicates whether the value is a known member of the Stage enum.
+func (e Stage) Valid() bool {
+	switch e {
+	case Bootstrap:
+		return true
+	case Translate:
 		return true
 	default:
 		return false
@@ -126,10 +339,92 @@ type AuthSession struct {
 	User             User      `json:"user"`
 }
 
+// Backend defines model for Backend.
+type Backend struct {
+	Id             int                     `json:"id"`
+	Name           string                  `json:"name"`
+	Options        *map[string]interface{} `json:"options,omitempty"`
+	OptionsVisible *bool                   `json:"options_visible,omitempty"`
+	OwnerOrgId     *int                    `json:"owner_org_id,omitempty"`
+	OwnerUserId    *int                    `json:"owner_user_id,omitempty"`
+	Priority       int                     `json:"priority"`
+	Source         BackendSource           `json:"source"`
+	Type           BackendType             `json:"type"`
+}
+
+// BackendSource defines model for Backend.Source.
+type BackendSource string
+
+// BackendType defines model for Backend.Type.
+type BackendType string
+
+// BackendListResponse defines model for BackendListResponse.
+type BackendListResponse struct {
+	Items []Backend `json:"items"`
+}
+
 // ChangePasswordRequest defines model for ChangePasswordRequest.
 type ChangePasswordRequest struct {
 	CurrentPassword string `json:"current_password"`
 	NewPassword     string `json:"new_password"`
+}
+
+// CreateBackendRequest defines model for CreateBackendRequest.
+type CreateBackendRequest struct {
+	Name     string                   `json:"name"`
+	Options  *map[string]interface{}  `json:"options,omitempty"`
+	Priority *int                     `json:"priority,omitempty"`
+	Type     CreateBackendRequestType `json:"type"`
+}
+
+// CreateBackendRequestType defines model for CreateBackendRequest.Type.
+type CreateBackendRequestType string
+
+// CreateGlossaryEntryRequest defines model for CreateGlossaryEntryRequest.
+type CreateGlossaryEntryRequest struct {
+	CaseSensitive *bool   `json:"case_sensitive,omitempty"`
+	Notes         *string `json:"notes,omitempty"`
+	Source        string  `json:"source"`
+	Target        string  `json:"target"`
+}
+
+// CreateProjectRequest defines model for CreateProjectRequest.
+type CreateProjectRequest struct {
+	Config        *map[string]interface{}            `json:"config,omitempty"`
+	Name          string                             `json:"name"`
+	OwnerOrgId    *int                               `json:"owner_org_id,omitempty"`
+	ResourceScope *CreateProjectRequestResourceScope `json:"resource_scope,omitempty"`
+	SourceLang    *string                            `json:"source_lang,omitempty"`
+	TargetLang    *string                            `json:"target_lang,omitempty"`
+}
+
+// CreateProjectRequestResourceScope defines model for CreateProjectRequest.ResourceScope.
+type CreateProjectRequestResourceScope string
+
+// GlossaryEntry defines model for GlossaryEntry.
+type GlossaryEntry struct {
+	CaseSensitive bool       `json:"case_sensitive"`
+	CreatedAt     *time.Time `json:"created_at,omitempty"`
+	Id            int        `json:"id"`
+	Notes         *string    `json:"notes,omitempty"`
+	Source        string     `json:"source"`
+	Target        string     `json:"target"`
+	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
+}
+
+// GlossaryImportResult defines model for GlossaryImportResult.
+type GlossaryImportResult struct {
+	Added   int `json:"added"`
+	Skipped *[]struct {
+		Line   *int    `json:"line,omitempty"`
+		Reason *string `json:"reason,omitempty"`
+		Source *string `json:"source,omitempty"`
+	} `json:"skipped,omitempty"`
+}
+
+// GlossaryListResponse defines model for GlossaryListResponse.
+type GlossaryListResponse struct {
+	Items []GlossaryEntry `json:"items"`
 }
 
 // HealthResponse defines model for HealthResponse.
@@ -220,6 +515,45 @@ type Problem struct {
 	Type   *string `json:"type,omitempty"`
 }
 
+// Project defines model for Project.
+type Project struct {
+	Config        *map[string]interface{} `json:"config,omitempty"`
+	CreatedAt     *time.Time              `json:"created_at,omitempty"`
+	Id            int                     `json:"id"`
+	Name          string                  `json:"name"`
+	OwnerOrgId    *int                    `json:"owner_org_id,omitempty"`
+	OwnerUserId   *int                    `json:"owner_user_id,omitempty"`
+	ResourceScope ProjectResourceScope    `json:"resource_scope"`
+	SourceLang    string                  `json:"source_lang"`
+	TargetLang    string                  `json:"target_lang"`
+	UpdatedAt     *time.Time              `json:"updated_at,omitempty"`
+}
+
+// ProjectResourceScope defines model for Project.ResourceScope.
+type ProjectResourceScope string
+
+// ProjectBackendBinding defines model for ProjectBackendBinding.
+type ProjectBackendBinding struct {
+	BackendId  int                     `json:"backend_id"`
+	Name       string                  `json:"name"`
+	Options    *map[string]interface{} `json:"options,omitempty"`
+	OrderIndex int                     `json:"order_index"`
+	Priority   int                     `json:"priority"`
+	Source     string                  `json:"source"`
+	Type       string                  `json:"type"`
+}
+
+// ProjectBackendSettings defines model for ProjectBackendSettings.
+type ProjectBackendSettings struct {
+	Backends       []ProjectBackendBinding          `json:"backends"`
+	StageOverrides *map[string]StageBackendOverride `json:"stage_overrides,omitempty"`
+}
+
+// ProjectListResponse defines model for ProjectListResponse.
+type ProjectListResponse struct {
+	Items []Project `json:"items"`
+}
+
 // RefreshRequest defines model for RefreshRequest.
 type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
@@ -264,6 +598,37 @@ type SegmentListResponse struct {
 	NextCursor *string   `json:"next_cursor,omitempty"`
 }
 
+// SetBackendOrderRequest defines model for SetBackendOrderRequest.
+type SetBackendOrderRequest struct {
+	Bindings []struct {
+		BackendId int                                  `json:"backend_id"`
+		Source    SetBackendOrderRequestBindingsSource `json:"source"`
+	} `json:"bindings"`
+}
+
+// SetBackendOrderRequestBindingsSource defines model for SetBackendOrderRequest.Bindings.Source.
+type SetBackendOrderRequestBindingsSource string
+
+// SetStageOverrideRequest defines model for SetStageOverrideRequest.
+type SetStageOverrideRequest struct {
+	BackendMode  SetStageOverrideRequestBackendMode `json:"backend_mode"`
+	BackendOrder *[]string                          `json:"backend_order,omitempty"`
+	Stage        string                             `json:"stage"`
+}
+
+// SetStageOverrideRequestBackendMode defines model for SetStageOverrideRequest.BackendMode.
+type SetStageOverrideRequestBackendMode string
+
+// StageBackendOverride defines model for StageBackendOverride.
+type StageBackendOverride struct {
+	BackendMode  StageBackendOverrideBackendMode `json:"backend_mode"`
+	BackendOrder *[]string                       `json:"backend_order,omitempty"`
+	Stage        string                          `json:"stage"`
+}
+
+// StageBackendOverrideBackendMode defines model for StageBackendOverride.BackendMode.
+type StageBackendOverrideBackendMode string
+
 // SubJob defines model for SubJob.
 type SubJob struct {
 	CreatedAt     *time.Time `json:"created_at,omitempty"`
@@ -290,10 +655,29 @@ type SubJobSummary struct {
 	Status   string `json:"status"`
 }
 
+// UpdateBackendRequest defines model for UpdateBackendRequest.
+type UpdateBackendRequest struct {
+	Name     string                   `json:"name"`
+	Options  *map[string]interface{}  `json:"options,omitempty"`
+	Priority *int                     `json:"priority,omitempty"`
+	Type     UpdateBackendRequestType `json:"type"`
+}
+
+// UpdateBackendRequestType defines model for UpdateBackendRequest.Type.
+type UpdateBackendRequestType string
+
 // UpdateCurrentUserRequest defines model for UpdateCurrentUserRequest.
 type UpdateCurrentUserRequest struct {
 	DisplayName *string              `json:"display_name,omitempty"`
 	Email       *openapi_types.Email `json:"email,omitempty"`
+}
+
+// UpdateGlossaryEntryRequest defines model for UpdateGlossaryEntryRequest.
+type UpdateGlossaryEntryRequest struct {
+	CaseSensitive *bool   `json:"case_sensitive,omitempty"`
+	Notes         *string `json:"notes,omitempty"`
+	Source        string  `json:"source"`
+	Target        string  `json:"target"`
 }
 
 // UpdateOrganizationMemberRequest defines model for UpdateOrganizationMemberRequest.
@@ -303,6 +687,18 @@ type UpdateOrganizationMemberRequest struct {
 
 // UpdateOrganizationMemberRequestRole defines model for UpdateOrganizationMemberRequest.Role.
 type UpdateOrganizationMemberRequestRole string
+
+// UpdateProjectRequest defines model for UpdateProjectRequest.
+type UpdateProjectRequest struct {
+	Config        *map[string]interface{}            `json:"config,omitempty"`
+	Name          *string                            `json:"name,omitempty"`
+	ResourceScope *UpdateProjectRequestResourceScope `json:"resource_scope,omitempty"`
+	SourceLang    *string                            `json:"source_lang,omitempty"`
+	TargetLang    *string                            `json:"target_lang,omitempty"`
+}
+
+// UpdateProjectRequestResourceScope defines model for UpdateProjectRequest.ResourceScope.
+type UpdateProjectRequestResourceScope string
 
 // UsageStats defines model for UsageStats.
 type UsageStats struct {
@@ -325,8 +721,14 @@ type User struct {
 	Username    string              `json:"username"`
 }
 
+// BackendId defines model for BackendId.
+type BackendId = int
+
 // Cursor defines model for Cursor.
 type Cursor = string
+
+// EntryId defines model for EntryId.
+type EntryId = int
 
 // JobId defines model for JobId.
 type JobId = int
@@ -342,6 +744,9 @@ type ProjectId = int
 
 // SegmentId defines model for SegmentId.
 type SegmentId = int
+
+// Stage defines model for Stage.
+type Stage string
 
 // SubJobId defines model for SubJobId.
 type SubJobId = int
@@ -359,6 +764,11 @@ type ListActivityParams struct {
 type ListJobSegmentsParams struct {
 	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ImportGlossaryCSVMultipartBody defines parameters for ImportGlossaryCSV.
+type ImportGlossaryCSVMultipartBody struct {
+	File openapi_types.File `json:"file"`
 }
 
 // CreateProjectJobMultipartBody defines parameters for CreateProjectJob.
@@ -380,11 +790,23 @@ type RefreshAuthJSONRequestBody = RefreshRequest
 // RegisterAuthJSONRequestBody defines body for RegisterAuth for application/json ContentType.
 type RegisterAuthJSONRequestBody = RegisterRequest
 
+// CreateUserBackendJSONRequestBody defines body for CreateUserBackend for application/json ContentType.
+type CreateUserBackendJSONRequestBody = CreateBackendRequest
+
+// UpdateUserBackendJSONRequestBody defines body for UpdateUserBackend for application/json ContentType.
+type UpdateUserBackendJSONRequestBody = UpdateBackendRequest
+
 // CreateOrganizationJSONRequestBody defines body for CreateOrganization for application/json ContentType.
 type CreateOrganizationJSONRequestBody = OrganizationRequest
 
 // UpdateOrganizationJSONRequestBody defines body for UpdateOrganization for application/json ContentType.
 type UpdateOrganizationJSONRequestBody = OrganizationRequest
+
+// CreateOrgBackendJSONRequestBody defines body for CreateOrgBackend for application/json ContentType.
+type CreateOrgBackendJSONRequestBody = CreateBackendRequest
+
+// UpdateOrgBackendJSONRequestBody defines body for UpdateOrgBackend for application/json ContentType.
+type UpdateOrgBackendJSONRequestBody = UpdateBackendRequest
 
 // AddOrganizationMemberJSONRequestBody defines body for AddOrganizationMember for application/json ContentType.
 type AddOrganizationMemberJSONRequestBody = AddOrganizationMemberRequest
@@ -392,8 +814,29 @@ type AddOrganizationMemberJSONRequestBody = AddOrganizationMemberRequest
 // UpdateOrganizationMemberJSONRequestBody defines body for UpdateOrganizationMember for application/json ContentType.
 type UpdateOrganizationMemberJSONRequestBody = UpdateOrganizationMemberRequest
 
+// CreateProjectJSONRequestBody defines body for CreateProject for application/json ContentType.
+type CreateProjectJSONRequestBody = CreateProjectRequest
+
+// UpdateProjectJSONRequestBody defines body for UpdateProject for application/json ContentType.
+type UpdateProjectJSONRequestBody = UpdateProjectRequest
+
+// SetProjectBackendOrderJSONRequestBody defines body for SetProjectBackendOrder for application/json ContentType.
+type SetProjectBackendOrderJSONRequestBody = SetBackendOrderRequest
+
+// CreateGlossaryEntryJSONRequestBody defines body for CreateGlossaryEntry for application/json ContentType.
+type CreateGlossaryEntryJSONRequestBody = CreateGlossaryEntryRequest
+
+// ImportGlossaryCSVMultipartRequestBody defines body for ImportGlossaryCSV for multipart/form-data ContentType.
+type ImportGlossaryCSVMultipartRequestBody ImportGlossaryCSVMultipartBody
+
+// UpdateGlossaryEntryJSONRequestBody defines body for UpdateGlossaryEntry for application/json ContentType.
+type UpdateGlossaryEntryJSONRequestBody = UpdateGlossaryEntryRequest
+
 // CreateProjectJobMultipartRequestBody defines body for CreateProjectJob for multipart/form-data ContentType.
 type CreateProjectJobMultipartRequestBody CreateProjectJobMultipartBody
+
+// SetStageBackendOverrideJSONRequestBody defines body for SetStageBackendOverride for application/json ContentType.
+type SetStageBackendOverrideJSONRequestBody = SetStageOverrideRequest
 
 // EditSegmentJSONRequestBody defines body for EditSegment for application/json ContentType.
 type EditSegmentJSONRequestBody = SegmentEditRequest
@@ -427,6 +870,18 @@ type ServerInterface interface {
 	// 注册用户并签发会话
 	// (POST /auth/register)
 	RegisterAuth(w http.ResponseWriter, r *http.Request)
+	// 列出个人后端
+	// (GET /backends)
+	ListUserBackends(w http.ResponseWriter, r *http.Request)
+	// 创建个人后端
+	// (POST /backends)
+	CreateUserBackend(w http.ResponseWriter, r *http.Request)
+	// 删除个人后端
+	// (DELETE /backends/{backendId})
+	DeleteUserBackend(w http.ResponseWriter, r *http.Request, backendId BackendId)
+	// 更新个人后端
+	// (PUT /backends/{backendId})
+	UpdateUserBackend(w http.ResponseWriter, r *http.Request, backendId BackendId)
 	// 获取任务详情
 	// (GET /jobs/{jobId})
 	GetJob(w http.ResponseWriter, r *http.Request, jobId JobId)
@@ -466,6 +921,18 @@ type ServerInterface interface {
 	// 更新组织信息
 	// (PUT /orgs/{orgId})
 	UpdateOrganization(w http.ResponseWriter, r *http.Request, orgId OrgId)
+	// 列出组织后端
+	// (GET /orgs/{orgId}/backends)
+	ListOrgBackends(w http.ResponseWriter, r *http.Request, orgId OrgId)
+	// 创建组织后端
+	// (POST /orgs/{orgId}/backends)
+	CreateOrgBackend(w http.ResponseWriter, r *http.Request, orgId OrgId)
+	// 删除组织后端
+	// (DELETE /orgs/{orgId}/backends/{backendId})
+	DeleteOrgBackend(w http.ResponseWriter, r *http.Request, orgId OrgId, backendId BackendId)
+	// 更新组织后端
+	// (PUT /orgs/{orgId}/backends/{backendId})
+	UpdateOrgBackend(w http.ResponseWriter, r *http.Request, orgId OrgId, backendId BackendId)
 	// 获取组织成员列表
 	// (GET /orgs/{orgId}/members)
 	ListOrganizationMembers(w http.ResponseWriter, r *http.Request, orgId OrgId)
@@ -481,9 +948,54 @@ type ServerInterface interface {
 	// 无鉴权连通测试
 	// (GET /ping)
 	Ping(w http.ResponseWriter, r *http.Request)
+	// 列出项目
+	// (GET /projects)
+	ListProjects(w http.ResponseWriter, r *http.Request)
+	// 创建项目
+	// (POST /projects)
+	CreateProject(w http.ResponseWriter, r *http.Request)
+	// 删除项目
+	// (DELETE /projects/{projectId})
+	DeleteProject(w http.ResponseWriter, r *http.Request, projectId ProjectId)
+	// 获取项目详情
+	// (GET /projects/{projectId})
+	GetProject(w http.ResponseWriter, r *http.Request, projectId ProjectId)
+	// 更新项目
+	// (PUT /projects/{projectId})
+	UpdateProject(w http.ResponseWriter, r *http.Request, projectId ProjectId)
+	// 获取项目后端设置
+	// (GET /projects/{projectId}/backends)
+	GetProjectBackends(w http.ResponseWriter, r *http.Request, projectId ProjectId)
+	// 设置项目后端顺序
+	// (PUT /projects/{projectId}/backends)
+	SetProjectBackendOrder(w http.ResponseWriter, r *http.Request, projectId ProjectId)
+	// 列出术语条目
+	// (GET /projects/{projectId}/glossary)
+	ListGlossaryEntries(w http.ResponseWriter, r *http.Request, projectId ProjectId)
+	// 创建术语条目
+	// (POST /projects/{projectId}/glossary)
+	CreateGlossaryEntry(w http.ResponseWriter, r *http.Request, projectId ProjectId)
+	// CSV 导出术语表
+	// (GET /projects/{projectId}/glossary/export)
+	ExportGlossaryCSV(w http.ResponseWriter, r *http.Request, projectId ProjectId)
+	// CSV 导入术语表
+	// (POST /projects/{projectId}/glossary/import)
+	ImportGlossaryCSV(w http.ResponseWriter, r *http.Request, projectId ProjectId)
+	// 删除术语条目
+	// (DELETE /projects/{projectId}/glossary/{entryId})
+	DeleteGlossaryEntry(w http.ResponseWriter, r *http.Request, projectId ProjectId, entryId EntryId)
+	// 更新术语条目
+	// (PUT /projects/{projectId}/glossary/{entryId})
+	UpdateGlossaryEntry(w http.ResponseWriter, r *http.Request, projectId ProjectId, entryId EntryId)
 	// 创建多文件翻译任务
 	// (POST /projects/{projectId}/jobs)
 	CreateProjectJob(w http.ResponseWriter, r *http.Request, projectId ProjectId)
+	// 设置阶段后端覆盖
+	// (PUT /projects/{projectId}/stages/{stage}/override)
+	SetStageBackendOverride(w http.ResponseWriter, r *http.Request, projectId ProjectId, stage Stage)
+	// 查询阶段执行计划
+	// (GET /projects/{projectId}/stages/{stage}/plan)
+	GetStagePlan(w http.ResponseWriter, r *http.Request, projectId ProjectId, stage Stage)
 	// 编辑段译文
 	// (PUT /segments/{segmentId})
 	EditSegment(w http.ResponseWriter, r *http.Request, segmentId SegmentId)
@@ -538,6 +1050,30 @@ func (_ Unimplemented) RefreshAuth(w http.ResponseWriter, r *http.Request) {
 // 注册用户并签发会话
 // (POST /auth/register)
 func (_ Unimplemented) RegisterAuth(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 列出个人后端
+// (GET /backends)
+func (_ Unimplemented) ListUserBackends(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 创建个人后端
+// (POST /backends)
+func (_ Unimplemented) CreateUserBackend(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 删除个人后端
+// (DELETE /backends/{backendId})
+func (_ Unimplemented) DeleteUserBackend(w http.ResponseWriter, r *http.Request, backendId BackendId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 更新个人后端
+// (PUT /backends/{backendId})
+func (_ Unimplemented) UpdateUserBackend(w http.ResponseWriter, r *http.Request, backendId BackendId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -619,6 +1155,30 @@ func (_ Unimplemented) UpdateOrganization(w http.ResponseWriter, r *http.Request
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// 列出组织后端
+// (GET /orgs/{orgId}/backends)
+func (_ Unimplemented) ListOrgBackends(w http.ResponseWriter, r *http.Request, orgId OrgId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 创建组织后端
+// (POST /orgs/{orgId}/backends)
+func (_ Unimplemented) CreateOrgBackend(w http.ResponseWriter, r *http.Request, orgId OrgId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 删除组织后端
+// (DELETE /orgs/{orgId}/backends/{backendId})
+func (_ Unimplemented) DeleteOrgBackend(w http.ResponseWriter, r *http.Request, orgId OrgId, backendId BackendId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 更新组织后端
+// (PUT /orgs/{orgId}/backends/{backendId})
+func (_ Unimplemented) UpdateOrgBackend(w http.ResponseWriter, r *http.Request, orgId OrgId, backendId BackendId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // 获取组织成员列表
 // (GET /orgs/{orgId}/members)
 func (_ Unimplemented) ListOrganizationMembers(w http.ResponseWriter, r *http.Request, orgId OrgId) {
@@ -649,9 +1209,99 @@ func (_ Unimplemented) Ping(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// 列出项目
+// (GET /projects)
+func (_ Unimplemented) ListProjects(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 创建项目
+// (POST /projects)
+func (_ Unimplemented) CreateProject(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 删除项目
+// (DELETE /projects/{projectId})
+func (_ Unimplemented) DeleteProject(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 获取项目详情
+// (GET /projects/{projectId})
+func (_ Unimplemented) GetProject(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 更新项目
+// (PUT /projects/{projectId})
+func (_ Unimplemented) UpdateProject(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 获取项目后端设置
+// (GET /projects/{projectId}/backends)
+func (_ Unimplemented) GetProjectBackends(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 设置项目后端顺序
+// (PUT /projects/{projectId}/backends)
+func (_ Unimplemented) SetProjectBackendOrder(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 列出术语条目
+// (GET /projects/{projectId}/glossary)
+func (_ Unimplemented) ListGlossaryEntries(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 创建术语条目
+// (POST /projects/{projectId}/glossary)
+func (_ Unimplemented) CreateGlossaryEntry(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CSV 导出术语表
+// (GET /projects/{projectId}/glossary/export)
+func (_ Unimplemented) ExportGlossaryCSV(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// CSV 导入术语表
+// (POST /projects/{projectId}/glossary/import)
+func (_ Unimplemented) ImportGlossaryCSV(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 删除术语条目
+// (DELETE /projects/{projectId}/glossary/{entryId})
+func (_ Unimplemented) DeleteGlossaryEntry(w http.ResponseWriter, r *http.Request, projectId ProjectId, entryId EntryId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 更新术语条目
+// (PUT /projects/{projectId}/glossary/{entryId})
+func (_ Unimplemented) UpdateGlossaryEntry(w http.ResponseWriter, r *http.Request, projectId ProjectId, entryId EntryId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // 创建多文件翻译任务
 // (POST /projects/{projectId}/jobs)
 func (_ Unimplemented) CreateProjectJob(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 设置阶段后端覆盖
+// (PUT /projects/{projectId}/stages/{stage}/override)
+func (_ Unimplemented) SetStageBackendOverride(w http.ResponseWriter, r *http.Request, projectId ProjectId, stage Stage) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 查询阶段执行计划
+// (GET /projects/{projectId}/stages/{stage}/plan)
+func (_ Unimplemented) GetStagePlan(w http.ResponseWriter, r *http.Request, projectId ProjectId, stage Stage) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -800,6 +1450,108 @@ func (siw *ServerInterfaceWrapper) RegisterAuth(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RegisterAuth(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListUserBackends operation middleware
+func (siw *ServerInterfaceWrapper) ListUserBackends(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListUserBackends(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateUserBackend operation middleware
+func (siw *ServerInterfaceWrapper) CreateUserBackend(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateUserBackend(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteUserBackend operation middleware
+func (siw *ServerInterfaceWrapper) DeleteUserBackend(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "backendId" -------------
+	var backendId BackendId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "backendId", chi.URLParam(r, "backendId"), &backendId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "backendId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteUserBackend(w, r, backendId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateUserBackend operation middleware
+func (siw *ServerInterfaceWrapper) UpdateUserBackend(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "backendId" -------------
+	var backendId BackendId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "backendId", chi.URLParam(r, "backendId"), &backendId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "backendId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateUserBackend(w, r, backendId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1218,6 +1970,148 @@ func (siw *ServerInterfaceWrapper) UpdateOrganization(w http.ResponseWriter, r *
 	handler.ServeHTTP(w, r)
 }
 
+// ListOrgBackends operation middleware
+func (siw *ServerInterfaceWrapper) ListOrgBackends(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "orgId" -------------
+	var orgId OrgId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "orgId", chi.URLParam(r, "orgId"), &orgId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "orgId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListOrgBackends(w, r, orgId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateOrgBackend operation middleware
+func (siw *ServerInterfaceWrapper) CreateOrgBackend(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "orgId" -------------
+	var orgId OrgId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "orgId", chi.URLParam(r, "orgId"), &orgId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "orgId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateOrgBackend(w, r, orgId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteOrgBackend operation middleware
+func (siw *ServerInterfaceWrapper) DeleteOrgBackend(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "orgId" -------------
+	var orgId OrgId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "orgId", chi.URLParam(r, "orgId"), &orgId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "orgId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "backendId" -------------
+	var backendId BackendId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "backendId", chi.URLParam(r, "backendId"), &backendId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "backendId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteOrgBackend(w, r, orgId, backendId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateOrgBackend operation middleware
+func (siw *ServerInterfaceWrapper) UpdateOrgBackend(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "orgId" -------------
+	var orgId OrgId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "orgId", chi.URLParam(r, "orgId"), &orgId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "orgId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "backendId" -------------
+	var backendId BackendId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "backendId", chi.URLParam(r, "backendId"), &backendId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "backendId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateOrgBackend(w, r, orgId, backendId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListOrganizationMembers operation middleware
 func (siw *ServerInterfaceWrapper) ListOrganizationMembers(w http.ResponseWriter, r *http.Request) {
 
@@ -1374,6 +2268,405 @@ func (siw *ServerInterfaceWrapper) Ping(w http.ResponseWriter, r *http.Request) 
 	handler.ServeHTTP(w, r)
 }
 
+// ListProjects operation middleware
+func (siw *ServerInterfaceWrapper) ListProjects(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListProjects(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateProject operation middleware
+func (siw *ServerInterfaceWrapper) CreateProject(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateProject(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteProject operation middleware
+func (siw *ServerInterfaceWrapper) DeleteProject(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteProject(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetProject operation middleware
+func (siw *ServerInterfaceWrapper) GetProject(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetProject(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateProject operation middleware
+func (siw *ServerInterfaceWrapper) UpdateProject(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateProject(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetProjectBackends operation middleware
+func (siw *ServerInterfaceWrapper) GetProjectBackends(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetProjectBackends(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetProjectBackendOrder operation middleware
+func (siw *ServerInterfaceWrapper) SetProjectBackendOrder(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetProjectBackendOrder(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListGlossaryEntries operation middleware
+func (siw *ServerInterfaceWrapper) ListGlossaryEntries(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListGlossaryEntries(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateGlossaryEntry operation middleware
+func (siw *ServerInterfaceWrapper) CreateGlossaryEntry(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateGlossaryEntry(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ExportGlossaryCSV operation middleware
+func (siw *ServerInterfaceWrapper) ExportGlossaryCSV(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ExportGlossaryCSV(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ImportGlossaryCSV operation middleware
+func (siw *ServerInterfaceWrapper) ImportGlossaryCSV(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ImportGlossaryCSV(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteGlossaryEntry operation middleware
+func (siw *ServerInterfaceWrapper) DeleteGlossaryEntry(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "entryId" -------------
+	var entryId EntryId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "entryId", chi.URLParam(r, "entryId"), &entryId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entryId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteGlossaryEntry(w, r, projectId, entryId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateGlossaryEntry operation middleware
+func (siw *ServerInterfaceWrapper) UpdateGlossaryEntry(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "entryId" -------------
+	var entryId EntryId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "entryId", chi.URLParam(r, "entryId"), &entryId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entryId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateGlossaryEntry(w, r, projectId, entryId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // CreateProjectJob operation middleware
 func (siw *ServerInterfaceWrapper) CreateProjectJob(w http.ResponseWriter, r *http.Request) {
 
@@ -1396,6 +2689,86 @@ func (siw *ServerInterfaceWrapper) CreateProjectJob(w http.ResponseWriter, r *ht
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.CreateProjectJob(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// SetStageBackendOverride operation middleware
+func (siw *ServerInterfaceWrapper) SetStageBackendOverride(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "stage" -------------
+	var stage Stage
+
+	err = runtime.BindStyledParameterWithOptions("simple", "stage", chi.URLParam(r, "stage"), &stage, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "stage", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.SetStageBackendOverride(w, r, projectId, stage)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetStagePlan operation middleware
+func (siw *ServerInterfaceWrapper) GetStagePlan(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "stage" -------------
+	var stage Stage
+
+	err = runtime.BindStyledParameterWithOptions("simple", "stage", chi.URLParam(r, "stage"), &stage, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "stage", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetStagePlan(w, r, projectId, stage)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1707,6 +3080,18 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/auth/register", wrapper.RegisterAuth)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/backends", wrapper.ListUserBackends)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/backends", wrapper.CreateUserBackend)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/backends/{backendId}", wrapper.DeleteUserBackend)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/backends/{backendId}", wrapper.UpdateUserBackend)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/jobs/{jobId}", wrapper.GetJob)
 	})
 	r.Group(func(r chi.Router) {
@@ -1746,6 +3131,18 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Put(options.BaseURL+"/orgs/{orgId}", wrapper.UpdateOrganization)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/orgs/{orgId}/backends", wrapper.ListOrgBackends)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/orgs/{orgId}/backends", wrapper.CreateOrgBackend)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/orgs/{orgId}/backends/{backendId}", wrapper.DeleteOrgBackend)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/orgs/{orgId}/backends/{backendId}", wrapper.UpdateOrgBackend)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/orgs/{orgId}/members", wrapper.ListOrganizationMembers)
 	})
 	r.Group(func(r chi.Router) {
@@ -1761,7 +3158,52 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/ping", wrapper.Ping)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects", wrapper.ListProjects)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/projects", wrapper.CreateProject)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/projects/{projectId}", wrapper.DeleteProject)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}", wrapper.GetProject)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/projects/{projectId}", wrapper.UpdateProject)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/backends", wrapper.GetProjectBackends)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/projects/{projectId}/backends", wrapper.SetProjectBackendOrder)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/glossary", wrapper.ListGlossaryEntries)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/projects/{projectId}/glossary", wrapper.CreateGlossaryEntry)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/glossary/export", wrapper.ExportGlossaryCSV)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/projects/{projectId}/glossary/import", wrapper.ImportGlossaryCSV)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/projects/{projectId}/glossary/{entryId}", wrapper.DeleteGlossaryEntry)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/projects/{projectId}/glossary/{entryId}", wrapper.UpdateGlossaryEntry)
+	})
+	r.Group(func(r chi.Router) {
 		r.Post(options.BaseURL+"/projects/{projectId}/jobs", wrapper.CreateProjectJob)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/projects/{projectId}/stages/{stage}/override", wrapper.SetStageBackendOverride)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/stages/{stage}/plan", wrapper.GetStagePlan)
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/segments/{segmentId}", wrapper.EditSegment)
@@ -1791,58 +3233,79 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"qsXpE1L1XPU/AQAA//+bRPriH1EAAA==",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

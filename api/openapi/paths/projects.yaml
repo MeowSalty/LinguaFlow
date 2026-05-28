@@ -1,0 +1,169 @@
+projects:
+  post:
+    operationId: CreateProject
+    summary: 创建项目
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/project.yaml#/CreateProjectRequest'
+    responses:
+      '201':
+        description: 创建成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/project.yaml#/Project'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  get:
+    operationId: ListProjects
+    summary: 列出项目
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 项目列表
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/project.yaml#/ProjectListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+projectById:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+  get:
+    operationId: GetProject
+    summary: 获取项目详情
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 项目详情
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/project.yaml#/Project'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  put:
+    operationId: UpdateProject
+    summary: 更新项目
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/project.yaml#/UpdateProjectRequest'
+    responses:
+      '200':
+        description: 更新成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/project.yaml#/Project'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  delete:
+    operationId: DeleteProject
+    summary: 删除项目
+    security:
+      - bearerAuth: []
+    responses:
+      '204':
+        description: 删除成功
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+projectBackends:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+  get:
+    operationId: GetProjectBackends
+    summary: 获取项目后端设置
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 后端设置
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/project.yaml#/ProjectBackendSettings'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  put:
+    operationId: SetProjectBackendOrder
+    summary: 设置项目后端顺序
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/project.yaml#/SetBackendOrderRequest'
+    responses:
+      '200':
+        description: 设置成功
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../components/schemas/project.yaml#/ProjectBackendBinding'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+stageOverride:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+    - $ref: '../base.yaml#/components/parameters/Stage'
+  put:
+    operationId: SetStageBackendOverride
+    summary: 设置阶段后端覆盖
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/project.yaml#/SetStageOverrideRequest'
+    responses:
+      '200':
+        description: 设置成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/project.yaml#/StageBackendOverride'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+stagePlan:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+    - $ref: '../base.yaml#/components/parameters/Stage'
+  get:
+    operationId: GetStagePlan
+    summary: 查询阶段执行计划
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 阶段执行计划
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../components/schemas/project.yaml#/ProjectBackendBinding'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
