@@ -1,0 +1,162 @@
+# LinguaFlow 示例配置
+# 由 `linguaflow init` 生成。所有字段均可被 CLI flag 覆盖。
+# 优先级：flag > env > yaml > 内置默认值。
+
+version: 1
+
+# 源/目标语言。source_lang 设为 auto 表示自动检测（MVP 由 CLI --from 决定）
+source_lang: auto
+target_lang: zh
+
+# AI 后端定义。第一项为默认；其余按 priority 顺序作为回退。
+backends:
+  - name: openai-default
+    type: openai
+    enabled: true
+    priority: 100
+    options:
+      api_key: ${OPENAI_API_KEY}            # 支持 ${ENV} 展开
+      base_url: https://api.openai.com/v1   # 改为 Ollama / 自定义网关只需换 URL
+      model: gpt-4o-mini
+      temperature: 0.2
+      max_tokens: 2048                      # 若为 0 或移除该项，则由 API 自行决定
+      timeout: 60s
+      response_format: json_schema          # json_schema | json_object | none（本地网关不支持时设 none）
+  # - name: anthropic-default
+  #   type: anthropic
+  #   enabled: false
+  #   priority: 80
+  #   options:
+  #     api_key: ${ANTHROPIC_API_KEY}
+  #     base_url: ""                    # 留空走 SDK 默认;支持自建代理
+  #     model: claude-sonnet-4-5
+  #     temperature: 0.2
+  #     max_tokens: 8192                # Anthropic 必填,覆盖典型批量翻译 + glossary
+  #     timeout: 60s
+  #     response_format: json_schema    # 用 tool use 强制结构化输出;json_object|none 亦可
+  #     enable_prompt_cache: true       # system block 加 ephemeral 缓存,长文翻译省 token
+  # - name: google-default
+  #   type: google
+  #   enabled: false
+  #   priority: 70
+  #   options:
+  #     api_key: ${GOOGLE_API_KEY}
+  #     base_url: ""                    # 留空走 SDK 默认 https://generativelanguage.googleapis.com/;可指向自建网关
+  #     model: gemini-2.5-flash
+  #     temperature: 0.2
+  #     max_tokens: 8192                # 默认 8192;覆盖批量翻译 + glossary
+  #     timeout: 60s
+  #     response_format: json_schema    # 走 ResponseJsonSchema 强制结构化;json_object|none 亦可
+
+# 处理管线。每个 stage 可单独启用/禁用。
+pipeline:
+  split:
+    enabled: true
+    strategy: paragraph                     # MVP 仅支持 paragraph
+    max_chars: 1200                         # 超长段强制再切
+  protect:
+    enabled: true
+    rules: [code, link, placeholder, xml]
+  translate:
+    concurrency: 4
+    batch_size: 1                           # >1 时把多段合并为一次 LLM 调用，吞吐显著提升
+    fallback_shrink: 0.5                    # 整批失败时下一级 batch = floor(cur*shrink) 并发重试；0 = 直接降到单段
+    rate_limit_per_sec: 5
+    # 阶段级后端顺序控制：
+    #   - backend_mode: prepend | restrict
+    #   - prepend : 先按 backend_order 尝试，再补齐其余全局 backends
+    #   - restrict: 只允许使用 backend_order 中列出的后端
+    # 留空 backend_order 时，默认按全局 backends 的 priority 顺序作为回退链。
+    # backend_mode: prepend
+    # backend_order: [anthropic-default, openai-default]
+    # 高级模式：显式定义多轮翻译计划。留空则沿用上面的简单模式
+    # （单轮 batch + fallback_shrink）。配置后，本轮未成功的段会流入下一轮，
+    # 不再在同一轮内按 shrink 递归缩批。
+    # plan:
+    #   - name: bulk
+    #     batch_size: 40
+    #     concurrency: 4
+    #     backend_mode: restrict
+    #     backend_order: [google-default]
+    #   - name: retry
+    #     batch_size: 10
+    #     backend_order: [openai-default]
+    #   - name: final-single
+    #     batch_size: 1
+    #     concurrency: 1
+    retry:
+      max_attempts: 3
+      backoff: 1s
+  postprocess:
+    enabled: true
+    trim_spaces: true
+
+# 提示词模板。system_template 留空使用内置默认（基于 text/template）。
+# user_template 已废弃：本协议下 user 消息由 prompt 包按 JSON envelope 序列化生成，
+# 留空即可；如果显式填了非空值，启动会报错。
+prompt:
+  system_template: ""
+  user_template: ""
+  vars:
+    style: "concise, technical"
+    audience: "developers"
+
+# 术语表
+# enabled=false 时返回 Nop 实现，所有 Lookup/Add 都是空操作。
+# enabled=true 时从 path 加载 CSV，CSV 列为 source,target,case_sensitive,notes（首行表头可选）。
+glossary:
+  enabled: false
+  path: ./glossary.csv
+  bootstrap:
+    mode: off                   # off | pre | inline
+                                #   pre   : 翻译前独立扫一遍抽取术语，整篇文档都能用上
+                                #   inline: 翻译时让 LLM 顺带返回术语，只对后续 batch 生效，省一次扫描
+                                # 任一非 off 模式会自动启用 glossary。
+    # bootstrap 也可单独覆盖后端候选顺序。
+    # 例如只允许它使用更便宜的模型：
+    # backend_mode: restrict
+    # backend_order: [google-default]
+    save: true                  # 自举完成后把增量术语回写到 path（off 模式下无变更，不会写）
+    max_terms_per_batch: 20     # 每批 LLM 抽取/返回的术语数量上限
+    min_source_len: 2           # 长度小于此值的术语丢弃（过滤噪声）
+    inline_conflict_strategy: rewrite-local  # off | rewrite-local
+                                #   rewrite-local（默认）: inline 模式下，后到的 worker 把本批译文里冲突的 target 字面值
+                                #                          改写为权威表里的版本，避免文档内同一术语翻译不一致
+                                #   off                  : 完全不处理，沿用 First-Wins 旧行为
+
+# 翻译记忆（MVP 仅占位）
+translation_memory:
+  enabled: false
+  driver: sqlite
+  dsn: ./.linguaflow/tm.db
+
+# Lua 插件（MVP 仅占位）
+plugins:
+  enabled: false
+  scripts: []
+
+# 输出
+output:
+  mode: overwrite                           # overwrite | side_by_side
+  preserve_extension: true
+  incremental: false                        # 按段落 hash 跳过已译
+
+# 日志
+log:
+  level: info                               # debug | info | warn | error
+  format: text                              # text | json
+
+# Web Service（阶段一最小骨架）
+server:
+  host: 0.0.0.0
+  port: 8080
+  service_name: linguaflow
+  data_dir: ./data
+  auto_migrate: true
+  jwt_secret: ${LINGUAFLOW_JWT_SECRET:-dev-insecure-secret-change-me}
+  jwt_issuer: linguaflow
+  jwt_expiry: 1h
+  refresh_token_expiry: 720h
+  shutdown_timeout: 10s
+  cors:
+    allowed_origins: ["*"]
