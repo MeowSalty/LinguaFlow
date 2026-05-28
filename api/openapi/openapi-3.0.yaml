@@ -5,6 +5,20 @@ info:
 servers:
   - url: /api/v1
 paths:
+  /ping:
+    get:
+      operationId: Ping
+      summary: 无鉴权连通测试
+      description: 用于前端在登录前快速判断后端 HTTP 服务是否可达；不检查数据库或第三方依赖。
+      responses:
+        '200':
+          description: 服务可达
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        default:
+          $ref: '#/components/responses/Problem'
   /auth/register:
     post:
       operationId: RegisterAuth
@@ -653,6 +667,17 @@ components:
           type: integer
         detail:
           type: string
+    HealthResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          example: ok
+        service:
+          type: string
+          example: linguaflow
     User:
       type: object
       required:

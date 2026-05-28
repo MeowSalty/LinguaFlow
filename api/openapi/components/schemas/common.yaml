@@ -1,3 +1,14 @@
+HealthResponse:
+  type: object
+  required: [status]
+  properties:
+    status:
+      type: string
+      example: ok
+    service:
+      type: string
+      example: linguaflow
+
 Problem:
   type: object
   required: [title, status]

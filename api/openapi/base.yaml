@@ -5,6 +5,8 @@ info:
 servers:
   - url: /api/v1
 paths:
+  /ping:
+    $ref: './paths/system.yaml#/ping'
   /auth/register:
     $ref: './paths/auth.yaml#/register'
   /auth/login:
@@ -82,6 +84,8 @@ components:
   schemas:
     Problem:
       $ref: './components/schemas/common.yaml#/Problem'
+    HealthResponse:
+      $ref: './components/schemas/common.yaml#/HealthResponse'
     User:
       $ref: './components/schemas/user.yaml#/User'
     RegisterRequest:

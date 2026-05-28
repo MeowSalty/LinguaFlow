@@ -207,6 +207,7 @@ type LogConfig struct {
 type ServerConfig struct {
 	Host            string        `yaml:"host"`
 	Port            int           `yaml:"port"`
+	ServiceName     string        `yaml:"service_name"`
 	DataDir         string        `yaml:"data_dir"`
 	AutoMigrate     bool          `yaml:"auto_migrate"`
 	JWTSecret       string        `yaml:"jwt_secret"`
@@ -296,6 +297,7 @@ func Default() *Config {
 		Server: ServerConfig{
 			Host:            "0.0.0.0",
 			Port:            8080,
+			ServiceName:     "linguaflow",
 			DataDir:         "./data",
 			AutoMigrate:     true,
 			JWTSecret:       "dev-insecure-secret-change-me",
