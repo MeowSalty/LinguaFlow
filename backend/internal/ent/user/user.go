@@ -32,6 +32,8 @@ const (
 	FieldActive = "active"
 	// EdgeJobs holds the string denoting the jobs edge name in mutations.
 	EdgeJobs = "jobs"
+	// EdgeCreatedTranslationJobs holds the string denoting the created_translation_jobs edge name in mutations.
+	EdgeCreatedTranslationJobs = "created_translation_jobs"
 	// EdgeReviewedSegments holds the string denoting the reviewed_segments edge name in mutations.
 	EdgeReviewedSegments = "reviewed_segments"
 	// EdgeRefreshTokens holds the string denoting the refresh_tokens edge name in mutations.
@@ -55,6 +57,13 @@ const (
 	JobsInverseTable = "jobs"
 	// JobsColumn is the table column denoting the jobs relation/edge.
 	JobsColumn = "user_jobs"
+	// CreatedTranslationJobsTable is the table that holds the created_translation_jobs relation/edge.
+	CreatedTranslationJobsTable = "translation_jobs"
+	// CreatedTranslationJobsInverseTable is the table name for the TranslationJob entity.
+	// It exists in this package in order to avoid circular dependency with the "translationjob" package.
+	CreatedTranslationJobsInverseTable = "translation_jobs"
+	// CreatedTranslationJobsColumn is the table column denoting the created_translation_jobs relation/edge.
+	CreatedTranslationJobsColumn = "user_created_translation_jobs"
 	// ReviewedSegmentsTable is the table that holds the reviewed_segments relation/edge.
 	ReviewedSegmentsTable = "segments"
 	// ReviewedSegmentsInverseTable is the table name for the Segment entity.
@@ -210,6 +219,20 @@ func ByJobs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
+// ByCreatedTranslationJobsCount orders the results by created_translation_jobs count.
+func ByCreatedTranslationJobsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newCreatedTranslationJobsStep(), opts...)
+	}
+}
+
+// ByCreatedTranslationJobs orders the results by created_translation_jobs terms.
+func ByCreatedTranslationJobs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newCreatedTranslationJobsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
 // ByReviewedSegmentsCount orders the results by reviewed_segments count.
 func ByReviewedSegmentsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -312,6 +335,13 @@ func newJobsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(JobsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, JobsTable, JobsColumn),
+	)
+}
+func newCreatedTranslationJobsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(CreatedTranslationJobsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, CreatedTranslationJobsTable, CreatedTranslationJobsColumn),
 	)
 }
 func newReviewedSegmentsStep() *sqlgraph.Step {

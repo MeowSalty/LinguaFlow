@@ -25,6 +25,7 @@ func (s *Server) newRouter() http.Handler {
 
 	apiV1 := chi.NewRouter()
 	r.Mount("/api/v1", HandlerFromMux(s, apiV1))
+
 	return r
 }
 

@@ -132,6 +132,10 @@ func (e *Engine) TranslateWithResult(ctx context.Context, job TranslateJob) (Tra
 		return result, fmt.Errorf("engine: parse: %w", parseErr)
 	}
 	result.SegmentCount = len(doc.Segments)
+	selectedSegments := selectedSegmentIndexSet(job.SegmentIndexes)
+	if len(selectedSegments) > 0 {
+		applySegmentSelection(doc, selectedSegments)
+	}
 
 	// 语言：CLI flag 优先，再用 config 默认
 	doc.SourceLang = firstNonEmpty(job.SourceLang, e.cfg.SourceLang)
@@ -156,6 +160,9 @@ func (e *Engine) TranslateWithResult(ctx context.Context, job TranslateJob) (Tra
 	e.logger.Info("pipeline start", "stages", stageNames(pipe.Stages()))
 	if err := pipe.Run(ctx, doc); err != nil {
 		return result, err
+	}
+	if len(selectedSegments) > 0 {
+		restoreUnselectedTargets(doc, selectedSegments, job.ExistingTargets)
 	}
 	result.Segments = make([]SegmentResult, 0, len(doc.Segments))
 	for i, seg := range doc.Segments {
@@ -289,6 +296,44 @@ func firstNonEmpty(xs ...string) string {
 		}
 	}
 	return ""
+}
+
+func selectedSegmentIndexSet(indexes []int) map[int]struct{} {
+	if len(indexes) == 0 {
+		return nil
+	}
+	selected := make(map[int]struct{}, len(indexes))
+	for _, idx := range indexes {
+		if idx >= 0 {
+			selected[idx] = struct{}{}
+		}
+	}
+	return selected
+}
+
+func applySegmentSelection(doc *pipeline.Document, selected map[int]struct{}) {
+	if doc == nil || len(selected) == 0 {
+		return
+	}
+	for i := range doc.Segments {
+		if _, ok := selected[i]; !ok {
+			doc.Segments[i].Skip = true
+		}
+	}
+}
+
+func restoreUnselectedTargets(doc *pipeline.Document, selected map[int]struct{}, existing map[int]string) {
+	if doc == nil || len(selected) == 0 {
+		return
+	}
+	for i := range doc.Segments {
+		if _, ok := selected[i]; ok {
+			continue
+		}
+		if target, ok := existing[i]; ok && target != "" {
+			doc.Segments[i].Target = target
+		}
+	}
 }
 
 // toRepairOptions 把 config 层的 RepairConfig 翻成 repair 包消费的 Options。

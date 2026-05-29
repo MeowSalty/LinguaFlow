@@ -45,6 +45,18 @@ func (f JobFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) 
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.JobMutation", m)
 }
 
+// The JobResourceFunc type is an adapter to allow the use of ordinary
+// function as JobResource mutator.
+type JobResourceFunc func(context.Context, *ent.JobResourceMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f JobResourceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.JobResourceMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.JobResourceMutation", m)
+}
+
 // The OrgBackendFunc type is an adapter to allow the use of ordinary
 // function as OrgBackend mutator.
 type OrgBackendFunc func(context.Context, *ent.OrgBackendMutation) (ent.Value, error)
@@ -117,6 +129,18 @@ func (f RefreshTokenFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.RefreshTokenMutation", m)
 }
 
+// The ResourceFunc type is an adapter to allow the use of ordinary
+// function as Resource mutator.
+type ResourceFunc func(context.Context, *ent.ResourceMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ResourceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ResourceMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ResourceMutation", m)
+}
+
 // The SegmentFunc type is an adapter to allow the use of ordinary
 // function as Segment mutator.
 type SegmentFunc func(context.Context, *ent.SegmentMutation) (ent.Value, error)
@@ -163,6 +187,18 @@ func (f TMEntryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.TMEntryMutation", m)
+}
+
+// The TranslationJobFunc type is an adapter to allow the use of ordinary
+// function as TranslationJob mutator.
+type TranslationJobFunc func(context.Context, *ent.TranslationJobMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f TranslationJobFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.TranslationJobMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.TranslationJobMutation", m)
 }
 
 // The UsageRecordFunc type is an adapter to allow the use of ordinary

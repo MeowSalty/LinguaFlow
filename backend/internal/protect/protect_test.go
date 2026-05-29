@@ -103,8 +103,8 @@ func TestFromRules(t *testing.T) {
 func TestRestoreAll_OrdersByLengthDesc(t *testing.T) {
 	seg := &pipeline.Segment{
 		Protected: map[string]string{
-			"__LF_000001__":   "SHORT",
-			"__LF_000001__X":  "LONG",
+			"__LF_000001__":  "SHORT",
+			"__LF_000001__X": "LONG",
 		},
 		Target: "a __LF_000001__X b __LF_000001__ c",
 	}

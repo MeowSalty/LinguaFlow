@@ -22,6 +22,9 @@ func (Project) Fields() []ent.Field {
 		field.String("resource_scope").Default("project"),
 		field.JSON("config", map[string]any{}).
 			Default(func() map[string]any { return map[string]any{} }),
+		field.JSON("default_translation_config", map[string]any{}).
+			Default(func() map[string]any { return map[string]any{} }).
+			Comment("默认翻译配置，创建翻译任务时作为任务配置基底"),
 		field.String("source_lang").Default("auto"),
 		field.String("target_lang").Default("zh"),
 	}
@@ -42,7 +45,9 @@ func (Project) Edges() []ent.Edge {
 		edge.To("glossary_entries", GlossaryEntry.Type),
 		edge.To("tm_entries", TMEntry.Type),
 		edge.To("jobs", Job.Type),
+		edge.To("translation_jobs", TranslationJob.Type),
 		edge.To("activity_logs", ActivityLog.Type),
 		edge.To("usage_records", UsageRecord.Type),
+		edge.To("resources", Resource.Type),
 	}
 }

@@ -19,8 +19,10 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/projectbackend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
@@ -39,8 +41,10 @@ type ProjectQuery struct {
 	withGlossaryEntries       *GlossaryEntryQuery
 	withTmEntries             *TMEntryQuery
 	withJobs                  *JobQuery
+	withTranslationJobs       *TranslationJobQuery
 	withActivityLogs          *ActivityLogQuery
 	withUsageRecords          *UsageRecordQuery
+	withResources             *ResourceQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -231,6 +235,28 @@ func (_q *ProjectQuery) QueryJobs() *JobQuery {
 	return query
 }
 
+// QueryTranslationJobs chains the current query on the "translation_jobs" edge.
+func (_q *ProjectQuery) QueryTranslationJobs() *TranslationJobQuery {
+	query := (&TranslationJobClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(project.Table, project.FieldID, selector),
+			sqlgraph.To(translationjob.Table, translationjob.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, project.TranslationJobsTable, project.TranslationJobsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
 // QueryActivityLogs chains the current query on the "activity_logs" edge.
 func (_q *ProjectQuery) QueryActivityLogs() *ActivityLogQuery {
 	query := (&ActivityLogClient{config: _q.config}).Query()
@@ -268,6 +294,28 @@ func (_q *ProjectQuery) QueryUsageRecords() *UsageRecordQuery {
 			sqlgraph.From(project.Table, project.FieldID, selector),
 			sqlgraph.To(usagerecord.Table, usagerecord.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, project.UsageRecordsTable, project.UsageRecordsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryResources chains the current query on the "resources" edge.
+func (_q *ProjectQuery) QueryResources() *ResourceQuery {
+	query := (&ResourceClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(project.Table, project.FieldID, selector),
+			sqlgraph.To(resource.Table, resource.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, project.ResourcesTable, project.ResourcesColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -474,8 +522,10 @@ func (_q *ProjectQuery) Clone() *ProjectQuery {
 		withGlossaryEntries:       _q.withGlossaryEntries.Clone(),
 		withTmEntries:             _q.withTmEntries.Clone(),
 		withJobs:                  _q.withJobs.Clone(),
+		withTranslationJobs:       _q.withTranslationJobs.Clone(),
 		withActivityLogs:          _q.withActivityLogs.Clone(),
 		withUsageRecords:          _q.withUsageRecords.Clone(),
+		withResources:             _q.withResources.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -559,6 +609,17 @@ func (_q *ProjectQuery) WithJobs(opts ...func(*JobQuery)) *ProjectQuery {
 	return _q
 }
 
+// WithTranslationJobs tells the query-builder to eager-load the nodes that are connected to
+// the "translation_jobs" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *ProjectQuery) WithTranslationJobs(opts ...func(*TranslationJobQuery)) *ProjectQuery {
+	query := (&TranslationJobClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withTranslationJobs = query
+	return _q
+}
+
 // WithActivityLogs tells the query-builder to eager-load the nodes that are connected to
 // the "activity_logs" edge. The optional arguments are used to configure the query builder of the edge.
 func (_q *ProjectQuery) WithActivityLogs(opts ...func(*ActivityLogQuery)) *ProjectQuery {
@@ -578,6 +639,17 @@ func (_q *ProjectQuery) WithUsageRecords(opts ...func(*UsageRecordQuery)) *Proje
 		opt(query)
 	}
 	_q.withUsageRecords = query
+	return _q
+}
+
+// WithResources tells the query-builder to eager-load the nodes that are connected to
+// the "resources" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *ProjectQuery) WithResources(opts ...func(*ResourceQuery)) *ProjectQuery {
+	query := (&ResourceClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withResources = query
 	return _q
 }
 
@@ -659,7 +731,7 @@ func (_q *ProjectQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Proj
 	var (
 		nodes       = []*Project{}
 		_spec       = _q.querySpec()
-		loadedTypes = [9]bool{
+		loadedTypes = [11]bool{
 			_q.withOwnerUser != nil,
 			_q.withOwnerOrg != nil,
 			_q.withProjectBackends != nil,
@@ -667,8 +739,10 @@ func (_q *ProjectQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Proj
 			_q.withGlossaryEntries != nil,
 			_q.withTmEntries != nil,
 			_q.withJobs != nil,
+			_q.withTranslationJobs != nil,
 			_q.withActivityLogs != nil,
 			_q.withUsageRecords != nil,
+			_q.withResources != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -738,6 +812,13 @@ func (_q *ProjectQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Proj
 			return nil, err
 		}
 	}
+	if query := _q.withTranslationJobs; query != nil {
+		if err := _q.loadTranslationJobs(ctx, query, nodes,
+			func(n *Project) { n.Edges.TranslationJobs = []*TranslationJob{} },
+			func(n *Project, e *TranslationJob) { n.Edges.TranslationJobs = append(n.Edges.TranslationJobs, e) }); err != nil {
+			return nil, err
+		}
+	}
 	if query := _q.withActivityLogs; query != nil {
 		if err := _q.loadActivityLogs(ctx, query, nodes,
 			func(n *Project) { n.Edges.ActivityLogs = []*ActivityLog{} },
@@ -749,6 +830,13 @@ func (_q *ProjectQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Proj
 		if err := _q.loadUsageRecords(ctx, query, nodes,
 			func(n *Project) { n.Edges.UsageRecords = []*UsageRecord{} },
 			func(n *Project, e *UsageRecord) { n.Edges.UsageRecords = append(n.Edges.UsageRecords, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withResources; query != nil {
+		if err := _q.loadResources(ctx, query, nodes,
+			func(n *Project) { n.Edges.Resources = []*Resource{} },
+			func(n *Project, e *Resource) { n.Edges.Resources = append(n.Edges.Resources, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -978,6 +1066,37 @@ func (_q *ProjectQuery) loadJobs(ctx context.Context, query *JobQuery, nodes []*
 	}
 	return nil
 }
+func (_q *ProjectQuery) loadTranslationJobs(ctx context.Context, query *TranslationJobQuery, nodes []*Project, init func(*Project), assign func(*Project, *TranslationJob)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*Project)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	query.withFKs = true
+	query.Where(predicate.TranslationJob(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(project.TranslationJobsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.project_translation_jobs
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "project_translation_jobs" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "project_translation_jobs" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
 func (_q *ProjectQuery) loadActivityLogs(ctx context.Context, query *ActivityLogQuery, nodes []*Project, init func(*Project), assign func(*Project, *ActivityLog)) error {
 	fks := make([]driver.Value, 0, len(nodes))
 	nodeids := make(map[int]*Project)
@@ -1035,6 +1154,39 @@ func (_q *ProjectQuery) loadUsageRecords(ctx context.Context, query *UsageRecord
 		node, ok := nodeids[*fk]
 		if !ok {
 			return fmt.Errorf(`unexpected referenced foreign-key "project_usage_records" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *ProjectQuery) loadResources(ctx context.Context, query *ResourceQuery, nodes []*Project, init func(*Project), assign func(*Project, *Resource)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*Project)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(resource.FieldProjectID)
+	}
+	query.Where(predicate.Resource(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(project.ResourcesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.ProjectID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "project_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "project_id" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}

@@ -8,17 +8,20 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/projectbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
@@ -151,6 +154,41 @@ func init() {
 	jobDescConfig := jobFields[6].Descriptor()
 	// job.DefaultConfig holds the default value on creation for the config field.
 	job.DefaultConfig = jobDescConfig.Default.(func() map[string]interface{})
+	jobresourceMixin := schema.JobResource{}.Mixin()
+	jobresourceMixinFields0 := jobresourceMixin[0].Fields()
+	_ = jobresourceMixinFields0
+	jobresourceFields := schema.JobResource{}.Fields()
+	_ = jobresourceFields
+	// jobresourceDescCreatedAt is the schema descriptor for created_at field.
+	jobresourceDescCreatedAt := jobresourceMixinFields0[0].Descriptor()
+	// jobresource.DefaultCreatedAt holds the default value on creation for the created_at field.
+	jobresource.DefaultCreatedAt = jobresourceDescCreatedAt.Default.(func() time.Time)
+	// jobresourceDescUpdatedAt is the schema descriptor for updated_at field.
+	jobresourceDescUpdatedAt := jobresourceMixinFields0[1].Descriptor()
+	// jobresource.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	jobresource.DefaultUpdatedAt = jobresourceDescUpdatedAt.Default.(func() time.Time)
+	// jobresource.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	jobresource.UpdateDefaultUpdatedAt = jobresourceDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// jobresourceDescStatus is the schema descriptor for status field.
+	jobresourceDescStatus := jobresourceFields[0].Descriptor()
+	// jobresource.DefaultStatus holds the default value on creation for the status field.
+	jobresource.DefaultStatus = jobresourceDescStatus.Default.(string)
+	// jobresourceDescSegmentIds is the schema descriptor for segment_ids field.
+	jobresourceDescSegmentIds := jobresourceFields[1].Descriptor()
+	// jobresource.DefaultSegmentIds holds the default value on creation for the segment_ids field.
+	jobresource.DefaultSegmentIds = jobresourceDescSegmentIds.Default.(func() []int)
+	// jobresourceDescSegmentCount is the schema descriptor for segment_count field.
+	jobresourceDescSegmentCount := jobresourceFields[2].Descriptor()
+	// jobresource.DefaultSegmentCount holds the default value on creation for the segment_count field.
+	jobresource.DefaultSegmentCount = jobresourceDescSegmentCount.Default.(int)
+	// jobresource.SegmentCountValidator is a validator for the "segment_count" field. It is called by the builders before save.
+	jobresource.SegmentCountValidator = jobresourceDescSegmentCount.Validators[0].(func(int) error)
+	// jobresourceDescCompletedSegments is the schema descriptor for completed_segments field.
+	jobresourceDescCompletedSegments := jobresourceFields[3].Descriptor()
+	// jobresource.DefaultCompletedSegments holds the default value on creation for the completed_segments field.
+	jobresource.DefaultCompletedSegments = jobresourceDescCompletedSegments.Default.(int)
+	// jobresource.CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.
+	jobresource.CompletedSegmentsValidator = jobresourceDescCompletedSegments.Validators[0].(func(int) error)
 	orgbackendMixin := schema.OrgBackend{}.Mixin()
 	orgbackendMixinFields0 := orgbackendMixin[0].Fields()
 	_ = orgbackendMixinFields0
@@ -255,12 +293,16 @@ func init() {
 	projectDescConfig := projectFields[4].Descriptor()
 	// project.DefaultConfig holds the default value on creation for the config field.
 	project.DefaultConfig = projectDescConfig.Default.(func() map[string]interface{})
+	// projectDescDefaultTranslationConfig is the schema descriptor for default_translation_config field.
+	projectDescDefaultTranslationConfig := projectFields[5].Descriptor()
+	// project.DefaultDefaultTranslationConfig holds the default value on creation for the default_translation_config field.
+	project.DefaultDefaultTranslationConfig = projectDescDefaultTranslationConfig.Default.(func() map[string]interface{})
 	// projectDescSourceLang is the schema descriptor for source_lang field.
-	projectDescSourceLang := projectFields[5].Descriptor()
+	projectDescSourceLang := projectFields[6].Descriptor()
 	// project.DefaultSourceLang holds the default value on creation for the source_lang field.
 	project.DefaultSourceLang = projectDescSourceLang.Default.(string)
 	// projectDescTargetLang is the schema descriptor for target_lang field.
-	projectDescTargetLang := projectFields[6].Descriptor()
+	projectDescTargetLang := projectFields[7].Descriptor()
 	// project.DefaultTargetLang holds the default value on creation for the target_lang field.
 	project.DefaultTargetLang = projectDescTargetLang.Default.(string)
 	projectbackendMixin := schema.ProjectBackend{}.Mixin()
@@ -305,6 +347,47 @@ func init() {
 	refreshtokenDescTokenHash := refreshtokenFields[0].Descriptor()
 	// refreshtoken.TokenHashValidator is a validator for the "token_hash" field. It is called by the builders before save.
 	refreshtoken.TokenHashValidator = refreshtokenDescTokenHash.Validators[0].(func(string) error)
+	resourceMixin := schema.Resource{}.Mixin()
+	resourceMixinFields0 := resourceMixin[0].Fields()
+	_ = resourceMixinFields0
+	resourceFields := schema.Resource{}.Fields()
+	_ = resourceFields
+	// resourceDescCreatedAt is the schema descriptor for created_at field.
+	resourceDescCreatedAt := resourceMixinFields0[0].Descriptor()
+	// resource.DefaultCreatedAt holds the default value on creation for the created_at field.
+	resource.DefaultCreatedAt = resourceDescCreatedAt.Default.(func() time.Time)
+	// resourceDescUpdatedAt is the schema descriptor for updated_at field.
+	resourceDescUpdatedAt := resourceMixinFields0[1].Descriptor()
+	// resource.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	resource.DefaultUpdatedAt = resourceDescUpdatedAt.Default.(func() time.Time)
+	// resource.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	resource.UpdateDefaultUpdatedAt = resourceDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// resourceDescFilename is the schema descriptor for filename field.
+	resourceDescFilename := resourceFields[0].Descriptor()
+	// resource.FilenameValidator is a validator for the "filename" field. It is called by the builders before save.
+	resource.FilenameValidator = resourceDescFilename.Validators[0].(func(string) error)
+	// resourceDescFormat is the schema descriptor for format field.
+	resourceDescFormat := resourceFields[1].Descriptor()
+	// resource.FormatValidator is a validator for the "format" field. It is called by the builders before save.
+	resource.FormatValidator = resourceDescFormat.Validators[0].(func(string) error)
+	// resourceDescStoragePath is the schema descriptor for storage_path field.
+	resourceDescStoragePath := resourceFields[2].Descriptor()
+	// resource.StoragePathValidator is a validator for the "storage_path" field. It is called by the builders before save.
+	resource.StoragePathValidator = resourceDescStoragePath.Validators[0].(func(string) error)
+	// resourceDescTotalSegments is the schema descriptor for total_segments field.
+	resourceDescTotalSegments := resourceFields[3].Descriptor()
+	// resource.DefaultTotalSegments holds the default value on creation for the total_segments field.
+	resource.DefaultTotalSegments = resourceDescTotalSegments.Default.(int)
+	// resource.TotalSegmentsValidator is a validator for the "total_segments" field. It is called by the builders before save.
+	resource.TotalSegmentsValidator = resourceDescTotalSegments.Validators[0].(func(int) error)
+	// resourceDescStatus is the schema descriptor for status field.
+	resourceDescStatus := resourceFields[4].Descriptor()
+	// resource.DefaultStatus holds the default value on creation for the status field.
+	resource.DefaultStatus = resourceDescStatus.Default.(string)
+	// resourceDescProjectID is the schema descriptor for project_id field.
+	resourceDescProjectID := resourceFields[6].Descriptor()
+	// resource.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
+	resource.ProjectIDValidator = resourceDescProjectID.Validators[0].(func(int) error)
 	segmentMixin := schema.Segment{}.Mixin()
 	segmentMixinFields0 := segmentMixin[0].Fields()
 	_ = segmentMixinFields0
@@ -332,6 +415,10 @@ func init() {
 	segmentDescStatus := segmentFields[3].Descriptor()
 	// segment.DefaultStatus holds the default value on creation for the status field.
 	segment.DefaultStatus = segmentDescStatus.Default.(string)
+	// segmentDescResourceID is the schema descriptor for resource_id field.
+	segmentDescResourceID := segmentFields[5].Descriptor()
+	// segment.ResourceIDValidator is a validator for the "resource_id" field. It is called by the builders before save.
+	segment.ResourceIDValidator = segmentDescResourceID.Validators[0].(func(int) error)
 	stagebackendoverrideMixin := schema.StageBackendOverride{}.Mixin()
 	stagebackendoverrideMixinFields0 := stagebackendoverrideMixin[0].Fields()
 	_ = stagebackendoverrideMixinFields0
@@ -429,6 +516,63 @@ func init() {
 	tmentryDescOrganizationID := tmentryFields[8].Descriptor()
 	// tmentry.OrganizationIDValidator is a validator for the "organization_id" field. It is called by the builders before save.
 	tmentry.OrganizationIDValidator = tmentryDescOrganizationID.Validators[0].(func(int) error)
+	translationjobMixin := schema.TranslationJob{}.Mixin()
+	translationjobMixinFields0 := translationjobMixin[0].Fields()
+	_ = translationjobMixinFields0
+	translationjobFields := schema.TranslationJob{}.Fields()
+	_ = translationjobFields
+	// translationjobDescCreatedAt is the schema descriptor for created_at field.
+	translationjobDescCreatedAt := translationjobMixinFields0[0].Descriptor()
+	// translationjob.DefaultCreatedAt holds the default value on creation for the created_at field.
+	translationjob.DefaultCreatedAt = translationjobDescCreatedAt.Default.(func() time.Time)
+	// translationjobDescUpdatedAt is the schema descriptor for updated_at field.
+	translationjobDescUpdatedAt := translationjobMixinFields0[1].Descriptor()
+	// translationjob.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	translationjob.DefaultUpdatedAt = translationjobDescUpdatedAt.Default.(func() time.Time)
+	// translationjob.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	translationjob.UpdateDefaultUpdatedAt = translationjobDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// translationjobDescStatus is the schema descriptor for status field.
+	translationjobDescStatus := translationjobFields[0].Descriptor()
+	// translationjob.DefaultStatus holds the default value on creation for the status field.
+	translationjob.DefaultStatus = translationjobDescStatus.Default.(string)
+	// translationjobDescTriggerType is the schema descriptor for trigger_type field.
+	translationjobDescTriggerType := translationjobFields[1].Descriptor()
+	// translationjob.DefaultTriggerType holds the default value on creation for the trigger_type field.
+	translationjob.DefaultTriggerType = translationjobDescTriggerType.Default.(string)
+	// translationjobDescTranslationConfig is the schema descriptor for translation_config field.
+	translationjobDescTranslationConfig := translationjobFields[2].Descriptor()
+	// translationjob.DefaultTranslationConfig holds the default value on creation for the translation_config field.
+	translationjob.DefaultTranslationConfig = translationjobDescTranslationConfig.Default.(func() map[string]interface{})
+	// translationjobDescResourceCount is the schema descriptor for resource_count field.
+	translationjobDescResourceCount := translationjobFields[3].Descriptor()
+	// translationjob.DefaultResourceCount holds the default value on creation for the resource_count field.
+	translationjob.DefaultResourceCount = translationjobDescResourceCount.Default.(int)
+	// translationjob.ResourceCountValidator is a validator for the "resource_count" field. It is called by the builders before save.
+	translationjob.ResourceCountValidator = translationjobDescResourceCount.Validators[0].(func(int) error)
+	// translationjobDescCompletedResources is the schema descriptor for completed_resources field.
+	translationjobDescCompletedResources := translationjobFields[4].Descriptor()
+	// translationjob.DefaultCompletedResources holds the default value on creation for the completed_resources field.
+	translationjob.DefaultCompletedResources = translationjobDescCompletedResources.Default.(int)
+	// translationjob.CompletedResourcesValidator is a validator for the "completed_resources" field. It is called by the builders before save.
+	translationjob.CompletedResourcesValidator = translationjobDescCompletedResources.Validators[0].(func(int) error)
+	// translationjobDescFailedResources is the schema descriptor for failed_resources field.
+	translationjobDescFailedResources := translationjobFields[5].Descriptor()
+	// translationjob.DefaultFailedResources holds the default value on creation for the failed_resources field.
+	translationjob.DefaultFailedResources = translationjobDescFailedResources.Default.(int)
+	// translationjob.FailedResourcesValidator is a validator for the "failed_resources" field. It is called by the builders before save.
+	translationjob.FailedResourcesValidator = translationjobDescFailedResources.Validators[0].(func(int) error)
+	// translationjobDescTotalSegments is the schema descriptor for total_segments field.
+	translationjobDescTotalSegments := translationjobFields[6].Descriptor()
+	// translationjob.DefaultTotalSegments holds the default value on creation for the total_segments field.
+	translationjob.DefaultTotalSegments = translationjobDescTotalSegments.Default.(int)
+	// translationjob.TotalSegmentsValidator is a validator for the "total_segments" field. It is called by the builders before save.
+	translationjob.TotalSegmentsValidator = translationjobDescTotalSegments.Validators[0].(func(int) error)
+	// translationjobDescCompletedSegments is the schema descriptor for completed_segments field.
+	translationjobDescCompletedSegments := translationjobFields[7].Descriptor()
+	// translationjob.DefaultCompletedSegments holds the default value on creation for the completed_segments field.
+	translationjob.DefaultCompletedSegments = translationjobDescCompletedSegments.Default.(int)
+	// translationjob.CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.
+	translationjob.CompletedSegmentsValidator = translationjobDescCompletedSegments.Validators[0].(func(int) error)
 	usagerecordMixin := schema.UsageRecord{}.Mixin()
 	usagerecordMixinFields0 := usagerecordMixin[0].Fields()
 	_ = usagerecordMixinFields0

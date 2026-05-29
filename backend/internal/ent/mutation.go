@@ -14,6 +14,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -21,10 +22,12 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/projectbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
@@ -42,16 +45,19 @@ const (
 	TypeActivityLog          = "ActivityLog"
 	TypeGlossaryEntry        = "GlossaryEntry"
 	TypeJob                  = "Job"
+	TypeJobResource          = "JobResource"
 	TypeOrgBackend           = "OrgBackend"
 	TypeOrgMembership        = "OrgMembership"
 	TypeOrganization         = "Organization"
 	TypeProject              = "Project"
 	TypeProjectBackend       = "ProjectBackend"
 	TypeRefreshToken         = "RefreshToken"
+	TypeResource             = "Resource"
 	TypeSegment              = "Segment"
 	TypeStageBackendOverride = "StageBackendOverride"
 	TypeSubJob               = "SubJob"
 	TypeTMEntry              = "TMEntry"
+	TypeTranslationJob       = "TranslationJob"
 	TypeUsageRecord          = "UsageRecord"
 	TypeUser                 = "User"
 	TypeUserBackend          = "UserBackend"
@@ -3463,6 +3469,962 @@ func (m *JobMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown Job edge %s", name)
 }
 
+// JobResourceMutation represents an operation that mutates the JobResource nodes in the graph.
+type JobResourceMutation struct {
+	config
+	op                    Op
+	typ                   string
+	id                    *int
+	created_at            *time.Time
+	updated_at            *time.Time
+	status                *string
+	segment_ids           *[]int
+	appendsegment_ids     []int
+	segment_count         *int
+	addsegment_count      *int
+	completed_segments    *int
+	addcompleted_segments *int
+	output_path           *string
+	error_message         *string
+	clearedFields         map[string]struct{}
+	job                   *int
+	clearedjob            bool
+	resource              *int
+	clearedresource       bool
+	done                  bool
+	oldValue              func(context.Context) (*JobResource, error)
+	predicates            []predicate.JobResource
+}
+
+var _ ent.Mutation = (*JobResourceMutation)(nil)
+
+// jobresourceOption allows management of the mutation configuration using functional options.
+type jobresourceOption func(*JobResourceMutation)
+
+// newJobResourceMutation creates new mutation for the JobResource entity.
+func newJobResourceMutation(c config, op Op, opts ...jobresourceOption) *JobResourceMutation {
+	m := &JobResourceMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeJobResource,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withJobResourceID sets the ID field of the mutation.
+func withJobResourceID(id int) jobresourceOption {
+	return func(m *JobResourceMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *JobResource
+		)
+		m.oldValue = func(ctx context.Context) (*JobResource, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().JobResource.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withJobResource sets the old JobResource of the mutation.
+func withJobResource(node *JobResource) jobresourceOption {
+	return func(m *JobResourceMutation) {
+		m.oldValue = func(context.Context) (*JobResource, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m JobResourceMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m JobResourceMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *JobResourceMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *JobResourceMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().JobResource.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *JobResourceMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *JobResourceMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the JobResource entity.
+// If the JobResource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *JobResourceMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *JobResourceMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *JobResourceMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *JobResourceMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the JobResource entity.
+// If the JobResource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *JobResourceMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *JobResourceMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *JobResourceMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *JobResourceMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the JobResource entity.
+// If the JobResource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *JobResourceMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *JobResourceMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetSegmentIds sets the "segment_ids" field.
+func (m *JobResourceMutation) SetSegmentIds(i []int) {
+	m.segment_ids = &i
+	m.appendsegment_ids = nil
+}
+
+// SegmentIds returns the value of the "segment_ids" field in the mutation.
+func (m *JobResourceMutation) SegmentIds() (r []int, exists bool) {
+	v := m.segment_ids
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSegmentIds returns the old "segment_ids" field's value of the JobResource entity.
+// If the JobResource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *JobResourceMutation) OldSegmentIds(ctx context.Context) (v []int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSegmentIds is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSegmentIds requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSegmentIds: %w", err)
+	}
+	return oldValue.SegmentIds, nil
+}
+
+// AppendSegmentIds adds i to the "segment_ids" field.
+func (m *JobResourceMutation) AppendSegmentIds(i []int) {
+	m.appendsegment_ids = append(m.appendsegment_ids, i...)
+}
+
+// AppendedSegmentIds returns the list of values that were appended to the "segment_ids" field in this mutation.
+func (m *JobResourceMutation) AppendedSegmentIds() ([]int, bool) {
+	if len(m.appendsegment_ids) == 0 {
+		return nil, false
+	}
+	return m.appendsegment_ids, true
+}
+
+// ResetSegmentIds resets all changes to the "segment_ids" field.
+func (m *JobResourceMutation) ResetSegmentIds() {
+	m.segment_ids = nil
+	m.appendsegment_ids = nil
+}
+
+// SetSegmentCount sets the "segment_count" field.
+func (m *JobResourceMutation) SetSegmentCount(i int) {
+	m.segment_count = &i
+	m.addsegment_count = nil
+}
+
+// SegmentCount returns the value of the "segment_count" field in the mutation.
+func (m *JobResourceMutation) SegmentCount() (r int, exists bool) {
+	v := m.segment_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSegmentCount returns the old "segment_count" field's value of the JobResource entity.
+// If the JobResource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *JobResourceMutation) OldSegmentCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSegmentCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSegmentCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSegmentCount: %w", err)
+	}
+	return oldValue.SegmentCount, nil
+}
+
+// AddSegmentCount adds i to the "segment_count" field.
+func (m *JobResourceMutation) AddSegmentCount(i int) {
+	if m.addsegment_count != nil {
+		*m.addsegment_count += i
+	} else {
+		m.addsegment_count = &i
+	}
+}
+
+// AddedSegmentCount returns the value that was added to the "segment_count" field in this mutation.
+func (m *JobResourceMutation) AddedSegmentCount() (r int, exists bool) {
+	v := m.addsegment_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSegmentCount resets all changes to the "segment_count" field.
+func (m *JobResourceMutation) ResetSegmentCount() {
+	m.segment_count = nil
+	m.addsegment_count = nil
+}
+
+// SetCompletedSegments sets the "completed_segments" field.
+func (m *JobResourceMutation) SetCompletedSegments(i int) {
+	m.completed_segments = &i
+	m.addcompleted_segments = nil
+}
+
+// CompletedSegments returns the value of the "completed_segments" field in the mutation.
+func (m *JobResourceMutation) CompletedSegments() (r int, exists bool) {
+	v := m.completed_segments
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCompletedSegments returns the old "completed_segments" field's value of the JobResource entity.
+// If the JobResource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *JobResourceMutation) OldCompletedSegments(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCompletedSegments is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCompletedSegments requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCompletedSegments: %w", err)
+	}
+	return oldValue.CompletedSegments, nil
+}
+
+// AddCompletedSegments adds i to the "completed_segments" field.
+func (m *JobResourceMutation) AddCompletedSegments(i int) {
+	if m.addcompleted_segments != nil {
+		*m.addcompleted_segments += i
+	} else {
+		m.addcompleted_segments = &i
+	}
+}
+
+// AddedCompletedSegments returns the value that was added to the "completed_segments" field in this mutation.
+func (m *JobResourceMutation) AddedCompletedSegments() (r int, exists bool) {
+	v := m.addcompleted_segments
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCompletedSegments resets all changes to the "completed_segments" field.
+func (m *JobResourceMutation) ResetCompletedSegments() {
+	m.completed_segments = nil
+	m.addcompleted_segments = nil
+}
+
+// SetOutputPath sets the "output_path" field.
+func (m *JobResourceMutation) SetOutputPath(s string) {
+	m.output_path = &s
+}
+
+// OutputPath returns the value of the "output_path" field in the mutation.
+func (m *JobResourceMutation) OutputPath() (r string, exists bool) {
+	v := m.output_path
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOutputPath returns the old "output_path" field's value of the JobResource entity.
+// If the JobResource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *JobResourceMutation) OldOutputPath(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOutputPath is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOutputPath requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOutputPath: %w", err)
+	}
+	return oldValue.OutputPath, nil
+}
+
+// ClearOutputPath clears the value of the "output_path" field.
+func (m *JobResourceMutation) ClearOutputPath() {
+	m.output_path = nil
+	m.clearedFields[jobresource.FieldOutputPath] = struct{}{}
+}
+
+// OutputPathCleared returns if the "output_path" field was cleared in this mutation.
+func (m *JobResourceMutation) OutputPathCleared() bool {
+	_, ok := m.clearedFields[jobresource.FieldOutputPath]
+	return ok
+}
+
+// ResetOutputPath resets all changes to the "output_path" field.
+func (m *JobResourceMutation) ResetOutputPath() {
+	m.output_path = nil
+	delete(m.clearedFields, jobresource.FieldOutputPath)
+}
+
+// SetErrorMessage sets the "error_message" field.
+func (m *JobResourceMutation) SetErrorMessage(s string) {
+	m.error_message = &s
+}
+
+// ErrorMessage returns the value of the "error_message" field in the mutation.
+func (m *JobResourceMutation) ErrorMessage() (r string, exists bool) {
+	v := m.error_message
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldErrorMessage returns the old "error_message" field's value of the JobResource entity.
+// If the JobResource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *JobResourceMutation) OldErrorMessage(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldErrorMessage is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldErrorMessage requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldErrorMessage: %w", err)
+	}
+	return oldValue.ErrorMessage, nil
+}
+
+// ClearErrorMessage clears the value of the "error_message" field.
+func (m *JobResourceMutation) ClearErrorMessage() {
+	m.error_message = nil
+	m.clearedFields[jobresource.FieldErrorMessage] = struct{}{}
+}
+
+// ErrorMessageCleared returns if the "error_message" field was cleared in this mutation.
+func (m *JobResourceMutation) ErrorMessageCleared() bool {
+	_, ok := m.clearedFields[jobresource.FieldErrorMessage]
+	return ok
+}
+
+// ResetErrorMessage resets all changes to the "error_message" field.
+func (m *JobResourceMutation) ResetErrorMessage() {
+	m.error_message = nil
+	delete(m.clearedFields, jobresource.FieldErrorMessage)
+}
+
+// SetJobID sets the "job" edge to the TranslationJob entity by id.
+func (m *JobResourceMutation) SetJobID(id int) {
+	m.job = &id
+}
+
+// ClearJob clears the "job" edge to the TranslationJob entity.
+func (m *JobResourceMutation) ClearJob() {
+	m.clearedjob = true
+}
+
+// JobCleared reports if the "job" edge to the TranslationJob entity was cleared.
+func (m *JobResourceMutation) JobCleared() bool {
+	return m.clearedjob
+}
+
+// JobID returns the "job" edge ID in the mutation.
+func (m *JobResourceMutation) JobID() (id int, exists bool) {
+	if m.job != nil {
+		return *m.job, true
+	}
+	return
+}
+
+// JobIDs returns the "job" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// JobID instead. It exists only for internal usage by the builders.
+func (m *JobResourceMutation) JobIDs() (ids []int) {
+	if id := m.job; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetJob resets all changes to the "job" edge.
+func (m *JobResourceMutation) ResetJob() {
+	m.job = nil
+	m.clearedjob = false
+}
+
+// SetResourceID sets the "resource" edge to the Resource entity by id.
+func (m *JobResourceMutation) SetResourceID(id int) {
+	m.resource = &id
+}
+
+// ClearResource clears the "resource" edge to the Resource entity.
+func (m *JobResourceMutation) ClearResource() {
+	m.clearedresource = true
+}
+
+// ResourceCleared reports if the "resource" edge to the Resource entity was cleared.
+func (m *JobResourceMutation) ResourceCleared() bool {
+	return m.clearedresource
+}
+
+// ResourceID returns the "resource" edge ID in the mutation.
+func (m *JobResourceMutation) ResourceID() (id int, exists bool) {
+	if m.resource != nil {
+		return *m.resource, true
+	}
+	return
+}
+
+// ResourceIDs returns the "resource" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// ResourceID instead. It exists only for internal usage by the builders.
+func (m *JobResourceMutation) ResourceIDs() (ids []int) {
+	if id := m.resource; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetResource resets all changes to the "resource" edge.
+func (m *JobResourceMutation) ResetResource() {
+	m.resource = nil
+	m.clearedresource = false
+}
+
+// Where appends a list predicates to the JobResourceMutation builder.
+func (m *JobResourceMutation) Where(ps ...predicate.JobResource) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the JobResourceMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *JobResourceMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.JobResource, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *JobResourceMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *JobResourceMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (JobResource).
+func (m *JobResourceMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *JobResourceMutation) Fields() []string {
+	fields := make([]string, 0, 8)
+	if m.created_at != nil {
+		fields = append(fields, jobresource.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, jobresource.FieldUpdatedAt)
+	}
+	if m.status != nil {
+		fields = append(fields, jobresource.FieldStatus)
+	}
+	if m.segment_ids != nil {
+		fields = append(fields, jobresource.FieldSegmentIds)
+	}
+	if m.segment_count != nil {
+		fields = append(fields, jobresource.FieldSegmentCount)
+	}
+	if m.completed_segments != nil {
+		fields = append(fields, jobresource.FieldCompletedSegments)
+	}
+	if m.output_path != nil {
+		fields = append(fields, jobresource.FieldOutputPath)
+	}
+	if m.error_message != nil {
+		fields = append(fields, jobresource.FieldErrorMessage)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *JobResourceMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case jobresource.FieldCreatedAt:
+		return m.CreatedAt()
+	case jobresource.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case jobresource.FieldStatus:
+		return m.Status()
+	case jobresource.FieldSegmentIds:
+		return m.SegmentIds()
+	case jobresource.FieldSegmentCount:
+		return m.SegmentCount()
+	case jobresource.FieldCompletedSegments:
+		return m.CompletedSegments()
+	case jobresource.FieldOutputPath:
+		return m.OutputPath()
+	case jobresource.FieldErrorMessage:
+		return m.ErrorMessage()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *JobResourceMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case jobresource.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case jobresource.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case jobresource.FieldStatus:
+		return m.OldStatus(ctx)
+	case jobresource.FieldSegmentIds:
+		return m.OldSegmentIds(ctx)
+	case jobresource.FieldSegmentCount:
+		return m.OldSegmentCount(ctx)
+	case jobresource.FieldCompletedSegments:
+		return m.OldCompletedSegments(ctx)
+	case jobresource.FieldOutputPath:
+		return m.OldOutputPath(ctx)
+	case jobresource.FieldErrorMessage:
+		return m.OldErrorMessage(ctx)
+	}
+	return nil, fmt.Errorf("unknown JobResource field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *JobResourceMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case jobresource.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case jobresource.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case jobresource.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case jobresource.FieldSegmentIds:
+		v, ok := value.([]int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSegmentIds(v)
+		return nil
+	case jobresource.FieldSegmentCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSegmentCount(v)
+		return nil
+	case jobresource.FieldCompletedSegments:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCompletedSegments(v)
+		return nil
+	case jobresource.FieldOutputPath:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOutputPath(v)
+		return nil
+	case jobresource.FieldErrorMessage:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetErrorMessage(v)
+		return nil
+	}
+	return fmt.Errorf("unknown JobResource field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *JobResourceMutation) AddedFields() []string {
+	var fields []string
+	if m.addsegment_count != nil {
+		fields = append(fields, jobresource.FieldSegmentCount)
+	}
+	if m.addcompleted_segments != nil {
+		fields = append(fields, jobresource.FieldCompletedSegments)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *JobResourceMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case jobresource.FieldSegmentCount:
+		return m.AddedSegmentCount()
+	case jobresource.FieldCompletedSegments:
+		return m.AddedCompletedSegments()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *JobResourceMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case jobresource.FieldSegmentCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSegmentCount(v)
+		return nil
+	case jobresource.FieldCompletedSegments:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCompletedSegments(v)
+		return nil
+	}
+	return fmt.Errorf("unknown JobResource numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *JobResourceMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(jobresource.FieldOutputPath) {
+		fields = append(fields, jobresource.FieldOutputPath)
+	}
+	if m.FieldCleared(jobresource.FieldErrorMessage) {
+		fields = append(fields, jobresource.FieldErrorMessage)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *JobResourceMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *JobResourceMutation) ClearField(name string) error {
+	switch name {
+	case jobresource.FieldOutputPath:
+		m.ClearOutputPath()
+		return nil
+	case jobresource.FieldErrorMessage:
+		m.ClearErrorMessage()
+		return nil
+	}
+	return fmt.Errorf("unknown JobResource nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *JobResourceMutation) ResetField(name string) error {
+	switch name {
+	case jobresource.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case jobresource.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case jobresource.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case jobresource.FieldSegmentIds:
+		m.ResetSegmentIds()
+		return nil
+	case jobresource.FieldSegmentCount:
+		m.ResetSegmentCount()
+		return nil
+	case jobresource.FieldCompletedSegments:
+		m.ResetCompletedSegments()
+		return nil
+	case jobresource.FieldOutputPath:
+		m.ResetOutputPath()
+		return nil
+	case jobresource.FieldErrorMessage:
+		m.ResetErrorMessage()
+		return nil
+	}
+	return fmt.Errorf("unknown JobResource field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *JobResourceMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.job != nil {
+		edges = append(edges, jobresource.EdgeJob)
+	}
+	if m.resource != nil {
+		edges = append(edges, jobresource.EdgeResource)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *JobResourceMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case jobresource.EdgeJob:
+		if id := m.job; id != nil {
+			return []ent.Value{*id}
+		}
+	case jobresource.EdgeResource:
+		if id := m.resource; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *JobResourceMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *JobResourceMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *JobResourceMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.clearedjob {
+		edges = append(edges, jobresource.EdgeJob)
+	}
+	if m.clearedresource {
+		edges = append(edges, jobresource.EdgeResource)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *JobResourceMutation) EdgeCleared(name string) bool {
+	switch name {
+	case jobresource.EdgeJob:
+		return m.clearedjob
+	case jobresource.EdgeResource:
+		return m.clearedresource
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *JobResourceMutation) ClearEdge(name string) error {
+	switch name {
+	case jobresource.EdgeJob:
+		m.ClearJob()
+		return nil
+	case jobresource.EdgeResource:
+		m.ClearResource()
+		return nil
+	}
+	return fmt.Errorf("unknown JobResource unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *JobResourceMutation) ResetEdge(name string) error {
+	switch name {
+	case jobresource.EdgeJob:
+		m.ResetJob()
+		return nil
+	case jobresource.EdgeResource:
+		m.ResetResource()
+		return nil
+	}
+	return fmt.Errorf("unknown JobResource edge %s", name)
+}
+
 // OrgBackendMutation represents an operation that mutates the OrgBackend nodes in the graph.
 type OrgBackendMutation struct {
 	config
@@ -5961,6 +6923,7 @@ type ProjectMutation struct {
 	name                           *string
 	resource_scope                 *string
 	_config                        *map[string]interface{}
+	default_translation_config     *map[string]interface{}
 	source_lang                    *string
 	target_lang                    *string
 	clearedFields                  map[string]struct{}
@@ -5983,12 +6946,18 @@ type ProjectMutation struct {
 	jobs                           map[int]struct{}
 	removedjobs                    map[int]struct{}
 	clearedjobs                    bool
+	translation_jobs               map[int]struct{}
+	removedtranslation_jobs        map[int]struct{}
+	clearedtranslation_jobs        bool
 	activity_logs                  map[int]struct{}
 	removedactivity_logs           map[int]struct{}
 	clearedactivity_logs           bool
 	usage_records                  map[int]struct{}
 	removedusage_records           map[int]struct{}
 	clearedusage_records           bool
+	resources                      map[int]struct{}
+	removedresources               map[int]struct{}
+	clearedresources               bool
 	done                           bool
 	oldValue                       func(context.Context) (*Project, error)
 	predicates                     []predicate.Project
@@ -6368,6 +7337,42 @@ func (m *ProjectMutation) OldConfig(ctx context.Context) (v map[string]interface
 // ResetConfig resets all changes to the "config" field.
 func (m *ProjectMutation) ResetConfig() {
 	m._config = nil
+}
+
+// SetDefaultTranslationConfig sets the "default_translation_config" field.
+func (m *ProjectMutation) SetDefaultTranslationConfig(value map[string]interface{}) {
+	m.default_translation_config = &value
+}
+
+// DefaultTranslationConfig returns the value of the "default_translation_config" field in the mutation.
+func (m *ProjectMutation) DefaultTranslationConfig() (r map[string]interface{}, exists bool) {
+	v := m.default_translation_config
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDefaultTranslationConfig returns the old "default_translation_config" field's value of the Project entity.
+// If the Project object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProjectMutation) OldDefaultTranslationConfig(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDefaultTranslationConfig is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDefaultTranslationConfig requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDefaultTranslationConfig: %w", err)
+	}
+	return oldValue.DefaultTranslationConfig, nil
+}
+
+// ResetDefaultTranslationConfig resets all changes to the "default_translation_config" field.
+func (m *ProjectMutation) ResetDefaultTranslationConfig() {
+	m.default_translation_config = nil
 }
 
 // SetSourceLang sets the "source_lang" field.
@@ -6766,6 +7771,60 @@ func (m *ProjectMutation) ResetJobs() {
 	m.removedjobs = nil
 }
 
+// AddTranslationJobIDs adds the "translation_jobs" edge to the TranslationJob entity by ids.
+func (m *ProjectMutation) AddTranslationJobIDs(ids ...int) {
+	if m.translation_jobs == nil {
+		m.translation_jobs = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.translation_jobs[ids[i]] = struct{}{}
+	}
+}
+
+// ClearTranslationJobs clears the "translation_jobs" edge to the TranslationJob entity.
+func (m *ProjectMutation) ClearTranslationJobs() {
+	m.clearedtranslation_jobs = true
+}
+
+// TranslationJobsCleared reports if the "translation_jobs" edge to the TranslationJob entity was cleared.
+func (m *ProjectMutation) TranslationJobsCleared() bool {
+	return m.clearedtranslation_jobs
+}
+
+// RemoveTranslationJobIDs removes the "translation_jobs" edge to the TranslationJob entity by IDs.
+func (m *ProjectMutation) RemoveTranslationJobIDs(ids ...int) {
+	if m.removedtranslation_jobs == nil {
+		m.removedtranslation_jobs = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.translation_jobs, ids[i])
+		m.removedtranslation_jobs[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedTranslationJobs returns the removed IDs of the "translation_jobs" edge to the TranslationJob entity.
+func (m *ProjectMutation) RemovedTranslationJobsIDs() (ids []int) {
+	for id := range m.removedtranslation_jobs {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// TranslationJobsIDs returns the "translation_jobs" edge IDs in the mutation.
+func (m *ProjectMutation) TranslationJobsIDs() (ids []int) {
+	for id := range m.translation_jobs {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetTranslationJobs resets all changes to the "translation_jobs" edge.
+func (m *ProjectMutation) ResetTranslationJobs() {
+	m.translation_jobs = nil
+	m.clearedtranslation_jobs = false
+	m.removedtranslation_jobs = nil
+}
+
 // AddActivityLogIDs adds the "activity_logs" edge to the ActivityLog entity by ids.
 func (m *ProjectMutation) AddActivityLogIDs(ids ...int) {
 	if m.activity_logs == nil {
@@ -6874,6 +7933,60 @@ func (m *ProjectMutation) ResetUsageRecords() {
 	m.removedusage_records = nil
 }
 
+// AddResourceIDs adds the "resources" edge to the Resource entity by ids.
+func (m *ProjectMutation) AddResourceIDs(ids ...int) {
+	if m.resources == nil {
+		m.resources = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.resources[ids[i]] = struct{}{}
+	}
+}
+
+// ClearResources clears the "resources" edge to the Resource entity.
+func (m *ProjectMutation) ClearResources() {
+	m.clearedresources = true
+}
+
+// ResourcesCleared reports if the "resources" edge to the Resource entity was cleared.
+func (m *ProjectMutation) ResourcesCleared() bool {
+	return m.clearedresources
+}
+
+// RemoveResourceIDs removes the "resources" edge to the Resource entity by IDs.
+func (m *ProjectMutation) RemoveResourceIDs(ids ...int) {
+	if m.removedresources == nil {
+		m.removedresources = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.resources, ids[i])
+		m.removedresources[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedResources returns the removed IDs of the "resources" edge to the Resource entity.
+func (m *ProjectMutation) RemovedResourcesIDs() (ids []int) {
+	for id := range m.removedresources {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResourcesIDs returns the "resources" edge IDs in the mutation.
+func (m *ProjectMutation) ResourcesIDs() (ids []int) {
+	for id := range m.resources {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetResources resets all changes to the "resources" edge.
+func (m *ProjectMutation) ResetResources() {
+	m.resources = nil
+	m.clearedresources = false
+	m.removedresources = nil
+}
+
 // Where appends a list predicates to the ProjectMutation builder.
 func (m *ProjectMutation) Where(ps ...predicate.Project) {
 	m.predicates = append(m.predicates, ps...)
@@ -6908,7 +8021,7 @@ func (m *ProjectMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ProjectMutation) Fields() []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 10)
 	if m.created_at != nil {
 		fields = append(fields, project.FieldCreatedAt)
 	}
@@ -6929,6 +8042,9 @@ func (m *ProjectMutation) Fields() []string {
 	}
 	if m._config != nil {
 		fields = append(fields, project.FieldConfig)
+	}
+	if m.default_translation_config != nil {
+		fields = append(fields, project.FieldDefaultTranslationConfig)
 	}
 	if m.source_lang != nil {
 		fields = append(fields, project.FieldSourceLang)
@@ -6958,6 +8074,8 @@ func (m *ProjectMutation) Field(name string) (ent.Value, bool) {
 		return m.ResourceScope()
 	case project.FieldConfig:
 		return m.Config()
+	case project.FieldDefaultTranslationConfig:
+		return m.DefaultTranslationConfig()
 	case project.FieldSourceLang:
 		return m.SourceLang()
 	case project.FieldTargetLang:
@@ -6985,6 +8103,8 @@ func (m *ProjectMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldResourceScope(ctx)
 	case project.FieldConfig:
 		return m.OldConfig(ctx)
+	case project.FieldDefaultTranslationConfig:
+		return m.OldDefaultTranslationConfig(ctx)
 	case project.FieldSourceLang:
 		return m.OldSourceLang(ctx)
 	case project.FieldTargetLang:
@@ -7046,6 +8166,13 @@ func (m *ProjectMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetConfig(v)
+		return nil
+	case project.FieldDefaultTranslationConfig:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDefaultTranslationConfig(v)
 		return nil
 	case project.FieldSourceLang:
 		v, ok := value.(string)
@@ -7149,6 +8276,9 @@ func (m *ProjectMutation) ResetField(name string) error {
 	case project.FieldConfig:
 		m.ResetConfig()
 		return nil
+	case project.FieldDefaultTranslationConfig:
+		m.ResetDefaultTranslationConfig()
+		return nil
 	case project.FieldSourceLang:
 		m.ResetSourceLang()
 		return nil
@@ -7161,7 +8291,7 @@ func (m *ProjectMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *ProjectMutation) AddedEdges() []string {
-	edges := make([]string, 0, 9)
+	edges := make([]string, 0, 11)
 	if m.owner_user != nil {
 		edges = append(edges, project.EdgeOwnerUser)
 	}
@@ -7183,11 +8313,17 @@ func (m *ProjectMutation) AddedEdges() []string {
 	if m.jobs != nil {
 		edges = append(edges, project.EdgeJobs)
 	}
+	if m.translation_jobs != nil {
+		edges = append(edges, project.EdgeTranslationJobs)
+	}
 	if m.activity_logs != nil {
 		edges = append(edges, project.EdgeActivityLogs)
 	}
 	if m.usage_records != nil {
 		edges = append(edges, project.EdgeUsageRecords)
+	}
+	if m.resources != nil {
+		edges = append(edges, project.EdgeResources)
 	}
 	return edges
 }
@@ -7234,6 +8370,12 @@ func (m *ProjectMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case project.EdgeTranslationJobs:
+		ids := make([]ent.Value, 0, len(m.translation_jobs))
+		for id := range m.translation_jobs {
+			ids = append(ids, id)
+		}
+		return ids
 	case project.EdgeActivityLogs:
 		ids := make([]ent.Value, 0, len(m.activity_logs))
 		for id := range m.activity_logs {
@@ -7246,13 +8388,19 @@ func (m *ProjectMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case project.EdgeResources:
+		ids := make([]ent.Value, 0, len(m.resources))
+		for id := range m.resources {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *ProjectMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 9)
+	edges := make([]string, 0, 11)
 	if m.removedproject_backends != nil {
 		edges = append(edges, project.EdgeProjectBackends)
 	}
@@ -7268,11 +8416,17 @@ func (m *ProjectMutation) RemovedEdges() []string {
 	if m.removedjobs != nil {
 		edges = append(edges, project.EdgeJobs)
 	}
+	if m.removedtranslation_jobs != nil {
+		edges = append(edges, project.EdgeTranslationJobs)
+	}
 	if m.removedactivity_logs != nil {
 		edges = append(edges, project.EdgeActivityLogs)
 	}
 	if m.removedusage_records != nil {
 		edges = append(edges, project.EdgeUsageRecords)
+	}
+	if m.removedresources != nil {
+		edges = append(edges, project.EdgeResources)
 	}
 	return edges
 }
@@ -7311,6 +8465,12 @@ func (m *ProjectMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case project.EdgeTranslationJobs:
+		ids := make([]ent.Value, 0, len(m.removedtranslation_jobs))
+		for id := range m.removedtranslation_jobs {
+			ids = append(ids, id)
+		}
+		return ids
 	case project.EdgeActivityLogs:
 		ids := make([]ent.Value, 0, len(m.removedactivity_logs))
 		for id := range m.removedactivity_logs {
@@ -7323,13 +8483,19 @@ func (m *ProjectMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case project.EdgeResources:
+		ids := make([]ent.Value, 0, len(m.removedresources))
+		for id := range m.removedresources {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *ProjectMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 9)
+	edges := make([]string, 0, 11)
 	if m.clearedowner_user {
 		edges = append(edges, project.EdgeOwnerUser)
 	}
@@ -7351,11 +8517,17 @@ func (m *ProjectMutation) ClearedEdges() []string {
 	if m.clearedjobs {
 		edges = append(edges, project.EdgeJobs)
 	}
+	if m.clearedtranslation_jobs {
+		edges = append(edges, project.EdgeTranslationJobs)
+	}
 	if m.clearedactivity_logs {
 		edges = append(edges, project.EdgeActivityLogs)
 	}
 	if m.clearedusage_records {
 		edges = append(edges, project.EdgeUsageRecords)
+	}
+	if m.clearedresources {
+		edges = append(edges, project.EdgeResources)
 	}
 	return edges
 }
@@ -7378,10 +8550,14 @@ func (m *ProjectMutation) EdgeCleared(name string) bool {
 		return m.clearedtm_entries
 	case project.EdgeJobs:
 		return m.clearedjobs
+	case project.EdgeTranslationJobs:
+		return m.clearedtranslation_jobs
 	case project.EdgeActivityLogs:
 		return m.clearedactivity_logs
 	case project.EdgeUsageRecords:
 		return m.clearedusage_records
+	case project.EdgeResources:
+		return m.clearedresources
 	}
 	return false
 }
@@ -7425,11 +8601,17 @@ func (m *ProjectMutation) ResetEdge(name string) error {
 	case project.EdgeJobs:
 		m.ResetJobs()
 		return nil
+	case project.EdgeTranslationJobs:
+		m.ResetTranslationJobs()
+		return nil
 	case project.EdgeActivityLogs:
 		m.ResetActivityLogs()
 		return nil
 	case project.EdgeUsageRecords:
 		m.ResetUsageRecords()
+		return nil
+	case project.EdgeResources:
+		m.ResetResources()
 		return nil
 	}
 	return fmt.Errorf("unknown Project edge %s", name)
@@ -8744,6 +9926,1063 @@ func (m *RefreshTokenMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown RefreshToken edge %s", name)
 }
 
+// ResourceMutation represents an operation that mutates the Resource nodes in the graph.
+type ResourceMutation struct {
+	config
+	op                   Op
+	typ                  string
+	id                   *int
+	created_at           *time.Time
+	updated_at           *time.Time
+	filename             *string
+	format               *string
+	storage_path         *string
+	total_segments       *int
+	addtotal_segments    *int
+	status               *string
+	error_message        *string
+	clearedFields        map[string]struct{}
+	project              *int
+	clearedproject       bool
+	segments             map[int]struct{}
+	removedsegments      map[int]struct{}
+	clearedsegments      bool
+	job_resources        map[int]struct{}
+	removedjob_resources map[int]struct{}
+	clearedjob_resources bool
+	done                 bool
+	oldValue             func(context.Context) (*Resource, error)
+	predicates           []predicate.Resource
+}
+
+var _ ent.Mutation = (*ResourceMutation)(nil)
+
+// resourceOption allows management of the mutation configuration using functional options.
+type resourceOption func(*ResourceMutation)
+
+// newResourceMutation creates new mutation for the Resource entity.
+func newResourceMutation(c config, op Op, opts ...resourceOption) *ResourceMutation {
+	m := &ResourceMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeResource,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withResourceID sets the ID field of the mutation.
+func withResourceID(id int) resourceOption {
+	return func(m *ResourceMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *Resource
+		)
+		m.oldValue = func(ctx context.Context) (*Resource, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().Resource.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withResource sets the old Resource of the mutation.
+func withResource(node *Resource) resourceOption {
+	return func(m *ResourceMutation) {
+		m.oldValue = func(context.Context) (*Resource, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m ResourceMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m ResourceMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *ResourceMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *ResourceMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().Resource.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *ResourceMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *ResourceMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the Resource entity.
+// If the Resource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResourceMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *ResourceMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *ResourceMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *ResourceMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the Resource entity.
+// If the Resource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResourceMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *ResourceMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetFilename sets the "filename" field.
+func (m *ResourceMutation) SetFilename(s string) {
+	m.filename = &s
+}
+
+// Filename returns the value of the "filename" field in the mutation.
+func (m *ResourceMutation) Filename() (r string, exists bool) {
+	v := m.filename
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFilename returns the old "filename" field's value of the Resource entity.
+// If the Resource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResourceMutation) OldFilename(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFilename is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFilename requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFilename: %w", err)
+	}
+	return oldValue.Filename, nil
+}
+
+// ResetFilename resets all changes to the "filename" field.
+func (m *ResourceMutation) ResetFilename() {
+	m.filename = nil
+}
+
+// SetFormat sets the "format" field.
+func (m *ResourceMutation) SetFormat(s string) {
+	m.format = &s
+}
+
+// Format returns the value of the "format" field in the mutation.
+func (m *ResourceMutation) Format() (r string, exists bool) {
+	v := m.format
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFormat returns the old "format" field's value of the Resource entity.
+// If the Resource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResourceMutation) OldFormat(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFormat is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFormat requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFormat: %w", err)
+	}
+	return oldValue.Format, nil
+}
+
+// ResetFormat resets all changes to the "format" field.
+func (m *ResourceMutation) ResetFormat() {
+	m.format = nil
+}
+
+// SetStoragePath sets the "storage_path" field.
+func (m *ResourceMutation) SetStoragePath(s string) {
+	m.storage_path = &s
+}
+
+// StoragePath returns the value of the "storage_path" field in the mutation.
+func (m *ResourceMutation) StoragePath() (r string, exists bool) {
+	v := m.storage_path
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStoragePath returns the old "storage_path" field's value of the Resource entity.
+// If the Resource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResourceMutation) OldStoragePath(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStoragePath is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStoragePath requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStoragePath: %w", err)
+	}
+	return oldValue.StoragePath, nil
+}
+
+// ResetStoragePath resets all changes to the "storage_path" field.
+func (m *ResourceMutation) ResetStoragePath() {
+	m.storage_path = nil
+}
+
+// SetTotalSegments sets the "total_segments" field.
+func (m *ResourceMutation) SetTotalSegments(i int) {
+	m.total_segments = &i
+	m.addtotal_segments = nil
+}
+
+// TotalSegments returns the value of the "total_segments" field in the mutation.
+func (m *ResourceMutation) TotalSegments() (r int, exists bool) {
+	v := m.total_segments
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTotalSegments returns the old "total_segments" field's value of the Resource entity.
+// If the Resource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResourceMutation) OldTotalSegments(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTotalSegments is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTotalSegments requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTotalSegments: %w", err)
+	}
+	return oldValue.TotalSegments, nil
+}
+
+// AddTotalSegments adds i to the "total_segments" field.
+func (m *ResourceMutation) AddTotalSegments(i int) {
+	if m.addtotal_segments != nil {
+		*m.addtotal_segments += i
+	} else {
+		m.addtotal_segments = &i
+	}
+}
+
+// AddedTotalSegments returns the value that was added to the "total_segments" field in this mutation.
+func (m *ResourceMutation) AddedTotalSegments() (r int, exists bool) {
+	v := m.addtotal_segments
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetTotalSegments resets all changes to the "total_segments" field.
+func (m *ResourceMutation) ResetTotalSegments() {
+	m.total_segments = nil
+	m.addtotal_segments = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *ResourceMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *ResourceMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the Resource entity.
+// If the Resource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResourceMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *ResourceMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetErrorMessage sets the "error_message" field.
+func (m *ResourceMutation) SetErrorMessage(s string) {
+	m.error_message = &s
+}
+
+// ErrorMessage returns the value of the "error_message" field in the mutation.
+func (m *ResourceMutation) ErrorMessage() (r string, exists bool) {
+	v := m.error_message
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldErrorMessage returns the old "error_message" field's value of the Resource entity.
+// If the Resource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResourceMutation) OldErrorMessage(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldErrorMessage is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldErrorMessage requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldErrorMessage: %w", err)
+	}
+	return oldValue.ErrorMessage, nil
+}
+
+// ClearErrorMessage clears the value of the "error_message" field.
+func (m *ResourceMutation) ClearErrorMessage() {
+	m.error_message = nil
+	m.clearedFields[resource.FieldErrorMessage] = struct{}{}
+}
+
+// ErrorMessageCleared returns if the "error_message" field was cleared in this mutation.
+func (m *ResourceMutation) ErrorMessageCleared() bool {
+	_, ok := m.clearedFields[resource.FieldErrorMessage]
+	return ok
+}
+
+// ResetErrorMessage resets all changes to the "error_message" field.
+func (m *ResourceMutation) ResetErrorMessage() {
+	m.error_message = nil
+	delete(m.clearedFields, resource.FieldErrorMessage)
+}
+
+// SetProjectID sets the "project_id" field.
+func (m *ResourceMutation) SetProjectID(i int) {
+	m.project = &i
+}
+
+// ProjectID returns the value of the "project_id" field in the mutation.
+func (m *ResourceMutation) ProjectID() (r int, exists bool) {
+	v := m.project
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldProjectID returns the old "project_id" field's value of the Resource entity.
+// If the Resource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ResourceMutation) OldProjectID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldProjectID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldProjectID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldProjectID: %w", err)
+	}
+	return oldValue.ProjectID, nil
+}
+
+// ClearProjectID clears the value of the "project_id" field.
+func (m *ResourceMutation) ClearProjectID() {
+	m.project = nil
+	m.clearedFields[resource.FieldProjectID] = struct{}{}
+}
+
+// ProjectIDCleared returns if the "project_id" field was cleared in this mutation.
+func (m *ResourceMutation) ProjectIDCleared() bool {
+	_, ok := m.clearedFields[resource.FieldProjectID]
+	return ok
+}
+
+// ResetProjectID resets all changes to the "project_id" field.
+func (m *ResourceMutation) ResetProjectID() {
+	m.project = nil
+	delete(m.clearedFields, resource.FieldProjectID)
+}
+
+// ClearProject clears the "project" edge to the Project entity.
+func (m *ResourceMutation) ClearProject() {
+	m.clearedproject = true
+	m.clearedFields[resource.FieldProjectID] = struct{}{}
+}
+
+// ProjectCleared reports if the "project" edge to the Project entity was cleared.
+func (m *ResourceMutation) ProjectCleared() bool {
+	return m.ProjectIDCleared() || m.clearedproject
+}
+
+// ProjectIDs returns the "project" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// ProjectID instead. It exists only for internal usage by the builders.
+func (m *ResourceMutation) ProjectIDs() (ids []int) {
+	if id := m.project; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetProject resets all changes to the "project" edge.
+func (m *ResourceMutation) ResetProject() {
+	m.project = nil
+	m.clearedproject = false
+}
+
+// AddSegmentIDs adds the "segments" edge to the Segment entity by ids.
+func (m *ResourceMutation) AddSegmentIDs(ids ...int) {
+	if m.segments == nil {
+		m.segments = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.segments[ids[i]] = struct{}{}
+	}
+}
+
+// ClearSegments clears the "segments" edge to the Segment entity.
+func (m *ResourceMutation) ClearSegments() {
+	m.clearedsegments = true
+}
+
+// SegmentsCleared reports if the "segments" edge to the Segment entity was cleared.
+func (m *ResourceMutation) SegmentsCleared() bool {
+	return m.clearedsegments
+}
+
+// RemoveSegmentIDs removes the "segments" edge to the Segment entity by IDs.
+func (m *ResourceMutation) RemoveSegmentIDs(ids ...int) {
+	if m.removedsegments == nil {
+		m.removedsegments = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.segments, ids[i])
+		m.removedsegments[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedSegments returns the removed IDs of the "segments" edge to the Segment entity.
+func (m *ResourceMutation) RemovedSegmentsIDs() (ids []int) {
+	for id := range m.removedsegments {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// SegmentsIDs returns the "segments" edge IDs in the mutation.
+func (m *ResourceMutation) SegmentsIDs() (ids []int) {
+	for id := range m.segments {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetSegments resets all changes to the "segments" edge.
+func (m *ResourceMutation) ResetSegments() {
+	m.segments = nil
+	m.clearedsegments = false
+	m.removedsegments = nil
+}
+
+// AddJobResourceIDs adds the "job_resources" edge to the JobResource entity by ids.
+func (m *ResourceMutation) AddJobResourceIDs(ids ...int) {
+	if m.job_resources == nil {
+		m.job_resources = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.job_resources[ids[i]] = struct{}{}
+	}
+}
+
+// ClearJobResources clears the "job_resources" edge to the JobResource entity.
+func (m *ResourceMutation) ClearJobResources() {
+	m.clearedjob_resources = true
+}
+
+// JobResourcesCleared reports if the "job_resources" edge to the JobResource entity was cleared.
+func (m *ResourceMutation) JobResourcesCleared() bool {
+	return m.clearedjob_resources
+}
+
+// RemoveJobResourceIDs removes the "job_resources" edge to the JobResource entity by IDs.
+func (m *ResourceMutation) RemoveJobResourceIDs(ids ...int) {
+	if m.removedjob_resources == nil {
+		m.removedjob_resources = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.job_resources, ids[i])
+		m.removedjob_resources[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedJobResources returns the removed IDs of the "job_resources" edge to the JobResource entity.
+func (m *ResourceMutation) RemovedJobResourcesIDs() (ids []int) {
+	for id := range m.removedjob_resources {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// JobResourcesIDs returns the "job_resources" edge IDs in the mutation.
+func (m *ResourceMutation) JobResourcesIDs() (ids []int) {
+	for id := range m.job_resources {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetJobResources resets all changes to the "job_resources" edge.
+func (m *ResourceMutation) ResetJobResources() {
+	m.job_resources = nil
+	m.clearedjob_resources = false
+	m.removedjob_resources = nil
+}
+
+// Where appends a list predicates to the ResourceMutation builder.
+func (m *ResourceMutation) Where(ps ...predicate.Resource) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the ResourceMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *ResourceMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Resource, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *ResourceMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *ResourceMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (Resource).
+func (m *ResourceMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *ResourceMutation) Fields() []string {
+	fields := make([]string, 0, 9)
+	if m.created_at != nil {
+		fields = append(fields, resource.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, resource.FieldUpdatedAt)
+	}
+	if m.filename != nil {
+		fields = append(fields, resource.FieldFilename)
+	}
+	if m.format != nil {
+		fields = append(fields, resource.FieldFormat)
+	}
+	if m.storage_path != nil {
+		fields = append(fields, resource.FieldStoragePath)
+	}
+	if m.total_segments != nil {
+		fields = append(fields, resource.FieldTotalSegments)
+	}
+	if m.status != nil {
+		fields = append(fields, resource.FieldStatus)
+	}
+	if m.error_message != nil {
+		fields = append(fields, resource.FieldErrorMessage)
+	}
+	if m.project != nil {
+		fields = append(fields, resource.FieldProjectID)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *ResourceMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case resource.FieldCreatedAt:
+		return m.CreatedAt()
+	case resource.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case resource.FieldFilename:
+		return m.Filename()
+	case resource.FieldFormat:
+		return m.Format()
+	case resource.FieldStoragePath:
+		return m.StoragePath()
+	case resource.FieldTotalSegments:
+		return m.TotalSegments()
+	case resource.FieldStatus:
+		return m.Status()
+	case resource.FieldErrorMessage:
+		return m.ErrorMessage()
+	case resource.FieldProjectID:
+		return m.ProjectID()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *ResourceMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case resource.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case resource.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case resource.FieldFilename:
+		return m.OldFilename(ctx)
+	case resource.FieldFormat:
+		return m.OldFormat(ctx)
+	case resource.FieldStoragePath:
+		return m.OldStoragePath(ctx)
+	case resource.FieldTotalSegments:
+		return m.OldTotalSegments(ctx)
+	case resource.FieldStatus:
+		return m.OldStatus(ctx)
+	case resource.FieldErrorMessage:
+		return m.OldErrorMessage(ctx)
+	case resource.FieldProjectID:
+		return m.OldProjectID(ctx)
+	}
+	return nil, fmt.Errorf("unknown Resource field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ResourceMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case resource.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case resource.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case resource.FieldFilename:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFilename(v)
+		return nil
+	case resource.FieldFormat:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFormat(v)
+		return nil
+	case resource.FieldStoragePath:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStoragePath(v)
+		return nil
+	case resource.FieldTotalSegments:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTotalSegments(v)
+		return nil
+	case resource.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case resource.FieldErrorMessage:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetErrorMessage(v)
+		return nil
+	case resource.FieldProjectID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetProjectID(v)
+		return nil
+	}
+	return fmt.Errorf("unknown Resource field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *ResourceMutation) AddedFields() []string {
+	var fields []string
+	if m.addtotal_segments != nil {
+		fields = append(fields, resource.FieldTotalSegments)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *ResourceMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case resource.FieldTotalSegments:
+		return m.AddedTotalSegments()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ResourceMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case resource.FieldTotalSegments:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTotalSegments(v)
+		return nil
+	}
+	return fmt.Errorf("unknown Resource numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *ResourceMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(resource.FieldErrorMessage) {
+		fields = append(fields, resource.FieldErrorMessage)
+	}
+	if m.FieldCleared(resource.FieldProjectID) {
+		fields = append(fields, resource.FieldProjectID)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *ResourceMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *ResourceMutation) ClearField(name string) error {
+	switch name {
+	case resource.FieldErrorMessage:
+		m.ClearErrorMessage()
+		return nil
+	case resource.FieldProjectID:
+		m.ClearProjectID()
+		return nil
+	}
+	return fmt.Errorf("unknown Resource nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *ResourceMutation) ResetField(name string) error {
+	switch name {
+	case resource.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case resource.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case resource.FieldFilename:
+		m.ResetFilename()
+		return nil
+	case resource.FieldFormat:
+		m.ResetFormat()
+		return nil
+	case resource.FieldStoragePath:
+		m.ResetStoragePath()
+		return nil
+	case resource.FieldTotalSegments:
+		m.ResetTotalSegments()
+		return nil
+	case resource.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case resource.FieldErrorMessage:
+		m.ResetErrorMessage()
+		return nil
+	case resource.FieldProjectID:
+		m.ResetProjectID()
+		return nil
+	}
+	return fmt.Errorf("unknown Resource field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *ResourceMutation) AddedEdges() []string {
+	edges := make([]string, 0, 3)
+	if m.project != nil {
+		edges = append(edges, resource.EdgeProject)
+	}
+	if m.segments != nil {
+		edges = append(edges, resource.EdgeSegments)
+	}
+	if m.job_resources != nil {
+		edges = append(edges, resource.EdgeJobResources)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *ResourceMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case resource.EdgeProject:
+		if id := m.project; id != nil {
+			return []ent.Value{*id}
+		}
+	case resource.EdgeSegments:
+		ids := make([]ent.Value, 0, len(m.segments))
+		for id := range m.segments {
+			ids = append(ids, id)
+		}
+		return ids
+	case resource.EdgeJobResources:
+		ids := make([]ent.Value, 0, len(m.job_resources))
+		for id := range m.job_resources {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *ResourceMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 3)
+	if m.removedsegments != nil {
+		edges = append(edges, resource.EdgeSegments)
+	}
+	if m.removedjob_resources != nil {
+		edges = append(edges, resource.EdgeJobResources)
+	}
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *ResourceMutation) RemovedIDs(name string) []ent.Value {
+	switch name {
+	case resource.EdgeSegments:
+		ids := make([]ent.Value, 0, len(m.removedsegments))
+		for id := range m.removedsegments {
+			ids = append(ids, id)
+		}
+		return ids
+	case resource.EdgeJobResources:
+		ids := make([]ent.Value, 0, len(m.removedjob_resources))
+		for id := range m.removedjob_resources {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *ResourceMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 3)
+	if m.clearedproject {
+		edges = append(edges, resource.EdgeProject)
+	}
+	if m.clearedsegments {
+		edges = append(edges, resource.EdgeSegments)
+	}
+	if m.clearedjob_resources {
+		edges = append(edges, resource.EdgeJobResources)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *ResourceMutation) EdgeCleared(name string) bool {
+	switch name {
+	case resource.EdgeProject:
+		return m.clearedproject
+	case resource.EdgeSegments:
+		return m.clearedsegments
+	case resource.EdgeJobResources:
+		return m.clearedjob_resources
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *ResourceMutation) ClearEdge(name string) error {
+	switch name {
+	case resource.EdgeProject:
+		m.ClearProject()
+		return nil
+	}
+	return fmt.Errorf("unknown Resource unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *ResourceMutation) ResetEdge(name string) error {
+	switch name {
+	case resource.EdgeProject:
+		m.ResetProject()
+		return nil
+	case resource.EdgeSegments:
+		m.ResetSegments()
+		return nil
+	case resource.EdgeJobResources:
+		m.ResetJobResources()
+		return nil
+	}
+	return fmt.Errorf("unknown Resource edge %s", name)
+}
+
 // SegmentMutation represents an operation that mutates the Segment nodes in the graph.
 type SegmentMutation struct {
 	config
@@ -8761,6 +11000,8 @@ type SegmentMutation struct {
 	clearedFields      map[string]struct{}
 	sub_job            *int
 	clearedsub_job     bool
+	resource           *int
+	clearedresource    bool
 	reviewed_by        *int
 	clearedreviewed_by bool
 	done               bool
@@ -9164,6 +11405,55 @@ func (m *SegmentMutation) ResetReviewComment() {
 	delete(m.clearedFields, segment.FieldReviewComment)
 }
 
+// SetResourceID sets the "resource_id" field.
+func (m *SegmentMutation) SetResourceID(i int) {
+	m.resource = &i
+}
+
+// ResourceID returns the value of the "resource_id" field in the mutation.
+func (m *SegmentMutation) ResourceID() (r int, exists bool) {
+	v := m.resource
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResourceID returns the old "resource_id" field's value of the Segment entity.
+// If the Segment object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SegmentMutation) OldResourceID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResourceID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResourceID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResourceID: %w", err)
+	}
+	return oldValue.ResourceID, nil
+}
+
+// ClearResourceID clears the value of the "resource_id" field.
+func (m *SegmentMutation) ClearResourceID() {
+	m.resource = nil
+	m.clearedFields[segment.FieldResourceID] = struct{}{}
+}
+
+// ResourceIDCleared returns if the "resource_id" field was cleared in this mutation.
+func (m *SegmentMutation) ResourceIDCleared() bool {
+	_, ok := m.clearedFields[segment.FieldResourceID]
+	return ok
+}
+
+// ResetResourceID resets all changes to the "resource_id" field.
+func (m *SegmentMutation) ResetResourceID() {
+	m.resource = nil
+	delete(m.clearedFields, segment.FieldResourceID)
+}
+
 // SetSubJobID sets the "sub_job" edge to the SubJob entity by id.
 func (m *SegmentMutation) SetSubJobID(id int) {
 	m.sub_job = &id
@@ -9201,6 +11491,33 @@ func (m *SegmentMutation) SubJobIDs() (ids []int) {
 func (m *SegmentMutation) ResetSubJob() {
 	m.sub_job = nil
 	m.clearedsub_job = false
+}
+
+// ClearResource clears the "resource" edge to the Resource entity.
+func (m *SegmentMutation) ClearResource() {
+	m.clearedresource = true
+	m.clearedFields[segment.FieldResourceID] = struct{}{}
+}
+
+// ResourceCleared reports if the "resource" edge to the Resource entity was cleared.
+func (m *SegmentMutation) ResourceCleared() bool {
+	return m.ResourceIDCleared() || m.clearedresource
+}
+
+// ResourceIDs returns the "resource" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// ResourceID instead. It exists only for internal usage by the builders.
+func (m *SegmentMutation) ResourceIDs() (ids []int) {
+	if id := m.resource; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetResource resets all changes to the "resource" edge.
+func (m *SegmentMutation) ResetResource() {
+	m.resource = nil
+	m.clearedresource = false
 }
 
 // SetReviewedByID sets the "reviewed_by" edge to the User entity by id.
@@ -9276,7 +11593,7 @@ func (m *SegmentMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SegmentMutation) Fields() []string {
-	fields := make([]string, 0, 7)
+	fields := make([]string, 0, 8)
 	if m.created_at != nil {
 		fields = append(fields, segment.FieldCreatedAt)
 	}
@@ -9297,6 +11614,9 @@ func (m *SegmentMutation) Fields() []string {
 	}
 	if m.review_comment != nil {
 		fields = append(fields, segment.FieldReviewComment)
+	}
+	if m.resource != nil {
+		fields = append(fields, segment.FieldResourceID)
 	}
 	return fields
 }
@@ -9320,6 +11640,8 @@ func (m *SegmentMutation) Field(name string) (ent.Value, bool) {
 		return m.Status()
 	case segment.FieldReviewComment:
 		return m.ReviewComment()
+	case segment.FieldResourceID:
+		return m.ResourceID()
 	}
 	return nil, false
 }
@@ -9343,6 +11665,8 @@ func (m *SegmentMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldStatus(ctx)
 	case segment.FieldReviewComment:
 		return m.OldReviewComment(ctx)
+	case segment.FieldResourceID:
+		return m.OldResourceID(ctx)
 	}
 	return nil, fmt.Errorf("unknown Segment field %s", name)
 }
@@ -9401,6 +11725,13 @@ func (m *SegmentMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetReviewComment(v)
 		return nil
+	case segment.FieldResourceID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResourceID(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Segment field %s", name)
 }
@@ -9452,6 +11783,9 @@ func (m *SegmentMutation) ClearedFields() []string {
 	if m.FieldCleared(segment.FieldReviewComment) {
 		fields = append(fields, segment.FieldReviewComment)
 	}
+	if m.FieldCleared(segment.FieldResourceID) {
+		fields = append(fields, segment.FieldResourceID)
+	}
 	return fields
 }
 
@@ -9471,6 +11805,9 @@ func (m *SegmentMutation) ClearField(name string) error {
 		return nil
 	case segment.FieldReviewComment:
 		m.ClearReviewComment()
+		return nil
+	case segment.FieldResourceID:
+		m.ClearResourceID()
 		return nil
 	}
 	return fmt.Errorf("unknown Segment nullable field %s", name)
@@ -9501,15 +11838,21 @@ func (m *SegmentMutation) ResetField(name string) error {
 	case segment.FieldReviewComment:
 		m.ResetReviewComment()
 		return nil
+	case segment.FieldResourceID:
+		m.ResetResourceID()
+		return nil
 	}
 	return fmt.Errorf("unknown Segment field %s", name)
 }
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *SegmentMutation) AddedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 3)
 	if m.sub_job != nil {
 		edges = append(edges, segment.EdgeSubJob)
+	}
+	if m.resource != nil {
+		edges = append(edges, segment.EdgeResource)
 	}
 	if m.reviewed_by != nil {
 		edges = append(edges, segment.EdgeReviewedBy)
@@ -9525,6 +11868,10 @@ func (m *SegmentMutation) AddedIDs(name string) []ent.Value {
 		if id := m.sub_job; id != nil {
 			return []ent.Value{*id}
 		}
+	case segment.EdgeResource:
+		if id := m.resource; id != nil {
+			return []ent.Value{*id}
+		}
 	case segment.EdgeReviewedBy:
 		if id := m.reviewed_by; id != nil {
 			return []ent.Value{*id}
@@ -9535,7 +11882,7 @@ func (m *SegmentMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *SegmentMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 3)
 	return edges
 }
 
@@ -9547,9 +11894,12 @@ func (m *SegmentMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *SegmentMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 3)
 	if m.clearedsub_job {
 		edges = append(edges, segment.EdgeSubJob)
+	}
+	if m.clearedresource {
+		edges = append(edges, segment.EdgeResource)
 	}
 	if m.clearedreviewed_by {
 		edges = append(edges, segment.EdgeReviewedBy)
@@ -9563,6 +11913,8 @@ func (m *SegmentMutation) EdgeCleared(name string) bool {
 	switch name {
 	case segment.EdgeSubJob:
 		return m.clearedsub_job
+	case segment.EdgeResource:
+		return m.clearedresource
 	case segment.EdgeReviewedBy:
 		return m.clearedreviewed_by
 	}
@@ -9575,6 +11927,9 @@ func (m *SegmentMutation) ClearEdge(name string) error {
 	switch name {
 	case segment.EdgeSubJob:
 		m.ClearSubJob()
+		return nil
+	case segment.EdgeResource:
+		m.ClearResource()
 		return nil
 	case segment.EdgeReviewedBy:
 		m.ClearReviewedBy()
@@ -9589,6 +11944,9 @@ func (m *SegmentMutation) ResetEdge(name string) error {
 	switch name {
 	case segment.EdgeSubJob:
 		m.ResetSubJob()
+		return nil
+	case segment.EdgeResource:
+		m.ResetResource()
 		return nil
 	case segment.EdgeReviewedBy:
 		m.ResetReviewedBy()
@@ -12309,6 +14667,1273 @@ func (m *TMEntryMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown TMEntry edge %s", name)
 }
 
+// TranslationJobMutation represents an operation that mutates the TranslationJob nodes in the graph.
+type TranslationJobMutation struct {
+	config
+	op                     Op
+	typ                    string
+	id                     *int
+	created_at             *time.Time
+	updated_at             *time.Time
+	status                 *string
+	trigger_type           *string
+	translation_config     *map[string]interface{}
+	resource_count         *int
+	addresource_count      *int
+	completed_resources    *int
+	addcompleted_resources *int
+	failed_resources       *int
+	addfailed_resources    *int
+	total_segments         *int
+	addtotal_segments      *int
+	completed_segments     *int
+	addcompleted_segments  *int
+	error_message          *string
+	clearedFields          map[string]struct{}
+	project                *int
+	clearedproject         bool
+	created_by             *int
+	clearedcreated_by      bool
+	job_resources          map[int]struct{}
+	removedjob_resources   map[int]struct{}
+	clearedjob_resources   bool
+	done                   bool
+	oldValue               func(context.Context) (*TranslationJob, error)
+	predicates             []predicate.TranslationJob
+}
+
+var _ ent.Mutation = (*TranslationJobMutation)(nil)
+
+// translationjobOption allows management of the mutation configuration using functional options.
+type translationjobOption func(*TranslationJobMutation)
+
+// newTranslationJobMutation creates new mutation for the TranslationJob entity.
+func newTranslationJobMutation(c config, op Op, opts ...translationjobOption) *TranslationJobMutation {
+	m := &TranslationJobMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeTranslationJob,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withTranslationJobID sets the ID field of the mutation.
+func withTranslationJobID(id int) translationjobOption {
+	return func(m *TranslationJobMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *TranslationJob
+		)
+		m.oldValue = func(ctx context.Context) (*TranslationJob, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().TranslationJob.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withTranslationJob sets the old TranslationJob of the mutation.
+func withTranslationJob(node *TranslationJob) translationjobOption {
+	return func(m *TranslationJobMutation) {
+		m.oldValue = func(context.Context) (*TranslationJob, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m TranslationJobMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m TranslationJobMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *TranslationJobMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *TranslationJobMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().TranslationJob.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *TranslationJobMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *TranslationJobMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the TranslationJob entity.
+// If the TranslationJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TranslationJobMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *TranslationJobMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *TranslationJobMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *TranslationJobMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the TranslationJob entity.
+// If the TranslationJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TranslationJobMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *TranslationJobMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetStatus sets the "status" field.
+func (m *TranslationJobMutation) SetStatus(s string) {
+	m.status = &s
+}
+
+// Status returns the value of the "status" field in the mutation.
+func (m *TranslationJobMutation) Status() (r string, exists bool) {
+	v := m.status
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStatus returns the old "status" field's value of the TranslationJob entity.
+// If the TranslationJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TranslationJobMutation) OldStatus(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStatus requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
+	}
+	return oldValue.Status, nil
+}
+
+// ResetStatus resets all changes to the "status" field.
+func (m *TranslationJobMutation) ResetStatus() {
+	m.status = nil
+}
+
+// SetTriggerType sets the "trigger_type" field.
+func (m *TranslationJobMutation) SetTriggerType(s string) {
+	m.trigger_type = &s
+}
+
+// TriggerType returns the value of the "trigger_type" field in the mutation.
+func (m *TranslationJobMutation) TriggerType() (r string, exists bool) {
+	v := m.trigger_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTriggerType returns the old "trigger_type" field's value of the TranslationJob entity.
+// If the TranslationJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TranslationJobMutation) OldTriggerType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTriggerType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTriggerType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTriggerType: %w", err)
+	}
+	return oldValue.TriggerType, nil
+}
+
+// ResetTriggerType resets all changes to the "trigger_type" field.
+func (m *TranslationJobMutation) ResetTriggerType() {
+	m.trigger_type = nil
+}
+
+// SetTranslationConfig sets the "translation_config" field.
+func (m *TranslationJobMutation) SetTranslationConfig(value map[string]interface{}) {
+	m.translation_config = &value
+}
+
+// TranslationConfig returns the value of the "translation_config" field in the mutation.
+func (m *TranslationJobMutation) TranslationConfig() (r map[string]interface{}, exists bool) {
+	v := m.translation_config
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTranslationConfig returns the old "translation_config" field's value of the TranslationJob entity.
+// If the TranslationJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TranslationJobMutation) OldTranslationConfig(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTranslationConfig is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTranslationConfig requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTranslationConfig: %w", err)
+	}
+	return oldValue.TranslationConfig, nil
+}
+
+// ResetTranslationConfig resets all changes to the "translation_config" field.
+func (m *TranslationJobMutation) ResetTranslationConfig() {
+	m.translation_config = nil
+}
+
+// SetResourceCount sets the "resource_count" field.
+func (m *TranslationJobMutation) SetResourceCount(i int) {
+	m.resource_count = &i
+	m.addresource_count = nil
+}
+
+// ResourceCount returns the value of the "resource_count" field in the mutation.
+func (m *TranslationJobMutation) ResourceCount() (r int, exists bool) {
+	v := m.resource_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldResourceCount returns the old "resource_count" field's value of the TranslationJob entity.
+// If the TranslationJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TranslationJobMutation) OldResourceCount(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldResourceCount is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldResourceCount requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldResourceCount: %w", err)
+	}
+	return oldValue.ResourceCount, nil
+}
+
+// AddResourceCount adds i to the "resource_count" field.
+func (m *TranslationJobMutation) AddResourceCount(i int) {
+	if m.addresource_count != nil {
+		*m.addresource_count += i
+	} else {
+		m.addresource_count = &i
+	}
+}
+
+// AddedResourceCount returns the value that was added to the "resource_count" field in this mutation.
+func (m *TranslationJobMutation) AddedResourceCount() (r int, exists bool) {
+	v := m.addresource_count
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetResourceCount resets all changes to the "resource_count" field.
+func (m *TranslationJobMutation) ResetResourceCount() {
+	m.resource_count = nil
+	m.addresource_count = nil
+}
+
+// SetCompletedResources sets the "completed_resources" field.
+func (m *TranslationJobMutation) SetCompletedResources(i int) {
+	m.completed_resources = &i
+	m.addcompleted_resources = nil
+}
+
+// CompletedResources returns the value of the "completed_resources" field in the mutation.
+func (m *TranslationJobMutation) CompletedResources() (r int, exists bool) {
+	v := m.completed_resources
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCompletedResources returns the old "completed_resources" field's value of the TranslationJob entity.
+// If the TranslationJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TranslationJobMutation) OldCompletedResources(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCompletedResources is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCompletedResources requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCompletedResources: %w", err)
+	}
+	return oldValue.CompletedResources, nil
+}
+
+// AddCompletedResources adds i to the "completed_resources" field.
+func (m *TranslationJobMutation) AddCompletedResources(i int) {
+	if m.addcompleted_resources != nil {
+		*m.addcompleted_resources += i
+	} else {
+		m.addcompleted_resources = &i
+	}
+}
+
+// AddedCompletedResources returns the value that was added to the "completed_resources" field in this mutation.
+func (m *TranslationJobMutation) AddedCompletedResources() (r int, exists bool) {
+	v := m.addcompleted_resources
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCompletedResources resets all changes to the "completed_resources" field.
+func (m *TranslationJobMutation) ResetCompletedResources() {
+	m.completed_resources = nil
+	m.addcompleted_resources = nil
+}
+
+// SetFailedResources sets the "failed_resources" field.
+func (m *TranslationJobMutation) SetFailedResources(i int) {
+	m.failed_resources = &i
+	m.addfailed_resources = nil
+}
+
+// FailedResources returns the value of the "failed_resources" field in the mutation.
+func (m *TranslationJobMutation) FailedResources() (r int, exists bool) {
+	v := m.failed_resources
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldFailedResources returns the old "failed_resources" field's value of the TranslationJob entity.
+// If the TranslationJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TranslationJobMutation) OldFailedResources(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldFailedResources is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldFailedResources requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldFailedResources: %w", err)
+	}
+	return oldValue.FailedResources, nil
+}
+
+// AddFailedResources adds i to the "failed_resources" field.
+func (m *TranslationJobMutation) AddFailedResources(i int) {
+	if m.addfailed_resources != nil {
+		*m.addfailed_resources += i
+	} else {
+		m.addfailed_resources = &i
+	}
+}
+
+// AddedFailedResources returns the value that was added to the "failed_resources" field in this mutation.
+func (m *TranslationJobMutation) AddedFailedResources() (r int, exists bool) {
+	v := m.addfailed_resources
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetFailedResources resets all changes to the "failed_resources" field.
+func (m *TranslationJobMutation) ResetFailedResources() {
+	m.failed_resources = nil
+	m.addfailed_resources = nil
+}
+
+// SetTotalSegments sets the "total_segments" field.
+func (m *TranslationJobMutation) SetTotalSegments(i int) {
+	m.total_segments = &i
+	m.addtotal_segments = nil
+}
+
+// TotalSegments returns the value of the "total_segments" field in the mutation.
+func (m *TranslationJobMutation) TotalSegments() (r int, exists bool) {
+	v := m.total_segments
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldTotalSegments returns the old "total_segments" field's value of the TranslationJob entity.
+// If the TranslationJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TranslationJobMutation) OldTotalSegments(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldTotalSegments is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldTotalSegments requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldTotalSegments: %w", err)
+	}
+	return oldValue.TotalSegments, nil
+}
+
+// AddTotalSegments adds i to the "total_segments" field.
+func (m *TranslationJobMutation) AddTotalSegments(i int) {
+	if m.addtotal_segments != nil {
+		*m.addtotal_segments += i
+	} else {
+		m.addtotal_segments = &i
+	}
+}
+
+// AddedTotalSegments returns the value that was added to the "total_segments" field in this mutation.
+func (m *TranslationJobMutation) AddedTotalSegments() (r int, exists bool) {
+	v := m.addtotal_segments
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetTotalSegments resets all changes to the "total_segments" field.
+func (m *TranslationJobMutation) ResetTotalSegments() {
+	m.total_segments = nil
+	m.addtotal_segments = nil
+}
+
+// SetCompletedSegments sets the "completed_segments" field.
+func (m *TranslationJobMutation) SetCompletedSegments(i int) {
+	m.completed_segments = &i
+	m.addcompleted_segments = nil
+}
+
+// CompletedSegments returns the value of the "completed_segments" field in the mutation.
+func (m *TranslationJobMutation) CompletedSegments() (r int, exists bool) {
+	v := m.completed_segments
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCompletedSegments returns the old "completed_segments" field's value of the TranslationJob entity.
+// If the TranslationJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TranslationJobMutation) OldCompletedSegments(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCompletedSegments is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCompletedSegments requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCompletedSegments: %w", err)
+	}
+	return oldValue.CompletedSegments, nil
+}
+
+// AddCompletedSegments adds i to the "completed_segments" field.
+func (m *TranslationJobMutation) AddCompletedSegments(i int) {
+	if m.addcompleted_segments != nil {
+		*m.addcompleted_segments += i
+	} else {
+		m.addcompleted_segments = &i
+	}
+}
+
+// AddedCompletedSegments returns the value that was added to the "completed_segments" field in this mutation.
+func (m *TranslationJobMutation) AddedCompletedSegments() (r int, exists bool) {
+	v := m.addcompleted_segments
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetCompletedSegments resets all changes to the "completed_segments" field.
+func (m *TranslationJobMutation) ResetCompletedSegments() {
+	m.completed_segments = nil
+	m.addcompleted_segments = nil
+}
+
+// SetErrorMessage sets the "error_message" field.
+func (m *TranslationJobMutation) SetErrorMessage(s string) {
+	m.error_message = &s
+}
+
+// ErrorMessage returns the value of the "error_message" field in the mutation.
+func (m *TranslationJobMutation) ErrorMessage() (r string, exists bool) {
+	v := m.error_message
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldErrorMessage returns the old "error_message" field's value of the TranslationJob entity.
+// If the TranslationJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TranslationJobMutation) OldErrorMessage(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldErrorMessage is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldErrorMessage requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldErrorMessage: %w", err)
+	}
+	return oldValue.ErrorMessage, nil
+}
+
+// ClearErrorMessage clears the value of the "error_message" field.
+func (m *TranslationJobMutation) ClearErrorMessage() {
+	m.error_message = nil
+	m.clearedFields[translationjob.FieldErrorMessage] = struct{}{}
+}
+
+// ErrorMessageCleared returns if the "error_message" field was cleared in this mutation.
+func (m *TranslationJobMutation) ErrorMessageCleared() bool {
+	_, ok := m.clearedFields[translationjob.FieldErrorMessage]
+	return ok
+}
+
+// ResetErrorMessage resets all changes to the "error_message" field.
+func (m *TranslationJobMutation) ResetErrorMessage() {
+	m.error_message = nil
+	delete(m.clearedFields, translationjob.FieldErrorMessage)
+}
+
+// SetProjectID sets the "project" edge to the Project entity by id.
+func (m *TranslationJobMutation) SetProjectID(id int) {
+	m.project = &id
+}
+
+// ClearProject clears the "project" edge to the Project entity.
+func (m *TranslationJobMutation) ClearProject() {
+	m.clearedproject = true
+}
+
+// ProjectCleared reports if the "project" edge to the Project entity was cleared.
+func (m *TranslationJobMutation) ProjectCleared() bool {
+	return m.clearedproject
+}
+
+// ProjectID returns the "project" edge ID in the mutation.
+func (m *TranslationJobMutation) ProjectID() (id int, exists bool) {
+	if m.project != nil {
+		return *m.project, true
+	}
+	return
+}
+
+// ProjectIDs returns the "project" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// ProjectID instead. It exists only for internal usage by the builders.
+func (m *TranslationJobMutation) ProjectIDs() (ids []int) {
+	if id := m.project; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetProject resets all changes to the "project" edge.
+func (m *TranslationJobMutation) ResetProject() {
+	m.project = nil
+	m.clearedproject = false
+}
+
+// SetCreatedByID sets the "created_by" edge to the User entity by id.
+func (m *TranslationJobMutation) SetCreatedByID(id int) {
+	m.created_by = &id
+}
+
+// ClearCreatedBy clears the "created_by" edge to the User entity.
+func (m *TranslationJobMutation) ClearCreatedBy() {
+	m.clearedcreated_by = true
+}
+
+// CreatedByCleared reports if the "created_by" edge to the User entity was cleared.
+func (m *TranslationJobMutation) CreatedByCleared() bool {
+	return m.clearedcreated_by
+}
+
+// CreatedByID returns the "created_by" edge ID in the mutation.
+func (m *TranslationJobMutation) CreatedByID() (id int, exists bool) {
+	if m.created_by != nil {
+		return *m.created_by, true
+	}
+	return
+}
+
+// CreatedByIDs returns the "created_by" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// CreatedByID instead. It exists only for internal usage by the builders.
+func (m *TranslationJobMutation) CreatedByIDs() (ids []int) {
+	if id := m.created_by; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetCreatedBy resets all changes to the "created_by" edge.
+func (m *TranslationJobMutation) ResetCreatedBy() {
+	m.created_by = nil
+	m.clearedcreated_by = false
+}
+
+// AddJobResourceIDs adds the "job_resources" edge to the JobResource entity by ids.
+func (m *TranslationJobMutation) AddJobResourceIDs(ids ...int) {
+	if m.job_resources == nil {
+		m.job_resources = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.job_resources[ids[i]] = struct{}{}
+	}
+}
+
+// ClearJobResources clears the "job_resources" edge to the JobResource entity.
+func (m *TranslationJobMutation) ClearJobResources() {
+	m.clearedjob_resources = true
+}
+
+// JobResourcesCleared reports if the "job_resources" edge to the JobResource entity was cleared.
+func (m *TranslationJobMutation) JobResourcesCleared() bool {
+	return m.clearedjob_resources
+}
+
+// RemoveJobResourceIDs removes the "job_resources" edge to the JobResource entity by IDs.
+func (m *TranslationJobMutation) RemoveJobResourceIDs(ids ...int) {
+	if m.removedjob_resources == nil {
+		m.removedjob_resources = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.job_resources, ids[i])
+		m.removedjob_resources[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedJobResources returns the removed IDs of the "job_resources" edge to the JobResource entity.
+func (m *TranslationJobMutation) RemovedJobResourcesIDs() (ids []int) {
+	for id := range m.removedjob_resources {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// JobResourcesIDs returns the "job_resources" edge IDs in the mutation.
+func (m *TranslationJobMutation) JobResourcesIDs() (ids []int) {
+	for id := range m.job_resources {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetJobResources resets all changes to the "job_resources" edge.
+func (m *TranslationJobMutation) ResetJobResources() {
+	m.job_resources = nil
+	m.clearedjob_resources = false
+	m.removedjob_resources = nil
+}
+
+// Where appends a list predicates to the TranslationJobMutation builder.
+func (m *TranslationJobMutation) Where(ps ...predicate.TranslationJob) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the TranslationJobMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *TranslationJobMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.TranslationJob, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *TranslationJobMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *TranslationJobMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (TranslationJob).
+func (m *TranslationJobMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *TranslationJobMutation) Fields() []string {
+	fields := make([]string, 0, 11)
+	if m.created_at != nil {
+		fields = append(fields, translationjob.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, translationjob.FieldUpdatedAt)
+	}
+	if m.status != nil {
+		fields = append(fields, translationjob.FieldStatus)
+	}
+	if m.trigger_type != nil {
+		fields = append(fields, translationjob.FieldTriggerType)
+	}
+	if m.translation_config != nil {
+		fields = append(fields, translationjob.FieldTranslationConfig)
+	}
+	if m.resource_count != nil {
+		fields = append(fields, translationjob.FieldResourceCount)
+	}
+	if m.completed_resources != nil {
+		fields = append(fields, translationjob.FieldCompletedResources)
+	}
+	if m.failed_resources != nil {
+		fields = append(fields, translationjob.FieldFailedResources)
+	}
+	if m.total_segments != nil {
+		fields = append(fields, translationjob.FieldTotalSegments)
+	}
+	if m.completed_segments != nil {
+		fields = append(fields, translationjob.FieldCompletedSegments)
+	}
+	if m.error_message != nil {
+		fields = append(fields, translationjob.FieldErrorMessage)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *TranslationJobMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case translationjob.FieldCreatedAt:
+		return m.CreatedAt()
+	case translationjob.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case translationjob.FieldStatus:
+		return m.Status()
+	case translationjob.FieldTriggerType:
+		return m.TriggerType()
+	case translationjob.FieldTranslationConfig:
+		return m.TranslationConfig()
+	case translationjob.FieldResourceCount:
+		return m.ResourceCount()
+	case translationjob.FieldCompletedResources:
+		return m.CompletedResources()
+	case translationjob.FieldFailedResources:
+		return m.FailedResources()
+	case translationjob.FieldTotalSegments:
+		return m.TotalSegments()
+	case translationjob.FieldCompletedSegments:
+		return m.CompletedSegments()
+	case translationjob.FieldErrorMessage:
+		return m.ErrorMessage()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *TranslationJobMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case translationjob.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case translationjob.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case translationjob.FieldStatus:
+		return m.OldStatus(ctx)
+	case translationjob.FieldTriggerType:
+		return m.OldTriggerType(ctx)
+	case translationjob.FieldTranslationConfig:
+		return m.OldTranslationConfig(ctx)
+	case translationjob.FieldResourceCount:
+		return m.OldResourceCount(ctx)
+	case translationjob.FieldCompletedResources:
+		return m.OldCompletedResources(ctx)
+	case translationjob.FieldFailedResources:
+		return m.OldFailedResources(ctx)
+	case translationjob.FieldTotalSegments:
+		return m.OldTotalSegments(ctx)
+	case translationjob.FieldCompletedSegments:
+		return m.OldCompletedSegments(ctx)
+	case translationjob.FieldErrorMessage:
+		return m.OldErrorMessage(ctx)
+	}
+	return nil, fmt.Errorf("unknown TranslationJob field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *TranslationJobMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case translationjob.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case translationjob.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case translationjob.FieldStatus:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStatus(v)
+		return nil
+	case translationjob.FieldTriggerType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTriggerType(v)
+		return nil
+	case translationjob.FieldTranslationConfig:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTranslationConfig(v)
+		return nil
+	case translationjob.FieldResourceCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetResourceCount(v)
+		return nil
+	case translationjob.FieldCompletedResources:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCompletedResources(v)
+		return nil
+	case translationjob.FieldFailedResources:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetFailedResources(v)
+		return nil
+	case translationjob.FieldTotalSegments:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetTotalSegments(v)
+		return nil
+	case translationjob.FieldCompletedSegments:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCompletedSegments(v)
+		return nil
+	case translationjob.FieldErrorMessage:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetErrorMessage(v)
+		return nil
+	}
+	return fmt.Errorf("unknown TranslationJob field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *TranslationJobMutation) AddedFields() []string {
+	var fields []string
+	if m.addresource_count != nil {
+		fields = append(fields, translationjob.FieldResourceCount)
+	}
+	if m.addcompleted_resources != nil {
+		fields = append(fields, translationjob.FieldCompletedResources)
+	}
+	if m.addfailed_resources != nil {
+		fields = append(fields, translationjob.FieldFailedResources)
+	}
+	if m.addtotal_segments != nil {
+		fields = append(fields, translationjob.FieldTotalSegments)
+	}
+	if m.addcompleted_segments != nil {
+		fields = append(fields, translationjob.FieldCompletedSegments)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *TranslationJobMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case translationjob.FieldResourceCount:
+		return m.AddedResourceCount()
+	case translationjob.FieldCompletedResources:
+		return m.AddedCompletedResources()
+	case translationjob.FieldFailedResources:
+		return m.AddedFailedResources()
+	case translationjob.FieldTotalSegments:
+		return m.AddedTotalSegments()
+	case translationjob.FieldCompletedSegments:
+		return m.AddedCompletedSegments()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *TranslationJobMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case translationjob.FieldResourceCount:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddResourceCount(v)
+		return nil
+	case translationjob.FieldCompletedResources:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCompletedResources(v)
+		return nil
+	case translationjob.FieldFailedResources:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddFailedResources(v)
+		return nil
+	case translationjob.FieldTotalSegments:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddTotalSegments(v)
+		return nil
+	case translationjob.FieldCompletedSegments:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddCompletedSegments(v)
+		return nil
+	}
+	return fmt.Errorf("unknown TranslationJob numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *TranslationJobMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(translationjob.FieldErrorMessage) {
+		fields = append(fields, translationjob.FieldErrorMessage)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *TranslationJobMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *TranslationJobMutation) ClearField(name string) error {
+	switch name {
+	case translationjob.FieldErrorMessage:
+		m.ClearErrorMessage()
+		return nil
+	}
+	return fmt.Errorf("unknown TranslationJob nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *TranslationJobMutation) ResetField(name string) error {
+	switch name {
+	case translationjob.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case translationjob.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case translationjob.FieldStatus:
+		m.ResetStatus()
+		return nil
+	case translationjob.FieldTriggerType:
+		m.ResetTriggerType()
+		return nil
+	case translationjob.FieldTranslationConfig:
+		m.ResetTranslationConfig()
+		return nil
+	case translationjob.FieldResourceCount:
+		m.ResetResourceCount()
+		return nil
+	case translationjob.FieldCompletedResources:
+		m.ResetCompletedResources()
+		return nil
+	case translationjob.FieldFailedResources:
+		m.ResetFailedResources()
+		return nil
+	case translationjob.FieldTotalSegments:
+		m.ResetTotalSegments()
+		return nil
+	case translationjob.FieldCompletedSegments:
+		m.ResetCompletedSegments()
+		return nil
+	case translationjob.FieldErrorMessage:
+		m.ResetErrorMessage()
+		return nil
+	}
+	return fmt.Errorf("unknown TranslationJob field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *TranslationJobMutation) AddedEdges() []string {
+	edges := make([]string, 0, 3)
+	if m.project != nil {
+		edges = append(edges, translationjob.EdgeProject)
+	}
+	if m.created_by != nil {
+		edges = append(edges, translationjob.EdgeCreatedBy)
+	}
+	if m.job_resources != nil {
+		edges = append(edges, translationjob.EdgeJobResources)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *TranslationJobMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case translationjob.EdgeProject:
+		if id := m.project; id != nil {
+			return []ent.Value{*id}
+		}
+	case translationjob.EdgeCreatedBy:
+		if id := m.created_by; id != nil {
+			return []ent.Value{*id}
+		}
+	case translationjob.EdgeJobResources:
+		ids := make([]ent.Value, 0, len(m.job_resources))
+		for id := range m.job_resources {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *TranslationJobMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 3)
+	if m.removedjob_resources != nil {
+		edges = append(edges, translationjob.EdgeJobResources)
+	}
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *TranslationJobMutation) RemovedIDs(name string) []ent.Value {
+	switch name {
+	case translationjob.EdgeJobResources:
+		ids := make([]ent.Value, 0, len(m.removedjob_resources))
+		for id := range m.removedjob_resources {
+			ids = append(ids, id)
+		}
+		return ids
+	}
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *TranslationJobMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 3)
+	if m.clearedproject {
+		edges = append(edges, translationjob.EdgeProject)
+	}
+	if m.clearedcreated_by {
+		edges = append(edges, translationjob.EdgeCreatedBy)
+	}
+	if m.clearedjob_resources {
+		edges = append(edges, translationjob.EdgeJobResources)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *TranslationJobMutation) EdgeCleared(name string) bool {
+	switch name {
+	case translationjob.EdgeProject:
+		return m.clearedproject
+	case translationjob.EdgeCreatedBy:
+		return m.clearedcreated_by
+	case translationjob.EdgeJobResources:
+		return m.clearedjob_resources
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *TranslationJobMutation) ClearEdge(name string) error {
+	switch name {
+	case translationjob.EdgeProject:
+		m.ClearProject()
+		return nil
+	case translationjob.EdgeCreatedBy:
+		m.ClearCreatedBy()
+		return nil
+	}
+	return fmt.Errorf("unknown TranslationJob unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *TranslationJobMutation) ResetEdge(name string) error {
+	switch name {
+	case translationjob.EdgeProject:
+		m.ResetProject()
+		return nil
+	case translationjob.EdgeCreatedBy:
+		m.ResetCreatedBy()
+		return nil
+	case translationjob.EdgeJobResources:
+		m.ResetJobResources()
+		return nil
+	}
+	return fmt.Errorf("unknown TranslationJob edge %s", name)
+}
+
 // UsageRecordMutation represents an operation that mutates the UsageRecord nodes in the graph.
 type UsageRecordMutation struct {
 	config
@@ -13417,45 +17042,48 @@ func (m *UsageRecordMutation) ResetEdge(name string) error {
 // UserMutation represents an operation that mutates the User nodes in the graph.
 type UserMutation struct {
 	config
-	op                       Op
-	typ                      string
-	id                       *int
-	created_at               *time.Time
-	updated_at               *time.Time
-	username                 *string
-	password_hash            *string
-	email                    *string
-	display_name             *string
-	role                     *string
-	active                   *bool
-	clearedFields            map[string]struct{}
-	jobs                     map[int]struct{}
-	removedjobs              map[int]struct{}
-	clearedjobs              bool
-	reviewed_segments        map[int]struct{}
-	removedreviewed_segments map[int]struct{}
-	clearedreviewed_segments bool
-	refresh_tokens           map[int]struct{}
-	removedrefresh_tokens    map[int]struct{}
-	clearedrefresh_tokens    bool
-	memberships              map[int]struct{}
-	removedmemberships       map[int]struct{}
-	clearedmemberships       bool
-	user_backends            map[int]struct{}
-	removeduser_backends     map[int]struct{}
-	cleareduser_backends     bool
-	owned_projects           map[int]struct{}
-	removedowned_projects    map[int]struct{}
-	clearedowned_projects    bool
-	activity_logs            map[int]struct{}
-	removedactivity_logs     map[int]struct{}
-	clearedactivity_logs     bool
-	usage_records            map[int]struct{}
-	removedusage_records     map[int]struct{}
-	clearedusage_records     bool
-	done                     bool
-	oldValue                 func(context.Context) (*User, error)
-	predicates               []predicate.User
+	op                              Op
+	typ                             string
+	id                              *int
+	created_at                      *time.Time
+	updated_at                      *time.Time
+	username                        *string
+	password_hash                   *string
+	email                           *string
+	display_name                    *string
+	role                            *string
+	active                          *bool
+	clearedFields                   map[string]struct{}
+	jobs                            map[int]struct{}
+	removedjobs                     map[int]struct{}
+	clearedjobs                     bool
+	created_translation_jobs        map[int]struct{}
+	removedcreated_translation_jobs map[int]struct{}
+	clearedcreated_translation_jobs bool
+	reviewed_segments               map[int]struct{}
+	removedreviewed_segments        map[int]struct{}
+	clearedreviewed_segments        bool
+	refresh_tokens                  map[int]struct{}
+	removedrefresh_tokens           map[int]struct{}
+	clearedrefresh_tokens           bool
+	memberships                     map[int]struct{}
+	removedmemberships              map[int]struct{}
+	clearedmemberships              bool
+	user_backends                   map[int]struct{}
+	removeduser_backends            map[int]struct{}
+	cleareduser_backends            bool
+	owned_projects                  map[int]struct{}
+	removedowned_projects           map[int]struct{}
+	clearedowned_projects           bool
+	activity_logs                   map[int]struct{}
+	removedactivity_logs            map[int]struct{}
+	clearedactivity_logs            bool
+	usage_records                   map[int]struct{}
+	removedusage_records            map[int]struct{}
+	clearedusage_records            bool
+	done                            bool
+	oldValue                        func(context.Context) (*User, error)
+	predicates                      []predicate.User
 }
 
 var _ ent.Mutation = (*UserMutation)(nil)
@@ -13909,6 +17537,60 @@ func (m *UserMutation) ResetJobs() {
 	m.jobs = nil
 	m.clearedjobs = false
 	m.removedjobs = nil
+}
+
+// AddCreatedTranslationJobIDs adds the "created_translation_jobs" edge to the TranslationJob entity by ids.
+func (m *UserMutation) AddCreatedTranslationJobIDs(ids ...int) {
+	if m.created_translation_jobs == nil {
+		m.created_translation_jobs = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.created_translation_jobs[ids[i]] = struct{}{}
+	}
+}
+
+// ClearCreatedTranslationJobs clears the "created_translation_jobs" edge to the TranslationJob entity.
+func (m *UserMutation) ClearCreatedTranslationJobs() {
+	m.clearedcreated_translation_jobs = true
+}
+
+// CreatedTranslationJobsCleared reports if the "created_translation_jobs" edge to the TranslationJob entity was cleared.
+func (m *UserMutation) CreatedTranslationJobsCleared() bool {
+	return m.clearedcreated_translation_jobs
+}
+
+// RemoveCreatedTranslationJobIDs removes the "created_translation_jobs" edge to the TranslationJob entity by IDs.
+func (m *UserMutation) RemoveCreatedTranslationJobIDs(ids ...int) {
+	if m.removedcreated_translation_jobs == nil {
+		m.removedcreated_translation_jobs = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.created_translation_jobs, ids[i])
+		m.removedcreated_translation_jobs[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedCreatedTranslationJobs returns the removed IDs of the "created_translation_jobs" edge to the TranslationJob entity.
+func (m *UserMutation) RemovedCreatedTranslationJobsIDs() (ids []int) {
+	for id := range m.removedcreated_translation_jobs {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// CreatedTranslationJobsIDs returns the "created_translation_jobs" edge IDs in the mutation.
+func (m *UserMutation) CreatedTranslationJobsIDs() (ids []int) {
+	for id := range m.created_translation_jobs {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetCreatedTranslationJobs resets all changes to the "created_translation_jobs" edge.
+func (m *UserMutation) ResetCreatedTranslationJobs() {
+	m.created_translation_jobs = nil
+	m.clearedcreated_translation_jobs = false
+	m.removedcreated_translation_jobs = nil
 }
 
 // AddReviewedSegmentIDs adds the "reviewed_segments" edge to the Segment entity by ids.
@@ -14550,9 +18232,12 @@ func (m *UserMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *UserMutation) AddedEdges() []string {
-	edges := make([]string, 0, 8)
+	edges := make([]string, 0, 9)
 	if m.jobs != nil {
 		edges = append(edges, user.EdgeJobs)
+	}
+	if m.created_translation_jobs != nil {
+		edges = append(edges, user.EdgeCreatedTranslationJobs)
 	}
 	if m.reviewed_segments != nil {
 		edges = append(edges, user.EdgeReviewedSegments)
@@ -14585,6 +18270,12 @@ func (m *UserMutation) AddedIDs(name string) []ent.Value {
 	case user.EdgeJobs:
 		ids := make([]ent.Value, 0, len(m.jobs))
 		for id := range m.jobs {
+			ids = append(ids, id)
+		}
+		return ids
+	case user.EdgeCreatedTranslationJobs:
+		ids := make([]ent.Value, 0, len(m.created_translation_jobs))
+		for id := range m.created_translation_jobs {
 			ids = append(ids, id)
 		}
 		return ids
@@ -14636,9 +18327,12 @@ func (m *UserMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *UserMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 8)
+	edges := make([]string, 0, 9)
 	if m.removedjobs != nil {
 		edges = append(edges, user.EdgeJobs)
+	}
+	if m.removedcreated_translation_jobs != nil {
+		edges = append(edges, user.EdgeCreatedTranslationJobs)
 	}
 	if m.removedreviewed_segments != nil {
 		edges = append(edges, user.EdgeReviewedSegments)
@@ -14671,6 +18365,12 @@ func (m *UserMutation) RemovedIDs(name string) []ent.Value {
 	case user.EdgeJobs:
 		ids := make([]ent.Value, 0, len(m.removedjobs))
 		for id := range m.removedjobs {
+			ids = append(ids, id)
+		}
+		return ids
+	case user.EdgeCreatedTranslationJobs:
+		ids := make([]ent.Value, 0, len(m.removedcreated_translation_jobs))
+		for id := range m.removedcreated_translation_jobs {
 			ids = append(ids, id)
 		}
 		return ids
@@ -14722,9 +18422,12 @@ func (m *UserMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *UserMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 8)
+	edges := make([]string, 0, 9)
 	if m.clearedjobs {
 		edges = append(edges, user.EdgeJobs)
+	}
+	if m.clearedcreated_translation_jobs {
+		edges = append(edges, user.EdgeCreatedTranslationJobs)
 	}
 	if m.clearedreviewed_segments {
 		edges = append(edges, user.EdgeReviewedSegments)
@@ -14756,6 +18459,8 @@ func (m *UserMutation) EdgeCleared(name string) bool {
 	switch name {
 	case user.EdgeJobs:
 		return m.clearedjobs
+	case user.EdgeCreatedTranslationJobs:
+		return m.clearedcreated_translation_jobs
 	case user.EdgeReviewedSegments:
 		return m.clearedreviewed_segments
 	case user.EdgeRefreshTokens:
@@ -14788,6 +18493,9 @@ func (m *UserMutation) ResetEdge(name string) error {
 	switch name {
 	case user.EdgeJobs:
 		m.ResetJobs()
+		return nil
+	case user.EdgeCreatedTranslationJobs:
+		m.ResetCreatedTranslationJobs()
 		return nil
 	case user.EdgeReviewedSegments:
 		m.ResetReviewedSegments()

@@ -16,6 +16,9 @@ Project:
     config:
       type: object
       additionalProperties: true
+    default_translation_config:
+      type: object
+      additionalProperties: true
     source_lang:
       type: string
     target_lang:
@@ -50,6 +53,9 @@ CreateProjectRequest:
     config:
       type: object
       additionalProperties: true
+    default_translation_config:
+      type: object
+      additionalProperties: true
     source_lang:
       type: string
     target_lang:
@@ -65,6 +71,9 @@ UpdateProjectRequest:
       type: string
       enum: [project, organization]
     config:
+      type: object
+      additionalProperties: true
+    default_translation_config:
       type: object
       additionalProperties: true
     source_lang:

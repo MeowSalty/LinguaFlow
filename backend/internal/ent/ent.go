@@ -15,16 +15,19 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/projectbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
@@ -91,16 +94,19 @@ func checkColumn(t, c string) error {
 			activitylog.Table:          activitylog.ValidColumn,
 			glossaryentry.Table:        glossaryentry.ValidColumn,
 			job.Table:                  job.ValidColumn,
+			jobresource.Table:          jobresource.ValidColumn,
 			orgbackend.Table:           orgbackend.ValidColumn,
 			orgmembership.Table:        orgmembership.ValidColumn,
 			organization.Table:         organization.ValidColumn,
 			project.Table:              project.ValidColumn,
 			projectbackend.Table:       projectbackend.ValidColumn,
 			refreshtoken.Table:         refreshtoken.ValidColumn,
+			resource.Table:             resource.ValidColumn,
 			segment.Table:              segment.ValidColumn,
 			stagebackendoverride.Table: stagebackendoverride.ValidColumn,
 			subjob.Table:               subjob.ValidColumn,
 			tmentry.Table:              tmentry.ValidColumn,
+			translationjob.Table:       translationjob.ValidColumn,
 			usagerecord.Table:          usagerecord.ValidColumn,
 			user.Table:                 user.ValidColumn,
 			userbackend.Table:          userbackend.ValidColumn,

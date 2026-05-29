@@ -90,6 +90,11 @@ func ReviewComment(v string) predicate.Segment {
 	return predicate.Segment(sql.FieldEQ(FieldReviewComment, v))
 }
 
+// ResourceID applies equality check predicate on the "resource_id" field. It's identical to ResourceIDEQ.
+func ResourceID(v int) predicate.Segment {
+	return predicate.Segment(sql.FieldEQ(FieldResourceID, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.Segment {
 	return predicate.Segment(sql.FieldEQ(FieldCreatedAt, v))
@@ -490,6 +495,36 @@ func ReviewCommentContainsFold(v string) predicate.Segment {
 	return predicate.Segment(sql.FieldContainsFold(FieldReviewComment, v))
 }
 
+// ResourceIDEQ applies the EQ predicate on the "resource_id" field.
+func ResourceIDEQ(v int) predicate.Segment {
+	return predicate.Segment(sql.FieldEQ(FieldResourceID, v))
+}
+
+// ResourceIDNEQ applies the NEQ predicate on the "resource_id" field.
+func ResourceIDNEQ(v int) predicate.Segment {
+	return predicate.Segment(sql.FieldNEQ(FieldResourceID, v))
+}
+
+// ResourceIDIn applies the In predicate on the "resource_id" field.
+func ResourceIDIn(vs ...int) predicate.Segment {
+	return predicate.Segment(sql.FieldIn(FieldResourceID, vs...))
+}
+
+// ResourceIDNotIn applies the NotIn predicate on the "resource_id" field.
+func ResourceIDNotIn(vs ...int) predicate.Segment {
+	return predicate.Segment(sql.FieldNotIn(FieldResourceID, vs...))
+}
+
+// ResourceIDIsNil applies the IsNil predicate on the "resource_id" field.
+func ResourceIDIsNil() predicate.Segment {
+	return predicate.Segment(sql.FieldIsNull(FieldResourceID))
+}
+
+// ResourceIDNotNil applies the NotNil predicate on the "resource_id" field.
+func ResourceIDNotNil() predicate.Segment {
+	return predicate.Segment(sql.FieldNotNull(FieldResourceID))
+}
+
 // HasSubJob applies the HasEdge predicate on the "sub_job" edge.
 func HasSubJob() predicate.Segment {
 	return predicate.Segment(func(s *sql.Selector) {
@@ -505,6 +540,29 @@ func HasSubJob() predicate.Segment {
 func HasSubJobWith(preds ...predicate.SubJob) predicate.Segment {
 	return predicate.Segment(func(s *sql.Selector) {
 		step := newSubJobStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasResource applies the HasEdge predicate on the "resource" edge.
+func HasResource() predicate.Segment {
+	return predicate.Segment(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, ResourceTable, ResourceColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasResourceWith applies the HasEdge predicate on the "resource" edge with a given conditions (other predicates).
+func HasResourceWith(preds ...predicate.Resource) predicate.Segment {
+	return predicate.Segment(func(s *sql.Selector) {
+		step := newResourceStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

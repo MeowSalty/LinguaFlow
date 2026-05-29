@@ -15,6 +15,9 @@ type GlossaryEntry func(*sql.Selector)
 // Job is the predicate function for job builders.
 type Job func(*sql.Selector)
 
+// JobResource is the predicate function for jobresource builders.
+type JobResource func(*sql.Selector)
+
 // OrgBackend is the predicate function for orgbackend builders.
 type OrgBackend func(*sql.Selector)
 
@@ -33,6 +36,9 @@ type ProjectBackend func(*sql.Selector)
 // RefreshToken is the predicate function for refreshtoken builders.
 type RefreshToken func(*sql.Selector)
 
+// Resource is the predicate function for resource builders.
+type Resource func(*sql.Selector)
+
 // Segment is the predicate function for segment builders.
 type Segment func(*sql.Selector)
 
@@ -44,6 +50,9 @@ type SubJob func(*sql.Selector)
 
 // TMEntry is the predicate function for tmentry builders.
 type TMEntry func(*sql.Selector)
+
+// TranslationJob is the predicate function for translationjob builders.
+type TranslationJob func(*sql.Selector)
 
 // UsageRecord is the predicate function for usagerecord builders.
 type UsageRecord func(*sql.Selector)

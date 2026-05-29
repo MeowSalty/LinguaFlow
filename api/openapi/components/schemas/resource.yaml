@@ -1,0 +1,67 @@
+Resource:
+  type: object
+  required: [id, filename, format, total_segments, status, created_at, updated_at]
+  properties:
+    id:
+      type: integer
+    filename:
+      type: string
+    format:
+      type: string
+    total_segments:
+      type: integer
+    status:
+      type: string
+      enum: [ready, processing, error]
+    error_message:
+      type: string
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+
+ResourceUploadResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/Resource'
+
+ResourceListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/Resource'
+
+ResourceSegment:
+  allOf:
+    - $ref: '../schemas/job.yaml#/Segment'
+
+ResourceSegmentListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '../schemas/job.yaml#/Segment'
+    next_cursor:
+      type: string
+
+ResourceSegmentUpdateRequest:
+  type: object
+  properties:
+    source_text:
+      type: string
+    target_text:
+      type: string
+    comment:
+      type: string
+  additionalProperties: false

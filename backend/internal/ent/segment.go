@@ -9,6 +9,7 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
@@ -33,6 +34,8 @@ type Segment struct {
 	Status string `json:"status,omitempty"`
 	// ReviewComment holds the value of the "review_comment" field.
 	ReviewComment *string `json:"review_comment,omitempty"`
+	// 所属资源 ID（新路径，与 sub_job 二选一）
+	ResourceID *int `json:"resource_id,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the SegmentQuery when eager-loading is set.
 	Edges                  SegmentEdges `json:"edges"`
@@ -45,11 +48,13 @@ type Segment struct {
 type SegmentEdges struct {
 	// SubJob holds the value of the sub_job edge.
 	SubJob *SubJob `json:"sub_job,omitempty"`
+	// Resource holds the value of the resource edge.
+	Resource *Resource `json:"resource,omitempty"`
 	// ReviewedBy holds the value of the reviewed_by edge.
 	ReviewedBy *User `json:"reviewed_by,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [2]bool
+	loadedTypes [3]bool
 }
 
 // SubJobOrErr returns the SubJob value or an error if the edge
@@ -63,12 +68,23 @@ func (e SegmentEdges) SubJobOrErr() (*SubJob, error) {
 	return nil, &NotLoadedError{edge: "sub_job"}
 }
 
+// ResourceOrErr returns the Resource value or an error if the edge
+// was not loaded in eager-loading, or loaded but was not found.
+func (e SegmentEdges) ResourceOrErr() (*Resource, error) {
+	if e.Resource != nil {
+		return e.Resource, nil
+	} else if e.loadedTypes[1] {
+		return nil, &NotFoundError{label: resource.Label}
+	}
+	return nil, &NotLoadedError{edge: "resource"}
+}
+
 // ReviewedByOrErr returns the ReviewedBy value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
 func (e SegmentEdges) ReviewedByOrErr() (*User, error) {
 	if e.ReviewedBy != nil {
 		return e.ReviewedBy, nil
-	} else if e.loadedTypes[1] {
+	} else if e.loadedTypes[2] {
 		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "reviewed_by"}
@@ -79,7 +95,7 @@ func (*Segment) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case segment.FieldID, segment.FieldSegmentIndex:
+		case segment.FieldID, segment.FieldSegmentIndex, segment.FieldResourceID:
 			values[i] = new(sql.NullInt64)
 		case segment.FieldSourceText, segment.FieldTargetText, segment.FieldStatus, segment.FieldReviewComment:
 			values[i] = new(sql.NullString)
@@ -154,6 +170,13 @@ func (_m *Segment) assignValues(columns []string, values []any) error {
 				_m.ReviewComment = new(string)
 				*_m.ReviewComment = value.String
 			}
+		case segment.FieldResourceID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field resource_id", values[i])
+			} else if value.Valid {
+				_m.ResourceID = new(int)
+				*_m.ResourceID = int(value.Int64)
+			}
 		case segment.ForeignKeys[0]:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for edge-field sub_job_segments", value)
@@ -184,6 +207,11 @@ func (_m *Segment) Value(name string) (ent.Value, error) {
 // QuerySubJob queries the "sub_job" edge of the Segment entity.
 func (_m *Segment) QuerySubJob() *SubJobQuery {
 	return NewSegmentClient(_m.config).QuerySubJob(_m)
+}
+
+// QueryResource queries the "resource" edge of the Segment entity.
+func (_m *Segment) QueryResource() *ResourceQuery {
+	return NewSegmentClient(_m.config).QueryResource(_m)
 }
 
 // QueryReviewedBy queries the "reviewed_by" edge of the Segment entity.
@@ -237,6 +265,11 @@ func (_m *Segment) String() string {
 	if v := _m.ReviewComment; v != nil {
 		builder.WriteString("review_comment=")
 		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.ResourceID; v != nil {
+		builder.WriteString("resource_id=")
+		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteByte(')')
 	return builder.String()

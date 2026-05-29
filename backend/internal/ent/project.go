@@ -34,6 +34,8 @@ type Project struct {
 	ResourceScope string `json:"resource_scope,omitempty"`
 	// Config holds the value of the "config" field.
 	Config map[string]interface{} `json:"config,omitempty"`
+	// 默认翻译配置，创建翻译任务时作为任务配置基底
+	DefaultTranslationConfig map[string]interface{} `json:"default_translation_config,omitempty"`
 	// SourceLang holds the value of the "source_lang" field.
 	SourceLang string `json:"source_lang,omitempty"`
 	// TargetLang holds the value of the "target_lang" field.
@@ -60,13 +62,17 @@ type ProjectEdges struct {
 	TmEntries []*TMEntry `json:"tm_entries,omitempty"`
 	// Jobs holds the value of the jobs edge.
 	Jobs []*Job `json:"jobs,omitempty"`
+	// TranslationJobs holds the value of the translation_jobs edge.
+	TranslationJobs []*TranslationJob `json:"translation_jobs,omitempty"`
 	// ActivityLogs holds the value of the activity_logs edge.
 	ActivityLogs []*ActivityLog `json:"activity_logs,omitempty"`
 	// UsageRecords holds the value of the usage_records edge.
 	UsageRecords []*UsageRecord `json:"usage_records,omitempty"`
+	// Resources holds the value of the resources edge.
+	Resources []*Resource `json:"resources,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [9]bool
+	loadedTypes [11]bool
 }
 
 // OwnerUserOrErr returns the OwnerUser value or an error if the edge
@@ -136,10 +142,19 @@ func (e ProjectEdges) JobsOrErr() ([]*Job, error) {
 	return nil, &NotLoadedError{edge: "jobs"}
 }
 
+// TranslationJobsOrErr returns the TranslationJobs value or an error if the edge
+// was not loaded in eager-loading.
+func (e ProjectEdges) TranslationJobsOrErr() ([]*TranslationJob, error) {
+	if e.loadedTypes[7] {
+		return e.TranslationJobs, nil
+	}
+	return nil, &NotLoadedError{edge: "translation_jobs"}
+}
+
 // ActivityLogsOrErr returns the ActivityLogs value or an error if the edge
 // was not loaded in eager-loading.
 func (e ProjectEdges) ActivityLogsOrErr() ([]*ActivityLog, error) {
-	if e.loadedTypes[7] {
+	if e.loadedTypes[8] {
 		return e.ActivityLogs, nil
 	}
 	return nil, &NotLoadedError{edge: "activity_logs"}
@@ -148,10 +163,19 @@ func (e ProjectEdges) ActivityLogsOrErr() ([]*ActivityLog, error) {
 // UsageRecordsOrErr returns the UsageRecords value or an error if the edge
 // was not loaded in eager-loading.
 func (e ProjectEdges) UsageRecordsOrErr() ([]*UsageRecord, error) {
-	if e.loadedTypes[8] {
+	if e.loadedTypes[9] {
 		return e.UsageRecords, nil
 	}
 	return nil, &NotLoadedError{edge: "usage_records"}
+}
+
+// ResourcesOrErr returns the Resources value or an error if the edge
+// was not loaded in eager-loading.
+func (e ProjectEdges) ResourcesOrErr() ([]*Resource, error) {
+	if e.loadedTypes[10] {
+		return e.Resources, nil
+	}
+	return nil, &NotLoadedError{edge: "resources"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -159,7 +183,7 @@ func (*Project) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case project.FieldConfig:
+		case project.FieldConfig, project.FieldDefaultTranslationConfig:
 			values[i] = new([]byte)
 		case project.FieldID, project.FieldOwnerUserID, project.FieldOwnerOrgID:
 			values[i] = new(sql.NullInt64)
@@ -234,6 +258,14 @@ func (_m *Project) assignValues(columns []string, values []any) error {
 					return fmt.Errorf("unmarshal field config: %w", err)
 				}
 			}
+		case project.FieldDefaultTranslationConfig:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field default_translation_config", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.DefaultTranslationConfig); err != nil {
+					return fmt.Errorf("unmarshal field default_translation_config: %w", err)
+				}
+			}
 		case project.FieldSourceLang:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field source_lang", values[i])
@@ -294,6 +326,11 @@ func (_m *Project) QueryJobs() *JobQuery {
 	return NewProjectClient(_m.config).QueryJobs(_m)
 }
 
+// QueryTranslationJobs queries the "translation_jobs" edge of the Project entity.
+func (_m *Project) QueryTranslationJobs() *TranslationJobQuery {
+	return NewProjectClient(_m.config).QueryTranslationJobs(_m)
+}
+
 // QueryActivityLogs queries the "activity_logs" edge of the Project entity.
 func (_m *Project) QueryActivityLogs() *ActivityLogQuery {
 	return NewProjectClient(_m.config).QueryActivityLogs(_m)
@@ -302,6 +339,11 @@ func (_m *Project) QueryActivityLogs() *ActivityLogQuery {
 // QueryUsageRecords queries the "usage_records" edge of the Project entity.
 func (_m *Project) QueryUsageRecords() *UsageRecordQuery {
 	return NewProjectClient(_m.config).QueryUsageRecords(_m)
+}
+
+// QueryResources queries the "resources" edge of the Project entity.
+func (_m *Project) QueryResources() *ResourceQuery {
+	return NewProjectClient(_m.config).QueryResources(_m)
 }
 
 // Update returns a builder for updating this Project.
@@ -351,6 +393,9 @@ func (_m *Project) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("config=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Config))
+	builder.WriteString(", ")
+	builder.WriteString("default_translation_config=")
+	builder.WriteString(fmt.Sprintf("%v", _m.DefaultTranslationConfig))
 	builder.WriteString(", ")
 	builder.WriteString("source_lang=")
 	builder.WriteString(_m.SourceLang)

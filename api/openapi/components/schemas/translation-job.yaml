@@ -1,0 +1,100 @@
+CreateTranslationJobRequest:
+  type: object
+  properties:
+    resource_ids:
+      type: array
+      items:
+        type: integer
+        minimum: 1
+    segment_ids:
+      type: array
+      items:
+        type: integer
+        minimum: 1
+    translation_config:
+      type: object
+      additionalProperties: true
+  additionalProperties: false
+
+TranslationJobResource:
+  type: object
+  required: [id, resource_id, status, segment_count, completed_segments, created_at, updated_at]
+  properties:
+    id:
+      type: integer
+    resource_id:
+      type: integer
+    status:
+      type: string
+      enum: [pending, running, completed, failed, cancelled]
+    segment_ids:
+      type: array
+      items:
+        type: integer
+    segment_count:
+      type: integer
+    completed_segments:
+      type: integer
+    output_path:
+      type: string
+    error_message:
+      type: string
+    resource:
+      $ref: './resource.yaml#/Resource'
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+
+TranslationJob:
+  type: object
+  required: [id, project_id, status, trigger_type, resource_count, completed_resources, failed_resources, total_segments, completed_segments, created_at, updated_at]
+  properties:
+    id:
+      type: integer
+    project_id:
+      type: integer
+    status:
+      type: string
+      enum: [pending, running, awaiting_review, completed, failed, cancelled]
+    trigger_type:
+      type: string
+      enum: [manual, file_update, glossary_change, web_edit]
+    translation_config:
+      type: object
+      additionalProperties: true
+    resource_count:
+      type: integer
+    completed_resources:
+      type: integer
+    failed_resources:
+      type: integer
+    total_segments:
+      type: integer
+    completed_segments:
+      type: integer
+    error_message:
+      type: string
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+    job_resources:
+      type: array
+      items:
+        $ref: '#/TranslationJobResource'
+
+TranslationJobListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/TranslationJob'
+    next_cursor:
+      type: string

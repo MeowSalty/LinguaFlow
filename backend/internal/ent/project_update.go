@@ -18,8 +18,10 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/projectbackend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
@@ -114,6 +116,12 @@ func (_u *ProjectUpdate) SetNillableResourceScope(v *string) *ProjectUpdate {
 // SetConfig sets the "config" field.
 func (_u *ProjectUpdate) SetConfig(v map[string]interface{}) *ProjectUpdate {
 	_u.mutation.SetConfig(v)
+	return _u
+}
+
+// SetDefaultTranslationConfig sets the "default_translation_config" field.
+func (_u *ProjectUpdate) SetDefaultTranslationConfig(v map[string]interface{}) *ProjectUpdate {
+	_u.mutation.SetDefaultTranslationConfig(v)
 	return _u
 }
 
@@ -230,6 +238,21 @@ func (_u *ProjectUpdate) AddJobs(v ...*Job) *ProjectUpdate {
 	return _u.AddJobIDs(ids...)
 }
 
+// AddTranslationJobIDs adds the "translation_jobs" edge to the TranslationJob entity by IDs.
+func (_u *ProjectUpdate) AddTranslationJobIDs(ids ...int) *ProjectUpdate {
+	_u.mutation.AddTranslationJobIDs(ids...)
+	return _u
+}
+
+// AddTranslationJobs adds the "translation_jobs" edges to the TranslationJob entity.
+func (_u *ProjectUpdate) AddTranslationJobs(v ...*TranslationJob) *ProjectUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddTranslationJobIDs(ids...)
+}
+
 // AddActivityLogIDs adds the "activity_logs" edge to the ActivityLog entity by IDs.
 func (_u *ProjectUpdate) AddActivityLogIDs(ids ...int) *ProjectUpdate {
 	_u.mutation.AddActivityLogIDs(ids...)
@@ -258,6 +281,21 @@ func (_u *ProjectUpdate) AddUsageRecords(v ...*UsageRecord) *ProjectUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.AddUsageRecordIDs(ids...)
+}
+
+// AddResourceIDs adds the "resources" edge to the Resource entity by IDs.
+func (_u *ProjectUpdate) AddResourceIDs(ids ...int) *ProjectUpdate {
+	_u.mutation.AddResourceIDs(ids...)
+	return _u
+}
+
+// AddResources adds the "resources" edges to the Resource entity.
+func (_u *ProjectUpdate) AddResources(v ...*Resource) *ProjectUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddResourceIDs(ids...)
 }
 
 // Mutation returns the ProjectMutation object of the builder.
@@ -382,6 +420,27 @@ func (_u *ProjectUpdate) RemoveJobs(v ...*Job) *ProjectUpdate {
 	return _u.RemoveJobIDs(ids...)
 }
 
+// ClearTranslationJobs clears all "translation_jobs" edges to the TranslationJob entity.
+func (_u *ProjectUpdate) ClearTranslationJobs() *ProjectUpdate {
+	_u.mutation.ClearTranslationJobs()
+	return _u
+}
+
+// RemoveTranslationJobIDs removes the "translation_jobs" edge to TranslationJob entities by IDs.
+func (_u *ProjectUpdate) RemoveTranslationJobIDs(ids ...int) *ProjectUpdate {
+	_u.mutation.RemoveTranslationJobIDs(ids...)
+	return _u
+}
+
+// RemoveTranslationJobs removes "translation_jobs" edges to TranslationJob entities.
+func (_u *ProjectUpdate) RemoveTranslationJobs(v ...*TranslationJob) *ProjectUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveTranslationJobIDs(ids...)
+}
+
 // ClearActivityLogs clears all "activity_logs" edges to the ActivityLog entity.
 func (_u *ProjectUpdate) ClearActivityLogs() *ProjectUpdate {
 	_u.mutation.ClearActivityLogs()
@@ -422,6 +481,27 @@ func (_u *ProjectUpdate) RemoveUsageRecords(v ...*UsageRecord) *ProjectUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveUsageRecordIDs(ids...)
+}
+
+// ClearResources clears all "resources" edges to the Resource entity.
+func (_u *ProjectUpdate) ClearResources() *ProjectUpdate {
+	_u.mutation.ClearResources()
+	return _u
+}
+
+// RemoveResourceIDs removes the "resources" edge to Resource entities by IDs.
+func (_u *ProjectUpdate) RemoveResourceIDs(ids ...int) *ProjectUpdate {
+	_u.mutation.RemoveResourceIDs(ids...)
+	return _u
+}
+
+// RemoveResources removes "resources" edges to Resource entities.
+func (_u *ProjectUpdate) RemoveResources(v ...*Resource) *ProjectUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveResourceIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -503,6 +583,9 @@ func (_u *ProjectUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Config(); ok {
 		_spec.SetField(project.FieldConfig, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.DefaultTranslationConfig(); ok {
+		_spec.SetField(project.FieldDefaultTranslationConfig, field.TypeJSON, value)
 	}
 	if value, ok := _u.mutation.SourceLang(); ok {
 		_spec.SetField(project.FieldSourceLang, field.TypeString, value)
@@ -793,6 +876,51 @@ func (_u *ProjectUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.TranslationJobsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.TranslationJobsTable,
+			Columns: []string{project.TranslationJobsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedTranslationJobsIDs(); len(nodes) > 0 && !_u.mutation.TranslationJobsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.TranslationJobsTable,
+			Columns: []string{project.TranslationJobsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.TranslationJobsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.TranslationJobsTable,
+			Columns: []string{project.TranslationJobsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _u.mutation.ActivityLogsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -876,6 +1004,51 @@ func (_u *ProjectUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ResourcesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.ResourcesTable,
+			Columns: []string{project.ResourcesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(resource.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedResourcesIDs(); len(nodes) > 0 && !_u.mutation.ResourcesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.ResourcesTable,
+			Columns: []string{project.ResourcesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(resource.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ResourcesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.ResourcesTable,
+			Columns: []string{project.ResourcesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(resource.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -980,6 +1153,12 @@ func (_u *ProjectUpdateOne) SetNillableResourceScope(v *string) *ProjectUpdateOn
 // SetConfig sets the "config" field.
 func (_u *ProjectUpdateOne) SetConfig(v map[string]interface{}) *ProjectUpdateOne {
 	_u.mutation.SetConfig(v)
+	return _u
+}
+
+// SetDefaultTranslationConfig sets the "default_translation_config" field.
+func (_u *ProjectUpdateOne) SetDefaultTranslationConfig(v map[string]interface{}) *ProjectUpdateOne {
+	_u.mutation.SetDefaultTranslationConfig(v)
 	return _u
 }
 
@@ -1096,6 +1275,21 @@ func (_u *ProjectUpdateOne) AddJobs(v ...*Job) *ProjectUpdateOne {
 	return _u.AddJobIDs(ids...)
 }
 
+// AddTranslationJobIDs adds the "translation_jobs" edge to the TranslationJob entity by IDs.
+func (_u *ProjectUpdateOne) AddTranslationJobIDs(ids ...int) *ProjectUpdateOne {
+	_u.mutation.AddTranslationJobIDs(ids...)
+	return _u
+}
+
+// AddTranslationJobs adds the "translation_jobs" edges to the TranslationJob entity.
+func (_u *ProjectUpdateOne) AddTranslationJobs(v ...*TranslationJob) *ProjectUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddTranslationJobIDs(ids...)
+}
+
 // AddActivityLogIDs adds the "activity_logs" edge to the ActivityLog entity by IDs.
 func (_u *ProjectUpdateOne) AddActivityLogIDs(ids ...int) *ProjectUpdateOne {
 	_u.mutation.AddActivityLogIDs(ids...)
@@ -1124,6 +1318,21 @@ func (_u *ProjectUpdateOne) AddUsageRecords(v ...*UsageRecord) *ProjectUpdateOne
 		ids[i] = v[i].ID
 	}
 	return _u.AddUsageRecordIDs(ids...)
+}
+
+// AddResourceIDs adds the "resources" edge to the Resource entity by IDs.
+func (_u *ProjectUpdateOne) AddResourceIDs(ids ...int) *ProjectUpdateOne {
+	_u.mutation.AddResourceIDs(ids...)
+	return _u
+}
+
+// AddResources adds the "resources" edges to the Resource entity.
+func (_u *ProjectUpdateOne) AddResources(v ...*Resource) *ProjectUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddResourceIDs(ids...)
 }
 
 // Mutation returns the ProjectMutation object of the builder.
@@ -1248,6 +1457,27 @@ func (_u *ProjectUpdateOne) RemoveJobs(v ...*Job) *ProjectUpdateOne {
 	return _u.RemoveJobIDs(ids...)
 }
 
+// ClearTranslationJobs clears all "translation_jobs" edges to the TranslationJob entity.
+func (_u *ProjectUpdateOne) ClearTranslationJobs() *ProjectUpdateOne {
+	_u.mutation.ClearTranslationJobs()
+	return _u
+}
+
+// RemoveTranslationJobIDs removes the "translation_jobs" edge to TranslationJob entities by IDs.
+func (_u *ProjectUpdateOne) RemoveTranslationJobIDs(ids ...int) *ProjectUpdateOne {
+	_u.mutation.RemoveTranslationJobIDs(ids...)
+	return _u
+}
+
+// RemoveTranslationJobs removes "translation_jobs" edges to TranslationJob entities.
+func (_u *ProjectUpdateOne) RemoveTranslationJobs(v ...*TranslationJob) *ProjectUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveTranslationJobIDs(ids...)
+}
+
 // ClearActivityLogs clears all "activity_logs" edges to the ActivityLog entity.
 func (_u *ProjectUpdateOne) ClearActivityLogs() *ProjectUpdateOne {
 	_u.mutation.ClearActivityLogs()
@@ -1288,6 +1518,27 @@ func (_u *ProjectUpdateOne) RemoveUsageRecords(v ...*UsageRecord) *ProjectUpdate
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveUsageRecordIDs(ids...)
+}
+
+// ClearResources clears all "resources" edges to the Resource entity.
+func (_u *ProjectUpdateOne) ClearResources() *ProjectUpdateOne {
+	_u.mutation.ClearResources()
+	return _u
+}
+
+// RemoveResourceIDs removes the "resources" edge to Resource entities by IDs.
+func (_u *ProjectUpdateOne) RemoveResourceIDs(ids ...int) *ProjectUpdateOne {
+	_u.mutation.RemoveResourceIDs(ids...)
+	return _u
+}
+
+// RemoveResources removes "resources" edges to Resource entities.
+func (_u *ProjectUpdateOne) RemoveResources(v ...*Resource) *ProjectUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveResourceIDs(ids...)
 }
 
 // Where appends a list predicates to the ProjectUpdate builder.
@@ -1399,6 +1650,9 @@ func (_u *ProjectUpdateOne) sqlSave(ctx context.Context) (_node *Project, err er
 	}
 	if value, ok := _u.mutation.Config(); ok {
 		_spec.SetField(project.FieldConfig, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.DefaultTranslationConfig(); ok {
+		_spec.SetField(project.FieldDefaultTranslationConfig, field.TypeJSON, value)
 	}
 	if value, ok := _u.mutation.SourceLang(); ok {
 		_spec.SetField(project.FieldSourceLang, field.TypeString, value)
@@ -1689,6 +1943,51 @@ func (_u *ProjectUpdateOne) sqlSave(ctx context.Context) (_node *Project, err er
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.TranslationJobsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.TranslationJobsTable,
+			Columns: []string{project.TranslationJobsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedTranslationJobsIDs(); len(nodes) > 0 && !_u.mutation.TranslationJobsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.TranslationJobsTable,
+			Columns: []string{project.TranslationJobsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.TranslationJobsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.TranslationJobsTable,
+			Columns: []string{project.TranslationJobsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _u.mutation.ActivityLogsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -1772,6 +2071,51 @@ func (_u *ProjectUpdateOne) sqlSave(ctx context.Context) (_node *Project, err er
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ResourcesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.ResourcesTable,
+			Columns: []string{project.ResourcesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(resource.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedResourcesIDs(); len(nodes) > 0 && !_u.mutation.ResourcesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.ResourcesTable,
+			Columns: []string{project.ResourcesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(resource.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ResourcesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.ResourcesTable,
+			Columns: []string{project.ResourcesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(resource.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
