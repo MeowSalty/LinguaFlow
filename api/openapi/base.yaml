@@ -63,8 +63,6 @@ paths:
     $ref: './paths/glossary.yaml#/glossaryImport'
   /projects/{projectId}/glossary/export:
     $ref: './paths/glossary.yaml#/glossaryExport'
-  /projects/{projectId}/jobs:
-    $ref: './paths/jobs.yaml#/projectJobs'
   /projects/{projectId}/translation-jobs:
     $ref: './paths/translation-jobs.yaml#/projectTranslationJobs'
   /translation-jobs/{translationJobId}:
@@ -75,30 +73,6 @@ paths:
     $ref: './paths/translation-jobs.yaml#/translationJobRetry'
   /translation-jobs/{translationJobId}/download:
     $ref: './paths/translation-jobs.yaml#/translationJobDownload'
-  /jobs/{jobId}:
-    $ref: './paths/jobs.yaml#/jobById'
-  /jobs/{jobId}/subjobs:
-    $ref: './paths/jobs.yaml#/jobSubJobs'
-  /jobs/{jobId}/subjobs/{subJobId}:
-    $ref: './paths/jobs.yaml#/jobSubJobById'
-  /jobs/{jobId}/cancel:
-    $ref: './paths/jobs.yaml#/jobCancel'
-  /jobs/{jobId}/retry:
-    $ref: './paths/jobs.yaml#/jobRetry'
-  /jobs/{jobId}/download:
-    $ref: './paths/jobs.yaml#/jobDownload'
-  /jobs/{jobId}/segments:
-    $ref: './paths/review.yaml#/jobSegments'
-  /jobs/{jobId}/approve:
-    $ref: './paths/review.yaml#/jobApprove'
-  /jobs/{jobId}/retranslate:
-    $ref: './paths/review.yaml#/jobRetranslate'
-  /segments/{segmentId}:
-    $ref: './paths/review.yaml#/segmentById'
-  /segments/{segmentId}/approve:
-    $ref: './paths/review.yaml#/segmentApprove'
-  /segments/{segmentId}/reject:
-    $ref: './paths/review.yaml#/segmentReject'
   /stats/summary:
     $ref: './paths/stats.yaml#/statsSummary'
   /activity:
@@ -114,14 +88,10 @@ components:
       $ref: './components/parameters.yaml#/UserId'
     ProjectId:
       $ref: './components/parameters.yaml#/ProjectId'
-    JobId:
-      $ref: './components/parameters.yaml#/JobId'
     ResourceId:
       $ref: './components/parameters.yaml#/ResourceId'
     TranslationJobId:
       $ref: './components/parameters.yaml#/TranslationJobId'
-    SubJobId:
-      $ref: './components/parameters.yaml#/SubJobId'
     BackendId:
       $ref: './components/parameters.yaml#/BackendId'
     EntryId:
@@ -172,28 +142,10 @@ components:
       $ref: './components/schemas/organization.yaml#/AddOrganizationMemberRequest'
     UpdateOrganizationMemberRequest:
       $ref: './components/schemas/organization.yaml#/UpdateOrganizationMemberRequest'
-    JobCreateRequest:
-      $ref: './components/schemas/job.yaml#/JobCreateRequest'
-    JobCreateResponse:
-      $ref: './components/schemas/job.yaml#/JobCreateResponse'
-    Job:
-      $ref: './components/schemas/job.yaml#/Job'
-    JobListResponse:
-      $ref: './components/schemas/job.yaml#/JobListResponse'
-    SubJobSummary:
-      $ref: './components/schemas/job.yaml#/SubJobSummary'
-    SubJob:
-      $ref: './components/schemas/job.yaml#/SubJob'
-    SubJobListResponse:
-      $ref: './components/schemas/job.yaml#/SubJobListResponse'
     Segment:
       $ref: './components/schemas/job.yaml#/Segment'
     SegmentListResponse:
       $ref: './components/schemas/job.yaml#/SegmentListResponse'
-    SegmentEditRequest:
-      $ref: './components/schemas/job.yaml#/SegmentEditRequest'
-    SegmentDecisionRequest:
-      $ref: './components/schemas/job.yaml#/SegmentDecisionRequest'
     UsageStats:
       $ref: './components/schemas/job.yaml#/UsageStats'
     Resource:

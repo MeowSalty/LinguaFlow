@@ -22,14 +22,6 @@ ProjectId:
     type: integer
     minimum: 1
 
-JobId:
-  name: jobId
-  in: path
-  required: true
-  schema:
-    type: integer
-    minimum: 1
-
 ResourceId:
   name: resourceId
   in: path
@@ -40,14 +32,6 @@ ResourceId:
 
 TranslationJobId:
   name: translationJobId
-  in: path
-  required: true
-  schema:
-    type: integer
-    minimum: 1
-
-SubJobId:
-  name: subJobId
   in: path
   required: true
   schema:
