@@ -41,6 +41,16 @@ paths:
     $ref: './paths/projects.yaml#/projectById'
   /projects/{projectId}/backends:
     $ref: './paths/projects.yaml#/projectBackends'
+  /projects/{projectId}/resources:
+    $ref: './paths/resources.yaml#/projectResources'
+  /projects/{projectId}/resources/{resourceId}:
+    $ref: './paths/resources.yaml#/projectResourceById'
+  /projects/{projectId}/resources/{resourceId}/download:
+    $ref: './paths/resources.yaml#/projectResourceDownload'
+  /projects/{projectId}/resources/{resourceId}/segments:
+    $ref: './paths/resources.yaml#/projectResourceSegments'
+  /projects/{projectId}/resources/{resourceId}/segments/{segmentId}:
+    $ref: './paths/resources.yaml#/projectResourceSegmentById'
   /projects/{projectId}/stages/{stage}/override:
     $ref: './paths/projects.yaml#/stageOverride'
   /projects/{projectId}/stages/{stage}/plan:
@@ -55,6 +65,16 @@ paths:
     $ref: './paths/glossary.yaml#/glossaryExport'
   /projects/{projectId}/jobs:
     $ref: './paths/jobs.yaml#/projectJobs'
+  /projects/{projectId}/translation-jobs:
+    $ref: './paths/translation-jobs.yaml#/projectTranslationJobs'
+  /translation-jobs/{translationJobId}:
+    $ref: './paths/translation-jobs.yaml#/translationJobById'
+  /translation-jobs/{translationJobId}/cancel:
+    $ref: './paths/translation-jobs.yaml#/translationJobCancel'
+  /translation-jobs/{translationJobId}/retry:
+    $ref: './paths/translation-jobs.yaml#/translationJobRetry'
+  /translation-jobs/{translationJobId}/download:
+    $ref: './paths/translation-jobs.yaml#/translationJobDownload'
   /jobs/{jobId}:
     $ref: './paths/jobs.yaml#/jobById'
   /jobs/{jobId}/subjobs:
@@ -96,6 +116,10 @@ components:
       $ref: './components/parameters.yaml#/ProjectId'
     JobId:
       $ref: './components/parameters.yaml#/JobId'
+    ResourceId:
+      $ref: './components/parameters.yaml#/ResourceId'
+    TranslationJobId:
+      $ref: './components/parameters.yaml#/TranslationJobId'
     SubJobId:
       $ref: './components/parameters.yaml#/SubJobId'
     BackendId:
@@ -172,6 +196,24 @@ components:
       $ref: './components/schemas/job.yaml#/SegmentDecisionRequest'
     UsageStats:
       $ref: './components/schemas/job.yaml#/UsageStats'
+    Resource:
+      $ref: './components/schemas/resource.yaml#/Resource'
+    ResourceUploadResponse:
+      $ref: './components/schemas/resource.yaml#/ResourceUploadResponse'
+    ResourceListResponse:
+      $ref: './components/schemas/resource.yaml#/ResourceListResponse'
+    ResourceSegmentUpdateRequest:
+      $ref: './components/schemas/resource.yaml#/ResourceSegmentUpdateRequest'
+    ResourceSegmentListResponse:
+      $ref: './components/schemas/resource.yaml#/ResourceSegmentListResponse'
+    CreateTranslationJobRequest:
+      $ref: './components/schemas/translation-job.yaml#/CreateTranslationJobRequest'
+    TranslationJobResource:
+      $ref: './components/schemas/translation-job.yaml#/TranslationJobResource'
+    TranslationJob:
+      $ref: './components/schemas/translation-job.yaml#/TranslationJob'
+    TranslationJobListResponse:
+      $ref: './components/schemas/translation-job.yaml#/TranslationJobListResponse'
     Activity:
       $ref: './components/schemas/job.yaml#/Activity'
     ActivityListResponse:

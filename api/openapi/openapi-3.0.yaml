@@ -548,6 +548,208 @@ paths:
                   $ref: '#/components/schemas/ProjectBackendBinding'
         default:
           $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      operationId: ListProjectResources
+      summary: 列出项目资源文件
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - ready
+              - processing
+              - error
+        - name: format
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 资源列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: UploadProjectResources
+      summary: 上传资源文件到项目
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - files
+              properties:
+                files:
+                  type: array
+                  maxItems: 50
+                  items:
+                    type: string
+                    format: binary
+      responses:
+        '201':
+          description: 上传成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceUploadResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      operationId: GetResource
+      summary: 获取资源详情
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 资源详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: UpdateResource
+      summary: 更新资源文件
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteResource
+      summary: 删除资源文件及其所有段落
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/download:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      operationId: DownloadResourceFile
+      summary: 下载资源原始文件
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 资源原始文件
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/segments:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      operationId: ListResourceSegments
+      summary: 列出资源段落
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - pending
+              - translated
+              - reviewed
+              - rejected
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 段落列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceSegmentListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/segments/{segmentId}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/SegmentId'
+    patch:
+      operationId: UpdateResourceSegment
+      summary: 更新资源段落内容
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceSegmentUpdateRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Segment'
+        default:
+          $ref: '#/components/responses/Problem'
   /projects/{projectId}/stages/{stage}/override:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -743,6 +945,148 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/JobCreateResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/translation-jobs:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      operationId: ListTranslationJobs
+      summary: 列出项目翻译任务
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - pending
+              - running
+              - awaiting_review
+              - completed
+              - failed
+              - cancelled
+        - name: trigger_type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - manual
+              - file_update
+              - glossary_change
+              - web_edit
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 翻译任务列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationJobListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateTranslationJob
+      summary: 创建翻译任务
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTranslationJobRequest'
+      responses:
+        '202':
+          description: 任务已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationJob'
+        default:
+          $ref: '#/components/responses/Problem'
+  /translation-jobs/{translationJobId}:
+    parameters:
+      - $ref: '#/components/parameters/TranslationJobId'
+    get:
+      operationId: GetTranslationJob
+      summary: 获取翻译任务详情
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 任务详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationJob'
+        default:
+          $ref: '#/components/responses/Problem'
+  /translation-jobs/{translationJobId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/TranslationJobId'
+    post:
+      operationId: CancelTranslationJob
+      summary: 取消翻译任务
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 取消后的任务
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationJob'
+        default:
+          $ref: '#/components/responses/Problem'
+  /translation-jobs/{translationJobId}/retry:
+    parameters:
+      - $ref: '#/components/parameters/TranslationJobId'
+    post:
+      operationId: RetryTranslationJob
+      summary: 重试失败的资源翻译
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 重试后的任务
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationJob'
+        default:
+          $ref: '#/components/responses/Problem'
+  /translation-jobs/{translationJobId}/download:
+    parameters:
+      - $ref: '#/components/parameters/TranslationJobId'
+    get:
+      operationId: DownloadTranslationJobResult
+      summary: 下载翻译任务结果
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: resource_id
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+      responses:
+        '200':
+          description: 翻译结果文件
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+            application/zip:
+              schema:
+                type: string
+                format: binary
         default:
           $ref: '#/components/responses/Problem'
   /jobs/{jobId}:
@@ -1034,6 +1378,20 @@ components:
         minimum: 1
     JobId:
       name: jobId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    ResourceId:
+      name: resourceId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    TranslationJobId:
+      name: translationJobId
       in: path
       required: true
       schema:
@@ -1538,6 +1896,209 @@ components:
           type: integer
         failed_jobs:
           type: integer
+    Resource:
+      type: object
+      required:
+        - id
+        - filename
+        - format
+        - total_segments
+        - status
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+        filename:
+          type: string
+        format:
+          type: string
+        total_segments:
+          type: integer
+        status:
+          type: string
+          enum:
+            - ready
+            - processing
+            - error
+        error_message:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ResourceUploadResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Resource'
+    ResourceListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Resource'
+    ResourceSegmentUpdateRequest:
+      type: object
+      properties:
+        source_text:
+          type: string
+        target_text:
+          type: string
+        comment:
+          type: string
+      additionalProperties: false
+    ResourceSegmentListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Segment'
+        next_cursor:
+          type: string
+    CreateTranslationJobRequest:
+      type: object
+      properties:
+        resource_ids:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+        segment_ids:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+        translation_config:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+    TranslationJobResource:
+      type: object
+      required:
+        - id
+        - resource_id
+        - status
+        - segment_count
+        - completed_segments
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+        resource_id:
+          type: integer
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
+            - cancelled
+        segment_ids:
+          type: array
+          items:
+            type: integer
+        segment_count:
+          type: integer
+        completed_segments:
+          type: integer
+        output_path:
+          type: string
+        error_message:
+          type: string
+        resource:
+          $ref: '#/components/schemas/Resource'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    TranslationJob:
+      type: object
+      required:
+        - id
+        - project_id
+        - status
+        - trigger_type
+        - resource_count
+        - completed_resources
+        - failed_resources
+        - total_segments
+        - completed_segments
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+        project_id:
+          type: integer
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - awaiting_review
+            - completed
+            - failed
+            - cancelled
+        trigger_type:
+          type: string
+          enum:
+            - manual
+            - file_update
+            - glossary_change
+            - web_edit
+        translation_config:
+          type: object
+          additionalProperties: true
+        resource_count:
+          type: integer
+        completed_resources:
+          type: integer
+        failed_resources:
+          type: integer
+        total_segments:
+          type: integer
+        completed_segments:
+          type: integer
+        error_message:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        job_resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/TranslationJobResource'
+    TranslationJobListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TranslationJob'
+        next_cursor:
+          type: string
     Activity:
       type: object
       required:
@@ -1689,6 +2250,9 @@ components:
         config:
           type: object
           additionalProperties: true
+        default_translation_config:
+          type: object
+          additionalProperties: true
         source_lang:
           type: string
         target_lang:
@@ -1725,6 +2289,9 @@ components:
         config:
           type: object
           additionalProperties: true
+        default_translation_config:
+          type: object
+          additionalProperties: true
         source_lang:
           type: string
         target_lang:
@@ -1741,6 +2308,9 @@ components:
             - project
             - organization
         config:
+          type: object
+          additionalProperties: true
+        default_translation_config:
           type: object
           additionalProperties: true
         source_lang:

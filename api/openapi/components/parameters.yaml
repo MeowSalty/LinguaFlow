@@ -30,6 +30,22 @@ JobId:
     type: integer
     minimum: 1
 
+ResourceId:
+  name: resourceId
+  in: path
+  required: true
+  schema:
+    type: integer
+    minimum: 1
+
+TranslationJobId:
+  name: translationJobId
+  in: path
+  required: true
+  schema:
+    type: integer
+    minimum: 1
+
 SubJobId:
   name: subJobId
   in: path
