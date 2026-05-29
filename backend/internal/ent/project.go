@@ -64,9 +64,11 @@ type ProjectEdges struct {
 	ActivityLogs []*ActivityLog `json:"activity_logs,omitempty"`
 	// UsageRecords holds the value of the usage_records edge.
 	UsageRecords []*UsageRecord `json:"usage_records,omitempty"`
+	// Resources holds the value of the resources edge.
+	Resources []*Resource `json:"resources,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [9]bool
+	loadedTypes [10]bool
 }
 
 // OwnerUserOrErr returns the OwnerUser value or an error if the edge
@@ -152,6 +154,15 @@ func (e ProjectEdges) UsageRecordsOrErr() ([]*UsageRecord, error) {
 		return e.UsageRecords, nil
 	}
 	return nil, &NotLoadedError{edge: "usage_records"}
+}
+
+// ResourcesOrErr returns the Resources value or an error if the edge
+// was not loaded in eager-loading.
+func (e ProjectEdges) ResourcesOrErr() ([]*Resource, error) {
+	if e.loadedTypes[9] {
+		return e.Resources, nil
+	}
+	return nil, &NotLoadedError{edge: "resources"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -302,6 +313,11 @@ func (_m *Project) QueryActivityLogs() *ActivityLogQuery {
 // QueryUsageRecords queries the "usage_records" edge of the Project entity.
 func (_m *Project) QueryUsageRecords() *UsageRecordQuery {
 	return NewProjectClient(_m.config).QueryUsageRecords(_m)
+}
+
+// QueryResources queries the "resources" edge of the Project entity.
+func (_m *Project) QueryResources() *ResourceQuery {
+	return NewProjectClient(_m.config).QueryResources(_m)
 }
 
 // Update returns a builder for updating this Project.

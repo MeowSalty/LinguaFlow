@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
@@ -25,6 +26,7 @@ type SegmentQuery struct {
 	inters         []Interceptor
 	predicates     []predicate.Segment
 	withSubJob     *SubJobQuery
+	withResource   *ResourceQuery
 	withReviewedBy *UserQuery
 	withFKs        bool
 	// intermediate query (i.e. traversal path).
@@ -78,6 +80,28 @@ func (_q *SegmentQuery) QuerySubJob() *SubJobQuery {
 			sqlgraph.From(segment.Table, segment.FieldID, selector),
 			sqlgraph.To(subjob.Table, subjob.FieldID),
 			sqlgraph.Edge(sqlgraph.M2O, true, segment.SubJobTable, segment.SubJobColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryResource chains the current query on the "resource" edge.
+func (_q *SegmentQuery) QueryResource() *ResourceQuery {
+	query := (&ResourceClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(segment.Table, segment.FieldID, selector),
+			sqlgraph.To(resource.Table, resource.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, segment.ResourceTable, segment.ResourceColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -300,6 +324,7 @@ func (_q *SegmentQuery) Clone() *SegmentQuery {
 		inters:         append([]Interceptor{}, _q.inters...),
 		predicates:     append([]predicate.Segment{}, _q.predicates...),
 		withSubJob:     _q.withSubJob.Clone(),
+		withResource:   _q.withResource.Clone(),
 		withReviewedBy: _q.withReviewedBy.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
@@ -315,6 +340,17 @@ func (_q *SegmentQuery) WithSubJob(opts ...func(*SubJobQuery)) *SegmentQuery {
 		opt(query)
 	}
 	_q.withSubJob = query
+	return _q
+}
+
+// WithResource tells the query-builder to eager-load the nodes that are connected to
+// the "resource" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *SegmentQuery) WithResource(opts ...func(*ResourceQuery)) *SegmentQuery {
+	query := (&ResourceClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withResource = query
 	return _q
 }
 
@@ -408,8 +444,9 @@ func (_q *SegmentQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Segm
 		nodes       = []*Segment{}
 		withFKs     = _q.withFKs
 		_spec       = _q.querySpec()
-		loadedTypes = [2]bool{
+		loadedTypes = [3]bool{
 			_q.withSubJob != nil,
+			_q.withResource != nil,
 			_q.withReviewedBy != nil,
 		}
 	)
@@ -440,6 +477,12 @@ func (_q *SegmentQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Segm
 	if query := _q.withSubJob; query != nil {
 		if err := _q.loadSubJob(ctx, query, nodes, nil,
 			func(n *Segment, e *SubJob) { n.Edges.SubJob = e }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withResource; query != nil {
+		if err := _q.loadResource(ctx, query, nodes, nil,
+			func(n *Segment, e *Resource) { n.Edges.Resource = e }); err != nil {
 			return nil, err
 		}
 	}
@@ -477,6 +520,38 @@ func (_q *SegmentQuery) loadSubJob(ctx context.Context, query *SubJobQuery, node
 		nodes, ok := nodeids[n.ID]
 		if !ok {
 			return fmt.Errorf(`unexpected foreign-key "sub_job_segments" returned %v`, n.ID)
+		}
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
+	}
+	return nil
+}
+func (_q *SegmentQuery) loadResource(ctx context.Context, query *ResourceQuery, nodes []*Segment, init func(*Segment), assign func(*Segment, *Resource)) error {
+	ids := make([]int, 0, len(nodes))
+	nodeids := make(map[int][]*Segment)
+	for i := range nodes {
+		if nodes[i].ResourceID == nil {
+			continue
+		}
+		fk := *nodes[i].ResourceID
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	query.Where(resource.IDIn(ids...))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nodeids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "resource_id" returned %v`, n.ID)
 		}
 		for i := range nodes {
 			assign(nodes[i], n)
@@ -541,6 +616,9 @@ func (_q *SegmentQuery) querySpec() *sqlgraph.QuerySpec {
 			if fields[i] != segment.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
+		}
+		if _q.withResource != nil {
+			_spec.Node.AddColumnOnce(segment.FieldResourceID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {

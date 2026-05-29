@@ -31,8 +31,10 @@ type Server struct {
 	glossarySvc *service.GlossaryService
 	jobService  *service.JobService
 	reviewSvc   *service.ReviewService
+	segmentSvc  *service.SegmentService
 	statsSvc    *service.StatsService
 	auditSvc    *service.AuditService
+	resourceSvc *service.ResourceService
 	jobStore    *filestore.LocalStore
 	jobQueue    *worker.Queue
 	jobRunner   *worker.Runner
@@ -58,6 +60,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 	s.glossarySvc = service.NewGlossaryService(client, s.projectSvc)
 	s.jobService = service.NewJobService(client, s.projectSvc)
 	s.reviewSvc = service.NewReviewService(client, s.projectSvc)
+	s.segmentSvc = service.NewSegmentService(client, s.projectSvc)
 	s.statsSvc = service.NewStatsService(client, s.projectSvc)
 	s.auditSvc = service.NewAuditService(client, s.userService, s.projectSvc)
 	jobStore, err := filestore.NewLocal(filepath.Join(cfg.Server.DataDir, "jobs"))
@@ -65,6 +68,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 		return nil, err
 	}
 	s.jobStore = jobStore
+	s.resourceSvc = service.NewResourceService(client, s.projectSvc, jobStore)
 	queueSize := cfg.Pipeline.Translate.Concurrency * 8
 	if queueSize < 16 {
 		queueSize = 16

@@ -30,6 +30,8 @@ type Tx struct {
 	ProjectBackend *ProjectBackendClient
 	// RefreshToken is the client for interacting with the RefreshToken builders.
 	RefreshToken *RefreshTokenClient
+	// Resource is the client for interacting with the Resource builders.
+	Resource *ResourceClient
 	// Segment is the client for interacting with the Segment builders.
 	Segment *SegmentClient
 	// StageBackendOverride is the client for interacting with the StageBackendOverride builders.
@@ -184,6 +186,7 @@ func (tx *Tx) init() {
 	tx.Project = NewProjectClient(tx.config)
 	tx.ProjectBackend = NewProjectBackendClient(tx.config)
 	tx.RefreshToken = NewRefreshTokenClient(tx.config)
+	tx.Resource = NewResourceClient(tx.config)
 	tx.Segment = NewSegmentClient(tx.config)
 	tx.StageBackendOverride = NewStageBackendOverrideClient(tx.config)
 	tx.SubJob = NewSubJobClient(tx.config)

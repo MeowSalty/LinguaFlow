@@ -311,6 +311,33 @@ var (
 			},
 		},
 	}
+	// ResourcesColumns holds the columns for the "resources" table.
+	ResourcesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "filename", Type: field.TypeString},
+		{Name: "format", Type: field.TypeString},
+		{Name: "storage_path", Type: field.TypeString},
+		{Name: "total_segments", Type: field.TypeInt, Default: 0},
+		{Name: "status", Type: field.TypeString, Default: "ready"},
+		{Name: "error_message", Type: field.TypeString, Nullable: true},
+		{Name: "project_id", Type: field.TypeInt, Nullable: true},
+	}
+	// ResourcesTable holds the schema information for the "resources" table.
+	ResourcesTable = &schema.Table{
+		Name:       "resources",
+		Columns:    ResourcesColumns,
+		PrimaryKey: []*schema.Column{ResourcesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "resources_projects_resources",
+				Columns:    []*schema.Column{ResourcesColumns[9]},
+				RefColumns: []*schema.Column{ProjectsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
 	// SegmentsColumns holds the columns for the "segments" table.
 	SegmentsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -321,7 +348,8 @@ var (
 		{Name: "target_text", Type: field.TypeString, Nullable: true},
 		{Name: "status", Type: field.TypeString, Default: "pending"},
 		{Name: "review_comment", Type: field.TypeString, Nullable: true},
-		{Name: "sub_job_segments", Type: field.TypeInt},
+		{Name: "resource_id", Type: field.TypeInt, Nullable: true},
+		{Name: "sub_job_segments", Type: field.TypeInt, Nullable: true},
 		{Name: "user_reviewed_segments", Type: field.TypeInt, Nullable: true},
 	}
 	// SegmentsTable holds the schema information for the "segments" table.
@@ -331,14 +359,20 @@ var (
 		PrimaryKey: []*schema.Column{SegmentsColumns[0]},
 		ForeignKeys: []*schema.ForeignKey{
 			{
-				Symbol:     "segments_sub_jobs_segments",
+				Symbol:     "segments_resources_segments",
 				Columns:    []*schema.Column{SegmentsColumns[8]},
+				RefColumns: []*schema.Column{ResourcesColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "segments_sub_jobs_segments",
+				Columns:    []*schema.Column{SegmentsColumns[9]},
 				RefColumns: []*schema.Column{SubJobsColumns[0]},
-				OnDelete:   schema.NoAction,
+				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "segments_users_reviewed_segments",
-				Columns:    []*schema.Column{SegmentsColumns[9]},
+				Columns:    []*schema.Column{SegmentsColumns[10]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -554,6 +588,7 @@ var (
 		ProjectsTable,
 		ProjectBackendsTable,
 		RefreshTokensTable,
+		ResourcesTable,
 		SegmentsTable,
 		StageBackendOverridesTable,
 		SubJobsTable,
@@ -580,8 +615,10 @@ func init() {
 	ProjectsTable.ForeignKeys[1].RefTable = UsersTable
 	ProjectBackendsTable.ForeignKeys[0].RefTable = ProjectsTable
 	RefreshTokensTable.ForeignKeys[0].RefTable = UsersTable
-	SegmentsTable.ForeignKeys[0].RefTable = SubJobsTable
-	SegmentsTable.ForeignKeys[1].RefTable = UsersTable
+	ResourcesTable.ForeignKeys[0].RefTable = ProjectsTable
+	SegmentsTable.ForeignKeys[0].RefTable = ResourcesTable
+	SegmentsTable.ForeignKeys[1].RefTable = SubJobsTable
+	SegmentsTable.ForeignKeys[2].RefTable = UsersTable
 	StageBackendOverridesTable.ForeignKeys[0].RefTable = ProjectsTable
 	SubJobsTable.ForeignKeys[0].RefTable = JobsTable
 	TmEntriesTable.ForeignKeys[0].RefTable = OrganizationsTable

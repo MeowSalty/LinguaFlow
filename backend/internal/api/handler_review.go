@@ -13,7 +13,8 @@ import (
 
 type segmentResponse struct {
 	ID            int           `json:"id"`
-	SubJobID      int           `json:"sub_job_id"`
+	SubJobID      int           `json:"sub_job_id,omitempty"`
+	ResourceID    int           `json:"resource_id,omitempty"`
 	SegmentIndex  int           `json:"segment_index"`
 	SourceText    string        `json:"source_text"`
 	TargetText    string        `json:"target_text,omitempty"`
@@ -212,6 +213,9 @@ func toSegmentResponse(row *ent.Segment) segmentResponse {
 	}
 	if row.Edges.SubJob != nil {
 		resp.SubJobID = row.Edges.SubJob.ID
+	}
+	if row.Edges.Resource != nil {
+		resp.ResourceID = row.Edges.Resource.ID
 	}
 	if row.Edges.ReviewedBy != nil {
 		reviewer := toUserResponse(row.Edges.ReviewedBy)

@@ -25,6 +25,20 @@ func (s *Server) newRouter() http.Handler {
 
 	apiV1 := chi.NewRouter()
 	r.Mount("/api/v1", HandlerFromMux(s, apiV1))
+
+	// Resource 管理 API（手动注册，待后续纳入 OpenAPI spec）
+	// 每个 handler 内部已调用 authUserFromContext 进行认证检查
+	apiV1.Route("/projects/{projectId}/resources", func(r chi.Router) {
+		r.Get("/", s.authHandleFunc(s.handleListProjectResources))
+		r.Post("/", s.authHandleFunc(s.handleUploadProjectResources))
+		r.Get("/{resourceId}", s.authHandleFunc(s.handleGetResource))
+		r.Put("/{resourceId}", s.authHandleFunc(s.handleUpdateResource))
+		r.Delete("/{resourceId}", s.authHandleFunc(s.handleDeleteResource))
+		r.Get("/{resourceId}/download", s.authHandleFunc(s.handleDownloadResourceFile))
+		r.Get("/{resourceId}/segments", s.authHandleFunc(s.handleListResourceSegments))
+		r.Patch("/{resourceId}/segments/{segmentId}", s.authHandleFunc(s.handleUpdateResourceSegment))
+	})
+
 	return r
 }
 

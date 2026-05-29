@@ -38,6 +38,14 @@ func authUserFromContext(ctx context.Context) (authenticatedUser, bool) {
 	return v, ok
 }
 
+// authHandleFunc 将需要认证的 http.HandlerFunc 包装为 chi 路由可用的 http.HandlerFunc。
+// 等效于 s.requireAuth(http.HandlerFunc(fn)) 但返回的是函数而非 Handler。
+func (s *Server) authHandleFunc(fn http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		s.requireAuth(http.HandlerFunc(fn)).ServeHTTP(w, r)
+	}
+}
+
 func bearerToken(header string) string {
 	const prefix = "Bearer "
 	if !strings.HasPrefix(header, prefix) {

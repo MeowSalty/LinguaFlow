@@ -14,6 +14,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/projectbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
@@ -305,6 +306,47 @@ func init() {
 	refreshtokenDescTokenHash := refreshtokenFields[0].Descriptor()
 	// refreshtoken.TokenHashValidator is a validator for the "token_hash" field. It is called by the builders before save.
 	refreshtoken.TokenHashValidator = refreshtokenDescTokenHash.Validators[0].(func(string) error)
+	resourceMixin := schema.Resource{}.Mixin()
+	resourceMixinFields0 := resourceMixin[0].Fields()
+	_ = resourceMixinFields0
+	resourceFields := schema.Resource{}.Fields()
+	_ = resourceFields
+	// resourceDescCreatedAt is the schema descriptor for created_at field.
+	resourceDescCreatedAt := resourceMixinFields0[0].Descriptor()
+	// resource.DefaultCreatedAt holds the default value on creation for the created_at field.
+	resource.DefaultCreatedAt = resourceDescCreatedAt.Default.(func() time.Time)
+	// resourceDescUpdatedAt is the schema descriptor for updated_at field.
+	resourceDescUpdatedAt := resourceMixinFields0[1].Descriptor()
+	// resource.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	resource.DefaultUpdatedAt = resourceDescUpdatedAt.Default.(func() time.Time)
+	// resource.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	resource.UpdateDefaultUpdatedAt = resourceDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// resourceDescFilename is the schema descriptor for filename field.
+	resourceDescFilename := resourceFields[0].Descriptor()
+	// resource.FilenameValidator is a validator for the "filename" field. It is called by the builders before save.
+	resource.FilenameValidator = resourceDescFilename.Validators[0].(func(string) error)
+	// resourceDescFormat is the schema descriptor for format field.
+	resourceDescFormat := resourceFields[1].Descriptor()
+	// resource.FormatValidator is a validator for the "format" field. It is called by the builders before save.
+	resource.FormatValidator = resourceDescFormat.Validators[0].(func(string) error)
+	// resourceDescStoragePath is the schema descriptor for storage_path field.
+	resourceDescStoragePath := resourceFields[2].Descriptor()
+	// resource.StoragePathValidator is a validator for the "storage_path" field. It is called by the builders before save.
+	resource.StoragePathValidator = resourceDescStoragePath.Validators[0].(func(string) error)
+	// resourceDescTotalSegments is the schema descriptor for total_segments field.
+	resourceDescTotalSegments := resourceFields[3].Descriptor()
+	// resource.DefaultTotalSegments holds the default value on creation for the total_segments field.
+	resource.DefaultTotalSegments = resourceDescTotalSegments.Default.(int)
+	// resource.TotalSegmentsValidator is a validator for the "total_segments" field. It is called by the builders before save.
+	resource.TotalSegmentsValidator = resourceDescTotalSegments.Validators[0].(func(int) error)
+	// resourceDescStatus is the schema descriptor for status field.
+	resourceDescStatus := resourceFields[4].Descriptor()
+	// resource.DefaultStatus holds the default value on creation for the status field.
+	resource.DefaultStatus = resourceDescStatus.Default.(string)
+	// resourceDescProjectID is the schema descriptor for project_id field.
+	resourceDescProjectID := resourceFields[6].Descriptor()
+	// resource.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
+	resource.ProjectIDValidator = resourceDescProjectID.Validators[0].(func(int) error)
 	segmentMixin := schema.Segment{}.Mixin()
 	segmentMixinFields0 := segmentMixin[0].Fields()
 	_ = segmentMixinFields0
@@ -332,6 +374,10 @@ func init() {
 	segmentDescStatus := segmentFields[3].Descriptor()
 	// segment.DefaultStatus holds the default value on creation for the status field.
 	segment.DefaultStatus = segmentDescStatus.Default.(string)
+	// segmentDescResourceID is the schema descriptor for resource_id field.
+	segmentDescResourceID := segmentFields[5].Descriptor()
+	// segment.ResourceIDValidator is a validator for the "resource_id" field. It is called by the builders before save.
+	segment.ResourceIDValidator = segmentDescResourceID.Validators[0].(func(int) error)
 	stagebackendoverrideMixin := schema.StageBackendOverride{}.Mixin()
 	stagebackendoverrideMixinFields0 := stagebackendoverrideMixin[0].Fields()
 	_ = stagebackendoverrideMixinFields0

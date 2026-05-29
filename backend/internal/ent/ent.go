@@ -21,6 +21,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/projectbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
@@ -97,6 +98,7 @@ func checkColumn(t, c string) error {
 			project.Table:              project.ValidColumn,
 			projectbackend.Table:       projectbackend.ValidColumn,
 			refreshtoken.Table:         refreshtoken.ValidColumn,
+			resource.Table:             resource.ValidColumn,
 			segment.Table:              segment.ValidColumn,
 			stagebackendoverride.Table: stagebackendoverride.ValidColumn,
 			subjob.Table:               subjob.ValidColumn,

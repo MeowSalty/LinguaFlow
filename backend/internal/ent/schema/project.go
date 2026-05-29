@@ -44,5 +44,6 @@ func (Project) Edges() []ent.Edge {
 		edge.To("jobs", Job.Type),
 		edge.To("activity_logs", ActivityLog.Type),
 		edge.To("usage_records", UsageRecord.Type),
+		edge.To("resources", Resource.Type),
 	}
 }

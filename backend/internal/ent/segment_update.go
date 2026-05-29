@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
@@ -125,15 +126,48 @@ func (_u *SegmentUpdate) ClearReviewComment() *SegmentUpdate {
 	return _u
 }
 
+// SetResourceID sets the "resource_id" field.
+func (_u *SegmentUpdate) SetResourceID(v int) *SegmentUpdate {
+	_u.mutation.SetResourceID(v)
+	return _u
+}
+
+// SetNillableResourceID sets the "resource_id" field if the given value is not nil.
+func (_u *SegmentUpdate) SetNillableResourceID(v *int) *SegmentUpdate {
+	if v != nil {
+		_u.SetResourceID(*v)
+	}
+	return _u
+}
+
+// ClearResourceID clears the value of the "resource_id" field.
+func (_u *SegmentUpdate) ClearResourceID() *SegmentUpdate {
+	_u.mutation.ClearResourceID()
+	return _u
+}
+
 // SetSubJobID sets the "sub_job" edge to the SubJob entity by ID.
 func (_u *SegmentUpdate) SetSubJobID(id int) *SegmentUpdate {
 	_u.mutation.SetSubJobID(id)
 	return _u
 }
 
+// SetNillableSubJobID sets the "sub_job" edge to the SubJob entity by ID if the given value is not nil.
+func (_u *SegmentUpdate) SetNillableSubJobID(id *int) *SegmentUpdate {
+	if id != nil {
+		_u = _u.SetSubJobID(*id)
+	}
+	return _u
+}
+
 // SetSubJob sets the "sub_job" edge to the SubJob entity.
 func (_u *SegmentUpdate) SetSubJob(v *SubJob) *SegmentUpdate {
 	return _u.SetSubJobID(v.ID)
+}
+
+// SetResource sets the "resource" edge to the Resource entity.
+func (_u *SegmentUpdate) SetResource(v *Resource) *SegmentUpdate {
+	return _u.SetResourceID(v.ID)
 }
 
 // SetReviewedByID sets the "reviewed_by" edge to the User entity by ID.
@@ -163,6 +197,12 @@ func (_u *SegmentUpdate) Mutation() *SegmentMutation {
 // ClearSubJob clears the "sub_job" edge to the SubJob entity.
 func (_u *SegmentUpdate) ClearSubJob() *SegmentUpdate {
 	_u.mutation.ClearSubJob()
+	return _u
+}
+
+// ClearResource clears the "resource" edge to the Resource entity.
+func (_u *SegmentUpdate) ClearResource() *SegmentUpdate {
+	_u.mutation.ClearResource()
 	return _u
 }
 
@@ -220,8 +260,10 @@ func (_u *SegmentUpdate) check() error {
 			return &ValidationError{Name: "source_text", err: fmt.Errorf(`ent: validator failed for field "Segment.source_text": %w`, err)}
 		}
 	}
-	if _u.mutation.SubJobCleared() && len(_u.mutation.SubJobIDs()) > 0 {
-		return errors.New(`ent: clearing a required unique edge "Segment.sub_job"`)
+	if v, ok := _u.mutation.ResourceID(); ok {
+		if err := segment.ResourceIDValidator(v); err != nil {
+			return &ValidationError{Name: "resource_id", err: fmt.Errorf(`ent: validator failed for field "Segment.resource_id": %w`, err)}
+		}
 	}
 	return nil
 }
@@ -287,6 +329,35 @@ func (_u *SegmentUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(subjob.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ResourceCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   segment.ResourceTable,
+			Columns: []string{segment.ResourceColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(resource.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ResourceIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   segment.ResourceTable,
+			Columns: []string{segment.ResourceColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(resource.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -438,15 +509,48 @@ func (_u *SegmentUpdateOne) ClearReviewComment() *SegmentUpdateOne {
 	return _u
 }
 
+// SetResourceID sets the "resource_id" field.
+func (_u *SegmentUpdateOne) SetResourceID(v int) *SegmentUpdateOne {
+	_u.mutation.SetResourceID(v)
+	return _u
+}
+
+// SetNillableResourceID sets the "resource_id" field if the given value is not nil.
+func (_u *SegmentUpdateOne) SetNillableResourceID(v *int) *SegmentUpdateOne {
+	if v != nil {
+		_u.SetResourceID(*v)
+	}
+	return _u
+}
+
+// ClearResourceID clears the value of the "resource_id" field.
+func (_u *SegmentUpdateOne) ClearResourceID() *SegmentUpdateOne {
+	_u.mutation.ClearResourceID()
+	return _u
+}
+
 // SetSubJobID sets the "sub_job" edge to the SubJob entity by ID.
 func (_u *SegmentUpdateOne) SetSubJobID(id int) *SegmentUpdateOne {
 	_u.mutation.SetSubJobID(id)
 	return _u
 }
 
+// SetNillableSubJobID sets the "sub_job" edge to the SubJob entity by ID if the given value is not nil.
+func (_u *SegmentUpdateOne) SetNillableSubJobID(id *int) *SegmentUpdateOne {
+	if id != nil {
+		_u = _u.SetSubJobID(*id)
+	}
+	return _u
+}
+
 // SetSubJob sets the "sub_job" edge to the SubJob entity.
 func (_u *SegmentUpdateOne) SetSubJob(v *SubJob) *SegmentUpdateOne {
 	return _u.SetSubJobID(v.ID)
+}
+
+// SetResource sets the "resource" edge to the Resource entity.
+func (_u *SegmentUpdateOne) SetResource(v *Resource) *SegmentUpdateOne {
+	return _u.SetResourceID(v.ID)
 }
 
 // SetReviewedByID sets the "reviewed_by" edge to the User entity by ID.
@@ -476,6 +580,12 @@ func (_u *SegmentUpdateOne) Mutation() *SegmentMutation {
 // ClearSubJob clears the "sub_job" edge to the SubJob entity.
 func (_u *SegmentUpdateOne) ClearSubJob() *SegmentUpdateOne {
 	_u.mutation.ClearSubJob()
+	return _u
+}
+
+// ClearResource clears the "resource" edge to the Resource entity.
+func (_u *SegmentUpdateOne) ClearResource() *SegmentUpdateOne {
+	_u.mutation.ClearResource()
 	return _u
 }
 
@@ -546,8 +656,10 @@ func (_u *SegmentUpdateOne) check() error {
 			return &ValidationError{Name: "source_text", err: fmt.Errorf(`ent: validator failed for field "Segment.source_text": %w`, err)}
 		}
 	}
-	if _u.mutation.SubJobCleared() && len(_u.mutation.SubJobIDs()) > 0 {
-		return errors.New(`ent: clearing a required unique edge "Segment.sub_job"`)
+	if v, ok := _u.mutation.ResourceID(); ok {
+		if err := segment.ResourceIDValidator(v); err != nil {
+			return &ValidationError{Name: "resource_id", err: fmt.Errorf(`ent: validator failed for field "Segment.resource_id": %w`, err)}
+		}
 	}
 	return nil
 }
@@ -630,6 +742,35 @@ func (_u *SegmentUpdateOne) sqlSave(ctx context.Context) (_node *Segment, err er
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(subjob.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ResourceCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   segment.ResourceTable,
+			Columns: []string{segment.ResourceColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(resource.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ResourceIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.M2O,
+			Inverse: true,
+			Table:   segment.ResourceTable,
+			Columns: []string{segment.ResourceColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(resource.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
