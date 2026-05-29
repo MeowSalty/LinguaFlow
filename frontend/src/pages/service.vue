@@ -49,6 +49,23 @@ const rules = computed<FormRules>(() => ({
   ],
 }))
 
+interface ApiProblem {
+  status?: number
+  title?: string
+  detail?: string
+}
+
+const extractErrorMessage = (error: unknown, fallback: string): string => {
+  if (error instanceof Error && error.message) {
+    return error.message
+  }
+  if (error && typeof error === 'object') {
+    const problem = error as ApiProblem
+    return problem.detail || problem.title || fallback
+  }
+  return fallback
+}
+
 const onSubmit = async () => {
   try {
     await formRef.value?.validate()
@@ -58,10 +75,13 @@ const onSubmit = async () => {
 
   submitting.value = true
   try {
-    service.setBaseUrl(formValue.baseUrl)
-    message.success(t('service.messages.connected', { url: service.baseUrl }))
+    await service.connect(formValue.baseUrl)
+    message.success(t('service.messages.connected', { name: service.displayName }))
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : null
     await router.push(redirect ?? '/login')
+  } catch (error) {
+    console.error(error)
+    message.error(extractErrorMessage(error, t('service.messages.connectFailed')))
   } finally {
     submitting.value = false
   }

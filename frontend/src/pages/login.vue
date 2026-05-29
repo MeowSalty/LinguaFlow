@@ -120,7 +120,7 @@ const onSubmit = async () => {
         to="/service"
         class="text-lf-text-muted no-underline transition-colors hover:text-brand-500"
       >
-        {{ t('login.links.switchService', { url: service.baseUrl }) }}
+        {{ t('login.links.switchService', { name: service.displayName }) }}
       </RouterLink>
       <RouterLink to="/register" class="text-brand-500 no-underline hover:underline">
         {{ t('login.links.register') }}

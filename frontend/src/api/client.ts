@@ -29,7 +29,7 @@ const DEFAULT_API_BASE_URL = '/api/v1'
 const ACCESS_TOKEN_STORAGE_KEY = 'linguaflow.access_token'
 const REFRESH_TOKEN_STORAGE_KEY = 'linguaflow.refresh_token'
 const API_BASE_URL_STORAGE_KEY = 'linguaflow.api_base_url'
-const AUTH_TOKEN_SKIP_PATHS = new Set(['/auth/register', '/auth/login', '/auth/refresh'])
+const AUTH_TOKEN_SKIP_PATHS = new Set(['/ping', '/auth/register', '/auth/login', '/auth/refresh'])
 
 const getDefaultTokenStorage = (): TokenStorage | undefined => {
   if (typeof window === 'undefined') {
@@ -184,6 +184,20 @@ export const setApiBaseUrl = (baseUrl: string): void => {
   const normalized = resolveApiBaseUrl(baseUrl)
   _client = createApiClient({ baseUrl: normalized })
   writeStoredApiBaseUrl(normalized)
+}
+
+export const pingService = async (baseUrl: string): Promise<ApiSchemas['HealthResponse']> => {
+  const client = createApiClient({
+    baseUrl,
+    getAccessToken: () => null,
+  })
+  const { data, error, response } = await client.GET('/ping')
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.pingFailed'), error, response)
+  }
+
+  return data
 }
 
 export const apiClient = new Proxy({} as ApiClient, {

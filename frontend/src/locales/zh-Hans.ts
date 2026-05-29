@@ -44,7 +44,8 @@ const messages = {
       invalidUrl: '请填写合法的 URL，例如 https://linguaflow.example.com/api/v1',
     },
     messages: {
-      connected: '已连接到 {url}',
+      connected: '已连接到 {name}',
+      connectFailed: '连接失败，请检查服务器地址',
     },
     hints: {
       prefix: '留空或填写',
@@ -70,7 +71,7 @@ const messages = {
       failed: '登录失败，请检查用户名和密码',
     },
     links: {
-      switchService: '切换服务器 · {url}',
+      switchService: '切换服务器 · {name}',
       register: '没有账号？去注册',
     },
   },
@@ -276,6 +277,7 @@ const messages = {
     errors: {
       requestNotSent: '请求未送达，请检查网络或服务器地址',
       serverReturned: '服务器返回 {status}',
+      pingFailed: '连接服务器失败',
       loginFailed: '登录失败',
       registerFailed: '注册失败',
       refreshSessionFailed: '刷新会话失败',

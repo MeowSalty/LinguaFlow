@@ -140,7 +140,7 @@ const onSelectTheme = (key: string | number): void => {
           </NButton>
         </NDropdown>
         <span class="hidden text-xs text-lf-text-subtle sm:inline" :title="service.baseUrl">
-          {{ service.baseUrl }}
+          {{ service.displayName }}
         </span>
         <NDropdown
           v-if="auth.user"
