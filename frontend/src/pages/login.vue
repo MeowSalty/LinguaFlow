@@ -81,7 +81,7 @@ const onSubmit = async () => {
 
 <template>
   <BlankLayout :title="t('login.title')" :subtitle="t('login.subtitle')">
-    <NCard :bordered="false" class="shadow-lg shadow-slate-200/60">
+    <NCard :bordered="false" class="shadow-lg shadow-lf-shadow">
       <NForm
         ref="formRef"
         :model="formValue"
@@ -115,10 +115,10 @@ const onSubmit = async () => {
       </NForm>
     </NCard>
 
-    <div class="mt-6 flex items-center justify-between text-xs text-slate-500">
+    <div class="mt-6 flex items-center justify-between text-xs text-lf-text-muted">
       <RouterLink
         to="/service"
-        class="text-slate-500 no-underline transition-colors hover:text-brand-500"
+        class="text-lf-text-muted no-underline transition-colors hover:text-brand-500"
       >
         {{ t('login.links.switchService', { url: service.baseUrl }) }}
       </RouterLink>

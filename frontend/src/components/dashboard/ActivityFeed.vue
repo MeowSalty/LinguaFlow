@@ -34,16 +34,18 @@ const getActionLabel = (action: string): string => {
 </script>
 
 <template>
-  <div class="rounded-xl bg-white p-6 shadow-sm shadow-slate-200/60">
-    <h2 class="text-lg font-medium text-slate-900">{{ t('dashboard.activity.title') }}</h2>
+  <div class="rounded-xl bg-lf-surface p-6 shadow-sm">
+    <h2 class="text-lg font-medium text-lf-text-strong">
+      {{ t('dashboard.activity.title') }}
+    </h2>
 
     <!-- 加载状态 -->
     <div v-if="stats.activitiesLoading && stats.activities.length === 0" class="mt-4 space-y-4">
       <div v-for="i in 5" :key="i" class="flex items-start gap-3">
-        <div class="mt-1 h-2 w-2 shrink-0 animate-pulse rounded-full bg-slate-200" />
+        <div class="mt-1 h-2 w-2 shrink-0 animate-pulse rounded-full bg-lf-border" />
         <div class="flex-1 space-y-1">
-          <div class="h-4 w-3/4 animate-pulse rounded bg-slate-200" />
-          <div class="h-3 w-1/3 animate-pulse rounded bg-slate-200" />
+          <div class="h-4 w-3/4 animate-pulse rounded bg-lf-border" />
+          <div class="h-3 w-1/3 animate-pulse rounded bg-lf-border" />
         </div>
       </div>
     </div>
@@ -69,15 +71,17 @@ const getActionLabel = (action: string): string => {
         <div class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand-500" />
 
         <div class="min-w-0 flex-1">
-          <p class="text-sm text-slate-700">
+          <p class="text-sm text-lf-text">
             <span v-if="activity.actor" class="font-medium">
               {{ activity.actor.display_name?.trim() || activity.actor.username }}
             </span>
             {{ getActionLabel(activity.action) }}
             <span class="font-medium">{{ activity.resource_type }}</span>
-            <span v-if="activity.message" class="text-slate-500"> — {{ activity.message }}</span>
+            <span v-if="activity.message" class="text-lf-text-muted">
+              - {{ activity.message }}</span
+            >
           </p>
-          <time class="text-xs text-slate-400">{{ relativeTime(activity.created_at) }}</time>
+          <time class="text-xs text-lf-text-subtle">{{ relativeTime(activity.created_at) }}</time>
         </div>
       </div>
 

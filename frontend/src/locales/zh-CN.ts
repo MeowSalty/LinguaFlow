@@ -5,6 +5,7 @@ const messages = {
     loadMore: '加载更多',
     switchService: '切换服务器',
     currentService: '当前服务器',
+    theme: '主题',
   },
   nav: {
     main: '主导航',
@@ -24,6 +25,11 @@ const messages = {
   },
   locale: {
     zhCN: '简体中文',
+  },
+  theme: {
+    system: '跟随系统',
+    light: '亮色',
+    dark: '暗色',
   },
   service: {
     title: '选择 LinguaFlow 服务器',

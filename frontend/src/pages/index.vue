@@ -26,12 +26,12 @@ onMounted(() => {
 <template>
   <div class="space-y-6">
     <!-- 欢迎区域 -->
-    <NCard :bordered="false" class="shadow-sm shadow-slate-200/60">
+    <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
       <div class="flex flex-col gap-2">
-        <h1 class="text-2xl font-semibold tracking-tight text-slate-900">
+        <h1 class="text-2xl font-semibold tracking-tight text-lf-text-strong">
           {{ greeting }}
         </h1>
-        <p class="text-sm text-slate-500">
+        <p class="text-sm text-lf-text-muted">
           {{ t('dashboard.intro') }}
         </p>
       </div>
@@ -80,20 +80,20 @@ onMounted(() => {
       <NCard
         hoverable
         :bordered="false"
-        class="cursor-pointer shadow-sm shadow-slate-200/60 transition-shadow hover:shadow-md hover:shadow-slate-200/80"
+        class="cursor-pointer shadow-sm shadow-lf-shadow transition-shadow hover:shadow-md hover:shadow-lf-shadow-strong"
         @click="router.push({ path: '/projects', query: { create: '1' } })"
       >
         <div class="flex items-center gap-3">
           <div
-            class="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50 text-brand-500"
+            class="flex h-10 w-10 items-center justify-center rounded-lg bg-lf-brand-soft text-brand-500"
           >
             ➕
           </div>
           <div>
-            <div class="font-medium text-slate-900">
+            <div class="font-medium text-lf-text-strong">
               {{ t('dashboard.quickActions.createProject.title') }}
             </div>
-            <div class="text-xs text-slate-500">
+            <div class="text-xs text-lf-text-muted">
               {{ t('dashboard.quickActions.createProject.description') }}
             </div>
           </div>
@@ -103,20 +103,20 @@ onMounted(() => {
       <NCard
         hoverable
         :bordered="false"
-        class="cursor-pointer shadow-sm shadow-slate-200/60 transition-shadow hover:shadow-md hover:shadow-slate-200/80"
+        class="cursor-pointer shadow-sm shadow-lf-shadow transition-shadow hover:shadow-md hover:shadow-lf-shadow-strong"
         @click="router.push({ path: '/projects' })"
       >
         <div class="flex items-center gap-3">
           <div
-            class="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-500"
+            class="flex h-10 w-10 items-center justify-center rounded-lg bg-lf-info-soft text-blue-500"
           >
             📋
           </div>
           <div>
-            <div class="font-medium text-slate-900">
+            <div class="font-medium text-lf-text-strong">
               {{ t('dashboard.quickActions.viewProjects.title') }}
             </div>
-            <div class="text-xs text-slate-500">
+            <div class="text-xs text-lf-text-muted">
               {{ t('dashboard.quickActions.viewProjects.description') }}
             </div>
           </div>
@@ -126,19 +126,19 @@ onMounted(() => {
       <NCard
         hoverable
         :bordered="false"
-        class="cursor-pointer shadow-sm shadow-slate-200/60 transition-shadow hover:shadow-md hover:shadow-slate-200/80"
+        class="cursor-pointer shadow-sm shadow-lf-shadow transition-shadow hover:shadow-md hover:shadow-lf-shadow-strong"
       >
         <div class="flex items-center gap-3">
           <div
-            class="flex h-10 w-10 items-center justify-center rounded-lg bg-purple-50 text-purple-500"
+            class="flex h-10 w-10 items-center justify-center rounded-lg bg-lf-info-soft text-purple-500"
           >
             🏢
           </div>
           <div>
-            <div class="font-medium text-slate-900">
+            <div class="font-medium text-lf-text-strong">
               {{ t('dashboard.quickActions.manageOrganizations.title') }}
             </div>
-            <div class="text-xs text-slate-500">
+            <div class="text-xs text-lf-text-muted">
               {{ t('dashboard.quickActions.manageOrganizations.description') }}
             </div>
           </div>

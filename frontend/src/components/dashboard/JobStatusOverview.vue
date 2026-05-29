@@ -23,15 +23,17 @@ const failedPercent = computed(() => {
 </script>
 
 <template>
-  <div class="rounded-xl bg-white p-6 shadow-sm shadow-slate-200/60">
-    <h2 class="text-lg font-medium text-slate-900">{{ t('dashboard.jobStatus.title') }}</h2>
+  <div class="rounded-xl bg-lf-surface p-6 shadow-sm">
+    <h2 class="text-lg font-medium text-lf-text-strong">
+      {{ t('dashboard.jobStatus.title') }}
+    </h2>
 
     <!-- 加载状态 -->
     <div v-if="stats.statsLoading" class="mt-6 space-y-4">
-      <div class="h-4 w-full animate-pulse rounded bg-slate-200" />
+      <div class="h-4 w-full animate-pulse rounded bg-lf-border" />
       <div class="grid grid-cols-2 gap-4">
-        <div class="h-16 animate-pulse rounded bg-slate-200" />
-        <div class="h-16 animate-pulse rounded bg-slate-200" />
+        <div class="h-16 animate-pulse rounded bg-lf-border" />
+        <div class="h-16 animate-pulse rounded bg-lf-border" />
       </div>
     </div>
 
@@ -42,11 +44,11 @@ const failedPercent = computed(() => {
     <template v-else>
       <!-- 进度条 -->
       <div class="mt-6">
-        <div class="flex items-center justify-between text-xs text-slate-500">
+        <div class="flex items-center justify-between text-xs text-lf-text-muted">
           <span>{{ t('dashboard.jobStatus.total', { count: n(totalJobs) }) }}</span>
           <span>{{ t('dashboard.jobStatus.successRate', { percent: completedPercent }) }}</span>
         </div>
-        <div class="mt-2 h-3 w-full overflow-hidden rounded-full bg-slate-100">
+        <div class="mt-2 h-3 w-full overflow-hidden rounded-full bg-lf-bg-soft">
           <div class="flex h-full">
             <div
               class="bg-green-500 transition-all duration-500"
@@ -62,13 +64,13 @@ const failedPercent = computed(() => {
 
       <!-- 详情卡片 -->
       <div class="mt-6 grid grid-cols-2 gap-4">
-        <div class="rounded-lg bg-green-50 p-4">
+        <div class="rounded-lg bg-lf-success-soft p-4">
           <div class="text-sm text-green-600">{{ t('dashboard.jobStatus.completed') }}</div>
           <div class="mt-1 text-2xl font-bold text-green-700">
             {{ n(completedJobs) }}
           </div>
         </div>
-        <div class="rounded-lg bg-red-50 p-4">
+        <div class="rounded-lg bg-lf-danger-soft p-4">
           <div class="text-sm text-red-600">{{ t('dashboard.jobStatus.failed') }}</div>
           <div class="mt-1 text-2xl font-bold text-red-700">
             {{ n(failedJobs) }}

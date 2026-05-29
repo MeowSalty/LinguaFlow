@@ -60,7 +60,8 @@ export const useProjectsStore = defineStore('projects', () => {
     const query = searchQuery.value.trim().toLowerCase()
 
     return sortedItems.value.filter((project) => {
-      const matchesScope = scopeFilter.value === 'all' || project.resource_scope === scopeFilter.value
+      const matchesScope =
+        scopeFilter.value === 'all' || project.resource_scope === scopeFilter.value
       const matchesQuery =
         query.length === 0 ||
         includesNormalized(project.name, query) ||
@@ -93,7 +94,8 @@ export const useProjectsStore = defineStore('projects', () => {
       const response = await fetchProjects()
       items.value = response.items
     } catch (loadError) {
-      error.value = loadError instanceof Error ? loadError.message : t('api.errors.loadProjectsFailed')
+      error.value =
+        loadError instanceof Error ? loadError.message : t('api.errors.loadProjectsFailed')
     } finally {
       loading.value = false
     }
@@ -131,7 +133,10 @@ export const useProjectsStore = defineStore('projects', () => {
     }
   }
 
-  const updateProject = async (projectId: number, payload: UpdateProjectPayload): Promise<Project> => {
+  const updateProject = async (
+    projectId: number,
+    payload: UpdateProjectPayload,
+  ): Promise<Project> => {
     updating.value = true
     updateError.value = null
 
@@ -164,7 +169,8 @@ export const useProjectsStore = defineStore('projects', () => {
     }
   }
 
-  const isDeletingProject = (projectId: number): boolean => deletingProjectIds.value.includes(projectId)
+  const isDeletingProject = (projectId: number): boolean =>
+    deletingProjectIds.value.includes(projectId)
 
   const resetFilters = (): void => {
     searchQuery.value = ''

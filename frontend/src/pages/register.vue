@@ -125,7 +125,7 @@ const onSubmit = async () => {
 
 <template>
   <BlankLayout :title="t('register.title')" :subtitle="t('register.subtitle')">
-    <NCard :bordered="false" class="shadow-lg shadow-slate-200/60">
+    <NCard :bordered="false" class="shadow-lg shadow-lf-shadow">
       <NForm
         ref="formRef"
         :model="formValue"
@@ -186,7 +186,7 @@ const onSubmit = async () => {
       </NForm>
     </NCard>
 
-    <div class="mt-6 text-center text-xs text-slate-500">
+    <div class="mt-6 text-center text-xs text-lf-text-muted">
       {{ t('register.links.hasAccount') }}
       <RouterLink to="/login" class="text-brand-500 no-underline hover:underline">
         {{ t('register.links.login') }}

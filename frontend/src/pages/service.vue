@@ -70,7 +70,7 @@ const onSubmit = async () => {
 
 <template>
   <BlankLayout :title="t('service.title')" :subtitle="t('service.subtitle')">
-    <NCard :bordered="false" class="shadow-lg shadow-slate-200/60">
+    <NCard :bordered="false" class="shadow-lg shadow-lf-shadow">
       <NForm
         ref="formRef"
         :model="formValue"
@@ -93,9 +93,9 @@ const onSubmit = async () => {
         </NButton>
       </NForm>
 
-      <p class="mt-5 text-center text-xs text-slate-500">
+      <p class="mt-5 text-center text-xs text-lf-text-muted">
         {{ t('service.hints.prefix') }}
-        <code class="rounded bg-slate-100 px-1 py-0.5 text-slate-700">/api/v1</code>
+        <code class="rounded bg-lf-code-bg px-1 py-0.5 text-lf-text">/api/v1</code>
         {{ t('service.hints.suffix') }}
       </p>
     </NCard>

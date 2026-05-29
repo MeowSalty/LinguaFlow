@@ -112,7 +112,8 @@ const rules = computed<FormRules>(() => ({
   ],
   owner_org_id: [
     {
-      validator: () => formModel.resource_scope !== 'organization' || Boolean(formModel.owner_org_id),
+      validator: () =>
+        formModel.resource_scope !== 'organization' || Boolean(formModel.owner_org_id),
       message: t('projects.validation.organizationRequired'),
       trigger: ['change', 'blur'],
     },
@@ -173,7 +174,11 @@ const formatDate = (value?: string): string => {
 
 const getOrganizationName = (orgId?: number): string => {
   const organization = projects.organizations.find((item) => item.id === orgId)
-  return organization?.display_name?.trim() || organization?.name || t('projects.card.unknownOrganization')
+  return (
+    organization?.display_name?.trim() ||
+    organization?.name ||
+    t('projects.card.unknownOrganization')
+  )
 }
 
 const buildProjectPayload = (): ApiSchemas['CreateProjectRequest'] => {
@@ -269,19 +274,19 @@ onMounted(() => {
 
 <template>
   <div class="space-y-6">
-    <NCard :bordered="false" class="overflow-hidden shadow-sm shadow-slate-200/60">
+    <NCard :bordered="false" class="overflow-hidden shadow-sm shadow-lf-shadow">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
         <div class="space-y-3">
           <div
-            class="inline-flex items-center rounded-full bg-brand-50 px-3 py-1 text-xs font-medium text-brand-600"
+            class="inline-flex items-center rounded-full bg-lf-brand-soft px-3 py-1 text-xs font-medium text-brand-600"
           >
             {{ t('projects.eyebrow') }}
           </div>
           <div>
-            <h1 class="text-3xl font-semibold tracking-tight text-slate-950">
+            <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
               {{ t('projects.title') }}
             </h1>
-            <p class="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
+            <p class="mt-2 max-w-2xl text-sm leading-6 text-lf-text-muted">
               {{ t('projects.subtitle') }}
             </p>
           </div>
@@ -298,31 +303,41 @@ onMounted(() => {
     </NCard>
 
     <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
-      <NCard :bordered="false" class="shadow-sm shadow-slate-200/60">
-        <div class="text-xs font-medium text-slate-500">{{ t('projects.stats.total') }}</div>
-        <div class="mt-2 text-2xl font-semibold text-slate-950">{{ projects.projectCount }}</div>
+      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
+        <div class="text-xs font-medium text-lf-text-muted">
+          {{ t('projects.stats.total') }}
+        </div>
+        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
+          {{ projects.projectCount }}
+        </div>
       </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-slate-200/60">
-        <div class="text-xs font-medium text-slate-500">{{ t('projects.stats.personal') }}</div>
-        <div class="mt-2 text-2xl font-semibold text-slate-950">
+      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
+        <div class="text-xs font-medium text-lf-text-muted">
+          {{ t('projects.stats.personal') }}
+        </div>
+        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
           {{ projects.personalProjectCount }}
         </div>
       </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-slate-200/60">
-        <div class="text-xs font-medium text-slate-500">{{ t('projects.stats.organization') }}</div>
-        <div class="mt-2 text-2xl font-semibold text-slate-950">
+      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
+        <div class="text-xs font-medium text-lf-text-muted">
+          {{ t('projects.stats.organization') }}
+        </div>
+        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
           {{ projects.organizationProjectCount }}
         </div>
       </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-slate-200/60">
-        <div class="text-xs font-medium text-slate-500">{{ t('projects.stats.languagePairs') }}</div>
-        <div class="mt-2 text-2xl font-semibold text-slate-950">
+      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
+        <div class="text-xs font-medium text-lf-text-muted">
+          {{ t('projects.stats.languagePairs') }}
+        </div>
+        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
           {{ projects.languagePairCount }}
         </div>
       </NCard>
     </div>
 
-    <NCard :bordered="false" class="shadow-sm shadow-slate-200/60">
+    <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <NInput
           v-model:value="projects.searchQuery"
@@ -348,14 +363,14 @@ onMounted(() => {
     </NAlert>
 
     <div v-if="projects.loading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <NCard v-for="index in 6" :key="index" :bordered="false" class="shadow-sm shadow-slate-200/60">
+      <NCard v-for="index in 6" :key="index" :bordered="false" class="shadow-sm shadow-lf-shadow">
         <NSkeleton text :repeat="4" />
       </NCard>
     </div>
 
     <NEmpty
       v-else-if="projects.filteredItems.length === 0"
-      class="rounded-2xl bg-white py-16 shadow-sm shadow-slate-200/60"
+      class="rounded-2xl bg-lf-surface py-16 shadow-sm shadow-lf-shadow"
       :description="hasActiveFilters ? t('projects.empty.filtered') : t('projects.empty.default')"
     >
       <template #extra>
@@ -374,15 +389,15 @@ onMounted(() => {
         :key="project.id"
         hoverable
         :bordered="false"
-        class="group shadow-sm shadow-slate-200/60 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-slate-200/80"
+        class="group shadow-sm shadow-lf-shadow transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-lf-shadow-strong"
       >
         <div class="flex h-full flex-col gap-5">
           <div class="flex items-start justify-between gap-4">
             <div class="min-w-0">
-              <h2 class="truncate text-lg font-semibold text-slate-950">
+              <h2 class="truncate text-lg font-semibold text-lf-text-strong">
                 {{ project.name }}
               </h2>
-              <p class="mt-1 text-xs text-slate-400">
+              <p class="mt-1 text-xs text-lf-text-subtle">
                 {{ t('projects.card.projectId', { id: project.id }) }}
               </p>
             </div>
@@ -395,40 +410,51 @@ onMounted(() => {
             </NTag>
           </div>
 
-          <div class="rounded-2xl bg-slate-50 p-4">
+          <div class="rounded-2xl bg-lf-surface-muted p-4">
             <div class="flex items-center justify-between gap-3">
               <div class="min-w-0">
-                <div class="text-xs text-slate-400">{{ t('projects.card.source') }}</div>
-                <div class="mt-1 truncate text-base font-semibold text-slate-800">
+                <div class="text-xs text-lf-text-subtle">
+                  {{ t('projects.card.source') }}
+                </div>
+                <div class="mt-1 truncate text-base font-semibold text-lf-text">
                   {{ project.source_lang || '-' }}
                 </div>
               </div>
-              <div class="rounded-full bg-white px-3 py-1 text-sm text-brand-500 shadow-sm">→</div>
+              <div
+                class="rounded-full bg-lf-surface-elevated px-3 py-1 text-sm text-brand-500 shadow-sm shadow-lf-shadow"
+              >
+                →
+              </div>
               <div class="min-w-0 text-right">
-                <div class="text-xs text-slate-400">{{ t('projects.card.target') }}</div>
-                <div class="mt-1 truncate text-base font-semibold text-slate-800">
+                <div class="text-xs text-lf-text-subtle">
+                  {{ t('projects.card.target') }}
+                </div>
+                <div class="mt-1 truncate text-base font-semibold text-lf-text">
                   {{ project.target_lang || '-' }}
                 </div>
               </div>
             </div>
           </div>
 
-          <div class="mt-auto space-y-2 text-xs text-slate-500">
-            <div v-if="project.resource_scope === 'organization'" class="flex justify-between gap-3">
+          <div class="mt-auto space-y-2 text-xs text-lf-text-muted">
+            <div
+              v-if="project.resource_scope === 'organization'"
+              class="flex justify-between gap-3"
+            >
               <span>{{ t('projects.card.organization') }}</span>
-              <span class="truncate font-medium text-slate-700">
+              <span class="truncate font-medium text-lf-text">
                 {{ getOrganizationName(project.owner_org_id) }}
               </span>
             </div>
             <div class="flex justify-between gap-3">
               <span>{{ t('projects.card.updatedAt') }}</span>
-              <span class="font-medium text-slate-700">
+              <span class="font-medium text-lf-text">
                 {{ formatDate(project.updated_at ?? project.created_at) }}
               </span>
             </div>
           </div>
 
-          <div class="border-t border-slate-100 pt-4">
+          <div class="border-t border-lf-border-soft pt-4">
             <div class="flex items-center justify-between gap-3">
               <NButton
                 text
@@ -478,7 +504,7 @@ onMounted(() => {
 
     <NDrawer v-model:show="drawerVisible" :width="480" placement="right">
       <NDrawerContent :title="drawerTitle" closable>
-        <div class="mb-6 rounded-2xl bg-slate-50 p-4 text-sm leading-6 text-slate-500">
+        <div class="mb-6 rounded-2xl bg-lf-surface-muted p-4 text-sm leading-6 text-lf-text-muted">
           {{ drawerDescription }}
         </div>
 
