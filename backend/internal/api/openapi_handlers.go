@@ -158,34 +158,6 @@ func (s *Server) GetStagePlan(w http.ResponseWriter, r *http.Request, _ ProjectI
 	s.requireAuth(http.HandlerFunc(s.handleGetStagePlan)).ServeHTTP(w, r)
 }
 
-func (s *Server) CreateProjectJob(w http.ResponseWriter, r *http.Request, _ ProjectId) {
-	s.requireAuth(http.HandlerFunc(s.handleCreateProjectJob)).ServeHTTP(w, r)
-}
-
-func (s *Server) GetJob(w http.ResponseWriter, r *http.Request, _ JobId) {
-	s.requireAuth(http.HandlerFunc(s.handleGetJob)).ServeHTTP(w, r)
-}
-
-func (s *Server) ListJobSubJobs(w http.ResponseWriter, r *http.Request, _ JobId) {
-	s.requireAuth(http.HandlerFunc(s.handleListJobSubJobs)).ServeHTTP(w, r)
-}
-
-func (s *Server) GetJobSubJob(w http.ResponseWriter, r *http.Request, _ JobId, _ SubJobId) {
-	s.requireAuth(http.HandlerFunc(s.handleGetJobSubJob)).ServeHTTP(w, r)
-}
-
-func (s *Server) CancelJob(w http.ResponseWriter, r *http.Request, _ JobId) {
-	s.requireAuth(http.HandlerFunc(s.handleCancelJob)).ServeHTTP(w, r)
-}
-
-func (s *Server) RetryJob(w http.ResponseWriter, r *http.Request, _ JobId) {
-	s.requireAuth(http.HandlerFunc(s.handleRetryJob)).ServeHTTP(w, r)
-}
-
-func (s *Server) DownloadJobResult(w http.ResponseWriter, r *http.Request, _ JobId) {
-	s.requireAuth(http.HandlerFunc(s.handleDownloadJobResult)).ServeHTTP(w, r)
-}
-
 func (s *Server) ListProjectResources(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ListProjectResourcesParams) {
 	s.requireAuth(http.HandlerFunc(s.handleListProjectResources)).ServeHTTP(w, r)
 }
@@ -244,30 +216,6 @@ func (s *Server) DownloadTranslationJobResult(w http.ResponseWriter, r *http.Req
 
 func (s *Server) ListActivity(w http.ResponseWriter, r *http.Request, _ ListActivityParams) {
 	s.requireAuth(http.HandlerFunc(s.handleListActivity)).ServeHTTP(w, r)
-}
-
-func (s *Server) ApproveJob(w http.ResponseWriter, r *http.Request, _ JobId) {
-	s.requireAuth(http.HandlerFunc(s.handleApproveJob)).ServeHTTP(w, r)
-}
-
-func (s *Server) RetranslateRejectedSegments(w http.ResponseWriter, r *http.Request, _ JobId) {
-	s.requireAuth(http.HandlerFunc(s.handleRetranslateRejected)).ServeHTTP(w, r)
-}
-
-func (s *Server) ListJobSegments(w http.ResponseWriter, r *http.Request, _ JobId, _ ListJobSegmentsParams) {
-	s.requireAuth(http.HandlerFunc(s.handleListJobSegments)).ServeHTTP(w, r)
-}
-
-func (s *Server) EditSegment(w http.ResponseWriter, r *http.Request, _ SegmentId) {
-	s.requireAuth(http.HandlerFunc(s.handleEditSegment)).ServeHTTP(w, r)
-}
-
-func (s *Server) ApproveSegment(w http.ResponseWriter, r *http.Request, _ SegmentId) {
-	s.requireAuth(http.HandlerFunc(s.handleApproveSegment)).ServeHTTP(w, r)
-}
-
-func (s *Server) RejectSegment(w http.ResponseWriter, r *http.Request, _ SegmentId) {
-	s.requireAuth(http.HandlerFunc(s.handleRejectSegment)).ServeHTTP(w, r)
 }
 
 func (s *Server) GetStatsSummary(w http.ResponseWriter, r *http.Request) {

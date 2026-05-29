@@ -642,32 +642,6 @@ type HealthResponse struct {
 	Status  string  `json:"status"`
 }
 
-// Job defines model for Job.
-type Job struct {
-	CompletedSubJobs int        `json:"completed_sub_jobs"`
-	CreatedAt        *time.Time `json:"created_at,omitempty"`
-	ErrorMessage     *string    `json:"error_message,omitempty"`
-	FailedSubJobs    int        `json:"failed_sub_jobs"`
-	Id               int        `json:"id"`
-	InputPath        *string    `json:"input_path,omitempty"`
-	OutputPath       *string    `json:"output_path,omitempty"`
-	ProjectId        int        `json:"project_id"`
-	SourceLang       string     `json:"source_lang"`
-	Status           string     `json:"status"`
-	SubJobCount      int        `json:"sub_job_count"`
-	SubJobs          []SubJob   `json:"sub_jobs"`
-	TargetLang       string     `json:"target_lang"`
-	UpdatedAt        *time.Time `json:"updated_at,omitempty"`
-}
-
-// JobCreateResponse defines model for JobCreateResponse.
-type JobCreateResponse struct {
-	CreatedAt time.Time       `json:"created_at"`
-	JobId     int             `json:"job_id"`
-	Status    string          `json:"status"`
-	SubJobs   []SubJobSummary `json:"sub_jobs"`
-}
-
 // LoginRequest defines model for LoginRequest.
 type LoginRequest struct {
 	Password string `json:"password"`
@@ -829,23 +803,6 @@ type Segment struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 
-// SegmentDecisionRequest defines model for SegmentDecisionRequest.
-type SegmentDecisionRequest struct {
-	Comment *string `json:"comment,omitempty"`
-}
-
-// SegmentEditRequest defines model for SegmentEditRequest.
-type SegmentEditRequest struct {
-	Comment    *string `json:"comment,omitempty"`
-	TargetText string  `json:"target_text"`
-}
-
-// SegmentListResponse defines model for SegmentListResponse.
-type SegmentListResponse struct {
-	Items      []Segment `json:"items"`
-	NextCursor *string   `json:"next_cursor,omitempty"`
-}
-
 // SetBackendOrderRequest defines model for SetBackendOrderRequest.
 type SetBackendOrderRequest struct {
 	Bindings []struct {
@@ -876,32 +833,6 @@ type StageBackendOverride struct {
 
 // StageBackendOverrideBackendMode defines model for StageBackendOverride.BackendMode.
 type StageBackendOverrideBackendMode string
-
-// SubJob defines model for SubJob.
-type SubJob struct {
-	CreatedAt     *time.Time `json:"created_at,omitempty"`
-	ErrorMessage  *string    `json:"error_message,omitempty"`
-	Id            int        `json:"id"`
-	InputFilename string     `json:"input_filename"`
-	InputFormat   string     `json:"input_format"`
-	InputPath     string     `json:"input_path"`
-	OutputPath    string     `json:"output_path"`
-	SegmentCount  int        `json:"segment_count"`
-	Status        string     `json:"status"`
-	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
-}
-
-// SubJobListResponse defines model for SubJobListResponse.
-type SubJobListResponse struct {
-	Items []SubJob `json:"items"`
-}
-
-// SubJobSummary defines model for SubJobSummary.
-type SubJobSummary struct {
-	Filename string `json:"filename"`
-	Id       int    `json:"id"`
-	Status   string `json:"status"`
-}
 
 // TranslationJob defines model for TranslationJob.
 type TranslationJob struct {
@@ -1027,9 +958,6 @@ type Cursor = string
 // EntryId defines model for EntryId.
 type EntryId = int
 
-// JobId defines model for JobId.
-type JobId = int
-
 // Limit defines model for Limit.
 type Limit = int
 
@@ -1048,9 +976,6 @@ type SegmentId = int
 // Stage defines model for Stage.
 type Stage string
 
-// SubJobId defines model for SubJobId.
-type SubJobId = int
-
 // TranslationJobId defines model for TranslationJobId.
 type TranslationJobId = int
 
@@ -1063,22 +988,9 @@ type ListActivityParams struct {
 	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
 }
 
-// ListJobSegmentsParams defines parameters for ListJobSegments.
-type ListJobSegmentsParams struct {
-	Cursor *Cursor `form:"cursor,omitempty" json:"cursor,omitempty"`
-	Limit  *Limit  `form:"limit,omitempty" json:"limit,omitempty"`
-}
-
 // ImportGlossaryCSVMultipartBody defines parameters for ImportGlossaryCSV.
 type ImportGlossaryCSVMultipartBody struct {
 	File openapi_types.File `json:"file"`
-}
-
-// CreateProjectJobMultipartBody defines parameters for CreateProjectJob.
-type CreateProjectJobMultipartBody struct {
-	Files      []openapi_types.File `json:"files"`
-	SourceLang *string              `json:"source_lang,omitempty"`
-	TargetLang *string              `json:"target_lang,omitempty"`
 }
 
 // ListProjectResourcesParams defines parameters for ListProjectResources.
@@ -1187,9 +1099,6 @@ type ImportGlossaryCSVMultipartRequestBody ImportGlossaryCSVMultipartBody
 // UpdateGlossaryEntryJSONRequestBody defines body for UpdateGlossaryEntry for application/json ContentType.
 type UpdateGlossaryEntryJSONRequestBody = UpdateGlossaryEntryRequest
 
-// CreateProjectJobMultipartRequestBody defines body for CreateProjectJob for multipart/form-data ContentType.
-type CreateProjectJobMultipartRequestBody CreateProjectJobMultipartBody
-
 // UploadProjectResourcesMultipartRequestBody defines body for UploadProjectResources for multipart/form-data ContentType.
 type UploadProjectResourcesMultipartRequestBody UploadProjectResourcesMultipartBody
 
@@ -1204,15 +1113,6 @@ type SetStageBackendOverrideJSONRequestBody = SetStageOverrideRequest
 
 // CreateTranslationJobJSONRequestBody defines body for CreateTranslationJob for application/json ContentType.
 type CreateTranslationJobJSONRequestBody = CreateTranslationJobRequest
-
-// EditSegmentJSONRequestBody defines body for EditSegment for application/json ContentType.
-type EditSegmentJSONRequestBody = SegmentEditRequest
-
-// ApproveSegmentJSONRequestBody defines body for ApproveSegment for application/json ContentType.
-type ApproveSegmentJSONRequestBody = SegmentDecisionRequest
-
-// RejectSegmentJSONRequestBody defines body for RejectSegment for application/json ContentType.
-type RejectSegmentJSONRequestBody = SegmentDecisionRequest
 
 // UpdateCurrentUserJSONRequestBody defines body for UpdateCurrentUser for application/json ContentType.
 type UpdateCurrentUserJSONRequestBody = UpdateCurrentUserRequest
@@ -1249,33 +1149,6 @@ type ServerInterface interface {
 	// 更新个人后端
 	// (PUT /backends/{backendId})
 	UpdateUserBackend(w http.ResponseWriter, r *http.Request, backendId BackendId)
-	// 获取任务详情
-	// (GET /jobs/{jobId})
-	GetJob(w http.ResponseWriter, r *http.Request, jobId JobId)
-	// 批量通过任务审校
-	// (POST /jobs/{jobId}/approve)
-	ApproveJob(w http.ResponseWriter, r *http.Request, jobId JobId)
-	// 取消任务
-	// (POST /jobs/{jobId}/cancel)
-	CancelJob(w http.ResponseWriter, r *http.Request, jobId JobId)
-	// 下载任务输出
-	// (GET /jobs/{jobId}/download)
-	DownloadJobResult(w http.ResponseWriter, r *http.Request, jobId JobId)
-	// 重译被驳回段
-	// (POST /jobs/{jobId}/retranslate)
-	RetranslateRejectedSegments(w http.ResponseWriter, r *http.Request, jobId JobId)
-	// 重试失败子任务
-	// (POST /jobs/{jobId}/retry)
-	RetryJob(w http.ResponseWriter, r *http.Request, jobId JobId)
-	// 获取任务段列表
-	// (GET /jobs/{jobId}/segments)
-	ListJobSegments(w http.ResponseWriter, r *http.Request, jobId JobId, params ListJobSegmentsParams)
-	// 获取任务子任务列表
-	// (GET /jobs/{jobId}/subjobs)
-	ListJobSubJobs(w http.ResponseWriter, r *http.Request, jobId JobId)
-	// 获取单个子任务详情
-	// (GET /jobs/{jobId}/subjobs/{subJobId})
-	GetJobSubJob(w http.ResponseWriter, r *http.Request, jobId JobId, subJobId SubJobId)
 	// 列出当前用户所属组织
 	// (GET /orgs)
 	ListOrganizations(w http.ResponseWriter, r *http.Request)
@@ -1354,9 +1227,6 @@ type ServerInterface interface {
 	// 更新术语条目
 	// (PUT /projects/{projectId}/glossary/{entryId})
 	UpdateGlossaryEntry(w http.ResponseWriter, r *http.Request, projectId ProjectId, entryId EntryId)
-	// 创建多文件翻译任务
-	// (POST /projects/{projectId}/jobs)
-	CreateProjectJob(w http.ResponseWriter, r *http.Request, projectId ProjectId)
 	// 列出项目资源文件
 	// (GET /projects/{projectId}/resources)
 	ListProjectResources(w http.ResponseWriter, r *http.Request, projectId ProjectId, params ListProjectResourcesParams)
@@ -1393,15 +1263,6 @@ type ServerInterface interface {
 	// 创建翻译任务
 	// (POST /projects/{projectId}/translation-jobs)
 	CreateTranslationJob(w http.ResponseWriter, r *http.Request, projectId ProjectId)
-	// 编辑段译文
-	// (PUT /segments/{segmentId})
-	EditSegment(w http.ResponseWriter, r *http.Request, segmentId SegmentId)
-	// 通过段译文
-	// (POST /segments/{segmentId}/approve)
-	ApproveSegment(w http.ResponseWriter, r *http.Request, segmentId SegmentId)
-	// 驳回段译文
-	// (POST /segments/{segmentId}/reject)
-	RejectSegment(w http.ResponseWriter, r *http.Request, segmentId SegmentId)
 	// 获取用量统计汇总
 	// (GET /stats/summary)
 	GetStatsSummary(w http.ResponseWriter, r *http.Request)
@@ -1483,60 +1344,6 @@ func (_ Unimplemented) DeleteUserBackend(w http.ResponseWriter, r *http.Request,
 // 更新个人后端
 // (PUT /backends/{backendId})
 func (_ Unimplemented) UpdateUserBackend(w http.ResponseWriter, r *http.Request, backendId BackendId) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// 获取任务详情
-// (GET /jobs/{jobId})
-func (_ Unimplemented) GetJob(w http.ResponseWriter, r *http.Request, jobId JobId) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// 批量通过任务审校
-// (POST /jobs/{jobId}/approve)
-func (_ Unimplemented) ApproveJob(w http.ResponseWriter, r *http.Request, jobId JobId) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// 取消任务
-// (POST /jobs/{jobId}/cancel)
-func (_ Unimplemented) CancelJob(w http.ResponseWriter, r *http.Request, jobId JobId) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// 下载任务输出
-// (GET /jobs/{jobId}/download)
-func (_ Unimplemented) DownloadJobResult(w http.ResponseWriter, r *http.Request, jobId JobId) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// 重译被驳回段
-// (POST /jobs/{jobId}/retranslate)
-func (_ Unimplemented) RetranslateRejectedSegments(w http.ResponseWriter, r *http.Request, jobId JobId) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// 重试失败子任务
-// (POST /jobs/{jobId}/retry)
-func (_ Unimplemented) RetryJob(w http.ResponseWriter, r *http.Request, jobId JobId) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// 获取任务段列表
-// (GET /jobs/{jobId}/segments)
-func (_ Unimplemented) ListJobSegments(w http.ResponseWriter, r *http.Request, jobId JobId, params ListJobSegmentsParams) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// 获取任务子任务列表
-// (GET /jobs/{jobId}/subjobs)
-func (_ Unimplemented) ListJobSubJobs(w http.ResponseWriter, r *http.Request, jobId JobId) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// 获取单个子任务详情
-// (GET /jobs/{jobId}/subjobs/{subJobId})
-func (_ Unimplemented) GetJobSubJob(w http.ResponseWriter, r *http.Request, jobId JobId, subJobId SubJobId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1696,12 +1503,6 @@ func (_ Unimplemented) UpdateGlossaryEntry(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
-// 创建多文件翻译任务
-// (POST /projects/{projectId}/jobs)
-func (_ Unimplemented) CreateProjectJob(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
 // 列出项目资源文件
 // (GET /projects/{projectId}/resources)
 func (_ Unimplemented) ListProjectResources(w http.ResponseWriter, r *http.Request, projectId ProjectId, params ListProjectResourcesParams) {
@@ -1771,24 +1572,6 @@ func (_ Unimplemented) ListTranslationJobs(w http.ResponseWriter, r *http.Reques
 // 创建翻译任务
 // (POST /projects/{projectId}/translation-jobs)
 func (_ Unimplemented) CreateTranslationJob(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// 编辑段译文
-// (PUT /segments/{segmentId})
-func (_ Unimplemented) EditSegment(w http.ResponseWriter, r *http.Request, segmentId SegmentId) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// 通过段译文
-// (POST /segments/{segmentId}/approve)
-func (_ Unimplemented) ApproveSegment(w http.ResponseWriter, r *http.Request, segmentId SegmentId) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// 驳回段译文
-// (POST /segments/{segmentId}/reject)
-func (_ Unimplemented) RejectSegment(w http.ResponseWriter, r *http.Request, segmentId SegmentId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2045,313 +1828,6 @@ func (siw *ServerInterfaceWrapper) UpdateUserBackend(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateUserBackend(w, r, backendId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetJob operation middleware
-func (siw *ServerInterfaceWrapper) GetJob(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "jobId" -------------
-	var jobId JobId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "jobId", chi.URLParam(r, "jobId"), &jobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "jobId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetJob(w, r, jobId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ApproveJob operation middleware
-func (siw *ServerInterfaceWrapper) ApproveJob(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "jobId" -------------
-	var jobId JobId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "jobId", chi.URLParam(r, "jobId"), &jobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "jobId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ApproveJob(w, r, jobId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CancelJob operation middleware
-func (siw *ServerInterfaceWrapper) CancelJob(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "jobId" -------------
-	var jobId JobId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "jobId", chi.URLParam(r, "jobId"), &jobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "jobId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CancelJob(w, r, jobId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DownloadJobResult operation middleware
-func (siw *ServerInterfaceWrapper) DownloadJobResult(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "jobId" -------------
-	var jobId JobId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "jobId", chi.URLParam(r, "jobId"), &jobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "jobId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DownloadJobResult(w, r, jobId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// RetranslateRejectedSegments operation middleware
-func (siw *ServerInterfaceWrapper) RetranslateRejectedSegments(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "jobId" -------------
-	var jobId JobId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "jobId", chi.URLParam(r, "jobId"), &jobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "jobId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.RetranslateRejectedSegments(w, r, jobId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// RetryJob operation middleware
-func (siw *ServerInterfaceWrapper) RetryJob(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "jobId" -------------
-	var jobId JobId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "jobId", chi.URLParam(r, "jobId"), &jobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "jobId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.RetryJob(w, r, jobId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListJobSegments operation middleware
-func (siw *ServerInterfaceWrapper) ListJobSegments(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "jobId" -------------
-	var jobId JobId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "jobId", chi.URLParam(r, "jobId"), &jobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "jobId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	// Parameter object where we will unmarshal all parameters from the context
-	var params ListJobSegmentsParams
-
-	// ------------- Optional query parameter "cursor" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
-		return
-	}
-
-	// ------------- Optional query parameter "limit" -------------
-
-	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListJobSegments(w, r, jobId, params)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ListJobSubJobs operation middleware
-func (siw *ServerInterfaceWrapper) ListJobSubJobs(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "jobId" -------------
-	var jobId JobId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "jobId", chi.URLParam(r, "jobId"), &jobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "jobId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ListJobSubJobs(w, r, jobId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetJobSubJob operation middleware
-func (siw *ServerInterfaceWrapper) GetJobSubJob(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "jobId" -------------
-	var jobId JobId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "jobId", chi.URLParam(r, "jobId"), &jobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "jobId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "subJobId" -------------
-	var subJobId SubJobId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "subJobId", chi.URLParam(r, "subJobId"), &subJobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "subJobId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetJobSubJob(w, r, jobId, subJobId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3160,37 +2636,6 @@ func (siw *ServerInterfaceWrapper) UpdateGlossaryEntry(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
-// CreateProjectJob operation middleware
-func (siw *ServerInterfaceWrapper) CreateProjectJob(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "projectId" -------------
-	var projectId ProjectId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateProjectJob(w, r, projectId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // ListProjectResources operation middleware
 func (siw *ServerInterfaceWrapper) ListProjectResources(w http.ResponseWriter, r *http.Request) {
 
@@ -3757,99 +3202,6 @@ func (siw *ServerInterfaceWrapper) CreateTranslationJob(w http.ResponseWriter, r
 	handler.ServeHTTP(w, r)
 }
 
-// EditSegment operation middleware
-func (siw *ServerInterfaceWrapper) EditSegment(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "segmentId" -------------
-	var segmentId SegmentId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "segmentId", chi.URLParam(r, "segmentId"), &segmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "segmentId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.EditSegment(w, r, segmentId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// ApproveSegment operation middleware
-func (siw *ServerInterfaceWrapper) ApproveSegment(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "segmentId" -------------
-	var segmentId SegmentId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "segmentId", chi.URLParam(r, "segmentId"), &segmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "segmentId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ApproveSegment(w, r, segmentId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// RejectSegment operation middleware
-func (siw *ServerInterfaceWrapper) RejectSegment(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "segmentId" -------------
-	var segmentId SegmentId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "segmentId", chi.URLParam(r, "segmentId"), &segmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "segmentId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.RejectSegment(w, r, segmentId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // GetStatsSummary operation middleware
 func (siw *ServerInterfaceWrapper) GetStatsSummary(w http.ResponseWriter, r *http.Request) {
 
@@ -4206,33 +3558,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Put(options.BaseURL+"/backends/{backendId}", wrapper.UpdateUserBackend)
 	})
 	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/jobs/{jobId}", wrapper.GetJob)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/jobs/{jobId}/approve", wrapper.ApproveJob)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/jobs/{jobId}/cancel", wrapper.CancelJob)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/jobs/{jobId}/download", wrapper.DownloadJobResult)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/jobs/{jobId}/retranslate", wrapper.RetranslateRejectedSegments)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/jobs/{jobId}/retry", wrapper.RetryJob)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/jobs/{jobId}/segments", wrapper.ListJobSegments)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/jobs/{jobId}/subjobs", wrapper.ListJobSubJobs)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/jobs/{jobId}/subjobs/{subJobId}", wrapper.GetJobSubJob)
-	})
-	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/orgs", wrapper.ListOrganizations)
 	})
 	r.Group(func(r chi.Router) {
@@ -4311,9 +3636,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Put(options.BaseURL+"/projects/{projectId}/glossary/{entryId}", wrapper.UpdateGlossaryEntry)
 	})
 	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/projects/{projectId}/jobs", wrapper.CreateProjectJob)
-	})
-	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/resources", wrapper.ListProjectResources)
 	})
 	r.Group(func(r chi.Router) {
@@ -4350,15 +3672,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/projects/{projectId}/translation-jobs", wrapper.CreateTranslationJob)
 	})
 	r.Group(func(r chi.Router) {
-		r.Put(options.BaseURL+"/segments/{segmentId}", wrapper.EditSegment)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/segments/{segmentId}/approve", wrapper.ApproveSegment)
-	})
-	r.Group(func(r chi.Router) {
-		r.Post(options.BaseURL+"/segments/{segmentId}/reject", wrapper.RejectSegment)
-	})
-	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/stats/summary", wrapper.GetStatsSummary)
 	})
 	r.Group(func(r chi.Router) {
@@ -4389,94 +3702,83 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/+w93XPURp7/CqW7t5tkzO7di98SkuxCsYULk90HiprSjJqxiEZSWi0br2uqvLchtkkc",
-	"IBCTQBLwHiTcZjNO2PBl8/HHnCWPn+5f2FJ3S9OSuluaGUkzm80TYyT1r3/fH/3r7hWlZXVsywQmcpTZ",
-	"FcVWodoBCED815tq6z1gase14A/dVGYVW0ULSk0x1Q5QZpVm9LymQPC+q0OgKbMIuqCmOK0F0FGDDzu6",
-	"qXfcjjJ7tKagZTv4UDcRaAOodLs15ZgLHQtGEN53AVwegGiRp+x4dAwHQd1s4yHeNhFcFs4S0KdjzPGE",
-	"1RQOfwE/G2Pwk3pHRyL8DfwwNpp6kY42M1PLGvsUbAsnbuFnY0x8DloXQAsJAdjR8zGAnAaO5cIWEEKB",
-	"gxfGADMP2h1ginFxoufjAEFqG4gA4GeywYEZjHxWQVA1HUNFwdtNy0IOgqqtnKtxFGPebcpE1wkfj4HT",
-	"GTob3TJloFDytTFAvusAKATkkocjD98NvnRsy3QAtoFz0GoaoBP8bFkmAiZWVdW2Db2F0anb5I3/uOBY",
-	"ZvBsAOjfITivzCr/Vh8Y2Tp56tTDcTFEDTgtqNvBcMqscnjji/7Ojnd909u9gRGm3wRDvtFC+qKOlrGx",
-	"hpYNINLJRNUW+TxlIGvBI2JhZRMKqBq83IJARUBrqBjR8xbsBL8UTUXgNaR3AqlLAdA1Bm5Ey5rSAY5D",
-	"RT71TQcgVVMRJpSqaXowe9WYY3AifKMfWs3AliiEPVjhGyKo0QvkEQe2a2tD4thlBepsgHAtpHgSYIyE",
-	"MVjnONiEDD2pO+g0Fbw0c3UEOvEfMlZGQtKNAKoQqvhvE1xEjVbkczPQxNC409a0U7CtmvofsRL8DnSa",
-	"AJ4G77vAQenpQ8sArAmzlkwQOHVV6+gBATv4c44Nq2F9JqqdNdnoTe58XbQwDxyHqkhSdVrAcRrIeg/w",
-	"FQhctHUInKF0AoLzEDgLjXG+Fc8IP5EIeKDMuRQ+QcQYKZITiYGNUYWLLp0Gjx00suQIukCnBSJQUyxs",
-	"NZ2hrQj9rrGoO3rTYMduWpYBVBO/FMhpw4Jtoa0hbwR4Cl+xoW5BarLTT4nlYJUDE60WhGdchQh5HumS",
-	"DUxVD5TJRAvQsvWWUlPaltU2AD8oSNkxOgVKZPoJM28JA4u0WqFMpIxWbqN0bEE122BOdZwlC2pCa9Ry",
-	"IQQmatj0Ra5cmWBJ9kJiTqkhEwNwZ4u9BMWamSxfjM+rhgNqCUwK1wpWVjVwXnUNpMzO1DhyW6gYsoIn",
-	"JtVvDMtxVLiM073RCNZSHdBwgOnoSF8EMSzp+2kjYFqIfJyi8kB301qqwjZA2YIT6R79QIw9zbZGxNsy",
-	"z+vtocWBEqfBRO+NEYcSi2qmjY3CK6dlxYWOZpjEWkbBCNds0iEM1WxLGCZ6zpNXMaviOdFoHGOi3LgJ",
-	"lWUv6XCP5q1jjjI2/7scWsXUmWOlU6qaVs0ic5Vi1byoHCNpH2pJupyTUPZ4x7Zg4J+xgUtFvZoGBLRw",
-	"3tNtmzyMJCb+saGbQKStqiPIQ4WE5ImHNAYgc5fhXmRkEpfU0eOT3wLVQAviWTkALuo0GLyodmyDVADN",
-	"tqueN6wlnjQ7SEWuE//Cei9TtuhnvEmesJocZbSCsQNxdtxm44LVdPjMH0UhAYQWbMhKBedV3cgELdJr",
-	"3bTdIDBDC3z34yLpc+pihM4py68MGJR+RPBptCzXRILRGZRziSqp+HFtuNTBFWWvGHJFuCcxrfHEKc3l",
-	"OG3jCDCUEcgw8cRiXRtFUgMUhHKQyedhmTjvdjpqDntDZ5UmtxMvRfEIddJq66YwUZImSCMUZmqKNCE6",
-	"abUtF4mLSBlFkQTU+Os8eGwBKw0uVpPl4K/pjm2oyw1hYDt0KcMx3ByxJ2Y1JSf+Igu1Ij1hjGSjO8J0",
-	"6TB/JWjMWuJIVTFMcwxYUtNKI1UW5SnJiqG/UN/GVoAxBT1LxpmVmeTEkaob+bwxm/ToyBBE+fwya2K+",
-	"5PuaLLaiOTwvvhopqR7FiRWY0w9frC2injoF5YCioiUq4gmMZIGPRKpoJfFN3dR0Muu4jNFujUZ1JXao",
-	"BWw0NXBxvMr4iArJwmcyaYYOQ5W842SeBwjpZtsR0jm/aefzj1fMQWobNKxFAKGuAQlDMsLLYBgK7RQd",
-	"TOnyajYsNSO0JLQp0uGFtnJ0L3eaRIDVBZSnQVt3kGQdNNNlgg71XJFFIf/DsWAlBufhPPg4DvRy/Iwq",
-	"R+6vG0BIrhDIENE3UzChXgMCVVsmqWsLOI6ObS6eGH/9zUKq0aB1VUEoUYx3iFCPEE1BZ5K+YZoOQiYW",
-	"qa+RYIyjsGQI2oxV5OzokCV2RCQm/y7mwKirNZ0OMJGkhtpA4CKSBS6C513JxN+1DUvVpkgcQp4VYmnE",
-	"0eSiDpYaMpKTV4DWaC7nbaKKll3EwU8WI3MUDkU4yWWgsKWJwSySCMexG9FIUfa/BVq6E89TC1Glrhjk",
-	"25qOitfcTM2MJZPMyxLi/HOZyHkQBrmngtB8NBI3SXzsSBansjKdIXtuREv2DJhzwy5gRVgI6IRj9DA4",
-	"H5FQdHodS4vhqpsLAOKmchsCG5ikWTZAtoW4EU84EM6nYmQXJGaJjCVHFwRtfo5NmUsZXuoi5P/PCnOy",
-	"sFNR1C1fTJPG5PQVSWQ+3oJc6Glkq2Zi11mQ6wv9WYIeCexjuMYxS+IhZnmhJl6wOpjfgsdWplKzkQvG",
-	"sCtnGTmRpM4ab8CRLWeHpTfRevZgoVKa8JW67p0xRxFdg9gs9mkuEUn2Lomi+OyV8aiqmUtToxouIOWv",
-	"mgJd0yS/1CVVR7rZbpBInF1AjtaNcWeM2QKGEWsMGS5vL6AmjqDebgPYSPZHdlTTVQ0qwQ1ihpSa0qat",
-	"JY0W7l1VasoSaDaApvMdUpmL9LGZp9hX4yoNR0Y5NQqOFg2XCsSFskiLmLAU5cW+Ar2SddpMwOIIl2Uy",
-	"nDJk8MlbFcjcx5PH0wvaG3M0RuayPCPYmWJUlCUO29kRI0kBmkXKVNPbhD7hxnNCnmOku/9dp5LSflc4",
-	"j1Ia4Kew4Z1gW8X+suQSj2XI5ODn2oI/HQ32aaIHbmoeqYhT4lFtvdFSDSMzbhc3jNLIRdJRipM3vNzn",
-	"SN2i7JUcTswN8GxA0LKgxh0l2fwc4Z6YY3JCaX8RB5WiU5woXEVweL1aaktsTYpc88zqCRtjHRT7WWYx",
-	"NJwD7fqiGJ7jrZI7oOUG/mo+CHJoBQqoEMA3XBIukb/eCdE78Ycz4YkOmFb46QDdBYRssi1cN89beOak",
-	"M0k5iVvB3zGspSN/AM0j86Rd/Mgbc8eVmrIIINndqsy8fvT1GeKAganaujKr/Pr1mdd/jZd40QKeYF1l",
-	"NpJTwx1wFOv3cQ0Dc1C0kTixKf5XMzOSDfHDbYTnboDm7Ir3f9rzLj/wetv93rZ/87736iZjHkVAolkz",
-	"++0HDFNmz8ZZdfZc91xNccLyhtL/5Il3ZYsPmT0q5Swf+uCVOj3lpFvLfJMcB9I9160pddVFC3XDauuk",
-	"P9VyeHwKHuPpE4EGDnrT0pYL40+sRbgbV5vA0XTLlA1m1zZHJA6+2PNefOavX/Uu3xldGCJuH9x44K8/",
-	"IYPiRxH9LRdJGWC5qFwOMH3RuVjwn6kGTsV78jBAbW23fLUhcLxnj/1P7x3eWPXWn/hbP+zv3TvY+Jih",
-	"K+2nEROW9u+USNlEh9B0STchW2HSTYbr914d3uxxeEE6l2TMIG+Uyo14+1QudhytjB1PHnrrt7293QJ4",
-	"4f/9gffhx8TeeM8eH3z/0rtybf/5rf7OV4QpbA+h0DsHsdib4Yslyilvrz+PQFc/Ofhux1u/2d9+UL6N",
-	"8dZvemu7+0//ur+7SyBjp8yVXbIXiCFXSQLM3dFfsRRHpyjwDEogvuMalPwMCqDFGcSKdn0lOj6uS7xV",
-	"kIikmfcW/v8k8zK93frdwy/uVYdrAC0ljENFiIPD9oKxbZcjx6QKUb4cc4uCFTtHiRz7t38qwDHm5S2B",
-	"lpbjIEWur+DT/7pCM/0bgE5YzTKNM161SNNof2/Pu7zd3/nG//OlqvKkJMzh5J8cC0fyHpa2ddW2oUWq",
-	"C6ONKHILb5CB/xUY5G88O1y7crh6q/9qjUD2etv+3e20KNfJ6kbx1D6Gx50MsYMk/vF6oL23PiDoV+AT",
-	"MMwQWorMmrVkGpaqCU3HW/QFsloYzHMoulktBNBrDoJA7cTpF5XZmrqp4rNGk5WxtLA+/aj/4sXB3nX/",
-	"6y/9rbX9vcfl04/ApGry8jpNXAuyKRAMTtEsXNJPDwY/DS6AFgLa/GB1LsHDX5Uu+08eHq5t+ls/eJfu",
-	"H35egcM8XNvs71zr/+W7w//9u3f7a7/3iCP+AQOWyyH98mRsDEb7s2ptDIV578f+T/e9768KjQ3bSiBM",
-	"J09YTbGYFkc+XucyL8jrPaoqlWSjlxjYkWSzVlItOM5QtxmuW0n5idv1ymVnukmRZ4RC4ZwETznAC3Ij",
-	"lA31lfAk5axMgDZgls4PKQ+qzQq8zc/2n/6VA7wk7YrOvCb8smBbriZsm0GpmiI8k4O3srH3wcHeWrW1",
-	"NO/FdW9jkxQl/Y1V78evySyy6mqxM0HKKUjwzquouK4WP/lEUh4eEK2K+loILRT1+go+1l9qh1IMq0Dg",
-	"xUJerTVKwhzOCJHrFDLqc9OsD9Uxl5TNSDhclUoQmATa/qtt/087acXIt7RyCrb/xVdWqAcasZjNKIrc",
-	"c/yyIFPxgkycr0LtGG51JsHIaVycKUSea8Wt4pQu+78s4gg8g1D2SZdw/mzhd/T9irws50w5Hl3Xr3rX",
-	"Pq82zSZ0TUIu1mNwLxwpSXWkl5tMMO8Iz/3jZh/+kz3v8l3ChAoUCkNjGS9WqPoKuZQpnyPhsThPb9u3",
-	"e9SnVIE+gRZHvzSfQu+7GiLtKFU7snZnTDARESsIm45UJST7r3r+jWeskPS//bS/8ZBoik0P6aOuJpEa",
-	"33iwv/uJt7EZxP1fPiA9qd7Gpvfqu8PVO976PX/re+LHjvz2zJm5I/6Xm97lbf/zHe/qN96Vnf7Ll///",
-	"/Pb+003/f1b9O/f9z37wN3ve7nV/fevgb3/bf7rhbz3bf/lV/9HW/63+t1JLyNMc3QVXFscSx6DzuIXR",
-	"IYgU0W538+7hxk/+V3/uv/r6cPWW/+ij/g7t8KUbXOROfy58qUSi8E7Q460ybT87uN2rNhUkMLPKgHPR",
-	"VqHyMrnEBqyKXXF0IuF0ZHIhW1gxrq9El27m8LYsy6YxZxsInqiUKcRgpgquk/lVW8BMwhwu5hhc2ZoR",
-	"TZSrzdztlBXHDRK+TiI3zdLm7LrlQB2qKF0KTsMVVi/7vZcHL3rVakkScuG6Mp8kOT7XrCSlEZyeVoLa",
-	"FHlqcVoeCD+q0i4CjZWHw+1db/eKRNPCM1mkMSG7F18Hpaoa90ojbtS809/5vr/9oNrwkID1v9oOg8Rx",
-	"tEwSYMZvYSozzOSes1BxsJm4c2o6Qs44qzMVqA4u2hZEQj16Gz8OMT02//tsLULgIqq3nMWxW1qPzf/+",
-	"SFWtrAEsb+d5pCsjFUhZRcmmvN4JKV+8OpJr5ZJsEyljxzWQbqsQ1QMuvRZe+T1gXvoIuXwsje/fx99x",
-	"tudXGlNyL97j6e7Oc+/SfdJPXZ34XbrPiF+2CK2AwPTkSiTTpnka08nCHFV2yfZtQrqsLKsKlyY5OmhC",
-	"2iF0aZPIu3K6tLDbtqzghr4ZNocWaEzjB6NlmlXOSWlF3pxLZjSanS50q0TifkDhDq0Ctn0PF2N5926R",
-	"uOTg1V5/5xrb08+VzNgRn1kl7NPMMY0JUdYDnN93ARYKcmYOc+5cRNaRbs0ILCZv/Oic3MH4Ob90gApb",
-	"C1lfFt6IX6J15N7JwUufH33g716dxAoAgTwImou3heQKCo6sTtYidtSLx8nr/zWTcXTyOPbtaOGylLjS",
-	"g7uz7/L+87tVuVwCjZUjbz278hlZuPpK+DNXVBodNjqtAWmMEFcue5ce+xur/pcbfu9R/+oL2bqHGLXi",
-	"DZLYCFW78pGEWWL4fjoSs6wIPsaIX1JgudRMIr6PO60hbUz+Xdoh2u/oBpjgRm0aHHxyx/v2o2o3avMh",
-	"V6Wjw/I114bYxI1e48fMgxOmow3ipPuX3C+Ff5L94kPE0D/fSDj/TuH+1RfVBsTUqkR+etrlvL5Cf9HA",
-	"qaL55titGU6LOFoVtRayXG14T1VZh9BJrvGr2JdGN3JNlSsl6vbhJa/3TOJQ8cVGgdwF/3brFntZU3nC",
-	"h++Hkq7Xc2+QKm3BnnuNV9VSxL3ud0rW5T9/7Pce0T6Nbz48uL2VX6RsQzVlzTAY77ngpaluhyAk8De+",
-	"7W9/3O9te+ufVqDPd+73d/7Ch1yBdgo5zBxy/1rm+RbxG1WKjM4KvXlIFLclrttJz6eIG4P+2UI/yUU/",
-	"vA3kTIV8EgXReIW+vM6XxCVFZba+JK8pijxWmcsxyUuYpmYtJr0EU0xAnYh6eaHK25qOyo10OZfdTlF8",
-	"23tUVXXx4PlW/+U1DPCav7Um5vPoJ1Em+C07jbISnifvVObq98+Nz+T0yzx8JlWYcthMTgT8hculcTk8",
-	"dDDGZaQGEx1cWyrJGZATXm9aIq2Yq414cc2NB4drVw727vR725Xt4WZg+j+u+at7hHTJkLy+gmLeOuOs",
-	"IU7oUknoOC1nIrMRxKhLV2cSBKcZVA7OjHyYLwek/FzfaeLz5E77TceLeZiUe5EpdYcoORU4R9qbuE4y",
-	"InRHN/VOkG4eraVvHTtX2TpWLTbSH3V77IUwwolJnFjMysCgw7cyjR/xYN0hFB6fsTtN+j7pk3cPbn1A",
-	"SuOE9UTxXScgK7l5TuQcmXtFyw02BIeGMAc+VnYaaAKmpLUiSZ2yWqM5t7tWnAeLGBQ7Q68iNlGYDJsC",
-	"2d76Ii7VdVt1nCULYp/F5eExXJ1kaDsXflFS+QrDC4GMfVnazocHd//kPXlIyFHVWSEs2ckUCAYOgIuh",
-	"IXehocwqddXW64tHA8fwjwAAAP//VT/0RcS1AAA=",
+	"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",
+	"kanNa03gGs2VkyQw/F8AAAD//3C7txEhlgAA",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file
