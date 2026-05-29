@@ -163,6 +163,27 @@ func (e ProjectResourceScope) Valid() bool {
 	}
 }
 
+// Defines values for ResourceStatus.
+const (
+	ResourceStatusError      ResourceStatus = "error"
+	ResourceStatusProcessing ResourceStatus = "processing"
+	ResourceStatusReady      ResourceStatus = "ready"
+)
+
+// Valid indicates whether the value is a known member of the ResourceStatus enum.
+func (e ResourceStatus) Valid() bool {
+	switch e {
+	case ResourceStatusError:
+		return true
+	case ResourceStatusProcessing:
+		return true
+	case ResourceStatusReady:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for SetBackendOrderRequestBindingsSource.
 const (
 	SetBackendOrderRequestBindingsSourceOrg  SetBackendOrderRequestBindingsSource = "org"
@@ -217,6 +238,87 @@ func (e StageBackendOverrideBackendMode) Valid() bool {
 	case StageBackendOverrideBackendModePrepend:
 		return true
 	case StageBackendOverrideBackendModeRestrict:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TranslationJobStatus.
+const (
+	TranslationJobStatusAwaitingReview TranslationJobStatus = "awaiting_review"
+	TranslationJobStatusCancelled      TranslationJobStatus = "cancelled"
+	TranslationJobStatusCompleted      TranslationJobStatus = "completed"
+	TranslationJobStatusFailed         TranslationJobStatus = "failed"
+	TranslationJobStatusPending        TranslationJobStatus = "pending"
+	TranslationJobStatusRunning        TranslationJobStatus = "running"
+)
+
+// Valid indicates whether the value is a known member of the TranslationJobStatus enum.
+func (e TranslationJobStatus) Valid() bool {
+	switch e {
+	case TranslationJobStatusAwaitingReview:
+		return true
+	case TranslationJobStatusCancelled:
+		return true
+	case TranslationJobStatusCompleted:
+		return true
+	case TranslationJobStatusFailed:
+		return true
+	case TranslationJobStatusPending:
+		return true
+	case TranslationJobStatusRunning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TranslationJobTriggerType.
+const (
+	TranslationJobTriggerTypeFileUpdate     TranslationJobTriggerType = "file_update"
+	TranslationJobTriggerTypeGlossaryChange TranslationJobTriggerType = "glossary_change"
+	TranslationJobTriggerTypeManual         TranslationJobTriggerType = "manual"
+	TranslationJobTriggerTypeWebEdit        TranslationJobTriggerType = "web_edit"
+)
+
+// Valid indicates whether the value is a known member of the TranslationJobTriggerType enum.
+func (e TranslationJobTriggerType) Valid() bool {
+	switch e {
+	case TranslationJobTriggerTypeFileUpdate:
+		return true
+	case TranslationJobTriggerTypeGlossaryChange:
+		return true
+	case TranslationJobTriggerTypeManual:
+		return true
+	case TranslationJobTriggerTypeWebEdit:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TranslationJobResourceStatus.
+const (
+	TranslationJobResourceStatusCancelled TranslationJobResourceStatus = "cancelled"
+	TranslationJobResourceStatusCompleted TranslationJobResourceStatus = "completed"
+	TranslationJobResourceStatusFailed    TranslationJobResourceStatus = "failed"
+	TranslationJobResourceStatusPending   TranslationJobResourceStatus = "pending"
+	TranslationJobResourceStatusRunning   TranslationJobResourceStatus = "running"
+)
+
+// Valid indicates whether the value is a known member of the TranslationJobResourceStatus enum.
+func (e TranslationJobResourceStatus) Valid() bool {
+	switch e {
+	case TranslationJobResourceStatusCancelled:
+		return true
+	case TranslationJobResourceStatusCompleted:
+		return true
+	case TranslationJobResourceStatusFailed:
+		return true
+	case TranslationJobResourceStatusPending:
+		return true
+	case TranslationJobResourceStatusRunning:
 		return true
 	default:
 		return false
@@ -295,6 +397,105 @@ func (e Stage) Valid() bool {
 	case Bootstrap:
 		return true
 	case Translate:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListProjectResourcesParamsStatus.
+const (
+	ListProjectResourcesParamsStatusError      ListProjectResourcesParamsStatus = "error"
+	ListProjectResourcesParamsStatusProcessing ListProjectResourcesParamsStatus = "processing"
+	ListProjectResourcesParamsStatusReady      ListProjectResourcesParamsStatus = "ready"
+)
+
+// Valid indicates whether the value is a known member of the ListProjectResourcesParamsStatus enum.
+func (e ListProjectResourcesParamsStatus) Valid() bool {
+	switch e {
+	case ListProjectResourcesParamsStatusError:
+		return true
+	case ListProjectResourcesParamsStatusProcessing:
+		return true
+	case ListProjectResourcesParamsStatusReady:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListResourceSegmentsParamsStatus.
+const (
+	ListResourceSegmentsParamsStatusPending    ListResourceSegmentsParamsStatus = "pending"
+	ListResourceSegmentsParamsStatusRejected   ListResourceSegmentsParamsStatus = "rejected"
+	ListResourceSegmentsParamsStatusReviewed   ListResourceSegmentsParamsStatus = "reviewed"
+	ListResourceSegmentsParamsStatusTranslated ListResourceSegmentsParamsStatus = "translated"
+)
+
+// Valid indicates whether the value is a known member of the ListResourceSegmentsParamsStatus enum.
+func (e ListResourceSegmentsParamsStatus) Valid() bool {
+	switch e {
+	case ListResourceSegmentsParamsStatusPending:
+		return true
+	case ListResourceSegmentsParamsStatusRejected:
+		return true
+	case ListResourceSegmentsParamsStatusReviewed:
+		return true
+	case ListResourceSegmentsParamsStatusTranslated:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListTranslationJobsParamsStatus.
+const (
+	ListTranslationJobsParamsStatusAwaitingReview ListTranslationJobsParamsStatus = "awaiting_review"
+	ListTranslationJobsParamsStatusCancelled      ListTranslationJobsParamsStatus = "cancelled"
+	ListTranslationJobsParamsStatusCompleted      ListTranslationJobsParamsStatus = "completed"
+	ListTranslationJobsParamsStatusFailed         ListTranslationJobsParamsStatus = "failed"
+	ListTranslationJobsParamsStatusPending        ListTranslationJobsParamsStatus = "pending"
+	ListTranslationJobsParamsStatusRunning        ListTranslationJobsParamsStatus = "running"
+)
+
+// Valid indicates whether the value is a known member of the ListTranslationJobsParamsStatus enum.
+func (e ListTranslationJobsParamsStatus) Valid() bool {
+	switch e {
+	case ListTranslationJobsParamsStatusAwaitingReview:
+		return true
+	case ListTranslationJobsParamsStatusCancelled:
+		return true
+	case ListTranslationJobsParamsStatusCompleted:
+		return true
+	case ListTranslationJobsParamsStatusFailed:
+		return true
+	case ListTranslationJobsParamsStatusPending:
+		return true
+	case ListTranslationJobsParamsStatusRunning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ListTranslationJobsParamsTriggerType.
+const (
+	ListTranslationJobsParamsTriggerTypeFileUpdate     ListTranslationJobsParamsTriggerType = "file_update"
+	ListTranslationJobsParamsTriggerTypeGlossaryChange ListTranslationJobsParamsTriggerType = "glossary_change"
+	ListTranslationJobsParamsTriggerTypeManual         ListTranslationJobsParamsTriggerType = "manual"
+	ListTranslationJobsParamsTriggerTypeWebEdit        ListTranslationJobsParamsTriggerType = "web_edit"
+)
+
+// Valid indicates whether the value is a known member of the ListTranslationJobsParamsTriggerType enum.
+func (e ListTranslationJobsParamsTriggerType) Valid() bool {
+	switch e {
+	case ListTranslationJobsParamsTriggerTypeFileUpdate:
+		return true
+	case ListTranslationJobsParamsTriggerTypeGlossaryChange:
+		return true
+	case ListTranslationJobsParamsTriggerTypeManual:
+		return true
+	case ListTranslationJobsParamsTriggerTypeWebEdit:
 		return true
 	default:
 		return false
@@ -390,16 +591,24 @@ type CreateGlossaryEntryRequest struct {
 
 // CreateProjectRequest defines model for CreateProjectRequest.
 type CreateProjectRequest struct {
-	Config        *map[string]interface{}            `json:"config,omitempty"`
-	Name          string                             `json:"name"`
-	OwnerOrgId    *int                               `json:"owner_org_id,omitempty"`
-	ResourceScope *CreateProjectRequestResourceScope `json:"resource_scope,omitempty"`
-	SourceLang    *string                            `json:"source_lang,omitempty"`
-	TargetLang    *string                            `json:"target_lang,omitempty"`
+	Config                   *map[string]interface{}            `json:"config,omitempty"`
+	DefaultTranslationConfig *map[string]interface{}            `json:"default_translation_config,omitempty"`
+	Name                     string                             `json:"name"`
+	OwnerOrgId               *int                               `json:"owner_org_id,omitempty"`
+	ResourceScope            *CreateProjectRequestResourceScope `json:"resource_scope,omitempty"`
+	SourceLang               *string                            `json:"source_lang,omitempty"`
+	TargetLang               *string                            `json:"target_lang,omitempty"`
 }
 
 // CreateProjectRequestResourceScope defines model for CreateProjectRequest.ResourceScope.
 type CreateProjectRequestResourceScope string
+
+// CreateTranslationJobRequest defines model for CreateTranslationJobRequest.
+type CreateTranslationJobRequest struct {
+	ResourceIds       *[]int                  `json:"resource_ids,omitempty"`
+	SegmentIds        *[]int                  `json:"segment_ids,omitempty"`
+	TranslationConfig *map[string]interface{} `json:"translation_config,omitempty"`
+}
 
 // GlossaryEntry defines model for GlossaryEntry.
 type GlossaryEntry struct {
@@ -517,16 +726,17 @@ type Problem struct {
 
 // Project defines model for Project.
 type Project struct {
-	Config        *map[string]interface{} `json:"config,omitempty"`
-	CreatedAt     *time.Time              `json:"created_at,omitempty"`
-	Id            int                     `json:"id"`
-	Name          string                  `json:"name"`
-	OwnerOrgId    *int                    `json:"owner_org_id,omitempty"`
-	OwnerUserId   *int                    `json:"owner_user_id,omitempty"`
-	ResourceScope ProjectResourceScope    `json:"resource_scope"`
-	SourceLang    string                  `json:"source_lang"`
-	TargetLang    string                  `json:"target_lang"`
-	UpdatedAt     *time.Time              `json:"updated_at,omitempty"`
+	Config                   *map[string]interface{} `json:"config,omitempty"`
+	CreatedAt                *time.Time              `json:"created_at,omitempty"`
+	DefaultTranslationConfig *map[string]interface{} `json:"default_translation_config,omitempty"`
+	Id                       int                     `json:"id"`
+	Name                     string                  `json:"name"`
+	OwnerOrgId               *int                    `json:"owner_org_id,omitempty"`
+	OwnerUserId              *int                    `json:"owner_user_id,omitempty"`
+	ResourceScope            ProjectResourceScope    `json:"resource_scope"`
+	SourceLang               string                  `json:"source_lang"`
+	TargetLang               string                  `json:"target_lang"`
+	UpdatedAt                *time.Time              `json:"updated_at,omitempty"`
 }
 
 // ProjectResourceScope defines model for Project.ResourceScope.
@@ -565,6 +775,44 @@ type RegisterRequest struct {
 	Email       openapi_types.Email `json:"email"`
 	Password    string              `json:"password"`
 	Username    string              `json:"username"`
+}
+
+// Resource defines model for Resource.
+type Resource struct {
+	CreatedAt     time.Time      `json:"created_at"`
+	ErrorMessage  *string        `json:"error_message,omitempty"`
+	Filename      string         `json:"filename"`
+	Format        string         `json:"format"`
+	Id            int            `json:"id"`
+	Status        ResourceStatus `json:"status"`
+	TotalSegments int            `json:"total_segments"`
+	UpdatedAt     time.Time      `json:"updated_at"`
+}
+
+// ResourceStatus defines model for Resource.Status.
+type ResourceStatus string
+
+// ResourceListResponse defines model for ResourceListResponse.
+type ResourceListResponse struct {
+	Items []Resource `json:"items"`
+}
+
+// ResourceSegmentListResponse defines model for ResourceSegmentListResponse.
+type ResourceSegmentListResponse struct {
+	Items      []Segment `json:"items"`
+	NextCursor *string   `json:"next_cursor,omitempty"`
+}
+
+// ResourceSegmentUpdateRequest defines model for ResourceSegmentUpdateRequest.
+type ResourceSegmentUpdateRequest struct {
+	Comment    *string `json:"comment,omitempty"`
+	SourceText *string `json:"source_text,omitempty"`
+	TargetText *string `json:"target_text,omitempty"`
+}
+
+// ResourceUploadResponse defines model for ResourceUploadResponse.
+type ResourceUploadResponse struct {
+	Items []Resource `json:"items"`
 }
 
 // Segment defines model for Segment.
@@ -655,6 +903,54 @@ type SubJobSummary struct {
 	Status   string `json:"status"`
 }
 
+// TranslationJob defines model for TranslationJob.
+type TranslationJob struct {
+	CompletedResources int                       `json:"completed_resources"`
+	CompletedSegments  int                       `json:"completed_segments"`
+	CreatedAt          time.Time                 `json:"created_at"`
+	ErrorMessage       *string                   `json:"error_message,omitempty"`
+	FailedResources    int                       `json:"failed_resources"`
+	Id                 int                       `json:"id"`
+	JobResources       *[]TranslationJobResource `json:"job_resources,omitempty"`
+	ProjectId          int                       `json:"project_id"`
+	ResourceCount      int                       `json:"resource_count"`
+	Status             TranslationJobStatus      `json:"status"`
+	TotalSegments      int                       `json:"total_segments"`
+	TranslationConfig  *map[string]interface{}   `json:"translation_config,omitempty"`
+	TriggerType        TranslationJobTriggerType `json:"trigger_type"`
+	UpdatedAt          time.Time                 `json:"updated_at"`
+}
+
+// TranslationJobStatus defines model for TranslationJob.Status.
+type TranslationJobStatus string
+
+// TranslationJobTriggerType defines model for TranslationJob.TriggerType.
+type TranslationJobTriggerType string
+
+// TranslationJobListResponse defines model for TranslationJobListResponse.
+type TranslationJobListResponse struct {
+	Items      []TranslationJob `json:"items"`
+	NextCursor *string          `json:"next_cursor,omitempty"`
+}
+
+// TranslationJobResource defines model for TranslationJobResource.
+type TranslationJobResource struct {
+	CompletedSegments int                          `json:"completed_segments"`
+	CreatedAt         time.Time                    `json:"created_at"`
+	ErrorMessage      *string                      `json:"error_message,omitempty"`
+	Id                int                          `json:"id"`
+	OutputPath        *string                      `json:"output_path,omitempty"`
+	Resource          *Resource                    `json:"resource,omitempty"`
+	ResourceId        int                          `json:"resource_id"`
+	SegmentCount      int                          `json:"segment_count"`
+	SegmentIds        *[]int                       `json:"segment_ids,omitempty"`
+	Status            TranslationJobResourceStatus `json:"status"`
+	UpdatedAt         time.Time                    `json:"updated_at"`
+}
+
+// TranslationJobResourceStatus defines model for TranslationJobResource.Status.
+type TranslationJobResourceStatus string
+
 // UpdateBackendRequest defines model for UpdateBackendRequest.
 type UpdateBackendRequest struct {
 	Name     string                   `json:"name"`
@@ -690,11 +986,12 @@ type UpdateOrganizationMemberRequestRole string
 
 // UpdateProjectRequest defines model for UpdateProjectRequest.
 type UpdateProjectRequest struct {
-	Config        *map[string]interface{}            `json:"config,omitempty"`
-	Name          *string                            `json:"name,omitempty"`
-	ResourceScope *UpdateProjectRequestResourceScope `json:"resource_scope,omitempty"`
-	SourceLang    *string                            `json:"source_lang,omitempty"`
-	TargetLang    *string                            `json:"target_lang,omitempty"`
+	Config                   *map[string]interface{}            `json:"config,omitempty"`
+	DefaultTranslationConfig *map[string]interface{}            `json:"default_translation_config,omitempty"`
+	Name                     *string                            `json:"name,omitempty"`
+	ResourceScope            *UpdateProjectRequestResourceScope `json:"resource_scope,omitempty"`
+	SourceLang               *string                            `json:"source_lang,omitempty"`
+	TargetLang               *string                            `json:"target_lang,omitempty"`
 }
 
 // UpdateProjectRequestResourceScope defines model for UpdateProjectRequest.ResourceScope.
@@ -742,6 +1039,9 @@ type OrgId = int
 // ProjectId defines model for ProjectId.
 type ProjectId = int
 
+// ResourceId defines model for ResourceId.
+type ResourceId = int
+
 // SegmentId defines model for SegmentId.
 type SegmentId = int
 
@@ -750,6 +1050,9 @@ type Stage string
 
 // SubJobId defines model for SubJobId.
 type SubJobId = int
+
+// TranslationJobId defines model for TranslationJobId.
+type TranslationJobId = int
 
 // UserId defines model for UserId.
 type UserId = int
@@ -776,6 +1079,58 @@ type CreateProjectJobMultipartBody struct {
 	Files      []openapi_types.File `json:"files"`
 	SourceLang *string              `json:"source_lang,omitempty"`
 	TargetLang *string              `json:"target_lang,omitempty"`
+}
+
+// ListProjectResourcesParams defines parameters for ListProjectResources.
+type ListProjectResourcesParams struct {
+	Status *ListProjectResourcesParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+	Format *string                           `form:"format,omitempty" json:"format,omitempty"`
+	Search *string                           `form:"search,omitempty" json:"search,omitempty"`
+	Cursor *Cursor                           `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit                            `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListProjectResourcesParamsStatus defines parameters for ListProjectResources.
+type ListProjectResourcesParamsStatus string
+
+// UploadProjectResourcesMultipartBody defines parameters for UploadProjectResources.
+type UploadProjectResourcesMultipartBody struct {
+	Files []openapi_types.File `json:"files"`
+}
+
+// UpdateResourceMultipartBody defines parameters for UpdateResource.
+type UpdateResourceMultipartBody struct {
+	File openapi_types.File `json:"file"`
+}
+
+// ListResourceSegmentsParams defines parameters for ListResourceSegments.
+type ListResourceSegmentsParams struct {
+	Status *ListResourceSegmentsParamsStatus `form:"status,omitempty" json:"status,omitempty"`
+	Search *string                           `form:"search,omitempty" json:"search,omitempty"`
+	Cursor *Cursor                           `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit  *Limit                            `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListResourceSegmentsParamsStatus defines parameters for ListResourceSegments.
+type ListResourceSegmentsParamsStatus string
+
+// ListTranslationJobsParams defines parameters for ListTranslationJobs.
+type ListTranslationJobsParams struct {
+	Status      *ListTranslationJobsParamsStatus      `form:"status,omitempty" json:"status,omitempty"`
+	TriggerType *ListTranslationJobsParamsTriggerType `form:"trigger_type,omitempty" json:"trigger_type,omitempty"`
+	Cursor      *Cursor                               `form:"cursor,omitempty" json:"cursor,omitempty"`
+	Limit       *Limit                                `form:"limit,omitempty" json:"limit,omitempty"`
+}
+
+// ListTranslationJobsParamsStatus defines parameters for ListTranslationJobs.
+type ListTranslationJobsParamsStatus string
+
+// ListTranslationJobsParamsTriggerType defines parameters for ListTranslationJobs.
+type ListTranslationJobsParamsTriggerType string
+
+// DownloadTranslationJobResultParams defines parameters for DownloadTranslationJobResult.
+type DownloadTranslationJobResultParams struct {
+	ResourceId *int `form:"resource_id,omitempty" json:"resource_id,omitempty"`
 }
 
 // LoginAuthJSONRequestBody defines body for LoginAuth for application/json ContentType.
@@ -835,8 +1190,20 @@ type UpdateGlossaryEntryJSONRequestBody = UpdateGlossaryEntryRequest
 // CreateProjectJobMultipartRequestBody defines body for CreateProjectJob for multipart/form-data ContentType.
 type CreateProjectJobMultipartRequestBody CreateProjectJobMultipartBody
 
+// UploadProjectResourcesMultipartRequestBody defines body for UploadProjectResources for multipart/form-data ContentType.
+type UploadProjectResourcesMultipartRequestBody UploadProjectResourcesMultipartBody
+
+// UpdateResourceMultipartRequestBody defines body for UpdateResource for multipart/form-data ContentType.
+type UpdateResourceMultipartRequestBody UpdateResourceMultipartBody
+
+// UpdateResourceSegmentJSONRequestBody defines body for UpdateResourceSegment for application/json ContentType.
+type UpdateResourceSegmentJSONRequestBody = ResourceSegmentUpdateRequest
+
 // SetStageBackendOverrideJSONRequestBody defines body for SetStageBackendOverride for application/json ContentType.
 type SetStageBackendOverrideJSONRequestBody = SetStageOverrideRequest
+
+// CreateTranslationJobJSONRequestBody defines body for CreateTranslationJob for application/json ContentType.
+type CreateTranslationJobJSONRequestBody = CreateTranslationJobRequest
 
 // EditSegmentJSONRequestBody defines body for EditSegment for application/json ContentType.
 type EditSegmentJSONRequestBody = SegmentEditRequest
@@ -990,12 +1357,42 @@ type ServerInterface interface {
 	// 创建多文件翻译任务
 	// (POST /projects/{projectId}/jobs)
 	CreateProjectJob(w http.ResponseWriter, r *http.Request, projectId ProjectId)
+	// 列出项目资源文件
+	// (GET /projects/{projectId}/resources)
+	ListProjectResources(w http.ResponseWriter, r *http.Request, projectId ProjectId, params ListProjectResourcesParams)
+	// 上传资源文件到项目
+	// (POST /projects/{projectId}/resources)
+	UploadProjectResources(w http.ResponseWriter, r *http.Request, projectId ProjectId)
+	// 删除资源文件及其所有段落
+	// (DELETE /projects/{projectId}/resources/{resourceId})
+	DeleteResource(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId)
+	// 获取资源详情
+	// (GET /projects/{projectId}/resources/{resourceId})
+	GetResource(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId)
+	// 更新资源文件
+	// (PUT /projects/{projectId}/resources/{resourceId})
+	UpdateResource(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId)
+	// 下载资源原始文件
+	// (GET /projects/{projectId}/resources/{resourceId}/download)
+	DownloadResourceFile(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId)
+	// 列出资源段落
+	// (GET /projects/{projectId}/resources/{resourceId}/segments)
+	ListResourceSegments(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId, params ListResourceSegmentsParams)
+	// 更新资源段落内容
+	// (PATCH /projects/{projectId}/resources/{resourceId}/segments/{segmentId})
+	UpdateResourceSegment(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId, segmentId SegmentId)
 	// 设置阶段后端覆盖
 	// (PUT /projects/{projectId}/stages/{stage}/override)
 	SetStageBackendOverride(w http.ResponseWriter, r *http.Request, projectId ProjectId, stage Stage)
 	// 查询阶段执行计划
 	// (GET /projects/{projectId}/stages/{stage}/plan)
 	GetStagePlan(w http.ResponseWriter, r *http.Request, projectId ProjectId, stage Stage)
+	// 列出项目翻译任务
+	// (GET /projects/{projectId}/translation-jobs)
+	ListTranslationJobs(w http.ResponseWriter, r *http.Request, projectId ProjectId, params ListTranslationJobsParams)
+	// 创建翻译任务
+	// (POST /projects/{projectId}/translation-jobs)
+	CreateTranslationJob(w http.ResponseWriter, r *http.Request, projectId ProjectId)
 	// 编辑段译文
 	// (PUT /segments/{segmentId})
 	EditSegment(w http.ResponseWriter, r *http.Request, segmentId SegmentId)
@@ -1008,6 +1405,18 @@ type ServerInterface interface {
 	// 获取用量统计汇总
 	// (GET /stats/summary)
 	GetStatsSummary(w http.ResponseWriter, r *http.Request)
+	// 获取翻译任务详情
+	// (GET /translation-jobs/{translationJobId})
+	GetTranslationJob(w http.ResponseWriter, r *http.Request, translationJobId TranslationJobId)
+	// 取消翻译任务
+	// (POST /translation-jobs/{translationJobId}/cancel)
+	CancelTranslationJob(w http.ResponseWriter, r *http.Request, translationJobId TranslationJobId)
+	// 下载翻译任务结果
+	// (GET /translation-jobs/{translationJobId}/download)
+	DownloadTranslationJobResult(w http.ResponseWriter, r *http.Request, translationJobId TranslationJobId, params DownloadTranslationJobResultParams)
+	// 重试失败的资源翻译
+	// (POST /translation-jobs/{translationJobId}/retry)
+	RetryTranslationJob(w http.ResponseWriter, r *http.Request, translationJobId TranslationJobId)
 	// 获取当前用户
 	// (GET /users/me)
 	GetCurrentUser(w http.ResponseWriter, r *http.Request)
@@ -1293,6 +1702,54 @@ func (_ Unimplemented) CreateProjectJob(w http.ResponseWriter, r *http.Request, 
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// 列出项目资源文件
+// (GET /projects/{projectId}/resources)
+func (_ Unimplemented) ListProjectResources(w http.ResponseWriter, r *http.Request, projectId ProjectId, params ListProjectResourcesParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 上传资源文件到项目
+// (POST /projects/{projectId}/resources)
+func (_ Unimplemented) UploadProjectResources(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 删除资源文件及其所有段落
+// (DELETE /projects/{projectId}/resources/{resourceId})
+func (_ Unimplemented) DeleteResource(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 获取资源详情
+// (GET /projects/{projectId}/resources/{resourceId})
+func (_ Unimplemented) GetResource(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 更新资源文件
+// (PUT /projects/{projectId}/resources/{resourceId})
+func (_ Unimplemented) UpdateResource(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 下载资源原始文件
+// (GET /projects/{projectId}/resources/{resourceId}/download)
+func (_ Unimplemented) DownloadResourceFile(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 列出资源段落
+// (GET /projects/{projectId}/resources/{resourceId}/segments)
+func (_ Unimplemented) ListResourceSegments(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId, params ListResourceSegmentsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 更新资源段落内容
+// (PATCH /projects/{projectId}/resources/{resourceId}/segments/{segmentId})
+func (_ Unimplemented) UpdateResourceSegment(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId, segmentId SegmentId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // 设置阶段后端覆盖
 // (PUT /projects/{projectId}/stages/{stage}/override)
 func (_ Unimplemented) SetStageBackendOverride(w http.ResponseWriter, r *http.Request, projectId ProjectId, stage Stage) {
@@ -1302,6 +1759,18 @@ func (_ Unimplemented) SetStageBackendOverride(w http.ResponseWriter, r *http.Re
 // 查询阶段执行计划
 // (GET /projects/{projectId}/stages/{stage}/plan)
 func (_ Unimplemented) GetStagePlan(w http.ResponseWriter, r *http.Request, projectId ProjectId, stage Stage) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 列出项目翻译任务
+// (GET /projects/{projectId}/translation-jobs)
+func (_ Unimplemented) ListTranslationJobs(w http.ResponseWriter, r *http.Request, projectId ProjectId, params ListTranslationJobsParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 创建翻译任务
+// (POST /projects/{projectId}/translation-jobs)
+func (_ Unimplemented) CreateTranslationJob(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1326,6 +1795,30 @@ func (_ Unimplemented) RejectSegment(w http.ResponseWriter, r *http.Request, seg
 // 获取用量统计汇总
 // (GET /stats/summary)
 func (_ Unimplemented) GetStatsSummary(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 获取翻译任务详情
+// (GET /translation-jobs/{translationJobId})
+func (_ Unimplemented) GetTranslationJob(w http.ResponseWriter, r *http.Request, translationJobId TranslationJobId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 取消翻译任务
+// (POST /translation-jobs/{translationJobId}/cancel)
+func (_ Unimplemented) CancelTranslationJob(w http.ResponseWriter, r *http.Request, translationJobId TranslationJobId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 下载翻译任务结果
+// (GET /translation-jobs/{translationJobId}/download)
+func (_ Unimplemented) DownloadTranslationJobResult(w http.ResponseWriter, r *http.Request, translationJobId TranslationJobId, params DownloadTranslationJobResultParams) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 重试失败的资源翻译
+// (POST /translation-jobs/{translationJobId}/retry)
+func (_ Unimplemented) RetryTranslationJob(w http.ResponseWriter, r *http.Request, translationJobId TranslationJobId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2698,6 +3191,395 @@ func (siw *ServerInterfaceWrapper) CreateProjectJob(w http.ResponseWriter, r *ht
 	handler.ServeHTTP(w, r)
 }
 
+// ListProjectResources operation middleware
+func (siw *ServerInterfaceWrapper) ListProjectResources(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListProjectResourcesParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "format" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "format", r.URL.Query(), &params.Format, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "format", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "search" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "search", r.URL.Query(), &params.Search, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "search", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListProjectResources(w, r, projectId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UploadProjectResources operation middleware
+func (siw *ServerInterfaceWrapper) UploadProjectResources(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UploadProjectResources(w, r, projectId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteResource operation middleware
+func (siw *ServerInterfaceWrapper) DeleteResource(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "resourceId" -------------
+	var resourceId ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "resourceId", chi.URLParam(r, "resourceId"), &resourceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "resourceId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteResource(w, r, projectId, resourceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetResource operation middleware
+func (siw *ServerInterfaceWrapper) GetResource(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "resourceId" -------------
+	var resourceId ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "resourceId", chi.URLParam(r, "resourceId"), &resourceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "resourceId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetResource(w, r, projectId, resourceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateResource operation middleware
+func (siw *ServerInterfaceWrapper) UpdateResource(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "resourceId" -------------
+	var resourceId ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "resourceId", chi.URLParam(r, "resourceId"), &resourceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "resourceId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateResource(w, r, projectId, resourceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DownloadResourceFile operation middleware
+func (siw *ServerInterfaceWrapper) DownloadResourceFile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "resourceId" -------------
+	var resourceId ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "resourceId", chi.URLParam(r, "resourceId"), &resourceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "resourceId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DownloadResourceFile(w, r, projectId, resourceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListResourceSegments operation middleware
+func (siw *ServerInterfaceWrapper) ListResourceSegments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "resourceId" -------------
+	var resourceId ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "resourceId", chi.URLParam(r, "resourceId"), &resourceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "resourceId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListResourceSegmentsParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "search" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "search", r.URL.Query(), &params.Search, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "search", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListResourceSegments(w, r, projectId, resourceId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateResourceSegment operation middleware
+func (siw *ServerInterfaceWrapper) UpdateResourceSegment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "resourceId" -------------
+	var resourceId ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "resourceId", chi.URLParam(r, "resourceId"), &resourceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "resourceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "segmentId" -------------
+	var segmentId SegmentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "segmentId", chi.URLParam(r, "segmentId"), &segmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "segmentId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateResourceSegment(w, r, projectId, resourceId, segmentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // SetStageBackendOverride operation middleware
 func (siw *ServerInterfaceWrapper) SetStageBackendOverride(w http.ResponseWriter, r *http.Request) {
 
@@ -2769,6 +3651,103 @@ func (siw *ServerInterfaceWrapper) GetStagePlan(w http.ResponseWriter, r *http.R
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetStagePlan(w, r, projectId, stage)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListTranslationJobs operation middleware
+func (siw *ServerInterfaceWrapper) ListTranslationJobs(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params ListTranslationJobsParams
+
+	// ------------- Optional query parameter "status" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "status", r.URL.Query(), &params.Status, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "status", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "trigger_type" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "trigger_type", r.URL.Query(), &params.TriggerType, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "trigger_type", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "cursor" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "cursor", r.URL.Query(), &params.Cursor, runtime.BindQueryParameterOptions{Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "cursor", Err: err})
+		return
+	}
+
+	// ------------- Optional query parameter "limit" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "limit", r.URL.Query(), &params.Limit, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "limit", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTranslationJobs(w, r, projectId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateTranslationJob operation middleware
+func (siw *ServerInterfaceWrapper) CreateTranslationJob(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateTranslationJob(w, r, projectId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -2882,6 +3861,141 @@ func (siw *ServerInterfaceWrapper) GetStatsSummary(w http.ResponseWriter, r *htt
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.GetStatsSummary(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetTranslationJob operation middleware
+func (siw *ServerInterfaceWrapper) GetTranslationJob(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "translationJobId" -------------
+	var translationJobId TranslationJobId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "translationJobId", chi.URLParam(r, "translationJobId"), &translationJobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "translationJobId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTranslationJob(w, r, translationJobId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CancelTranslationJob operation middleware
+func (siw *ServerInterfaceWrapper) CancelTranslationJob(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "translationJobId" -------------
+	var translationJobId TranslationJobId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "translationJobId", chi.URLParam(r, "translationJobId"), &translationJobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "translationJobId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelTranslationJob(w, r, translationJobId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DownloadTranslationJobResult operation middleware
+func (siw *ServerInterfaceWrapper) DownloadTranslationJobResult(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "translationJobId" -------------
+	var translationJobId TranslationJobId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "translationJobId", chi.URLParam(r, "translationJobId"), &translationJobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "translationJobId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	// Parameter object where we will unmarshal all parameters from the context
+	var params DownloadTranslationJobResultParams
+
+	// ------------- Optional query parameter "resource_id" -------------
+
+	err = runtime.BindQueryParameterWithOptions("form", true, false, "resource_id", r.URL.Query(), &params.ResourceId, runtime.BindQueryParameterOptions{Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "resource_id", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DownloadTranslationJobResult(w, r, translationJobId, params)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// RetryTranslationJob operation middleware
+func (siw *ServerInterfaceWrapper) RetryTranslationJob(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "translationJobId" -------------
+	var translationJobId TranslationJobId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "translationJobId", chi.URLParam(r, "translationJobId"), &translationJobId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "translationJobId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RetryTranslationJob(w, r, translationJobId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3200,10 +4314,40 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/projects/{projectId}/jobs", wrapper.CreateProjectJob)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/resources", wrapper.ListProjectResources)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/projects/{projectId}/resources", wrapper.UploadProjectResources)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/projects/{projectId}/resources/{resourceId}", wrapper.DeleteResource)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/resources/{resourceId}", wrapper.GetResource)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/projects/{projectId}/resources/{resourceId}", wrapper.UpdateResource)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/resources/{resourceId}/download", wrapper.DownloadResourceFile)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/resources/{resourceId}/segments", wrapper.ListResourceSegments)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/projects/{projectId}/resources/{resourceId}/segments/{segmentId}", wrapper.UpdateResourceSegment)
+	})
+	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/projects/{projectId}/stages/{stage}/override", wrapper.SetStageBackendOverride)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/stages/{stage}/plan", wrapper.GetStagePlan)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/translation-jobs", wrapper.ListTranslationJobs)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/projects/{projectId}/translation-jobs", wrapper.CreateTranslationJob)
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/segments/{segmentId}", wrapper.EditSegment)
@@ -3216,6 +4360,18 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/stats/summary", wrapper.GetStatsSummary)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/translation-jobs/{translationJobId}", wrapper.GetTranslationJob)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/translation-jobs/{translationJobId}/cancel", wrapper.CancelTranslationJob)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/translation-jobs/{translationJobId}/download", wrapper.DownloadTranslationJobResult)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/translation-jobs/{translationJobId}/retry", wrapper.RetryTranslationJob)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/users/me", wrapper.GetCurrentUser)
@@ -3233,79 +4389,94 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
+	"IXehocwqddXW64tHA8fwjwAAAP//VT/0RcS1AAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

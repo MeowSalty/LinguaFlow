@@ -100,7 +100,8 @@ func (s *TranslationJobService) CreateManualJob(ctx context.Context, actorUserID
 		}
 	}()
 
-	translationConfig := mergeConfigMaps(projectRow.DefaultTranslationConfig, input.TranslationConfig)
+	projectConfig := defaultProjectTranslationConfig(projectRow)
+	translationConfig := mergeConfigMaps(projectConfig, input.TranslationConfig)
 	created, err := tx.TranslationJob.Create().
 		SetProjectID(projectID).
 		SetCreatedByID(actorUserID).
@@ -240,6 +241,53 @@ func (s *TranslationJobService) MarkJobResourceFailed(ctx context.Context, jobRe
 		return err
 	}
 	return nil
+}
+
+func (s *TranslationJobService) CancelJob(ctx context.Context, actorUserID, jobID int) (*ent.TranslationJob, error) {
+	current, err := s.GetJob(ctx, actorUserID, jobID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.client.JobResource.Update().
+		Where(jobresource.HasJobWith(translationjob.IDEQ(current.ID)), jobresource.StatusIn(JobResourceStatusPending, JobResourceStatusRunning)).
+		SetStatus(JobResourceStatusCancelled).
+		Exec(ctx); err != nil {
+		return nil, err
+	}
+	if err := s.client.TranslationJob.UpdateOneID(current.ID).
+		SetStatus(TranslationJobStatusCancelled).
+		Exec(ctx); err != nil {
+		if ent.IsNotFound(err) {
+			return nil, ErrTranslationJobNotFound
+		}
+		return nil, err
+	}
+	return s.GetJob(ctx, actorUserID, current.ID)
+}
+
+func (s *TranslationJobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent.TranslationJob, error) {
+	current, err := s.GetJob(ctx, actorUserID, jobID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.client.JobResource.Update().
+		Where(jobresource.HasJobWith(translationjob.IDEQ(current.ID)), jobresource.StatusEQ(JobResourceStatusFailed)).
+		SetStatus(JobResourceStatusPending).
+		ClearErrorMessage().
+		Exec(ctx); err != nil {
+		return nil, err
+	}
+	if err := s.client.TranslationJob.UpdateOneID(current.ID).
+		SetStatus(TranslationJobStatusPending).
+		SetFailedResources(0).
+		ClearErrorMessage().
+		Exec(ctx); err != nil {
+		if ent.IsNotFound(err) {
+			return nil, ErrTranslationJobNotFound
+		}
+		return nil, err
+	}
+	return s.GetJob(ctx, actorUserID, current.ID)
 }
 
 func (s *TranslationJobService) ReconcileJob(ctx context.Context, jobID int) error {
@@ -430,6 +478,20 @@ func (s *TranslationJobService) resolveResourceSelection(ctx context.Context, pr
 		selection[res.ID] = ids
 	}
 	return selection, nil
+}
+
+func defaultProjectTranslationConfig(projectRow *ent.Project) map[string]any {
+	base := map[string]any{}
+	if projectRow == nil {
+		return base
+	}
+	if sourceLang := strings.TrimSpace(projectRow.SourceLang); sourceLang != "" {
+		base["source_lang"] = sourceLang
+	}
+	if targetLang := strings.TrimSpace(projectRow.TargetLang); targetLang != "" {
+		base["target_lang"] = targetLang
+	}
+	return mergeConfigMaps(base, projectRow.DefaultTranslationConfig)
 }
 
 func uniqueInts(values []int) []int {

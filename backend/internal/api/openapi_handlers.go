@@ -186,6 +186,62 @@ func (s *Server) DownloadJobResult(w http.ResponseWriter, r *http.Request, _ Job
 	s.requireAuth(http.HandlerFunc(s.handleDownloadJobResult)).ServeHTTP(w, r)
 }
 
+func (s *Server) ListProjectResources(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ListProjectResourcesParams) {
+	s.requireAuth(http.HandlerFunc(s.handleListProjectResources)).ServeHTTP(w, r)
+}
+
+func (s *Server) UploadProjectResources(w http.ResponseWriter, r *http.Request, _ ProjectId) {
+	s.requireAuth(http.HandlerFunc(s.handleUploadProjectResources)).ServeHTTP(w, r)
+}
+
+func (s *Server) GetResource(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
+	s.requireAuth(http.HandlerFunc(s.handleGetResource)).ServeHTTP(w, r)
+}
+
+func (s *Server) UpdateResource(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
+	s.requireAuth(http.HandlerFunc(s.handleUpdateResource)).ServeHTTP(w, r)
+}
+
+func (s *Server) DeleteResource(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
+	s.requireAuth(http.HandlerFunc(s.handleDeleteResource)).ServeHTTP(w, r)
+}
+
+func (s *Server) DownloadResourceFile(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
+	s.requireAuth(http.HandlerFunc(s.handleDownloadResourceFile)).ServeHTTP(w, r)
+}
+
+func (s *Server) ListResourceSegments(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId, _ ListResourceSegmentsParams) {
+	s.requireAuth(http.HandlerFunc(s.handleListResourceSegments)).ServeHTTP(w, r)
+}
+
+func (s *Server) UpdateResourceSegment(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId, _ SegmentId) {
+	s.requireAuth(http.HandlerFunc(s.handleUpdateResourceSegment)).ServeHTTP(w, r)
+}
+
+func (s *Server) ListTranslationJobs(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ListTranslationJobsParams) {
+	s.requireAuth(http.HandlerFunc(s.handleListTranslationJobs)).ServeHTTP(w, r)
+}
+
+func (s *Server) CreateTranslationJob(w http.ResponseWriter, r *http.Request, _ ProjectId) {
+	s.requireAuth(http.HandlerFunc(s.handleCreateTranslationJob)).ServeHTTP(w, r)
+}
+
+func (s *Server) GetTranslationJob(w http.ResponseWriter, r *http.Request, _ TranslationJobId) {
+	s.requireAuth(http.HandlerFunc(s.handleGetTranslationJob)).ServeHTTP(w, r)
+}
+
+func (s *Server) CancelTranslationJob(w http.ResponseWriter, r *http.Request, _ TranslationJobId) {
+	s.requireAuth(http.HandlerFunc(s.handleCancelTranslationJob)).ServeHTTP(w, r)
+}
+
+func (s *Server) RetryTranslationJob(w http.ResponseWriter, r *http.Request, _ TranslationJobId) {
+	s.requireAuth(http.HandlerFunc(s.handleRetryTranslationJob)).ServeHTTP(w, r)
+}
+
+func (s *Server) DownloadTranslationJobResult(w http.ResponseWriter, r *http.Request, _ TranslationJobId, _ DownloadTranslationJobResultParams) {
+	s.requireAuth(http.HandlerFunc(s.handleDownloadTranslationJobResult)).ServeHTTP(w, r)
+}
+
 func (s *Server) ListActivity(w http.ResponseWriter, r *http.Request, _ ListActivityParams) {
 	s.requireAuth(http.HandlerFunc(s.handleListActivity)).ServeHTTP(w, r)
 }

@@ -14,6 +14,7 @@ import (
 const (
 	SegmentStatusPending    = "pending"
 	SegmentStatusTranslated = "translated"
+	SegmentStatusReviewed   = "reviewed"
 	SegmentStatusEdited     = "edited"
 	SegmentStatusApproved   = "approved"
 	SegmentStatusRejected   = "rejected"

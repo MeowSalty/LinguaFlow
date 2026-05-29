@@ -227,12 +227,6 @@ func (r *TranslationRunner) buildJobConfig(ctx context.Context, exec *service.Tr
 			cfg.Glossary.Bootstrap.BackendOrder = append(cfg.Glossary.Bootstrap.BackendOrder, binding.Name)
 		}
 	}
-	if exec.Project.SourceLang != "" {
-		cfg.SourceLang = exec.Project.SourceLang
-	}
-	if exec.Project.TargetLang != "" {
-		cfg.TargetLang = exec.Project.TargetLang
-	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err
 	}

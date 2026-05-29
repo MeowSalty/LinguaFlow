@@ -137,6 +137,50 @@ func (s *Server) handleGetTranslationJob(w http.ResponseWriter, r *http.Request)
 	writeJSON(w, http.StatusOK, toTranslationJobResponse(job))
 }
 
+func (s *Server) handleCancelTranslationJob(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+	jobID, ok := parseIntParam(w, chi.URLParam(r, "translationJobId"), "translationJobId")
+	if !ok {
+		return
+	}
+	job, err := s.translationJobSvc.CancelJob(r.Context(), authUser.User.ID, jobID)
+	if err != nil {
+		writeTranslationJobServiceError(w, err)
+		return
+	}
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "translation_job.cancel", ResourceType: "translation_job", ResourceID: job.ID, Message: "取消翻译任务"})
+	writeJSON(w, http.StatusOK, toTranslationJobResponse(job))
+}
+
+func (s *Server) handleRetryTranslationJob(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+	jobID, ok := parseIntParam(w, chi.URLParam(r, "translationJobId"), "translationJobId")
+	if !ok {
+		return
+	}
+	job, err := s.translationJobSvc.RetryJob(r.Context(), authUser.User.ID, jobID)
+	if err != nil {
+		writeTranslationJobServiceError(w, err)
+		return
+	}
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "translation_job.retry", ResourceType: "translation_job", ResourceID: job.ID, Message: "重试翻译任务"})
+	if s.translationJobQueue != nil {
+		if err := s.translationJobQueue.Enqueue(r.Context(), job.ID); err != nil {
+			writeServiceError(w, err)
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, toTranslationJobResponse(job))
+}
+
 func (s *Server) handleDownloadTranslationJobResult(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {

@@ -96,7 +96,7 @@ func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID,
 		if target == "" {
 			return nil, ErrInvalidInput
 		}
-		update.SetTargetText(target).SetStatus(SegmentStatusEdited).SetReviewedByID(actorUserID)
+		update.SetTargetText(target).SetStatus(SegmentStatusReviewed).SetReviewedByID(actorUserID)
 		changed = true
 		targetChanged = true
 	}
