@@ -11,6 +11,7 @@ import Icons from 'unplugin-icons/vite'
 import IconsResolver from 'unplugin-icons/resolver'
 import { NaiveUiResolver } from 'unplugin-vue-components/resolvers'
 import vueDevTools from 'vite-plugin-vue-devtools'
+import tailwindcss from '@tailwindcss/vite'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -37,6 +38,7 @@ export default defineConfig({
     Icons({
       autoInstall: true,
     }),
+    tailwindcss(),
     vueDevTools(),
   ],
   resolve: {
