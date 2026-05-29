@@ -83,6 +83,13 @@ const onSelectUserAction = async (key: string | number) => {
           {{ t('nav.dashboard') }}
         </RouterLink>
         <RouterLink
+          to="/projects"
+          class="text-slate-600 no-underline transition-colors hover:text-brand-500"
+          active-class="!text-brand-500 font-semibold"
+        >
+          {{ t('nav.projects') }}
+        </RouterLink>
+        <RouterLink
           to="/about"
           class="text-slate-600 no-underline transition-colors hover:text-brand-500"
           active-class="!text-brand-500 font-semibold"

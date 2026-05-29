@@ -9,6 +9,7 @@ const messages = {
   nav: {
     main: '主导航',
     dashboard: '工作台',
+    projects: '项目',
     about: '关于',
   },
   layout: {
@@ -115,13 +116,13 @@ const messages = {
       segmentCount: '任务段数',
     },
     quickActions: {
-      createJob: {
-        title: '新建任务',
-        description: '创建一个新的翻译任务',
+      createProject: {
+        title: '新建项目',
+        description: '创建专业翻译项目',
       },
-      viewJobs: {
-        title: '查看任务',
-        description: '查看所有翻译任务',
+      viewProjects: {
+        title: '查看项目',
+        description: '进入项目工作区',
       },
       manageOrganizations: {
         title: '管理组织',
@@ -155,6 +156,109 @@ const messages = {
       failed: '失败',
     },
   },
+  projects: {
+    eyebrow: 'Project Workspace',
+    title: '翻译项目',
+    subtitle: '集中管理您的多语言翻译项目，快速查看语言方向、资源归属与最近更新时间。',
+    actions: {
+      create: '新建项目',
+      createFirst: '创建第一个项目',
+      refresh: '刷新',
+      cancel: '取消',
+      submitCreate: '创建项目',
+      submitUpdate: '保存修改',
+      details: '查看详情',
+      more: '更多',
+      jobs: '任务',
+      glossary: '术语表',
+      backends: '后端设置',
+      edit: '编辑',
+      delete: '删除',
+      confirmDelete: '确认删除',
+    },
+    stats: {
+      total: '全部项目',
+      personal: '项目级资源',
+      organization: '组织级资源',
+      languagePairs: '语言方向',
+    },
+    filters: {
+      searchPlaceholder: '搜索项目名称或语言代码',
+      allScopes: '全部范围',
+      reset: '重置筛选',
+    },
+    scopes: {
+      project: '项目级',
+      organization: '组织级',
+    },
+    languages: {
+      auto: '自动识别 · auto',
+      zhHans: '简体中文 · zh-Hans',
+      zhHant: '繁体中文 · zh-Hant',
+      enUS: '英语（美国）· en-US',
+      enGB: '英语（英国）· en-GB',
+      ja: '日语 · ja',
+      ko: '韩语 · ko',
+      fr: '法语 · fr',
+      de: '德语 · de',
+      es: '西班牙语 · es',
+    },
+    card: {
+      projectId: '项目 #{id}',
+      source: '源语言',
+      target: '目标语言',
+      organization: '所属组织',
+      updatedAt: '最近更新',
+      noDate: '暂无时间',
+      unknownOrganization: '未知组织',
+    },
+    features: {
+      details: '项目详情',
+      jobs: '翻译任务',
+      glossary: '术语表',
+      backends: '后端设置',
+    },
+    empty: {
+      default: '暂无项目，创建一个项目开始管理翻译流程。',
+      filtered: '没有找到符合条件的项目。',
+    },
+    create: {
+      title: '新建翻译项目',
+      description: '填写项目基础信息。创建后可继续配置术语表、翻译后端与任务流程。',
+    },
+    edit: {
+      title: '编辑翻译项目',
+      description: '更新项目基础信息。保存后项目列表会同步刷新。',
+    },
+    delete: {
+      confirm: '确定要删除项目“{name}”吗？此操作无法撤销。',
+    },
+    form: {
+      name: '项目名称',
+      namePlaceholder: '例如：LinguaFlow 本地化',
+      sourceLang: '源语言',
+      targetLang: '目标语言',
+      languagePlaceholder: '选择或输入语言代码',
+      scope: '资源范围',
+      organization: '所属组织',
+      organizationPlaceholder: '选择组织',
+    },
+    validation: {
+      nameRequired: '请输入项目名称',
+      sourceLangRequired: '请选择或输入源语言',
+      targetLangRequired: '请选择或输入目标语言',
+      organizationRequired: '请选择所属组织',
+    },
+    messages: {
+      createSuccess: '项目创建成功',
+      createFailed: '项目创建失败，请稍后重试',
+      updateSuccess: '项目已更新',
+      updateFailed: '项目更新失败，请稍后重试',
+      deleteSuccess: '项目已删除',
+      deleteFailed: '项目删除失败，请稍后重试',
+      featureComingSoon: '{feature}功能将在后续版本接入',
+    },
+  },
   about: {
     title: '关于 LinguaFlow',
     description:
@@ -172,8 +276,15 @@ const messages = {
       fetchCurrentUserFailed: '获取当前用户失败',
       fetchStatsFailed: '获取用量统计失败',
       fetchActivityFailed: '获取活动日志失败',
+      fetchProjectsFailed: '获取项目列表失败',
+      createProjectFailed: '创建项目失败',
+      updateProjectFailed: '更新项目失败',
+      deleteProjectFailed: '删除项目失败',
+      fetchOrganizationsFailed: '获取组织列表失败',
       loadStatsFailed: '加载统计失败',
       loadActivityFailed: '加载活动失败',
+      loadProjectsFailed: '加载项目失败',
+      loadOrganizationsFailed: '加载组织失败',
     },
   },
 } as const

@@ -304,6 +304,72 @@ export const fetchStatsSummary = async (client = apiClient): Promise<ApiSchemas[
   return data
 }
 
+export const fetchProjects = async (
+  client = apiClient,
+): Promise<ApiSchemas['ProjectListResponse']> => {
+  const { data, error, response } = await client.GET('/projects')
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.fetchProjectsFailed'), error, response)
+  }
+
+  return data
+}
+
+export const createProject = async (
+  payload: ApiSchemas['CreateProjectRequest'],
+  client = apiClient,
+): Promise<ApiSchemas['Project']> => {
+  const { data, error, response } = await client.POST('/projects', {
+    body: payload,
+  })
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.createProjectFailed'), error, response)
+  }
+
+  return data
+}
+
+export const updateProject = async (
+  projectId: number,
+  payload: ApiSchemas['UpdateProjectRequest'],
+  client = apiClient,
+): Promise<ApiSchemas['Project']> => {
+  const { data, error, response } = await client.PUT('/projects/{projectId}', {
+    params: { path: { projectId } },
+    body: payload,
+  })
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.updateProjectFailed'), error, response)
+  }
+
+  return data
+}
+
+export const deleteProject = async (projectId: number, client = apiClient): Promise<void> => {
+  const { error, response } = await client.DELETE('/projects/{projectId}', {
+    params: { path: { projectId } },
+  })
+
+  if (error || response.status !== 204) {
+    throw buildRequestFailureError(t('api.errors.deleteProjectFailed'), error, response)
+  }
+}
+
+export const fetchOrganizations = async (
+  client = apiClient,
+): Promise<ApiSchemas['OrganizationListResponse']> => {
+  const { data, error, response } = await client.GET('/orgs')
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.fetchOrganizationsFailed'), error, response)
+  }
+
+  return data
+}
+
 export const fetchActivity = async (
   params?: { cursor?: string; limit?: number },
   client = apiClient,

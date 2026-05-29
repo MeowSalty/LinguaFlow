@@ -7,6 +7,7 @@ import StatsCard from '@/components/dashboard/StatsCard.vue'
 import ActivityFeed from '@/components/dashboard/ActivityFeed.vue'
 import JobStatusOverview from '@/components/dashboard/JobStatusOverview.vue'
 
+const router = useRouter()
 const auth = useAuthStore()
 const stats = useStatsStore()
 const { t } = useI18n()
@@ -80,6 +81,7 @@ onMounted(() => {
         hoverable
         :bordered="false"
         class="cursor-pointer shadow-sm shadow-slate-200/60 transition-shadow hover:shadow-md hover:shadow-slate-200/80"
+        @click="router.push({ path: '/projects', query: { create: '1' } })"
       >
         <div class="flex items-center gap-3">
           <div
@@ -89,10 +91,10 @@ onMounted(() => {
           </div>
           <div>
             <div class="font-medium text-slate-900">
-              {{ t('dashboard.quickActions.createJob.title') }}
+              {{ t('dashboard.quickActions.createProject.title') }}
             </div>
             <div class="text-xs text-slate-500">
-              {{ t('dashboard.quickActions.createJob.description') }}
+              {{ t('dashboard.quickActions.createProject.description') }}
             </div>
           </div>
         </div>
@@ -102,6 +104,7 @@ onMounted(() => {
         hoverable
         :bordered="false"
         class="cursor-pointer shadow-sm shadow-slate-200/60 transition-shadow hover:shadow-md hover:shadow-slate-200/80"
+        @click="router.push({ path: '/projects' })"
       >
         <div class="flex items-center gap-3">
           <div
@@ -111,10 +114,10 @@ onMounted(() => {
           </div>
           <div>
             <div class="font-medium text-slate-900">
-              {{ t('dashboard.quickActions.viewJobs.title') }}
+              {{ t('dashboard.quickActions.viewProjects.title') }}
             </div>
             <div class="text-xs text-slate-500">
-              {{ t('dashboard.quickActions.viewJobs.description') }}
+              {{ t('dashboard.quickActions.viewProjects.description') }}
             </div>
           </div>
         </div>
