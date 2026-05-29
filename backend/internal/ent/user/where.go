@@ -543,6 +543,29 @@ func HasJobsWith(preds ...predicate.Job) predicate.User {
 	})
 }
 
+// HasCreatedTranslationJobs applies the HasEdge predicate on the "created_translation_jobs" edge.
+func HasCreatedTranslationJobs() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, CreatedTranslationJobsTable, CreatedTranslationJobsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasCreatedTranslationJobsWith applies the HasEdge predicate on the "created_translation_jobs" edge with a given conditions (other predicates).
+func HasCreatedTranslationJobsWith(preds ...predicate.TranslationJob) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newCreatedTranslationJobsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // HasReviewedSegments applies the HasEdge predicate on the "reviewed_segments" edge.
 func HasReviewedSegments() predicate.User {
 	return predicate.User(func(s *sql.Selector) {

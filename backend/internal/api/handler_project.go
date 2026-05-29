@@ -10,43 +10,47 @@ import (
 )
 
 type createProjectRequest struct {
-	Name          string         `json:"name"`
-	OwnerOrgID    *int           `json:"owner_org_id"`
-	ResourceScope string         `json:"resource_scope"`
-	Config        map[string]any `json:"config"`
-	SourceLang    string         `json:"source_lang"`
-	TargetLang    string         `json:"target_lang"`
+	Name                     string         `json:"name"`
+	OwnerOrgID               *int           `json:"owner_org_id"`
+	ResourceScope            string         `json:"resource_scope"`
+	Config                   map[string]any `json:"config"`
+	DefaultTranslationConfig map[string]any `json:"default_translation_config"`
+	SourceLang               string         `json:"source_lang"`
+	TargetLang               string         `json:"target_lang"`
 }
 
 type updateProjectRequest struct {
-	Name          string         `json:"name"`
-	ResourceScope string         `json:"resource_scope"`
-	Config        map[string]any `json:"config"`
-	SourceLang    string         `json:"source_lang"`
-	TargetLang    string         `json:"target_lang"`
+	Name                     string         `json:"name"`
+	ResourceScope            string         `json:"resource_scope"`
+	Config                   map[string]any `json:"config"`
+	DefaultTranslationConfig map[string]any `json:"default_translation_config"`
+	SourceLang               string         `json:"source_lang"`
+	TargetLang               string         `json:"target_lang"`
 }
 
 type projectResponse struct {
-	ID            int            `json:"id"`
-	Name          string         `json:"name"`
-	ResourceScope string         `json:"resource_scope"`
-	OwnerUserID   *int           `json:"owner_user_id,omitempty"`
-	OwnerOrgID    *int           `json:"owner_org_id,omitempty"`
-	Config        map[string]any `json:"config,omitempty"`
-	SourceLang    string         `json:"source_lang"`
-	TargetLang    string         `json:"target_lang"`
+	ID                       int            `json:"id"`
+	Name                     string         `json:"name"`
+	ResourceScope            string         `json:"resource_scope"`
+	OwnerUserID              *int           `json:"owner_user_id,omitempty"`
+	OwnerOrgID               *int           `json:"owner_org_id,omitempty"`
+	Config                   map[string]any `json:"config,omitempty"`
+	DefaultTranslationConfig map[string]any `json:"default_translation_config,omitempty"`
+	SourceLang               string         `json:"source_lang"`
+	TargetLang               string         `json:"target_lang"`
 }
 
 func toProjectResponse(p *ent.Project) projectResponse {
 	return projectResponse{
-		ID:            p.ID,
-		Name:          p.Name,
-		ResourceScope: p.ResourceScope,
-		OwnerUserID:   p.OwnerUserID,
-		OwnerOrgID:    p.OwnerOrgID,
-		Config:        p.Config,
-		SourceLang:    p.SourceLang,
-		TargetLang:    p.TargetLang,
+		ID:                       p.ID,
+		Name:                     p.Name,
+		ResourceScope:            p.ResourceScope,
+		OwnerUserID:              p.OwnerUserID,
+		OwnerOrgID:               p.OwnerOrgID,
+		Config:                   p.Config,
+		DefaultTranslationConfig: p.DefaultTranslationConfig,
+		SourceLang:               p.SourceLang,
+		TargetLang:               p.TargetLang,
 	}
 }
 
@@ -99,12 +103,13 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, err := s.projectSvc.CreateProject(r.Context(), authUser.User.ID, service.CreateProjectInput{
-		Name:          req.Name,
-		OwnerOrgID:    req.OwnerOrgID,
-		ResourceScope: req.ResourceScope,
-		Config:        req.Config,
-		SourceLang:    req.SourceLang,
-		TargetLang:    req.TargetLang,
+		Name:                     req.Name,
+		OwnerOrgID:               req.OwnerOrgID,
+		ResourceScope:            req.ResourceScope,
+		Config:                   req.Config,
+		DefaultTranslationConfig: req.DefaultTranslationConfig,
+		SourceLang:               req.SourceLang,
+		TargetLang:               req.TargetLang,
 	})
 	if err != nil {
 		writeProjectServiceError(w, err)
@@ -160,11 +165,12 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, err := s.projectSvc.UpdateProject(r.Context(), authUser.User.ID, projectID, service.UpdateProjectInput{
-		Name:          req.Name,
-		ResourceScope: req.ResourceScope,
-		Config:        req.Config,
-		SourceLang:    req.SourceLang,
-		TargetLang:    req.TargetLang,
+		Name:                     req.Name,
+		ResourceScope:            req.ResourceScope,
+		Config:                   req.Config,
+		DefaultTranslationConfig: req.DefaultTranslationConfig,
+		SourceLang:               req.SourceLang,
+		TargetLang:               req.TargetLang,
 	})
 	if err != nil {
 		writeProjectServiceError(w, err)
@@ -221,7 +227,7 @@ func (s *Server) handleGetProjectBackends(w http.ResponseWriter, r *http.Request
 type setBackendOrderRequest struct {
 	Bindings []struct {
 		Source    string `json:"source"`
-		BackendID int   `json:"backend_id"`
+		BackendID int    `json:"backend_id"`
 	} `json:"bindings"`
 }
 

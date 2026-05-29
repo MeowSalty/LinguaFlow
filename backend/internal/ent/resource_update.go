@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
@@ -173,6 +174,21 @@ func (_u *ResourceUpdate) AddSegments(v ...*Segment) *ResourceUpdate {
 	return _u.AddSegmentIDs(ids...)
 }
 
+// AddJobResourceIDs adds the "job_resources" edge to the JobResource entity by IDs.
+func (_u *ResourceUpdate) AddJobResourceIDs(ids ...int) *ResourceUpdate {
+	_u.mutation.AddJobResourceIDs(ids...)
+	return _u
+}
+
+// AddJobResources adds the "job_resources" edges to the JobResource entity.
+func (_u *ResourceUpdate) AddJobResources(v ...*JobResource) *ResourceUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddJobResourceIDs(ids...)
+}
+
 // Mutation returns the ResourceMutation object of the builder.
 func (_u *ResourceUpdate) Mutation() *ResourceMutation {
 	return _u.mutation
@@ -203,6 +219,27 @@ func (_u *ResourceUpdate) RemoveSegments(v ...*Segment) *ResourceUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveSegmentIDs(ids...)
+}
+
+// ClearJobResources clears all "job_resources" edges to the JobResource entity.
+func (_u *ResourceUpdate) ClearJobResources() *ResourceUpdate {
+	_u.mutation.ClearJobResources()
+	return _u
+}
+
+// RemoveJobResourceIDs removes the "job_resources" edge to JobResource entities by IDs.
+func (_u *ResourceUpdate) RemoveJobResourceIDs(ids ...int) *ResourceUpdate {
+	_u.mutation.RemoveJobResourceIDs(ids...)
+	return _u
+}
+
+// RemoveJobResources removes "job_resources" edges to JobResource entities.
+func (_u *ResourceUpdate) RemoveJobResources(v ...*JobResource) *ResourceUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveJobResourceIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -384,6 +421,51 @@ func (_u *ResourceUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.JobResourcesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   resource.JobResourcesTable,
+			Columns: []string{resource.JobResourcesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedJobResourcesIDs(); len(nodes) > 0 && !_u.mutation.JobResourcesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   resource.JobResourcesTable,
+			Columns: []string{resource.JobResourcesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.JobResourcesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   resource.JobResourcesTable,
+			Columns: []string{resource.JobResourcesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{resource.Label}
@@ -547,6 +629,21 @@ func (_u *ResourceUpdateOne) AddSegments(v ...*Segment) *ResourceUpdateOne {
 	return _u.AddSegmentIDs(ids...)
 }
 
+// AddJobResourceIDs adds the "job_resources" edge to the JobResource entity by IDs.
+func (_u *ResourceUpdateOne) AddJobResourceIDs(ids ...int) *ResourceUpdateOne {
+	_u.mutation.AddJobResourceIDs(ids...)
+	return _u
+}
+
+// AddJobResources adds the "job_resources" edges to the JobResource entity.
+func (_u *ResourceUpdateOne) AddJobResources(v ...*JobResource) *ResourceUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddJobResourceIDs(ids...)
+}
+
 // Mutation returns the ResourceMutation object of the builder.
 func (_u *ResourceUpdateOne) Mutation() *ResourceMutation {
 	return _u.mutation
@@ -577,6 +674,27 @@ func (_u *ResourceUpdateOne) RemoveSegments(v ...*Segment) *ResourceUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveSegmentIDs(ids...)
+}
+
+// ClearJobResources clears all "job_resources" edges to the JobResource entity.
+func (_u *ResourceUpdateOne) ClearJobResources() *ResourceUpdateOne {
+	_u.mutation.ClearJobResources()
+	return _u
+}
+
+// RemoveJobResourceIDs removes the "job_resources" edge to JobResource entities by IDs.
+func (_u *ResourceUpdateOne) RemoveJobResourceIDs(ids ...int) *ResourceUpdateOne {
+	_u.mutation.RemoveJobResourceIDs(ids...)
+	return _u
+}
+
+// RemoveJobResources removes "job_resources" edges to JobResource entities.
+func (_u *ResourceUpdateOne) RemoveJobResources(v ...*JobResource) *ResourceUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveJobResourceIDs(ids...)
 }
 
 // Where appends a list predicates to the ResourceUpdate builder.
@@ -781,6 +899,51 @@ func (_u *ResourceUpdateOne) sqlSave(ctx context.Context) (_node *Resource, err 
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(segment.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.JobResourcesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   resource.JobResourcesTable,
+			Columns: []string{resource.JobResourcesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedJobResourcesIDs(); len(nodes) > 0 && !_u.mutation.JobResourcesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   resource.JobResourcesTable,
+			Columns: []string{resource.JobResourcesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.JobResourcesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   resource.JobResourcesTable,
+			Columns: []string{resource.JobResourcesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

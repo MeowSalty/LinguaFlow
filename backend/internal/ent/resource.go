@@ -48,9 +48,11 @@ type ResourceEdges struct {
 	Project *Project `json:"project,omitempty"`
 	// Segments holds the value of the segments edge.
 	Segments []*Segment `json:"segments,omitempty"`
+	// JobResources holds the value of the job_resources edge.
+	JobResources []*JobResource `json:"job_resources,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [2]bool
+	loadedTypes [3]bool
 }
 
 // ProjectOrErr returns the Project value or an error if the edge
@@ -71,6 +73,15 @@ func (e ResourceEdges) SegmentsOrErr() ([]*Segment, error) {
 		return e.Segments, nil
 	}
 	return nil, &NotLoadedError{edge: "segments"}
+}
+
+// JobResourcesOrErr returns the JobResources value or an error if the edge
+// was not loaded in eager-loading.
+func (e ResourceEdges) JobResourcesOrErr() ([]*JobResource, error) {
+	if e.loadedTypes[2] {
+		return e.JobResources, nil
+	}
+	return nil, &NotLoadedError{edge: "job_resources"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -182,6 +193,11 @@ func (_m *Resource) QueryProject() *ProjectQuery {
 // QuerySegments queries the "segments" edge of the Resource entity.
 func (_m *Resource) QuerySegments() *SegmentQuery {
 	return NewResourceClient(_m.config).QuerySegments(_m)
+}
+
+// QueryJobResources queries the "job_resources" edge of the Resource entity.
+func (_m *Resource) QueryJobResources() *JobResourceQuery {
+	return NewResourceClient(_m.config).QueryJobResources(_m)
 }
 
 // Update returns a builder for updating this Resource.

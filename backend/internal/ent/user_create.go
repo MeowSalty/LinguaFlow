@@ -16,6 +16,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
@@ -129,6 +130,21 @@ func (_c *UserCreate) AddJobs(v ...*Job) *UserCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddJobIDs(ids...)
+}
+
+// AddCreatedTranslationJobIDs adds the "created_translation_jobs" edge to the TranslationJob entity by IDs.
+func (_c *UserCreate) AddCreatedTranslationJobIDs(ids ...int) *UserCreate {
+	_c.mutation.AddCreatedTranslationJobIDs(ids...)
+	return _c
+}
+
+// AddCreatedTranslationJobs adds the "created_translation_jobs" edges to the TranslationJob entity.
+func (_c *UserCreate) AddCreatedTranslationJobs(v ...*TranslationJob) *UserCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddCreatedTranslationJobIDs(ids...)
 }
 
 // AddReviewedSegmentIDs adds the "reviewed_segments" edge to the Segment entity by IDs.
@@ -394,6 +410,22 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.CreatedTranslationJobsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.CreatedTranslationJobsTable,
+			Columns: []string{user.CreatedTranslationJobsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

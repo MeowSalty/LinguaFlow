@@ -40,5 +40,6 @@ func (Resource) Edges() []ent.Edge {
 			Field("project_id").
 			Unique(),
 		edge.To("segments", Segment.Type),
+		edge.To("job_resources", JobResource.Type),
 	}
 }

@@ -15,58 +15,59 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
-// ResourceQuery is the builder for querying Resource entities.
-type ResourceQuery struct {
+// TranslationJobQuery is the builder for querying TranslationJob entities.
+type TranslationJobQuery struct {
 	config
 	ctx              *QueryContext
-	order            []resource.OrderOption
+	order            []translationjob.OrderOption
 	inters           []Interceptor
-	predicates       []predicate.Resource
+	predicates       []predicate.TranslationJob
 	withProject      *ProjectQuery
-	withSegments     *SegmentQuery
+	withCreatedBy    *UserQuery
 	withJobResources *JobResourceQuery
+	withFKs          bool
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
 }
 
-// Where adds a new predicate for the ResourceQuery builder.
-func (_q *ResourceQuery) Where(ps ...predicate.Resource) *ResourceQuery {
+// Where adds a new predicate for the TranslationJobQuery builder.
+func (_q *TranslationJobQuery) Where(ps ...predicate.TranslationJob) *TranslationJobQuery {
 	_q.predicates = append(_q.predicates, ps...)
 	return _q
 }
 
 // Limit the number of records to be returned by this query.
-func (_q *ResourceQuery) Limit(limit int) *ResourceQuery {
+func (_q *TranslationJobQuery) Limit(limit int) *TranslationJobQuery {
 	_q.ctx.Limit = &limit
 	return _q
 }
 
 // Offset to start from.
-func (_q *ResourceQuery) Offset(offset int) *ResourceQuery {
+func (_q *TranslationJobQuery) Offset(offset int) *TranslationJobQuery {
 	_q.ctx.Offset = &offset
 	return _q
 }
 
 // Unique configures the query builder to filter duplicate records on query.
 // By default, unique is set to true, and can be disabled using this method.
-func (_q *ResourceQuery) Unique(unique bool) *ResourceQuery {
+func (_q *TranslationJobQuery) Unique(unique bool) *TranslationJobQuery {
 	_q.ctx.Unique = &unique
 	return _q
 }
 
 // Order specifies how the records should be ordered.
-func (_q *ResourceQuery) Order(o ...resource.OrderOption) *ResourceQuery {
+func (_q *TranslationJobQuery) Order(o ...translationjob.OrderOption) *TranslationJobQuery {
 	_q.order = append(_q.order, o...)
 	return _q
 }
 
 // QueryProject chains the current query on the "project" edge.
-func (_q *ResourceQuery) QueryProject() *ProjectQuery {
+func (_q *TranslationJobQuery) QueryProject() *ProjectQuery {
 	query := (&ProjectClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
@@ -77,9 +78,9 @@ func (_q *ResourceQuery) QueryProject() *ProjectQuery {
 			return nil, err
 		}
 		step := sqlgraph.NewStep(
-			sqlgraph.From(resource.Table, resource.FieldID, selector),
+			sqlgraph.From(translationjob.Table, translationjob.FieldID, selector),
 			sqlgraph.To(project.Table, project.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, resource.ProjectTable, resource.ProjectColumn),
+			sqlgraph.Edge(sqlgraph.M2O, true, translationjob.ProjectTable, translationjob.ProjectColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -87,9 +88,9 @@ func (_q *ResourceQuery) QueryProject() *ProjectQuery {
 	return query
 }
 
-// QuerySegments chains the current query on the "segments" edge.
-func (_q *ResourceQuery) QuerySegments() *SegmentQuery {
-	query := (&SegmentClient{config: _q.config}).Query()
+// QueryCreatedBy chains the current query on the "created_by" edge.
+func (_q *TranslationJobQuery) QueryCreatedBy() *UserQuery {
+	query := (&UserClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
 			return nil, err
@@ -99,9 +100,9 @@ func (_q *ResourceQuery) QuerySegments() *SegmentQuery {
 			return nil, err
 		}
 		step := sqlgraph.NewStep(
-			sqlgraph.From(resource.Table, resource.FieldID, selector),
-			sqlgraph.To(segment.Table, segment.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, resource.SegmentsTable, resource.SegmentsColumn),
+			sqlgraph.From(translationjob.Table, translationjob.FieldID, selector),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, translationjob.CreatedByTable, translationjob.CreatedByColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -110,7 +111,7 @@ func (_q *ResourceQuery) QuerySegments() *SegmentQuery {
 }
 
 // QueryJobResources chains the current query on the "job_resources" edge.
-func (_q *ResourceQuery) QueryJobResources() *JobResourceQuery {
+func (_q *TranslationJobQuery) QueryJobResources() *JobResourceQuery {
 	query := (&JobResourceClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
@@ -121,9 +122,9 @@ func (_q *ResourceQuery) QueryJobResources() *JobResourceQuery {
 			return nil, err
 		}
 		step := sqlgraph.NewStep(
-			sqlgraph.From(resource.Table, resource.FieldID, selector),
+			sqlgraph.From(translationjob.Table, translationjob.FieldID, selector),
 			sqlgraph.To(jobresource.Table, jobresource.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, resource.JobResourcesTable, resource.JobResourcesColumn),
+			sqlgraph.Edge(sqlgraph.O2M, false, translationjob.JobResourcesTable, translationjob.JobResourcesColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -131,21 +132,21 @@ func (_q *ResourceQuery) QueryJobResources() *JobResourceQuery {
 	return query
 }
 
-// First returns the first Resource entity from the query.
-// Returns a *NotFoundError when no Resource was found.
-func (_q *ResourceQuery) First(ctx context.Context) (*Resource, error) {
+// First returns the first TranslationJob entity from the query.
+// Returns a *NotFoundError when no TranslationJob was found.
+func (_q *TranslationJobQuery) First(ctx context.Context) (*TranslationJob, error) {
 	nodes, err := _q.Limit(1).All(setContextOp(ctx, _q.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
 	if len(nodes) == 0 {
-		return nil, &NotFoundError{resource.Label}
+		return nil, &NotFoundError{translationjob.Label}
 	}
 	return nodes[0], nil
 }
 
 // FirstX is like First, but panics if an error occurs.
-func (_q *ResourceQuery) FirstX(ctx context.Context) *Resource {
+func (_q *TranslationJobQuery) FirstX(ctx context.Context) *TranslationJob {
 	node, err := _q.First(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
@@ -153,22 +154,22 @@ func (_q *ResourceQuery) FirstX(ctx context.Context) *Resource {
 	return node
 }
 
-// FirstID returns the first Resource ID from the query.
-// Returns a *NotFoundError when no Resource ID was found.
-func (_q *ResourceQuery) FirstID(ctx context.Context) (id int, err error) {
+// FirstID returns the first TranslationJob ID from the query.
+// Returns a *NotFoundError when no TranslationJob ID was found.
+func (_q *TranslationJobQuery) FirstID(ctx context.Context) (id int, err error) {
 	var ids []int
 	if ids, err = _q.Limit(1).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
 	if len(ids) == 0 {
-		err = &NotFoundError{resource.Label}
+		err = &NotFoundError{translationjob.Label}
 		return
 	}
 	return ids[0], nil
 }
 
 // FirstIDX is like FirstID, but panics if an error occurs.
-func (_q *ResourceQuery) FirstIDX(ctx context.Context) int {
+func (_q *TranslationJobQuery) FirstIDX(ctx context.Context) int {
 	id, err := _q.FirstID(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
@@ -176,10 +177,10 @@ func (_q *ResourceQuery) FirstIDX(ctx context.Context) int {
 	return id
 }
 
-// Only returns a single Resource entity found by the query, ensuring it only returns one.
-// Returns a *NotSingularError when more than one Resource entity is found.
-// Returns a *NotFoundError when no Resource entities are found.
-func (_q *ResourceQuery) Only(ctx context.Context) (*Resource, error) {
+// Only returns a single TranslationJob entity found by the query, ensuring it only returns one.
+// Returns a *NotSingularError when more than one TranslationJob entity is found.
+// Returns a *NotFoundError when no TranslationJob entities are found.
+func (_q *TranslationJobQuery) Only(ctx context.Context) (*TranslationJob, error) {
 	nodes, err := _q.Limit(2).All(setContextOp(ctx, _q.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
@@ -188,14 +189,14 @@ func (_q *ResourceQuery) Only(ctx context.Context) (*Resource, error) {
 	case 1:
 		return nodes[0], nil
 	case 0:
-		return nil, &NotFoundError{resource.Label}
+		return nil, &NotFoundError{translationjob.Label}
 	default:
-		return nil, &NotSingularError{resource.Label}
+		return nil, &NotSingularError{translationjob.Label}
 	}
 }
 
 // OnlyX is like Only, but panics if an error occurs.
-func (_q *ResourceQuery) OnlyX(ctx context.Context) *Resource {
+func (_q *TranslationJobQuery) OnlyX(ctx context.Context) *TranslationJob {
 	node, err := _q.Only(ctx)
 	if err != nil {
 		panic(err)
@@ -203,10 +204,10 @@ func (_q *ResourceQuery) OnlyX(ctx context.Context) *Resource {
 	return node
 }
 
-// OnlyID is like Only, but returns the only Resource ID in the query.
-// Returns a *NotSingularError when more than one Resource ID is found.
+// OnlyID is like Only, but returns the only TranslationJob ID in the query.
+// Returns a *NotSingularError when more than one TranslationJob ID is found.
 // Returns a *NotFoundError when no entities are found.
-func (_q *ResourceQuery) OnlyID(ctx context.Context) (id int, err error) {
+func (_q *TranslationJobQuery) OnlyID(ctx context.Context) (id int, err error) {
 	var ids []int
 	if ids, err = _q.Limit(2).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
@@ -215,15 +216,15 @@ func (_q *ResourceQuery) OnlyID(ctx context.Context) (id int, err error) {
 	case 1:
 		id = ids[0]
 	case 0:
-		err = &NotFoundError{resource.Label}
+		err = &NotFoundError{translationjob.Label}
 	default:
-		err = &NotSingularError{resource.Label}
+		err = &NotSingularError{translationjob.Label}
 	}
 	return
 }
 
 // OnlyIDX is like OnlyID, but panics if an error occurs.
-func (_q *ResourceQuery) OnlyIDX(ctx context.Context) int {
+func (_q *TranslationJobQuery) OnlyIDX(ctx context.Context) int {
 	id, err := _q.OnlyID(ctx)
 	if err != nil {
 		panic(err)
@@ -231,18 +232,18 @@ func (_q *ResourceQuery) OnlyIDX(ctx context.Context) int {
 	return id
 }
 
-// All executes the query and returns a list of Resources.
-func (_q *ResourceQuery) All(ctx context.Context) ([]*Resource, error) {
+// All executes the query and returns a list of TranslationJobs.
+func (_q *TranslationJobQuery) All(ctx context.Context) ([]*TranslationJob, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryAll)
 	if err := _q.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
-	qr := querierAll[[]*Resource, *ResourceQuery]()
-	return withInterceptors[[]*Resource](ctx, _q, qr, _q.inters)
+	qr := querierAll[[]*TranslationJob, *TranslationJobQuery]()
+	return withInterceptors[[]*TranslationJob](ctx, _q, qr, _q.inters)
 }
 
 // AllX is like All, but panics if an error occurs.
-func (_q *ResourceQuery) AllX(ctx context.Context) []*Resource {
+func (_q *TranslationJobQuery) AllX(ctx context.Context) []*TranslationJob {
 	nodes, err := _q.All(ctx)
 	if err != nil {
 		panic(err)
@@ -250,20 +251,20 @@ func (_q *ResourceQuery) AllX(ctx context.Context) []*Resource {
 	return nodes
 }
 
-// IDs executes the query and returns a list of Resource IDs.
-func (_q *ResourceQuery) IDs(ctx context.Context) (ids []int, err error) {
+// IDs executes the query and returns a list of TranslationJob IDs.
+func (_q *TranslationJobQuery) IDs(ctx context.Context) (ids []int, err error) {
 	if _q.ctx.Unique == nil && _q.path != nil {
 		_q.Unique(true)
 	}
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryIDs)
-	if err = _q.Select(resource.FieldID).Scan(ctx, &ids); err != nil {
+	if err = _q.Select(translationjob.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
 }
 
 // IDsX is like IDs, but panics if an error occurs.
-func (_q *ResourceQuery) IDsX(ctx context.Context) []int {
+func (_q *TranslationJobQuery) IDsX(ctx context.Context) []int {
 	ids, err := _q.IDs(ctx)
 	if err != nil {
 		panic(err)
@@ -272,16 +273,16 @@ func (_q *ResourceQuery) IDsX(ctx context.Context) []int {
 }
 
 // Count returns the count of the given query.
-func (_q *ResourceQuery) Count(ctx context.Context) (int, error) {
+func (_q *TranslationJobQuery) Count(ctx context.Context) (int, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryCount)
 	if err := _q.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
-	return withInterceptors[int](ctx, _q, querierCount[*ResourceQuery](), _q.inters)
+	return withInterceptors[int](ctx, _q, querierCount[*TranslationJobQuery](), _q.inters)
 }
 
 // CountX is like Count, but panics if an error occurs.
-func (_q *ResourceQuery) CountX(ctx context.Context) int {
+func (_q *TranslationJobQuery) CountX(ctx context.Context) int {
 	count, err := _q.Count(ctx)
 	if err != nil {
 		panic(err)
@@ -290,7 +291,7 @@ func (_q *ResourceQuery) CountX(ctx context.Context) int {
 }
 
 // Exist returns true if the query has elements in the graph.
-func (_q *ResourceQuery) Exist(ctx context.Context) (bool, error) {
+func (_q *TranslationJobQuery) Exist(ctx context.Context) (bool, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryExist)
 	switch _, err := _q.FirstID(ctx); {
 	case IsNotFound(err):
@@ -303,7 +304,7 @@ func (_q *ResourceQuery) Exist(ctx context.Context) (bool, error) {
 }
 
 // ExistX is like Exist, but panics if an error occurs.
-func (_q *ResourceQuery) ExistX(ctx context.Context) bool {
+func (_q *TranslationJobQuery) ExistX(ctx context.Context) bool {
 	exist, err := _q.Exist(ctx)
 	if err != nil {
 		panic(err)
@@ -311,20 +312,20 @@ func (_q *ResourceQuery) ExistX(ctx context.Context) bool {
 	return exist
 }
 
-// Clone returns a duplicate of the ResourceQuery builder, including all associated steps. It can be
+// Clone returns a duplicate of the TranslationJobQuery builder, including all associated steps. It can be
 // used to prepare common query builders and use them differently after the clone is made.
-func (_q *ResourceQuery) Clone() *ResourceQuery {
+func (_q *TranslationJobQuery) Clone() *TranslationJobQuery {
 	if _q == nil {
 		return nil
 	}
-	return &ResourceQuery{
+	return &TranslationJobQuery{
 		config:           _q.config,
 		ctx:              _q.ctx.Clone(),
-		order:            append([]resource.OrderOption{}, _q.order...),
+		order:            append([]translationjob.OrderOption{}, _q.order...),
 		inters:           append([]Interceptor{}, _q.inters...),
-		predicates:       append([]predicate.Resource{}, _q.predicates...),
+		predicates:       append([]predicate.TranslationJob{}, _q.predicates...),
 		withProject:      _q.withProject.Clone(),
-		withSegments:     _q.withSegments.Clone(),
+		withCreatedBy:    _q.withCreatedBy.Clone(),
 		withJobResources: _q.withJobResources.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
@@ -334,7 +335,7 @@ func (_q *ResourceQuery) Clone() *ResourceQuery {
 
 // WithProject tells the query-builder to eager-load the nodes that are connected to
 // the "project" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *ResourceQuery) WithProject(opts ...func(*ProjectQuery)) *ResourceQuery {
+func (_q *TranslationJobQuery) WithProject(opts ...func(*ProjectQuery)) *TranslationJobQuery {
 	query := (&ProjectClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
@@ -343,20 +344,20 @@ func (_q *ResourceQuery) WithProject(opts ...func(*ProjectQuery)) *ResourceQuery
 	return _q
 }
 
-// WithSegments tells the query-builder to eager-load the nodes that are connected to
-// the "segments" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *ResourceQuery) WithSegments(opts ...func(*SegmentQuery)) *ResourceQuery {
-	query := (&SegmentClient{config: _q.config}).Query()
+// WithCreatedBy tells the query-builder to eager-load the nodes that are connected to
+// the "created_by" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *TranslationJobQuery) WithCreatedBy(opts ...func(*UserQuery)) *TranslationJobQuery {
+	query := (&UserClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
-	_q.withSegments = query
+	_q.withCreatedBy = query
 	return _q
 }
 
 // WithJobResources tells the query-builder to eager-load the nodes that are connected to
 // the "job_resources" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *ResourceQuery) WithJobResources(opts ...func(*JobResourceQuery)) *ResourceQuery {
+func (_q *TranslationJobQuery) WithJobResources(opts ...func(*JobResourceQuery)) *TranslationJobQuery {
 	query := (&JobResourceClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
@@ -375,15 +376,15 @@ func (_q *ResourceQuery) WithJobResources(opts ...func(*JobResourceQuery)) *Reso
 //		Count int `json:"count,omitempty"`
 //	}
 //
-//	client.Resource.Query().
-//		GroupBy(resource.FieldCreatedAt).
+//	client.TranslationJob.Query().
+//		GroupBy(translationjob.FieldCreatedAt).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
-func (_q *ResourceQuery) GroupBy(field string, fields ...string) *ResourceGroupBy {
+func (_q *TranslationJobQuery) GroupBy(field string, fields ...string) *TranslationJobGroupBy {
 	_q.ctx.Fields = append([]string{field}, fields...)
-	grbuild := &ResourceGroupBy{build: _q}
+	grbuild := &TranslationJobGroupBy{build: _q}
 	grbuild.flds = &_q.ctx.Fields
-	grbuild.label = resource.Label
+	grbuild.label = translationjob.Label
 	grbuild.scan = grbuild.Scan
 	return grbuild
 }
@@ -397,23 +398,23 @@ func (_q *ResourceQuery) GroupBy(field string, fields ...string) *ResourceGroupB
 //		CreatedAt time.Time `json:"created_at,omitempty"`
 //	}
 //
-//	client.Resource.Query().
-//		Select(resource.FieldCreatedAt).
+//	client.TranslationJob.Query().
+//		Select(translationjob.FieldCreatedAt).
 //		Scan(ctx, &v)
-func (_q *ResourceQuery) Select(fields ...string) *ResourceSelect {
+func (_q *TranslationJobQuery) Select(fields ...string) *TranslationJobSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)
-	sbuild := &ResourceSelect{ResourceQuery: _q}
-	sbuild.label = resource.Label
+	sbuild := &TranslationJobSelect{TranslationJobQuery: _q}
+	sbuild.label = translationjob.Label
 	sbuild.flds, sbuild.scan = &_q.ctx.Fields, sbuild.Scan
 	return sbuild
 }
 
-// Aggregate returns a ResourceSelect configured with the given aggregations.
-func (_q *ResourceQuery) Aggregate(fns ...AggregateFunc) *ResourceSelect {
+// Aggregate returns a TranslationJobSelect configured with the given aggregations.
+func (_q *TranslationJobQuery) Aggregate(fns ...AggregateFunc) *TranslationJobSelect {
 	return _q.Select().Aggregate(fns...)
 }
 
-func (_q *ResourceQuery) prepareQuery(ctx context.Context) error {
+func (_q *TranslationJobQuery) prepareQuery(ctx context.Context) error {
 	for _, inter := range _q.inters {
 		if inter == nil {
 			return fmt.Errorf("ent: uninitialized interceptor (forgotten import ent/runtime?)")
@@ -425,7 +426,7 @@ func (_q *ResourceQuery) prepareQuery(ctx context.Context) error {
 		}
 	}
 	for _, f := range _q.ctx.Fields {
-		if !resource.ValidColumn(f) {
+		if !translationjob.ValidColumn(f) {
 			return &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 		}
 	}
@@ -439,21 +440,28 @@ func (_q *ResourceQuery) prepareQuery(ctx context.Context) error {
 	return nil
 }
 
-func (_q *ResourceQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Resource, error) {
+func (_q *TranslationJobQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*TranslationJob, error) {
 	var (
-		nodes       = []*Resource{}
+		nodes       = []*TranslationJob{}
+		withFKs     = _q.withFKs
 		_spec       = _q.querySpec()
 		loadedTypes = [3]bool{
 			_q.withProject != nil,
-			_q.withSegments != nil,
+			_q.withCreatedBy != nil,
 			_q.withJobResources != nil,
 		}
 	)
+	if _q.withProject != nil || _q.withCreatedBy != nil {
+		withFKs = true
+	}
+	if withFKs {
+		_spec.Node.Columns = append(_spec.Node.Columns, translationjob.ForeignKeys...)
+	}
 	_spec.ScanValues = func(columns []string) ([]any, error) {
-		return (*Resource).scanValues(nil, columns)
+		return (*TranslationJob).scanValues(nil, columns)
 	}
 	_spec.Assign = func(columns []string, values []any) error {
-		node := &Resource{config: _q.config}
+		node := &TranslationJob{config: _q.config}
 		nodes = append(nodes, node)
 		node.Edges.loadedTypes = loadedTypes
 		return node.assignValues(columns, values)
@@ -469,35 +477,34 @@ func (_q *ResourceQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Res
 	}
 	if query := _q.withProject; query != nil {
 		if err := _q.loadProject(ctx, query, nodes, nil,
-			func(n *Resource, e *Project) { n.Edges.Project = e }); err != nil {
+			func(n *TranslationJob, e *Project) { n.Edges.Project = e }); err != nil {
 			return nil, err
 		}
 	}
-	if query := _q.withSegments; query != nil {
-		if err := _q.loadSegments(ctx, query, nodes,
-			func(n *Resource) { n.Edges.Segments = []*Segment{} },
-			func(n *Resource, e *Segment) { n.Edges.Segments = append(n.Edges.Segments, e) }); err != nil {
+	if query := _q.withCreatedBy; query != nil {
+		if err := _q.loadCreatedBy(ctx, query, nodes, nil,
+			func(n *TranslationJob, e *User) { n.Edges.CreatedBy = e }); err != nil {
 			return nil, err
 		}
 	}
 	if query := _q.withJobResources; query != nil {
 		if err := _q.loadJobResources(ctx, query, nodes,
-			func(n *Resource) { n.Edges.JobResources = []*JobResource{} },
-			func(n *Resource, e *JobResource) { n.Edges.JobResources = append(n.Edges.JobResources, e) }); err != nil {
+			func(n *TranslationJob) { n.Edges.JobResources = []*JobResource{} },
+			func(n *TranslationJob, e *JobResource) { n.Edges.JobResources = append(n.Edges.JobResources, e) }); err != nil {
 			return nil, err
 		}
 	}
 	return nodes, nil
 }
 
-func (_q *ResourceQuery) loadProject(ctx context.Context, query *ProjectQuery, nodes []*Resource, init func(*Resource), assign func(*Resource, *Project)) error {
+func (_q *TranslationJobQuery) loadProject(ctx context.Context, query *ProjectQuery, nodes []*TranslationJob, init func(*TranslationJob), assign func(*TranslationJob, *Project)) error {
 	ids := make([]int, 0, len(nodes))
-	nodeids := make(map[int][]*Resource)
+	nodeids := make(map[int][]*TranslationJob)
 	for i := range nodes {
-		if nodes[i].ProjectID == nil {
+		if nodes[i].project_translation_jobs == nil {
 			continue
 		}
-		fk := *nodes[i].ProjectID
+		fk := *nodes[i].project_translation_jobs
 		if _, ok := nodeids[fk]; !ok {
 			ids = append(ids, fk)
 		}
@@ -514,7 +521,7 @@ func (_q *ResourceQuery) loadProject(ctx context.Context, query *ProjectQuery, n
 	for _, n := range neighbors {
 		nodes, ok := nodeids[n.ID]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "project_id" returned %v`, n.ID)
+			return fmt.Errorf(`unexpected foreign-key "project_translation_jobs" returned %v`, n.ID)
 		}
 		for i := range nodes {
 			assign(nodes[i], n)
@@ -522,43 +529,41 @@ func (_q *ResourceQuery) loadProject(ctx context.Context, query *ProjectQuery, n
 	}
 	return nil
 }
-func (_q *ResourceQuery) loadSegments(ctx context.Context, query *SegmentQuery, nodes []*Resource, init func(*Resource), assign func(*Resource, *Segment)) error {
-	fks := make([]driver.Value, 0, len(nodes))
-	nodeids := make(map[int]*Resource)
+func (_q *TranslationJobQuery) loadCreatedBy(ctx context.Context, query *UserQuery, nodes []*TranslationJob, init func(*TranslationJob), assign func(*TranslationJob, *User)) error {
+	ids := make([]int, 0, len(nodes))
+	nodeids := make(map[int][]*TranslationJob)
 	for i := range nodes {
-		fks = append(fks, nodes[i].ID)
-		nodeids[nodes[i].ID] = nodes[i]
-		if init != nil {
-			init(nodes[i])
+		if nodes[i].user_created_translation_jobs == nil {
+			continue
 		}
+		fk := *nodes[i].user_created_translation_jobs
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
 	}
-	query.withFKs = true
-	if len(query.ctx.Fields) > 0 {
-		query.ctx.AppendFieldOnce(segment.FieldResourceID)
+	if len(ids) == 0 {
+		return nil
 	}
-	query.Where(predicate.Segment(func(s *sql.Selector) {
-		s.Where(sql.InValues(s.C(resource.SegmentsColumn), fks...))
-	}))
+	query.Where(user.IDIn(ids...))
 	neighbors, err := query.All(ctx)
 	if err != nil {
 		return err
 	}
 	for _, n := range neighbors {
-		fk := n.ResourceID
-		if fk == nil {
-			return fmt.Errorf(`foreign-key "resource_id" is nil for node %v`, n.ID)
-		}
-		node, ok := nodeids[*fk]
+		nodes, ok := nodeids[n.ID]
 		if !ok {
-			return fmt.Errorf(`unexpected referenced foreign-key "resource_id" returned %v for node %v`, *fk, n.ID)
+			return fmt.Errorf(`unexpected foreign-key "user_created_translation_jobs" returned %v`, n.ID)
 		}
-		assign(node, n)
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
 	}
 	return nil
 }
-func (_q *ResourceQuery) loadJobResources(ctx context.Context, query *JobResourceQuery, nodes []*Resource, init func(*Resource), assign func(*Resource, *JobResource)) error {
+func (_q *TranslationJobQuery) loadJobResources(ctx context.Context, query *JobResourceQuery, nodes []*TranslationJob, init func(*TranslationJob), assign func(*TranslationJob, *JobResource)) error {
 	fks := make([]driver.Value, 0, len(nodes))
-	nodeids := make(map[int]*Resource)
+	nodeids := make(map[int]*TranslationJob)
 	for i := range nodes {
 		fks = append(fks, nodes[i].ID)
 		nodeids[nodes[i].ID] = nodes[i]
@@ -568,27 +573,27 @@ func (_q *ResourceQuery) loadJobResources(ctx context.Context, query *JobResourc
 	}
 	query.withFKs = true
 	query.Where(predicate.JobResource(func(s *sql.Selector) {
-		s.Where(sql.InValues(s.C(resource.JobResourcesColumn), fks...))
+		s.Where(sql.InValues(s.C(translationjob.JobResourcesColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
 		return err
 	}
 	for _, n := range neighbors {
-		fk := n.resource_job_resources
+		fk := n.translation_job_job_resources
 		if fk == nil {
-			return fmt.Errorf(`foreign-key "resource_job_resources" is nil for node %v`, n.ID)
+			return fmt.Errorf(`foreign-key "translation_job_job_resources" is nil for node %v`, n.ID)
 		}
 		node, ok := nodeids[*fk]
 		if !ok {
-			return fmt.Errorf(`unexpected referenced foreign-key "resource_job_resources" returned %v for node %v`, *fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "translation_job_job_resources" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}
 	return nil
 }
 
-func (_q *ResourceQuery) sqlCount(ctx context.Context) (int, error) {
+func (_q *TranslationJobQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := _q.querySpec()
 	_spec.Node.Columns = _q.ctx.Fields
 	if len(_q.ctx.Fields) > 0 {
@@ -597,8 +602,8 @@ func (_q *ResourceQuery) sqlCount(ctx context.Context) (int, error) {
 	return sqlgraph.CountNodes(ctx, _q.driver, _spec)
 }
 
-func (_q *ResourceQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := sqlgraph.NewQuerySpec(resource.Table, resource.Columns, sqlgraph.NewFieldSpec(resource.FieldID, field.TypeInt))
+func (_q *TranslationJobQuery) querySpec() *sqlgraph.QuerySpec {
+	_spec := sqlgraph.NewQuerySpec(translationjob.Table, translationjob.Columns, sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt))
 	_spec.From = _q.sql
 	if unique := _q.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
@@ -607,14 +612,11 @@ func (_q *ResourceQuery) querySpec() *sqlgraph.QuerySpec {
 	}
 	if fields := _q.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
-		_spec.Node.Columns = append(_spec.Node.Columns, resource.FieldID)
+		_spec.Node.Columns = append(_spec.Node.Columns, translationjob.FieldID)
 		for i := range fields {
-			if fields[i] != resource.FieldID {
+			if fields[i] != translationjob.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
-		}
-		if _q.withProject != nil {
-			_spec.Node.AddColumnOnce(resource.FieldProjectID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {
@@ -640,12 +642,12 @@ func (_q *ResourceQuery) querySpec() *sqlgraph.QuerySpec {
 	return _spec
 }
 
-func (_q *ResourceQuery) sqlQuery(ctx context.Context) *sql.Selector {
+func (_q *TranslationJobQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(_q.driver.Dialect())
-	t1 := builder.Table(resource.Table)
+	t1 := builder.Table(translationjob.Table)
 	columns := _q.ctx.Fields
 	if len(columns) == 0 {
-		columns = resource.Columns
+		columns = translationjob.Columns
 	}
 	selector := builder.Select(t1.Columns(columns...)...).From(t1)
 	if _q.sql != nil {
@@ -672,28 +674,28 @@ func (_q *ResourceQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	return selector
 }
 
-// ResourceGroupBy is the group-by builder for Resource entities.
-type ResourceGroupBy struct {
+// TranslationJobGroupBy is the group-by builder for TranslationJob entities.
+type TranslationJobGroupBy struct {
 	selector
-	build *ResourceQuery
+	build *TranslationJobQuery
 }
 
 // Aggregate adds the given aggregation functions to the group-by query.
-func (_g *ResourceGroupBy) Aggregate(fns ...AggregateFunc) *ResourceGroupBy {
+func (_g *TranslationJobGroupBy) Aggregate(fns ...AggregateFunc) *TranslationJobGroupBy {
 	_g.fns = append(_g.fns, fns...)
 	return _g
 }
 
 // Scan applies the selector query and scans the result into the given value.
-func (_g *ResourceGroupBy) Scan(ctx context.Context, v any) error {
+func (_g *TranslationJobGroupBy) Scan(ctx context.Context, v any) error {
 	ctx = setContextOp(ctx, _g.build.ctx, ent.OpQueryGroupBy)
 	if err := _g.build.prepareQuery(ctx); err != nil {
 		return err
 	}
-	return scanWithInterceptors[*ResourceQuery, *ResourceGroupBy](ctx, _g.build, _g, _g.build.inters, v)
+	return scanWithInterceptors[*TranslationJobQuery, *TranslationJobGroupBy](ctx, _g.build, _g, _g.build.inters, v)
 }
 
-func (_g *ResourceGroupBy) sqlScan(ctx context.Context, root *ResourceQuery, v any) error {
+func (_g *TranslationJobGroupBy) sqlScan(ctx context.Context, root *TranslationJobQuery, v any) error {
 	selector := root.sqlQuery(ctx).Select()
 	aggregation := make([]string, 0, len(_g.fns))
 	for _, fn := range _g.fns {
@@ -720,28 +722,28 @@ func (_g *ResourceGroupBy) sqlScan(ctx context.Context, root *ResourceQuery, v a
 	return sql.ScanSlice(rows, v)
 }
 
-// ResourceSelect is the builder for selecting fields of Resource entities.
-type ResourceSelect struct {
-	*ResourceQuery
+// TranslationJobSelect is the builder for selecting fields of TranslationJob entities.
+type TranslationJobSelect struct {
+	*TranslationJobQuery
 	selector
 }
 
 // Aggregate adds the given aggregation functions to the selector query.
-func (_s *ResourceSelect) Aggregate(fns ...AggregateFunc) *ResourceSelect {
+func (_s *TranslationJobSelect) Aggregate(fns ...AggregateFunc) *TranslationJobSelect {
 	_s.fns = append(_s.fns, fns...)
 	return _s
 }
 
 // Scan applies the selector query and scans the result into the given value.
-func (_s *ResourceSelect) Scan(ctx context.Context, v any) error {
+func (_s *TranslationJobSelect) Scan(ctx context.Context, v any) error {
 	ctx = setContextOp(ctx, _s.ctx, ent.OpQuerySelect)
 	if err := _s.prepareQuery(ctx); err != nil {
 		return err
 	}
-	return scanWithInterceptors[*ResourceQuery, *ResourceSelect](ctx, _s.ResourceQuery, _s, _s.inters, v)
+	return scanWithInterceptors[*TranslationJobQuery, *TranslationJobSelect](ctx, _s.TranslationJobQuery, _s, _s.inters, v)
 }
 
-func (_s *ResourceSelect) sqlScan(ctx context.Context, root *ResourceQuery, v any) error {
+func (_s *TranslationJobSelect) sqlScan(ctx context.Context, root *TranslationJobQuery, v any) error {
 	selector := root.sqlQuery(ctx)
 	aggregation := make([]string, 0, len(_s.fns))
 	for _, fn := range _s.fns {

@@ -39,6 +39,13 @@ func (s *Server) newRouter() http.Handler {
 		r.Patch("/{resourceId}/segments/{segmentId}", s.authHandleFunc(s.handleUpdateResourceSegment))
 	})
 
+	apiV1.Route("/projects/{projectId}/translation-jobs", func(r chi.Router) {
+		r.Get("/", s.authHandleFunc(s.handleListTranslationJobs))
+		r.Post("/", s.authHandleFunc(s.handleCreateTranslationJob))
+	})
+	apiV1.Get("/translation-jobs/{translationJobId}", s.authHandleFunc(s.handleGetTranslationJob))
+	apiV1.Get("/translation-jobs/{translationJobId}/download", s.authHandleFunc(s.handleDownloadTranslationJobResult))
+
 	return r
 }
 

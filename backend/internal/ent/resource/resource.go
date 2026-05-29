@@ -36,6 +36,8 @@ const (
 	EdgeProject = "project"
 	// EdgeSegments holds the string denoting the segments edge name in mutations.
 	EdgeSegments = "segments"
+	// EdgeJobResources holds the string denoting the job_resources edge name in mutations.
+	EdgeJobResources = "job_resources"
 	// Table holds the table name of the resource in the database.
 	Table = "resources"
 	// ProjectTable is the table that holds the project relation/edge.
@@ -52,6 +54,13 @@ const (
 	SegmentsInverseTable = "segments"
 	// SegmentsColumn is the table column denoting the segments relation/edge.
 	SegmentsColumn = "resource_id"
+	// JobResourcesTable is the table that holds the job_resources relation/edge.
+	JobResourcesTable = "job_resources"
+	// JobResourcesInverseTable is the table name for the JobResource entity.
+	// It exists in this package in order to avoid circular dependency with the "jobresource" package.
+	JobResourcesInverseTable = "job_resources"
+	// JobResourcesColumn is the table column denoting the job_resources relation/edge.
+	JobResourcesColumn = "resource_job_resources"
 )
 
 // Columns holds all SQL columns for resource fields.
@@ -174,6 +183,20 @@ func BySegments(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newSegmentsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByJobResourcesCount orders the results by job_resources count.
+func ByJobResourcesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newJobResourcesStep(), opts...)
+	}
+}
+
+// ByJobResources orders the results by job_resources terms.
+func ByJobResources(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newJobResourcesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newProjectStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -186,5 +209,12 @@ func newSegmentsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(SegmentsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, SegmentsTable, SegmentsColumn),
+	)
+}
+func newJobResourcesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(JobResourcesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, JobResourcesTable, JobResourcesColumn),
 	)
 }

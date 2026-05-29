@@ -19,6 +19,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
@@ -109,6 +110,12 @@ func (_c *ProjectCreate) SetNillableResourceScope(v *string) *ProjectCreate {
 // SetConfig sets the "config" field.
 func (_c *ProjectCreate) SetConfig(v map[string]interface{}) *ProjectCreate {
 	_c.mutation.SetConfig(v)
+	return _c
+}
+
+// SetDefaultTranslationConfig sets the "default_translation_config" field.
+func (_c *ProjectCreate) SetDefaultTranslationConfig(v map[string]interface{}) *ProjectCreate {
+	_c.mutation.SetDefaultTranslationConfig(v)
 	return _c
 }
 
@@ -225,6 +232,21 @@ func (_c *ProjectCreate) AddJobs(v ...*Job) *ProjectCreate {
 	return _c.AddJobIDs(ids...)
 }
 
+// AddTranslationJobIDs adds the "translation_jobs" edge to the TranslationJob entity by IDs.
+func (_c *ProjectCreate) AddTranslationJobIDs(ids ...int) *ProjectCreate {
+	_c.mutation.AddTranslationJobIDs(ids...)
+	return _c
+}
+
+// AddTranslationJobs adds the "translation_jobs" edges to the TranslationJob entity.
+func (_c *ProjectCreate) AddTranslationJobs(v ...*TranslationJob) *ProjectCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddTranslationJobIDs(ids...)
+}
+
 // AddActivityLogIDs adds the "activity_logs" edge to the ActivityLog entity by IDs.
 func (_c *ProjectCreate) AddActivityLogIDs(ids ...int) *ProjectCreate {
 	_c.mutation.AddActivityLogIDs(ids...)
@@ -321,6 +343,10 @@ func (_c *ProjectCreate) defaults() {
 		v := project.DefaultConfig()
 		_c.mutation.SetConfig(v)
 	}
+	if _, ok := _c.mutation.DefaultTranslationConfig(); !ok {
+		v := project.DefaultDefaultTranslationConfig()
+		_c.mutation.SetDefaultTranslationConfig(v)
+	}
 	if _, ok := _c.mutation.SourceLang(); !ok {
 		v := project.DefaultSourceLang
 		_c.mutation.SetSourceLang(v)
@@ -362,6 +388,9 @@ func (_c *ProjectCreate) check() error {
 	}
 	if _, ok := _c.mutation.Config(); !ok {
 		return &ValidationError{Name: "config", err: errors.New(`ent: missing required field "Project.config"`)}
+	}
+	if _, ok := _c.mutation.DefaultTranslationConfig(); !ok {
+		return &ValidationError{Name: "default_translation_config", err: errors.New(`ent: missing required field "Project.default_translation_config"`)}
 	}
 	if _, ok := _c.mutation.SourceLang(); !ok {
 		return &ValidationError{Name: "source_lang", err: errors.New(`ent: missing required field "Project.source_lang"`)}
@@ -414,6 +443,10 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Config(); ok {
 		_spec.SetField(project.FieldConfig, field.TypeJSON, value)
 		_node.Config = value
+	}
+	if value, ok := _c.mutation.DefaultTranslationConfig(); ok {
+		_spec.SetField(project.FieldDefaultTranslationConfig, field.TypeJSON, value)
+		_node.DefaultTranslationConfig = value
 	}
 	if value, ok := _c.mutation.SourceLang(); ok {
 		_spec.SetField(project.FieldSourceLang, field.TypeString, value)
@@ -530,6 +563,22 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.TranslationJobsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.TranslationJobsTable,
+			Columns: []string{project.TranslationJobsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

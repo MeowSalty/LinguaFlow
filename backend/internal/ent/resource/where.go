@@ -631,6 +631,29 @@ func HasSegmentsWith(preds ...predicate.Segment) predicate.Resource {
 	})
 }
 
+// HasJobResources applies the HasEdge predicate on the "job_resources" edge.
+func HasJobResources() predicate.Resource {
+	return predicate.Resource(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, JobResourcesTable, JobResourcesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasJobResourcesWith applies the HasEdge predicate on the "job_resources" edge with a given conditions (other predicates).
+func HasJobResourcesWith(preds ...predicate.JobResource) predicate.Resource {
+	return predicate.Resource(func(s *sql.Selector) {
+		step := newJobResourcesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.Resource) predicate.Resource {
 	return predicate.Resource(sql.AndPredicates(predicates...))

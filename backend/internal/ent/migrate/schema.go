@@ -134,6 +134,40 @@ var (
 			},
 		},
 	}
+	// JobResourcesColumns holds the columns for the "job_resources" table.
+	JobResourcesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "status", Type: field.TypeString, Default: "pending"},
+		{Name: "segment_ids", Type: field.TypeJSON},
+		{Name: "segment_count", Type: field.TypeInt, Default: 0},
+		{Name: "completed_segments", Type: field.TypeInt, Default: 0},
+		{Name: "output_path", Type: field.TypeString, Nullable: true},
+		{Name: "error_message", Type: field.TypeString, Nullable: true},
+		{Name: "resource_job_resources", Type: field.TypeInt},
+		{Name: "translation_job_job_resources", Type: field.TypeInt},
+	}
+	// JobResourcesTable holds the schema information for the "job_resources" table.
+	JobResourcesTable = &schema.Table{
+		Name:       "job_resources",
+		Columns:    JobResourcesColumns,
+		PrimaryKey: []*schema.Column{JobResourcesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "job_resources_resources_job_resources",
+				Columns:    []*schema.Column{JobResourcesColumns[9]},
+				RefColumns: []*schema.Column{ResourcesColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "job_resources_translation_jobs_job_resources",
+				Columns:    []*schema.Column{JobResourcesColumns[10]},
+				RefColumns: []*schema.Column{TranslationJobsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+	}
 	// OrgBackendsColumns holds the columns for the "org_backends" table.
 	OrgBackendsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -226,6 +260,7 @@ var (
 		{Name: "name", Type: field.TypeString},
 		{Name: "resource_scope", Type: field.TypeString, Default: "project"},
 		{Name: "config", Type: field.TypeJSON},
+		{Name: "default_translation_config", Type: field.TypeJSON},
 		{Name: "source_lang", Type: field.TypeString, Default: "auto"},
 		{Name: "target_lang", Type: field.TypeString, Default: "zh"},
 		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
@@ -239,13 +274,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "projects_organizations_projects",
-				Columns:    []*schema.Column{ProjectsColumns[8]},
+				Columns:    []*schema.Column{ProjectsColumns[9]},
 				RefColumns: []*schema.Column{OrganizationsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "projects_users_owned_projects",
-				Columns:    []*schema.Column{ProjectsColumns[9]},
+				Columns:    []*schema.Column{ProjectsColumns[10]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -479,6 +514,43 @@ var (
 			},
 		},
 	}
+	// TranslationJobsColumns holds the columns for the "translation_jobs" table.
+	TranslationJobsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "status", Type: field.TypeString, Default: "pending"},
+		{Name: "trigger_type", Type: field.TypeString, Default: "manual"},
+		{Name: "translation_config", Type: field.TypeJSON},
+		{Name: "resource_count", Type: field.TypeInt, Default: 0},
+		{Name: "completed_resources", Type: field.TypeInt, Default: 0},
+		{Name: "failed_resources", Type: field.TypeInt, Default: 0},
+		{Name: "total_segments", Type: field.TypeInt, Default: 0},
+		{Name: "completed_segments", Type: field.TypeInt, Default: 0},
+		{Name: "error_message", Type: field.TypeString, Nullable: true},
+		{Name: "project_translation_jobs", Type: field.TypeInt},
+		{Name: "user_created_translation_jobs", Type: field.TypeInt, Nullable: true},
+	}
+	// TranslationJobsTable holds the schema information for the "translation_jobs" table.
+	TranslationJobsTable = &schema.Table{
+		Name:       "translation_jobs",
+		Columns:    TranslationJobsColumns,
+		PrimaryKey: []*schema.Column{TranslationJobsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "translation_jobs_projects_translation_jobs",
+				Columns:    []*schema.Column{TranslationJobsColumns[12]},
+				RefColumns: []*schema.Column{ProjectsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "translation_jobs_users_created_translation_jobs",
+				Columns:    []*schema.Column{TranslationJobsColumns[13]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
 	// UsageRecordsColumns holds the columns for the "usage_records" table.
 	UsageRecordsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -582,6 +654,7 @@ var (
 		ActivityLogsTable,
 		GlossaryEntriesTable,
 		JobsTable,
+		JobResourcesTable,
 		OrgBackendsTable,
 		OrgMembershipsTable,
 		OrganizationsTable,
@@ -593,6 +666,7 @@ var (
 		StageBackendOverridesTable,
 		SubJobsTable,
 		TmEntriesTable,
+		TranslationJobsTable,
 		UsageRecordsTable,
 		UsersTable,
 		UserBackendsTable,
@@ -608,6 +682,8 @@ func init() {
 	GlossaryEntriesTable.ForeignKeys[1].RefTable = ProjectsTable
 	JobsTable.ForeignKeys[0].RefTable = ProjectsTable
 	JobsTable.ForeignKeys[1].RefTable = UsersTable
+	JobResourcesTable.ForeignKeys[0].RefTable = ResourcesTable
+	JobResourcesTable.ForeignKeys[1].RefTable = TranslationJobsTable
 	OrgBackendsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	OrgMembershipsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	OrgMembershipsTable.ForeignKeys[1].RefTable = UsersTable
@@ -623,6 +699,8 @@ func init() {
 	SubJobsTable.ForeignKeys[0].RefTable = JobsTable
 	TmEntriesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	TmEntriesTable.ForeignKeys[1].RefTable = ProjectsTable
+	TranslationJobsTable.ForeignKeys[0].RefTable = ProjectsTable
+	TranslationJobsTable.ForeignKeys[1].RefTable = UsersTable
 	UsageRecordsTable.ForeignKeys[0].RefTable = JobsTable
 	UsageRecordsTable.ForeignKeys[1].RefTable = OrganizationsTable
 	UsageRecordsTable.ForeignKeys[2].RefTable = ProjectsTable

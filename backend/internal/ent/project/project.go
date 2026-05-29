@@ -28,6 +28,8 @@ const (
 	FieldResourceScope = "resource_scope"
 	// FieldConfig holds the string denoting the config field in the database.
 	FieldConfig = "config"
+	// FieldDefaultTranslationConfig holds the string denoting the default_translation_config field in the database.
+	FieldDefaultTranslationConfig = "default_translation_config"
 	// FieldSourceLang holds the string denoting the source_lang field in the database.
 	FieldSourceLang = "source_lang"
 	// FieldTargetLang holds the string denoting the target_lang field in the database.
@@ -46,6 +48,8 @@ const (
 	EdgeTmEntries = "tm_entries"
 	// EdgeJobs holds the string denoting the jobs edge name in mutations.
 	EdgeJobs = "jobs"
+	// EdgeTranslationJobs holds the string denoting the translation_jobs edge name in mutations.
+	EdgeTranslationJobs = "translation_jobs"
 	// EdgeActivityLogs holds the string denoting the activity_logs edge name in mutations.
 	EdgeActivityLogs = "activity_logs"
 	// EdgeUsageRecords holds the string denoting the usage_records edge name in mutations.
@@ -103,6 +107,13 @@ const (
 	JobsInverseTable = "jobs"
 	// JobsColumn is the table column denoting the jobs relation/edge.
 	JobsColumn = "project_jobs"
+	// TranslationJobsTable is the table that holds the translation_jobs relation/edge.
+	TranslationJobsTable = "translation_jobs"
+	// TranslationJobsInverseTable is the table name for the TranslationJob entity.
+	// It exists in this package in order to avoid circular dependency with the "translationjob" package.
+	TranslationJobsInverseTable = "translation_jobs"
+	// TranslationJobsColumn is the table column denoting the translation_jobs relation/edge.
+	TranslationJobsColumn = "project_translation_jobs"
 	// ActivityLogsTable is the table that holds the activity_logs relation/edge.
 	ActivityLogsTable = "activity_logs"
 	// ActivityLogsInverseTable is the table name for the ActivityLog entity.
@@ -136,6 +147,7 @@ var Columns = []string{
 	FieldOwnerOrgID,
 	FieldResourceScope,
 	FieldConfig,
+	FieldDefaultTranslationConfig,
 	FieldSourceLang,
 	FieldTargetLang,
 }
@@ -167,6 +179,8 @@ var (
 	DefaultResourceScope string
 	// DefaultConfig holds the default value on creation for the "config" field.
 	DefaultConfig func() map[string]interface{}
+	// DefaultDefaultTranslationConfig holds the default value on creation for the "default_translation_config" field.
+	DefaultDefaultTranslationConfig func() map[string]interface{}
 	// DefaultSourceLang holds the default value on creation for the "source_lang" field.
 	DefaultSourceLang string
 	// DefaultTargetLang holds the default value on creation for the "target_lang" field.
@@ -305,6 +319,20 @@ func ByJobs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
+// ByTranslationJobsCount orders the results by translation_jobs count.
+func ByTranslationJobsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newTranslationJobsStep(), opts...)
+	}
+}
+
+// ByTranslationJobs orders the results by translation_jobs terms.
+func ByTranslationJobs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newTranslationJobsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
 // ByActivityLogsCount orders the results by activity_logs count.
 func ByActivityLogsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -393,6 +421,13 @@ func newJobsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(JobsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, JobsTable, JobsColumn),
+	)
+}
+func newTranslationJobsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(TranslationJobsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, TranslationJobsTable, TranslationJobsColumn),
 	)
 }
 func newActivityLogsStep() *sqlgraph.Step {

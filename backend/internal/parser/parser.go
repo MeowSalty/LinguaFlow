@@ -29,9 +29,9 @@ var ErrNotImplemented = errors.New("parser: not implemented")
 var ErrNoParser = errors.New("parser: no parser for extension")
 
 var (
-	mu       sync.RWMutex
-	byName   = map[string]Parser{}
-	byExt    = map[string]Parser{}
+	mu     sync.RWMutex
+	byName = map[string]Parser{}
+	byExt  = map[string]Parser{}
 )
 
 // Register 注册 parser。同名/同扩展名再次注册会覆盖前者。

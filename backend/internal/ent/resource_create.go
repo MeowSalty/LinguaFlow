@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
@@ -142,6 +143,21 @@ func (_c *ResourceCreate) AddSegments(v ...*Segment) *ResourceCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddSegmentIDs(ids...)
+}
+
+// AddJobResourceIDs adds the "job_resources" edge to the JobResource entity by IDs.
+func (_c *ResourceCreate) AddJobResourceIDs(ids ...int) *ResourceCreate {
+	_c.mutation.AddJobResourceIDs(ids...)
+	return _c
+}
+
+// AddJobResources adds the "job_resources" edges to the JobResource entity.
+func (_c *ResourceCreate) AddJobResources(v ...*JobResource) *ResourceCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddJobResourceIDs(ids...)
 }
 
 // Mutation returns the ResourceMutation object of the builder.
@@ -329,6 +345,22 @@ func (_c *ResourceCreate) createSpec() (*Resource, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(segment.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.JobResourcesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   resource.JobResourcesTable,
+			Columns: []string{resource.JobResourcesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

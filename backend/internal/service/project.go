@@ -41,21 +41,23 @@ type ProjectService struct {
 }
 
 type CreateProjectInput struct {
-	Name          string
-	OwnerUserID   *int
-	OwnerOrgID    *int
-	ResourceScope string
-	Config        map[string]any
-	SourceLang    string
-	TargetLang    string
+	Name                     string
+	OwnerUserID              *int
+	OwnerOrgID               *int
+	ResourceScope            string
+	Config                   map[string]any
+	DefaultTranslationConfig map[string]any
+	SourceLang               string
+	TargetLang               string
 }
 
 type UpdateProjectInput struct {
-	Name          string
-	ResourceScope string
-	Config        map[string]any
-	SourceLang    string
-	TargetLang    string
+	Name                     string
+	ResourceScope            string
+	Config                   map[string]any
+	DefaultTranslationConfig map[string]any
+	SourceLang               string
+	TargetLang               string
 }
 
 type ProjectBackendBindingInput struct {
@@ -103,6 +105,7 @@ func (s *ProjectService) CreateProject(ctx context.Context, actorUserID int, inp
 		SetName(normalized.Name).
 		SetResourceScope(normalized.ResourceScope).
 		SetConfig(cloneMap(normalized.Config)).
+		SetDefaultTranslationConfig(cloneMap(normalized.DefaultTranslationConfig)).
 		SetSourceLang(normalized.SourceLang).
 		SetTargetLang(normalized.TargetLang)
 	if normalized.OwnerUserID != nil {
@@ -148,6 +151,7 @@ func (s *ProjectService) UpdateProject(ctx context.Context, actorUserID, project
 		SetName(normalized.Name).
 		SetResourceScope(normalized.ResourceScope).
 		SetConfig(cloneMap(normalized.Config)).
+		SetDefaultTranslationConfig(cloneMap(normalized.DefaultTranslationConfig)).
 		SetSourceLang(normalized.SourceLang).
 		SetTargetLang(normalized.TargetLang).
 		Save(ctx)
@@ -389,13 +393,14 @@ func (s *ProjectService) normalizeCreateInput(ctx context.Context, actorUserID i
 		return CreateProjectInput{}, err
 	}
 	return CreateProjectInput{
-		Name:          name,
-		OwnerUserID:   ownerUserID,
-		OwnerOrgID:    ownerOrgID,
-		ResourceScope: scope,
-		Config:        cloneMap(input.Config),
-		SourceLang:    normalizeLangOrDefault(input.SourceLang, "auto"),
-		TargetLang:    normalizeLangOrDefault(input.TargetLang, "zh"),
+		Name:                     name,
+		OwnerUserID:              ownerUserID,
+		OwnerOrgID:               ownerOrgID,
+		ResourceScope:            scope,
+		Config:                   cloneMap(input.Config),
+		DefaultTranslationConfig: cloneMap(input.DefaultTranslationConfig),
+		SourceLang:               normalizeLangOrDefault(input.SourceLang, "auto"),
+		TargetLang:               normalizeLangOrDefault(input.TargetLang, "zh"),
 	}, nil
 }
 
@@ -412,12 +417,17 @@ func (s *ProjectService) normalizeUpdateInput(current *ent.Project, input Update
 	if len(configValue) == 0 {
 		configValue = cloneMap(current.Config)
 	}
+	defaultTranslationConfig := cloneMap(input.DefaultTranslationConfig)
+	if len(defaultTranslationConfig) == 0 {
+		defaultTranslationConfig = cloneMap(current.DefaultTranslationConfig)
+	}
 	return UpdateProjectInput{
-		Name:          name,
-		ResourceScope: scope,
-		Config:        configValue,
-		SourceLang:    normalizeLangOrDefault(input.SourceLang, current.SourceLang),
-		TargetLang:    normalizeLangOrDefault(input.TargetLang, current.TargetLang),
+		Name:                     name,
+		ResourceScope:            scope,
+		Config:                   configValue,
+		DefaultTranslationConfig: defaultTranslationConfig,
+		SourceLang:               normalizeLangOrDefault(input.SourceLang, current.SourceLang),
+		TargetLang:               normalizeLangOrDefault(input.TargetLang, current.TargetLang),
 	}, nil
 }
 

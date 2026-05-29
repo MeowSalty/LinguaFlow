@@ -18,6 +18,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
@@ -145,6 +146,21 @@ func (_u *UserUpdate) AddJobs(v ...*Job) *UserUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.AddJobIDs(ids...)
+}
+
+// AddCreatedTranslationJobIDs adds the "created_translation_jobs" edge to the TranslationJob entity by IDs.
+func (_u *UserUpdate) AddCreatedTranslationJobIDs(ids ...int) *UserUpdate {
+	_u.mutation.AddCreatedTranslationJobIDs(ids...)
+	return _u
+}
+
+// AddCreatedTranslationJobs adds the "created_translation_jobs" edges to the TranslationJob entity.
+func (_u *UserUpdate) AddCreatedTranslationJobs(v ...*TranslationJob) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddCreatedTranslationJobIDs(ids...)
 }
 
 // AddReviewedSegmentIDs adds the "reviewed_segments" edge to the Segment entity by IDs.
@@ -276,6 +292,27 @@ func (_u *UserUpdate) RemoveJobs(v ...*Job) *UserUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveJobIDs(ids...)
+}
+
+// ClearCreatedTranslationJobs clears all "created_translation_jobs" edges to the TranslationJob entity.
+func (_u *UserUpdate) ClearCreatedTranslationJobs() *UserUpdate {
+	_u.mutation.ClearCreatedTranslationJobs()
+	return _u
+}
+
+// RemoveCreatedTranslationJobIDs removes the "created_translation_jobs" edge to TranslationJob entities by IDs.
+func (_u *UserUpdate) RemoveCreatedTranslationJobIDs(ids ...int) *UserUpdate {
+	_u.mutation.RemoveCreatedTranslationJobIDs(ids...)
+	return _u
+}
+
+// RemoveCreatedTranslationJobs removes "created_translation_jobs" edges to TranslationJob entities.
+func (_u *UserUpdate) RemoveCreatedTranslationJobs(v ...*TranslationJob) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveCreatedTranslationJobIDs(ids...)
 }
 
 // ClearReviewedSegments clears all "reviewed_segments" edges to the Segment entity.
@@ -555,6 +592,51 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.CreatedTranslationJobsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.CreatedTranslationJobsTable,
+			Columns: []string{user.CreatedTranslationJobsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedCreatedTranslationJobsIDs(); len(nodes) > 0 && !_u.mutation.CreatedTranslationJobsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.CreatedTranslationJobsTable,
+			Columns: []string{user.CreatedTranslationJobsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.CreatedTranslationJobsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.CreatedTranslationJobsTable,
+			Columns: []string{user.CreatedTranslationJobsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -1008,6 +1090,21 @@ func (_u *UserUpdateOne) AddJobs(v ...*Job) *UserUpdateOne {
 	return _u.AddJobIDs(ids...)
 }
 
+// AddCreatedTranslationJobIDs adds the "created_translation_jobs" edge to the TranslationJob entity by IDs.
+func (_u *UserUpdateOne) AddCreatedTranslationJobIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.AddCreatedTranslationJobIDs(ids...)
+	return _u
+}
+
+// AddCreatedTranslationJobs adds the "created_translation_jobs" edges to the TranslationJob entity.
+func (_u *UserUpdateOne) AddCreatedTranslationJobs(v ...*TranslationJob) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddCreatedTranslationJobIDs(ids...)
+}
+
 // AddReviewedSegmentIDs adds the "reviewed_segments" edge to the Segment entity by IDs.
 func (_u *UserUpdateOne) AddReviewedSegmentIDs(ids ...int) *UserUpdateOne {
 	_u.mutation.AddReviewedSegmentIDs(ids...)
@@ -1137,6 +1234,27 @@ func (_u *UserUpdateOne) RemoveJobs(v ...*Job) *UserUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveJobIDs(ids...)
+}
+
+// ClearCreatedTranslationJobs clears all "created_translation_jobs" edges to the TranslationJob entity.
+func (_u *UserUpdateOne) ClearCreatedTranslationJobs() *UserUpdateOne {
+	_u.mutation.ClearCreatedTranslationJobs()
+	return _u
+}
+
+// RemoveCreatedTranslationJobIDs removes the "created_translation_jobs" edge to TranslationJob entities by IDs.
+func (_u *UserUpdateOne) RemoveCreatedTranslationJobIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.RemoveCreatedTranslationJobIDs(ids...)
+	return _u
+}
+
+// RemoveCreatedTranslationJobs removes "created_translation_jobs" edges to TranslationJob entities.
+func (_u *UserUpdateOne) RemoveCreatedTranslationJobs(v ...*TranslationJob) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveCreatedTranslationJobIDs(ids...)
 }
 
 // ClearReviewedSegments clears all "reviewed_segments" edges to the Segment entity.
@@ -1446,6 +1564,51 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.CreatedTranslationJobsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.CreatedTranslationJobsTable,
+			Columns: []string{user.CreatedTranslationJobsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedCreatedTranslationJobsIDs(); len(nodes) > 0 && !_u.mutation.CreatedTranslationJobsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.CreatedTranslationJobsTable,
+			Columns: []string{user.CreatedTranslationJobsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.CreatedTranslationJobsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.CreatedTranslationJobsTable,
+			Columns: []string{user.CreatedTranslationJobsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
