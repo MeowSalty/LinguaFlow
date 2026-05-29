@@ -163,7 +163,7 @@ const formatDate = (value?: string): string => {
     return t('projects.card.noDate')
   }
 
-  return new Intl.DateTimeFormat('zh-CN', {
+  return new Intl.DateTimeFormat('zh-Hans', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',

@@ -1,21 +1,21 @@
-import zhCN from './zh-CN'
+import zhHans from './zh-Hans'
 
-export const DEFAULT_LOCALE = 'zh-CN'
+export const DEFAULT_LOCALE = 'zh-Hans'
 export const FALLBACK_LOCALE = DEFAULT_LOCALE
 
 export const localeOptions = [
   {
     code: DEFAULT_LOCALE,
-    labelKey: 'locale.zhCN',
+    labelKey: 'locale.zhHans',
     nativeName: '简体中文',
   },
 ] as const
 
 export type SupportedLocale = (typeof localeOptions)[number]['code']
-export type LocaleMessageSchema = typeof zhCN
+export type LocaleMessageSchema = typeof zhHans
 
 export const messages = {
-  [DEFAULT_LOCALE]: zhCN,
+  [DEFAULT_LOCALE]: zhHans,
 } satisfies Record<SupportedLocale, LocaleMessageSchema>
 
 export const supportedLocales = localeOptions.map((locale) => locale.code) as SupportedLocale[]

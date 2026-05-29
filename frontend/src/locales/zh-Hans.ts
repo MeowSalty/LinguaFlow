@@ -24,7 +24,7 @@ const messages = {
     },
   },
   locale: {
-    zhCN: '简体中文',
+    zhHans: '简体中文',
   },
   theme: {
     system: '跟随系统',

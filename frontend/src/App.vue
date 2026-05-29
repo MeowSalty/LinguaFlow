@@ -23,7 +23,7 @@ const themeOverrides: GlobalThemeOverrides = {
 
 const naiveLocale = computed(() => {
   switch (locale.currentLocale) {
-    case 'zh-CN':
+    case 'zh-Hans':
     default:
       return zhCN
   }
@@ -31,7 +31,7 @@ const naiveLocale = computed(() => {
 
 const naiveDateLocale = computed(() => {
   switch (locale.currentLocale) {
-    case 'zh-CN':
+    case 'zh-Hans':
     default:
       return dateZhCN
   }
