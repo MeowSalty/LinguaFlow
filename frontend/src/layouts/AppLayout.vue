@@ -1,13 +1,17 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { useMessage, type DropdownOption } from 'naive-ui'
 
 import { useAuthStore } from '@/stores/auth'
+import { useLocaleStore } from '@/stores/locale'
 import { useServiceStore } from '@/stores/service'
 
 const router = useRouter()
 const auth = useAuthStore()
+const locale = useLocaleStore()
 const service = useServiceStore()
 const message = useMessage()
+const { t } = useI18n()
 
 const displayName = computed(() => {
   if (!auth.user) {
@@ -34,19 +38,26 @@ const userOptions = computed<DropdownOption[]>(() => [
       ]),
   },
   { type: 'divider', key: 'divider-1' },
-  { label: '切换服务器', key: 'switch-service' },
-  { label: '退出登录', key: 'logout' },
+  { label: t('layout.userMenu.switchService'), key: 'switch-service' },
+  { label: t('layout.userMenu.logout'), key: 'logout' },
 ])
+
+const localeOptions = computed<DropdownOption[]>(() =>
+  locale.availableLocales.map((item) => ({
+    label: t(item.labelKey),
+    key: item.code,
+  })),
+)
 
 const onSelectUserAction = async (key: string | number) => {
   if (key === 'logout') {
     try {
       await auth.logout()
-      message.success('已退出登录')
+      message.success(t('layout.messages.logoutSuccess'))
       await router.push({ path: '/login' })
     } catch (error) {
       console.error(error)
-      message.error('退出登录失败，请重试')
+      message.error(t('layout.messages.logoutFailed'))
     }
   } else if (key === 'switch-service') {
     await router.push({ path: '/service' })
@@ -60,27 +71,38 @@ const onSelectUserAction = async (key: string | number) => {
       class="sticky top-0 z-10 flex h-16 items-center gap-8 border-b border-slate-200 bg-white/80 px-8 backdrop-blur"
     >
       <RouterLink to="/" class="text-xl font-bold tracking-tight text-brand-500 no-underline">
-        LinguaFlow
+        {{ t('common.appName') }}
       </RouterLink>
 
-      <nav class="flex items-center gap-6 text-sm" aria-label="主导航">
+      <nav class="flex items-center gap-6 text-sm" :aria-label="t('nav.main')">
         <RouterLink
           to="/"
           class="text-slate-600 no-underline transition-colors hover:text-brand-500"
           active-class="!text-brand-500 font-semibold"
         >
-          工作台
+          {{ t('nav.dashboard') }}
         </RouterLink>
         <RouterLink
           to="/about"
           class="text-slate-600 no-underline transition-colors hover:text-brand-500"
           active-class="!text-brand-500 font-semibold"
         >
-          关于
+          {{ t('nav.about') }}
         </RouterLink>
       </nav>
 
       <div class="ml-auto flex items-center gap-4">
+        <NDropdown
+          v-if="locale.hasMultipleLocales"
+          trigger="click"
+          :options="localeOptions"
+          placement="bottom-end"
+          @select="(key) => locale.setLocale(String(key))"
+        >
+          <NButton quaternary size="small">
+            {{ t('common.language') }}
+          </NButton>
+        </NDropdown>
         <span class="hidden text-xs text-slate-400 sm:inline" :title="service.baseUrl">
           {{ service.baseUrl }}
         </span>
@@ -105,7 +127,7 @@ const onSelectUserAction = async (key: string | number) => {
     </header>
 
     <main class="flex-1 px-8 py-10">
-      <div class="mx-auto max-w-[1100px]">
+      <div class="mx-auto max-w-275">
         <slot />
       </div>
     </main>

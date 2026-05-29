@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 
 import { type ApiSchemas, fetchStatsSummary, fetchActivity } from '@/api/client'
+import { t } from '@/i18n'
 
 type UsageStats = ApiSchemas['UsageStats']
 type Activity = ApiSchemas['Activity']
@@ -24,7 +25,7 @@ export const useStatsStore = defineStore('stats', () => {
     try {
       stats.value = await fetchStatsSummary()
     } catch (error) {
-      statsError.value = error instanceof Error ? error.message : '加载统计失败'
+      statsError.value = error instanceof Error ? error.message : t('api.errors.loadStatsFailed')
     } finally {
       statsLoading.value = false
     }
@@ -46,7 +47,8 @@ export const useStatsStore = defineStore('stats', () => {
 
       nextCursor.value = response.next_cursor
     } catch (error) {
-      activitiesError.value = error instanceof Error ? error.message : '加载活动失败'
+      activitiesError.value =
+        error instanceof Error ? error.message : t('api.errors.loadActivityFailed')
     } finally {
       activitiesLoading.value = false
     }

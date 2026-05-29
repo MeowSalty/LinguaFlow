@@ -9,16 +9,18 @@
     "preview": "vite preview",
     "build-only": "vite build",
     "type-check": "vue-tsc --build",
-    "lint": "run-s lint:*",
+    "lint": "run-s i18n:check lint:*",
     "lint:oxlint": "oxlint . --fix",
     "lint:eslint": "eslint . --fix --cache",
-    "format": "oxfmt src/"
+    "format": "oxfmt src/",
+    "i18n:check": "vue-tsc --noEmit -p tsconfig.app.json"
   },
   "dependencies": {
     "naive-ui": "^2.44.1",
     "openapi-fetch": "^0.17.0",
     "pinia": "^3.0.4",
     "vue": "^3.5.32",
+    "vue-i18n": "^11.4.4",
     "vue-router": "^5.0.4"
   },
   "devDependencies": {

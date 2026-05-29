@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
 import { useAuthStore } from '@/stores/auth'
 import { useStatsStore } from '@/stores/stats'
 import StatsCard from '@/components/dashboard/StatsCard.vue'
@@ -7,10 +9,11 @@ import JobStatusOverview from '@/components/dashboard/JobStatusOverview.vue'
 
 const auth = useAuthStore()
 const stats = useStatsStore()
+const { t } = useI18n()
 
 const greeting = computed(() => {
   const name = auth.user?.display_name?.trim() || auth.user?.username
-  return name ? `欢迎回来, ${name}` : '欢迎使用 LinguaFlow'
+  return name ? t('dashboard.greeting.named', { name }) : t('dashboard.greeting.anonymous')
 })
 
 // 页面加载时获取数据
@@ -28,7 +31,7 @@ onMounted(() => {
           {{ greeting }}
         </h1>
         <p class="text-sm text-slate-500">
-          这是 LinguaFlow 的工作台首页，查看您的翻译任务统计和最近活动。
+          {{ t('dashboard.intro') }}
         </p>
       </div>
     </NCard>
@@ -36,25 +39,25 @@ onMounted(() => {
     <!-- 统计卡片区域 -->
     <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
       <StatsCard
-        title="API 调用"
+        :title="t('dashboard.stats.apiCalls')"
         :value="stats.stats?.api_calls ?? 0"
         icon="🔗"
         :loading="stats.statsLoading"
       />
       <StatsCard
-        title="输入 Token"
+        :title="t('dashboard.stats.inputTokens')"
         :value="stats.stats?.input_tokens ?? 0"
         icon="📥"
         :loading="stats.statsLoading"
       />
       <StatsCard
-        title="输出 Token"
+        :title="t('dashboard.stats.outputTokens')"
         :value="stats.stats?.output_tokens ?? 0"
         icon="📤"
         :loading="stats.statsLoading"
       />
       <StatsCard
-        title="任务段数"
+        :title="t('dashboard.stats.segmentCount')"
         :value="stats.stats?.segment_count ?? 0"
         icon="📊"
         :loading="stats.statsLoading"
@@ -85,8 +88,12 @@ onMounted(() => {
             ➕
           </div>
           <div>
-            <div class="font-medium text-slate-900">新建任务</div>
-            <div class="text-xs text-slate-500">创建一个新的翻译任务</div>
+            <div class="font-medium text-slate-900">
+              {{ t('dashboard.quickActions.createJob.title') }}
+            </div>
+            <div class="text-xs text-slate-500">
+              {{ t('dashboard.quickActions.createJob.description') }}
+            </div>
           </div>
         </div>
       </NCard>
@@ -103,8 +110,12 @@ onMounted(() => {
             📋
           </div>
           <div>
-            <div class="font-medium text-slate-900">查看任务</div>
-            <div class="text-xs text-slate-500">查看所有翻译任务</div>
+            <div class="font-medium text-slate-900">
+              {{ t('dashboard.quickActions.viewJobs.title') }}
+            </div>
+            <div class="text-xs text-slate-500">
+              {{ t('dashboard.quickActions.viewJobs.description') }}
+            </div>
           </div>
         </div>
       </NCard>
@@ -121,8 +132,12 @@ onMounted(() => {
             🏢
           </div>
           <div>
-            <div class="font-medium text-slate-900">管理组织</div>
-            <div class="text-xs text-slate-500">管理您的组织设置</div>
+            <div class="font-medium text-slate-900">
+              {{ t('dashboard.quickActions.manageOrganizations.title') }}
+            </div>
+            <div class="text-xs text-slate-500">
+              {{ t('dashboard.quickActions.manageOrganizations.description') }}
+            </div>
           </div>
         </div>
       </NCard>

@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
 import { useStatsStore } from '@/stores/stats'
 
 const stats = useStatsStore()
+const { n, t } = useI18n()
 
 const completedJobs = computed(() => stats.stats?.completed_jobs ?? 0)
 const failedJobs = computed(() => stats.stats?.failed_jobs ?? 0)
@@ -21,7 +24,7 @@ const failedPercent = computed(() => {
 
 <template>
   <div class="rounded-xl bg-white p-6 shadow-sm shadow-slate-200/60">
-    <h2 class="text-lg font-medium text-slate-900">任务状态概览</h2>
+    <h2 class="text-lg font-medium text-slate-900">{{ t('dashboard.jobStatus.title') }}</h2>
 
     <!-- 加载状态 -->
     <div v-if="stats.statsLoading" class="mt-6 space-y-4">
@@ -40,8 +43,8 @@ const failedPercent = computed(() => {
       <!-- 进度条 -->
       <div class="mt-6">
         <div class="flex items-center justify-between text-xs text-slate-500">
-          <span>总计 {{ totalJobs.toLocaleString() }} 个任务</span>
-          <span>{{ completedPercent }}% 成功率</span>
+          <span>{{ t('dashboard.jobStatus.total', { count: n(totalJobs) }) }}</span>
+          <span>{{ t('dashboard.jobStatus.successRate', { percent: completedPercent }) }}</span>
         </div>
         <div class="mt-2 h-3 w-full overflow-hidden rounded-full bg-slate-100">
           <div class="flex h-full">
@@ -60,15 +63,15 @@ const failedPercent = computed(() => {
       <!-- 详情卡片 -->
       <div class="mt-6 grid grid-cols-2 gap-4">
         <div class="rounded-lg bg-green-50 p-4">
-          <div class="text-sm text-green-600">已完成</div>
+          <div class="text-sm text-green-600">{{ t('dashboard.jobStatus.completed') }}</div>
           <div class="mt-1 text-2xl font-bold text-green-700">
-            {{ completedJobs.toLocaleString() }}
+            {{ n(completedJobs) }}
           </div>
         </div>
         <div class="rounded-lg bg-red-50 p-4">
-          <div class="text-sm text-red-600">失败</div>
+          <div class="text-sm text-red-600">{{ t('dashboard.jobStatus.failed') }}</div>
           <div class="mt-1 text-2xl font-bold text-red-700">
-            {{ failedJobs.toLocaleString() }}
+            {{ n(failedJobs) }}
           </div>
         </div>
       </div>

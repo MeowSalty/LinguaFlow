@@ -1,5 +1,7 @@
 import createClient, { type Client, type ClientOptions, type Middleware } from 'openapi-fetch'
 
+import { t } from '@/i18n'
+
 import type { components, paths } from './types'
 
 export type ApiPaths = paths
@@ -198,8 +200,10 @@ const buildRequestFailureError = (
     return error as Error
   }
   const status = response?.status
-  const reason = status ? `服务器返回 ${status}` : '请求未送达，请检查网络或服务器地址'
-  return new Error(`${fallbackMessage}(${reason})`)
+  const reason = status
+    ? t('api.errors.serverReturned', { status })
+    : t('api.errors.requestNotSent')
+  return new Error(`${fallbackMessage}（${reason}）`)
 }
 
 export const loginWithPassword = async (
@@ -211,7 +215,7 @@ export const loginWithPassword = async (
   })
 
   if (!data) {
-    throw buildRequestFailureError('登录失败', error, response)
+    throw buildRequestFailureError(t('api.errors.loginFailed'), error, response)
   }
 
   setAuthSession(data)
@@ -228,7 +232,7 @@ export const registerAndLogin = async (
   })
 
   if (!data) {
-    throw buildRequestFailureError('注册失败', error, response)
+    throw buildRequestFailureError(t('api.errors.registerFailed'), error, response)
   }
 
   setAuthSession(data)
@@ -251,7 +255,7 @@ export const refreshAuthSession = async (
   })
 
   if (!data) {
-    throw buildRequestFailureError('刷新会话失败', error, response)
+    throw buildRequestFailureError(t('api.errors.refreshSessionFailed'), error, response)
   }
 
   setAuthSession(data)
@@ -284,7 +288,7 @@ export const fetchCurrentUser = async (client = apiClient): Promise<ApiSchemas['
   const { data, error, response } = await client.GET('/users/me')
 
   if (!data) {
-    throw buildRequestFailureError('获取当前用户失败', error, response)
+    throw buildRequestFailureError(t('api.errors.fetchCurrentUserFailed'), error, response)
   }
 
   return data
@@ -294,7 +298,7 @@ export const fetchStatsSummary = async (client = apiClient): Promise<ApiSchemas[
   const { data, error, response } = await client.GET('/stats/summary')
 
   if (!data) {
-    throw buildRequestFailureError('获取用量统计失败', error, response)
+    throw buildRequestFailureError(t('api.errors.fetchStatsFailed'), error, response)
   }
 
   return data
@@ -309,7 +313,7 @@ export const fetchActivity = async (
   })
 
   if (!data) {
-    throw buildRequestFailureError('获取活动日志失败', error, response)
+    throw buildRequestFailureError(t('api.errors.fetchActivityFailed'), error, response)
   }
 
   return data

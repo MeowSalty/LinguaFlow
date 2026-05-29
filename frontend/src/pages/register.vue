@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { useMessage, type FormInst, type FormItemRule, type FormRules } from 'naive-ui'
 
 import BlankLayout from '@/layouts/BlankLayout.vue'
@@ -15,6 +16,7 @@ const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 const message = useMessage()
+const { t } = useI18n()
 
 const formRef = ref<FormInst | null>(null)
 const submitting = ref(false)
@@ -29,36 +31,53 @@ const formValue = reactive({
 
 const validatePasswordConfirm = (_rule: FormItemRule, value: string): boolean | Error => {
   if (value && value !== formValue.password) {
-    return new Error('两次输入的密码不一致')
+    return new Error(t('register.validation.passwordMismatch'))
   }
   return true
 }
 
-const rules: FormRules = {
+const rules = computed<FormRules>(() => ({
   username: [
-    { required: true, trigger: ['blur', 'input'], message: '请输入用户名' },
-    { min: 3, max: 32, trigger: ['blur', 'input'], message: '用户名长度需在 3-32 之间' },
+    {
+      required: true,
+      trigger: ['blur', 'input'],
+      message: t('register.validation.usernameRequired'),
+    },
+    {
+      min: 3,
+      max: 32,
+      trigger: ['blur', 'input'],
+      message: t('register.validation.usernameLength'),
+    },
   ],
   email: [
-    { required: true, trigger: ['blur', 'input'], message: '请输入邮箱' },
+    { required: true, trigger: ['blur', 'input'], message: t('register.validation.emailRequired') },
     {
       trigger: ['blur', 'input'],
       validator(_rule, value: string) {
         if (!value) return true
         const ok = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
-        return ok ? true : new Error('请输入合法的邮箱地址')
+        return ok ? true : new Error(t('register.validation.emailInvalid'))
       },
     },
   ],
   password: [
-    { required: true, trigger: ['blur', 'input'], message: '请输入密码' },
-    { min: 8, trigger: ['blur', 'input'], message: '密码至少 8 位' },
+    {
+      required: true,
+      trigger: ['blur', 'input'],
+      message: t('register.validation.passwordRequired'),
+    },
+    { min: 8, trigger: ['blur', 'input'], message: t('register.validation.passwordMinLength') },
   ],
   confirm_password: [
-    { required: true, trigger: ['blur', 'input'], message: '请再次输入密码' },
+    {
+      required: true,
+      trigger: ['blur', 'input'],
+      message: t('register.validation.confirmPasswordRequired'),
+    },
     { trigger: ['blur', 'input'], validator: validatePasswordConfirm },
   ],
-}
+}))
 
 interface ApiProblem {
   status?: number
@@ -92,12 +111,12 @@ const onSubmit = async () => {
       display_name: formValue.display_name.trim() || undefined,
       password: formValue.password,
     })
-    message.success('注册成功，欢迎使用 LinguaFlow')
+    message.success(t('register.messages.success'))
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : null
     await router.push(redirect ?? '/')
   } catch (error) {
     console.error(error)
-    message.error(extractErrorMessage(error, '注册失败，请稍后重试'))
+    message.error(extractErrorMessage(error, t('register.messages.failed')))
   } finally {
     submitting.value = false
   }
@@ -105,7 +124,7 @@ const onSubmit = async () => {
 </script>
 
 <template>
-  <BlankLayout title="注册账号" subtitle="创建一个 LinguaFlow 账号">
+  <BlankLayout :title="t('register.title')" :subtitle="t('register.subtitle')">
     <NCard :bordered="false" class="shadow-lg shadow-slate-200/60">
       <NForm
         ref="formRef"
@@ -115,58 +134,62 @@ const onSubmit = async () => {
         require-mark-placement="right-hanging"
         @submit.prevent="onSubmit"
       >
-        <NFormItem label="用户名" path="username">
+        <NFormItem :label="t('register.form.username')" path="username">
           <NInput
             v-model:value="formValue.username"
-            placeholder="3-32 位,字母 / 数字 / 下划线"
+            :placeholder="t('register.form.usernamePlaceholder')"
             clearable
             :input-props="{ autocomplete: 'username' }"
           />
         </NFormItem>
 
-        <NFormItem label="邮箱" path="email">
+        <NFormItem :label="t('register.form.email')" path="email">
           <NInput
             v-model:value="formValue.email"
-            placeholder="you@example.com"
+            :placeholder="t('register.form.emailPlaceholder')"
             clearable
             :input-props="{ autocomplete: 'email', type: 'email' }"
           />
         </NFormItem>
 
-        <NFormItem label="显示名(可选)" path="display_name">
-          <NInput v-model:value="formValue.display_name" placeholder="留空则使用用户名" clearable />
+        <NFormItem :label="t('register.form.displayName')" path="display_name">
+          <NInput
+            v-model:value="formValue.display_name"
+            :placeholder="t('register.form.displayNamePlaceholder')"
+            clearable
+          />
         </NFormItem>
 
-        <NFormItem label="密码" path="password">
+        <NFormItem :label="t('register.form.password')" path="password">
           <NInput
             v-model:value="formValue.password"
             type="password"
-            placeholder="至少 8 位"
+            :placeholder="t('register.form.passwordPlaceholder')"
             show-password-on="click"
             :input-props="{ autocomplete: 'new-password' }"
           />
         </NFormItem>
 
-        <NFormItem label="确认密码" path="confirm_password">
+        <NFormItem :label="t('register.form.confirmPassword')" path="confirm_password">
           <NInput
             v-model:value="formValue.confirm_password"
             type="password"
-            placeholder="再次输入密码"
+            :placeholder="t('register.form.confirmPasswordPlaceholder')"
             show-password-on="click"
             :input-props="{ autocomplete: 'new-password' }"
           />
         </NFormItem>
 
         <NButton attr-type="submit" type="primary" size="large" block :loading="submitting">
-          注册并登录
+          {{ t('register.form.submit') }}
         </NButton>
       </NForm>
     </NCard>
 
     <div class="mt-6 text-center text-xs text-slate-500">
-      已经有账号了？
+      {{ t('register.links.hasAccount') }}
       <RouterLink to="/login" class="text-brand-500 no-underline hover:underline">
-        去登录
+        {{ t('register.links.login') }}
       </RouterLink>
     </div>
   </BlankLayout>

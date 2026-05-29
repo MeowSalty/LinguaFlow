@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
+
 import { useStatsStore } from '@/stores/stats'
 
 const stats = useStatsStore()
+const { d, t } = useI18n()
 
 const relativeTime = (dateStr: string): string => {
   const now = Date.now()
@@ -9,38 +12,30 @@ const relativeTime = (dateStr: string): string => {
   const diff = now - date
 
   const seconds = Math.floor(diff / 1000)
-  if (seconds < 60) return '刚刚'
+  if (seconds < 60) return t('dashboard.activity.relativeTime.justNow')
 
   const minutes = Math.floor(seconds / 60)
-  if (minutes < 60) return `${minutes}分钟前`
+  if (minutes < 60) return t('dashboard.activity.relativeTime.minutesAgo', { count: minutes })
 
   const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours}小时前`
+  if (hours < 24) return t('dashboard.activity.relativeTime.hoursAgo', { count: hours })
 
   const days = Math.floor(hours / 24)
-  if (days < 30) return `${days}天前`
+  if (days < 30) return t('dashboard.activity.relativeTime.daysAgo', { count: days })
 
-  return new Date(dateStr).toLocaleDateString('zh-CN')
-}
-
-const actionLabels: Record<string, string> = {
-  create: '创建了',
-  update: '更新了',
-  delete: '删除了',
-  complete: '完成了',
-  fail: '失败了',
-  approve: '审核通过了',
-  reject: '驳回了',
+  return d(new Date(dateStr), 'short')
 }
 
 const getActionLabel = (action: string): string => {
-  return actionLabels[action] || action
+  const key = `dashboard.activity.actions.${action}`
+  const label = t(key)
+  return label === key ? action : label
 }
 </script>
 
 <template>
   <div class="rounded-xl bg-white p-6 shadow-sm shadow-slate-200/60">
-    <h2 class="text-lg font-medium text-slate-900">最近活动</h2>
+    <h2 class="text-lg font-medium text-slate-900">{{ t('dashboard.activity.title') }}</h2>
 
     <!-- 加载状态 -->
     <div v-if="stats.activitiesLoading && stats.activities.length === 0" class="mt-4 space-y-4">
@@ -57,7 +52,11 @@ const getActionLabel = (action: string): string => {
     <NEmpty v-else-if="stats.activitiesError" :description="stats.activitiesError" class="mt-8" />
 
     <!-- 空状态 -->
-    <NEmpty v-else-if="stats.activities.length === 0" description="暂无活动记录" class="mt-8" />
+    <NEmpty
+      v-else-if="stats.activities.length === 0"
+      :description="t('dashboard.activity.empty')"
+      class="mt-8"
+    />
 
     <!-- 活动列表 -->
     <div v-else class="mt-4 space-y-4">
@@ -90,7 +89,7 @@ const getActionLabel = (action: string): string => {
           :loading="stats.activitiesLoading"
           @click="stats.loadActivities(false)"
         >
-          加载更多
+          {{ t('common.loadMore') }}
         </NButton>
       </div>
     </div>

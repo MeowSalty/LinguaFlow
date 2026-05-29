@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useI18n } from 'vue-i18n'
 import { useMessage, type FormInst, type FormRules } from 'naive-ui'
 
 import BlankLayout from '@/layouts/BlankLayout.vue'
@@ -17,6 +18,7 @@ const route = useRoute()
 const auth = useAuthStore()
 const service = useServiceStore()
 const message = useMessage()
+const { t } = useI18n()
 
 const formRef = ref<FormInst | null>(null)
 const submitting = ref(false)
@@ -26,10 +28,14 @@ const formValue = reactive({
   password: '',
 })
 
-const rules: FormRules = {
-  username: [{ required: true, trigger: ['blur', 'input'], message: '请输入用户名' }],
-  password: [{ required: true, trigger: ['blur', 'input'], message: '请输入密码' }],
-}
+const rules = computed<FormRules>(() => ({
+  username: [
+    { required: true, trigger: ['blur', 'input'], message: t('login.validation.usernameRequired') },
+  ],
+  password: [
+    { required: true, trigger: ['blur', 'input'], message: t('login.validation.passwordRequired') },
+  ],
+}))
 
 interface ApiProblem {
   status?: number
@@ -61,12 +67,12 @@ const onSubmit = async () => {
       username: formValue.username.trim(),
       password: formValue.password,
     })
-    message.success('登录成功')
+    message.success(t('login.messages.success'))
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : null
     await router.push(redirect ?? '/')
   } catch (error) {
     console.error(error)
-    message.error(extractErrorMessage(error, '登录失败,请检查用户名和密码'))
+    message.error(extractErrorMessage(error, t('login.messages.failed')))
   } finally {
     submitting.value = false
   }
@@ -74,7 +80,7 @@ const onSubmit = async () => {
 </script>
 
 <template>
-  <BlankLayout title="登录" subtitle="使用账号登录 LinguaFlow">
+  <BlankLayout :title="t('login.title')" :subtitle="t('login.subtitle')">
     <NCard :bordered="false" class="shadow-lg shadow-slate-200/60">
       <NForm
         ref="formRef"
@@ -84,27 +90,27 @@ const onSubmit = async () => {
         require-mark-placement="right-hanging"
         @submit.prevent="onSubmit"
       >
-        <NFormItem label="用户名" path="username">
+        <NFormItem :label="t('login.form.username')" path="username">
           <NInput
             v-model:value="formValue.username"
-            placeholder="请输入用户名"
+            :placeholder="t('login.form.usernamePlaceholder')"
             clearable
             :input-props="{ autocomplete: 'username' }"
           />
         </NFormItem>
 
-        <NFormItem label="密码" path="password">
+        <NFormItem :label="t('login.form.password')" path="password">
           <NInput
             v-model:value="formValue.password"
             type="password"
-            placeholder="请输入密码"
+            :placeholder="t('login.form.passwordPlaceholder')"
             show-password-on="click"
             :input-props="{ autocomplete: 'current-password' }"
           />
         </NFormItem>
 
         <NButton attr-type="submit" type="primary" size="large" block :loading="submitting">
-          登录
+          {{ t('login.form.submit') }}
         </NButton>
       </NForm>
     </NCard>
@@ -114,10 +120,10 @@ const onSubmit = async () => {
         to="/service"
         class="text-slate-500 no-underline transition-colors hover:text-brand-500"
       >
-        切换服务器 · <span class="text-slate-400">{{ service.baseUrl }}</span>
+        {{ t('login.links.switchService', { url: service.baseUrl }) }}
       </RouterLink>
       <RouterLink to="/register" class="text-brand-500 no-underline hover:underline">
-        没有账号?去注册
+        {{ t('login.links.register') }}
       </RouterLink>
     </div>
   </BlankLayout>
