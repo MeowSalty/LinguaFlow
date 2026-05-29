@@ -1,0 +1,197 @@
+projectResources:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+  get:
+    operationId: ListProjectResources
+    summary: 列出项目资源文件
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [ready, processing, error]
+      - name: format
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: search
+        in: query
+        required: false
+        schema:
+          type: string
+      - $ref: '../base.yaml#/components/parameters/Cursor'
+      - $ref: '../base.yaml#/components/parameters/Limit'
+    responses:
+      '200':
+        description: 资源列表
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/ResourceListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  post:
+    operationId: UploadProjectResources
+    summary: 上传资源文件到项目
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            required: [files]
+            properties:
+              files:
+                type: array
+                maxItems: 50
+                items:
+                  type: string
+                  format: binary
+    responses:
+      '201':
+        description: 上传成功
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/ResourceUploadResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+projectResourceById:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+    - $ref: '../base.yaml#/components/parameters/ResourceId'
+  get:
+    operationId: GetResource
+    summary: 获取资源详情
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 资源详情
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/Resource'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  put:
+    operationId: UpdateResource
+    summary: 更新资源文件
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            required: [file]
+            properties:
+              file:
+                type: string
+                format: binary
+    responses:
+      '200':
+        description: 更新成功
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/Resource'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  delete:
+    operationId: DeleteResource
+    summary: 删除资源文件及其所有段落
+    security:
+      - bearerAuth: []
+    responses:
+      '204':
+        description: 删除成功
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+projectResourceDownload:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+    - $ref: '../base.yaml#/components/parameters/ResourceId'
+  get:
+    operationId: DownloadResourceFile
+    summary: 下载资源原始文件
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 资源原始文件
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+projectResourceSegments:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+    - $ref: '../base.yaml#/components/parameters/ResourceId'
+  get:
+    operationId: ListResourceSegments
+    summary: 列出资源段落
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [pending, translated, reviewed, rejected]
+      - name: search
+        in: query
+        required: false
+        schema:
+          type: string
+      - $ref: '../base.yaml#/components/parameters/Cursor'
+      - $ref: '../base.yaml#/components/parameters/Limit'
+    responses:
+      '200':
+        description: 段落列表
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/ResourceSegmentListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+projectResourceSegmentById:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+    - $ref: '../base.yaml#/components/parameters/ResourceId'
+    - $ref: '../base.yaml#/components/parameters/SegmentId'
+  patch:
+    operationId: UpdateResourceSegment
+    summary: 更新资源段落内容
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/ResourceSegmentUpdateRequest'
+    responses:
+      '200':
+        description: 更新成功
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/Segment'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

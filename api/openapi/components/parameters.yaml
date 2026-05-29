@@ -22,16 +22,16 @@ ProjectId:
     type: integer
     minimum: 1
 
-JobId:
-  name: jobId
+ResourceId:
+  name: resourceId
   in: path
   required: true
   schema:
     type: integer
     minimum: 1
 
-SubJobId:
-  name: subJobId
+TranslationJobId:
+  name: translationJobId
   in: path
   required: true
   schema:
