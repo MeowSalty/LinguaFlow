@@ -12,7 +12,7 @@ Resource:
       type: integer
     status:
       type: string
-      enum: [ready, processing, error]
+      enum: [ready, error]
     error_message:
       type: string
     created_at:

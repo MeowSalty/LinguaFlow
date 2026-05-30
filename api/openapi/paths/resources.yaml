@@ -12,7 +12,7 @@ projectResources:
         required: false
         schema:
           type: string
-          enum: [ready, processing, error]
+          enum: [ready, error]
       - name: format
         in: query
         required: false
