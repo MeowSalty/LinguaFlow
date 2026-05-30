@@ -564,7 +564,6 @@ paths:
             type: string
             enum:
               - ready
-              - processing
               - error
         - name: format
           in: query
@@ -1492,7 +1491,6 @@ components:
           type: string
           enum:
             - ready
-            - processing
             - error
         error_message:
           type: string
