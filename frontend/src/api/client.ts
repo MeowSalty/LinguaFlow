@@ -3,41 +3,24 @@ import createClient, { type Client, type ClientOptions, type Middleware } from '
 import { t } from '@/i18n'
 
 import type { components, paths } from './types'
+import { getDefaultTokenStorage } from './token-storage'
+import { buildRequestFailureError } from './utils'
 
 export type ApiPaths = paths
 export type ApiSchemas = components['schemas']
 export type ApiClient = Client<ApiPaths>
-export type AuthSession = ApiSchemas['AuthSession']
-export type AuthTokens = Pick<AuthSession, 'access_token' | 'refresh_token'>
-
-export interface TokenStorage {
-  getItem(key: string): string | null
-  setItem(key: string, value: string): void
-  removeItem(key: string): void
-}
 
 export interface ApiClientOptions extends Omit<ClientOptions, 'baseUrl'> {
   /** API 根地址;不传时默认使用 `/api/v1`。 */
   baseUrl?: string
   /** 自定义 Token 存储，默认使用 `window.localStorage`。 */
-  tokenStorage?: TokenStorage
+  tokenStorage?: import('./token-storage').TokenStorage
   /** 自定义 Access Token 读取逻辑；优先级高于 `tokenStorage`。 */
   getAccessToken?: () => string | null | undefined
 }
 
 const DEFAULT_API_BASE_URL = '/api/v1'
-const ACCESS_TOKEN_STORAGE_KEY = 'linguaflow.access_token'
-const REFRESH_TOKEN_STORAGE_KEY = 'linguaflow.refresh_token'
-const API_BASE_URL_STORAGE_KEY = 'linguaflow.api_base_url'
 const AUTH_TOKEN_SKIP_PATHS = new Set(['/ping', '/auth/register', '/auth/login', '/auth/refresh'])
-
-const getDefaultTokenStorage = (): TokenStorage | undefined => {
-  if (typeof window === 'undefined') {
-    return undefined
-  }
-
-  return window.localStorage
-}
 
 const resolveApiBaseUrl = (baseUrl?: string): string => {
   const normalizedBaseUrl = baseUrl?.trim()
@@ -46,77 +29,22 @@ const resolveApiBaseUrl = (baseUrl?: string): string => {
 }
 
 const resolveAccessTokenReader = (
-  tokenStorage?: TokenStorage,
+  tokenStorage?: import('./token-storage').TokenStorage,
   getAccessToken?: ApiClientOptions['getAccessToken'],
 ): (() => string | null | undefined) => {
   if (getAccessToken) {
     return getAccessToken
   }
 
-  return () => tokenStorage?.getItem(ACCESS_TOKEN_STORAGE_KEY)
+  return () => tokenStorage?.getItem('linguaflow.access_token')
 }
 
-export const authTokenStorageKeys = {
-  accessToken: ACCESS_TOKEN_STORAGE_KEY,
-  refreshToken: REFRESH_TOKEN_STORAGE_KEY,
-  apiBaseUrl: API_BASE_URL_STORAGE_KEY,
-} as const
-
-export const getAccessToken = (tokenStorage = getDefaultTokenStorage()): string | null => {
-  return tokenStorage?.getItem(ACCESS_TOKEN_STORAGE_KEY) ?? null
+const readStoredApiBaseUrl = (): string | null => {
+  return getDefaultTokenStorage()?.getItem('linguaflow.api_base_url') ?? null
 }
 
-export const getRefreshToken = (tokenStorage = getDefaultTokenStorage()): string | null => {
-  return tokenStorage?.getItem(REFRESH_TOKEN_STORAGE_KEY) ?? null
-}
-
-export const getAuthTokens = (tokenStorage = getDefaultTokenStorage()): AuthTokens | null => {
-  const accessToken = getAccessToken(tokenStorage)
-  const refreshToken = getRefreshToken(tokenStorage)
-
-  if (!accessToken || !refreshToken) {
-    return null
-  }
-
-  return {
-    access_token: accessToken,
-    refresh_token: refreshToken,
-  }
-}
-
-export const setAuthTokens = (
-  tokens: AuthTokens,
-  tokenStorage = getDefaultTokenStorage(),
-): void => {
-  tokenStorage?.setItem(ACCESS_TOKEN_STORAGE_KEY, tokens.access_token)
-  tokenStorage?.setItem(REFRESH_TOKEN_STORAGE_KEY, tokens.refresh_token)
-}
-
-export const setAuthSession = (
-  session: AuthSession,
-  tokenStorage = getDefaultTokenStorage(),
-): void => {
-  setAuthTokens(session, tokenStorage)
-}
-
-export const clearAuthTokens = (tokenStorage = getDefaultTokenStorage()): void => {
-  tokenStorage?.removeItem(ACCESS_TOKEN_STORAGE_KEY)
-  tokenStorage?.removeItem(REFRESH_TOKEN_STORAGE_KEY)
-}
-
-export const readStoredApiBaseUrl = (tokenStorage = getDefaultTokenStorage()): string | null => {
-  return tokenStorage?.getItem(API_BASE_URL_STORAGE_KEY) ?? null
-}
-
-export const writeStoredApiBaseUrl = (
-  baseUrl: string,
-  tokenStorage = getDefaultTokenStorage(),
-): void => {
-  tokenStorage?.setItem(API_BASE_URL_STORAGE_KEY, baseUrl)
-}
-
-export const clearStoredApiBaseUrl = (tokenStorage = getDefaultTokenStorage()): void => {
-  tokenStorage?.removeItem(API_BASE_URL_STORAGE_KEY)
+const writeStoredApiBaseUrl = (baseUrl: string): void => {
+  getDefaultTokenStorage()?.setItem('linguaflow.api_base_url', baseUrl)
 }
 
 type UnauthorizedHandler = () => void
@@ -205,196 +133,10 @@ export const apiClient = new Proxy({} as ApiClient, {
   has: (_target, prop) => Reflect.has(_client as object, prop),
 }) as ApiClient
 
-const buildRequestFailureError = (
-  fallbackMessage: string,
-  error?: unknown,
-  response?: Response,
-): Error => {
-  if (error) {
-    return error as Error
-  }
-  const status = response?.status
-  const reason = status
-    ? t('api.errors.serverReturned', { status })
-    : t('api.errors.requestNotSent')
-  return new Error(`${fallbackMessage}（${reason}）`)
-}
-
-export const loginWithPassword = async (
-  credentials: ApiSchemas['LoginRequest'],
-  client = apiClient,
-): Promise<AuthSession> => {
-  const { data, error, response } = await client.POST('/auth/login', {
-    body: credentials,
-  })
-
-  if (!data) {
-    throw buildRequestFailureError(t('api.errors.loginFailed'), error, response)
-  }
-
-  setAuthSession(data)
-
-  return data
-}
-
-export const registerAndLogin = async (
-  payload: ApiSchemas['RegisterRequest'],
-  client = apiClient,
-): Promise<AuthSession> => {
-  const { data, error, response } = await client.POST('/auth/register', {
-    body: payload,
-  })
-
-  if (!data) {
-    throw buildRequestFailureError(t('api.errors.registerFailed'), error, response)
-  }
-
-  setAuthSession(data)
-
-  return data
-}
-
-export const refreshAuthSession = async (
-  refreshToken = getRefreshToken(),
-  client = apiClient,
-): Promise<AuthSession> => {
-  if (!refreshToken) {
-    throw new Error('Refresh token is missing.')
-  }
-
-  const { data, error, response } = await client.POST('/auth/refresh', {
-    body: {
-      refresh_token: refreshToken,
-    },
-  })
-
-  if (!data) {
-    throw buildRequestFailureError(t('api.errors.refreshSessionFailed'), error, response)
-  }
-
-  setAuthSession(data)
-
-  return data
-}
-
-export const logout = async (
-  refreshToken = getRefreshToken(),
-  client = apiClient,
-): Promise<void> => {
-  try {
-    if (refreshToken) {
-      const { error } = await client.POST('/auth/logout', {
-        body: {
-          refresh_token: refreshToken,
-        },
-      })
-
-      if (error) {
-        throw error
-      }
-    }
-  } finally {
-    clearAuthTokens()
-  }
-}
-
-export const fetchCurrentUser = async (client = apiClient): Promise<ApiSchemas['User']> => {
-  const { data, error, response } = await client.GET('/users/me')
-
-  if (!data) {
-    throw buildRequestFailureError(t('api.errors.fetchCurrentUserFailed'), error, response)
-  }
-
-  return data
-}
-
-export const fetchStatsSummary = async (client = apiClient): Promise<ApiSchemas['UsageStats']> => {
-  const { data, error, response } = await client.GET('/stats/summary')
-
-  if (!data) {
-    throw buildRequestFailureError(t('api.errors.fetchStatsFailed'), error, response)
-  }
-
-  return data
-}
-
-export const fetchProjects = async (
-  client = apiClient,
-): Promise<ApiSchemas['ProjectListResponse']> => {
-  const { data, error, response } = await client.GET('/projects')
-
-  if (!data) {
-    throw buildRequestFailureError(t('api.errors.fetchProjectsFailed'), error, response)
-  }
-
-  return data
-}
-
-export const createProject = async (
-  payload: ApiSchemas['CreateProjectRequest'],
-  client = apiClient,
-): Promise<ApiSchemas['Project']> => {
-  const { data, error, response } = await client.POST('/projects', {
-    body: payload,
-  })
-
-  if (!data) {
-    throw buildRequestFailureError(t('api.errors.createProjectFailed'), error, response)
-  }
-
-  return data
-}
-
-export const updateProject = async (
-  projectId: number,
-  payload: ApiSchemas['UpdateProjectRequest'],
-  client = apiClient,
-): Promise<ApiSchemas['Project']> => {
-  const { data, error, response } = await client.PUT('/projects/{projectId}', {
-    params: { path: { projectId } },
-    body: payload,
-  })
-
-  if (!data) {
-    throw buildRequestFailureError(t('api.errors.updateProjectFailed'), error, response)
-  }
-
-  return data
-}
-
-export const deleteProject = async (projectId: number, client = apiClient): Promise<void> => {
-  const { error, response } = await client.DELETE('/projects/{projectId}', {
-    params: { path: { projectId } },
-  })
-
-  if (error || response.status !== 204) {
-    throw buildRequestFailureError(t('api.errors.deleteProjectFailed'), error, response)
-  }
-}
-
-export const fetchOrganizations = async (
-  client = apiClient,
-): Promise<ApiSchemas['OrganizationListResponse']> => {
-  const { data, error, response } = await client.GET('/orgs')
-
-  if (!data) {
-    throw buildRequestFailureError(t('api.errors.fetchOrganizationsFailed'), error, response)
-  }
-
-  return data
-}
-
-export const fetchActivity = async (
-  params?: { cursor?: string; limit?: number },
-  client = apiClient,
-): Promise<ApiSchemas['ActivityListResponse']> => {
-  const { data, error, response } = await client.GET('/activity', {
-    params: { query: params },
-  })
-
-  if (!data) {
-    throw buildRequestFailureError(t('api.errors.fetchActivityFailed'), error, response)
-  }
-
-  return data
-}
+// Re-export 所有子模块以保持向后兼容
+export * from './token-storage'
+export * from './utils'
+export * from './auth'
+export * from './projects'
+export * from './translation-jobs'
+export * from './misc'
