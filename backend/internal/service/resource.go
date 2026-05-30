@@ -25,6 +25,8 @@ const (
 var (
 	ErrResourceNotFound   = errors.New("resource not found")
 	ErrResourceProcessing = errors.New("resource is still processing")
+	ErrUnsupportedFormat  = errors.New("unsupported file format")
+	ErrParseFailed        = errors.New("file parse failed")
 )
 
 type ResourceService struct {
@@ -125,10 +127,23 @@ func (s *ResourceService) uploadSingleResource(ctx context.Context, projectID in
 		return nil, fmt.Errorf("resource: update record: %w", err)
 	}
 
+	if parseErr != nil {
+		if errors.Is(parseErr, parser.ErrNoParser) {
+			return &ResourceUploadResult{
+				Resource:      updated,
+				TotalSegments: segmentCount,
+			}, fmt.Errorf("%w: %s", ErrUnsupportedFormat, format)
+		}
+		return &ResourceUploadResult{
+			Resource:      updated,
+			TotalSegments: segmentCount,
+		}, fmt.Errorf("%w: %v", ErrParseFailed, parseErr)
+	}
+
 	return &ResourceUploadResult{
 		Resource:      updated,
 		TotalSegments: segmentCount,
-	}, parseErr
+	}, nil
 }
 
 // ListResources 列出项目中的资源文件。
@@ -264,7 +279,14 @@ func (s *ResourceService) UpdateResource(ctx context.Context, actorUserID, proje
 		return nil, fmt.Errorf("resource: update record: %w", err)
 	}
 
-	return updated, parseErr
+	if parseErr != nil {
+		if errors.Is(parseErr, parser.ErrNoParser) {
+			return updated, fmt.Errorf("%w: %s", ErrUnsupportedFormat, format)
+		}
+		return updated, fmt.Errorf("%w: %v", ErrParseFailed, parseErr)
+	}
+
+	return updated, nil
 }
 
 // Absolute 获取文件的绝对路径。

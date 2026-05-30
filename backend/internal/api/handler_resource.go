@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -8,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	chimiddleware "github.com/go-chi/chi/v5/middleware"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
@@ -99,7 +101,7 @@ func (s *Server) handleUploadProjectResources(w http.ResponseWriter, r *http.Req
 
 	results, err := s.resourceSvc.UploadResources(r.Context(), authUser.User.ID, projectID, uploaded)
 	if err != nil {
-		writeResourceServiceError(w, err)
+		s.writeResourceServiceError(w, r, err)
 		return
 	}
 
@@ -131,7 +133,7 @@ func (s *Server) handleListProjectResources(w http.ResponseWriter, r *http.Reque
 
 	resources, err := s.resourceSvc.ListResources(r.Context(), authUser.User.ID, projectID, opts)
 	if err != nil {
-		writeResourceServiceError(w, err)
+		s.writeResourceServiceError(w, r, err)
 		return
 	}
 
@@ -156,7 +158,7 @@ func (s *Server) handleGetResource(w http.ResponseWriter, r *http.Request) {
 
 	res, err := s.resourceSvc.GetResource(r.Context(), authUser.User.ID, projectID, resourceID)
 	if err != nil {
-		writeResourceServiceError(w, err)
+		s.writeResourceServiceError(w, r, err)
 		return
 	}
 
@@ -204,7 +206,7 @@ func (s *Server) handleUpdateResource(w http.ResponseWriter, r *http.Request) {
 		Reader:   opened,
 	})
 	if err != nil {
-		writeResourceServiceError(w, err)
+		s.writeResourceServiceError(w, r, err)
 		return
 	}
 
@@ -228,7 +230,7 @@ func (s *Server) handleDeleteResource(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := s.resourceSvc.DeleteResource(r.Context(), authUser.User.ID, projectID, resourceID); err != nil {
-		writeResourceServiceError(w, err)
+		s.writeResourceServiceError(w, r, err)
 		return
 	}
 
@@ -253,7 +255,7 @@ func (s *Server) handleDownloadResourceFile(w http.ResponseWriter, r *http.Reque
 
 	res, err := s.resourceSvc.GetResource(r.Context(), authUser.User.ID, projectID, resourceID)
 	if err != nil {
-		writeResourceServiceError(w, err)
+		s.writeResourceServiceError(w, r, err)
 		return
 	}
 
@@ -274,17 +276,27 @@ func (s *Server) handleDownloadResourceFile(w http.ResponseWriter, r *http.Reque
 }
 
 // writeResourceServiceError 写入资源服务的错误响应。
-func writeResourceServiceError(w http.ResponseWriter, err error) {
+func (s *Server) writeResourceServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case err == nil:
 		return
-	case err.Error() == "project not found":
+	case errors.Is(err, service.ErrProjectNotFound):
 		writeProblem(w, http.StatusNotFound, "not_found", "项目不存在")
-	case err.Error() == "resource not found":
+	case errors.Is(err, service.ErrResourceNotFound):
 		writeProblem(w, http.StatusNotFound, "not_found", "资源不存在")
-	case err.Error() == "forbidden":
+	case errors.Is(err, service.ErrForbidden):
 		writeProblem(w, http.StatusForbidden, "forbidden", "没有权限执行该操作")
+	case errors.Is(err, service.ErrUnsupportedFormat):
+		writeProblem(w, http.StatusBadRequest, "unsupported_format", err.Error())
+	case errors.Is(err, service.ErrParseFailed):
+		writeProblem(w, http.StatusBadRequest, "parse_failed", err.Error())
 	default:
+		s.logger.Error("resource service error",
+			"request_id", chimiddleware.GetReqID(r.Context()),
+			"method", r.Method,
+			"path", r.URL.Path,
+			"err", err,
+		)
 		writeProblem(w, http.StatusInternalServerError, "internal_error", "服务器内部错误")
 	}
 }
