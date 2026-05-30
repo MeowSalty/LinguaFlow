@@ -10,198 +10,216 @@ import {
   type DataTableColumns,
   type SelectOption,
   type UploadCustomRequestOptions,
-} from "naive-ui";
-import { h } from "vue";
-import { useI18n } from "vue-i18n";
+} from 'naive-ui'
+import { h } from 'vue'
+import { useI18n } from 'vue-i18n'
 
-import { type ApiSchemas, type DownloadFileResult } from "@/api/client";
-import { useProjectWorkspaceStore } from "@/stores/projectWorkspace";
+import { type ApiSchemas, type DownloadFileResult } from '@/api/client'
+import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 
-type Resource = ApiSchemas["Resource"];
-type Segment = ApiSchemas["Segment"];
-type TranslationJob = ApiSchemas["TranslationJob"];
-type CreateTranslationJobPayload = ApiSchemas["CreateTranslationJobRequest"];
+type Resource = ApiSchemas['Resource']
+type Segment = ApiSchemas['Segment']
+type TranslationJob = ApiSchemas['TranslationJob']
+type CreateTranslationJobPayload = ApiSchemas['CreateTranslationJobRequest']
 
-type WorkspaceTab = "resources" | "segments" | "jobs";
-type JobTargetMode = "resources" | "segments";
+type WorkspaceTab = 'resources' | 'segments' | 'jobs'
+type JobTargetMode = 'resources' | 'segments'
 
 interface SegmentFormModel {
-  source_text: string;
-  target_text: string;
-  comment: string;
+  source_text: string
+  target_text: string
+  comment: string
 }
 
 interface JobFormModel {
-  source_lang: string;
-  target_lang: string;
-  backend_order_text: string;
+  source_lang: string
+  target_lang: string
+  backend_order_text: string
 }
 
-const route = useRoute();
-const router = useRouter();
-const message = useMessage();
-const { t } = useI18n();
-const workspace = useProjectWorkspaceStore();
+const route = useRoute()
+const router = useRouter()
+const message = useMessage()
+const { t } = useI18n()
+const workspace = useProjectWorkspaceStore()
 
-const activeTab = ref<WorkspaceTab>("resources");
-const editingSegment = ref<Segment | null>(null);
-const segmentDrawerVisible = ref(false);
-const jobDrawerVisible = ref(false);
-const jobDetailDrawerVisible = ref(false);
-const jobTargetMode = ref<JobTargetMode>("resources");
-const jobTargetResourceIds = ref<number[]>([]);
-const jobTargetSegmentIds = ref<number[]>([]);
-const replacingResourceId = ref<number | null>(null);
+const activeTab = ref<WorkspaceTab>('resources')
+const editingSegment = ref<Segment | null>(null)
+const segmentDrawerVisible = ref(false)
+const jobDrawerVisible = ref(false)
+const jobDetailDrawerVisible = ref(false)
+const jobTargetMode = ref<JobTargetMode>('resources')
+const jobTargetResourceIds = ref<number[]>([])
+const jobTargetSegmentIds = ref<number[]>([])
+const replacingResourceId = ref<number | null>(null)
+const uploadDismissTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 const segmentForm = reactive<SegmentFormModel>({
-  source_text: "",
-  target_text: "",
-  comment: "",
-});
+  source_text: '',
+  target_text: '',
+  comment: '',
+})
 
 const jobForm = reactive<JobFormModel>({
-  source_lang: "",
-  target_lang: "",
-  backend_order_text: "",
-});
+  source_lang: '',
+  target_lang: '',
+  backend_order_text: '',
+})
 
 const projectId = computed(() => {
-  const params = route.params as Partial<Record<"projectId", string | string[]>>;
-  const rawValue = Array.isArray(params.projectId) ? params.projectId[0] : params.projectId;
-  const parsed = Number(rawValue);
+  const params = route.params as Partial<Record<'projectId', string | string[]>>
+  const rawValue = Array.isArray(params.projectId) ? params.projectId[0] : params.projectId
+  const parsed = Number(rawValue)
 
-  return Number.isFinite(parsed) ? parsed : null;
-});
+  return Number.isFinite(parsed) ? parsed : null
+})
 
 const resourceStatusOptions = computed<SelectOption[]>(() => [
-  { label: t("workspace.filters.allStatuses"), value: "all" },
-  { label: t("workspace.resource.status.ready"), value: "ready" },
-  { label: t("workspace.resource.status.processing"), value: "processing" },
-  { label: t("workspace.resource.status.error"), value: "error" },
-]);
+  { label: t('workspace.filters.allStatuses'), value: 'all' },
+  { label: t('workspace.resource.status.ready'), value: 'ready' },
+  { label: t('workspace.resource.status.processing'), value: 'processing' },
+  { label: t('workspace.resource.status.error'), value: 'error' },
+])
 
 const resourceFormatOptions = computed<SelectOption[]>(() => [
-  { label: t("workspace.filters.allFormats"), value: "all" },
+  { label: t('workspace.filters.allFormats'), value: 'all' },
   ...workspace.availableFormats.map((format) => ({
     label: format,
     value: format,
   })),
-]);
+])
 
 const segmentStatusOptions = computed<SelectOption[]>(() => [
-  { label: t("workspace.filters.allStatuses"), value: "all" },
-  { label: t("workspace.segment.status.pending"), value: "pending" },
-  { label: t("workspace.segment.status.translated"), value: "translated" },
-  { label: t("workspace.segment.status.reviewed"), value: "reviewed" },
-  { label: t("workspace.segment.status.rejected"), value: "rejected" },
-]);
+  { label: t('workspace.filters.allStatuses'), value: 'all' },
+  { label: t('workspace.segment.status.pending'), value: 'pending' },
+  { label: t('workspace.segment.status.translated'), value: 'translated' },
+  { label: t('workspace.segment.status.reviewed'), value: 'reviewed' },
+  { label: t('workspace.segment.status.rejected'), value: 'rejected' },
+])
 
 const jobStatusOptions = computed<SelectOption[]>(() => [
-  { label: t("workspace.filters.allStatuses"), value: "all" },
-  { label: t("workspace.job.status.pending"), value: "pending" },
-  { label: t("workspace.job.status.running"), value: "running" },
-  { label: t("workspace.job.status.awaiting_review"), value: "awaiting_review" },
-  { label: t("workspace.job.status.completed"), value: "completed" },
-  { label: t("workspace.job.status.failed"), value: "failed" },
-  { label: t("workspace.job.status.cancelled"), value: "cancelled" },
-]);
+  { label: t('workspace.filters.allStatuses'), value: 'all' },
+  { label: t('workspace.job.status.pending'), value: 'pending' },
+  { label: t('workspace.job.status.running'), value: 'running' },
+  { label: t('workspace.job.status.awaiting_review'), value: 'awaiting_review' },
+  { label: t('workspace.job.status.completed'), value: 'completed' },
+  { label: t('workspace.job.status.failed'), value: 'failed' },
+  { label: t('workspace.job.status.cancelled'), value: 'cancelled' },
+])
 
 const selectedReadyResourceIds = computed(() =>
   workspace.selectedResources
-    .filter((resource) => resource.status === "ready")
+    .filter((resource) => resource.status === 'ready')
     .map((resource) => resource.id),
-);
+)
 
-const canCreateResourceJob = computed(() => selectedReadyResourceIds.value.length > 0);
+const canCreateResourceJob = computed(() => selectedReadyResourceIds.value.length > 0)
 const canCreateSegmentJob = computed(() =>
   Boolean(editingSegment.value || workspace.segments.length > 0),
-);
+)
 
 const formatDate = (value?: string): string => {
   if (!value) {
-    return t("workspace.common.noDate");
+    return t('workspace.common.noDate')
   }
 
-  return new Intl.DateTimeFormat("zh-Hans", {
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-  }).format(new Date(value));
-};
+  return new Intl.DateTimeFormat('zh-Hans', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(new Date(value))
+}
 
-const statusTagType = (status: string): "default" | "success" | "warning" | "error" | "info" => {
+const statusTagType = (status: string): 'default' | 'success' | 'warning' | 'error' | 'info' => {
   switch (status) {
-    case "ready":
-    case "completed":
-    case "translated":
-    case "reviewed":
-      return "success";
-    case "processing":
-    case "pending":
-    case "running":
-    case "awaiting_review":
-      return "info";
-    case "error":
-    case "failed":
-    case "rejected":
-      return "error";
-    case "cancelled":
-      return "warning";
+    case 'ready':
+    case 'completed':
+    case 'translated':
+    case 'reviewed':
+      return 'success'
+    case 'processing':
+    case 'pending':
+    case 'running':
+    case 'awaiting_review':
+      return 'info'
+    case 'error':
+    case 'failed':
+    case 'rejected':
+      return 'error'
+    case 'cancelled':
+      return 'warning'
     default:
-      return "default";
+      return 'default'
   }
-};
+}
 
-const getResourceStatusLabel = (status: Resource["status"]): string =>
-  t(`workspace.resource.status.${status}`);
+const getResourceStatusLabel = (status: Resource['status']): string =>
+  t(`workspace.resource.status.${status}`)
 
 const getSegmentStatusLabel = (status: string): string =>
-  t(`workspace.segment.status.${status}`, status);
+  t(`workspace.segment.status.${status}`, status)
 
-const getJobStatusLabel = (status: TranslationJob["status"]): string =>
-  t(`workspace.job.status.${status}`);
+const getJobStatusLabel = (status: TranslationJob['status']): string =>
+  t(`workspace.job.status.${status}`)
 
-const getJobTriggerLabel = (trigger: TranslationJob["trigger_type"]): string =>
-  t(`workspace.job.trigger.${trigger}`);
+const getJobTriggerLabel = (trigger: TranslationJob['trigger_type']): string =>
+  t(`workspace.job.trigger.${trigger}`)
 
 const getJobProgress = (job: TranslationJob): number => {
   if (job.total_segments <= 0) {
-    return job.status === "completed" ? 100 : 0;
+    return job.status === 'completed' ? 100 : 0
   }
 
-  return Math.round((job.completed_segments / job.total_segments) * 100);
-};
+  return Math.round((job.completed_segments / job.total_segments) * 100)
+}
 
 const triggerBrowserDownload = (file: DownloadFileResult, fallbackName: string): void => {
-  const url = URL.createObjectURL(file.blob);
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = file.filename || fallbackName;
-  anchor.click();
-  URL.revokeObjectURL(url);
-};
+  const url = URL.createObjectURL(file.blob)
+  const anchor = document.createElement('a')
+  anchor.href = url
+  anchor.download = file.filename || fallbackName
+  anchor.click()
+  URL.revokeObjectURL(url)
+}
 
 const reloadWorkspace = async (): Promise<void> => {
   if (!projectId.value) {
-    return;
+    return
   }
 
   await Promise.all([
     workspace.loadProject(projectId.value),
     workspace.loadResources(projectId.value),
     workspace.loadJobs(projectId.value),
-  ]);
-};
+  ])
+}
 
 const reloadSegments = async (): Promise<void> => {
   if (!projectId.value || !workspace.activeResourceId) {
-    return;
+    return
   }
 
-  await workspace.loadSegments(projectId.value, workspace.activeResourceId);
-};
+  await workspace.loadSegments(projectId.value, workspace.activeResourceId)
+}
+
+const scheduleTaskDismiss = (taskId: string): void => {
+  const timer = setTimeout(() => {
+    uploadDismissTimers.delete(taskId)
+    workspace.removeUploadTask(taskId)
+  }, 3000)
+  uploadDismissTimers.set(taskId, timer)
+}
+
+const dismissTask = (taskId: string): void => {
+  const timer = uploadDismissTimers.get(taskId)
+  if (timer) {
+    clearTimeout(timer)
+    uploadDismissTimers.delete(taskId)
+  }
+  workspace.removeUploadTask(taskId)
+}
 
 const handleUpload = async ({
   file,
@@ -209,109 +227,113 @@ const handleUpload = async ({
   onError,
 }: UploadCustomRequestOptions): Promise<void> => {
   if (!projectId.value || !file.file) {
-    onError();
-    return;
+    onError()
+    return
   }
+
+  const taskId = workspace.addUploadTask(file.name)
 
   try {
-    await workspace.uploadResources(projectId.value, [file.file]);
-    message.success(t("workspace.messages.uploadSuccess"));
-    onFinish();
+    await workspace.uploadResources(projectId.value, [file.file], taskId)
+    message.success(t('workspace.messages.uploadSuccess'))
+    onFinish()
+    workspace.updateUploadTaskStage(taskId, 'complete', undefined)
+    scheduleTaskDismiss(taskId)
   } catch (error) {
-    console.error(error);
-    message.error(workspace.actionError || t("workspace.messages.uploadFailed"));
-    onError();
+    console.error(error)
+    message.error(workspace.actionError || t('workspace.messages.uploadFailed'))
+    onError()
   }
-};
+}
 
 const chooseReplacementFile = (resourceId: number): void => {
-  const input = document.createElement("input");
-  input.type = "file";
+  const input = document.createElement('input')
+  input.type = 'file'
   input.onchange = () => {
-    const file = input.files?.[0];
+    const file = input.files?.[0]
     if (file) {
-      void replaceResource(resourceId, file);
+      void replaceResource(resourceId, file)
     }
-  };
-  input.click();
-};
+  }
+  input.click()
+}
 
 const replaceResource = async (resourceId: number, file: File): Promise<void> => {
   if (!projectId.value) {
-    return;
+    return
   }
 
-  replacingResourceId.value = resourceId;
+  replacingResourceId.value = resourceId
   try {
-    await workspace.replaceResource(projectId.value, resourceId, file);
-    message.success(t("workspace.messages.replaceSuccess"));
+    await workspace.replaceResource(projectId.value, resourceId, file)
+    message.success(t('workspace.messages.replaceSuccess'))
     if (workspace.activeResourceId === resourceId) {
-      await reloadSegments();
+      await reloadSegments()
     }
   } catch (error) {
-    console.error(error);
-    message.error(workspace.actionError || t("workspace.messages.replaceFailed"));
+    console.error(error)
+    message.error(workspace.actionError || t('workspace.messages.replaceFailed'))
   } finally {
-    replacingResourceId.value = null;
+    replacingResourceId.value = null
   }
-};
+}
 
 const deleteResource = async (resource: Resource): Promise<void> => {
   if (!projectId.value) {
-    return;
+    return
   }
 
   try {
-    await workspace.deleteResource(projectId.value, resource.id);
-    message.success(t("workspace.messages.deleteResourceSuccess"));
+    await workspace.deleteResource(projectId.value, resource.id)
+    message.success(t('workspace.messages.deleteResourceSuccess'))
     if (workspace.activeResourceId) {
-      await reloadSegments();
+      await reloadSegments()
     }
   } catch (error) {
-    console.error(error);
-    message.error(workspace.actionError || t("workspace.messages.deleteResourceFailed"));
+    console.error(error)
+    message.error(workspace.actionError || t('workspace.messages.deleteResourceFailed'))
   }
-};
+}
 
 const downloadResource = async (resource: Resource): Promise<void> => {
   if (!projectId.value) {
-    return;
+    return
   }
 
   try {
-    const file = await workspace.downloadResource(projectId.value, resource.id);
-    triggerBrowserDownload(file, resource.filename);
+    const file = await workspace.downloadResource(projectId.value, resource.id)
+    triggerBrowserDownload(file, resource.filename)
   } catch (error) {
-    console.error(error);
-    message.error(workspace.actionError || t("workspace.messages.downloadFailed"));
+    console.error(error)
+    message.error(workspace.actionError || t('workspace.messages.downloadFailed'))
   }
-};
+}
 
 const openSegmentsForResource = async (resource: Resource): Promise<void> => {
-  workspace.setActiveResource(resource.id);
-  activeTab.value = "segments";
-  await reloadSegments();
-};
+  workspace.setActiveResource(resource.id)
+  activeTab.value = 'segments'
+  await reloadSegments()
+}
 
 const openSegmentDrawer = (segment: Segment): void => {
-  editingSegment.value = segment;
-  segmentForm.source_text = segment.source_text;
-  segmentForm.target_text = segment.target_text ?? "";
-  segmentForm.comment = segment.review_comment ?? "";
-  segmentDrawerVisible.value = true;
-};
+  editingSegment.value = segment
+  segmentForm.source_text = segment.source_text
+  segmentForm.target_text = segment.target_text ?? ''
+  segmentForm.comment = segment.review_comment ?? ''
+  segmentDrawerVisible.value = true
+}
 
 const closeSegmentDrawer = (): void => {
-  segmentDrawerVisible.value = false;
-  editingSegment.value = null;
-  segmentForm.source_text = "";
-  segmentForm.target_text = "";
-  segmentForm.comment = "";
-};
+  segmentDrawerVisible.value = false
+  editingSegment.value = null
+  segmentForm.source_text = ''
+  segmentForm.target_text = ''
+  segmentForm.comment = ''
+}
 
 const saveSegment = async (): Promise<void> => {
   if (!projectId.value || !workspace.activeResourceId || !editingSegment.value) {
-    return;
+    return
   }
 
   try {
@@ -324,67 +346,67 @@ const saveSegment = async (): Promise<void> => {
         target_text: segmentForm.target_text || undefined,
         comment: segmentForm.comment || undefined,
       },
-    );
-    message.success(t("workspace.messages.segmentSaved"));
-    closeSegmentDrawer();
+    )
+    message.success(t('workspace.messages.segmentSaved'))
+    closeSegmentDrawer()
   } catch (error) {
-    console.error(error);
-    message.error(workspace.actionError || t("workspace.messages.segmentSaveFailed"));
+    console.error(error)
+    message.error(workspace.actionError || t('workspace.messages.segmentSaveFailed'))
   }
-};
+}
 
 const setDefaultJobForm = (): void => {
-  jobForm.source_lang = workspace.project?.source_lang || "auto";
-  jobForm.target_lang = workspace.project?.target_lang || "en-US";
-  const config = workspace.project?.default_translation_config;
-  const backendOrder = Array.isArray(config?.backend_order) ? config.backend_order : [];
-  jobForm.backend_order_text = backendOrder.join("\n");
-};
+  jobForm.source_lang = workspace.project?.source_lang || 'auto'
+  jobForm.target_lang = workspace.project?.target_lang || 'en-US'
+  const config = workspace.project?.default_translation_config
+  const backendOrder = Array.isArray(config?.backend_order) ? config.backend_order : []
+  jobForm.backend_order_text = backendOrder.join('\n')
+}
 
 const openResourceJobDrawer = (): void => {
   if (!canCreateResourceJob.value) {
-    message.warning(t("workspace.messages.selectReadyResource"));
-    return;
+    message.warning(t('workspace.messages.selectReadyResource'))
+    return
   }
 
-  jobTargetMode.value = "resources";
-  jobTargetResourceIds.value = selectedReadyResourceIds.value;
-  jobTargetSegmentIds.value = [];
-  setDefaultJobForm();
-  jobDrawerVisible.value = true;
-};
+  jobTargetMode.value = 'resources'
+  jobTargetResourceIds.value = selectedReadyResourceIds.value
+  jobTargetSegmentIds.value = []
+  setDefaultJobForm()
+  jobDrawerVisible.value = true
+}
 
 const openSegmentJobDrawer = (segment?: Segment): void => {
   if (!workspace.activeResourceId) {
-    message.warning(t("workspace.messages.selectResourceFirst"));
-    return;
+    message.warning(t('workspace.messages.selectResourceFirst'))
+    return
   }
 
-  jobTargetMode.value = "segments";
-  jobTargetResourceIds.value = [workspace.activeResourceId];
-  jobTargetSegmentIds.value = segment ? [segment.id] : workspace.segments.map((item) => item.id);
-  setDefaultJobForm();
-  jobDrawerVisible.value = true;
-};
+  jobTargetMode.value = 'segments'
+  jobTargetResourceIds.value = [workspace.activeResourceId]
+  jobTargetSegmentIds.value = segment ? [segment.id] : workspace.segments.map((item) => item.id)
+  setDefaultJobForm()
+  jobDrawerVisible.value = true
+}
 
 const closeJobDrawer = (): void => {
-  jobDrawerVisible.value = false;
-  jobTargetResourceIds.value = [];
-  jobTargetSegmentIds.value = [];
-  jobForm.source_lang = "";
-  jobForm.target_lang = "";
-  jobForm.backend_order_text = "";
-};
+  jobDrawerVisible.value = false
+  jobTargetResourceIds.value = []
+  jobTargetSegmentIds.value = []
+  jobForm.source_lang = ''
+  jobForm.target_lang = ''
+  jobForm.backend_order_text = ''
+}
 
 const submitJob = async (): Promise<void> => {
   if (!projectId.value) {
-    return;
+    return
   }
 
   const backendOrder = jobForm.backend_order_text
     .split(/\r?\n|,/)
     .map((item) => item.trim())
-    .filter(Boolean);
+    .filter(Boolean)
   const payload: CreateTranslationJobPayload = {
     resource_ids: jobTargetResourceIds.value,
     translation_config: {
@@ -392,165 +414,165 @@ const submitJob = async (): Promise<void> => {
       target_lang: jobForm.target_lang.trim(),
       backend_order: backendOrder,
     },
-  };
+  }
 
-  if (jobTargetMode.value === "segments") {
-    payload.segment_ids = jobTargetSegmentIds.value;
+  if (jobTargetMode.value === 'segments') {
+    payload.segment_ids = jobTargetSegmentIds.value
   }
 
   try {
-    await workspace.createJob(projectId.value, payload);
-    message.success(t("workspace.messages.jobCreated"));
-    closeJobDrawer();
-    activeTab.value = "jobs";
-    await workspace.loadJobs(projectId.value);
+    await workspace.createJob(projectId.value, payload)
+    message.success(t('workspace.messages.jobCreated'))
+    closeJobDrawer()
+    activeTab.value = 'jobs'
+    await workspace.loadJobs(projectId.value)
   } catch (error) {
-    console.error(error);
-    message.error(workspace.actionError || t("workspace.messages.jobCreateFailed"));
+    console.error(error)
+    message.error(workspace.actionError || t('workspace.messages.jobCreateFailed'))
   }
-};
+}
 
 const cancelJob = async (job: TranslationJob): Promise<void> => {
   try {
-    await workspace.cancelJob(job.id);
-    message.success(t("workspace.messages.jobCancelled"));
+    await workspace.cancelJob(job.id)
+    message.success(t('workspace.messages.jobCancelled'))
   } catch (error) {
-    console.error(error);
-    message.error(workspace.actionError || t("workspace.messages.jobCancelFailed"));
+    console.error(error)
+    message.error(workspace.actionError || t('workspace.messages.jobCancelFailed'))
   }
-};
+}
 
 const retryJob = async (job: TranslationJob): Promise<void> => {
   try {
-    await workspace.retryJob(job.id);
-    message.success(t("workspace.messages.jobRetried"));
+    await workspace.retryJob(job.id)
+    message.success(t('workspace.messages.jobRetried'))
   } catch (error) {
-    console.error(error);
-    message.error(workspace.actionError || t("workspace.messages.jobRetryFailed"));
+    console.error(error)
+    message.error(workspace.actionError || t('workspace.messages.jobRetryFailed'))
   }
-};
+}
 
 const downloadJob = async (job: TranslationJob): Promise<void> => {
   try {
-    const file = await workspace.downloadJobResult(job.id);
-    triggerBrowserDownload(file, `translation-job-${job.id}.zip`);
+    const file = await workspace.downloadJobResult(job.id)
+    triggerBrowserDownload(file, `translation-job-${job.id}.zip`)
   } catch (error) {
-    console.error(error);
-    message.error(workspace.actionError || t("workspace.messages.downloadFailed"));
+    console.error(error)
+    message.error(workspace.actionError || t('workspace.messages.downloadFailed'))
   }
-};
+}
 
 const openJobDetail = async (job: TranslationJob): Promise<void> => {
-  jobDetailDrawerVisible.value = true;
-  workspace.selectedJob = job;
+  jobDetailDrawerVisible.value = true
+  workspace.selectedJob = job
 
   try {
-    await workspace.loadJobDetail(job.id);
+    await workspace.loadJobDetail(job.id)
   } catch (error) {
-    console.error(error);
-    message.error(workspace.jobDetailError || t("workspace.messages.jobDetailFailed"));
+    console.error(error)
+    message.error(workspace.jobDetailError || t('workspace.messages.jobDetailFailed'))
   }
-};
+}
 
 const formatConfigValue = (value: unknown): string => {
-  if (value === null || value === undefined || value === "") {
-    return "-";
+  if (value === null || value === undefined || value === '') {
+    return '-'
   }
 
   if (Array.isArray(value)) {
-    return value.length > 0 ? value.join(", ") : "-";
+    return value.length > 0 ? value.join(', ') : '-'
   }
 
-  if (typeof value === "object") {
-    return JSON.stringify(value, null, 2);
+  if (typeof value === 'object') {
+    return JSON.stringify(value, null, 2)
   }
 
-  return String(value);
-};
+  return String(value)
+}
 
 const resourceColumns = computed<DataTableColumns<Resource>>(() => [
   {
-    type: "selection",
-    disabled: (row) => row.status !== "ready",
+    type: 'selection',
+    disabled: (row) => row.status !== 'ready',
   },
   {
-    title: t("workspace.resource.columns.filename"),
-    key: "filename",
+    title: t('workspace.resource.columns.filename'),
+    key: 'filename',
     minWidth: 220,
     ellipsis: {
       tooltip: true,
     },
   },
   {
-    title: t("workspace.resource.columns.format"),
-    key: "format",
+    title: t('workspace.resource.columns.format'),
+    key: 'format',
     width: 100,
-    render: (row) => h(NTag, { size: "small" }, { default: () => row.format || "-" }),
+    render: (row) => h(NTag, { size: 'small' }, { default: () => row.format || '-' }),
   },
   {
-    title: t("workspace.resource.columns.status"),
-    key: "status",
+    title: t('workspace.resource.columns.status'),
+    key: 'status',
     width: 120,
     render: (row) =>
       h(
         NTag,
-        { size: "small", type: statusTagType(row.status) },
+        { size: 'small', type: statusTagType(row.status) },
         { default: () => getResourceStatusLabel(row.status) },
       ),
   },
   {
-    title: t("workspace.resource.columns.segments"),
-    key: "total_segments",
+    title: t('workspace.resource.columns.segments'),
+    key: 'total_segments',
     width: 100,
   },
   {
-    title: t("workspace.common.updatedAt"),
-    key: "updated_at",
+    title: t('workspace.common.updatedAt'),
+    key: 'updated_at',
     width: 170,
     render: (row) => formatDate(row.updated_at),
   },
   {
-    title: t("workspace.common.actions"),
-    key: "actions",
+    title: t('workspace.common.actions'),
+    key: 'actions',
     width: 300,
-    fixed: "right",
+    fixed: 'right',
     render: (row) =>
       h(NSpace, { size: 4, wrap: false }, () => [
         h(
           NButton,
           {
-            size: "small",
+            size: 'small',
             quaternary: true,
-            type: "primary",
+            type: 'primary',
             onClick: () => void openSegmentsForResource(row),
           },
-          { default: () => t("workspace.resource.actions.segments") },
+          { default: () => t('workspace.resource.actions.segments') },
         ),
         h(
           NButton,
           {
-            size: "small",
+            size: 'small',
             quaternary: true,
             loading: replacingResourceId.value === row.id,
             onClick: () => chooseReplacementFile(row.id),
           },
-          { default: () => t("workspace.resource.actions.replace") },
+          { default: () => t('workspace.resource.actions.replace') },
         ),
         h(
           NButton,
           {
-            size: "small",
+            size: 'small',
             quaternary: true,
             loading: workspace.downloadingKeys.includes(`resource:${row.id}`),
             onClick: () => void downloadResource(row),
           },
-          { default: () => t("workspace.common.download") },
+          { default: () => t('workspace.common.download') },
         ),
         h(
           NPopconfirm,
           {
-            positiveText: t("workspace.common.confirm"),
-            negativeText: t("workspace.common.cancel"),
+            positiveText: t('workspace.common.confirm'),
+            negativeText: t('workspace.common.cancel'),
             onPositiveClick: () => void deleteResource(row),
           },
           {
@@ -558,274 +580,278 @@ const resourceColumns = computed<DataTableColumns<Resource>>(() => [
               h(
                 NButton,
                 {
-                  size: "small",
+                  size: 'small',
                   quaternary: true,
-                  type: "error",
+                  type: 'error',
                   loading: workspace.deletingResourceIds.includes(row.id),
                 },
-                { default: () => t("workspace.common.delete") },
+                { default: () => t('workspace.common.delete') },
               ),
-            default: () => t("workspace.resource.deleteConfirm", { name: row.filename }),
+            default: () => t('workspace.resource.deleteConfirm', { name: row.filename }),
           },
         ),
       ]),
   },
-]);
+])
 
 const segmentColumns = computed<DataTableColumns<Segment>>(() => [
   {
-    title: "#",
-    key: "segment_index",
+    title: '#',
+    key: 'segment_index',
     width: 76,
   },
   {
-    title: t("workspace.segment.columns.source"),
-    key: "source_text",
+    title: t('workspace.segment.columns.source'),
+    key: 'source_text',
     minWidth: 260,
     ellipsis: {
       tooltip: true,
     },
   },
   {
-    title: t("workspace.segment.columns.target"),
-    key: "target_text",
+    title: t('workspace.segment.columns.target'),
+    key: 'target_text',
     minWidth: 260,
     ellipsis: {
       tooltip: true,
     },
     render: (row) =>
       row.target_text ||
-      h(NText, { depth: 3 }, { default: () => t("workspace.segment.emptyTarget") }),
+      h(NText, { depth: 3 }, { default: () => t('workspace.segment.emptyTarget') }),
   },
   {
-    title: t("workspace.segment.columns.status"),
-    key: "status",
+    title: t('workspace.segment.columns.status'),
+    key: 'status',
     width: 120,
     render: (row) =>
       h(
         NTag,
-        { size: "small", type: statusTagType(row.status) },
+        { size: 'small', type: statusTagType(row.status) },
         { default: () => getSegmentStatusLabel(row.status) },
       ),
   },
   {
-    title: t("workspace.common.updatedAt"),
-    key: "updated_at",
+    title: t('workspace.common.updatedAt'),
+    key: 'updated_at',
     width: 170,
     render: (row) => formatDate(row.updated_at),
   },
   {
-    title: t("workspace.common.actions"),
-    key: "actions",
+    title: t('workspace.common.actions'),
+    key: 'actions',
     width: 180,
-    fixed: "right",
+    fixed: 'right',
     render: (row) =>
       h(NSpace, { size: 4, wrap: false }, () => [
         h(
           NButton,
           {
-            size: "small",
+            size: 'small',
             quaternary: true,
-            type: "primary",
+            type: 'primary',
             loading: workspace.editingSegmentIds.includes(row.id),
             onClick: () => openSegmentDrawer(row),
           },
-          { default: () => t("workspace.segment.actions.edit") },
+          { default: () => t('workspace.segment.actions.edit') },
         ),
         h(
           NButton,
           {
-            size: "small",
+            size: 'small',
             quaternary: true,
             onClick: () => openSegmentJobDrawer(row),
           },
-          { default: () => t("workspace.segment.actions.translate") },
+          { default: () => t('workspace.segment.actions.translate') },
         ),
       ]),
   },
-]);
+])
 
 const jobColumns = computed<DataTableColumns<TranslationJob>>(() => [
   {
-    title: t("workspace.job.columns.id"),
-    key: "id",
+    title: t('workspace.job.columns.id'),
+    key: 'id',
     width: 90,
     render: (row) => `#${row.id}`,
   },
   {
-    title: t("workspace.job.columns.status"),
-    key: "status",
+    title: t('workspace.job.columns.status'),
+    key: 'status',
     width: 140,
     render: (row) =>
       h(
         NTag,
-        { size: "small", type: statusTagType(row.status) },
+        { size: 'small', type: statusTagType(row.status) },
         { default: () => getJobStatusLabel(row.status) },
       ),
   },
   {
-    title: t("workspace.job.columns.progress"),
-    key: "progress",
+    title: t('workspace.job.columns.progress'),
+    key: 'progress',
     minWidth: 180,
     render: (row) =>
       h(NProgress, {
-        type: "line",
+        type: 'line',
         percentage: getJobProgress(row),
-        indicatorPlacement: "inside",
-        processing: row.status === "pending" || row.status === "running",
+        indicatorPlacement: 'inside',
+        processing: row.status === 'pending' || row.status === 'running',
       }),
   },
   {
-    title: t("workspace.job.columns.resources"),
-    key: "resource_count",
+    title: t('workspace.job.columns.resources'),
+    key: 'resource_count',
     width: 130,
     render: (row) => `${row.completed_resources}/${row.resource_count}`,
   },
   {
-    title: t("workspace.job.columns.segments"),
-    key: "total_segments",
+    title: t('workspace.job.columns.segments'),
+    key: 'total_segments',
     width: 130,
     render: (row) => `${row.completed_segments}/${row.total_segments}`,
   },
   {
-    title: t("workspace.job.columns.trigger"),
-    key: "trigger_type",
+    title: t('workspace.job.columns.trigger'),
+    key: 'trigger_type',
     width: 130,
     render: (row) => getJobTriggerLabel(row.trigger_type),
   },
   {
-    title: t("workspace.job.columns.error"),
-    key: "error_message",
+    title: t('workspace.job.columns.error'),
+    key: 'error_message',
     minWidth: 220,
     ellipsis: {
       tooltip: true,
     },
-    render: (row) => row.error_message || "-",
+    render: (row) => row.error_message || '-',
   },
   {
-    title: t("workspace.common.updatedAt"),
-    key: "updated_at",
+    title: t('workspace.common.updatedAt'),
+    key: 'updated_at',
     width: 170,
     render: (row) => formatDate(row.updated_at),
   },
   {
-    title: t("workspace.common.actions"),
-    key: "actions",
+    title: t('workspace.common.actions'),
+    key: 'actions',
     width: 220,
-    fixed: "right",
+    fixed: 'right',
     render: (row) =>
       h(NSpace, { size: 4, wrap: false }, () => [
         h(
           NButton,
           {
-            size: "small",
+            size: 'small',
             quaternary: true,
-            type: "primary",
+            type: 'primary',
             onClick: (event: MouseEvent) => {
-              event.stopPropagation();
-              void openJobDetail(row);
+              event.stopPropagation()
+              void openJobDetail(row)
             },
           },
-          { default: () => t("workspace.job.actions.details") },
+          { default: () => t('workspace.job.actions.details') },
         ),
         h(
           NButton,
           {
-            size: "small",
+            size: 'small',
             quaternary: true,
-            disabled: row.status !== "pending" && row.status !== "running",
+            disabled: row.status !== 'pending' && row.status !== 'running',
             loading: workspace.cancellingJobIds.includes(row.id),
             onClick: (event: MouseEvent) => {
-              event.stopPropagation();
-              void cancelJob(row);
+              event.stopPropagation()
+              void cancelJob(row)
             },
           },
-          { default: () => t("workspace.job.actions.cancel") },
+          { default: () => t('workspace.job.actions.cancel') },
         ),
         h(
           NButton,
           {
-            size: "small",
+            size: 'small',
             quaternary: true,
-            disabled: row.status !== "failed",
+            disabled: row.status !== 'failed',
             loading: workspace.retryingJobIds.includes(row.id),
             onClick: (event: MouseEvent) => {
-              event.stopPropagation();
-              void retryJob(row);
+              event.stopPropagation()
+              void retryJob(row)
             },
           },
-          { default: () => t("workspace.job.actions.retry") },
+          { default: () => t('workspace.job.actions.retry') },
         ),
         h(
           NButton,
           {
-            size: "small",
+            size: 'small',
             quaternary: true,
-            type: "primary",
-            disabled: row.status !== "completed" && row.status !== "awaiting_review",
+            type: 'primary',
+            disabled: row.status !== 'completed' && row.status !== 'awaiting_review',
             loading: workspace.downloadingKeys.includes(`job:${row.id}:all`),
             onClick: (event: MouseEvent) => {
-              event.stopPropagation();
-              void downloadJob(row);
+              event.stopPropagation()
+              void downloadJob(row)
             },
           },
-          { default: () => t("workspace.common.download") },
+          { default: () => t('workspace.common.download') },
         ),
       ]),
   },
-]);
+])
 
 watch(
   () => route.query.tab,
   (tab) => {
-    if (tab === "segments" || tab === "jobs" || tab === "resources") {
-      activeTab.value = tab;
+    if (tab === 'segments' || tab === 'jobs' || tab === 'resources') {
+      activeTab.value = tab
     }
   },
   { immediate: true },
-);
+)
 
 watch(
   () => [workspace.resourceSearch, workspace.resourceStatusFilter, workspace.resourceFormatFilter],
   () => {
     if (projectId.value) {
-      void workspace.loadResources(projectId.value);
+      void workspace.loadResources(projectId.value)
     }
   },
-);
+)
 
 watch(
   () => [workspace.segmentSearch, workspace.segmentStatusFilter, workspace.activeResourceId],
   () => {
     if (projectId.value && workspace.activeResourceId) {
-      void workspace.loadSegments(projectId.value, workspace.activeResourceId);
+      void workspace.loadSegments(projectId.value, workspace.activeResourceId)
     }
   },
-);
+)
 
 watch(
   () => workspace.jobStatusFilter,
   () => {
     if (projectId.value) {
-      void workspace.loadJobs(projectId.value);
+      void workspace.loadJobs(projectId.value)
     }
   },
-);
+)
 
 watch(activeTab, (tab) => {
   if (route.query.tab !== tab) {
-    void router.replace({ query: { ...route.query, tab } });
+    void router.replace({ query: { ...route.query, tab } })
   }
-});
+})
 
 onMounted(() => {
-  workspace.reset();
-  void reloadWorkspace();
-});
+  workspace.reset()
+  void reloadWorkspace()
+})
 
 onBeforeUnmount(() => {
-  workspace.reset();
-});
+  for (const timer of uploadDismissTimers.values()) {
+    clearTimeout(timer)
+  }
+  uploadDismissTimers.clear()
+  workspace.reset()
+})
 </script>
 
 <template>
@@ -834,25 +860,25 @@ onBeforeUnmount(() => {
       <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
         <div class="min-w-0 space-y-3">
           <NButton quaternary size="small" @click="router.push('/projects')">
-            {{ t("workspace.actions.back") }}
+            {{ t('workspace.actions.back') }}
           </NButton>
           <div>
             <div class="text-xs font-medium uppercase text-brand-600">
-              {{ t("workspace.eyebrow") }}
+              {{ t('workspace.eyebrow') }}
             </div>
             <h1 class="mt-2 truncate text-2xl font-semibold text-lf-text-strong">
-              {{ workspace.project?.name || t("workspace.loadingProject") }}
+              {{ workspace.project?.name || t('workspace.loadingProject') }}
             </h1>
             <div class="mt-2 flex flex-wrap items-center gap-2 text-sm text-lf-text-muted">
-              <span>{{ t("workspace.projectId", { id: projectId ?? "-" }) }}</span>
+              <span>{{ t('workspace.projectId', { id: projectId ?? '-' }) }}</span>
               <span>·</span>
               <span
-                >{{ workspace.project?.source_lang || "-" }} →
-                {{ workspace.project?.target_lang || "-" }}</span
+                >{{ workspace.project?.source_lang || '-' }} →
+                {{ workspace.project?.target_lang || '-' }}</span
               >
               <span>·</span>
               <span>{{
-                t("workspace.updatedAt", {
+                t('workspace.updatedAt', {
                   time: formatDate(workspace.project?.updated_at ?? workspace.project?.created_at),
                 })
               }}</span>
@@ -867,10 +893,10 @@ onBeforeUnmount(() => {
             "
             @click="reloadWorkspace"
           >
-            {{ t("workspace.actions.refresh") }}
+            {{ t('workspace.actions.refresh') }}
           </NButton>
           <NButton type="primary" :disabled="!canCreateResourceJob" @click="openResourceJobDrawer">
-            {{ t("workspace.job.actions.createFromResources") }}
+            {{ t('workspace.job.actions.createFromResources') }}
           </NButton>
         </div>
       </div>
@@ -882,25 +908,25 @@ onBeforeUnmount(() => {
 
     <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
       <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs text-lf-text-muted">{{ t("workspace.stats.resources") }}</div>
+        <div class="text-xs text-lf-text-muted">{{ t('workspace.stats.resources') }}</div>
         <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
           {{ workspace.resources.length }}
         </div>
       </NCard>
       <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs text-lf-text-muted">{{ t("workspace.stats.readyResources") }}</div>
+        <div class="text-xs text-lf-text-muted">{{ t('workspace.stats.readyResources') }}</div>
         <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
           {{ workspace.readyResourceCount }}
         </div>
       </NCard>
       <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs text-lf-text-muted">{{ t("workspace.stats.segments") }}</div>
+        <div class="text-xs text-lf-text-muted">{{ t('workspace.stats.segments') }}</div>
         <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
           {{ workspace.totalSegmentCount }}
         </div>
       </NCard>
       <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs text-lf-text-muted">{{ t("workspace.stats.runningJobs") }}</div>
+        <div class="text-xs text-lf-text-muted">{{ t('workspace.stats.runningJobs') }}</div>
         <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
           {{ workspace.runningJobCount }}
         </div>
@@ -932,15 +958,100 @@ onBeforeUnmount(() => {
               </div>
               <div class="flex flex-wrap gap-3">
                 <NUpload multiple :show-file-list="false" :custom-request="handleUpload">
-                  <NButton type="primary" :loading="workspace.uploadingResources">
-                    {{ t("workspace.resource.actions.upload") }}
+                  <NButton type="primary" :loading="workspace.hasActiveUploads">
+                    {{ t('workspace.resource.actions.upload') }}
                   </NButton>
                 </NUpload>
                 <NButton :disabled="!canCreateResourceJob" @click="openResourceJobDrawer">
-                  {{ t("workspace.job.actions.create") }}
+                  {{ t('workspace.job.actions.create') }}
                 </NButton>
               </div>
             </div>
+
+            <TransitionGroup
+              enter-active-class="transition-all duration-300 ease-out"
+              leave-active-class="transition-all duration-200 ease-in"
+              enter-from-class="opacity-0 -translate-y-2"
+              leave-to-class="opacity-0 -translate-y-2"
+              move-class="transition-transform duration-200"
+              tag="div"
+              class="space-y-2"
+            >
+              <div
+                v-for="task in workspace.uploadTasks"
+                :key="task.id"
+                class="overflow-hidden rounded-lg border border-lf-border bg-lf-surface-muted px-4 py-3"
+              >
+                <div class="flex items-center justify-between">
+                  <div class="flex min-w-0 flex-1 items-center gap-2.5">
+                    <div
+                      class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md"
+                      :class="{
+                        'bg-blue-50 text-blue-500 dark:bg-blue-500/10': task.stage === 'uploading',
+                        'bg-amber-50 text-amber-500 dark:bg-amber-500/10':
+                          task.stage === 'processing',
+                        'bg-emerald-50 text-emerald-500 dark:bg-emerald-500/10':
+                          task.stage === 'complete',
+                        'bg-red-50 text-red-500 dark:bg-red-500/10': task.stage === 'error',
+                      }"
+                    >
+                      <IconLucideUpload v-if="task.stage === 'uploading'" class="h-3.5 w-3.5" />
+                      <IconLucideLoader2
+                        v-else-if="task.stage === 'processing'"
+                        class="h-3.5 w-3.5 animate-spin"
+                      />
+                      <IconLucideCheck v-else-if="task.stage === 'complete'" class="h-3.5 w-3.5" />
+                      <IconLucideAlertCircle v-else class="h-3.5 w-3.5" />
+                    </div>
+                    <div class="min-w-0 flex-1">
+                      <div class="flex items-baseline justify-between gap-2">
+                        <span class="truncate text-sm font-medium text-lf-text-strong">
+                          {{ task.fileName }}
+                        </span>
+                        <span class="shrink-0 text-xs text-lf-text-muted">
+                          <template v-if="task.stage === 'uploading'">
+                            {{ t('workspace.upload.uploadingPercent', { percent: task.progress }) }}
+                          </template>
+                          <template v-else-if="task.stage === 'processing'">
+                            {{ t('workspace.upload.processing') }}
+                          </template>
+                          <template v-else-if="task.stage === 'complete'">
+                            {{ t('workspace.upload.complete') }}
+                          </template>
+                          <template v-else>
+                            {{ task.errorMessage || t('workspace.upload.failed') }}
+                          </template>
+                        </span>
+                      </div>
+                      <NProgress
+                        class="mt-1.5"
+                        type="line"
+                        :percentage="task.progress"
+                        :status="
+                          task.stage === 'complete'
+                            ? 'success'
+                            : task.stage === 'error'
+                              ? 'error'
+                              : undefined
+                        "
+                        :show-indicator="false"
+                        :processing="task.stage === 'uploading' || task.stage === 'processing'"
+                      />
+                    </div>
+                  </div>
+                  <NButton
+                    quaternary
+                    size="tiny"
+                    class="ml-2 shrink-0"
+                    @click="dismissTask(task.id)"
+                  >
+                    <template #icon>
+                      <IconLucideX class="h-3.5 w-3.5" />
+                    </template>
+                  </NButton>
+                </div>
+              </div>
+            </TransitionGroup>
 
             <NAlert v-if="workspace.resourcesError" type="error" :bordered="false">
               {{ workspace.resourcesError }}
@@ -963,7 +1074,7 @@ onBeforeUnmount(() => {
                   <template #extra>
                     <NUpload multiple :show-file-list="false" :custom-request="handleUpload">
                       <NButton type="primary">{{
-                        t("workspace.resource.actions.uploadFirst")
+                        t('workspace.resource.actions.uploadFirst')
                       }}</NButton>
                     </NUpload>
                   </template>
@@ -1011,14 +1122,14 @@ onBeforeUnmount(() => {
                   :loading="workspace.loadingSegments"
                   @click="reloadSegments"
                 >
-                  {{ t("workspace.actions.refresh") }}
+                  {{ t('workspace.actions.refresh') }}
                 </NButton>
                 <NButton
                   type="primary"
                   :disabled="!canCreateSegmentJob"
                   @click="openSegmentJobDrawer()"
                 >
-                  {{ t("workspace.job.actions.createFromSegments") }}
+                  {{ t('workspace.job.actions.createFromSegments') }}
                 </NButton>
               </div>
             </div>
@@ -1046,7 +1157,7 @@ onBeforeUnmount(() => {
                   :loading="workspace.loadingSegments"
                   @click="workspace.loadSegments(projectId!, workspace.activeResourceId!, true)"
                 >
-                  {{ t("common.loadMore") }}
+                  {{ t('common.loadMore') }}
                 </NButton>
               </div>
               <NEmpty
@@ -1072,14 +1183,14 @@ onBeforeUnmount(() => {
                   :loading="workspace.loadingJobs"
                   @click="projectId && workspace.loadJobs(projectId)"
                 >
-                  {{ t("workspace.actions.refresh") }}
+                  {{ t('workspace.actions.refresh') }}
                 </NButton>
                 <NButton
                   type="primary"
                   :disabled="!canCreateResourceJob"
                   @click="openResourceJobDrawer"
                 >
-                  {{ t("workspace.job.actions.create") }}
+                  {{ t('workspace.job.actions.create') }}
                 </NButton>
               </div>
             </div>
@@ -1107,7 +1218,7 @@ onBeforeUnmount(() => {
                 :loading="workspace.loadingJobs"
                 @click="workspace.loadJobs(projectId!, true)"
               >
-                {{ t("common.loadMore") }}
+                {{ t('common.loadMore') }}
               </NButton>
             </div>
             <NEmpty
@@ -1147,12 +1258,12 @@ onBeforeUnmount(() => {
         </NForm>
         <template #footer>
           <div class="flex flex-wrap justify-end gap-3">
-            <NButton @click="closeSegmentDrawer">{{ t("workspace.common.cancel") }}</NButton>
+            <NButton @click="closeSegmentDrawer">{{ t('workspace.common.cancel') }}</NButton>
             <NButton
               :disabled="!editingSegment"
               @click="editingSegment && openSegmentJobDrawer(editingSegment)"
             >
-              {{ t("workspace.segment.actions.translate") }}
+              {{ t('workspace.segment.actions.translate') }}
             </NButton>
             <NButton
               type="primary"
@@ -1161,7 +1272,7 @@ onBeforeUnmount(() => {
               "
               @click="saveSegment"
             >
-              {{ t("workspace.common.save") }}
+              {{ t('workspace.common.save') }}
             </NButton>
           </div>
         </template>
@@ -1172,9 +1283,9 @@ onBeforeUnmount(() => {
       <NDrawerContent :title="t('workspace.job.createTitle')" closable>
         <div class="mb-5 rounded-lg bg-lf-surface-muted p-4 text-sm text-lf-text-muted">
           {{
-            jobTargetMode === "resources"
-              ? t("workspace.job.targetResources", { count: jobTargetResourceIds.length })
-              : t("workspace.job.targetSegments", { count: jobTargetSegmentIds.length })
+            jobTargetMode === 'resources'
+              ? t('workspace.job.targetResources', { count: jobTargetResourceIds.length })
+              : t('workspace.job.targetSegments', { count: jobTargetSegmentIds.length })
           }}
         </div>
         <NForm :model="jobForm" label-placement="top">
@@ -1198,10 +1309,10 @@ onBeforeUnmount(() => {
         <template #footer>
           <div class="flex justify-end gap-3">
             <NButton :disabled="workspace.creatingJob" @click="closeJobDrawer">{{
-              t("workspace.common.cancel")
+              t('workspace.common.cancel')
             }}</NButton>
             <NButton type="primary" :loading="workspace.creatingJob" @click="submitJob">
-              {{ t("workspace.job.actions.submitCreate") }}
+              {{ t('workspace.job.actions.submitCreate') }}
             </NButton>
           </div>
         </template>
@@ -1222,7 +1333,7 @@ onBeforeUnmount(() => {
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div class="rounded-lg bg-lf-surface-muted p-4">
                 <div class="text-xs text-lf-text-muted">
-                  {{ t("workspace.job.columns.status") }}
+                  {{ t('workspace.job.columns.status') }}
                 </div>
                 <NTag class="mt-2" size="small" :type="statusTagType(workspace.selectedJob.status)">
                   {{ getJobStatusLabel(workspace.selectedJob.status) }}
@@ -1230,7 +1341,7 @@ onBeforeUnmount(() => {
               </div>
               <div class="rounded-lg bg-lf-surface-muted p-4">
                 <div class="text-xs text-lf-text-muted">
-                  {{ t("workspace.job.columns.resources") }}
+                  {{ t('workspace.job.columns.resources') }}
                 </div>
                 <div class="mt-2 text-lg font-semibold text-lf-text-strong">
                   {{ workspace.selectedJob.completed_resources }}/{{
@@ -1240,7 +1351,7 @@ onBeforeUnmount(() => {
               </div>
               <div class="rounded-lg bg-lf-surface-muted p-4">
                 <div class="text-xs text-lf-text-muted">
-                  {{ t("workspace.job.columns.segments") }}
+                  {{ t('workspace.job.columns.segments') }}
                 </div>
                 <div class="mt-2 text-lg font-semibold text-lf-text-strong">
                   {{ workspace.selectedJob.completed_segments }}/{{
@@ -1292,7 +1403,7 @@ onBeforeUnmount(() => {
 
             <div>
               <div class="mb-3 text-sm font-medium text-lf-text-strong">
-                {{ t("workspace.job.resourcesTitle") }}
+                {{ t('workspace.job.resourcesTitle') }}
               </div>
               <NDataTable
                 :data="workspace.selectedJob.job_resources ?? []"
@@ -1331,7 +1442,7 @@ onBeforeUnmount(() => {
         <template #footer>
           <div class="flex flex-wrap justify-end gap-3">
             <NButton @click="jobDetailDrawerVisible = false">{{
-              t("workspace.common.close")
+              t('workspace.common.close')
             }}</NButton>
             <NButton
               v-if="workspace.selectedJob"
@@ -1343,7 +1454,7 @@ onBeforeUnmount(() => {
               type="primary"
               @click="downloadJob(workspace.selectedJob)"
             >
-              {{ t("workspace.common.download") }}
+              {{ t('workspace.common.download') }}
             </NButton>
           </div>
         </template>

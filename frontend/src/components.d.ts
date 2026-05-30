@@ -13,6 +13,11 @@ export {}
 declare module 'vue' {
   export interface GlobalComponents {
     ActivityFeed: typeof import('./components/dashboard/ActivityFeed.vue')['default']
+    IconLucideAlertCircle: typeof import('~icons/lucide/alert-circle')['default']
+    IconLucideCheck: typeof import('~icons/lucide/check')['default']
+    IconLucideLoader2: typeof import('~icons/lucide/loader2')['default']
+    IconLucideUpload: typeof import('~icons/lucide/upload')['default']
+    IconLucideX: typeof import('~icons/lucide/x')['default']
     JobStatusOverview: typeof import('./components/dashboard/JobStatusOverview.vue')['default']
     NAlert: typeof import('naive-ui')['NAlert']
     NAvatar: typeof import('naive-ui')['NAvatar']
@@ -50,6 +55,11 @@ declare module 'vue' {
 // For TSX support
 declare global {
   const ActivityFeed: typeof import('./components/dashboard/ActivityFeed.vue')['default']
+  const IconLucideAlertCircle: typeof import('~icons/lucide/alert-circle')['default']
+  const IconLucideCheck: typeof import('~icons/lucide/check')['default']
+  const IconLucideLoader2: typeof import('~icons/lucide/loader2')['default']
+  const IconLucideUpload: typeof import('~icons/lucide/upload')['default']
+  const IconLucideX: typeof import('~icons/lucide/x')['default']
   const JobStatusOverview: typeof import('./components/dashboard/JobStatusOverview.vue')['default']
   const NAlert: typeof import('naive-ui')['NAlert']
   const NAvatar: typeof import('naive-ui')['NAvatar']

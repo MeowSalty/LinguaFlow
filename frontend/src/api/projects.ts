@@ -2,9 +2,24 @@ import { t } from '@/i18n'
 
 import type { ApiClient, ApiSchemas } from './client'
 import { apiClient } from './client'
-import { buildFilesFormData, buildRequestFailureError, type DownloadFileResult, getContentDispositionFilename } from './utils'
+import {
+  buildFilesFormData,
+  buildRequestFailureError,
+  type DownloadFileResult,
+  getContentDispositionFilename,
+} from './utils'
+import { getAccessToken, readStoredApiBaseUrl } from './token-storage'
 
-export const fetchCurrentUser = async (client: ApiClient = apiClient): Promise<ApiSchemas['User']> => {
+export interface UploadProgressCallbacks {
+  /** 上传进度回调，percent 范围 0-100 */
+  onProgress?: (percent: number) => void
+  /** 文件发送完毕，服务端处理中 */
+  onServerProcessing?: () => void
+}
+
+export const fetchCurrentUser = async (
+  client: ApiClient = apiClient,
+): Promise<ApiSchemas['User']> => {
   const { data, error, response } = await client.GET('/users/me')
 
   if (!data) {
@@ -14,7 +29,9 @@ export const fetchCurrentUser = async (client: ApiClient = apiClient): Promise<A
   return data
 }
 
-export const fetchStatsSummary = async (client: ApiClient = apiClient): Promise<ApiSchemas['UsageStats']> => {
+export const fetchStatsSummary = async (
+  client: ApiClient = apiClient,
+): Promise<ApiSchemas['UsageStats']> => {
   const { data, error, response } = await client.GET('/stats/summary')
 
   if (!data) {
@@ -83,7 +100,10 @@ export const updateProject = async (
   return data
 }
 
-export const deleteProject = async (projectId: number, client: ApiClient = apiClient): Promise<void> => {
+export const deleteProject = async (
+  projectId: number,
+  client: ApiClient = apiClient,
+): Promise<void> => {
   const { error, response } = await client.DELETE('/projects/{projectId}', {
     params: { path: { projectId } },
   })
@@ -132,6 +152,70 @@ export const uploadProjectResources = async (
   }
 
   return data
+}
+
+export const uploadProjectResourcesWithProgress = async (
+  projectId: number,
+  files: File[],
+  callbacks?: UploadProgressCallbacks,
+): Promise<ApiSchemas['ResourceUploadResponse']> => {
+  const baseUrl = readStoredApiBaseUrl() ?? '/api/v1'
+  const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
+  const url = `${normalizedBaseUrl}/projects/${projectId}/resources`
+
+  const formData = buildFilesFormData(files, 'files')
+  const accessToken = getAccessToken()
+
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    let serverProcessingNotified = false
+
+    xhr.upload.addEventListener('progress', (event) => {
+      if (event.lengthComputable && callbacks?.onProgress) {
+        const percent = Math.round((event.loaded / event.total) * 100)
+        callbacks.onProgress(percent)
+        if (percent >= 100 && !serverProcessingNotified) {
+          serverProcessingNotified = true
+          callbacks?.onServerProcessing?.()
+        }
+      }
+    })
+
+    xhr.addEventListener('load', () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          const data = JSON.parse(xhr.responseText) as ApiSchemas['ResourceUploadResponse']
+          resolve(data)
+        } catch {
+          reject(new Error(t('api.errors.uploadResourcesFailed')))
+        }
+      } else {
+        reject(
+          buildRequestFailureError(
+            t('api.errors.uploadResourcesFailed'),
+            undefined,
+            new Response(null, { status: xhr.status }),
+          ),
+        )
+      }
+    })
+
+    xhr.addEventListener('error', () => {
+      reject(buildRequestFailureError(t('api.errors.uploadResourcesFailed')))
+    })
+
+    xhr.addEventListener('abort', () => {
+      reject(buildRequestFailureError(t('api.errors.uploadResourcesFailed')))
+    })
+
+    xhr.open('POST', url)
+
+    if (accessToken) {
+      xhr.setRequestHeader('Authorization', `Bearer ${accessToken}`)
+    }
+
+    xhr.send(formData)
+  })
 }
 
 export const replaceProjectResource = async (

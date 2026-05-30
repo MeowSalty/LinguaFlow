@@ -2,7 +2,11 @@ import { t } from '@/i18n'
 
 import type { ApiClient, ApiSchemas } from './client'
 import { apiClient } from './client'
-import { buildRequestFailureError, type DownloadFileResult, getContentDispositionFilename } from './utils'
+import {
+  buildRequestFailureError,
+  type DownloadFileResult,
+  getContentDispositionFilename,
+} from './utils'
 
 export const fetchTranslationJobs = async (
   projectId: number,
@@ -61,9 +65,12 @@ export const cancelTranslationJob = async (
   translationJobId: number,
   client: ApiClient = apiClient,
 ): Promise<ApiSchemas['TranslationJob']> => {
-  const { data, error, response } = await client.POST('/translation-jobs/{translationJobId}/cancel', {
-    params: { path: { translationJobId } },
-  })
+  const { data, error, response } = await client.POST(
+    '/translation-jobs/{translationJobId}/cancel',
+    {
+      params: { path: { translationJobId } },
+    },
+  )
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.cancelTranslationJobFailed'), error, response)
@@ -76,9 +83,12 @@ export const retryTranslationJob = async (
   translationJobId: number,
   client: ApiClient = apiClient,
 ): Promise<ApiSchemas['TranslationJob']> => {
-  const { data, error, response } = await client.POST('/translation-jobs/{translationJobId}/retry', {
-    params: { path: { translationJobId } },
-  })
+  const { data, error, response } = await client.POST(
+    '/translation-jobs/{translationJobId}/retry',
+    {
+      params: { path: { translationJobId } },
+    },
+  )
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.retryTranslationJobFailed'), error, response)

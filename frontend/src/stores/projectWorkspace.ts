@@ -17,7 +17,7 @@ import {
   replaceProjectResource as replaceProjectResourceRequest,
   retryTranslationJob as retryTranslationJobRequest,
   updateResourceSegment as updateResourceSegmentRequest,
-  uploadProjectResources as uploadProjectResourcesRequest,
+  uploadProjectResourcesWithProgress,
 } from '@/api/client'
 import { t } from '@/i18n'
 
@@ -27,6 +27,14 @@ type Segment = ApiSchemas['Segment']
 type TranslationJob = ApiSchemas['TranslationJob']
 type CreateTranslationJobPayload = ApiSchemas['CreateTranslationJobRequest']
 type SegmentUpdatePayload = ApiSchemas['ResourceSegmentUpdateRequest']
+
+export interface UploadTask {
+  id: string
+  fileName: string
+  stage: 'uploading' | 'processing' | 'complete' | 'error'
+  progress: number
+  errorMessage?: string
+}
 
 export type ResourceStatusFilter = Resource['status'] | 'all'
 export type SegmentStatusFilter = 'pending' | 'translated' | 'reviewed' | 'rejected' | 'all'
@@ -58,7 +66,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   const loadingSegments = ref(false)
   const loadingJobs = ref(false)
   const loadingJobDetail = ref(false)
-  const uploadingResources = ref(false)
+  const uploadTasks = ref<UploadTask[]>([])
   const replacingResourceIds = ref<number[]>([])
   const deletingResourceIds = ref<number[]>([])
   const editingSegmentIds = ref<number[]>([])
@@ -99,6 +107,9 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   const runningJobCount = computed(
     () => jobs.value.filter((job) => job.status === 'pending' || job.status === 'running').length,
   )
+  const hasActiveUploads = computed(() =>
+    uploadTasks.value.some((task) => task.stage === 'uploading' || task.stage === 'processing'),
+  )
 
   const loadProject = async (projectId: number): Promise<void> => {
     loadingProject.value = true
@@ -122,7 +133,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
         status: resourceStatusFilter.value === 'all' ? undefined : resourceStatusFilter.value,
         format: resourceFormatFilter.value === 'all' ? undefined : resourceFormatFilter.value,
         search: resourceSearch.value.trim() || undefined,
-        cursor: append ? resourcesCursor.value ?? undefined : undefined,
+        cursor: append ? (resourcesCursor.value ?? undefined) : undefined,
         limit: 50,
       })
       resources.value = append ? [...resources.value, ...response.items] : response.items
@@ -135,7 +146,10 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
       selectedResourceIds.value = selectedResourceIds.value.filter((id) =>
         resources.value.some((resource) => resource.id === id),
       )
-      if (activeResourceId.value && !resources.value.some((item) => item.id === activeResourceId.value)) {
+      if (
+        activeResourceId.value &&
+        !resources.value.some((item) => item.id === activeResourceId.value)
+      ) {
         activeResourceId.value = resources.value[0]?.id ?? null
       }
     } catch (error) {
@@ -145,7 +159,11 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     }
   }
 
-  const loadSegments = async (projectId: number, resourceId: number, append = false): Promise<void> => {
+  const loadSegments = async (
+    projectId: number,
+    resourceId: number,
+    append = false,
+  ): Promise<void> => {
     loadingSegments.value = true
     segmentsError.value = null
 
@@ -153,7 +171,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
       const response = await fetchResourceSegments(projectId, resourceId, {
         status: segmentStatusFilter.value === 'all' ? undefined : segmentStatusFilter.value,
         search: segmentSearch.value.trim() || undefined,
-        cursor: append ? segmentsCursor.value ?? undefined : undefined,
+        cursor: append ? (segmentsCursor.value ?? undefined) : undefined,
         limit: 50,
       })
       segments.value = append ? [...segments.value, ...response.items] : response.items
@@ -172,7 +190,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     try {
       const response = await fetchTranslationJobs(projectId, {
         status: jobStatusFilter.value === 'all' ? undefined : jobStatusFilter.value,
-        cursor: append ? jobsCursor.value ?? undefined : undefined,
+        cursor: append ? (jobsCursor.value ?? undefined) : undefined,
         limit: 50,
       })
       jobs.value = append ? [...jobs.value, ...response.items] : response.items
@@ -201,25 +219,75 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     }
   }
 
-  const uploadResources = async (projectId: number, files: File[]): Promise<void> => {
+  const addUploadTask = (fileName: string): string => {
+    const id = crypto.randomUUID()
+    uploadTasks.value = [...uploadTasks.value, { id, fileName, stage: 'uploading', progress: 0 }]
+    return id
+  }
+
+  const updateUploadTaskProgress = (taskId: string, progress: number): void => {
+    uploadTasks.value = uploadTasks.value.map((task) =>
+      task.id === taskId ? { ...task, progress } : task,
+    )
+  }
+
+  const updateUploadTaskStage = (
+    taskId: string,
+    stage: UploadTask['stage'],
+    errorMessage?: string,
+  ): void => {
+    uploadTasks.value = uploadTasks.value.map((task) =>
+      task.id === taskId ? { ...task, stage, errorMessage } : task,
+    )
+  }
+
+  const removeUploadTask = (taskId: string): void => {
+    uploadTasks.value = uploadTasks.value.filter((task) => task.id !== taskId)
+  }
+
+  const clearCompletedUploadTasks = (): void => {
+    uploadTasks.value = uploadTasks.value.filter((task) => task.stage !== 'complete')
+  }
+
+  const clearAllUploadTasks = (): void => {
+    uploadTasks.value = []
+  }
+
+  const uploadResources = async (
+    projectId: number,
+    files: File[],
+    taskId?: string,
+  ): Promise<void> => {
     if (files.length === 0) {
       return
     }
 
-    uploadingResources.value = true
     actionError.value = null
 
     try {
-      const response = await uploadProjectResourcesRequest(projectId, files)
+      const response = await uploadProjectResourcesWithProgress(projectId, files, {
+        onProgress: (percent) => {
+          if (taskId) {
+            updateUploadTaskProgress(taskId, percent)
+          }
+        },
+        onServerProcessing: () => {
+          if (taskId) {
+            updateUploadTaskStage(taskId, 'processing')
+          }
+        },
+      })
       resources.value = [...response.items, ...resources.value]
       if (!activeResourceId.value && response.items[0]) {
         activeResourceId.value = response.items[0].id
       }
     } catch (error) {
-      actionError.value = getErrorMessage(error, t('api.errors.uploadResourcesFailed'))
+      const message = getErrorMessage(error, t('api.errors.uploadResourcesFailed'))
+      actionError.value = message
+      if (taskId) {
+        updateUploadTaskStage(taskId, 'error', message)
+      }
       throw error
-    } finally {
-      uploadingResources.value = false
     }
   }
 
@@ -396,6 +464,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     jobsError.value = null
     jobDetailError.value = null
     actionError.value = null
+    clearAllUploadTasks()
     resourceSearch.value = ''
     resourceStatusFilter.value = 'all'
     resourceFormatFilter.value = 'all'
@@ -422,7 +491,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     loadingSegments,
     loadingJobs,
     loadingJobDetail,
-    uploadingResources,
+    uploadTasks,
+    hasActiveUploads,
     replacingResourceIds,
     deletingResourceIds,
     editingSegmentIds,
@@ -451,6 +521,12 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     loadSegments,
     loadJobs,
     loadJobDetail,
+    addUploadTask,
+    updateUploadTaskProgress,
+    updateUploadTaskStage,
+    removeUploadTask,
+    clearCompletedUploadTasks,
+    clearAllUploadTasks,
     uploadResources,
     replaceResource,
     deleteResource,

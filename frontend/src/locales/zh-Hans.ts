@@ -324,6 +324,12 @@ const messages = {
         error: '错误',
       },
     },
+    upload: {
+      uploadingPercent: '正在上传… {percent}%',
+      processing: '服务端处理中…',
+      complete: '上传完成',
+      failed: '上传失败',
+    },
     segment: {
       resourcePlaceholder: '选择资源文件',
       searchPlaceholder: '搜索原文或译文',
