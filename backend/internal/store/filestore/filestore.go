@@ -116,7 +116,23 @@ func (s *LocalStore) Delete(relativePath string) error {
 	if err := os.Remove(absPath); err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("filestore: delete %s: %w", relativePath, err)
 	}
+	// 清理空的父目录，直到遇到非空目录或根目录
+	s.cleanupEmptyParents(filepath.Dir(absPath))
 	return nil
+}
+
+// cleanupEmptyParents 向上遍历并删除空的父目录，直到遇到非空目录或根目录。
+func (s *LocalStore) cleanupEmptyParents(dir string) {
+	for dir != s.root {
+		entries, err := os.ReadDir(dir)
+		if err != nil || len(entries) > 0 {
+			break
+		}
+		if err := os.Remove(dir); err != nil {
+			break
+		}
+		dir = filepath.Dir(dir)
+	}
 }
 
 func (s *LocalStore) DeleteJob(jobID int) error {
