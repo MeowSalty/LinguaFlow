@@ -23,6 +23,7 @@ interface ProjectFormModel {
 }
 
 const route = useRoute()
+const router = useRouter()
 const projects = useProjectsStore()
 const message = useMessage()
 const { t } = useI18n()
@@ -87,6 +88,7 @@ const submitButtonText = computed(() =>
   isEditMode.value ? t('projects.actions.submitUpdate') : t('projects.actions.submitCreate'),
 )
 const submitting = computed(() => projects.creating || projects.updating)
+const isProjectListRoute = computed(() => route.path === '/projects')
 
 const rules = computed<FormRules>(() => ({
   name: [
@@ -231,9 +233,20 @@ const moreActionOptions = computed<DropdownOption[]>(() => [
   { label: t('projects.actions.backends'), key: 'backends' },
 ])
 
-const selectMoreAction = (key: string | number): void => {
+const openProjectWorkspace = (project: Project, tab?: string): void => {
+  void router.push({
+    path: `/projects/${project.id}`,
+    query: tab ? { tab } : undefined,
+  })
+}
+
+const selectMoreAction = (project: Project, key: string | number): void => {
+  if (key === 'jobs') {
+    openProjectWorkspace(project, 'jobs')
+    return
+  }
+
   const featureKeyMap: Record<string, string> = {
-    jobs: 'projects.features.jobs',
     glossary: 'projects.features.glossary',
     backends: 'projects.features.backends',
   }
@@ -264,6 +277,10 @@ watch(
 )
 
 onMounted(() => {
+  if (!isProjectListRoute.value) {
+    return
+  }
+
   projects.loadProjects()
 
   if (route.query.create === '1') {
@@ -273,7 +290,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-6">
+  <RouterView v-if="!isProjectListRoute" />
+  <div v-else class="space-y-6">
     <NCard :bordered="false" class="overflow-hidden shadow-sm shadow-lf-shadow">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
         <div class="space-y-3">
@@ -460,7 +478,7 @@ onMounted(() => {
                 text
                 type="primary"
                 class="font-medium"
-                @click="showPlaceholder('projects.features.details')"
+                @click="openProjectWorkspace(project)"
               >
                 {{ t('projects.actions.details') }}
               </NButton>
@@ -472,7 +490,7 @@ onMounted(() => {
                   trigger="click"
                   :options="moreActionOptions"
                   placement="bottom-end"
-                  @select="selectMoreAction"
+                  @select="(key: string | number) => selectMoreAction(project, key)"
                 >
                   <NButton quaternary size="small">
                     {{ t('projects.actions.more') }}

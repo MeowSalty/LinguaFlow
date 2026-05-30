@@ -78,10 +78,11 @@ tasks:
     dir: '{{.FRONTEND_DIR}}'
     sources:
       - '../{{.OPENAPI_SCHEMA}}'
+      - 'scripts/generate-openapi-types.ts'
     generates:
       - '{{.FRONTEND_OPENAPI_TYPES}}'
     cmds:
-      - pnpm exec openapi-typescript ../{{.OPENAPI_SCHEMA}} -o {{.FRONTEND_OPENAPI_TYPES}}
+      - node --import jiti/register scripts/generate-openapi-types.ts
 
   backend:install:
     desc: 下载后端 Go 模块依赖

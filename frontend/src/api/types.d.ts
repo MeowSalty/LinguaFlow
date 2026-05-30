@@ -344,6 +344,109 @@ export interface paths {
     patch?: never
     trace?: never
   }
+  '/projects/{projectId}/resources': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        projectId: components['parameters']['ProjectId']
+      }
+      cookie?: never
+    }
+    /** 列出项目资源文件 */
+    get: operations['ListProjectResources']
+    put?: never
+    /** 上传资源文件到项目 */
+    post: operations['UploadProjectResources']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/projects/{projectId}/resources/{resourceId}': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        projectId: components['parameters']['ProjectId']
+        resourceId: components['parameters']['ResourceId']
+      }
+      cookie?: never
+    }
+    /** 获取资源详情 */
+    get: operations['GetResource']
+    /** 更新资源文件 */
+    put: operations['UpdateResource']
+    post?: never
+    /** 删除资源文件及其所有段落 */
+    delete: operations['DeleteResource']
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/projects/{projectId}/resources/{resourceId}/download': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        projectId: components['parameters']['ProjectId']
+        resourceId: components['parameters']['ResourceId']
+      }
+      cookie?: never
+    }
+    /** 下载资源原始文件 */
+    get: operations['DownloadResourceFile']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/projects/{projectId}/resources/{resourceId}/segments': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        projectId: components['parameters']['ProjectId']
+        resourceId: components['parameters']['ResourceId']
+      }
+      cookie?: never
+    }
+    /** 列出资源段落 */
+    get: operations['ListResourceSegments']
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/projects/{projectId}/resources/{resourceId}/segments/{segmentId}': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        projectId: components['parameters']['ProjectId']
+        resourceId: components['parameters']['ResourceId']
+        segmentId: components['parameters']['SegmentId']
+      }
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    post?: never
+    delete?: never
+    options?: never
+    head?: never
+    /** 更新资源段落内容 */
+    patch: operations['UpdateResourceSegment']
+    trace?: never
+  }
   '/projects/{projectId}/stages/{stage}/override': {
     parameters: {
       query?: never
@@ -463,7 +566,7 @@ export interface paths {
     patch?: never
     trace?: never
   }
-  '/projects/{projectId}/jobs': {
+  '/projects/{projectId}/translation-jobs': {
     parameters: {
       query?: never
       header?: never
@@ -472,27 +575,28 @@ export interface paths {
       }
       cookie?: never
     }
-    get?: never
+    /** 列出项目翻译任务 */
+    get: operations['ListTranslationJobs']
     put?: never
-    /** 创建多文件翻译任务 */
-    post: operations['CreateProjectJob']
+    /** 创建翻译任务 */
+    post: operations['CreateTranslationJob']
     delete?: never
     options?: never
     head?: never
     patch?: never
     trace?: never
   }
-  '/jobs/{jobId}': {
+  '/translation-jobs/{translationJobId}': {
     parameters: {
       query?: never
       header?: never
       path: {
-        jobId: components['parameters']['JobId']
+        translationJobId: components['parameters']['TranslationJobId']
       }
       cookie?: never
     }
-    /** 获取任务详情 */
-    get: operations['GetJob']
+    /** 获取翻译任务详情 */
+    get: operations['GetTranslationJob']
     put?: never
     post?: never
     delete?: never
@@ -501,213 +605,57 @@ export interface paths {
     patch?: never
     trace?: never
   }
-  '/jobs/{jobId}/subjobs': {
+  '/translation-jobs/{translationJobId}/cancel': {
     parameters: {
       query?: never
       header?: never
       path: {
-        jobId: components['parameters']['JobId']
+        translationJobId: components['parameters']['TranslationJobId']
       }
       cookie?: never
     }
-    /** 获取任务子任务列表 */
-    get: operations['ListJobSubJobs']
+    get?: never
+    put?: never
+    /** 取消翻译任务 */
+    post: operations['CancelTranslationJob']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/translation-jobs/{translationJobId}/retry': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        translationJobId: components['parameters']['TranslationJobId']
+      }
+      cookie?: never
+    }
+    get?: never
+    put?: never
+    /** 重试失败的资源翻译 */
+    post: operations['RetryTranslationJob']
+    delete?: never
+    options?: never
+    head?: never
+    patch?: never
+    trace?: never
+  }
+  '/translation-jobs/{translationJobId}/download': {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        translationJobId: components['parameters']['TranslationJobId']
+      }
+      cookie?: never
+    }
+    /** 下载翻译任务结果 */
+    get: operations['DownloadTranslationJobResult']
     put?: never
     post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/jobs/{jobId}/subjobs/{subJobId}': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        jobId: components['parameters']['JobId']
-        subJobId: components['parameters']['SubJobId']
-      }
-      cookie?: never
-    }
-    /** 获取单个子任务详情 */
-    get: operations['GetJobSubJob']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/jobs/{jobId}/cancel': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        jobId: components['parameters']['JobId']
-      }
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** 取消任务 */
-    post: operations['CancelJob']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/jobs/{jobId}/retry': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        jobId: components['parameters']['JobId']
-      }
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** 重试失败子任务 */
-    post: operations['RetryJob']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/jobs/{jobId}/download': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        jobId: components['parameters']['JobId']
-      }
-      cookie?: never
-    }
-    /** 下载任务输出 */
-    get: operations['DownloadJobResult']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/jobs/{jobId}/segments': {
-    parameters: {
-      query?: {
-        cursor?: components['parameters']['Cursor']
-        limit?: components['parameters']['Limit']
-      }
-      header?: never
-      path: {
-        jobId: components['parameters']['JobId']
-      }
-      cookie?: never
-    }
-    /** 获取任务段列表 */
-    get: operations['ListJobSegments']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/jobs/{jobId}/approve': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        jobId: components['parameters']['JobId']
-      }
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** 批量通过任务审校 */
-    post: operations['ApproveJob']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/jobs/{jobId}/retranslate': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        jobId: components['parameters']['JobId']
-      }
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** 重译被驳回段 */
-    post: operations['RetranslateRejectedSegments']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/segments/{segmentId}': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        segmentId: components['parameters']['SegmentId']
-      }
-      cookie?: never
-    }
-    get?: never
-    /** 编辑段译文 */
-    put: operations['EditSegment']
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/segments/{segmentId}/approve': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        segmentId: components['parameters']['SegmentId']
-      }
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** 通过段译文 */
-    post: operations['ApproveSegment']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/segments/{segmentId}/reject': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        segmentId: components['parameters']['SegmentId']
-      }
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** 驳回段译文 */
-    post: operations['RejectSegment']
     delete?: never
     options?: never
     head?: never
@@ -846,60 +794,6 @@ export interface components {
       /** @enum {string} */
       role: 'owner' | 'admin' | 'member'
     }
-    JobCreateRequest: {
-      source_lang?: string
-      target_lang?: string
-    }
-    JobCreateResponse: {
-      job_id: number
-      status: string
-      sub_jobs: components['schemas']['SubJobSummary'][]
-      /** Format: date-time */
-      created_at: string
-    }
-    Job: {
-      id: number
-      project_id: number
-      status: string
-      sub_job_count: number
-      completed_sub_jobs: number
-      failed_sub_jobs: number
-      source_lang: string
-      target_lang: string
-      input_path?: string
-      output_path?: string
-      error_message?: string
-      /** Format: date-time */
-      created_at?: string
-      /** Format: date-time */
-      updated_at?: string
-      sub_jobs: components['schemas']['SubJob'][]
-    }
-    JobListResponse: {
-      items: components['schemas']['Job'][]
-    }
-    SubJobSummary: {
-      id: number
-      filename: string
-      status: string
-    }
-    SubJob: {
-      id: number
-      status: string
-      input_filename: string
-      input_format: string
-      input_path: string
-      output_path: string
-      segment_count: number
-      error_message?: string
-      /** Format: date-time */
-      created_at?: string
-      /** Format: date-time */
-      updated_at?: string
-    }
-    SubJobListResponse: {
-      items: components['schemas']['SubJob'][]
-    }
     Segment: {
       id: number
       sub_job_id: number
@@ -918,13 +812,6 @@ export interface components {
       items: components['schemas']['Segment'][]
       next_cursor?: string
     }
-    SegmentEditRequest: {
-      target_text: string
-      comment?: string
-    }
-    SegmentDecisionRequest: {
-      comment?: string
-    }
     UsageStats: {
       api_calls: number
       input_tokens: number
@@ -933,6 +820,83 @@ export interface components {
       usage_records: number
       completed_jobs: number
       failed_jobs: number
+    }
+    Resource: {
+      id: number
+      filename: string
+      format: string
+      total_segments: number
+      /** @enum {string} */
+      status: 'ready' | 'processing' | 'error'
+      error_message?: string
+      /** Format: date-time */
+      created_at: string
+      /** Format: date-time */
+      updated_at: string
+    }
+    ResourceUploadResponse: {
+      items: components['schemas']['Resource'][]
+    }
+    ResourceListResponse: {
+      items: components['schemas']['Resource'][]
+    }
+    ResourceSegmentUpdateRequest: {
+      source_text?: string
+      target_text?: string
+      comment?: string
+    }
+    ResourceSegmentListResponse: {
+      items: components['schemas']['Segment'][]
+      next_cursor?: string
+    }
+    CreateTranslationJobRequest: {
+      resource_ids?: number[]
+      segment_ids?: number[]
+      translation_config?: {
+        [key: string]: unknown
+      }
+    }
+    TranslationJobResource: {
+      id: number
+      resource_id: number
+      /** @enum {string} */
+      status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
+      segment_ids?: number[]
+      segment_count: number
+      completed_segments: number
+      output_path?: string
+      error_message?: string
+      resource?: components['schemas']['Resource']
+      /** Format: date-time */
+      created_at: string
+      /** Format: date-time */
+      updated_at: string
+    }
+    TranslationJob: {
+      id: number
+      project_id: number
+      /** @enum {string} */
+      status: 'pending' | 'running' | 'awaiting_review' | 'completed' | 'failed' | 'cancelled'
+      /** @enum {string} */
+      trigger_type: 'manual' | 'file_update' | 'glossary_change' | 'web_edit'
+      translation_config?: {
+        [key: string]: unknown
+      }
+      resource_count: number
+      completed_resources: number
+      failed_resources: number
+      total_segments: number
+      completed_segments: number
+      error_message?: string
+      /** Format: date-time */
+      created_at: string
+      /** Format: date-time */
+      updated_at: string
+      job_resources?: components['schemas']['TranslationJobResource'][]
+    }
+    TranslationJobListResponse: {
+      items: components['schemas']['TranslationJob'][]
+      next_cursor?: string
     }
     Activity: {
       id: number
@@ -1000,6 +964,9 @@ export interface components {
       config?: {
         [key: string]: unknown
       }
+      default_translation_config?: {
+        [key: string]: unknown
+      }
       source_lang: string
       target_lang: string
       /** Format: date-time */
@@ -1018,6 +985,9 @@ export interface components {
       config?: {
         [key: string]: unknown
       }
+      default_translation_config?: {
+        [key: string]: unknown
+      }
       source_lang?: string
       target_lang?: string
     }
@@ -1026,6 +996,9 @@ export interface components {
       /** @enum {string} */
       resource_scope?: 'project' | 'organization'
       config?: {
+        [key: string]: unknown
+      }
+      default_translation_config?: {
         [key: string]: unknown
       }
       source_lang?: string
@@ -1118,8 +1091,8 @@ export interface components {
     OrgId: number
     UserId: number
     ProjectId: number
-    JobId: number
-    SubJobId: number
+    ResourceId: number
+    TranslationJobId: number
     BackendId: number
     EntryId: number
     Stage: 'translate' | 'bootstrap'
@@ -1878,6 +1851,223 @@ export interface operations {
       default: components['responses']['Problem']
     }
   }
+  ListProjectResources: {
+    parameters: {
+      query?: {
+        status?: 'ready' | 'processing' | 'error'
+        format?: string
+        search?: string
+        cursor?: components['parameters']['Cursor']
+        limit?: components['parameters']['Limit']
+      }
+      header?: never
+      path: {
+        projectId: components['parameters']['ProjectId']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description 资源列表 */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ResourceListResponse']
+        }
+      }
+      default: components['responses']['Problem']
+    }
+  }
+  UploadProjectResources: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        projectId: components['parameters']['ProjectId']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'multipart/form-data': {
+          files: File[]
+        }
+      }
+    }
+    responses: {
+      /** @description 上传成功 */
+      201: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ResourceUploadResponse']
+        }
+      }
+      default: components['responses']['Problem']
+    }
+  }
+  GetResource: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        projectId: components['parameters']['ProjectId']
+        resourceId: components['parameters']['ResourceId']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description 资源详情 */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Resource']
+        }
+      }
+      default: components['responses']['Problem']
+    }
+  }
+  UpdateResource: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        projectId: components['parameters']['ProjectId']
+        resourceId: components['parameters']['ResourceId']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'multipart/form-data': {
+          /** Format: binary */
+          file: File
+        }
+      }
+    }
+    responses: {
+      /** @description 更新成功 */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Resource']
+        }
+      }
+      default: components['responses']['Problem']
+    }
+  }
+  DeleteResource: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        projectId: components['parameters']['ProjectId']
+        resourceId: components['parameters']['ResourceId']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description 删除成功 */
+      204: {
+        headers: {
+          [name: string]: unknown
+        }
+        content?: never
+      }
+      default: components['responses']['Problem']
+    }
+  }
+  DownloadResourceFile: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        projectId: components['parameters']['ProjectId']
+        resourceId: components['parameters']['ResourceId']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description 资源原始文件 */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/octet-stream': File
+        }
+      }
+      default: components['responses']['Problem']
+    }
+  }
+  ListResourceSegments: {
+    parameters: {
+      query?: {
+        status?: 'pending' | 'translated' | 'reviewed' | 'rejected'
+        search?: string
+        cursor?: components['parameters']['Cursor']
+        limit?: components['parameters']['Limit']
+      }
+      header?: never
+      path: {
+        projectId: components['parameters']['ProjectId']
+        resourceId: components['parameters']['ResourceId']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description 段落列表 */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['ResourceSegmentListResponse']
+        }
+      }
+      default: components['responses']['Problem']
+    }
+  }
+  UpdateResourceSegment: {
+    parameters: {
+      query?: never
+      header?: never
+      path: {
+        projectId: components['parameters']['ProjectId']
+        resourceId: components['parameters']['ResourceId']
+        segmentId: components['parameters']['SegmentId']
+      }
+      cookie?: never
+    }
+    requestBody: {
+      content: {
+        'application/json': components['schemas']['ResourceSegmentUpdateRequest']
+      }
+    }
+    responses: {
+      /** @description 更新成功 */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['Segment']
+        }
+      }
+      default: components['responses']['Problem']
+    }
+  }
   SetStageBackendOverride: {
     parameters: {
       query?: never
@@ -2043,7 +2233,7 @@ export interface operations {
       content: {
         'multipart/form-data': {
           /** Format: binary */
-          file: string
+          file: File
         }
       }
     }
@@ -2077,13 +2267,41 @@ export interface operations {
           [name: string]: unknown
         }
         content: {
-          'text/csv': string
+          'text/csv': File
         }
       }
       default: components['responses']['Problem']
     }
   }
-  CreateProjectJob: {
+  ListTranslationJobs: {
+    parameters: {
+      query?: {
+        status?: 'pending' | 'running' | 'awaiting_review' | 'completed' | 'failed' | 'cancelled'
+        trigger_type?: 'manual' | 'file_update' | 'glossary_change' | 'web_edit'
+        cursor?: components['parameters']['Cursor']
+        limit?: components['parameters']['Limit']
+      }
+      header?: never
+      path: {
+        projectId: components['parameters']['ProjectId']
+      }
+      cookie?: never
+    }
+    requestBody?: never
+    responses: {
+      /** @description 翻译任务列表 */
+      200: {
+        headers: {
+          [name: string]: unknown
+        }
+        content: {
+          'application/json': components['schemas']['TranslationJobListResponse']
+        }
+      }
+      default: components['responses']['Problem']
+    }
+  }
+  CreateTranslationJob: {
     parameters: {
       query?: never
       header?: never
@@ -2092,13 +2310,9 @@ export interface operations {
       }
       cookie?: never
     }
-    requestBody: {
+    requestBody?: {
       content: {
-        'multipart/form-data': {
-          files: string[]
-          source_lang?: string
-          target_lang?: string
-        }
+        'application/json': components['schemas']['CreateTranslationJobRequest']
       }
     }
     responses: {
@@ -2108,18 +2322,18 @@ export interface operations {
           [name: string]: unknown
         }
         content: {
-          'application/json': components['schemas']['JobCreateResponse']
+          'application/json': components['schemas']['TranslationJob']
         }
       }
       default: components['responses']['Problem']
     }
   }
-  GetJob: {
+  GetTranslationJob: {
     parameters: {
       query?: never
       header?: never
       path: {
-        jobId: components['parameters']['JobId']
+        translationJobId: components['parameters']['TranslationJobId']
       }
       cookie?: never
     }
@@ -2131,65 +2345,18 @@ export interface operations {
           [name: string]: unknown
         }
         content: {
-          'application/json': components['schemas']['Job']
+          'application/json': components['schemas']['TranslationJob']
         }
       }
       default: components['responses']['Problem']
     }
   }
-  ListJobSubJobs: {
+  CancelTranslationJob: {
     parameters: {
       query?: never
       header?: never
       path: {
-        jobId: components['parameters']['JobId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 子任务列表 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['SubJobListResponse']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  GetJobSubJob: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        jobId: components['parameters']['JobId']
-        subJobId: components['parameters']['SubJobId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 子任务详情 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['SubJob']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  CancelJob: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        jobId: components['parameters']['JobId']
+        translationJobId: components['parameters']['TranslationJobId']
       }
       cookie?: never
     }
@@ -2201,18 +2368,18 @@ export interface operations {
           [name: string]: unknown
         }
         content: {
-          'application/json': components['schemas']['Job']
+          'application/json': components['schemas']['TranslationJob']
         }
       }
       default: components['responses']['Problem']
     }
   }
-  RetryJob: {
+  RetryTranslationJob: {
     parameters: {
       query?: never
       header?: never
       path: {
-        jobId: components['parameters']['JobId']
+        translationJobId: components['parameters']['TranslationJobId']
       }
       cookie?: never
     }
@@ -2224,183 +2391,33 @@ export interface operations {
           [name: string]: unknown
         }
         content: {
-          'application/json': components['schemas']['Job']
+          'application/json': components['schemas']['TranslationJob']
         }
       }
       default: components['responses']['Problem']
     }
   }
-  DownloadJobResult: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        jobId: components['parameters']['JobId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 下载结果文件 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/octet-stream': string
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  ListJobSegments: {
+  DownloadTranslationJobResult: {
     parameters: {
       query?: {
-        cursor?: components['parameters']['Cursor']
-        limit?: components['parameters']['Limit']
+        resource_id?: number
       }
       header?: never
       path: {
-        jobId: components['parameters']['JobId']
+        translationJobId: components['parameters']['TranslationJobId']
       }
       cookie?: never
     }
     requestBody?: never
     responses: {
-      /** @description 段列表 */
+      /** @description 翻译结果文件 */
       200: {
         headers: {
           [name: string]: unknown
         }
         content: {
-          'application/json': components['schemas']['SegmentListResponse']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  ApproveJob: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        jobId: components['parameters']['JobId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 任务详情 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Job']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  RetranslateRejectedSegments: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        jobId: components['parameters']['JobId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 已重新入队 */
-      202: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Job']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  EditSegment: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        segmentId: components['parameters']['SegmentId']
-      }
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['SegmentEditRequest']
-      }
-    }
-    responses: {
-      /** @description 段详情 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Segment']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  ApproveSegment: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        segmentId: components['parameters']['SegmentId']
-      }
-      cookie?: never
-    }
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['SegmentDecisionRequest']
-      }
-    }
-    responses: {
-      /** @description 段详情 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Segment']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  RejectSegment: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        segmentId: components['parameters']['SegmentId']
-      }
-      cookie?: never
-    }
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['SegmentDecisionRequest']
-      }
-    }
-    responses: {
-      /** @description 段详情 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Segment']
+          'application/octet-stream': File
+          'application/zip': File
         }
       }
       default: components['responses']['Problem']
