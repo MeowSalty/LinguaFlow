@@ -158,6 +158,10 @@ components:
       $ref: './components/schemas/resource.yaml#/ResourceSegmentUpdateRequest'
     ResourceSegmentListResponse:
       $ref: './components/schemas/resource.yaml#/ResourceSegmentListResponse'
+    IncrementalUpdateResponse:
+      $ref: './components/schemas/resource.yaml#/IncrementalUpdateResponse'
+    ResourceConflictResponse:
+      $ref: './components/schemas/resource.yaml#/ResourceConflictResponse'
     CreateTranslationJobRequest:
       $ref: './components/schemas/translation-job.yaml#/CreateTranslationJobRequest'
     TranslationJobResource:

@@ -613,6 +613,12 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResourceUploadResponse'
+        '409':
+          description: 同名文件冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceConflictResponse'
         default:
           $ref: '#/components/responses/Problem'
   /projects/{projectId}/resources/{resourceId}:
@@ -657,6 +663,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Resource'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: IncrementalUpdateResource
+      summary: 增量更新资源文件
+      description: |
+        上传新版本文件，系统自动对比段落变化：
+        - 相同源文本的段落保留已有译文
+        - 源文本变化的段落重置为待翻译
+        - 新增段落状态为待翻译
+        - 不再存在的段落将被删除
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 增量更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncrementalUpdateResponse'
         default:
           $ref: '#/components/responses/Problem'
     delete:
@@ -1539,6 +1577,23 @@ components:
             $ref: '#/components/schemas/Segment'
         next_cursor:
           type: string
+    IncrementalUpdateResponse:
+      type: object
+      required:
+        - resource
+        - changes
+      properties:
+        resource:
+          $ref: '#/components/schemas/Resource'
+        changes:
+          $ref: '#/components/schemas/IncrementalUpdateChanges'
+    ResourceConflictResponse:
+      type: object
+      required:
+        - existing_resource
+      properties:
+        existing_resource:
+          $ref: '#/components/schemas/Resource'
     CreateTranslationJobRequest:
       type: object
       properties:
@@ -2067,3 +2122,23 @@ components:
                 type: string
               reason:
                 type: string
+    IncrementalUpdateChanges:
+      type: object
+      required:
+        - added
+        - updated
+        - unchanged
+        - deleted
+      properties:
+        added:
+          type: integer
+          description: 新增段落数
+        updated:
+          type: integer
+          description: 源文本变化的段落数
+        unchanged:
+          type: integer
+          description: 未变化的段落数
+        deleted:
+          type: integer
+          description: 删除的段落数

@@ -65,3 +65,36 @@ ResourceSegmentUpdateRequest:
     comment:
       type: string
   additionalProperties: false
+
+IncrementalUpdateChanges:
+  type: object
+  required: [added, updated, unchanged, deleted]
+  properties:
+    added:
+      type: integer
+      description: 新增段落数
+    updated:
+      type: integer
+      description: 源文本变化的段落数
+    unchanged:
+      type: integer
+      description: 未变化的段落数
+    deleted:
+      type: integer
+      description: 删除的段落数
+
+IncrementalUpdateResponse:
+  type: object
+  required: [resource, changes]
+  properties:
+    resource:
+      $ref: '#/Resource'
+    changes:
+      $ref: '#/IncrementalUpdateChanges'
+
+ResourceConflictResponse:
+  type: object
+  required: [existing_resource]
+  properties:
+    existing_resource:
+      $ref: '#/Resource'
