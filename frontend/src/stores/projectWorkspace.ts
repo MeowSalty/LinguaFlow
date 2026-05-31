@@ -14,6 +14,7 @@ import {
   fetchResourceSegments,
   fetchTranslationJob,
   fetchTranslationJobs,
+  incrementalUpdateResource as incrementalUpdateResourceRequest,
   replaceProjectResource as replaceProjectResourceRequest,
   retryTranslationJob as retryTranslationJobRequest,
   updateResourceSegment as updateResourceSegmentRequest,
@@ -68,6 +69,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   const loadingJobDetail = ref(false)
   const uploadTasks = ref<UploadTask[]>([])
   const replacingResourceIds = ref<number[]>([])
+  const incrementalUpdatingIds = ref<number[]>([])
   const deletingResourceIds = ref<number[]>([])
   const editingSegmentIds = ref<number[]>([])
   const creatingJob = ref(false)
@@ -314,6 +316,32 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     }
   }
 
+  const incrementalUpdateResource = async (
+    projectId: number,
+    resourceId: number,
+    file: File,
+  ): Promise<ApiSchemas['IncrementalUpdateResponse']> => {
+    incrementalUpdatingIds.value = [...incrementalUpdatingIds.value, resourceId]
+    actionError.value = null
+
+    try {
+      const result = await incrementalUpdateResourceRequest(projectId, resourceId, file)
+      resources.value = resources.value.map((item) =>
+        item.id === result.resource.id ? result.resource : item,
+      )
+      if (activeResourceId.value === resourceId) {
+        segments.value = []
+        segmentsCursor.value = null
+      }
+      return result
+    } catch (error) {
+      actionError.value = getErrorMessage(error, t('api.errors.incrementalUpdateFailed'))
+      throw error
+    } finally {
+      incrementalUpdatingIds.value = incrementalUpdatingIds.value.filter((id) => id !== resourceId)
+    }
+  }
+
   const deleteResource = async (projectId: number, resourceId: number): Promise<void> => {
     deletingResourceIds.value = [...deletingResourceIds.value, resourceId]
     actionError.value = null
@@ -465,6 +493,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     jobDetailError.value = null
     actionError.value = null
     clearAllUploadTasks()
+    incrementalUpdatingIds.value = []
     resourceSearch.value = ''
     resourceStatusFilter.value = 'all'
     resourceFormatFilter.value = 'all'
@@ -494,6 +523,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     uploadTasks,
     hasActiveUploads,
     replacingResourceIds,
+    incrementalUpdatingIds,
     deletingResourceIds,
     editingSegmentIds,
     creatingJob,
@@ -529,6 +559,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     clearAllUploadTasks,
     uploadResources,
     replaceResource,
+    incrementalUpdateResource,
     deleteResource,
     updateSegment,
     createJob,

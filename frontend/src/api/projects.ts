@@ -17,6 +17,17 @@ export interface UploadProgressCallbacks {
   onServerProcessing?: () => void
 }
 
+export interface ResourceConflictError extends Error {
+  readonly isResourceConflict: true
+  readonly status: 409
+  readonly conflictData: ApiSchemas['ResourceConflictResponse']
+}
+
+export const isResourceConflictError = (error: unknown): error is ResourceConflictError =>
+  error instanceof Error &&
+  'isResourceConflict' in error &&
+  (error as ResourceConflictError).isResourceConflict === true
+
 export const fetchCurrentUser = async (
   client: ApiClient = apiClient,
 ): Promise<ApiSchemas['User']> => {
@@ -189,6 +200,36 @@ export const uploadProjectResourcesWithProgress = async (
         } catch {
           reject(new Error(t('api.errors.uploadResourcesFailed')))
         }
+      } else if (xhr.status === 409) {
+        try {
+          const conflictData = JSON.parse(
+            xhr.responseText,
+          ) as ApiSchemas['ResourceConflictResponse']
+          const conflictError = new Error(
+            t('api.errors.uploadResourceConflict'),
+          ) as ResourceConflictError
+          Object.defineProperty(conflictError, 'isResourceConflict', {
+            value: true as const,
+            enumerable: false,
+          })
+          Object.defineProperty(conflictError, 'status', {
+            value: 409 as const,
+            enumerable: false,
+          })
+          Object.defineProperty(conflictError, 'conflictData', {
+            value: conflictData,
+            enumerable: false,
+          })
+          reject(conflictError)
+        } catch {
+          reject(
+            buildRequestFailureError(
+              t('api.errors.uploadResourcesFailed'),
+              undefined,
+              new Response(null, { status: xhr.status }),
+            ),
+          )
+        }
       } else {
         reject(
           buildRequestFailureError(
@@ -236,6 +277,29 @@ export const replaceProjectResource = async (
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.replaceResourceFailed'), error, response)
+  }
+
+  return data
+}
+
+export const incrementalUpdateResource = async (
+  projectId: number,
+  resourceId: number,
+  file: File,
+  client: ApiClient = apiClient,
+): Promise<ApiSchemas['IncrementalUpdateResponse']> => {
+  const { data, error, response } = await client.POST(
+    '/projects/{projectId}/resources/{resourceId}',
+    {
+      params: { path: { projectId, resourceId } },
+      body: buildFilesFormData([file], 'file') as unknown as {
+        file: File
+      },
+    },
+  )
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.incrementalUpdateFailed'), error, response)
   }
 
   return data

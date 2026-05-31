@@ -4,2468 +4,2533 @@
  */
 
 export interface paths {
-  '/ping': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /**
-     * 无鉴权连通测试
-     * @description 用于前端在登录前快速判断后端 HTTP 服务是否可达；不检查数据库或第三方依赖。
-     */
-    get: operations['Ping']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/auth/register': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** 注册用户并签发会话 */
-    post: operations['RegisterAuth']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/auth/login': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** 用户登录 */
-    post: operations['LoginAuth']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/auth/refresh': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** 刷新访问令牌 */
-    post: operations['RefreshAuth']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/auth/logout': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** 登出并撤销刷新令牌 */
-    post: operations['LogoutAuth']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/users/me': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** 获取当前用户 */
-    get: operations['GetCurrentUser']
-    /** 更新当前用户资料 */
-    put: operations['UpdateCurrentUser']
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/users/me/password': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    get?: never
-    /** 修改当前用户密码 */
-    put: operations['ChangeCurrentUserPassword']
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/orgs': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** 列出当前用户所属组织 */
-    get: operations['ListOrganizations']
-    put?: never
-    /** 创建组织 */
-    post: operations['CreateOrganization']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/orgs/{orgId}': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        orgId: components['parameters']['OrgId']
-      }
-      cookie?: never
-    }
-    /** 获取组织详情 */
-    get: operations['GetOrganization']
-    /** 更新组织信息 */
-    put: operations['UpdateOrganization']
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/orgs/{orgId}/members': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        orgId: components['parameters']['OrgId']
-      }
-      cookie?: never
-    }
-    /** 获取组织成员列表 */
-    get: operations['ListOrganizationMembers']
-    put?: never
-    /** 添加组织成员 */
-    post: operations['AddOrganizationMember']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/orgs/{orgId}/members/{userId}': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        orgId: components['parameters']['OrgId']
-        userId: components['parameters']['UserId']
-      }
-      cookie?: never
-    }
-    get?: never
-    /** 修改组织成员角色 */
-    put: operations['UpdateOrganizationMember']
-    post?: never
-    /** 移除组织成员 */
-    delete: operations['DeleteOrganizationMember']
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/backends': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** 列出个人后端 */
-    get: operations['ListUserBackends']
-    put?: never
-    /** 创建个人后端 */
-    post: operations['CreateUserBackend']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/backends/{backendId}': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        backendId: components['parameters']['BackendId']
-      }
-      cookie?: never
-    }
-    get?: never
-    /** 更新个人后端 */
-    put: operations['UpdateUserBackend']
-    post?: never
-    /** 删除个人后端 */
-    delete: operations['DeleteUserBackend']
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/orgs/{orgId}/backends': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        orgId: components['parameters']['OrgId']
-      }
-      cookie?: never
-    }
-    /** 列出组织后端 */
-    get: operations['ListOrgBackends']
-    put?: never
-    /** 创建组织后端 */
-    post: operations['CreateOrgBackend']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/orgs/{orgId}/backends/{backendId}': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        orgId: components['parameters']['OrgId']
-        backendId: components['parameters']['BackendId']
-      }
-      cookie?: never
-    }
-    get?: never
-    /** 更新组织后端 */
-    put: operations['UpdateOrgBackend']
-    post?: never
-    /** 删除组织后端 */
-    delete: operations['DeleteOrgBackend']
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/projects': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** 列出项目 */
-    get: operations['ListProjects']
-    put?: never
-    /** 创建项目 */
-    post: operations['CreateProject']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/projects/{projectId}': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-      }
-      cookie?: never
-    }
-    /** 获取项目详情 */
-    get: operations['GetProject']
-    /** 更新项目 */
-    put: operations['UpdateProject']
-    post?: never
-    /** 删除项目 */
-    delete: operations['DeleteProject']
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/projects/{projectId}/backends': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-      }
-      cookie?: never
-    }
-    /** 获取项目后端设置 */
-    get: operations['GetProjectBackends']
-    /** 设置项目后端顺序 */
-    put: operations['SetProjectBackendOrder']
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/projects/{projectId}/resources': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-      }
-      cookie?: never
-    }
-    /** 列出项目资源文件 */
-    get: operations['ListProjectResources']
-    put?: never
-    /** 上传资源文件到项目 */
-    post: operations['UploadProjectResources']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/projects/{projectId}/resources/{resourceId}': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-        resourceId: components['parameters']['ResourceId']
-      }
-      cookie?: never
-    }
-    /** 获取资源详情 */
-    get: operations['GetResource']
-    /** 更新资源文件 */
-    put: operations['UpdateResource']
-    post?: never
-    /** 删除资源文件及其所有段落 */
-    delete: operations['DeleteResource']
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/projects/{projectId}/resources/{resourceId}/download': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-        resourceId: components['parameters']['ResourceId']
-      }
-      cookie?: never
-    }
-    /** 下载资源原始文件 */
-    get: operations['DownloadResourceFile']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/projects/{projectId}/resources/{resourceId}/segments': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-        resourceId: components['parameters']['ResourceId']
-      }
-      cookie?: never
-    }
-    /** 列出资源段落 */
-    get: operations['ListResourceSegments']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/projects/{projectId}/resources/{resourceId}/segments/{segmentId}': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-        resourceId: components['parameters']['ResourceId']
-        segmentId: components['parameters']['SegmentId']
-      }
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    /** 更新资源段落内容 */
-    patch: operations['UpdateResourceSegment']
-    trace?: never
-  }
-  '/projects/{projectId}/stages/{stage}/override': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-        stage: components['parameters']['Stage']
-      }
-      cookie?: never
-    }
-    get?: never
-    /** 设置阶段后端覆盖 */
-    put: operations['SetStageBackendOverride']
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/projects/{projectId}/stages/{stage}/plan': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-        stage: components['parameters']['Stage']
-      }
-      cookie?: never
-    }
-    /** 查询阶段执行计划 */
-    get: operations['GetStagePlan']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/projects/{projectId}/glossary': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-      }
-      cookie?: never
-    }
-    /** 列出术语条目 */
-    get: operations['ListGlossaryEntries']
-    put?: never
-    /** 创建术语条目 */
-    post: operations['CreateGlossaryEntry']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/projects/{projectId}/glossary/{entryId}': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-        entryId: components['parameters']['EntryId']
-      }
-      cookie?: never
-    }
-    get?: never
-    /** 更新术语条目 */
-    put: operations['UpdateGlossaryEntry']
-    post?: never
-    /** 删除术语条目 */
-    delete: operations['DeleteGlossaryEntry']
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/projects/{projectId}/glossary/import': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-      }
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** CSV 导入术语表 */
-    post: operations['ImportGlossaryCSV']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/projects/{projectId}/glossary/export': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-      }
-      cookie?: never
-    }
-    /** CSV 导出术语表 */
-    get: operations['ExportGlossaryCSV']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/projects/{projectId}/translation-jobs': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-      }
-      cookie?: never
-    }
-    /** 列出项目翻译任务 */
-    get: operations['ListTranslationJobs']
-    put?: never
-    /** 创建翻译任务 */
-    post: operations['CreateTranslationJob']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/translation-jobs/{translationJobId}': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        translationJobId: components['parameters']['TranslationJobId']
-      }
-      cookie?: never
-    }
-    /** 获取翻译任务详情 */
-    get: operations['GetTranslationJob']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/translation-jobs/{translationJobId}/cancel': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        translationJobId: components['parameters']['TranslationJobId']
-      }
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** 取消翻译任务 */
-    post: operations['CancelTranslationJob']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/translation-jobs/{translationJobId}/retry': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        translationJobId: components['parameters']['TranslationJobId']
-      }
-      cookie?: never
-    }
-    get?: never
-    put?: never
-    /** 重试失败的资源翻译 */
-    post: operations['RetryTranslationJob']
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/translation-jobs/{translationJobId}/download': {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        translationJobId: components['parameters']['TranslationJobId']
-      }
-      cookie?: never
-    }
-    /** 下载翻译任务结果 */
-    get: operations['DownloadTranslationJobResult']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/stats/summary': {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** 获取用量统计汇总 */
-    get: operations['GetStatsSummary']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
-  '/activity': {
-    parameters: {
-      query?: {
-        cursor?: components['parameters']['Cursor']
-        limit?: components['parameters']['Limit']
-      }
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    /** 获取活动审计日志 */
-    get: operations['ListActivity']
-    put?: never
-    post?: never
-    delete?: never
-    options?: never
-    head?: never
-    patch?: never
-    trace?: never
-  }
+    "/ping": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 无鉴权连通测试
+         * @description 用于前端在登录前快速判断后端 HTTP 服务是否可达；不检查数据库或第三方依赖。
+         */
+        get: operations["Ping"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/register": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 注册用户并签发会话 */
+        post: operations["RegisterAuth"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 用户登录 */
+        post: operations["LoginAuth"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 刷新访问令牌 */
+        post: operations["RefreshAuth"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 登出并撤销刷新令牌 */
+        post: operations["LogoutAuth"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取当前用户 */
+        get: operations["GetCurrentUser"];
+        /** 更新当前用户资料 */
+        put: operations["UpdateCurrentUser"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/me/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 修改当前用户密码 */
+        put: operations["ChangeCurrentUserPassword"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出当前用户所属组织 */
+        get: operations["ListOrganizations"];
+        put?: never;
+        /** 创建组织 */
+        post: operations["CreateOrganization"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        /** 获取组织详情 */
+        get: operations["GetOrganization"];
+        /** 更新组织信息 */
+        put: operations["UpdateOrganization"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        /** 获取组织成员列表 */
+        get: operations["ListOrganizationMembers"];
+        put?: never;
+        /** 添加组织成员 */
+        post: operations["AddOrganizationMember"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/members/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** 修改组织成员角色 */
+        put: operations["UpdateOrganizationMember"];
+        post?: never;
+        /** 移除组织成员 */
+        delete: operations["DeleteOrganizationMember"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backends": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出个人后端 */
+        get: operations["ListUserBackends"];
+        put?: never;
+        /** 创建个人后端 */
+        post: operations["CreateUserBackend"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/backends/{backendId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                backendId: components["parameters"]["BackendId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** 更新个人后端 */
+        put: operations["UpdateUserBackend"];
+        post?: never;
+        /** 删除个人后端 */
+        delete: operations["DeleteUserBackend"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/backends": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        /** 列出组织后端 */
+        get: operations["ListOrgBackends"];
+        put?: never;
+        /** 创建组织后端 */
+        post: operations["CreateOrgBackend"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/backends/{backendId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+                backendId: components["parameters"]["BackendId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** 更新组织后端 */
+        put: operations["UpdateOrgBackend"];
+        post?: never;
+        /** 删除组织后端 */
+        delete: operations["DeleteOrgBackend"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出项目 */
+        get: operations["ListProjects"];
+        put?: never;
+        /** 创建项目 */
+        post: operations["CreateProject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /** 获取项目详情 */
+        get: operations["GetProject"];
+        /** 更新项目 */
+        put: operations["UpdateProject"];
+        post?: never;
+        /** 删除项目 */
+        delete: operations["DeleteProject"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/backends": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /** 获取项目后端设置 */
+        get: operations["GetProjectBackends"];
+        /** 设置项目后端顺序 */
+        put: operations["SetProjectBackendOrder"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/resources": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /** 列出项目资源文件 */
+        get: operations["ListProjectResources"];
+        put?: never;
+        /** 上传资源文件到项目 */
+        post: operations["UploadProjectResources"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/{resourceId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        /** 获取资源详情 */
+        get: operations["GetResource"];
+        /** 更新资源文件 */
+        put: operations["UpdateResource"];
+        /**
+         * 增量更新资源文件
+         * @description 上传新版本文件，系统自动对比段落变化：
+         *     - 相同源文本的段落保留已有译文
+         *     - 源文本变化的段落重置为待翻译
+         *     - 新增段落状态为待翻译
+         *     - 不再存在的段落将被删除
+         */
+        post: operations["IncrementalUpdateResource"];
+        /** 删除资源文件及其所有段落 */
+        delete: operations["DeleteResource"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/{resourceId}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        /** 下载资源原始文件 */
+        get: operations["DownloadResourceFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/{resourceId}/segments": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        /** 列出资源段落 */
+        get: operations["ListResourceSegments"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/{resourceId}/segments/{segmentId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+                segmentId: components["parameters"]["SegmentId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 更新资源段落内容 */
+        patch: operations["UpdateResourceSegment"];
+        trace?: never;
+    };
+    "/projects/{projectId}/stages/{stage}/override": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                stage: components["parameters"]["Stage"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** 设置阶段后端覆盖 */
+        put: operations["SetStageBackendOverride"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/stages/{stage}/plan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                stage: components["parameters"]["Stage"];
+            };
+            cookie?: never;
+        };
+        /** 查询阶段执行计划 */
+        get: operations["GetStagePlan"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/glossary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /** 列出术语条目 */
+        get: operations["ListGlossaryEntries"];
+        put?: never;
+        /** 创建术语条目 */
+        post: operations["CreateGlossaryEntry"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/glossary/{entryId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                entryId: components["parameters"]["EntryId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** 更新术语条目 */
+        put: operations["UpdateGlossaryEntry"];
+        post?: never;
+        /** 删除术语条目 */
+        delete: operations["DeleteGlossaryEntry"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/glossary/import": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** CSV 导入术语表 */
+        post: operations["ImportGlossaryCSV"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/glossary/export": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /** CSV 导出术语表 */
+        get: operations["ExportGlossaryCSV"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/translation-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /** 列出项目翻译任务 */
+        get: operations["ListTranslationJobs"];
+        put?: never;
+        /** 创建翻译任务 */
+        post: operations["CreateTranslationJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/translation-jobs/{translationJobId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                translationJobId: components["parameters"]["TranslationJobId"];
+            };
+            cookie?: never;
+        };
+        /** 获取翻译任务详情 */
+        get: operations["GetTranslationJob"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/translation-jobs/{translationJobId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                translationJobId: components["parameters"]["TranslationJobId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 取消翻译任务 */
+        post: operations["CancelTranslationJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/translation-jobs/{translationJobId}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                translationJobId: components["parameters"]["TranslationJobId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 重试失败的资源翻译 */
+        post: operations["RetryTranslationJob"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/translation-jobs/{translationJobId}/download": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                translationJobId: components["parameters"]["TranslationJobId"];
+            };
+            cookie?: never;
+        };
+        /** 下载翻译任务结果 */
+        get: operations["DownloadTranslationJobResult"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/stats/summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取用量统计汇总 */
+        get: operations["GetStatsSummary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/activity": {
+        parameters: {
+            query?: {
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取活动审计日志 */
+        get: operations["ListActivity"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
-export type webhooks = Record<string, never>
+export type webhooks = Record<string, never>;
 export interface components {
-  schemas: {
-    Problem: {
-      type?: string
-      title: string
-      status: number
-      detail?: string
-    }
-    HealthResponse: {
-      /** @example ok */
-      status: string
-      /** @example linguaflow */
-      service?: string
-    }
-    User: {
-      id: number
-      username: string
-      /** Format: email */
-      email: string
-      display_name?: string
-      role: string
-      active: boolean
-    }
-    RegisterRequest: {
-      username: string
-      password: string
-      /** Format: email */
-      email: string
-      display_name?: string
-    }
-    LoginRequest: {
-      username: string
-      password: string
-    }
-    RefreshRequest: {
-      refresh_token: string
-    }
-    LogoutRequest: {
-      refresh_token: string
-    }
-    AuthSession: {
-      access_token: string
-      refresh_token: string
-      token_type: string
-      /** Format: date-time */
-      expires_at: string
-      /** Format: date-time */
-      refresh_expires_at: string
-      user: components['schemas']['User']
-    }
-    UpdateCurrentUserRequest: {
-      display_name?: string
-      /** Format: email */
-      email?: string
-    }
-    ChangePasswordRequest: {
-      current_password: string
-      new_password: string
-    }
-    Organization: {
-      id: number
-      name: string
-      slug: string
-      display_name?: string
-      description?: string
-    }
-    OrganizationRequest: {
-      name: string
-      slug: string
-      display_name?: string
-      description?: string
-    }
-    OrganizationListResponse: {
-      items: components['schemas']['Organization'][]
-    }
-    OrganizationMember: {
-      id: number
-      /** @enum {string} */
-      role: 'owner' | 'admin' | 'member'
-      user: components['schemas']['User']
-    }
-    OrganizationMemberListResponse: {
-      items: components['schemas']['OrganizationMember'][]
-    }
-    AddOrganizationMemberRequest: {
-      username: string
-      /** @enum {string} */
-      role?: 'owner' | 'admin' | 'member'
-    }
-    UpdateOrganizationMemberRequest: {
-      /** @enum {string} */
-      role: 'owner' | 'admin' | 'member'
-    }
-    Segment: {
-      id: number
-      sub_job_id: number
-      segment_index: number
-      source_text: string
-      target_text?: string
-      status: string
-      review_comment?: string
-      reviewed_by?: components['schemas']['User']
-      /** Format: date-time */
-      created_at: string
-      /** Format: date-time */
-      updated_at: string
-    }
-    SegmentListResponse: {
-      items: components['schemas']['Segment'][]
-      next_cursor?: string
-    }
-    UsageStats: {
-      api_calls: number
-      input_tokens: number
-      output_tokens: number
-      segment_count: number
-      usage_records: number
-      completed_jobs: number
-      failed_jobs: number
-    }
-    Resource: {
-      id: number
-      filename: string
-      format: string
-      total_segments: number
-      /** @enum {string} */
-      status: 'ready' | 'processing' | 'error'
-      error_message?: string
-      /** Format: date-time */
-      created_at: string
-      /** Format: date-time */
-      updated_at: string
-    }
-    ResourceUploadResponse: {
-      items: components['schemas']['Resource'][]
-    }
-    ResourceListResponse: {
-      items: components['schemas']['Resource'][]
-    }
-    ResourceSegmentUpdateRequest: {
-      source_text?: string
-      target_text?: string
-      comment?: string
-    }
-    ResourceSegmentListResponse: {
-      items: components['schemas']['Segment'][]
-      next_cursor?: string
-    }
-    CreateTranslationJobRequest: {
-      resource_ids?: number[]
-      segment_ids?: number[]
-      translation_config?: {
-        [key: string]: unknown
-      }
-    }
-    TranslationJobResource: {
-      id: number
-      resource_id: number
-      /** @enum {string} */
-      status: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
-      segment_ids?: number[]
-      segment_count: number
-      completed_segments: number
-      output_path?: string
-      error_message?: string
-      resource?: components['schemas']['Resource']
-      /** Format: date-time */
-      created_at: string
-      /** Format: date-time */
-      updated_at: string
-    }
-    TranslationJob: {
-      id: number
-      project_id: number
-      /** @enum {string} */
-      status: 'pending' | 'running' | 'awaiting_review' | 'completed' | 'failed' | 'cancelled'
-      /** @enum {string} */
-      trigger_type: 'manual' | 'file_update' | 'glossary_change' | 'web_edit'
-      translation_config?: {
-        [key: string]: unknown
-      }
-      resource_count: number
-      completed_resources: number
-      failed_resources: number
-      total_segments: number
-      completed_segments: number
-      error_message?: string
-      /** Format: date-time */
-      created_at: string
-      /** Format: date-time */
-      updated_at: string
-      job_resources?: components['schemas']['TranslationJobResource'][]
-    }
-    TranslationJobListResponse: {
-      items: components['schemas']['TranslationJob'][]
-      next_cursor?: string
-    }
-    Activity: {
-      id: number
-      action: string
-      resource_type: string
-      resource_id?: number
-      message?: string
-      metadata?: {
-        [key: string]: unknown
-      }
-      actor?: components['schemas']['User']
-      /** Format: date-time */
-      created_at: string
-      /** Format: date-time */
-      updated_at: string
-    }
-    ActivityListResponse: {
-      items: components['schemas']['Activity'][]
-      next_cursor?: string
-    }
-    Backend: {
-      id: number
-      /** @enum {string} */
-      source: 'user' | 'org'
-      name: string
-      /** @enum {string} */
-      type: 'openai' | 'anthropic' | 'google'
-      priority: number
-      options?: {
-        [key: string]: unknown
-      }
-      options_visible?: boolean
-      owner_user_id?: number
-      owner_org_id?: number
-    }
-    BackendListResponse: {
-      items: components['schemas']['Backend'][]
-    }
-    CreateBackendRequest: {
-      name: string
-      /** @enum {string} */
-      type: 'openai' | 'anthropic' | 'google'
-      /** @default 0 */
-      priority: number
-      options?: {
-        [key: string]: unknown
-      }
-    }
-    UpdateBackendRequest: {
-      name: string
-      /** @enum {string} */
-      type: 'openai' | 'anthropic' | 'google'
-      priority?: number
-      options?: {
-        [key: string]: unknown
-      }
-    }
-    Project: {
-      id: number
-      name: string
-      /** @enum {string} */
-      resource_scope: 'project' | 'organization'
-      owner_user_id?: number
-      owner_org_id?: number
-      config?: {
-        [key: string]: unknown
-      }
-      default_translation_config?: {
-        [key: string]: unknown
-      }
-      source_lang: string
-      target_lang: string
-      /** Format: date-time */
-      created_at?: string
-      /** Format: date-time */
-      updated_at?: string
-    }
-    ProjectListResponse: {
-      items: components['schemas']['Project'][]
-    }
-    CreateProjectRequest: {
-      name: string
-      owner_org_id?: number
-      /** @enum {string} */
-      resource_scope?: 'project' | 'organization'
-      config?: {
-        [key: string]: unknown
-      }
-      default_translation_config?: {
-        [key: string]: unknown
-      }
-      source_lang?: string
-      target_lang?: string
-    }
-    UpdateProjectRequest: {
-      name?: string
-      /** @enum {string} */
-      resource_scope?: 'project' | 'organization'
-      config?: {
-        [key: string]: unknown
-      }
-      default_translation_config?: {
-        [key: string]: unknown
-      }
-      source_lang?: string
-      target_lang?: string
-    }
-    ProjectBackendBinding: {
-      order_index: number
-      source: string
-      backend_id: number
-      name: string
-      type: string
-      priority: number
-      options?: {
-        [key: string]: unknown
-      }
-    }
-    StageBackendOverride: {
-      stage: string
-      /** @enum {string} */
-      backend_mode: 'inherit' | 'prepend' | 'restrict'
-      backend_order?: string[]
-    }
-    SetBackendOrderRequest: {
-      bindings: {
-        /** @enum {string} */
-        source: 'user' | 'org'
-        backend_id: number
-      }[]
-    }
-    SetStageOverrideRequest: {
-      stage: string
-      /** @enum {string} */
-      backend_mode: 'inherit' | 'prepend' | 'restrict'
-      backend_order?: string[]
-    }
-    ProjectBackendSettings: {
-      backends: components['schemas']['ProjectBackendBinding'][]
-      stage_overrides?: {
-        [key: string]: components['schemas']['StageBackendOverride']
-      }
-    }
-    GlossaryEntry: {
-      id: number
-      source: string
-      target: string
-      case_sensitive: boolean
-      notes?: string
-      /** Format: date-time */
-      created_at?: string
-      /** Format: date-time */
-      updated_at?: string
-    }
-    GlossaryListResponse: {
-      items: components['schemas']['GlossaryEntry'][]
-    }
-    CreateGlossaryEntryRequest: {
-      source: string
-      target: string
-      /** @default false */
-      case_sensitive: boolean
-      notes?: string
-    }
-    UpdateGlossaryEntryRequest: {
-      source: string
-      target: string
-      case_sensitive?: boolean
-      notes?: string
-    }
-    GlossaryImportResult: {
-      added: number
-      skipped?: {
-        line?: number
-        source?: string
-        reason?: string
-      }[]
-    }
-  }
-  responses: {
-    /** @description 错误响应 */
-    Problem: {
-      headers: {
-        [name: string]: unknown
-      }
-      content: {
-        'application/problem+json': components['schemas']['Problem']
-      }
-    }
-  }
-  parameters: {
-    OrgId: number
-    UserId: number
-    ProjectId: number
-    ResourceId: number
-    TranslationJobId: number
-    BackendId: number
-    EntryId: number
-    Stage: 'translate' | 'bootstrap'
-    SegmentId: number
-    Cursor: string
-    Limit: number
-  }
-  requestBodies: never
-  headers: never
-  pathItems: never
+    schemas: {
+        Problem: {
+            type?: string;
+            title: string;
+            status: number;
+            detail?: string;
+        };
+        HealthResponse: {
+            /** @example ok */
+            status: string;
+            /** @example linguaflow */
+            service?: string;
+        };
+        User: {
+            id: number;
+            username: string;
+            /** Format: email */
+            email: string;
+            display_name?: string;
+            role: string;
+            active: boolean;
+        };
+        RegisterRequest: {
+            username: string;
+            password: string;
+            /** Format: email */
+            email: string;
+            display_name?: string;
+        };
+        LoginRequest: {
+            username: string;
+            password: string;
+        };
+        RefreshRequest: {
+            refresh_token: string;
+        };
+        LogoutRequest: {
+            refresh_token: string;
+        };
+        AuthSession: {
+            access_token: string;
+            refresh_token: string;
+            token_type: string;
+            /** Format: date-time */
+            expires_at: string;
+            /** Format: date-time */
+            refresh_expires_at: string;
+            user: components["schemas"]["User"];
+        };
+        UpdateCurrentUserRequest: {
+            display_name?: string;
+            /** Format: email */
+            email?: string;
+        };
+        ChangePasswordRequest: {
+            current_password: string;
+            new_password: string;
+        };
+        Organization: {
+            id: number;
+            name: string;
+            slug: string;
+            display_name?: string;
+            description?: string;
+        };
+        OrganizationRequest: {
+            name: string;
+            slug: string;
+            display_name?: string;
+            description?: string;
+        };
+        OrganizationListResponse: {
+            items: components["schemas"]["Organization"][];
+        };
+        OrganizationMember: {
+            id: number;
+            /** @enum {string} */
+            role: "owner" | "admin" | "member";
+            user: components["schemas"]["User"];
+        };
+        OrganizationMemberListResponse: {
+            items: components["schemas"]["OrganizationMember"][];
+        };
+        AddOrganizationMemberRequest: {
+            username: string;
+            /** @enum {string} */
+            role?: "owner" | "admin" | "member";
+        };
+        UpdateOrganizationMemberRequest: {
+            /** @enum {string} */
+            role: "owner" | "admin" | "member";
+        };
+        Segment: {
+            id: number;
+            sub_job_id: number;
+            segment_index: number;
+            source_text: string;
+            target_text?: string;
+            status: string;
+            review_comment?: string;
+            reviewed_by?: components["schemas"]["User"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        SegmentListResponse: {
+            items: components["schemas"]["Segment"][];
+            next_cursor?: string;
+        };
+        UsageStats: {
+            api_calls: number;
+            input_tokens: number;
+            output_tokens: number;
+            segment_count: number;
+            usage_records: number;
+            completed_jobs: number;
+            failed_jobs: number;
+        };
+        Resource: {
+            id: number;
+            filename: string;
+            format: string;
+            total_segments: number;
+            /** @enum {string} */
+            status: "ready" | "error";
+            error_message?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ResourceUploadResponse: {
+            items: components["schemas"]["Resource"][];
+        };
+        ResourceListResponse: {
+            items: components["schemas"]["Resource"][];
+        };
+        ResourceSegmentUpdateRequest: {
+            source_text?: string;
+            target_text?: string;
+            comment?: string;
+        };
+        ResourceSegmentListResponse: {
+            items: components["schemas"]["Segment"][];
+            next_cursor?: string;
+        };
+        IncrementalUpdateResponse: {
+            resource: components["schemas"]["Resource"];
+            changes: components["schemas"]["IncrementalUpdateChanges"];
+        };
+        ResourceConflictResponse: {
+            existing_resource: components["schemas"]["Resource"];
+        };
+        CreateTranslationJobRequest: {
+            resource_ids?: number[];
+            segment_ids?: number[];
+            translation_config?: {
+                [key: string]: unknown;
+            };
+        };
+        TranslationJobResource: {
+            id: number;
+            resource_id: number;
+            /** @enum {string} */
+            status: "pending" | "running" | "completed" | "failed" | "cancelled";
+            segment_ids?: number[];
+            segment_count: number;
+            completed_segments: number;
+            output_path?: string;
+            error_message?: string;
+            resource?: components["schemas"]["Resource"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        TranslationJob: {
+            id: number;
+            project_id: number;
+            /** @enum {string} */
+            status: "pending" | "running" | "awaiting_review" | "completed" | "failed" | "cancelled";
+            /** @enum {string} */
+            trigger_type: "manual" | "file_update" | "glossary_change" | "web_edit";
+            translation_config?: {
+                [key: string]: unknown;
+            };
+            resource_count: number;
+            completed_resources: number;
+            failed_resources: number;
+            total_segments: number;
+            completed_segments: number;
+            error_message?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            job_resources?: components["schemas"]["TranslationJobResource"][];
+        };
+        TranslationJobListResponse: {
+            items: components["schemas"]["TranslationJob"][];
+            next_cursor?: string;
+        };
+        Activity: {
+            id: number;
+            action: string;
+            resource_type: string;
+            resource_id?: number;
+            message?: string;
+            metadata?: {
+                [key: string]: unknown;
+            };
+            actor?: components["schemas"]["User"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        ActivityListResponse: {
+            items: components["schemas"]["Activity"][];
+            next_cursor?: string;
+        };
+        Backend: {
+            id: number;
+            /** @enum {string} */
+            source: "user" | "org";
+            name: string;
+            /** @enum {string} */
+            type: "openai" | "anthropic" | "google";
+            priority: number;
+            options?: {
+                [key: string]: unknown;
+            };
+            options_visible?: boolean;
+            owner_user_id?: number;
+            owner_org_id?: number;
+        };
+        BackendListResponse: {
+            items: components["schemas"]["Backend"][];
+        };
+        CreateBackendRequest: {
+            name: string;
+            /** @enum {string} */
+            type: "openai" | "anthropic" | "google";
+            /** @default 0 */
+            priority: number;
+            options?: {
+                [key: string]: unknown;
+            };
+        };
+        UpdateBackendRequest: {
+            name: string;
+            /** @enum {string} */
+            type: "openai" | "anthropic" | "google";
+            priority?: number;
+            options?: {
+                [key: string]: unknown;
+            };
+        };
+        Project: {
+            id: number;
+            name: string;
+            /** @enum {string} */
+            resource_scope: "project" | "organization";
+            owner_user_id?: number;
+            owner_org_id?: number;
+            config?: {
+                [key: string]: unknown;
+            };
+            default_translation_config?: {
+                [key: string]: unknown;
+            };
+            source_lang: string;
+            target_lang: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        ProjectListResponse: {
+            items: components["schemas"]["Project"][];
+        };
+        CreateProjectRequest: {
+            name: string;
+            owner_org_id?: number;
+            /** @enum {string} */
+            resource_scope?: "project" | "organization";
+            config?: {
+                [key: string]: unknown;
+            };
+            default_translation_config?: {
+                [key: string]: unknown;
+            };
+            source_lang?: string;
+            target_lang?: string;
+        };
+        UpdateProjectRequest: {
+            name?: string;
+            /** @enum {string} */
+            resource_scope?: "project" | "organization";
+            config?: {
+                [key: string]: unknown;
+            };
+            default_translation_config?: {
+                [key: string]: unknown;
+            };
+            source_lang?: string;
+            target_lang?: string;
+        };
+        ProjectBackendBinding: {
+            order_index: number;
+            source: string;
+            backend_id: number;
+            name: string;
+            type: string;
+            priority: number;
+            options?: {
+                [key: string]: unknown;
+            };
+        };
+        StageBackendOverride: {
+            stage: string;
+            /** @enum {string} */
+            backend_mode: "inherit" | "prepend" | "restrict";
+            backend_order?: string[];
+        };
+        SetBackendOrderRequest: {
+            bindings: {
+                /** @enum {string} */
+                source: "user" | "org";
+                backend_id: number;
+            }[];
+        };
+        SetStageOverrideRequest: {
+            stage: string;
+            /** @enum {string} */
+            backend_mode: "inherit" | "prepend" | "restrict";
+            backend_order?: string[];
+        };
+        ProjectBackendSettings: {
+            backends: components["schemas"]["ProjectBackendBinding"][];
+            stage_overrides?: {
+                [key: string]: components["schemas"]["StageBackendOverride"];
+            };
+        };
+        GlossaryEntry: {
+            id: number;
+            source: string;
+            target: string;
+            case_sensitive: boolean;
+            notes?: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        GlossaryListResponse: {
+            items: components["schemas"]["GlossaryEntry"][];
+        };
+        CreateGlossaryEntryRequest: {
+            source: string;
+            target: string;
+            /** @default false */
+            case_sensitive: boolean;
+            notes?: string;
+        };
+        UpdateGlossaryEntryRequest: {
+            source: string;
+            target: string;
+            case_sensitive?: boolean;
+            notes?: string;
+        };
+        GlossaryImportResult: {
+            added: number;
+            skipped?: {
+                line?: number;
+                source?: string;
+                reason?: string;
+            }[];
+        };
+        IncrementalUpdateChanges: {
+            /** @description 新增段落数 */
+            added: number;
+            /** @description 源文本变化的段落数 */
+            updated: number;
+            /** @description 未变化的段落数 */
+            unchanged: number;
+            /** @description 删除的段落数 */
+            deleted: number;
+        };
+    };
+    responses: {
+        /** @description 错误响应 */
+        Problem: {
+            headers: {
+                [name: string]: unknown;
+            };
+            content: {
+                "application/problem+json": components["schemas"]["Problem"];
+            };
+        };
+    };
+    parameters: {
+        OrgId: number;
+        UserId: number;
+        ProjectId: number;
+        ResourceId: number;
+        TranslationJobId: number;
+        BackendId: number;
+        EntryId: number;
+        Stage: "translate" | "bootstrap";
+        SegmentId: number;
+        Cursor: string;
+        Limit: number;
+    };
+    requestBodies: never;
+    headers: never;
+    pathItems: never;
 }
-export type $defs = Record<string, never>
+export type $defs = Record<string, never>;
 export interface operations {
-  Ping: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 服务可达 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['HealthResponse']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  RegisterAuth: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['RegisterRequest']
-      }
-    }
-    responses: {
-      /** @description 已创建 */
-      201: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['AuthSession']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  LoginAuth: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['LoginRequest']
-      }
-    }
-    responses: {
-      /** @description 登录成功 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['AuthSession']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  RefreshAuth: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['RefreshRequest']
-      }
-    }
-    responses: {
-      /** @description 刷新成功 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['AuthSession']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  LogoutAuth: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['LogoutRequest']
-      }
-    }
-    responses: {
-      /** @description 已登出 */
-      204: {
-        headers: {
-          [name: string]: unknown
-        }
-        content?: never
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  GetCurrentUser: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 当前用户 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['User']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  UpdateCurrentUser: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['UpdateCurrentUserRequest']
-      }
-    }
-    responses: {
-      /** @description 更新后的用户 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['User']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  ChangeCurrentUserPassword: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['ChangePasswordRequest']
-      }
-    }
-    responses: {
-      /** @description 密码已更新 */
-      204: {
-        headers: {
-          [name: string]: unknown
-        }
-        content?: never
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  ListOrganizations: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 组织列表 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['OrganizationListResponse']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  CreateOrganization: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['OrganizationRequest']
-      }
-    }
-    responses: {
-      /** @description 已创建组织 */
-      201: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Organization']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  GetOrganization: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        orgId: components['parameters']['OrgId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 组织详情 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Organization']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  UpdateOrganization: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        orgId: components['parameters']['OrgId']
-      }
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['OrganizationRequest']
-      }
-    }
-    responses: {
-      /** @description 更新后的组织 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Organization']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  ListOrganizationMembers: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        orgId: components['parameters']['OrgId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 成员列表 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['OrganizationMemberListResponse']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  AddOrganizationMember: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        orgId: components['parameters']['OrgId']
-      }
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['AddOrganizationMemberRequest']
-      }
-    }
-    responses: {
-      /** @description 已添加成员 */
-      201: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['OrganizationMember']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  UpdateOrganizationMember: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        orgId: components['parameters']['OrgId']
-        userId: components['parameters']['UserId']
-      }
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['UpdateOrganizationMemberRequest']
-      }
-    }
-    responses: {
-      /** @description 更新后的成员 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['OrganizationMember']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  DeleteOrganizationMember: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        orgId: components['parameters']['OrgId']
-        userId: components['parameters']['UserId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 已移除成员 */
-      204: {
-        headers: {
-          [name: string]: unknown
-        }
-        content?: never
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  ListUserBackends: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 后端列表 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['BackendListResponse']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  CreateUserBackend: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['CreateBackendRequest']
-      }
-    }
-    responses: {
-      /** @description 创建成功 */
-      201: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Backend']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  UpdateUserBackend: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        backendId: components['parameters']['BackendId']
-      }
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['UpdateBackendRequest']
-      }
-    }
-    responses: {
-      /** @description 更新成功 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Backend']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  DeleteUserBackend: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        backendId: components['parameters']['BackendId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 删除成功 */
-      204: {
-        headers: {
-          [name: string]: unknown
-        }
-        content?: never
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  ListOrgBackends: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        orgId: components['parameters']['OrgId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 后端列表 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['BackendListResponse']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  CreateOrgBackend: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        orgId: components['parameters']['OrgId']
-      }
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['CreateBackendRequest']
-      }
-    }
-    responses: {
-      /** @description 创建成功 */
-      201: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Backend']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  UpdateOrgBackend: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        orgId: components['parameters']['OrgId']
-        backendId: components['parameters']['BackendId']
-      }
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['UpdateBackendRequest']
-      }
-    }
-    responses: {
-      /** @description 更新成功 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Backend']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  DeleteOrgBackend: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        orgId: components['parameters']['OrgId']
-        backendId: components['parameters']['BackendId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 删除成功 */
-      204: {
-        headers: {
-          [name: string]: unknown
-        }
-        content?: never
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  ListProjects: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 项目列表 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['ProjectListResponse']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  CreateProject: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['CreateProjectRequest']
-      }
-    }
-    responses: {
-      /** @description 创建成功 */
-      201: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Project']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  GetProject: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 项目详情 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Project']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  UpdateProject: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-      }
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['UpdateProjectRequest']
-      }
-    }
-    responses: {
-      /** @description 更新成功 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Project']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  DeleteProject: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 删除成功 */
-      204: {
-        headers: {
-          [name: string]: unknown
-        }
-        content?: never
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  GetProjectBackends: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 后端设置 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['ProjectBackendSettings']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  SetProjectBackendOrder: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-      }
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['SetBackendOrderRequest']
-      }
-    }
-    responses: {
-      /** @description 设置成功 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['ProjectBackendBinding'][]
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  ListProjectResources: {
-    parameters: {
-      query?: {
-        status?: 'ready' | 'processing' | 'error'
-        format?: string
-        search?: string
-        cursor?: components['parameters']['Cursor']
-        limit?: components['parameters']['Limit']
-      }
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 资源列表 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['ResourceListResponse']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  UploadProjectResources: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-      }
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'multipart/form-data': {
-          files: File[]
-        }
-      }
-    }
-    responses: {
-      /** @description 上传成功 */
-      201: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['ResourceUploadResponse']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  GetResource: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-        resourceId: components['parameters']['ResourceId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 资源详情 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Resource']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  UpdateResource: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-        resourceId: components['parameters']['ResourceId']
-      }
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'multipart/form-data': {
-          /** Format: binary */
-          file: File
-        }
-      }
-    }
-    responses: {
-      /** @description 更新成功 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Resource']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  DeleteResource: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-        resourceId: components['parameters']['ResourceId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 删除成功 */
-      204: {
-        headers: {
-          [name: string]: unknown
-        }
-        content?: never
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  DownloadResourceFile: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-        resourceId: components['parameters']['ResourceId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 资源原始文件 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/octet-stream': File
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  ListResourceSegments: {
-    parameters: {
-      query?: {
-        status?: 'pending' | 'translated' | 'reviewed' | 'rejected'
-        search?: string
-        cursor?: components['parameters']['Cursor']
-        limit?: components['parameters']['Limit']
-      }
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-        resourceId: components['parameters']['ResourceId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 段落列表 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['ResourceSegmentListResponse']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  UpdateResourceSegment: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-        resourceId: components['parameters']['ResourceId']
-        segmentId: components['parameters']['SegmentId']
-      }
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['ResourceSegmentUpdateRequest']
-      }
-    }
-    responses: {
-      /** @description 更新成功 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['Segment']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  SetStageBackendOverride: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-        stage: components['parameters']['Stage']
-      }
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['SetStageOverrideRequest']
-      }
-    }
-    responses: {
-      /** @description 设置成功 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['StageBackendOverride']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  GetStagePlan: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-        stage: components['parameters']['Stage']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 阶段执行计划 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['ProjectBackendBinding'][]
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  ListGlossaryEntries: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 术语表列表 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['GlossaryListResponse']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  CreateGlossaryEntry: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-      }
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['CreateGlossaryEntryRequest']
-      }
-    }
-    responses: {
-      /** @description 创建成功 */
-      201: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['GlossaryEntry']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  UpdateGlossaryEntry: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-        entryId: components['parameters']['EntryId']
-      }
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'application/json': components['schemas']['UpdateGlossaryEntryRequest']
-      }
-    }
-    responses: {
-      /** @description 更新成功 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['GlossaryEntry']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  DeleteGlossaryEntry: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-        entryId: components['parameters']['EntryId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 删除成功 */
-      204: {
-        headers: {
-          [name: string]: unknown
-        }
-        content?: never
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  ImportGlossaryCSV: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-      }
-      cookie?: never
-    }
-    requestBody: {
-      content: {
-        'multipart/form-data': {
-          /** Format: binary */
-          file: File
-        }
-      }
-    }
-    responses: {
-      /** @description 导入结果 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['GlossaryImportResult']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  ExportGlossaryCSV: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description CSV 文件 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'text/csv': File
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  ListTranslationJobs: {
-    parameters: {
-      query?: {
-        status?: 'pending' | 'running' | 'awaiting_review' | 'completed' | 'failed' | 'cancelled'
-        trigger_type?: 'manual' | 'file_update' | 'glossary_change' | 'web_edit'
-        cursor?: components['parameters']['Cursor']
-        limit?: components['parameters']['Limit']
-      }
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 翻译任务列表 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['TranslationJobListResponse']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  CreateTranslationJob: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        projectId: components['parameters']['ProjectId']
-      }
-      cookie?: never
-    }
-    requestBody?: {
-      content: {
-        'application/json': components['schemas']['CreateTranslationJobRequest']
-      }
-    }
-    responses: {
-      /** @description 任务已创建 */
-      202: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['TranslationJob']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  GetTranslationJob: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        translationJobId: components['parameters']['TranslationJobId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 任务详情 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['TranslationJob']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  CancelTranslationJob: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        translationJobId: components['parameters']['TranslationJobId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 取消后的任务 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['TranslationJob']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  RetryTranslationJob: {
-    parameters: {
-      query?: never
-      header?: never
-      path: {
-        translationJobId: components['parameters']['TranslationJobId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 重试后的任务 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['TranslationJob']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  DownloadTranslationJobResult: {
-    parameters: {
-      query?: {
-        resource_id?: number
-      }
-      header?: never
-      path: {
-        translationJobId: components['parameters']['TranslationJobId']
-      }
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 翻译结果文件 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/octet-stream': File
-          'application/zip': File
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  GetStatsSummary: {
-    parameters: {
-      query?: never
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 用量统计 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['UsageStats']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
-  ListActivity: {
-    parameters: {
-      query?: {
-        cursor?: components['parameters']['Cursor']
-        limit?: components['parameters']['Limit']
-      }
-      header?: never
-      path?: never
-      cookie?: never
-    }
-    requestBody?: never
-    responses: {
-      /** @description 活动审计日志 */
-      200: {
-        headers: {
-          [name: string]: unknown
-        }
-        content: {
-          'application/json': components['schemas']['ActivityListResponse']
-        }
-      }
-      default: components['responses']['Problem']
-    }
-  }
+    Ping: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 服务可达 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    RegisterAuth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegisterRequest"];
+            };
+        };
+        responses: {
+            /** @description 已创建 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSession"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    LoginAuth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description 登录成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSession"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    RefreshAuth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RefreshRequest"];
+            };
+        };
+        responses: {
+            /** @description 刷新成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AuthSession"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    LogoutAuth: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LogoutRequest"];
+            };
+        };
+        responses: {
+            /** @description 已登出 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetCurrentUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前用户 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateCurrentUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateCurrentUserRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新后的用户 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ChangeCurrentUserPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChangePasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description 密码已更新 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListOrganizations: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 组织列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizationRequest"];
+            };
+        };
+        responses: {
+            /** @description 已创建组织 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Organization"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 组织详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Organization"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateOrganization: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["OrganizationRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新后的组织 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Organization"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListOrganizationMembers: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 成员列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationMemberListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AddOrganizationMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AddOrganizationMemberRequest"];
+            };
+        };
+        responses: {
+            /** @description 已添加成员 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationMember"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateOrganizationMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateOrganizationMemberRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新后的成员 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrganizationMember"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteOrganizationMember: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 已移除成员 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListUserBackends: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 后端列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackendListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateUserBackend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBackendRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Backend"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateUserBackend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                backendId: components["parameters"]["BackendId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateBackendRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Backend"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteUserBackend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                backendId: components["parameters"]["BackendId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 删除成功 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListOrgBackends: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 后端列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackendListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateOrgBackend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBackendRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Backend"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateOrgBackend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+                backendId: components["parameters"]["BackendId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateBackendRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Backend"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteOrgBackend: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+                backendId: components["parameters"]["BackendId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 删除成功 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListProjects: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 项目列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 项目详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 删除成功 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetProjectBackends: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 后端设置 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectBackendSettings"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    SetProjectBackendOrder: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetBackendOrderRequest"];
+            };
+        };
+        responses: {
+            /** @description 设置成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectBackendBinding"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListProjectResources: {
+        parameters: {
+            query?: {
+                status?: "ready" | "error";
+                format?: string;
+                search?: string;
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 资源列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UploadProjectResources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    files: File[];
+                };
+            };
+        };
+        responses: {
+            /** @description 上传成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceUploadResponse"];
+                };
+            };
+            /** @description 同名文件冲突 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceConflictResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetResource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 资源详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Resource"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateResource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: File;
+                };
+            };
+        };
+        responses: {
+            /** @description 更新成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Resource"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    IncrementalUpdateResource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: File;
+                };
+            };
+        };
+        responses: {
+            /** @description 增量更新成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["IncrementalUpdateResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteResource: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 删除成功 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DownloadResourceFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 资源原始文件 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": File;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListResourceSegments: {
+        parameters: {
+            query?: {
+                status?: "pending" | "translated" | "reviewed" | "rejected";
+                search?: string;
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 段落列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceSegmentListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateResourceSegment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+                segmentId: components["parameters"]["SegmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResourceSegmentUpdateRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Segment"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    SetStageBackendOverride: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                stage: components["parameters"]["Stage"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SetStageOverrideRequest"];
+            };
+        };
+        responses: {
+            /** @description 设置成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StageBackendOverride"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetStagePlan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                stage: components["parameters"]["Stage"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 阶段执行计划 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectBackendBinding"][];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListGlossaryEntries: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 术语表列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlossaryListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateGlossaryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateGlossaryEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlossaryEntry"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateGlossaryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                entryId: components["parameters"]["EntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateGlossaryEntryRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlossaryEntry"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteGlossaryEntry: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                entryId: components["parameters"]["EntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 删除成功 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ImportGlossaryCSV: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** Format: binary */
+                    file: File;
+                };
+            };
+        };
+        responses: {
+            /** @description 导入结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlossaryImportResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ExportGlossaryCSV: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description CSV 文件 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "text/csv": File;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListTranslationJobs: {
+        parameters: {
+            query?: {
+                status?: "pending" | "running" | "awaiting_review" | "completed" | "failed" | "cancelled";
+                trigger_type?: "manual" | "file_update" | "glossary_change" | "web_edit";
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 翻译任务列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslationJobListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateTranslationJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CreateTranslationJobRequest"];
+            };
+        };
+        responses: {
+            /** @description 任务已创建 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslationJob"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetTranslationJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                translationJobId: components["parameters"]["TranslationJobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 任务详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslationJob"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CancelTranslationJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                translationJobId: components["parameters"]["TranslationJobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 取消后的任务 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslationJob"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    RetryTranslationJob: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                translationJobId: components["parameters"]["TranslationJobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 重试后的任务 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslationJob"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DownloadTranslationJobResult: {
+        parameters: {
+            query?: {
+                resource_id?: number;
+            };
+            header?: never;
+            path: {
+                translationJobId: components["parameters"]["TranslationJobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 翻译结果文件 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": File;
+                    "application/zip": File;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetStatsSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 用量统计 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageStats"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListActivity: {
+        parameters: {
+            query?: {
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 活动审计日志 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
 }

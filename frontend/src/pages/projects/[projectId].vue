@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import {
+  NAlert,
   NButton,
+  NModal,
   NPopconfirm,
   NProgress,
   NSpace,
@@ -14,13 +16,14 @@ import {
 import { h } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { type ApiSchemas, type DownloadFileResult } from '@/api/client'
+import { type ApiSchemas, type DownloadFileResult, isResourceConflictError } from '@/api/client'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 
 type Resource = ApiSchemas['Resource']
 type Segment = ApiSchemas['Segment']
 type TranslationJob = ApiSchemas['TranslationJob']
 type CreateTranslationJobPayload = ApiSchemas['CreateTranslationJobRequest']
+type IncrementalUpdateResponse = ApiSchemas['IncrementalUpdateResponse']
 
 type WorkspaceTab = 'resources' | 'segments' | 'jobs'
 type JobTargetMode = 'resources' | 'segments'
@@ -52,6 +55,11 @@ const jobTargetMode = ref<JobTargetMode>('resources')
 const jobTargetResourceIds = ref<number[]>([])
 const jobTargetSegmentIds = ref<number[]>([])
 const replacingResourceId = ref<number | null>(null)
+const conflictDialogVisible = ref(false)
+const conflictResource = ref<Resource | null>(null)
+const conflictFile = ref<File | null>(null)
+const incrementalResultVisible = ref(false)
+const incrementalResult = ref<IncrementalUpdateResponse | null>(null)
 const uploadDismissTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 const segmentForm = reactive<SegmentFormModel>({
@@ -239,10 +247,106 @@ const handleUpload = async ({
     workspace.updateUploadTaskStage(taskId, 'complete', undefined)
     scheduleTaskDismiss(taskId)
   } catch (error) {
-    console.error(error)
-    message.error(workspace.actionError || t('workspace.messages.uploadFailed'))
-    onError()
+    if (isResourceConflictError(error)) {
+      workspace.removeUploadTask(taskId)
+      conflictResource.value = error.conflictData.existing_resource
+      conflictFile.value = file.file
+      conflictDialogVisible.value = true
+      onFinish()
+    } else {
+      console.error(error)
+      message.error(workspace.actionError || t('workspace.messages.uploadFailed'))
+      onError()
+    }
   }
+}
+
+const resetConflictState = (): void => {
+  conflictResource.value = null
+  conflictFile.value = null
+}
+
+const handleConflictReplace = async (): Promise<void> => {
+  if (!projectId.value || !conflictResource.value || !conflictFile.value) {
+    return
+  }
+
+  conflictDialogVisible.value = false
+  const resourceId = conflictResource.value.id
+  const file = conflictFile.value
+  resetConflictState()
+
+  replacingResourceId.value = resourceId
+  try {
+    await workspace.replaceResource(projectId.value, resourceId, file)
+    message.success(t('workspace.messages.replaceSuccess'))
+    if (workspace.activeResourceId === resourceId) {
+      await reloadSegments()
+    }
+  } catch (error) {
+    console.error(error)
+    message.error(workspace.actionError || t('workspace.messages.replaceFailed'))
+  } finally {
+    replacingResourceId.value = null
+  }
+}
+
+const handleConflictIncremental = async (): Promise<void> => {
+  if (!projectId.value || !conflictResource.value || !conflictFile.value) {
+    return
+  }
+
+  conflictDialogVisible.value = false
+  const resourceId = conflictResource.value.id
+  const file = conflictFile.value
+  resetConflictState()
+
+  try {
+    const result = await workspace.incrementalUpdateResource(projectId.value, resourceId, file)
+    incrementalResult.value = result
+    incrementalResultVisible.value = true
+    if (workspace.activeResourceId === resourceId) {
+      await reloadSegments()
+    }
+  } catch (error) {
+    console.error(error)
+    message.error(workspace.actionError || t('workspace.messages.incrementalUpdateFailed'))
+  }
+}
+
+const chooseIncrementalUpdateFile = (resourceId: number): void => {
+  const input = document.createElement('input')
+  input.type = 'file'
+  input.onchange = () => {
+    const file = input.files?.[0]
+    if (file) {
+      void doIncrementalUpdate(resourceId, file)
+    }
+  }
+  input.click()
+}
+
+const doIncrementalUpdate = async (resourceId: number, file: File): Promise<void> => {
+  if (!projectId.value) {
+    return
+  }
+
+  try {
+    const result = await workspace.incrementalUpdateResource(projectId.value, resourceId, file)
+    incrementalResult.value = result
+    incrementalResultVisible.value = true
+    if (workspace.activeResourceId === resourceId) {
+      await reloadSegments()
+    }
+  } catch (error) {
+    console.error(error)
+    message.error(workspace.actionError || t('workspace.messages.incrementalUpdateFailed'))
+  }
+}
+
+const confirmIncrementalResult = (): void => {
+  incrementalResultVisible.value = false
+  incrementalResult.value = null
 }
 
 const chooseReplacementFile = (resourceId: number): void => {
@@ -533,7 +637,7 @@ const resourceColumns = computed<DataTableColumns<Resource>>(() => [
   {
     title: t('workspace.common.actions'),
     key: 'actions',
-    width: 300,
+    width: 360,
     fixed: 'right',
     render: (row) =>
       h(NSpace, { size: 4, wrap: false }, () => [
@@ -556,6 +660,16 @@ const resourceColumns = computed<DataTableColumns<Resource>>(() => [
             onClick: () => chooseReplacementFile(row.id),
           },
           { default: () => t('workspace.resource.actions.replace') },
+        ),
+        h(
+          NButton,
+          {
+            size: 'small',
+            quaternary: true,
+            loading: workspace.incrementalUpdatingIds.includes(row.id),
+            onClick: () => chooseIncrementalUpdateFile(row.id),
+          },
+          { default: () => t('workspace.resource.actions.incrementalUpdate') },
         ),
         h(
           NButton,
@@ -1459,5 +1573,89 @@ onBeforeUnmount(() => {
         </template>
       </NDrawerContent>
     </NDrawer>
+
+    <NModal
+      v-model:show="conflictDialogVisible"
+      preset="card"
+      :title="t('workspace.conflict.title')"
+      :style="{ width: '440px' }"
+      :bordered="false"
+      :mask-closable="false"
+    >
+      <div class="space-y-3">
+        <NAlert type="warning" :bordered="false">
+          {{ t('workspace.conflict.description', { name: conflictResource?.filename ?? '' }) }}
+        </NAlert>
+        <p class="text-sm text-lf-text-muted">
+          {{ t('workspace.conflict.hint') }}
+        </p>
+      </div>
+      <template #footer>
+        <div class="flex justify-end gap-3">
+          <NButton
+            @click="conflictDialogVisible = false; resetConflictState()"
+          >
+            {{ t('workspace.common.cancel') }}
+          </NButton>
+          <NButton :loading="replacingResourceId !== null" @click="handleConflictReplace">
+            {{ t('workspace.conflict.fullReplace') }}
+          </NButton>
+          <NButton type="primary" @click="handleConflictIncremental">
+            {{ t('workspace.conflict.incrementalUpdate') }}
+          </NButton>
+        </div>
+      </template>
+    </NModal>
+
+    <NModal
+      v-model:show="incrementalResultVisible"
+      preset="card"
+      :title="t('workspace.incremental.resultTitle')"
+      :style="{ width: '480px' }"
+      :bordered="false"
+      :mask-closable="false"
+    >
+      <div v-if="incrementalResult" class="grid grid-cols-2 gap-3">
+        <div class="rounded-lg bg-emerald-50 p-4 text-center dark:bg-emerald-500/10">
+          <div class="text-2xl font-bold text-emerald-600">
+            {{ incrementalResult.changes.added }}
+          </div>
+          <div class="mt-1 text-xs text-emerald-600/70">
+            {{ t('workspace.incremental.added') }}
+          </div>
+        </div>
+        <div class="rounded-lg bg-blue-50 p-4 text-center dark:bg-blue-500/10">
+          <div class="text-2xl font-bold text-blue-600">
+            {{ incrementalResult.changes.updated }}
+          </div>
+          <div class="mt-1 text-xs text-blue-600/70">
+            {{ t('workspace.incremental.updated') }}
+          </div>
+        </div>
+        <div class="rounded-lg bg-gray-50 p-4 text-center dark:bg-gray-500/10">
+          <div class="text-2xl font-bold text-gray-600">
+            {{ incrementalResult.changes.unchanged }}
+          </div>
+          <div class="mt-1 text-xs text-gray-600/70">
+            {{ t('workspace.incremental.unchanged') }}
+          </div>
+        </div>
+        <div class="rounded-lg bg-red-50 p-4 text-center dark:bg-red-500/10">
+          <div class="text-2xl font-bold text-red-600">
+            {{ incrementalResult.changes.deleted }}
+          </div>
+          <div class="mt-1 text-xs text-red-600/70">
+            {{ t('workspace.incremental.deleted') }}
+          </div>
+        </div>
+      </div>
+      <template #footer>
+        <div class="flex justify-end">
+          <NButton type="primary" @click="confirmIncrementalResult">
+            {{ t('workspace.common.confirm') }}
+          </NButton>
+        </div>
+      </template>
+    </NModal>
   </div>
 </template>
