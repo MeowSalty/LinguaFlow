@@ -174,6 +174,10 @@ func (s *Server) UpdateResource(w http.ResponseWriter, r *http.Request, _ Projec
 	s.requireAuth(http.HandlerFunc(s.handleUpdateResource)).ServeHTTP(w, r)
 }
 
+func (s *Server) IncrementalUpdateResource(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
+	s.requireAuth(http.HandlerFunc(s.handleIncrementalUpdateResource)).ServeHTTP(w, r)
+}
+
 func (s *Server) DeleteResource(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
 	s.requireAuth(http.HandlerFunc(s.handleDeleteResource)).ServeHTTP(w, r)
 }

@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -74,6 +76,21 @@ func (s *Server) handleUploadProjectResources(w http.ResponseWriter, r *http.Req
 	if len(files) > maxResourceUploadFiles {
 		writeProblem(w, http.StatusBadRequest, "invalid_input", fmt.Sprintf("上传文件数量超出限制（最多 %d 个）", maxResourceUploadFiles))
 		return
+	}
+
+	// 检测同名文件冲突
+	for _, header := range files {
+		existing, err := s.resourceSvc.FindResourceByFilename(r.Context(), projectID, header.Filename)
+		if err != nil {
+			writeProblem(w, http.StatusInternalServerError, "internal_error", "检查文件冲突失败")
+			return
+		}
+		if existing != nil {
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"existing_resource": toResourceResponse(existing),
+			})
+			return
+		}
 	}
 
 	uploaded := make([]service.UploadedFile, 0, len(files))
@@ -186,8 +203,8 @@ func (s *Server) handleUpdateResource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fileHeader, fileHeaderErr := r.MultipartForm.File["file"]
-	if fileHeaderErr || len(fileHeader) == 0 {
+	fileHeader, fileFieldOK := r.MultipartForm.File["file"]
+	if !fileFieldOK || len(fileHeader) == 0 {
 		writeProblem(w, http.StatusBadRequest, "invalid_input", "请上传一个文件")
 		return
 	}
@@ -275,6 +292,133 @@ func (s *Server) handleDownloadResourceFile(w http.ResponseWriter, r *http.Reque
 	http.ServeFile(w, r, absolutePath)
 }
 
+// handleIncrementalUpdateResource 处理增量更新资源文件。
+func (s *Server) handleIncrementalUpdateResource(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	if !ok {
+		return
+	}
+	resourceID, ok := parseIntParam(w, chi.URLParam(r, "resourceId"), "resourceId")
+	if !ok {
+		return
+	}
+
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		s.logResourceMultipartDebug(r, "parse incremental update multipart form failed", "err", err)
+		writeProblem(w, http.StatusBadRequest, "invalid_multipart", "上传表单解析失败")
+		return
+	}
+
+	s.logResourceMultipartDebug(r, "parsed incremental update multipart form")
+
+	fileHeader, fileFieldOK := r.MultipartForm.File["file"]
+	if !fileFieldOK || len(fileHeader) == 0 {
+		s.logResourceMultipartDebug(r, "incremental update multipart form missing file field", "file_field_exists", fileFieldOK, "file_field_count", len(fileHeader))
+		writeProblem(w, http.StatusBadRequest, "invalid_input", "请上传一个文件")
+		return
+	}
+
+	header := fileHeader[0]
+	s.logResourceMultipartDebug(r, "incremental update selected uploaded file", "filename", header.Filename, "size", header.Size, "content_type", header.Header.Get("Content-Type"))
+	opened, openErr := header.Open()
+	if openErr != nil {
+		s.logResourceMultipartDebug(r, "open incremental update uploaded file failed", "filename", header.Filename, "size", header.Size, "err", openErr)
+		writeProblem(w, http.StatusBadRequest, "invalid_upload", "无法读取上传文件")
+		return
+	}
+	defer opened.Close()
+
+	res, stats, err := s.resourceSvc.IncrementalUpdateResource(r.Context(), authUser.User.ID, projectID, resourceID, service.UploadedFile{
+		Filename: header.Filename,
+		Size:     header.Size,
+		Reader:   opened,
+	})
+	if err != nil {
+		s.writeResourceServiceError(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"resource": toResourceResponse(res),
+		"changes": map[string]int{
+			"added":     stats.Added,
+			"updated":   stats.Updated,
+			"unchanged": stats.Unchanged,
+			"deleted":   stats.Deleted,
+		},
+	})
+}
+
+func (s *Server) logResourceMultipartDebug(r *http.Request, message string, attrs ...any) {
+	fields := []any{
+		"request_id", chimiddleware.GetReqID(r.Context()),
+		"method", r.Method,
+		"path", r.URL.Path,
+		"query", r.URL.RawQuery,
+		"content_type", r.Header.Get("Content-Type"),
+		"content_length", r.ContentLength,
+		"transfer_encoding", strings.Join(r.TransferEncoding, ","),
+	}
+
+	if r.MultipartForm == nil {
+		fields = append(fields, "multipart_form_present", false)
+	} else {
+		fields = append(fields,
+			"multipart_form_present", true,
+			"multipart_value_fields", summarizeMultipartValueFields(r.MultipartForm.Value),
+			"multipart_file_fields", summarizeMultipartFileFields(r.MultipartForm.File),
+		)
+	}
+
+	fields = append(fields, attrs...)
+	s.logger.Debug("resource multipart debug: "+message, fields...)
+}
+
+func summarizeMultipartValueFields(values map[string][]string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	summaries := make([]string, 0, len(keys))
+	for _, key := range keys {
+		summaries = append(summaries, fmt.Sprintf("%s[count=%d]", key, len(values[key])))
+	}
+	return summaries
+}
+
+func summarizeMultipartFileFields(files map[string][]*multipart.FileHeader) []string {
+	if len(files) == 0 {
+		return nil
+	}
+
+	keys := make([]string, 0, len(files))
+	for key := range files {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	summaries := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts := make([]string, 0, len(files[key]))
+		for _, header := range files[key] {
+			parts = append(parts, fmt.Sprintf("filename=%q size=%d content_type=%q", header.Filename, header.Size, header.Header.Get("Content-Type")))
+		}
+		summaries = append(summaries, fmt.Sprintf("%s[count=%d files=[%s]]", key, len(files[key]), strings.Join(parts, "; ")))
+	}
+	return summaries
+}
+
 // writeResourceServiceError 写入资源服务的错误响应。
 func (s *Server) writeResourceServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
@@ -284,6 +428,8 @@ func (s *Server) writeResourceServiceError(w http.ResponseWriter, r *http.Reques
 		writeProblem(w, http.StatusNotFound, "not_found", "项目不存在")
 	case errors.Is(err, service.ErrResourceNotFound):
 		writeProblem(w, http.StatusNotFound, "not_found", "资源不存在")
+	case errors.Is(err, service.ErrResourceAlreadyExists):
+		writeProblem(w, http.StatusConflict, "conflict", "项目中已存在同名文件")
 	case errors.Is(err, service.ErrForbidden):
 		writeProblem(w, http.StatusForbidden, "forbidden", "没有权限执行该操作")
 	case errors.Is(err, service.ErrUnsupportedFormat):
