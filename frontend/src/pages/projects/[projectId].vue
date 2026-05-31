@@ -77,7 +77,6 @@ const projectId = computed(() => {
 const resourceStatusOptions = computed<SelectOption[]>(() => [
   { label: t('workspace.filters.allStatuses'), value: 'all' },
   { label: t('workspace.resource.status.ready'), value: 'ready' },
-  { label: t('workspace.resource.status.processing'), value: 'processing' },
   { label: t('workspace.resource.status.error'), value: 'error' },
 ])
 

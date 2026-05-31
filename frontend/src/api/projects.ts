@@ -116,7 +116,7 @@ export const deleteProject = async (
 export const fetchProjectResources = async (
   projectId: number,
   params?: {
-    status?: 'ready' | 'processing' | 'error'
+    status?: 'ready' | 'error'
     format?: string
     search?: string
     cursor?: string
