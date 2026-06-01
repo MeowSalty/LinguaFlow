@@ -25,7 +25,8 @@ const (
 
 var (
 	ErrResourceNotFound      = errors.New("resource not found")
-	ErrResourceAlreadyExists = errors.New("resource already exists with same filename")
+	ErrResourceAlreadyExists = errors.New("resource already exists with same path")
+	ErrResourcePathInvalid   = errors.New("resource path invalid")
 	ErrUnsupportedFormat     = errors.New("unsupported file format")
 	ErrParseFailed           = errors.New("file parse failed")
 )
@@ -96,17 +97,22 @@ func (s *ResourceService) UploadResources(ctx context.Context, actorUserID, proj
 // UploadedFile 上传文件的抽象。
 type UploadedFile struct {
 	Filename string
+	Path     string
 	Size     int64
 	Reader   io.Reader
 }
 
 func (s *ResourceService) uploadSingleResource(ctx context.Context, projectID int, file UploadedFile) (*ResourceUploadResult, error) {
-	cleanName := sanitizeFilename(file.Filename)
+	resourcePath, err := NormalizeResourcePath(firstNonEmpty(file.Path, file.Filename))
+	if err != nil {
+		return nil, err
+	}
+	cleanName := sanitizeFilename(pathBase(resourcePath))
 	format := strings.TrimPrefix(strings.ToLower(filepath.Ext(cleanName)), ".")
 
 	// 生成随机唯一 ID，用于构建存储路径
 	uniqueID := generateUniqueID()
-	relPath := s.buildResourcePath(projectID, uniqueID, cleanName)
+	relPath := s.buildResourcePath(projectID, uniqueID, resourcePath)
 
 	// 保存文件到存储
 	if err := s.fileStore.Write(ctx, relPath, file.Reader); err != nil {
@@ -127,7 +133,7 @@ func (s *ResourceService) uploadSingleResource(ctx context.Context, projectID in
 	}
 
 	res, err := s.client.Resource.Create().
-		SetFilename(cleanName).
+		SetPath(resourcePath).
 		SetFormat(format).
 		SetStoragePath(relPath).
 		SetStatus(status).
@@ -138,6 +144,9 @@ func (s *ResourceService) uploadSingleResource(ctx context.Context, projectID in
 	if err != nil {
 		// 记录创建失败，清理已保存的文件
 		_ = s.fileStore.Delete(relPath)
+		if ent.IsConstraintError(err) {
+			return nil, ErrResourceAlreadyExists
+		}
 		return nil, fmt.Errorf("resource: create record: %w", err)
 	}
 
@@ -183,10 +192,10 @@ func (s *ResourceService) ListResources(ctx context.Context, actorUserID, projec
 		q = q.Where(resource.FormatEQ(opts.Format))
 	}
 	if opts.Search != "" {
-		q = q.Where(resource.FilenameContains(opts.Search))
+		q = q.Where(resource.PathContains(opts.Search))
 	}
 
-	q = q.Order(ent.Asc(resource.FieldID))
+	q = q.Order(ent.Asc(resource.FieldPath), ent.Asc(resource.FieldID))
 
 	if opts.Limit > 0 {
 		q = q.Limit(opts.Limit)
@@ -254,7 +263,7 @@ func (s *ResourceService) UpdateResource(ctx context.Context, actorUserID, proje
 		return nil, err
 	}
 
-	cleanName := sanitizeFilename(file.Filename)
+	cleanName := sanitizeFilename(pathBase(res.Path))
 	format := strings.TrimPrefix(strings.ToLower(filepath.Ext(cleanName)), ".")
 
 	// 删除旧文件
@@ -263,7 +272,7 @@ func (s *ResourceService) UpdateResource(ctx context.Context, actorUserID, proje
 	}
 
 	// 保存新文件
-	relPath := s.buildResourcePath(projectID, fmt.Sprintf("resource-%d", res.ID), cleanName)
+	relPath := s.buildResourcePath(projectID, fmt.Sprintf("resource-%d", res.ID), resourcePathForStorage(res.Path, cleanName))
 	if err := s.fileStore.Write(ctx, relPath, file.Reader); err != nil {
 		_, _ = s.client.Resource.UpdateOneID(res.ID).
 			SetStatus(ResourceStatusError).
@@ -282,7 +291,6 @@ func (s *ResourceService) UpdateResource(ctx context.Context, actorUserID, proje
 	}
 
 	update := s.client.Resource.UpdateOneID(res.ID).
-		SetFilename(cleanName).
 		SetFormat(format).
 		SetStoragePath(relPath).
 		SetTotalSegments(segmentCount)
@@ -315,13 +323,17 @@ func (s *ResourceService) Absolute(relativePath string) (string, error) {
 	return s.fileStore.Absolute(relativePath)
 }
 
-// buildResourcePath 构建资源文件的存储路径：resources/project-{id}/{uniqueID}/{filename}
-func (s *ResourceService) buildResourcePath(projectID int, uniqueID, filename string) string {
-	return filepath.Join("resources",
+// buildResourcePath 构建资源文件的存储路径：resources/project-{id}/{uniqueID}/{resourcePath}。
+func (s *ResourceService) buildResourcePath(projectID int, uniqueID, resourcePath string) string {
+	cleanPath, err := NormalizeResourcePath(resourcePath)
+	if err != nil {
+		cleanPath = sanitizeFilename(resourcePath)
+	}
+	return filepath.ToSlash(filepath.Join("resources",
 		fmt.Sprintf("project-%d", projectID),
 		uniqueID,
-		filename,
-	)
+		filepath.FromSlash(cleanPath),
+	))
 }
 
 type parsedResourceSegment struct {
@@ -399,7 +411,7 @@ type ResourceListOptions struct {
 }
 
 func sanitizeFilename(name string) string {
-	base := strings.TrimSpace(filepath.Base(name))
+	base := strings.TrimSpace(filepath.Base(strings.ReplaceAll(name, "\\", "/")))
 	if base == "" || base == "." || base == ".." {
 		base = "file"
 	}
@@ -411,6 +423,75 @@ func sanitizeFilename(name string) string {
 	return base
 }
 
+// NormalizeResourcePath 将用户提供的资源路径规范化为项目内相对路径。
+func NormalizeResourcePath(value string) (string, error) {
+	raw := strings.TrimSpace(strings.ReplaceAll(value, "\\", "/"))
+	if raw == "" || strings.HasPrefix(raw, "/") {
+		return "", ErrResourcePathInvalid
+	}
+	rawParts := strings.Split(raw, "/")
+	for _, part := range rawParts {
+		part = strings.TrimSpace(part)
+		if part == "" || part == "." || part == ".." {
+			return "", ErrResourcePathInvalid
+		}
+	}
+	clean := filepath.ToSlash(filepath.Clean(raw))
+	if clean == "." || clean == "" || strings.HasPrefix(clean, "../") || clean == ".." || strings.HasPrefix(clean, "/") {
+		return "", ErrResourcePathInvalid
+	}
+	parts := strings.Split(clean, "/")
+	for i, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" || part == "." || part == ".." {
+			return "", ErrResourcePathInvalid
+		}
+		parts[i] = sanitizePathSegment(part)
+	}
+	if len(parts) == 0 || strings.TrimSpace(parts[len(parts)-1]) == "" {
+		return "", ErrResourcePathInvalid
+	}
+	return strings.Join(parts, "/"), nil
+}
+
+func sanitizePathSegment(part string) string {
+	replacer := strings.NewReplacer(":", "_", "*", "_", "?", "_", "\"", "_", "<", "_", ">", "_", "|", "_")
+	part = replacer.Replace(part)
+	if strings.TrimSpace(part) == "" {
+		return "_"
+	}
+	return part
+}
+
+func pathBase(value string) string {
+	return filepath.Base(strings.ReplaceAll(value, "\\", "/"))
+}
+
+func resourcePathForStorage(resourcePath, fallbackFilename string) string {
+	if normalized, err := NormalizeResourcePath(resourcePath); err == nil {
+		return normalized
+	}
+	return sanitizeFilename(fallbackFilename)
+}
+
+func resourceDirectory(resourcePath string) string {
+	resourcePath = strings.TrimSpace(strings.ReplaceAll(resourcePath, "\\", "/"))
+	dir := filepath.ToSlash(filepath.Dir(resourcePath))
+	if dir == "." {
+		return ""
+	}
+	return dir
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
 // generateUniqueID 生成 16 位随机十六进制字符串，用于构建存储路径。
 func generateUniqueID() string {
 	b := make([]byte, 8)
@@ -418,11 +499,14 @@ func generateUniqueID() string {
 	return hex.EncodeToString(b)
 }
 
-// FindResourceByFilename 在项目中查找同名资源文件。
-func (s *ResourceService) FindResourceByFilename(ctx context.Context, projectID int, filename string) (*ent.Resource, error) {
-	cleanName := sanitizeFilename(filename)
+// FindResourceByPath 在项目中查找同路径资源文件。
+func (s *ResourceService) FindResourceByPath(ctx context.Context, projectID int, resourcePath string) (*ent.Resource, error) {
+	cleanPath, err := NormalizeResourcePath(resourcePath)
+	if err != nil {
+		return nil, err
+	}
 	res, err := s.client.Resource.Query().
-		Where(resource.ProjectID(projectID), resource.Filename(cleanName)).
+		Where(resource.ProjectID(projectID), resource.Path(cleanPath)).
 		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -525,9 +609,9 @@ func (s *ResourceService) IncrementalUpdateResource(
 	}
 
 	// 保存新文件
-	cleanName := sanitizeFilename(file.Filename)
+	cleanName := sanitizeFilename(pathBase(res.Path))
 	format := strings.TrimPrefix(strings.ToLower(filepath.Ext(cleanName)), ".")
-	relPath := s.buildResourcePath(projectID, fmt.Sprintf("resource-%d", res.ID), cleanName)
+	relPath := s.buildResourcePath(projectID, fmt.Sprintf("resource-%d", res.ID), resourcePathForStorage(res.Path, cleanName))
 	if err := s.fileStore.Write(ctx, relPath, file.Reader); err != nil {
 		_, _ = s.client.Resource.UpdateOneID(res.ID).
 			SetStatus(ResourceStatusError).
@@ -541,7 +625,6 @@ func (s *ResourceService) IncrementalUpdateResource(
 	if parseErr != nil {
 		// 解析失败，更新资源状态
 		update := s.client.Resource.UpdateOneID(res.ID).
-			SetFilename(cleanName).
 			SetFormat(format).
 			SetStoragePath(relPath).
 			SetStatus(ResourceStatusError).
@@ -588,7 +671,6 @@ func (s *ResourceService) IncrementalUpdateResource(
 
 	// 更新资源元数据
 	updated, err := s.client.Resource.UpdateOneID(res.ID).
-		SetFilename(cleanName).
 		SetFormat(format).
 		SetStoragePath(relPath).
 		SetTotalSegments(len(newSegments)).

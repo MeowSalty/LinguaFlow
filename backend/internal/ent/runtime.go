@@ -362,10 +362,10 @@ func init() {
 	resource.DefaultUpdatedAt = resourceDescUpdatedAt.Default.(func() time.Time)
 	// resource.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	resource.UpdateDefaultUpdatedAt = resourceDescUpdatedAt.UpdateDefault.(func() time.Time)
-	// resourceDescFilename is the schema descriptor for filename field.
-	resourceDescFilename := resourceFields[0].Descriptor()
-	// resource.FilenameValidator is a validator for the "filename" field. It is called by the builders before save.
-	resource.FilenameValidator = resourceDescFilename.Validators[0].(func(string) error)
+	// resourceDescPath is the schema descriptor for path field.
+	resourceDescPath := resourceFields[0].Descriptor()
+	// resource.PathValidator is a validator for the "path" field. It is called by the builders before save.
+	resource.PathValidator = resourceDescPath.Validators[0].(func(string) error)
 	// resourceDescFormat is the schema descriptor for format field.
 	resourceDescFormat := resourceFields[1].Descriptor()
 	// resource.FormatValidator is a validator for the "format" field. It is called by the builders before save.

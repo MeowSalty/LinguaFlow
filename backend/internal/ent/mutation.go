@@ -9934,7 +9934,7 @@ type ResourceMutation struct {
 	id                   *int
 	created_at           *time.Time
 	updated_at           *time.Time
-	filename             *string
+	_path                *string
 	format               *string
 	storage_path         *string
 	total_segments       *int
@@ -10125,40 +10125,40 @@ func (m *ResourceMutation) ResetUpdatedAt() {
 	m.updated_at = nil
 }
 
-// SetFilename sets the "filename" field.
-func (m *ResourceMutation) SetFilename(s string) {
-	m.filename = &s
+// SetPath sets the "path" field.
+func (m *ResourceMutation) SetPath(s string) {
+	m._path = &s
 }
 
-// Filename returns the value of the "filename" field in the mutation.
-func (m *ResourceMutation) Filename() (r string, exists bool) {
-	v := m.filename
+// Path returns the value of the "path" field in the mutation.
+func (m *ResourceMutation) Path() (r string, exists bool) {
+	v := m._path
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldFilename returns the old "filename" field's value of the Resource entity.
+// OldPath returns the old "path" field's value of the Resource entity.
 // If the Resource object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ResourceMutation) OldFilename(ctx context.Context) (v string, err error) {
+func (m *ResourceMutation) OldPath(ctx context.Context) (v string, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldFilename is only allowed on UpdateOne operations")
+		return v, errors.New("OldPath is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldFilename requires an ID field in the mutation")
+		return v, errors.New("OldPath requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldFilename: %w", err)
+		return v, fmt.Errorf("querying old value for OldPath: %w", err)
 	}
-	return oldValue.Filename, nil
+	return oldValue.Path, nil
 }
 
-// ResetFilename resets all changes to the "filename" field.
-func (m *ResourceMutation) ResetFilename() {
-	m.filename = nil
+// ResetPath resets all changes to the "path" field.
+func (m *ResourceMutation) ResetPath() {
+	m._path = nil
 }
 
 // SetFormat sets the "format" field.
@@ -10599,8 +10599,8 @@ func (m *ResourceMutation) Fields() []string {
 	if m.updated_at != nil {
 		fields = append(fields, resource.FieldUpdatedAt)
 	}
-	if m.filename != nil {
-		fields = append(fields, resource.FieldFilename)
+	if m._path != nil {
+		fields = append(fields, resource.FieldPath)
 	}
 	if m.format != nil {
 		fields = append(fields, resource.FieldFormat)
@@ -10632,8 +10632,8 @@ func (m *ResourceMutation) Field(name string) (ent.Value, bool) {
 		return m.CreatedAt()
 	case resource.FieldUpdatedAt:
 		return m.UpdatedAt()
-	case resource.FieldFilename:
-		return m.Filename()
+	case resource.FieldPath:
+		return m.Path()
 	case resource.FieldFormat:
 		return m.Format()
 	case resource.FieldStoragePath:
@@ -10659,8 +10659,8 @@ func (m *ResourceMutation) OldField(ctx context.Context, name string) (ent.Value
 		return m.OldCreatedAt(ctx)
 	case resource.FieldUpdatedAt:
 		return m.OldUpdatedAt(ctx)
-	case resource.FieldFilename:
-		return m.OldFilename(ctx)
+	case resource.FieldPath:
+		return m.OldPath(ctx)
 	case resource.FieldFormat:
 		return m.OldFormat(ctx)
 	case resource.FieldStoragePath:
@@ -10696,12 +10696,12 @@ func (m *ResourceMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetUpdatedAt(v)
 		return nil
-	case resource.FieldFilename:
+	case resource.FieldPath:
 		v, ok := value.(string)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetFilename(v)
+		m.SetPath(v)
 		return nil
 	case resource.FieldFormat:
 		v, ok := value.(string)
@@ -10830,8 +10830,8 @@ func (m *ResourceMutation) ResetField(name string) error {
 	case resource.FieldUpdatedAt:
 		m.ResetUpdatedAt()
 		return nil
-	case resource.FieldFilename:
-		m.ResetFilename()
+	case resource.FieldPath:
+		m.ResetPath()
 		return nil
 	case resource.FieldFormat:
 		m.ResetFormat()

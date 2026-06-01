@@ -65,9 +65,9 @@ func UpdatedAt(v time.Time) predicate.Resource {
 	return predicate.Resource(sql.FieldEQ(FieldUpdatedAt, v))
 }
 
-// Filename applies equality check predicate on the "filename" field. It's identical to FilenameEQ.
-func Filename(v string) predicate.Resource {
-	return predicate.Resource(sql.FieldEQ(FieldFilename, v))
+// Path applies equality check predicate on the "path" field. It's identical to PathEQ.
+func Path(v string) predicate.Resource {
+	return predicate.Resource(sql.FieldEQ(FieldPath, v))
 }
 
 // Format applies equality check predicate on the "format" field. It's identical to FormatEQ.
@@ -180,69 +180,69 @@ func UpdatedAtLTE(v time.Time) predicate.Resource {
 	return predicate.Resource(sql.FieldLTE(FieldUpdatedAt, v))
 }
 
-// FilenameEQ applies the EQ predicate on the "filename" field.
-func FilenameEQ(v string) predicate.Resource {
-	return predicate.Resource(sql.FieldEQ(FieldFilename, v))
+// PathEQ applies the EQ predicate on the "path" field.
+func PathEQ(v string) predicate.Resource {
+	return predicate.Resource(sql.FieldEQ(FieldPath, v))
 }
 
-// FilenameNEQ applies the NEQ predicate on the "filename" field.
-func FilenameNEQ(v string) predicate.Resource {
-	return predicate.Resource(sql.FieldNEQ(FieldFilename, v))
+// PathNEQ applies the NEQ predicate on the "path" field.
+func PathNEQ(v string) predicate.Resource {
+	return predicate.Resource(sql.FieldNEQ(FieldPath, v))
 }
 
-// FilenameIn applies the In predicate on the "filename" field.
-func FilenameIn(vs ...string) predicate.Resource {
-	return predicate.Resource(sql.FieldIn(FieldFilename, vs...))
+// PathIn applies the In predicate on the "path" field.
+func PathIn(vs ...string) predicate.Resource {
+	return predicate.Resource(sql.FieldIn(FieldPath, vs...))
 }
 
-// FilenameNotIn applies the NotIn predicate on the "filename" field.
-func FilenameNotIn(vs ...string) predicate.Resource {
-	return predicate.Resource(sql.FieldNotIn(FieldFilename, vs...))
+// PathNotIn applies the NotIn predicate on the "path" field.
+func PathNotIn(vs ...string) predicate.Resource {
+	return predicate.Resource(sql.FieldNotIn(FieldPath, vs...))
 }
 
-// FilenameGT applies the GT predicate on the "filename" field.
-func FilenameGT(v string) predicate.Resource {
-	return predicate.Resource(sql.FieldGT(FieldFilename, v))
+// PathGT applies the GT predicate on the "path" field.
+func PathGT(v string) predicate.Resource {
+	return predicate.Resource(sql.FieldGT(FieldPath, v))
 }
 
-// FilenameGTE applies the GTE predicate on the "filename" field.
-func FilenameGTE(v string) predicate.Resource {
-	return predicate.Resource(sql.FieldGTE(FieldFilename, v))
+// PathGTE applies the GTE predicate on the "path" field.
+func PathGTE(v string) predicate.Resource {
+	return predicate.Resource(sql.FieldGTE(FieldPath, v))
 }
 
-// FilenameLT applies the LT predicate on the "filename" field.
-func FilenameLT(v string) predicate.Resource {
-	return predicate.Resource(sql.FieldLT(FieldFilename, v))
+// PathLT applies the LT predicate on the "path" field.
+func PathLT(v string) predicate.Resource {
+	return predicate.Resource(sql.FieldLT(FieldPath, v))
 }
 
-// FilenameLTE applies the LTE predicate on the "filename" field.
-func FilenameLTE(v string) predicate.Resource {
-	return predicate.Resource(sql.FieldLTE(FieldFilename, v))
+// PathLTE applies the LTE predicate on the "path" field.
+func PathLTE(v string) predicate.Resource {
+	return predicate.Resource(sql.FieldLTE(FieldPath, v))
 }
 
-// FilenameContains applies the Contains predicate on the "filename" field.
-func FilenameContains(v string) predicate.Resource {
-	return predicate.Resource(sql.FieldContains(FieldFilename, v))
+// PathContains applies the Contains predicate on the "path" field.
+func PathContains(v string) predicate.Resource {
+	return predicate.Resource(sql.FieldContains(FieldPath, v))
 }
 
-// FilenameHasPrefix applies the HasPrefix predicate on the "filename" field.
-func FilenameHasPrefix(v string) predicate.Resource {
-	return predicate.Resource(sql.FieldHasPrefix(FieldFilename, v))
+// PathHasPrefix applies the HasPrefix predicate on the "path" field.
+func PathHasPrefix(v string) predicate.Resource {
+	return predicate.Resource(sql.FieldHasPrefix(FieldPath, v))
 }
 
-// FilenameHasSuffix applies the HasSuffix predicate on the "filename" field.
-func FilenameHasSuffix(v string) predicate.Resource {
-	return predicate.Resource(sql.FieldHasSuffix(FieldFilename, v))
+// PathHasSuffix applies the HasSuffix predicate on the "path" field.
+func PathHasSuffix(v string) predicate.Resource {
+	return predicate.Resource(sql.FieldHasSuffix(FieldPath, v))
 }
 
-// FilenameEqualFold applies the EqualFold predicate on the "filename" field.
-func FilenameEqualFold(v string) predicate.Resource {
-	return predicate.Resource(sql.FieldEqualFold(FieldFilename, v))
+// PathEqualFold applies the EqualFold predicate on the "path" field.
+func PathEqualFold(v string) predicate.Resource {
+	return predicate.Resource(sql.FieldEqualFold(FieldPath, v))
 }
 
-// FilenameContainsFold applies the ContainsFold predicate on the "filename" field.
-func FilenameContainsFold(v string) predicate.Resource {
-	return predicate.Resource(sql.FieldContainsFold(FieldFilename, v))
+// PathContainsFold applies the ContainsFold predicate on the "path" field.
+func PathContainsFold(v string) predicate.Resource {
+	return predicate.Resource(sql.FieldContainsFold(FieldPath, v))
 }
 
 // FormatEQ applies the EQ predicate on the "format" field.

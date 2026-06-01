@@ -22,8 +22,8 @@ type Resource struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
-	// 原始文件名，如 quest_en.json
-	Filename string `json:"filename,omitempty"`
+	// 项目内规范化资源相对路径，如 ui/common.json
+	Path string `json:"path,omitempty"`
 	// 文件格式：srt, vtt, ass, json, md, txt
 	Format string `json:"format,omitempty"`
 	// 文件存储路径
@@ -91,7 +91,7 @@ func (*Resource) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case resource.FieldID, resource.FieldTotalSegments, resource.FieldProjectID:
 			values[i] = new(sql.NullInt64)
-		case resource.FieldFilename, resource.FieldFormat, resource.FieldStoragePath, resource.FieldStatus, resource.FieldErrorMessage:
+		case resource.FieldPath, resource.FieldFormat, resource.FieldStoragePath, resource.FieldStatus, resource.FieldErrorMessage:
 			values[i] = new(sql.NullString)
 		case resource.FieldCreatedAt, resource.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -128,11 +128,11 @@ func (_m *Resource) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
 			}
-		case resource.FieldFilename:
+		case resource.FieldPath:
 			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field filename", values[i])
+				return fmt.Errorf("unexpected type %T for field path", values[i])
 			} else if value.Valid {
-				_m.Filename = value.String
+				_m.Path = value.String
 			}
 		case resource.FieldFormat:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -229,8 +229,8 @@ func (_m *Resource) String() string {
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
 	builder.WriteString(", ")
-	builder.WriteString("filename=")
-	builder.WriteString(_m.Filename)
+	builder.WriteString("path=")
+	builder.WriteString(_m.Path)
 	builder.WriteString(", ")
 	builder.WriteString("format=")
 	builder.WriteString(_m.Format)

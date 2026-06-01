@@ -4,6 +4,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
+	"entgo.io/ent/schema/index"
 )
 
 type Resource struct {
@@ -16,8 +17,8 @@ func (Resource) Mixin() []ent.Mixin {
 
 func (Resource) Fields() []ent.Field {
 	return []ent.Field{
-		field.String("filename").NotEmpty().
-			Comment("原始文件名，如 quest_en.json"),
+		field.String("path").NotEmpty().
+			Comment("项目内规范化资源相对路径，如 ui/common.json"),
 		field.String("format").NotEmpty().
 			Comment("文件格式：srt, vtt, ass, json, md, txt"),
 		field.String("storage_path").NotEmpty().
@@ -30,6 +31,12 @@ func (Resource) Fields() []ent.Field {
 			Comment("解析错误信息"),
 		field.Int("project_id").Optional().Nillable().Positive().
 			Comment("所属项目 ID"),
+	}
+}
+
+func (Resource) Indexes() []ent.Index {
+	return []ent.Index{
+		index.Fields("project_id", "path").Unique(),
 	}
 }
 

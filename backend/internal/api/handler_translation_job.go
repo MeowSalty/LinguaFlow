@@ -260,8 +260,8 @@ func (s *Server) downloadZipTranslationOutputs(w http.ResponseWriter, jobID int,
 			continue
 		}
 		entryName := filepath.Base(absolutePath)
-		if item.Edges.Resource != nil && strings.TrimSpace(item.Edges.Resource.Filename) != "" {
-			entryName = item.Edges.Resource.Filename
+		if item.Edges.Resource != nil {
+			entryName = safeZipResourceEntryName(item.Edges.Resource)
 		}
 		entry, err := zw.Create(entryName)
 		if err != nil {
@@ -271,6 +271,27 @@ func (s *Server) downloadZipTranslationOutputs(w http.ResponseWriter, jobID int,
 		_, _ = io.Copy(entry, file)
 		_ = file.Close()
 	}
+}
+
+func safeZipResourceEntryName(res *ent.Resource) string {
+	candidate := ""
+	if res != nil {
+		candidate = strings.TrimSpace(res.Path)
+	}
+	candidate = filepath.ToSlash(filepath.Clean(strings.ReplaceAll(candidate, "\\", "/")))
+	if candidate == "" || candidate == "." || candidate == ".." || strings.HasPrefix(candidate, "../") || strings.HasPrefix(candidate, "/") {
+		return "resource"
+	}
+	parts := strings.Split(candidate, "/")
+	for i, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" || part == "." || part == ".." {
+			parts[i] = "resource"
+			continue
+		}
+		parts[i] = strings.NewReplacer(":", "_", "*", "_", "?", "_", "\"", "_", "<", "_", ">", "_", "|", "_").Replace(part)
+	}
+	return strings.Join(parts, "/")
 }
 
 func toTranslationJobResponse(row *ent.TranslationJob) translationJobResponse {
