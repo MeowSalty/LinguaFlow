@@ -29,14 +29,35 @@ Resource:
       type: string
       format: date-time
 
-ResourceUploadResponse:
+ResourceUploadFileResult:
+  type: object
+  required: [path, action]
+  properties:
+    path:
+      type: string
+      description: 资源项目内规范化相对路径
+    action:
+      type: string
+      enum: [created, conflict, failed]
+      description: 处理结果：created=创建成功，conflict=与已有资源冲突，failed=处理失败
+    resource:
+      $ref: '#/Resource'
+      description: 创建成功时返回新资源
+    existing_resource:
+      $ref: '#/Resource'
+      description: 冲突时返回已有资源
+    error:
+      type: string
+      description: 失败时的错误信息
+
+ResourceUploadBatchResponse:
   type: object
   required: [items]
   properties:
     items:
       type: array
       items:
-        $ref: '#/Resource'
+        $ref: '#/ResourceUploadFileResult'
 
 ResourceListResponse:
   type: object
@@ -131,3 +152,27 @@ ResourceConflictResponse:
   properties:
     existing_resource:
       $ref: '#/Resource'
+
+ResourcePrecheckFileResult:
+  type: object
+  required: [path, action]
+  properties:
+    path:
+      type: string
+      description: 资源项目内规范化相对路径
+    action:
+      type: string
+      enum: [create, conflict, duplicate]
+      description: 建议操作：create=可直接创建，conflict=与已有资源冲突，duplicate=批次内重复路径
+    existing_resource:
+      $ref: '#/Resource'
+      description: 冲突时返回已有资源信息
+
+ResourcePrecheckBatchResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/ResourcePrecheckFileResult'
