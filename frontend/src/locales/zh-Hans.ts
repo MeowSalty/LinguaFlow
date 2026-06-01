@@ -82,7 +82,7 @@ const messages = {
       username: '用户名',
       usernamePlaceholder: '3-32 位，字母 / 数字 / 下划线',
       email: '邮箱',
-      emailPlaceholder: 'you@example.com',
+      emailPlaceholder: "you{'@'}example.com",
       displayName: '显示名（可选）',
       displayNamePlaceholder: '留空则使用用户名',
       password: '密码',
