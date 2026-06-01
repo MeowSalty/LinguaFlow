@@ -23,6 +23,11 @@ const (
 	ResourceStatusError = "error"
 )
 
+// segmentBatchSize 每批插入的最大 Segment 数量。
+// SQLite 默认绑定变量上限为 999，每条 Segment 记录约 4 个字段，
+// 100 条 × 4 字段 = 400，安全低于限制。
+const segmentBatchSize = 100
+
 var (
 	ErrResourceNotFound      = errors.New("resource not found")
 	ErrResourceAlreadyExists = errors.New("resource already exists with same path")
@@ -123,7 +128,7 @@ func (s *ResourceService) uploadSingleResource(ctx context.Context, projectID in
 	parsedSegments, parseErr := s.parseResourceSegments(relPath)
 	segmentCount := len(parsedSegments)
 
-	// 一次性创建完整的 Resource 记录
+	// 事务包裹：Resource 创建 + Segment 插入，保证原子性
 	status := ResourceStatusReady
 	var errMsg *string
 	if parseErr != nil {
@@ -132,7 +137,13 @@ func (s *ResourceService) uploadSingleResource(ctx context.Context, projectID in
 		errMsg = &msg
 	}
 
-	res, err := s.client.Resource.Create().
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		_ = s.fileStore.Delete(relPath)
+		return nil, fmt.Errorf("resource: begin transaction: %w", err)
+	}
+
+	res, err := tx.Resource.Create().
 		SetPath(resourcePath).
 		SetFormat(format).
 		SetStoragePath(relPath).
@@ -142,7 +153,7 @@ func (s *ResourceService) uploadSingleResource(ctx context.Context, projectID in
 		SetNillableErrorMessage(errMsg).
 		Save(ctx)
 	if err != nil {
-		// 记录创建失败，清理已保存的文件
+		_ = tx.Rollback()
 		_ = s.fileStore.Delete(relPath)
 		if ent.IsConstraintError(err) {
 			return nil, ErrResourceAlreadyExists
@@ -150,11 +161,18 @@ func (s *ResourceService) uploadSingleResource(ctx context.Context, projectID in
 		return nil, fmt.Errorf("resource: create record: %w", err)
 	}
 
-	// 创建段落记录（需要 res.ID）
+	// 在事务中创建段落记录（需要 res.ID）
 	if parseErr == nil {
-		if err := s.replaceResourceSegments(ctx, res.ID, parsedSegments); err != nil {
+		if err := replaceResourceSegmentsBatch(ctx, tx.Segment, res.ID, parsedSegments); err != nil {
+			_ = tx.Rollback()
+			_ = s.fileStore.Delete(relPath)
 			return nil, fmt.Errorf("resource: create segments: %w", err)
 		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		_ = s.fileStore.Delete(relPath)
+		return nil, fmt.Errorf("resource: commit transaction: %w", err)
 	}
 
 	if parseErr != nil {
@@ -248,6 +266,7 @@ func (s *ResourceService) DeleteResource(ctx context.Context, actorUserID, proje
 }
 
 // UpdateResource 替换资源文件内容。
+// 段落替换和 Resource 更新在同一事务中执行，保证原子性。
 func (s *ResourceService) UpdateResource(ctx context.Context, actorUserID, projectID, resourceID int, file UploadedFile) (*ent.Resource, error) {
 	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true); err != nil {
 		return nil, err
@@ -281,16 +300,24 @@ func (s *ResourceService) UpdateResource(ctx context.Context, actorUserID, proje
 		return nil, fmt.Errorf("resource: save file: %w", err)
 	}
 
-	// 解析新文件并替换 Resource 级段落
+	// 解析新文件
 	parsedSegments, parseErr := s.parseResourceSegments(relPath)
 	segmentCount := len(parsedSegments)
+
+	// 事务包裹：段落替换 + Resource 更新，保证原子性
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resource: begin transaction: %w", err)
+	}
+
 	if parseErr == nil {
-		if err := s.replaceResourceSegments(ctx, res.ID, parsedSegments); err != nil {
+		if err := replaceResourceSegmentsBatch(ctx, tx.Segment, res.ID, parsedSegments); err != nil {
+			_ = tx.Rollback()
 			return nil, fmt.Errorf("resource: replace segments: %w", err)
 		}
 	}
 
-	update := s.client.Resource.UpdateOneID(res.ID).
+	update := tx.Resource.UpdateOneID(res.ID).
 		SetFormat(format).
 		SetStoragePath(relPath).
 		SetTotalSegments(segmentCount)
@@ -305,7 +332,12 @@ func (s *ResourceService) UpdateResource(ctx context.Context, actorUserID, proje
 	}
 	updated, err := update.Save(ctx)
 	if err != nil {
+		_ = tx.Rollback()
 		return nil, fmt.Errorf("resource: update record: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("resource: commit transaction: %w", err)
 	}
 
 	if parseErr != nil {
@@ -379,27 +411,49 @@ func (s *ResourceService) parseResourceSegments(relPath string) ([]parsedResourc
 	return items, nil
 }
 
-func (s *ResourceService) replaceResourceSegments(ctx context.Context, resourceID int, items []parsedResourceSegment) error {
-	if _, err := s.client.Segment.Delete().Where(segment.ResourceIDEQ(resourceID)).Exec(ctx); err != nil {
+// segmentClientAccessor 抽象 Segment 客户端操作，兼容 *ent.Client 和 *ent.Tx。
+type segmentClientAccessor interface {
+	Create() *ent.SegmentCreate
+	Delete() *ent.SegmentDelete
+	CreateBulk(builders ...*ent.SegmentCreate) *ent.SegmentCreateBulk
+}
+
+// replaceResourceSegmentsBatch 删除旧段落并分批插入新段落。
+// 分批避免超过 SQLite 999 绑定变量限制（segmentBatchSize × 4 字段 < 999）。
+func replaceResourceSegmentsBatch(ctx context.Context, accessor segmentClientAccessor, resourceID int, items []parsedResourceSegment) error {
+	if _, err := accessor.Delete().Where(segment.ResourceIDEQ(resourceID)).Exec(ctx); err != nil {
 		return err
 	}
 	if len(items) == 0 {
 		return nil
 	}
-	builders := make([]*ent.SegmentCreate, 0, len(items))
-	for _, item := range items {
-		create := s.client.Segment.Create().
-			SetResourceID(resourceID).
-			SetSegmentIndex(item.Index).
-			SetSourceText(item.SourceText).
-			SetStatus(SegmentStatusPending)
-		if strings.TrimSpace(item.TargetText) != "" {
-			create.SetTargetText(item.TargetText).SetStatus(SegmentStatusTranslated)
+	for i := 0; i < len(items); i += segmentBatchSize {
+		end := i + segmentBatchSize
+		if end > len(items) {
+			end = len(items)
 		}
-		builders = append(builders, create)
+		batch := items[i:end]
+		builders := make([]*ent.SegmentCreate, 0, len(batch))
+		for _, item := range batch {
+			create := accessor.Create().
+				SetResourceID(resourceID).
+				SetSegmentIndex(item.Index).
+				SetSourceText(item.SourceText).
+				SetStatus(SegmentStatusPending)
+			if strings.TrimSpace(item.TargetText) != "" {
+				create.SetTargetText(item.TargetText).SetStatus(SegmentStatusTranslated)
+			}
+			builders = append(builders, create)
+		}
+		if _, err := accessor.CreateBulk(builders...).Save(ctx); err != nil {
+			return err
+		}
 	}
-	_, err := s.client.Segment.CreateBulk(builders...).Save(ctx)
-	return err
+	return nil
+}
+
+func (s *ResourceService) replaceResourceSegments(ctx context.Context, resourceID int, items []parsedResourceSegment) error {
+	return replaceResourceSegmentsBatch(ctx, s.client.Segment, resourceID, items)
 }
 
 // ResourceListOptions 资源列表查询选项。
