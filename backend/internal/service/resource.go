@@ -73,6 +73,22 @@ type ResourceUploadResult struct {
 	TotalSegments int
 }
 
+// UploadFileResult 单个文件的上传结果。
+type UploadFileResult struct {
+	Path             string
+	Action           string // created, conflict, failed
+	Resource         *ent.Resource
+	ExistingResource *ent.Resource
+	Error            string
+}
+
+// PrecheckFileResult 单个文件的预检结果。
+type PrecheckFileResult struct {
+	Path             string
+	Action           string // create, conflict, duplicate
+	ExistingResource *ent.Resource
+}
+
 func NewResourceService(client *ent.Client, projects *ProjectService, fileStore *filestore.LocalStore) *ResourceService {
 	return &ResourceService{
 		client:    client,
@@ -82,19 +98,109 @@ func NewResourceService(client *ent.Client, projects *ProjectService, fileStore 
 }
 
 // UploadResources 上传资源文件到项目。
-// 保存文件、解析段落、创建 Resource 和 Segment 记录。
-func (s *ResourceService) UploadResources(ctx context.Context, actorUserID, projectID int, files []UploadedFile) ([]ResourceUploadResult, error) {
+// 允许部分成功：冲突或失败的文件不会阻断其他文件的上传。
+func (s *ResourceService) UploadResources(ctx context.Context, actorUserID, projectID int, files []UploadedFile) ([]UploadFileResult, error) {
 	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true); err != nil {
 		return nil, err
 	}
 
-	results := make([]ResourceUploadResult, 0, len(files))
+	results := make([]UploadFileResult, 0, len(files))
 	for _, f := range files {
+		resourcePath, err := NormalizeResourcePath(firstNonEmpty(f.Path, f.Filename))
+		if err != nil {
+			results = append(results, UploadFileResult{
+				Path:   firstNonEmpty(f.Path, f.Filename),
+				Action: "failed",
+				Error:  fmt.Sprintf("资源路径不合法: %v", err),
+			})
+			continue
+		}
+
+		// 检查路径冲突
+		existing, err := s.FindResourceByPath(ctx, projectID, resourcePath)
+		if err != nil {
+			results = append(results, UploadFileResult{
+				Path:   resourcePath,
+				Action: "failed",
+				Error:  fmt.Sprintf("检查资源路径冲突失败: %v", err),
+			})
+			continue
+		}
+		if existing != nil {
+			results = append(results, UploadFileResult{
+				Path:             resourcePath,
+				Action:           "conflict",
+				ExistingResource: existing,
+			})
+			continue
+		}
+
+		// 上传单个资源
 		result, err := s.uploadSingleResource(ctx, projectID, f)
 		if err != nil {
-			return nil, err
+			results = append(results, UploadFileResult{
+				Path:   resourcePath,
+				Action: "failed",
+				Error:  err.Error(),
+			})
+			continue
 		}
-		results = append(results, *result)
+		results = append(results, UploadFileResult{
+			Path:     resourcePath,
+			Action:   "created",
+			Resource: result.Resource,
+		})
+	}
+	return results, nil
+}
+
+// PrecheckResources 预检批量资源路径，检查冲突情况，不执行任何写入操作。
+func (s *ResourceService) PrecheckResources(ctx context.Context, actorUserID, projectID int, paths []string) ([]PrecheckFileResult, error) {
+	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, false); err != nil {
+		return nil, err
+	}
+
+	results := make([]PrecheckFileResult, 0, len(paths))
+	seenPaths := make(map[string]struct{}, len(paths))
+
+	for _, rawPath := range paths {
+		resourcePath, err := NormalizeResourcePath(rawPath)
+		if err != nil {
+			results = append(results, PrecheckFileResult{
+				Path:   rawPath,
+				Action: "duplicate", // 路径不合法也标记为不可创建
+			})
+			continue
+		}
+
+		// 检查批次内重复
+		if _, exists := seenPaths[resourcePath]; exists {
+			results = append(results, PrecheckFileResult{
+				Path:   resourcePath,
+				Action: "duplicate",
+			})
+			continue
+		}
+		seenPaths[resourcePath] = struct{}{}
+
+		// 检查与已有资源冲突
+		existing, err := s.FindResourceByPath(ctx, projectID, resourcePath)
+		if err != nil {
+			return nil, fmt.Errorf("检查资源路径冲突失败: %w", err)
+		}
+		if existing != nil {
+			results = append(results, PrecheckFileResult{
+				Path:             resourcePath,
+				Action:           "conflict",
+				ExistingResource: existing,
+			})
+			continue
+		}
+
+		results = append(results, PrecheckFileResult{
+			Path:   resourcePath,
+			Action: "create",
+		})
 	}
 	return results, nil
 }
