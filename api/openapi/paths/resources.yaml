@@ -38,11 +38,12 @@ projectResources:
     operationId: UploadProjectResources
     summary: 上传资源文件到项目
     description: |
-      上传资源文件时可通过 paths 数组为每个文件提供项目内逻辑相对路径。
+      批量上传资源文件，允许部分成功。
       - files 与 paths 按数组下标一一对应
       - paths 使用 / 分隔，例如 ui/common.json、admin/common.json
       - 未提供 paths 时兼容旧客户端，使用上传文件名作为根目录资源路径
       - 项目内资源唯一性以规范化 path 判断，而不是 filename
+      - 冲突或失败的文件不会阻断其他文件的上传，每个文件独立返回处理结果
     security:
       - bearerAuth: []
     requestBody:
@@ -65,18 +66,51 @@ projectResources:
                 items:
                   type: string
     responses:
-      '201':
-        description: 上传成功
+      '200':
+        description: 批量上传结果（可能包含部分冲突或失败）
         content:
           application/json:
             schema:
-              $ref: '../base.yaml#/components/schemas/ResourceUploadResponse'
-      '409':
-        description: 同路径资源冲突
+              $ref: '../base.yaml#/components/schemas/ResourceUploadBatchResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+projectResourcePrecheck:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+  post:
+    operationId: PrecheckProjectResources
+    summary: 上传资源预检
+    description: |
+      在实际上传前检查批量文件中的冲突情况，不执行任何写入操作。
+      - 检查批次内是否有重复路径
+      - 检查每个路径是否与项目已有资源冲突
+      - 返回每个文件的建议操作（create / conflict / duplicate）
+      - 前端可根据结果让用户确认冲突处理策略后再执行实际上传
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            required: [paths]
+            properties:
+              paths:
+                type: array
+                minItems: 1
+                maxItems: 50
+                items:
+                  type: string
+                description: 待检查的项目内资源相对路径列表（不包含实际文件）
+    responses:
+      '200':
+        description: 预检结果
         content:
           application/json:
             schema:
-              $ref: '../base.yaml#/components/schemas/ResourceConflictResponse'
+              $ref: '../base.yaml#/components/schemas/ResourcePrecheckBatchResponse'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
 
