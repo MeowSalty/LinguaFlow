@@ -43,6 +43,8 @@ paths:
     $ref: './paths/projects.yaml#/projectBackends'
   /projects/{projectId}/resources:
     $ref: './paths/resources.yaml#/projectResources'
+  /projects/{projectId}/resources/tree:
+    $ref: './paths/resources.yaml#/projectResourceTree'
   /projects/{projectId}/resources/{resourceId}:
     $ref: './paths/resources.yaml#/projectResourceById'
   /projects/{projectId}/resources/{resourceId}/download:
@@ -154,6 +156,10 @@ components:
       $ref: './components/schemas/resource.yaml#/ResourceUploadResponse'
     ResourceListResponse:
       $ref: './components/schemas/resource.yaml#/ResourceListResponse'
+    ResourceTreeNode:
+      $ref: './components/schemas/resource.yaml#/ResourceTreeNode'
+    ResourceTreeResponse:
+      $ref: './components/schemas/resource.yaml#/ResourceTreeResponse'
     ResourceSegmentUpdateRequest:
       $ref: './components/schemas/resource.yaml#/ResourceSegmentUpdateRequest'
     ResourceSegmentListResponse:

@@ -1,11 +1,18 @@
 Resource:
   type: object
-  required: [id, filename, format, total_segments, status, created_at, updated_at]
+  required: [id, path, name, directory, format, total_segments, status, created_at, updated_at]
   properties:
     id:
       type: integer
-    filename:
+    path:
       type: string
+      description: 项目内规范化资源相对路径，使用 / 分隔，例如 ui/common.json
+    name:
+      type: string
+      description: 资源显示名，当前等同于资源路径 basename，预留给后续可编辑显示名
+    directory:
+      type: string
+      description: 资源所在目录，根目录为空字符串
     format:
       type: string
     total_segments:
@@ -39,6 +46,32 @@ ResourceListResponse:
       type: array
       items:
         $ref: '#/Resource'
+
+ResourceTreeNode:
+  type: object
+  required: [type, name, path]
+  properties:
+    type:
+      type: string
+      enum: [directory, resource]
+    name:
+      type: string
+    path:
+      type: string
+      description: 目录或资源的项目内规范化相对路径，根目录为空字符串
+    resource:
+      $ref: '#/Resource'
+    children:
+      type: array
+      items:
+        $ref: '#/ResourceTreeNode'
+
+ResourceTreeResponse:
+  type: object
+  required: [root]
+  properties:
+    root:
+      $ref: '#/ResourceTreeNode'
 
 ResourceSegment:
   allOf:
