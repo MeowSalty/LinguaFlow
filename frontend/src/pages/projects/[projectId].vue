@@ -3,7 +3,6 @@ import {
   NAlert,
   NButton,
   NModal,
-  NPopconfirm,
   NProgress,
   NSpace,
   NTag,
@@ -11,12 +10,12 @@ import {
   useMessage,
   type DataTableColumns,
   type SelectOption,
-  type UploadCustomRequestOptions,
 } from 'naive-ui'
 import { h } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { type ApiSchemas, type DownloadFileResult, isResourceConflictError } from '@/api/client'
+import { type ApiSchemas, type DownloadFileResult } from '@/api/client'
+import ResourceExplorer from '@/components/workspace/ResourceExplorer.vue'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 
 type Resource = ApiSchemas['Resource']
@@ -54,13 +53,12 @@ const jobDetailDrawerVisible = ref(false)
 const jobTargetMode = ref<JobTargetMode>('resources')
 const jobTargetResourceIds = ref<number[]>([])
 const jobTargetSegmentIds = ref<number[]>([])
-const replacingResourceId = ref<number | null>(null)
 const conflictDialogVisible = ref(false)
 const conflictResource = ref<Resource | null>(null)
 const conflictFile = ref<File | null>(null)
+const replacingResourceId = ref<number | null>(null)
 const incrementalResultVisible = ref(false)
 const incrementalResult = ref<IncrementalUpdateResponse | null>(null)
-const uploadDismissTimers = new Map<string, ReturnType<typeof setTimeout>>()
 
 const segmentForm = reactive<SegmentFormModel>({
   source_text: '',
@@ -81,20 +79,6 @@ const projectId = computed(() => {
 
   return Number.isFinite(parsed) ? parsed : null
 })
-
-const resourceStatusOptions = computed<SelectOption[]>(() => [
-  { label: t('workspace.filters.allStatuses'), value: 'all' },
-  { label: t('workspace.resource.status.ready'), value: 'ready' },
-  { label: t('workspace.resource.status.error'), value: 'error' },
-])
-
-const resourceFormatOptions = computed<SelectOption[]>(() => [
-  { label: t('workspace.filters.allFormats'), value: 'all' },
-  ...workspace.availableFormats.map((format) => ({
-    label: format,
-    value: format,
-  })),
-])
 
 const segmentStatusOptions = computed<SelectOption[]>(() => [
   { label: t('workspace.filters.allStatuses'), value: 'all' },
@@ -162,9 +146,6 @@ const statusTagType = (status: string): 'default' | 'success' | 'warning' | 'err
   }
 }
 
-const getResourceStatusLabel = (status: Resource['status']): string =>
-  t(`workspace.resource.status.${status}`)
-
 const getSegmentStatusLabel = (status: string): string =>
   t(`workspace.segment.status.${status}`, status)
 
@@ -198,9 +179,11 @@ const reloadWorkspace = async (): Promise<void> => {
 
   await Promise.all([
     workspace.loadProject(projectId.value),
+    workspace.loadResourceTree(projectId.value),
     workspace.loadResources(projectId.value),
     workspace.loadJobs(projectId.value),
   ])
+  workspace.syncResourcesFromTree()
 }
 
 const reloadSegments = async (): Promise<void> => {
@@ -211,54 +194,23 @@ const reloadSegments = async (): Promise<void> => {
   await workspace.loadSegments(projectId.value, workspace.activeResourceId)
 }
 
-const scheduleTaskDismiss = (taskId: string): void => {
-  const timer = setTimeout(() => {
-    uploadDismissTimers.delete(taskId)
-    workspace.removeUploadTask(taskId)
-  }, 3000)
-  uploadDismissTimers.set(taskId, timer)
+// ── ResourceExplorer 事件处理 ──
+
+const handleExplorerOpenSegments = (resource: Resource): void => {
+  workspace.setActiveResource(resource.id)
+  activeTab.value = 'segments'
+  void reloadSegments()
 }
 
-const dismissTask = (taskId: string): void => {
-  const timer = uploadDismissTimers.get(taskId)
-  if (timer) {
-    clearTimeout(timer)
-    uploadDismissTimers.delete(taskId)
-  }
-  workspace.removeUploadTask(taskId)
+const handleExplorerConflict = (resource: Resource, file: File): void => {
+  conflictResource.value = resource
+  conflictFile.value = file
+  conflictDialogVisible.value = true
 }
 
-const handleUpload = async ({
-  file,
-  onFinish,
-  onError,
-}: UploadCustomRequestOptions): Promise<void> => {
-  if (!projectId.value || !file.file) {
-    onError()
-    return
-  }
-
-  const taskId = workspace.addUploadTask(file.name)
-
-  try {
-    await workspace.uploadResources(projectId.value, [file.file], taskId)
-    message.success(t('workspace.messages.uploadSuccess'))
-    onFinish()
-    workspace.updateUploadTaskStage(taskId, 'complete', undefined)
-    scheduleTaskDismiss(taskId)
-  } catch (error) {
-    if (isResourceConflictError(error)) {
-      workspace.removeUploadTask(taskId)
-      conflictResource.value = error.conflictData.existing_resource
-      conflictFile.value = file.file
-      conflictDialogVisible.value = true
-      onFinish()
-    } else {
-      console.error(error)
-      message.error(workspace.actionError || t('workspace.messages.uploadFailed'))
-      onError()
-    }
-  }
+const handleExplorerIncrementalResult = (result: IncrementalUpdateResponse): void => {
+  incrementalResult.value = result
+  incrementalResultVisible.value = true
 }
 
 const resetConflictState = (): void => {
@@ -280,6 +232,7 @@ const handleConflictReplace = async (): Promise<void> => {
   try {
     await workspace.replaceResource(projectId.value, resourceId, file)
     message.success(t('workspace.messages.replaceSuccess'))
+    await workspace.loadResourceTree(projectId.value)
     if (workspace.activeResourceId === resourceId) {
       await reloadSegments()
     }
@@ -305,36 +258,7 @@ const handleConflictIncremental = async (): Promise<void> => {
     const result = await workspace.incrementalUpdateResource(projectId.value, resourceId, file)
     incrementalResult.value = result
     incrementalResultVisible.value = true
-    if (workspace.activeResourceId === resourceId) {
-      await reloadSegments()
-    }
-  } catch (error) {
-    console.error(error)
-    message.error(workspace.actionError || t('workspace.messages.incrementalUpdateFailed'))
-  }
-}
-
-const chooseIncrementalUpdateFile = (resourceId: number): void => {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.onchange = () => {
-    const file = input.files?.[0]
-    if (file) {
-      void doIncrementalUpdate(resourceId, file)
-    }
-  }
-  input.click()
-}
-
-const doIncrementalUpdate = async (resourceId: number, file: File): Promise<void> => {
-  if (!projectId.value) {
-    return
-  }
-
-  try {
-    const result = await workspace.incrementalUpdateResource(projectId.value, resourceId, file)
-    incrementalResult.value = result
-    incrementalResultVisible.value = true
+    await workspace.loadResourceTree(projectId.value)
     if (workspace.activeResourceId === resourceId) {
       await reloadSegments()
     }
@@ -349,74 +273,7 @@ const confirmIncrementalResult = (): void => {
   incrementalResult.value = null
 }
 
-const chooseReplacementFile = (resourceId: number): void => {
-  const input = document.createElement('input')
-  input.type = 'file'
-  input.onchange = () => {
-    const file = input.files?.[0]
-    if (file) {
-      void replaceResource(resourceId, file)
-    }
-  }
-  input.click()
-}
-
-const replaceResource = async (resourceId: number, file: File): Promise<void> => {
-  if (!projectId.value) {
-    return
-  }
-
-  replacingResourceId.value = resourceId
-  try {
-    await workspace.replaceResource(projectId.value, resourceId, file)
-    message.success(t('workspace.messages.replaceSuccess'))
-    if (workspace.activeResourceId === resourceId) {
-      await reloadSegments()
-    }
-  } catch (error) {
-    console.error(error)
-    message.error(workspace.actionError || t('workspace.messages.replaceFailed'))
-  } finally {
-    replacingResourceId.value = null
-  }
-}
-
-const deleteResource = async (resource: Resource): Promise<void> => {
-  if (!projectId.value) {
-    return
-  }
-
-  try {
-    await workspace.deleteResource(projectId.value, resource.id)
-    message.success(t('workspace.messages.deleteResourceSuccess'))
-    if (workspace.activeResourceId) {
-      await reloadSegments()
-    }
-  } catch (error) {
-    console.error(error)
-    message.error(workspace.actionError || t('workspace.messages.deleteResourceFailed'))
-  }
-}
-
-const downloadResource = async (resource: Resource): Promise<void> => {
-  if (!projectId.value) {
-    return
-  }
-
-  try {
-    const file = await workspace.downloadResource(projectId.value, resource.id)
-    triggerBrowserDownload(file, resource.filename)
-  } catch (error) {
-    console.error(error)
-    message.error(workspace.actionError || t('workspace.messages.downloadFailed'))
-  }
-}
-
-const openSegmentsForResource = async (resource: Resource): Promise<void> => {
-  workspace.setActiveResource(resource.id)
-  activeTab.value = 'segments'
-  await reloadSegments()
-}
+// ── 段落操作 ──
 
 const openSegmentDrawer = (segment: Segment): void => {
   editingSegment.value = segment
@@ -457,6 +314,8 @@ const saveSegment = async (): Promise<void> => {
     message.error(workspace.actionError || t('workspace.messages.segmentSaveFailed'))
   }
 }
+
+// ── 翻译任务操作 ──
 
 const setDefaultJobForm = (): void => {
   jobForm.source_lang = workspace.project?.source_lang || 'auto'
@@ -593,119 +452,7 @@ const formatConfigValue = (value: unknown): string => {
   return String(value)
 }
 
-const resourceColumns = computed<DataTableColumns<Resource>>(() => [
-  {
-    type: 'selection',
-    disabled: (row) => row.status !== 'ready',
-  },
-  {
-    title: t('workspace.resource.columns.filename'),
-    key: 'filename',
-    minWidth: 220,
-    ellipsis: {
-      tooltip: true,
-    },
-  },
-  {
-    title: t('workspace.resource.columns.format'),
-    key: 'format',
-    width: 100,
-    render: (row) => h(NTag, { size: 'small' }, { default: () => row.format || '-' }),
-  },
-  {
-    title: t('workspace.resource.columns.status'),
-    key: 'status',
-    width: 120,
-    render: (row) =>
-      h(
-        NTag,
-        { size: 'small', type: statusTagType(row.status) },
-        { default: () => getResourceStatusLabel(row.status) },
-      ),
-  },
-  {
-    title: t('workspace.resource.columns.segments'),
-    key: 'total_segments',
-    width: 100,
-  },
-  {
-    title: t('workspace.common.updatedAt'),
-    key: 'updated_at',
-    width: 170,
-    render: (row) => formatDate(row.updated_at),
-  },
-  {
-    title: t('workspace.common.actions'),
-    key: 'actions',
-    width: 360,
-    fixed: 'right',
-    render: (row) =>
-      h(NSpace, { size: 4, wrap: false }, () => [
-        h(
-          NButton,
-          {
-            size: 'small',
-            quaternary: true,
-            type: 'primary',
-            onClick: () => void openSegmentsForResource(row),
-          },
-          { default: () => t('workspace.resource.actions.segments') },
-        ),
-        h(
-          NButton,
-          {
-            size: 'small',
-            quaternary: true,
-            loading: replacingResourceId.value === row.id,
-            onClick: () => chooseReplacementFile(row.id),
-          },
-          { default: () => t('workspace.resource.actions.replace') },
-        ),
-        h(
-          NButton,
-          {
-            size: 'small',
-            quaternary: true,
-            loading: workspace.incrementalUpdatingIds.includes(row.id),
-            onClick: () => chooseIncrementalUpdateFile(row.id),
-          },
-          { default: () => t('workspace.resource.actions.incrementalUpdate') },
-        ),
-        h(
-          NButton,
-          {
-            size: 'small',
-            quaternary: true,
-            loading: workspace.downloadingKeys.includes(`resource:${row.id}`),
-            onClick: () => void downloadResource(row),
-          },
-          { default: () => t('workspace.common.download') },
-        ),
-        h(
-          NPopconfirm,
-          {
-            positiveText: t('workspace.common.confirm'),
-            negativeText: t('workspace.common.cancel'),
-            onPositiveClick: () => void deleteResource(row),
-          },
-          {
-            trigger: () =>
-              h(
-                NButton,
-                {
-                  size: 'small',
-                  quaternary: true,
-                  type: 'error',
-                  loading: workspace.deletingResourceIds.includes(row.id),
-                },
-                { default: () => t('workspace.common.delete') },
-              ),
-            default: () => t('workspace.resource.deleteConfirm', { name: row.filename }),
-          },
-        ),
-      ]),
-  },
-])
+// ── 表格列定义 ──
 
 const segmentColumns = computed<DataTableColumns<Segment>>(() => [
   {
@@ -910,6 +657,8 @@ const jobColumns = computed<DataTableColumns<TranslationJob>>(() => [
   },
 ])
 
+// ── Watchers ──
+
 watch(
   () => route.query.tab,
   (tab) => {
@@ -918,15 +667,6 @@ watch(
     }
   },
   { immediate: true },
-)
-
-watch(
-  () => [workspace.resourceSearch, workspace.resourceStatusFilter, workspace.resourceFormatFilter],
-  () => {
-    if (projectId.value) {
-      void workspace.loadResources(projectId.value)
-    }
-  },
 )
 
 watch(
@@ -959,10 +699,6 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
-  for (const timer of uploadDismissTimers.values()) {
-    clearTimeout(timer)
-  }
-  uploadDismissTimers.clear()
   workspace.reset()
 })
 </script>
@@ -1002,7 +738,7 @@ onBeforeUnmount(() => {
           <NButton
             secondary
             :loading="
-              workspace.loadingProject || workspace.loadingResources || workspace.loadingJobs
+              workspace.loadingProject || workspace.loadingResourceTree || workspace.loadingJobs
             "
             @click="reloadWorkspace"
           >
@@ -1049,151 +785,14 @@ onBeforeUnmount(() => {
     <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
       <NTabs v-model:value="activeTab" animated>
         <NTabPane name="resources" :tab="t('workspace.tabs.resources')">
-          <div class="space-y-4 pt-2">
-            <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div class="flex flex-1 flex-col gap-3 md:flex-row">
-                <NInput
-                  v-model:value="workspace.resourceSearch"
-                  clearable
-                  class="md:max-w-sm"
-                  :placeholder="t('workspace.resource.searchPlaceholder')"
-                />
-                <NSelect
-                  v-model:value="workspace.resourceStatusFilter"
-                  class="md:w-44"
-                  :options="resourceStatusOptions"
-                />
-                <NSelect
-                  v-model:value="workspace.resourceFormatFilter"
-                  class="md:w-44"
-                  :options="resourceFormatOptions"
-                />
-              </div>
-              <div class="flex flex-wrap gap-3">
-                <NUpload multiple :show-file-list="false" :custom-request="handleUpload">
-                  <NButton type="primary" :loading="workspace.hasActiveUploads">
-                    {{ t('workspace.resource.actions.upload') }}
-                  </NButton>
-                </NUpload>
-                <NButton :disabled="!canCreateResourceJob" @click="openResourceJobDrawer">
-                  {{ t('workspace.job.actions.create') }}
-                </NButton>
-              </div>
-            </div>
-
-            <TransitionGroup
-              enter-active-class="transition-all duration-300 ease-out"
-              leave-active-class="transition-all duration-200 ease-in"
-              enter-from-class="opacity-0 -translate-y-2"
-              leave-to-class="opacity-0 -translate-y-2"
-              move-class="transition-transform duration-200"
-              tag="div"
-              class="space-y-2"
-            >
-              <div
-                v-for="task in workspace.uploadTasks"
-                :key="task.id"
-                class="overflow-hidden rounded-lg border border-lf-border bg-lf-surface-muted px-4 py-3"
-              >
-                <div class="flex items-center justify-between">
-                  <div class="flex min-w-0 flex-1 items-center gap-2.5">
-                    <div
-                      class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md"
-                      :class="{
-                        'bg-blue-50 text-blue-500 dark:bg-blue-500/10': task.stage === 'uploading',
-                        'bg-amber-50 text-amber-500 dark:bg-amber-500/10':
-                          task.stage === 'processing',
-                        'bg-emerald-50 text-emerald-500 dark:bg-emerald-500/10':
-                          task.stage === 'complete',
-                        'bg-red-50 text-red-500 dark:bg-red-500/10': task.stage === 'error',
-                      }"
-                    >
-                      <IconLucideUpload v-if="task.stage === 'uploading'" class="h-3.5 w-3.5" />
-                      <IconLucideLoader2
-                        v-else-if="task.stage === 'processing'"
-                        class="h-3.5 w-3.5 animate-spin"
-                      />
-                      <IconLucideCheck v-else-if="task.stage === 'complete'" class="h-3.5 w-3.5" />
-                      <IconLucideAlertCircle v-else class="h-3.5 w-3.5" />
-                    </div>
-                    <div class="min-w-0 flex-1">
-                      <div class="flex items-baseline justify-between gap-2">
-                        <span class="truncate text-sm font-medium text-lf-text-strong">
-                          {{ task.fileName }}
-                        </span>
-                        <span class="shrink-0 text-xs text-lf-text-muted">
-                          <template v-if="task.stage === 'uploading'">
-                            {{ t('workspace.upload.uploadingPercent', { percent: task.progress }) }}
-                          </template>
-                          <template v-else-if="task.stage === 'processing'">
-                            {{ t('workspace.upload.processing') }}
-                          </template>
-                          <template v-else-if="task.stage === 'complete'">
-                            {{ t('workspace.upload.complete') }}
-                          </template>
-                          <template v-else>
-                            {{ task.errorMessage || t('workspace.upload.failed') }}
-                          </template>
-                        </span>
-                      </div>
-                      <NProgress
-                        class="mt-1.5"
-                        type="line"
-                        :percentage="task.progress"
-                        :status="
-                          task.stage === 'complete'
-                            ? 'success'
-                            : task.stage === 'error'
-                              ? 'error'
-                              : undefined
-                        "
-                        :show-indicator="false"
-                        :processing="task.stage === 'uploading' || task.stage === 'processing'"
-                      />
-                    </div>
-                  </div>
-                  <NButton
-                    quaternary
-                    size="tiny"
-                    class="ml-2 shrink-0"
-                    @click="dismissTask(task.id)"
-                  >
-                    <template #icon>
-                      <IconLucideX class="h-3.5 w-3.5" />
-                    </template>
-                  </NButton>
-                </div>
-              </div>
-            </TransitionGroup>
-
-            <NAlert v-if="workspace.resourcesError" type="error" :bordered="false">
-              {{ workspace.resourcesError }}
-            </NAlert>
-
-            <NDataTable
-              v-model:checked-row-keys="workspace.selectedResourceIds"
-              remote
-              :columns="resourceColumns"
-              :data="workspace.resources"
-              :loading="workspace.loadingResources"
-              :row-key="(row: Resource) => row.id"
-              :scroll-x="1120"
-            >
-              <template #empty>
-                <NEmpty
-                  v-if="!workspace.loadingResources && workspace.resources.length === 0"
-                  :description="t('workspace.resource.empty')"
-                >
-                  <template #extra>
-                    <NUpload multiple :show-file-list="false" :custom-request="handleUpload">
-                      <NButton type="primary">{{
-                        t('workspace.resource.actions.uploadFirst')
-                      }}</NButton>
-                    </NUpload>
-                  </template>
-                </NEmpty>
-              </template>
-            </NDataTable>
+          <div class="pt-2">
+            <ResourceExplorer
+              v-if="projectId"
+              :project-id="projectId"
+              @open-segments="handleExplorerOpenSegments"
+              @conflict="handleExplorerConflict"
+              @incremental-result="handleExplorerIncrementalResult"
+            />
           </div>
         </NTabPane>
 
@@ -1207,7 +806,7 @@ onBeforeUnmount(() => {
                   class="md:max-w-sm"
                   :options="
                     workspace.resources.map((resource) => ({
-                      label: resource.filename,
+                      label: resource.path,
                       value: resource.id,
                     }))
                   "
@@ -1522,10 +1121,10 @@ onBeforeUnmount(() => {
                 :data="workspace.selectedJob.job_resources ?? []"
                 :columns="[
                   {
-                    title: t('workspace.resource.columns.filename'),
-                    key: 'filename',
+                    title: t('workspace.resource.columns.name'),
+                    key: 'name',
                     render: (row: ApiSchemas['TranslationJobResource']) =>
-                      row.resource?.filename || `#${row.resource_id}`,
+                      row.resource?.name || `#${row.resource_id}`,
                   },
                   {
                     title: t('workspace.job.columns.status'),
@@ -1584,7 +1183,7 @@ onBeforeUnmount(() => {
     >
       <div class="space-y-3">
         <NAlert type="warning" :bordered="false">
-          {{ t('workspace.conflict.description', { name: conflictResource?.filename ?? '' }) }}
+          {{ t('workspace.conflict.description', { name: conflictResource?.name ?? '' }) }}
         </NAlert>
         <p class="text-sm text-lf-text-muted">
           {{ t('workspace.conflict.hint') }}

@@ -168,6 +168,7 @@ export const uploadProjectResources = async (
 export const uploadProjectResourcesWithProgress = async (
   projectId: number,
   files: File[],
+  paths?: string[],
   callbacks?: UploadProgressCallbacks,
 ): Promise<ApiSchemas['ResourceUploadResponse']> => {
   const baseUrl = readStoredApiBaseUrl() ?? '/api/v1'
@@ -175,6 +176,11 @@ export const uploadProjectResourcesWithProgress = async (
   const url = `${normalizedBaseUrl}/projects/${projectId}/resources`
 
   const formData = buildFilesFormData(files, 'files')
+  if (paths && paths.length > 0) {
+    for (const path of paths) {
+      formData.append('paths', path)
+    }
+  }
   const accessToken = getAccessToken()
 
   return new Promise((resolve, reject) => {
@@ -340,6 +346,24 @@ export const downloadProjectResource = async (
     blob: data as Blob,
     filename: getContentDispositionFilename(response),
   }
+}
+
+export const fetchProjectResourceTree = async (
+  projectId: number,
+  client: ApiClient = apiClient,
+): Promise<ApiSchemas['ResourceTreeResponse']> => {
+  const { data, error, response } = await client.GET(
+    '/projects/{projectId}/resources/tree',
+    {
+      params: { path: { projectId } },
+    },
+  )
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.fetchResourceTreeFailed'), error, response)
+  }
+
+  return data
 }
 
 export const fetchResourceSegments = async (

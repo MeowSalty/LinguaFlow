@@ -356,8 +356,37 @@ export interface paths {
         /** 列出项目资源文件 */
         get: operations["ListProjectResources"];
         put?: never;
-        /** 上传资源文件到项目 */
+        /**
+         * 上传资源文件到项目
+         * @description 上传资源文件时可通过 paths 数组为每个文件提供项目内逻辑相对路径。
+         *     - files 与 paths 按数组下标一一对应
+         *     - paths 使用 / 分隔，例如 ui/common.json、admin/common.json
+         *     - 未提供 paths 时兼容旧客户端，使用上传文件名作为根目录资源路径
+         *     - 项目内资源唯一性以规范化 path 判断，而不是 filename
+         */
         post: operations["UploadProjectResources"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/tree": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * 获取项目资源目录树
+         * @description 按资源 path 聚合生成目录树。当前目录为虚拟节点，资源身份仍由 Resource.path 唯一确定；后续可在此基础上扩展目录移动、重命名等能力。
+         */
+        get: operations["GetProjectResourceTree"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -831,7 +860,12 @@ export interface components {
         };
         Resource: {
             id: number;
-            filename: string;
+            /** @description 项目内规范化资源相对路径，使用 / 分隔，例如 ui/common.json */
+            path: string;
+            /** @description 资源显示名，当前等同于资源路径 basename，预留给后续可编辑显示名 */
+            name: string;
+            /** @description 资源所在目录，根目录为空字符串 */
+            directory: string;
             format: string;
             total_segments: number;
             /** @enum {string} */
@@ -847,6 +881,18 @@ export interface components {
         };
         ResourceListResponse: {
             items: components["schemas"]["Resource"][];
+        };
+        ResourceTreeNode: {
+            /** @enum {string} */
+            type: "directory" | "resource";
+            name: string;
+            /** @description 目录或资源的项目内规范化相对路径，根目录为空字符串 */
+            path: string;
+            resource?: components["schemas"]["Resource"];
+            children?: components["schemas"]["ResourceTreeNode"][];
+        };
+        ResourceTreeResponse: {
+            root: components["schemas"]["ResourceTreeNode"];
         };
         ResourceSegmentUpdateRequest: {
             source_text?: string;
@@ -1918,6 +1964,8 @@ export interface operations {
             content: {
                 "multipart/form-data": {
                     files: File[];
+                    /** @description 与 files 一一对应的项目内资源相对路径；省略时使用文件名作为根目录路径 */
+                    paths?: string[];
                 };
             };
         };
@@ -1931,13 +1979,36 @@ export interface operations {
                     "application/json": components["schemas"]["ResourceUploadResponse"];
                 };
             };
-            /** @description 同名文件冲突 */
+            /** @description 同路径资源冲突 */
             409: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
                     "application/json": components["schemas"]["ResourceConflictResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetProjectResourceTree: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 资源目录树 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceTreeResponse"];
                 };
             };
             default: components["responses"]["Problem"];
