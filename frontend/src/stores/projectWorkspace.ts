@@ -11,9 +11,11 @@ import {
   type DownloadFileResult,
   fetchProject,
   fetchProjectResources,
+  fetchProjectResourceTree,
   fetchResourceSegments,
   fetchTranslationJob,
   fetchTranslationJobs,
+  incrementalUpdateResource as incrementalUpdateResourceRequest,
   replaceProjectResource as replaceProjectResourceRequest,
   retryTranslationJob as retryTranslationJobRequest,
   updateResourceSegment as updateResourceSegmentRequest,
@@ -23,10 +25,24 @@ import { t } from '@/i18n'
 
 type Project = ApiSchemas['Project']
 type Resource = ApiSchemas['Resource']
+type ResourceTreeNode = ApiSchemas['ResourceTreeNode']
 type Segment = ApiSchemas['Segment']
 type TranslationJob = ApiSchemas['TranslationJob']
 type CreateTranslationJobPayload = ApiSchemas['CreateTranslationJobRequest']
 type SegmentUpdatePayload = ApiSchemas['ResourceSegmentUpdateRequest']
+
+export interface BreadcrumbItem {
+  label: string
+  path: string
+}
+
+export interface DirectoryChild {
+  type: 'directory' | 'resource'
+  name: string
+  path: string
+  resource?: Resource
+  childCount?: number
+}
 
 export interface UploadTask {
   id: string
@@ -48,8 +64,40 @@ const upsertById = <T extends { id: number }>(items: T[], item: T): T[] => [
   ...items.filter((current) => current.id !== item.id),
 ]
 
+/**
+ * 从资源树中定位指定路径的目录节点。
+ * path 为空字符串时返回根节点。
+ */
+const findNodeByPath = (root: ResourceTreeNode, path: string): ResourceTreeNode | null => {
+  if (!path) {
+    return root
+  }
+
+  const parts = path.split('/')
+  let node = root
+
+  for (const part of parts) {
+    const child = node.children?.find((c) => c.name === part && c.type === 'directory')
+    if (!child) {
+      return null
+    }
+    node = child
+  }
+
+  return node
+}
+
 export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
+  // ── 项目 ──
   const project = ref<Project | null>(null)
+
+  // ── 资源目录树 ──
+  const resourceTree = ref<ResourceTreeNode | null>(null)
+  const currentPath = ref('')
+  const loadingResourceTree = ref(false)
+  const resourceTreeError = ref<string | null>(null)
+
+  // ── 资源列表（用于段落 Tab 筛选器和兼容旧逻辑） ──
   const resources = ref<Resource[]>([])
   const selectedResourceIds = ref<number[]>([])
   const activeResourceId = ref<number | null>(null)
@@ -61,6 +109,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   const segmentsCursor = ref<string | null>(null)
   const jobsCursor = ref<string | null>(null)
 
+  // ── 加载状态 ──
   const loadingProject = ref(false)
   const loadingResources = ref(false)
   const loadingSegments = ref(false)
@@ -68,6 +117,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   const loadingJobDetail = ref(false)
   const uploadTasks = ref<UploadTask[]>([])
   const replacingResourceIds = ref<number[]>([])
+  const incrementalUpdatingIds = ref<number[]>([])
   const deletingResourceIds = ref<number[]>([])
   const editingSegmentIds = ref<number[]>([])
   const creatingJob = ref(false)
@@ -75,6 +125,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   const retryingJobIds = ref<number[]>([])
   const downloadingKeys = ref<string[]>([])
 
+  // ── 错误状态 ──
   const projectError = ref<string | null>(null)
   const resourcesError = ref<string | null>(null)
   const segmentsError = ref<string | null>(null)
@@ -82,12 +133,76 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   const jobDetailError = ref<string | null>(null)
   const actionError = ref<string | null>(null)
 
+  // ── 筛选器 ──
   const resourceSearch = ref('')
   const resourceStatusFilter = ref<ResourceStatusFilter>('all')
   const resourceFormatFilter = ref<string>('all')
   const segmentSearch = ref('')
   const segmentStatusFilter = ref<SegmentStatusFilter>('all')
   const jobStatusFilter = ref<JobStatusFilter>('all')
+
+  // ── 计算属性：资源树导航 ──
+
+  /** 面包屑路径列表 */
+  const breadcrumbs = computed<BreadcrumbItem[]>(() => {
+    if (!currentPath.value) {
+      return []
+    }
+
+    const parts = currentPath.value.split('/')
+    return parts.map((part, index) => ({
+      label: part,
+      path: parts.slice(0, index + 1).join('/'),
+    }))
+  })
+
+  /** 当前目录的树节点 */
+  const currentDirectoryNode = computed<ResourceTreeNode | null>(() => {
+    if (!resourceTree.value) {
+      return null
+    }
+
+    return findNodeByPath(resourceTree.value, currentPath.value)
+  })
+
+  /** 当前目录的子项列表（目录在前，资源在后） */
+  const currentDirectoryChildren = computed<DirectoryChild[]>(() => {
+    const node = currentDirectoryNode.value
+    if (!node?.children) {
+      return []
+    }
+
+    const directories: DirectoryChild[] = node.children
+      .filter((c) => c.type === 'directory')
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((c) => ({
+        type: 'directory' as const,
+        name: c.name,
+        path: c.path,
+        childCount: c.children?.length ?? 0,
+      }))
+
+    const resourceItems: DirectoryChild[] = node.children
+      .filter((c) => c.type === 'resource' && c.resource)
+      .sort((a, b) => a.name.localeCompare(b.name))
+      .map((c) => ({
+        type: 'resource' as const,
+        name: c.name,
+        path: c.path,
+        resource: c.resource,
+      }))
+
+    return [...directories, ...resourceItems]
+  })
+
+  /** 当前目录中的资源列表（用于选择器等场景） */
+  const currentDirectoryResources = computed<Resource[]>(() =>
+    currentDirectoryChildren.value
+      .filter((child) => child.type === 'resource' && child.resource)
+      .map((child) => child.resource!),
+  )
+
+  // ── 计算属性：资源统计 ──
 
   const activeResource = computed<Resource | null>(
     () => resources.value.find((resource) => resource.id === activeResourceId.value) ?? null,
@@ -111,6 +226,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     uploadTasks.value.some((task) => task.stage === 'uploading' || task.stage === 'processing'),
   )
 
+  // ── Actions：项目 ──
+
   const loadProject = async (projectId: number): Promise<void> => {
     loadingProject.value = true
     projectError.value = null
@@ -123,6 +240,71 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
       loadingProject.value = false
     }
   }
+
+  // ── Actions：资源树 ──
+
+  const loadResourceTree = async (projectId: number): Promise<void> => {
+    loadingResourceTree.value = true
+    resourceTreeError.value = null
+
+    try {
+      const response = await fetchProjectResourceTree(projectId)
+      resourceTree.value = response.root
+    } catch (error) {
+      resourceTreeError.value = getErrorMessage(error, t('api.errors.fetchResourceTreeFailed'))
+    } finally {
+      loadingResourceTree.value = false
+    }
+  }
+
+  /** 导航到指定目录路径 */
+  const navigateTo = (path: string): void => {
+    currentPath.value = path
+  }
+
+  /** 返回上级目录 */
+  const navigateUp = (): void => {
+    const parts = currentPath.value.split('/')
+    parts.pop()
+    currentPath.value = parts.join('/')
+  }
+
+  /** 刷新资源树后同步更新扁平资源列表 */
+  const syncResourcesFromTree = (): void => {
+    if (!resourceTree.value) {
+      resources.value = []
+      return
+    }
+
+    const flat: Resource[] = []
+
+    const walk = (node: ResourceTreeNode): void => {
+      if (node.type === 'resource' && node.resource) {
+        flat.push(node.resource)
+      }
+      if (node.children) {
+        for (const child of node.children) {
+          walk(child)
+        }
+      }
+    }
+
+    walk(resourceTree.value)
+    resources.value = flat
+
+    // 同步选中和激活状态
+    selectedResourceIds.value = selectedResourceIds.value.filter((id) =>
+      resources.value.some((resource) => resource.id === id),
+    )
+    if (
+      activeResourceId.value &&
+      !resources.value.some((item) => item.id === activeResourceId.value)
+    ) {
+      activeResourceId.value = resources.value[0]?.id ?? null
+    }
+  }
+
+  // ── Actions：资源列表（保留用于段落 Tab 和筛选） ──
 
   const loadResources = async (projectId: number, append = false): Promise<void> => {
     loadingResources.value = true
@@ -159,6 +341,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     }
   }
 
+  // ── Actions：段落 ──
+
   const loadSegments = async (
     projectId: number,
     resourceId: number,
@@ -182,6 +366,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
       loadingSegments.value = false
     }
   }
+
+  // ── Actions：翻译任务 ──
 
   const loadJobs = async (projectId: number, append = false): Promise<void> => {
     loadingJobs.value = true
@@ -218,6 +404,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
       loadingJobDetail.value = false
     }
   }
+
+  // ── Actions：上传 ──
 
   const addUploadTask = (fileName: string): string => {
     const id = crypto.randomUUID()
@@ -256,6 +444,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   const uploadResources = async (
     projectId: number,
     files: File[],
+    paths?: string[],
     taskId?: string,
   ): Promise<void> => {
     if (files.length === 0) {
@@ -265,7 +454,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     actionError.value = null
 
     try {
-      const response = await uploadProjectResourcesWithProgress(projectId, files, {
+      const response = await uploadProjectResourcesWithProgress(projectId, files, paths, {
         onProgress: (percent) => {
           if (taskId) {
             updateUploadTaskProgress(taskId, percent)
@@ -291,6 +480,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     }
   }
 
+  // ── Actions：资源操作 ──
+
   const replaceResource = async (
     projectId: number,
     resourceId: number,
@@ -311,6 +502,32 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
       throw error
     } finally {
       replacingResourceIds.value = replacingResourceIds.value.filter((id) => id !== resourceId)
+    }
+  }
+
+  const incrementalUpdateResource = async (
+    projectId: number,
+    resourceId: number,
+    file: File,
+  ): Promise<ApiSchemas['IncrementalUpdateResponse']> => {
+    incrementalUpdatingIds.value = [...incrementalUpdatingIds.value, resourceId]
+    actionError.value = null
+
+    try {
+      const result = await incrementalUpdateResourceRequest(projectId, resourceId, file)
+      resources.value = resources.value.map((item) =>
+        item.id === result.resource.id ? result.resource : item,
+      )
+      if (activeResourceId.value === resourceId) {
+        segments.value = []
+        segmentsCursor.value = null
+      }
+      return result
+    } catch (error) {
+      actionError.value = getErrorMessage(error, t('api.errors.incrementalUpdateFailed'))
+      throw error
+    } finally {
+      incrementalUpdatingIds.value = incrementalUpdatingIds.value.filter((id) => id !== resourceId)
     }
   }
 
@@ -355,6 +572,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
       editingSegmentIds.value = editingSegmentIds.value.filter((id) => id !== segmentId)
     }
   }
+
+  // ── Actions：翻译任务操作 ──
 
   const createJob = async (
     projectId: number,
@@ -405,6 +624,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     }
   }
 
+  // ── Actions：下载 ──
+
   const downloadResource = async (
     projectId: number,
     resourceId: number,
@@ -441,6 +662,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     }
   }
 
+  // ── Actions：工具方法 ──
+
   const setActiveResource = (resourceId: number | null): void => {
     activeResourceId.value = resourceId
     segments.value = []
@@ -449,6 +672,10 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
 
   const reset = (): void => {
     project.value = null
+    resourceTree.value = null
+    currentPath.value = ''
+    loadingResourceTree.value = false
+    resourceTreeError.value = null
     resources.value = []
     selectedResourceIds.value = []
     activeResourceId.value = null
@@ -465,6 +692,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     jobDetailError.value = null
     actionError.value = null
     clearAllUploadTasks()
+    incrementalUpdatingIds.value = []
     resourceSearch.value = ''
     resourceStatusFilter.value = 'all'
     resourceFormatFilter.value = 'all'
@@ -474,18 +702,32 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   }
 
   return {
+    // 项目
     project,
+    // 资源树
+    resourceTree,
+    currentPath,
+    loadingResourceTree,
+    resourceTreeError,
+    breadcrumbs,
+    currentDirectoryNode,
+    currentDirectoryChildren,
+    currentDirectoryResources,
+    // 资源列表
     resources,
     selectedResourceIds,
     activeResourceId,
     activeResource,
     selectedResources,
+    // 段落 & 任务
     segments,
     jobs,
     selectedJob,
+    // 游标
     resourcesCursor,
     segmentsCursor,
     jobsCursor,
+    // 加载状态
     loadingProject,
     loadingResources,
     loadingSegments,
@@ -494,29 +736,38 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     uploadTasks,
     hasActiveUploads,
     replacingResourceIds,
+    incrementalUpdatingIds,
     deletingResourceIds,
     editingSegmentIds,
     creatingJob,
     cancellingJobIds,
     retryingJobIds,
     downloadingKeys,
+    // 错误
     projectError,
     resourcesError,
     segmentsError,
     jobsError,
     jobDetailError,
     actionError,
+    // 筛选器
     resourceSearch,
     resourceStatusFilter,
     resourceFormatFilter,
     segmentSearch,
     segmentStatusFilter,
     jobStatusFilter,
+    // 计算属性
     availableFormats,
     readyResourceCount,
     totalSegmentCount,
     runningJobCount,
+    // Actions
     loadProject,
+    loadResourceTree,
+    navigateTo,
+    navigateUp,
+    syncResourcesFromTree,
     loadResources,
     loadSegments,
     loadJobs,
@@ -529,6 +780,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     clearAllUploadTasks,
     uploadResources,
     replaceResource,
+    incrementalUpdateResource,
     deleteResource,
     updateSegment,
     createJob,
