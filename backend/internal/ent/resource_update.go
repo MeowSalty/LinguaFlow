@@ -37,16 +37,16 @@ func (_u *ResourceUpdate) SetUpdatedAt(v time.Time) *ResourceUpdate {
 	return _u
 }
 
-// SetFilename sets the "filename" field.
-func (_u *ResourceUpdate) SetFilename(v string) *ResourceUpdate {
-	_u.mutation.SetFilename(v)
+// SetPath sets the "path" field.
+func (_u *ResourceUpdate) SetPath(v string) *ResourceUpdate {
+	_u.mutation.SetPath(v)
 	return _u
 }
 
-// SetNillableFilename sets the "filename" field if the given value is not nil.
-func (_u *ResourceUpdate) SetNillableFilename(v *string) *ResourceUpdate {
+// SetNillablePath sets the "path" field if the given value is not nil.
+func (_u *ResourceUpdate) SetNillablePath(v *string) *ResourceUpdate {
 	if v != nil {
-		_u.SetFilename(*v)
+		_u.SetPath(*v)
 	}
 	return _u
 }
@@ -280,9 +280,9 @@ func (_u *ResourceUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *ResourceUpdate) check() error {
-	if v, ok := _u.mutation.Filename(); ok {
-		if err := resource.FilenameValidator(v); err != nil {
-			return &ValidationError{Name: "filename", err: fmt.Errorf(`ent: validator failed for field "Resource.filename": %w`, err)}
+	if v, ok := _u.mutation.Path(); ok {
+		if err := resource.PathValidator(v); err != nil {
+			return &ValidationError{Name: "path", err: fmt.Errorf(`ent: validator failed for field "Resource.path": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.Format(); ok {
@@ -323,8 +323,8 @@ func (_u *ResourceUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(resource.FieldUpdatedAt, field.TypeTime, value)
 	}
-	if value, ok := _u.mutation.Filename(); ok {
-		_spec.SetField(resource.FieldFilename, field.TypeString, value)
+	if value, ok := _u.mutation.Path(); ok {
+		_spec.SetField(resource.FieldPath, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Format(); ok {
 		_spec.SetField(resource.FieldFormat, field.TypeString, value)
@@ -492,16 +492,16 @@ func (_u *ResourceUpdateOne) SetUpdatedAt(v time.Time) *ResourceUpdateOne {
 	return _u
 }
 
-// SetFilename sets the "filename" field.
-func (_u *ResourceUpdateOne) SetFilename(v string) *ResourceUpdateOne {
-	_u.mutation.SetFilename(v)
+// SetPath sets the "path" field.
+func (_u *ResourceUpdateOne) SetPath(v string) *ResourceUpdateOne {
+	_u.mutation.SetPath(v)
 	return _u
 }
 
-// SetNillableFilename sets the "filename" field if the given value is not nil.
-func (_u *ResourceUpdateOne) SetNillableFilename(v *string) *ResourceUpdateOne {
+// SetNillablePath sets the "path" field if the given value is not nil.
+func (_u *ResourceUpdateOne) SetNillablePath(v *string) *ResourceUpdateOne {
 	if v != nil {
-		_u.SetFilename(*v)
+		_u.SetPath(*v)
 	}
 	return _u
 }
@@ -748,9 +748,9 @@ func (_u *ResourceUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *ResourceUpdateOne) check() error {
-	if v, ok := _u.mutation.Filename(); ok {
-		if err := resource.FilenameValidator(v); err != nil {
-			return &ValidationError{Name: "filename", err: fmt.Errorf(`ent: validator failed for field "Resource.filename": %w`, err)}
+	if v, ok := _u.mutation.Path(); ok {
+		if err := resource.PathValidator(v); err != nil {
+			return &ValidationError{Name: "path", err: fmt.Errorf(`ent: validator failed for field "Resource.path": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.Format(); ok {
@@ -808,8 +808,8 @@ func (_u *ResourceUpdateOne) sqlSave(ctx context.Context) (_node *Resource, err 
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(resource.FieldUpdatedAt, field.TypeTime, value)
 	}
-	if value, ok := _u.mutation.Filename(); ok {
-		_spec.SetField(resource.FieldFilename, field.TypeString, value)
+	if value, ok := _u.mutation.Path(); ok {
+		_spec.SetField(resource.FieldPath, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Format(); ok {
 		_spec.SetField(resource.FieldFormat, field.TypeString, value)

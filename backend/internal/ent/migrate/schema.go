@@ -351,7 +351,7 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
-		{Name: "filename", Type: field.TypeString},
+		{Name: "path", Type: field.TypeString},
 		{Name: "format", Type: field.TypeString},
 		{Name: "storage_path", Type: field.TypeString},
 		{Name: "total_segments", Type: field.TypeInt, Default: 0},
@@ -370,6 +370,13 @@ var (
 				Columns:    []*schema.Column{ResourcesColumns[9]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.SetNull,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "resource_project_id_path",
+				Unique:  true,
+				Columns: []*schema.Column{ResourcesColumns[9], ResourcesColumns[3]},
 			},
 		},
 	}

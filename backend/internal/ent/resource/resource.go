@@ -18,8 +18,8 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
-	// FieldFilename holds the string denoting the filename field in the database.
-	FieldFilename = "filename"
+	// FieldPath holds the string denoting the path field in the database.
+	FieldPath = "path"
 	// FieldFormat holds the string denoting the format field in the database.
 	FieldFormat = "format"
 	// FieldStoragePath holds the string denoting the storage_path field in the database.
@@ -68,7 +68,7 @@ var Columns = []string{
 	FieldID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
-	FieldFilename,
+	FieldPath,
 	FieldFormat,
 	FieldStoragePath,
 	FieldTotalSegments,
@@ -94,8 +94,8 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
-	// FilenameValidator is a validator for the "filename" field. It is called by the builders before save.
-	FilenameValidator func(string) error
+	// PathValidator is a validator for the "path" field. It is called by the builders before save.
+	PathValidator func(string) error
 	// FormatValidator is a validator for the "format" field. It is called by the builders before save.
 	FormatValidator func(string) error
 	// StoragePathValidator is a validator for the "storage_path" field. It is called by the builders before save.
@@ -128,9 +128,9 @@ func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
 }
 
-// ByFilename orders the results by the filename field.
-func ByFilename(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldFilename, opts...).ToFunc()
+// ByPath orders the results by the path field.
+func ByPath(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldPath, opts...).ToFunc()
 }
 
 // ByFormat orders the results by the format field.

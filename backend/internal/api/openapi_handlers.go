@@ -166,12 +166,20 @@ func (s *Server) UploadProjectResources(w http.ResponseWriter, r *http.Request, 
 	s.requireAuth(http.HandlerFunc(s.handleUploadProjectResources)).ServeHTTP(w, r)
 }
 
+func (s *Server) GetProjectResourceTree(w http.ResponseWriter, r *http.Request, _ ProjectId) {
+	s.requireAuth(http.HandlerFunc(s.handleGetProjectResourceTree)).ServeHTTP(w, r)
+}
+
 func (s *Server) GetResource(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
 	s.requireAuth(http.HandlerFunc(s.handleGetResource)).ServeHTTP(w, r)
 }
 
 func (s *Server) UpdateResource(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
 	s.requireAuth(http.HandlerFunc(s.handleUpdateResource)).ServeHTTP(w, r)
+}
+
+func (s *Server) IncrementalUpdateResource(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
+	s.requireAuth(http.HandlerFunc(s.handleIncrementalUpdateResource)).ServeHTTP(w, r)
 }
 
 func (s *Server) DeleteResource(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {

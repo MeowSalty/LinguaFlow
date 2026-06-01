@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -19,7 +21,9 @@ const maxResourceUploadFiles = 50
 
 type resourceResponse struct {
 	ID            int     `json:"id"`
-	Filename      string  `json:"filename"`
+	Path          string  `json:"path"`
+	Name          string  `json:"name"`
+	Directory     string  `json:"directory"`
 	Format        string  `json:"format"`
 	TotalSegments int     `json:"total_segments"`
 	Status        string  `json:"status"`
@@ -29,9 +33,12 @@ type resourceResponse struct {
 }
 
 func toResourceResponse(r *ent.Resource) resourceResponse {
+	pathValue := resourceResponsePath(r)
 	return resourceResponse{
 		ID:            r.ID,
-		Filename:      r.Filename,
+		Path:          pathValue,
+		Name:          resourceResponseName(pathValue),
+		Directory:     resourceResponseDirectory(pathValue),
 		Format:        r.Format,
 		TotalSegments: r.TotalSegments,
 		Status:        r.Status,
@@ -39,6 +46,26 @@ func toResourceResponse(r *ent.Resource) resourceResponse {
 		CreatedAt:     r.CreatedAt.Format(timeRFC3339),
 		UpdatedAt:     r.UpdatedAt.Format(timeRFC3339),
 	}
+}
+
+func resourceResponsePath(r *ent.Resource) string {
+	return strings.TrimSpace(r.Path)
+}
+
+func resourceResponseName(resourcePath string) string {
+	name := filepath.Base(strings.ReplaceAll(resourcePath, "\\", "/"))
+	if name == "." || name == string(filepath.Separator) || strings.TrimSpace(name) == "" {
+		return "resource"
+	}
+	return name
+}
+
+func resourceResponseDirectory(resourcePath string) string {
+	dir := filepath.ToSlash(filepath.Dir(strings.ReplaceAll(resourcePath, "\\", "/")))
+	if dir == "." {
+		return ""
+	}
+	return dir
 }
 
 func toResourceListResponse(resources []*ent.Resource) map[string]any {
@@ -76,8 +103,45 @@ func (s *Server) handleUploadProjectResources(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	paths := r.MultipartForm.Value["paths"]
+	if len(paths) > 0 && len(paths) != len(files) {
+		writeProblem(w, http.StatusBadRequest, "invalid_input", "paths 数量必须与 files 数量一致")
+		return
+	}
+
+	normalizedPaths := make([]string, 0, len(files))
+	seenPaths := make(map[string]struct{}, len(files))
+	for i, header := range files {
+		candidatePath := header.Filename
+		if len(paths) > 0 {
+			candidatePath = paths[i]
+		}
+		resourcePath, err := service.NormalizeResourcePath(candidatePath)
+		if err != nil {
+			writeProblem(w, http.StatusBadRequest, "invalid_resource_path", "资源路径不合法")
+			return
+		}
+		if _, exists := seenPaths[resourcePath]; exists {
+			writeProblem(w, http.StatusConflict, "conflict", "上传批次中存在重复资源路径")
+			return
+		}
+		seenPaths[resourcePath] = struct{}{}
+		existing, err := s.resourceSvc.FindResourceByPath(r.Context(), projectID, resourcePath)
+		if err != nil {
+			writeProblem(w, http.StatusInternalServerError, "internal_error", "检查资源路径冲突失败")
+			return
+		}
+		if existing != nil {
+			writeJSON(w, http.StatusConflict, map[string]any{
+				"existing_resource": toResourceResponse(existing),
+			})
+			return
+		}
+		normalizedPaths = append(normalizedPaths, resourcePath)
+	}
+
 	uploaded := make([]service.UploadedFile, 0, len(files))
-	for _, header := range files {
+	for i, header := range files {
 		opened, err := header.Open()
 		if err != nil {
 			writeProblem(w, http.StatusBadRequest, "invalid_upload", "无法读取上传文件")
@@ -85,6 +149,7 @@ func (s *Server) handleUploadProjectResources(w http.ResponseWriter, r *http.Req
 		}
 		uploaded = append(uploaded, service.UploadedFile{
 			Filename: header.Filename,
+			Path:     normalizedPaths[i],
 			Size:     header.Size,
 			Reader:   opened,
 		})
@@ -110,6 +175,14 @@ func (s *Server) handleUploadProjectResources(w http.ResponseWriter, r *http.Req
 		items = append(items, toResourceResponse(result.Resource))
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"items": items})
+}
+
+type resourceTreeNodeResponse struct {
+	Type     string                      `json:"type"`
+	Name     string                      `json:"name"`
+	Path     string                      `json:"path"`
+	Resource *resourceResponse           `json:"resource,omitempty"`
+	Children []*resourceTreeNodeResponse `json:"children,omitempty"`
 }
 
 // handleListProjectResources 处理列出项目资源。
@@ -138,6 +211,79 @@ func (s *Server) handleListProjectResources(w http.ResponseWriter, r *http.Reque
 	}
 
 	writeJSON(w, http.StatusOK, toResourceListResponse(resources))
+}
+
+// handleGetProjectResourceTree 处理获取项目资源目录树。
+func (s *Server) handleGetProjectResourceTree(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	if !ok {
+		return
+	}
+
+	resources, err := s.resourceSvc.ListResources(r.Context(), authUser.User.ID, projectID, service.ResourceListOptions{})
+	if err != nil {
+		s.writeResourceServiceError(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"root": buildResourceTreeResponse(resources)})
+}
+
+func buildResourceTreeResponse(resources []*ent.Resource) *resourceTreeNodeResponse {
+	root := &resourceTreeNodeResponse{Type: string(ResourceTreeNodeTypeDirectory), Name: "", Path: ""}
+	for _, row := range resources {
+		resourceResp := toResourceResponse(row)
+		parts := strings.Split(resourceResp.Path, "/")
+		current := root
+		for i, part := range parts {
+			currentPath := strings.Join(parts[:i+1], "/")
+			if i == len(parts)-1 {
+				resp := resourceResp
+				current.Children = append(current.Children, &resourceTreeNodeResponse{
+					Type:     string(ResourceTreeNodeTypeResource),
+					Name:     resourceResp.Name,
+					Path:     resourceResp.Path,
+					Resource: &resp,
+				})
+				continue
+			}
+			child := findResourceTreeDirectory(current.Children, currentPath)
+			if child == nil {
+				child = &resourceTreeNodeResponse{Type: string(ResourceTreeNodeTypeDirectory), Name: part, Path: currentPath}
+				current.Children = append(current.Children, child)
+			}
+			current = child
+		}
+	}
+	sortResourceTreeChildren(root)
+	return root
+}
+
+func findResourceTreeDirectory(children []*resourceTreeNodeResponse, resourcePath string) *resourceTreeNodeResponse {
+	for _, child := range children {
+		if child.Type == string(ResourceTreeNodeTypeDirectory) && child.Path == resourcePath {
+			return child
+		}
+	}
+	return nil
+}
+
+func sortResourceTreeChildren(node *resourceTreeNodeResponse) {
+	sort.SliceStable(node.Children, func(i, j int) bool {
+		left, right := node.Children[i], node.Children[j]
+		if left.Type != right.Type {
+			return left.Type == string(ResourceTreeNodeTypeDirectory)
+		}
+		return left.Name < right.Name
+	})
+	for _, child := range node.Children {
+		sortResourceTreeChildren(child)
+	}
 }
 
 // handleGetResource 处理获取资源详情。
@@ -186,8 +332,8 @@ func (s *Server) handleUpdateResource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fileHeader, fileHeaderErr := r.MultipartForm.File["file"]
-	if fileHeaderErr || len(fileHeader) == 0 {
+	fileHeader, fileFieldOK := r.MultipartForm.File["file"]
+	if !fileFieldOK || len(fileHeader) == 0 {
 		writeProblem(w, http.StatusBadRequest, "invalid_input", "请上传一个文件")
 		return
 	}
@@ -275,6 +421,133 @@ func (s *Server) handleDownloadResourceFile(w http.ResponseWriter, r *http.Reque
 	http.ServeFile(w, r, absolutePath)
 }
 
+// handleIncrementalUpdateResource 处理增量更新资源文件。
+func (s *Server) handleIncrementalUpdateResource(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	if !ok {
+		return
+	}
+	resourceID, ok := parseIntParam(w, chi.URLParam(r, "resourceId"), "resourceId")
+	if !ok {
+		return
+	}
+
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		s.logResourceMultipartDebug(r, "parse incremental update multipart form failed", "err", err)
+		writeProblem(w, http.StatusBadRequest, "invalid_multipart", "上传表单解析失败")
+		return
+	}
+
+	s.logResourceMultipartDebug(r, "parsed incremental update multipart form")
+
+	fileHeader, fileFieldOK := r.MultipartForm.File["file"]
+	if !fileFieldOK || len(fileHeader) == 0 {
+		s.logResourceMultipartDebug(r, "incremental update multipart form missing file field", "file_field_exists", fileFieldOK, "file_field_count", len(fileHeader))
+		writeProblem(w, http.StatusBadRequest, "invalid_input", "请上传一个文件")
+		return
+	}
+
+	header := fileHeader[0]
+	s.logResourceMultipartDebug(r, "incremental update selected uploaded file", "filename", header.Filename, "size", header.Size, "content_type", header.Header.Get("Content-Type"))
+	opened, openErr := header.Open()
+	if openErr != nil {
+		s.logResourceMultipartDebug(r, "open incremental update uploaded file failed", "filename", header.Filename, "size", header.Size, "err", openErr)
+		writeProblem(w, http.StatusBadRequest, "invalid_upload", "无法读取上传文件")
+		return
+	}
+	defer opened.Close()
+
+	res, stats, err := s.resourceSvc.IncrementalUpdateResource(r.Context(), authUser.User.ID, projectID, resourceID, service.UploadedFile{
+		Filename: header.Filename,
+		Size:     header.Size,
+		Reader:   opened,
+	})
+	if err != nil {
+		s.writeResourceServiceError(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"resource": toResourceResponse(res),
+		"changes": map[string]int{
+			"added":     stats.Added,
+			"updated":   stats.Updated,
+			"unchanged": stats.Unchanged,
+			"deleted":   stats.Deleted,
+		},
+	})
+}
+
+func (s *Server) logResourceMultipartDebug(r *http.Request, message string, attrs ...any) {
+	fields := []any{
+		"request_id", chimiddleware.GetReqID(r.Context()),
+		"method", r.Method,
+		"path", r.URL.Path,
+		"query", r.URL.RawQuery,
+		"content_type", r.Header.Get("Content-Type"),
+		"content_length", r.ContentLength,
+		"transfer_encoding", strings.Join(r.TransferEncoding, ","),
+	}
+
+	if r.MultipartForm == nil {
+		fields = append(fields, "multipart_form_present", false)
+	} else {
+		fields = append(fields,
+			"multipart_form_present", true,
+			"multipart_value_fields", summarizeMultipartValueFields(r.MultipartForm.Value),
+			"multipart_file_fields", summarizeMultipartFileFields(r.MultipartForm.File),
+		)
+	}
+
+	fields = append(fields, attrs...)
+	s.logger.Debug("resource multipart debug: "+message, fields...)
+}
+
+func summarizeMultipartValueFields(values map[string][]string) []string {
+	if len(values) == 0 {
+		return nil
+	}
+
+	keys := make([]string, 0, len(values))
+	for key := range values {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	summaries := make([]string, 0, len(keys))
+	for _, key := range keys {
+		summaries = append(summaries, fmt.Sprintf("%s[count=%d]", key, len(values[key])))
+	}
+	return summaries
+}
+
+func summarizeMultipartFileFields(files map[string][]*multipart.FileHeader) []string {
+	if len(files) == 0 {
+		return nil
+	}
+
+	keys := make([]string, 0, len(files))
+	for key := range files {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+
+	summaries := make([]string, 0, len(keys))
+	for _, key := range keys {
+		parts := make([]string, 0, len(files[key]))
+		for _, header := range files[key] {
+			parts = append(parts, fmt.Sprintf("filename=%q size=%d content_type=%q", header.Filename, header.Size, header.Header.Get("Content-Type")))
+		}
+		summaries = append(summaries, fmt.Sprintf("%s[count=%d files=[%s]]", key, len(files[key]), strings.Join(parts, "; ")))
+	}
+	return summaries
+}
+
 // writeResourceServiceError 写入资源服务的错误响应。
 func (s *Server) writeResourceServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
@@ -284,6 +557,10 @@ func (s *Server) writeResourceServiceError(w http.ResponseWriter, r *http.Reques
 		writeProblem(w, http.StatusNotFound, "not_found", "项目不存在")
 	case errors.Is(err, service.ErrResourceNotFound):
 		writeProblem(w, http.StatusNotFound, "not_found", "资源不存在")
+	case errors.Is(err, service.ErrResourceAlreadyExists):
+		writeProblem(w, http.StatusConflict, "conflict", "项目中已存在同路径资源")
+	case errors.Is(err, service.ErrResourcePathInvalid):
+		writeProblem(w, http.StatusBadRequest, "invalid_resource_path", "资源路径不合法")
 	case errors.Is(err, service.ErrForbidden):
 		writeProblem(w, http.StatusForbidden, "forbidden", "没有权限执行该操作")
 	case errors.Is(err, service.ErrUnsupportedFormat):

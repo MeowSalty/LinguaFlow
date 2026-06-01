@@ -231,7 +231,11 @@ func (c ServerConfig) DatabasePath() string {
 }
 
 func (c ServerConfig) DatabaseDSN() string {
-	return c.DatabasePath() + "?_pragma=foreign_keys(1)"
+	return c.DatabasePath() +
+		"?_pragma=foreign_keys(1)" +
+		"&_pragma=journal_mode(WAL)" +
+		"&_pragma=busy_timeout(5000)" +
+		"&_pragma=synchronous(NORMAL)"
 }
 
 // Default 返回内置默认配置。loader 在解析 yaml 前以此为基底合并。

@@ -51,9 +51,9 @@ func (_c *ResourceCreate) SetNillableUpdatedAt(v *time.Time) *ResourceCreate {
 	return _c
 }
 
-// SetFilename sets the "filename" field.
-func (_c *ResourceCreate) SetFilename(v string) *ResourceCreate {
-	_c.mutation.SetFilename(v)
+// SetPath sets the "path" field.
+func (_c *ResourceCreate) SetPath(v string) *ResourceCreate {
+	_c.mutation.SetPath(v)
 	return _c
 }
 
@@ -221,12 +221,12 @@ func (_c *ResourceCreate) check() error {
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "Resource.updated_at"`)}
 	}
-	if _, ok := _c.mutation.Filename(); !ok {
-		return &ValidationError{Name: "filename", err: errors.New(`ent: missing required field "Resource.filename"`)}
+	if _, ok := _c.mutation.Path(); !ok {
+		return &ValidationError{Name: "path", err: errors.New(`ent: missing required field "Resource.path"`)}
 	}
-	if v, ok := _c.mutation.Filename(); ok {
-		if err := resource.FilenameValidator(v); err != nil {
-			return &ValidationError{Name: "filename", err: fmt.Errorf(`ent: validator failed for field "Resource.filename": %w`, err)}
+	if v, ok := _c.mutation.Path(); ok {
+		if err := resource.PathValidator(v); err != nil {
+			return &ValidationError{Name: "path", err: fmt.Errorf(`ent: validator failed for field "Resource.path": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Format(); !ok {
@@ -295,9 +295,9 @@ func (_c *ResourceCreate) createSpec() (*Resource, *sqlgraph.CreateSpec) {
 		_spec.SetField(resource.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
 	}
-	if value, ok := _c.mutation.Filename(); ok {
-		_spec.SetField(resource.FieldFilename, field.TypeString, value)
-		_node.Filename = value
+	if value, ok := _c.mutation.Path(); ok {
+		_spec.SetField(resource.FieldPath, field.TypeString, value)
+		_node.Path = value
 	}
 	if value, ok := _c.mutation.Format(); ok {
 		_spec.SetField(resource.FieldFormat, field.TypeString, value)

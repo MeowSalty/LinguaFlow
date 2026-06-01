@@ -23,11 +23,44 @@ const (
 	ResourceStatusError = "error"
 )
 
+// segmentBatchSize 每批插入的最大 Segment 数量。
+// SQLite 默认绑定变量上限为 999，每条 Segment 记录约 4 个字段，
+// 100 条 × 4 字段 = 400，安全低于限制。
+const segmentBatchSize = 100
+
 var (
-	ErrResourceNotFound  = errors.New("resource not found")
-	ErrUnsupportedFormat = errors.New("unsupported file format")
-	ErrParseFailed       = errors.New("file parse failed")
+	ErrResourceNotFound      = errors.New("resource not found")
+	ErrResourceAlreadyExists = errors.New("resource already exists with same path")
+	ErrResourcePathInvalid   = errors.New("resource path invalid")
+	ErrUnsupportedFormat     = errors.New("unsupported file format")
+	ErrParseFailed           = errors.New("file parse failed")
 )
+
+// SegmentChangeType 段落变更类型。
+type SegmentChangeType string
+
+const (
+	SegmentChangeAdded     SegmentChangeType = "added"
+	SegmentChangeUpdated   SegmentChangeType = "updated"
+	SegmentChangeUnchanged SegmentChangeType = "unchanged"
+	SegmentChangeDeleted   SegmentChangeType = "deleted"
+)
+
+// SegmentChange 段落变更详情。
+type SegmentChange struct {
+	ChangeType SegmentChangeType
+	OldSegment *ent.Segment // 旧段落（updated/unchanged/deleted 时有值）
+	NewIndex   int          // 新文件中的索引
+	NewSource  string       // 新源文本
+}
+
+// IncrementalUpdateStats 增量更新统计信息。
+type IncrementalUpdateStats struct {
+	Added     int `json:"added"`
+	Updated   int `json:"updated"`
+	Unchanged int `json:"unchanged"`
+	Deleted   int `json:"deleted"`
+}
 
 type ResourceService struct {
 	client    *ent.Client
@@ -69,17 +102,22 @@ func (s *ResourceService) UploadResources(ctx context.Context, actorUserID, proj
 // UploadedFile 上传文件的抽象。
 type UploadedFile struct {
 	Filename string
+	Path     string
 	Size     int64
 	Reader   io.Reader
 }
 
 func (s *ResourceService) uploadSingleResource(ctx context.Context, projectID int, file UploadedFile) (*ResourceUploadResult, error) {
-	cleanName := sanitizeFilename(file.Filename)
+	resourcePath, err := NormalizeResourcePath(firstNonEmpty(file.Path, file.Filename))
+	if err != nil {
+		return nil, err
+	}
+	cleanName := sanitizeFilename(pathBase(resourcePath))
 	format := strings.TrimPrefix(strings.ToLower(filepath.Ext(cleanName)), ".")
 
 	// 生成随机唯一 ID，用于构建存储路径
 	uniqueID := generateUniqueID()
-	relPath := s.buildResourcePath(projectID, uniqueID, cleanName)
+	relPath := s.buildResourcePath(projectID, uniqueID, resourcePath)
 
 	// 保存文件到存储
 	if err := s.fileStore.Write(ctx, relPath, file.Reader); err != nil {
@@ -90,7 +128,7 @@ func (s *ResourceService) uploadSingleResource(ctx context.Context, projectID in
 	parsedSegments, parseErr := s.parseResourceSegments(relPath)
 	segmentCount := len(parsedSegments)
 
-	// 一次性创建完整的 Resource 记录
+	// 事务包裹：Resource 创建 + Segment 插入，保证原子性
 	status := ResourceStatusReady
 	var errMsg *string
 	if parseErr != nil {
@@ -99,8 +137,14 @@ func (s *ResourceService) uploadSingleResource(ctx context.Context, projectID in
 		errMsg = &msg
 	}
 
-	res, err := s.client.Resource.Create().
-		SetFilename(cleanName).
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		_ = s.fileStore.Delete(relPath)
+		return nil, fmt.Errorf("resource: begin transaction: %w", err)
+	}
+
+	res, err := tx.Resource.Create().
+		SetPath(resourcePath).
 		SetFormat(format).
 		SetStoragePath(relPath).
 		SetStatus(status).
@@ -109,16 +153,26 @@ func (s *ResourceService) uploadSingleResource(ctx context.Context, projectID in
 		SetNillableErrorMessage(errMsg).
 		Save(ctx)
 	if err != nil {
-		// 记录创建失败，清理已保存的文件
+		_ = tx.Rollback()
 		_ = s.fileStore.Delete(relPath)
+		if ent.IsConstraintError(err) {
+			return nil, ErrResourceAlreadyExists
+		}
 		return nil, fmt.Errorf("resource: create record: %w", err)
 	}
 
-	// 创建段落记录（需要 res.ID）
+	// 在事务中创建段落记录（需要 res.ID）
 	if parseErr == nil {
-		if err := s.replaceResourceSegments(ctx, res.ID, parsedSegments); err != nil {
+		if err := replaceResourceSegmentsBatch(ctx, tx.Segment, res.ID, parsedSegments); err != nil {
+			_ = tx.Rollback()
+			_ = s.fileStore.Delete(relPath)
 			return nil, fmt.Errorf("resource: create segments: %w", err)
 		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		_ = s.fileStore.Delete(relPath)
+		return nil, fmt.Errorf("resource: commit transaction: %w", err)
 	}
 
 	if parseErr != nil {
@@ -156,10 +210,10 @@ func (s *ResourceService) ListResources(ctx context.Context, actorUserID, projec
 		q = q.Where(resource.FormatEQ(opts.Format))
 	}
 	if opts.Search != "" {
-		q = q.Where(resource.FilenameContains(opts.Search))
+		q = q.Where(resource.PathContains(opts.Search))
 	}
 
-	q = q.Order(ent.Asc(resource.FieldID))
+	q = q.Order(ent.Asc(resource.FieldPath), ent.Asc(resource.FieldID))
 
 	if opts.Limit > 0 {
 		q = q.Limit(opts.Limit)
@@ -212,6 +266,7 @@ func (s *ResourceService) DeleteResource(ctx context.Context, actorUserID, proje
 }
 
 // UpdateResource 替换资源文件内容。
+// 段落替换和 Resource 更新在同一事务中执行，保证原子性。
 func (s *ResourceService) UpdateResource(ctx context.Context, actorUserID, projectID, resourceID int, file UploadedFile) (*ent.Resource, error) {
 	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true); err != nil {
 		return nil, err
@@ -227,7 +282,7 @@ func (s *ResourceService) UpdateResource(ctx context.Context, actorUserID, proje
 		return nil, err
 	}
 
-	cleanName := sanitizeFilename(file.Filename)
+	cleanName := sanitizeFilename(pathBase(res.Path))
 	format := strings.TrimPrefix(strings.ToLower(filepath.Ext(cleanName)), ".")
 
 	// 删除旧文件
@@ -236,7 +291,7 @@ func (s *ResourceService) UpdateResource(ctx context.Context, actorUserID, proje
 	}
 
 	// 保存新文件
-	relPath := s.buildResourcePath(projectID, fmt.Sprintf("resource-%d", res.ID), cleanName)
+	relPath := s.buildResourcePath(projectID, fmt.Sprintf("resource-%d", res.ID), resourcePathForStorage(res.Path, cleanName))
 	if err := s.fileStore.Write(ctx, relPath, file.Reader); err != nil {
 		_, _ = s.client.Resource.UpdateOneID(res.ID).
 			SetStatus(ResourceStatusError).
@@ -245,17 +300,24 @@ func (s *ResourceService) UpdateResource(ctx context.Context, actorUserID, proje
 		return nil, fmt.Errorf("resource: save file: %w", err)
 	}
 
-	// 解析新文件并替换 Resource 级段落
+	// 解析新文件
 	parsedSegments, parseErr := s.parseResourceSegments(relPath)
 	segmentCount := len(parsedSegments)
+
+	// 事务包裹：段落替换 + Resource 更新，保证原子性
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("resource: begin transaction: %w", err)
+	}
+
 	if parseErr == nil {
-		if err := s.replaceResourceSegments(ctx, res.ID, parsedSegments); err != nil {
+		if err := replaceResourceSegmentsBatch(ctx, tx.Segment, res.ID, parsedSegments); err != nil {
+			_ = tx.Rollback()
 			return nil, fmt.Errorf("resource: replace segments: %w", err)
 		}
 	}
 
-	update := s.client.Resource.UpdateOneID(res.ID).
-		SetFilename(cleanName).
+	update := tx.Resource.UpdateOneID(res.ID).
 		SetFormat(format).
 		SetStoragePath(relPath).
 		SetTotalSegments(segmentCount)
@@ -270,7 +332,12 @@ func (s *ResourceService) UpdateResource(ctx context.Context, actorUserID, proje
 	}
 	updated, err := update.Save(ctx)
 	if err != nil {
+		_ = tx.Rollback()
 		return nil, fmt.Errorf("resource: update record: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return nil, fmt.Errorf("resource: commit transaction: %w", err)
 	}
 
 	if parseErr != nil {
@@ -288,13 +355,17 @@ func (s *ResourceService) Absolute(relativePath string) (string, error) {
 	return s.fileStore.Absolute(relativePath)
 }
 
-// buildResourcePath 构建资源文件的存储路径：resources/project-{id}/{uniqueID}/{filename}
-func (s *ResourceService) buildResourcePath(projectID int, uniqueID, filename string) string {
-	return filepath.Join("resources",
+// buildResourcePath 构建资源文件的存储路径：resources/project-{id}/{uniqueID}/{resourcePath}。
+func (s *ResourceService) buildResourcePath(projectID int, uniqueID, resourcePath string) string {
+	cleanPath, err := NormalizeResourcePath(resourcePath)
+	if err != nil {
+		cleanPath = sanitizeFilename(resourcePath)
+	}
+	return filepath.ToSlash(filepath.Join("resources",
 		fmt.Sprintf("project-%d", projectID),
 		uniqueID,
-		filename,
-	)
+		filepath.FromSlash(cleanPath),
+	))
 }
 
 type parsedResourceSegment struct {
@@ -340,27 +411,49 @@ func (s *ResourceService) parseResourceSegments(relPath string) ([]parsedResourc
 	return items, nil
 }
 
-func (s *ResourceService) replaceResourceSegments(ctx context.Context, resourceID int, items []parsedResourceSegment) error {
-	if _, err := s.client.Segment.Delete().Where(segment.ResourceIDEQ(resourceID)).Exec(ctx); err != nil {
+// segmentClientAccessor 抽象 Segment 客户端操作，兼容 *ent.Client 和 *ent.Tx。
+type segmentClientAccessor interface {
+	Create() *ent.SegmentCreate
+	Delete() *ent.SegmentDelete
+	CreateBulk(builders ...*ent.SegmentCreate) *ent.SegmentCreateBulk
+}
+
+// replaceResourceSegmentsBatch 删除旧段落并分批插入新段落。
+// 分批避免超过 SQLite 999 绑定变量限制（segmentBatchSize × 4 字段 < 999）。
+func replaceResourceSegmentsBatch(ctx context.Context, accessor segmentClientAccessor, resourceID int, items []parsedResourceSegment) error {
+	if _, err := accessor.Delete().Where(segment.ResourceIDEQ(resourceID)).Exec(ctx); err != nil {
 		return err
 	}
 	if len(items) == 0 {
 		return nil
 	}
-	builders := make([]*ent.SegmentCreate, 0, len(items))
-	for _, item := range items {
-		create := s.client.Segment.Create().
-			SetResourceID(resourceID).
-			SetSegmentIndex(item.Index).
-			SetSourceText(item.SourceText).
-			SetStatus(SegmentStatusPending)
-		if strings.TrimSpace(item.TargetText) != "" {
-			create.SetTargetText(item.TargetText).SetStatus(SegmentStatusTranslated)
+	for i := 0; i < len(items); i += segmentBatchSize {
+		end := i + segmentBatchSize
+		if end > len(items) {
+			end = len(items)
 		}
-		builders = append(builders, create)
+		batch := items[i:end]
+		builders := make([]*ent.SegmentCreate, 0, len(batch))
+		for _, item := range batch {
+			create := accessor.Create().
+				SetResourceID(resourceID).
+				SetSegmentIndex(item.Index).
+				SetSourceText(item.SourceText).
+				SetStatus(SegmentStatusPending)
+			if strings.TrimSpace(item.TargetText) != "" {
+				create.SetTargetText(item.TargetText).SetStatus(SegmentStatusTranslated)
+			}
+			builders = append(builders, create)
+		}
+		if _, err := accessor.CreateBulk(builders...).Save(ctx); err != nil {
+			return err
+		}
 	}
-	_, err := s.client.Segment.CreateBulk(builders...).Save(ctx)
-	return err
+	return nil
+}
+
+func (s *ResourceService) replaceResourceSegments(ctx context.Context, resourceID int, items []parsedResourceSegment) error {
+	return replaceResourceSegmentsBatch(ctx, s.client.Segment, resourceID, items)
 }
 
 // ResourceListOptions 资源列表查询选项。
@@ -372,7 +465,7 @@ type ResourceListOptions struct {
 }
 
 func sanitizeFilename(name string) string {
-	base := strings.TrimSpace(filepath.Base(name))
+	base := strings.TrimSpace(filepath.Base(strings.ReplaceAll(name, "\\", "/")))
 	if base == "" || base == "." || base == ".." {
 		base = "file"
 	}
@@ -384,9 +477,320 @@ func sanitizeFilename(name string) string {
 	return base
 }
 
+// NormalizeResourcePath 将用户提供的资源路径规范化为项目内相对路径。
+func NormalizeResourcePath(value string) (string, error) {
+	raw := strings.TrimSpace(strings.ReplaceAll(value, "\\", "/"))
+	if raw == "" || strings.HasPrefix(raw, "/") {
+		return "", ErrResourcePathInvalid
+	}
+	rawParts := strings.Split(raw, "/")
+	for _, part := range rawParts {
+		part = strings.TrimSpace(part)
+		if part == "" || part == "." || part == ".." {
+			return "", ErrResourcePathInvalid
+		}
+	}
+	clean := filepath.ToSlash(filepath.Clean(raw))
+	if clean == "." || clean == "" || strings.HasPrefix(clean, "../") || clean == ".." || strings.HasPrefix(clean, "/") {
+		return "", ErrResourcePathInvalid
+	}
+	parts := strings.Split(clean, "/")
+	for i, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" || part == "." || part == ".." {
+			return "", ErrResourcePathInvalid
+		}
+		parts[i] = sanitizePathSegment(part)
+	}
+	if len(parts) == 0 || strings.TrimSpace(parts[len(parts)-1]) == "" {
+		return "", ErrResourcePathInvalid
+	}
+	return strings.Join(parts, "/"), nil
+}
+
+func sanitizePathSegment(part string) string {
+	replacer := strings.NewReplacer(":", "_", "*", "_", "?", "_", "\"", "_", "<", "_", ">", "_", "|", "_")
+	part = replacer.Replace(part)
+	if strings.TrimSpace(part) == "" {
+		return "_"
+	}
+	return part
+}
+
+func pathBase(value string) string {
+	return filepath.Base(strings.ReplaceAll(value, "\\", "/"))
+}
+
+func resourcePathForStorage(resourcePath, fallbackFilename string) string {
+	if normalized, err := NormalizeResourcePath(resourcePath); err == nil {
+		return normalized
+	}
+	return sanitizeFilename(fallbackFilename)
+}
+
+func resourceDirectory(resourcePath string) string {
+	resourcePath = strings.TrimSpace(strings.ReplaceAll(resourcePath, "\\", "/"))
+	dir := filepath.ToSlash(filepath.Dir(resourcePath))
+	if dir == "." {
+		return ""
+	}
+	return dir
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
 // generateUniqueID 生成 16 位随机十六进制字符串，用于构建存储路径。
 func generateUniqueID() string {
 	b := make([]byte, 8)
 	_, _ = rand.Read(b)
 	return hex.EncodeToString(b)
+}
+
+// FindResourceByPath 在项目中查找同路径资源文件。
+func (s *ResourceService) FindResourceByPath(ctx context.Context, projectID int, resourcePath string) (*ent.Resource, error) {
+	cleanPath, err := NormalizeResourcePath(resourcePath)
+	if err != nil {
+		return nil, err
+	}
+	res, err := s.client.Resource.Query().
+		Where(resource.ProjectID(projectID), resource.Path(cleanPath)).
+		Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return res, nil
+}
+
+// diffSegments 对比新旧段落，返回变更列表。
+// 按 source_text 内容匹配，处理段落重排。
+func diffSegments(oldSegments []*ent.Segment, newSegments []parsedResourceSegment) []SegmentChange {
+	// 构建旧段落索引：source_text → 未消耗的旧段落队列
+	oldQueue := make(map[string][]*ent.Segment)
+	for _, seg := range oldSegments {
+		key := strings.TrimSpace(seg.SourceText)
+		oldQueue[key] = append(oldQueue[key], seg)
+	}
+
+	changes := make([]SegmentChange, 0, len(newSegments))
+	matchedOldIDs := make(map[int]bool)
+
+	// 遍历新段落，尝试匹配旧段落
+	for _, newSeg := range newSegments {
+		key := strings.TrimSpace(newSeg.SourceText)
+		queue := oldQueue[key]
+
+		if len(queue) > 0 {
+			// 匹配到旧段落
+			old := queue[0]
+			oldQueue[key] = queue[1:]
+			matchedOldIDs[old.ID] = true
+
+			if strings.TrimSpace(old.SourceText) == strings.TrimSpace(newSeg.SourceText) {
+				// 源文本完全相同 → unchanged
+				changes = append(changes, SegmentChange{
+					ChangeType: SegmentChangeUnchanged,
+					OldSegment: old,
+					NewIndex:   newSeg.Index,
+					NewSource:  newSeg.SourceText,
+				})
+			} else {
+				// 源文本有细微差异 → updated
+				changes = append(changes, SegmentChange{
+					ChangeType: SegmentChangeUpdated,
+					OldSegment: old,
+					NewIndex:   newSeg.Index,
+					NewSource:  newSeg.SourceText,
+				})
+			}
+		} else {
+			// 未匹配到旧段落 → added
+			changes = append(changes, SegmentChange{
+				ChangeType: SegmentChangeAdded,
+				NewIndex:   newSeg.Index,
+				NewSource:  newSeg.SourceText,
+			})
+		}
+	}
+
+	// 检查未匹配的旧段落 → deleted
+	for _, seg := range oldSegments {
+		if !matchedOldIDs[seg.ID] {
+			changes = append(changes, SegmentChange{
+				ChangeType: SegmentChangeDeleted,
+				OldSegment: seg,
+			})
+		}
+	}
+
+	return changes
+}
+
+// IncrementalUpdateResource 增量更新资源文件。
+// 对比新旧文件段落变化，保留已有译文。
+func (s *ResourceService) IncrementalUpdateResource(
+	ctx context.Context,
+	actorUserID, projectID, resourceID int,
+	file UploadedFile,
+) (*ent.Resource, *IncrementalUpdateStats, error) {
+	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true); err != nil {
+		return nil, nil, err
+	}
+
+	// 查询旧资源
+	res, err := s.client.Resource.Query().
+		Where(resource.ID(resourceID), resource.ProjectID(projectID)).
+		Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, nil, ErrResourceNotFound
+		}
+		return nil, nil, err
+	}
+
+	// 删除旧文件
+	if res.StoragePath != "" {
+		_ = s.fileStore.Delete(res.StoragePath)
+	}
+
+	// 保存新文件
+	cleanName := sanitizeFilename(pathBase(res.Path))
+	format := strings.TrimPrefix(strings.ToLower(filepath.Ext(cleanName)), ".")
+	relPath := s.buildResourcePath(projectID, fmt.Sprintf("resource-%d", res.ID), resourcePathForStorage(res.Path, cleanName))
+	if err := s.fileStore.Write(ctx, relPath, file.Reader); err != nil {
+		_, _ = s.client.Resource.UpdateOneID(res.ID).
+			SetStatus(ResourceStatusError).
+			SetErrorMessage(fmt.Sprintf("file save failed: %v", err)).
+			Save(ctx)
+		return nil, nil, fmt.Errorf("resource: save file: %w", err)
+	}
+
+	// 解析新文件段落
+	newSegments, parseErr := s.parseResourceSegments(relPath)
+	if parseErr != nil {
+		// 解析失败，更新资源状态
+		update := s.client.Resource.UpdateOneID(res.ID).
+			SetFormat(format).
+			SetStoragePath(relPath).
+			SetStatus(ResourceStatusError).
+			SetErrorMessage(fmt.Sprintf("parse failed: %v", parseErr))
+		updated, _ := update.Save(ctx)
+
+		if errors.Is(parseErr, parser.ErrNoParser) {
+			return updated, nil, fmt.Errorf("%w: %s", ErrUnsupportedFormat, format)
+		}
+		return updated, nil, fmt.Errorf("%w: %v", ErrParseFailed, parseErr)
+	}
+
+	// 查询旧段落
+	oldSegments, err := s.client.Segment.Query().
+		Where(segment.ResourceIDEQ(res.ID)).
+		Order(ent.Asc(segment.FieldSegmentIndex)).
+		All(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("resource: query old segments: %w", err)
+	}
+
+	// 执行段落对比
+	changes := diffSegments(oldSegments, newSegments)
+
+	// 统计变更
+	stats := &IncrementalUpdateStats{}
+	for _, c := range changes {
+		switch c.ChangeType {
+		case SegmentChangeAdded:
+			stats.Added++
+		case SegmentChangeUpdated:
+			stats.Updated++
+		case SegmentChangeUnchanged:
+			stats.Unchanged++
+		case SegmentChangeDeleted:
+			stats.Deleted++
+		}
+	}
+
+	// 应用变更
+	if err := s.applySegmentChanges(ctx, res.ID, changes); err != nil {
+		return nil, nil, fmt.Errorf("resource: apply changes: %w", err)
+	}
+
+	// 更新资源元数据
+	updated, err := s.client.Resource.UpdateOneID(res.ID).
+		SetFormat(format).
+		SetStoragePath(relPath).
+		SetTotalSegments(len(newSegments)).
+		SetStatus(ResourceStatusReady).
+		ClearErrorMessage().
+		Save(ctx)
+	if err != nil {
+		return nil, nil, fmt.Errorf("resource: update record: %w", err)
+	}
+
+	return updated, stats, nil
+}
+
+// applySegmentChanges 应用段落变更到数据库。
+func (s *ResourceService) applySegmentChanges(ctx context.Context, resourceID int, changes []SegmentChange) error {
+	// 收集需要删除的段落 ID
+	deleteIDs := make([]int, 0)
+	for _, c := range changes {
+		if c.ChangeType == SegmentChangeDeleted && c.OldSegment != nil {
+			deleteIDs = append(deleteIDs, c.OldSegment.ID)
+		}
+	}
+
+	// 批量删除
+	if len(deleteIDs) > 0 {
+		if _, err := s.client.Segment.Delete().
+			Where(segment.IDIn(deleteIDs...)).
+			Exec(ctx); err != nil {
+			return err
+		}
+	}
+
+	// 处理更新和新增
+	for _, c := range changes {
+		switch c.ChangeType {
+		case SegmentChangeUnchanged:
+			// 更新索引位置，保留译文
+			if _, err := s.client.Segment.UpdateOneID(c.OldSegment.ID).
+				SetSegmentIndex(c.NewIndex).
+				Save(ctx); err != nil {
+				return err
+			}
+
+		case SegmentChangeUpdated:
+			// 更新索引和源文本，清空译文，重置状态
+			if _, err := s.client.Segment.UpdateOneID(c.OldSegment.ID).
+				SetSegmentIndex(c.NewIndex).
+				SetSourceText(c.NewSource).
+				ClearTargetText().
+				SetStatus(SegmentStatusPending).
+				Save(ctx); err != nil {
+				return err
+			}
+
+		case SegmentChangeAdded:
+			// 创建新段落
+			create := s.client.Segment.Create().
+				SetResourceID(resourceID).
+				SetSegmentIndex(c.NewIndex).
+				SetSourceText(c.NewSource).
+				SetStatus(SegmentStatusPending)
+			if _, err := create.Save(ctx); err != nil {
+				return err
+			}
+		}
+	}
+
+	return nil
 }

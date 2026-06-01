@@ -589,6 +589,12 @@ paths:
     post:
       operationId: UploadProjectResources
       summary: 上传资源文件到项目
+      description: |
+        上传资源文件时可通过 paths 数组为每个文件提供项目内逻辑相对路径。
+        - files 与 paths 按数组下标一一对应
+        - paths 使用 / 分隔，例如 ui/common.json、admin/common.json
+        - 未提供 paths 时兼容旧客户端，使用上传文件名作为根目录资源路径
+        - 项目内资源唯一性以规范化 path 判断，而不是 filename
       security:
         - bearerAuth: []
       requestBody:
@@ -606,6 +612,11 @@ paths:
                   items:
                     type: string
                     format: binary
+                paths:
+                  type: array
+                  description: 与 files 一一对应的项目内资源相对路径；省略时使用文件名作为根目录路径
+                  items:
+                    type: string
       responses:
         '201':
           description: 上传成功
@@ -613,6 +624,31 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ResourceUploadResponse'
+        '409':
+          description: 同路径资源冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceConflictResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/tree:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      operationId: GetProjectResourceTree
+      summary: 获取项目资源目录树
+      description: |
+        按资源 path 聚合生成目录树。当前目录为虚拟节点，资源身份仍由 Resource.path 唯一确定；后续可在此基础上扩展目录移动、重命名等能力。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 资源目录树
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceTreeResponse'
         default:
           $ref: '#/components/responses/Problem'
   /projects/{projectId}/resources/{resourceId}:
@@ -657,6 +693,38 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Resource'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: IncrementalUpdateResource
+      summary: 增量更新资源文件
+      description: |
+        上传新版本文件，系统自动对比段落变化：
+        - 相同源文本的段落保留已有译文
+        - 源文本变化的段落重置为待翻译
+        - 新增段落状态为待翻译
+        - 不再存在的段落将被删除
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 增量更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncrementalUpdateResponse'
         default:
           $ref: '#/components/responses/Problem'
     delete:
@@ -1472,7 +1540,9 @@ components:
       type: object
       required:
         - id
-        - filename
+        - path
+        - name
+        - directory
         - format
         - total_segments
         - status
@@ -1481,8 +1551,15 @@ components:
       properties:
         id:
           type: integer
-        filename:
+        path:
           type: string
+          description: 项目内规范化资源相对路径，使用 / 分隔，例如 ui/common.json
+        name:
+          type: string
+          description: 资源显示名，当前等同于资源路径 basename，预留给后续可编辑显示名
+        directory:
+          type: string
+          description: 资源所在目录，根目录为空字符串
         format:
           type: string
         total_segments:
@@ -1518,6 +1595,36 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/Resource'
+    ResourceTreeNode:
+      type: object
+      required:
+        - type
+        - name
+        - path
+      properties:
+        type:
+          type: string
+          enum:
+            - directory
+            - resource
+        name:
+          type: string
+        path:
+          type: string
+          description: 目录或资源的项目内规范化相对路径，根目录为空字符串
+        resource:
+          $ref: '#/components/schemas/Resource'
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceTreeNode'
+    ResourceTreeResponse:
+      type: object
+      required:
+        - root
+      properties:
+        root:
+          $ref: '#/components/schemas/ResourceTreeNode'
     ResourceSegmentUpdateRequest:
       type: object
       properties:
@@ -1539,6 +1646,23 @@ components:
             $ref: '#/components/schemas/Segment'
         next_cursor:
           type: string
+    IncrementalUpdateResponse:
+      type: object
+      required:
+        - resource
+        - changes
+      properties:
+        resource:
+          $ref: '#/components/schemas/Resource'
+        changes:
+          $ref: '#/components/schemas/IncrementalUpdateChanges'
+    ResourceConflictResponse:
+      type: object
+      required:
+        - existing_resource
+      properties:
+        existing_resource:
+          $ref: '#/components/schemas/Resource'
     CreateTranslationJobRequest:
       type: object
       properties:
@@ -2067,3 +2191,23 @@ components:
                 type: string
               reason:
                 type: string
+    IncrementalUpdateChanges:
+      type: object
+      required:
+        - added
+        - updated
+        - unchanged
+        - deleted
+      properties:
+        added:
+          type: integer
+          description: 新增段落数
+        updated:
+          type: integer
+          description: 源文本变化的段落数
+        unchanged:
+          type: integer
+          description: 未变化的段落数
+        deleted:
+          type: integer
+          description: 删除的段落数

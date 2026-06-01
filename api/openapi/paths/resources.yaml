@@ -37,6 +37,12 @@ projectResources:
   post:
     operationId: UploadProjectResources
     summary: 上传资源文件到项目
+    description: |
+      上传资源文件时可通过 paths 数组为每个文件提供项目内逻辑相对路径。
+      - files 与 paths 按数组下标一一对应
+      - paths 使用 / 分隔，例如 ui/common.json、admin/common.json
+      - 未提供 paths 时兼容旧客户端，使用上传文件名作为根目录资源路径
+      - 项目内资源唯一性以规范化 path 判断，而不是 filename
     security:
       - bearerAuth: []
     requestBody:
@@ -53,6 +59,11 @@ projectResources:
                 items:
                   type: string
                   format: binary
+              paths:
+                type: array
+                description: 与 files 一一对应的项目内资源相对路径；省略时使用文件名作为根目录路径
+                items:
+                  type: string
     responses:
       '201':
         description: 上传成功
@@ -60,6 +71,32 @@ projectResources:
           application/json:
             schema:
               $ref: '../base.yaml#/components/schemas/ResourceUploadResponse'
+      '409':
+        description: 同路径资源冲突
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/ResourceConflictResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+projectResourceTree:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+  get:
+    operationId: GetProjectResourceTree
+    summary: 获取项目资源目录树
+    description: |
+      按资源 path 聚合生成目录树。当前目录为虚拟节点，资源身份仍由 Resource.path 唯一确定；后续可在此基础上扩展目录移动、重命名等能力。
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 资源目录树
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/ResourceTreeResponse'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
 
@@ -104,6 +141,37 @@ projectResourceById:
           application/json:
             schema:
               $ref: '../base.yaml#/components/schemas/Resource'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  post:
+    operationId: IncrementalUpdateResource
+    summary: 增量更新资源文件
+    description: |
+      上传新版本文件，系统自动对比段落变化：
+      - 相同源文本的段落保留已有译文
+      - 源文本变化的段落重置为待翻译
+      - 新增段落状态为待翻译
+      - 不再存在的段落将被删除
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            required: [file]
+            properties:
+              file:
+                type: string
+                format: binary
+    responses:
+      '200':
+        description: 增量更新成功
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/IncrementalUpdateResponse'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
   delete:

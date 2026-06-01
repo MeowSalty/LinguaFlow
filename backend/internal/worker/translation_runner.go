@@ -117,7 +117,7 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	outputRel := strings.TrimSpace(item.OutputPath)
 	outputPath := ""
 	if outputRel == "" {
-		outputRel = translationOutputPath(exec.Job.ID, item.ID, res.Filename)
+		outputRel = translationOutputPath(exec.Job.ID, item.ID, resourceOutputName(res))
 	}
 	outputPath, err = r.store.Absolute(outputRel)
 	if err != nil {
@@ -309,9 +309,31 @@ func (r *TranslationRunner) recordUsage(ctx context.Context, exec *service.Trans
 }
 
 func translationOutputPath(jobID, jobResourceID int, filename string) string {
-	cleanName := strings.TrimSpace(filepath.Base(filename))
-	if cleanName == "" || cleanName == "." || cleanName == ".." {
-		cleanName = "resource"
+	cleanName := cleanOutputResourcePath(filename)
+	return filepath.ToSlash(filepath.Join("translation_outputs", fmt.Sprintf("job-%d", jobID), fmt.Sprintf("resource-%d", jobResourceID), filepath.FromSlash(cleanName)))
+}
+
+func resourceOutputName(res *ent.Resource) string {
+	if res != nil && strings.TrimSpace(res.Path) != "" {
+		return res.Path
 	}
-	return filepath.ToSlash(filepath.Join("translation_outputs", fmt.Sprintf("job-%d", jobID), fmt.Sprintf("resource-%d", jobResourceID), cleanName))
+	return "resource"
+}
+
+func cleanOutputResourcePath(value string) string {
+	clean := strings.TrimSpace(strings.ReplaceAll(value, "\\", "/"))
+	clean = filepath.ToSlash(filepath.Clean(clean))
+	if clean == "" || clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || strings.HasPrefix(clean, "/") {
+		return "resource"
+	}
+	parts := strings.Split(clean, "/")
+	for i, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" || part == "." || part == ".." {
+			parts[i] = "resource"
+			continue
+		}
+		parts[i] = strings.NewReplacer(":", "_", "*", "_", "?", "_", "\"", "_", "<", "_", ">", "_", "|", "_").Replace(part)
+	}
+	return strings.Join(parts, "/")
 }
