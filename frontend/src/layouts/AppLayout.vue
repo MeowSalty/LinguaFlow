@@ -82,6 +82,10 @@ const onSelectUserAction = async (key: string | number) => {
 const onSelectTheme = (key: string | number): void => {
   theme.setMode(String(key) as ThemeMode)
 }
+
+const onSelectLocale = (key: string | number): void => {
+  locale.setLocale(String(key))
+}
 </script>
 
 <template>
@@ -123,7 +127,7 @@ const onSelectTheme = (key: string | number): void => {
           trigger="click"
           :options="localeOptions"
           placement="bottom-end"
-          @select="(key) => locale.setLocale(String(key))"
+          @select="onSelectLocale"
         >
           <NButton quaternary size="small">
             {{ t('common.language') }}

@@ -146,15 +146,54 @@ export const fetchProjectResources = async (
   return data
 }
 
+const appendUploadPaths = (formData: FormData, paths?: string[]): void => {
+  if (!paths || paths.length === 0) {
+    return
+  }
+
+  for (const path of paths) {
+    formData.append('paths', path)
+  }
+}
+
+export const precheckProjectResources = async (
+  projectId: number,
+  paths: string[],
+  client: ApiClient = apiClient,
+): Promise<ApiSchemas['ResourcePrecheckBatchResponse']> => {
+  const formData = new FormData()
+  for (const path of paths) {
+    formData.append('paths', path)
+  }
+
+  const { data, error, response } = await client.POST('/projects/{projectId}/resources/precheck', {
+    params: { path: { projectId } },
+    body: formData as unknown as {
+      paths: string[]
+    },
+  })
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.precheckResourcesFailed'), error, response)
+  }
+
+  return data
+}
+
 export const uploadProjectResources = async (
   projectId: number,
   files: File[],
+  paths?: string[],
   client: ApiClient = apiClient,
-): Promise<ApiSchemas['ResourceUploadResponse']> => {
+): Promise<ApiSchemas['ResourceUploadBatchResponse']> => {
+  const formData = buildFilesFormData(files, 'files')
+  appendUploadPaths(formData, paths)
+
   const { data, error, response } = await client.POST('/projects/{projectId}/resources', {
     params: { path: { projectId } },
-    body: buildFilesFormData(files, 'files') as unknown as {
+    body: formData as unknown as {
       files: File[]
+      paths?: string[]
     },
   })
 
@@ -170,17 +209,13 @@ export const uploadProjectResourcesWithProgress = async (
   files: File[],
   paths?: string[],
   callbacks?: UploadProgressCallbacks,
-): Promise<ApiSchemas['ResourceUploadResponse']> => {
+): Promise<ApiSchemas['ResourceUploadBatchResponse']> => {
   const baseUrl = readStoredApiBaseUrl() ?? '/api/v1'
   const normalizedBaseUrl = baseUrl.endsWith('/') ? baseUrl.slice(0, -1) : baseUrl
   const url = `${normalizedBaseUrl}/projects/${projectId}/resources`
 
   const formData = buildFilesFormData(files, 'files')
-  if (paths && paths.length > 0) {
-    for (const path of paths) {
-      formData.append('paths', path)
-    }
-  }
+  appendUploadPaths(formData, paths)
   const accessToken = getAccessToken()
 
   return new Promise((resolve, reject) => {
@@ -201,7 +236,7 @@ export const uploadProjectResourcesWithProgress = async (
     xhr.addEventListener('load', () => {
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
-          const data = JSON.parse(xhr.responseText) as ApiSchemas['ResourceUploadResponse']
+          const data = JSON.parse(xhr.responseText) as ApiSchemas['ResourceUploadBatchResponse']
           resolve(data)
         } catch {
           reject(new Error(t('api.errors.uploadResourcesFailed')))
@@ -352,12 +387,9 @@ export const fetchProjectResourceTree = async (
   projectId: number,
   client: ApiClient = apiClient,
 ): Promise<ApiSchemas['ResourceTreeResponse']> => {
-  const { data, error, response } = await client.GET(
-    '/projects/{projectId}/resources/tree',
-    {
-      params: { path: { projectId } },
-    },
-  )
+  const { data, error, response } = await client.GET('/projects/{projectId}/resources/tree', {
+    params: { path: { projectId } },
+  })
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.fetchResourceTreeFailed'), error, response)

@@ -358,13 +358,40 @@ export interface paths {
         put?: never;
         /**
          * 上传资源文件到项目
-         * @description 上传资源文件时可通过 paths 数组为每个文件提供项目内逻辑相对路径。
+         * @description 批量上传资源文件，允许部分成功。
          *     - files 与 paths 按数组下标一一对应
          *     - paths 使用 / 分隔，例如 ui/common.json、admin/common.json
          *     - 未提供 paths 时兼容旧客户端，使用上传文件名作为根目录资源路径
          *     - 项目内资源唯一性以规范化 path 判断，而不是 filename
+         *     - 冲突或失败的文件不会阻断其他文件的上传，每个文件独立返回处理结果
          */
         post: operations["UploadProjectResources"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/precheck": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 上传资源预检
+         * @description 在实际上传前检查批量文件中的冲突情况，不执行任何写入操作。
+         *     - 检查批次内是否有重复路径
+         *     - 检查每个路径是否与项目已有资源冲突
+         *     - 返回每个文件的建议操作（create / conflict / duplicate）
+         *     - 前端可根据结果让用户确认冲突处理策略后再执行实际上传
+         */
+        post: operations["PrecheckProjectResources"];
         delete?: never;
         options?: never;
         head?: never;
@@ -876,9 +903,6 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
-        ResourceUploadResponse: {
-            items: components["schemas"]["Resource"][];
-        };
         ResourceListResponse: {
             items: components["schemas"]["Resource"][];
         };
@@ -909,6 +933,38 @@ export interface components {
         };
         ResourceConflictResponse: {
             existing_resource: components["schemas"]["Resource"];
+        };
+        ResourceUploadFileResult: {
+            /** @description 资源项目内规范化相对路径 */
+            path: string;
+            /**
+             * @description 处理结果：created=创建成功, conflict=与已有资源冲突, failed=处理失败
+             * @enum {string}
+             */
+            action: "created" | "conflict" | "failed";
+            /** @description 创建成功时返回新资源 */
+            resource?: components["schemas"]["Resource"];
+            /** @description 冲突时返回已有资源 */
+            existing_resource?: components["schemas"]["Resource"];
+            /** @description 失败时的错误信息 */
+            error?: string;
+        };
+        ResourceUploadBatchResponse: {
+            items: components["schemas"]["ResourceUploadFileResult"][];
+        };
+        ResourcePrecheckFileResult: {
+            /** @description 资源项目内规范化相对路径 */
+            path: string;
+            /**
+             * @description 建议操作：create=可直接创建, conflict=与已有资源冲突, duplicate=批次内重复路径
+             * @enum {string}
+             */
+            action: "create" | "conflict" | "duplicate";
+            /** @description 冲突时返回已有资源信息 */
+            existing_resource?: components["schemas"]["Resource"];
+        };
+        ResourcePrecheckBatchResponse: {
+            items: components["schemas"]["ResourcePrecheckFileResult"][];
         };
         CreateTranslationJobRequest: {
             resource_ids?: number[];
@@ -1970,22 +2026,43 @@ export interface operations {
             };
         };
         responses: {
-            /** @description 上传成功 */
-            201: {
+            /** @description 批量上传结果（可能包含部分冲突或失败） */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ResourceUploadResponse"];
+                    "application/json": components["schemas"]["ResourceUploadBatchResponse"];
                 };
             };
-            /** @description 同路径资源冲突 */
-            409: {
+            default: components["responses"]["Problem"];
+        };
+    };
+    PrecheckProjectResources: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "multipart/form-data": {
+                    /** @description 待检查的项目内资源相对路径列表（不包含实际文件） */
+                    paths: string[];
+                };
+            };
+        };
+        responses: {
+            /** @description 预检结果 */
+            200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ResourceConflictResponse"];
+                    "application/json": components["schemas"]["ResourcePrecheckBatchResponse"];
                 };
             };
             default: components["responses"]["Problem"];

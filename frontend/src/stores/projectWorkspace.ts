@@ -16,6 +16,7 @@ import {
   fetchTranslationJob,
   fetchTranslationJobs,
   incrementalUpdateResource as incrementalUpdateResourceRequest,
+  precheckProjectResources as precheckProjectResourcesRequest,
   replaceProjectResource as replaceProjectResourceRequest,
   retryTranslationJob as retryTranslationJobRequest,
   updateResourceSegment as updateResourceSegmentRequest,
@@ -30,6 +31,8 @@ type Segment = ApiSchemas['Segment']
 type TranslationJob = ApiSchemas['TranslationJob']
 type CreateTranslationJobPayload = ApiSchemas['CreateTranslationJobRequest']
 type SegmentUpdatePayload = ApiSchemas['ResourceSegmentUpdateRequest']
+type ResourcePrecheckFileResult = ApiSchemas['ResourcePrecheckFileResult']
+type ResourceUploadBatchResponse = ApiSchemas['ResourceUploadBatchResponse']
 
 export interface BreadcrumbItem {
   label: string
@@ -47,9 +50,51 @@ export interface DirectoryChild {
 export interface UploadTask {
   id: string
   fileName: string
-  stage: 'uploading' | 'processing' | 'complete' | 'error'
+  stage: 'prechecking' | 'uploading' | 'processing' | 'complete' | 'partial' | 'error'
   progress: number
   errorMessage?: string
+  summary?: UploadResultSummary
+}
+
+export type PendingUploadStrategy = 'create' | 'incremental_update' | 'replace' | 'skip'
+
+export interface PendingUploadItem {
+  id: string
+  file: File
+  path: string
+  precheck: ResourcePrecheckFileResult
+  selected: boolean
+  strategy: PendingUploadStrategy
+}
+
+export interface IncrementalUploadResult {
+  item: PendingUploadItem
+  result?: ApiSchemas['IncrementalUpdateResponse']
+  error?: string
+}
+
+export interface ReplaceUploadResult {
+  item: PendingUploadItem
+  result?: boolean
+  error?: string
+}
+
+export interface UploadResultSummary {
+  created: number
+  incrementallyUpdated: number
+  replaced: number
+  conflicts: number
+  failed: number
+  skipped: number
+  total: number
+}
+
+export interface UploadExecutionResult {
+  response: ResourceUploadBatchResponse
+  skippedItems: PendingUploadItem[]
+  incrementalResults: IncrementalUploadResult[]
+  replaceResults: ReplaceUploadResult[]
+  summary: UploadResultSummary
 }
 
 export type ResourceStatusFilter = Resource['status'] | 'all'
@@ -87,6 +132,28 @@ const findNodeByPath = (root: ResourceTreeNode, path: string): ResourceTreeNode 
   return node
 }
 
+const normalizeUploadPath = (path: string): string =>
+  path.replaceAll('\\\\', '/').replace(/^\/+/, '').replace(/\/+/g, '/')
+
+const buildUploadSummary = (
+  response: ResourceUploadBatchResponse,
+  skippedItems: PendingUploadItem[] = [],
+  incrementalResults: IncrementalUploadResult[] = [],
+  replaceResults: ReplaceUploadResult[] = [],
+): UploadResultSummary => ({
+  created: response.items.filter((item) => item.action === 'created').length,
+  incrementallyUpdated: incrementalResults.filter((item) => item.result && !item.error).length,
+  replaced: replaceResults.filter((item) => item.result && !item.error).length,
+  conflicts: response.items.filter((item) => item.action === 'conflict').length,
+  failed:
+    response.items.filter((item) => item.action === 'failed').length +
+    incrementalResults.filter((item) => item.error).length +
+    replaceResults.filter((item) => item.error).length,
+  skipped: skippedItems.length,
+  total:
+    response.items.length + skippedItems.length + incrementalResults.length + replaceResults.length,
+})
+
 export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   // ── 项目 ──
   const project = ref<Project | null>(null)
@@ -116,6 +183,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   const loadingJobs = ref(false)
   const loadingJobDetail = ref(false)
   const uploadTasks = ref<UploadTask[]>([])
+  const pendingUploadItems = ref<PendingUploadItem[]>([])
+  const lastUploadResult = ref<UploadExecutionResult | null>(null)
   const replacingResourceIds = ref<number[]>([])
   const incrementalUpdatingIds = ref<number[]>([])
   const deletingResourceIds = ref<number[]>([])
@@ -223,7 +292,9 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     () => jobs.value.filter((job) => job.status === 'pending' || job.status === 'running').length,
   )
   const hasActiveUploads = computed(() =>
-    uploadTasks.value.some((task) => task.stage === 'uploading' || task.stage === 'processing'),
+    uploadTasks.value.some((task) =>
+      ['prechecking', 'uploading', 'processing'].includes(task.stage),
+    ),
   )
 
   // ── Actions：项目 ──
@@ -423,9 +494,10 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     taskId: string,
     stage: UploadTask['stage'],
     errorMessage?: string,
+    summary?: UploadResultSummary,
   ): void => {
     uploadTasks.value = uploadTasks.value.map((task) =>
-      task.id === taskId ? { ...task, stage, errorMessage } : task,
+      task.id === taskId ? { ...task, stage, errorMessage, summary } : task,
     )
   }
 
@@ -441,14 +513,115 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     uploadTasks.value = []
   }
 
+  const precheckUploadResources = async (
+    projectId: number,
+    files: File[],
+    paths?: string[],
+  ): Promise<PendingUploadItem[]> => {
+    const normalizedPaths = files.map((file, index) =>
+      normalizeUploadPath(paths?.[index] ?? file.name),
+    )
+    const response = await precheckProjectResourcesRequest(projectId, normalizedPaths)
+
+    return files.map((file, index) => {
+      const path = normalizedPaths[index] ?? file.name
+      const precheck = response.items[index] ?? {
+        path,
+        action: 'create' as const,
+      }
+
+      return {
+        id: crypto.randomUUID(),
+        file,
+        path,
+        precheck,
+        selected: precheck.action !== 'duplicate',
+        strategy:
+          precheck.action === 'create'
+            ? 'create'
+            : precheck.action === 'conflict'
+              ? 'incremental_update'
+              : 'skip',
+      }
+    })
+  }
+
+  const setPendingUploadItems = (items: PendingUploadItem[]): void => {
+    pendingUploadItems.value = items
+  }
+
+  const clearPendingUploadItems = (): void => {
+    pendingUploadItems.value = []
+  }
+
+  const setPendingUploadItemSelected = (itemId: string, selected: boolean): void => {
+    pendingUploadItems.value = pendingUploadItems.value.map((item) =>
+      item.id === itemId ? { ...item, selected, strategy: selected ? 'create' : 'skip' } : item,
+    )
+  }
+
+  const setPendingUploadItemStrategy = (itemId: string, strategy: PendingUploadStrategy): void => {
+    pendingUploadItems.value = pendingUploadItems.value.map((item) =>
+      item.id === itemId ? { ...item, strategy, selected: strategy !== 'skip' } : item,
+    )
+  }
+
+  const setAllCreatablePendingUploadItemsSelected = (selected: boolean): void => {
+    pendingUploadItems.value = pendingUploadItems.value.map((item) =>
+      item.precheck.action === 'create'
+        ? { ...item, selected, strategy: selected ? 'create' : 'skip' }
+        : item,
+    )
+  }
+
+  const mergeLastUploadResult = (
+    incrementalResults: IncrementalUploadResult[],
+    replaceResults: ReplaceUploadResult[] = [],
+  ): UploadExecutionResult => {
+    const baseResult = lastUploadResult.value ?? {
+      response: { items: [] },
+      skippedItems: [],
+      incrementalResults: [],
+      replaceResults: [],
+      summary: buildUploadSummary({ items: [] }),
+    }
+    const mergedIncrementalResults = [...baseResult.incrementalResults, ...incrementalResults]
+    const mergedReplaceResults = [...baseResult.replaceResults, ...replaceResults]
+    const summary = buildUploadSummary(
+      baseResult.response,
+      baseResult.skippedItems,
+      mergedIncrementalResults,
+      mergedReplaceResults,
+    )
+    const result = {
+      ...baseResult,
+      incrementalResults: mergedIncrementalResults,
+      replaceResults: mergedReplaceResults,
+      summary,
+    }
+    lastUploadResult.value = result
+    return result
+  }
+
   const uploadResources = async (
     projectId: number,
     files: File[],
     paths?: string[],
     taskId?: string,
-  ): Promise<void> => {
+    skippedItems: PendingUploadItem[] = [],
+  ): Promise<UploadExecutionResult> => {
+    const emptyResponse: ResourceUploadBatchResponse = { items: [] }
     if (files.length === 0) {
-      return
+      const summary = buildUploadSummary(emptyResponse, skippedItems)
+      const result = {
+        response: emptyResponse,
+        skippedItems,
+        incrementalResults: [],
+        replaceResults: [],
+        summary,
+      }
+      lastUploadResult.value = result
+      return result
     }
 
     actionError.value = null
@@ -466,10 +639,27 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
           }
         },
       })
-      resources.value = [...response.items, ...resources.value]
-      if (!activeResourceId.value && response.items[0]) {
-        activeResourceId.value = response.items[0].id
+      const createdResources = response.items
+        .filter((item) => item.action === 'created' && item.resource)
+        .map((item) => item.resource!)
+      resources.value = [...createdResources, ...resources.value]
+      if (!activeResourceId.value && createdResources[0]) {
+        activeResourceId.value = createdResources[0].id
       }
+      const summary = buildUploadSummary(response, skippedItems)
+      const result = { response, skippedItems, incrementalResults: [], replaceResults: [], summary }
+      lastUploadResult.value = result
+      if (taskId) {
+        updateUploadTaskStage(
+          taskId,
+          summary.failed > 0 || summary.conflicts > 0 || summary.skipped > 0
+            ? 'partial'
+            : 'complete',
+          undefined,
+          summary,
+        )
+      }
+      return result
     } catch (error) {
       const message = getErrorMessage(error, t('api.errors.uploadResourcesFailed'))
       actionError.value = message
@@ -692,6 +882,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     jobDetailError.value = null
     actionError.value = null
     clearAllUploadTasks()
+    clearPendingUploadItems()
+    lastUploadResult.value = null
     incrementalUpdatingIds.value = []
     resourceSearch.value = ''
     resourceStatusFilter.value = 'all'
@@ -734,6 +926,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     loadingJobs,
     loadingJobDetail,
     uploadTasks,
+    pendingUploadItems,
+    lastUploadResult,
     hasActiveUploads,
     replacingResourceIds,
     incrementalUpdatingIds,
@@ -778,6 +972,13 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     removeUploadTask,
     clearCompletedUploadTasks,
     clearAllUploadTasks,
+    precheckUploadResources,
+    setPendingUploadItems,
+    clearPendingUploadItems,
+    setPendingUploadItemSelected,
+    setPendingUploadItemStrategy,
+    setAllCreatablePendingUploadItemsSelected,
+    mergeLastUploadResult,
     uploadResources,
     replaceResource,
     incrementalUpdateResource,

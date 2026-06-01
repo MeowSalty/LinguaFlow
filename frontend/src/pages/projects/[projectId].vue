@@ -2,6 +2,7 @@
 import {
   NAlert,
   NButton,
+  NIcon,
   NModal,
   NProgress,
   NSpace,
@@ -705,36 +706,54 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="space-y-6">
-    <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
+    <NCard :bordered="false" class="overflow-hidden shadow-sm shadow-lf-shadow">
       <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-        <div class="min-w-0 space-y-3">
-          <NButton quaternary size="small" @click="router.push('/projects')">
-            {{ t('workspace.actions.back') }}
-          </NButton>
-          <div>
-            <div class="text-xs font-medium uppercase text-brand-600">
+        <div class="min-w-0 space-y-4">
+          <div class="flex flex-wrap items-center gap-3">
+            <NButton quaternary size="small" @click="router.push('/projects')">
+              <template #icon>
+                <NIcon><IconLucideArrowLeft /></NIcon>
+              </template>
+              {{ t('workspace.actions.back') }}
+            </NButton>
+            <span
+              class="rounded-full bg-lf-brand-soft px-3 py-1 text-xs font-medium text-brand-700"
+            >
               {{ t('workspace.eyebrow') }}
-            </div>
-            <h1 class="mt-2 truncate text-2xl font-semibold text-lf-text-strong">
+            </span>
+          </div>
+
+          <div class="space-y-2">
+            <h1 class="truncate text-2xl font-semibold tracking-tight text-lf-text-strong">
               {{ workspace.project?.name || t('workspace.loadingProject') }}
             </h1>
-            <div class="mt-2 flex flex-wrap items-center gap-2 text-sm text-lf-text-muted">
-              <span>{{ t('workspace.projectId', { id: projectId ?? '-' }) }}</span>
-              <span>·</span>
-              <span
-                >{{ workspace.project?.source_lang || '-' }} →
-                {{ workspace.project?.target_lang || '-' }}</span
-              >
-              <span>·</span>
-              <span>{{
-                t('workspace.updatedAt', {
-                  time: formatDate(workspace.project?.updated_at ?? workspace.project?.created_at),
-                })
-              }}</span>
+            <p class="max-w-3xl text-sm leading-6 text-lf-text-muted">
+              {{ t('workspace.subtitle') }}
+            </p>
+            <div class="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-lf-text-muted">
+              <span class="inline-flex items-center gap-1.5">
+                <IconLucideHash class="h-3.5 w-3.5 text-lf-text-subtle" />
+                {{ t('workspace.projectId', { id: projectId ?? '-' }) }}
+              </span>
+              <span class="inline-flex items-center gap-1.5">
+                <IconLucideLanguages class="h-3.5 w-3.5 text-lf-text-subtle" />
+                {{ workspace.project?.source_lang || '-' }} →
+                {{ workspace.project?.target_lang || '-' }}
+              </span>
+              <span class="inline-flex items-center gap-1.5">
+                <IconLucideClock3 class="h-3.5 w-3.5 text-lf-text-subtle" />
+                {{
+                  t('workspace.updatedAt', {
+                    time: formatDate(
+                      workspace.project?.updated_at ?? workspace.project?.created_at,
+                    ),
+                  })
+                }}
+              </span>
             </div>
           </div>
         </div>
-        <div class="flex flex-wrap gap-3">
+        <div class="flex flex-wrap gap-3 lg:justify-end">
           <NButton
             secondary
             :loading="
@@ -742,9 +761,15 @@ onBeforeUnmount(() => {
             "
             @click="reloadWorkspace"
           >
+            <template #icon>
+              <NIcon><IconLucideRefreshCw /></NIcon>
+            </template>
             {{ t('workspace.actions.refresh') }}
           </NButton>
           <NButton type="primary" :disabled="!canCreateResourceJob" @click="openResourceJobDrawer">
+            <template #icon>
+              <NIcon><IconLucideSparkles /></NIcon>
+            </template>
             {{ t('workspace.job.actions.createFromResources') }}
           </NButton>
         </div>
@@ -755,37 +780,115 @@ onBeforeUnmount(() => {
       {{ workspace.projectError }}
     </NAlert>
 
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs text-lf-text-muted">{{ t('workspace.stats.resources') }}</div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ workspace.resources.length }}
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <NCard
+        :bordered="false"
+        class="shadow-sm shadow-lf-shadow transition-shadow hover:shadow-lf-shadow-strong"
+      >
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <div class="text-sm text-lf-text-muted">{{ t('workspace.stats.resources') }}</div>
+            <div class="mt-2 text-2xl font-semibold tracking-tight text-lf-text-strong">
+              {{ workspace.resources.length }}
+            </div>
+            <div class="mt-1 text-xs text-lf-text-subtle">
+              {{ t('workspace.stats.resourceHint') }}
+            </div>
+          </div>
+          <div
+            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-500 dark:bg-blue-500/10"
+          >
+            <NIcon size="20"><IconLucideFiles /></NIcon>
+          </div>
         </div>
       </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs text-lf-text-muted">{{ t('workspace.stats.readyResources') }}</div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ workspace.readyResourceCount }}
+      <NCard
+        :bordered="false"
+        class="shadow-sm shadow-lf-shadow transition-shadow hover:shadow-lf-shadow-strong"
+      >
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <div class="text-sm text-lf-text-muted">{{ t('workspace.stats.readyResources') }}</div>
+            <div class="mt-2 text-2xl font-semibold tracking-tight text-lf-text-strong">
+              {{ workspace.readyResourceCount }}
+            </div>
+            <div class="mt-1 text-xs text-lf-text-subtle">
+              {{ t('workspace.stats.readyResourceHint') }}
+            </div>
+          </div>
+          <div
+            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-emerald-50 text-emerald-500 dark:bg-emerald-500/10"
+          >
+            <NIcon size="20"><IconLucideCheckCircle2 /></NIcon>
+          </div>
         </div>
       </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs text-lf-text-muted">{{ t('workspace.stats.segments') }}</div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ workspace.totalSegmentCount }}
+      <NCard
+        :bordered="false"
+        class="shadow-sm shadow-lf-shadow transition-shadow hover:shadow-lf-shadow-strong"
+      >
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <div class="text-sm text-lf-text-muted">{{ t('workspace.stats.segments') }}</div>
+            <div class="mt-2 text-2xl font-semibold tracking-tight text-lf-text-strong">
+              {{ workspace.totalSegmentCount }}
+            </div>
+            <div class="mt-1 text-xs text-lf-text-subtle">
+              {{ t('workspace.stats.segmentHint') }}
+            </div>
+          </div>
+          <div
+            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-indigo-50 text-indigo-500 dark:bg-indigo-500/10"
+          >
+            <NIcon size="20"><IconLucideRows3 /></NIcon>
+          </div>
         </div>
       </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs text-lf-text-muted">{{ t('workspace.stats.runningJobs') }}</div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ workspace.runningJobCount }}
+      <NCard
+        :bordered="false"
+        class="shadow-sm shadow-lf-shadow transition-shadow hover:shadow-lf-shadow-strong"
+      >
+        <div class="flex items-start justify-between gap-4">
+          <div>
+            <div class="text-sm text-lf-text-muted">{{ t('workspace.stats.runningJobs') }}</div>
+            <div class="mt-2 text-2xl font-semibold tracking-tight text-lf-text-strong">
+              {{ workspace.runningJobCount }}
+            </div>
+            <div class="mt-1 text-xs text-lf-text-subtle">
+              {{ t('workspace.stats.runningJobHint') }}
+            </div>
+          </div>
+          <div
+            class="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-500 dark:bg-amber-500/10"
+          >
+            <NIcon size="20"><IconLucideActivity /></NIcon>
+          </div>
         </div>
       </NCard>
     </div>
 
     <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
+      <div
+        class="mb-4 flex flex-col gap-3 border-b border-lf-border-soft pb-4 lg:flex-row lg:items-center lg:justify-between"
+      >
+        <div>
+          <h2 class="text-lg font-semibold text-lf-text-strong">
+            {{ t('workspace.content.title') }}
+          </h2>
+          <p class="mt-1 text-sm text-lf-text-muted">{{ t('workspace.content.description') }}</p>
+        </div>
+        <div
+          v-if="activeTab === 'resources' && selectedReadyResourceIds.length > 0"
+          class="inline-flex items-center gap-2 rounded-full bg-lf-surface-muted px-3 py-1.5 text-xs text-lf-text-muted lg:self-start"
+        >
+          <IconLucideMousePointer2 class="h-3.5 w-3.5" />
+          {{ t('workspace.content.selectedResources', { count: selectedReadyResourceIds.length }) }}
+        </div>
+      </div>
+
       <NTabs v-model:value="activeTab" animated>
         <NTabPane name="resources" :tab="t('workspace.tabs.resources')">
-          <div class="pt-2">
+          <div class="pt-3">
             <ResourceExplorer
               v-if="projectId"
               :project-id="projectId"
@@ -797,52 +900,62 @@ onBeforeUnmount(() => {
         </NTabPane>
 
         <NTabPane name="segments" :tab="t('workspace.tabs.segments')">
-          <div class="space-y-4 pt-2">
-            <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div class="flex flex-1 flex-col gap-3 md:flex-row">
-                <NSelect
-                  v-model:value="workspace.activeResourceId"
-                  clearable
-                  class="md:max-w-sm"
-                  :options="
-                    workspace.resources.map((resource) => ({
-                      label: resource.path,
-                      value: resource.id,
-                    }))
-                  "
-                  :placeholder="t('workspace.segment.resourcePlaceholder')"
-                  @update:value="(value: number | null) => workspace.setActiveResource(value)"
-                />
-                <NInput
-                  v-model:value="workspace.segmentSearch"
-                  clearable
-                  class="md:max-w-sm"
-                  :disabled="!workspace.activeResourceId"
-                  :placeholder="t('workspace.segment.searchPlaceholder')"
-                />
-                <NSelect
-                  v-model:value="workspace.segmentStatusFilter"
-                  class="md:w-44"
-                  :disabled="!workspace.activeResourceId"
-                  :options="segmentStatusOptions"
-                />
+          <div class="space-y-4 pt-3">
+            <div class="rounded-xl border border-lf-border-soft bg-lf-surface-muted/60 p-4">
+              <div class="mb-4 flex flex-col gap-1">
+                <h3 class="text-base font-semibold text-lf-text-strong">
+                  {{ t('workspace.sections.segments.title') }}
+                </h3>
+                <p class="text-sm text-lf-text-muted">
+                  {{ t('workspace.sections.segments.description') }}
+                </p>
               </div>
-              <div class="flex flex-wrap gap-3">
-                <NButton
-                  secondary
-                  :disabled="!workspace.activeResourceId"
-                  :loading="workspace.loadingSegments"
-                  @click="reloadSegments"
-                >
-                  {{ t('workspace.actions.refresh') }}
-                </NButton>
-                <NButton
-                  type="primary"
-                  :disabled="!canCreateSegmentJob"
-                  @click="openSegmentJobDrawer()"
-                >
-                  {{ t('workspace.job.actions.createFromSegments') }}
-                </NButton>
+              <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                <div class="flex flex-1 flex-col gap-3 md:flex-row">
+                  <NSelect
+                    v-model:value="workspace.activeResourceId"
+                    clearable
+                    class="md:max-w-sm"
+                    :options="
+                      workspace.resources.map((resource) => ({
+                        label: resource.path,
+                        value: resource.id,
+                      }))
+                    "
+                    :placeholder="t('workspace.segment.resourcePlaceholder')"
+                    @update:value="(value: number | null) => workspace.setActiveResource(value)"
+                  />
+                  <NInput
+                    v-model:value="workspace.segmentSearch"
+                    clearable
+                    class="md:max-w-sm"
+                    :disabled="!workspace.activeResourceId"
+                    :placeholder="t('workspace.segment.searchPlaceholder')"
+                  />
+                  <NSelect
+                    v-model:value="workspace.segmentStatusFilter"
+                    class="md:w-44"
+                    :disabled="!workspace.activeResourceId"
+                    :options="segmentStatusOptions"
+                  />
+                </div>
+                <div class="flex flex-wrap gap-3">
+                  <NButton
+                    secondary
+                    :disabled="!workspace.activeResourceId"
+                    :loading="workspace.loadingSegments"
+                    @click="reloadSegments"
+                  >
+                    {{ t('workspace.actions.refresh') }}
+                  </NButton>
+                  <NButton
+                    type="primary"
+                    :disabled="!canCreateSegmentJob"
+                    @click="openSegmentJobDrawer()"
+                  >
+                    {{ t('workspace.job.actions.createFromSegments') }}
+                  </NButton>
+                </div>
               </div>
             </div>
 
@@ -882,28 +995,38 @@ onBeforeUnmount(() => {
         </NTabPane>
 
         <NTabPane name="jobs" :tab="t('workspace.tabs.jobs')">
-          <div class="space-y-4 pt-2">
-            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <NSelect
-                v-model:value="workspace.jobStatusFilter"
-                class="md:w-56"
-                :options="jobStatusOptions"
-              />
-              <div class="flex flex-wrap gap-3">
-                <NButton
-                  secondary
-                  :loading="workspace.loadingJobs"
-                  @click="projectId && workspace.loadJobs(projectId)"
-                >
-                  {{ t('workspace.actions.refresh') }}
-                </NButton>
-                <NButton
-                  type="primary"
-                  :disabled="!canCreateResourceJob"
-                  @click="openResourceJobDrawer"
-                >
-                  {{ t('workspace.job.actions.create') }}
-                </NButton>
+          <div class="space-y-4 pt-3">
+            <div class="rounded-xl border border-lf-border-soft bg-lf-surface-muted/60 p-4">
+              <div class="mb-4 flex flex-col gap-1">
+                <h3 class="text-base font-semibold text-lf-text-strong">
+                  {{ t('workspace.sections.jobs.title') }}
+                </h3>
+                <p class="text-sm text-lf-text-muted">
+                  {{ t('workspace.sections.jobs.description') }}
+                </p>
+              </div>
+              <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <NSelect
+                  v-model:value="workspace.jobStatusFilter"
+                  class="md:w-56"
+                  :options="jobStatusOptions"
+                />
+                <div class="flex flex-wrap gap-3">
+                  <NButton
+                    secondary
+                    :loading="workspace.loadingJobs"
+                    @click="projectId && workspace.loadJobs(projectId)"
+                  >
+                    {{ t('workspace.actions.refresh') }}
+                  </NButton>
+                  <NButton
+                    type="primary"
+                    :disabled="!canCreateResourceJob"
+                    @click="openResourceJobDrawer"
+                  >
+                    {{ t('workspace.job.actions.create') }}
+                  </NButton>
+                </div>
               </div>
             </div>
 
@@ -1192,7 +1315,9 @@ onBeforeUnmount(() => {
       <template #footer>
         <div class="flex justify-end gap-3">
           <NButton
-            @click="conflictDialogVisible = false; resetConflictState()"
+            @click="
+              conflictDialogVisible = false,resetConflictState()
+            "
           >
             {{ t('workspace.common.cancel') }}
           </NButton>
