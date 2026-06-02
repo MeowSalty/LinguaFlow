@@ -277,6 +277,7 @@ const messages = {
       resources: '资源文件',
       segments: '段落编辑',
       jobs: '翻译任务',
+      glossary: '术语表',
     },
     stats: {
       resources: '资源文件',
@@ -304,6 +305,10 @@ const messages = {
       jobs: {
         title: '翻译任务',
         description: '跟踪批量翻译进度，并下载已完成结果。',
+      },
+      glossary: {
+        title: '术语表',
+        description: '管理项目翻译术语，确保关键术语在翻译过程中保持一致。',
       },
     },
     filters: {
@@ -539,6 +544,53 @@ const messages = {
       unchanged: '未变化',
       deleted: '已删除',
     },
+    glossary: {
+      actions: {
+        create: '新增条目',
+        import: '导入 CSV',
+        export: '导出 CSV',
+      },
+      columns: {
+        source: '源术语',
+        target: '目标译文',
+        caseSensitive: '区分大小写',
+        notes: '备注',
+      },
+      form: {
+        source: '源术语',
+        sourcePlaceholder: '输入源语言术语',
+        target: '目标译文',
+        targetPlaceholder: '输入目标语言译文',
+        caseSensitive: '区分大小写',
+        notes: '备注',
+        notesPlaceholder: '可选，添加备注说明',
+      },
+      validation: {
+        sourceRequired: '请输入源术语',
+        targetRequired: '请输入目标译文',
+      },
+      empty: {
+        default: '暂无术语条目，添加术语以确保翻译一致性。',
+        filtered: '没有找到符合条件的术语。',
+      },
+      import: {
+        title: '导入术语表',
+        description: '上传 CSV 文件，格式为：source,target,case_sensitive,notes',
+        result: '导入完成：成功 {added} 条',
+        skipped: '跳过 {count} 条',
+      },
+      messages: {
+        createSuccess: '术语条目已创建',
+        createFailed: '创建术语条目失败',
+        updateSuccess: '术语条目已更新',
+        updateFailed: '更新术语条目失败',
+        deleteSuccess: '术语条目已删除',
+        deleteFailed: '术语条目删除失败',
+        importSuccess: '术语表导入成功',
+        importFailed: '术语表导入失败',
+        exportFailed: '术语表导出失败',
+      },
+    },
     messages: {
       uploadSuccess: '资源已上传',
       uploadPartialSuccess:
@@ -689,6 +741,12 @@ const messages = {
       createBackendFailed: '创建后端失败',
       updateBackendFailed: '更新后端失败',
       deleteBackendFailed: '删除后端失败',
+      fetchGlossaryFailed: '获取术语表失败',
+      createGlossaryEntryFailed: '创建术语条目失败',
+      updateGlossaryEntryFailed: '更新术语条目失败',
+      deleteGlossaryEntryFailed: '删除术语条目失败',
+      importGlossaryFailed: '导入术语表失败',
+      exportGlossaryFailed: '导出术语表失败',
     },
   },
 } as const

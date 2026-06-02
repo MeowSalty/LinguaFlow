@@ -387,8 +387,7 @@ onMounted(() => {
             v-if="hasActiveFilters"
             quaternary
             @click="
-              backends.searchQuery = ''
-              backends.typeFilter = 'all'
+              backends.searchQuery = '', backends.typeFilter = 'all'
             "
           >
             {{ t('backends.filters.reset') }}
