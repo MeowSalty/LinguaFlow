@@ -3,15 +3,25 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/projectbackend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
@@ -164,11 +174,171 @@ func (s *ProjectService) UpdateProject(ctx context.Context, actorUserID, project
 	return updated, nil
 }
 
-func (s *ProjectService) DeleteProject(ctx context.Context, actorUserID, projectID int) error {
+func (s *ProjectService) DeleteProject(ctx context.Context, actorUserID, projectID int) ([]string, error) {
 	if _, err := s.requireProjectAccess(ctx, actorUserID, projectID, true); err != nil {
-		return err
+		return nil, err
 	}
-	return s.client.Project.DeleteOneID(projectID).Exec(ctx)
+	return s.cascadeDeleteProject(ctx, projectID)
+}
+
+// cascadeDeleteProject 在事务中执行项目级联删除，返回需要清理的物理文件存储路径列表。
+// 删除顺序遵循依赖关系：叶子节点优先，最后删除项目本身。
+func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int) (storagePaths []string, err error) {
+	// 1. 收集需要删除文件的 Resource 存储路径
+	resources, err := s.client.Resource.Query().
+		Where(resource.ProjectIDEQ(projectID)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("query project resources: %w", err)
+	}
+	for _, r := range resources {
+		if r.StoragePath != "" {
+			storagePaths = append(storagePaths, r.StoragePath)
+		}
+	}
+
+	// 2. 开启事务执行级联删除
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("begin transaction: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
+	// 收集项目关联的 TranslationJob IDs（用于删除 JobResource）
+	tjIDs, err := tx.TranslationJob.Query().
+		Where(translationjob.HasProjectWith(project.IDEQ(projectID))).
+		IDs(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("query translation job IDs: %w", err)
+	}
+
+	// 收集项目关联的 Resource IDs（用于删除 Segment 和 JobResource）
+	resIDs := make([]int, 0, len(resources))
+	for _, r := range resources {
+		resIDs = append(resIDs, r.ID)
+	}
+
+	// Step 1: 删除 JobResource（同时依赖 TJ 和 Resource）
+	if len(tjIDs) > 0 || len(resIDs) > 0 {
+		var preds []predicate.JobResource
+		if len(tjIDs) > 0 {
+			preds = append(preds, jobresource.HasJobWith(translationjob.IDIn(tjIDs...)))
+		}
+		if len(resIDs) > 0 {
+			preds = append(preds, jobresource.HasResourceWith(resource.IDIn(resIDs...)))
+		}
+		_, err = tx.JobResource.Delete().
+			Where(jobresource.Or(preds...)).
+			Exec(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("delete job resources: %w", err)
+		}
+	}
+
+	// Step 2: 删除 TranslationJob
+	if len(tjIDs) > 0 {
+		_, err = tx.TranslationJob.Delete().
+			Where(translationjob.IDIn(tjIDs...)).
+			Exec(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("delete translation jobs: %w", err)
+		}
+	}
+
+	// Step 4: 删除 Segment（依赖 Resource）
+	if len(resIDs) > 0 {
+		_, err = tx.Segment.Delete().
+			Where(segment.ResourceIDIn(resIDs...)).
+			Exec(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("delete segments: %w", err)
+		}
+	}
+
+	// Step 5: 删除 Resource DB 记录
+	if len(resIDs) > 0 {
+		_, err = tx.Resource.Delete().
+			Where(resource.IDIn(resIDs...)).
+			Exec(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("delete resources: %w", err)
+		}
+	}
+
+	// Step 6: 删除 Job 及其子实体
+	// 先删除 SubJob 的 Segment
+	_, err = tx.Segment.Delete().
+		Where(segment.HasSubJobWith(
+			subjob.HasJobWith(job.HasProjectWith(project.IDEQ(projectID))),
+		)).Exec(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("delete subjob segments: %w", err)
+	}
+	// 删除 SubJob
+	_, err = tx.SubJob.Delete().
+		Where(subjob.HasJobWith(job.HasProjectWith(project.IDEQ(projectID)))).
+		Exec(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("delete subjobs: %w", err)
+	}
+	// 删除 Job
+	_, err = tx.Job.Delete().
+		Where(job.HasProjectWith(project.IDEQ(projectID))).
+		Exec(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("delete jobs: %w", err)
+	}
+
+	// Step 7: 删除 ProjectBackend
+	_, err = tx.ProjectBackend.Delete().
+		Where(projectbackend.HasProjectWith(project.IDEQ(projectID))).
+		Exec(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("delete project backends: %w", err)
+	}
+
+	// Step 8: 删除 StageBackendOverride
+	_, err = tx.StageBackendOverride.Delete().
+		Where(stagebackendoverride.HasProjectWith(project.IDEQ(projectID))).
+		Exec(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("delete stage backend overrides: %w", err)
+	}
+
+	// Step 9: 删除 GlossaryEntry
+	_, err = tx.GlossaryEntry.Delete().
+		Where(glossaryentry.HasProjectWith(project.IDEQ(projectID))).
+		Exec(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("delete glossary entries: %w", err)
+	}
+
+	// Step 10: 删除 TMEntry
+	_, err = tx.TMEntry.Delete().
+		Where(tmentry.HasProjectWith(project.IDEQ(projectID))).
+		Exec(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("delete tm entries: %w", err)
+	}
+
+	// Step 11-12: ActivityLog 和 UsageRecord 保留，SetNull 由 FK 策略自动处理
+
+	// Step 13: 删除 Project
+	err = tx.Project.DeleteOneID(projectID).Exec(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("delete project: %w", err)
+	}
+
+	// 提交事务
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return storagePaths, nil
 }
 
 func (s *ProjectService) SetBackendOrder(ctx context.Context, actorUserID, projectID int, bindings []ProjectBackendBindingInput) ([]ProjectBackendBinding, error) {
