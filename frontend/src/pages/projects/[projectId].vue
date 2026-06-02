@@ -2,7 +2,10 @@
 import {
   NAlert,
   NButton,
+  NIcon,
+  NInput,
   NModal,
+  NPopover,
   NProgress,
   NSpace,
   NTag,
@@ -16,6 +19,7 @@ import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas, type DownloadFileResult } from '@/api/client'
 import ResourceExplorer from '@/components/workspace/ResourceExplorer.vue'
+import WorkspaceMetricsBar from '@/components/workspace/WorkspaceMetricsBar.vue'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 
 type Resource = ApiSchemas['Resource']
@@ -46,8 +50,6 @@ const { t } = useI18n()
 const workspace = useProjectWorkspaceStore()
 
 const activeTab = ref<WorkspaceTab>('resources')
-const editingSegment = ref<Segment | null>(null)
-const segmentDrawerVisible = ref(false)
 const jobDrawerVisible = ref(false)
 const jobDetailDrawerVisible = ref(false)
 const jobTargetMode = ref<JobTargetMode>('resources')
@@ -60,11 +62,15 @@ const replacingResourceId = ref<number | null>(null)
 const incrementalResultVisible = ref(false)
 const incrementalResult = ref<IncrementalUpdateResponse | null>(null)
 
-const segmentForm = reactive<SegmentFormModel>({
+// ── 内联编辑状态 ──
+const inlineEditingSegmentId = ref<number | null>(null)
+const inlineEditForm = reactive<SegmentFormModel>({
   source_text: '',
   target_text: '',
   comment: '',
 })
+const inlineCommentVisible = ref<number | null>(null)
+const inlineCommentText = ref('')
 
 const jobForm = reactive<JobFormModel>({
   source_lang: '',
@@ -105,9 +111,7 @@ const selectedReadyResourceIds = computed(() =>
 )
 
 const canCreateResourceJob = computed(() => selectedReadyResourceIds.value.length > 0)
-const canCreateSegmentJob = computed(() =>
-  Boolean(editingSegment.value || workspace.segments.length > 0),
-)
+const canCreateSegmentJob = computed(() => workspace.segments.length > 0)
 
 const formatDate = (value?: string): string => {
   if (!value) {
@@ -184,6 +188,7 @@ const reloadWorkspace = async (): Promise<void> => {
     workspace.loadJobs(projectId.value),
   ])
   workspace.syncResourcesFromTree()
+
 }
 
 const reloadSegments = async (): Promise<void> => {
@@ -275,24 +280,22 @@ const confirmIncrementalResult = (): void => {
 
 // ── 段落操作 ──
 
-const openSegmentDrawer = (segment: Segment): void => {
-  editingSegment.value = segment
-  segmentForm.source_text = segment.source_text
-  segmentForm.target_text = segment.target_text ?? ''
-  segmentForm.comment = segment.review_comment ?? ''
-  segmentDrawerVisible.value = true
+const startInlineEdit = (segment: Segment): void => {
+  inlineEditingSegmentId.value = segment.id
+  inlineEditForm.source_text = segment.source_text
+  inlineEditForm.target_text = segment.target_text ?? ''
+  inlineEditForm.comment = segment.review_comment ?? ''
 }
 
-const closeSegmentDrawer = (): void => {
-  segmentDrawerVisible.value = false
-  editingSegment.value = null
-  segmentForm.source_text = ''
-  segmentForm.target_text = ''
-  segmentForm.comment = ''
+const cancelInlineEdit = (): void => {
+  inlineEditingSegmentId.value = null
+  inlineEditForm.source_text = ''
+  inlineEditForm.target_text = ''
+  inlineEditForm.comment = ''
 }
 
-const saveSegment = async (): Promise<void> => {
-  if (!projectId.value || !workspace.activeResourceId || !editingSegment.value) {
+const saveInlineEdit = async (segment: Segment): Promise<void> => {
+  if (!projectId.value || !workspace.activeResourceId) {
     return
   }
 
@@ -300,15 +303,44 @@ const saveSegment = async (): Promise<void> => {
     await workspace.updateSegment(
       projectId.value,
       workspace.activeResourceId,
-      editingSegment.value.id,
+      segment.id,
       {
-        source_text: segmentForm.source_text,
-        target_text: segmentForm.target_text || undefined,
-        comment: segmentForm.comment || undefined,
+        source_text: inlineEditForm.source_text,
+        target_text: inlineEditForm.target_text || undefined,
+        comment: inlineEditForm.comment || undefined,
       },
     )
     message.success(t('workspace.messages.segmentSaved'))
-    closeSegmentDrawer()
+    cancelInlineEdit()
+  } catch (error) {
+    console.error(error)
+    message.error(workspace.actionError || t('workspace.messages.segmentSaveFailed'))
+  }
+}
+
+const openInlineComment = (segment: Segment): void => {
+  inlineCommentVisible.value = segment.id
+  inlineCommentText.value = segment.review_comment ?? ''
+}
+
+const saveInlineComment = async (segment: Segment): Promise<void> => {
+  if (!projectId.value || !workspace.activeResourceId) {
+    return
+  }
+
+  try {
+    await workspace.updateSegment(
+      projectId.value,
+      workspace.activeResourceId,
+      segment.id,
+      {
+        source_text: segment.source_text,
+        target_text: segment.target_text || undefined,
+        comment: inlineCommentText.value || undefined,
+      },
+    )
+    inlineCommentVisible.value = null
+    message.success(t('workspace.messages.segmentSaved'))
   } catch (error) {
     console.error(error)
     message.error(workspace.actionError || t('workspace.messages.segmentSaveFailed'))
@@ -464,20 +496,38 @@ const segmentColumns = computed<DataTableColumns<Segment>>(() => [
     title: t('workspace.segment.columns.source'),
     key: 'source_text',
     minWidth: 260,
-    ellipsis: {
-      tooltip: true,
+    render: (row) => {
+      if (inlineEditingSegmentId.value === row.id) {
+        return h(NInput, {
+          value: inlineEditForm.source_text,
+          type: 'textarea',
+          autosize: { minRows: 2, maxRows: 6 },
+          'onUpdate:value': (val: string) => {
+            inlineEditForm.source_text = val
+          },
+        })
+      }
+      return row.source_text
     },
   },
   {
     title: t('workspace.segment.columns.target'),
     key: 'target_text',
     minWidth: 260,
-    ellipsis: {
-      tooltip: true,
+    render: (row) => {
+      if (inlineEditingSegmentId.value === row.id) {
+        return h(NInput, {
+          value: inlineEditForm.target_text,
+          type: 'textarea',
+          autosize: { minRows: 2, maxRows: 6 },
+          placeholder: t('workspace.segment.form.target'),
+          'onUpdate:value': (val: string) => {
+            inlineEditForm.target_text = val
+          },
+        })
+      }
+      return row.target_text || h(NText, { depth: 3 }, { default: () => t('workspace.segment.emptyTarget') })
     },
-    render: (row) =>
-      row.target_text ||
-      h(NText, { depth: 3 }, { default: () => t('workspace.segment.emptyTarget') }),
   },
   {
     title: t('workspace.segment.columns.status'),
@@ -499,10 +549,33 @@ const segmentColumns = computed<DataTableColumns<Segment>>(() => [
   {
     title: t('workspace.common.actions'),
     key: 'actions',
-    width: 180,
+    width: 220,
     fixed: 'right',
-    render: (row) =>
-      h(NSpace, { size: 4, wrap: false }, () => [
+    render: (row) => {
+      if (inlineEditingSegmentId.value === row.id) {
+        return h(NSpace, { size: 4, wrap: false }, () => [
+          h(
+            NButton,
+            {
+              size: 'small',
+              quaternary: true,
+              onClick: () => cancelInlineEdit(),
+            },
+            { default: () => t('workspace.segment.actions.cancelInline') },
+          ),
+          h(
+            NButton,
+            {
+              size: 'small',
+              type: 'primary',
+              loading: workspace.editingSegmentIds.includes(row.id),
+              onClick: () => saveInlineEdit(row),
+            },
+            { default: () => t('workspace.segment.actions.saveInline') },
+          ),
+        ])
+      }
+      return h(NSpace, { size: 4, wrap: false }, () => [
         h(
           NButton,
           {
@@ -510,9 +583,57 @@ const segmentColumns = computed<DataTableColumns<Segment>>(() => [
             quaternary: true,
             type: 'primary',
             loading: workspace.editingSegmentIds.includes(row.id),
-            onClick: () => openSegmentDrawer(row),
+            onClick: () => startInlineEdit(row),
           },
           { default: () => t('workspace.segment.actions.edit') },
+        ),
+        h(
+          NPopover,
+          {
+            show: inlineCommentVisible.value === row.id,
+            trigger: 'click',
+            placement: 'bottom',
+            'onUpdate:show': (show: boolean) => {
+              if (show) {
+                openInlineComment(row)
+              } else {
+                inlineCommentVisible.value = null
+              }
+            },
+          },
+          {
+            trigger: () =>
+              h(
+                NButton,
+                {
+                  size: 'small',
+                  quaternary: true,
+                },
+                { default: () => t('workspace.segment.actions.comment') },
+              ),
+            default: () =>
+              h('div', { class: 'w-64 space-y-3' }, [
+                h(NInput, {
+                  value: inlineCommentText.value,
+                  type: 'textarea',
+                  autosize: { minRows: 2, maxRows: 4 },
+                  placeholder: t('workspace.segment.form.comment'),
+                  'onUpdate:value': (val: string) => {
+                    inlineCommentText.value = val
+                  },
+                }),
+                h(
+                  NButton,
+                  {
+                    size: 'small',
+                    type: 'primary',
+                    block: true,
+                    onClick: () => saveInlineComment(row),
+                  },
+                  { default: () => t('workspace.common.save') },
+                ),
+              ]),
+          },
         ),
         h(
           NButton,
@@ -523,7 +644,8 @@ const segmentColumns = computed<DataTableColumns<Segment>>(() => [
           },
           { default: () => t('workspace.segment.actions.translate') },
         ),
-      ]),
+      ])
+    },
   },
 ])
 
@@ -705,36 +827,36 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="space-y-6">
-    <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-      <div class="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-        <div class="min-w-0 space-y-3">
+    <NCard :bordered="false" class="overflow-hidden shadow-sm shadow-lf-shadow">
+      <div class="flex flex-wrap items-center justify-between gap-3">
+        <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
           <NButton quaternary size="small" @click="router.push('/projects')">
-            {{ t('workspace.actions.back') }}
+            <template #icon>
+              <NIcon><IconLucideArrowLeft /></NIcon>
+            </template>
           </NButton>
-          <div>
-            <div class="text-xs font-medium uppercase text-brand-600">
-              {{ t('workspace.eyebrow') }}
-            </div>
-            <h1 class="mt-2 truncate text-2xl font-semibold text-lf-text-strong">
-              {{ workspace.project?.name || t('workspace.loadingProject') }}
-            </h1>
-            <div class="mt-2 flex flex-wrap items-center gap-2 text-sm text-lf-text-muted">
-              <span>{{ t('workspace.projectId', { id: projectId ?? '-' }) }}</span>
-              <span>·</span>
-              <span
-                >{{ workspace.project?.source_lang || '-' }} →
-                {{ workspace.project?.target_lang || '-' }}</span
-              >
-              <span>·</span>
-              <span>{{
-                t('workspace.updatedAt', {
-                  time: formatDate(workspace.project?.updated_at ?? workspace.project?.created_at),
-                })
-              }}</span>
-            </div>
-          </div>
+          <h1 class="truncate text-lg font-semibold tracking-tight text-lf-text-strong">
+            {{ workspace.project?.name || t('workspace.loadingProject') }}
+          </h1>
+          <span class="inline-block h-4 w-px bg-lf-border-soft" />
+          <span class="inline-flex items-center gap-1.5 text-sm text-lf-text-muted">
+            <IconLucideLanguages class="h-3.5 w-3.5 text-lf-text-subtle" />
+            {{ workspace.project?.source_lang || '-' }} →
+            {{ workspace.project?.target_lang || '-' }}
+          </span>
+          <span class="hidden h-4 w-px bg-lf-border-soft md:inline-block" />
+          <span class="hidden items-center gap-1.5 text-sm text-lf-text-muted md:inline-flex">
+            <IconLucideClock3 class="h-3.5 w-3.5 text-lf-text-subtle" />
+            {{
+              t('workspace.updatedAt', {
+                time: formatDate(
+                  workspace.project?.updated_at ?? workspace.project?.created_at,
+                ),
+              })
+            }}
+          </span>
         </div>
-        <div class="flex flex-wrap gap-3">
+        <div class="flex shrink-0 flex-wrap gap-3">
           <NButton
             secondary
             :loading="
@@ -742,9 +864,15 @@ onBeforeUnmount(() => {
             "
             @click="reloadWorkspace"
           >
+            <template #icon>
+              <NIcon><IconLucideRefreshCw /></NIcon>
+            </template>
             {{ t('workspace.actions.refresh') }}
           </NButton>
           <NButton type="primary" :disabled="!canCreateResourceJob" @click="openResourceJobDrawer">
+            <template #icon>
+              <NIcon><IconLucideSparkles /></NIcon>
+            </template>
             {{ t('workspace.job.actions.createFromResources') }}
           </NButton>
         </div>
@@ -755,37 +883,29 @@ onBeforeUnmount(() => {
       {{ workspace.projectError }}
     </NAlert>
 
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs text-lf-text-muted">{{ t('workspace.stats.resources') }}</div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ workspace.resources.length }}
-        </div>
-      </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs text-lf-text-muted">{{ t('workspace.stats.readyResources') }}</div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ workspace.readyResourceCount }}
-        </div>
-      </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs text-lf-text-muted">{{ t('workspace.stats.segments') }}</div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ workspace.totalSegmentCount }}
-        </div>
-      </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs text-lf-text-muted">{{ t('workspace.stats.runningJobs') }}</div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ workspace.runningJobCount }}
-        </div>
-      </NCard>
-    </div>
+    <WorkspaceMetricsBar
+      :total-resources="workspace.resources.length"
+      :ready-resources="workspace.readyResourceCount"
+      :total-segments="workspace.totalSegmentCount"
+      :translated-segments="workspace.translatedSegmentCount"
+      :running-jobs="workspace.runningJobCount"
+    />
 
     <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
+      <div
+        v-if="activeTab === 'resources' && selectedReadyResourceIds.length > 0"
+        class="mb-3 inline-flex items-center gap-2 rounded-full bg-lf-surface-muted px-3 py-1.5 text-xs text-lf-text-muted"
+      >
+        <IconLucideMousePointer2 class="h-3.5 w-3.5" />
+        {{ t('workspace.content.selectedResources', { count: selectedReadyResourceIds.length }) }}
+      </div>
+
       <NTabs v-model:value="activeTab" animated>
-        <NTabPane name="resources" :tab="t('workspace.tabs.resources')">
-          <div class="pt-2">
+        <NTabPane
+          name="resources"
+          :tab="`${t('workspace.tabs.resources')} (${workspace.resources.length})`"
+        >
+          <div class="pt-3">
             <ResourceExplorer
               v-if="projectId"
               :project-id="projectId"
@@ -796,53 +916,66 @@ onBeforeUnmount(() => {
           </div>
         </NTabPane>
 
-        <NTabPane name="segments" :tab="t('workspace.tabs.segments')">
-          <div class="space-y-4 pt-2">
-            <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-              <div class="flex flex-1 flex-col gap-3 md:flex-row">
-                <NSelect
-                  v-model:value="workspace.activeResourceId"
-                  clearable
-                  class="md:max-w-sm"
-                  :options="
-                    workspace.resources.map((resource) => ({
-                      label: resource.path,
-                      value: resource.id,
-                    }))
-                  "
-                  :placeholder="t('workspace.segment.resourcePlaceholder')"
-                  @update:value="(value: number | null) => workspace.setActiveResource(value)"
-                />
-                <NInput
-                  v-model:value="workspace.segmentSearch"
-                  clearable
-                  class="md:max-w-sm"
-                  :disabled="!workspace.activeResourceId"
-                  :placeholder="t('workspace.segment.searchPlaceholder')"
-                />
-                <NSelect
-                  v-model:value="workspace.segmentStatusFilter"
-                  class="md:w-44"
-                  :disabled="!workspace.activeResourceId"
-                  :options="segmentStatusOptions"
-                />
+        <NTabPane
+          name="segments"
+          :tab="`${t('workspace.tabs.segments')} (${workspace.totalSegmentCount})`"
+        >
+          <div class="space-y-4 pt-3">
+            <div class="rounded-xl border border-lf-border-soft bg-lf-surface-muted/60 p-4">
+              <div class="mb-4 flex flex-col gap-1">
+                <h3 class="text-base font-semibold text-lf-text-strong">
+                  {{ t('workspace.sections.segments.title') }}
+                </h3>
+                <p class="text-sm text-lf-text-muted">
+                  {{ t('workspace.sections.segments.description') }}
+                </p>
               </div>
-              <div class="flex flex-wrap gap-3">
-                <NButton
-                  secondary
-                  :disabled="!workspace.activeResourceId"
-                  :loading="workspace.loadingSegments"
-                  @click="reloadSegments"
-                >
-                  {{ t('workspace.actions.refresh') }}
-                </NButton>
-                <NButton
-                  type="primary"
-                  :disabled="!canCreateSegmentJob"
-                  @click="openSegmentJobDrawer()"
-                >
-                  {{ t('workspace.job.actions.createFromSegments') }}
-                </NButton>
+              <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
+                <div class="flex flex-1 flex-col gap-3 md:flex-row">
+                  <NSelect
+                    v-model:value="workspace.activeResourceId"
+                    clearable
+                    class="md:max-w-sm"
+                    :options="
+                      workspace.resources.map((resource) => ({
+                        label: resource.path,
+                        value: resource.id,
+                      }))
+                    "
+                    :placeholder="t('workspace.segment.resourcePlaceholder')"
+                    @update:value="(value: number | null) => workspace.setActiveResource(value)"
+                  />
+                  <NInput
+                    v-model:value="workspace.segmentSearch"
+                    clearable
+                    class="md:max-w-sm"
+                    :disabled="!workspace.activeResourceId"
+                    :placeholder="t('workspace.segment.searchPlaceholder')"
+                  />
+                  <NSelect
+                    v-model:value="workspace.segmentStatusFilter"
+                    class="md:w-44"
+                    :disabled="!workspace.activeResourceId"
+                    :options="segmentStatusOptions"
+                  />
+                </div>
+                <div class="flex flex-wrap gap-3">
+                  <NButton
+                    secondary
+                    :disabled="!workspace.activeResourceId"
+                    :loading="workspace.loadingSegments"
+                    @click="reloadSegments"
+                  >
+                    {{ t('workspace.actions.refresh') }}
+                  </NButton>
+                  <NButton
+                    type="primary"
+                    :disabled="!canCreateSegmentJob"
+                    @click="openSegmentJobDrawer()"
+                  >
+                    {{ t('workspace.job.actions.createFromSegments') }}
+                  </NButton>
+                </div>
               </div>
             </div>
 
@@ -881,29 +1014,42 @@ onBeforeUnmount(() => {
           </div>
         </NTabPane>
 
-        <NTabPane name="jobs" :tab="t('workspace.tabs.jobs')">
-          <div class="space-y-4 pt-2">
-            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-              <NSelect
-                v-model:value="workspace.jobStatusFilter"
-                class="md:w-56"
-                :options="jobStatusOptions"
-              />
-              <div class="flex flex-wrap gap-3">
-                <NButton
-                  secondary
-                  :loading="workspace.loadingJobs"
-                  @click="projectId && workspace.loadJobs(projectId)"
-                >
-                  {{ t('workspace.actions.refresh') }}
-                </NButton>
-                <NButton
-                  type="primary"
-                  :disabled="!canCreateResourceJob"
-                  @click="openResourceJobDrawer"
-                >
-                  {{ t('workspace.job.actions.create') }}
-                </NButton>
+        <NTabPane
+          name="jobs"
+          :tab="`${t('workspace.tabs.jobs')} (${workspace.jobs.length})`"
+        >
+          <div class="space-y-4 pt-3">
+            <div class="rounded-xl border border-lf-border-soft bg-lf-surface-muted/60 p-4">
+              <div class="mb-4 flex flex-col gap-1">
+                <h3 class="text-base font-semibold text-lf-text-strong">
+                  {{ t('workspace.sections.jobs.title') }}
+                </h3>
+                <p class="text-sm text-lf-text-muted">
+                  {{ t('workspace.sections.jobs.description') }}
+                </p>
+              </div>
+              <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                <NSelect
+                  v-model:value="workspace.jobStatusFilter"
+                  class="md:w-56"
+                  :options="jobStatusOptions"
+                />
+                <div class="flex flex-wrap gap-3">
+                  <NButton
+                    secondary
+                    :loading="workspace.loadingJobs"
+                    @click="projectId && workspace.loadJobs(projectId)"
+                  >
+                    {{ t('workspace.actions.refresh') }}
+                  </NButton>
+                  <NButton
+                    type="primary"
+                    :disabled="!canCreateResourceJob"
+                    @click="openResourceJobDrawer"
+                  >
+                    {{ t('workspace.job.actions.create') }}
+                  </NButton>
+                </div>
               </div>
             </div>
 
@@ -942,54 +1088,6 @@ onBeforeUnmount(() => {
         </NTabPane>
       </NTabs>
     </NCard>
-
-    <NDrawer v-model:show="segmentDrawerVisible" :width="620" placement="right">
-      <NDrawerContent :title="t('workspace.segment.editTitle')" closable>
-        <NForm :model="segmentForm" label-placement="top">
-          <NFormItem :label="t('workspace.segment.form.source')">
-            <NInput
-              v-model:value="segmentForm.source_text"
-              type="textarea"
-              :autosize="{ minRows: 5, maxRows: 12 }"
-            />
-          </NFormItem>
-          <NFormItem :label="t('workspace.segment.form.target')">
-            <NInput
-              v-model:value="segmentForm.target_text"
-              type="textarea"
-              :autosize="{ minRows: 5, maxRows: 12 }"
-            />
-          </NFormItem>
-          <NFormItem :label="t('workspace.segment.form.comment')">
-            <NInput
-              v-model:value="segmentForm.comment"
-              type="textarea"
-              :autosize="{ minRows: 2, maxRows: 5 }"
-            />
-          </NFormItem>
-        </NForm>
-        <template #footer>
-          <div class="flex flex-wrap justify-end gap-3">
-            <NButton @click="closeSegmentDrawer">{{ t('workspace.common.cancel') }}</NButton>
-            <NButton
-              :disabled="!editingSegment"
-              @click="editingSegment && openSegmentJobDrawer(editingSegment)"
-            >
-              {{ t('workspace.segment.actions.translate') }}
-            </NButton>
-            <NButton
-              type="primary"
-              :loading="
-                Boolean(editingSegment && workspace.editingSegmentIds.includes(editingSegment.id))
-              "
-              @click="saveSegment"
-            >
-              {{ t('workspace.common.save') }}
-            </NButton>
-          </div>
-        </template>
-      </NDrawerContent>
-    </NDrawer>
 
     <NDrawer v-model:show="jobDrawerVisible" :width="520" placement="right">
       <NDrawerContent :title="t('workspace.job.createTitle')" closable>
@@ -1192,7 +1290,9 @@ onBeforeUnmount(() => {
       <template #footer>
         <div class="flex justify-end gap-3">
           <NButton
-            @click="conflictDialogVisible = false; resetConflictState()"
+            @click="
+              conflictDialogVisible = false,resetConflictState()
+            "
           >
             {{ t('workspace.common.cancel') }}
           </NButton>

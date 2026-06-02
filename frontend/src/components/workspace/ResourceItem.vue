@@ -3,10 +3,14 @@ import {
   NButton,
   NDropdown,
   NIcon,
-  NPopconfirm,
+  NProgress,
   NTag,
   NText,
+  NTooltip,
+  useDialog,
+  type DropdownOption,
 } from 'naive-ui'
+import { h } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
@@ -19,6 +23,8 @@ const props = defineProps<{
   incrementalUpdating?: boolean
   downloading?: boolean
   deleting?: boolean
+  /** 翻译进度百分比（0-100） */
+  progress?: number
 }>()
 
 const emit = defineEmits<{
@@ -30,6 +36,7 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
+const dialog = useDialog()
 
 const formatDate = (value?: string): string => {
   if (!value) {
@@ -58,14 +65,71 @@ const statusTagType = (status: string): 'success' | 'error' | 'default' => {
 const getStatusLabel = (status: Resource['status']): string =>
   t(`workspace.resource.status.${status}`)
 
-const dropdownOptions = computed(() => [
-  { label: t('workspace.resource.actions.replace'), key: 'replace' },
-  { label: t('workspace.resource.actions.incrementalUpdate'), key: 'incrementalUpdate' },
-  { label: t('workspace.common.download'), key: 'download' },
+const isBusy = computed(
+  () => props.replacing || props.incrementalUpdating || props.downloading || props.deleting,
+)
+
+const dropdownOptions = computed<DropdownOption[]>(() => [
+  {
+    label: t('workspace.resource.actions.segments'),
+    key: 'openSegments',
+    disabled: isBusy.value,
+  },
+  {
+    type: 'divider',
+    key: 'primaryDivider',
+  },
+  {
+    label: props.replacing
+      ? t('workspace.resource.actions.replacing')
+      : t('workspace.resource.actions.replace'),
+    key: 'replace',
+    disabled: isBusy.value,
+  },
+  {
+    label: props.incrementalUpdating
+      ? t('workspace.resource.actions.incrementalUpdating')
+      : t('workspace.resource.actions.incrementalUpdate'),
+    key: 'incrementalUpdate',
+    disabled: isBusy.value,
+  },
+  {
+    label: props.downloading
+      ? t('workspace.resource.actions.downloading')
+      : t('workspace.common.download'),
+    key: 'download',
+    disabled: isBusy.value,
+  },
+  {
+    type: 'divider',
+    key: 'dangerDivider',
+  },
+  {
+    label: () =>
+      h('span', { class: 'text-red-500 dark:text-red-300' }, t('workspace.common.delete')),
+    key: 'delete',
+    disabled: isBusy.value,
+  },
 ])
+
+const confirmDelete = (): void => {
+  dialog.warning({
+    title: t('workspace.common.delete'),
+    content: t('workspace.resource.deleteConfirm', { name: props.resource.name }),
+    positiveText: t('workspace.common.confirm'),
+    negativeText: t('workspace.common.cancel'),
+    positiveButtonProps: {
+      type: 'error',
+    },
+    onPositiveClick: () => emit('delete', props.resource),
+  })
+}
 
 const handleDropdownSelect = (key: string) => {
   switch (key) {
+    case 'openSegments':
+      emit('openSegments', props.resource)
+      break
     case 'replace':
       emit('replace', props.resource)
       break
@@ -75,79 +139,131 @@ const handleDropdownSelect = (key: string) => {
     case 'download':
       emit('download', props.resource)
       break
+    case 'delete':
+      confirmDelete()
+      break
   }
 }
 </script>
 
 <template>
   <div
-    class="rounded-lg border border-transparent bg-lf-surface-muted px-4 py-3 transition-colors hover:border-lf-border hover:bg-lf-surface"
+    class="group rounded-lg border border-transparent bg-lf-surface/80 px-4 py-3 transition-all hover:border-lf-border-soft hover:bg-lf-surface-elevated hover:shadow-sm hover:shadow-lf-shadow"
   >
-    <div class="flex items-center gap-3">
-      <div class="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-500 dark:bg-blue-500/10">
+    <div class="flex min-h-19 items-start gap-3">
+      <div
+        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300"
+      >
         <NIcon size="18"><IconLucideFile /></NIcon>
       </div>
-      <div class="min-w-0 flex-1">
-        <div class="flex items-center gap-2">
-          <span class="truncate text-sm font-medium text-lf-text-strong">
-            {{ props.resource.name }}
-          </span>
-          <NTag size="small" :bordered="false">{{ props.resource.format || '-' }}</NTag>
-          <NTag size="small" :type="statusTagType(props.resource.status)" :bordered="false">
-            {{ getStatusLabel(props.resource.status) }}
-          </NTag>
+      <div class="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div class="min-w-0 flex-1">
+          <div class="flex min-w-0 items-center gap-2">
+            <NTooltip trigger="hover" placement="top-start">
+              <template #trigger>
+                <span
+                  class="block min-w-0 truncate text-sm font-medium text-lf-text-strong"
+                  :title="props.resource.name"
+                >
+                  {{ props.resource.name }}
+                </span>
+              </template>
+              <span class="block max-w-xs break-all">{{ props.resource.name }}</span>
+            </NTooltip>
+            <NTag
+              class="shrink-0"
+              size="small"
+              :type="statusTagType(props.resource.status)"
+              :bordered="false"
+            >
+              {{ getStatusLabel(props.resource.status) }}
+            </NTag>
+          </div>
+          <div
+            class="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-lf-text-muted"
+          >
+            <NTooltip
+              v-if="props.resource.path !== props.resource.name"
+              trigger="hover"
+              placement="top-start"
+            >
+              <template #trigger>
+                <span
+                  class="inline-flex min-w-0 max-w-full items-center gap-1.5 sm:max-w-[min(36rem,50vw)]"
+                  :title="props.resource.path"
+                >
+                  <IconLucideFolderTree class="h-3.5 w-3.5 shrink-0 text-lf-text-subtle" />
+                  <span class="truncate">{{ props.resource.path }}</span>
+                </span>
+              </template>
+              <span class="block max-w-sm break-all">{{ props.resource.path }}</span>
+            </NTooltip>
+            <span class="inline-flex shrink-0 items-center gap-1.5">
+              <IconLucideRows3 class="h-3.5 w-3.5 text-lf-text-subtle" />
+              {{ props.resource.total_segments }} {{ t('workspace.resource.columns.segments') }}
+            </span>
+            <span class="inline-flex shrink-0 items-center gap-1.5">
+              <IconLucideClock3 class="h-3.5 w-3.5 text-lf-text-subtle" />
+              {{ formatDate(props.resource.updated_at) }}
+            </span>
+            <span
+              class="shrink-0 rounded-full bg-lf-surface-muted px-2 py-0.5 text-[11px] uppercase tracking-wide text-lf-text-subtle dark:bg-lf-surface-elevated dark:text-slate-300"
+            >
+              {{ props.resource.format || '-' }}
+            </span>
+          </div>
+          <NText
+            v-if="props.resource.status === 'error' && props.resource.error_message"
+            type="error"
+            class="mt-1 block truncate text-xs"
+            :title="props.resource.error_message"
+          >
+            {{ props.resource.error_message }}
+          </NText>
+          <!-- 翻译进度条 -->
+          <div v-if="props.progress !== undefined && props.resource.total_segments > 0" class="mt-2 flex items-center gap-2">
+            <NProgress
+              type="line"
+              :percentage="props.progress"
+              :show-indicator="false"
+              :height="4"
+              :border-radius="2"
+              :color="props.progress > 0 ? undefined : '#94a3b8'"
+              :rail-color="props.progress > 0 ? undefined : '#e2e8f0'"
+              status="success"
+              class="w-32"
+            />
+            <span class="whitespace-nowrap text-[11px] text-lf-text-subtle">{{ props.progress }}%</span>
+          </div>
         </div>
-        <div class="mt-1 flex items-center gap-3 text-xs text-lf-text-muted">
-          <span v-if="props.resource.path !== props.resource.name" class="truncate">
-            {{ props.resource.path }}
-          </span>
-          <span>{{ t('workspace.resource.columns.segments') }}: {{ props.resource.total_segments }}</span>
-          <span>{{ formatDate(props.resource.updated_at) }}</span>
-        </div>
-        <NText
-          v-if="props.resource.status === 'error' && props.resource.error_message"
-          type="error"
-          class="mt-1 block text-xs"
-        >
-          {{ props.resource.error_message }}
-        </NText>
-      </div>
 
-      <!-- 操作按钮：始终可见 -->
-      <div class="flex shrink-0 items-center gap-1">
-        <NButton
-          size="small"
-          quaternary
-          type="primary"
-          @click="emit('openSegments', props.resource)"
+        <!-- 操作按钮 -->
+        <div
+          class="flex w-full shrink-0 items-center justify-end gap-1 opacity-100 transition-opacity sm:w-auto md:opacity-80 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
         >
-          {{ t('workspace.resource.actions.segments') }}
-        </NButton>
-        <NDropdown
-          :options="dropdownOptions"
-          trigger="click"
-          @select="handleDropdownSelect"
-        >
-          <NButton size="small" quaternary>
-            <template #icon>
-              <NIcon><IconLucideMoreHorizontal /></NIcon>
-            </template>
+          <NButton
+            class="hidden sm:inline-flex"
+            size="small"
+            quaternary
+            type="primary"
+            @click="emit('openSegments', props.resource)"
+          >
+            {{ t('workspace.resource.actions.segments') }}
           </NButton>
-        </NDropdown>
-        <NPopconfirm
-          :positive-text="t('workspace.common.confirm')"
-          :negative-text="t('workspace.common.cancel')"
-          @positive-click="emit('delete', props.resource)"
-        >
-          <template #trigger>
-            <NButton size="small" quaternary type="error" :loading="props.deleting">
+          <NDropdown :options="dropdownOptions" trigger="click" @select="handleDropdownSelect">
+            <NButton
+              size="small"
+              quaternary
+              :loading="
+                props.replacing || props.incrementalUpdating || props.downloading || props.deleting
+              "
+            >
               <template #icon>
-                <NIcon><IconLucideTrash2 /></NIcon>
+                <NIcon><IconLucideMoreHorizontal /></NIcon>
               </template>
             </NButton>
-          </template>
-          {{ t('workspace.resource.deleteConfirm', { name: props.resource.name }) }}
-        </NPopconfirm>
+          </NDropdown>
+        </div>
       </div>
     </div>
   </div>

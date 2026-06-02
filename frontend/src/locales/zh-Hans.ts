@@ -267,12 +267,9 @@ const messages = {
     },
   },
   workspace: {
-    eyebrow: 'Project Workspace',
     loadingProject: '加载项目中',
-    projectId: '项目 #{id}',
     updatedAt: '更新于 {time}',
     actions: {
-      back: '返回项目列表',
       refresh: '刷新',
     },
     tabs: {
@@ -285,6 +282,28 @@ const messages = {
       readyResources: '可翻译资源',
       segments: '段落总数',
       runningJobs: '运行中任务',
+      resourceHint: '已导入文件',
+      readyResourceHint: '可立即翻译',
+      segmentHint: '待处理段落',
+      runningJobHint: '当前执行中',
+      progress: '已翻译',
+    },
+    content: {
+      selectedResources: '已选 {count} 个资源',
+    },
+    sections: {
+      resources: {
+        title: '资源文件',
+        description: '管理项目源文件，可上传、替换或进入段落编辑。',
+      },
+      segments: {
+        title: '段落编辑',
+        description: '选择资源后检索原文、译文与翻译状态。',
+      },
+      jobs: {
+        title: '翻译任务',
+        description: '跟踪批量翻译进度，并下载已完成结果。',
+      },
     },
     filters: {
       allStatuses: '全部状态',
@@ -306,8 +325,11 @@ const messages = {
       rootLabel: '项目根目录',
       emptyDirectory: '当前目录为空，上传文件后即可开始翻译。',
       dropToUpload: '拖拽文件或文件夹到此处上传',
+      dropHint: '也可以直接把文件或文件夹拖入此区域，系统会保留当前目录层级。',
       backToParent: '返回上级',
+      refreshDirectory: '刷新目录',
       childCount: '{count} 个项目',
+      currentDirectorySummary: '{directoryCount} 个文件夹 / {fileCount} 个文件',
     },
     resource: {
       searchPlaceholder: '搜索资源路径或文件名',
@@ -324,7 +346,10 @@ const messages = {
         upload: '上传资源',
         uploadFirst: '上传第一个资源',
         replace: '替换',
+        replacing: '正在替换…',
         incrementalUpdate: '增量更新',
+        incrementalUpdating: '正在增量更新…',
+        downloading: '正在下载…',
         segments: '查看段落',
       },
       status: {
@@ -334,10 +359,91 @@ const messages = {
       },
     },
     upload: {
+      batchName: '{count} 个文件',
+      prechecking: '正在预检…',
       uploadingPercent: '正在上传… {percent}%',
       processing: '服务端处理中…',
       complete: '上传完成',
+      partialComplete:
+        '部分完成：创建 {created}，增量更新 {incrementallyUpdated}，覆盖 {replaced}，跳过 {skipped}，失败 {failed}',
       failed: '上传失败',
+    },
+    uploadPrecheck: {
+      modalTitle: '上传预检',
+      title: '确认上传文件',
+      descriptionReady: '所有文件均可创建，将直接上传所选文件。',
+      descriptionWithProblems: '检测到冲突或重复路径。冲突文件默认增量更新，也可切换为覆盖或跳过。',
+      selectedHint: '将处理 {count} 项；跳过项不会写入项目。',
+      confirmSelected: '开始处理 {count} 项',
+      columns: {
+        upload: '上传',
+        selectAllCreatable: '批量选择可创建资源',
+        path: '资源路径',
+        status: '状态',
+        conflictResolution: '冲突处理',
+      },
+      summary: {
+        creatable: '新建',
+        conflicts: '冲突',
+        duplicates: '重复',
+        incrementalUpdates: '增量更新',
+        replaces: '覆盖',
+      },
+      actions: {
+        create: '可创建',
+        conflict: '冲突',
+        duplicate: '重复',
+      },
+      strategies: {
+        create: '将上传',
+        createHint: '新资源将按当前路径创建。',
+        incrementalUpdate: '增量更新',
+        incrementalUpdateHint: '保留未变化段落的已有译文，仅更新变更内容。',
+        replace: '覆盖',
+        replaceHint: '使用新文件完全替换已有资源，已有译文将重新生成。',
+        skip: '跳过',
+        skipHint: '本次不处理该文件。',
+      },
+      reasons: {
+        create: '路径可用，将创建新资源。',
+        conflict: '已存在资源「{name}」，请选择增量更新、覆盖或跳过。',
+        duplicate: '本批次存在相同路径，请保留一个有效文件，其余跳过。',
+      },
+    },
+    uploadResult: {
+      modalTitle: '上传结果',
+      columns: {
+        path: '资源路径',
+        status: '结果',
+        detail: '说明',
+      },
+      summary: {
+        created: '已创建',
+        incrementallyUpdated: '已增量更新',
+        replaced: '已覆盖',
+        conflicts: '冲突',
+        failed: '失败',
+        skipped: '已跳过',
+      },
+      actions: {
+        created: '已创建',
+        incremental_updated: '已增量更新',
+        replaced: '已覆盖',
+        conflict: '冲突',
+        failed: '失败',
+        skipped: '已跳过',
+      },
+      details: {
+        created: '资源已创建并完成解析。',
+        incrementalUpdated: '资源已增量更新，未变化段落的译文已保留。',
+        replaced: '资源已被新文件覆盖并重新解析。',
+        conflict: '与已有资源「{name}」冲突，未写入。',
+        failed: '服务端处理失败。',
+        missingExistingResource: '缺少已有资源信息，无法执行冲突处理。',
+        skipped: '用户未选择处理。',
+        skippedConflict: '预检发现已有资源，本次已跳过。',
+        skippedDuplicate: '预检发现批次内重复路径，本次已跳过。',
+      },
     },
     segment: {
       resourcePlaceholder: '选择资源文件',
@@ -354,6 +460,9 @@ const messages = {
       actions: {
         edit: '编辑',
         translate: '翻译',
+        saveInline: '保存',
+        cancelInline: '取消',
+        comment: '备注',
       },
       form: {
         source: '原文',
@@ -431,6 +540,8 @@ const messages = {
     },
     messages: {
       uploadSuccess: '资源已上传',
+      uploadPartialSuccess:
+        '上传部分完成：创建 {created}，增量更新 {incrementallyUpdated}，覆盖 {replaced}，跳过 {skipped}，失败 {failed}',
       uploadFailed: '资源上传失败',
       replaceSuccess: '资源已替换',
       replaceFailed: '资源替换失败',
@@ -478,6 +589,7 @@ const messages = {
       fetchResourceTreeFailed: '获取资源目录树失败',
       fetchResourcesFailed: '获取资源列表失败',
       uploadResourcesFailed: '上传资源失败',
+      precheckResourcesFailed: '上传预检失败',
       replaceResourceFailed: '替换资源失败',
       incrementalUpdateFailed: '增量更新失败',
       uploadResourceConflict: '上传的文件与已有资源冲突',

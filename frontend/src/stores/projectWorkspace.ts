@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import {
   cancelTranslationJob as cancelTranslationJobRequest,
@@ -16,6 +16,7 @@ import {
   fetchTranslationJob,
   fetchTranslationJobs,
   incrementalUpdateResource as incrementalUpdateResourceRequest,
+  precheckProjectResources as precheckProjectResourcesRequest,
   replaceProjectResource as replaceProjectResourceRequest,
   retryTranslationJob as retryTranslationJobRequest,
   updateResourceSegment as updateResourceSegmentRequest,
@@ -30,6 +31,8 @@ type Segment = ApiSchemas['Segment']
 type TranslationJob = ApiSchemas['TranslationJob']
 type CreateTranslationJobPayload = ApiSchemas['CreateTranslationJobRequest']
 type SegmentUpdatePayload = ApiSchemas['ResourceSegmentUpdateRequest']
+type ResourcePrecheckFileResult = ApiSchemas['ResourcePrecheckFileResult']
+type ResourceUploadBatchResponse = ApiSchemas['ResourceUploadBatchResponse']
 
 export interface BreadcrumbItem {
   label: string
@@ -47,9 +50,51 @@ export interface DirectoryChild {
 export interface UploadTask {
   id: string
   fileName: string
-  stage: 'uploading' | 'processing' | 'complete' | 'error'
+  stage: 'prechecking' | 'uploading' | 'processing' | 'complete' | 'partial' | 'error'
   progress: number
   errorMessage?: string
+  summary?: UploadResultSummary
+}
+
+export type PendingUploadStrategy = 'create' | 'incremental_update' | 'replace' | 'skip'
+
+export interface PendingUploadItem {
+  id: string
+  file: File
+  path: string
+  precheck: ResourcePrecheckFileResult
+  selected: boolean
+  strategy: PendingUploadStrategy
+}
+
+export interface IncrementalUploadResult {
+  item: PendingUploadItem
+  result?: ApiSchemas['IncrementalUpdateResponse']
+  error?: string
+}
+
+export interface ReplaceUploadResult {
+  item: PendingUploadItem
+  result?: boolean
+  error?: string
+}
+
+export interface UploadResultSummary {
+  created: number
+  incrementallyUpdated: number
+  replaced: number
+  conflicts: number
+  failed: number
+  skipped: number
+  total: number
+}
+
+export interface UploadExecutionResult {
+  response: ResourceUploadBatchResponse
+  skippedItems: PendingUploadItem[]
+  incrementalResults: IncrementalUploadResult[]
+  replaceResults: ReplaceUploadResult[]
+  summary: UploadResultSummary
 }
 
 export type ResourceStatusFilter = Resource['status'] | 'all'
@@ -87,9 +132,33 @@ const findNodeByPath = (root: ResourceTreeNode, path: string): ResourceTreeNode 
   return node
 }
 
+const normalizeUploadPath = (path: string): string =>
+  path.replaceAll('\\\\', '/').replace(/^\/+/, '').replace(/\/+/g, '/')
+
+const buildUploadSummary = (
+  response: ResourceUploadBatchResponse,
+  skippedItems: PendingUploadItem[] = [],
+  incrementalResults: IncrementalUploadResult[] = [],
+  replaceResults: ReplaceUploadResult[] = [],
+): UploadResultSummary => ({
+  created: response.items.filter((item) => item.action === 'created').length,
+  incrementallyUpdated: incrementalResults.filter((item) => item.result && !item.error).length,
+  replaced: replaceResults.filter((item) => item.result && !item.error).length,
+  conflicts: response.items.filter((item) => item.action === 'conflict').length,
+  failed:
+    response.items.filter((item) => item.action === 'failed').length +
+    incrementalResults.filter((item) => item.error).length +
+    replaceResults.filter((item) => item.error).length,
+  skipped: skippedItems.length,
+  total:
+    response.items.length + skippedItems.length + incrementalResults.length + replaceResults.length,
+})
+
 export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   // ── 项目 ──
   const project = ref<Project | null>(null)
+  /** 内部缓存当前项目 ID，供目录变化时自动预加载段落进度 */
+  const _currentProjectId = ref<number | null>(null)
 
   // ── 资源目录树 ──
   const resourceTree = ref<ResourceTreeNode | null>(null)
@@ -116,6 +185,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   const loadingJobs = ref(false)
   const loadingJobDetail = ref(false)
   const uploadTasks = ref<UploadTask[]>([])
+  const pendingUploadItems = ref<PendingUploadItem[]>([])
+  const lastUploadResult = ref<UploadExecutionResult | null>(null)
   const replacingResourceIds = ref<number[]>([])
   const incrementalUpdatingIds = ref<number[]>([])
   const deletingResourceIds = ref<number[]>([])
@@ -202,6 +273,52 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
       .map((child) => child.resource!),
   )
 
+  // ── 段落进度缓存 ──
+
+  interface SegmentProgress {
+    pending: number
+    translated: number
+    reviewed: number
+    rejected: number
+    total: number
+  }
+
+  /** 资源级段落状态缓存：resourceId → 状态分布 */
+  const segmentProgressCache = ref<Map<number, SegmentProgress>>(new Map())
+
+  const updateSegmentProgressCache = (resourceId: number, segments: Segment[]): void => {
+    const counts: SegmentProgress = { pending: 0, translated: 0, reviewed: 0, rejected: 0, total: segments.length }
+    for (const seg of segments) {
+      if (seg.status === 'pending') counts.pending++
+      else if (seg.status === 'translated') counts.translated++
+      else if (seg.status === 'reviewed') counts.reviewed++
+      else if (seg.status === 'rejected') counts.rejected++
+    }
+    segmentProgressCache.value = new Map(segmentProgressCache.value).set(resourceId, counts)
+  }
+
+  /** 获取指定资源的翻译进度百分比（未加载段落的资源返回 0） */
+  const getResourceProgress = (resourceId: number): number => {
+    const progress = segmentProgressCache.value.get(resourceId)
+    if (!progress || progress.total === 0) return 0
+    return Math.round(((progress.translated + progress.reviewed) / progress.total) * 100)
+  }
+
+  /** 已加载段落中已翻译/已审核的总数（前端聚合） */
+  const translatedSegmentCount = computed(() => {
+    let sum = 0
+    for (const progress of segmentProgressCache.value.values()) {
+      sum += progress.translated + progress.reviewed
+    }
+    return sum
+  })
+
+  /** 项目级翻译进度百分比 */
+  const translationProgress = computed(() => {
+    if (totalSegmentCount.value === 0) return 0
+    return Math.round((translatedSegmentCount.value / totalSegmentCount.value) * 100)
+  })
+
   // ── 计算属性：资源统计 ──
 
   const activeResource = computed<Resource | null>(
@@ -223,14 +340,24 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     () => jobs.value.filter((job) => job.status === 'pending' || job.status === 'running').length,
   )
   const hasActiveUploads = computed(() =>
-    uploadTasks.value.some((task) => task.stage === 'uploading' || task.stage === 'processing'),
+    uploadTasks.value.some((task) =>
+      ['prechecking', 'uploading', 'processing'].includes(task.stage),
+    ),
   )
+
+  // 监听目录变化，自动预加载当前目录下资源的段落进度
+  watch(currentPath, () => {
+    if (_currentProjectId.value) {
+      void preloadDirectoryProgress(_currentProjectId.value)
+    }
+  })
 
   // ── Actions：项目 ──
 
   const loadProject = async (projectId: number): Promise<void> => {
     loadingProject.value = true
     projectError.value = null
+    _currentProjectId.value = projectId
 
     try {
       project.value = await fetchProject(projectId)
@@ -360,10 +487,46 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
       })
       segments.value = append ? [...segments.value, ...response.items] : response.items
       segmentsCursor.value = response.next_cursor ?? null
+
+      // 仅在无筛选条件的全量加载时更新进度缓存
+      if (!append && segmentStatusFilter.value === 'all' && !segmentSearch.value.trim()) {
+        updateSegmentProgressCache(resourceId, segments.value)
+      }
     } catch (error) {
       segmentsError.value = getErrorMessage(error, t('api.errors.fetchSegmentsFailed'))
     } finally {
       loadingSegments.value = false
+    }
+  }
+
+  /** 为当前目录下的资源预加载段落数据以填充进度缓存（后台静默执行） */
+  const preloadDirectoryProgress = async (projectId: number): Promise<void> => {
+    const CONCURRENT = 3
+
+    const loadResourceSegments = async (resourceId: number): Promise<void> => {
+      let cursor: string | undefined
+      const collected: Segment[] = []
+
+      do {
+        const response = await fetchResourceSegments(projectId, resourceId, {
+          cursor,
+          limit: 100,
+        })
+        collected.push(...response.items)
+        cursor = response.next_cursor ?? undefined
+      } while (cursor)
+
+      updateSegmentProgressCache(resourceId, collected)
+    }
+
+    // 仅加载当前目录下有段落的资源
+    const resourceIds = currentDirectoryResources.value
+      .filter((r) => r.total_segments > 0)
+      .map((r) => r.id)
+
+    for (let i = 0; i < resourceIds.length; i += CONCURRENT) {
+      const batch = resourceIds.slice(i, i + CONCURRENT)
+      await Promise.allSettled(batch.map((id) => loadResourceSegments(id)))
     }
   }
 
@@ -423,9 +586,10 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     taskId: string,
     stage: UploadTask['stage'],
     errorMessage?: string,
+    summary?: UploadResultSummary,
   ): void => {
     uploadTasks.value = uploadTasks.value.map((task) =>
-      task.id === taskId ? { ...task, stage, errorMessage } : task,
+      task.id === taskId ? { ...task, stage, errorMessage, summary } : task,
     )
   }
 
@@ -441,14 +605,115 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     uploadTasks.value = []
   }
 
+  const precheckUploadResources = async (
+    projectId: number,
+    files: File[],
+    paths?: string[],
+  ): Promise<PendingUploadItem[]> => {
+    const normalizedPaths = files.map((file, index) =>
+      normalizeUploadPath(paths?.[index] ?? file.name),
+    )
+    const response = await precheckProjectResourcesRequest(projectId, normalizedPaths)
+
+    return files.map((file, index) => {
+      const path = normalizedPaths[index] ?? file.name
+      const precheck = response.items[index] ?? {
+        path,
+        action: 'create' as const,
+      }
+
+      return {
+        id: crypto.randomUUID(),
+        file,
+        path,
+        precheck,
+        selected: precheck.action !== 'duplicate',
+        strategy:
+          precheck.action === 'create'
+            ? 'create'
+            : precheck.action === 'conflict'
+              ? 'incremental_update'
+              : 'skip',
+      }
+    })
+  }
+
+  const setPendingUploadItems = (items: PendingUploadItem[]): void => {
+    pendingUploadItems.value = items
+  }
+
+  const clearPendingUploadItems = (): void => {
+    pendingUploadItems.value = []
+  }
+
+  const setPendingUploadItemSelected = (itemId: string, selected: boolean): void => {
+    pendingUploadItems.value = pendingUploadItems.value.map((item) =>
+      item.id === itemId ? { ...item, selected, strategy: selected ? 'create' : 'skip' } : item,
+    )
+  }
+
+  const setPendingUploadItemStrategy = (itemId: string, strategy: PendingUploadStrategy): void => {
+    pendingUploadItems.value = pendingUploadItems.value.map((item) =>
+      item.id === itemId ? { ...item, strategy, selected: strategy !== 'skip' } : item,
+    )
+  }
+
+  const setAllCreatablePendingUploadItemsSelected = (selected: boolean): void => {
+    pendingUploadItems.value = pendingUploadItems.value.map((item) =>
+      item.precheck.action === 'create'
+        ? { ...item, selected, strategy: selected ? 'create' : 'skip' }
+        : item,
+    )
+  }
+
+  const mergeLastUploadResult = (
+    incrementalResults: IncrementalUploadResult[],
+    replaceResults: ReplaceUploadResult[] = [],
+  ): UploadExecutionResult => {
+    const baseResult = lastUploadResult.value ?? {
+      response: { items: [] },
+      skippedItems: [],
+      incrementalResults: [],
+      replaceResults: [],
+      summary: buildUploadSummary({ items: [] }),
+    }
+    const mergedIncrementalResults = [...baseResult.incrementalResults, ...incrementalResults]
+    const mergedReplaceResults = [...baseResult.replaceResults, ...replaceResults]
+    const summary = buildUploadSummary(
+      baseResult.response,
+      baseResult.skippedItems,
+      mergedIncrementalResults,
+      mergedReplaceResults,
+    )
+    const result = {
+      ...baseResult,
+      incrementalResults: mergedIncrementalResults,
+      replaceResults: mergedReplaceResults,
+      summary,
+    }
+    lastUploadResult.value = result
+    return result
+  }
+
   const uploadResources = async (
     projectId: number,
     files: File[],
     paths?: string[],
     taskId?: string,
-  ): Promise<void> => {
+    skippedItems: PendingUploadItem[] = [],
+  ): Promise<UploadExecutionResult> => {
+    const emptyResponse: ResourceUploadBatchResponse = { items: [] }
     if (files.length === 0) {
-      return
+      const summary = buildUploadSummary(emptyResponse, skippedItems)
+      const result = {
+        response: emptyResponse,
+        skippedItems,
+        incrementalResults: [],
+        replaceResults: [],
+        summary,
+      }
+      lastUploadResult.value = result
+      return result
     }
 
     actionError.value = null
@@ -466,10 +731,27 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
           }
         },
       })
-      resources.value = [...response.items, ...resources.value]
-      if (!activeResourceId.value && response.items[0]) {
-        activeResourceId.value = response.items[0].id
+      const createdResources = response.items
+        .filter((item) => item.action === 'created' && item.resource)
+        .map((item) => item.resource!)
+      resources.value = [...createdResources, ...resources.value]
+      if (!activeResourceId.value && createdResources[0]) {
+        activeResourceId.value = createdResources[0].id
       }
+      const summary = buildUploadSummary(response, skippedItems)
+      const result = { response, skippedItems, incrementalResults: [], replaceResults: [], summary }
+      lastUploadResult.value = result
+      if (taskId) {
+        updateUploadTaskStage(
+          taskId,
+          summary.failed > 0 || summary.conflicts > 0 || summary.skipped > 0
+            ? 'partial'
+            : 'complete',
+          undefined,
+          summary,
+        )
+      }
+      return result
     } catch (error) {
       const message = getErrorMessage(error, t('api.errors.uploadResourcesFailed'))
       actionError.value = message
@@ -672,6 +954,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
 
   const reset = (): void => {
     project.value = null
+    _currentProjectId.value = null
     resourceTree.value = null
     currentPath.value = ''
     loadingResourceTree.value = false
@@ -692,6 +975,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     jobDetailError.value = null
     actionError.value = null
     clearAllUploadTasks()
+    clearPendingUploadItems()
+    lastUploadResult.value = null
     incrementalUpdatingIds.value = []
     resourceSearch.value = ''
     resourceStatusFilter.value = 'all'
@@ -699,6 +984,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     segmentSearch.value = ''
     segmentStatusFilter.value = 'all'
     jobStatusFilter.value = 'all'
+    segmentProgressCache.value = new Map()
   }
 
   return {
@@ -734,6 +1020,8 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     loadingJobs,
     loadingJobDetail,
     uploadTasks,
+    pendingUploadItems,
+    lastUploadResult,
     hasActiveUploads,
     replacingResourceIds,
     incrementalUpdatingIds,
@@ -757,6 +1045,11 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     segmentSearch,
     segmentStatusFilter,
     jobStatusFilter,
+    // 段落进度缓存
+    segmentProgressCache,
+    getResourceProgress,
+    translatedSegmentCount,
+    translationProgress,
     // 计算属性
     availableFormats,
     readyResourceCount,
@@ -778,6 +1071,13 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     removeUploadTask,
     clearCompletedUploadTasks,
     clearAllUploadTasks,
+    precheckUploadResources,
+    setPendingUploadItems,
+    clearPendingUploadItems,
+    setPendingUploadItemSelected,
+    setPendingUploadItemStrategy,
+    setAllCreatablePendingUploadItemsSelected,
+    mergeLastUploadResult,
     uploadResources,
     replaceResource,
     incrementalUpdateResource,
@@ -789,6 +1089,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     downloadResource,
     downloadJobResult,
     setActiveResource,
+    preloadDirectoryProgress,
     reset,
   }
 })

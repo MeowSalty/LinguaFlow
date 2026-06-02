@@ -4,6 +4,7 @@ import {
   NButton,
   NEmpty,
   NIcon,
+  NModal,
   NUpload,
   useMessage,
   type UploadCustomRequestOptions,
@@ -11,11 +12,17 @@ import {
 import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { isResourceConflictError, type ApiSchemas } from '@/api/client'
+import { type ApiSchemas } from '@/api/client'
 import DirectoryItem from '@/components/workspace/DirectoryItem.vue'
 import ResourceBreadcrumb from '@/components/workspace/ResourceBreadcrumb.vue'
 import ResourceItem from '@/components/workspace/ResourceItem.vue'
-import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
+import UploadPrecheckPanel from '@/components/workspace/UploadPrecheckPanel.vue'
+import UploadResultPanel from '@/components/workspace/UploadResultPanel.vue'
+import {
+  useProjectWorkspaceStore,
+  type PendingUploadItem,
+  type ReplaceUploadResult,
+} from '@/stores/projectWorkspace'
 
 type Resource = ApiSchemas['Resource']
 type IncrementalUpdateResponse = ApiSchemas['IncrementalUpdateResponse']
@@ -35,6 +42,10 @@ const { t } = useI18n()
 const workspace = useProjectWorkspaceStore()
 
 const dragOver = ref(false)
+const uploadPrecheckVisible = ref(false)
+const uploadResultVisible = ref(false)
+const uploadConfirming = ref(false)
+const pendingUploadTaskId = ref<string | null>(null)
 
 // ── 计算属性 ──
 
@@ -47,9 +58,14 @@ const resourceItems = computed(() =>
 )
 
 const isEmpty = computed(
-  () =>
-    !workspace.loadingResourceTree &&
-    workspace.currentDirectoryChildren.length === 0,
+  () => !workspace.loadingResourceTree && workspace.currentDirectoryChildren.length === 0,
+)
+
+const currentDirectorySummary = computed(() =>
+  t('workspace.explorer.currentDirectorySummary', {
+    fileCount: resourceItems.value.length,
+    directoryCount: directories.value.length,
+  }),
 )
 
 // ── 生命周期 ──
@@ -68,6 +84,14 @@ watch(
 
 const handleNavigate = (path: string): void => {
   workspace.navigateTo(path)
+}
+
+const handleNavigateUp = (): void => {
+  workspace.navigateUp()
+}
+
+const handleRefreshDirectory = async (): Promise<void> => {
+  await workspace.loadResourceTree(props.projectId)
 }
 
 // ── 资源操作 ──
@@ -153,9 +177,181 @@ const computeUploadPaths = (files: File[], directoryPrefix: string): string[] | 
 
   return files.map((file) => {
     // webkitRelativePath 包含文件夹相对路径，如 "common.json" 或 "sub/common.json"
-    const relativePath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name
+    const relativePath =
+      (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name
     return directoryPrefix ? `${directoryPrefix}/${relativePath}` : relativePath
   })
+}
+
+const summarizeUploadName = (files: File[]): string =>
+  files.length === 1 ? files[0]!.name : t('workspace.upload.batchName', { count: files.length })
+
+const closeUploadResult = (): void => {
+  uploadResultVisible.value = false
+}
+
+const finishUploadTaskLater = (taskId: string, delay = 4000): void => {
+  setTimeout(() => workspace.removeUploadTask(taskId), delay)
+}
+
+const executeIncrementalUploadItems = async (
+  items: PendingUploadItem[],
+): Promise<import('@/stores/projectWorkspace').IncrementalUploadResult[]> => {
+  const results: import('@/stores/projectWorkspace').IncrementalUploadResult[] = []
+
+  for (const item of items) {
+    const resourceId = item.precheck.existing_resource?.id
+    if (!resourceId) {
+      results.push({ item, error: t('workspace.uploadResult.details.missingExistingResource') })
+      continue
+    }
+
+    try {
+      const result = await workspace.incrementalUpdateResource(
+        props.projectId,
+        resourceId,
+        item.file,
+      )
+      results.push({ item, result })
+    } catch (error) {
+      results.push({
+        item,
+        error:
+          error instanceof Error ? error.message : t('workspace.messages.incrementalUpdateFailed'),
+      })
+    }
+  }
+
+  return results
+}
+
+const executeReplaceUploadItems = async (
+  items: PendingUploadItem[],
+): Promise<ReplaceUploadResult[]> => {
+  const results: ReplaceUploadResult[] = []
+
+  for (const item of items) {
+    const resourceId = item.precheck.existing_resource?.id
+    if (!resourceId) {
+      results.push({ item, error: t('workspace.uploadResult.details.missingExistingResource') })
+      continue
+    }
+
+    try {
+      await workspace.replaceResource(props.projectId, resourceId, item.file)
+      results.push({ item, result: true })
+    } catch (error) {
+      results.push({
+        item,
+        error: error instanceof Error ? error.message : t('workspace.messages.replaceFailed'),
+      })
+    }
+  }
+
+  return results
+}
+
+const executeUploadItems = async (items: PendingUploadItem[], taskId: string): Promise<void> => {
+  const selectedItems = items.filter((item) => item.selected && item.strategy === 'create')
+  const incrementalItems = items.filter((item) => item.strategy === 'incremental_update')
+  const replaceItems = items.filter((item) => item.strategy === 'replace')
+  const skippedItems = items.filter((item) => item.strategy === 'skip')
+
+  workspace.updateUploadTaskStage(taskId, 'uploading')
+  await workspace.uploadResources(
+    props.projectId,
+    selectedItems.map((item) => item.file),
+    selectedItems.map((item) => item.path),
+    taskId,
+    skippedItems,
+  )
+
+  workspace.updateUploadTaskStage(taskId, 'processing')
+  const incrementalResults = await executeIncrementalUploadItems(incrementalItems)
+  const replaceResults = await executeReplaceUploadItems(replaceItems)
+  const mergedResult = workspace.mergeLastUploadResult(incrementalResults, replaceResults)
+
+  await workspace.loadResourceTree(props.projectId)
+  uploadResultVisible.value = true
+  if (
+    mergedResult.summary.failed > 0 ||
+    mergedResult.summary.conflicts > 0 ||
+    mergedResult.summary.skipped > 0
+  ) {
+    message.warning(t('workspace.messages.uploadPartialSuccess', { ...mergedResult.summary }))
+    finishUploadTaskLater(taskId, 6000)
+  } else {
+    message.success(t('workspace.messages.uploadSuccess'))
+    finishUploadTaskLater(taskId)
+  }
+}
+
+const beginUpload = async (
+  files: File[],
+  paths: string[] | undefined,
+  displayName: string,
+  callbacks?: Pick<UploadCustomRequestOptions, 'onFinish' | 'onError'>,
+): Promise<void> => {
+  if (files.length === 0) {
+    callbacks?.onFinish?.()
+    return
+  }
+
+  const taskId = workspace.addUploadTask(displayName)
+  workspace.updateUploadTaskStage(taskId, 'prechecking')
+
+  try {
+    const items = await workspace.precheckUploadResources(props.projectId, files, paths)
+    workspace.setPendingUploadItems(items)
+
+    if (items.some((item) => item.precheck.action !== 'create')) {
+      pendingUploadTaskId.value = taskId
+      uploadPrecheckVisible.value = true
+      callbacks?.onFinish?.()
+      return
+    }
+
+    await executeUploadItems(items, taskId)
+    callbacks?.onFinish?.()
+  } catch (error) {
+    console.error(error)
+    message.error(workspace.actionError || t('workspace.messages.uploadFailed'))
+    workspace.updateUploadTaskStage(
+      taskId,
+      'error',
+      workspace.actionError || t('workspace.messages.uploadFailed'),
+    )
+    callbacks?.onError?.()
+  }
+}
+
+const confirmPrecheckedUpload = async (): Promise<void> => {
+  const taskId = pendingUploadTaskId.value
+  if (!taskId) {
+    return
+  }
+
+  uploadConfirming.value = true
+  try {
+    await executeUploadItems(workspace.pendingUploadItems, taskId)
+    uploadPrecheckVisible.value = false
+    pendingUploadTaskId.value = null
+    workspace.clearPendingUploadItems()
+  } catch (error) {
+    console.error(error)
+    message.error(workspace.actionError || t('workspace.messages.uploadFailed'))
+  } finally {
+    uploadConfirming.value = false
+  }
+}
+
+const cancelPrecheckedUpload = (): void => {
+  if (pendingUploadTaskId.value) {
+    workspace.removeUploadTask(pendingUploadTaskId.value)
+  }
+  pendingUploadTaskId.value = null
+  uploadPrecheckVisible.value = false
+  workspace.clearPendingUploadItems()
 }
 
 const handleUpload = async ({
@@ -170,26 +366,7 @@ const handleUpload = async ({
 
   const files = [file.file]
   const paths = computeUploadPaths(files, workspace.currentPath)
-  const taskId = workspace.addUploadTask(file.name)
-
-  try {
-    await workspace.uploadResources(props.projectId, files, paths, taskId)
-    message.success(t('workspace.messages.uploadSuccess'))
-    onFinish()
-    workspace.updateUploadTaskStage(taskId, 'complete', undefined)
-    setTimeout(() => workspace.removeUploadTask(taskId), 3000)
-    await workspace.loadResourceTree(props.projectId)
-  } catch (error) {
-    if (isResourceConflictError(error)) {
-      workspace.removeUploadTask(taskId)
-      emit('conflict', error.conflictData.existing_resource, file.file)
-      onFinish()
-    } else {
-      console.error(error)
-      message.error(workspace.actionError || t('workspace.messages.uploadFailed'))
-      onError()
-    }
-  }
+  await beginUpload(files, paths, file.name, { onFinish, onError })
 }
 
 // ── 拖拽上传 ──
@@ -255,68 +432,70 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
     currentPrefix ? `${currentPrefix}/${item.relativePath}` : item.relativePath,
   )
 
-  const taskId = workspace.addUploadTask(
-    collectedFiles.length === 1 ? collectedFiles[0]!.file.name : `${collectedFiles.length} files`,
-  )
-
-  try {
-    await workspace.uploadResources(props.projectId, files, paths, taskId)
-    message.success(t('workspace.messages.uploadSuccess'))
-    workspace.updateUploadTaskStage(taskId, 'complete', undefined)
-    setTimeout(() => workspace.removeUploadTask(taskId), 3000)
-    await workspace.loadResourceTree(props.projectId)
-  } catch (error) {
-    if (isResourceConflictError(error)) {
-      workspace.removeUploadTask(taskId)
-      emit('conflict', error.conflictData.existing_resource, files[0]!)
-    } else {
-      console.error(error)
-      message.error(workspace.actionError || t('workspace.messages.uploadFailed'))
-      workspace.updateUploadTaskStage(taskId, 'error', workspace.actionError || t('workspace.messages.uploadFailed'))
-    }
-  }
+  await beginUpload(files, paths, summarizeUploadName(files))
 }
 </script>
 
 <template>
-  <div
-    class="space-y-4"
-    @dragover="handleDragOver"
-    @dragleave="handleDragLeave"
-    @drop="handleDrop"
-  >
-    <!-- 面包屑 + 操作栏 -->
-    <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-      <ResourceBreadcrumb
-        :items="workspace.breadcrumbs"
-        :project-name="workspace.project?.name ?? ''"
-        @navigate="handleNavigate"
-      />
-      <div class="flex flex-wrap items-center gap-2">
-        <NButton
-          v-if="workspace.currentPath"
-          quaternary
-          size="small"
-          @click="workspace.navigateUp()"
-        >
-          <template #icon>
-            <NIcon><IconLucideArrowLeft /></NIcon>
-          </template>
-          {{ t('workspace.explorer.backToParent') }}
-        </NButton>
-        <NButton
-          secondary
-          size="small"
-          :loading="workspace.loadingResourceTree"
-          @click="workspace.loadResourceTree(props.projectId)"
-        >
-          {{ t('workspace.actions.refresh') }}
-        </NButton>
-        <NUpload multiple :show-file-list="false" :custom-request="handleUpload">
-          <NButton type="primary" size="small" :loading="workspace.hasActiveUploads">
-            {{ t('workspace.resource.actions.upload') }}
+  <div class="space-y-4" @dragover="handleDragOver" @dragleave="handleDragLeave" @drop="handleDrop">
+    <!-- 资源路径 + 操作栏 -->
+    <div
+      class="overflow-hidden rounded-2xl border border-lf-border-soft bg-lf-surface shadow-sm shadow-lf-shadow/40"
+    >
+      <div class="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
+        <div class="flex min-w-0 flex-1 items-center gap-3">
+          <NButton
+            quaternary
+            circle
+            size="small"
+            class="shrink-0 text-lf-text-muted hover:text-lf-text-strong"
+            :loading="workspace.loadingResourceTree"
+            :title="t('workspace.explorer.refreshDirectory')"
+            :aria-label="t('workspace.explorer.refreshDirectory')"
+            @click="handleRefreshDirectory"
+          >
+            <template #icon>
+              <NIcon><IconLucideRefreshCw /></NIcon>
+            </template>
           </NButton>
-        </NUpload>
+          <div class="min-w-0 flex-1">
+            <div
+              class="flex max-w-full items-center gap-2 overflow-hidden rounded-xl border border-lf-border-soft bg-lf-surface-muted/45 px-2 py-2"
+            >
+              <NButton
+                v-if="workspace.currentPath"
+                quaternary
+                circle
+                size="small"
+                class="shrink-0 text-lf-text-muted hover:text-lf-text-strong"
+                :title="t('workspace.explorer.backToParent')"
+                :aria-label="t('workspace.explorer.backToParent')"
+                @click="handleNavigateUp"
+              >
+                <template #icon>
+                  <NIcon><IconLucideArrowUp /></NIcon>
+                </template>
+              </NButton>
+              <div v-if="workspace.currentPath" class="h-5 border-l border-lf-border-soft" />
+              <ResourceBreadcrumb
+                class="min-w-0 flex-1"
+                :items="workspace.breadcrumbs"
+                :project-name="workspace.project?.name ?? ''"
+                @navigate="handleNavigate"
+              />
+            </div>
+          </div>
+        </div>
+        <div class="flex shrink-0 flex-nowrap items-center gap-2 lg:justify-end">
+          <NUpload multiple :show-file-list="false" :custom-request="handleUpload">
+            <NButton type="primary" size="small" strong :loading="workspace.hasActiveUploads">
+              <template #icon>
+                <NIcon><IconLucideUpload /></NIcon>
+              </template>
+              {{ t('workspace.resource.actions.upload') }}
+            </NButton>
+          </NUpload>
+        </div>
       </div>
     </div>
 
@@ -334,11 +513,17 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
     >
       <div
         v-if="dragOver"
-        class="flex items-center justify-center rounded-xl border-2 border-dashed border-blue-400 bg-blue-50/50 py-12 dark:bg-blue-500/5"
+        class="flex items-center justify-center rounded-xl border-2 border-dashed border-brand-500/45 bg-lf-brand-soft/80 py-12 dark:border-brand-500/55 dark:bg-lf-brand-soft/70"
       >
         <div class="text-center">
-          <NIcon size="32" class="text-blue-400"><IconLucideUpload /></NIcon>
-          <p class="mt-2 text-sm text-blue-500">{{ t('workspace.explorer.dropToUpload') }}</p>
+          <div
+            class="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-brand-50 text-brand-600 shadow-sm shadow-lf-shadow dark:bg-brand-500/15 dark:text-brand-100"
+          >
+            <NIcon size="26"><IconLucideUpload /></NIcon>
+          </div>
+          <p class="mt-3 text-sm font-medium text-brand-700 dark:text-brand-100">
+            {{ t('workspace.explorer.dropToUpload') }}
+          </p>
         </div>
       </div>
     </Transition>
@@ -356,26 +541,32 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
       <div
         v-for="task in workspace.uploadTasks"
         :key="task.id"
-        class="overflow-hidden rounded-lg border border-lf-border bg-lf-surface-muted px-4 py-3"
+        class="overflow-hidden rounded-xl border border-lf-border-soft bg-lf-surface/80 px-4 py-3 shadow-sm shadow-lf-shadow/50"
       >
         <div class="flex items-center justify-between">
-          <div class="flex min-w-0 flex-1 items-center gap-2.5">
+          <div class="flex min-w-0 flex-1 items-center gap-3">
             <div
-              class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md"
+              class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
               :class="{
-                'bg-blue-50 text-blue-500 dark:bg-blue-500/10': task.stage === 'uploading',
-                'bg-amber-50 text-amber-500 dark:bg-amber-500/10': task.stage === 'processing',
-                'bg-emerald-50 text-emerald-500 dark:bg-emerald-500/10': task.stage === 'complete',
-                'bg-red-50 text-red-500 dark:bg-red-500/10': task.stage === 'error',
+                'bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300':
+                  task.stage === 'uploading',
+                'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300':
+                  task.stage === 'prechecking',
+                'bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300':
+                  task.stage === 'processing' || task.stage === 'partial',
+                'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300':
+                  task.stage === 'complete',
+                'bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-300':
+                  task.stage === 'error',
               }"
             >
-              <IconLucideUpload v-if="task.stage === 'uploading'" class="h-3.5 w-3.5" />
+              <IconLucideUpload v-if="task.stage === 'uploading'" class="h-4.5 w-4.5" />
               <IconLucideLoader2
-                v-else-if="task.stage === 'processing'"
-                class="h-3.5 w-3.5 animate-spin"
+                v-else-if="task.stage === 'prechecking' || task.stage === 'processing'"
+                class="h-4.5 w-4.5 animate-spin"
               />
-              <IconLucideCheck v-else-if="task.stage === 'complete'" class="h-3.5 w-3.5" />
-              <IconLucideAlertCircle v-else class="h-3.5 w-3.5" />
+              <IconLucideCheck v-else-if="task.stage === 'complete'" class="h-4.5 w-4.5" />
+              <IconLucideAlertCircle v-else class="h-4.5 w-4.5" />
             </div>
             <div class="min-w-0 flex-1">
               <span class="truncate text-sm font-medium text-lf-text-strong">
@@ -385,11 +576,17 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
                 <template v-if="task.stage === 'uploading'">
                   {{ t('workspace.upload.uploadingPercent', { percent: task.progress }) }}
                 </template>
+                <template v-else-if="task.stage === 'prechecking'">
+                  {{ t('workspace.upload.prechecking') }}
+                </template>
                 <template v-else-if="task.stage === 'processing'">
                   {{ t('workspace.upload.processing') }}
                 </template>
                 <template v-else-if="task.stage === 'complete'">
                   {{ t('workspace.upload.complete') }}
+                </template>
+                <template v-else-if="task.stage === 'partial'">
+                  {{ t('workspace.upload.partialComplete', task.summary ?? {}) }}
                 </template>
                 <template v-else>
                   {{ task.errorMessage || t('workspace.upload.failed') }}
@@ -412,60 +609,116 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
     </TransitionGroup>
 
     <!-- 加载状态 -->
-    <div v-if="workspace.loadingResourceTree" class="py-12 text-center">
-      <NIcon size="24" class="animate-spin text-lf-text-muted"><IconLucideLoader2 /></NIcon>
+    <div
+      v-if="workspace.loadingResourceTree"
+      class="flex items-center justify-center rounded-xl border border-dashed border-lf-border-soft bg-lf-surface-muted/60 px-6 py-12 text-center"
+    >
+      <div
+        class="flex h-12 w-12 items-center justify-center rounded-xl bg-lf-surface-elevated text-brand-600 shadow-sm shadow-lf-shadow dark:text-brand-100"
+      >
+        <NIcon size="24" class="animate-spin"><IconLucideLoader2 /></NIcon>
+      </div>
     </div>
 
     <!-- 空状态 -->
-    <NEmpty
+    <div
       v-else-if="isEmpty"
-      class="py-12"
-      :description="t('workspace.explorer.emptyDirectory')"
+      class="rounded-xl border border-dashed border-lf-border-soft bg-lf-surface-muted/60 px-6 py-12"
     >
-      <template #extra>
-        <NUpload multiple :show-file-list="false" :custom-request="handleUpload">
-          <NButton type="primary">{{ t('workspace.resource.actions.uploadFirst') }}</NButton>
-        </NUpload>
-      </template>
-    </NEmpty>
+      <NEmpty :description="t('workspace.explorer.emptyDirectory')">
+        <template #extra>
+          <div class="flex flex-col items-center gap-3">
+            <p class="max-w-md text-center text-xs leading-5 text-lf-text-muted">
+              {{ t('workspace.explorer.dropHint') }}
+            </p>
+            <NUpload multiple :show-file-list="false" :custom-request="handleUpload">
+              <NButton type="primary">
+                <template #icon>
+                  <NIcon><IconLucideUpload /></NIcon>
+                </template>
+                {{ t('workspace.resource.actions.uploadFirst') }}
+              </NButton>
+            </NUpload>
+          </div>
+        </template>
+      </NEmpty>
+    </div>
 
     <!-- 目录 + 资源列表 -->
     <template v-else>
-      <!-- 目录列表 -->
-      <div v-if="directories.length > 0" class="space-y-1.5">
-        <DirectoryItem
-          v-for="dir in directories"
-          :key="dir.path"
-          :name="dir.name"
-          :path="dir.path"
-          :child-count="dir.childCount ?? 0"
-          @open="handleNavigate"
-        />
-      </div>
+      <div class="rounded-xl bg-lf-surface-muted/35 p-2">
+        <div class="mb-2 flex items-center justify-between px-2 pt-0.5 text-xs text-lf-text-muted">
+          <span>{{ currentDirectorySummary }}</span>
+        </div>
 
-      <!-- 分隔线 -->
-      <div
-        v-if="directories.length > 0 && resourceItems.length > 0"
-        class="border-t border-lf-border"
-      />
+        <!-- 目录列表 -->
+        <div v-if="directories.length > 0" class="space-y-1.5">
+          <DirectoryItem
+            v-for="dir in directories"
+            :key="dir.path"
+            :name="dir.name"
+            :path="dir.path"
+            :child-count="dir.childCount ?? 0"
+            @open="handleNavigate"
+          />
+        </div>
 
-      <!-- 资源列表 -->
-      <div v-if="resourceItems.length > 0" class="space-y-1.5">
-        <ResourceItem
-          v-for="item in resourceItems"
-          :key="item.path"
-          :resource="item.resource!"
-          :replacing="workspace.replacingResourceIds.includes(item.resource!.id)"
-          :incremental-updating="workspace.incrementalUpdatingIds.includes(item.resource!.id)"
-          :downloading="workspace.downloadingKeys.includes(`resource:${item.resource!.id}`)"
-          :deleting="workspace.deletingResourceIds.includes(item.resource!.id)"
-          @open-segments="(r) => emit('openSegments', r)"
-          @replace="(r) => chooseReplacementFile(r.id)"
-          @incremental-update="(r) => chooseIncrementalUpdateFile(r.id)"
-          @download="(r) => void downloadResource(r)"
-          @delete="(r) => void deleteResource(r)"
+        <!-- 分隔线 -->
+        <div
+          v-if="directories.length > 0 && resourceItems.length > 0"
+          class="my-2 border-t border-lf-border-soft"
         />
+
+        <!-- 资源列表 -->
+        <div v-if="resourceItems.length > 0" class="space-y-1.5">
+          <ResourceItem
+            v-for="item in resourceItems"
+            :key="item.path"
+            :resource="item.resource!"
+            :replacing="workspace.replacingResourceIds.includes(item.resource!.id)"
+            :incremental-updating="workspace.incrementalUpdatingIds.includes(item.resource!.id)"
+            :downloading="workspace.downloadingKeys.includes(`resource:${item.resource!.id}`)"
+            :deleting="workspace.deletingResourceIds.includes(item.resource!.id)"
+            :progress="workspace.getResourceProgress(item.resource!.id)"
+            @open-segments="(r) => emit('openSegments', r)"
+            @replace="(r) => chooseReplacementFile(r.id)"
+            @incremental-update="(r) => chooseIncrementalUpdateFile(r.id)"
+            @download="(r) => void downloadResource(r)"
+            @delete="(r) => void deleteResource(r)"
+          />
+        </div>
       </div>
     </template>
+
+    <NModal
+      v-model:show="uploadPrecheckVisible"
+      preset="card"
+      :title="t('workspace.uploadPrecheck.modalTitle')"
+      class="w-[min(1120px,calc(100vw-32px))]"
+      :mask-closable="false"
+    >
+      <UploadPrecheckPanel
+        :items="workspace.pendingUploadItems"
+        :loading="uploadConfirming"
+        @confirm="confirmPrecheckedUpload"
+        @cancel="cancelPrecheckedUpload"
+        @update-selected="workspace.setPendingUploadItemSelected"
+        @update-strategy="workspace.setPendingUploadItemStrategy"
+        @update-all-creatable="workspace.setAllCreatablePendingUploadItemsSelected"
+      />
+    </NModal>
+
+    <NModal
+      v-model:show="uploadResultVisible"
+      preset="card"
+      :title="t('workspace.uploadResult.modalTitle')"
+      class="w-[min(960px,calc(100vw-32px))]"
+    >
+      <UploadResultPanel
+        v-if="workspace.lastUploadResult"
+        :result="workspace.lastUploadResult"
+        @close="closeUploadResult"
+      />
+    </NModal>
   </div>
 </template>
