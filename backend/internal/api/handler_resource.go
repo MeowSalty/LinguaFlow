@@ -48,6 +48,23 @@ func toResourceResponse(r *ent.Resource) resourceResponse {
 	}
 }
 
+// toGeneratedResource 转换 ent.Resource 为 OpenAPI 生成的 Resource 类型。
+func toGeneratedResource(r *ent.Resource) Resource {
+	pathValue := resourceResponsePath(r)
+	return Resource{
+		Id:            r.ID,
+		Path:          pathValue,
+		Name:          resourceResponseName(pathValue),
+		Directory:     resourceResponseDirectory(pathValue),
+		Format:        r.Format,
+		TotalSegments: r.TotalSegments,
+		Status:        ResourceStatus(r.Status),
+		ErrorMessage:  r.ErrorMessage,
+		CreatedAt:     r.CreatedAt,
+		UpdatedAt:     r.UpdatedAt,
+	}
+}
+
 func resourceResponsePath(r *ent.Resource) string {
 	return strings.TrimSpace(r.Path)
 }
@@ -77,6 +94,7 @@ func toResourceListResponse(resources []*ent.Resource) map[string]any {
 }
 
 // handleUploadProjectResources 处理上传资源文件到项目。
+// 允许部分成功：冲突或失败的文件不会阻断其他文件的上传。
 func (s *Server) handleUploadProjectResources(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
@@ -109,39 +127,12 @@ func (s *Server) handleUploadProjectResources(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	normalizedPaths := make([]string, 0, len(files))
-	seenPaths := make(map[string]struct{}, len(files))
+	uploaded := make([]service.UploadedFile, 0, len(files))
 	for i, header := range files {
 		candidatePath := header.Filename
 		if len(paths) > 0 {
 			candidatePath = paths[i]
 		}
-		resourcePath, err := service.NormalizeResourcePath(candidatePath)
-		if err != nil {
-			writeProblem(w, http.StatusBadRequest, "invalid_resource_path", "资源路径不合法")
-			return
-		}
-		if _, exists := seenPaths[resourcePath]; exists {
-			writeProblem(w, http.StatusConflict, "conflict", "上传批次中存在重复资源路径")
-			return
-		}
-		seenPaths[resourcePath] = struct{}{}
-		existing, err := s.resourceSvc.FindResourceByPath(r.Context(), projectID, resourcePath)
-		if err != nil {
-			writeProblem(w, http.StatusInternalServerError, "internal_error", "检查资源路径冲突失败")
-			return
-		}
-		if existing != nil {
-			writeJSON(w, http.StatusConflict, map[string]any{
-				"existing_resource": toResourceResponse(existing),
-			})
-			return
-		}
-		normalizedPaths = append(normalizedPaths, resourcePath)
-	}
-
-	uploaded := make([]service.UploadedFile, 0, len(files))
-	for i, header := range files {
 		opened, err := header.Open()
 		if err != nil {
 			writeProblem(w, http.StatusBadRequest, "invalid_upload", "无法读取上传文件")
@@ -149,7 +140,7 @@ func (s *Server) handleUploadProjectResources(w http.ResponseWriter, r *http.Req
 		}
 		uploaded = append(uploaded, service.UploadedFile{
 			Filename: header.Filename,
-			Path:     normalizedPaths[i],
+			Path:     candidatePath,
 			Size:     header.Size,
 			Reader:   opened,
 		})
@@ -170,11 +161,89 @@ func (s *Server) handleUploadProjectResources(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	items := make([]resourceResponse, 0, len(results))
+	respItems := make([]ResourceUploadFileResult, 0, len(results))
 	for _, result := range results {
-		items = append(items, toResourceResponse(result.Resource))
+		item := ResourceUploadFileResult{
+			Path: result.Path,
+		}
+		switch result.Action {
+		case "created":
+			item.Action = ResourceUploadFileResultActionCreated
+			if result.Resource != nil {
+				gr := toGeneratedResource(result.Resource)
+				item.Resource = &gr
+			}
+		case "conflict":
+			item.Action = ResourceUploadFileResultActionConflict
+			if result.ExistingResource != nil {
+				gr := toGeneratedResource(result.ExistingResource)
+				item.ExistingResource = &gr
+			}
+		case "failed":
+			item.Action = ResourceUploadFileResultActionFailed
+			if result.Error != "" {
+				item.Error = &result.Error
+			}
+		}
+		respItems = append(respItems, item)
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"items": items})
+	writeJSON(w, http.StatusOK, ResourceUploadBatchResponse{Items: respItems})
+}
+
+// handlePrecheckProjectResources 处理资源上传预检。
+// 检查批量路径中的冲突情况，不执行任何写入操作。
+func (s *Server) handlePrecheckProjectResources(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	if !ok {
+		return
+	}
+
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		writeProblem(w, http.StatusBadRequest, "invalid_multipart", "表单解析失败")
+		return
+	}
+
+	paths := r.MultipartForm.Value["paths"]
+	if len(paths) == 0 {
+		writeProblem(w, http.StatusBadRequest, "invalid_input", "至少提供一个路径")
+		return
+	}
+	if len(paths) > maxResourceUploadFiles {
+		writeProblem(w, http.StatusBadRequest, "invalid_input", fmt.Sprintf("路径数量超出限制（最多 %d 个）", maxResourceUploadFiles))
+		return
+	}
+
+	results, err := s.resourceSvc.PrecheckResources(r.Context(), authUser.User.ID, projectID, paths)
+	if err != nil {
+		s.writeResourceServiceError(w, r, err)
+		return
+	}
+
+	respItems := make([]ResourcePrecheckFileResult, 0, len(results))
+	for _, result := range results {
+		item := ResourcePrecheckFileResult{
+			Path: result.Path,
+		}
+		switch result.Action {
+		case "create":
+			item.Action = ResourcePrecheckFileResultActionCreate
+		case "conflict":
+			item.Action = ResourcePrecheckFileResultActionConflict
+			if result.ExistingResource != nil {
+				gr := toGeneratedResource(result.ExistingResource)
+				item.ExistingResource = &gr
+			}
+		case "duplicate":
+			item.Action = ResourcePrecheckFileResultActionDuplicate
+		}
+		respItems = append(respItems, item)
+	}
+	writeJSON(w, http.StatusOK, ResourcePrecheckBatchResponse{Items: respItems})
 }
 
 type resourceTreeNodeResponse struct {

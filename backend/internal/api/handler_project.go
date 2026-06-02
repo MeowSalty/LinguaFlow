@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -189,9 +190,18 @@ func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if err := s.projectSvc.DeleteProject(r.Context(), authUser.User.ID, projectID); err != nil {
+	storagePaths, err := s.projectSvc.DeleteProject(r.Context(), authUser.User.ID, projectID)
+	if err != nil {
 		writeProjectServiceError(w, err)
 		return
+	}
+	// 事务成功后清理物理文件
+	for _, p := range storagePaths {
+		if fileErr := s.jobStore.Delete(p); fileErr != nil {
+			// 文件删除失败仅记录警告，不影响响应
+			slog.Warn("failed to delete resource file after project deletion",
+				"path", p, "error", fileErr)
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

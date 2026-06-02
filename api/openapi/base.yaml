@@ -43,6 +43,8 @@ paths:
     $ref: './paths/projects.yaml#/projectBackends'
   /projects/{projectId}/resources:
     $ref: './paths/resources.yaml#/projectResources'
+  /projects/{projectId}/resources/precheck:
+    $ref: './paths/resources.yaml#/projectResourcePrecheck'
   /projects/{projectId}/resources/tree:
     $ref: './paths/resources.yaml#/projectResourceTree'
   /projects/{projectId}/resources/{resourceId}:
@@ -152,8 +154,6 @@ components:
       $ref: './components/schemas/job.yaml#/UsageStats'
     Resource:
       $ref: './components/schemas/resource.yaml#/Resource'
-    ResourceUploadResponse:
-      $ref: './components/schemas/resource.yaml#/ResourceUploadResponse'
     ResourceListResponse:
       $ref: './components/schemas/resource.yaml#/ResourceListResponse'
     ResourceTreeNode:
@@ -168,6 +168,14 @@ components:
       $ref: './components/schemas/resource.yaml#/IncrementalUpdateResponse'
     ResourceConflictResponse:
       $ref: './components/schemas/resource.yaml#/ResourceConflictResponse'
+    ResourceUploadFileResult:
+      $ref: './components/schemas/resource.yaml#/ResourceUploadFileResult'
+    ResourceUploadBatchResponse:
+      $ref: './components/schemas/resource.yaml#/ResourceUploadBatchResponse'
+    ResourcePrecheckFileResult:
+      $ref: './components/schemas/resource.yaml#/ResourcePrecheckFileResult'
+    ResourcePrecheckBatchResponse:
+      $ref: './components/schemas/resource.yaml#/ResourcePrecheckBatchResponse'
     CreateTranslationJobRequest:
       $ref: './components/schemas/translation-job.yaml#/CreateTranslationJobRequest'
     TranslationJobResource:
