@@ -267,13 +267,9 @@ const messages = {
     },
   },
   workspace: {
-    eyebrow: '项目工作区',
-    subtitle: '集中管理源文件、段落编辑与翻译任务，保持项目本地化流程清晰可控。',
     loadingProject: '加载项目中',
-    projectId: '项目 #{id}',
     updatedAt: '更新于 {time}',
     actions: {
-      back: '返回项目列表',
       refresh: '刷新',
     },
     tabs: {
@@ -290,10 +286,9 @@ const messages = {
       readyResourceHint: '可立即翻译',
       segmentHint: '待处理段落',
       runningJobHint: '当前执行中',
+      progress: '已翻译',
     },
     content: {
-      title: '工作内容',
-      description: '在同一工作区内完成资源管理、段落维护与任务跟踪。',
       selectedResources: '已选 {count} 个资源',
     },
     sections: {
@@ -465,6 +460,9 @@ const messages = {
       actions: {
         edit: '编辑',
         translate: '翻译',
+        saveInline: '保存',
+        cancelInline: '取消',
+        comment: '备注',
       },
       form: {
         source: '原文',

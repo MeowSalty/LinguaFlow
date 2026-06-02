@@ -75,6 +75,7 @@ declare module 'vue' {
     StatsCard: typeof import('./components/dashboard/StatsCard.vue')['default']
     UploadPrecheckPanel: typeof import('./components/workspace/UploadPrecheckPanel.vue')['default']
     UploadResultPanel: typeof import('./components/workspace/UploadResultPanel.vue')['default']
+    WorkspaceMetricsBar: typeof import('./components/workspace/WorkspaceMetricsBar.vue')['default']
   }
 }
 
@@ -143,4 +144,5 @@ declare global {
   const StatsCard: typeof import('./components/dashboard/StatsCard.vue')['default']
   const UploadPrecheckPanel: typeof import('./components/workspace/UploadPrecheckPanel.vue')['default']
   const UploadResultPanel: typeof import('./components/workspace/UploadResultPanel.vue')['default']
+  const WorkspaceMetricsBar: typeof import('./components/workspace/WorkspaceMetricsBar.vue')['default']
 }

@@ -679,6 +679,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
             :incremental-updating="workspace.incrementalUpdatingIds.includes(item.resource!.id)"
             :downloading="workspace.downloadingKeys.includes(`resource:${item.resource!.id}`)"
             :deleting="workspace.deletingResourceIds.includes(item.resource!.id)"
+            :progress="workspace.getResourceProgress(item.resource!.id)"
             @open-segments="(r) => emit('openSegments', r)"
             @replace="(r) => chooseReplacementFile(r.id)"
             @incremental-update="(r) => chooseIncrementalUpdateFile(r.id)"

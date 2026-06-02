@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 
 import {
   cancelTranslationJob as cancelTranslationJobRequest,
@@ -157,6 +157,8 @@ const buildUploadSummary = (
 export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   // ── 项目 ──
   const project = ref<Project | null>(null)
+  /** 内部缓存当前项目 ID，供目录变化时自动预加载段落进度 */
+  const _currentProjectId = ref<number | null>(null)
 
   // ── 资源目录树 ──
   const resourceTree = ref<ResourceTreeNode | null>(null)
@@ -271,6 +273,52 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
       .map((child) => child.resource!),
   )
 
+  // ── 段落进度缓存 ──
+
+  interface SegmentProgress {
+    pending: number
+    translated: number
+    reviewed: number
+    rejected: number
+    total: number
+  }
+
+  /** 资源级段落状态缓存：resourceId → 状态分布 */
+  const segmentProgressCache = ref<Map<number, SegmentProgress>>(new Map())
+
+  const updateSegmentProgressCache = (resourceId: number, segments: Segment[]): void => {
+    const counts: SegmentProgress = { pending: 0, translated: 0, reviewed: 0, rejected: 0, total: segments.length }
+    for (const seg of segments) {
+      if (seg.status === 'pending') counts.pending++
+      else if (seg.status === 'translated') counts.translated++
+      else if (seg.status === 'reviewed') counts.reviewed++
+      else if (seg.status === 'rejected') counts.rejected++
+    }
+    segmentProgressCache.value = new Map(segmentProgressCache.value).set(resourceId, counts)
+  }
+
+  /** 获取指定资源的翻译进度百分比（未加载段落的资源返回 0） */
+  const getResourceProgress = (resourceId: number): number => {
+    const progress = segmentProgressCache.value.get(resourceId)
+    if (!progress || progress.total === 0) return 0
+    return Math.round(((progress.translated + progress.reviewed) / progress.total) * 100)
+  }
+
+  /** 已加载段落中已翻译/已审核的总数（前端聚合） */
+  const translatedSegmentCount = computed(() => {
+    let sum = 0
+    for (const progress of segmentProgressCache.value.values()) {
+      sum += progress.translated + progress.reviewed
+    }
+    return sum
+  })
+
+  /** 项目级翻译进度百分比 */
+  const translationProgress = computed(() => {
+    if (totalSegmentCount.value === 0) return 0
+    return Math.round((translatedSegmentCount.value / totalSegmentCount.value) * 100)
+  })
+
   // ── 计算属性：资源统计 ──
 
   const activeResource = computed<Resource | null>(
@@ -297,11 +345,19 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     ),
   )
 
+  // 监听目录变化，自动预加载当前目录下资源的段落进度
+  watch(currentPath, () => {
+    if (_currentProjectId.value) {
+      void preloadDirectoryProgress(_currentProjectId.value)
+    }
+  })
+
   // ── Actions：项目 ──
 
   const loadProject = async (projectId: number): Promise<void> => {
     loadingProject.value = true
     projectError.value = null
+    _currentProjectId.value = projectId
 
     try {
       project.value = await fetchProject(projectId)
@@ -431,10 +487,46 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
       })
       segments.value = append ? [...segments.value, ...response.items] : response.items
       segmentsCursor.value = response.next_cursor ?? null
+
+      // 仅在无筛选条件的全量加载时更新进度缓存
+      if (!append && segmentStatusFilter.value === 'all' && !segmentSearch.value.trim()) {
+        updateSegmentProgressCache(resourceId, segments.value)
+      }
     } catch (error) {
       segmentsError.value = getErrorMessage(error, t('api.errors.fetchSegmentsFailed'))
     } finally {
       loadingSegments.value = false
+    }
+  }
+
+  /** 为当前目录下的资源预加载段落数据以填充进度缓存（后台静默执行） */
+  const preloadDirectoryProgress = async (projectId: number): Promise<void> => {
+    const CONCURRENT = 3
+
+    const loadResourceSegments = async (resourceId: number): Promise<void> => {
+      let cursor: string | undefined
+      const collected: Segment[] = []
+
+      do {
+        const response = await fetchResourceSegments(projectId, resourceId, {
+          cursor,
+          limit: 100,
+        })
+        collected.push(...response.items)
+        cursor = response.next_cursor ?? undefined
+      } while (cursor)
+
+      updateSegmentProgressCache(resourceId, collected)
+    }
+
+    // 仅加载当前目录下有段落的资源
+    const resourceIds = currentDirectoryResources.value
+      .filter((r) => r.total_segments > 0)
+      .map((r) => r.id)
+
+    for (let i = 0; i < resourceIds.length; i += CONCURRENT) {
+      const batch = resourceIds.slice(i, i + CONCURRENT)
+      await Promise.allSettled(batch.map((id) => loadResourceSegments(id)))
     }
   }
 
@@ -862,6 +954,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
 
   const reset = (): void => {
     project.value = null
+    _currentProjectId.value = null
     resourceTree.value = null
     currentPath.value = ''
     loadingResourceTree.value = false
@@ -891,6 +984,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     segmentSearch.value = ''
     segmentStatusFilter.value = 'all'
     jobStatusFilter.value = 'all'
+    segmentProgressCache.value = new Map()
   }
 
   return {
@@ -951,6 +1045,11 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     segmentSearch,
     segmentStatusFilter,
     jobStatusFilter,
+    // 段落进度缓存
+    segmentProgressCache,
+    getResourceProgress,
+    translatedSegmentCount,
+    translationProgress,
     // 计算属性
     availableFormats,
     readyResourceCount,
@@ -990,6 +1089,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     downloadResource,
     downloadJobResult,
     setActiveResource,
+    preloadDirectoryProgress,
     reset,
   }
 })
