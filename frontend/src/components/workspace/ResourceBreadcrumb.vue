@@ -114,7 +114,8 @@ const handleCollapsedSelect = (key: string | number): void => {
 }
 
 watch(
-  () => `${props.projectName}\n${props.items.map((item) => `${item.path}\0${item.label}`).join('\n')}`,
+  () =>
+    `${props.projectName}\n${props.items.map((item) => `${item.path}\0${item.label}`).join('\n')}`,
   scheduleMeasure,
   { flush: 'post' },
 )
@@ -150,7 +151,9 @@ onBeforeUnmount(() => {
             :title="props.projectName || t('workspace.explorer.rootLabel')"
           >
             <IconLucideHome class="h-3.5 w-3.5 shrink-0 text-lf-text-subtle" />
-            <span class="truncate">{{ props.projectName || t('workspace.explorer.rootLabel') }}</span>
+            <span class="truncate">{{
+              props.projectName || t('workspace.explorer.rootLabel')
+            }}</span>
           </span>
         </NBreadcrumbItem>
         <template v-if="shouldCollapse">

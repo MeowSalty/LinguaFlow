@@ -287,7 +287,13 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   const segmentProgressCache = ref<Map<number, SegmentProgress>>(new Map())
 
   const updateSegmentProgressCache = (resourceId: number, segments: Segment[]): void => {
-    const counts: SegmentProgress = { pending: 0, translated: 0, reviewed: 0, rejected: 0, total: segments.length }
+    const counts: SegmentProgress = {
+      pending: 0,
+      translated: 0,
+      reviewed: 0,
+      rejected: 0,
+      total: segments.length,
+    }
     for (const seg of segments) {
       if (seg.status === 'pending') counts.pending++
       else if (seg.status === 'translated') counts.translated++

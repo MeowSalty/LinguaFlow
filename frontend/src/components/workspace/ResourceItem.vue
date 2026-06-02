@@ -221,7 +221,10 @@ const handleDropdownSelect = (key: string) => {
             {{ props.resource.error_message }}
           </NText>
           <!-- 翻译进度条 -->
-          <div v-if="props.progress !== undefined && props.resource.total_segments > 0" class="mt-2 flex items-center gap-2">
+          <div
+            v-if="props.progress !== undefined && props.resource.total_segments > 0"
+            class="mt-2 flex items-center gap-2"
+          >
             <NProgress
               type="line"
               :percentage="props.progress"
@@ -233,7 +236,9 @@ const handleDropdownSelect = (key: string) => {
               status="success"
               class="w-32"
             />
-            <span class="whitespace-nowrap text-[11px] text-lf-text-subtle">{{ props.progress }}%</span>
+            <span class="whitespace-nowrap text-[11px] text-lf-text-subtle"
+              >{{ props.progress }}%</span
+            >
           </div>
         </div>
 
