@@ -113,6 +113,13 @@ const onSelectLocale = (key: string | number): void => {
           {{ t('nav.projects') }}
         </RouterLink>
         <RouterLink
+          to="/backends"
+          class="text-lf-text-muted no-underline transition-colors hover:text-brand-500"
+          active-class="!text-brand-500 font-semibold"
+        >
+          {{ t('nav.backends') }}
+        </RouterLink>
+        <RouterLink
           to="/about"
           class="text-lf-text-muted no-underline transition-colors hover:text-brand-500"
           active-class="!text-brand-500 font-semibold"

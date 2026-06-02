@@ -137,6 +137,7 @@ export const apiClient = new Proxy({} as ApiClient, {
 export * from './token-storage'
 export * from './utils'
 export * from './auth'
+export * from './backends'
 export * from './projects'
 export * from './translation-jobs'
 export * from './misc'

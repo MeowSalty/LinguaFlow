@@ -188,7 +188,6 @@ const reloadWorkspace = async (): Promise<void> => {
     workspace.loadJobs(projectId.value),
   ])
   workspace.syncResourcesFromTree()
-
 }
 
 const reloadSegments = async (): Promise<void> => {
@@ -300,16 +299,11 @@ const saveInlineEdit = async (segment: Segment): Promise<void> => {
   }
 
   try {
-    await workspace.updateSegment(
-      projectId.value,
-      workspace.activeResourceId,
-      segment.id,
-      {
-        source_text: inlineEditForm.source_text,
-        target_text: inlineEditForm.target_text || undefined,
-        comment: inlineEditForm.comment || undefined,
-      },
-    )
+    await workspace.updateSegment(projectId.value, workspace.activeResourceId, segment.id, {
+      source_text: inlineEditForm.source_text,
+      target_text: inlineEditForm.target_text || undefined,
+      comment: inlineEditForm.comment || undefined,
+    })
     message.success(t('workspace.messages.segmentSaved'))
     cancelInlineEdit()
   } catch (error) {
@@ -329,16 +323,11 @@ const saveInlineComment = async (segment: Segment): Promise<void> => {
   }
 
   try {
-    await workspace.updateSegment(
-      projectId.value,
-      workspace.activeResourceId,
-      segment.id,
-      {
-        source_text: segment.source_text,
-        target_text: segment.target_text || undefined,
-        comment: inlineCommentText.value || undefined,
-      },
-    )
+    await workspace.updateSegment(projectId.value, workspace.activeResourceId, segment.id, {
+      source_text: segment.source_text,
+      target_text: segment.target_text || undefined,
+      comment: inlineCommentText.value || undefined,
+    })
     inlineCommentVisible.value = null
     message.success(t('workspace.messages.segmentSaved'))
   } catch (error) {
@@ -526,7 +515,10 @@ const segmentColumns = computed<DataTableColumns<Segment>>(() => [
           },
         })
       }
-      return row.target_text || h(NText, { depth: 3 }, { default: () => t('workspace.segment.emptyTarget') })
+      return (
+        row.target_text ||
+        h(NText, { depth: 3 }, { default: () => t('workspace.segment.emptyTarget') })
+      )
     },
   },
   {
@@ -849,9 +841,7 @@ onBeforeUnmount(() => {
             <IconLucideClock3 class="h-3.5 w-3.5 text-lf-text-subtle" />
             {{
               t('workspace.updatedAt', {
-                time: formatDate(
-                  workspace.project?.updated_at ?? workspace.project?.created_at,
-                ),
+                time: formatDate(workspace.project?.updated_at ?? workspace.project?.created_at),
               })
             }}
           </span>
@@ -1014,10 +1004,7 @@ onBeforeUnmount(() => {
           </div>
         </NTabPane>
 
-        <NTabPane
-          name="jobs"
-          :tab="`${t('workspace.tabs.jobs')} (${workspace.jobs.length})`"
-        >
+        <NTabPane name="jobs" :tab="`${t('workspace.tabs.jobs')} (${workspace.jobs.length})`">
           <div class="space-y-4 pt-3">
             <div class="rounded-xl border border-lf-border-soft bg-lf-surface-muted/60 p-4">
               <div class="mb-4 flex flex-col gap-1">
@@ -1289,11 +1276,7 @@ onBeforeUnmount(() => {
       </div>
       <template #footer>
         <div class="flex justify-end gap-3">
-          <NButton
-            @click="
-              conflictDialogVisible = false,resetConflictState()
-            "
-          >
+          <NButton @click="((conflictDialogVisible = false), resetConflictState())">
             {{ t('workspace.common.cancel') }}
           </NButton>
           <NButton :loading="replacingResourceId !== null" @click="handleConflictReplace">
