@@ -416,10 +416,7 @@ onMounted(() => {
         <NButton
           v-if="hasActiveFilters"
           secondary
-          @click="
-            backends.searchQuery = ''
-            backends.typeFilter = 'all'
-          "
+          @click="((backends.searchQuery = ''), (backends.typeFilter = 'all'))"
         >
           {{ t('backends.filters.reset') }}
         </NButton>
