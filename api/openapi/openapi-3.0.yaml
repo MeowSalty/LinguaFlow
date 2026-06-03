@@ -1188,6 +1188,160 @@ paths:
                 $ref: '#/components/schemas/ActivityListResponse'
         default:
           $ref: '#/components/responses/Problem'
+  /templates:
+    get:
+      operationId: ListTemplates
+      summary: 列出当前用户可见的所有模板
+      description: 返回内置模板、用户自有模板及用户所属组织的模板
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 模板列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateTemplate
+      summary: 创建用户级自定义模板
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTemplateRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+  /templates/{templateId}:
+    parameters:
+      - $ref: '#/components/parameters/TemplateId'
+    get:
+      operationId: GetTemplate
+      summary: 获取模板详情
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 模板详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: UpdateTemplate
+      summary: 更新模板（仅 owner 可操作）
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTemplateRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteTemplate
+      summary: 删除模板（内置模板不可删除）
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
+  /orgs/{orgId}/templates:
+    parameters:
+      - $ref: '#/components/parameters/OrgId'
+    get:
+      operationId: ListOrgTemplates
+      summary: 列出组织级模板
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 组织模板列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TemplateListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateOrgTemplate
+      summary: 创建组织级模板
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTemplateRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+  /orgs/{orgId}/templates/{templateId}:
+    parameters:
+      - $ref: '#/components/parameters/OrgId'
+      - $ref: '#/components/parameters/TemplateId'
+    put:
+      operationId: UpdateOrgTemplate
+      summary: 更新组织级模板
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTemplateRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteOrgTemplate
+      summary: 删除组织级模板
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
 components:
   securitySchemes:
     bearerAuth:
@@ -1239,6 +1393,13 @@ components:
         minimum: 1
     EntryId:
       name: entryId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    TemplateId:
+      name: templateId
       in: path
       required: true
       schema:
@@ -1703,7 +1864,7 @@ components:
             - created
             - conflict
             - failed
-          description: 处理结果：created=创建成功, conflict=与已有资源冲突, failed=处理失败
+          description: 处理结果：created=创建成功，conflict=与已有资源冲突，failed=处理失败
         resource:
           $ref: '#/components/schemas/Resource'
           description: 创建成功时返回新资源
@@ -1737,7 +1898,7 @@ components:
             - create
             - conflict
             - duplicate
-          description: 建议操作：create=可直接创建, conflict=与已有资源冲突, duplicate=批次内重复路径
+          description: 建议操作：create=可直接创建，conflict=与已有资源冲突，duplicate=批次内重复路径
         existing_resource:
           $ref: '#/components/schemas/Resource'
           description: 冲突时返回已有资源信息
@@ -2278,6 +2439,98 @@ components:
                 type: string
               reason:
                 type: string
+    TranslationTemplate:
+      type: object
+      required:
+        - id
+        - name
+        - is_builtin
+        - scope
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        is_builtin:
+          type: boolean
+        scope:
+          type: string
+          enum:
+            - builtin
+            - user
+            - org
+        owner_user_id:
+          type: integer
+          nullable: true
+        owner_org_id:
+          type: integer
+          nullable: true
+        system_prompt:
+          type: string
+          description: 自定义 system prompt；为空表示使用系统默认
+        prompt_vars:
+          type: object
+          additionalProperties: true
+        translation_config:
+          type: object
+          additionalProperties: true
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    TemplateListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TranslationTemplate'
+    CreateTemplateRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        system_prompt:
+          type: string
+        prompt_vars:
+          type: object
+          additionalProperties: true
+        translation_config:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+    UpdateTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        system_prompt:
+          type: string
+        prompt_vars:
+          type: object
+          additionalProperties: true
+        translation_config:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
     IncrementalUpdateChanges:
       type: object
       required:

@@ -54,6 +54,14 @@ EntryId:
     type: integer
     minimum: 1
 
+TemplateId:
+  name: templateId
+  in: path
+  required: true
+  schema:
+    type: integer
+    minimum: 1
+
 Stage:
   name: stage
   in: path

@@ -81,6 +81,14 @@ paths:
     $ref: './paths/stats.yaml#/statsSummary'
   /activity:
     $ref: './paths/stats.yaml#/activity'
+  /templates:
+    $ref: './paths/templates.yaml#/templates'
+  /templates/{templateId}:
+    $ref: './paths/templates.yaml#/templateById'
+  /orgs/{orgId}/templates:
+    $ref: './paths/templates.yaml#/orgTemplates'
+  /orgs/{orgId}/templates/{templateId}:
+    $ref: './paths/templates.yaml#/orgTemplateById'
 components:
   securitySchemes:
     bearerAuth:
@@ -100,6 +108,8 @@ components:
       $ref: './components/parameters.yaml#/BackendId'
     EntryId:
       $ref: './components/parameters.yaml#/EntryId'
+    TemplateId:
+      $ref: './components/parameters.yaml#/TemplateId'
     Stage:
       $ref: './components/parameters.yaml#/Stage'
     SegmentId:
@@ -224,3 +234,11 @@ components:
       $ref: './components/schemas/glossary.yaml#/UpdateGlossaryEntryRequest'
     GlossaryImportResult:
       $ref: './components/schemas/glossary.yaml#/GlossaryImportResult'
+    TranslationTemplate:
+      $ref: './components/schemas/translation-template.yaml#/TranslationTemplate'
+    TemplateListResponse:
+      $ref: './components/schemas/translation-template.yaml#/TemplateListResponse'
+    CreateTemplateRequest:
+      $ref: './components/schemas/translation-template.yaml#/CreateTemplateRequest'
+    UpdateTemplateRequest:
+      $ref: './components/schemas/translation-template.yaml#/UpdateTemplateRequest'
