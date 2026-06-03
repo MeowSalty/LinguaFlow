@@ -763,6 +763,89 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 列出当前用户可见的所有模板
+         * @description 返回内置模板、用户自有模板及用户所属组织的模板
+         */
+        get: operations["ListTemplates"];
+        put?: never;
+        /** 创建用户级自定义模板 */
+        post: operations["CreateTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/templates/{templateId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                templateId: components["parameters"]["TemplateId"];
+            };
+            cookie?: never;
+        };
+        /** 获取模板详情 */
+        get: operations["GetTemplate"];
+        /** 更新模板（仅 owner 可操作） */
+        put: operations["UpdateTemplate"];
+        post?: never;
+        /** 删除模板（内置模板不可删除） */
+        delete: operations["DeleteTemplate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        /** 列出组织级模板 */
+        get: operations["ListOrgTemplates"];
+        put?: never;
+        /** 创建组织级模板 */
+        post: operations["CreateOrgTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/templates/{templateId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+                templateId: components["parameters"]["TemplateId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** 更新组织级模板 */
+        put: operations["UpdateOrgTemplate"];
+        post?: never;
+        /** 删除组织级模板 */
+        delete: operations["DeleteOrgTemplate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
 }
 export type webhooks = Record<string, never>;
 export interface components {
@@ -938,7 +1021,7 @@ export interface components {
             /** @description 资源项目内规范化相对路径 */
             path: string;
             /**
-             * @description 处理结果：created=创建成功, conflict=与已有资源冲突, failed=处理失败
+             * @description 处理结果：created=创建成功，conflict=与已有资源冲突，failed=处理失败
              * @enum {string}
              */
             action: "created" | "conflict" | "failed";
@@ -956,7 +1039,7 @@ export interface components {
             /** @description 资源项目内规范化相对路径 */
             path: string;
             /**
-             * @description 建议操作：create=可直接创建, conflict=与已有资源冲突, duplicate=批次内重复路径
+             * @description 建议操作：create=可直接创建，conflict=与已有资源冲突，duplicate=批次内重复路径
              * @enum {string}
              */
             action: "create" | "conflict" | "duplicate";
@@ -1192,6 +1275,56 @@ export interface components {
                 reason?: string;
             }[];
         };
+        TranslationTemplate: {
+            id: number;
+            name: string;
+            description?: string;
+            icon?: string;
+            is_builtin: boolean;
+            /** @enum {string} */
+            scope: "builtin" | "user" | "org";
+            owner_user_id?: number | null;
+            owner_org_id?: number | null;
+            /** @description 自定义 system prompt；为空表示使用系统默认 */
+            system_prompt?: string;
+            prompt_vars?: {
+                [key: string]: unknown;
+            };
+            translation_config?: {
+                [key: string]: unknown;
+            };
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        TemplateListResponse: {
+            items: components["schemas"]["TranslationTemplate"][];
+        };
+        CreateTemplateRequest: {
+            name: string;
+            description?: string;
+            icon?: string;
+            system_prompt?: string;
+            prompt_vars?: {
+                [key: string]: unknown;
+            };
+            translation_config?: {
+                [key: string]: unknown;
+            };
+        };
+        UpdateTemplateRequest: {
+            name?: string;
+            description?: string;
+            icon?: string;
+            system_prompt?: string;
+            prompt_vars?: {
+                [key: string]: unknown;
+            };
+            translation_config?: {
+                [key: string]: unknown;
+            };
+        };
         IncrementalUpdateChanges: {
             /** @description 新增段落数 */
             added: number;
@@ -1222,6 +1355,7 @@ export interface components {
         TranslationJobId: number;
         BackendId: number;
         EntryId: number;
+        TemplateId: number;
         Stage: "translate" | "bootstrap";
         SegmentId: number;
         Cursor: string;
@@ -2677,6 +2811,223 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["ActivityListResponse"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListTemplates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 模板列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTemplateRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslationTemplate"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                templateId: components["parameters"]["TemplateId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 模板详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslationTemplate"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                templateId: components["parameters"]["TemplateId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTemplateRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslationTemplate"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                templateId: components["parameters"]["TemplateId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 删除成功 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListOrgTemplates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 组织模板列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TemplateListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateOrgTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTemplateRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslationTemplate"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateOrgTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+                templateId: components["parameters"]["TemplateId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTemplateRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslationTemplate"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteOrgTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+                templateId: components["parameters"]["TemplateId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 删除成功 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };

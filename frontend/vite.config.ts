@@ -31,6 +31,7 @@ export default defineConfig({
         NaiveUiResolver(),
         IconsResolver({
           prefix: 'Icon',
+          enabledCollections: ['carbon'],
         }),
       ],
       dts: 'src/components.d.ts',
