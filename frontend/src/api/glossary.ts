@@ -46,13 +46,10 @@ export const updateGlossaryEntry = async (
   payload: UpdateGlossaryEntryRequest,
   client: ApiClient = apiClient,
 ): Promise<GlossaryEntry> => {
-  const { data, error, response } = await client.PUT(
-    '/projects/{projectId}/glossary/{entryId}',
-    {
-      params: { path: { projectId, entryId } },
-      body: payload,
-    },
-  )
+  const { data, error, response } = await client.PUT('/projects/{projectId}/glossary/{entryId}', {
+    params: { path: { projectId, entryId } },
+    body: payload,
+  })
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.updateGlossaryEntryFailed'), error, response)
@@ -66,12 +63,9 @@ export const deleteGlossaryEntry = async (
   entryId: number,
   client: ApiClient = apiClient,
 ): Promise<void> => {
-  const { error, response } = await client.DELETE(
-    '/projects/{projectId}/glossary/{entryId}',
-    {
-      params: { path: { projectId, entryId } },
-    },
-  )
+  const { error, response } = await client.DELETE('/projects/{projectId}/glossary/{entryId}', {
+    params: { path: { projectId, entryId } },
+  })
 
   if (response && !response.ok) {
     throw buildRequestFailureError(t('api.errors.deleteGlossaryEntryFailed'), error, response)
@@ -83,18 +77,15 @@ export const importGlossaryCSV = async (
   file: File,
   client: ApiClient = apiClient,
 ): Promise<ApiSchemas['GlossaryImportResult']> => {
-  const { data, error, response } = await client.POST(
-    '/projects/{projectId}/glossary/import',
-    {
-      params: { path: { projectId } },
-      body: { file },
-      bodySerializer: () => {
-        const formData = new FormData()
-        formData.append('file', file)
-        return formData
-      },
+  const { data, error, response } = await client.POST('/projects/{projectId}/glossary/import', {
+    params: { path: { projectId } },
+    body: { file },
+    bodySerializer: () => {
+      const formData = new FormData()
+      formData.append('file', file)
+      return formData
     },
-  )
+  })
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.importGlossaryFailed'), error, response)
@@ -107,13 +98,10 @@ export const exportGlossaryCSV = async (
   projectId: number,
   client: ApiClient = apiClient,
 ): Promise<Blob> => {
-  const { data, error, response } = await client.GET(
-    '/projects/{projectId}/glossary/export',
-    {
-      params: { path: { projectId } },
-      parseAs: 'blob',
-    },
-  )
+  const { data, error, response } = await client.GET('/projects/{projectId}/glossary/export', {
+    params: { path: { projectId } },
+    parseAs: 'blob',
+  })
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.exportGlossaryFailed'), error, response)

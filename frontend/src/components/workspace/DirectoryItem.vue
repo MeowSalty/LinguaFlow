@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { NIcon, NTooltip } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
@@ -24,7 +24,7 @@ const { t } = useI18n()
     <div
       class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300"
     >
-      <NIcon size="18"><IconLucideFolder /></NIcon>
+      <NIcon size="18"><IconCarbonFolder /></NIcon>
     </div>
     <div class="min-w-0 flex-1">
       <NTooltip trigger="hover" placement="top-start">
@@ -45,7 +45,7 @@ const { t } = useI18n()
       size="16"
       class="shrink-0 text-lf-text-muted opacity-60 transition-all group-hover:translate-x-0.5 group-hover:opacity-100"
     >
-      <IconLucideChevronRight />
+      <IconCarbonChevronRight />
     </NIcon>
   </button>
 </template>

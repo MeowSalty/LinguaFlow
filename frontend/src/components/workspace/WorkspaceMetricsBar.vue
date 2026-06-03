@@ -28,7 +28,7 @@ const progressPercent = computed(() => {
       <div
         class="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-50 text-blue-500 dark:bg-blue-500/10"
       >
-        <NIcon size="14"><IconLucideFiles /></NIcon>
+        <NIcon size="14"><IconCarbonDocument /></NIcon>
       </div>
       <span class="text-sm font-medium text-lf-text-strong">{{ totalResources }}</span>
       <span class="text-xs text-lf-text-muted">{{ t('workspace.stats.resources') }}</span>
@@ -41,7 +41,7 @@ const progressPercent = computed(() => {
       <div
         class="flex h-7 w-7 items-center justify-center rounded-lg bg-emerald-50 text-emerald-500 dark:bg-emerald-500/10"
       >
-        <NIcon size="14"><IconLucideCheckCircle2 /></NIcon>
+        <NIcon size="14"><IconCarbonCheckmarkFilled /></NIcon>
       </div>
       <span class="text-sm font-medium text-lf-text-strong">{{ readyResources }}</span>
       <span class="text-xs text-lf-text-muted">{{ t('workspace.stats.readyResources') }}</span>
@@ -54,7 +54,7 @@ const progressPercent = computed(() => {
       <div
         class="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-50 text-indigo-500 dark:bg-indigo-500/10"
       >
-        <NIcon size="14"><IconLucideRows3 /></NIcon>
+        <NIcon size="14"><IconCarbonRow /></NIcon>
       </div>
       <span class="text-sm font-medium text-lf-text-strong">{{
         totalSegments.toLocaleString()
@@ -69,7 +69,7 @@ const progressPercent = computed(() => {
       <div
         class="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-50 text-amber-500 dark:bg-amber-500/10"
       >
-        <NIcon size="14"><IconLucideActivity /></NIcon>
+        <NIcon size="14"><IconCarbonActivity /></NIcon>
       </div>
       <span class="text-sm font-medium text-lf-text-strong">{{ runningJobs }}</span>
       <span class="text-xs text-lf-text-muted">{{ t('workspace.stats.runningJobs') }}</span>

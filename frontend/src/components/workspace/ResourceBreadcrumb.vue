@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { NBreadcrumb, NBreadcrumbItem, NDropdown, type DropdownOption } from 'naive-ui'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -150,7 +150,7 @@ onBeforeUnmount(() => {
             :class="props.items.length === 0 ? 'text-lf-text-strong' : 'text-lf-text-muted'"
             :title="props.projectName || t('workspace.explorer.rootLabel')"
           >
-            <IconLucideHome class="h-3.5 w-3.5 shrink-0 text-lf-text-subtle" />
+            <IconCarbonHome class="h-3.5 w-3.5 shrink-0 text-lf-text-subtle" />
             <span class="truncate">{{
               props.projectName || t('workspace.explorer.rootLabel')
             }}</span>
@@ -165,7 +165,7 @@ onBeforeUnmount(() => {
                 :title="collapsedItems.map((item) => item.label).join(' / ')"
                 @click.stop
               >
-                <IconLucideMoreHorizontal class="h-4 w-4" />
+                <IconCarbonOverflowMenuHorizontal class="h-4 w-4" />
               </button>
             </NDropdown>
           </NBreadcrumbItem>

@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import {
   NButton,
   NDropdown,
@@ -154,7 +154,7 @@ const handleDropdownSelect = (key: string) => {
       <div
         class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300"
       >
-        <NIcon size="18"><IconLucideFile /></NIcon>
+        <NIcon size="18"><IconCarbonDocument /></NIcon>
       </div>
       <div class="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div class="min-w-0 flex-1">
@@ -192,18 +192,18 @@ const handleDropdownSelect = (key: string) => {
                   class="inline-flex min-w-0 max-w-full items-center gap-1.5 sm:max-w-[min(36rem,50vw)]"
                   :title="props.resource.path"
                 >
-                  <IconLucideFolderTree class="h-3.5 w-3.5 shrink-0 text-lf-text-subtle" />
+                  <IconCarbonTreeView class="h-3.5 w-3.5 shrink-0 text-lf-text-subtle" />
                   <span class="truncate">{{ props.resource.path }}</span>
                 </span>
               </template>
               <span class="block max-w-sm break-all">{{ props.resource.path }}</span>
             </NTooltip>
             <span class="inline-flex shrink-0 items-center gap-1.5">
-              <IconLucideRows3 class="h-3.5 w-3.5 text-lf-text-subtle" />
+              <IconCarbonRow class="h-3.5 w-3.5 text-lf-text-subtle" />
               {{ props.resource.total_segments }} {{ t('workspace.resource.columns.segments') }}
             </span>
             <span class="inline-flex shrink-0 items-center gap-1.5">
-              <IconLucideClock3 class="h-3.5 w-3.5 text-lf-text-subtle" />
+              <IconCarbonTime class="h-3.5 w-3.5 text-lf-text-subtle" />
               {{ formatDate(props.resource.updated_at) }}
             </span>
             <span
@@ -264,7 +264,7 @@ const handleDropdownSelect = (key: string) => {
               "
             >
               <template #icon>
-                <NIcon><IconLucideMoreHorizontal /></NIcon>
+                <NIcon><IconCarbonOverflowMenuHorizontal /></NIcon>
               </template>
             </NButton>
           </NDropdown>

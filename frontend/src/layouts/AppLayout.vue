@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { useMessage, type DropdownOption } from 'naive-ui'
+import { Icon as IconifyIcon } from '@iconify/vue'
 
 import { useAuthStore } from '@/stores/auth'
 import { useLocaleStore } from '@/stores/locale'
@@ -59,9 +60,9 @@ const themeOptions = computed<DropdownOption[]>(() => [
 
 const themeIcon = computed(() => {
   if (theme.mode === 'system') {
-    return '◐'
+    return 'carbon:contrast'
   }
-  return theme.resolvedTheme === 'dark' ? '☾' : '☀'
+  return theme.resolvedTheme === 'dark' ? 'carbon:moon' : 'carbon:sun'
 })
 
 const onSelectUserAction = async (key: string | number) => {
@@ -120,6 +121,13 @@ const onSelectLocale = (key: string | number): void => {
           {{ t('nav.backends') }}
         </RouterLink>
         <RouterLink
+          to="/templates"
+          class="text-lf-text-muted no-underline transition-colors hover:text-brand-500"
+          active-class="!text-brand-500 font-semibold"
+        >
+          {{ t('nav.templates') }}
+        </RouterLink>
+        <RouterLink
           to="/about"
           class="text-lf-text-muted no-underline transition-colors hover:text-brand-500"
           active-class="!text-brand-500 font-semibold"
@@ -147,7 +155,9 @@ const onSelectLocale = (key: string | number): void => {
           @select="onSelectTheme"
         >
           <NButton quaternary circle :title="t('common.theme')" :aria-label="t('common.theme')">
-            {{ themeIcon }}
+            <template #icon>
+              <IconifyIcon :icon="themeIcon" class="text-lg" />
+            </template>
           </NButton>
         </NDropdown>
         <span class="hidden text-xs text-lf-text-subtle sm:inline" :title="service.baseUrl">

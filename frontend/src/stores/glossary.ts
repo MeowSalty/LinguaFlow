@@ -144,9 +144,7 @@ export const useGlossaryStore = defineStore('glossary', () => {
       return result
     } catch (submitError) {
       importError.value =
-        submitError instanceof Error
-          ? submitError.message
-          : t('api.errors.importGlossaryFailed')
+        submitError instanceof Error ? submitError.message : t('api.errors.importGlossaryFailed')
       throw submitError
     } finally {
       importing.value = false
@@ -164,9 +162,7 @@ export const useGlossaryStore = defineStore('glossary', () => {
       URL.revokeObjectURL(url)
     } catch (submitError) {
       const errorMessage =
-        submitError instanceof Error
-          ? submitError.message
-          : t('api.errors.exportGlossaryFailed')
+        submitError instanceof Error ? submitError.message : t('api.errors.exportGlossaryFailed')
       throw new Error(errorMessage)
     }
   }

@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import {
   NAlert,
   NButton,
@@ -455,7 +455,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
             @click="handleRefreshDirectory"
           >
             <template #icon>
-              <NIcon><IconLucideRefreshCw /></NIcon>
+              <NIcon><IconCarbonRenew /></NIcon>
             </template>
           </NButton>
           <div class="min-w-0 flex-1">
@@ -473,7 +473,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
                 @click="handleNavigateUp"
               >
                 <template #icon>
-                  <NIcon><IconLucideArrowUp /></NIcon>
+                  <NIcon><IconCarbonArrowUp /></NIcon>
                 </template>
               </NButton>
               <div v-if="workspace.currentPath" class="h-5 border-l border-lf-border-soft" />
@@ -490,7 +490,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
           <NUpload multiple :show-file-list="false" :custom-request="handleUpload">
             <NButton type="primary" size="small" strong :loading="workspace.hasActiveUploads">
               <template #icon>
-                <NIcon><IconLucideUpload /></NIcon>
+                <NIcon><IconCarbonUpload /></NIcon>
               </template>
               {{ t('workspace.resource.actions.upload') }}
             </NButton>
@@ -519,7 +519,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
           <div
             class="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-brand-50 text-brand-600 shadow-sm shadow-lf-shadow dark:bg-brand-500/15 dark:text-brand-100"
           >
-            <NIcon size="26"><IconLucideUpload /></NIcon>
+            <NIcon size="26"><IconCarbonUpload /></NIcon>
           </div>
           <p class="mt-3 text-sm font-medium text-brand-700 dark:text-brand-100">
             {{ t('workspace.explorer.dropToUpload') }}
@@ -560,13 +560,13 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
                   task.stage === 'error',
               }"
             >
-              <IconLucideUpload v-if="task.stage === 'uploading'" class="h-4.5 w-4.5" />
-              <IconLucideLoader2
+              <IconCarbonUpload v-if="task.stage === 'uploading'" class="h-4.5 w-4.5" />
+              <IconCarbonAsync
                 v-else-if="task.stage === 'prechecking' || task.stage === 'processing'"
                 class="h-4.5 w-4.5 animate-spin"
               />
-              <IconLucideCheck v-else-if="task.stage === 'complete'" class="h-4.5 w-4.5" />
-              <IconLucideAlertCircle v-else class="h-4.5 w-4.5" />
+              <IconCarbonCheckmark v-else-if="task.stage === 'complete'" class="h-4.5 w-4.5" />
+              <IconCarbonWarningAlt v-else class="h-4.5 w-4.5" />
             </div>
             <div class="min-w-0 flex-1">
               <span class="truncate text-sm font-medium text-lf-text-strong">
@@ -601,7 +601,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
             @click="workspace.removeUploadTask(task.id)"
           >
             <template #icon>
-              <NIcon><IconLucideX /></NIcon>
+              <NIcon><IconCarbonClose /></NIcon>
             </template>
           </NButton>
         </div>
@@ -616,7 +616,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
       <div
         class="flex h-12 w-12 items-center justify-center rounded-xl bg-lf-surface-elevated text-brand-600 shadow-sm shadow-lf-shadow dark:text-brand-100"
       >
-        <NIcon size="24" class="animate-spin"><IconLucideLoader2 /></NIcon>
+        <NIcon size="24" class="animate-spin"><IconCarbonCircleDash /></NIcon>
       </div>
     </div>
 
@@ -634,7 +634,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
             <NUpload multiple :show-file-list="false" :custom-request="handleUpload">
               <NButton type="primary">
                 <template #icon>
-                  <NIcon><IconLucideUpload /></NIcon>
+                  <NIcon><IconCarbonUpload /></NIcon>
                 </template>
                 {{ t('workspace.resource.actions.uploadFirst') }}
               </NButton>
