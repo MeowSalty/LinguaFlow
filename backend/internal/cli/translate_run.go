@@ -56,12 +56,12 @@ func runTranslate(cmd *cobra.Command, rt *appCtx, opts translateOptions) error {
 		rt.logger.Info("ignored unsupported file", "path", ignored.Path, "reason", ignored.Reason)
 	}
 	for _, job := range jobs {
-		rt.logger.Info("translation queued", "input", job.InputPath, "output", job.OutputPath)
+		rt.logger.Info("translation queued")
 		job.SourceLang = opts.from
 		job.TargetLang = opts.to
 		if err := eng.Translate(cmd.Context(), job); err != nil {
-			failed = append(failed, fmt.Sprintf("%s: %v", job.InputPath, err))
-			rt.logger.Error("translation failed", "input", job.InputPath, "output", job.OutputPath, "err", err)
+			failed = append(failed, fmt.Sprintf("%v", err))
+			rt.logger.Error("translation failed", "err", err)
 			continue
 		}
 	}

@@ -170,14 +170,12 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 			existingTargets[row.SegmentIndex] = *row.TargetText
 		}
 	}
-	result, err := eng.TranslateWithResult(ctx, engine.TranslateJob{
-		InputPath:       inputPath,
-		OutputPath:      outputPath,
-		SourceLang:      jobCfg.SourceLang,
-		TargetLang:      jobCfg.TargetLang,
-		SegmentIndexes:  selectedIndexes,
-		ExistingTargets: existingTargets,
-	})
+	job := engine.FileJob(inputPath, outputPath)
+	job.SourceLang = jobCfg.SourceLang
+	job.TargetLang = jobCfg.TargetLang
+	job.SegmentIndexes = selectedIndexes
+	job.ExistingTargets = existingTargets
+	result, err := eng.TranslateWithResult(ctx, job)
 	if err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil

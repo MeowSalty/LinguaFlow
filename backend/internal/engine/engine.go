@@ -4,13 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/output"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline/stages"
@@ -117,17 +115,21 @@ func (e *Engine) TranslateWithResult(ctx context.Context, job TranslateJob) (Tra
 	start := time.Now()
 	var result TranslateResult
 
-	p, err := parser.DetectByExt(job.InputPath)
+	// 1. 通过 FormatHint 检测格式
+	hint := job.Source.FormatHint()
+	p, err := parser.DetectByExt(hint)
 	if err != nil {
 		return result, err
 	}
 
-	f, err := os.Open(job.InputPath)
+	// 2. 通过 DocumentSource.Open 获取 reader
+	reader, err := job.Source.Open(ctx)
 	if err != nil {
-		return result, fmt.Errorf("engine: open input: %w", err)
+		return result, fmt.Errorf("engine: open source: %w", err)
 	}
-	doc, parseErr := p.Parse(ctx, f)
-	_ = f.Close()
+	defer func() { _ = reader.Close() }()
+
+	doc, parseErr := p.Parse(ctx, reader)
 	if parseErr != nil {
 		return result, fmt.Errorf("engine: parse: %w", parseErr)
 	}
@@ -150,7 +152,6 @@ func (e *Engine) TranslateWithResult(ctx context.Context, job TranslateJob) (Tra
 	}
 
 	e.logger.Info("parsed document",
-		"path", job.InputPath,
 		"format", doc.Format,
 		"segments", len(doc.Segments),
 		"source_lang", doc.SourceLang,
@@ -177,16 +178,21 @@ func (e *Engine) TranslateWithResult(ctx context.Context, job TranslateJob) (Tra
 		})
 	}
 
-	w := output.New(e.cfg.Output, p, job.OutputPath)
-	if err := w.Write(ctx, doc); err != nil {
-		return result, err
+	// 3. 通过 DocumentSink.Create 获取 writer
+	writer, err := job.Sink.Create(ctx)
+	if err != nil {
+		return result, fmt.Errorf("engine: create sink: %w", err)
+	}
+	defer func() { _ = writer.Close() }()
+
+	if err := p.Render(ctx, doc, writer); err != nil {
+		return result, fmt.Errorf("engine: render: %w", err)
 	}
 
 	// 自举完成后按配置回写术语表。失败仅 warn——译文已写出。
 	e.maybeSaveGlossary(ctx)
 
 	e.logger.Info("output written",
-		"path", job.OutputPath,
 		"segments", len(doc.Segments),
 		"duration", time.Since(start).Round(time.Millisecond))
 	return result, nil

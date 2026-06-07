@@ -168,12 +168,10 @@ func (r *Runner) processSubJob(ctx context.Context, exec *service.JobExecution, 
 		return nil
 	}
 	defer func() { _ = eng.Close() }()
-	result, err := eng.TranslateWithResult(ctx, engine.TranslateJob{
-		InputPath:  inputPath,
-		OutputPath: outputPath,
-		SourceLang: firstNonEmpty(exec.Job.SourceLang, exec.Project.SourceLang),
-		TargetLang: firstNonEmpty(exec.Job.TargetLang, exec.Project.TargetLang),
-	})
+	job := engine.FileJob(inputPath, outputPath)
+	job.SourceLang = firstNonEmpty(exec.Job.SourceLang, exec.Project.SourceLang)
+	job.TargetLang = firstNonEmpty(exec.Job.TargetLang, exec.Project.TargetLang)
+	result, err := eng.TranslateWithResult(ctx, job)
 	if err != nil {
 		_ = r.jobs.MarkSubJobFailed(ctx, sub.ID, err)
 		return nil
