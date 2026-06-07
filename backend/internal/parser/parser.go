@@ -9,7 +9,6 @@ import (
 	"io"
 	"path/filepath"
 	"strings"
-	"sync"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 )
@@ -28,16 +27,15 @@ var ErrNotImplemented = errors.New("parser: not implemented")
 // ErrNoParser 找不到匹配扩展名的 parser。
 var ErrNoParser = errors.New("parser: no parser for extension")
 
+// byName / byExt 在 init 阶段由各 parser 包写入，main 后只读。
+// Go 内存模型保证所有 init 先于 main 执行（happens-before），因此无需加锁。
 var (
-	mu     sync.RWMutex
 	byName = map[string]Parser{}
 	byExt  = map[string]Parser{}
 )
 
-// Register 注册 parser。同名/同扩展名再次注册会覆盖前者。
+// Register 注册 parser。仅应在 init 中调用。
 func Register(name string, p Parser) {
-	mu.Lock()
-	defer mu.Unlock()
 	byName[name] = p
 	for _, ext := range p.Extensions() {
 		byExt[strings.ToLower(ext)] = p
@@ -46,8 +44,6 @@ func Register(name string, p Parser) {
 
 // Get 按名字获取 parser。
 func Get(name string) (Parser, bool) {
-	mu.RLock()
-	defer mu.RUnlock()
 	p, ok := byName[name]
 	return p, ok
 }
@@ -55,8 +51,6 @@ func Get(name string) (Parser, bool) {
 // DetectByExt 根据文件路径扩展名选择 parser。
 func DetectByExt(path string) (Parser, error) {
 	ext := strings.ToLower(filepath.Ext(path))
-	mu.RLock()
-	defer mu.RUnlock()
 	p, ok := byExt[ext]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrNoParser, ext)

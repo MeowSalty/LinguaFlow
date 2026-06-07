@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"sync"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 )
@@ -62,23 +61,18 @@ var ErrUnknownBackendType = errors.New("backend: unknown type")
 // ErrNoBackend 选择器找不到可用后端。
 var ErrNoBackend = errors.New("backend: no enabled backend")
 
-var (
-	factoryMu sync.RWMutex
-	factories = map[string]Factory{}
-)
+// factories 在 init 阶段由各后端包写入，main 后只读。
+// Go 内存模型保证所有 init 先于 main 执行（happens-before），因此无需加锁。
+var factories = map[string]Factory{}
 
-// Register 注册一个后端 type 的工厂。重复注册会覆盖。
+// Register 注册一个后端 type 的工厂。仅应在 init 中调用。
 func Register(typ string, f Factory) {
-	factoryMu.Lock()
-	defer factoryMu.Unlock()
 	factories[typ] = f
 }
 
 // Build 按 BackendConfig 构造后端实例。
 func Build(cfg config.BackendConfig) (Backend, error) {
-	factoryMu.RLock()
 	f, ok := factories[cfg.Type]
-	factoryMu.RUnlock()
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrUnknownBackendType, cfg.Type)
 	}
