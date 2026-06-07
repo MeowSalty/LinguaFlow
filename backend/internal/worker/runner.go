@@ -3,7 +3,6 @@ package worker
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -18,17 +17,14 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
+// Runner 文件翻译任务的执行器，通过嵌入 BaseRunner 复用公共逻辑。
 type Runner struct {
-	baseConfig  *config.Config
-	logger      *slog.Logger
-	client      *ent.Client
-	projects    *service.ProjectService
+	*BaseRunner
 	jobs        *service.JobService
-	store       *filestore.LocalStore
-	queue       *Queue
-	concurrency int
+	concurrency int // 并发处理子任务的协程数
 }
 
+// NewRunner 创建一个新的文件翻译任务执行器。
 func NewRunner(
 	cfg *config.Config,
 	logger *slog.Logger,
@@ -38,55 +34,19 @@ func NewRunner(
 	store *filestore.LocalStore,
 	queue *Queue,
 ) *Runner {
-	if logger == nil {
-		logger = slog.Default()
-	}
 	concurrency := 1
 	if cfg != nil && cfg.Pipeline.Translate.Concurrency > 0 {
 		concurrency = cfg.Pipeline.Translate.Concurrency
 	}
-	return &Runner{
-		baseConfig:  cfg,
-		logger:      logger,
-		client:      client,
-		projects:    projects,
+	r := &Runner{
 		jobs:        jobs,
-		store:       store,
-		queue:       queue,
 		concurrency: concurrency,
 	}
+	r.BaseRunner = newBaseRunner(cfg, logger, client, projects, store, queue, jobs, r.processJob, "worker")
+	return r
 }
 
-func (r *Runner) Recover(ctx context.Context) error {
-	jobIDs, err := r.jobs.RecoverPendingJobs(ctx)
-	if err != nil {
-		return err
-	}
-	for _, jobID := range jobIDs {
-		if err := r.queue.Enqueue(ctx, jobID); err != nil {
-			return err
-		}
-	}
-	r.logger.Info("worker recovery completed", "jobs", len(jobIDs))
-	return nil
-}
-
-func (r *Runner) Run(ctx context.Context) error {
-	for {
-		jobID, err := r.queue.Dequeue(ctx)
-		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				return nil
-			}
-			return err
-		}
-		if err := r.processJob(ctx, jobID); err != nil {
-			r.logger.Error("worker process job failed", "job_id", jobID, "err", err)
-		}
-		r.queue.Done(jobID)
-	}
-}
-
+// processJob 处理单个翻译任务：加载执行上下文，筛选待处理子任务，并发执行。
 func (r *Runner) processJob(ctx context.Context, jobID int) error {
 	exec, err := r.jobs.LoadJobExecution(ctx, jobID)
 	if err != nil {
@@ -117,6 +77,7 @@ func (r *Runner) processJob(ctx context.Context, jobID int) error {
 	return r.jobs.ReconcileJob(ctx, jobID)
 }
 
+// processSubJob 处理单个子任务：解析路径、构建配置、调用引擎翻译并记录结果。
 func (r *Runner) processSubJob(ctx context.Context, exec *service.JobExecution, sub *ent.SubJob) error {
 	if err := r.jobs.MarkSubJobRunning(ctx, sub.ID); err != nil {
 		return err
@@ -187,6 +148,7 @@ func (r *Runner) processSubJob(ctx context.Context, exec *service.JobExecution, 
 	return r.jobs.MarkSubJobCompletedWithSegments(ctx, sub.ID, outputRel, result.SegmentCount, segments)
 }
 
+// buildJobConfig 构建翻译任务配置：克隆基础配置、合并项目配置、解析后端计划、设置语言。
 func (r *Runner) buildJobConfig(ctx context.Context, exec *service.JobExecution) (*config.Config, error) {
 	if r.baseConfig == nil {
 		return nil, fmt.Errorf("worker: nil base config")
@@ -199,34 +161,8 @@ func (r *Runner) buildJobConfig(ctx context.Context, exec *service.JobExecution)
 			}
 		}
 	}
-	translatePlan, err := r.projects.ResolveStagePlan(ctx, exec.ActorUserID, exec.Project.ID, service.StageTranslate)
-	if err != nil {
+	if err := r.buildBackendConfig(ctx, cfg, exec.ActorUserID, exec.Project.ID); err != nil {
 		return nil, err
-	}
-	if len(translatePlan) == 0 {
-		return nil, fmt.Errorf("worker: project %d has no backend plan", exec.Project.ID)
-	}
-	cfg.Backends = make([]config.BackendConfig, 0, len(translatePlan))
-	cfg.Pipeline.Translate.BackendMode = config.BackendModeRestrict
-	cfg.Pipeline.Translate.BackendOrder = make([]string, 0, len(translatePlan))
-	priorityBase := len(translatePlan)
-	for i, binding := range translatePlan {
-		cfg.Backends = append(cfg.Backends, config.BackendConfig{
-			Name:     binding.Name,
-			Type:     binding.Type,
-			Enabled:  true,
-			Priority: priorityBase - i,
-			Options:  cloneAnyMap(binding.Options),
-		})
-		cfg.Pipeline.Translate.BackendOrder = append(cfg.Pipeline.Translate.BackendOrder, binding.Name)
-	}
-	bootstrapPlan, bootstrapErr := r.projects.ResolveStagePlan(ctx, exec.ActorUserID, exec.Project.ID, service.StageBootstrap)
-	if bootstrapErr == nil && len(bootstrapPlan) > 0 {
-		cfg.Glossary.Bootstrap.BackendMode = config.BackendModeRestrict
-		cfg.Glossary.Bootstrap.BackendOrder = make([]string, 0, len(bootstrapPlan))
-		for _, binding := range bootstrapPlan {
-			cfg.Glossary.Bootstrap.BackendOrder = append(cfg.Glossary.Bootstrap.BackendOrder, binding.Name)
-		}
 	}
 	if exec.Project.SourceLang != "" {
 		cfg.SourceLang = exec.Project.SourceLang
@@ -246,17 +182,7 @@ func (r *Runner) buildJobConfig(ctx context.Context, exec *service.JobExecution)
 	return cfg, nil
 }
 
-func (r *Runner) resolvePath(raw string) (string, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return "", fmt.Errorf("worker: empty path")
-	}
-	if filepath.IsAbs(raw) {
-		return raw, nil
-	}
-	return r.store.Absolute(raw)
-}
-
+// cloneConfig 深拷贝配置对象，避免并发修改。
 func cloneConfig(in *config.Config) *config.Config {
 	copyCfg := *in
 	copyCfg.Backends = make([]config.BackendConfig, 0, len(in.Backends))
@@ -275,6 +201,7 @@ func cloneConfig(in *config.Config) *config.Config {
 	return &copyCfg
 }
 
+// cloneAnyMap 浅拷贝 map[string]any。
 func cloneAnyMap(in map[string]any) map[string]any {
 	if len(in) == 0 {
 		return map[string]any{}
@@ -286,6 +213,7 @@ func cloneAnyMap(in map[string]any) map[string]any {
 	return out
 }
 
+// firstNonEmpty 返回参数中第一个非空白字符串。
 func firstNonEmpty(values ...string) string {
 	for _, value := range values {
 		if strings.TrimSpace(value) != "" {

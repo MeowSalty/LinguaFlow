@@ -2,7 +2,6 @@ package worker
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -20,16 +19,13 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
+// TranslationRunner 翻译任务的执行器，通过嵌入 BaseRunner 复用公共逻辑。
 type TranslationRunner struct {
-	baseConfig *config.Config
-	logger     *slog.Logger
-	client     *ent.Client
-	projects   *service.ProjectService
-	jobs       *service.TranslationJobService
-	store      *filestore.LocalStore
-	queue      *Queue
+	*BaseRunner
+	jobs *service.TranslationJobService
 }
 
+// NewTranslationRunner 创建一个新的翻译任务执行器。
 func NewTranslationRunner(
 	cfg *config.Config,
 	logger *slog.Logger,
@@ -39,42 +35,14 @@ func NewTranslationRunner(
 	store *filestore.LocalStore,
 	queue *Queue,
 ) *TranslationRunner {
-	if logger == nil {
-		logger = slog.Default()
+	r := &TranslationRunner{
+		jobs: jobs,
 	}
-	return &TranslationRunner{baseConfig: cfg, logger: logger, client: client, projects: projects, jobs: jobs, store: store, queue: queue}
+	r.BaseRunner = newBaseRunner(cfg, logger, client, projects, store, queue, jobs, r.processJob, "translation worker")
+	return r
 }
 
-func (r *TranslationRunner) Recover(ctx context.Context) error {
-	jobIDs, err := r.jobs.RecoverPendingJobs(ctx)
-	if err != nil {
-		return err
-	}
-	for _, jobID := range jobIDs {
-		if err := r.queue.Enqueue(ctx, jobID); err != nil {
-			return err
-		}
-	}
-	r.logger.Info("translation worker recovery completed", "jobs", len(jobIDs))
-	return nil
-}
-
-func (r *TranslationRunner) Run(ctx context.Context) error {
-	for {
-		jobID, err := r.queue.Dequeue(ctx)
-		if err != nil {
-			if errors.Is(err, context.Canceled) {
-				return nil
-			}
-			return err
-		}
-		if err := r.processJob(ctx, jobID); err != nil {
-			r.logger.Error("translation worker process job failed", "job_id", jobID, "err", err)
-		}
-		r.queue.Done(jobID)
-	}
-}
-
+// processJob 处理单个翻译任务：加载执行上下文，筛选待处理的资源并依次执行。
 func (r *TranslationRunner) processJob(ctx context.Context, jobID int) error {
 	exec, err := r.jobs.LoadJobExecution(ctx, jobID)
 	if err != nil {
@@ -100,6 +68,7 @@ func (r *TranslationRunner) processJob(ctx context.Context, jobID int) error {
 	return r.jobs.ReconcileJob(ctx, jobID)
 }
 
+// processJobResource 处理单个翻译资源：解析路径、加载片段、构建配置、调用引擎翻译并更新结果。
 func (r *TranslationRunner) processJobResource(ctx context.Context, exec *service.TranslationJobExecution, item *ent.JobResource) error {
 	if err := r.jobs.MarkJobResourceRunning(ctx, item.ID); err != nil {
 		return err
@@ -191,39 +160,14 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	return r.jobs.MarkJobResourceCompleted(ctx, item.ID, outputRel, len(selectedRows))
 }
 
+// buildJobConfig 构建翻译任务配置：合并翻译配置、解析后端计划、校验配置。
 func (r *TranslationRunner) buildJobConfig(ctx context.Context, exec *service.TranslationJobExecution) (*config.Config, error) {
 	cfg, err := service.MergeTranslationConfig(r.baseConfig, nil, exec.Job.TranslationConfig)
 	if err != nil {
 		return nil, err
 	}
-	translatePlan, err := r.projects.ResolveStagePlan(ctx, exec.ActorUserID, exec.Project.ID, service.StageTranslate)
-	if err != nil {
+	if err := r.buildBackendConfig(ctx, cfg, exec.ActorUserID, exec.Project.ID); err != nil {
 		return nil, err
-	}
-	if len(translatePlan) == 0 {
-		return nil, fmt.Errorf("translation worker: project %d has no backend plan", exec.Project.ID)
-	}
-	cfg.Backends = make([]config.BackendConfig, 0, len(translatePlan))
-	cfg.Pipeline.Translate.BackendMode = config.BackendModeRestrict
-	cfg.Pipeline.Translate.BackendOrder = make([]string, 0, len(translatePlan))
-	priorityBase := len(translatePlan)
-	for i, binding := range translatePlan {
-		cfg.Backends = append(cfg.Backends, config.BackendConfig{
-			Name:     binding.Name,
-			Type:     binding.Type,
-			Enabled:  true,
-			Priority: priorityBase - i,
-			Options:  cloneAnyMap(binding.Options),
-		})
-		cfg.Pipeline.Translate.BackendOrder = append(cfg.Pipeline.Translate.BackendOrder, binding.Name)
-	}
-	bootstrapPlan, bootstrapErr := r.projects.ResolveStagePlan(ctx, exec.ActorUserID, exec.Project.ID, service.StageBootstrap)
-	if bootstrapErr == nil && len(bootstrapPlan) > 0 {
-		cfg.Glossary.Bootstrap.BackendMode = config.BackendModeRestrict
-		cfg.Glossary.Bootstrap.BackendOrder = make([]string, 0, len(bootstrapPlan))
-		for _, binding := range bootstrapPlan {
-			cfg.Glossary.Bootstrap.BackendOrder = append(cfg.Glossary.Bootstrap.BackendOrder, binding.Name)
-		}
 	}
 	if err := cfg.Validate(); err != nil {
 		return nil, err
@@ -231,6 +175,7 @@ func (r *TranslationRunner) buildJobConfig(ctx context.Context, exec *service.Tr
 	return cfg, nil
 }
 
+// buildRuntimeGlossary 根据配置构建运行时术语表，未启用则返回空实现。
 func (r *TranslationRunner) buildRuntimeGlossary(projectRow *ent.Project, cfg *config.Config) (glossary.Glossary, error) {
 	if cfg == nil || !cfg.Glossary.Enabled {
 		return glossary.Nop{}, nil
@@ -238,6 +183,7 @@ func (r *TranslationRunner) buildRuntimeGlossary(projectRow *ent.Project, cfg *c
 	return service.NewDatabaseGlossary(r.client, projectRow)
 }
 
+// buildRuntimeTM 根据配置构建运行时翻译记忆，未启用则返回空实现。
 func (r *TranslationRunner) buildRuntimeTM(projectRow *ent.Project, cfg *config.Config) (tm.TranslationMemory, error) {
 	if cfg == nil || !cfg.TranslationMemory.Enabled {
 		return tm.Nop{}, nil
@@ -249,6 +195,7 @@ func (r *TranslationRunner) buildRuntimeTM(projectRow *ent.Project, cfg *config.
 	return tm.NewSQLite(r.client, scope)
 }
 
+// loadSegments 从数据库加载指定资源的所有片段，并按 selectedIDs 过滤。
 func (r *TranslationRunner) loadSegments(ctx context.Context, resourceID int, selectedIDs []int) ([]*ent.Segment, []*ent.Segment, error) {
 	allRows, err := r.client.Segment.Query().
 		Where(segment.ResourceIDEQ(resourceID)).
@@ -273,6 +220,7 @@ func (r *TranslationRunner) loadSegments(ctx context.Context, resourceID int, se
 	return selectedRows, allRows, nil
 }
 
+// updateTranslatedSegments 将翻译结果更新回数据库中的对应片段。
 func (r *TranslationRunner) updateTranslatedSegments(ctx context.Context, selectedIDsByIndex map[int]int, segments []engine.SegmentResult) error {
 	for _, item := range segments {
 		segmentID, ok := selectedIDsByIndex[item.Index]
@@ -290,6 +238,7 @@ func (r *TranslationRunner) updateTranslatedSegments(ctx context.Context, select
 	return nil
 }
 
+// recordUsage 记录翻译用量到数据库。
 func (r *TranslationRunner) recordUsage(ctx context.Context, exec *service.TranslationJobExecution, segmentCount int) error {
 	usage := r.client.UsageRecord.Create().
 		SetProjectID(exec.Project.ID).
@@ -306,11 +255,13 @@ func (r *TranslationRunner) recordUsage(ctx context.Context, exec *service.Trans
 	return usage.Exec(ctx)
 }
 
+// translationOutputPath 生成翻译输出文件的相对路径。
 func translationOutputPath(jobID, jobResourceID int, filename string) string {
 	cleanName := cleanOutputResourcePath(filename)
 	return filepath.ToSlash(filepath.Join("translation_outputs", fmt.Sprintf("job-%d", jobID), fmt.Sprintf("resource-%d", jobResourceID), filepath.FromSlash(cleanName)))
 }
 
+// resourceOutputName 获取资源的输出文件名，为空时返回默认值 "resource"。
 func resourceOutputName(res *ent.Resource) string {
 	if res != nil && strings.TrimSpace(res.Path) != "" {
 		return res.Path
@@ -318,6 +269,7 @@ func resourceOutputName(res *ent.Resource) string {
 	return "resource"
 }
 
+// cleanOutputResourcePath 清理输出路径中的非法字符，确保路径安全。
 func cleanOutputResourcePath(value string) string {
 	clean := strings.TrimSpace(strings.ReplaceAll(value, "\\", "/"))
 	clean = filepath.ToSlash(filepath.Clean(clean))
