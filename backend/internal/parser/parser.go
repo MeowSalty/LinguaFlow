@@ -18,7 +18,9 @@ type Parser interface {
 	// Extensions 返回该 parser 处理的小写扩展名（含点，如 ".md"）。
 	Extensions() []string
 	Parse(ctx context.Context, r io.Reader) (*pipeline.Document, error)
-	Render(ctx context.Context, doc *pipeline.Document, w io.Writer) error
+	// Render 将翻译后的 Document 写入 w。original 是原始文件的读取器，
+	// 用于位置替换渲染策略——从原始文件读取内容，按 Segment 记录的位置替换译文。
+	Render(ctx context.Context, doc *pipeline.Document, original io.Reader, w io.Writer) error
 }
 
 // ErrNotImplemented 由占位 parser 返回。

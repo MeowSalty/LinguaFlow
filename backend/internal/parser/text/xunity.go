@@ -1,6 +1,7 @@
 package text
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"strings"
@@ -50,13 +51,16 @@ func parseXUnity(content string) (*pipeline.Document, error) {
 	lines := strings.Split(content, "\n")
 	segments := make([]pipeline.Segment, 0, len(lines))
 
-	for _, line := range lines {
+	for i, line := range lines {
 		if !strings.Contains(line, "=") {
 			// 不含 = 的行，Skip 保留
 			segments = append(segments, pipeline.Segment{
 				ID:     shortHash(line),
 				Source: line,
 				Skip:   true,
+				Meta: map[string]any{
+					"pos_line": i, // 0-based 行索引
+				},
 			})
 			continue
 		}
@@ -72,6 +76,9 @@ func parseXUnity(content string) (*pipeline.Document, error) {
 				ID:     shortHash(line),
 				Source: line,
 				Skip:   true,
+				Meta: map[string]any{
+					"pos_line": i,
+				},
 			})
 			continue
 		}
@@ -82,7 +89,7 @@ func parseXUnity(content string) (*pipeline.Document, error) {
 			Source: keyTrimmed,
 			Target: strings.TrimSpace(after),
 			Meta: map[string]any{
-				"xunity_raw": line,
+				"pos_line": i, // 0-based 行索引
 			},
 		})
 	}
@@ -93,54 +100,56 @@ func parseXUnity(content string) (*pipeline.Document, error) {
 	}, nil
 }
 
-// renderXUnity 渲染 XUnity 格式。
-// 渲染规则：
-//   - Skip 段 → 原样输出
-//   - 可翻译段 → key=Target（Target 为空则回退到 Source）
-func renderXUnity(doc *pipeline.Document, w io.Writer) error {
-	bw := &strings.Builder{}
+// renderXUnity 渲染 XUnity 格式。位置替换策略：
+// 读取原始文件行，按 pos_line 替换可翻译行的 value 部分。
+func renderXUnity(doc *pipeline.Document, original io.Reader, w io.Writer) error {
+	// 读取原始文件所有行
+	scanner := bufio.NewScanner(original)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
+	var lines []string
+	for scanner.Scan() {
+		lines = append(lines, scanner.Text())
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("xunity: read original: %w", err)
+	}
 
+	// 构建行索引 → Segment 的映射
+	lineToSeg := make(map[int]pipeline.Segment)
 	for _, seg := range doc.Segments {
 		if seg.Skip {
-			if _, err := fmt.Fprintln(bw, seg.Source); err != nil {
-				return err
-			}
 			continue
 		}
-
-		// 可翻译行
-		rawLine, _ := seg.Meta["xunity_raw"].(string)
-		if rawLine == "" {
-			// 无原始行信息，回退格式 key=value
-			value := seg.Target
-			if value == "" {
-				value = seg.Source
-			}
-			if _, err := fmt.Fprintf(bw, "%s=%s\n", seg.Source, value); err != nil {
-				return err
-			}
+		lineIdx, ok := seg.Meta["pos_line"].(int)
+		if !ok {
 			continue
 		}
+		lineToSeg[lineIdx] = seg
+	}
 
-		// 用 Target 替换 = 右侧内容，保留原始行格式
-		before, _, found := strings.Cut(rawLine, "=")
+	// 按行输出，可翻译行替换 value 部分
+	bw := bufio.NewWriter(w)
+	for i, line := range lines {
+		seg, ok := lineToSeg[i]
+		if !ok {
+			// 原样输出
+			bw.WriteString(line)
+			bw.WriteByte('\n')
+			continue
+		}
+		// 替换 = 右侧内容
+		before, _, found := strings.Cut(line, "=")
 		if !found {
-			// 不可能发生，兜底
-			if _, err := fmt.Fprintln(bw, rawLine); err != nil {
-				return err
-			}
+			// 不可能发生（Parse 时已确认），兜底原样
+			bw.WriteString(line)
+			bw.WriteByte('\n')
 			continue
 		}
-
 		value := seg.Target
 		if value == "" {
 			value = seg.Source
 		}
-		if _, err := fmt.Fprintf(bw, "%s=%s\n", before, value); err != nil {
-			return err
-		}
+		fmt.Fprintf(bw, "%s=%s\n", before, value)
 	}
-
-	_, err := io.WriteString(w, bw.String())
-	return err
+	return bw.Flush()
 }

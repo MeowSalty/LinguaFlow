@@ -1,6 +1,8 @@
 // Package output 把翻译后的 Document 写入目标文件。
 // MVP 实现「overwrite」模式：先写入临时文件再 rename，保证失败时不留半成品。
 // 「side_by_side」模式为占位。
+//
+// 注意：当前 Engine 已直接调用 Parser.Render，此包保留供外部调用方使用。
 package output
 
 import (
@@ -21,13 +23,20 @@ var ErrUnsupportedMode = errors.New("output: unsupported mode")
 
 // Writer 把 Document 渲染并写入到指定路径。
 type Writer struct {
-	cfg    config.OutputConfig
-	path   string
-	parser parser.Parser
+	cfg      config.OutputConfig
+	path     string
+	parser   parser.Parser
+	original io.Reader // 原始文件内容，位置替换渲染使用
 }
 
 func New(cfg config.OutputConfig, p parser.Parser, path string) *Writer {
 	return &Writer{cfg: cfg, parser: p, path: path}
+}
+
+// WithOriginal 设置原始文件读取器。位置替换渲染模式下必须设置。
+func (w *Writer) WithOriginal(r io.Reader) *Writer {
+	w.original = r
+	return w
 }
 
 // Write 把 doc 渲染到目标文件。原子写入：临时文件 → rename。
@@ -57,7 +66,7 @@ func (w *Writer) writeOverwrite(ctx context.Context, doc *pipeline.Document) err
 		_ = os.Remove(tmpName)
 	}()
 
-	if err := w.parser.Render(ctx, doc, tmp); err != nil {
+	if err := w.parser.Render(ctx, doc, w.original, tmp); err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("output: render: %w", err)
 	}

@@ -178,14 +178,21 @@ func (e *Engine) TranslateWithResult(ctx context.Context, job TranslateJob) (Tra
 		})
 	}
 
-	// 3. 通过 DocumentSink.Create 获取 writer
+	// 3. 重新打开原始文件用于 Render（Parse 已消耗了 reader）
+	original, err := job.Source.Open(ctx)
+	if err != nil {
+		return result, fmt.Errorf("engine: reopen source: %w", err)
+	}
+	defer func() { _ = original.Close() }()
+
+	// 4. 通过 DocumentSink.Create 获取 writer
 	writer, err := job.Sink.Create(ctx)
 	if err != nil {
 		return result, fmt.Errorf("engine: create sink: %w", err)
 	}
 	defer func() { _ = writer.Close() }()
 
-	if err := p.Render(ctx, doc, writer); err != nil {
+	if err := p.Render(ctx, doc, original, writer); err != nil {
 		return result, fmt.Errorf("engine: render: %w", err)
 	}
 
