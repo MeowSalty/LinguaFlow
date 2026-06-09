@@ -29,6 +29,7 @@ type Engine struct {
 	bootstrapRenderer *prompt.BootstrapRenderer
 	glossary          glossary.Glossary
 	tm                tm.TranslationMemory
+	limiter           backend.RateLimiter // 当前活跃的限流器，Close 时释放
 }
 
 type RuntimeResources struct {
@@ -102,8 +103,13 @@ func NewWithRuntime(cfg *config.Config, logger *slog.Logger, reporter progress.R
 	return e, nil
 }
 
-// Close 释放后端连接。
-func (e *Engine) Close() error { return e.selector.Close() }
+// Close 释放限流器与后端连接。
+func (e *Engine) Close() error {
+	if e.limiter != nil {
+		e.limiter.Close()
+	}
+	return e.selector.Close()
+}
 
 // Translate 执行一次翻译任务。
 func (e *Engine) Translate(ctx context.Context, job TranslateJob) error {
@@ -209,7 +215,12 @@ func (e *Engine) buildPipeline() *pipeline.Pipeline {
 	pc := e.cfg.Pipeline
 
 	protector := protect.FromRules(pc.Protect.Rules)
+	// 关闭旧的 limiter（如果存在），避免 goroutine 泄漏。
+	if e.limiter != nil {
+		e.limiter.Close()
+	}
 	limiter := backend.NewRateLimiter(pc.Translate.RateLimitPerSec)
+	e.limiter = limiter
 	retry := backend.RetryPolicy{
 		MaxAttempts: pc.Translate.Retry.MaxAttempts,
 		Backoff:     pc.Translate.Retry.Backoff,

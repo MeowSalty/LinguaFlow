@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math/rand"
 	"regexp"
+	"sync"
 	"time"
 )
 
@@ -42,7 +43,7 @@ func IsRetryable(err error) bool {
 }
 
 // reHTTPStatus 匹配 OpenAI/Anthropic SDK 错误消息中的 HTTP 状态码。
-// 格式: POST "url": 401 Unauthorized ...
+// 格式：POST "url": 401 Unauthorized ...
 var reHTTPStatus = regexp.MustCompile(`: (\d{3}) \w`)
 
 // ExtractHTTPStatusCode 从错误消息中提取 HTTP 状态码。
@@ -102,6 +103,7 @@ func WithRetry(ctx context.Context, policy RetryPolicy, fn func() error) error {
 // RateLimiter 是一个简单的令牌桶接口（按秒补充）。
 type RateLimiter interface {
 	Wait(ctx context.Context) error
+	Close() // 停止内部 goroutine，释放资源。
 }
 
 // NewRateLimiter 创建每秒 ratePerSec 个令牌的限流器。
@@ -113,6 +115,7 @@ func NewRateLimiter(ratePerSec int) RateLimiter {
 	r := &tokenBucket{
 		interval: time.Second / time.Duration(ratePerSec),
 		tokens:   make(chan struct{}, ratePerSec),
+		done:     make(chan struct{}),
 	}
 	// 预填满桶
 	for i := 0; i < ratePerSec; i++ {
@@ -123,19 +126,33 @@ func NewRateLimiter(ratePerSec int) RateLimiter {
 }
 
 type tokenBucket struct {
-	interval time.Duration
-	tokens   chan struct{}
+	interval  time.Duration
+	tokens    chan struct{}
+	done      chan struct{}
+	closeOnce sync.Once
 }
 
 func (r *tokenBucket) refill() {
 	t := time.NewTicker(r.interval)
 	defer t.Stop()
-	for range t.C {
+	for {
 		select {
-		case r.tokens <- struct{}{}:
-		default:
+		case <-r.done:
+			return
+		case <-t.C:
+			select {
+			case r.tokens <- struct{}{}:
+			default:
+			}
 		}
 	}
+}
+
+// Close 停止 refill goroutine。多次调用安全。
+func (r *tokenBucket) Close() {
+	r.closeOnce.Do(func() {
+		close(r.done)
+	})
 }
 
 func (r *tokenBucket) Wait(ctx context.Context) error {
@@ -150,3 +167,4 @@ func (r *tokenBucket) Wait(ctx context.Context) error {
 type nopLimiter struct{}
 
 func (nopLimiter) Wait(context.Context) error { return nil }
+func (nopLimiter) Close()                     {}
