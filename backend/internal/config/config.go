@@ -30,11 +30,12 @@ type Config struct {
 }
 
 type BackendConfig struct {
-	Name     string         `yaml:"name"`
-	Type     string         `yaml:"type"`
-	Enabled  bool           `yaml:"enabled"`
-	Priority int            `yaml:"priority"`
-	Options  map[string]any `yaml:"options"`
+	Name            string         `yaml:"name"`
+	Type            string         `yaml:"type"`
+	Enabled         bool           `yaml:"enabled"`
+	Priority        int            `yaml:"priority"`
+	RateLimitPerSec int            `yaml:"rate_limit_per_sec"` // 按后端独立限流；0 表示使用全局限流器
+	Options         map[string]any `yaml:"options"`
 }
 
 type PipelineConfig struct {
@@ -268,7 +269,7 @@ func Default() *Config {
 				BatchSize:       1,
 				FallbackShrink:  0.5,
 				RateLimitPerSec: 5,
-				Retry:           RetryConfig{MaxAttempts: 3, Backoff: time.Second},
+				Retry:           RetryConfig{MaxAttempts: 3, Backoff: 2 * time.Second},
 				Repair: RepairConfig{
 					Enabled:              true,
 					JSONStructural:       true,
@@ -333,6 +334,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Pipeline.Translate.Concurrency < 1 {
 		c.Pipeline.Translate.Concurrency = 1
+	}
+	if c.Pipeline.Translate.Retry.Backoff < time.Second {
+		c.Pipeline.Translate.Retry.Backoff = time.Second
 	}
 	if shrink := c.Pipeline.Translate.FallbackShrink; math.IsNaN(shrink) || math.IsInf(shrink, 0) || shrink < 0 {
 		c.Pipeline.Translate.FallbackShrink = 0

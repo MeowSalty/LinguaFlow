@@ -111,6 +111,10 @@ func NewSelector(cfgs []config.BackendConfig) (Selector, error) {
 			// 单个后端构造失败不阻塞其余后端
 			return nil, fmt.Errorf("build backend %q: %w", c.Name, err)
 		}
+		// 如果配置了后端级限流，包装 RateLimitedBackend
+		if c.RateLimitPerSec > 0 {
+			b = NewRateLimitedBackend(b, c.RateLimitPerSec)
+		}
 		entries = append(entries, entry{name: c.Name, priority: c.Priority, backend: b})
 	}
 	if len(entries) == 0 {

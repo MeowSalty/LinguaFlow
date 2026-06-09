@@ -86,7 +86,7 @@ pipeline:
     #     concurrency: 1
     retry:
       max_attempts: 3
-      backoff: 1s
+      backoff: 2s
       jitter: true
   postprocess:
     enabled: true
