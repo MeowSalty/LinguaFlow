@@ -32,7 +32,6 @@ type Backend struct {
 	name           string
 	client         *genai.Client
 	model          string
-	temperature    float64
 	maxTokens      int64
 	timeout        time.Duration
 	responseFormat string
@@ -49,10 +48,6 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 	model := req.Model
 	if model == "" {
 		model = b.model
-	}
-	temp := req.Temperature
-	if temp == 0 {
-		temp = b.temperature
 	}
 	maxTok := req.MaxTokens
 	if maxTok == 0 {
@@ -84,8 +79,8 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 	cfg := &genai.GenerateContentConfig{
 		SystemInstruction: genai.NewContentFromText(sysText, genai.RoleUser),
 	}
-	if temp != 0 {
-		cfg.Temperature = genai.Ptr(float32(temp))
+	if req.Temperature != nil {
+		cfg.Temperature = genai.Ptr(float32(*req.Temperature))
 	}
 	if maxTok > 0 {
 		cfg.MaxOutputTokens = int32(maxTok)
@@ -146,7 +141,6 @@ func (b *Backend) Close() error { return nil }
 //   - api_key (必填)
 //   - base_url (可选，留空走 SDK 默认 https://generativelanguage.googleapis.com/)
 //   - model (默认 gemini-2.5-flash)
-//   - temperature (默认 0.2)
 //   - max_tokens (默认 8192)
 //   - timeout (默认 60s, duration 字符串)
 //   - response_format (json_schema|json_object|none, 默认 json_schema)
@@ -177,7 +171,6 @@ func factory(opts map[string]any) (backend.Backend, error) {
 	b := &Backend{
 		client:         client,
 		model:          backend.StringOpt(opts, "model", defaultModel),
-		temperature:    backend.Float64Opt(opts, "temperature", 0.2),
 		maxTokens:      backend.Int64Opt(opts, "max_tokens", defaultMaxTokens),
 		responseFormat: rf,
 	}

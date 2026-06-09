@@ -12,10 +12,12 @@ import (
 
 // Request 是发往后端的统一请求。
 type Request struct {
-	System      string
-	User        string
-	Model       string
-	Temperature float64
+	System string
+	User   string
+	Model  string
+	// Temperature 控制采样温度。nil 表示未设置，回退到后端默认值；
+	// 指向 0 表示确定性输出（greedy decoding）；其他合法范围取决于具体后端。
+	Temperature *float64
 	MaxTokens   int64
 	Meta        map[string]any // 透传给具体后端（如 stop 序列）
 
