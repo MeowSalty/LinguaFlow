@@ -323,6 +323,21 @@ func (c *Config) Validate() error {
 	if c.TargetLang == "" {
 		return errEmptyTargetLang
 	}
+	// 校验后端 name 唯一性和 name/type 非空
+	seen := make(map[string]int, len(c.Backends))
+	for i, b := range c.Backends {
+		if b.Name == "" {
+			return fmt.Errorf("配置错误：backends[%d].name 不能为空", i)
+		}
+		if b.Type == "" {
+			return fmt.Errorf("配置错误：backends[%d].type 不能为空（后端 %q）", i, b.Name)
+		}
+		if prev, dup := seen[b.Name]; dup {
+			return fmt.Errorf("%w：%q 在 backends[%d] 与 backends[%d] 重复",
+				errDuplicateBackendName, b.Name, i, prev)
+		}
+		seen[b.Name] = i
+	}
 	enabled := 0
 	for _, b := range c.Backends {
 		if b.Enabled {
