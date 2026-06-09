@@ -213,6 +213,7 @@ func (e *Engine) buildPipeline() *pipeline.Pipeline {
 	retry := backend.RetryPolicy{
 		MaxAttempts: pc.Translate.Retry.MaxAttempts,
 		Backoff:     pc.Translate.Retry.Backoff,
+		Jitter:      pc.Translate.Retry.Jitter,
 	}
 
 	var s []pipeline.Stage

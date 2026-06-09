@@ -87,6 +87,7 @@ pipeline:
     retry:
       max_attempts: 3
       backoff: 1s
+      jitter: true
   postprocess:
     enabled: true
     trim_spaces: true

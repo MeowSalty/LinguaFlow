@@ -113,7 +113,7 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 
 	msg, err := b.client.Messages.New(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("anthropic: messages: %w", err)
+		return nil, wrapAnthropicError(err)
 	}
 
 	// 截断会让 tool_use 的 JSON 残缺，显式失败以触发上层 shrinkOrFallback
@@ -138,6 +138,16 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 }
 
 func (b *Backend) Close() error { return nil }
+
+// wrapAnthropicError 将 Anthropic SDK 错误包装为 backend.StatusError。
+// 与 OpenAI 类似，apierror.Error 在 internal 包中。
+func wrapAnthropicError(err error) error {
+	if code, ok := backend.ExtractHTTPStatusCode(err.Error()); ok {
+		return fmt.Errorf("anthropic: messages: %w",
+			&backend.StatusError{StatusCode: code, Err: err})
+	}
+	return fmt.Errorf("anthropic: messages: %w", err)
+}
 
 // extractResponseText 把响应内容拼成可供上层 parseBatchResponse 解析的字符串。
 // useToolPath=true 时优先在 content 中找 emit_translations 的 tool_use 块，

@@ -88,6 +88,7 @@ type TranslateRoundConfig struct {
 type RetryConfig struct {
 	MaxAttempts int           `yaml:"max_attempts"`
 	Backoff     time.Duration `yaml:"backoff"`
+	Jitter      bool          `yaml:"jitter"`
 }
 
 // RepairConfig 控制 LLM 响应解析失败 / 部分缺失时的"主动修复"行为。

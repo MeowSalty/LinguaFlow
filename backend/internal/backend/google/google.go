@@ -106,7 +106,7 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 		cfg,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("google: generate content: %w", err)
+		return nil, wrapGoogleError(err)
 	}
 	if len(resp.Candidates) == 0 {
 		return nil, errors.New("google: empty candidates")
@@ -136,6 +136,17 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 }
 
 func (b *Backend) Close() error { return nil }
+
+// wrapGoogleError 将 Google SDK 错误包装为 backend.StatusError。
+// genai.APIError 是公开类型，可直接 errors.As。
+func wrapGoogleError(err error) error {
+	var apiErr *genai.APIError
+	if errors.As(err, &apiErr) {
+		return fmt.Errorf("google: generate content: %w",
+			&backend.StatusError{StatusCode: apiErr.Code, Err: err})
+	}
+	return fmt.Errorf("google: generate content: %w", err)
+}
 
 // factory 从 BackendConfig.Options 构造实例。期望的键：
 //   - api_key (必填)
