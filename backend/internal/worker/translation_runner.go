@@ -110,6 +110,12 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
 	}
+	autoApprove := false
+	if exec.Job.TranslationConfig != nil {
+		if v, ok := exec.Job.TranslationConfig["auto_approve"].(bool); ok {
+			autoApprove = v
+		}
+	}
 	runtimeGlossary, err := r.buildRuntimeGlossary(exec.Project, jobCfg)
 	if err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
@@ -149,7 +155,7 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
 	}
-	if err := r.updateTranslatedSegments(ctx, selectedIDsByIndex, result.Segments); err != nil {
+	if err := r.updateTranslatedSegments(ctx, selectedIDsByIndex, result.Segments, autoApprove); err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
 	}
@@ -221,17 +227,25 @@ func (r *TranslationRunner) loadSegments(ctx context.Context, resourceID int, se
 }
 
 // updateTranslatedSegments 将翻译结果更新回数据库中的对应片段。
-func (r *TranslationRunner) updateTranslatedSegments(ctx context.Context, selectedIDsByIndex map[int]int, segments []engine.SegmentResult) error {
+// 当 autoApprove 为 true 时，直接将状态设为 approved 跳过审核。
+func (r *TranslationRunner) updateTranslatedSegments(ctx context.Context, selectedIDsByIndex map[int]int, segments []engine.SegmentResult, autoApprove bool) error {
+	status := service.SegmentStatusTranslated
+	if autoApprove {
+		status = service.SegmentStatusApproved
+	}
 	for _, item := range segments {
 		segmentID, ok := selectedIDsByIndex[item.Index]
 		if !ok {
 			continue
 		}
-		if err := r.client.Segment.UpdateOneID(segmentID).
+		update := r.client.Segment.UpdateOneID(segmentID).
 			SetSourceText(firstNonEmpty(item.SourceText, " ")).
 			SetTargetText(item.TargetText).
-			SetStatus(service.SegmentStatusTranslated).
-			Exec(ctx); err != nil {
+			SetStatus(status)
+		if autoApprove {
+			update.ClearReviewComment()
+		}
+		if err := update.Exec(ctx); err != nil {
 			return err
 		}
 	}

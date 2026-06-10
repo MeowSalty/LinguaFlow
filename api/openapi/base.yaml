@@ -55,6 +55,14 @@ paths:
     $ref: './paths/resources.yaml#/projectResourceSegments'
   /projects/{projectId}/resources/{resourceId}/segments/{segmentId}:
     $ref: './paths/resources.yaml#/projectResourceSegmentById'
+  /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/review:
+    $ref: './paths/resources.yaml#/projectResourceSegmentReview'
+  /projects/{projectId}/resources/{resourceId}/segments/batch-review:
+    $ref: './paths/resources.yaml#/projectResourceSegmentsBatchReview'
+  /projects/{projectId}/resources/{resourceId}/segments/approve-all:
+    $ref: './paths/resources.yaml#/projectResourceSegmentsApproveAll'
+  /projects/{projectId}/resources/{resourceId}/retranslate-rejected:
+    $ref: './paths/resources.yaml#/projectResourceRetranslateRejected'
   /projects/{projectId}/stages/{stage}/override:
     $ref: './paths/projects.yaml#/stageOverride'
   /projects/{projectId}/stages/{stage}/plan:
@@ -164,6 +172,16 @@ components:
       $ref: './components/schemas/resource.yaml#/ResourceSegmentUpdateRequest'
     ResourceSegmentListResponse:
       $ref: './components/schemas/resource.yaml#/ResourceSegmentListResponse'
+    SegmentReviewRequest:
+      $ref: './components/schemas/resource.yaml#/SegmentReviewRequest'
+    BatchReviewRequest:
+      $ref: './components/schemas/resource.yaml#/BatchReviewRequest'
+    BatchReviewResponse:
+      $ref: './components/schemas/resource.yaml#/BatchReviewResponse'
+    ApproveAllResponse:
+      $ref: './components/schemas/resource.yaml#/ApproveAllResponse'
+    RetranslateResponse:
+      $ref: './components/schemas/resource.yaml#/RetranslateResponse'
     IncrementalUpdateResponse:
       $ref: './components/schemas/resource.yaml#/IncrementalUpdateResponse'
     ResourceConflictResponse:

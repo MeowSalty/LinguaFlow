@@ -851,6 +851,91 @@ paths:
                 $ref: '#/components/schemas/Segment'
         default:
           $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/review:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/SegmentId'
+    patch:
+      operationId: ReviewResourceSegment
+      summary: 审核单个段落（通过/拒绝/编辑）
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SegmentReviewRequest'
+      responses:
+        '200':
+          description: 审核成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Segment'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/segments/batch-review:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: BatchReviewResourceSegments
+      summary: 批量审核段落
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchReviewRequest'
+      responses:
+        '200':
+          description: 批量审核结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchReviewResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/segments/approve-all:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: ApproveAllResourceSegments
+      summary: 批准资源中所有已翻译/已编辑的段落
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 批准结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApproveAllResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/retranslate-rejected:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: RetranslateRejectedSegments
+      summary: 将资源中被拒绝的段落重置为待翻译
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 重置结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetranslateResponse'
+        default:
+          $ref: '#/components/responses/Problem'
   /projects/{projectId}/stages/{stage}/override:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -1671,6 +1756,70 @@ components:
             $ref: '#/components/schemas/Segment'
         next_cursor:
           type: string
+    SegmentReviewRequest:
+      type: object
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          enum:
+            - approve
+            - reject
+            - edit
+          description: 审核操作：approve=通过, reject=拒绝, edit=编辑译文
+        target_text:
+          type: string
+          description: 编辑译文时必填
+        comment:
+          type: string
+          description: 审核备注
+    BatchReviewRequest:
+      type: object
+      required:
+        - segment_ids
+        - action
+      properties:
+        segment_ids:
+          type: array
+          items:
+            type: integer
+          minItems: 1
+          description: 待审核的段落 ID 列表
+        action:
+          type: string
+          enum:
+            - approve
+            - reject
+          description: 批量审核操作
+        comment:
+          type: string
+          description: 审核备注
+    BatchReviewResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Segment'
+    ApproveAllResponse:
+      type: object
+      required:
+        - approved_count
+      properties:
+        approved_count:
+          type: integer
+          description: 批准的段落数
+    RetranslateResponse:
+      type: object
+      required:
+        - reset_count
+      properties:
+        reset_count:
+          type: integer
+          description: 重置为待翻译的段落数
     IncrementalUpdateResponse:
       type: object
       required:
@@ -1703,7 +1852,7 @@ components:
             - created
             - conflict
             - failed
-          description: 处理结果：created=创建成功, conflict=与已有资源冲突, failed=处理失败
+          description: 处理结果：created=创建成功，conflict=与已有资源冲突，failed=处理失败
         resource:
           $ref: '#/components/schemas/Resource'
           description: 创建成功时返回新资源
@@ -1737,7 +1886,7 @@ components:
             - create
             - conflict
             - duplicate
-          description: 建议操作：create=可直接创建, conflict=与已有资源冲突, duplicate=批次内重复路径
+          description: 建议操作：create=可直接创建，conflict=与已有资源冲突，duplicate=批次内重复路径
         existing_resource:
           $ref: '#/components/schemas/Resource'
           description: 冲突时返回已有资源信息

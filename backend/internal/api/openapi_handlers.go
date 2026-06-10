@@ -233,3 +233,19 @@ func (s *Server) ListActivity(w http.ResponseWriter, r *http.Request, _ ListActi
 func (s *Server) GetStatsSummary(w http.ResponseWriter, r *http.Request) {
 	s.requireAuth(http.HandlerFunc(s.handleStatsSummary)).ServeHTTP(w, r)
 }
+
+func (s *Server) ReviewResourceSegment(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId, _ SegmentId) {
+	s.requireAuth(http.HandlerFunc(s.handleReviewSegment)).ServeHTTP(w, r)
+}
+
+func (s *Server) BatchReviewResourceSegments(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
+	s.requireAuth(http.HandlerFunc(s.handleBatchReviewSegments)).ServeHTTP(w, r)
+}
+
+func (s *Server) ApproveAllResourceSegments(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
+	s.requireAuth(http.HandlerFunc(s.handleApproveAllResourceSegments)).ServeHTTP(w, r)
+}
+
+func (s *Server) RetranslateRejectedSegments(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
+	s.requireAuth(http.HandlerFunc(s.handleRetranslateRejected)).ServeHTTP(w, r)
+}
