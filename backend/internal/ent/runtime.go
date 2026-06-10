@@ -7,7 +7,6 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgbackend"
@@ -19,7 +18,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
@@ -105,55 +103,6 @@ func init() {
 	glossaryentryDescOrganizationID := glossaryentryFields[7].Descriptor()
 	// glossaryentry.OrganizationIDValidator is a validator for the "organization_id" field. It is called by the builders before save.
 	glossaryentry.OrganizationIDValidator = glossaryentryDescOrganizationID.Validators[0].(func(int) error)
-	jobMixin := schema.Job{}.Mixin()
-	jobMixinFields0 := jobMixin[0].Fields()
-	_ = jobMixinFields0
-	jobFields := schema.Job{}.Fields()
-	_ = jobFields
-	// jobDescCreatedAt is the schema descriptor for created_at field.
-	jobDescCreatedAt := jobMixinFields0[0].Descriptor()
-	// job.DefaultCreatedAt holds the default value on creation for the created_at field.
-	job.DefaultCreatedAt = jobDescCreatedAt.Default.(func() time.Time)
-	// jobDescUpdatedAt is the schema descriptor for updated_at field.
-	jobDescUpdatedAt := jobMixinFields0[1].Descriptor()
-	// job.DefaultUpdatedAt holds the default value on creation for the updated_at field.
-	job.DefaultUpdatedAt = jobDescUpdatedAt.Default.(func() time.Time)
-	// job.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
-	job.UpdateDefaultUpdatedAt = jobDescUpdatedAt.UpdateDefault.(func() time.Time)
-	// jobDescStatus is the schema descriptor for status field.
-	jobDescStatus := jobFields[0].Descriptor()
-	// job.DefaultStatus holds the default value on creation for the status field.
-	job.DefaultStatus = jobDescStatus.Default.(string)
-	// jobDescSubJobCount is the schema descriptor for sub_job_count field.
-	jobDescSubJobCount := jobFields[1].Descriptor()
-	// job.DefaultSubJobCount holds the default value on creation for the sub_job_count field.
-	job.DefaultSubJobCount = jobDescSubJobCount.Default.(int)
-	// job.SubJobCountValidator is a validator for the "sub_job_count" field. It is called by the builders before save.
-	job.SubJobCountValidator = jobDescSubJobCount.Validators[0].(func(int) error)
-	// jobDescCompletedSubJobs is the schema descriptor for completed_sub_jobs field.
-	jobDescCompletedSubJobs := jobFields[2].Descriptor()
-	// job.DefaultCompletedSubJobs holds the default value on creation for the completed_sub_jobs field.
-	job.DefaultCompletedSubJobs = jobDescCompletedSubJobs.Default.(int)
-	// job.CompletedSubJobsValidator is a validator for the "completed_sub_jobs" field. It is called by the builders before save.
-	job.CompletedSubJobsValidator = jobDescCompletedSubJobs.Validators[0].(func(int) error)
-	// jobDescFailedSubJobs is the schema descriptor for failed_sub_jobs field.
-	jobDescFailedSubJobs := jobFields[3].Descriptor()
-	// job.DefaultFailedSubJobs holds the default value on creation for the failed_sub_jobs field.
-	job.DefaultFailedSubJobs = jobDescFailedSubJobs.Default.(int)
-	// job.FailedSubJobsValidator is a validator for the "failed_sub_jobs" field. It is called by the builders before save.
-	job.FailedSubJobsValidator = jobDescFailedSubJobs.Validators[0].(func(int) error)
-	// jobDescSourceLang is the schema descriptor for source_lang field.
-	jobDescSourceLang := jobFields[4].Descriptor()
-	// job.DefaultSourceLang holds the default value on creation for the source_lang field.
-	job.DefaultSourceLang = jobDescSourceLang.Default.(string)
-	// jobDescTargetLang is the schema descriptor for target_lang field.
-	jobDescTargetLang := jobFields[5].Descriptor()
-	// job.DefaultTargetLang holds the default value on creation for the target_lang field.
-	job.DefaultTargetLang = jobDescTargetLang.Default.(string)
-	// jobDescConfig is the schema descriptor for config field.
-	jobDescConfig := jobFields[6].Descriptor()
-	// job.DefaultConfig holds the default value on creation for the config field.
-	job.DefaultConfig = jobDescConfig.Default.(func() map[string]interface{})
 	jobresourceMixin := schema.JobResource{}.Mixin()
 	jobresourceMixinFields0 := jobresourceMixin[0].Fields()
 	_ = jobresourceMixinFields0
@@ -438,31 +387,6 @@ func init() {
 	stagebackendoverrideDescBackendOrder := stagebackendoverrideFields[2].Descriptor()
 	// stagebackendoverride.DefaultBackendOrder holds the default value on creation for the backend_order field.
 	stagebackendoverride.DefaultBackendOrder = stagebackendoverrideDescBackendOrder.Default.([]string)
-	subjobMixin := schema.SubJob{}.Mixin()
-	subjobMixinFields0 := subjobMixin[0].Fields()
-	_ = subjobMixinFields0
-	subjobFields := schema.SubJob{}.Fields()
-	_ = subjobFields
-	// subjobDescCreatedAt is the schema descriptor for created_at field.
-	subjobDescCreatedAt := subjobMixinFields0[0].Descriptor()
-	// subjob.DefaultCreatedAt holds the default value on creation for the created_at field.
-	subjob.DefaultCreatedAt = subjobDescCreatedAt.Default.(func() time.Time)
-	// subjobDescUpdatedAt is the schema descriptor for updated_at field.
-	subjobDescUpdatedAt := subjobMixinFields0[1].Descriptor()
-	// subjob.DefaultUpdatedAt holds the default value on creation for the updated_at field.
-	subjob.DefaultUpdatedAt = subjobDescUpdatedAt.Default.(func() time.Time)
-	// subjob.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
-	subjob.UpdateDefaultUpdatedAt = subjobDescUpdatedAt.UpdateDefault.(func() time.Time)
-	// subjobDescStatus is the schema descriptor for status field.
-	subjobDescStatus := subjobFields[0].Descriptor()
-	// subjob.DefaultStatus holds the default value on creation for the status field.
-	subjob.DefaultStatus = subjobDescStatus.Default.(string)
-	// subjobDescSegmentCount is the schema descriptor for segment_count field.
-	subjobDescSegmentCount := subjobFields[5].Descriptor()
-	// subjob.DefaultSegmentCount holds the default value on creation for the segment_count field.
-	subjob.DefaultSegmentCount = subjobDescSegmentCount.Default.(int)
-	// subjob.SegmentCountValidator is a validator for the "segment_count" field. It is called by the builders before save.
-	subjob.SegmentCountValidator = subjobDescSegmentCount.Validators[0].(func(int) error)
 	tmentryMixin := schema.TMEntry{}.Mixin()
 	tmentryMixinFields0 := tmentryMixin[0].Fields()
 	_ = tmentryMixinFields0

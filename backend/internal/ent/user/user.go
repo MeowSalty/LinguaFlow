@@ -30,8 +30,6 @@ const (
 	FieldRole = "role"
 	// FieldActive holds the string denoting the active field in the database.
 	FieldActive = "active"
-	// EdgeJobs holds the string denoting the jobs edge name in mutations.
-	EdgeJobs = "jobs"
 	// EdgeCreatedTranslationJobs holds the string denoting the created_translation_jobs edge name in mutations.
 	EdgeCreatedTranslationJobs = "created_translation_jobs"
 	// EdgeReviewedSegments holds the string denoting the reviewed_segments edge name in mutations.
@@ -50,13 +48,6 @@ const (
 	EdgeUsageRecords = "usage_records"
 	// Table holds the table name of the user in the database.
 	Table = "users"
-	// JobsTable is the table that holds the jobs relation/edge.
-	JobsTable = "jobs"
-	// JobsInverseTable is the table name for the Job entity.
-	// It exists in this package in order to avoid circular dependency with the "job" package.
-	JobsInverseTable = "jobs"
-	// JobsColumn is the table column denoting the jobs relation/edge.
-	JobsColumn = "user_jobs"
 	// CreatedTranslationJobsTable is the table that holds the created_translation_jobs relation/edge.
 	CreatedTranslationJobsTable = "translation_jobs"
 	// CreatedTranslationJobsInverseTable is the table name for the TranslationJob entity.
@@ -205,20 +196,6 @@ func ByActive(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldActive, opts...).ToFunc()
 }
 
-// ByJobsCount orders the results by jobs count.
-func ByJobsCount(opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newJobsStep(), opts...)
-	}
-}
-
-// ByJobs orders the results by jobs terms.
-func ByJobs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newJobsStep(), append([]sql.OrderTerm{term}, terms...)...)
-	}
-}
-
 // ByCreatedTranslationJobsCount orders the results by created_translation_jobs count.
 func ByCreatedTranslationJobsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -329,13 +306,6 @@ func ByUsageRecords(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
 		sqlgraph.OrderByNeighborTerms(s, newUsageRecordsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
-}
-func newJobsStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(JobsInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, JobsTable, JobsColumn),
-	)
 }
 func newCreatedTranslationJobsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(

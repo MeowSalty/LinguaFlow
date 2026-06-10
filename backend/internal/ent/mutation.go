@@ -13,7 +13,6 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgbackend"
@@ -25,7 +24,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
@@ -44,7 +42,6 @@ const (
 	// Node types.
 	TypeActivityLog          = "ActivityLog"
 	TypeGlossaryEntry        = "GlossaryEntry"
-	TypeJob                  = "Job"
 	TypeJobResource          = "JobResource"
 	TypeOrgBackend           = "OrgBackend"
 	TypeOrgMembership        = "OrgMembership"
@@ -55,7 +52,6 @@ const (
 	TypeResource             = "Resource"
 	TypeSegment              = "Segment"
 	TypeStageBackendOverride = "StageBackendOverride"
-	TypeSubJob               = "SubJob"
 	TypeTMEntry              = "TMEntry"
 	TypeTranslationJob       = "TranslationJob"
 	TypeUsageRecord          = "UsageRecord"
@@ -84,8 +80,6 @@ type ActivityLogMutation struct {
 	clearedorganization bool
 	project             *int
 	clearedproject      bool
-	job                 *int
-	clearedjob          bool
 	done                bool
 	oldValue            func(context.Context) (*ActivityLog, error)
 	predicates          []predicate.ActivityLog
@@ -605,45 +599,6 @@ func (m *ActivityLogMutation) ResetProject() {
 	m.clearedproject = false
 }
 
-// SetJobID sets the "job" edge to the Job entity by id.
-func (m *ActivityLogMutation) SetJobID(id int) {
-	m.job = &id
-}
-
-// ClearJob clears the "job" edge to the Job entity.
-func (m *ActivityLogMutation) ClearJob() {
-	m.clearedjob = true
-}
-
-// JobCleared reports if the "job" edge to the Job entity was cleared.
-func (m *ActivityLogMutation) JobCleared() bool {
-	return m.clearedjob
-}
-
-// JobID returns the "job" edge ID in the mutation.
-func (m *ActivityLogMutation) JobID() (id int, exists bool) {
-	if m.job != nil {
-		return *m.job, true
-	}
-	return
-}
-
-// JobIDs returns the "job" edge IDs in the mutation.
-// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
-// JobID instead. It exists only for internal usage by the builders.
-func (m *ActivityLogMutation) JobIDs() (ids []int) {
-	if id := m.job; id != nil {
-		ids = append(ids, *id)
-	}
-	return
-}
-
-// ResetJob resets all changes to the "job" edge.
-func (m *ActivityLogMutation) ResetJob() {
-	m.job = nil
-	m.clearedjob = false
-}
-
 // Where appends a list predicates to the ActivityLogMutation builder.
 func (m *ActivityLogMutation) Where(ps ...predicate.ActivityLog) {
 	m.predicates = append(m.predicates, ps...)
@@ -909,7 +864,7 @@ func (m *ActivityLogMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *ActivityLogMutation) AddedEdges() []string {
-	edges := make([]string, 0, 4)
+	edges := make([]string, 0, 3)
 	if m.actor != nil {
 		edges = append(edges, activitylog.EdgeActor)
 	}
@@ -918,9 +873,6 @@ func (m *ActivityLogMutation) AddedEdges() []string {
 	}
 	if m.project != nil {
 		edges = append(edges, activitylog.EdgeProject)
-	}
-	if m.job != nil {
-		edges = append(edges, activitylog.EdgeJob)
 	}
 	return edges
 }
@@ -941,17 +893,13 @@ func (m *ActivityLogMutation) AddedIDs(name string) []ent.Value {
 		if id := m.project; id != nil {
 			return []ent.Value{*id}
 		}
-	case activitylog.EdgeJob:
-		if id := m.job; id != nil {
-			return []ent.Value{*id}
-		}
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *ActivityLogMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 4)
+	edges := make([]string, 0, 3)
 	return edges
 }
 
@@ -963,7 +911,7 @@ func (m *ActivityLogMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *ActivityLogMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 4)
+	edges := make([]string, 0, 3)
 	if m.clearedactor {
 		edges = append(edges, activitylog.EdgeActor)
 	}
@@ -972,9 +920,6 @@ func (m *ActivityLogMutation) ClearedEdges() []string {
 	}
 	if m.clearedproject {
 		edges = append(edges, activitylog.EdgeProject)
-	}
-	if m.clearedjob {
-		edges = append(edges, activitylog.EdgeJob)
 	}
 	return edges
 }
@@ -989,8 +934,6 @@ func (m *ActivityLogMutation) EdgeCleared(name string) bool {
 		return m.clearedorganization
 	case activitylog.EdgeProject:
 		return m.clearedproject
-	case activitylog.EdgeJob:
-		return m.clearedjob
 	}
 	return false
 }
@@ -1008,9 +951,6 @@ func (m *ActivityLogMutation) ClearEdge(name string) error {
 	case activitylog.EdgeProject:
 		m.ClearProject()
 		return nil
-	case activitylog.EdgeJob:
-		m.ClearJob()
-		return nil
 	}
 	return fmt.Errorf("unknown ActivityLog unique edge %s", name)
 }
@@ -1027,9 +967,6 @@ func (m *ActivityLogMutation) ResetEdge(name string) error {
 		return nil
 	case activitylog.EdgeProject:
 		m.ResetProject()
-		return nil
-	case activitylog.EdgeJob:
-		m.ResetJob()
 		return nil
 	}
 	return fmt.Errorf("unknown ActivityLog edge %s", name)
@@ -2008,1465 +1945,6 @@ func (m *GlossaryEntryMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown GlossaryEntry edge %s", name)
-}
-
-// JobMutation represents an operation that mutates the Job nodes in the graph.
-type JobMutation struct {
-	config
-	op                    Op
-	typ                   string
-	id                    *int
-	created_at            *time.Time
-	updated_at            *time.Time
-	status                *string
-	sub_job_count         *int
-	addsub_job_count      *int
-	completed_sub_jobs    *int
-	addcompleted_sub_jobs *int
-	failed_sub_jobs       *int
-	addfailed_sub_jobs    *int
-	source_lang           *string
-	target_lang           *string
-	_config               *map[string]interface{}
-	input_path            *string
-	output_path           *string
-	error_message         *string
-	clearedFields         map[string]struct{}
-	project               *int
-	clearedproject        bool
-	created_by            *int
-	clearedcreated_by     bool
-	sub_jobs              map[int]struct{}
-	removedsub_jobs       map[int]struct{}
-	clearedsub_jobs       bool
-	activity_logs         map[int]struct{}
-	removedactivity_logs  map[int]struct{}
-	clearedactivity_logs  bool
-	usage_records         map[int]struct{}
-	removedusage_records  map[int]struct{}
-	clearedusage_records  bool
-	done                  bool
-	oldValue              func(context.Context) (*Job, error)
-	predicates            []predicate.Job
-}
-
-var _ ent.Mutation = (*JobMutation)(nil)
-
-// jobOption allows management of the mutation configuration using functional options.
-type jobOption func(*JobMutation)
-
-// newJobMutation creates new mutation for the Job entity.
-func newJobMutation(c config, op Op, opts ...jobOption) *JobMutation {
-	m := &JobMutation{
-		config:        c,
-		op:            op,
-		typ:           TypeJob,
-		clearedFields: make(map[string]struct{}),
-	}
-	for _, opt := range opts {
-		opt(m)
-	}
-	return m
-}
-
-// withJobID sets the ID field of the mutation.
-func withJobID(id int) jobOption {
-	return func(m *JobMutation) {
-		var (
-			err   error
-			once  sync.Once
-			value *Job
-		)
-		m.oldValue = func(ctx context.Context) (*Job, error) {
-			once.Do(func() {
-				if m.done {
-					err = errors.New("querying old values post mutation is not allowed")
-				} else {
-					value, err = m.Client().Job.Get(ctx, id)
-				}
-			})
-			return value, err
-		}
-		m.id = &id
-	}
-}
-
-// withJob sets the old Job of the mutation.
-func withJob(node *Job) jobOption {
-	return func(m *JobMutation) {
-		m.oldValue = func(context.Context) (*Job, error) {
-			return node, nil
-		}
-		m.id = &node.ID
-	}
-}
-
-// Client returns a new `ent.Client` from the mutation. If the mutation was
-// executed in a transaction (ent.Tx), a transactional client is returned.
-func (m JobMutation) Client() *Client {
-	client := &Client{config: m.config}
-	client.init()
-	return client
-}
-
-// Tx returns an `ent.Tx` for mutations that were executed in transactions;
-// it returns an error otherwise.
-func (m JobMutation) Tx() (*Tx, error) {
-	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
-	}
-	tx := &Tx{config: m.config}
-	tx.init()
-	return tx, nil
-}
-
-// ID returns the ID value in the mutation. Note that the ID is only available
-// if it was provided to the builder or after it was returned from the database.
-func (m *JobMutation) ID() (id int, exists bool) {
-	if m.id == nil {
-		return
-	}
-	return *m.id, true
-}
-
-// IDs queries the database and returns the entity ids that match the mutation's predicate.
-// That means, if the mutation is applied within a transaction with an isolation level such
-// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
-// or updated by the mutation.
-func (m *JobMutation) IDs(ctx context.Context) ([]int, error) {
-	switch {
-	case m.op.Is(OpUpdateOne | OpDeleteOne):
-		id, exists := m.ID()
-		if exists {
-			return []int{id}, nil
-		}
-		fallthrough
-	case m.op.Is(OpUpdate | OpDelete):
-		return m.Client().Job.Query().Where(m.predicates...).IDs(ctx)
-	default:
-		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
-	}
-}
-
-// SetCreatedAt sets the "created_at" field.
-func (m *JobMutation) SetCreatedAt(t time.Time) {
-	m.created_at = &t
-}
-
-// CreatedAt returns the value of the "created_at" field in the mutation.
-func (m *JobMutation) CreatedAt() (r time.Time, exists bool) {
-	v := m.created_at
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldCreatedAt returns the old "created_at" field's value of the Job entity.
-// If the Job object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *JobMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
-	}
-	return oldValue.CreatedAt, nil
-}
-
-// ResetCreatedAt resets all changes to the "created_at" field.
-func (m *JobMutation) ResetCreatedAt() {
-	m.created_at = nil
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (m *JobMutation) SetUpdatedAt(t time.Time) {
-	m.updated_at = &t
-}
-
-// UpdatedAt returns the value of the "updated_at" field in the mutation.
-func (m *JobMutation) UpdatedAt() (r time.Time, exists bool) {
-	v := m.updated_at
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldUpdatedAt returns the old "updated_at" field's value of the Job entity.
-// If the Job object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *JobMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
-	}
-	return oldValue.UpdatedAt, nil
-}
-
-// ResetUpdatedAt resets all changes to the "updated_at" field.
-func (m *JobMutation) ResetUpdatedAt() {
-	m.updated_at = nil
-}
-
-// SetStatus sets the "status" field.
-func (m *JobMutation) SetStatus(s string) {
-	m.status = &s
-}
-
-// Status returns the value of the "status" field in the mutation.
-func (m *JobMutation) Status() (r string, exists bool) {
-	v := m.status
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldStatus returns the old "status" field's value of the Job entity.
-// If the Job object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *JobMutation) OldStatus(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldStatus requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
-	}
-	return oldValue.Status, nil
-}
-
-// ResetStatus resets all changes to the "status" field.
-func (m *JobMutation) ResetStatus() {
-	m.status = nil
-}
-
-// SetSubJobCount sets the "sub_job_count" field.
-func (m *JobMutation) SetSubJobCount(i int) {
-	m.sub_job_count = &i
-	m.addsub_job_count = nil
-}
-
-// SubJobCount returns the value of the "sub_job_count" field in the mutation.
-func (m *JobMutation) SubJobCount() (r int, exists bool) {
-	v := m.sub_job_count
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldSubJobCount returns the old "sub_job_count" field's value of the Job entity.
-// If the Job object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *JobMutation) OldSubJobCount(ctx context.Context) (v int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldSubJobCount is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldSubJobCount requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldSubJobCount: %w", err)
-	}
-	return oldValue.SubJobCount, nil
-}
-
-// AddSubJobCount adds i to the "sub_job_count" field.
-func (m *JobMutation) AddSubJobCount(i int) {
-	if m.addsub_job_count != nil {
-		*m.addsub_job_count += i
-	} else {
-		m.addsub_job_count = &i
-	}
-}
-
-// AddedSubJobCount returns the value that was added to the "sub_job_count" field in this mutation.
-func (m *JobMutation) AddedSubJobCount() (r int, exists bool) {
-	v := m.addsub_job_count
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// ResetSubJobCount resets all changes to the "sub_job_count" field.
-func (m *JobMutation) ResetSubJobCount() {
-	m.sub_job_count = nil
-	m.addsub_job_count = nil
-}
-
-// SetCompletedSubJobs sets the "completed_sub_jobs" field.
-func (m *JobMutation) SetCompletedSubJobs(i int) {
-	m.completed_sub_jobs = &i
-	m.addcompleted_sub_jobs = nil
-}
-
-// CompletedSubJobs returns the value of the "completed_sub_jobs" field in the mutation.
-func (m *JobMutation) CompletedSubJobs() (r int, exists bool) {
-	v := m.completed_sub_jobs
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldCompletedSubJobs returns the old "completed_sub_jobs" field's value of the Job entity.
-// If the Job object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *JobMutation) OldCompletedSubJobs(ctx context.Context) (v int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldCompletedSubJobs is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldCompletedSubJobs requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldCompletedSubJobs: %w", err)
-	}
-	return oldValue.CompletedSubJobs, nil
-}
-
-// AddCompletedSubJobs adds i to the "completed_sub_jobs" field.
-func (m *JobMutation) AddCompletedSubJobs(i int) {
-	if m.addcompleted_sub_jobs != nil {
-		*m.addcompleted_sub_jobs += i
-	} else {
-		m.addcompleted_sub_jobs = &i
-	}
-}
-
-// AddedCompletedSubJobs returns the value that was added to the "completed_sub_jobs" field in this mutation.
-func (m *JobMutation) AddedCompletedSubJobs() (r int, exists bool) {
-	v := m.addcompleted_sub_jobs
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// ResetCompletedSubJobs resets all changes to the "completed_sub_jobs" field.
-func (m *JobMutation) ResetCompletedSubJobs() {
-	m.completed_sub_jobs = nil
-	m.addcompleted_sub_jobs = nil
-}
-
-// SetFailedSubJobs sets the "failed_sub_jobs" field.
-func (m *JobMutation) SetFailedSubJobs(i int) {
-	m.failed_sub_jobs = &i
-	m.addfailed_sub_jobs = nil
-}
-
-// FailedSubJobs returns the value of the "failed_sub_jobs" field in the mutation.
-func (m *JobMutation) FailedSubJobs() (r int, exists bool) {
-	v := m.failed_sub_jobs
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldFailedSubJobs returns the old "failed_sub_jobs" field's value of the Job entity.
-// If the Job object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *JobMutation) OldFailedSubJobs(ctx context.Context) (v int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldFailedSubJobs is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldFailedSubJobs requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldFailedSubJobs: %w", err)
-	}
-	return oldValue.FailedSubJobs, nil
-}
-
-// AddFailedSubJobs adds i to the "failed_sub_jobs" field.
-func (m *JobMutation) AddFailedSubJobs(i int) {
-	if m.addfailed_sub_jobs != nil {
-		*m.addfailed_sub_jobs += i
-	} else {
-		m.addfailed_sub_jobs = &i
-	}
-}
-
-// AddedFailedSubJobs returns the value that was added to the "failed_sub_jobs" field in this mutation.
-func (m *JobMutation) AddedFailedSubJobs() (r int, exists bool) {
-	v := m.addfailed_sub_jobs
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// ResetFailedSubJobs resets all changes to the "failed_sub_jobs" field.
-func (m *JobMutation) ResetFailedSubJobs() {
-	m.failed_sub_jobs = nil
-	m.addfailed_sub_jobs = nil
-}
-
-// SetSourceLang sets the "source_lang" field.
-func (m *JobMutation) SetSourceLang(s string) {
-	m.source_lang = &s
-}
-
-// SourceLang returns the value of the "source_lang" field in the mutation.
-func (m *JobMutation) SourceLang() (r string, exists bool) {
-	v := m.source_lang
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldSourceLang returns the old "source_lang" field's value of the Job entity.
-// If the Job object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *JobMutation) OldSourceLang(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldSourceLang is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldSourceLang requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldSourceLang: %w", err)
-	}
-	return oldValue.SourceLang, nil
-}
-
-// ResetSourceLang resets all changes to the "source_lang" field.
-func (m *JobMutation) ResetSourceLang() {
-	m.source_lang = nil
-}
-
-// SetTargetLang sets the "target_lang" field.
-func (m *JobMutation) SetTargetLang(s string) {
-	m.target_lang = &s
-}
-
-// TargetLang returns the value of the "target_lang" field in the mutation.
-func (m *JobMutation) TargetLang() (r string, exists bool) {
-	v := m.target_lang
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldTargetLang returns the old "target_lang" field's value of the Job entity.
-// If the Job object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *JobMutation) OldTargetLang(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldTargetLang is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldTargetLang requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldTargetLang: %w", err)
-	}
-	return oldValue.TargetLang, nil
-}
-
-// ResetTargetLang resets all changes to the "target_lang" field.
-func (m *JobMutation) ResetTargetLang() {
-	m.target_lang = nil
-}
-
-// SetConfig sets the "config" field.
-func (m *JobMutation) SetConfig(value map[string]interface{}) {
-	m._config = &value
-}
-
-// Config returns the value of the "config" field in the mutation.
-func (m *JobMutation) Config() (r map[string]interface{}, exists bool) {
-	v := m._config
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldConfig returns the old "config" field's value of the Job entity.
-// If the Job object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *JobMutation) OldConfig(ctx context.Context) (v map[string]interface{}, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldConfig is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldConfig requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldConfig: %w", err)
-	}
-	return oldValue.Config, nil
-}
-
-// ResetConfig resets all changes to the "config" field.
-func (m *JobMutation) ResetConfig() {
-	m._config = nil
-}
-
-// SetInputPath sets the "input_path" field.
-func (m *JobMutation) SetInputPath(s string) {
-	m.input_path = &s
-}
-
-// InputPath returns the value of the "input_path" field in the mutation.
-func (m *JobMutation) InputPath() (r string, exists bool) {
-	v := m.input_path
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldInputPath returns the old "input_path" field's value of the Job entity.
-// If the Job object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *JobMutation) OldInputPath(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldInputPath is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldInputPath requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldInputPath: %w", err)
-	}
-	return oldValue.InputPath, nil
-}
-
-// ClearInputPath clears the value of the "input_path" field.
-func (m *JobMutation) ClearInputPath() {
-	m.input_path = nil
-	m.clearedFields[job.FieldInputPath] = struct{}{}
-}
-
-// InputPathCleared returns if the "input_path" field was cleared in this mutation.
-func (m *JobMutation) InputPathCleared() bool {
-	_, ok := m.clearedFields[job.FieldInputPath]
-	return ok
-}
-
-// ResetInputPath resets all changes to the "input_path" field.
-func (m *JobMutation) ResetInputPath() {
-	m.input_path = nil
-	delete(m.clearedFields, job.FieldInputPath)
-}
-
-// SetOutputPath sets the "output_path" field.
-func (m *JobMutation) SetOutputPath(s string) {
-	m.output_path = &s
-}
-
-// OutputPath returns the value of the "output_path" field in the mutation.
-func (m *JobMutation) OutputPath() (r string, exists bool) {
-	v := m.output_path
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldOutputPath returns the old "output_path" field's value of the Job entity.
-// If the Job object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *JobMutation) OldOutputPath(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldOutputPath is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldOutputPath requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldOutputPath: %w", err)
-	}
-	return oldValue.OutputPath, nil
-}
-
-// ClearOutputPath clears the value of the "output_path" field.
-func (m *JobMutation) ClearOutputPath() {
-	m.output_path = nil
-	m.clearedFields[job.FieldOutputPath] = struct{}{}
-}
-
-// OutputPathCleared returns if the "output_path" field was cleared in this mutation.
-func (m *JobMutation) OutputPathCleared() bool {
-	_, ok := m.clearedFields[job.FieldOutputPath]
-	return ok
-}
-
-// ResetOutputPath resets all changes to the "output_path" field.
-func (m *JobMutation) ResetOutputPath() {
-	m.output_path = nil
-	delete(m.clearedFields, job.FieldOutputPath)
-}
-
-// SetErrorMessage sets the "error_message" field.
-func (m *JobMutation) SetErrorMessage(s string) {
-	m.error_message = &s
-}
-
-// ErrorMessage returns the value of the "error_message" field in the mutation.
-func (m *JobMutation) ErrorMessage() (r string, exists bool) {
-	v := m.error_message
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldErrorMessage returns the old "error_message" field's value of the Job entity.
-// If the Job object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *JobMutation) OldErrorMessage(ctx context.Context) (v *string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldErrorMessage is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldErrorMessage requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldErrorMessage: %w", err)
-	}
-	return oldValue.ErrorMessage, nil
-}
-
-// ClearErrorMessage clears the value of the "error_message" field.
-func (m *JobMutation) ClearErrorMessage() {
-	m.error_message = nil
-	m.clearedFields[job.FieldErrorMessage] = struct{}{}
-}
-
-// ErrorMessageCleared returns if the "error_message" field was cleared in this mutation.
-func (m *JobMutation) ErrorMessageCleared() bool {
-	_, ok := m.clearedFields[job.FieldErrorMessage]
-	return ok
-}
-
-// ResetErrorMessage resets all changes to the "error_message" field.
-func (m *JobMutation) ResetErrorMessage() {
-	m.error_message = nil
-	delete(m.clearedFields, job.FieldErrorMessage)
-}
-
-// SetProjectID sets the "project" edge to the Project entity by id.
-func (m *JobMutation) SetProjectID(id int) {
-	m.project = &id
-}
-
-// ClearProject clears the "project" edge to the Project entity.
-func (m *JobMutation) ClearProject() {
-	m.clearedproject = true
-}
-
-// ProjectCleared reports if the "project" edge to the Project entity was cleared.
-func (m *JobMutation) ProjectCleared() bool {
-	return m.clearedproject
-}
-
-// ProjectID returns the "project" edge ID in the mutation.
-func (m *JobMutation) ProjectID() (id int, exists bool) {
-	if m.project != nil {
-		return *m.project, true
-	}
-	return
-}
-
-// ProjectIDs returns the "project" edge IDs in the mutation.
-// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
-// ProjectID instead. It exists only for internal usage by the builders.
-func (m *JobMutation) ProjectIDs() (ids []int) {
-	if id := m.project; id != nil {
-		ids = append(ids, *id)
-	}
-	return
-}
-
-// ResetProject resets all changes to the "project" edge.
-func (m *JobMutation) ResetProject() {
-	m.project = nil
-	m.clearedproject = false
-}
-
-// SetCreatedByID sets the "created_by" edge to the User entity by id.
-func (m *JobMutation) SetCreatedByID(id int) {
-	m.created_by = &id
-}
-
-// ClearCreatedBy clears the "created_by" edge to the User entity.
-func (m *JobMutation) ClearCreatedBy() {
-	m.clearedcreated_by = true
-}
-
-// CreatedByCleared reports if the "created_by" edge to the User entity was cleared.
-func (m *JobMutation) CreatedByCleared() bool {
-	return m.clearedcreated_by
-}
-
-// CreatedByID returns the "created_by" edge ID in the mutation.
-func (m *JobMutation) CreatedByID() (id int, exists bool) {
-	if m.created_by != nil {
-		return *m.created_by, true
-	}
-	return
-}
-
-// CreatedByIDs returns the "created_by" edge IDs in the mutation.
-// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
-// CreatedByID instead. It exists only for internal usage by the builders.
-func (m *JobMutation) CreatedByIDs() (ids []int) {
-	if id := m.created_by; id != nil {
-		ids = append(ids, *id)
-	}
-	return
-}
-
-// ResetCreatedBy resets all changes to the "created_by" edge.
-func (m *JobMutation) ResetCreatedBy() {
-	m.created_by = nil
-	m.clearedcreated_by = false
-}
-
-// AddSubJobIDs adds the "sub_jobs" edge to the SubJob entity by ids.
-func (m *JobMutation) AddSubJobIDs(ids ...int) {
-	if m.sub_jobs == nil {
-		m.sub_jobs = make(map[int]struct{})
-	}
-	for i := range ids {
-		m.sub_jobs[ids[i]] = struct{}{}
-	}
-}
-
-// ClearSubJobs clears the "sub_jobs" edge to the SubJob entity.
-func (m *JobMutation) ClearSubJobs() {
-	m.clearedsub_jobs = true
-}
-
-// SubJobsCleared reports if the "sub_jobs" edge to the SubJob entity was cleared.
-func (m *JobMutation) SubJobsCleared() bool {
-	return m.clearedsub_jobs
-}
-
-// RemoveSubJobIDs removes the "sub_jobs" edge to the SubJob entity by IDs.
-func (m *JobMutation) RemoveSubJobIDs(ids ...int) {
-	if m.removedsub_jobs == nil {
-		m.removedsub_jobs = make(map[int]struct{})
-	}
-	for i := range ids {
-		delete(m.sub_jobs, ids[i])
-		m.removedsub_jobs[ids[i]] = struct{}{}
-	}
-}
-
-// RemovedSubJobs returns the removed IDs of the "sub_jobs" edge to the SubJob entity.
-func (m *JobMutation) RemovedSubJobsIDs() (ids []int) {
-	for id := range m.removedsub_jobs {
-		ids = append(ids, id)
-	}
-	return
-}
-
-// SubJobsIDs returns the "sub_jobs" edge IDs in the mutation.
-func (m *JobMutation) SubJobsIDs() (ids []int) {
-	for id := range m.sub_jobs {
-		ids = append(ids, id)
-	}
-	return
-}
-
-// ResetSubJobs resets all changes to the "sub_jobs" edge.
-func (m *JobMutation) ResetSubJobs() {
-	m.sub_jobs = nil
-	m.clearedsub_jobs = false
-	m.removedsub_jobs = nil
-}
-
-// AddActivityLogIDs adds the "activity_logs" edge to the ActivityLog entity by ids.
-func (m *JobMutation) AddActivityLogIDs(ids ...int) {
-	if m.activity_logs == nil {
-		m.activity_logs = make(map[int]struct{})
-	}
-	for i := range ids {
-		m.activity_logs[ids[i]] = struct{}{}
-	}
-}
-
-// ClearActivityLogs clears the "activity_logs" edge to the ActivityLog entity.
-func (m *JobMutation) ClearActivityLogs() {
-	m.clearedactivity_logs = true
-}
-
-// ActivityLogsCleared reports if the "activity_logs" edge to the ActivityLog entity was cleared.
-func (m *JobMutation) ActivityLogsCleared() bool {
-	return m.clearedactivity_logs
-}
-
-// RemoveActivityLogIDs removes the "activity_logs" edge to the ActivityLog entity by IDs.
-func (m *JobMutation) RemoveActivityLogIDs(ids ...int) {
-	if m.removedactivity_logs == nil {
-		m.removedactivity_logs = make(map[int]struct{})
-	}
-	for i := range ids {
-		delete(m.activity_logs, ids[i])
-		m.removedactivity_logs[ids[i]] = struct{}{}
-	}
-}
-
-// RemovedActivityLogs returns the removed IDs of the "activity_logs" edge to the ActivityLog entity.
-func (m *JobMutation) RemovedActivityLogsIDs() (ids []int) {
-	for id := range m.removedactivity_logs {
-		ids = append(ids, id)
-	}
-	return
-}
-
-// ActivityLogsIDs returns the "activity_logs" edge IDs in the mutation.
-func (m *JobMutation) ActivityLogsIDs() (ids []int) {
-	for id := range m.activity_logs {
-		ids = append(ids, id)
-	}
-	return
-}
-
-// ResetActivityLogs resets all changes to the "activity_logs" edge.
-func (m *JobMutation) ResetActivityLogs() {
-	m.activity_logs = nil
-	m.clearedactivity_logs = false
-	m.removedactivity_logs = nil
-}
-
-// AddUsageRecordIDs adds the "usage_records" edge to the UsageRecord entity by ids.
-func (m *JobMutation) AddUsageRecordIDs(ids ...int) {
-	if m.usage_records == nil {
-		m.usage_records = make(map[int]struct{})
-	}
-	for i := range ids {
-		m.usage_records[ids[i]] = struct{}{}
-	}
-}
-
-// ClearUsageRecords clears the "usage_records" edge to the UsageRecord entity.
-func (m *JobMutation) ClearUsageRecords() {
-	m.clearedusage_records = true
-}
-
-// UsageRecordsCleared reports if the "usage_records" edge to the UsageRecord entity was cleared.
-func (m *JobMutation) UsageRecordsCleared() bool {
-	return m.clearedusage_records
-}
-
-// RemoveUsageRecordIDs removes the "usage_records" edge to the UsageRecord entity by IDs.
-func (m *JobMutation) RemoveUsageRecordIDs(ids ...int) {
-	if m.removedusage_records == nil {
-		m.removedusage_records = make(map[int]struct{})
-	}
-	for i := range ids {
-		delete(m.usage_records, ids[i])
-		m.removedusage_records[ids[i]] = struct{}{}
-	}
-}
-
-// RemovedUsageRecords returns the removed IDs of the "usage_records" edge to the UsageRecord entity.
-func (m *JobMutation) RemovedUsageRecordsIDs() (ids []int) {
-	for id := range m.removedusage_records {
-		ids = append(ids, id)
-	}
-	return
-}
-
-// UsageRecordsIDs returns the "usage_records" edge IDs in the mutation.
-func (m *JobMutation) UsageRecordsIDs() (ids []int) {
-	for id := range m.usage_records {
-		ids = append(ids, id)
-	}
-	return
-}
-
-// ResetUsageRecords resets all changes to the "usage_records" edge.
-func (m *JobMutation) ResetUsageRecords() {
-	m.usage_records = nil
-	m.clearedusage_records = false
-	m.removedusage_records = nil
-}
-
-// Where appends a list predicates to the JobMutation builder.
-func (m *JobMutation) Where(ps ...predicate.Job) {
-	m.predicates = append(m.predicates, ps...)
-}
-
-// WhereP appends storage-level predicates to the JobMutation builder. Using this method,
-// users can use type-assertion to append predicates that do not depend on any generated package.
-func (m *JobMutation) WhereP(ps ...func(*sql.Selector)) {
-	p := make([]predicate.Job, len(ps))
-	for i := range ps {
-		p[i] = ps[i]
-	}
-	m.Where(p...)
-}
-
-// Op returns the operation name.
-func (m *JobMutation) Op() Op {
-	return m.op
-}
-
-// SetOp allows setting the mutation operation.
-func (m *JobMutation) SetOp(op Op) {
-	m.op = op
-}
-
-// Type returns the node type of this mutation (Job).
-func (m *JobMutation) Type() string {
-	return m.typ
-}
-
-// Fields returns all fields that were changed during this mutation. Note that in
-// order to get all numeric fields that were incremented/decremented, call
-// AddedFields().
-func (m *JobMutation) Fields() []string {
-	fields := make([]string, 0, 12)
-	if m.created_at != nil {
-		fields = append(fields, job.FieldCreatedAt)
-	}
-	if m.updated_at != nil {
-		fields = append(fields, job.FieldUpdatedAt)
-	}
-	if m.status != nil {
-		fields = append(fields, job.FieldStatus)
-	}
-	if m.sub_job_count != nil {
-		fields = append(fields, job.FieldSubJobCount)
-	}
-	if m.completed_sub_jobs != nil {
-		fields = append(fields, job.FieldCompletedSubJobs)
-	}
-	if m.failed_sub_jobs != nil {
-		fields = append(fields, job.FieldFailedSubJobs)
-	}
-	if m.source_lang != nil {
-		fields = append(fields, job.FieldSourceLang)
-	}
-	if m.target_lang != nil {
-		fields = append(fields, job.FieldTargetLang)
-	}
-	if m._config != nil {
-		fields = append(fields, job.FieldConfig)
-	}
-	if m.input_path != nil {
-		fields = append(fields, job.FieldInputPath)
-	}
-	if m.output_path != nil {
-		fields = append(fields, job.FieldOutputPath)
-	}
-	if m.error_message != nil {
-		fields = append(fields, job.FieldErrorMessage)
-	}
-	return fields
-}
-
-// Field returns the value of a field with the given name. The second boolean
-// return value indicates that this field was not set, or was not defined in the
-// schema.
-func (m *JobMutation) Field(name string) (ent.Value, bool) {
-	switch name {
-	case job.FieldCreatedAt:
-		return m.CreatedAt()
-	case job.FieldUpdatedAt:
-		return m.UpdatedAt()
-	case job.FieldStatus:
-		return m.Status()
-	case job.FieldSubJobCount:
-		return m.SubJobCount()
-	case job.FieldCompletedSubJobs:
-		return m.CompletedSubJobs()
-	case job.FieldFailedSubJobs:
-		return m.FailedSubJobs()
-	case job.FieldSourceLang:
-		return m.SourceLang()
-	case job.FieldTargetLang:
-		return m.TargetLang()
-	case job.FieldConfig:
-		return m.Config()
-	case job.FieldInputPath:
-		return m.InputPath()
-	case job.FieldOutputPath:
-		return m.OutputPath()
-	case job.FieldErrorMessage:
-		return m.ErrorMessage()
-	}
-	return nil, false
-}
-
-// OldField returns the old value of the field from the database. An error is
-// returned if the mutation operation is not UpdateOne, or the query to the
-// database failed.
-func (m *JobMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
-	switch name {
-	case job.FieldCreatedAt:
-		return m.OldCreatedAt(ctx)
-	case job.FieldUpdatedAt:
-		return m.OldUpdatedAt(ctx)
-	case job.FieldStatus:
-		return m.OldStatus(ctx)
-	case job.FieldSubJobCount:
-		return m.OldSubJobCount(ctx)
-	case job.FieldCompletedSubJobs:
-		return m.OldCompletedSubJobs(ctx)
-	case job.FieldFailedSubJobs:
-		return m.OldFailedSubJobs(ctx)
-	case job.FieldSourceLang:
-		return m.OldSourceLang(ctx)
-	case job.FieldTargetLang:
-		return m.OldTargetLang(ctx)
-	case job.FieldConfig:
-		return m.OldConfig(ctx)
-	case job.FieldInputPath:
-		return m.OldInputPath(ctx)
-	case job.FieldOutputPath:
-		return m.OldOutputPath(ctx)
-	case job.FieldErrorMessage:
-		return m.OldErrorMessage(ctx)
-	}
-	return nil, fmt.Errorf("unknown Job field %s", name)
-}
-
-// SetField sets the value of a field with the given name. It returns an error if
-// the field is not defined in the schema, or if the type mismatched the field
-// type.
-func (m *JobMutation) SetField(name string, value ent.Value) error {
-	switch name {
-	case job.FieldCreatedAt:
-		v, ok := value.(time.Time)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetCreatedAt(v)
-		return nil
-	case job.FieldUpdatedAt:
-		v, ok := value.(time.Time)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetUpdatedAt(v)
-		return nil
-	case job.FieldStatus:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetStatus(v)
-		return nil
-	case job.FieldSubJobCount:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetSubJobCount(v)
-		return nil
-	case job.FieldCompletedSubJobs:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetCompletedSubJobs(v)
-		return nil
-	case job.FieldFailedSubJobs:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetFailedSubJobs(v)
-		return nil
-	case job.FieldSourceLang:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetSourceLang(v)
-		return nil
-	case job.FieldTargetLang:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetTargetLang(v)
-		return nil
-	case job.FieldConfig:
-		v, ok := value.(map[string]interface{})
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetConfig(v)
-		return nil
-	case job.FieldInputPath:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetInputPath(v)
-		return nil
-	case job.FieldOutputPath:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetOutputPath(v)
-		return nil
-	case job.FieldErrorMessage:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetErrorMessage(v)
-		return nil
-	}
-	return fmt.Errorf("unknown Job field %s", name)
-}
-
-// AddedFields returns all numeric fields that were incremented/decremented during
-// this mutation.
-func (m *JobMutation) AddedFields() []string {
-	var fields []string
-	if m.addsub_job_count != nil {
-		fields = append(fields, job.FieldSubJobCount)
-	}
-	if m.addcompleted_sub_jobs != nil {
-		fields = append(fields, job.FieldCompletedSubJobs)
-	}
-	if m.addfailed_sub_jobs != nil {
-		fields = append(fields, job.FieldFailedSubJobs)
-	}
-	return fields
-}
-
-// AddedField returns the numeric value that was incremented/decremented on a field
-// with the given name. The second boolean return value indicates that this field
-// was not set, or was not defined in the schema.
-func (m *JobMutation) AddedField(name string) (ent.Value, bool) {
-	switch name {
-	case job.FieldSubJobCount:
-		return m.AddedSubJobCount()
-	case job.FieldCompletedSubJobs:
-		return m.AddedCompletedSubJobs()
-	case job.FieldFailedSubJobs:
-		return m.AddedFailedSubJobs()
-	}
-	return nil, false
-}
-
-// AddField adds the value to the field with the given name. It returns an error if
-// the field is not defined in the schema, or if the type mismatched the field
-// type.
-func (m *JobMutation) AddField(name string, value ent.Value) error {
-	switch name {
-	case job.FieldSubJobCount:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddSubJobCount(v)
-		return nil
-	case job.FieldCompletedSubJobs:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddCompletedSubJobs(v)
-		return nil
-	case job.FieldFailedSubJobs:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddFailedSubJobs(v)
-		return nil
-	}
-	return fmt.Errorf("unknown Job numeric field %s", name)
-}
-
-// ClearedFields returns all nullable fields that were cleared during this
-// mutation.
-func (m *JobMutation) ClearedFields() []string {
-	var fields []string
-	if m.FieldCleared(job.FieldInputPath) {
-		fields = append(fields, job.FieldInputPath)
-	}
-	if m.FieldCleared(job.FieldOutputPath) {
-		fields = append(fields, job.FieldOutputPath)
-	}
-	if m.FieldCleared(job.FieldErrorMessage) {
-		fields = append(fields, job.FieldErrorMessage)
-	}
-	return fields
-}
-
-// FieldCleared returns a boolean indicating if a field with the given name was
-// cleared in this mutation.
-func (m *JobMutation) FieldCleared(name string) bool {
-	_, ok := m.clearedFields[name]
-	return ok
-}
-
-// ClearField clears the value of the field with the given name. It returns an
-// error if the field is not defined in the schema.
-func (m *JobMutation) ClearField(name string) error {
-	switch name {
-	case job.FieldInputPath:
-		m.ClearInputPath()
-		return nil
-	case job.FieldOutputPath:
-		m.ClearOutputPath()
-		return nil
-	case job.FieldErrorMessage:
-		m.ClearErrorMessage()
-		return nil
-	}
-	return fmt.Errorf("unknown Job nullable field %s", name)
-}
-
-// ResetField resets all changes in the mutation for the field with the given name.
-// It returns an error if the field is not defined in the schema.
-func (m *JobMutation) ResetField(name string) error {
-	switch name {
-	case job.FieldCreatedAt:
-		m.ResetCreatedAt()
-		return nil
-	case job.FieldUpdatedAt:
-		m.ResetUpdatedAt()
-		return nil
-	case job.FieldStatus:
-		m.ResetStatus()
-		return nil
-	case job.FieldSubJobCount:
-		m.ResetSubJobCount()
-		return nil
-	case job.FieldCompletedSubJobs:
-		m.ResetCompletedSubJobs()
-		return nil
-	case job.FieldFailedSubJobs:
-		m.ResetFailedSubJobs()
-		return nil
-	case job.FieldSourceLang:
-		m.ResetSourceLang()
-		return nil
-	case job.FieldTargetLang:
-		m.ResetTargetLang()
-		return nil
-	case job.FieldConfig:
-		m.ResetConfig()
-		return nil
-	case job.FieldInputPath:
-		m.ResetInputPath()
-		return nil
-	case job.FieldOutputPath:
-		m.ResetOutputPath()
-		return nil
-	case job.FieldErrorMessage:
-		m.ResetErrorMessage()
-		return nil
-	}
-	return fmt.Errorf("unknown Job field %s", name)
-}
-
-// AddedEdges returns all edge names that were set/added in this mutation.
-func (m *JobMutation) AddedEdges() []string {
-	edges := make([]string, 0, 5)
-	if m.project != nil {
-		edges = append(edges, job.EdgeProject)
-	}
-	if m.created_by != nil {
-		edges = append(edges, job.EdgeCreatedBy)
-	}
-	if m.sub_jobs != nil {
-		edges = append(edges, job.EdgeSubJobs)
-	}
-	if m.activity_logs != nil {
-		edges = append(edges, job.EdgeActivityLogs)
-	}
-	if m.usage_records != nil {
-		edges = append(edges, job.EdgeUsageRecords)
-	}
-	return edges
-}
-
-// AddedIDs returns all IDs (to other nodes) that were added for the given edge
-// name in this mutation.
-func (m *JobMutation) AddedIDs(name string) []ent.Value {
-	switch name {
-	case job.EdgeProject:
-		if id := m.project; id != nil {
-			return []ent.Value{*id}
-		}
-	case job.EdgeCreatedBy:
-		if id := m.created_by; id != nil {
-			return []ent.Value{*id}
-		}
-	case job.EdgeSubJobs:
-		ids := make([]ent.Value, 0, len(m.sub_jobs))
-		for id := range m.sub_jobs {
-			ids = append(ids, id)
-		}
-		return ids
-	case job.EdgeActivityLogs:
-		ids := make([]ent.Value, 0, len(m.activity_logs))
-		for id := range m.activity_logs {
-			ids = append(ids, id)
-		}
-		return ids
-	case job.EdgeUsageRecords:
-		ids := make([]ent.Value, 0, len(m.usage_records))
-		for id := range m.usage_records {
-			ids = append(ids, id)
-		}
-		return ids
-	}
-	return nil
-}
-
-// RemovedEdges returns all edge names that were removed in this mutation.
-func (m *JobMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 5)
-	if m.removedsub_jobs != nil {
-		edges = append(edges, job.EdgeSubJobs)
-	}
-	if m.removedactivity_logs != nil {
-		edges = append(edges, job.EdgeActivityLogs)
-	}
-	if m.removedusage_records != nil {
-		edges = append(edges, job.EdgeUsageRecords)
-	}
-	return edges
-}
-
-// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
-// the given name in this mutation.
-func (m *JobMutation) RemovedIDs(name string) []ent.Value {
-	switch name {
-	case job.EdgeSubJobs:
-		ids := make([]ent.Value, 0, len(m.removedsub_jobs))
-		for id := range m.removedsub_jobs {
-			ids = append(ids, id)
-		}
-		return ids
-	case job.EdgeActivityLogs:
-		ids := make([]ent.Value, 0, len(m.removedactivity_logs))
-		for id := range m.removedactivity_logs {
-			ids = append(ids, id)
-		}
-		return ids
-	case job.EdgeUsageRecords:
-		ids := make([]ent.Value, 0, len(m.removedusage_records))
-		for id := range m.removedusage_records {
-			ids = append(ids, id)
-		}
-		return ids
-	}
-	return nil
-}
-
-// ClearedEdges returns all edge names that were cleared in this mutation.
-func (m *JobMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 5)
-	if m.clearedproject {
-		edges = append(edges, job.EdgeProject)
-	}
-	if m.clearedcreated_by {
-		edges = append(edges, job.EdgeCreatedBy)
-	}
-	if m.clearedsub_jobs {
-		edges = append(edges, job.EdgeSubJobs)
-	}
-	if m.clearedactivity_logs {
-		edges = append(edges, job.EdgeActivityLogs)
-	}
-	if m.clearedusage_records {
-		edges = append(edges, job.EdgeUsageRecords)
-	}
-	return edges
-}
-
-// EdgeCleared returns a boolean which indicates if the edge with the given name
-// was cleared in this mutation.
-func (m *JobMutation) EdgeCleared(name string) bool {
-	switch name {
-	case job.EdgeProject:
-		return m.clearedproject
-	case job.EdgeCreatedBy:
-		return m.clearedcreated_by
-	case job.EdgeSubJobs:
-		return m.clearedsub_jobs
-	case job.EdgeActivityLogs:
-		return m.clearedactivity_logs
-	case job.EdgeUsageRecords:
-		return m.clearedusage_records
-	}
-	return false
-}
-
-// ClearEdge clears the value of the edge with the given name. It returns an error
-// if that edge is not defined in the schema.
-func (m *JobMutation) ClearEdge(name string) error {
-	switch name {
-	case job.EdgeProject:
-		m.ClearProject()
-		return nil
-	case job.EdgeCreatedBy:
-		m.ClearCreatedBy()
-		return nil
-	}
-	return fmt.Errorf("unknown Job unique edge %s", name)
-}
-
-// ResetEdge resets all changes to the edge with the given name in this mutation.
-// It returns an error if the edge is not defined in the schema.
-func (m *JobMutation) ResetEdge(name string) error {
-	switch name {
-	case job.EdgeProject:
-		m.ResetProject()
-		return nil
-	case job.EdgeCreatedBy:
-		m.ResetCreatedBy()
-		return nil
-	case job.EdgeSubJobs:
-		m.ResetSubJobs()
-		return nil
-	case job.EdgeActivityLogs:
-		m.ResetActivityLogs()
-		return nil
-	case job.EdgeUsageRecords:
-		m.ResetUsageRecords()
-		return nil
-	}
-	return fmt.Errorf("unknown Job edge %s", name)
 }
 
 // JobResourceMutation represents an operation that mutates the JobResource nodes in the graph.
@@ -6943,9 +5421,6 @@ type ProjectMutation struct {
 	tm_entries                     map[int]struct{}
 	removedtm_entries              map[int]struct{}
 	clearedtm_entries              bool
-	jobs                           map[int]struct{}
-	removedjobs                    map[int]struct{}
-	clearedjobs                    bool
 	translation_jobs               map[int]struct{}
 	removedtranslation_jobs        map[int]struct{}
 	clearedtranslation_jobs        bool
@@ -7717,60 +6192,6 @@ func (m *ProjectMutation) ResetTmEntries() {
 	m.removedtm_entries = nil
 }
 
-// AddJobIDs adds the "jobs" edge to the Job entity by ids.
-func (m *ProjectMutation) AddJobIDs(ids ...int) {
-	if m.jobs == nil {
-		m.jobs = make(map[int]struct{})
-	}
-	for i := range ids {
-		m.jobs[ids[i]] = struct{}{}
-	}
-}
-
-// ClearJobs clears the "jobs" edge to the Job entity.
-func (m *ProjectMutation) ClearJobs() {
-	m.clearedjobs = true
-}
-
-// JobsCleared reports if the "jobs" edge to the Job entity was cleared.
-func (m *ProjectMutation) JobsCleared() bool {
-	return m.clearedjobs
-}
-
-// RemoveJobIDs removes the "jobs" edge to the Job entity by IDs.
-func (m *ProjectMutation) RemoveJobIDs(ids ...int) {
-	if m.removedjobs == nil {
-		m.removedjobs = make(map[int]struct{})
-	}
-	for i := range ids {
-		delete(m.jobs, ids[i])
-		m.removedjobs[ids[i]] = struct{}{}
-	}
-}
-
-// RemovedJobs returns the removed IDs of the "jobs" edge to the Job entity.
-func (m *ProjectMutation) RemovedJobsIDs() (ids []int) {
-	for id := range m.removedjobs {
-		ids = append(ids, id)
-	}
-	return
-}
-
-// JobsIDs returns the "jobs" edge IDs in the mutation.
-func (m *ProjectMutation) JobsIDs() (ids []int) {
-	for id := range m.jobs {
-		ids = append(ids, id)
-	}
-	return
-}
-
-// ResetJobs resets all changes to the "jobs" edge.
-func (m *ProjectMutation) ResetJobs() {
-	m.jobs = nil
-	m.clearedjobs = false
-	m.removedjobs = nil
-}
-
 // AddTranslationJobIDs adds the "translation_jobs" edge to the TranslationJob entity by ids.
 func (m *ProjectMutation) AddTranslationJobIDs(ids ...int) {
 	if m.translation_jobs == nil {
@@ -8291,7 +6712,7 @@ func (m *ProjectMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *ProjectMutation) AddedEdges() []string {
-	edges := make([]string, 0, 11)
+	edges := make([]string, 0, 10)
 	if m.owner_user != nil {
 		edges = append(edges, project.EdgeOwnerUser)
 	}
@@ -8309,9 +6730,6 @@ func (m *ProjectMutation) AddedEdges() []string {
 	}
 	if m.tm_entries != nil {
 		edges = append(edges, project.EdgeTmEntries)
-	}
-	if m.jobs != nil {
-		edges = append(edges, project.EdgeJobs)
 	}
 	if m.translation_jobs != nil {
 		edges = append(edges, project.EdgeTranslationJobs)
@@ -8364,12 +6782,6 @@ func (m *ProjectMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
-	case project.EdgeJobs:
-		ids := make([]ent.Value, 0, len(m.jobs))
-		for id := range m.jobs {
-			ids = append(ids, id)
-		}
-		return ids
 	case project.EdgeTranslationJobs:
 		ids := make([]ent.Value, 0, len(m.translation_jobs))
 		for id := range m.translation_jobs {
@@ -8400,7 +6812,7 @@ func (m *ProjectMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *ProjectMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 11)
+	edges := make([]string, 0, 10)
 	if m.removedproject_backends != nil {
 		edges = append(edges, project.EdgeProjectBackends)
 	}
@@ -8412,9 +6824,6 @@ func (m *ProjectMutation) RemovedEdges() []string {
 	}
 	if m.removedtm_entries != nil {
 		edges = append(edges, project.EdgeTmEntries)
-	}
-	if m.removedjobs != nil {
-		edges = append(edges, project.EdgeJobs)
 	}
 	if m.removedtranslation_jobs != nil {
 		edges = append(edges, project.EdgeTranslationJobs)
@@ -8459,12 +6868,6 @@ func (m *ProjectMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
-	case project.EdgeJobs:
-		ids := make([]ent.Value, 0, len(m.removedjobs))
-		for id := range m.removedjobs {
-			ids = append(ids, id)
-		}
-		return ids
 	case project.EdgeTranslationJobs:
 		ids := make([]ent.Value, 0, len(m.removedtranslation_jobs))
 		for id := range m.removedtranslation_jobs {
@@ -8495,7 +6898,7 @@ func (m *ProjectMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *ProjectMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 11)
+	edges := make([]string, 0, 10)
 	if m.clearedowner_user {
 		edges = append(edges, project.EdgeOwnerUser)
 	}
@@ -8513,9 +6916,6 @@ func (m *ProjectMutation) ClearedEdges() []string {
 	}
 	if m.clearedtm_entries {
 		edges = append(edges, project.EdgeTmEntries)
-	}
-	if m.clearedjobs {
-		edges = append(edges, project.EdgeJobs)
 	}
 	if m.clearedtranslation_jobs {
 		edges = append(edges, project.EdgeTranslationJobs)
@@ -8548,8 +6948,6 @@ func (m *ProjectMutation) EdgeCleared(name string) bool {
 		return m.clearedglossary_entries
 	case project.EdgeTmEntries:
 		return m.clearedtm_entries
-	case project.EdgeJobs:
-		return m.clearedjobs
 	case project.EdgeTranslationJobs:
 		return m.clearedtranslation_jobs
 	case project.EdgeActivityLogs:
@@ -8597,9 +6995,6 @@ func (m *ProjectMutation) ResetEdge(name string) error {
 		return nil
 	case project.EdgeTmEntries:
 		m.ResetTmEntries()
-		return nil
-	case project.EdgeJobs:
-		m.ResetJobs()
 		return nil
 	case project.EdgeTranslationJobs:
 		m.ResetTranslationJobs()
@@ -10998,8 +9393,6 @@ type SegmentMutation struct {
 	status             *string
 	review_comment     *string
 	clearedFields      map[string]struct{}
-	sub_job            *int
-	clearedsub_job     bool
 	resource           *int
 	clearedresource    bool
 	reviewed_by        *int
@@ -11454,45 +9847,6 @@ func (m *SegmentMutation) ResetResourceID() {
 	delete(m.clearedFields, segment.FieldResourceID)
 }
 
-// SetSubJobID sets the "sub_job" edge to the SubJob entity by id.
-func (m *SegmentMutation) SetSubJobID(id int) {
-	m.sub_job = &id
-}
-
-// ClearSubJob clears the "sub_job" edge to the SubJob entity.
-func (m *SegmentMutation) ClearSubJob() {
-	m.clearedsub_job = true
-}
-
-// SubJobCleared reports if the "sub_job" edge to the SubJob entity was cleared.
-func (m *SegmentMutation) SubJobCleared() bool {
-	return m.clearedsub_job
-}
-
-// SubJobID returns the "sub_job" edge ID in the mutation.
-func (m *SegmentMutation) SubJobID() (id int, exists bool) {
-	if m.sub_job != nil {
-		return *m.sub_job, true
-	}
-	return
-}
-
-// SubJobIDs returns the "sub_job" edge IDs in the mutation.
-// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
-// SubJobID instead. It exists only for internal usage by the builders.
-func (m *SegmentMutation) SubJobIDs() (ids []int) {
-	if id := m.sub_job; id != nil {
-		ids = append(ids, *id)
-	}
-	return
-}
-
-// ResetSubJob resets all changes to the "sub_job" edge.
-func (m *SegmentMutation) ResetSubJob() {
-	m.sub_job = nil
-	m.clearedsub_job = false
-}
-
 // ClearResource clears the "resource" edge to the Resource entity.
 func (m *SegmentMutation) ClearResource() {
 	m.clearedresource = true
@@ -11847,10 +10201,7 @@ func (m *SegmentMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *SegmentMutation) AddedEdges() []string {
-	edges := make([]string, 0, 3)
-	if m.sub_job != nil {
-		edges = append(edges, segment.EdgeSubJob)
-	}
+	edges := make([]string, 0, 2)
 	if m.resource != nil {
 		edges = append(edges, segment.EdgeResource)
 	}
@@ -11864,10 +10215,6 @@ func (m *SegmentMutation) AddedEdges() []string {
 // name in this mutation.
 func (m *SegmentMutation) AddedIDs(name string) []ent.Value {
 	switch name {
-	case segment.EdgeSubJob:
-		if id := m.sub_job; id != nil {
-			return []ent.Value{*id}
-		}
 	case segment.EdgeResource:
 		if id := m.resource; id != nil {
 			return []ent.Value{*id}
@@ -11882,7 +10229,7 @@ func (m *SegmentMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *SegmentMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 2)
 	return edges
 }
 
@@ -11894,10 +10241,7 @@ func (m *SegmentMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *SegmentMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 3)
-	if m.clearedsub_job {
-		edges = append(edges, segment.EdgeSubJob)
-	}
+	edges := make([]string, 0, 2)
 	if m.clearedresource {
 		edges = append(edges, segment.EdgeResource)
 	}
@@ -11911,8 +10255,6 @@ func (m *SegmentMutation) ClearedEdges() []string {
 // was cleared in this mutation.
 func (m *SegmentMutation) EdgeCleared(name string) bool {
 	switch name {
-	case segment.EdgeSubJob:
-		return m.clearedsub_job
 	case segment.EdgeResource:
 		return m.clearedresource
 	case segment.EdgeReviewedBy:
@@ -11925,9 +10267,6 @@ func (m *SegmentMutation) EdgeCleared(name string) bool {
 // if that edge is not defined in the schema.
 func (m *SegmentMutation) ClearEdge(name string) error {
 	switch name {
-	case segment.EdgeSubJob:
-		m.ClearSubJob()
-		return nil
 	case segment.EdgeResource:
 		m.ClearResource()
 		return nil
@@ -11942,9 +10281,6 @@ func (m *SegmentMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *SegmentMutation) ResetEdge(name string) error {
 	switch name {
-	case segment.EdgeSubJob:
-		m.ResetSubJob()
-		return nil
 	case segment.EdgeResource:
 		m.ResetResource()
 		return nil
@@ -12578,1050 +10914,6 @@ func (m *StageBackendOverrideMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown StageBackendOverride edge %s", name)
-}
-
-// SubJobMutation represents an operation that mutates the SubJob nodes in the graph.
-type SubJobMutation struct {
-	config
-	op               Op
-	typ              string
-	id               *int
-	created_at       *time.Time
-	updated_at       *time.Time
-	status           *string
-	input_filename   *string
-	input_format     *string
-	input_path       *string
-	output_path      *string
-	segment_count    *int
-	addsegment_count *int
-	error_message    *string
-	clearedFields    map[string]struct{}
-	job              *int
-	clearedjob       bool
-	segments         map[int]struct{}
-	removedsegments  map[int]struct{}
-	clearedsegments  bool
-	done             bool
-	oldValue         func(context.Context) (*SubJob, error)
-	predicates       []predicate.SubJob
-}
-
-var _ ent.Mutation = (*SubJobMutation)(nil)
-
-// subjobOption allows management of the mutation configuration using functional options.
-type subjobOption func(*SubJobMutation)
-
-// newSubJobMutation creates new mutation for the SubJob entity.
-func newSubJobMutation(c config, op Op, opts ...subjobOption) *SubJobMutation {
-	m := &SubJobMutation{
-		config:        c,
-		op:            op,
-		typ:           TypeSubJob,
-		clearedFields: make(map[string]struct{}),
-	}
-	for _, opt := range opts {
-		opt(m)
-	}
-	return m
-}
-
-// withSubJobID sets the ID field of the mutation.
-func withSubJobID(id int) subjobOption {
-	return func(m *SubJobMutation) {
-		var (
-			err   error
-			once  sync.Once
-			value *SubJob
-		)
-		m.oldValue = func(ctx context.Context) (*SubJob, error) {
-			once.Do(func() {
-				if m.done {
-					err = errors.New("querying old values post mutation is not allowed")
-				} else {
-					value, err = m.Client().SubJob.Get(ctx, id)
-				}
-			})
-			return value, err
-		}
-		m.id = &id
-	}
-}
-
-// withSubJob sets the old SubJob of the mutation.
-func withSubJob(node *SubJob) subjobOption {
-	return func(m *SubJobMutation) {
-		m.oldValue = func(context.Context) (*SubJob, error) {
-			return node, nil
-		}
-		m.id = &node.ID
-	}
-}
-
-// Client returns a new `ent.Client` from the mutation. If the mutation was
-// executed in a transaction (ent.Tx), a transactional client is returned.
-func (m SubJobMutation) Client() *Client {
-	client := &Client{config: m.config}
-	client.init()
-	return client
-}
-
-// Tx returns an `ent.Tx` for mutations that were executed in transactions;
-// it returns an error otherwise.
-func (m SubJobMutation) Tx() (*Tx, error) {
-	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
-	}
-	tx := &Tx{config: m.config}
-	tx.init()
-	return tx, nil
-}
-
-// ID returns the ID value in the mutation. Note that the ID is only available
-// if it was provided to the builder or after it was returned from the database.
-func (m *SubJobMutation) ID() (id int, exists bool) {
-	if m.id == nil {
-		return
-	}
-	return *m.id, true
-}
-
-// IDs queries the database and returns the entity ids that match the mutation's predicate.
-// That means, if the mutation is applied within a transaction with an isolation level such
-// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
-// or updated by the mutation.
-func (m *SubJobMutation) IDs(ctx context.Context) ([]int, error) {
-	switch {
-	case m.op.Is(OpUpdateOne | OpDeleteOne):
-		id, exists := m.ID()
-		if exists {
-			return []int{id}, nil
-		}
-		fallthrough
-	case m.op.Is(OpUpdate | OpDelete):
-		return m.Client().SubJob.Query().Where(m.predicates...).IDs(ctx)
-	default:
-		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
-	}
-}
-
-// SetCreatedAt sets the "created_at" field.
-func (m *SubJobMutation) SetCreatedAt(t time.Time) {
-	m.created_at = &t
-}
-
-// CreatedAt returns the value of the "created_at" field in the mutation.
-func (m *SubJobMutation) CreatedAt() (r time.Time, exists bool) {
-	v := m.created_at
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldCreatedAt returns the old "created_at" field's value of the SubJob entity.
-// If the SubJob object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SubJobMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
-	}
-	return oldValue.CreatedAt, nil
-}
-
-// ResetCreatedAt resets all changes to the "created_at" field.
-func (m *SubJobMutation) ResetCreatedAt() {
-	m.created_at = nil
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (m *SubJobMutation) SetUpdatedAt(t time.Time) {
-	m.updated_at = &t
-}
-
-// UpdatedAt returns the value of the "updated_at" field in the mutation.
-func (m *SubJobMutation) UpdatedAt() (r time.Time, exists bool) {
-	v := m.updated_at
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldUpdatedAt returns the old "updated_at" field's value of the SubJob entity.
-// If the SubJob object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SubJobMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
-	}
-	return oldValue.UpdatedAt, nil
-}
-
-// ResetUpdatedAt resets all changes to the "updated_at" field.
-func (m *SubJobMutation) ResetUpdatedAt() {
-	m.updated_at = nil
-}
-
-// SetStatus sets the "status" field.
-func (m *SubJobMutation) SetStatus(s string) {
-	m.status = &s
-}
-
-// Status returns the value of the "status" field in the mutation.
-func (m *SubJobMutation) Status() (r string, exists bool) {
-	v := m.status
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldStatus returns the old "status" field's value of the SubJob entity.
-// If the SubJob object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SubJobMutation) OldStatus(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldStatus requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldStatus: %w", err)
-	}
-	return oldValue.Status, nil
-}
-
-// ResetStatus resets all changes to the "status" field.
-func (m *SubJobMutation) ResetStatus() {
-	m.status = nil
-}
-
-// SetInputFilename sets the "input_filename" field.
-func (m *SubJobMutation) SetInputFilename(s string) {
-	m.input_filename = &s
-}
-
-// InputFilename returns the value of the "input_filename" field in the mutation.
-func (m *SubJobMutation) InputFilename() (r string, exists bool) {
-	v := m.input_filename
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldInputFilename returns the old "input_filename" field's value of the SubJob entity.
-// If the SubJob object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SubJobMutation) OldInputFilename(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldInputFilename is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldInputFilename requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldInputFilename: %w", err)
-	}
-	return oldValue.InputFilename, nil
-}
-
-// ClearInputFilename clears the value of the "input_filename" field.
-func (m *SubJobMutation) ClearInputFilename() {
-	m.input_filename = nil
-	m.clearedFields[subjob.FieldInputFilename] = struct{}{}
-}
-
-// InputFilenameCleared returns if the "input_filename" field was cleared in this mutation.
-func (m *SubJobMutation) InputFilenameCleared() bool {
-	_, ok := m.clearedFields[subjob.FieldInputFilename]
-	return ok
-}
-
-// ResetInputFilename resets all changes to the "input_filename" field.
-func (m *SubJobMutation) ResetInputFilename() {
-	m.input_filename = nil
-	delete(m.clearedFields, subjob.FieldInputFilename)
-}
-
-// SetInputFormat sets the "input_format" field.
-func (m *SubJobMutation) SetInputFormat(s string) {
-	m.input_format = &s
-}
-
-// InputFormat returns the value of the "input_format" field in the mutation.
-func (m *SubJobMutation) InputFormat() (r string, exists bool) {
-	v := m.input_format
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldInputFormat returns the old "input_format" field's value of the SubJob entity.
-// If the SubJob object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SubJobMutation) OldInputFormat(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldInputFormat is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldInputFormat requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldInputFormat: %w", err)
-	}
-	return oldValue.InputFormat, nil
-}
-
-// ClearInputFormat clears the value of the "input_format" field.
-func (m *SubJobMutation) ClearInputFormat() {
-	m.input_format = nil
-	m.clearedFields[subjob.FieldInputFormat] = struct{}{}
-}
-
-// InputFormatCleared returns if the "input_format" field was cleared in this mutation.
-func (m *SubJobMutation) InputFormatCleared() bool {
-	_, ok := m.clearedFields[subjob.FieldInputFormat]
-	return ok
-}
-
-// ResetInputFormat resets all changes to the "input_format" field.
-func (m *SubJobMutation) ResetInputFormat() {
-	m.input_format = nil
-	delete(m.clearedFields, subjob.FieldInputFormat)
-}
-
-// SetInputPath sets the "input_path" field.
-func (m *SubJobMutation) SetInputPath(s string) {
-	m.input_path = &s
-}
-
-// InputPath returns the value of the "input_path" field in the mutation.
-func (m *SubJobMutation) InputPath() (r string, exists bool) {
-	v := m.input_path
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldInputPath returns the old "input_path" field's value of the SubJob entity.
-// If the SubJob object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SubJobMutation) OldInputPath(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldInputPath is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldInputPath requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldInputPath: %w", err)
-	}
-	return oldValue.InputPath, nil
-}
-
-// ClearInputPath clears the value of the "input_path" field.
-func (m *SubJobMutation) ClearInputPath() {
-	m.input_path = nil
-	m.clearedFields[subjob.FieldInputPath] = struct{}{}
-}
-
-// InputPathCleared returns if the "input_path" field was cleared in this mutation.
-func (m *SubJobMutation) InputPathCleared() bool {
-	_, ok := m.clearedFields[subjob.FieldInputPath]
-	return ok
-}
-
-// ResetInputPath resets all changes to the "input_path" field.
-func (m *SubJobMutation) ResetInputPath() {
-	m.input_path = nil
-	delete(m.clearedFields, subjob.FieldInputPath)
-}
-
-// SetOutputPath sets the "output_path" field.
-func (m *SubJobMutation) SetOutputPath(s string) {
-	m.output_path = &s
-}
-
-// OutputPath returns the value of the "output_path" field in the mutation.
-func (m *SubJobMutation) OutputPath() (r string, exists bool) {
-	v := m.output_path
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldOutputPath returns the old "output_path" field's value of the SubJob entity.
-// If the SubJob object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SubJobMutation) OldOutputPath(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldOutputPath is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldOutputPath requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldOutputPath: %w", err)
-	}
-	return oldValue.OutputPath, nil
-}
-
-// ClearOutputPath clears the value of the "output_path" field.
-func (m *SubJobMutation) ClearOutputPath() {
-	m.output_path = nil
-	m.clearedFields[subjob.FieldOutputPath] = struct{}{}
-}
-
-// OutputPathCleared returns if the "output_path" field was cleared in this mutation.
-func (m *SubJobMutation) OutputPathCleared() bool {
-	_, ok := m.clearedFields[subjob.FieldOutputPath]
-	return ok
-}
-
-// ResetOutputPath resets all changes to the "output_path" field.
-func (m *SubJobMutation) ResetOutputPath() {
-	m.output_path = nil
-	delete(m.clearedFields, subjob.FieldOutputPath)
-}
-
-// SetSegmentCount sets the "segment_count" field.
-func (m *SubJobMutation) SetSegmentCount(i int) {
-	m.segment_count = &i
-	m.addsegment_count = nil
-}
-
-// SegmentCount returns the value of the "segment_count" field in the mutation.
-func (m *SubJobMutation) SegmentCount() (r int, exists bool) {
-	v := m.segment_count
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldSegmentCount returns the old "segment_count" field's value of the SubJob entity.
-// If the SubJob object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SubJobMutation) OldSegmentCount(ctx context.Context) (v int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldSegmentCount is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldSegmentCount requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldSegmentCount: %w", err)
-	}
-	return oldValue.SegmentCount, nil
-}
-
-// AddSegmentCount adds i to the "segment_count" field.
-func (m *SubJobMutation) AddSegmentCount(i int) {
-	if m.addsegment_count != nil {
-		*m.addsegment_count += i
-	} else {
-		m.addsegment_count = &i
-	}
-}
-
-// AddedSegmentCount returns the value that was added to the "segment_count" field in this mutation.
-func (m *SubJobMutation) AddedSegmentCount() (r int, exists bool) {
-	v := m.addsegment_count
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// ResetSegmentCount resets all changes to the "segment_count" field.
-func (m *SubJobMutation) ResetSegmentCount() {
-	m.segment_count = nil
-	m.addsegment_count = nil
-}
-
-// SetErrorMessage sets the "error_message" field.
-func (m *SubJobMutation) SetErrorMessage(s string) {
-	m.error_message = &s
-}
-
-// ErrorMessage returns the value of the "error_message" field in the mutation.
-func (m *SubJobMutation) ErrorMessage() (r string, exists bool) {
-	v := m.error_message
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldErrorMessage returns the old "error_message" field's value of the SubJob entity.
-// If the SubJob object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SubJobMutation) OldErrorMessage(ctx context.Context) (v *string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldErrorMessage is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldErrorMessage requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldErrorMessage: %w", err)
-	}
-	return oldValue.ErrorMessage, nil
-}
-
-// ClearErrorMessage clears the value of the "error_message" field.
-func (m *SubJobMutation) ClearErrorMessage() {
-	m.error_message = nil
-	m.clearedFields[subjob.FieldErrorMessage] = struct{}{}
-}
-
-// ErrorMessageCleared returns if the "error_message" field was cleared in this mutation.
-func (m *SubJobMutation) ErrorMessageCleared() bool {
-	_, ok := m.clearedFields[subjob.FieldErrorMessage]
-	return ok
-}
-
-// ResetErrorMessage resets all changes to the "error_message" field.
-func (m *SubJobMutation) ResetErrorMessage() {
-	m.error_message = nil
-	delete(m.clearedFields, subjob.FieldErrorMessage)
-}
-
-// SetJobID sets the "job" edge to the Job entity by id.
-func (m *SubJobMutation) SetJobID(id int) {
-	m.job = &id
-}
-
-// ClearJob clears the "job" edge to the Job entity.
-func (m *SubJobMutation) ClearJob() {
-	m.clearedjob = true
-}
-
-// JobCleared reports if the "job" edge to the Job entity was cleared.
-func (m *SubJobMutation) JobCleared() bool {
-	return m.clearedjob
-}
-
-// JobID returns the "job" edge ID in the mutation.
-func (m *SubJobMutation) JobID() (id int, exists bool) {
-	if m.job != nil {
-		return *m.job, true
-	}
-	return
-}
-
-// JobIDs returns the "job" edge IDs in the mutation.
-// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
-// JobID instead. It exists only for internal usage by the builders.
-func (m *SubJobMutation) JobIDs() (ids []int) {
-	if id := m.job; id != nil {
-		ids = append(ids, *id)
-	}
-	return
-}
-
-// ResetJob resets all changes to the "job" edge.
-func (m *SubJobMutation) ResetJob() {
-	m.job = nil
-	m.clearedjob = false
-}
-
-// AddSegmentIDs adds the "segments" edge to the Segment entity by ids.
-func (m *SubJobMutation) AddSegmentIDs(ids ...int) {
-	if m.segments == nil {
-		m.segments = make(map[int]struct{})
-	}
-	for i := range ids {
-		m.segments[ids[i]] = struct{}{}
-	}
-}
-
-// ClearSegments clears the "segments" edge to the Segment entity.
-func (m *SubJobMutation) ClearSegments() {
-	m.clearedsegments = true
-}
-
-// SegmentsCleared reports if the "segments" edge to the Segment entity was cleared.
-func (m *SubJobMutation) SegmentsCleared() bool {
-	return m.clearedsegments
-}
-
-// RemoveSegmentIDs removes the "segments" edge to the Segment entity by IDs.
-func (m *SubJobMutation) RemoveSegmentIDs(ids ...int) {
-	if m.removedsegments == nil {
-		m.removedsegments = make(map[int]struct{})
-	}
-	for i := range ids {
-		delete(m.segments, ids[i])
-		m.removedsegments[ids[i]] = struct{}{}
-	}
-}
-
-// RemovedSegments returns the removed IDs of the "segments" edge to the Segment entity.
-func (m *SubJobMutation) RemovedSegmentsIDs() (ids []int) {
-	for id := range m.removedsegments {
-		ids = append(ids, id)
-	}
-	return
-}
-
-// SegmentsIDs returns the "segments" edge IDs in the mutation.
-func (m *SubJobMutation) SegmentsIDs() (ids []int) {
-	for id := range m.segments {
-		ids = append(ids, id)
-	}
-	return
-}
-
-// ResetSegments resets all changes to the "segments" edge.
-func (m *SubJobMutation) ResetSegments() {
-	m.segments = nil
-	m.clearedsegments = false
-	m.removedsegments = nil
-}
-
-// Where appends a list predicates to the SubJobMutation builder.
-func (m *SubJobMutation) Where(ps ...predicate.SubJob) {
-	m.predicates = append(m.predicates, ps...)
-}
-
-// WhereP appends storage-level predicates to the SubJobMutation builder. Using this method,
-// users can use type-assertion to append predicates that do not depend on any generated package.
-func (m *SubJobMutation) WhereP(ps ...func(*sql.Selector)) {
-	p := make([]predicate.SubJob, len(ps))
-	for i := range ps {
-		p[i] = ps[i]
-	}
-	m.Where(p...)
-}
-
-// Op returns the operation name.
-func (m *SubJobMutation) Op() Op {
-	return m.op
-}
-
-// SetOp allows setting the mutation operation.
-func (m *SubJobMutation) SetOp(op Op) {
-	m.op = op
-}
-
-// Type returns the node type of this mutation (SubJob).
-func (m *SubJobMutation) Type() string {
-	return m.typ
-}
-
-// Fields returns all fields that were changed during this mutation. Note that in
-// order to get all numeric fields that were incremented/decremented, call
-// AddedFields().
-func (m *SubJobMutation) Fields() []string {
-	fields := make([]string, 0, 9)
-	if m.created_at != nil {
-		fields = append(fields, subjob.FieldCreatedAt)
-	}
-	if m.updated_at != nil {
-		fields = append(fields, subjob.FieldUpdatedAt)
-	}
-	if m.status != nil {
-		fields = append(fields, subjob.FieldStatus)
-	}
-	if m.input_filename != nil {
-		fields = append(fields, subjob.FieldInputFilename)
-	}
-	if m.input_format != nil {
-		fields = append(fields, subjob.FieldInputFormat)
-	}
-	if m.input_path != nil {
-		fields = append(fields, subjob.FieldInputPath)
-	}
-	if m.output_path != nil {
-		fields = append(fields, subjob.FieldOutputPath)
-	}
-	if m.segment_count != nil {
-		fields = append(fields, subjob.FieldSegmentCount)
-	}
-	if m.error_message != nil {
-		fields = append(fields, subjob.FieldErrorMessage)
-	}
-	return fields
-}
-
-// Field returns the value of a field with the given name. The second boolean
-// return value indicates that this field was not set, or was not defined in the
-// schema.
-func (m *SubJobMutation) Field(name string) (ent.Value, bool) {
-	switch name {
-	case subjob.FieldCreatedAt:
-		return m.CreatedAt()
-	case subjob.FieldUpdatedAt:
-		return m.UpdatedAt()
-	case subjob.FieldStatus:
-		return m.Status()
-	case subjob.FieldInputFilename:
-		return m.InputFilename()
-	case subjob.FieldInputFormat:
-		return m.InputFormat()
-	case subjob.FieldInputPath:
-		return m.InputPath()
-	case subjob.FieldOutputPath:
-		return m.OutputPath()
-	case subjob.FieldSegmentCount:
-		return m.SegmentCount()
-	case subjob.FieldErrorMessage:
-		return m.ErrorMessage()
-	}
-	return nil, false
-}
-
-// OldField returns the old value of the field from the database. An error is
-// returned if the mutation operation is not UpdateOne, or the query to the
-// database failed.
-func (m *SubJobMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
-	switch name {
-	case subjob.FieldCreatedAt:
-		return m.OldCreatedAt(ctx)
-	case subjob.FieldUpdatedAt:
-		return m.OldUpdatedAt(ctx)
-	case subjob.FieldStatus:
-		return m.OldStatus(ctx)
-	case subjob.FieldInputFilename:
-		return m.OldInputFilename(ctx)
-	case subjob.FieldInputFormat:
-		return m.OldInputFormat(ctx)
-	case subjob.FieldInputPath:
-		return m.OldInputPath(ctx)
-	case subjob.FieldOutputPath:
-		return m.OldOutputPath(ctx)
-	case subjob.FieldSegmentCount:
-		return m.OldSegmentCount(ctx)
-	case subjob.FieldErrorMessage:
-		return m.OldErrorMessage(ctx)
-	}
-	return nil, fmt.Errorf("unknown SubJob field %s", name)
-}
-
-// SetField sets the value of a field with the given name. It returns an error if
-// the field is not defined in the schema, or if the type mismatched the field
-// type.
-func (m *SubJobMutation) SetField(name string, value ent.Value) error {
-	switch name {
-	case subjob.FieldCreatedAt:
-		v, ok := value.(time.Time)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetCreatedAt(v)
-		return nil
-	case subjob.FieldUpdatedAt:
-		v, ok := value.(time.Time)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetUpdatedAt(v)
-		return nil
-	case subjob.FieldStatus:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetStatus(v)
-		return nil
-	case subjob.FieldInputFilename:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetInputFilename(v)
-		return nil
-	case subjob.FieldInputFormat:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetInputFormat(v)
-		return nil
-	case subjob.FieldInputPath:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetInputPath(v)
-		return nil
-	case subjob.FieldOutputPath:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetOutputPath(v)
-		return nil
-	case subjob.FieldSegmentCount:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetSegmentCount(v)
-		return nil
-	case subjob.FieldErrorMessage:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetErrorMessage(v)
-		return nil
-	}
-	return fmt.Errorf("unknown SubJob field %s", name)
-}
-
-// AddedFields returns all numeric fields that were incremented/decremented during
-// this mutation.
-func (m *SubJobMutation) AddedFields() []string {
-	var fields []string
-	if m.addsegment_count != nil {
-		fields = append(fields, subjob.FieldSegmentCount)
-	}
-	return fields
-}
-
-// AddedField returns the numeric value that was incremented/decremented on a field
-// with the given name. The second boolean return value indicates that this field
-// was not set, or was not defined in the schema.
-func (m *SubJobMutation) AddedField(name string) (ent.Value, bool) {
-	switch name {
-	case subjob.FieldSegmentCount:
-		return m.AddedSegmentCount()
-	}
-	return nil, false
-}
-
-// AddField adds the value to the field with the given name. It returns an error if
-// the field is not defined in the schema, or if the type mismatched the field
-// type.
-func (m *SubJobMutation) AddField(name string, value ent.Value) error {
-	switch name {
-	case subjob.FieldSegmentCount:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddSegmentCount(v)
-		return nil
-	}
-	return fmt.Errorf("unknown SubJob numeric field %s", name)
-}
-
-// ClearedFields returns all nullable fields that were cleared during this
-// mutation.
-func (m *SubJobMutation) ClearedFields() []string {
-	var fields []string
-	if m.FieldCleared(subjob.FieldInputFilename) {
-		fields = append(fields, subjob.FieldInputFilename)
-	}
-	if m.FieldCleared(subjob.FieldInputFormat) {
-		fields = append(fields, subjob.FieldInputFormat)
-	}
-	if m.FieldCleared(subjob.FieldInputPath) {
-		fields = append(fields, subjob.FieldInputPath)
-	}
-	if m.FieldCleared(subjob.FieldOutputPath) {
-		fields = append(fields, subjob.FieldOutputPath)
-	}
-	if m.FieldCleared(subjob.FieldErrorMessage) {
-		fields = append(fields, subjob.FieldErrorMessage)
-	}
-	return fields
-}
-
-// FieldCleared returns a boolean indicating if a field with the given name was
-// cleared in this mutation.
-func (m *SubJobMutation) FieldCleared(name string) bool {
-	_, ok := m.clearedFields[name]
-	return ok
-}
-
-// ClearField clears the value of the field with the given name. It returns an
-// error if the field is not defined in the schema.
-func (m *SubJobMutation) ClearField(name string) error {
-	switch name {
-	case subjob.FieldInputFilename:
-		m.ClearInputFilename()
-		return nil
-	case subjob.FieldInputFormat:
-		m.ClearInputFormat()
-		return nil
-	case subjob.FieldInputPath:
-		m.ClearInputPath()
-		return nil
-	case subjob.FieldOutputPath:
-		m.ClearOutputPath()
-		return nil
-	case subjob.FieldErrorMessage:
-		m.ClearErrorMessage()
-		return nil
-	}
-	return fmt.Errorf("unknown SubJob nullable field %s", name)
-}
-
-// ResetField resets all changes in the mutation for the field with the given name.
-// It returns an error if the field is not defined in the schema.
-func (m *SubJobMutation) ResetField(name string) error {
-	switch name {
-	case subjob.FieldCreatedAt:
-		m.ResetCreatedAt()
-		return nil
-	case subjob.FieldUpdatedAt:
-		m.ResetUpdatedAt()
-		return nil
-	case subjob.FieldStatus:
-		m.ResetStatus()
-		return nil
-	case subjob.FieldInputFilename:
-		m.ResetInputFilename()
-		return nil
-	case subjob.FieldInputFormat:
-		m.ResetInputFormat()
-		return nil
-	case subjob.FieldInputPath:
-		m.ResetInputPath()
-		return nil
-	case subjob.FieldOutputPath:
-		m.ResetOutputPath()
-		return nil
-	case subjob.FieldSegmentCount:
-		m.ResetSegmentCount()
-		return nil
-	case subjob.FieldErrorMessage:
-		m.ResetErrorMessage()
-		return nil
-	}
-	return fmt.Errorf("unknown SubJob field %s", name)
-}
-
-// AddedEdges returns all edge names that were set/added in this mutation.
-func (m *SubJobMutation) AddedEdges() []string {
-	edges := make([]string, 0, 2)
-	if m.job != nil {
-		edges = append(edges, subjob.EdgeJob)
-	}
-	if m.segments != nil {
-		edges = append(edges, subjob.EdgeSegments)
-	}
-	return edges
-}
-
-// AddedIDs returns all IDs (to other nodes) that were added for the given edge
-// name in this mutation.
-func (m *SubJobMutation) AddedIDs(name string) []ent.Value {
-	switch name {
-	case subjob.EdgeJob:
-		if id := m.job; id != nil {
-			return []ent.Value{*id}
-		}
-	case subjob.EdgeSegments:
-		ids := make([]ent.Value, 0, len(m.segments))
-		for id := range m.segments {
-			ids = append(ids, id)
-		}
-		return ids
-	}
-	return nil
-}
-
-// RemovedEdges returns all edge names that were removed in this mutation.
-func (m *SubJobMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 2)
-	if m.removedsegments != nil {
-		edges = append(edges, subjob.EdgeSegments)
-	}
-	return edges
-}
-
-// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
-// the given name in this mutation.
-func (m *SubJobMutation) RemovedIDs(name string) []ent.Value {
-	switch name {
-	case subjob.EdgeSegments:
-		ids := make([]ent.Value, 0, len(m.removedsegments))
-		for id := range m.removedsegments {
-			ids = append(ids, id)
-		}
-		return ids
-	}
-	return nil
-}
-
-// ClearedEdges returns all edge names that were cleared in this mutation.
-func (m *SubJobMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 2)
-	if m.clearedjob {
-		edges = append(edges, subjob.EdgeJob)
-	}
-	if m.clearedsegments {
-		edges = append(edges, subjob.EdgeSegments)
-	}
-	return edges
-}
-
-// EdgeCleared returns a boolean which indicates if the edge with the given name
-// was cleared in this mutation.
-func (m *SubJobMutation) EdgeCleared(name string) bool {
-	switch name {
-	case subjob.EdgeJob:
-		return m.clearedjob
-	case subjob.EdgeSegments:
-		return m.clearedsegments
-	}
-	return false
-}
-
-// ClearEdge clears the value of the edge with the given name. It returns an error
-// if that edge is not defined in the schema.
-func (m *SubJobMutation) ClearEdge(name string) error {
-	switch name {
-	case subjob.EdgeJob:
-		m.ClearJob()
-		return nil
-	}
-	return fmt.Errorf("unknown SubJob unique edge %s", name)
-}
-
-// ResetEdge resets all changes to the edge with the given name in this mutation.
-// It returns an error if the edge is not defined in the schema.
-func (m *SubJobMutation) ResetEdge(name string) error {
-	switch name {
-	case subjob.EdgeJob:
-		m.ResetJob()
-		return nil
-	case subjob.EdgeSegments:
-		m.ResetSegments()
-		return nil
-	}
-	return fmt.Errorf("unknown SubJob edge %s", name)
 }
 
 // TMEntryMutation represents an operation that mutates the TMEntry nodes in the graph.
@@ -15959,8 +13251,6 @@ type UsageRecordMutation struct {
 	clearedorganization bool
 	project             *int
 	clearedproject      bool
-	job                 *int
-	clearedjob          bool
 	done                bool
 	oldValue            func(context.Context) (*UsageRecord, error)
 	predicates          []predicate.UsageRecord
@@ -16562,45 +13852,6 @@ func (m *UsageRecordMutation) ResetProject() {
 	m.clearedproject = false
 }
 
-// SetJobID sets the "job" edge to the Job entity by id.
-func (m *UsageRecordMutation) SetJobID(id int) {
-	m.job = &id
-}
-
-// ClearJob clears the "job" edge to the Job entity.
-func (m *UsageRecordMutation) ClearJob() {
-	m.clearedjob = true
-}
-
-// JobCleared reports if the "job" edge to the Job entity was cleared.
-func (m *UsageRecordMutation) JobCleared() bool {
-	return m.clearedjob
-}
-
-// JobID returns the "job" edge ID in the mutation.
-func (m *UsageRecordMutation) JobID() (id int, exists bool) {
-	if m.job != nil {
-		return *m.job, true
-	}
-	return
-}
-
-// JobIDs returns the "job" edge IDs in the mutation.
-// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
-// JobID instead. It exists only for internal usage by the builders.
-func (m *UsageRecordMutation) JobIDs() (ids []int) {
-	if id := m.job; id != nil {
-		ids = append(ids, *id)
-	}
-	return
-}
-
-// ResetJob resets all changes to the "job" edge.
-func (m *UsageRecordMutation) ResetJob() {
-	m.job = nil
-	m.clearedjob = false
-}
-
 // Where appends a list predicates to the UsageRecordMutation builder.
 func (m *UsageRecordMutation) Where(ps ...predicate.UsageRecord) {
 	m.predicates = append(m.predicates, ps...)
@@ -16913,7 +14164,7 @@ func (m *UsageRecordMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *UsageRecordMutation) AddedEdges() []string {
-	edges := make([]string, 0, 4)
+	edges := make([]string, 0, 3)
 	if m.user != nil {
 		edges = append(edges, usagerecord.EdgeUser)
 	}
@@ -16922,9 +14173,6 @@ func (m *UsageRecordMutation) AddedEdges() []string {
 	}
 	if m.project != nil {
 		edges = append(edges, usagerecord.EdgeProject)
-	}
-	if m.job != nil {
-		edges = append(edges, usagerecord.EdgeJob)
 	}
 	return edges
 }
@@ -16945,17 +14193,13 @@ func (m *UsageRecordMutation) AddedIDs(name string) []ent.Value {
 		if id := m.project; id != nil {
 			return []ent.Value{*id}
 		}
-	case usagerecord.EdgeJob:
-		if id := m.job; id != nil {
-			return []ent.Value{*id}
-		}
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *UsageRecordMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 4)
+	edges := make([]string, 0, 3)
 	return edges
 }
 
@@ -16967,7 +14211,7 @@ func (m *UsageRecordMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *UsageRecordMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 4)
+	edges := make([]string, 0, 3)
 	if m.cleareduser {
 		edges = append(edges, usagerecord.EdgeUser)
 	}
@@ -16976,9 +14220,6 @@ func (m *UsageRecordMutation) ClearedEdges() []string {
 	}
 	if m.clearedproject {
 		edges = append(edges, usagerecord.EdgeProject)
-	}
-	if m.clearedjob {
-		edges = append(edges, usagerecord.EdgeJob)
 	}
 	return edges
 }
@@ -16993,8 +14234,6 @@ func (m *UsageRecordMutation) EdgeCleared(name string) bool {
 		return m.clearedorganization
 	case usagerecord.EdgeProject:
 		return m.clearedproject
-	case usagerecord.EdgeJob:
-		return m.clearedjob
 	}
 	return false
 }
@@ -17012,9 +14251,6 @@ func (m *UsageRecordMutation) ClearEdge(name string) error {
 	case usagerecord.EdgeProject:
 		m.ClearProject()
 		return nil
-	case usagerecord.EdgeJob:
-		m.ClearJob()
-		return nil
 	}
 	return fmt.Errorf("unknown UsageRecord unique edge %s", name)
 }
@@ -17031,9 +14267,6 @@ func (m *UsageRecordMutation) ResetEdge(name string) error {
 		return nil
 	case usagerecord.EdgeProject:
 		m.ResetProject()
-		return nil
-	case usagerecord.EdgeJob:
-		m.ResetJob()
 		return nil
 	}
 	return fmt.Errorf("unknown UsageRecord edge %s", name)
@@ -17054,9 +14287,6 @@ type UserMutation struct {
 	role                            *string
 	active                          *bool
 	clearedFields                   map[string]struct{}
-	jobs                            map[int]struct{}
-	removedjobs                     map[int]struct{}
-	clearedjobs                     bool
 	created_translation_jobs        map[int]struct{}
 	removedcreated_translation_jobs map[int]struct{}
 	clearedcreated_translation_jobs bool
@@ -17483,60 +14713,6 @@ func (m *UserMutation) OldActive(ctx context.Context) (v bool, err error) {
 // ResetActive resets all changes to the "active" field.
 func (m *UserMutation) ResetActive() {
 	m.active = nil
-}
-
-// AddJobIDs adds the "jobs" edge to the Job entity by ids.
-func (m *UserMutation) AddJobIDs(ids ...int) {
-	if m.jobs == nil {
-		m.jobs = make(map[int]struct{})
-	}
-	for i := range ids {
-		m.jobs[ids[i]] = struct{}{}
-	}
-}
-
-// ClearJobs clears the "jobs" edge to the Job entity.
-func (m *UserMutation) ClearJobs() {
-	m.clearedjobs = true
-}
-
-// JobsCleared reports if the "jobs" edge to the Job entity was cleared.
-func (m *UserMutation) JobsCleared() bool {
-	return m.clearedjobs
-}
-
-// RemoveJobIDs removes the "jobs" edge to the Job entity by IDs.
-func (m *UserMutation) RemoveJobIDs(ids ...int) {
-	if m.removedjobs == nil {
-		m.removedjobs = make(map[int]struct{})
-	}
-	for i := range ids {
-		delete(m.jobs, ids[i])
-		m.removedjobs[ids[i]] = struct{}{}
-	}
-}
-
-// RemovedJobs returns the removed IDs of the "jobs" edge to the Job entity.
-func (m *UserMutation) RemovedJobsIDs() (ids []int) {
-	for id := range m.removedjobs {
-		ids = append(ids, id)
-	}
-	return
-}
-
-// JobsIDs returns the "jobs" edge IDs in the mutation.
-func (m *UserMutation) JobsIDs() (ids []int) {
-	for id := range m.jobs {
-		ids = append(ids, id)
-	}
-	return
-}
-
-// ResetJobs resets all changes to the "jobs" edge.
-func (m *UserMutation) ResetJobs() {
-	m.jobs = nil
-	m.clearedjobs = false
-	m.removedjobs = nil
 }
 
 // AddCreatedTranslationJobIDs adds the "created_translation_jobs" edge to the TranslationJob entity by ids.
@@ -18232,10 +15408,7 @@ func (m *UserMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *UserMutation) AddedEdges() []string {
-	edges := make([]string, 0, 9)
-	if m.jobs != nil {
-		edges = append(edges, user.EdgeJobs)
-	}
+	edges := make([]string, 0, 8)
 	if m.created_translation_jobs != nil {
 		edges = append(edges, user.EdgeCreatedTranslationJobs)
 	}
@@ -18267,12 +15440,6 @@ func (m *UserMutation) AddedEdges() []string {
 // name in this mutation.
 func (m *UserMutation) AddedIDs(name string) []ent.Value {
 	switch name {
-	case user.EdgeJobs:
-		ids := make([]ent.Value, 0, len(m.jobs))
-		for id := range m.jobs {
-			ids = append(ids, id)
-		}
-		return ids
 	case user.EdgeCreatedTranslationJobs:
 		ids := make([]ent.Value, 0, len(m.created_translation_jobs))
 		for id := range m.created_translation_jobs {
@@ -18327,10 +15494,7 @@ func (m *UserMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *UserMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 9)
-	if m.removedjobs != nil {
-		edges = append(edges, user.EdgeJobs)
-	}
+	edges := make([]string, 0, 8)
 	if m.removedcreated_translation_jobs != nil {
 		edges = append(edges, user.EdgeCreatedTranslationJobs)
 	}
@@ -18362,12 +15526,6 @@ func (m *UserMutation) RemovedEdges() []string {
 // the given name in this mutation.
 func (m *UserMutation) RemovedIDs(name string) []ent.Value {
 	switch name {
-	case user.EdgeJobs:
-		ids := make([]ent.Value, 0, len(m.removedjobs))
-		for id := range m.removedjobs {
-			ids = append(ids, id)
-		}
-		return ids
 	case user.EdgeCreatedTranslationJobs:
 		ids := make([]ent.Value, 0, len(m.removedcreated_translation_jobs))
 		for id := range m.removedcreated_translation_jobs {
@@ -18422,10 +15580,7 @@ func (m *UserMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *UserMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 9)
-	if m.clearedjobs {
-		edges = append(edges, user.EdgeJobs)
-	}
+	edges := make([]string, 0, 8)
 	if m.clearedcreated_translation_jobs {
 		edges = append(edges, user.EdgeCreatedTranslationJobs)
 	}
@@ -18457,8 +15612,6 @@ func (m *UserMutation) ClearedEdges() []string {
 // was cleared in this mutation.
 func (m *UserMutation) EdgeCleared(name string) bool {
 	switch name {
-	case user.EdgeJobs:
-		return m.clearedjobs
 	case user.EdgeCreatedTranslationJobs:
 		return m.clearedcreated_translation_jobs
 	case user.EdgeReviewedSegments:
@@ -18491,9 +15644,6 @@ func (m *UserMutation) ClearEdge(name string) error {
 // It returns an error if the edge is not defined in the schema.
 func (m *UserMutation) ResetEdge(name string) error {
 	switch name {
-	case user.EdgeJobs:
-		m.ResetJobs()
-		return nil
 	case user.EdgeCreatedTranslationJobs:
 		m.ResetCreatedTranslationJobs()
 		return nil

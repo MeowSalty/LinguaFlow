@@ -12,7 +12,6 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
@@ -176,25 +175,6 @@ func (_u *ActivityLogUpdate) SetProject(v *Project) *ActivityLogUpdate {
 	return _u.SetProjectID(v.ID)
 }
 
-// SetJobID sets the "job" edge to the Job entity by ID.
-func (_u *ActivityLogUpdate) SetJobID(id int) *ActivityLogUpdate {
-	_u.mutation.SetJobID(id)
-	return _u
-}
-
-// SetNillableJobID sets the "job" edge to the Job entity by ID if the given value is not nil.
-func (_u *ActivityLogUpdate) SetNillableJobID(id *int) *ActivityLogUpdate {
-	if id != nil {
-		_u = _u.SetJobID(*id)
-	}
-	return _u
-}
-
-// SetJob sets the "job" edge to the Job entity.
-func (_u *ActivityLogUpdate) SetJob(v *Job) *ActivityLogUpdate {
-	return _u.SetJobID(v.ID)
-}
-
 // Mutation returns the ActivityLogMutation object of the builder.
 func (_u *ActivityLogUpdate) Mutation() *ActivityLogMutation {
 	return _u.mutation
@@ -215,12 +195,6 @@ func (_u *ActivityLogUpdate) ClearOrganization() *ActivityLogUpdate {
 // ClearProject clears the "project" edge to the Project entity.
 func (_u *ActivityLogUpdate) ClearProject() *ActivityLogUpdate {
 	_u.mutation.ClearProject()
-	return _u
-}
-
-// ClearJob clears the "job" edge to the Job entity.
-func (_u *ActivityLogUpdate) ClearJob() *ActivityLogUpdate {
-	_u.mutation.ClearJob()
 	return _u
 }
 
@@ -406,35 +380,6 @@ func (_u *ActivityLogUpdate) sqlSave(ctx context.Context) (_node int, err error)
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if _u.mutation.JobCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   activitylog.JobTable,
-			Columns: []string{activitylog.JobColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.JobIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   activitylog.JobTable,
-			Columns: []string{activitylog.JobColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{activitylog.Label}
@@ -599,25 +544,6 @@ func (_u *ActivityLogUpdateOne) SetProject(v *Project) *ActivityLogUpdateOne {
 	return _u.SetProjectID(v.ID)
 }
 
-// SetJobID sets the "job" edge to the Job entity by ID.
-func (_u *ActivityLogUpdateOne) SetJobID(id int) *ActivityLogUpdateOne {
-	_u.mutation.SetJobID(id)
-	return _u
-}
-
-// SetNillableJobID sets the "job" edge to the Job entity by ID if the given value is not nil.
-func (_u *ActivityLogUpdateOne) SetNillableJobID(id *int) *ActivityLogUpdateOne {
-	if id != nil {
-		_u = _u.SetJobID(*id)
-	}
-	return _u
-}
-
-// SetJob sets the "job" edge to the Job entity.
-func (_u *ActivityLogUpdateOne) SetJob(v *Job) *ActivityLogUpdateOne {
-	return _u.SetJobID(v.ID)
-}
-
 // Mutation returns the ActivityLogMutation object of the builder.
 func (_u *ActivityLogUpdateOne) Mutation() *ActivityLogMutation {
 	return _u.mutation
@@ -638,12 +564,6 @@ func (_u *ActivityLogUpdateOne) ClearOrganization() *ActivityLogUpdateOne {
 // ClearProject clears the "project" edge to the Project entity.
 func (_u *ActivityLogUpdateOne) ClearProject() *ActivityLogUpdateOne {
 	_u.mutation.ClearProject()
-	return _u
-}
-
-// ClearJob clears the "job" edge to the Job entity.
-func (_u *ActivityLogUpdateOne) ClearJob() *ActivityLogUpdateOne {
-	_u.mutation.ClearJob()
 	return _u
 }
 
@@ -852,35 +772,6 @@ func (_u *ActivityLogUpdateOne) sqlSave(ctx context.Context) (_node *ActivityLog
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(project.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
-	if _u.mutation.JobCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   activitylog.JobTable,
-			Columns: []string{activitylog.JobColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.JobIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   activitylog.JobTable,
-			Columns: []string{activitylog.JobColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

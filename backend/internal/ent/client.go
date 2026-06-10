@@ -17,7 +17,6 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgbackend"
@@ -28,7 +27,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
@@ -45,8 +43,6 @@ type Client struct {
 	ActivityLog *ActivityLogClient
 	// GlossaryEntry is the client for interacting with the GlossaryEntry builders.
 	GlossaryEntry *GlossaryEntryClient
-	// Job is the client for interacting with the Job builders.
-	Job *JobClient
 	// JobResource is the client for interacting with the JobResource builders.
 	JobResource *JobResourceClient
 	// OrgBackend is the client for interacting with the OrgBackend builders.
@@ -67,8 +63,6 @@ type Client struct {
 	Segment *SegmentClient
 	// StageBackendOverride is the client for interacting with the StageBackendOverride builders.
 	StageBackendOverride *StageBackendOverrideClient
-	// SubJob is the client for interacting with the SubJob builders.
-	SubJob *SubJobClient
 	// TMEntry is the client for interacting with the TMEntry builders.
 	TMEntry *TMEntryClient
 	// TranslationJob is the client for interacting with the TranslationJob builders.
@@ -92,7 +86,6 @@ func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.ActivityLog = NewActivityLogClient(c.config)
 	c.GlossaryEntry = NewGlossaryEntryClient(c.config)
-	c.Job = NewJobClient(c.config)
 	c.JobResource = NewJobResourceClient(c.config)
 	c.OrgBackend = NewOrgBackendClient(c.config)
 	c.OrgMembership = NewOrgMembershipClient(c.config)
@@ -103,7 +96,6 @@ func (c *Client) init() {
 	c.Resource = NewResourceClient(c.config)
 	c.Segment = NewSegmentClient(c.config)
 	c.StageBackendOverride = NewStageBackendOverrideClient(c.config)
-	c.SubJob = NewSubJobClient(c.config)
 	c.TMEntry = NewTMEntryClient(c.config)
 	c.TranslationJob = NewTranslationJobClient(c.config)
 	c.UsageRecord = NewUsageRecordClient(c.config)
@@ -203,7 +195,6 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		config:               cfg,
 		ActivityLog:          NewActivityLogClient(cfg),
 		GlossaryEntry:        NewGlossaryEntryClient(cfg),
-		Job:                  NewJobClient(cfg),
 		JobResource:          NewJobResourceClient(cfg),
 		OrgBackend:           NewOrgBackendClient(cfg),
 		OrgMembership:        NewOrgMembershipClient(cfg),
@@ -214,7 +205,6 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		Resource:             NewResourceClient(cfg),
 		Segment:              NewSegmentClient(cfg),
 		StageBackendOverride: NewStageBackendOverrideClient(cfg),
-		SubJob:               NewSubJobClient(cfg),
 		TMEntry:              NewTMEntryClient(cfg),
 		TranslationJob:       NewTranslationJobClient(cfg),
 		UsageRecord:          NewUsageRecordClient(cfg),
@@ -241,7 +231,6 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		config:               cfg,
 		ActivityLog:          NewActivityLogClient(cfg),
 		GlossaryEntry:        NewGlossaryEntryClient(cfg),
-		Job:                  NewJobClient(cfg),
 		JobResource:          NewJobResourceClient(cfg),
 		OrgBackend:           NewOrgBackendClient(cfg),
 		OrgMembership:        NewOrgMembershipClient(cfg),
@@ -252,7 +241,6 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		Resource:             NewResourceClient(cfg),
 		Segment:              NewSegmentClient(cfg),
 		StageBackendOverride: NewStageBackendOverrideClient(cfg),
-		SubJob:               NewSubJobClient(cfg),
 		TMEntry:              NewTMEntryClient(cfg),
 		TranslationJob:       NewTranslationJobClient(cfg),
 		UsageRecord:          NewUsageRecordClient(cfg),
@@ -287,10 +275,10 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.ActivityLog, c.GlossaryEntry, c.Job, c.JobResource, c.OrgBackend,
-		c.OrgMembership, c.Organization, c.Project, c.ProjectBackend, c.RefreshToken,
-		c.Resource, c.Segment, c.StageBackendOverride, c.SubJob, c.TMEntry,
-		c.TranslationJob, c.UsageRecord, c.User, c.UserBackend,
+		c.ActivityLog, c.GlossaryEntry, c.JobResource, c.OrgBackend, c.OrgMembership,
+		c.Organization, c.Project, c.ProjectBackend, c.RefreshToken, c.Resource,
+		c.Segment, c.StageBackendOverride, c.TMEntry, c.TranslationJob, c.UsageRecord,
+		c.User, c.UserBackend,
 	} {
 		n.Use(hooks...)
 	}
@@ -300,10 +288,10 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.ActivityLog, c.GlossaryEntry, c.Job, c.JobResource, c.OrgBackend,
-		c.OrgMembership, c.Organization, c.Project, c.ProjectBackend, c.RefreshToken,
-		c.Resource, c.Segment, c.StageBackendOverride, c.SubJob, c.TMEntry,
-		c.TranslationJob, c.UsageRecord, c.User, c.UserBackend,
+		c.ActivityLog, c.GlossaryEntry, c.JobResource, c.OrgBackend, c.OrgMembership,
+		c.Organization, c.Project, c.ProjectBackend, c.RefreshToken, c.Resource,
+		c.Segment, c.StageBackendOverride, c.TMEntry, c.TranslationJob, c.UsageRecord,
+		c.User, c.UserBackend,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -316,8 +304,6 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.ActivityLog.mutate(ctx, m)
 	case *GlossaryEntryMutation:
 		return c.GlossaryEntry.mutate(ctx, m)
-	case *JobMutation:
-		return c.Job.mutate(ctx, m)
 	case *JobResourceMutation:
 		return c.JobResource.mutate(ctx, m)
 	case *OrgBackendMutation:
@@ -338,8 +324,6 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Segment.mutate(ctx, m)
 	case *StageBackendOverrideMutation:
 		return c.StageBackendOverride.mutate(ctx, m)
-	case *SubJobMutation:
-		return c.SubJob.mutate(ctx, m)
 	case *TMEntryMutation:
 		return c.TMEntry.mutate(ctx, m)
 	case *TranslationJobMutation:
@@ -504,22 +488,6 @@ func (c *ActivityLogClient) QueryProject(_m *ActivityLog) *ProjectQuery {
 			sqlgraph.From(activitylog.Table, activitylog.FieldID, id),
 			sqlgraph.To(project.Table, project.FieldID),
 			sqlgraph.Edge(sqlgraph.M2O, true, activitylog.ProjectTable, activitylog.ProjectColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// QueryJob queries the job edge of a ActivityLog.
-func (c *ActivityLogClient) QueryJob(_m *ActivityLog) *JobQuery {
-	query := (&JobClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(activitylog.Table, activitylog.FieldID, id),
-			sqlgraph.To(job.Table, job.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, activitylog.JobTable, activitylog.JobColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -714,219 +682,6 @@ func (c *GlossaryEntryClient) mutate(ctx context.Context, m *GlossaryEntryMutati
 		return (&GlossaryEntryDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown GlossaryEntry mutation op: %q", m.Op())
-	}
-}
-
-// JobClient is a client for the Job schema.
-type JobClient struct {
-	config
-}
-
-// NewJobClient returns a client for the Job from the given config.
-func NewJobClient(c config) *JobClient {
-	return &JobClient{config: c}
-}
-
-// Use adds a list of mutation hooks to the hooks stack.
-// A call to `Use(f, g, h)` equals to `job.Hooks(f(g(h())))`.
-func (c *JobClient) Use(hooks ...Hook) {
-	c.hooks.Job = append(c.hooks.Job, hooks...)
-}
-
-// Intercept adds a list of query interceptors to the interceptors stack.
-// A call to `Intercept(f, g, h)` equals to `job.Intercept(f(g(h())))`.
-func (c *JobClient) Intercept(interceptors ...Interceptor) {
-	c.inters.Job = append(c.inters.Job, interceptors...)
-}
-
-// Create returns a builder for creating a Job entity.
-func (c *JobClient) Create() *JobCreate {
-	mutation := newJobMutation(c.config, OpCreate)
-	return &JobCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// CreateBulk returns a builder for creating a bulk of Job entities.
-func (c *JobClient) CreateBulk(builders ...*JobCreate) *JobCreateBulk {
-	return &JobCreateBulk{config: c.config, builders: builders}
-}
-
-// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
-// a builder and applies setFunc on it.
-func (c *JobClient) MapCreateBulk(slice any, setFunc func(*JobCreate, int)) *JobCreateBulk {
-	rv := reflect.ValueOf(slice)
-	if rv.Kind() != reflect.Slice {
-		return &JobCreateBulk{err: fmt.Errorf("calling to JobClient.MapCreateBulk with wrong type %T, need slice", slice)}
-	}
-	builders := make([]*JobCreate, rv.Len())
-	for i := 0; i < rv.Len(); i++ {
-		builders[i] = c.Create()
-		setFunc(builders[i], i)
-	}
-	return &JobCreateBulk{config: c.config, builders: builders}
-}
-
-// Update returns an update builder for Job.
-func (c *JobClient) Update() *JobUpdate {
-	mutation := newJobMutation(c.config, OpUpdate)
-	return &JobUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOne returns an update builder for the given entity.
-func (c *JobClient) UpdateOne(_m *Job) *JobUpdateOne {
-	mutation := newJobMutation(c.config, OpUpdateOne, withJob(_m))
-	return &JobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOneID returns an update builder for the given id.
-func (c *JobClient) UpdateOneID(id int) *JobUpdateOne {
-	mutation := newJobMutation(c.config, OpUpdateOne, withJobID(id))
-	return &JobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// Delete returns a delete builder for Job.
-func (c *JobClient) Delete() *JobDelete {
-	mutation := newJobMutation(c.config, OpDelete)
-	return &JobDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// DeleteOne returns a builder for deleting the given entity.
-func (c *JobClient) DeleteOne(_m *Job) *JobDeleteOne {
-	return c.DeleteOneID(_m.ID)
-}
-
-// DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *JobClient) DeleteOneID(id int) *JobDeleteOne {
-	builder := c.Delete().Where(job.ID(id))
-	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
-	return &JobDeleteOne{builder}
-}
-
-// Query returns a query builder for Job.
-func (c *JobClient) Query() *JobQuery {
-	return &JobQuery{
-		config: c.config,
-		ctx:    &QueryContext{Type: TypeJob},
-		inters: c.Interceptors(),
-	}
-}
-
-// Get returns a Job entity by its id.
-func (c *JobClient) Get(ctx context.Context, id int) (*Job, error) {
-	return c.Query().Where(job.ID(id)).Only(ctx)
-}
-
-// GetX is like Get, but panics if an error occurs.
-func (c *JobClient) GetX(ctx context.Context, id int) *Job {
-	obj, err := c.Get(ctx, id)
-	if err != nil {
-		panic(err)
-	}
-	return obj
-}
-
-// QueryProject queries the project edge of a Job.
-func (c *JobClient) QueryProject(_m *Job) *ProjectQuery {
-	query := (&ProjectClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(job.Table, job.FieldID, id),
-			sqlgraph.To(project.Table, project.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, job.ProjectTable, job.ProjectColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// QueryCreatedBy queries the created_by edge of a Job.
-func (c *JobClient) QueryCreatedBy(_m *Job) *UserQuery {
-	query := (&UserClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(job.Table, job.FieldID, id),
-			sqlgraph.To(user.Table, user.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, job.CreatedByTable, job.CreatedByColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// QuerySubJobs queries the sub_jobs edge of a Job.
-func (c *JobClient) QuerySubJobs(_m *Job) *SubJobQuery {
-	query := (&SubJobClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(job.Table, job.FieldID, id),
-			sqlgraph.To(subjob.Table, subjob.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, job.SubJobsTable, job.SubJobsColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// QueryActivityLogs queries the activity_logs edge of a Job.
-func (c *JobClient) QueryActivityLogs(_m *Job) *ActivityLogQuery {
-	query := (&ActivityLogClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(job.Table, job.FieldID, id),
-			sqlgraph.To(activitylog.Table, activitylog.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, job.ActivityLogsTable, job.ActivityLogsColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// QueryUsageRecords queries the usage_records edge of a Job.
-func (c *JobClient) QueryUsageRecords(_m *Job) *UsageRecordQuery {
-	query := (&UsageRecordClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(job.Table, job.FieldID, id),
-			sqlgraph.To(usagerecord.Table, usagerecord.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, job.UsageRecordsTable, job.UsageRecordsColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// Hooks returns the client hooks.
-func (c *JobClient) Hooks() []Hook {
-	return c.hooks.Job
-}
-
-// Interceptors returns the client interceptors.
-func (c *JobClient) Interceptors() []Interceptor {
-	return c.inters.Job
-}
-
-func (c *JobClient) mutate(ctx context.Context, m *JobMutation) (Value, error) {
-	switch m.Op() {
-	case OpCreate:
-		return (&JobCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdate:
-		return (&JobUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdateOne:
-		return (&JobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpDelete, OpDeleteOne:
-		return (&JobDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
-	default:
-		return nil, fmt.Errorf("ent: unknown Job mutation op: %q", m.Op())
 	}
 }
 
@@ -1858,22 +1613,6 @@ func (c *ProjectClient) QueryTmEntries(_m *Project) *TMEntryQuery {
 	return query
 }
 
-// QueryJobs queries the jobs edge of a Project.
-func (c *ProjectClient) QueryJobs(_m *Project) *JobQuery {
-	query := (&JobClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(project.Table, project.FieldID, id),
-			sqlgraph.To(job.Table, job.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, project.JobsTable, project.JobsColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
 // QueryTranslationJobs queries the translation_jobs edge of a Project.
 func (c *ProjectClient) QueryTranslationJobs(_m *Project) *TranslationJobQuery {
 	query := (&TranslationJobClient{config: c.config}).Query()
@@ -2550,22 +2289,6 @@ func (c *SegmentClient) GetX(ctx context.Context, id int) *Segment {
 	return obj
 }
 
-// QuerySubJob queries the sub_job edge of a Segment.
-func (c *SegmentClient) QuerySubJob(_m *Segment) *SubJobQuery {
-	query := (&SubJobClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(segment.Table, segment.FieldID, id),
-			sqlgraph.To(subjob.Table, subjob.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, segment.SubJobTable, segment.SubJobColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
 // QueryResource queries the resource edge of a Segment.
 func (c *SegmentClient) QueryResource(_m *Segment) *ResourceQuery {
 	query := (&ResourceClient{config: c.config}).Query()
@@ -2769,171 +2492,6 @@ func (c *StageBackendOverrideClient) mutate(ctx context.Context, m *StageBackend
 		return (&StageBackendOverrideDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown StageBackendOverride mutation op: %q", m.Op())
-	}
-}
-
-// SubJobClient is a client for the SubJob schema.
-type SubJobClient struct {
-	config
-}
-
-// NewSubJobClient returns a client for the SubJob from the given config.
-func NewSubJobClient(c config) *SubJobClient {
-	return &SubJobClient{config: c}
-}
-
-// Use adds a list of mutation hooks to the hooks stack.
-// A call to `Use(f, g, h)` equals to `subjob.Hooks(f(g(h())))`.
-func (c *SubJobClient) Use(hooks ...Hook) {
-	c.hooks.SubJob = append(c.hooks.SubJob, hooks...)
-}
-
-// Intercept adds a list of query interceptors to the interceptors stack.
-// A call to `Intercept(f, g, h)` equals to `subjob.Intercept(f(g(h())))`.
-func (c *SubJobClient) Intercept(interceptors ...Interceptor) {
-	c.inters.SubJob = append(c.inters.SubJob, interceptors...)
-}
-
-// Create returns a builder for creating a SubJob entity.
-func (c *SubJobClient) Create() *SubJobCreate {
-	mutation := newSubJobMutation(c.config, OpCreate)
-	return &SubJobCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// CreateBulk returns a builder for creating a bulk of SubJob entities.
-func (c *SubJobClient) CreateBulk(builders ...*SubJobCreate) *SubJobCreateBulk {
-	return &SubJobCreateBulk{config: c.config, builders: builders}
-}
-
-// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
-// a builder and applies setFunc on it.
-func (c *SubJobClient) MapCreateBulk(slice any, setFunc func(*SubJobCreate, int)) *SubJobCreateBulk {
-	rv := reflect.ValueOf(slice)
-	if rv.Kind() != reflect.Slice {
-		return &SubJobCreateBulk{err: fmt.Errorf("calling to SubJobClient.MapCreateBulk with wrong type %T, need slice", slice)}
-	}
-	builders := make([]*SubJobCreate, rv.Len())
-	for i := 0; i < rv.Len(); i++ {
-		builders[i] = c.Create()
-		setFunc(builders[i], i)
-	}
-	return &SubJobCreateBulk{config: c.config, builders: builders}
-}
-
-// Update returns an update builder for SubJob.
-func (c *SubJobClient) Update() *SubJobUpdate {
-	mutation := newSubJobMutation(c.config, OpUpdate)
-	return &SubJobUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOne returns an update builder for the given entity.
-func (c *SubJobClient) UpdateOne(_m *SubJob) *SubJobUpdateOne {
-	mutation := newSubJobMutation(c.config, OpUpdateOne, withSubJob(_m))
-	return &SubJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOneID returns an update builder for the given id.
-func (c *SubJobClient) UpdateOneID(id int) *SubJobUpdateOne {
-	mutation := newSubJobMutation(c.config, OpUpdateOne, withSubJobID(id))
-	return &SubJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// Delete returns a delete builder for SubJob.
-func (c *SubJobClient) Delete() *SubJobDelete {
-	mutation := newSubJobMutation(c.config, OpDelete)
-	return &SubJobDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// DeleteOne returns a builder for deleting the given entity.
-func (c *SubJobClient) DeleteOne(_m *SubJob) *SubJobDeleteOne {
-	return c.DeleteOneID(_m.ID)
-}
-
-// DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *SubJobClient) DeleteOneID(id int) *SubJobDeleteOne {
-	builder := c.Delete().Where(subjob.ID(id))
-	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
-	return &SubJobDeleteOne{builder}
-}
-
-// Query returns a query builder for SubJob.
-func (c *SubJobClient) Query() *SubJobQuery {
-	return &SubJobQuery{
-		config: c.config,
-		ctx:    &QueryContext{Type: TypeSubJob},
-		inters: c.Interceptors(),
-	}
-}
-
-// Get returns a SubJob entity by its id.
-func (c *SubJobClient) Get(ctx context.Context, id int) (*SubJob, error) {
-	return c.Query().Where(subjob.ID(id)).Only(ctx)
-}
-
-// GetX is like Get, but panics if an error occurs.
-func (c *SubJobClient) GetX(ctx context.Context, id int) *SubJob {
-	obj, err := c.Get(ctx, id)
-	if err != nil {
-		panic(err)
-	}
-	return obj
-}
-
-// QueryJob queries the job edge of a SubJob.
-func (c *SubJobClient) QueryJob(_m *SubJob) *JobQuery {
-	query := (&JobClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(subjob.Table, subjob.FieldID, id),
-			sqlgraph.To(job.Table, job.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, subjob.JobTable, subjob.JobColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// QuerySegments queries the segments edge of a SubJob.
-func (c *SubJobClient) QuerySegments(_m *SubJob) *SegmentQuery {
-	query := (&SegmentClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(subjob.Table, subjob.FieldID, id),
-			sqlgraph.To(segment.Table, segment.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, subjob.SegmentsTable, subjob.SegmentsColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// Hooks returns the client hooks.
-func (c *SubJobClient) Hooks() []Hook {
-	return c.hooks.SubJob
-}
-
-// Interceptors returns the client interceptors.
-func (c *SubJobClient) Interceptors() []Interceptor {
-	return c.inters.SubJob
-}
-
-func (c *SubJobClient) mutate(ctx context.Context, m *SubJobMutation) (Value, error) {
-	switch m.Op() {
-	case OpCreate:
-		return (&SubJobCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdate:
-		return (&SubJobUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdateOne:
-		return (&SubJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpDelete, OpDeleteOne:
-		return (&SubJobDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
-	default:
-		return nil, fmt.Errorf("ent: unknown SubJob mutation op: %q", m.Op())
 	}
 }
 
@@ -3439,22 +2997,6 @@ func (c *UsageRecordClient) QueryProject(_m *UsageRecord) *ProjectQuery {
 	return query
 }
 
-// QueryJob queries the job edge of a UsageRecord.
-func (c *UsageRecordClient) QueryJob(_m *UsageRecord) *JobQuery {
-	query := (&JobClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(usagerecord.Table, usagerecord.FieldID, id),
-			sqlgraph.To(job.Table, job.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, usagerecord.JobTable, usagerecord.JobColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
 // Hooks returns the client hooks.
 func (c *UsageRecordClient) Hooks() []Hook {
 	return c.hooks.UsageRecord
@@ -3586,22 +3128,6 @@ func (c *UserClient) GetX(ctx context.Context, id int) *User {
 		panic(err)
 	}
 	return obj
-}
-
-// QueryJobs queries the jobs edge of a User.
-func (c *UserClient) QueryJobs(_m *User) *JobQuery {
-	query := (&JobClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(user.Table, user.FieldID, id),
-			sqlgraph.To(job.Table, job.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, user.JobsTable, user.JobsColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
 }
 
 // QueryCreatedTranslationJobs queries the created_translation_jobs edge of a User.
@@ -3909,15 +3435,15 @@ func (c *UserBackendClient) mutate(ctx context.Context, m *UserBackendMutation) 
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		ActivityLog, GlossaryEntry, Job, JobResource, OrgBackend, OrgMembership,
+		ActivityLog, GlossaryEntry, JobResource, OrgBackend, OrgMembership,
 		Organization, Project, ProjectBackend, RefreshToken, Resource, Segment,
-		StageBackendOverride, SubJob, TMEntry, TranslationJob, UsageRecord, User,
+		StageBackendOverride, TMEntry, TranslationJob, UsageRecord, User,
 		UserBackend []ent.Hook
 	}
 	inters struct {
-		ActivityLog, GlossaryEntry, Job, JobResource, OrgBackend, OrgMembership,
+		ActivityLog, GlossaryEntry, JobResource, OrgBackend, OrgMembership,
 		Organization, Project, ProjectBackend, RefreshToken, Resource, Segment,
-		StageBackendOverride, SubJob, TMEntry, TranslationJob, UsageRecord, User,
+		StageBackendOverride, TMEntry, TranslationJob, UsageRecord, User,
 		UserBackend []ent.Interceptor
 	}
 )

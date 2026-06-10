@@ -22,15 +22,12 @@ func (Segment) Fields() []ent.Field {
 		field.String("status").Default("pending"),
 		field.String("review_comment").Optional().Nillable(),
 		field.Int("resource_id").Optional().Nillable().Positive().
-			Comment("所属资源 ID（新路径，与 sub_job 二选一）"),
+			Comment("所属资源 ID"),
 	}
 }
 
 func (Segment) Edges() []ent.Edge {
 	return []ent.Edge{
-		edge.From("sub_job", SubJob.Type).
-			Ref("segments").
-			Unique(),
 		edge.From("resource", Resource.Type).
 			Ref("segments").
 			Field("resource_id").

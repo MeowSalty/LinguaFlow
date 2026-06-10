@@ -30,21 +30,12 @@ const (
 	FieldReviewComment = "review_comment"
 	// FieldResourceID holds the string denoting the resource_id field in the database.
 	FieldResourceID = "resource_id"
-	// EdgeSubJob holds the string denoting the sub_job edge name in mutations.
-	EdgeSubJob = "sub_job"
 	// EdgeResource holds the string denoting the resource edge name in mutations.
 	EdgeResource = "resource"
 	// EdgeReviewedBy holds the string denoting the reviewed_by edge name in mutations.
 	EdgeReviewedBy = "reviewed_by"
 	// Table holds the table name of the segment in the database.
 	Table = "segments"
-	// SubJobTable is the table that holds the sub_job relation/edge.
-	SubJobTable = "segments"
-	// SubJobInverseTable is the table name for the SubJob entity.
-	// It exists in this package in order to avoid circular dependency with the "subjob" package.
-	SubJobInverseTable = "sub_jobs"
-	// SubJobColumn is the table column denoting the sub_job relation/edge.
-	SubJobColumn = "sub_job_segments"
 	// ResourceTable is the table that holds the resource relation/edge.
 	ResourceTable = "segments"
 	// ResourceInverseTable is the table name for the Resource entity.
@@ -77,7 +68,6 @@ var Columns = []string{
 // ForeignKeys holds the SQL foreign-keys that are owned by the "segments"
 // table and are not defined as standalone fields in the schema.
 var ForeignKeys = []string{
-	"sub_job_segments",
 	"user_reviewed_segments",
 }
 
@@ -161,13 +151,6 @@ func ByResourceID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldResourceID, opts...).ToFunc()
 }
 
-// BySubJobField orders the results by sub_job field.
-func BySubJobField(field string, opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newSubJobStep(), sql.OrderByField(field, opts...))
-	}
-}
-
 // ByResourceField orders the results by resource field.
 func ByResourceField(field string, opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -180,13 +163,6 @@ func ByReviewedByField(field string, opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
 		sqlgraph.OrderByNeighborTerms(s, newReviewedByStep(), sql.OrderByField(field, opts...))
 	}
-}
-func newSubJobStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(SubJobInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.M2O, true, SubJobTable, SubJobColumn),
-	)
 }
 func newResourceStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(

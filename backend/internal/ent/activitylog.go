@@ -11,7 +11,6 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
@@ -39,7 +38,6 @@ type ActivityLog struct {
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the ActivityLogQuery when eager-loading is set.
 	Edges                      ActivityLogEdges `json:"edges"`
-	job_activity_logs          *int
 	organization_activity_logs *int
 	project_activity_logs      *int
 	user_activity_logs         *int
@@ -54,11 +52,9 @@ type ActivityLogEdges struct {
 	Organization *Organization `json:"organization,omitempty"`
 	// Project holds the value of the project edge.
 	Project *Project `json:"project,omitempty"`
-	// Job holds the value of the job edge.
-	Job *Job `json:"job,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [4]bool
+	loadedTypes [3]bool
 }
 
 // ActorOrErr returns the Actor value or an error if the edge
@@ -94,17 +90,6 @@ func (e ActivityLogEdges) ProjectOrErr() (*Project, error) {
 	return nil, &NotLoadedError{edge: "project"}
 }
 
-// JobOrErr returns the Job value or an error if the edge
-// was not loaded in eager-loading, or loaded but was not found.
-func (e ActivityLogEdges) JobOrErr() (*Job, error) {
-	if e.Job != nil {
-		return e.Job, nil
-	} else if e.loadedTypes[3] {
-		return nil, &NotFoundError{label: job.Label}
-	}
-	return nil, &NotLoadedError{edge: "job"}
-}
-
 // scanValues returns the types for scanning values from sql.Rows.
 func (*ActivityLog) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
@@ -118,13 +103,11 @@ func (*ActivityLog) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullString)
 		case activitylog.FieldCreatedAt, activitylog.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
-		case activitylog.ForeignKeys[0]: // job_activity_logs
+		case activitylog.ForeignKeys[0]: // organization_activity_logs
 			values[i] = new(sql.NullInt64)
-		case activitylog.ForeignKeys[1]: // organization_activity_logs
+		case activitylog.ForeignKeys[1]: // project_activity_logs
 			values[i] = new(sql.NullInt64)
-		case activitylog.ForeignKeys[2]: // project_activity_logs
-			values[i] = new(sql.NullInt64)
-		case activitylog.ForeignKeys[3]: // user_activity_logs
+		case activitylog.ForeignKeys[2]: // user_activity_logs
 			values[i] = new(sql.NullInt64)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -194,26 +177,19 @@ func (_m *ActivityLog) assignValues(columns []string, values []any) error {
 			}
 		case activitylog.ForeignKeys[0]:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for edge-field job_activity_logs", value)
-			} else if value.Valid {
-				_m.job_activity_logs = new(int)
-				*_m.job_activity_logs = int(value.Int64)
-			}
-		case activitylog.ForeignKeys[1]:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for edge-field organization_activity_logs", value)
 			} else if value.Valid {
 				_m.organization_activity_logs = new(int)
 				*_m.organization_activity_logs = int(value.Int64)
 			}
-		case activitylog.ForeignKeys[2]:
+		case activitylog.ForeignKeys[1]:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for edge-field project_activity_logs", value)
 			} else if value.Valid {
 				_m.project_activity_logs = new(int)
 				*_m.project_activity_logs = int(value.Int64)
 			}
-		case activitylog.ForeignKeys[3]:
+		case activitylog.ForeignKeys[2]:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for edge-field user_activity_logs", value)
 			} else if value.Valid {
@@ -246,11 +222,6 @@ func (_m *ActivityLog) QueryOrganization() *OrganizationQuery {
 // QueryProject queries the "project" edge of the ActivityLog entity.
 func (_m *ActivityLog) QueryProject() *ProjectQuery {
 	return NewActivityLogClient(_m.config).QueryProject(_m)
-}
-
-// QueryJob queries the "job" edge of the ActivityLog entity.
-func (_m *ActivityLog) QueryJob() *JobQuery {
-	return NewActivityLogClient(_m.config).QueryJob(_m)
 }
 
 // Update returns a builder for updating this ActivityLog.

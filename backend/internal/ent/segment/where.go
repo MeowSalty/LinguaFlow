@@ -525,29 +525,6 @@ func ResourceIDNotNil() predicate.Segment {
 	return predicate.Segment(sql.FieldNotNull(FieldResourceID))
 }
 
-// HasSubJob applies the HasEdge predicate on the "sub_job" edge.
-func HasSubJob() predicate.Segment {
-	return predicate.Segment(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, SubJobTable, SubJobColumn),
-		)
-		sqlgraph.HasNeighbors(s, step)
-	})
-}
-
-// HasSubJobWith applies the HasEdge predicate on the "sub_job" edge with a given conditions (other predicates).
-func HasSubJobWith(preds ...predicate.SubJob) predicate.Segment {
-	return predicate.Segment(func(s *sql.Selector) {
-		step := newSubJobStep()
-		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
-			for _, p := range preds {
-				p(s)
-			}
-		})
-	})
-}
-
 // HasResource applies the HasEdge predicate on the "resource" edge.
 func HasResource() predicate.Segment {
 	return predicate.Segment(func(s *sql.Selector) {

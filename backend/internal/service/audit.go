@@ -21,7 +21,6 @@ type AuditEvent struct {
 	ActorUserID  int
 	OrgID        *int
 	ProjectID    *int
-	JobID        *int
 	Action       string
 	ResourceType string
 	ResourceID   int
@@ -56,9 +55,6 @@ func (s *AuditService) Record(ctx context.Context, event AuditEvent) error {
 	if event.ProjectID != nil && *event.ProjectID > 0 {
 		create.SetProjectID(*event.ProjectID)
 	}
-	if event.JobID != nil && *event.JobID > 0 {
-		create.SetJobID(*event.JobID)
-	}
 	if event.ResourceID > 0 {
 		create.SetResourceID(event.ResourceID)
 	}
@@ -88,7 +84,7 @@ func (s *AuditService) ListActivity(ctx context.Context, actorUserID, afterID, l
 	for _, apply := range predicates {
 		apply(query)
 	}
-	rows, err := query.Order(ent.Asc(activitylog.FieldID)).Limit(limit + 1).WithActor().WithOrganization().WithProject().WithJob().All(ctx)
+	rows, err := query.Order(ent.Asc(activitylog.FieldID)).Limit(limit + 1).WithActor().WithOrganization().WithProject().All(ctx)
 	if err != nil {
 		return nil, err
 	}

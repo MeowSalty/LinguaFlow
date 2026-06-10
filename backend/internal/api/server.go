@@ -29,7 +29,6 @@ type Server struct {
 	backendSvc           *service.BackendService
 	projectSvc           *service.ProjectService
 	glossarySvc          *service.GlossaryService
-	jobService           *service.JobService
 	translationJobSvc    *service.TranslationJobService
 	reviewSvc            *service.ReviewService
 	segmentSvc           *service.SegmentService
@@ -37,8 +36,6 @@ type Server struct {
 	auditSvc             *service.AuditService
 	resourceSvc          *service.ResourceService
 	jobStore             *filestore.LocalStore
-	jobQueue             *worker.Queue
-	jobRunner            *worker.Runner
 	translationJobQueue  *worker.Queue
 	translationJobRunner *worker.TranslationRunner
 	httpServer           *http.Server
@@ -61,7 +58,6 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 	s.backendSvc = service.NewBackendService(client, s.userService)
 	s.projectSvc = service.NewProjectService(client, s.userService, s.backendSvc)
 	s.glossarySvc = service.NewGlossaryService(client, s.projectSvc)
-	s.jobService = service.NewJobService(client, s.projectSvc)
 	s.translationJobSvc = service.NewTranslationJobService(client, s.projectSvc)
 	s.reviewSvc = service.NewReviewService(client, s.projectSvc)
 	s.segmentSvc = service.NewSegmentService(client, s.projectSvc)
@@ -77,8 +73,6 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 	if queueSize < 16 {
 		queueSize = 16
 	}
-	s.jobQueue = worker.NewQueue(queueSize)
-	s.jobRunner = worker.NewRunner(cfg, logger, client, s.projectSvc, s.jobService, jobStore, s.jobQueue)
 	s.translationJobQueue = worker.NewQueue(queueSize)
 	s.translationJobRunner = worker.NewTranslationRunner(cfg, logger, client, s.projectSvc, s.translationJobSvc, jobStore, s.translationJobQueue)
 	s.httpServer = &http.Server{
@@ -92,16 +86,6 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 
 func (s *Server) Run(ctx context.Context) error {
 	serveErr := make(chan error, 1)
-	if s.jobRunner != nil {
-		if err := s.jobRunner.Recover(ctx); err != nil {
-			return err
-		}
-		go func() {
-			if err := s.jobRunner.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-				s.logger.Error("job runner stopped with error", "err", err)
-			}
-		}()
-	}
 	if s.translationJobRunner != nil {
 		if err := s.translationJobRunner.Recover(ctx); err != nil {
 			return err

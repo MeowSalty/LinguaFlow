@@ -85,6 +85,24 @@ func (e BackendType) Valid() bool {
 	}
 }
 
+// Defines values for BatchReviewRequestAction.
+const (
+	BatchReviewRequestActionApprove BatchReviewRequestAction = "approve"
+	BatchReviewRequestActionReject  BatchReviewRequestAction = "reject"
+)
+
+// Valid indicates whether the value is a known member of the BatchReviewRequestAction enum.
+func (e BatchReviewRequestAction) Valid() bool {
+	switch e {
+	case BatchReviewRequestActionApprove:
+		return true
+	case BatchReviewRequestActionReject:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for CreateBackendRequestType.
 const (
 	CreateBackendRequestTypeAnthropic CreateBackendRequestType = "anthropic"
@@ -235,6 +253,27 @@ func (e ResourceUploadFileResultAction) Valid() bool {
 	case ResourceUploadFileResultActionCreated:
 		return true
 	case ResourceUploadFileResultActionFailed:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for SegmentReviewRequestAction.
+const (
+	SegmentReviewRequestActionApprove SegmentReviewRequestAction = "approve"
+	SegmentReviewRequestActionEdit    SegmentReviewRequestAction = "edit"
+	SegmentReviewRequestActionReject  SegmentReviewRequestAction = "reject"
+)
+
+// Valid indicates whether the value is a known member of the SegmentReviewRequestAction enum.
+func (e SegmentReviewRequestAction) Valid() bool {
+	switch e {
+	case SegmentReviewRequestActionApprove:
+		return true
+	case SegmentReviewRequestActionEdit:
+		return true
+	case SegmentReviewRequestActionReject:
 		return true
 	default:
 		return false
@@ -584,6 +623,12 @@ type AddOrganizationMemberRequest struct {
 // AddOrganizationMemberRequestRole defines model for AddOrganizationMemberRequest.Role.
 type AddOrganizationMemberRequestRole string
 
+// ApproveAllResponse defines model for ApproveAllResponse.
+type ApproveAllResponse struct {
+	// ApprovedCount 批准的段落数
+	ApprovedCount int `json:"approved_count"`
+}
+
 // AuthSession defines model for AuthSession.
 type AuthSession struct {
 	AccessToken      string    `json:"access_token"`
@@ -616,6 +661,26 @@ type BackendType string
 // BackendListResponse defines model for BackendListResponse.
 type BackendListResponse struct {
 	Items []Backend `json:"items"`
+}
+
+// BatchReviewRequest defines model for BatchReviewRequest.
+type BatchReviewRequest struct {
+	// Action 批量审核操作
+	Action BatchReviewRequestAction `json:"action"`
+
+	// Comment 审核备注
+	Comment *string `json:"comment,omitempty"`
+
+	// SegmentIds 待审核的段落 ID 列表
+	SegmentIds []int `json:"segment_ids"`
+}
+
+// BatchReviewRequestAction 批量审核操作
+type BatchReviewRequestAction string
+
+// BatchReviewResponse defines model for BatchReviewResponse.
+type BatchReviewResponse struct {
+	Items []Segment `json:"items"`
 }
 
 // ChangePasswordRequest defines model for ChangePasswordRequest.
@@ -861,7 +926,7 @@ type ResourcePrecheckBatchResponse struct {
 
 // ResourcePrecheckFileResult defines model for ResourcePrecheckFileResult.
 type ResourcePrecheckFileResult struct {
-	// Action 建议操作：create=可直接创建, conflict=与已有资源冲突, duplicate=批次内重复路径
+	// Action 建议操作：create=可直接创建，conflict=与已有资源冲突，duplicate=批次内重复路径
 	Action           ResourcePrecheckFileResultAction `json:"action"`
 	ExistingResource *Resource                        `json:"existing_resource,omitempty"`
 
@@ -869,7 +934,7 @@ type ResourcePrecheckFileResult struct {
 	Path string `json:"path"`
 }
 
-// ResourcePrecheckFileResultAction 建议操作：create=可直接创建, conflict=与已有资源冲突, duplicate=批次内重复路径
+// ResourcePrecheckFileResultAction 建议操作：create=可直接创建，conflict=与已有资源冲突，duplicate=批次内重复路径
 type ResourcePrecheckFileResultAction string
 
 // ResourceSegmentListResponse defines model for ResourceSegmentListResponse.
@@ -911,7 +976,7 @@ type ResourceUploadBatchResponse struct {
 
 // ResourceUploadFileResult defines model for ResourceUploadFileResult.
 type ResourceUploadFileResult struct {
-	// Action 处理结果：created=创建成功, conflict=与已有资源冲突, failed=处理失败
+	// Action 处理结果：created=创建成功，conflict=与已有资源冲突，failed=处理失败
 	Action ResourceUploadFileResultAction `json:"action"`
 
 	// Error 失败时的错误信息
@@ -923,8 +988,14 @@ type ResourceUploadFileResult struct {
 	Resource *Resource `json:"resource,omitempty"`
 }
 
-// ResourceUploadFileResultAction 处理结果：created=创建成功, conflict=与已有资源冲突, failed=处理失败
+// ResourceUploadFileResultAction 处理结果：created=创建成功，conflict=与已有资源冲突，failed=处理失败
 type ResourceUploadFileResultAction string
+
+// RetranslateResponse defines model for RetranslateResponse.
+type RetranslateResponse struct {
+	// ResetCount 重置为待翻译的段落数
+	ResetCount int `json:"reset_count"`
+}
 
 // Segment defines model for Segment.
 type Segment struct {
@@ -939,6 +1010,21 @@ type Segment struct {
 	TargetText    *string   `json:"target_text,omitempty"`
 	UpdatedAt     time.Time `json:"updated_at"`
 }
+
+// SegmentReviewRequest defines model for SegmentReviewRequest.
+type SegmentReviewRequest struct {
+	// Action 审核操作：approve=通过, reject=拒绝, edit=编辑译文
+	Action SegmentReviewRequestAction `json:"action"`
+
+	// Comment 审核备注
+	Comment *string `json:"comment,omitempty"`
+
+	// TargetText 编辑译文时必填
+	TargetText *string `json:"target_text,omitempty"`
+}
+
+// SegmentReviewRequestAction 审核操作：approve=通过, reject=拒绝, edit=编辑译文
+type SegmentReviewRequestAction string
 
 // SetBackendOrderRequest defines model for SetBackendOrderRequest.
 type SetBackendOrderRequest struct {
@@ -1262,8 +1348,14 @@ type IncrementalUpdateResourceMultipartRequestBody IncrementalUpdateResourceMult
 // UpdateResourceMultipartRequestBody defines body for UpdateResource for multipart/form-data ContentType.
 type UpdateResourceMultipartRequestBody UpdateResourceMultipartBody
 
+// BatchReviewResourceSegmentsJSONRequestBody defines body for BatchReviewResourceSegments for application/json ContentType.
+type BatchReviewResourceSegmentsJSONRequestBody = BatchReviewRequest
+
 // UpdateResourceSegmentJSONRequestBody defines body for UpdateResourceSegment for application/json ContentType.
 type UpdateResourceSegmentJSONRequestBody = ResourceSegmentUpdateRequest
+
+// ReviewResourceSegmentJSONRequestBody defines body for ReviewResourceSegment for application/json ContentType.
+type ReviewResourceSegmentJSONRequestBody = SegmentReviewRequest
 
 // SetStageBackendOverrideJSONRequestBody defines body for SetStageBackendOverride for application/json ContentType.
 type SetStageBackendOverrideJSONRequestBody = SetStageOverrideRequest
@@ -1411,12 +1503,24 @@ type ServerInterface interface {
 	// 下载资源原始文件
 	// (GET /projects/{projectId}/resources/{resourceId}/download)
 	DownloadResourceFile(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId)
+	// 将资源中被拒绝的段落重置为待翻译
+	// (POST /projects/{projectId}/resources/{resourceId}/retranslate-rejected)
+	RetranslateRejectedSegments(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId)
 	// 列出资源段落
 	// (GET /projects/{projectId}/resources/{resourceId}/segments)
 	ListResourceSegments(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId, params ListResourceSegmentsParams)
+	// 批准资源中所有已翻译/已编辑的段落
+	// (POST /projects/{projectId}/resources/{resourceId}/segments/approve-all)
+	ApproveAllResourceSegments(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId)
+	// 批量审核段落
+	// (POST /projects/{projectId}/resources/{resourceId}/segments/batch-review)
+	BatchReviewResourceSegments(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId)
 	// 更新资源段落内容
 	// (PATCH /projects/{projectId}/resources/{resourceId}/segments/{segmentId})
 	UpdateResourceSegment(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId, segmentId SegmentId)
+	// 审核单个段落（通过/拒绝/编辑）
+	// (PATCH /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/review)
+	ReviewResourceSegment(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId, segmentId SegmentId)
 	// 设置阶段后端覆盖
 	// (PUT /projects/{projectId}/stages/{stage}/override)
 	SetStageBackendOverride(w http.ResponseWriter, r *http.Request, projectId ProjectId, stage Stage)
@@ -1723,15 +1827,39 @@ func (_ Unimplemented) DownloadResourceFile(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// 将资源中被拒绝的段落重置为待翻译
+// (POST /projects/{projectId}/resources/{resourceId}/retranslate-rejected)
+func (_ Unimplemented) RetranslateRejectedSegments(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // 列出资源段落
 // (GET /projects/{projectId}/resources/{resourceId}/segments)
 func (_ Unimplemented) ListResourceSegments(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId, params ListResourceSegmentsParams) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// 批准资源中所有已翻译/已编辑的段落
+// (POST /projects/{projectId}/resources/{resourceId}/segments/approve-all)
+func (_ Unimplemented) ApproveAllResourceSegments(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 批量审核段落
+// (POST /projects/{projectId}/resources/{resourceId}/segments/batch-review)
+func (_ Unimplemented) BatchReviewResourceSegments(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // 更新资源段落内容
 // (PATCH /projects/{projectId}/resources/{resourceId}/segments/{segmentId})
 func (_ Unimplemented) UpdateResourceSegment(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId, segmentId SegmentId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 审核单个段落（通过/拒绝/编辑）
+// (PATCH /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/review)
+func (_ Unimplemented) ReviewResourceSegment(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId, segmentId SegmentId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3187,6 +3315,46 @@ func (siw *ServerInterfaceWrapper) DownloadResourceFile(w http.ResponseWriter, r
 	handler.ServeHTTP(w, r)
 }
 
+// RetranslateRejectedSegments operation middleware
+func (siw *ServerInterfaceWrapper) RetranslateRejectedSegments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "resourceId" -------------
+	var resourceId ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "resourceId", chi.URLParam(r, "resourceId"), &resourceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "resourceId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.RetranslateRejectedSegments(w, r, projectId, resourceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListResourceSegments operation middleware
 func (siw *ServerInterfaceWrapper) ListResourceSegments(w http.ResponseWriter, r *http.Request) {
 
@@ -3262,6 +3430,86 @@ func (siw *ServerInterfaceWrapper) ListResourceSegments(w http.ResponseWriter, r
 	handler.ServeHTTP(w, r)
 }
 
+// ApproveAllResourceSegments operation middleware
+func (siw *ServerInterfaceWrapper) ApproveAllResourceSegments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "resourceId" -------------
+	var resourceId ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "resourceId", chi.URLParam(r, "resourceId"), &resourceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "resourceId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ApproveAllResourceSegments(w, r, projectId, resourceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// BatchReviewResourceSegments operation middleware
+func (siw *ServerInterfaceWrapper) BatchReviewResourceSegments(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "resourceId" -------------
+	var resourceId ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "resourceId", chi.URLParam(r, "resourceId"), &resourceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "resourceId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.BatchReviewResourceSegments(w, r, projectId, resourceId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // UpdateResourceSegment operation middleware
 func (siw *ServerInterfaceWrapper) UpdateResourceSegment(w http.ResponseWriter, r *http.Request) {
 
@@ -3302,6 +3550,55 @@ func (siw *ServerInterfaceWrapper) UpdateResourceSegment(w http.ResponseWriter, 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateResourceSegment(w, r, projectId, resourceId, segmentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ReviewResourceSegment operation middleware
+func (siw *ServerInterfaceWrapper) ReviewResourceSegment(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "resourceId" -------------
+	var resourceId ResourceId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "resourceId", chi.URLParam(r, "resourceId"), &resourceId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "resourceId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "segmentId" -------------
+	var segmentId SegmentId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "segmentId", chi.URLParam(r, "segmentId"), &segmentId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "segmentId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ReviewResourceSegment(w, r, projectId, resourceId, segmentId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3949,10 +4246,22 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/projects/{projectId}/resources/{resourceId}/download", wrapper.DownloadResourceFile)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/projects/{projectId}/resources/{resourceId}/retranslate-rejected", wrapper.RetranslateRejectedSegments)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/resources/{resourceId}/segments", wrapper.ListResourceSegments)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/projects/{projectId}/resources/{resourceId}/segments/approve-all", wrapper.ApproveAllResourceSegments)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/projects/{projectId}/resources/{resourceId}/segments/batch-review", wrapper.BatchReviewResourceSegments)
+	})
+	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/projects/{projectId}/resources/{resourceId}/segments/{segmentId}", wrapper.UpdateResourceSegment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Patch(options.BaseURL+"/projects/{projectId}/resources/{resourceId}/segments/{segmentId}/review", wrapper.ReviewResourceSegment)
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/projects/{projectId}/stages/{stage}/override", wrapper.SetStageBackendOverride)
@@ -3997,108 +4306,115 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"H4sIAAAAAAAC/+w9W3Pbxrl/RYNz3g5jOu05L5rJQ5M2rTvpicZy24fUw4HINYWEBBgA9KUezci2LqQs",
-	"WXIiy7ak2JZrx4ptkY4b25QoyT8mWIB60l84sxeAuOwCJAVAOm2eTAu7+3373ffb3W+vCnmlXFFkIOua",
-	"MHxVqIiqWAY6UPH/PhbzXwG5cKaA/iPJwrBQEfVxISPIYhkIw8KY8z0jqODrqqSCgjCsq1WQEbT8OCiL",
-	"qGNZkqVytSwMf5gR9CsV1FGSdVAEqjAxkRE+qaqaojoQvq4C9UoXRJ58dY9Hx9B0VZKLeIjfybp6hYsl",
-	"oF+PgONnUlnSeSiW8EfPaOJlOtrp05mosT9Xi1zUFfztCIiPqMqXIK9zAVSc70cAchZoSlXNAy4Utdvg",
-	"CGBGQbEMZP5cNOf7UYDoYhHwAOBvYYMDGY38haCroqyVRB21HlMUXdNVsSKczzBk9xxtKinyH5Ux7uR0",
-	"f7MjzPHPGlC5gKrk48DDT6CeWkWRNYBtyIiqjJVAGf3MK7IOZKxHYqVSkvJ4OtkKafFfX2qKjL51Af2n",
-	"Ci4Iw8J/ZLtGKku+all7XAyxALS8KlXQcMKwcLB8v9Nswm8X4M4ynjDtg4b8TV6XLkr6FWzsVKUCVF0i",
-	"iIp50j1gYDLoE7FQYQghqqLGeRWIOijkRDzRC4paRr+EgqiDD3SpjEQiAEAquOA6tMwIZaBpVB4DfcpA",
-	"FwuijgklFgoSwl4sjbjmRPhGOypjSNEFwh6sjTkeVKcB+cSAXa0U+pzjhFugvkATztgU9wP0kNAD6zxj",
-	"NjZDP5M0/SwVvCBzJR2UvT/CWOkIyYQDUFRVEf9fBpf1XN7xWRHTxNCYaBcKn6tFUZb+jpXgT6A8BtSz",
-	"4Osq0PQg+qpSAm77olySAXKKYqEsIQKWcXeGgclgfSaqHYWs05KJb1UfHwWaRlXErzp5oGk5XfkKsBUI",
-	"XK5IKtD60gkVXFCBNp47Sl8+RvhLiIAjZe5J4X1E9JDCj4gHrIcqzOlSNFjsoJEZQ9A5Os0RgYygYKup",
-	"9W1FaL/cRUmTxkrusccUpQREGTdCcppT1CLX1pAWaJ7cJhVVUlRqsoNfieVwKwcmWgbFTkyFsHnu6FIF",
-	"yKKElEnWx1WlIuWFjFBUlGIJsD12wI5RFCiRaRcX3iEMjNNq2TIRMFo9G6VPxkW5CEZETbukqAWuNcpX",
-	"VRXIeq5CGzLlSgaXwhr4cAoM6RuAiS32EnTWLmTZYnxBLGkg45tJ7FrhltUCuCBWS7owfDrDkNtYxdAt",
-	"eHxS/b6kaJqoXsHLpcEIlhc1kNOArEm6dBF4ZknbB42ArOikc4DKXd0NaqmoFoEeLTiO7tEO/NnTpdCA",
-	"81bkC1Kxb3GgxMm5ovfcgEPxRTXSxjrhlZZXvEJHl3/EWjrBCNNs0iFKolwMYRjvO0te+azyrokG45gr",
-	"yvWa0LDVSzDco4vKI45yZP5PMGjlUWeGlQ6oalA141yrxKvmca0x/PYh46fL+RDKnilXFBX5Z2zgAlFv",
-	"oQA4tNC+kioV8tGRGG/nkiQDnraKGmcdyiUkSzxCYwCCe9jc44xMvJI6eHzyByCW9HE+VhpQL0o0GLws",
-	"lislkp6Ti1XxQkm5xJJmTRf1qubtoXwVKVu0GwvJM3JeBchmiKU/YxEmUZUWIkDe9IW58go+fmA23nSW",
-	"9sw7rwSWgSmAEtBZnWHt0cH9J9bqVHj/qpzHWLHArz+Hi/fg/Er0IERDGUPsLJkrs+b6y54GYopmd3Q3",
-	"st2J90R5vqTkuzwJE1wuL11eNWoMOzsamKgzQMZBhzWrz5SiJHNj8dAYfIC1f0YIjbk/U4pKVefnKSLW",
-	"3QEKuJuz4LlzJEFwHqljzL8gaZWSeCXHjZ36Xi1rpWoP4Q32PJScuEfU1OI0th6SDW5rg9mp3pMNR0xX",
-	"DZR4wTTHgEPSJsFJJUV5SrJ46M/VtyMrwBEFPUrGXcl/P+K6KJXYkB2PzIirJb3ECSTZmTwfvqR/Jsx9",
-	"02Uiw2UMtm4bJMSOcdnYfz4wjpTdCVhxxrWAoCLum5EXOy8uIVJFk1UfS3JBIlh7ZYxuqOfSy+KqBcRG",
-	"uQAuHy35OqBCuuG7FmsuOvSVVfWSeRTouiQXNS6dezftbP6x8gW6WAQ55SJQVakAQhgSDg9vQ1Non9PB",
-	"hAlWWsBNTWdaIbSJ0+HZtnJwL3eWRIDpBZRnQVHS9JCttkiXCcrUczkWhfyFYcESDM5tPNhz7Oqlz4cN",
-	"4owkFeR1Rb0SXOd13kyhpV59Eq5vWmsNuHfncHfefLRNfhutHeuHHbh113r5vdF6zRobqKqi5sJ2uW0c",
-	"Bwjembje27ee7MClhcPdebj3LawvWFt1uDRv7NwiDTrvmnB/amhM1AAa53B3/uDxlHXnvtW+D5duWe0t",
-	"uNi0dlc6+7edodic18eDOBxsYNLMTHeeTXXmb8D5FQLUWmvB5jYBfbg7b+y9t5Y3h7JDsDZzsLqM/rJ/",
-	"E35/fagqIS0sK/IpfFYiPJ1BHa4KxMIVgZKavSGm6GIpRxOdnMArHl/qPmniFiyHzQFknBn1dyjA1oA4",
-	"jV13HX8Ea0eGGFFBfhzkv/pY1PPjceNnD/6pVAI0dRkfxq5BQw7Q+FJS7Z1Oo2F+u2DsrR/urhI+foT0",
-	"aO0n89ZTWFuD7Z3MEApwS1Je/8ho3YLvXpvrdaIccOa19fxaZqhQJUeGwEdmfdt8uQFnpg9mF+CTBaI3",
-	"SMSpyBMISGTokEjY7N5MFQCXJQ2FCrn+kzo8XSfIBzXereuRWkMVhlI2jEH0cFycAk+HTPAQjA95O2k3",
-	"2AZduUzPlvEWEjq4rIctJDjfJ0IQP6cC8L9KgZlglEoFlcQsfamvMySL7LyYhC2CxA2bNdvLrE6Fi2Of",
-	"znsQXfHvert9gDNe5HY3XQo4MZE+HipeiKR8pVAVRe+fOf7AEw0ShsOfKyVFLCRi8MnQsZr7wJC9G/sn",
-	"U9bSjNX+1nzQNfaFj4iRN2tLcO5htKm/IEol1AmPBZ/82PnpacC8F7z2nXRhG3cc+TAwReOad98ivcAn",
-	"Ro33G+a1pnCS/UMM2w7RPsU2/LEsH/gpoosSuJQLs9ukCSjkxq70evjW2a7nZzSivEEg/+j6VB3LfamM",
-	"cdMz4Y4kti3tLhb+CXtnN2DwPArsPMfnasGzUu7DH4+RFIkWsgUelezq82Qf72CQC8z5frfJnVlw6ITT",
-	"NHZ+ZkBCUfTKNIyw5yrJ40DF90oqKqgAmRzJR5PN60wzZw+EU2oesnNyc76kVQ9nrej9Bw/KTMqwsldc",
-	"/v8rzdx7com1iVCu4A1sx5NwFtzdhuEL80FMcg9ZF+xNo3DkKS4yTp6uPYUz/kNfvNV2xt5DiN59yCtV",
-	"j2txG5dAogRJmoST+WpVlskv8ZIoUb+PXJHg4ks35sgIeVHOgxIv/uglvxLDTo+uSsUiUHP+ELssylWx",
-	"hNCVSiBHbL+QEYr0TE6OnD0QMsIlMJYDBYmtYzElgLqcczknD+YB9mWYSsOQUUbyiKFF/flCr1DGubr2",
-	"WYrkFtkcvQoxTcdhcbibjVW9UtVzdgwdyyI08gKUHVSF2Q/OudAeTpT2ZHkGsDPxqKibOC4d9ZIkBs0i",
-	"yZ6Te3r/mE/s0+Nm5FoEWt2ksGE1wcUjkZsDJ/CmAJltGhfzAvmjUpgc/KveXTgZNxOCREdualQXddah",
-	"3YqUy4ulUmTc/qUyxmlDIxd+A0lGPg9vYmuhbjGsSQ9OrIrmmVNBXlELzFH8R3Oduftw9CMU9BdeUAE6",
-	"eYnCVASNdQJRzPOtSZw7+VEnHY+wu4/9rGuL38aBnmWkMzzPOvuhgXwV+atRFOTQRTUQVaD+pkrCJfK/",
-	"T+3p/fGv5+w6FZhW+Gt3uuO6XiH36SX5goIxJ+fthM/wGfpPS8qlob+CsaFRcs5+6DcjZ4SMcBGo5Fqw",
-	"cPrUh6dOEwcMZLEiCcPCr0+dPvVrmqTHCGZF1w18argRR7F+nylgYJru3MD2VRP41enTIZUE+qsgwLw5",
-	"zignYP7UhnObsLHRaWyYd5/C93dd5pEHxMHaVaigyzBh+Asvq744P3E+I2jVcllUrwjDQufWO7i4wobs",
-	"rtHyBRt6t0mWlleZyES2JEVOJs5PZISsWNXHsyWlKJFT14rG4hP6jNEnAg00/WOlcCU2/ngOvk941QY5",
-	"mokkZcN13Z0hEtb9Nt5ZW4JzDwcXBofb1vKmWXtHBsWfHPorVT2UAUpVT5YDrtP+PbHgvxkbLe9eo6nN",
-	"7iSvNgQO3H5rfvPkYHkS1t6ZK6+M9hOrPu+iKz0lxicsPZWWIGV9595OlnQTssUm3WS4TuP9wd0Ggxfk",
-	"PF4YM0iLRLnhPRTYEzs+TI0d716T7dMYeGH+cxPOzBN7A7ffWlv7cPG2sbvaaX5HmOI+Gcv1zigW+9hu",
-	"mKCcsooksAi0dMt60YS1u52NzeRtDKzdhbM7Ruu5sbNDIGOnzJRdcp3ZRa6EBJhZCiFlKXbKT7AMSnf3",
-	"Pw0GIWheBrlFO3vVqVs3QbwVWogEmfdb/Hc/8yK9Hb6Amd5cEbSAMPYVIXar/KGxK1WGHJMsRPJyzEwK",
-	"puwcQ+TYXPspBsfYK28JtKAcK2ox3Dy781eJ2mfuFUZWyNyestqz6RppesIbezuzPgl/fECwiDLYniuU",
-	"yUg663pfygbbe1E0JO7oEi0Nw21Ds0U9exVXwZzgivzvgR5gWAoCzxfyTvN788Z0WkkCP8z+jD+pPhph",
-	"+E+yPqTHXGKPkSVenUpLJQhMAo0eTwwoRm8x++dq8d88ZKceaMAoyaUo4Z7jl0g/5Ujfy1eudvQX9vsY",
-	"eRKj/ljkORPf8iBx2f9ldcDxDFzZJ9vPva8W/kTbp+RlGSU4WHStLcHb99LyFe6gyg85Xo/BLAGckOqE",
-	"lhs+xnWHXSaFufow37Xh3CPChBQUCkNzM56vUNmrpEx6b46ExeJeNk2etalPSWP6BJp3+on5FFqBvo9l",
-	"R6LaEXXs5xgXInwFcS9H0hIS433DXN52C0nn2Ted+muiKRVa04S6Gt/SeHnT2LkF6wso7l/fJJudsL4A",
-	"3784mHwIa0/MlS3ix4b+cO7cyJC5vgDnNsx7Tbj0PVxsdvb3D3fXjNaC+Y9J8+FT884rc6EBd741ayvW",
-	"y5dGq26ubBv733XerPw8eV3I+ORphB6vTIpjvsKELG7h6ZCJxLGPc/fRQf0n87sbnfcPDiZXzTc3O026",
-	"dUxPToU7/RG7UYJEYRUcYb3WQK7ApboUJDCj0oAjzhm05FZyvpN9Kbtip4DLyVjJ2Wxxi3H2qvNGTQ/e",
-	"1s2yk7hm6woeL5XJncHpNLhO8Es3gemH2V/M0X3hKCKaSFabmed0U44bQvh6HGvTKG2Ozlt21SGN1CWn",
-	"eBg3e9lp7Ft7jXS1xA85dl0Z9ZMc3wFOSGk4N40TUJs4i7wF5YHwIy3tItDc8nCwsQN3FkM0zb7sFxoT",
-	"ui95SCBRVWMWGWdGzc1Oc6uzsZlueEjAmt9t2EHiUbQsJMD01kVPMsxkXuBJOdj0VYE/GSGnl9WRCpQF",
-	"lyuKqnP16Hf4sz3TT0b/Eq1FOrisZ/PaRS8hnSsJY5IsYuHw3yIIkO+T0b8MmSuzRvtt8sRDsGBz19GV",
-	"gRKkbkWJprxUtikfvzqShx78bOMpY7la0qWKqOpZxKUP7Ef4uszz3lG5IJE7ItEs9V4Mwf0Y9z5SjSmZ",
-	"T2GwdLe5C6efkro/6Ynf9FOX+EWL0FX6FGwPC8mgaT6Jy8nYHFV0ytZ+YzdilZWGSwu5k3pM2sF1acex",
-	"7urRpXkqdEQlCs+6qiz4hIz1JHL32njgadyoeqRIFFlDOhVCQx6C5iADRDU/HtUz9mtUCYods7wpa11C",
-	"qqodQ2qVVtt1opE4XLZPs+rbB7OLRmvO2H3khna4Ow+nr3UarYMbm7A2Q1Tv58nrf5M/GEIeVRsyWreG",
-	"8HXEIXO+bt55ZbWnjNZN89Gs0Zo0WpOwuQ13llFz0qjHarw/T17Dl77df0ODmOvPzcUlY3/Nhnn3LZze",
-	"hY1t8+4z2Hhs1t5ZL5pO0V8yHzITuLRg7K0brR2nKKO7RDEau1s9jjB6uWm0Js3JZ0b7qVNPDoMdIvsr",
-	"h7vzncl5o7Vg3mtiYiANQQORwntmbYUUxbNWpwgKRmvB2F09uNc2V7bg9FujvUL+bq1OEUwPd+fN5qLR",
-	"ek7/fvOl9eJm5/0yXHvgrgT4NzmwJUNKDDLMS6xxl7c4R2QElhHK4uUzpPn/nGZUHrJvsXplEUmULVtd",
-	"EfLU22TUeV6z1q9Zd56ad98S3nO5btcC7LWsFSOO1I49kAwrhMlynC71tqtJ1uBis3NjD85Pw6UXRL19",
-	"gnu4W09hEzRgc2AtOtnpuNtshdZSjmsp4wtD1zdh48HB/WmCJqzbO6aYoLZab1mrU5R2N6bhzBtkgFoL",
-	"Zv1ZZ2PeaLeNvTtw5j4Kr3HVZmo+nYFI9WWyN2uu191lmF3tsF0gfyVNjdYtqhCBmp+oGzEbHnOyOuUt",
-	"Hl0jFWaGsk4J0aFstzD04W4dGzOyx7zYNB9tmwsNIj2dxg/0lu1Go9N4QqBSE7W1Yt15CpduwRlKATcB",
-	"GabLLoadpPHiWBq4P02oG25ciMs/3K0ZrQWiLmRKtoush1oTrw0sSzL934cRhobgfFIMDbvIOmvP6/GU",
-	"+Y/JtJaubutBIPdkNHQVAO7ZCnOeKhNx9p1rq3CpZi0/NGtLtAb0o9s/T16n12Hs+s6d+6vmzYeduevW",
-	"9W0UGZDgYueF0d4z2gvW8o9DNilPkRgChxfWRgM2Vg9315znEOD6prn1BD7csTYmjdacWf8B/niHQLGe",
-	"teHc5s+T15CJuL0HlxasrToy4XNr2KYEVKu74+MuuSykIC6eItHcWNohZ8qbo0HgCaTautJ21f7ZU67k",
-	"bPchw5OZJvH46sU5OP3WrE+a63XyKmXYbjx/avFLIF/q0t2P98NMMKl01hGzkIjGXhO9suo1c/2ls8yz",
-	"/tm22g87s8/h3CZsbpvNZcJP8ujo4e4qCgaQV1yadx4kdZ4iNd5/Z925TwOR5m1zZRZHLpyHSw9mF6y9",
-	"htHagfvT1vt2p3kbt3Y91GrNvTUnr/lbIPc7swC37sH1TWcw+Gqm8/gFkUyGCWS9YtqVwV9y0oxXWUNv",
-	"Gj1+gOLeVPNwbpiBTAg/d/oLo/uwjMeRWfXysk8/mi0ol2S09uXmW39LG9jT/lQq9el4lLwO9A80XQVi",
-	"+cj7iXR9dushfHYzrX1Fo3Wzs7fHhpyWH+qXr+5yudw8uu+pm6Pn0btFY+0CjYDcuyJvJuCfCHFmsdh/",
-	"v1Q5630kllUhHjrVjDm1Kk4setLlPHuV/qKLg5TwjW49aqNFgkm07o9ytfZTJ0nVlQp53yplX+q85nWi",
-	"XClRt5lp2NgOcaj4+QUkd+jfiaziflIiOeHDr1iEnpRkvnOR2FFJ5mMjaUsR813aE3Ii8t5bs/GGnpD9",
-	"fsZaW+ldpColUQ47hoznPYIaneiDqIQEJIndaWzA2jcp6PPDp53mYzbkFLSTy2FX3eoP7FLL3PDM+0hC",
-	"nNFZrI+J8OI23wsaQXzieATk/1voF/J2B6t0D07aGO02nNs4jhMTbvhJnjn2vTuS5KFj/8sjjscKeqhf",
-	"JcR1Fqcpj49eVbPPMiUeBiOzheyHlnXahXofXRul7RLUGFfde5aGLG8ezC5a7YedxkZqdRhcMM0fZ83J",
-	"NiGd37hnr+oevkfUC2MoQSpGiC+OKdcMc8nioIn+cz6CU1/cA2eyxMX1H74zQHKNHQZxkvgMF1fMtzVy",
-	"X79r5hO2PBhm0PL0wqSe05WBB6bQfHoKoHxvDTmELkuyVEaBS/fEQfdJivOpZUQznpH+LlWOnFIlnCBH",
-	"DdJNqbploHvUITWNV4FOXFxiCn8WQThJ+n4wu9Bp3klX3ylM+xAnPTaAWU8Uv6ohspZBmHN0PTqVbLDB",
-	"KfzjKtqalj/0wwzZpPNTJ6nrDYynv1LO9fAY5KmDmRKbKEwXm5Bsr9z3SnW2ImraJUXFPovJw0/wOtdF",
-	"2xG7R0ILIQzPBnLklzSaM9aja/Dda0KOtOr9uMlOUCAz0IB60TbkVbUkDAtZsSJlL36IHMP/BQAA//8e",
-	"JziKWqwAAA==",
+	"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",
+	"LsUXhdToeeQY/i8AAP//4wgwtAe6AAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

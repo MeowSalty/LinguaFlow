@@ -13,7 +13,6 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
@@ -223,21 +222,6 @@ func (_u *ProjectUpdate) AddTmEntries(v ...*TMEntry) *ProjectUpdate {
 	return _u.AddTmEntryIDs(ids...)
 }
 
-// AddJobIDs adds the "jobs" edge to the Job entity by IDs.
-func (_u *ProjectUpdate) AddJobIDs(ids ...int) *ProjectUpdate {
-	_u.mutation.AddJobIDs(ids...)
-	return _u
-}
-
-// AddJobs adds the "jobs" edges to the Job entity.
-func (_u *ProjectUpdate) AddJobs(v ...*Job) *ProjectUpdate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.AddJobIDs(ids...)
-}
-
 // AddTranslationJobIDs adds the "translation_jobs" edge to the TranslationJob entity by IDs.
 func (_u *ProjectUpdate) AddTranslationJobIDs(ids ...int) *ProjectUpdate {
 	_u.mutation.AddTranslationJobIDs(ids...)
@@ -397,27 +381,6 @@ func (_u *ProjectUpdate) RemoveTmEntries(v ...*TMEntry) *ProjectUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveTmEntryIDs(ids...)
-}
-
-// ClearJobs clears all "jobs" edges to the Job entity.
-func (_u *ProjectUpdate) ClearJobs() *ProjectUpdate {
-	_u.mutation.ClearJobs()
-	return _u
-}
-
-// RemoveJobIDs removes the "jobs" edge to Job entities by IDs.
-func (_u *ProjectUpdate) RemoveJobIDs(ids ...int) *ProjectUpdate {
-	_u.mutation.RemoveJobIDs(ids...)
-	return _u
-}
-
-// RemoveJobs removes "jobs" edges to Job entities.
-func (_u *ProjectUpdate) RemoveJobs(v ...*Job) *ProjectUpdate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.RemoveJobIDs(ids...)
 }
 
 // ClearTranslationJobs clears all "translation_jobs" edges to the TranslationJob entity.
@@ -831,51 +794,6 @@ func (_u *ProjectUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if _u.mutation.JobsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   project.JobsTable,
-			Columns: []string{project.JobsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.RemovedJobsIDs(); len(nodes) > 0 && !_u.mutation.JobsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   project.JobsTable,
-			Columns: []string{project.JobsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.JobsIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   project.JobsTable,
-			Columns: []string{project.JobsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
 	if _u.mutation.TranslationJobsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -1260,21 +1178,6 @@ func (_u *ProjectUpdateOne) AddTmEntries(v ...*TMEntry) *ProjectUpdateOne {
 	return _u.AddTmEntryIDs(ids...)
 }
 
-// AddJobIDs adds the "jobs" edge to the Job entity by IDs.
-func (_u *ProjectUpdateOne) AddJobIDs(ids ...int) *ProjectUpdateOne {
-	_u.mutation.AddJobIDs(ids...)
-	return _u
-}
-
-// AddJobs adds the "jobs" edges to the Job entity.
-func (_u *ProjectUpdateOne) AddJobs(v ...*Job) *ProjectUpdateOne {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.AddJobIDs(ids...)
-}
-
 // AddTranslationJobIDs adds the "translation_jobs" edge to the TranslationJob entity by IDs.
 func (_u *ProjectUpdateOne) AddTranslationJobIDs(ids ...int) *ProjectUpdateOne {
 	_u.mutation.AddTranslationJobIDs(ids...)
@@ -1434,27 +1337,6 @@ func (_u *ProjectUpdateOne) RemoveTmEntries(v ...*TMEntry) *ProjectUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveTmEntryIDs(ids...)
-}
-
-// ClearJobs clears all "jobs" edges to the Job entity.
-func (_u *ProjectUpdateOne) ClearJobs() *ProjectUpdateOne {
-	_u.mutation.ClearJobs()
-	return _u
-}
-
-// RemoveJobIDs removes the "jobs" edge to Job entities by IDs.
-func (_u *ProjectUpdateOne) RemoveJobIDs(ids ...int) *ProjectUpdateOne {
-	_u.mutation.RemoveJobIDs(ids...)
-	return _u
-}
-
-// RemoveJobs removes "jobs" edges to Job entities.
-func (_u *ProjectUpdateOne) RemoveJobs(v ...*Job) *ProjectUpdateOne {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.RemoveJobIDs(ids...)
 }
 
 // ClearTranslationJobs clears all "translation_jobs" edges to the TranslationJob entity.
@@ -1891,51 +1773,6 @@ func (_u *ProjectUpdateOne) sqlSave(ctx context.Context) (_node *Project, err er
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(tmentry.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
-	if _u.mutation.JobsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   project.JobsTable,
-			Columns: []string{project.JobsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.RemovedJobsIDs(); len(nodes) > 0 && !_u.mutation.JobsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   project.JobsTable,
-			Columns: []string{project.JobsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.JobsIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   project.JobsTable,
-			Columns: []string{project.JobsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

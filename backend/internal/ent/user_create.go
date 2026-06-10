@@ -11,7 +11,6 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
@@ -115,21 +114,6 @@ func (_c *UserCreate) SetNillableActive(v *bool) *UserCreate {
 		_c.SetActive(*v)
 	}
 	return _c
-}
-
-// AddJobIDs adds the "jobs" edge to the Job entity by IDs.
-func (_c *UserCreate) AddJobIDs(ids ...int) *UserCreate {
-	_c.mutation.AddJobIDs(ids...)
-	return _c
-}
-
-// AddJobs adds the "jobs" edges to the Job entity.
-func (_c *UserCreate) AddJobs(v ...*Job) *UserCreate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _c.AddJobIDs(ids...)
 }
 
 // AddCreatedTranslationJobIDs adds the "created_translation_jobs" edge to the TranslationJob entity by IDs.
@@ -400,22 +384,6 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Active(); ok {
 		_spec.SetField(user.FieldActive, field.TypeBool, value)
 		_node.Active = value
-	}
-	if nodes := _c.mutation.JobsIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.JobsTable,
-			Columns: []string{user.JobsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges = append(_spec.Edges, edge)
 	}
 	if nodes := _c.mutation.CreatedTranslationJobsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

@@ -14,7 +14,6 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgbackend"
@@ -25,7 +24,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
@@ -93,7 +91,6 @@ func checkColumn(t, c string) error {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
 			activitylog.Table:          activitylog.ValidColumn,
 			glossaryentry.Table:        glossaryentry.ValidColumn,
-			job.Table:                  job.ValidColumn,
 			jobresource.Table:          jobresource.ValidColumn,
 			orgbackend.Table:           orgbackend.ValidColumn,
 			orgmembership.Table:        orgmembership.ValidColumn,
@@ -104,7 +101,6 @@ func checkColumn(t, c string) error {
 			resource.Table:             resource.ValidColumn,
 			segment.Table:              segment.ValidColumn,
 			stagebackendoverride.Table: stagebackendoverride.ValidColumn,
-			subjob.Table:               subjob.ValidColumn,
 			tmentry.Table:              tmentry.ValidColumn,
 			translationjob.Table:       translationjob.ValidColumn,
 			usagerecord.Table:          usagerecord.ValidColumn,

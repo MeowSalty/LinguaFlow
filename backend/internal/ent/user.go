@@ -41,8 +41,6 @@ type User struct {
 
 // UserEdges holds the relations/edges for other nodes in the graph.
 type UserEdges struct {
-	// Jobs holds the value of the jobs edge.
-	Jobs []*Job `json:"jobs,omitempty"`
 	// CreatedTranslationJobs holds the value of the created_translation_jobs edge.
 	CreatedTranslationJobs []*TranslationJob `json:"created_translation_jobs,omitempty"`
 	// ReviewedSegments holds the value of the reviewed_segments edge.
@@ -61,22 +59,13 @@ type UserEdges struct {
 	UsageRecords []*UsageRecord `json:"usage_records,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [9]bool
-}
-
-// JobsOrErr returns the Jobs value or an error if the edge
-// was not loaded in eager-loading.
-func (e UserEdges) JobsOrErr() ([]*Job, error) {
-	if e.loadedTypes[0] {
-		return e.Jobs, nil
-	}
-	return nil, &NotLoadedError{edge: "jobs"}
+	loadedTypes [8]bool
 }
 
 // CreatedTranslationJobsOrErr returns the CreatedTranslationJobs value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) CreatedTranslationJobsOrErr() ([]*TranslationJob, error) {
-	if e.loadedTypes[1] {
+	if e.loadedTypes[0] {
 		return e.CreatedTranslationJobs, nil
 	}
 	return nil, &NotLoadedError{edge: "created_translation_jobs"}
@@ -85,7 +74,7 @@ func (e UserEdges) CreatedTranslationJobsOrErr() ([]*TranslationJob, error) {
 // ReviewedSegmentsOrErr returns the ReviewedSegments value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) ReviewedSegmentsOrErr() ([]*Segment, error) {
-	if e.loadedTypes[2] {
+	if e.loadedTypes[1] {
 		return e.ReviewedSegments, nil
 	}
 	return nil, &NotLoadedError{edge: "reviewed_segments"}
@@ -94,7 +83,7 @@ func (e UserEdges) ReviewedSegmentsOrErr() ([]*Segment, error) {
 // RefreshTokensOrErr returns the RefreshTokens value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) RefreshTokensOrErr() ([]*RefreshToken, error) {
-	if e.loadedTypes[3] {
+	if e.loadedTypes[2] {
 		return e.RefreshTokens, nil
 	}
 	return nil, &NotLoadedError{edge: "refresh_tokens"}
@@ -103,7 +92,7 @@ func (e UserEdges) RefreshTokensOrErr() ([]*RefreshToken, error) {
 // MembershipsOrErr returns the Memberships value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) MembershipsOrErr() ([]*OrgMembership, error) {
-	if e.loadedTypes[4] {
+	if e.loadedTypes[3] {
 		return e.Memberships, nil
 	}
 	return nil, &NotLoadedError{edge: "memberships"}
@@ -112,7 +101,7 @@ func (e UserEdges) MembershipsOrErr() ([]*OrgMembership, error) {
 // UserBackendsOrErr returns the UserBackends value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) UserBackendsOrErr() ([]*UserBackend, error) {
-	if e.loadedTypes[5] {
+	if e.loadedTypes[4] {
 		return e.UserBackends, nil
 	}
 	return nil, &NotLoadedError{edge: "user_backends"}
@@ -121,7 +110,7 @@ func (e UserEdges) UserBackendsOrErr() ([]*UserBackend, error) {
 // OwnedProjectsOrErr returns the OwnedProjects value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) OwnedProjectsOrErr() ([]*Project, error) {
-	if e.loadedTypes[6] {
+	if e.loadedTypes[5] {
 		return e.OwnedProjects, nil
 	}
 	return nil, &NotLoadedError{edge: "owned_projects"}
@@ -130,7 +119,7 @@ func (e UserEdges) OwnedProjectsOrErr() ([]*Project, error) {
 // ActivityLogsOrErr returns the ActivityLogs value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) ActivityLogsOrErr() ([]*ActivityLog, error) {
-	if e.loadedTypes[7] {
+	if e.loadedTypes[6] {
 		return e.ActivityLogs, nil
 	}
 	return nil, &NotLoadedError{edge: "activity_logs"}
@@ -139,7 +128,7 @@ func (e UserEdges) ActivityLogsOrErr() ([]*ActivityLog, error) {
 // UsageRecordsOrErr returns the UsageRecords value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) UsageRecordsOrErr() ([]*UsageRecord, error) {
-	if e.loadedTypes[8] {
+	if e.loadedTypes[7] {
 		return e.UsageRecords, nil
 	}
 	return nil, &NotLoadedError{edge: "usage_records"}
@@ -238,11 +227,6 @@ func (_m *User) assignValues(columns []string, values []any) error {
 // This includes values selected through modifiers, order, etc.
 func (_m *User) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
-}
-
-// QueryJobs queries the "jobs" edge of the User entity.
-func (_m *User) QueryJobs() *JobQuery {
-	return NewUserClient(_m.config).QueryJobs(_m)
 }
 
 // QueryCreatedTranslationJobs queries the "created_translation_jobs" edge of the User entity.

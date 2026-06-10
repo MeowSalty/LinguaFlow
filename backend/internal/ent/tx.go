@@ -16,8 +16,6 @@ type Tx struct {
 	ActivityLog *ActivityLogClient
 	// GlossaryEntry is the client for interacting with the GlossaryEntry builders.
 	GlossaryEntry *GlossaryEntryClient
-	// Job is the client for interacting with the Job builders.
-	Job *JobClient
 	// JobResource is the client for interacting with the JobResource builders.
 	JobResource *JobResourceClient
 	// OrgBackend is the client for interacting with the OrgBackend builders.
@@ -38,8 +36,6 @@ type Tx struct {
 	Segment *SegmentClient
 	// StageBackendOverride is the client for interacting with the StageBackendOverride builders.
 	StageBackendOverride *StageBackendOverrideClient
-	// SubJob is the client for interacting with the SubJob builders.
-	SubJob *SubJobClient
 	// TMEntry is the client for interacting with the TMEntry builders.
 	TMEntry *TMEntryClient
 	// TranslationJob is the client for interacting with the TranslationJob builders.
@@ -183,7 +179,6 @@ func (tx *Tx) Client() *Client {
 func (tx *Tx) init() {
 	tx.ActivityLog = NewActivityLogClient(tx.config)
 	tx.GlossaryEntry = NewGlossaryEntryClient(tx.config)
-	tx.Job = NewJobClient(tx.config)
 	tx.JobResource = NewJobResourceClient(tx.config)
 	tx.OrgBackend = NewOrgBackendClient(tx.config)
 	tx.OrgMembership = NewOrgMembershipClient(tx.config)
@@ -194,7 +189,6 @@ func (tx *Tx) init() {
 	tx.Resource = NewResourceClient(tx.config)
 	tx.Segment = NewSegmentClient(tx.config)
 	tx.StageBackendOverride = NewStageBackendOverrideClient(tx.config)
-	tx.SubJob = NewSubJobClient(tx.config)
 	tx.TMEntry = NewTMEntryClient(tx.config)
 	tx.TranslationJob = NewTranslationJobClient(tx.config)
 	tx.UsageRecord = NewUsageRecordClient(tx.config)

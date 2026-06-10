@@ -14,7 +14,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
@@ -146,25 +145,6 @@ func (_u *SegmentUpdate) ClearResourceID() *SegmentUpdate {
 	return _u
 }
 
-// SetSubJobID sets the "sub_job" edge to the SubJob entity by ID.
-func (_u *SegmentUpdate) SetSubJobID(id int) *SegmentUpdate {
-	_u.mutation.SetSubJobID(id)
-	return _u
-}
-
-// SetNillableSubJobID sets the "sub_job" edge to the SubJob entity by ID if the given value is not nil.
-func (_u *SegmentUpdate) SetNillableSubJobID(id *int) *SegmentUpdate {
-	if id != nil {
-		_u = _u.SetSubJobID(*id)
-	}
-	return _u
-}
-
-// SetSubJob sets the "sub_job" edge to the SubJob entity.
-func (_u *SegmentUpdate) SetSubJob(v *SubJob) *SegmentUpdate {
-	return _u.SetSubJobID(v.ID)
-}
-
 // SetResource sets the "resource" edge to the Resource entity.
 func (_u *SegmentUpdate) SetResource(v *Resource) *SegmentUpdate {
 	return _u.SetResourceID(v.ID)
@@ -192,12 +172,6 @@ func (_u *SegmentUpdate) SetReviewedBy(v *User) *SegmentUpdate {
 // Mutation returns the SegmentMutation object of the builder.
 func (_u *SegmentUpdate) Mutation() *SegmentMutation {
 	return _u.mutation
-}
-
-// ClearSubJob clears the "sub_job" edge to the SubJob entity.
-func (_u *SegmentUpdate) ClearSubJob() *SegmentUpdate {
-	_u.mutation.ClearSubJob()
-	return _u
 }
 
 // ClearResource clears the "resource" edge to the Resource entity.
@@ -306,35 +280,6 @@ func (_u *SegmentUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.ReviewCommentCleared() {
 		_spec.ClearField(segment.FieldReviewComment, field.TypeString)
-	}
-	if _u.mutation.SubJobCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   segment.SubJobTable,
-			Columns: []string{segment.SubJobColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(subjob.FieldID, field.TypeInt),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.SubJobIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   segment.SubJobTable,
-			Columns: []string{segment.SubJobColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(subjob.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	if _u.mutation.ResourceCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -529,25 +474,6 @@ func (_u *SegmentUpdateOne) ClearResourceID() *SegmentUpdateOne {
 	return _u
 }
 
-// SetSubJobID sets the "sub_job" edge to the SubJob entity by ID.
-func (_u *SegmentUpdateOne) SetSubJobID(id int) *SegmentUpdateOne {
-	_u.mutation.SetSubJobID(id)
-	return _u
-}
-
-// SetNillableSubJobID sets the "sub_job" edge to the SubJob entity by ID if the given value is not nil.
-func (_u *SegmentUpdateOne) SetNillableSubJobID(id *int) *SegmentUpdateOne {
-	if id != nil {
-		_u = _u.SetSubJobID(*id)
-	}
-	return _u
-}
-
-// SetSubJob sets the "sub_job" edge to the SubJob entity.
-func (_u *SegmentUpdateOne) SetSubJob(v *SubJob) *SegmentUpdateOne {
-	return _u.SetSubJobID(v.ID)
-}
-
 // SetResource sets the "resource" edge to the Resource entity.
 func (_u *SegmentUpdateOne) SetResource(v *Resource) *SegmentUpdateOne {
 	return _u.SetResourceID(v.ID)
@@ -575,12 +501,6 @@ func (_u *SegmentUpdateOne) SetReviewedBy(v *User) *SegmentUpdateOne {
 // Mutation returns the SegmentMutation object of the builder.
 func (_u *SegmentUpdateOne) Mutation() *SegmentMutation {
 	return _u.mutation
-}
-
-// ClearSubJob clears the "sub_job" edge to the SubJob entity.
-func (_u *SegmentUpdateOne) ClearSubJob() *SegmentUpdateOne {
-	_u.mutation.ClearSubJob()
-	return _u
 }
 
 // ClearResource clears the "resource" edge to the Resource entity.
@@ -719,35 +639,6 @@ func (_u *SegmentUpdateOne) sqlSave(ctx context.Context) (_node *Segment, err er
 	}
 	if _u.mutation.ReviewCommentCleared() {
 		_spec.ClearField(segment.FieldReviewComment, field.TypeString)
-	}
-	if _u.mutation.SubJobCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   segment.SubJobTable,
-			Columns: []string{segment.SubJobColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(subjob.FieldID, field.TypeInt),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.SubJobIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   segment.SubJobTable,
-			Columns: []string{segment.SubJobColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(subjob.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	if _u.mutation.ResourceCleared() {
 		edge := &sqlgraph.EdgeSpec{

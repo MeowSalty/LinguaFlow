@@ -11,7 +11,6 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
@@ -29,7 +28,6 @@ type UsageRecordQuery struct {
 	withUser         *UserQuery
 	withOrganization *OrganizationQuery
 	withProject      *ProjectQuery
-	withJob          *JobQuery
 	withFKs          bool
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
@@ -126,28 +124,6 @@ func (_q *UsageRecordQuery) QueryProject() *ProjectQuery {
 			sqlgraph.From(usagerecord.Table, usagerecord.FieldID, selector),
 			sqlgraph.To(project.Table, project.FieldID),
 			sqlgraph.Edge(sqlgraph.M2O, true, usagerecord.ProjectTable, usagerecord.ProjectColumn),
-		)
-		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
-		return fromU, nil
-	}
-	return query
-}
-
-// QueryJob chains the current query on the "job" edge.
-func (_q *UsageRecordQuery) QueryJob() *JobQuery {
-	query := (&JobClient{config: _q.config}).Query()
-	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
-		if err := _q.prepareQuery(ctx); err != nil {
-			return nil, err
-		}
-		selector := _q.sqlQuery(ctx)
-		if err := selector.Err(); err != nil {
-			return nil, err
-		}
-		step := sqlgraph.NewStep(
-			sqlgraph.From(usagerecord.Table, usagerecord.FieldID, selector),
-			sqlgraph.To(job.Table, job.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, usagerecord.JobTable, usagerecord.JobColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -350,7 +326,6 @@ func (_q *UsageRecordQuery) Clone() *UsageRecordQuery {
 		withUser:         _q.withUser.Clone(),
 		withOrganization: _q.withOrganization.Clone(),
 		withProject:      _q.withProject.Clone(),
-		withJob:          _q.withJob.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -387,17 +362,6 @@ func (_q *UsageRecordQuery) WithProject(opts ...func(*ProjectQuery)) *UsageRecor
 		opt(query)
 	}
 	_q.withProject = query
-	return _q
-}
-
-// WithJob tells the query-builder to eager-load the nodes that are connected to
-// the "job" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *UsageRecordQuery) WithJob(opts ...func(*JobQuery)) *UsageRecordQuery {
-	query := (&JobClient{config: _q.config}).Query()
-	for _, opt := range opts {
-		opt(query)
-	}
-	_q.withJob = query
 	return _q
 }
 
@@ -480,14 +444,13 @@ func (_q *UsageRecordQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*
 		nodes       = []*UsageRecord{}
 		withFKs     = _q.withFKs
 		_spec       = _q.querySpec()
-		loadedTypes = [4]bool{
+		loadedTypes = [3]bool{
 			_q.withUser != nil,
 			_q.withOrganization != nil,
 			_q.withProject != nil,
-			_q.withJob != nil,
 		}
 	)
-	if _q.withUser != nil || _q.withOrganization != nil || _q.withProject != nil || _q.withJob != nil {
+	if _q.withUser != nil || _q.withOrganization != nil || _q.withProject != nil {
 		withFKs = true
 	}
 	if withFKs {
@@ -526,12 +489,6 @@ func (_q *UsageRecordQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*
 	if query := _q.withProject; query != nil {
 		if err := _q.loadProject(ctx, query, nodes, nil,
 			func(n *UsageRecord, e *Project) { n.Edges.Project = e }); err != nil {
-			return nil, err
-		}
-	}
-	if query := _q.withJob; query != nil {
-		if err := _q.loadJob(ctx, query, nodes, nil,
-			func(n *UsageRecord, e *Job) { n.Edges.Job = e }); err != nil {
 			return nil, err
 		}
 	}
@@ -627,38 +584,6 @@ func (_q *UsageRecordQuery) loadProject(ctx context.Context, query *ProjectQuery
 		nodes, ok := nodeids[n.ID]
 		if !ok {
 			return fmt.Errorf(`unexpected foreign-key "project_usage_records" returned %v`, n.ID)
-		}
-		for i := range nodes {
-			assign(nodes[i], n)
-		}
-	}
-	return nil
-}
-func (_q *UsageRecordQuery) loadJob(ctx context.Context, query *JobQuery, nodes []*UsageRecord, init func(*UsageRecord), assign func(*UsageRecord, *Job)) error {
-	ids := make([]int, 0, len(nodes))
-	nodeids := make(map[int][]*UsageRecord)
-	for i := range nodes {
-		if nodes[i].job_usage_records == nil {
-			continue
-		}
-		fk := *nodes[i].job_usage_records
-		if _, ok := nodeids[fk]; !ok {
-			ids = append(ids, fk)
-		}
-		nodeids[fk] = append(nodeids[fk], nodes[i])
-	}
-	if len(ids) == 0 {
-		return nil
-	}
-	query.Where(job.IDIn(ids...))
-	neighbors, err := query.All(ctx)
-	if err != nil {
-		return err
-	}
-	for _, n := range neighbors {
-		nodes, ok := nodeids[n.ID]
-		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "job_usage_records" returned %v`, n.ID)
 		}
 		for i := range nodes {
 			assign(nodes[i], n)

@@ -11,7 +11,6 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
@@ -213,25 +212,6 @@ func (_u *UsageRecordUpdate) SetProject(v *Project) *UsageRecordUpdate {
 	return _u.SetProjectID(v.ID)
 }
 
-// SetJobID sets the "job" edge to the Job entity by ID.
-func (_u *UsageRecordUpdate) SetJobID(id int) *UsageRecordUpdate {
-	_u.mutation.SetJobID(id)
-	return _u
-}
-
-// SetNillableJobID sets the "job" edge to the Job entity by ID if the given value is not nil.
-func (_u *UsageRecordUpdate) SetNillableJobID(id *int) *UsageRecordUpdate {
-	if id != nil {
-		_u = _u.SetJobID(*id)
-	}
-	return _u
-}
-
-// SetJob sets the "job" edge to the Job entity.
-func (_u *UsageRecordUpdate) SetJob(v *Job) *UsageRecordUpdate {
-	return _u.SetJobID(v.ID)
-}
-
 // Mutation returns the UsageRecordMutation object of the builder.
 func (_u *UsageRecordUpdate) Mutation() *UsageRecordMutation {
 	return _u.mutation
@@ -252,12 +232,6 @@ func (_u *UsageRecordUpdate) ClearOrganization() *UsageRecordUpdate {
 // ClearProject clears the "project" edge to the Project entity.
 func (_u *UsageRecordUpdate) ClearProject() *UsageRecordUpdate {
 	_u.mutation.ClearProject()
-	return _u
-}
-
-// ClearJob clears the "job" edge to the Job entity.
-func (_u *UsageRecordUpdate) ClearJob() *UsageRecordUpdate {
-	_u.mutation.ClearJob()
 	return _u
 }
 
@@ -450,35 +424,6 @@ func (_u *UsageRecordUpdate) sqlSave(ctx context.Context) (_node int, err error)
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(project.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
-	if _u.mutation.JobCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   usagerecord.JobTable,
-			Columns: []string{usagerecord.JobColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.JobIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   usagerecord.JobTable,
-			Columns: []string{usagerecord.JobColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -687,25 +632,6 @@ func (_u *UsageRecordUpdateOne) SetProject(v *Project) *UsageRecordUpdateOne {
 	return _u.SetProjectID(v.ID)
 }
 
-// SetJobID sets the "job" edge to the Job entity by ID.
-func (_u *UsageRecordUpdateOne) SetJobID(id int) *UsageRecordUpdateOne {
-	_u.mutation.SetJobID(id)
-	return _u
-}
-
-// SetNillableJobID sets the "job" edge to the Job entity by ID if the given value is not nil.
-func (_u *UsageRecordUpdateOne) SetNillableJobID(id *int) *UsageRecordUpdateOne {
-	if id != nil {
-		_u = _u.SetJobID(*id)
-	}
-	return _u
-}
-
-// SetJob sets the "job" edge to the Job entity.
-func (_u *UsageRecordUpdateOne) SetJob(v *Job) *UsageRecordUpdateOne {
-	return _u.SetJobID(v.ID)
-}
-
 // Mutation returns the UsageRecordMutation object of the builder.
 func (_u *UsageRecordUpdateOne) Mutation() *UsageRecordMutation {
 	return _u.mutation
@@ -726,12 +652,6 @@ func (_u *UsageRecordUpdateOne) ClearOrganization() *UsageRecordUpdateOne {
 // ClearProject clears the "project" edge to the Project entity.
 func (_u *UsageRecordUpdateOne) ClearProject() *UsageRecordUpdateOne {
 	_u.mutation.ClearProject()
-	return _u
-}
-
-// ClearJob clears the "job" edge to the Job entity.
-func (_u *UsageRecordUpdateOne) ClearJob() *UsageRecordUpdateOne {
-	_u.mutation.ClearJob()
 	return _u
 }
 
@@ -954,35 +874,6 @@ func (_u *UsageRecordUpdateOne) sqlSave(ctx context.Context) (_node *UsageRecord
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(project.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
-	if _u.mutation.JobCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   usagerecord.JobTable,
-			Columns: []string{usagerecord.JobColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.JobIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   usagerecord.JobTable,
-			Columns: []string{usagerecord.JobColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

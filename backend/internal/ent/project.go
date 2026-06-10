@@ -60,8 +60,6 @@ type ProjectEdges struct {
 	GlossaryEntries []*GlossaryEntry `json:"glossary_entries,omitempty"`
 	// TmEntries holds the value of the tm_entries edge.
 	TmEntries []*TMEntry `json:"tm_entries,omitempty"`
-	// Jobs holds the value of the jobs edge.
-	Jobs []*Job `json:"jobs,omitempty"`
 	// TranslationJobs holds the value of the translation_jobs edge.
 	TranslationJobs []*TranslationJob `json:"translation_jobs,omitempty"`
 	// ActivityLogs holds the value of the activity_logs edge.
@@ -72,7 +70,7 @@ type ProjectEdges struct {
 	Resources []*Resource `json:"resources,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [11]bool
+	loadedTypes [10]bool
 }
 
 // OwnerUserOrErr returns the OwnerUser value or an error if the edge
@@ -133,19 +131,10 @@ func (e ProjectEdges) TmEntriesOrErr() ([]*TMEntry, error) {
 	return nil, &NotLoadedError{edge: "tm_entries"}
 }
 
-// JobsOrErr returns the Jobs value or an error if the edge
-// was not loaded in eager-loading.
-func (e ProjectEdges) JobsOrErr() ([]*Job, error) {
-	if e.loadedTypes[6] {
-		return e.Jobs, nil
-	}
-	return nil, &NotLoadedError{edge: "jobs"}
-}
-
 // TranslationJobsOrErr returns the TranslationJobs value or an error if the edge
 // was not loaded in eager-loading.
 func (e ProjectEdges) TranslationJobsOrErr() ([]*TranslationJob, error) {
-	if e.loadedTypes[7] {
+	if e.loadedTypes[6] {
 		return e.TranslationJobs, nil
 	}
 	return nil, &NotLoadedError{edge: "translation_jobs"}
@@ -154,7 +143,7 @@ func (e ProjectEdges) TranslationJobsOrErr() ([]*TranslationJob, error) {
 // ActivityLogsOrErr returns the ActivityLogs value or an error if the edge
 // was not loaded in eager-loading.
 func (e ProjectEdges) ActivityLogsOrErr() ([]*ActivityLog, error) {
-	if e.loadedTypes[8] {
+	if e.loadedTypes[7] {
 		return e.ActivityLogs, nil
 	}
 	return nil, &NotLoadedError{edge: "activity_logs"}
@@ -163,7 +152,7 @@ func (e ProjectEdges) ActivityLogsOrErr() ([]*ActivityLog, error) {
 // UsageRecordsOrErr returns the UsageRecords value or an error if the edge
 // was not loaded in eager-loading.
 func (e ProjectEdges) UsageRecordsOrErr() ([]*UsageRecord, error) {
-	if e.loadedTypes[9] {
+	if e.loadedTypes[8] {
 		return e.UsageRecords, nil
 	}
 	return nil, &NotLoadedError{edge: "usage_records"}
@@ -172,7 +161,7 @@ func (e ProjectEdges) UsageRecordsOrErr() ([]*UsageRecord, error) {
 // ResourcesOrErr returns the Resources value or an error if the edge
 // was not loaded in eager-loading.
 func (e ProjectEdges) ResourcesOrErr() ([]*Resource, error) {
-	if e.loadedTypes[10] {
+	if e.loadedTypes[9] {
 		return e.Resources, nil
 	}
 	return nil, &NotLoadedError{edge: "resources"}
@@ -319,11 +308,6 @@ func (_m *Project) QueryGlossaryEntries() *GlossaryEntryQuery {
 // QueryTmEntries queries the "tm_entries" edge of the Project entity.
 func (_m *Project) QueryTmEntries() *TMEntryQuery {
 	return NewProjectClient(_m.config).QueryTmEntries(_m)
-}
-
-// QueryJobs queries the "jobs" edge of the Project entity.
-func (_m *Project) QueryJobs() *JobQuery {
-	return NewProjectClient(_m.config).QueryJobs(_m)
 }
 
 // QueryTranslationJobs queries the "translation_jobs" edge of the Project entity.

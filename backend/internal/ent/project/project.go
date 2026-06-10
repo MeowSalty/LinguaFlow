@@ -46,8 +46,6 @@ const (
 	EdgeGlossaryEntries = "glossary_entries"
 	// EdgeTmEntries holds the string denoting the tm_entries edge name in mutations.
 	EdgeTmEntries = "tm_entries"
-	// EdgeJobs holds the string denoting the jobs edge name in mutations.
-	EdgeJobs = "jobs"
 	// EdgeTranslationJobs holds the string denoting the translation_jobs edge name in mutations.
 	EdgeTranslationJobs = "translation_jobs"
 	// EdgeActivityLogs holds the string denoting the activity_logs edge name in mutations.
@@ -100,13 +98,6 @@ const (
 	TmEntriesInverseTable = "tm_entries"
 	// TmEntriesColumn is the table column denoting the tm_entries relation/edge.
 	TmEntriesColumn = "project_id"
-	// JobsTable is the table that holds the jobs relation/edge.
-	JobsTable = "jobs"
-	// JobsInverseTable is the table name for the Job entity.
-	// It exists in this package in order to avoid circular dependency with the "job" package.
-	JobsInverseTable = "jobs"
-	// JobsColumn is the table column denoting the jobs relation/edge.
-	JobsColumn = "project_jobs"
 	// TranslationJobsTable is the table that holds the translation_jobs relation/edge.
 	TranslationJobsTable = "translation_jobs"
 	// TranslationJobsInverseTable is the table name for the TranslationJob entity.
@@ -305,20 +296,6 @@ func ByTmEntries(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
-// ByJobsCount orders the results by jobs count.
-func ByJobsCount(opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newJobsStep(), opts...)
-	}
-}
-
-// ByJobs orders the results by jobs terms.
-func ByJobs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newJobsStep(), append([]sql.OrderTerm{term}, terms...)...)
-	}
-}
-
 // ByTranslationJobsCount orders the results by translation_jobs count.
 func ByTranslationJobsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -414,13 +391,6 @@ func newTmEntriesStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(TmEntriesInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, TmEntriesTable, TmEntriesColumn),
-	)
-}
-func newJobsStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(JobsInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, JobsTable, JobsColumn),
 	)
 }
 func newTranslationJobsStep() *sqlgraph.Step {

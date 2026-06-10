@@ -14,7 +14,6 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
@@ -40,7 +39,6 @@ type ProjectQuery struct {
 	withStageBackendOverrides *StageBackendOverrideQuery
 	withGlossaryEntries       *GlossaryEntryQuery
 	withTmEntries             *TMEntryQuery
-	withJobs                  *JobQuery
 	withTranslationJobs       *TranslationJobQuery
 	withActivityLogs          *ActivityLogQuery
 	withUsageRecords          *UsageRecordQuery
@@ -206,28 +204,6 @@ func (_q *ProjectQuery) QueryTmEntries() *TMEntryQuery {
 			sqlgraph.From(project.Table, project.FieldID, selector),
 			sqlgraph.To(tmentry.Table, tmentry.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, project.TmEntriesTable, project.TmEntriesColumn),
-		)
-		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
-		return fromU, nil
-	}
-	return query
-}
-
-// QueryJobs chains the current query on the "jobs" edge.
-func (_q *ProjectQuery) QueryJobs() *JobQuery {
-	query := (&JobClient{config: _q.config}).Query()
-	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
-		if err := _q.prepareQuery(ctx); err != nil {
-			return nil, err
-		}
-		selector := _q.sqlQuery(ctx)
-		if err := selector.Err(); err != nil {
-			return nil, err
-		}
-		step := sqlgraph.NewStep(
-			sqlgraph.From(project.Table, project.FieldID, selector),
-			sqlgraph.To(job.Table, job.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, project.JobsTable, project.JobsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -521,7 +497,6 @@ func (_q *ProjectQuery) Clone() *ProjectQuery {
 		withStageBackendOverrides: _q.withStageBackendOverrides.Clone(),
 		withGlossaryEntries:       _q.withGlossaryEntries.Clone(),
 		withTmEntries:             _q.withTmEntries.Clone(),
-		withJobs:                  _q.withJobs.Clone(),
 		withTranslationJobs:       _q.withTranslationJobs.Clone(),
 		withActivityLogs:          _q.withActivityLogs.Clone(),
 		withUsageRecords:          _q.withUsageRecords.Clone(),
@@ -595,17 +570,6 @@ func (_q *ProjectQuery) WithTmEntries(opts ...func(*TMEntryQuery)) *ProjectQuery
 		opt(query)
 	}
 	_q.withTmEntries = query
-	return _q
-}
-
-// WithJobs tells the query-builder to eager-load the nodes that are connected to
-// the "jobs" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *ProjectQuery) WithJobs(opts ...func(*JobQuery)) *ProjectQuery {
-	query := (&JobClient{config: _q.config}).Query()
-	for _, opt := range opts {
-		opt(query)
-	}
-	_q.withJobs = query
 	return _q
 }
 
@@ -731,14 +695,13 @@ func (_q *ProjectQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Proj
 	var (
 		nodes       = []*Project{}
 		_spec       = _q.querySpec()
-		loadedTypes = [11]bool{
+		loadedTypes = [10]bool{
 			_q.withOwnerUser != nil,
 			_q.withOwnerOrg != nil,
 			_q.withProjectBackends != nil,
 			_q.withStageBackendOverrides != nil,
 			_q.withGlossaryEntries != nil,
 			_q.withTmEntries != nil,
-			_q.withJobs != nil,
 			_q.withTranslationJobs != nil,
 			_q.withActivityLogs != nil,
 			_q.withUsageRecords != nil,
@@ -802,13 +765,6 @@ func (_q *ProjectQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Proj
 		if err := _q.loadTmEntries(ctx, query, nodes,
 			func(n *Project) { n.Edges.TmEntries = []*TMEntry{} },
 			func(n *Project, e *TMEntry) { n.Edges.TmEntries = append(n.Edges.TmEntries, e) }); err != nil {
-			return nil, err
-		}
-	}
-	if query := _q.withJobs; query != nil {
-		if err := _q.loadJobs(ctx, query, nodes,
-			func(n *Project) { n.Edges.Jobs = []*Job{} },
-			func(n *Project, e *Job) { n.Edges.Jobs = append(n.Edges.Jobs, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -1030,37 +986,6 @@ func (_q *ProjectQuery) loadTmEntries(ctx context.Context, query *TMEntryQuery, 
 		node, ok := nodeids[*fk]
 		if !ok {
 			return fmt.Errorf(`unexpected referenced foreign-key "project_id" returned %v for node %v`, *fk, n.ID)
-		}
-		assign(node, n)
-	}
-	return nil
-}
-func (_q *ProjectQuery) loadJobs(ctx context.Context, query *JobQuery, nodes []*Project, init func(*Project), assign func(*Project, *Job)) error {
-	fks := make([]driver.Value, 0, len(nodes))
-	nodeids := make(map[int]*Project)
-	for i := range nodes {
-		fks = append(fks, nodes[i].ID)
-		nodeids[nodes[i].ID] = nodes[i]
-		if init != nil {
-			init(nodes[i])
-		}
-	}
-	query.withFKs = true
-	query.Where(predicate.Job(func(s *sql.Selector) {
-		s.Where(sql.InValues(s.C(project.JobsColumn), fks...))
-	}))
-	neighbors, err := query.All(ctx)
-	if err != nil {
-		return err
-	}
-	for _, n := range neighbors {
-		fk := n.project_jobs
-		if fk == nil {
-			return fmt.Errorf(`foreign-key "project_jobs" is nil for node %v`, n.ID)
-		}
-		node, ok := nodeids[*fk]
-		if !ok {
-			return fmt.Errorf(`unexpected referenced foreign-key "project_jobs" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}

@@ -12,7 +12,6 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
@@ -117,25 +116,6 @@ func (_c *SegmentCreate) SetNillableResourceID(v *int) *SegmentCreate {
 		_c.SetResourceID(*v)
 	}
 	return _c
-}
-
-// SetSubJobID sets the "sub_job" edge to the SubJob entity by ID.
-func (_c *SegmentCreate) SetSubJobID(id int) *SegmentCreate {
-	_c.mutation.SetSubJobID(id)
-	return _c
-}
-
-// SetNillableSubJobID sets the "sub_job" edge to the SubJob entity by ID if the given value is not nil.
-func (_c *SegmentCreate) SetNillableSubJobID(id *int) *SegmentCreate {
-	if id != nil {
-		_c = _c.SetSubJobID(*id)
-	}
-	return _c
-}
-
-// SetSubJob sets the "sub_job" edge to the SubJob entity.
-func (_c *SegmentCreate) SetSubJob(v *SubJob) *SegmentCreate {
-	return _c.SetSubJobID(v.ID)
 }
 
 // SetResource sets the "resource" edge to the Resource entity.
@@ -296,23 +276,6 @@ func (_c *SegmentCreate) createSpec() (*Segment, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.ReviewComment(); ok {
 		_spec.SetField(segment.FieldReviewComment, field.TypeString, value)
 		_node.ReviewComment = &value
-	}
-	if nodes := _c.mutation.SubJobIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   segment.SubJobTable,
-			Columns: []string{segment.SubJobColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(subjob.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_node.sub_job_segments = &nodes[0]
-		_spec.Edges = append(_spec.Edges, edge)
 	}
 	if nodes := _c.mutation.ResourceIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

@@ -9,7 +9,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -19,7 +18,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
@@ -269,31 +267,7 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 		}
 	}
 
-	// Step 6: 删除 Job 及其子实体
-	// 先删除 SubJob 的 Segment
-	_, err = tx.Segment.Delete().
-		Where(segment.HasSubJobWith(
-			subjob.HasJobWith(job.HasProjectWith(project.IDEQ(projectID))),
-		)).Exec(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("delete subjob segments: %w", err)
-	}
-	// 删除 SubJob
-	_, err = tx.SubJob.Delete().
-		Where(subjob.HasJobWith(job.HasProjectWith(project.IDEQ(projectID)))).
-		Exec(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("delete subjobs: %w", err)
-	}
-	// 删除 Job
-	_, err = tx.Job.Delete().
-		Where(job.HasProjectWith(project.IDEQ(projectID))).
-		Exec(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("delete jobs: %w", err)
-	}
-
-	// Step 7: 删除 ProjectBackend
+	// Step 6: 删除 ProjectBackend
 	_, err = tx.ProjectBackend.Delete().
 		Where(projectbackend.HasProjectWith(project.IDEQ(projectID))).
 		Exec(ctx)

@@ -33,18 +33,6 @@ func (f GlossaryEntryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Valu
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GlossaryEntryMutation", m)
 }
 
-// The JobFunc type is an adapter to allow the use of ordinary
-// function as Job mutator.
-type JobFunc func(context.Context, *ent.JobMutation) (ent.Value, error)
-
-// Mutate calls f(ctx, m).
-func (f JobFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	if mv, ok := m.(*ent.JobMutation); ok {
-		return f(ctx, mv)
-	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.JobMutation", m)
-}
-
 // The JobResourceFunc type is an adapter to allow the use of ordinary
 // function as JobResource mutator.
 type JobResourceFunc func(context.Context, *ent.JobResourceMutation) (ent.Value, error)
@@ -163,18 +151,6 @@ func (f StageBackendOverrideFunc) Mutate(ctx context.Context, m ent.Mutation) (e
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StageBackendOverrideMutation", m)
-}
-
-// The SubJobFunc type is an adapter to allow the use of ordinary
-// function as SubJob mutator.
-type SubJobFunc func(context.Context, *ent.SubJobMutation) (ent.Value, error)
-
-// Mutate calls f(ctx, m).
-func (f SubJobFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	if mv, ok := m.(*ent.SubJobMutation); ok {
-		return f(ctx, mv)
-	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SubJobMutation", m)
 }
 
 // The TMEntryFunc type is an adapter to allow the use of ordinary

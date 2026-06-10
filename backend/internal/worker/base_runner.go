@@ -14,8 +14,30 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 )
 
+// cloneAnyMap 浅拷贝 map[string]any。
+func cloneAnyMap(in map[string]any) map[string]any {
+	if len(in) == 0 {
+		return map[string]any{}
+	}
+	out := make(map[string]any, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
+
+// firstNonEmpty 返回参数中第一个非空白字符串。
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
 // JobController 定义任务生命周期管理的公共接口。
-// *service.JobService 和 *service.TranslationJobService 均满足此接口。
+// *service.TranslationJobService 满足此接口。
 type JobController interface {
 	RecoverPendingJobs(ctx context.Context) ([]int, error)
 	ReconcileJob(ctx context.Context, jobID int) error

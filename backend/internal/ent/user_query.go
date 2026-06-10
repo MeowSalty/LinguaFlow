@@ -13,7 +13,6 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
@@ -32,7 +31,6 @@ type UserQuery struct {
 	order                      []user.OrderOption
 	inters                     []Interceptor
 	predicates                 []predicate.User
-	withJobs                   *JobQuery
 	withCreatedTranslationJobs *TranslationJobQuery
 	withReviewedSegments       *SegmentQuery
 	withRefreshTokens          *RefreshTokenQuery
@@ -75,28 +73,6 @@ func (_q *UserQuery) Unique(unique bool) *UserQuery {
 func (_q *UserQuery) Order(o ...user.OrderOption) *UserQuery {
 	_q.order = append(_q.order, o...)
 	return _q
-}
-
-// QueryJobs chains the current query on the "jobs" edge.
-func (_q *UserQuery) QueryJobs() *JobQuery {
-	query := (&JobClient{config: _q.config}).Query()
-	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
-		if err := _q.prepareQuery(ctx); err != nil {
-			return nil, err
-		}
-		selector := _q.sqlQuery(ctx)
-		if err := selector.Err(); err != nil {
-			return nil, err
-		}
-		step := sqlgraph.NewStep(
-			sqlgraph.From(user.Table, user.FieldID, selector),
-			sqlgraph.To(job.Table, job.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, user.JobsTable, user.JobsColumn),
-		)
-		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
-		return fromU, nil
-	}
-	return query
 }
 
 // QueryCreatedTranslationJobs chains the current query on the "created_translation_jobs" edge.
@@ -467,7 +443,6 @@ func (_q *UserQuery) Clone() *UserQuery {
 		order:                      append([]user.OrderOption{}, _q.order...),
 		inters:                     append([]Interceptor{}, _q.inters...),
 		predicates:                 append([]predicate.User{}, _q.predicates...),
-		withJobs:                   _q.withJobs.Clone(),
 		withCreatedTranslationJobs: _q.withCreatedTranslationJobs.Clone(),
 		withReviewedSegments:       _q.withReviewedSegments.Clone(),
 		withRefreshTokens:          _q.withRefreshTokens.Clone(),
@@ -480,17 +455,6 @@ func (_q *UserQuery) Clone() *UserQuery {
 		sql:  _q.sql.Clone(),
 		path: _q.path,
 	}
-}
-
-// WithJobs tells the query-builder to eager-load the nodes that are connected to
-// the "jobs" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *UserQuery) WithJobs(opts ...func(*JobQuery)) *UserQuery {
-	query := (&JobClient{config: _q.config}).Query()
-	for _, opt := range opts {
-		opt(query)
-	}
-	_q.withJobs = query
-	return _q
 }
 
 // WithCreatedTranslationJobs tells the query-builder to eager-load the nodes that are connected to
@@ -659,8 +623,7 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	var (
 		nodes       = []*User{}
 		_spec       = _q.querySpec()
-		loadedTypes = [9]bool{
-			_q.withJobs != nil,
+		loadedTypes = [8]bool{
 			_q.withCreatedTranslationJobs != nil,
 			_q.withReviewedSegments != nil,
 			_q.withRefreshTokens != nil,
@@ -688,13 +651,6 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	}
 	if len(nodes) == 0 {
 		return nodes, nil
-	}
-	if query := _q.withJobs; query != nil {
-		if err := _q.loadJobs(ctx, query, nodes,
-			func(n *User) { n.Edges.Jobs = []*Job{} },
-			func(n *User, e *Job) { n.Edges.Jobs = append(n.Edges.Jobs, e) }); err != nil {
-			return nil, err
-		}
 	}
 	if query := _q.withCreatedTranslationJobs; query != nil {
 		if err := _q.loadCreatedTranslationJobs(ctx, query, nodes,
@@ -757,37 +713,6 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	return nodes, nil
 }
 
-func (_q *UserQuery) loadJobs(ctx context.Context, query *JobQuery, nodes []*User, init func(*User), assign func(*User, *Job)) error {
-	fks := make([]driver.Value, 0, len(nodes))
-	nodeids := make(map[int]*User)
-	for i := range nodes {
-		fks = append(fks, nodes[i].ID)
-		nodeids[nodes[i].ID] = nodes[i]
-		if init != nil {
-			init(nodes[i])
-		}
-	}
-	query.withFKs = true
-	query.Where(predicate.Job(func(s *sql.Selector) {
-		s.Where(sql.InValues(s.C(user.JobsColumn), fks...))
-	}))
-	neighbors, err := query.All(ctx)
-	if err != nil {
-		return err
-	}
-	for _, n := range neighbors {
-		fk := n.user_jobs
-		if fk == nil {
-			return fmt.Errorf(`foreign-key "user_jobs" is nil for node %v`, n.ID)
-		}
-		node, ok := nodeids[*fk]
-		if !ok {
-			return fmt.Errorf(`unexpected referenced foreign-key "user_jobs" returned %v for node %v`, *fk, n.ID)
-		}
-		assign(node, n)
-	}
-	return nil
-}
 func (_q *UserQuery) loadCreatedTranslationJobs(ctx context.Context, query *TranslationJobQuery, nodes []*User, init func(*User), assign func(*User, *TranslationJob)) error {
 	fks := make([]driver.Value, 0, len(nodes))
 	nodeids := make(map[int]*User)
