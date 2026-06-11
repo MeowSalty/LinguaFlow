@@ -297,3 +297,92 @@ projectResourceSegmentById:
               $ref: '../base.yaml#/components/schemas/Segment'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
+
+projectResourceSegmentReview:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+    - $ref: '../base.yaml#/components/parameters/ResourceId'
+    - $ref: '../base.yaml#/components/parameters/SegmentId'
+  patch:
+    operationId: ReviewResourceSegment
+    summary: 审核单个段落（通过/拒绝/编辑）
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/SegmentReviewRequest'
+    responses:
+      '200':
+        description: 审核成功
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/Segment'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+projectResourceSegmentsBatchReview:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+    - $ref: '../base.yaml#/components/parameters/ResourceId'
+  post:
+    operationId: BatchReviewResourceSegments
+    summary: 批量审核段落
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/BatchReviewRequest'
+    responses:
+      '200':
+        description: 批量审核结果
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/BatchReviewResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+projectResourceSegmentsApproveAll:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+    - $ref: '../base.yaml#/components/parameters/ResourceId'
+  post:
+    operationId: ApproveAllResourceSegments
+    summary: 批准资源中所有已翻译/已编辑的段落
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 批准结果
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/ApproveAllResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+projectResourceRetranslateRejected:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+    - $ref: '../base.yaml#/components/parameters/ResourceId'
+  post:
+    operationId: RetranslateRejectedSegments
+    summary: 将资源中被拒绝的段落重置为待翻译
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 重置结果
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/RetranslateResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

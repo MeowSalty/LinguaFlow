@@ -54,14 +54,6 @@ EntryId:
     type: integer
     minimum: 1
 
-TemplateId:
-  name: templateId
-  in: path
-  required: true
-  schema:
-    type: integer
-    minimum: 1
-
 Stage:
   name: stage
   in: path
@@ -69,3 +61,11 @@ Stage:
   schema:
     type: string
     enum: [translate, bootstrap]
+
+TemplateId:
+  name: templateId
+  in: path
+  required: true
+  schema:
+    type: integer
+    description: 模板 ID。正数为用户模板，负数为内置模板。

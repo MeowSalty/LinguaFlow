@@ -1,8 +1,8 @@
 templates:
   get:
     operationId: ListTemplates
-    summary: 列出当前用户可见的所有模板
-    description: 返回内置模板、用户自有模板及用户所属组织的模板
+    summary: 列出所有可用模板（内置 + 用户）
+    description: 返回内置模板和当前用户的所有模板合并列表。
     security:
       - bearerAuth: []
     responses:
@@ -11,12 +11,12 @@ templates:
         content:
           application/json:
             schema:
-              $ref: '../components/schemas/translation-template.yaml#/TemplateListResponse'
+              $ref: '../components/schemas/template.yaml#/TemplateListResponse'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
   post:
     operationId: CreateTemplate
-    summary: 创建用户级自定义模板
+    summary: 创建用户模板
     security:
       - bearerAuth: []
     requestBody:
@@ -24,14 +24,14 @@ templates:
       content:
         application/json:
           schema:
-            $ref: '../components/schemas/translation-template.yaml#/CreateTemplateRequest'
+            $ref: '../components/schemas/template.yaml#/CreateTemplateRequest'
     responses:
       '201':
         description: 创建成功
         content:
           application/json:
             schema:
-              $ref: '../components/schemas/translation-template.yaml#/TranslationTemplate'
+              $ref: '../components/schemas/template.yaml#/Template'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
 
@@ -41,6 +41,8 @@ templateById:
   get:
     operationId: GetTemplate
     summary: 获取模板详情
+    description: |
+      获取单个模板详情。templateId 正数为用户模板，负数为内置模板。
     security:
       - bearerAuth: []
     responses:
@@ -49,12 +51,14 @@ templateById:
         content:
           application/json:
             schema:
-              $ref: '../components/schemas/translation-template.yaml#/TranslationTemplate'
+              $ref: '../components/schemas/template.yaml#/Template'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
   put:
     operationId: UpdateTemplate
-    summary: 更新模板（仅 owner 可操作）
+    summary: 更新用户模板
+    description: |
+      仅可更新用户模板（templateId > 0）。对内置模板（templateId < 0）调用返回 403。
     security:
       - bearerAuth: []
     requestBody:
@@ -62,19 +66,21 @@ templateById:
       content:
         application/json:
           schema:
-            $ref: '../components/schemas/translation-template.yaml#/UpdateTemplateRequest'
+            $ref: '../components/schemas/template.yaml#/UpdateTemplateRequest'
     responses:
       '200':
         description: 更新成功
         content:
           application/json:
             schema:
-              $ref: '../components/schemas/translation-template.yaml#/TranslationTemplate'
+              $ref: '../components/schemas/template.yaml#/Template'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
   delete:
     operationId: DeleteTemplate
-    summary: 删除模板（内置模板不可删除）
+    summary: 删除用户模板
+    description: |
+      仅可删除用户模板（templateId > 0）。对内置模板（templateId < 0）调用返回 403。
     security:
       - bearerAuth: []
     responses:
@@ -83,12 +89,38 @@ templateById:
       default:
         $ref: '../base.yaml#/components/responses/Problem'
 
+templateCopy:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/TemplateId'
+  post:
+    operationId: CopyTemplate
+    summary: 复制模板为自定义模板
+    description: |
+      基于指定模板（内置或用户）创建一个用户模板副本。返回新创建的用户模板，ID 为正数。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/template.yaml#/CopyTemplateRequest'
+    responses:
+      '201':
+        description: 复制成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/template.yaml#/Template'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
 orgTemplates:
   parameters:
     - $ref: '../base.yaml#/components/parameters/OrgId'
   get:
     operationId: ListOrgTemplates
-    summary: 列出组织级模板
+    summary: 列出组织模板
     security:
       - bearerAuth: []
     responses:
@@ -97,12 +129,12 @@ orgTemplates:
         content:
           application/json:
             schema:
-              $ref: '../components/schemas/translation-template.yaml#/TemplateListResponse'
+              $ref: '../components/schemas/template.yaml#/TemplateListResponse'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
   post:
     operationId: CreateOrgTemplate
-    summary: 创建组织级模板
+    summary: 创建组织模板
     security:
       - bearerAuth: []
     requestBody:
@@ -110,14 +142,14 @@ orgTemplates:
       content:
         application/json:
           schema:
-            $ref: '../components/schemas/translation-template.yaml#/CreateTemplateRequest'
+            $ref: '../components/schemas/template.yaml#/CreateTemplateRequest'
     responses:
       '201':
         description: 创建成功
         content:
           application/json:
             schema:
-              $ref: '../components/schemas/translation-template.yaml#/TranslationTemplate'
+              $ref: '../components/schemas/template.yaml#/Template'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
 
@@ -127,7 +159,7 @@ orgTemplateById:
     - $ref: '../base.yaml#/components/parameters/TemplateId'
   put:
     operationId: UpdateOrgTemplate
-    summary: 更新组织级模板
+    summary: 更新组织模板
     security:
       - bearerAuth: []
     requestBody:
@@ -135,19 +167,19 @@ orgTemplateById:
       content:
         application/json:
           schema:
-            $ref: '../components/schemas/translation-template.yaml#/UpdateTemplateRequest'
+            $ref: '../components/schemas/template.yaml#/UpdateTemplateRequest'
     responses:
       '200':
         description: 更新成功
         content:
           application/json:
             schema:
-              $ref: '../components/schemas/translation-template.yaml#/TranslationTemplate'
+              $ref: '../components/schemas/template.yaml#/Template'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
   delete:
     operationId: DeleteOrgTemplate
-    summary: 删除组织级模板
+    summary: 删除组织模板
     security:
       - bearerAuth: []
     responses:
