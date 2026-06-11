@@ -694,6 +694,53 @@ const messages = {
     },
   },
   templates: {
+    configEditor: {
+      translate: {
+        title: '翻译核心',
+        concurrency: '并发数',
+        batchSize: '批次大小',
+        fallbackShrink: '失败缩减比',
+        rateLimit: '每秒限速',
+        backendMode: '后端模式',
+        backendModeNone: '不指定',
+        backendOrder: '后端顺序',
+      },
+      retry: {
+        title: '重试与修复',
+        maxAttempts: '最大重试次数',
+        backoff: '退避秒数',
+      },
+      repair: {
+        enabled: '启用响应修复',
+        jsonStructural: 'JSON 结构修复',
+        schemaAliases: 'Schema 别名映射',
+        partial: '部分缺失重试',
+        partialThreshold: '缺失率阈值',
+        placeholderNormalize: '占位符归一化',
+        promptUpgrade: 'Prompt 升级重试',
+      },
+      split: {
+        title: '分段策略',
+        enabled: '启用分段',
+        strategy: '分段策略',
+        maxChars: '最大字符数',
+      },
+      protect: {
+        title: '内容保护',
+        enabled: '启用保护',
+        rules: '保护规则',
+      },
+      postprocess: {
+        title: '后处理',
+        enabled: '启用后处理',
+        trimSpaces: '去除多余空格',
+      },
+      glossary: {
+        title: '术语表',
+        enabled: '启用术语表',
+        bootstrapMode: '自举模式',
+      },
+    },
     eyebrow: 'Translation Templates',
     title: '翻译模板',
     subtitle: '管理翻译任务的模板配置，定义系统提示词和翻译参数。',

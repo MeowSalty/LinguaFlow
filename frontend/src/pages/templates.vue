@@ -23,6 +23,7 @@ import { useI18n } from 'vue-i18n'
 import { Icon as IconifyIcon } from '@iconify/vue'
 import { type ApiSchemas } from '@/api/client'
 import HighlightTextarea from '@/components/HighlightTextarea.vue'
+import TranslationConfigEditor from '@/components/templates/TranslationConfigEditor.vue'
 import { useTemplatesStore } from '@/stores/templates'
 
 type TranslationTemplate = ApiSchemas['TranslationTemplate']
@@ -35,7 +36,7 @@ interface TemplateFormModel {
   icon: string
   system_prompt: string
   prompt_vars: Array<{ key: string; value: string }>
-  translation_config: Array<{ key: string; value: string }>
+  translation_config: Record<string, unknown>
 }
 
 const templates = useTemplatesStore()
@@ -54,7 +55,7 @@ const formModel = reactive<TemplateFormModel>({
   icon: '',
   system_prompt: '',
   prompt_vars: [],
-  translation_config: [],
+  translation_config: {},
 })
 
 const filterScopeOptions = computed<SelectOption[]>(() => [
@@ -89,7 +90,7 @@ const resetForm = (): void => {
   formModel.icon = ''
   formModel.system_prompt = ''
   formModel.prompt_vars = []
-  formModel.translation_config = []
+  formModel.translation_config = {}
   editingTemplate.value = null
 }
 
@@ -128,7 +129,7 @@ const openEditDrawer = (template: TranslationTemplate): void => {
   formModel.icon = template.icon ?? ''
   formModel.system_prompt = template.system_prompt ?? ''
   formModel.prompt_vars = recordToPairs(template.prompt_vars)
-  formModel.translation_config = recordToPairs(template.translation_config)
+  formModel.translation_config = template.translation_config ?? {}
   drawerVisible.value = true
 }
 
@@ -166,13 +167,6 @@ const insertVariable = (varName: string): void => {
   promptEditorRef.value?.insertAtCursor(`{{.${varName}}}`)
 }
 
-const addTranslationConfig = (): void => {
-  formModel.translation_config.push({ key: '', value: '' })
-}
-
-const removeTranslationConfig = (index: number): void => {
-  formModel.translation_config.splice(index, 1)
-}
 
 const buildPayload = (): CreateTemplatePayload => {
   const payload: CreateTemplatePayload = {
@@ -194,9 +188,8 @@ const buildPayload = (): CreateTemplatePayload => {
     payload.prompt_vars = promptVars
   }
 
-  const translationConfig = pairsToRecord(formModel.translation_config)
-  if (Object.keys(translationConfig).length > 0) {
-    payload.translation_config = translationConfig
+  if (Object.keys(formModel.translation_config).length > 0) {
+    payload.translation_config = { ...formModel.translation_config }
   }
 
   return payload
@@ -468,7 +461,7 @@ onMounted(() => {
     </div>
 
     <!-- 创建/编辑抽屉 -->
-    <NDrawer v-model:show="drawerVisible" :width="520" placement="right">
+    <NDrawer v-model:show="drawerVisible" :width="640" placement="right">
       <NDrawerContent :title="drawerTitle" :native-scrollbar="false">
         <template #header>
           <div>
@@ -594,35 +587,13 @@ onMounted(() => {
 
           <!-- 翻译配置 -->
           <div class="mb-4">
-            <div class="mb-2 flex items-center justify-between">
-              <span class="text-sm font-medium text-lf-text-strong">
-                {{ t('templates.form.translationConfig') }}
-              </span>
-              <NButton quaternary size="small" @click="addTranslationConfig">
-                + {{ t('templates.form.addConfig') }}
-              </NButton>
-            </div>
-            <div
-              v-for="(item, index) in formModel.translation_config"
-              :key="index"
-              class="mb-2 flex items-center gap-2"
-            >
-              <NInput
-                v-model:value="item.key"
-                size="small"
-                :placeholder="t('templates.form.translationConfigKeyPlaceholder')"
-                class="flex-1"
-              />
-              <NInput
-                v-model:value="item.value"
-                size="small"
-                :placeholder="t('templates.form.translationConfigValuePlaceholder')"
-                class="flex-1"
-              />
-              <NButton quaternary size="small" type="error" @click="removeTranslationConfig(index)">
-                ✕
-              </NButton>
-            </div>
+            <span class="mb-2 block text-sm font-medium text-lf-text-strong">
+              {{ t('templates.form.translationConfig') }}
+            </span>
+            <TranslationConfigEditor
+              v-model="formModel.translation_config"
+              :disabled="editingTemplate?.is_builtin === true"
+            />
           </div>
         </NForm>
 
