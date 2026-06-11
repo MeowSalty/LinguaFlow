@@ -85,6 +85,16 @@ paths:
     $ref: './paths/translation-jobs.yaml#/translationJobRetry'
   /translation-jobs/{translationJobId}/download:
     $ref: './paths/translation-jobs.yaml#/translationJobDownload'
+  /templates:
+    $ref: './paths/templates.yaml#/templates'
+  /templates/{templateId}:
+    $ref: './paths/templates.yaml#/templateById'
+  /templates/{templateId}/copy:
+    $ref: './paths/templates.yaml#/templateCopy'
+  /orgs/{orgId}/templates:
+    $ref: './paths/templates.yaml#/orgTemplates'
+  /orgs/{orgId}/templates/{templateId}:
+    $ref: './paths/templates.yaml#/orgTemplateById'
   /stats/summary:
     $ref: './paths/stats.yaml#/statsSummary'
   /activity:
@@ -110,6 +120,8 @@ components:
       $ref: './components/parameters.yaml#/EntryId'
     Stage:
       $ref: './components/parameters.yaml#/Stage'
+    TemplateId:
+      $ref: './components/parameters.yaml#/TemplateId'
     SegmentId:
       $ref: './components/parameters_extra.yaml#/SegmentId'
     Cursor:
@@ -242,3 +254,13 @@ components:
       $ref: './components/schemas/glossary.yaml#/UpdateGlossaryEntryRequest'
     GlossaryImportResult:
       $ref: './components/schemas/glossary.yaml#/GlossaryImportResult'
+    Template:
+      $ref: './components/schemas/template.yaml#/Template'
+    TemplateListResponse:
+      $ref: './components/schemas/template.yaml#/TemplateListResponse'
+    CreateTemplateRequest:
+      $ref: './components/schemas/template.yaml#/CreateTemplateRequest'
+    UpdateTemplateRequest:
+      $ref: './components/schemas/template.yaml#/UpdateTemplateRequest'
+    CopyTemplateRequest:
+      $ref: './components/schemas/template.yaml#/CopyTemplateRequest'

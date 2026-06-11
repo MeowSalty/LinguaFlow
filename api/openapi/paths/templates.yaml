@@ -1,0 +1,189 @@
+templates:
+  get:
+    operationId: ListTemplates
+    summary: 列出所有可用模板（内置 + 用户）
+    description: 返回内置模板和当前用户的所有模板合并列表。
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 模板列表
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/template.yaml#/TemplateListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  post:
+    operationId: CreateTemplate
+    summary: 创建用户模板
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/template.yaml#/CreateTemplateRequest'
+    responses:
+      '201':
+        description: 创建成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/template.yaml#/Template'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+templateById:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/TemplateId'
+  get:
+    operationId: GetTemplate
+    summary: 获取模板详情
+    description: |
+      获取单个模板详情。templateId 正数为用户模板，负数为内置模板。
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 模板详情
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/template.yaml#/Template'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  put:
+    operationId: UpdateTemplate
+    summary: 更新用户模板
+    description: |
+      仅可更新用户模板（templateId > 0）。对内置模板（templateId < 0）调用返回 403。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/template.yaml#/UpdateTemplateRequest'
+    responses:
+      '200':
+        description: 更新成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/template.yaml#/Template'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  delete:
+    operationId: DeleteTemplate
+    summary: 删除用户模板
+    description: |
+      仅可删除用户模板（templateId > 0）。对内置模板（templateId < 0）调用返回 403。
+    security:
+      - bearerAuth: []
+    responses:
+      '204':
+        description: 删除成功
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+templateCopy:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/TemplateId'
+  post:
+    operationId: CopyTemplate
+    summary: 复制模板为自定义模板
+    description: |
+      基于指定模板（内置或用户）创建一个用户模板副本。返回新创建的用户模板，ID 为正数。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/template.yaml#/CopyTemplateRequest'
+    responses:
+      '201':
+        description: 复制成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/template.yaml#/Template'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+orgTemplates:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/OrgId'
+  get:
+    operationId: ListOrgTemplates
+    summary: 列出组织模板
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 组织模板列表
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/template.yaml#/TemplateListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  post:
+    operationId: CreateOrgTemplate
+    summary: 创建组织模板
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/template.yaml#/CreateTemplateRequest'
+    responses:
+      '201':
+        description: 创建成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/template.yaml#/Template'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+orgTemplateById:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/OrgId'
+    - $ref: '../base.yaml#/components/parameters/TemplateId'
+  put:
+    operationId: UpdateOrgTemplate
+    summary: 更新组织模板
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/template.yaml#/UpdateTemplateRequest'
+    responses:
+      '200':
+        description: 更新成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/template.yaml#/Template'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  delete:
+    operationId: DeleteOrgTemplate
+    summary: 删除组织模板
+    security:
+      - bearerAuth: []
+    responses:
+      '204':
+        description: 删除成功
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
