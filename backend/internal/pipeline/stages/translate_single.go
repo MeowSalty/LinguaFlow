@@ -45,6 +45,7 @@ func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document,
 		Vars:              doc.Vars,
 		InlineBootstrap:   s.InlineBootstrap,
 		MaxBootstrapTerms: s.maxBootstrapTerms(),
+		StrictSchema:      true,
 	}
 	sys, usr, err := s.Renderer.Render(data)
 	if err != nil {
@@ -183,6 +184,7 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Do
 		Vars:              doc.Vars,
 		InlineBootstrap:   s.InlineBootstrap,
 		MaxBootstrapTerms: s.maxBootstrapTerms(),
+		StrictSchema:      true,
 	}
 	sys, usr, err := s.Renderer.Render(data)
 	if err != nil {

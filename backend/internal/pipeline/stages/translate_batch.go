@@ -51,6 +51,7 @@ func (s *Translate) processBatchAtSize(ctx context.Context, doc *pipeline.Docume
 		Vars:              doc.Vars,
 		InlineBootstrap:   s.InlineBootstrap,
 		MaxBootstrapTerms: s.maxBootstrapTerms(),
+		StrictSchema:      true,
 	}
 	sys, usr, err := s.Renderer.Render(data)
 	if err != nil {
@@ -272,6 +273,7 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *pipeline.Docum
 		Vars:              doc.Vars,
 		InlineBootstrap:   s.InlineBootstrap,
 		MaxBootstrapTerms: s.maxBootstrapTerms(),
+		StrictSchema:      true,
 	}
 	sys, usr, err := s.Renderer.Render(data)
 	if err != nil {

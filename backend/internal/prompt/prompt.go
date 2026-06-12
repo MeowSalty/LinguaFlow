@@ -61,6 +61,7 @@ type Data struct {
 	Vars              map[string]any
 	InlineBootstrap   bool // 是否在 system prompt 中追加 inline 抽取指令（mode=inline 时由 translate stage 设为 true）
 	MaxBootstrapTerms int  // inline 模式每批返回上限；仅在 InlineBootstrap=true 时有效
+	StrictSchema      bool // 当后端使用 json_schema 强制输出时为 true；模板据此精简协议描述以节省 token
 }
 
 // Renderer 持有已编译的 system 模板。user 由 Render 直接 JSON 序列化生成，无模板。
