@@ -87,9 +87,9 @@ type TranslateRoundConfig struct {
 }
 
 type RetryConfig struct {
-	MaxAttempts int           `yaml:"max_attempts"`
-	Backoff     time.Duration `yaml:"backoff"`
-	Jitter      bool          `yaml:"jitter"`
+	MaxAttempts int  `yaml:"max_attempts"`
+	BackoffMs   int  `yaml:"backoff_ms"` // 毫秒，废弃 time.Duration
+	Jitter      bool `yaml:"jitter"`
 }
 
 // RepairConfig 控制 LLM 响应解析失败 / 部分缺失时的"主动修复"行为。
@@ -113,9 +113,10 @@ type PostprocessConfig struct {
 }
 
 type PromptConfig struct {
-	SystemTemplate string         `yaml:"system_template"`
-	UserTemplate   string         `yaml:"user_template"`
-	Vars           map[string]any `yaml:"vars"`
+	SystemTemplate        string         `yaml:"system_template"`
+	SystemTemplateContent string         `yaml:"system_template_content"` // 新增：内联内容，优先级高于 SystemTemplate
+	UserTemplate          string         `yaml:"user_template"`
+	Vars                  map[string]any `yaml:"vars"`
 }
 
 type GlossaryConfig struct {
@@ -269,7 +270,7 @@ func Default() *Config {
 				BatchSize:       1,
 				FallbackShrink:  0.5,
 				RateLimitPerSec: 5,
-				Retry:           RetryConfig{MaxAttempts: 3, Backoff: 2 * time.Second},
+				Retry:           RetryConfig{MaxAttempts: 3, BackoffMs: 2000},
 				Repair: RepairConfig{
 					Enabled:              true,
 					JSONStructural:       true,
@@ -350,8 +351,8 @@ func (c *Config) Validate() error {
 	if c.Pipeline.Translate.Concurrency < 1 {
 		c.Pipeline.Translate.Concurrency = 1
 	}
-	if c.Pipeline.Translate.Retry.Backoff < time.Second {
-		c.Pipeline.Translate.Retry.Backoff = time.Second
+	if c.Pipeline.Translate.Retry.BackoffMs < 1000 {
+		c.Pipeline.Translate.Retry.BackoffMs = 1000
 	}
 	if shrink := c.Pipeline.Translate.FallbackShrink; math.IsNaN(shrink) || math.IsInf(shrink, 0) || shrink < 0 {
 		c.Pipeline.Translate.FallbackShrink = 0

@@ -48,6 +48,9 @@ type TMEntry func(*sql.Selector)
 // TranslationJob is the predicate function for translationjob builders.
 type TranslationJob func(*sql.Selector)
 
+// TranslationTemplate is the predicate function for translationtemplate builders.
+type TranslationTemplate func(*sql.Selector)
+
 // UsageRecord is the predicate function for usagerecord builders.
 type UsageRecord func(*sql.Selector)
 

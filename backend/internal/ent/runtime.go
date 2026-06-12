@@ -20,6 +20,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationtemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
@@ -497,6 +498,53 @@ func init() {
 	translationjob.DefaultCompletedSegments = translationjobDescCompletedSegments.Default.(int)
 	// translationjob.CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.
 	translationjob.CompletedSegmentsValidator = translationjobDescCompletedSegments.Validators[0].(func(int) error)
+	translationtemplateMixin := schema.TranslationTemplate{}.Mixin()
+	translationtemplateMixinFields0 := translationtemplateMixin[0].Fields()
+	_ = translationtemplateMixinFields0
+	translationtemplateFields := schema.TranslationTemplate{}.Fields()
+	_ = translationtemplateFields
+	// translationtemplateDescCreatedAt is the schema descriptor for created_at field.
+	translationtemplateDescCreatedAt := translationtemplateMixinFields0[0].Descriptor()
+	// translationtemplate.DefaultCreatedAt holds the default value on creation for the created_at field.
+	translationtemplate.DefaultCreatedAt = translationtemplateDescCreatedAt.Default.(func() time.Time)
+	// translationtemplateDescUpdatedAt is the schema descriptor for updated_at field.
+	translationtemplateDescUpdatedAt := translationtemplateMixinFields0[1].Descriptor()
+	// translationtemplate.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	translationtemplate.DefaultUpdatedAt = translationtemplateDescUpdatedAt.Default.(func() time.Time)
+	// translationtemplate.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	translationtemplate.UpdateDefaultUpdatedAt = translationtemplateDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// translationtemplateDescName is the schema descriptor for name field.
+	translationtemplateDescName := translationtemplateFields[0].Descriptor()
+	// translationtemplate.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	translationtemplate.NameValidator = translationtemplateDescName.Validators[0].(func(string) error)
+	// translationtemplateDescDescription is the schema descriptor for description field.
+	translationtemplateDescDescription := translationtemplateFields[1].Descriptor()
+	// translationtemplate.DefaultDescription holds the default value on creation for the description field.
+	translationtemplate.DefaultDescription = translationtemplateDescDescription.Default.(string)
+	// translationtemplateDescScope is the schema descriptor for scope field.
+	translationtemplateDescScope := translationtemplateFields[2].Descriptor()
+	// translationtemplate.DefaultScope holds the default value on creation for the scope field.
+	translationtemplate.DefaultScope = translationtemplateDescScope.Default.(string)
+	// translationtemplateDescOwnerUserID is the schema descriptor for owner_user_id field.
+	translationtemplateDescOwnerUserID := translationtemplateFields[3].Descriptor()
+	// translationtemplate.OwnerUserIDValidator is a validator for the "owner_user_id" field. It is called by the builders before save.
+	translationtemplate.OwnerUserIDValidator = translationtemplateDescOwnerUserID.Validators[0].(func(int) error)
+	// translationtemplateDescOwnerOrgID is the schema descriptor for owner_org_id field.
+	translationtemplateDescOwnerOrgID := translationtemplateFields[4].Descriptor()
+	// translationtemplate.OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
+	translationtemplate.OwnerOrgIDValidator = translationtemplateDescOwnerOrgID.Validators[0].(func(int) error)
+	// translationtemplateDescSystemPromptContent is the schema descriptor for system_prompt_content field.
+	translationtemplateDescSystemPromptContent := translationtemplateFields[5].Descriptor()
+	// translationtemplate.DefaultSystemPromptContent holds the default value on creation for the system_prompt_content field.
+	translationtemplate.DefaultSystemPromptContent = translationtemplateDescSystemPromptContent.Default.(string)
+	// translationtemplateDescPipelineConfig is the schema descriptor for pipeline_config field.
+	translationtemplateDescPipelineConfig := translationtemplateFields[6].Descriptor()
+	// translationtemplate.DefaultPipelineConfig holds the default value on creation for the pipeline_config field.
+	translationtemplate.DefaultPipelineConfig = translationtemplateDescPipelineConfig.Default.(schema.TemplatePipelineConfigData)
+	// translationtemplateDescGlossaryConfig is the schema descriptor for glossary_config field.
+	translationtemplateDescGlossaryConfig := translationtemplateFields[7].Descriptor()
+	// translationtemplate.DefaultGlossaryConfig holds the default value on creation for the glossary_config field.
+	translationtemplate.DefaultGlossaryConfig = translationtemplateDescGlossaryConfig.Default.(schema.TemplateGlossaryConfigData)
 	usagerecordMixin := schema.UsageRecord{}.Mixin()
 	usagerecordMixinFields0 := usagerecordMixin[0].Fields()
 	_ = usagerecordMixinFields0

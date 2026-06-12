@@ -40,6 +40,8 @@ type Tx struct {
 	TMEntry *TMEntryClient
 	// TranslationJob is the client for interacting with the TranslationJob builders.
 	TranslationJob *TranslationJobClient
+	// TranslationTemplate is the client for interacting with the TranslationTemplate builders.
+	TranslationTemplate *TranslationTemplateClient
 	// UsageRecord is the client for interacting with the UsageRecord builders.
 	UsageRecord *UsageRecordClient
 	// User is the client for interacting with the User builders.
@@ -191,6 +193,7 @@ func (tx *Tx) init() {
 	tx.StageBackendOverride = NewStageBackendOverrideClient(tx.config)
 	tx.TMEntry = NewTMEntryClient(tx.config)
 	tx.TranslationJob = NewTranslationJobClient(tx.config)
+	tx.TranslationTemplate = NewTranslationTemplateClient(tx.config)
 	tx.UsageRecord = NewUsageRecordClient(tx.config)
 	tx.User = NewUserClient(tx.config)
 	tx.UserBackend = NewUserBackendClient(tx.config)

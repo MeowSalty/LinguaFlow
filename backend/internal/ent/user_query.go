@@ -19,6 +19,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationtemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
@@ -39,6 +40,7 @@ type UserQuery struct {
 	withOwnedProjects          *ProjectQuery
 	withActivityLogs           *ActivityLogQuery
 	withUsageRecords           *UsageRecordQuery
+	withTranslationTemplates   *TranslationTemplateQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -251,6 +253,28 @@ func (_q *UserQuery) QueryUsageRecords() *UsageRecordQuery {
 	return query
 }
 
+// QueryTranslationTemplates chains the current query on the "translation_templates" edge.
+func (_q *UserQuery) QueryTranslationTemplates() *TranslationTemplateQuery {
+	query := (&TranslationTemplateClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(translationtemplate.Table, translationtemplate.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.TranslationTemplatesTable, user.TranslationTemplatesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
 // First returns the first User entity from the query.
 // Returns a *NotFoundError when no User was found.
 func (_q *UserQuery) First(ctx context.Context) (*User, error) {
@@ -451,6 +475,7 @@ func (_q *UserQuery) Clone() *UserQuery {
 		withOwnedProjects:          _q.withOwnedProjects.Clone(),
 		withActivityLogs:           _q.withActivityLogs.Clone(),
 		withUsageRecords:           _q.withUsageRecords.Clone(),
+		withTranslationTemplates:   _q.withTranslationTemplates.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -545,6 +570,17 @@ func (_q *UserQuery) WithUsageRecords(opts ...func(*UsageRecordQuery)) *UserQuer
 	return _q
 }
 
+// WithTranslationTemplates tells the query-builder to eager-load the nodes that are connected to
+// the "translation_templates" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithTranslationTemplates(opts ...func(*TranslationTemplateQuery)) *UserQuery {
+	query := (&TranslationTemplateClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withTranslationTemplates = query
+	return _q
+}
+
 // GroupBy is used to group vertices by one or more fields/columns.
 // It is often used with aggregate functions, like: count, max, mean, min, sum.
 //
@@ -623,7 +659,7 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	var (
 		nodes       = []*User{}
 		_spec       = _q.querySpec()
-		loadedTypes = [8]bool{
+		loadedTypes = [9]bool{
 			_q.withCreatedTranslationJobs != nil,
 			_q.withReviewedSegments != nil,
 			_q.withRefreshTokens != nil,
@@ -632,6 +668,7 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 			_q.withOwnedProjects != nil,
 			_q.withActivityLogs != nil,
 			_q.withUsageRecords != nil,
+			_q.withTranslationTemplates != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -707,6 +744,15 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 		if err := _q.loadUsageRecords(ctx, query, nodes,
 			func(n *User) { n.Edges.UsageRecords = []*UsageRecord{} },
 			func(n *User, e *UsageRecord) { n.Edges.UsageRecords = append(n.Edges.UsageRecords, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withTranslationTemplates; query != nil {
+		if err := _q.loadTranslationTemplates(ctx, query, nodes,
+			func(n *User) { n.Edges.TranslationTemplates = []*TranslationTemplate{} },
+			func(n *User, e *TranslationTemplate) {
+				n.Edges.TranslationTemplates = append(n.Edges.TranslationTemplates, e)
+			}); err != nil {
 			return nil, err
 		}
 	}
@@ -958,6 +1004,39 @@ func (_q *UserQuery) loadUsageRecords(ctx context.Context, query *UsageRecordQue
 		node, ok := nodeids[*fk]
 		if !ok {
 			return fmt.Errorf(`unexpected referenced foreign-key "user_usage_records" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadTranslationTemplates(ctx context.Context, query *TranslationTemplateQuery, nodes []*User, init func(*User), assign func(*User, *TranslationTemplate)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(translationtemplate.FieldOwnerUserID)
+	}
+	query.Where(predicate.TranslationTemplate(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.TranslationTemplatesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.OwnerUserID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "owner_user_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "owner_user_id" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}

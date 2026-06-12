@@ -340,6 +340,66 @@ func (e StageBackendOverrideBackendMode) Valid() bool {
 	}
 }
 
+// Defines values for TemplateBootstrapConfigInlineConflictStrategy.
+const (
+	TemplateBootstrapConfigInlineConflictStrategyOff          TemplateBootstrapConfigInlineConflictStrategy = "off"
+	TemplateBootstrapConfigInlineConflictStrategyRewriteLocal TemplateBootstrapConfigInlineConflictStrategy = "rewrite-local"
+)
+
+// Valid indicates whether the value is a known member of the TemplateBootstrapConfigInlineConflictStrategy enum.
+func (e TemplateBootstrapConfigInlineConflictStrategy) Valid() bool {
+	switch e {
+	case TemplateBootstrapConfigInlineConflictStrategyOff:
+		return true
+	case TemplateBootstrapConfigInlineConflictStrategyRewriteLocal:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TemplateBootstrapConfigMode.
+const (
+	TemplateBootstrapConfigModeInline TemplateBootstrapConfigMode = "inline"
+	TemplateBootstrapConfigModeOff    TemplateBootstrapConfigMode = "off"
+	TemplateBootstrapConfigModePre    TemplateBootstrapConfigMode = "pre"
+)
+
+// Valid indicates whether the value is a known member of the TemplateBootstrapConfigMode enum.
+func (e TemplateBootstrapConfigMode) Valid() bool {
+	switch e {
+	case TemplateBootstrapConfigModeInline:
+		return true
+	case TemplateBootstrapConfigModeOff:
+		return true
+	case TemplateBootstrapConfigModePre:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TemplateScope.
+const (
+	TemplateScopeOrg    TemplateScope = "org"
+	TemplateScopeSystem TemplateScope = "system"
+	TemplateScopeUser   TemplateScope = "user"
+)
+
+// Valid indicates whether the value is a known member of the TemplateScope enum.
+func (e TemplateScope) Valid() bool {
+	switch e {
+	case TemplateScopeOrg:
+		return true
+	case TemplateScopeSystem:
+		return true
+	case TemplateScopeUser:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for TranslationJobStatus.
 const (
 	TranslationJobStatusAwaitingReview TranslationJobStatus = "awaiting_review"
@@ -689,6 +749,12 @@ type ChangePasswordRequest struct {
 	NewPassword     string `json:"new_password"`
 }
 
+// CopyTemplateRequest defines model for CopyTemplateRequest.
+type CopyTemplateRequest struct {
+	// Name 新模板名称，留空则自动在原名后加"(副本)"
+	Name *string `json:"name,omitempty"`
+}
+
 // CreateBackendRequest defines model for CreateBackendRequest.
 type CreateBackendRequest struct {
 	Name     string                   `json:"name"`
@@ -721,6 +787,17 @@ type CreateProjectRequest struct {
 
 // CreateProjectRequestResourceScope defines model for CreateProjectRequest.ResourceScope.
 type CreateProjectRequestResourceScope string
+
+// CreateTemplateRequest defines model for CreateTemplateRequest.
+type CreateTemplateRequest struct {
+	Description *string                 `json:"description,omitempty"`
+	Glossary    *TemplateGlossaryConfig `json:"glossary,omitempty"`
+	Name        string                  `json:"name"`
+	Pipeline    *TemplatePipelineConfig `json:"pipeline,omitempty"`
+
+	// SystemPromptContent 内联提示词内容，空则使用内置默认模板。风格/受众等翻译要求直接写在提示词中。
+	SystemPromptContent *string `json:"system_prompt_content,omitempty"`
+}
 
 // CreateTranslationJobRequest defines model for CreateTranslationJobRequest.
 type CreateTranslationJobRequest struct {
@@ -1013,7 +1090,7 @@ type Segment struct {
 
 // SegmentReviewRequest defines model for SegmentReviewRequest.
 type SegmentReviewRequest struct {
-	// Action 审核操作：approve=通过, reject=拒绝, edit=编辑译文
+	// Action 审核操作：approve=通过，reject=拒绝，edit=编辑译文
 	Action SegmentReviewRequestAction `json:"action"`
 
 	// Comment 审核备注
@@ -1023,7 +1100,7 @@ type SegmentReviewRequest struct {
 	TargetText *string `json:"target_text,omitempty"`
 }
 
-// SegmentReviewRequestAction 审核操作：approve=通过, reject=拒绝, edit=编辑译文
+// SegmentReviewRequestAction 审核操作：approve=通过，reject=拒绝，edit=编辑译文
 type SegmentReviewRequestAction string
 
 // SetBackendOrderRequest defines model for SetBackendOrderRequest.
@@ -1056,6 +1133,100 @@ type StageBackendOverride struct {
 
 // StageBackendOverrideBackendMode defines model for StageBackendOverride.BackendMode.
 type StageBackendOverrideBackendMode string
+
+// Template defines model for Template.
+type Template struct {
+	CreatedAt   *time.Time             `json:"created_at,omitempty"`
+	Description string                 `json:"description"`
+	Glossary    TemplateGlossaryConfig `json:"glossary"`
+
+	// Id 模板 ID。正数为用户模板，负数为内置模板。
+	Id          int                    `json:"id"`
+	Name        string                 `json:"name"`
+	OwnerOrgId  *int                   `json:"owner_org_id,omitempty"`
+	OwnerUserId *int                   `json:"owner_user_id,omitempty"`
+	Pipeline    TemplatePipelineConfig `json:"pipeline"`
+	Scope       TemplateScope          `json:"scope"`
+
+	// SystemPromptContent 内联提示词内容，空则使用内置默认模板。风格/受众等翻译要求直接写在提示词中。
+	SystemPromptContent *string    `json:"system_prompt_content,omitempty"`
+	UpdatedAt           *time.Time `json:"updated_at,omitempty"`
+}
+
+// TemplateBootstrapConfig defines model for TemplateBootstrapConfig.
+type TemplateBootstrapConfig struct {
+	InlineConflictStrategy TemplateBootstrapConfigInlineConflictStrategy `json:"inline_conflict_strategy"`
+	MaxTermsPerBatch       int                                           `json:"max_terms_per_batch"`
+	MinSourceLen           int                                           `json:"min_source_len"`
+	Mode                   TemplateBootstrapConfigMode                   `json:"mode"`
+	Save                   bool                                          `json:"save"`
+}
+
+// TemplateBootstrapConfigInlineConflictStrategy defines model for TemplateBootstrapConfig.InlineConflictStrategy.
+type TemplateBootstrapConfigInlineConflictStrategy string
+
+// TemplateBootstrapConfigMode defines model for TemplateBootstrapConfig.Mode.
+type TemplateBootstrapConfigMode string
+
+// TemplateGlossaryConfig defines model for TemplateGlossaryConfig.
+type TemplateGlossaryConfig struct {
+	Bootstrap TemplateBootstrapConfig `json:"bootstrap"`
+	Enabled   bool                    `json:"enabled"`
+}
+
+// TemplateListResponse defines model for TemplateListResponse.
+type TemplateListResponse struct {
+	Items []Template `json:"items"`
+}
+
+// TemplatePipelineConfig defines model for TemplatePipelineConfig.
+type TemplatePipelineConfig struct {
+	Postprocess TemplatePostprocessConfig `json:"postprocess"`
+	Protect     TemplateProtectConfig     `json:"protect"`
+	Repair      TemplateRepairConfig      `json:"repair"`
+	Retry       TemplateRetryConfig       `json:"retry"`
+	Split       TemplateSplitConfig       `json:"split"`
+}
+
+// TemplatePostprocessConfig defines model for TemplatePostprocessConfig.
+type TemplatePostprocessConfig struct {
+	Enabled    bool `json:"enabled"`
+	TrimSpaces bool `json:"trim_spaces"`
+}
+
+// TemplateProtectConfig defines model for TemplateProtectConfig.
+type TemplateProtectConfig struct {
+	Enabled bool      `json:"enabled"`
+	Rules   *[]string `json:"rules,omitempty"`
+}
+
+// TemplateRepairConfig defines model for TemplateRepairConfig.
+type TemplateRepairConfig struct {
+	Enabled              bool    `json:"enabled"`
+	JsonStructural       bool    `json:"json_structural"`
+	Partial              bool    `json:"partial"`
+	PartialThreshold     float64 `json:"partial_threshold"`
+	PlaceholderNormalize bool    `json:"placeholder_normalize"`
+	PromptUpgrade        bool    `json:"prompt_upgrade"`
+	SchemaAliases        bool    `json:"schema_aliases"`
+}
+
+// TemplateRetryConfig defines model for TemplateRetryConfig.
+type TemplateRetryConfig struct {
+	BackoffMs   int  `json:"backoff_ms"`
+	Jitter      bool `json:"jitter"`
+	MaxAttempts int  `json:"max_attempts"`
+}
+
+// TemplateScope defines model for TemplateScope.
+type TemplateScope string
+
+// TemplateSplitConfig defines model for TemplateSplitConfig.
+type TemplateSplitConfig struct {
+	Enabled  bool   `json:"enabled"`
+	MaxChars int    `json:"max_chars"`
+	Strategy string `json:"strategy"`
+}
 
 // TranslationJob defines model for TranslationJob.
 type TranslationJob struct {
@@ -1151,6 +1322,17 @@ type UpdateProjectRequest struct {
 // UpdateProjectRequestResourceScope defines model for UpdateProjectRequest.ResourceScope.
 type UpdateProjectRequestResourceScope string
 
+// UpdateTemplateRequest defines model for UpdateTemplateRequest.
+type UpdateTemplateRequest struct {
+	Description *string                 `json:"description,omitempty"`
+	Glossary    *TemplateGlossaryConfig `json:"glossary,omitempty"`
+	Name        *string                 `json:"name,omitempty"`
+	Pipeline    *TemplatePipelineConfig `json:"pipeline,omitempty"`
+
+	// SystemPromptContent 内联提示词内容，空则使用内置默认模板。风格/受众等翻译要求直接写在提示词中。
+	SystemPromptContent *string `json:"system_prompt_content,omitempty"`
+}
+
 // UsageStats defines model for UsageStats.
 type UsageStats struct {
 	ApiCalls      int `json:"api_calls"`
@@ -1198,6 +1380,9 @@ type SegmentId = int
 
 // Stage defines model for Stage.
 type Stage string
+
+// TemplateId 模板 ID。正数为用户模板，负数为内置模板。
+type TemplateId = int
 
 // TranslationJobId defines model for TranslationJobId.
 type TranslationJobId = int
@@ -1318,6 +1503,12 @@ type AddOrganizationMemberJSONRequestBody = AddOrganizationMemberRequest
 // UpdateOrganizationMemberJSONRequestBody defines body for UpdateOrganizationMember for application/json ContentType.
 type UpdateOrganizationMemberJSONRequestBody = UpdateOrganizationMemberRequest
 
+// CreateOrgTemplateJSONRequestBody defines body for CreateOrgTemplate for application/json ContentType.
+type CreateOrgTemplateJSONRequestBody = CreateTemplateRequest
+
+// UpdateOrgTemplateJSONRequestBody defines body for UpdateOrgTemplate for application/json ContentType.
+type UpdateOrgTemplateJSONRequestBody = UpdateTemplateRequest
+
 // CreateProjectJSONRequestBody defines body for CreateProject for application/json ContentType.
 type CreateProjectJSONRequestBody = CreateProjectRequest
 
@@ -1362,6 +1553,15 @@ type SetStageBackendOverrideJSONRequestBody = SetStageOverrideRequest
 
 // CreateTranslationJobJSONRequestBody defines body for CreateTranslationJob for application/json ContentType.
 type CreateTranslationJobJSONRequestBody = CreateTranslationJobRequest
+
+// CreateTemplateJSONRequestBody defines body for CreateTemplate for application/json ContentType.
+type CreateTemplateJSONRequestBody = CreateTemplateRequest
+
+// UpdateTemplateJSONRequestBody defines body for UpdateTemplate for application/json ContentType.
+type UpdateTemplateJSONRequestBody = UpdateTemplateRequest
+
+// CopyTemplateJSONRequestBody defines body for CopyTemplate for application/json ContentType.
+type CopyTemplateJSONRequestBody = CopyTemplateRequest
 
 // UpdateCurrentUserJSONRequestBody defines body for UpdateCurrentUser for application/json ContentType.
 type UpdateCurrentUserJSONRequestBody = UpdateCurrentUserRequest
@@ -1434,6 +1634,18 @@ type ServerInterface interface {
 	// 修改组织成员角色
 	// (PUT /orgs/{orgId}/members/{userId})
 	UpdateOrganizationMember(w http.ResponseWriter, r *http.Request, orgId OrgId, userId UserId)
+	// 列出组织模板
+	// (GET /orgs/{orgId}/templates)
+	ListOrgTemplates(w http.ResponseWriter, r *http.Request, orgId OrgId)
+	// 创建组织模板
+	// (POST /orgs/{orgId}/templates)
+	CreateOrgTemplate(w http.ResponseWriter, r *http.Request, orgId OrgId)
+	// 删除组织模板
+	// (DELETE /orgs/{orgId}/templates/{templateId})
+	DeleteOrgTemplate(w http.ResponseWriter, r *http.Request, orgId OrgId, templateId TemplateId)
+	// 更新组织模板
+	// (PUT /orgs/{orgId}/templates/{templateId})
+	UpdateOrgTemplate(w http.ResponseWriter, r *http.Request, orgId OrgId, templateId TemplateId)
 	// 无鉴权连通测试
 	// (GET /ping)
 	Ping(w http.ResponseWriter, r *http.Request)
@@ -1536,6 +1748,24 @@ type ServerInterface interface {
 	// 获取用量统计汇总
 	// (GET /stats/summary)
 	GetStatsSummary(w http.ResponseWriter, r *http.Request)
+	// 列出所有可用模板（内置 + 用户）
+	// (GET /templates)
+	ListTemplates(w http.ResponseWriter, r *http.Request)
+	// 创建用户模板
+	// (POST /templates)
+	CreateTemplate(w http.ResponseWriter, r *http.Request)
+	// 删除用户模板
+	// (DELETE /templates/{templateId})
+	DeleteTemplate(w http.ResponseWriter, r *http.Request, templateId TemplateId)
+	// 获取模板详情
+	// (GET /templates/{templateId})
+	GetTemplate(w http.ResponseWriter, r *http.Request, templateId TemplateId)
+	// 更新用户模板
+	// (PUT /templates/{templateId})
+	UpdateTemplate(w http.ResponseWriter, r *http.Request, templateId TemplateId)
+	// 复制模板为自定义模板
+	// (POST /templates/{templateId}/copy)
+	CopyTemplate(w http.ResponseWriter, r *http.Request, templateId TemplateId)
 	// 获取翻译任务详情
 	// (GET /translation-jobs/{translationJobId})
 	GetTranslationJob(w http.ResponseWriter, r *http.Request, translationJobId TranslationJobId)
@@ -1686,6 +1916,30 @@ func (_ Unimplemented) DeleteOrganizationMember(w http.ResponseWriter, r *http.R
 // 修改组织成员角色
 // (PUT /orgs/{orgId}/members/{userId})
 func (_ Unimplemented) UpdateOrganizationMember(w http.ResponseWriter, r *http.Request, orgId OrgId, userId UserId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 列出组织模板
+// (GET /orgs/{orgId}/templates)
+func (_ Unimplemented) ListOrgTemplates(w http.ResponseWriter, r *http.Request, orgId OrgId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 创建组织模板
+// (POST /orgs/{orgId}/templates)
+func (_ Unimplemented) CreateOrgTemplate(w http.ResponseWriter, r *http.Request, orgId OrgId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 删除组织模板
+// (DELETE /orgs/{orgId}/templates/{templateId})
+func (_ Unimplemented) DeleteOrgTemplate(w http.ResponseWriter, r *http.Request, orgId OrgId, templateId TemplateId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 更新组织模板
+// (PUT /orgs/{orgId}/templates/{templateId})
+func (_ Unimplemented) UpdateOrgTemplate(w http.ResponseWriter, r *http.Request, orgId OrgId, templateId TemplateId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -1890,6 +2144,42 @@ func (_ Unimplemented) CreateTranslationJob(w http.ResponseWriter, r *http.Reque
 // 获取用量统计汇总
 // (GET /stats/summary)
 func (_ Unimplemented) GetStatsSummary(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 列出所有可用模板（内置 + 用户）
+// (GET /templates)
+func (_ Unimplemented) ListTemplates(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 创建用户模板
+// (POST /templates)
+func (_ Unimplemented) CreateTemplate(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 删除用户模板
+// (DELETE /templates/{templateId})
+func (_ Unimplemented) DeleteTemplate(w http.ResponseWriter, r *http.Request, templateId TemplateId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 获取模板详情
+// (GET /templates/{templateId})
+func (_ Unimplemented) GetTemplate(w http.ResponseWriter, r *http.Request, templateId TemplateId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 更新用户模板
+// (PUT /templates/{templateId})
+func (_ Unimplemented) UpdateTemplate(w http.ResponseWriter, r *http.Request, templateId TemplateId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 复制模板为自定义模板
+// (POST /templates/{templateId}/copy)
+func (_ Unimplemented) CopyTemplate(w http.ResponseWriter, r *http.Request, templateId TemplateId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2526,6 +2816,148 @@ func (siw *ServerInterfaceWrapper) UpdateOrganizationMember(w http.ResponseWrite
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateOrganizationMember(w, r, orgId, userId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListOrgTemplates operation middleware
+func (siw *ServerInterfaceWrapper) ListOrgTemplates(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "orgId" -------------
+	var orgId OrgId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "orgId", chi.URLParam(r, "orgId"), &orgId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "orgId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListOrgTemplates(w, r, orgId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateOrgTemplate operation middleware
+func (siw *ServerInterfaceWrapper) CreateOrgTemplate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "orgId" -------------
+	var orgId OrgId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "orgId", chi.URLParam(r, "orgId"), &orgId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "orgId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateOrgTemplate(w, r, orgId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteOrgTemplate operation middleware
+func (siw *ServerInterfaceWrapper) DeleteOrgTemplate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "orgId" -------------
+	var orgId OrgId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "orgId", chi.URLParam(r, "orgId"), &orgId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "orgId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "templateId" -------------
+	var templateId TemplateId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "templateId", chi.URLParam(r, "templateId"), &templateId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "templateId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteOrgTemplate(w, r, orgId, templateId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateOrgTemplate operation middleware
+func (siw *ServerInterfaceWrapper) UpdateOrgTemplate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "orgId" -------------
+	var orgId OrgId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "orgId", chi.URLParam(r, "orgId"), &orgId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "orgId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "templateId" -------------
+	var templateId TemplateId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "templateId", chi.URLParam(r, "templateId"), &templateId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "templateId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateOrgTemplate(w, r, orgId, templateId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3805,6 +4237,170 @@ func (siw *ServerInterfaceWrapper) GetStatsSummary(w http.ResponseWriter, r *htt
 	handler.ServeHTTP(w, r)
 }
 
+// ListTemplates operation middleware
+func (siw *ServerInterfaceWrapper) ListTemplates(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTemplates(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateTemplate operation middleware
+func (siw *ServerInterfaceWrapper) CreateTemplate(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateTemplate(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteTemplate operation middleware
+func (siw *ServerInterfaceWrapper) DeleteTemplate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "templateId" -------------
+	var templateId TemplateId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "templateId", chi.URLParam(r, "templateId"), &templateId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "templateId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteTemplate(w, r, templateId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetTemplate operation middleware
+func (siw *ServerInterfaceWrapper) GetTemplate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "templateId" -------------
+	var templateId TemplateId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "templateId", chi.URLParam(r, "templateId"), &templateId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "templateId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTemplate(w, r, templateId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateTemplate operation middleware
+func (siw *ServerInterfaceWrapper) UpdateTemplate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "templateId" -------------
+	var templateId TemplateId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "templateId", chi.URLParam(r, "templateId"), &templateId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "templateId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateTemplate(w, r, templateId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CopyTemplate operation middleware
+func (siw *ServerInterfaceWrapper) CopyTemplate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "templateId" -------------
+	var templateId TemplateId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "templateId", chi.URLParam(r, "templateId"), &templateId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "templateId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CopyTemplate(w, r, templateId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetTranslationJob operation middleware
 func (siw *ServerInterfaceWrapper) GetTranslationJob(w http.ResponseWriter, r *http.Request) {
 
@@ -4177,6 +4773,18 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Put(options.BaseURL+"/orgs/{orgId}/members/{userId}", wrapper.UpdateOrganizationMember)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/orgs/{orgId}/templates", wrapper.ListOrgTemplates)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/orgs/{orgId}/templates", wrapper.CreateOrgTemplate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/orgs/{orgId}/templates/{templateId}", wrapper.DeleteOrgTemplate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/orgs/{orgId}/templates/{templateId}", wrapper.UpdateOrgTemplate)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/ping", wrapper.Ping)
 	})
 	r.Group(func(r chi.Router) {
@@ -4279,6 +4887,24 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Get(options.BaseURL+"/stats/summary", wrapper.GetStatsSummary)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/templates", wrapper.ListTemplates)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/templates", wrapper.CreateTemplate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/templates/{templateId}", wrapper.DeleteTemplate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/templates/{templateId}", wrapper.GetTemplate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/templates/{templateId}", wrapper.UpdateTemplate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/templates/{templateId}/copy", wrapper.CopyTemplate)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/translation-jobs/{translationJobId}", wrapper.GetTranslationJob)
 	})
 	r.Group(func(r chi.Router) {
@@ -4306,115 +4932,136 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"LsUXhdToeeQY/i8AAP//4wgwtAe6AAA=",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

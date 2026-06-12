@@ -223,7 +223,7 @@ func (e *Engine) buildPipeline() *pipeline.Pipeline {
 	e.limiter = limiter
 	retry := backend.RetryPolicy{
 		MaxAttempts: pc.Translate.Retry.MaxAttempts,
-		Backoff:     pc.Translate.Retry.Backoff,
+		Backoff:     time.Duration(pc.Translate.Retry.BackoffMs) * time.Millisecond,
 		Jitter:      pc.Translate.Retry.Jitter,
 	}
 

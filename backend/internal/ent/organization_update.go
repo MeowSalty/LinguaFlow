@@ -19,6 +19,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationtemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 )
 
@@ -214,6 +215,21 @@ func (_u *OrganizationUpdate) AddUsageRecords(v ...*UsageRecord) *OrganizationUp
 	return _u.AddUsageRecordIDs(ids...)
 }
 
+// AddTranslationTemplateIDs adds the "translation_templates" edge to the TranslationTemplate entity by IDs.
+func (_u *OrganizationUpdate) AddTranslationTemplateIDs(ids ...int) *OrganizationUpdate {
+	_u.mutation.AddTranslationTemplateIDs(ids...)
+	return _u
+}
+
+// AddTranslationTemplates adds the "translation_templates" edges to the TranslationTemplate entity.
+func (_u *OrganizationUpdate) AddTranslationTemplates(v ...*TranslationTemplate) *OrganizationUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddTranslationTemplateIDs(ids...)
+}
+
 // Mutation returns the OrganizationMutation object of the builder.
 func (_u *OrganizationUpdate) Mutation() *OrganizationMutation {
 	return _u.mutation
@@ -364,6 +380,27 @@ func (_u *OrganizationUpdate) RemoveUsageRecords(v ...*UsageRecord) *Organizatio
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveUsageRecordIDs(ids...)
+}
+
+// ClearTranslationTemplates clears all "translation_templates" edges to the TranslationTemplate entity.
+func (_u *OrganizationUpdate) ClearTranslationTemplates() *OrganizationUpdate {
+	_u.mutation.ClearTranslationTemplates()
+	return _u
+}
+
+// RemoveTranslationTemplateIDs removes the "translation_templates" edge to TranslationTemplate entities by IDs.
+func (_u *OrganizationUpdate) RemoveTranslationTemplateIDs(ids ...int) *OrganizationUpdate {
+	_u.mutation.RemoveTranslationTemplateIDs(ids...)
+	return _u
+}
+
+// RemoveTranslationTemplates removes "translation_templates" edges to TranslationTemplate entities.
+func (_u *OrganizationUpdate) RemoveTranslationTemplates(v ...*TranslationTemplate) *OrganizationUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveTranslationTemplateIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -765,6 +802,51 @@ func (_u *OrganizationUpdate) sqlSave(ctx context.Context) (_node int, err error
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.TranslationTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.TranslationTemplatesTable,
+			Columns: []string{organization.TranslationTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationtemplate.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedTranslationTemplatesIDs(); len(nodes) > 0 && !_u.mutation.TranslationTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.TranslationTemplatesTable,
+			Columns: []string{organization.TranslationTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationtemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.TranslationTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.TranslationTemplatesTable,
+			Columns: []string{organization.TranslationTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationtemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{organization.Label}
@@ -964,6 +1046,21 @@ func (_u *OrganizationUpdateOne) AddUsageRecords(v ...*UsageRecord) *Organizatio
 	return _u.AddUsageRecordIDs(ids...)
 }
 
+// AddTranslationTemplateIDs adds the "translation_templates" edge to the TranslationTemplate entity by IDs.
+func (_u *OrganizationUpdateOne) AddTranslationTemplateIDs(ids ...int) *OrganizationUpdateOne {
+	_u.mutation.AddTranslationTemplateIDs(ids...)
+	return _u
+}
+
+// AddTranslationTemplates adds the "translation_templates" edges to the TranslationTemplate entity.
+func (_u *OrganizationUpdateOne) AddTranslationTemplates(v ...*TranslationTemplate) *OrganizationUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddTranslationTemplateIDs(ids...)
+}
+
 // Mutation returns the OrganizationMutation object of the builder.
 func (_u *OrganizationUpdateOne) Mutation() *OrganizationMutation {
 	return _u.mutation
@@ -1114,6 +1211,27 @@ func (_u *OrganizationUpdateOne) RemoveUsageRecords(v ...*UsageRecord) *Organiza
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveUsageRecordIDs(ids...)
+}
+
+// ClearTranslationTemplates clears all "translation_templates" edges to the TranslationTemplate entity.
+func (_u *OrganizationUpdateOne) ClearTranslationTemplates() *OrganizationUpdateOne {
+	_u.mutation.ClearTranslationTemplates()
+	return _u
+}
+
+// RemoveTranslationTemplateIDs removes the "translation_templates" edge to TranslationTemplate entities by IDs.
+func (_u *OrganizationUpdateOne) RemoveTranslationTemplateIDs(ids ...int) *OrganizationUpdateOne {
+	_u.mutation.RemoveTranslationTemplateIDs(ids...)
+	return _u
+}
+
+// RemoveTranslationTemplates removes "translation_templates" edges to TranslationTemplate entities.
+func (_u *OrganizationUpdateOne) RemoveTranslationTemplates(v ...*TranslationTemplate) *OrganizationUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveTranslationTemplateIDs(ids...)
 }
 
 // Where appends a list predicates to the OrganizationUpdate builder.
@@ -1538,6 +1656,51 @@ func (_u *OrganizationUpdateOne) sqlSave(ctx context.Context) (_node *Organizati
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.TranslationTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.TranslationTemplatesTable,
+			Columns: []string{organization.TranslationTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationtemplate.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedTranslationTemplatesIDs(); len(nodes) > 0 && !_u.mutation.TranslationTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.TranslationTemplatesTable,
+			Columns: []string{organization.TranslationTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationtemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.TranslationTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.TranslationTemplatesTable,
+			Columns: []string{organization.TranslationTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationtemplate.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

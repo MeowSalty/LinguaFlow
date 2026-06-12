@@ -606,6 +606,29 @@ func HasUsageRecordsWith(preds ...predicate.UsageRecord) predicate.Organization 
 	})
 }
 
+// HasTranslationTemplates applies the HasEdge predicate on the "translation_templates" edge.
+func HasTranslationTemplates() predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, TranslationTemplatesTable, TranslationTemplatesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasTranslationTemplatesWith applies the HasEdge predicate on the "translation_templates" edge with a given conditions (other predicates).
+func HasTranslationTemplatesWith(preds ...predicate.TranslationTemplate) predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := newTranslationTemplatesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.Organization) predicate.Organization {
 	return predicate.Organization(sql.AndPredicates(predicates...))

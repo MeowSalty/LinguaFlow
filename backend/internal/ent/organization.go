@@ -51,9 +51,11 @@ type OrganizationEdges struct {
 	ActivityLogs []*ActivityLog `json:"activity_logs,omitempty"`
 	// UsageRecords holds the value of the usage_records edge.
 	UsageRecords []*UsageRecord `json:"usage_records,omitempty"`
+	// TranslationTemplates holds the value of the translation_templates edge.
+	TranslationTemplates []*TranslationTemplate `json:"translation_templates,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [7]bool
+	loadedTypes [8]bool
 }
 
 // ProjectsOrErr returns the Projects value or an error if the edge
@@ -117,6 +119,15 @@ func (e OrganizationEdges) UsageRecordsOrErr() ([]*UsageRecord, error) {
 		return e.UsageRecords, nil
 	}
 	return nil, &NotLoadedError{edge: "usage_records"}
+}
+
+// TranslationTemplatesOrErr returns the TranslationTemplates value or an error if the edge
+// was not loaded in eager-loading.
+func (e OrganizationEdges) TranslationTemplatesOrErr() ([]*TranslationTemplate, error) {
+	if e.loadedTypes[7] {
+		return e.TranslationTemplates, nil
+	}
+	return nil, &NotLoadedError{edge: "translation_templates"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -233,6 +244,11 @@ func (_m *Organization) QueryActivityLogs() *ActivityLogQuery {
 // QueryUsageRecords queries the "usage_records" edge of the Organization entity.
 func (_m *Organization) QueryUsageRecords() *UsageRecordQuery {
 	return NewOrganizationClient(_m.config).QueryUsageRecords(_m)
+}
+
+// QueryTranslationTemplates queries the "translation_templates" edge of the Organization entity.
+func (_m *Organization) QueryTranslationTemplates() *TranslationTemplateQuery {
+	return NewOrganizationClient(_m.config).QueryTranslationTemplates(_m)
 }
 
 // Update returns a builder for updating this Organization.

@@ -46,6 +46,8 @@ const (
 	EdgeActivityLogs = "activity_logs"
 	// EdgeUsageRecords holds the string denoting the usage_records edge name in mutations.
 	EdgeUsageRecords = "usage_records"
+	// EdgeTranslationTemplates holds the string denoting the translation_templates edge name in mutations.
+	EdgeTranslationTemplates = "translation_templates"
 	// Table holds the table name of the user in the database.
 	Table = "users"
 	// CreatedTranslationJobsTable is the table that holds the created_translation_jobs relation/edge.
@@ -104,6 +106,13 @@ const (
 	UsageRecordsInverseTable = "usage_records"
 	// UsageRecordsColumn is the table column denoting the usage_records relation/edge.
 	UsageRecordsColumn = "user_usage_records"
+	// TranslationTemplatesTable is the table that holds the translation_templates relation/edge.
+	TranslationTemplatesTable = "translation_templates"
+	// TranslationTemplatesInverseTable is the table name for the TranslationTemplate entity.
+	// It exists in this package in order to avoid circular dependency with the "translationtemplate" package.
+	TranslationTemplatesInverseTable = "translation_templates"
+	// TranslationTemplatesColumn is the table column denoting the translation_templates relation/edge.
+	TranslationTemplatesColumn = "owner_user_id"
 )
 
 // Columns holds all SQL columns for user fields.
@@ -307,6 +316,20 @@ func ByUsageRecords(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newUsageRecordsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByTranslationTemplatesCount orders the results by translation_templates count.
+func ByTranslationTemplatesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newTranslationTemplatesStep(), opts...)
+	}
+}
+
+// ByTranslationTemplates orders the results by translation_templates terms.
+func ByTranslationTemplates(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newTranslationTemplatesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newCreatedTranslationJobsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -361,5 +384,12 @@ func newUsageRecordsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(UsageRecordsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, UsageRecordsTable, UsageRecordsColumn),
+	)
+}
+func newTranslationTemplatesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(TranslationTemplatesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, TranslationTemplatesTable, TranslationTemplatesColumn),
 	)
 }

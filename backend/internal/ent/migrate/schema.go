@@ -478,6 +478,40 @@ var (
 			},
 		},
 	}
+	// TranslationTemplatesColumns holds the columns for the "translation_templates" table.
+	TranslationTemplatesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "name", Type: field.TypeString},
+		{Name: "description", Type: field.TypeString, Default: ""},
+		{Name: "scope", Type: field.TypeString, Default: "user"},
+		{Name: "system_prompt_content", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "pipeline_config", Type: field.TypeJSON},
+		{Name: "glossary_config", Type: field.TypeJSON},
+		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
+		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
+	}
+	// TranslationTemplatesTable holds the schema information for the "translation_templates" table.
+	TranslationTemplatesTable = &schema.Table{
+		Name:       "translation_templates",
+		Columns:    TranslationTemplatesColumns,
+		PrimaryKey: []*schema.Column{TranslationTemplatesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "translation_templates_organizations_translation_templates",
+				Columns:    []*schema.Column{TranslationTemplatesColumns[9]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "translation_templates_users_translation_templates",
+				Columns:    []*schema.Column{TranslationTemplatesColumns[10]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
 	// UsageRecordsColumns holds the columns for the "usage_records" table.
 	UsageRecordsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -585,6 +619,7 @@ var (
 		StageBackendOverridesTable,
 		TmEntriesTable,
 		TranslationJobsTable,
+		TranslationTemplatesTable,
 		UsageRecordsTable,
 		UsersTable,
 		UserBackendsTable,
@@ -614,6 +649,8 @@ func init() {
 	TmEntriesTable.ForeignKeys[1].RefTable = ProjectsTable
 	TranslationJobsTable.ForeignKeys[0].RefTable = ProjectsTable
 	TranslationJobsTable.ForeignKeys[1].RefTable = UsersTable
+	TranslationTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
+	TranslationTemplatesTable.ForeignKeys[1].RefTable = UsersTable
 	UsageRecordsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	UsageRecordsTable.ForeignKeys[1].RefTable = ProjectsTable
 	UsageRecordsTable.ForeignKeys[2].RefTable = UsersTable

@@ -68,14 +68,17 @@ type Renderer struct {
 	system *template.Template
 }
 
-// NewRenderer 按配置创建 Renderer。SystemTemplate 为空则使用内置默认。
+// NewRenderer 按配置创建 Renderer。
+// 优先级：SystemTemplateContent（内联内容）> SystemTemplate（文件路径）> 内置默认。
 // UserTemplate 字段保留以兼容旧 yaml，但当前协议下不再使用，非空时构造会失败提醒。
 func NewRenderer(cfg config.PromptConfig) (*Renderer, error) {
 	if cfg.UserTemplate != "" {
 		return nil, fmt.Errorf("prompt: user_template is no longer supported (user message is built as JSON); remove it from config")
 	}
 	sys := defaultSystemTmpl
-	if cfg.SystemTemplate != "" {
+	if cfg.SystemTemplateContent != "" {
+		sys = cfg.SystemTemplateContent // 内联内容优先
+	} else if cfg.SystemTemplate != "" {
 		b, err := os.ReadFile(cfg.SystemTemplate)
 		if err != nil {
 			return nil, fmt.Errorf("prompt: read system template: %w", err)

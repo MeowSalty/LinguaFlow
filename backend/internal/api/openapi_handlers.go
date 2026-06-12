@@ -249,3 +249,45 @@ func (s *Server) ApproveAllResourceSegments(w http.ResponseWriter, r *http.Reque
 func (s *Server) RetranslateRejectedSegments(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
 	s.requireAuth(http.HandlerFunc(s.handleRetranslateRejected)).ServeHTTP(w, r)
 }
+
+// ---- 模板相关适配器 ----
+
+func (s *Server) ListTemplates(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleListTemplates)).ServeHTTP(w, r)
+}
+
+func (s *Server) CreateTemplate(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleCreateTemplate)).ServeHTTP(w, r)
+}
+
+func (s *Server) GetTemplate(w http.ResponseWriter, r *http.Request, _ TemplateId) {
+	s.requireAuth(http.HandlerFunc(s.handleGetTemplate)).ServeHTTP(w, r)
+}
+
+func (s *Server) UpdateTemplate(w http.ResponseWriter, r *http.Request, _ TemplateId) {
+	s.requireAuth(http.HandlerFunc(s.handleUpdateTemplate)).ServeHTTP(w, r)
+}
+
+func (s *Server) DeleteTemplate(w http.ResponseWriter, r *http.Request, _ TemplateId) {
+	s.requireAuth(http.HandlerFunc(s.handleDeleteTemplate)).ServeHTTP(w, r)
+}
+
+func (s *Server) CopyTemplate(w http.ResponseWriter, r *http.Request, _ TemplateId) {
+	s.requireAuth(http.HandlerFunc(s.handleCopyTemplate)).ServeHTTP(w, r)
+}
+
+func (s *Server) ListOrgTemplates(w http.ResponseWriter, r *http.Request, _ OrgId) {
+	s.requireAuth(http.HandlerFunc(s.handleListOrgTemplates)).ServeHTTP(w, r)
+}
+
+func (s *Server) CreateOrgTemplate(w http.ResponseWriter, r *http.Request, _ OrgId) {
+	s.requireAuth(http.HandlerFunc(s.handleCreateOrgTemplate)).ServeHTTP(w, r)
+}
+
+func (s *Server) UpdateOrgTemplate(w http.ResponseWriter, r *http.Request, _ OrgId, _ TemplateId) {
+	s.requireAuth(http.HandlerFunc(s.handleUpdateOrgTemplate)).ServeHTTP(w, r)
+}
+
+func (s *Server) DeleteOrgTemplate(w http.ResponseWriter, r *http.Request, _ OrgId, _ TemplateId) {
+	s.requireAuth(http.HandlerFunc(s.handleDeleteOrgTemplate)).ServeHTTP(w, r)
+}

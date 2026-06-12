@@ -29,6 +29,7 @@ type Server struct {
 	backendSvc           *service.BackendService
 	projectSvc           *service.ProjectService
 	glossarySvc          *service.GlossaryService
+	templateSvc          *service.TemplateService
 	translationJobSvc    *service.TranslationJobService
 	reviewSvc            *service.ReviewService
 	segmentSvc           *service.SegmentService
@@ -58,6 +59,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 	s.backendSvc = service.NewBackendService(client, s.userService)
 	s.projectSvc = service.NewProjectService(client, s.userService, s.backendSvc)
 	s.glossarySvc = service.NewGlossaryService(client, s.projectSvc)
+	s.templateSvc = service.NewTemplateService(client)
 	s.translationJobSvc = service.NewTranslationJobService(client, s.projectSvc)
 	s.reviewSvc = service.NewReviewService(client, s.projectSvc)
 	s.segmentSvc = service.NewSegmentService(client, s.projectSvc)

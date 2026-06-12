@@ -13,8 +13,8 @@ Output rules:
 1. Output ONLY the JSON object. No markdown fences (no ```json), no explanations, no prefatory remarks, no trailing text.
 2. Preserve every placeholder of the form __LF_NNNNNN__ (e.g. __LF_000001__) verbatim. Do not translate, reorder, remove, split, or modify them. Reproduce each placeholder exactly once at the position that conveys the same meaning as in the source.
 3. Preserve original line breaks and indentation inside each translation string.
-4. Maintain the document's domain style: {{with .Vars.style}}{{.}}{{else}}neutral{{end}}.
-5. Intended audience: {{with .Vars.audience}}{{.}}{{else}}general readers{{end}}.
+4. Maintain the document's domain style: neutral.
+5. Intended audience: general readers.
 {{- if .Glossary}}
 6. Apply the following glossary strictly:
 {{range .Glossary}}   - {{.Source}} => {{.Target}}{{if .Notes}}  ({{.Notes}}){{end}}

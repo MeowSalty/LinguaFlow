@@ -26,6 +26,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationtemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
@@ -103,6 +104,7 @@ func checkColumn(t, c string) error {
 			stagebackendoverride.Table: stagebackendoverride.ValidColumn,
 			tmentry.Table:              tmentry.ValidColumn,
 			translationjob.Table:       translationjob.ValidColumn,
+			translationtemplate.Table:  translationtemplate.ValidColumn,
 			usagerecord.Table:          usagerecord.ValidColumn,
 			user.Table:                 user.ValidColumn,
 			userbackend.Table:          userbackend.ValidColumn,

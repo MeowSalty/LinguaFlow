@@ -1,0 +1,35 @@
+id: -1
+name: "通用翻译"
+description: "默认配置，适用于一般文档翻译"
+scope: "system"
+pipeline:
+  split:
+    enabled: true
+    strategy: paragraph
+    max_chars: 1200
+  protect:
+    enabled: true
+    rules: [code, link, placeholder, xml]
+  retry:
+    max_attempts: 3
+    backoff_ms: 2000
+    jitter: true
+  repair:
+    enabled: true
+    json_structural: true
+    schema_aliases: true
+    partial: true
+    partial_threshold: 0.5
+    placeholder_normalize: true
+    prompt_upgrade: true
+  postprocess:
+    enabled: true
+    trim_spaces: true
+glossary:
+  enabled: false
+  bootstrap:
+    mode: "off"
+    save: true
+    max_terms_per_batch: 20
+    min_source_len: 2
+    inline_conflict_strategy: "rewrite-local"
