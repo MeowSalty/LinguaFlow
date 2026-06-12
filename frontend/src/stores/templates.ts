@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 
 import {
   type ApiSchemas,
+  copyTemplate as copyTemplateRequest,
   createTemplate as createTemplateRequest,
   deleteTemplate as deleteTemplateRequest,
   fetchTemplates,
@@ -10,26 +11,28 @@ import {
 } from '@/api/client'
 import { t } from '@/i18n'
 
-type TranslationTemplate = ApiSchemas['TranslationTemplate']
-type CreateTemplatePayload = ApiSchemas['CreateTemplateRequest']
-type UpdateTemplatePayload = ApiSchemas['UpdateTemplateRequest']
-type TemplateScope = TranslationTemplate['scope']
+type Template = ApiSchemas['Template']
+type CreateTemplateRequest = ApiSchemas['CreateTemplateRequest']
+type UpdateTemplateRequest = ApiSchemas['UpdateTemplateRequest']
+type TemplateScope = Template['scope']
 
 const includesNormalized = (source: string | undefined, query: string): boolean => {
   return source?.toLowerCase().includes(query) ?? false
 }
 
 export const useTemplatesStore = defineStore('templates', () => {
-  const items = ref<TranslationTemplate[]>([])
+  const items = ref<Template[]>([])
 
   const loading = ref(false)
   const creating = ref(false)
   const updating = ref(false)
+  const copying = ref(false)
   const deletingTemplateIds = ref<number[]>([])
 
   const error = ref<string | null>(null)
   const createError = ref<string | null>(null)
   const updateError = ref<string | null>(null)
+  const copyError = ref<string | null>(null)
   const deleteError = ref<string | null>(null)
 
   const searchQuery = ref('')
@@ -57,7 +60,7 @@ export const useTemplatesStore = defineStore('templates', () => {
   })
 
   const totalCount = computed(() => items.value.length)
-  const builtinCount = computed(() => items.value.filter((t) => t.is_builtin).length)
+  const systemCount = computed(() => items.value.filter((t) => t.scope === 'system').length)
   const userCount = computed(() => items.value.filter((t) => t.scope === 'user').length)
   const orgCount = computed(() => items.value.filter((t) => t.scope === 'org').length)
 
@@ -76,7 +79,7 @@ export const useTemplatesStore = defineStore('templates', () => {
     }
   }
 
-  const createTemplate = async (payload: CreateTemplatePayload): Promise<TranslationTemplate> => {
+  const createTemplate = async (payload: CreateTemplateRequest): Promise<Template> => {
     creating.value = true
     createError.value = null
 
@@ -95,8 +98,8 @@ export const useTemplatesStore = defineStore('templates', () => {
 
   const updateTemplate = async (
     templateId: number,
-    payload: UpdateTemplatePayload,
-  ): Promise<TranslationTemplate> => {
+    payload: UpdateTemplateRequest,
+  ): Promise<Template> => {
     updating.value = true
     updateError.value = null
 
@@ -110,6 +113,23 @@ export const useTemplatesStore = defineStore('templates', () => {
       throw submitError
     } finally {
       updating.value = false
+    }
+  }
+
+  const copyTemplate = async (templateId: number): Promise<Template> => {
+    copying.value = true
+    copyError.value = null
+
+    try {
+      const template = await copyTemplateRequest(templateId)
+      items.value = [template, ...items.value.filter((item) => item.id !== template.id)]
+      return template
+    } catch (submitError) {
+      copyError.value =
+        submitError instanceof Error ? submitError.message : t('api.errors.copyTemplateFailed')
+      throw submitError
+    } finally {
+      copying.value = false
     }
   }
 
@@ -134,22 +154,25 @@ export const useTemplatesStore = defineStore('templates', () => {
     loading,
     creating,
     updating,
+    copying,
     deletingTemplateIds,
     error,
     createError,
     updateError,
+    copyError,
     deleteError,
     searchQuery,
     scopeFilter,
     sortedItems,
     filteredItems,
     totalCount,
-    builtinCount,
+    systemCount,
     userCount,
     orgCount,
     loadTemplates,
     createTemplate,
     updateTemplate,
+    copyTemplate,
     deleteTemplate,
   }
 })

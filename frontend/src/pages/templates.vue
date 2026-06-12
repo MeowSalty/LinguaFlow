@@ -20,23 +20,51 @@ import {
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
-import { Icon as IconifyIcon } from '@iconify/vue'
 import { type ApiSchemas } from '@/api/client'
 import HighlightTextarea from '@/components/HighlightTextarea.vue'
 import TranslationConfigEditor from '@/components/templates/TranslationConfigEditor.vue'
 import { useTemplatesStore } from '@/stores/templates'
 
-type TranslationTemplate = ApiSchemas['TranslationTemplate']
-type CreateTemplatePayload = ApiSchemas['CreateTemplateRequest']
-type TemplateScope = TranslationTemplate['scope']
+type Template = ApiSchemas['Template']
+type CreateTemplateRequest = ApiSchemas['CreateTemplateRequest']
+type UpdateTemplateRequest = ApiSchemas['UpdateTemplateRequest']
+type TemplatePipelineConfig = ApiSchemas['TemplatePipelineConfig']
+type TemplateGlossaryConfig = ApiSchemas['TemplateGlossaryConfig']
+type TemplateScope = Template['scope']
 
 interface TemplateFormModel {
   name: string
   description: string
-  icon: string
-  system_prompt: string
-  prompt_vars: Array<{ key: string; value: string }>
-  translation_config: Record<string, unknown>
+  system_prompt_content: string
+  pipeline: TemplatePipelineConfig
+  glossary: TemplateGlossaryConfig
+}
+
+const PIPELINE_DEFAULTS: TemplatePipelineConfig = {
+  split: { enabled: true, strategy: 'paragraph', max_chars: 1200 },
+  protect: { enabled: true, rules: ['code', 'link', 'placeholder', 'xml'] },
+  retry: { max_attempts: 3, backoff_ms: 1000, jitter: false },
+  repair: {
+    enabled: true,
+    json_structural: true,
+    schema_aliases: true,
+    partial: true,
+    partial_threshold: 0.5,
+    placeholder_normalize: true,
+    prompt_upgrade: true,
+  },
+  postprocess: { enabled: true, trim_spaces: true },
+}
+
+const GLOSSARY_DEFAULTS: TemplateGlossaryConfig = {
+  enabled: false,
+  bootstrap: {
+    mode: 'off',
+    save: false,
+    max_terms_per_batch: 20,
+    min_source_len: 2,
+    inline_conflict_strategy: 'off',
+  },
 }
 
 const templates = useTemplatesStore()
@@ -45,22 +73,21 @@ const { t } = useI18n()
 const formRef = ref<FormInst | null>(null)
 const promptEditorRef = ref<InstanceType<typeof HighlightTextarea> | null>(null)
 const drawerVisible = ref(false)
-const editingTemplate = ref<TranslationTemplate | null>(null)
+const editingTemplate = ref<Template | null>(null)
 const deleteModalVisible = ref(false)
-const deletingTemplate = ref<TranslationTemplate | null>(null)
+const deletingTemplate = ref<Template | null>(null)
 
 const formModel = reactive<TemplateFormModel>({
   name: '',
   description: '',
-  icon: '',
-  system_prompt: '',
-  prompt_vars: [],
-  translation_config: {},
+  system_prompt_content: '',
+  pipeline: JSON.parse(JSON.stringify(PIPELINE_DEFAULTS)),
+  glossary: JSON.parse(JSON.stringify(GLOSSARY_DEFAULTS)),
 })
 
 const filterScopeOptions = computed<SelectOption[]>(() => [
   { label: t('templates.filters.allScopes'), value: 'all' },
-  { label: t('templates.scopes.builtin'), value: 'builtin' },
+  { label: t('templates.scopes.system'), value: 'system' },
   { label: t('templates.scopes.user'), value: 'user' },
   { label: t('templates.scopes.org'), value: 'org' },
 ])
@@ -87,10 +114,9 @@ const rules = computed<FormRules>(() => ({
 const resetForm = (): void => {
   formModel.name = ''
   formModel.description = ''
-  formModel.icon = ''
-  formModel.system_prompt = ''
-  formModel.prompt_vars = []
-  formModel.translation_config = {}
+  formModel.system_prompt_content = ''
+  formModel.pipeline = JSON.parse(JSON.stringify(PIPELINE_DEFAULTS))
+  formModel.glossary = JSON.parse(JSON.stringify(GLOSSARY_DEFAULTS))
   editingTemplate.value = null
 }
 
@@ -99,52 +125,42 @@ const openCreateDrawer = (): void => {
   drawerVisible.value = true
 }
 
-const recordToPairs = (
-  record: Record<string, unknown> | undefined,
-): Array<{ key: string; value: string }> => {
-  if (!record) {
-    return []
+/** 从 API 模板对象中提取 pipeline 配置，缺失字段用默认值填充 */
+function extractPipeline(template: Template): TemplatePipelineConfig {
+  const src = template.pipeline
+  if (!src) return JSON.parse(JSON.stringify(PIPELINE_DEFAULTS))
+  return {
+    split: { ...PIPELINE_DEFAULTS.split, ...src.split },
+    protect: {
+      ...PIPELINE_DEFAULTS.protect,
+      ...src.protect,
+      rules: src.protect?.rules ?? PIPELINE_DEFAULTS.protect.rules,
+    },
+    retry: { ...PIPELINE_DEFAULTS.retry, ...src.retry },
+    repair: { ...PIPELINE_DEFAULTS.repair, ...src.repair },
+    postprocess: { ...PIPELINE_DEFAULTS.postprocess, ...src.postprocess },
   }
-  return Object.entries(record).map(([key, value]) => ({
-    key,
-    value: typeof value === 'string' ? value : JSON.stringify(value),
-  }))
 }
 
-const pairsToRecord = (pairs: Array<{ key: string; value: string }>): Record<string, unknown> => {
-  const record: Record<string, unknown> = {}
-  for (const pair of pairs) {
-    const key = pair.key.trim()
-    if (key) {
-      record[key] = pair.value
-    }
+/** 从 API 模板对象中提取 glossary 配置，缺失字段用默认值填充 */
+function extractGlossary(template: Template): TemplateGlossaryConfig {
+  const src = template.glossary
+  if (!src) return JSON.parse(JSON.stringify(GLOSSARY_DEFAULTS))
+  return {
+    enabled: src.enabled ?? GLOSSARY_DEFAULTS.enabled,
+    bootstrap: { ...GLOSSARY_DEFAULTS.bootstrap, ...src.bootstrap },
   }
-  return record
 }
 
-const openEditDrawer = (template: TranslationTemplate): void => {
+const openEditDrawer = (template: Template): void => {
   editingTemplate.value = template
   formModel.name = template.name
   formModel.description = template.description ?? ''
-  formModel.icon = template.icon ?? ''
-  formModel.system_prompt = template.system_prompt ?? ''
-  formModel.prompt_vars = recordToPairs(template.prompt_vars)
-  formModel.translation_config = template.translation_config ?? {}
+  formModel.system_prompt_content = template.system_prompt_content ?? ''
+  formModel.pipeline = extractPipeline(template)
+  formModel.glossary = extractGlossary(template)
   drawerVisible.value = true
 }
-
-const addPromptVar = (): void => {
-  formModel.prompt_vars.push({ key: '', value: '' })
-}
-
-const removePromptVar = (index: number): void => {
-  formModel.prompt_vars.splice(index, 1)
-}
-
-/** 获取已定义的变量名列表（去重、过滤空值） */
-const definedVarNames = computed(() => [
-  ...new Set(formModel.prompt_vars.map((v) => v.key.trim()).filter(Boolean)),
-])
 
 /** 系统内置模板变量（对应后端 prompt.Data 结构） */
 const builtinVariables = [
@@ -162,34 +178,27 @@ const builtinVariables = [
 /** 生成变量占位符显示文本 */
 const varDisplay = (varName: string): string => `{{.${varName}}}`
 
-/** 将 {{.varName}} 插入到 system_prompt 的光标位置 */
+/** 将 {{.varName}} 插入到 system_prompt_content 的光标位置 */
 const insertVariable = (varName: string): void => {
   promptEditorRef.value?.insertAtCursor(`{{.${varName}}}`)
 }
 
-
-const buildPayload = (): CreateTemplatePayload => {
-  const payload: CreateTemplatePayload = {
+const buildPayload = (): CreateTemplateRequest => {
+  const payload: CreateTemplateRequest = {
     name: formModel.name.trim(),
   }
 
   if (formModel.description.trim()) {
     payload.description = formModel.description.trim()
   }
-  if (formModel.icon.trim()) {
-    payload.icon = formModel.icon.trim()
+  if (formModel.system_prompt_content.trim()) {
+    payload.system_prompt_content = formModel.system_prompt_content.trim()
   }
-  if (formModel.system_prompt.trim()) {
-    payload.system_prompt = formModel.system_prompt.trim()
+  if (formModel.pipeline) {
+    payload.pipeline = JSON.parse(JSON.stringify(formModel.pipeline))
   }
-
-  const promptVars = pairsToRecord(formModel.prompt_vars)
-  if (Object.keys(promptVars).length > 0) {
-    payload.prompt_vars = promptVars
-  }
-
-  if (Object.keys(formModel.translation_config).length > 0) {
-    payload.translation_config = { ...formModel.translation_config }
+  if (formModel.glossary) {
+    payload.glossary = JSON.parse(JSON.stringify(formModel.glossary))
   }
 
   return payload
@@ -206,7 +215,7 @@ const onSubmit = async (): Promise<void> => {
 
   try {
     if (isEditMode.value && editingTemplate.value) {
-      await templates.updateTemplate(editingTemplate.value.id, payload)
+      await templates.updateTemplate(editingTemplate.value.id, payload as UpdateTemplateRequest)
       message.success(t('templates.messages.updateSuccess'))
     } else {
       await templates.createTemplate(payload)
@@ -219,9 +228,20 @@ const onSubmit = async (): Promise<void> => {
   }
 }
 
-const confirmDelete = (template: TranslationTemplate): void => {
-  if (template.is_builtin) {
-    message.warning(t('templates.messages.builtinDeleteForbidden'))
+const onCopyTemplate = async (template: Template): Promise<void> => {
+  try {
+    const copied = await templates.copyTemplate(template.id)
+    message.success(t('templates.messages.copySuccess'))
+    // 复制成功后自动打开编辑抽屉
+    openEditDrawer(copied)
+  } catch {
+    // Error is handled by the store
+  }
+}
+
+const confirmDelete = (template: Template): void => {
+  if (template.scope === 'system') {
+    message.warning(t('templates.messages.systemDeleteForbidden'))
     return
   }
   deletingTemplate.value = template
@@ -245,7 +265,7 @@ const executeDelete = async (): Promise<void> => {
 
 const getScopeTagType = (scope: TemplateScope): 'default' | 'info' | 'success' => {
   switch (scope) {
-    case 'builtin': {
+    case 'system': {
       return 'default'
     }
     case 'user': {
@@ -315,10 +335,10 @@ onMounted(() => {
       </NCard>
       <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
         <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('templates.stats.builtin') }}
+          {{ t('templates.stats.system') }}
         </div>
         <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ templates.builtinCount }}
+          {{ templates.systemCount }}
         </div>
       </NCard>
       <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
@@ -407,19 +427,12 @@ onMounted(() => {
         class="group shadow-sm shadow-lf-shadow transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-lf-shadow-strong"
       >
         <div class="flex h-full flex-col gap-4">
-          <!-- 头部：图标 + 名称 + 作用域标签 -->
+          <!-- 头部：名称 + 作用域标签 -->
           <div class="flex items-start justify-between gap-4">
-            <div class="flex min-w-0 items-center gap-3">
-              <IconifyIcon
-                v-if="template.icon"
-                :icon="`carbon:${template.icon}`"
-                class="text-2xl"
-              />
-              <div class="min-w-0">
-                <h2 class="truncate text-lg font-semibold text-lf-text-strong">
-                  {{ template.name }}
-                </h2>
-              </div>
+            <div class="min-w-0">
+              <h2 class="truncate text-lg font-semibold text-lf-text-strong">
+                {{ template.name }}
+              </h2>
             </div>
             <NTag round size="small" :type="getScopeTagType(template.scope)">
               {{ t(`templates.scopes.${template.scope}`) }}
@@ -445,7 +458,16 @@ onMounted(() => {
                   {{ t('templates.actions.edit') }}
                 </NButton>
                 <NButton
-                  v-if="!template.is_builtin"
+                  text
+                  type="info"
+                  class="font-medium"
+                  :loading="templates.copying"
+                  @click="onCopyTemplate(template)"
+                >
+                  {{ t('templates.actions.copy') }}
+                </NButton>
+                <NButton
+                  v-if="template.scope !== 'system'"
                   text
                   type="error"
                   class="font-medium"
@@ -492,26 +514,12 @@ onMounted(() => {
             />
           </NFormItem>
 
-          <NFormItem :label="t('templates.form.icon')" path="icon">
-            <div class="flex w-full items-center gap-2">
-              <NInput
-                v-model:value="formModel.icon"
-                :placeholder="t('templates.form.iconPlaceholder')"
-              />
-              <IconifyIcon
-                v-if="formModel.icon.trim()"
-                :icon="`carbon:${formModel.icon.trim()}`"
-                class="shrink-0 text-2xl"
-              />
-            </div>
-          </NFormItem>
-
-          <NFormItem :label="t('templates.form.systemPrompt')" path="system_prompt">
+          <NFormItem :label="t('templates.form.systemPromptContent')" path="system_prompt_content">
             <div class="w-full">
               <HighlightTextarea
                 ref="promptEditorRef"
-                v-model:value="formModel.system_prompt"
-                :placeholder="t('templates.form.systemPromptPlaceholder')"
+                v-model:value="formModel.system_prompt_content"
+                :placeholder="t('templates.form.systemPromptContentPlaceholder')"
                 :rows="6"
               />
               <div class="mt-2 space-y-2">
@@ -532,58 +540,9 @@ onMounted(() => {
                     {{ varDisplay(v.key) }}
                   </NButton>
                 </div>
-                <!-- 用户自定义变量 -->
-                <div v-if="definedVarNames.length > 0" class="flex flex-wrap items-center gap-1.5">
-                  <span class="text-xs text-lf-text-muted">
-                    {{ t('templates.form.insertUserVar') }}
-                  </span>
-                  <NButton
-                    v-for="varName in definedVarNames"
-                    :key="varName"
-                    size="tiny"
-                    quaternary
-                    type="primary"
-                    @click="insertVariable(varName)"
-                  >
-                    {{ varDisplay(varName) }}
-                  </NButton>
-                </div>
               </div>
             </div>
           </NFormItem>
-
-          <!-- 提示词变量 -->
-          <div class="mb-4">
-            <div class="mb-2 flex items-center justify-between">
-              <span class="text-sm font-medium text-lf-text-strong">
-                {{ t('templates.form.promptVars') }}
-              </span>
-              <NButton quaternary size="small" @click="addPromptVar">
-                + {{ t('templates.form.addVar') }}
-              </NButton>
-            </div>
-            <div
-              v-for="(item, index) in formModel.prompt_vars"
-              :key="index"
-              class="mb-2 flex items-center gap-2"
-            >
-              <NInput
-                v-model:value="item.key"
-                size="small"
-                :placeholder="t('templates.form.promptVarsKeyPlaceholder')"
-                class="flex-1"
-              />
-              <NInput
-                v-model:value="item.value"
-                size="small"
-                :placeholder="t('templates.form.promptVarsValuePlaceholder')"
-                class="flex-1"
-              />
-              <NButton quaternary size="small" type="error" @click="removePromptVar(index)">
-                ✕
-              </NButton>
-            </div>
-          </div>
 
           <!-- 翻译配置 -->
           <div class="mb-4">
@@ -591,8 +550,9 @@ onMounted(() => {
               {{ t('templates.form.translationConfig') }}
             </span>
             <TranslationConfigEditor
-              v-model="formModel.translation_config"
-              :disabled="editingTemplate?.is_builtin === true"
+              v-model:pipeline="formModel.pipeline"
+              v-model:glossary="formModel.glossary"
+              :disabled="editingTemplate?.scope === 'system'"
             />
           </div>
         </NForm>

@@ -21,16 +21,13 @@ const { placeholder = '', highlightPatterns } = defineProps<{
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
 const backdropInnerRef = ref<HTMLDivElement | null>(null)
 
-const backdropWidth = ref(0)
-const backdropHeight = ref(0)
-
 let resizeObserver: ResizeObserver | null = null
 
-/** 同步背景层尺寸为 textarea 的 clientWidth/clientHeight */
-function syncDimensions() {
+/** 同步背景层高度为 textarea 的实际高度 */
+function syncHeight() {
   if (!textareaRef.value) return
-  backdropWidth.value = textareaRef.value.clientWidth
-  backdropHeight.value = textareaRef.value.clientHeight
+  const height = textareaRef.value.offsetHeight
+  backdropInnerRef.value?.parentElement?.style.setProperty('height', height + 'px')
 }
 
 /** 默认的 Go template 高亮规则 */
@@ -46,7 +43,7 @@ const highlightedHtml = computed(() => {
   if (!text) return ''
 
   // 转义 HTML 特殊字符
-  const escaped = text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const escaped = text.replace(/&/g, '&').replace(/</g, '<').replace(/>/g, '>')
 
   // 使用传入的规则列表，或使用默认规则
   const patterns = highlightPatterns?.length ? highlightPatterns : [defaultPattern]
@@ -61,7 +58,7 @@ const highlightedHtml = computed(() => {
   }, escaped)
 
   // 将换行符转为 <br>，与背景层保持一致的换行行为
-  return highlighted.replace(/\n/g, '<br>')
+  return highlighted.replace(/\r\n/g, '\n').replace(/\n/g, '<br>')
 })
 
 /** 滚动同步：通过 transform 平移内层，避免 scrollHeight 不一致导致的偏移 */
@@ -100,13 +97,21 @@ const insertAtCursor = (placeholder: string): void => {
   })
 }
 
+// ---------- 内容变化时同步高度（textarea 可能因内容增多而 resize） ----------
+watch(modelValue, () => {
+  nextTick(() => {
+    syncHeight()
+    syncScroll()
+  })
+})
+
 // ---------- 生命周期 ----------
 onMounted(async () => {
   await nextTick()
-  syncDimensions()
+  syncHeight()
   if (textareaRef.value) {
     resizeObserver = new ResizeObserver(() => {
-      syncDimensions()
+      syncHeight()
       syncScroll()
     })
     resizeObserver.observe(textareaRef.value)
@@ -115,6 +120,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   resizeObserver?.disconnect()
+  resizeObserver = null
   if (rafId) cancelAnimationFrame(rafId)
 })
 
@@ -125,11 +131,9 @@ defineExpose({ insertAtCursor })
   <div
     class="prompt-editor relative overflow-hidden rounded-lg border border-lf-border bg-lf-surface"
   >
-    <!-- 背景高亮容器：宽高与 textarea 可视区域一致，overflow: hidden 防止独立滚动 -->
+    <!-- 背景高亮容器：通过 CSS left/right 与 textarea 完全对齐，无需 JS 计算宽度 -->
     <div
-      ref="backdropRef"
-      class="prompt-editor-backdrop pointer-events-none absolute top-0 left-0 text-transparent bg-lf-surface"
-      :style="{ width: backdropWidth + 'px', height: backdropHeight + 'px' }"
+      class="prompt-editor-backdrop pointer-events-none absolute top-0 left-0 right-0 text-transparent bg-lf-surface"
       aria-hidden="true"
     >
       <!-- 内层平移层，通过 transform 同步滚动 -->

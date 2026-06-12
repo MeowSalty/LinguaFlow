@@ -511,6 +511,87 @@ export interface paths {
         patch: operations["UpdateResourceSegment"];
         trace?: never;
     };
+    "/projects/{projectId}/resources/{resourceId}/segments/{segmentId}/review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+                segmentId: components["parameters"]["SegmentId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 审核单个段落（通过/拒绝/编辑） */
+        patch: operations["ReviewResourceSegment"];
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/{resourceId}/segments/batch-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 批量审核段落 */
+        post: operations["BatchReviewResourceSegments"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/{resourceId}/segments/approve-all": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 批准资源中所有已翻译/已编辑的段落 */
+        post: operations["ApproveAllResourceSegments"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/{resourceId}/retranslate-rejected": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 将资源中被拒绝的段落重置为待翻译 */
+        post: operations["RetranslateRejectedSegments"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/stages/{stage}/override": {
         parameters: {
             query?: never;
@@ -726,6 +807,120 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 列出所有可用模板（内置 + 用户）
+         * @description 返回内置模板和当前用户的所有模板合并列表。
+         */
+        get: operations["ListTemplates"];
+        put?: never;
+        /** 创建用户模板 */
+        post: operations["CreateTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/templates/{templateId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                templateId: components["parameters"]["TemplateId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * 获取模板详情
+         * @description 获取单个模板详情。templateId 正数为用户模板，负数为内置模板。
+         */
+        get: operations["GetTemplate"];
+        /**
+         * 更新用户模板
+         * @description 仅可更新用户模板（templateId > 0）。对内置模板（templateId < 0）调用返回 403。
+         */
+        put: operations["UpdateTemplate"];
+        post?: never;
+        /**
+         * 删除用户模板
+         * @description 仅可删除用户模板（templateId > 0）。对内置模板（templateId < 0）调用返回 403。
+         */
+        delete: operations["DeleteTemplate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/templates/{templateId}/copy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                templateId: components["parameters"]["TemplateId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 复制模板为自定义模板
+         * @description 基于指定模板（内置或用户）创建一个用户模板副本。返回新创建的用户模板，ID 为正数。
+         */
+        post: operations["CopyTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        /** 列出组织模板 */
+        get: operations["ListOrgTemplates"];
+        put?: never;
+        /** 创建组织模板 */
+        post: operations["CreateOrgTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/orgs/{orgId}/templates/{templateId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+                templateId: components["parameters"]["TemplateId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        /** 更新组织模板 */
+        put: operations["UpdateOrgTemplate"];
+        post?: never;
+        /** 删除组织模板 */
+        delete: operations["DeleteOrgTemplate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/stats/summary": {
         parameters: {
             query?: never;
@@ -758,89 +953,6 @@ export interface paths {
         put?: never;
         post?: never;
         delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/templates": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * 列出当前用户可见的所有模板
-         * @description 返回内置模板、用户自有模板及用户所属组织的模板
-         */
-        get: operations["ListTemplates"];
-        put?: never;
-        /** 创建用户级自定义模板 */
-        post: operations["CreateTemplate"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/templates/{templateId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                templateId: components["parameters"]["TemplateId"];
-            };
-            cookie?: never;
-        };
-        /** 获取模板详情 */
-        get: operations["GetTemplate"];
-        /** 更新模板（仅 owner 可操作） */
-        put: operations["UpdateTemplate"];
-        post?: never;
-        /** 删除模板（内置模板不可删除） */
-        delete: operations["DeleteTemplate"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/orgs/{orgId}/templates": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                orgId: components["parameters"]["OrgId"];
-            };
-            cookie?: never;
-        };
-        /** 列出组织级模板 */
-        get: operations["ListOrgTemplates"];
-        put?: never;
-        /** 创建组织级模板 */
-        post: operations["CreateOrgTemplate"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/orgs/{orgId}/templates/{templateId}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                orgId: components["parameters"]["OrgId"];
-                templateId: components["parameters"]["TemplateId"];
-            };
-            cookie?: never;
-        };
-        get?: never;
-        /** 更新组织级模板 */
-        put: operations["UpdateOrgTemplate"];
-        post?: never;
-        /** 删除组织级模板 */
-        delete: operations["DeleteOrgTemplate"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1009,6 +1121,39 @@ export interface components {
         ResourceSegmentListResponse: {
             items: components["schemas"]["Segment"][];
             next_cursor?: string;
+        };
+        SegmentReviewRequest: {
+            /**
+             * @description 审核操作：approve=通过，reject=拒绝，edit=编辑译文
+             * @enum {string}
+             */
+            action: "approve" | "reject" | "edit";
+            /** @description 编辑译文时必填 */
+            target_text?: string;
+            /** @description 审核备注 */
+            comment?: string;
+        };
+        BatchReviewRequest: {
+            /** @description 待审核的段落 ID 列表 */
+            segment_ids: number[];
+            /**
+             * @description 批量审核操作
+             * @enum {string}
+             */
+            action: "approve" | "reject";
+            /** @description 审核备注 */
+            comment?: string;
+        };
+        BatchReviewResponse: {
+            items: components["schemas"]["Segment"][];
+        };
+        ApproveAllResponse: {
+            /** @description 批准的段落数 */
+            approved_count: number;
+        };
+        RetranslateResponse: {
+            /** @description 重置为待翻译的段落数 */
+            reset_count: number;
         };
         IncrementalUpdateResponse: {
             resource: components["schemas"]["Resource"];
@@ -1275,55 +1420,45 @@ export interface components {
                 reason?: string;
             }[];
         };
-        TranslationTemplate: {
+        Template: {
+            /** @description 模板 ID。正数为用户模板，负数为内置模板。 */
             id: number;
             name: string;
-            description?: string;
-            icon?: string;
-            is_builtin: boolean;
-            /** @enum {string} */
-            scope: "builtin" | "user" | "org";
-            owner_user_id?: number | null;
-            owner_org_id?: number | null;
-            /** @description 自定义 system prompt；为空表示使用系统默认 */
-            system_prompt?: string;
-            prompt_vars?: {
-                [key: string]: unknown;
-            };
-            translation_config?: {
-                [key: string]: unknown;
-            };
+            description: string;
+            scope: components["schemas"]["TemplateScope"];
+            owner_user_id?: number;
+            owner_org_id?: number;
+            /** @description 内联提示词内容，空则使用内置默认模板。风格/受众等翻译要求直接写在提示词中。 */
+            system_prompt_content?: string;
+            pipeline: components["schemas"]["TemplatePipelineConfig"];
+            glossary: components["schemas"]["TemplateGlossaryConfig"];
             /** Format: date-time */
             created_at?: string;
             /** Format: date-time */
             updated_at?: string;
         };
         TemplateListResponse: {
-            items: components["schemas"]["TranslationTemplate"][];
+            items: components["schemas"]["Template"][];
         };
         CreateTemplateRequest: {
             name: string;
             description?: string;
-            icon?: string;
-            system_prompt?: string;
-            prompt_vars?: {
-                [key: string]: unknown;
-            };
-            translation_config?: {
-                [key: string]: unknown;
-            };
+            /** @description 内联提示词内容，空则使用内置默认模板。风格/受众等翻译要求直接写在提示词中。 */
+            system_prompt_content?: string;
+            pipeline?: components["schemas"]["TemplatePipelineConfig"];
+            glossary?: components["schemas"]["TemplateGlossaryConfig"];
         };
         UpdateTemplateRequest: {
             name?: string;
             description?: string;
-            icon?: string;
-            system_prompt?: string;
-            prompt_vars?: {
-                [key: string]: unknown;
-            };
-            translation_config?: {
-                [key: string]: unknown;
-            };
+            /** @description 内联提示词内容，空则使用内置默认模板。风格/受众等翻译要求直接写在提示词中。 */
+            system_prompt_content?: string;
+            pipeline?: components["schemas"]["TemplatePipelineConfig"];
+            glossary?: components["schemas"]["TemplateGlossaryConfig"];
+        };
+        CopyTemplateRequest: {
+            /** @description 新模板名称，留空则自动在原名后加"(副本)" */
+            name?: string;
         };
         IncrementalUpdateChanges: {
             /** @description 新增段落数 */
@@ -1334,6 +1469,56 @@ export interface components {
             unchanged: number;
             /** @description 删除的段落数 */
             deleted: number;
+        };
+        /** @enum {string} */
+        TemplateScope: "user" | "org" | "system";
+        TemplateSplitConfig: {
+            enabled: boolean;
+            strategy: string;
+            max_chars: number;
+        };
+        TemplateProtectConfig: {
+            enabled: boolean;
+            rules?: string[];
+        };
+        TemplateRetryConfig: {
+            max_attempts: number;
+            backoff_ms: number;
+            jitter: boolean;
+        };
+        TemplateRepairConfig: {
+            enabled: boolean;
+            json_structural: boolean;
+            schema_aliases: boolean;
+            partial: boolean;
+            /** Format: double */
+            partial_threshold: number;
+            placeholder_normalize: boolean;
+            prompt_upgrade: boolean;
+        };
+        TemplatePostprocessConfig: {
+            enabled: boolean;
+            trim_spaces: boolean;
+        };
+        TemplatePipelineConfig: {
+            split: components["schemas"]["TemplateSplitConfig"];
+            protect: components["schemas"]["TemplateProtectConfig"];
+            retry: components["schemas"]["TemplateRetryConfig"];
+            repair: components["schemas"]["TemplateRepairConfig"];
+            postprocess: components["schemas"]["TemplatePostprocessConfig"];
+        };
+        TemplateBootstrapConfig: {
+            /** @enum {string} */
+            mode: "off" | "pre" | "inline";
+            save: boolean;
+            max_terms_per_batch: number;
+            min_source_len: number;
+            /** @enum {string} */
+            inline_conflict_strategy: "off" | "rewrite-local";
+        };
+        TemplateGlossaryConfig: {
+            enabled: boolean;
+            bootstrap: components["schemas"]["TemplateBootstrapConfig"];
         };
     };
     responses: {
@@ -1355,8 +1540,8 @@ export interface components {
         TranslationJobId: number;
         BackendId: number;
         EntryId: number;
-        TemplateId: number;
         Stage: "translate" | "bootstrap";
+        TemplateId: number;
         SegmentId: number;
         Cursor: string;
         Limit: number;
@@ -2415,6 +2600,111 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    ReviewResourceSegment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+                segmentId: components["parameters"]["SegmentId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SegmentReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description 审核成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Segment"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    BatchReviewResourceSegments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchReviewRequest"];
+            };
+        };
+        responses: {
+            /** @description 批量审核结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BatchReviewResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ApproveAllResourceSegments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 批准结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApproveAllResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    RetranslateRejectedSegments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 重置结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetranslateResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     SetStageBackendOverride: {
         parameters: {
             query?: never;
@@ -2770,51 +3060,6 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    GetStatsSummary: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 用量统计 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UsageStats"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    ListActivity: {
-        parameters: {
-            query?: {
-                cursor?: components["parameters"]["Cursor"];
-                limit?: components["parameters"]["Limit"];
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 活动审计日志 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ActivityListResponse"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
     ListTemplates: {
         parameters: {
             query?: never;
@@ -2855,7 +3100,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TranslationTemplate"];
+                    "application/json": components["schemas"]["Template"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -2878,7 +3123,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TranslationTemplate"];
+                    "application/json": components["schemas"]["Template"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -2905,7 +3150,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TranslationTemplate"];
+                    "application/json": components["schemas"]["Template"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -2928,6 +3173,33 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CopyTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                templateId: components["parameters"]["TemplateId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["CopyTemplateRequest"];
+            };
+        };
+        responses: {
+            /** @description 复制成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Template"];
+                };
             };
             default: components["responses"]["Problem"];
         };
@@ -2976,7 +3248,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TranslationTemplate"];
+                    "application/json": components["schemas"]["Template"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -3004,7 +3276,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TranslationTemplate"];
+                    "application/json": components["schemas"]["Template"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -3028,6 +3300,51 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetStatsSummary: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 用量统计 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UsageStats"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListActivity: {
+        parameters: {
+            query?: {
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 活动审计日志 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ActivityListResponse"];
+                };
             };
             default: components["responses"]["Problem"];
         };
