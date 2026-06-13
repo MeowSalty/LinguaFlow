@@ -28,6 +28,8 @@ type Tx struct {
 	Project *ProjectClient
 	// ProjectBackend is the client for interacting with the ProjectBackend builders.
 	ProjectBackend *ProjectBackendClient
+	// PromptTemplate is the client for interacting with the PromptTemplate builders.
+	PromptTemplate *PromptTemplateClient
 	// RefreshToken is the client for interacting with the RefreshToken builders.
 	RefreshToken *RefreshTokenClient
 	// Resource is the client for interacting with the Resource builders.
@@ -40,6 +42,8 @@ type Tx struct {
 	TMEntry *TMEntryClient
 	// TranslationJob is the client for interacting with the TranslationJob builders.
 	TranslationJob *TranslationJobClient
+	// TranslationProfile is the client for interacting with the TranslationProfile builders.
+	TranslationProfile *TranslationProfileClient
 	// TranslationTemplate is the client for interacting with the TranslationTemplate builders.
 	TranslationTemplate *TranslationTemplateClient
 	// UsageRecord is the client for interacting with the UsageRecord builders.
@@ -187,12 +191,14 @@ func (tx *Tx) init() {
 	tx.Organization = NewOrganizationClient(tx.config)
 	tx.Project = NewProjectClient(tx.config)
 	tx.ProjectBackend = NewProjectBackendClient(tx.config)
+	tx.PromptTemplate = NewPromptTemplateClient(tx.config)
 	tx.RefreshToken = NewRefreshTokenClient(tx.config)
 	tx.Resource = NewResourceClient(tx.config)
 	tx.Segment = NewSegmentClient(tx.config)
 	tx.StageBackendOverride = NewStageBackendOverrideClient(tx.config)
 	tx.TMEntry = NewTMEntryClient(tx.config)
 	tx.TranslationJob = NewTranslationJobClient(tx.config)
+	tx.TranslationProfile = NewTranslationProfileClient(tx.config)
 	tx.TranslationTemplate = NewTranslationTemplateClient(tx.config)
 	tx.UsageRecord = NewUsageRecordClient(tx.config)
 	tx.User = NewUserClient(tx.config)

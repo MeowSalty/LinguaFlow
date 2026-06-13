@@ -13,9 +13,11 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationtemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
@@ -250,6 +252,36 @@ func (_c *UserCreate) AddTranslationTemplates(v ...*TranslationTemplate) *UserCr
 		ids[i] = v[i].ID
 	}
 	return _c.AddTranslationTemplateIDs(ids...)
+}
+
+// AddPromptTemplateIDs adds the "prompt_templates" edge to the PromptTemplate entity by IDs.
+func (_c *UserCreate) AddPromptTemplateIDs(ids ...int) *UserCreate {
+	_c.mutation.AddPromptTemplateIDs(ids...)
+	return _c
+}
+
+// AddPromptTemplates adds the "prompt_templates" edges to the PromptTemplate entity.
+func (_c *UserCreate) AddPromptTemplates(v ...*PromptTemplate) *UserCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddPromptTemplateIDs(ids...)
+}
+
+// AddTranslationProfileIDs adds the "translation_profiles" edge to the TranslationProfile entity by IDs.
+func (_c *UserCreate) AddTranslationProfileIDs(ids ...int) *UserCreate {
+	_c.mutation.AddTranslationProfileIDs(ids...)
+	return _c
+}
+
+// AddTranslationProfiles adds the "translation_profiles" edges to the TranslationProfile entity.
+func (_c *UserCreate) AddTranslationProfiles(v ...*TranslationProfile) *UserCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddTranslationProfileIDs(ids...)
 }
 
 // Mutation returns the UserMutation object of the builder.
@@ -538,6 +570,38 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(translationtemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.PromptTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PromptTemplatesTable,
+			Columns: []string{user.PromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(prompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.TranslationProfilesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.TranslationProfilesTable,
+			Columns: []string{user.TranslationProfilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

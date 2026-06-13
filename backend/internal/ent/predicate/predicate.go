@@ -30,6 +30,9 @@ type Project func(*sql.Selector)
 // ProjectBackend is the predicate function for projectbackend builders.
 type ProjectBackend func(*sql.Selector)
 
+// PromptTemplate is the predicate function for prompttemplate builders.
+type PromptTemplate func(*sql.Selector)
+
 // RefreshToken is the predicate function for refreshtoken builders.
 type RefreshToken func(*sql.Selector)
 
@@ -47,6 +50,9 @@ type TMEntry func(*sql.Selector)
 
 // TranslationJob is the predicate function for translationjob builders.
 type TranslationJob func(*sql.Selector)
+
+// TranslationProfile is the predicate function for translationprofile builders.
+type TranslationProfile func(*sql.Selector)
 
 // TranslationTemplate is the predicate function for translationtemplate builders.
 type TranslationTemplate func(*sql.Selector)

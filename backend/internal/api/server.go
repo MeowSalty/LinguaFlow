@@ -20,27 +20,29 @@ import (
 const readinessPingTimeout = 2 * time.Second
 
 type Server struct {
-	config               *config.Config
-	logger               *slog.Logger
-	db                   *sql.DB
-	entClient            *ent.Client
-	authService          *service.AuthService
-	userService          *service.UserService
-	backendSvc           *service.BackendService
-	projectSvc           *service.ProjectService
-	glossarySvc          *service.GlossaryService
-	templateSvc          *service.TemplateService
-	translationJobSvc    *service.TranslationJobService
-	reviewSvc            *service.ReviewService
-	segmentSvc           *service.SegmentService
-	statsSvc             *service.StatsService
-	auditSvc             *service.AuditService
-	resourceSvc          *service.ResourceService
-	jobStore             *filestore.LocalStore
-	translationJobQueue  *worker.Queue
-	translationJobRunner *worker.TranslationRunner
-	httpServer           *http.Server
-	ready                atomic.Bool
+	config                *config.Config
+	logger                *slog.Logger
+	db                    *sql.DB
+	entClient             *ent.Client
+	authService           *service.AuthService
+	userService           *service.UserService
+	backendSvc            *service.BackendService
+	projectSvc            *service.ProjectService
+	glossarySvc           *service.GlossaryService
+	templateSvc           *service.TemplateService
+	promptTemplateSvc     *service.PromptTemplateService
+	translationProfileSvc *service.TranslationProfileService
+	translationJobSvc     *service.TranslationJobService
+	reviewSvc             *service.ReviewService
+	segmentSvc            *service.SegmentService
+	statsSvc              *service.StatsService
+	auditSvc              *service.AuditService
+	resourceSvc           *service.ResourceService
+	jobStore              *filestore.LocalStore
+	translationJobQueue   *worker.Queue
+	translationJobRunner  *worker.TranslationRunner
+	httpServer            *http.Server
+	ready                 atomic.Bool
 }
 
 func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.Client) (*Server, error) {
@@ -60,6 +62,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 	s.projectSvc = service.NewProjectService(client, s.userService, s.backendSvc)
 	s.glossarySvc = service.NewGlossaryService(client, s.projectSvc)
 	s.templateSvc = service.NewTemplateService(client)
+	s.promptTemplateSvc = service.NewPromptTemplateService(client)
+	s.translationProfileSvc = service.NewTranslationProfileService(client)
 	s.translationJobSvc = service.NewTranslationJobService(client, s.projectSvc)
 	s.reviewSvc = service.NewReviewService(client, s.projectSvc)
 	s.segmentSvc = service.NewSegmentService(client, s.projectSvc)

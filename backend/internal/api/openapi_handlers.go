@@ -291,3 +291,47 @@ func (s *Server) UpdateOrgTemplate(w http.ResponseWriter, r *http.Request, _ Org
 func (s *Server) DeleteOrgTemplate(w http.ResponseWriter, r *http.Request, _ OrgId, _ TemplateId) {
 	s.requireAuth(http.HandlerFunc(s.handleDeleteOrgTemplate)).ServeHTTP(w, r)
 }
+
+// ---- 提示词模板适配器 ----
+
+func (s *Server) ListPromptTemplates(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleListPromptTemplates)).ServeHTTP(w, r)
+}
+
+func (s *Server) CreatePromptTemplate(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleCreatePromptTemplate)).ServeHTTP(w, r)
+}
+
+func (s *Server) GetPromptTemplate(w http.ResponseWriter, r *http.Request, _ PromptTemplateId) {
+	s.requireAuth(http.HandlerFunc(s.handleGetPromptTemplate)).ServeHTTP(w, r)
+}
+
+func (s *Server) UpdatePromptTemplate(w http.ResponseWriter, r *http.Request, _ PromptTemplateId) {
+	s.requireAuth(http.HandlerFunc(s.handleUpdatePromptTemplate)).ServeHTTP(w, r)
+}
+
+func (s *Server) DeletePromptTemplate(w http.ResponseWriter, r *http.Request, _ PromptTemplateId) {
+	s.requireAuth(http.HandlerFunc(s.handleDeletePromptTemplate)).ServeHTTP(w, r)
+}
+
+// ---- 翻译配置适配器 ----
+
+func (s *Server) ListTranslationProfiles(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleListTranslationProfiles)).ServeHTTP(w, r)
+}
+
+func (s *Server) CreateTranslationProfile(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleCreateTranslationProfile)).ServeHTTP(w, r)
+}
+
+func (s *Server) GetTranslationProfile(w http.ResponseWriter, r *http.Request, _ TranslationProfileId) {
+	s.requireAuth(http.HandlerFunc(s.handleGetTranslationProfile)).ServeHTTP(w, r)
+}
+
+func (s *Server) UpdateTranslationProfile(w http.ResponseWriter, r *http.Request, _ TranslationProfileId) {
+	s.requireAuth(http.HandlerFunc(s.handleUpdateTranslationProfile)).ServeHTTP(w, r)
+}
+
+func (s *Server) DeleteTranslationProfile(w http.ResponseWriter, r *http.Request, _ TranslationProfileId) {
+	s.requireAuth(http.HandlerFunc(s.handleDeleteTranslationProfile)).ServeHTTP(w, r)
+}

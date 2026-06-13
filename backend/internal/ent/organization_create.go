@@ -16,7 +16,9 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationtemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 )
@@ -214,6 +216,36 @@ func (_c *OrganizationCreate) AddTranslationTemplates(v ...*TranslationTemplate)
 		ids[i] = v[i].ID
 	}
 	return _c.AddTranslationTemplateIDs(ids...)
+}
+
+// AddPromptTemplateIDs adds the "prompt_templates" edge to the PromptTemplate entity by IDs.
+func (_c *OrganizationCreate) AddPromptTemplateIDs(ids ...int) *OrganizationCreate {
+	_c.mutation.AddPromptTemplateIDs(ids...)
+	return _c
+}
+
+// AddPromptTemplates adds the "prompt_templates" edges to the PromptTemplate entity.
+func (_c *OrganizationCreate) AddPromptTemplates(v ...*PromptTemplate) *OrganizationCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddPromptTemplateIDs(ids...)
+}
+
+// AddTranslationProfileIDs adds the "translation_profiles" edge to the TranslationProfile entity by IDs.
+func (_c *OrganizationCreate) AddTranslationProfileIDs(ids ...int) *OrganizationCreate {
+	_c.mutation.AddTranslationProfileIDs(ids...)
+	return _c
+}
+
+// AddTranslationProfiles adds the "translation_profiles" edges to the TranslationProfile entity.
+func (_c *OrganizationCreate) AddTranslationProfiles(v ...*TranslationProfile) *OrganizationCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddTranslationProfileIDs(ids...)
 }
 
 // Mutation returns the OrganizationMutation object of the builder.
@@ -456,6 +488,38 @@ func (_c *OrganizationCreate) createSpec() (*Organization, *sqlgraph.CreateSpec)
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(translationtemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.PromptTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.PromptTemplatesTable,
+			Columns: []string{organization.PromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(prompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.TranslationProfilesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.TranslationProfilesTable,
+			Columns: []string{organization.TranslationProfilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

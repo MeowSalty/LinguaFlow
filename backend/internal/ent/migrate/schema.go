@@ -277,6 +277,38 @@ var (
 			},
 		},
 	}
+	// PromptTemplatesColumns holds the columns for the "prompt_templates" table.
+	PromptTemplatesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "name", Type: field.TypeString},
+		{Name: "description", Type: field.TypeString, Default: ""},
+		{Name: "scope", Type: field.TypeString, Default: "user"},
+		{Name: "system_prompt_content", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
+		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
+	}
+	// PromptTemplatesTable holds the schema information for the "prompt_templates" table.
+	PromptTemplatesTable = &schema.Table{
+		Name:       "prompt_templates",
+		Columns:    PromptTemplatesColumns,
+		PrimaryKey: []*schema.Column{PromptTemplatesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "prompt_templates_organizations_prompt_templates",
+				Columns:    []*schema.Column{PromptTemplatesColumns[7]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "prompt_templates_users_prompt_templates",
+				Columns:    []*schema.Column{PromptTemplatesColumns[8]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
 	// RefreshTokensColumns holds the columns for the "refresh_tokens" table.
 	RefreshTokensColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -478,6 +510,38 @@ var (
 			},
 		},
 	}
+	// TranslationProfilesColumns holds the columns for the "translation_profiles" table.
+	TranslationProfilesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "name", Type: field.TypeString},
+		{Name: "description", Type: field.TypeString, Default: ""},
+		{Name: "scope", Type: field.TypeString, Default: "user"},
+		{Name: "config", Type: field.TypeJSON},
+		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
+		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
+	}
+	// TranslationProfilesTable holds the schema information for the "translation_profiles" table.
+	TranslationProfilesTable = &schema.Table{
+		Name:       "translation_profiles",
+		Columns:    TranslationProfilesColumns,
+		PrimaryKey: []*schema.Column{TranslationProfilesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "translation_profiles_organizations_translation_profiles",
+				Columns:    []*schema.Column{TranslationProfilesColumns[7]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "translation_profiles_users_translation_profiles",
+				Columns:    []*schema.Column{TranslationProfilesColumns[8]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
 	// TranslationTemplatesColumns holds the columns for the "translation_templates" table.
 	TranslationTemplatesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -613,12 +677,14 @@ var (
 		OrganizationsTable,
 		ProjectsTable,
 		ProjectBackendsTable,
+		PromptTemplatesTable,
 		RefreshTokensTable,
 		ResourcesTable,
 		SegmentsTable,
 		StageBackendOverridesTable,
 		TmEntriesTable,
 		TranslationJobsTable,
+		TranslationProfilesTable,
 		TranslationTemplatesTable,
 		UsageRecordsTable,
 		UsersTable,
@@ -640,6 +706,8 @@ func init() {
 	ProjectsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	ProjectsTable.ForeignKeys[1].RefTable = UsersTable
 	ProjectBackendsTable.ForeignKeys[0].RefTable = ProjectsTable
+	PromptTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
+	PromptTemplatesTable.ForeignKeys[1].RefTable = UsersTable
 	RefreshTokensTable.ForeignKeys[0].RefTable = UsersTable
 	ResourcesTable.ForeignKeys[0].RefTable = ProjectsTable
 	SegmentsTable.ForeignKeys[0].RefTable = ResourcesTable
@@ -649,6 +717,8 @@ func init() {
 	TmEntriesTable.ForeignKeys[1].RefTable = ProjectsTable
 	TranslationJobsTable.ForeignKeys[0].RefTable = ProjectsTable
 	TranslationJobsTable.ForeignKeys[1].RefTable = UsersTable
+	TranslationProfilesTable.ForeignKeys[0].RefTable = OrganizationsTable
+	TranslationProfilesTable.ForeignKeys[1].RefTable = UsersTable
 	TranslationTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	TranslationTemplatesTable.ForeignKeys[1].RefTable = UsersTable
 	UsageRecordsTable.ForeignKeys[0].RefTable = OrganizationsTable

@@ -20,12 +20,14 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/projectbackend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationtemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
@@ -98,12 +100,14 @@ func checkColumn(t, c string) error {
 			organization.Table:         organization.ValidColumn,
 			project.Table:              project.ValidColumn,
 			projectbackend.Table:       projectbackend.ValidColumn,
+			prompttemplate.Table:       prompttemplate.ValidColumn,
 			refreshtoken.Table:         refreshtoken.ValidColumn,
 			resource.Table:             resource.ValidColumn,
 			segment.Table:              segment.ValidColumn,
 			stagebackendoverride.Table: stagebackendoverride.ValidColumn,
 			tmentry.Table:              tmentry.ValidColumn,
 			translationjob.Table:       translationjob.ValidColumn,
+			translationprofile.Table:   translationprofile.ValidColumn,
 			translationtemplate.Table:  translationtemplate.ValidColumn,
 			usagerecord.Table:          usagerecord.ValidColumn,
 			user.Table:                 user.ValidColumn,

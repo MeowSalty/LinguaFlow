@@ -16,9 +16,11 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationtemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
@@ -41,6 +43,8 @@ type UserQuery struct {
 	withActivityLogs           *ActivityLogQuery
 	withUsageRecords           *UsageRecordQuery
 	withTranslationTemplates   *TranslationTemplateQuery
+	withPromptTemplates        *PromptTemplateQuery
+	withTranslationProfiles    *TranslationProfileQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -275,6 +279,50 @@ func (_q *UserQuery) QueryTranslationTemplates() *TranslationTemplateQuery {
 	return query
 }
 
+// QueryPromptTemplates chains the current query on the "prompt_templates" edge.
+func (_q *UserQuery) QueryPromptTemplates() *PromptTemplateQuery {
+	query := (&PromptTemplateClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(prompttemplate.Table, prompttemplate.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.PromptTemplatesTable, user.PromptTemplatesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryTranslationProfiles chains the current query on the "translation_profiles" edge.
+func (_q *UserQuery) QueryTranslationProfiles() *TranslationProfileQuery {
+	query := (&TranslationProfileClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(translationprofile.Table, translationprofile.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.TranslationProfilesTable, user.TranslationProfilesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
 // First returns the first User entity from the query.
 // Returns a *NotFoundError when no User was found.
 func (_q *UserQuery) First(ctx context.Context) (*User, error) {
@@ -476,6 +524,8 @@ func (_q *UserQuery) Clone() *UserQuery {
 		withActivityLogs:           _q.withActivityLogs.Clone(),
 		withUsageRecords:           _q.withUsageRecords.Clone(),
 		withTranslationTemplates:   _q.withTranslationTemplates.Clone(),
+		withPromptTemplates:        _q.withPromptTemplates.Clone(),
+		withTranslationProfiles:    _q.withTranslationProfiles.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -581,6 +631,28 @@ func (_q *UserQuery) WithTranslationTemplates(opts ...func(*TranslationTemplateQ
 	return _q
 }
 
+// WithPromptTemplates tells the query-builder to eager-load the nodes that are connected to
+// the "prompt_templates" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithPromptTemplates(opts ...func(*PromptTemplateQuery)) *UserQuery {
+	query := (&PromptTemplateClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withPromptTemplates = query
+	return _q
+}
+
+// WithTranslationProfiles tells the query-builder to eager-load the nodes that are connected to
+// the "translation_profiles" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithTranslationProfiles(opts ...func(*TranslationProfileQuery)) *UserQuery {
+	query := (&TranslationProfileClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withTranslationProfiles = query
+	return _q
+}
+
 // GroupBy is used to group vertices by one or more fields/columns.
 // It is often used with aggregate functions, like: count, max, mean, min, sum.
 //
@@ -659,7 +731,7 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	var (
 		nodes       = []*User{}
 		_spec       = _q.querySpec()
-		loadedTypes = [9]bool{
+		loadedTypes = [11]bool{
 			_q.withCreatedTranslationJobs != nil,
 			_q.withReviewedSegments != nil,
 			_q.withRefreshTokens != nil,
@@ -669,6 +741,8 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 			_q.withActivityLogs != nil,
 			_q.withUsageRecords != nil,
 			_q.withTranslationTemplates != nil,
+			_q.withPromptTemplates != nil,
+			_q.withTranslationProfiles != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -752,6 +826,22 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 			func(n *User) { n.Edges.TranslationTemplates = []*TranslationTemplate{} },
 			func(n *User, e *TranslationTemplate) {
 				n.Edges.TranslationTemplates = append(n.Edges.TranslationTemplates, e)
+			}); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withPromptTemplates; query != nil {
+		if err := _q.loadPromptTemplates(ctx, query, nodes,
+			func(n *User) { n.Edges.PromptTemplates = []*PromptTemplate{} },
+			func(n *User, e *PromptTemplate) { n.Edges.PromptTemplates = append(n.Edges.PromptTemplates, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withTranslationProfiles; query != nil {
+		if err := _q.loadTranslationProfiles(ctx, query, nodes,
+			func(n *User) { n.Edges.TranslationProfiles = []*TranslationProfile{} },
+			func(n *User, e *TranslationProfile) {
+				n.Edges.TranslationProfiles = append(n.Edges.TranslationProfiles, e)
 			}); err != nil {
 			return nil, err
 		}
@@ -1024,6 +1114,72 @@ func (_q *UserQuery) loadTranslationTemplates(ctx context.Context, query *Transl
 	}
 	query.Where(predicate.TranslationTemplate(func(s *sql.Selector) {
 		s.Where(sql.InValues(s.C(user.TranslationTemplatesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.OwnerUserID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "owner_user_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "owner_user_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadPromptTemplates(ctx context.Context, query *PromptTemplateQuery, nodes []*User, init func(*User), assign func(*User, *PromptTemplate)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(prompttemplate.FieldOwnerUserID)
+	}
+	query.Where(predicate.PromptTemplate(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.PromptTemplatesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.OwnerUserID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "owner_user_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "owner_user_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadTranslationProfiles(ctx context.Context, query *TranslationProfileQuery, nodes []*User, init func(*User), assign func(*User, *TranslationProfile)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(translationprofile.FieldOwnerUserID)
+	}
+	query.Where(predicate.TranslationProfile(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.TranslationProfilesColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {

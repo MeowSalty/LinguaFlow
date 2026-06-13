@@ -163,6 +163,63 @@ func (e OrganizationMemberRole) Valid() bool {
 	}
 }
 
+// Defines values for ProfileBootstrapConfigInlineConflictStrategy.
+const (
+	ProfileBootstrapConfigInlineConflictStrategyOff          ProfileBootstrapConfigInlineConflictStrategy = "off"
+	ProfileBootstrapConfigInlineConflictStrategyRewriteLocal ProfileBootstrapConfigInlineConflictStrategy = "rewrite-local"
+)
+
+// Valid indicates whether the value is a known member of the ProfileBootstrapConfigInlineConflictStrategy enum.
+func (e ProfileBootstrapConfigInlineConflictStrategy) Valid() bool {
+	switch e {
+	case ProfileBootstrapConfigInlineConflictStrategyOff:
+		return true
+	case ProfileBootstrapConfigInlineConflictStrategyRewriteLocal:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProfileBootstrapConfigMode.
+const (
+	ProfileBootstrapConfigModeInline ProfileBootstrapConfigMode = "inline"
+	ProfileBootstrapConfigModeOff    ProfileBootstrapConfigMode = "off"
+	ProfileBootstrapConfigModePre    ProfileBootstrapConfigMode = "pre"
+)
+
+// Valid indicates whether the value is a known member of the ProfileBootstrapConfigMode enum.
+func (e ProfileBootstrapConfigMode) Valid() bool {
+	switch e {
+	case ProfileBootstrapConfigModeInline:
+		return true
+	case ProfileBootstrapConfigModeOff:
+		return true
+	case ProfileBootstrapConfigModePre:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for ProfileRoundConfigBackendMode.
+const (
+	ProfileRoundConfigBackendModePrepend  ProfileRoundConfigBackendMode = "prepend"
+	ProfileRoundConfigBackendModeRestrict ProfileRoundConfigBackendMode = "restrict"
+)
+
+// Valid indicates whether the value is a known member of the ProfileRoundConfigBackendMode enum.
+func (e ProfileRoundConfigBackendMode) Valid() bool {
+	switch e {
+	case ProfileRoundConfigBackendModePrepend:
+		return true
+	case ProfileRoundConfigBackendModeRestrict:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for ProjectResourceScope.
 const (
 	ProjectResourceScopeOrganization ProjectResourceScope = "organization"
@@ -175,6 +232,24 @@ func (e ProjectResourceScope) Valid() bool {
 	case ProjectResourceScopeOrganization:
 		return true
 	case ProjectResourceScopeProject:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for PromptTemplateScope.
+const (
+	PromptTemplateScopeOrg  PromptTemplateScope = "org"
+	PromptTemplateScopeUser PromptTemplateScope = "user"
+)
+
+// Valid indicates whether the value is a known member of the PromptTemplateScope enum.
+func (e PromptTemplateScope) Valid() bool {
+	switch e {
+	case PromptTemplateScopeOrg:
+		return true
+	case PromptTemplateScopeUser:
 		return true
 	default:
 		return false
@@ -321,19 +396,19 @@ func (e SetStageOverrideRequestBackendMode) Valid() bool {
 
 // Defines values for StageBackendOverrideBackendMode.
 const (
-	StageBackendOverrideBackendModeInherit  StageBackendOverrideBackendMode = "inherit"
-	StageBackendOverrideBackendModePrepend  StageBackendOverrideBackendMode = "prepend"
-	StageBackendOverrideBackendModeRestrict StageBackendOverrideBackendMode = "restrict"
+	Inherit  StageBackendOverrideBackendMode = "inherit"
+	Prepend  StageBackendOverrideBackendMode = "prepend"
+	Restrict StageBackendOverrideBackendMode = "restrict"
 )
 
 // Valid indicates whether the value is a known member of the StageBackendOverrideBackendMode enum.
 func (e StageBackendOverrideBackendMode) Valid() bool {
 	switch e {
-	case StageBackendOverrideBackendModeInherit:
+	case Inherit:
 		return true
-	case StageBackendOverrideBackendModePrepend:
+	case Prepend:
 		return true
-	case StageBackendOverrideBackendModeRestrict:
+	case Restrict:
 		return true
 	default:
 		return false
@@ -475,6 +550,24 @@ func (e TranslationJobResourceStatus) Valid() bool {
 	case TranslationJobResourceStatusPending:
 		return true
 	case TranslationJobResourceStatusRunning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for TranslationProfileScope.
+const (
+	TranslationProfileScopeOrg  TranslationProfileScope = "org"
+	TranslationProfileScopeUser TranslationProfileScope = "user"
+)
+
+// Valid indicates whether the value is a known member of the TranslationProfileScope enum.
+func (e TranslationProfileScope) Valid() bool {
+	switch e {
+	case TranslationProfileScopeOrg:
+		return true
+	case TranslationProfileScopeUser:
 		return true
 	default:
 		return false
@@ -788,6 +881,15 @@ type CreateProjectRequest struct {
 // CreateProjectRequestResourceScope defines model for CreateProjectRequest.ResourceScope.
 type CreateProjectRequestResourceScope string
 
+// CreatePromptTemplateRequest defines model for CreatePromptTemplateRequest.
+type CreatePromptTemplateRequest struct {
+	Description *string `json:"description,omitempty"`
+	Name        string  `json:"name"`
+
+	// SystemPromptContent 提示词内容。
+	SystemPromptContent *string `json:"system_prompt_content,omitempty"`
+}
+
 // CreateTemplateRequest defines model for CreateTemplateRequest.
 type CreateTemplateRequest struct {
 	Description *string                 `json:"description,omitempty"`
@@ -804,6 +906,13 @@ type CreateTranslationJobRequest struct {
 	ResourceIds       *[]int                  `json:"resource_ids,omitempty"`
 	SegmentIds        *[]int                  `json:"segment_ids,omitempty"`
 	TranslationConfig *map[string]interface{} `json:"translation_config,omitempty"`
+}
+
+// CreateTranslationProfileRequest defines model for CreateTranslationProfileRequest.
+type CreateTranslationProfileRequest struct {
+	Config      *TranslationProfileConfig `json:"config,omitempty"`
+	Description *string                   `json:"description,omitempty"`
+	Name        string                    `json:"name"`
 }
 
 // GlossaryEntry defines model for GlossaryEntry.
@@ -915,6 +1024,78 @@ type Problem struct {
 	Type   *string `json:"type,omitempty"`
 }
 
+// ProfileBootstrapConfig defines model for ProfileBootstrapConfig.
+type ProfileBootstrapConfig struct {
+	InlineConflictStrategy ProfileBootstrapConfigInlineConflictStrategy `json:"inline_conflict_strategy"`
+	MaxTermsPerBatch       int                                          `json:"max_terms_per_batch"`
+	MinSourceLen           int                                          `json:"min_source_len"`
+	Mode                   ProfileBootstrapConfigMode                   `json:"mode"`
+	Save                   bool                                         `json:"save"`
+}
+
+// ProfileBootstrapConfigInlineConflictStrategy defines model for ProfileBootstrapConfig.InlineConflictStrategy.
+type ProfileBootstrapConfigInlineConflictStrategy string
+
+// ProfileBootstrapConfigMode defines model for ProfileBootstrapConfig.Mode.
+type ProfileBootstrapConfigMode string
+
+// ProfileGlossaryConfig defines model for ProfileGlossaryConfig.
+type ProfileGlossaryConfig struct {
+	Bootstrap ProfileBootstrapConfig `json:"bootstrap"`
+	Enabled   bool                   `json:"enabled"`
+}
+
+// ProfilePostprocessConfig defines model for ProfilePostprocessConfig.
+type ProfilePostprocessConfig struct {
+	Enabled    bool `json:"enabled"`
+	TrimSpaces bool `json:"trim_spaces"`
+}
+
+// ProfileProtectConfig defines model for ProfileProtectConfig.
+type ProfileProtectConfig struct {
+	Enabled bool      `json:"enabled"`
+	Rules   *[]string `json:"rules,omitempty"`
+}
+
+// ProfileRepairConfig defines model for ProfileRepairConfig.
+type ProfileRepairConfig struct {
+	Enabled              bool    `json:"enabled"`
+	JsonStructural       bool    `json:"json_structural"`
+	Partial              bool    `json:"partial"`
+	PartialThreshold     float64 `json:"partial_threshold"`
+	PlaceholderNormalize bool    `json:"placeholder_normalize"`
+	PromptUpgrade        bool    `json:"prompt_upgrade"`
+	SchemaAliases        bool    `json:"schema_aliases"`
+}
+
+// ProfileRetryConfig defines model for ProfileRetryConfig.
+type ProfileRetryConfig struct {
+	BackoffMs   int  `json:"backoff_ms"`
+	Jitter      bool `json:"jitter"`
+	MaxAttempts int  `json:"max_attempts"`
+}
+
+// ProfileRoundConfig defines model for ProfileRoundConfig.
+type ProfileRoundConfig struct {
+	BackendMode     ProfileRoundConfigBackendMode `json:"backend_mode"`
+	BackendOrder    []int                         `json:"backend_order"`
+	BatchSize       int                           `json:"batch_size"`
+	Concurrency     int                           `json:"concurrency"`
+	FallbackShrink  float64                       `json:"fallback_shrink"`
+	RateLimitPerSec int                           `json:"rate_limit_per_sec"`
+	Retry           ProfileRetryConfig            `json:"retry"`
+}
+
+// ProfileRoundConfigBackendMode defines model for ProfileRoundConfig.BackendMode.
+type ProfileRoundConfigBackendMode string
+
+// ProfileSplitConfig defines model for ProfileSplitConfig.
+type ProfileSplitConfig struct {
+	Enabled  bool   `json:"enabled"`
+	MaxChars int    `json:"max_chars"`
+	Strategy string `json:"strategy"`
+}
+
 // Project defines model for Project.
 type Project struct {
 	Config                   *map[string]interface{} `json:"config,omitempty"`
@@ -954,6 +1135,29 @@ type ProjectBackendSettings struct {
 type ProjectListResponse struct {
 	Items []Project `json:"items"`
 }
+
+// PromptTemplate defines model for PromptTemplate.
+type PromptTemplate struct {
+	CreatedAt   *time.Time          `json:"created_at,omitempty"`
+	Description string              `json:"description"`
+	Id          int                 `json:"id"`
+	Name        string              `json:"name"`
+	OwnerOrgId  *int                `json:"owner_org_id,omitempty"`
+	OwnerUserId *int                `json:"owner_user_id,omitempty"`
+	Scope       PromptTemplateScope `json:"scope"`
+
+	// SystemPromptContent 提示词内容。
+	SystemPromptContent *string    `json:"system_prompt_content,omitempty"`
+	UpdatedAt           *time.Time `json:"updated_at,omitempty"`
+}
+
+// PromptTemplateListResponse defines model for PromptTemplateListResponse.
+type PromptTemplateListResponse struct {
+	Items []PromptTemplate `json:"items"`
+}
+
+// PromptTemplateScope defines model for PromptTemplateScope.
+type PromptTemplateScope string
 
 // RefreshRequest defines model for RefreshRequest.
 type RefreshRequest struct {
@@ -1276,6 +1480,37 @@ type TranslationJobResource struct {
 // TranslationJobResourceStatus defines model for TranslationJobResource.Status.
 type TranslationJobResourceStatus string
 
+// TranslationProfile defines model for TranslationProfile.
+type TranslationProfile struct {
+	Config      TranslationProfileConfig `json:"config"`
+	CreatedAt   *time.Time               `json:"created_at,omitempty"`
+	Description string                   `json:"description"`
+	Id          int                      `json:"id"`
+	Name        string                   `json:"name"`
+	OwnerOrgId  *int                     `json:"owner_org_id,omitempty"`
+	OwnerUserId *int                     `json:"owner_user_id,omitempty"`
+	Scope       TranslationProfileScope  `json:"scope"`
+	UpdatedAt   *time.Time               `json:"updated_at,omitempty"`
+}
+
+// TranslationProfileConfig defines model for TranslationProfileConfig.
+type TranslationProfileConfig struct {
+	Glossary    ProfileGlossaryConfig    `json:"glossary"`
+	Postprocess ProfilePostprocessConfig `json:"postprocess"`
+	Protect     ProfileProtectConfig     `json:"protect"`
+	Repair      ProfileRepairConfig      `json:"repair"`
+	Rounds      []ProfileRoundConfig     `json:"rounds"`
+	Split       ProfileSplitConfig       `json:"split"`
+}
+
+// TranslationProfileListResponse defines model for TranslationProfileListResponse.
+type TranslationProfileListResponse struct {
+	Items []TranslationProfile `json:"items"`
+}
+
+// TranslationProfileScope defines model for TranslationProfileScope.
+type TranslationProfileScope string
+
 // UpdateBackendRequest defines model for UpdateBackendRequest.
 type UpdateBackendRequest struct {
 	Name     string                   `json:"name"`
@@ -1322,6 +1557,15 @@ type UpdateProjectRequest struct {
 // UpdateProjectRequestResourceScope defines model for UpdateProjectRequest.ResourceScope.
 type UpdateProjectRequestResourceScope string
 
+// UpdatePromptTemplateRequest defines model for UpdatePromptTemplateRequest.
+type UpdatePromptTemplateRequest struct {
+	Description *string `json:"description,omitempty"`
+	Name        *string `json:"name,omitempty"`
+
+	// SystemPromptContent 提示词内容。
+	SystemPromptContent *string `json:"system_prompt_content,omitempty"`
+}
+
 // UpdateTemplateRequest defines model for UpdateTemplateRequest.
 type UpdateTemplateRequest struct {
 	Description *string                 `json:"description,omitempty"`
@@ -1331,6 +1575,13 @@ type UpdateTemplateRequest struct {
 
 	// SystemPromptContent 内联提示词内容，空则使用内置默认模板。风格/受众等翻译要求直接写在提示词中。
 	SystemPromptContent *string `json:"system_prompt_content,omitempty"`
+}
+
+// UpdateTranslationProfileRequest defines model for UpdateTranslationProfileRequest.
+type UpdateTranslationProfileRequest struct {
+	Config      *TranslationProfileConfig `json:"config,omitempty"`
+	Description *string                   `json:"description,omitempty"`
+	Name        *string                   `json:"name,omitempty"`
 }
 
 // UsageStats defines model for UsageStats.
@@ -1372,6 +1623,9 @@ type OrgId = int
 // ProjectId defines model for ProjectId.
 type ProjectId = int
 
+// PromptTemplateId defines model for PromptTemplateId.
+type PromptTemplateId = int
+
 // ResourceId defines model for ResourceId.
 type ResourceId = int
 
@@ -1386,6 +1640,9 @@ type TemplateId = int
 
 // TranslationJobId defines model for TranslationJobId.
 type TranslationJobId = int
+
+// TranslationProfileId defines model for TranslationProfileId.
+type TranslationProfileId = int
 
 // UserId defines model for UserId.
 type UserId = int
@@ -1554,6 +1811,12 @@ type SetStageBackendOverrideJSONRequestBody = SetStageOverrideRequest
 // CreateTranslationJobJSONRequestBody defines body for CreateTranslationJob for application/json ContentType.
 type CreateTranslationJobJSONRequestBody = CreateTranslationJobRequest
 
+// CreatePromptTemplateJSONRequestBody defines body for CreatePromptTemplate for application/json ContentType.
+type CreatePromptTemplateJSONRequestBody = CreatePromptTemplateRequest
+
+// UpdatePromptTemplateJSONRequestBody defines body for UpdatePromptTemplate for application/json ContentType.
+type UpdatePromptTemplateJSONRequestBody = UpdatePromptTemplateRequest
+
 // CreateTemplateJSONRequestBody defines body for CreateTemplate for application/json ContentType.
 type CreateTemplateJSONRequestBody = CreateTemplateRequest
 
@@ -1562,6 +1825,12 @@ type UpdateTemplateJSONRequestBody = UpdateTemplateRequest
 
 // CopyTemplateJSONRequestBody defines body for CopyTemplate for application/json ContentType.
 type CopyTemplateJSONRequestBody = CopyTemplateRequest
+
+// CreateTranslationProfileJSONRequestBody defines body for CreateTranslationProfile for application/json ContentType.
+type CreateTranslationProfileJSONRequestBody = CreateTranslationProfileRequest
+
+// UpdateTranslationProfileJSONRequestBody defines body for UpdateTranslationProfile for application/json ContentType.
+type UpdateTranslationProfileJSONRequestBody = UpdateTranslationProfileRequest
 
 // UpdateCurrentUserJSONRequestBody defines body for UpdateCurrentUser for application/json ContentType.
 type UpdateCurrentUserJSONRequestBody = UpdateCurrentUserRequest
@@ -1745,6 +2014,21 @@ type ServerInterface interface {
 	// 创建翻译任务
 	// (POST /projects/{projectId}/translation-jobs)
 	CreateTranslationJob(w http.ResponseWriter, r *http.Request, projectId ProjectId)
+	// 列出当前用户的提示词模板
+	// (GET /prompt-templates)
+	ListPromptTemplates(w http.ResponseWriter, r *http.Request)
+	// 创建提示词模板
+	// (POST /prompt-templates)
+	CreatePromptTemplate(w http.ResponseWriter, r *http.Request)
+	// 删除提示词模板
+	// (DELETE /prompt-templates/{promptTemplateId})
+	DeletePromptTemplate(w http.ResponseWriter, r *http.Request, promptTemplateId PromptTemplateId)
+	// 获取提示词模板详情
+	// (GET /prompt-templates/{promptTemplateId})
+	GetPromptTemplate(w http.ResponseWriter, r *http.Request, promptTemplateId PromptTemplateId)
+	// 更新提示词模板
+	// (PUT /prompt-templates/{promptTemplateId})
+	UpdatePromptTemplate(w http.ResponseWriter, r *http.Request, promptTemplateId PromptTemplateId)
 	// 获取用量统计汇总
 	// (GET /stats/summary)
 	GetStatsSummary(w http.ResponseWriter, r *http.Request)
@@ -1778,6 +2062,21 @@ type ServerInterface interface {
 	// 重试失败的资源翻译
 	// (POST /translation-jobs/{translationJobId}/retry)
 	RetryTranslationJob(w http.ResponseWriter, r *http.Request, translationJobId TranslationJobId)
+	// 列出当前用户的翻译配置
+	// (GET /translation-profiles)
+	ListTranslationProfiles(w http.ResponseWriter, r *http.Request)
+	// 创建翻译配置
+	// (POST /translation-profiles)
+	CreateTranslationProfile(w http.ResponseWriter, r *http.Request)
+	// 删除翻译配置
+	// (DELETE /translation-profiles/{translationProfileId})
+	DeleteTranslationProfile(w http.ResponseWriter, r *http.Request, translationProfileId TranslationProfileId)
+	// 获取翻译配置详情
+	// (GET /translation-profiles/{translationProfileId})
+	GetTranslationProfile(w http.ResponseWriter, r *http.Request, translationProfileId TranslationProfileId)
+	// 更新翻译配置
+	// (PUT /translation-profiles/{translationProfileId})
+	UpdateTranslationProfile(w http.ResponseWriter, r *http.Request, translationProfileId TranslationProfileId)
 	// 获取当前用户
 	// (GET /users/me)
 	GetCurrentUser(w http.ResponseWriter, r *http.Request)
@@ -2141,6 +2440,36 @@ func (_ Unimplemented) CreateTranslationJob(w http.ResponseWriter, r *http.Reque
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// 列出当前用户的提示词模板
+// (GET /prompt-templates)
+func (_ Unimplemented) ListPromptTemplates(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 创建提示词模板
+// (POST /prompt-templates)
+func (_ Unimplemented) CreatePromptTemplate(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 删除提示词模板
+// (DELETE /prompt-templates/{promptTemplateId})
+func (_ Unimplemented) DeletePromptTemplate(w http.ResponseWriter, r *http.Request, promptTemplateId PromptTemplateId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 获取提示词模板详情
+// (GET /prompt-templates/{promptTemplateId})
+func (_ Unimplemented) GetPromptTemplate(w http.ResponseWriter, r *http.Request, promptTemplateId PromptTemplateId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 更新提示词模板
+// (PUT /prompt-templates/{promptTemplateId})
+func (_ Unimplemented) UpdatePromptTemplate(w http.ResponseWriter, r *http.Request, promptTemplateId PromptTemplateId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // 获取用量统计汇总
 // (GET /stats/summary)
 func (_ Unimplemented) GetStatsSummary(w http.ResponseWriter, r *http.Request) {
@@ -2204,6 +2533,36 @@ func (_ Unimplemented) DownloadTranslationJobResult(w http.ResponseWriter, r *ht
 // 重试失败的资源翻译
 // (POST /translation-jobs/{translationJobId}/retry)
 func (_ Unimplemented) RetryTranslationJob(w http.ResponseWriter, r *http.Request, translationJobId TranslationJobId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 列出当前用户的翻译配置
+// (GET /translation-profiles)
+func (_ Unimplemented) ListTranslationProfiles(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 创建翻译配置
+// (POST /translation-profiles)
+func (_ Unimplemented) CreateTranslationProfile(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 删除翻译配置
+// (DELETE /translation-profiles/{translationProfileId})
+func (_ Unimplemented) DeleteTranslationProfile(w http.ResponseWriter, r *http.Request, translationProfileId TranslationProfileId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 获取翻译配置详情
+// (GET /translation-profiles/{translationProfileId})
+func (_ Unimplemented) GetTranslationProfile(w http.ResponseWriter, r *http.Request, translationProfileId TranslationProfileId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 更新翻译配置
+// (PUT /translation-profiles/{translationProfileId})
+func (_ Unimplemented) UpdateTranslationProfile(w http.ResponseWriter, r *http.Request, translationProfileId TranslationProfileId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -4217,6 +4576,139 @@ func (siw *ServerInterfaceWrapper) CreateTranslationJob(w http.ResponseWriter, r
 	handler.ServeHTTP(w, r)
 }
 
+// ListPromptTemplates operation middleware
+func (siw *ServerInterfaceWrapper) ListPromptTemplates(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListPromptTemplates(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreatePromptTemplate operation middleware
+func (siw *ServerInterfaceWrapper) CreatePromptTemplate(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreatePromptTemplate(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeletePromptTemplate operation middleware
+func (siw *ServerInterfaceWrapper) DeletePromptTemplate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "promptTemplateId" -------------
+	var promptTemplateId PromptTemplateId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "promptTemplateId", chi.URLParam(r, "promptTemplateId"), &promptTemplateId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "promptTemplateId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeletePromptTemplate(w, r, promptTemplateId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetPromptTemplate operation middleware
+func (siw *ServerInterfaceWrapper) GetPromptTemplate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "promptTemplateId" -------------
+	var promptTemplateId PromptTemplateId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "promptTemplateId", chi.URLParam(r, "promptTemplateId"), &promptTemplateId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "promptTemplateId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetPromptTemplate(w, r, promptTemplateId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdatePromptTemplate operation middleware
+func (siw *ServerInterfaceWrapper) UpdatePromptTemplate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "promptTemplateId" -------------
+	var promptTemplateId PromptTemplateId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "promptTemplateId", chi.URLParam(r, "promptTemplateId"), &promptTemplateId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "promptTemplateId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdatePromptTemplate(w, r, promptTemplateId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // GetStatsSummary operation middleware
 func (siw *ServerInterfaceWrapper) GetStatsSummary(w http.ResponseWriter, r *http.Request) {
 
@@ -4527,6 +5019,139 @@ func (siw *ServerInterfaceWrapper) RetryTranslationJob(w http.ResponseWriter, r 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.RetryTranslationJob(w, r, translationJobId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListTranslationProfiles operation middleware
+func (siw *ServerInterfaceWrapper) ListTranslationProfiles(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListTranslationProfiles(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateTranslationProfile operation middleware
+func (siw *ServerInterfaceWrapper) CreateTranslationProfile(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateTranslationProfile(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteTranslationProfile operation middleware
+func (siw *ServerInterfaceWrapper) DeleteTranslationProfile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "translationProfileId" -------------
+	var translationProfileId TranslationProfileId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "translationProfileId", chi.URLParam(r, "translationProfileId"), &translationProfileId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "translationProfileId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteTranslationProfile(w, r, translationProfileId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetTranslationProfile operation middleware
+func (siw *ServerInterfaceWrapper) GetTranslationProfile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "translationProfileId" -------------
+	var translationProfileId TranslationProfileId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "translationProfileId", chi.URLParam(r, "translationProfileId"), &translationProfileId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "translationProfileId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetTranslationProfile(w, r, translationProfileId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateTranslationProfile operation middleware
+func (siw *ServerInterfaceWrapper) UpdateTranslationProfile(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "translationProfileId" -------------
+	var translationProfileId TranslationProfileId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "translationProfileId", chi.URLParam(r, "translationProfileId"), &translationProfileId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "translationProfileId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateTranslationProfile(w, r, translationProfileId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4884,6 +5509,21 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/projects/{projectId}/translation-jobs", wrapper.CreateTranslationJob)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/prompt-templates", wrapper.ListPromptTemplates)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/prompt-templates", wrapper.CreatePromptTemplate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/prompt-templates/{promptTemplateId}", wrapper.DeletePromptTemplate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/prompt-templates/{promptTemplateId}", wrapper.GetPromptTemplate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/prompt-templates/{promptTemplateId}", wrapper.UpdatePromptTemplate)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/stats/summary", wrapper.GetStatsSummary)
 	})
 	r.Group(func(r chi.Router) {
@@ -4917,6 +5557,21 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Post(options.BaseURL+"/translation-jobs/{translationJobId}/retry", wrapper.RetryTranslationJob)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/translation-profiles", wrapper.ListTranslationProfiles)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/translation-profiles", wrapper.CreateTranslationProfile)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/translation-profiles/{translationProfileId}", wrapper.DeleteTranslationProfile)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/translation-profiles/{translationProfileId}", wrapper.GetTranslationProfile)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/translation-profiles/{translationProfileId}", wrapper.UpdateTranslationProfile)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/users/me", wrapper.GetCurrentUser)
 	})
 	r.Group(func(r chi.Router) {
@@ -4932,136 +5587,146 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"H4sIAAAAAAAC/+x9X3MTR7b4V3Hp93u4t1ZEzmbvC1V5SMhml63sjQuT3YeEUo2ltj3JaGYyMzJ4KVcZ",
+	"4n8yNjaJMWAcwASCA1gibAKyJcOHQT2Sn/wVbk13z6hnpntmJI/GSpanOKinz+nzv0+f7nMxlVMKqiID",
+	"2dBTJy+mVEETCsAAGvq/D4XcV0DOn85b/yPKqZMpVTDGU+mULBRA6mRqxPk9ndLA10VRA/nUSUMrgnRK",
+	"z42DgmB9WBBlsVAspE6+m04Zk6r1oSgbYAxoqampdOpUUdMVzYHwdRFok20QOfwrPR+ZQzc0UR5DU/xZ",
+	"NrRJLpaA/HoEHD8RC6LBQ1FCP7pmEy6Q2QYH02Fzf6qNcVFX0G9HQHxIU74EOYMLQHV+PxqQgmqcBQVV",
+	"EgwQBMs97AggzwBdKWo5PjCtPeAIYIbBWAHIfPLpzu9HAWIIY4AHAP0WNDmQrZk/TxmaIOsWYVPp1Iii",
+	"GLqhCWrqXJqhLqGcMqLxKA/0nCaqhqhYU5jbW+b3rwdOf/Rm+rK584N5/Vmjutdc2zYXXuKfDutLrV/u",
+	"4n+Hc7PN/TL+9zfTl1NMwpwlSxIV+W/KCB9b77Aj8IICOaQpo6IEooBtDz0C6M90oHGBFfGPXU8/ZX2p",
+	"q4qsA2TZhzRlRAIF68+cIhtARtZNUFVJzKElZVQ84g9f6hZ3L1KA/r8GRlMnU/8v03YdGfyrnrHnRRDd",
+	"8nGwdqtVqcDvluHeGlow+caa8oOcIU6IxiRyQZqiAs0QMaJCDn/uM/tp6yfsN4IQsqhqDc5pQDBAPiug",
+	"hY4qWsH6K5UXDHDCEAsglfYDEPMUXIeW6VQB6DpRWd83BWAIecFAhBLyedHCXpCGqDVhvpEPlRHL/KYw",
+	"e5DByvKgOgPwTwzYRTXf4RqnaIH63Fpw2qa4F6CLhC5Y5xirsRn6iagbZ4jg+ZkrGqDg/iOIlY6QTDkA",
+	"BU0T0P/L4IKRzTmRRMgyETQm2vn8p9qYIIv/Qkrwd1AYAdoZ8HUR6IYffU2RAG2ClfMysEIVIV8QLQIW",
+	"0OcMG5xG+oxVOwxZZyQTX1XVlAnwgSTxiSzgMflsTiliNffY7dIunJ9rbsyY5V9bq/vm9Wdsa0wj5ZmT",
+	"iVrRGB8Guk6016vVOaDrWUP5CrB1G1xQRQ3oHamrBkY1oI9nj/ItHyP0S4DuWXYmki3ykpImhRcRF1gX",
+	"VZjLJWiw2EFCeYYOcswNRzrTKQUJjt6xgSPfZSdEXRyR6LlHFEUCgowGWSqUVbQxrhnEI6x1coeomqho",
+	"xJv4f8VGjdZbRLS0FWwzddXmuaPmKpAF0dJz2RjXFFXMpdKpMUUZkwA73vKZWIICITL5hMI7gIFxGlRb",
+	"Jnz2NLK9/FAwcuNnwIQIznOtZNuD++zOwfwKLG+Z96rmd8uN/U1LwgmNiYFBYo6AsRiTUwoFwDJpeFL4",
+	"YN789zZL20nYnhXzOuPjV7P4e8ckDpz+aAAu3GhtWZM5lGXEBaJ8Gv/6bghFaQQcjxtK4Hi4TvY0R+D6",
+	"qXFBHgNDgq6fV7Q8l/G5oqZZi1TJQKY1kcH5oAEenHxTeiZgYquok/aOh8KVbbtGBUkHac9CbFPokd/1",
+	"Z3j/AleXm4+eHdaXmtdvNX/agwu3WvOP4eI23NyGV+/C1WW4ehUu3vsi9V+wVDE3n/73FylmJObHHAVc",
+	"REuPhnpsVpy2rXkwKhQlI3VyMM3QhljNJm0oz3FJ9RdJ0XVBm0T5oO4IlhN0kNWBrIuGOAFcqyTj/U5L",
+	"VgygM6nc9jV+ryJoY8AIF3nHV5AP+KsnuZ4u163Io+JYx+JAiJOlNsPZLqfii2poTODsVPSc4hY6kt/C",
+	"3t2J65nehEwhCfJYAMN4v7PkNZBVVCqsO465rBHLsvLoqU/qBihkcTouS23/PfZtZbX5YK9VWYZzs7C8",
+	"68rSdLfq3q53jCh/mP+zsbCNxSksrkEUU0UVSKIMok49RMa3p45Iczg327q05qG85VmQW2nsv26ubePU",
+	"2UHtZqv8wEmgHfxw1bxXz8CVG436jeZOqfm61qpca/14yfz5cvP2L+bVh3DuFtzcdqZuVHfi4Kgr9dYd",
+	"X6nEhzuICUpo+TMAnpiuy1mObMemotCK5AuPaqkDRdEHrS2MXVqOqKLh8sKMsNDnYf0eNc5sXbzeOa4s",
+	"m9etp710CaLs6YKqaNY2EMUlvg1XPg84tNC/ElUV/+goiPtj28yxnKygcwSGS0iWNgRuOjDuQWuPcwPs",
+	"ltTuN0R/BYJkjPOx0oE2IZKcwwWhoEr42FAeKwqjknKeuUU1BKOou79QvgqVLfIZC8nTck4DlokUpM+Q",
+	"CONtnB4gQL4ND7x/JyhLaJkWCRisj+HCvYNbD0KyjOlUUc4hrFjgNx/DlZtwaT18EqyhjCn2Vs31eXPz",
+	"aaSJmKLZnp1Gtr3wSJTnS0quzZMgweXykgqGw+awj1B9C3UmSDvosFb1iTImytzNf+Cmv4vsdzoVuMn/",
+	"RBlTigY/Ux+S3vVRgB7OgkefEvjBhTnYvKirkjCZ5QacHSdldakYYVeCPA8hJ/oibGlxGlsXybq3tf7z",
+	"meg57SMe2HSV30c0R4ADsvP+RfWK8oRk8dCfq29HVoAjCnqYjFPH317EDUGU2JAdj8zYRoiGxAkk2QdG",
+	"Hnzx9+kg902i+A/t0o5TzjbAIxqyFcKhzYsk5oysNdgAY5MuuR8dRZn185pogBOSkhMkptAXhAtZA2gF",
+	"PasCLTsiGLnx8C1VQZSzdi4FG9uQ8Uoe+JFTNYseeDHsdI3A3jx4KItmJ6PZC/JhnObTMIAxnnSCjy/t",
+	"mpzwEgoWo6fSKSALI5IrtOet2h7JLgXy4T6k6IaqKTmg6zz0A2Bbu2axkNVVIefaaIUjR38XhJ6mGCBn",
+	"dIWaVpQ8JpOjohxDaE8egN4ZoAqi1hV2X+qKbElXMWcUNUFiD1IFzRBDfswa41bEokh596ZUKY5IRPAd",
+	"FXTUsZ22l4u2V1AlIQeseYCWla1pJPFfnE06SWYV1TFNyHPGYKHOCpIo6B0Kh5c2vsnalGGRgbcUH96B",
+	"nDUCFFrIfaWMjmY9aSbmWciXomEAjU0iyyYJhgEKqqFHKBNzGTf60zSNkQMyaHVKUc4HrQ7I+azXOqsa",
+	"UIGMK9EsFeIczdqfK1oerzvg2NSbg0NmOasTuQt2HjlFxmeCucnwwaOCJFmIZfVxTZS/OqKmWC4hi2p/",
+	"kTPRQS5cDjRghCeoGcLnZTxFIjcN/ItkIpp289fLLxvRAOEZViWxO4tsCW1uXNAiZGfp2CU4gGqbDecb",
+	"GhJnIehP/x68u/OrbnKWMR6fdV7HE0epTR+cvMWVkSV7Bs+K3Ni5cQmQKnJo/6Eo50U5wLwmV31lKXZW",
+	"lPPgwtGKprrc4dDwqew3RYeOqqHcZB4GhiHKYzqXztH3ymz+sc6bDGEMZJUJoGliHgQwJKQax5qGQPuU",
+	"TJaaYh0rue0/WVYAbeLMINi2svu0gfvEm2F0u7KewVmG4zGJjiUMIShFjmH0SbxH8zGbRRoBe43hfI5Z",
+	"BmkJiksUh72OK6Qa9AzODSeXaj4DxkTdCChDD02mgQLJaTkygP+Fsboepu1tPNhrbDuYGOyCqIGcoWiT",
+	"fs1p/Tpj7q2apWm4ud28XYb71w/rS+a9Xfx3o7rX/GkP7txoPv2xUX3OmhtomqJlg26A2Dh2YZCYuN58",
+	"1XywB1eXD+tLcP87WFpu7pTg6lJj7yoe0HpZga9mBkYEHVjzHNaXDu7PNK/fatZuwdWrzdoOXKk06+ut",
+	"V9ecqdicN8b9OBxsIdLMzbYezbSWvoFL6xho83YVVnYx6MP6Eq5MGcgMwIW5g401619eXYE/Xh4oipYq",
+	"FxT5HXSPKPigkyigBoS8Fb4jUrMrshVDkLKk4oOzq4zH+tG3sGjBctjsQ8ZZUWcXZmwNiNNitk/4uraV",
+	"9hRDGsiNg9xXpB45XvzsyT9Gu15U1BAfxtSkkUvTYW2vVS7jovTD+gbm4/uWHuFSqoXbsLZ3WF+yE8Tv",
+	"N6pX4cvn5mYJawece958fOmwvpQv4gt14H2ztGs+3YJzswfzy/DBMtYcquAdw8C7eTSnJW7210wlABdE",
+	"3Yp6s50f+PK0HWPv13la20P1hqhMQFG7jQipRI9T5LnF7bFdEfMgbx/od1fJ5dxf4O2JDXDBCNoTc36f",
+	"CkD8rAbA/5Ksnrf4QJTyGo5aOlJgZ0oW2blFlUwRxI7YXLD9zMZMsDh26L670RVvITvtBZz5QivYya7W",
+	"iYqM8UDxskjKVwpNUYzOmeMNPa1JgnD4TJUUId8Tk4+njtXg+6aMbu4fzDRX55q178w7bXOffx+beXNh",
+	"FS7ejWLsRwVRsj5Ds8EHP7d+eegz8Hm3hcefsM07in4YuFrzmjdeWJqBblQ3Xm+ZlyqpfvYQMRQlRfEq",
+	"zhMIAYoDdGDwbsIezC8398uN6h58NYsLqDurEKMnZ2FoO6dYNjn8jOyECM5ng3wLHgLy2ZHJqNfnnepq",
+	"fgIxzGP56ieon4oj2S+VEW5KJdjZxVaS28bCu2D36roM8Qn7u7wuSV+UPKxvkAuS7x9Mb7Rezx/Wl/A9",
+	"yffNK982a98f1pdAXjTex/u+VuWauT4fdLsynbKGx3vJ0sM0j5unEDNvvICvZ+HWk1A2BWj/MLBztp9q",
+	"eVeypIOAbASne/WA+uiwxH2Ht4t5l70oMOc6raF2VsGhE0o527nmLgnFOR0W5XGgoceQ4jon5pVpkAR8",
+	"hPtz5AUdF8pMyrAy8ZHPxX/LK082K3/0e1pivuevD/X6kCCGG2VRjhm6PWA4/ntoCRxfUFygpDJIQd4W",
+	"X/Zb8SXHSHRffcljdU/KL3txTBbDARnH6PjveLTLRiPbMV+lKS4kNEglTqQ5XOWgaFWqIGpRP3eVa0at",
+	"yWp/bNCeSFclMTLedMmUz1ejidqksNFyFpd2UTuQa31azMtmX/9U8zLloy/KecGFnFTUxQnwd7s2ERf5",
+	"vC3zPWKZL0urf0d1vlFKHOyQkOnmWZbrt1ns6X6ogFXzWVDRBU4nV8o5Vm4PDD5+7mbnFKG2AOWLw3Dk",
+	"bTq+VEbcn0YLKDxvPPDOlNN2yWd4saiTf2VJgbccwNpMi6j2UivKMv5LOC+IJLM9IYLzKYov7ax6OpUT",
+	"5ByQeBn2KFUEMRTmGpo4Nga0rPcYqSDIRWTURkUJZPFuh9qIZPHd21Q6dR6MZLnpuZjKHNqco5KbLsx9",
+	"7EszlYYho4wSCYYWdZZLdQtlrPGz21L07iCZo1cBpuk4LA43x1E01KKRtU+JYjloDX0C107KB9kPzjMw",
+	"ER6QiWR5urAz8agoTRxKR90kiVezyFWPoBsS3T5B8x9W7usnhZORSyDNRdgVjdu8MC9q2pZ9HXYq3Um2",
+	"gHstNXqygHl1NHKugHWzE70fUOzwLoH3nl3wK6EREwqMK1jh+QSa/FRWgSwpLAHqE5MeuVzb5BwhecVR",
+	"tegV3rikq3+f3TzmpzbJgzP4JdbP9EQK06e4ePTkyc8+fOITrzaJx+l9VWJSkBz8Xh8d7Y8nRflE/708",
+	"H8pZ4dunQn8TT4XyuPc7eOrSvzRrjzxsCAbrxTxVzOYESQpNGn6pjHDGkLQJf4AoWxtudE9MD9yTBw2J",
+	"sIMuWuvMaiCnaHnmLL5eIPbaPTh6EfJvVt2gfHRyE4Xpg3TW819Cju/I47wsF/bM2BEu0KFNHXWLzsaB",
+	"PCRGVniOdU9YB7miFSoOW+pBjjCAoAHtgyLO1eD/+9he3t/+edY+dEG0Qr+2lztuGCpu5yTKowrCHD92",
+	"lfoEPWD5saScH/gnGBkYxo9cDnwwdDqVTk0ADbd+SQ2+8+47gzj2BbKgiqmTqffeGXznPVIFjxDMCFQD",
+	"KBIzWRxFSn06j4DphtMAyNPM6o+DgwGNrDprYMVsXMToZmX+UoOL27C81SpvmTcewtc3qMiEB8TBmuqT",
+	"1WZY6uTnblZ9fm7qXDqlFwsF5KtSrasv4co6GzLduPFzNvT2kAzpuTiVDh2JOx9OnZtKpzJC0RjPSMqY",
+	"KNun/ww+WT8j9LFAA934UMlPxsYf16uTU261sWK8qV7KBtXSiCESzVs1dHVlFS7e7V4YHG7j4jU8KfrJ",
+	"ob9SNAIZoBSN3nKAemozEgv+xAhfXj63lja/13u1wXDg7gvz2wcHa9Nw4aW5/qxRe9AsLVF0JRex+YQl",
+	"F797SFnP1fL+km5MttikG0/XKr8+uFFm8AJfeQ9iBh7RU264791HYse7ibHj5XN8PykGXpj/3oZzS9je",
+	"wN0XzZ1XcOVao77RqnyPmUK/osL1zlYs9qE9sIdyymqExSLQ6tXmkwpp29RzGwMXbsD5vUb1cWNvD0O2",
+	"U95+YuF2ABS5eiTAzPZBCUux02KMZVDa1+uSYJAFzc0gWrQzF51m1lPYW1kbET/zPkL/7mVeqLdDr58n",
+	"t1YLmk8YO4oQ262/rbnVIkOO8V6/93LMzMcn7BwD5Ni8/UsMjjEqbzE0vxwr2liweaZTxz21z9z3w1kh",
+	"c22mWZtP1kiTR1Tw1ZDSNPz5DsYizGC73i/vjaSz3tZO2GC7X2kPiDvaREvCcNvQbFHPXESt8ae4Iv8X",
+	"YPgYloDA84W8VfnR/GY2qSSBF2Znxv9Ti7Zhhr+f9SE55mJ7bFnijZmkVALDxNDI7X+fYkSL2T/Vxv7D",
+	"Q3bigbqMkihFCfYcbyP9hCN9N1+52tFZ2O9hZD9G/bHIczq+7UHPZf/t7oDjGbiyjys/ou8W/k7GJ+Rl",
+	"Gf1vWHRdWIXXbiblK+igygs5Xo/xQT7PaNfTG9VhwuqDfYfdo4i5+zBf1uDiPcyEBBQKQaMZz1eozMWi",
+	"DrSojoTF4iiHJo9qxKcksXwMzb38nvmUzxD1Otl29FQ7wirujnEjwlcQejuSlJA0XpfNtV1aSFqPvm2V",
+	"njM0xSBVT6HO56wzsIckZV6/527gSbP/Y9idYMg93J04bwb0cnviLelL2MG030Xopw2KzVq+pmQu2n9G",
+	"9SwubvbvHuWIUh3uT846dIvgU3qsAuyq1oRdSJAKHN8+hVYBlTRLIa7BY4bXtht7V2FpufmkAje3cWUM",
+	"LC3D108Opu/ChQfm+g7e9Az89ezZoQFzcxkubpk3K3D1R7hSab16dVi/3agumz9Mm3cfmtefmctluPed",
+	"ubDefPq0US2Z67uNV9+3fl3H1a5uQRkiFwF7xRtPC2kWh9By8ELiOPS/ce+g9Iv5/Tet13cOpjfMX6+0",
+	"KqTOiFS4BzvpIXtQD4nC6mTCoAx5jjRRz4xhhp0ZDTl3BXrnVz03MBJ2q05nmP7wqjZbaDHOXCR/RXKg",
+	"NMv60Xm2BY937sVdwWASXMf4JXva5YXZWUAxZEtHWJjQW21m3qdKOEII4OtxBAhh2hx+yNVWhyTOuThd",
+	"ybhHXa3yq+Z+OVkt8UKOXVeGvST/1OkpGb/ScJ797YHaxNk9zi8PmB9JaReGRsvDwdYe3FsJ0DT6yhw3",
+	"JqQv44q9zd3YoELPCTYrrcpOa2s72fAQgzW/37KDxKNoWUCA6br+3NMwk3nROuFg073aPgk53awOVaAM",
+	"uKAqmsHVoz+jn50bp8P/CNciA1wwMjl9wk1I5/7aiCgLSDi8V8585Ds1/I8Bc32+UXvRe+JZsGCl7uhK",
+	"V6dptKKEU14s2JSPXx1PF1hs4yljoSgZoipoRsbi0om8YAhu5rkvNNqv8ISz1H2LEH3HuCSYaExp0wRT",
+	"yG73wtDdSh3OPsRdWJITv9mHlPiFi9BFYJmeSBtJv2nux+1kbI4qPB/7Z0y6sF1WEi4t4O2QY9IOrks7",
+	"jn1XRJfmeksyLFF4hnoP0CNkorXOr4sAsRvfj6YeOHPIGLU/pCWKrCmdjo3tKSN+qQNBQ4+VB34Z+53b",
+	"Hoods90ka1+CW1wdQ2qVdD91opE4XLZHs0q7B/Mrjepio36PhnZYX4Kzl1rl6sE323BhDqvem+nLX8gn",
+	"BiyPqg80qlcH0N31AXOpZF5/1qzNNKpXzHvzjep0ozoNK7twb80ajgdF7I76ZvoSepyH/jdrEnPzsbmy",
+	"2nh124Z54wWcrcPyrnnjESzfNxdeNp9UnCaseD14JXB1ubG/2ajuOS3y6Jax1tztTl6Y0WuVRnXanH7U",
+	"qD10enshsAP4fOWwvtSaXmpUl82bFUQMS0OsiXAXNHNhHTcoa27MYBQa1eVGfePgZs1c34GzLxq1dfzv",
+	"zY0ZjOlhfcmsrDSqj8m/X3nafHKl9XoN3r5D92X7QvYdyeCGbwzzEmvc5X7GLDQCQw8Rk/fd/meQ8Uau",
+	"/eSBWxYtibJlqy1Cru6HjL67t5ubl5rXH5o3XmDec7lu92Xr8tl0TIfjDiSD2hKyHCel3nZvvwW4Uml9",
+	"sw+XZuHqE6zeHsE9rJcSqJjx2Ry4EJ7sdNxtRiW9bePaynjC0M1tWL5zcGsWowlL9okpIqit1jvNjRlC",
+	"u29m4dyvlgGqLpulR62tpUat1ti/DuduWeE16lhGzKczEe6Fi89mzc0S3RSXGofsAv5XPLRRvUoUwteA",
+	"0foMmw2XOdmYcTfzXcAvjw5kBuwGIwOZAafR7mG9hIwZPmNeqZj3ds3lMpaeVvkn8iTDVrlVfoChEhO1",
+	"s968/hCuXoVzhAI0ARmmy25O3EvjxbE08NUspm6wccEu/7C+0KguY3XBS7JdZCnQmrhtYMCLl4wuj/1j",
+	"aNhNr1lnXvdnzB+mk9q60tYDQ45kNAwNAG5thblElAk7+9alDbi60Fy7ay6sko689669mb5M7k7a3XZb",
+	"tzbMK3dbi5ebl3etyAAHF3tPGrX9Rm25ufbzgE3Kd3AMgcKL5lYZljcO67ed9vRwc9vceQDv7jW3phvV",
+	"RbP0E/z5OobSfFSDi9tvpi9ZJuLaPlxdbu6ULBO+eBvZFJ9qtU986Aa4qQTExdWylxtLO+RM+HDUD7wH",
+	"qba2tF20/4yUK3FeAe/XNInLV68swtkXZmna3Czh7rBBp/H8pcUvgXypS/Y83guzh0mlM46YBUQ09p7o",
+	"WbO0YG4+dbZ5zX/XmrW7rfnHcHEbVnbNyhrmJ1y5CZfWD+sbVjBgecXVJcx9c/Op0xK48fr75vVbJBBB",
+	"jUxR5GKPw3M4o/29hdHo9Wfw/h08orn4wpy+5B1hud+5ZbhzE25uO5PBZ3Ot+0+wZDJM4Gk5p4ECkA1B",
+	"stvTUzL4NietZ1gU4l9LvX/HinsTzcPRMH2ZEH7u9C2jO7CMx5FZdfOyQz+aySvnZWvvy823fkQG2Mv+",
+	"WJQ6dDxKzgDGCd3QgFA48nki2Z9dvQsfXUnqXLFRvdLa32dDTsoPdcpXrd26/gTuyI37aSXvN72vrFEt",
+	"9TFaw+2uIj1UWn8nf9auC7nUpHZdls9FQtWo7rTuP8F91gPce+faTbf34Z6m2Hyj+HC005R2kxuH6Piq",
+	"9oQIzpM/iURGP2r5/R6YELqHlh3hOC3RcxPiW5wdSb9aO1vOM4KqasoEOCFIUj9Yuw8wOh9IEkPJevfs",
+	"Jg01KJkN5+eSsnUYmmPu8FYXvnyOLVvG+qu+3np1zTF/3Ru7DOoDfYL08esDKSDJPgsdphjEX4zggnhM",
+	"71fQaw45UYHlLfNeNUFRdGAeWdYukr9ITiohUQsfPWyjheXSbvUetMMjn/Ts7VsXFBv0sQinvdL+2sFh",
+	"/46absQjkJnETWBMcsm0lT0r90ezH6uxDJBHYqaSyhEhaHD5eqP6GMvjYX3hYHqj9Xo+g7cnGeym0Zk2",
+	"V0Z1QxizBBT9dyqjTABNE3Gj7x4K4rAFLfASCRphX+6wkerZLRIEzQZzXJLFWnG/XBa5+cIs/0ouD/04",
+	"17y9Hl2kVEmQg25ooXUPWYP6+o4OJgE+32+Vt+DCtwn4nLsPW5X7bMgJaCeXw1TrtRN2yyJuzsLd6TjO",
+	"lEWsHcF5yQxPG2w/PnF08v6t5UMCGnCzXtBBG8dGrQYXt46jmJSG38vrWJ7m4T19TsfTPtzxWH4P9cce",
+	"cZ3FacLjo3en6PA1HReDidkqqMaJaC9OuRsq9vqOMAUqNI9oN+E7jten6JfSmxszHlwivH1BLbTXT2Aw",
+	"+mEm/xIGvd5+uZ3oZRpLN5Brp5CP+lCGl799ecHJL7UBLwUErmgwQVnxoJ1s/Q4XeMd+0yVUEd7X6L3F",
+	"COqgm/xrG2FScByXv1gWw4rG9YwzNHAvZ+jDZFwPaUd1Y2XFm2vbB/MrzdrdVnkrsdeBKZjmz/PmdA2T",
+	"jhWBePbz+LYLatZL/Py3S17ni8sN8a+rC3D3BY4FWG+VoT1XPz2geRzBCzm0WqlYJETwD+sLmMYDfxjA",
+	"dCWXPQIj+rdPYyb/NCbuzUOZnyivYXr3IbNwpULem6TmO6wvtGcY+KI4OPgeGBg8rJfeTF+GlV1aCRlD",
+	"c2ho69k3zbVtrLUDfxp8j12IjqOk/n+M00XsNMdCIQtHUs1UTPBm+jJFInPnB/P6s0Z1z03wpdYvd/G/",
+	"09TlVu8nEX8F+tzjCLiOFGexIyyWPpB3N49FH9xPoL59ZzXBd1Yj2tNMTlEnOz/38Yof+1Lh3b3G3lVz",
+	"aR6WNzzu2FxYd9yx3aZxulF9TKMNSxVz8+mb6cvkit/6M+IqNmY8xub0RwON6h42RWxBPKWok7126xSI",
+	"wNRcQk78wTJceJGYX8HQEEMa1b3W/GNY3mjsllwC6Dk/yFw0XKnFkNZujDxrInlufsYz4fZuVLqza6/h",
+	"ITg57onAmQw+RenCUvhBcqNvBKKf+Gy56RcLuLVC+yShx6qEYPqT21GYFPmygPckAT3QFOmMzq5pyYp5",
+	"18FYQZTFQrFA3/cVZQOMoZ4V5xK7j5B2zfQvUT3yhQbMCVz7luyFBloG2rV3iWm8BgxtsqcKf8aC0E/6",
+	"fjC/3KpcT1bfCUz7CRVyaZe6T0DzStUU54GSKGfvQ/b4ZMhKwEU7Gj6YXW7ul4/1eItGJDQr5FtmUme9",
+	"BNxxZYr86+6XnJGLezxVcZk2soJIh10chvdlQscjxxFiaO6SBhOWHBr344iovZC79naObIWdeSVmSXjg",
+	"jitHEkkejiVb4rMkRd3ibgEE7UhPFTUNyMZnOquVX5zHXpzGiJQvS0plvDADpNxLnV6JNwXnmOSaxyBX",
+	"n/CE2ERgUmyyAsr1W26pzqiCrp9XNHzjmMXDU6h+kaLtkP1Fj4IeBM8G0hEjWT64Mte8dwm+fI7JkVQ/",
+	"RJrsGAW8Ah1oE7Y/KWpS6mQqI6hiZuJdazf2fwEAAP//6+1b248BAQA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

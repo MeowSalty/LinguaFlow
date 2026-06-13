@@ -42,6 +42,10 @@ const (
 	EdgeUsageRecords = "usage_records"
 	// EdgeTranslationTemplates holds the string denoting the translation_templates edge name in mutations.
 	EdgeTranslationTemplates = "translation_templates"
+	// EdgePromptTemplates holds the string denoting the prompt_templates edge name in mutations.
+	EdgePromptTemplates = "prompt_templates"
+	// EdgeTranslationProfiles holds the string denoting the translation_profiles edge name in mutations.
+	EdgeTranslationProfiles = "translation_profiles"
 	// Table holds the table name of the organization in the database.
 	Table = "organizations"
 	// ProjectsTable is the table that holds the projects relation/edge.
@@ -100,6 +104,20 @@ const (
 	TranslationTemplatesInverseTable = "translation_templates"
 	// TranslationTemplatesColumn is the table column denoting the translation_templates relation/edge.
 	TranslationTemplatesColumn = "owner_org_id"
+	// PromptTemplatesTable is the table that holds the prompt_templates relation/edge.
+	PromptTemplatesTable = "prompt_templates"
+	// PromptTemplatesInverseTable is the table name for the PromptTemplate entity.
+	// It exists in this package in order to avoid circular dependency with the "prompttemplate" package.
+	PromptTemplatesInverseTable = "prompt_templates"
+	// PromptTemplatesColumn is the table column denoting the prompt_templates relation/edge.
+	PromptTemplatesColumn = "owner_org_id"
+	// TranslationProfilesTable is the table that holds the translation_profiles relation/edge.
+	TranslationProfilesTable = "translation_profiles"
+	// TranslationProfilesInverseTable is the table name for the TranslationProfile entity.
+	// It exists in this package in order to avoid circular dependency with the "translationprofile" package.
+	TranslationProfilesInverseTable = "translation_profiles"
+	// TranslationProfilesColumn is the table column denoting the translation_profiles relation/edge.
+	TranslationProfilesColumn = "owner_org_id"
 )
 
 // Columns holds all SQL columns for organization fields.
@@ -285,6 +303,34 @@ func ByTranslationTemplates(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOpt
 		sqlgraph.OrderByNeighborTerms(s, newTranslationTemplatesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByPromptTemplatesCount orders the results by prompt_templates count.
+func ByPromptTemplatesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newPromptTemplatesStep(), opts...)
+	}
+}
+
+// ByPromptTemplates orders the results by prompt_templates terms.
+func ByPromptTemplates(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newPromptTemplatesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByTranslationProfilesCount orders the results by translation_profiles count.
+func ByTranslationProfilesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newTranslationProfilesStep(), opts...)
+	}
+}
+
+// ByTranslationProfiles orders the results by translation_profiles terms.
+func ByTranslationProfiles(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newTranslationProfilesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newProjectsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -339,5 +385,19 @@ func newTranslationTemplatesStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(TranslationTemplatesInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, TranslationTemplatesTable, TranslationTemplatesColumn),
+	)
+}
+func newPromptTemplatesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(PromptTemplatesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, PromptTemplatesTable, PromptTemplatesColumn),
+	)
+}
+func newTranslationProfilesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(TranslationProfilesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, TranslationProfilesTable, TranslationProfilesColumn),
 	)
 }
