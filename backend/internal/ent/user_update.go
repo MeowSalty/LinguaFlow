@@ -20,7 +20,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationtemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
@@ -255,21 +254,6 @@ func (_u *UserUpdate) AddUsageRecords(v ...*UsageRecord) *UserUpdate {
 	return _u.AddUsageRecordIDs(ids...)
 }
 
-// AddTranslationTemplateIDs adds the "translation_templates" edge to the TranslationTemplate entity by IDs.
-func (_u *UserUpdate) AddTranslationTemplateIDs(ids ...int) *UserUpdate {
-	_u.mutation.AddTranslationTemplateIDs(ids...)
-	return _u
-}
-
-// AddTranslationTemplates adds the "translation_templates" edges to the TranslationTemplate entity.
-func (_u *UserUpdate) AddTranslationTemplates(v ...*TranslationTemplate) *UserUpdate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.AddTranslationTemplateIDs(ids...)
-}
-
 // AddPromptTemplateIDs adds the "prompt_templates" edge to the PromptTemplate entity by IDs.
 func (_u *UserUpdate) AddPromptTemplateIDs(ids ...int) *UserUpdate {
 	_u.mutation.AddPromptTemplateIDs(ids...)
@@ -471,27 +455,6 @@ func (_u *UserUpdate) RemoveUsageRecords(v ...*UsageRecord) *UserUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveUsageRecordIDs(ids...)
-}
-
-// ClearTranslationTemplates clears all "translation_templates" edges to the TranslationTemplate entity.
-func (_u *UserUpdate) ClearTranslationTemplates() *UserUpdate {
-	_u.mutation.ClearTranslationTemplates()
-	return _u
-}
-
-// RemoveTranslationTemplateIDs removes the "translation_templates" edge to TranslationTemplate entities by IDs.
-func (_u *UserUpdate) RemoveTranslationTemplateIDs(ids ...int) *UserUpdate {
-	_u.mutation.RemoveTranslationTemplateIDs(ids...)
-	return _u
-}
-
-// RemoveTranslationTemplates removes "translation_templates" edges to TranslationTemplate entities.
-func (_u *UserUpdate) RemoveTranslationTemplates(v ...*TranslationTemplate) *UserUpdate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.RemoveTranslationTemplateIDs(ids...)
 }
 
 // ClearPromptTemplates clears all "prompt_templates" edges to the PromptTemplate entity.
@@ -988,51 +951,6 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if _u.mutation.TranslationTemplatesCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.TranslationTemplatesTable,
-			Columns: []string{user.TranslationTemplatesColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationtemplate.FieldID, field.TypeInt),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.RemovedTranslationTemplatesIDs(); len(nodes) > 0 && !_u.mutation.TranslationTemplatesCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.TranslationTemplatesTable,
-			Columns: []string{user.TranslationTemplatesColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationtemplate.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.TranslationTemplatesIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.TranslationTemplatesTable,
-			Columns: []string{user.TranslationTemplatesColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationtemplate.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
 	if _u.mutation.PromptTemplatesCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -1359,21 +1277,6 @@ func (_u *UserUpdateOne) AddUsageRecords(v ...*UsageRecord) *UserUpdateOne {
 	return _u.AddUsageRecordIDs(ids...)
 }
 
-// AddTranslationTemplateIDs adds the "translation_templates" edge to the TranslationTemplate entity by IDs.
-func (_u *UserUpdateOne) AddTranslationTemplateIDs(ids ...int) *UserUpdateOne {
-	_u.mutation.AddTranslationTemplateIDs(ids...)
-	return _u
-}
-
-// AddTranslationTemplates adds the "translation_templates" edges to the TranslationTemplate entity.
-func (_u *UserUpdateOne) AddTranslationTemplates(v ...*TranslationTemplate) *UserUpdateOne {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.AddTranslationTemplateIDs(ids...)
-}
-
 // AddPromptTemplateIDs adds the "prompt_templates" edge to the PromptTemplate entity by IDs.
 func (_u *UserUpdateOne) AddPromptTemplateIDs(ids ...int) *UserUpdateOne {
 	_u.mutation.AddPromptTemplateIDs(ids...)
@@ -1575,27 +1478,6 @@ func (_u *UserUpdateOne) RemoveUsageRecords(v ...*UsageRecord) *UserUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveUsageRecordIDs(ids...)
-}
-
-// ClearTranslationTemplates clears all "translation_templates" edges to the TranslationTemplate entity.
-func (_u *UserUpdateOne) ClearTranslationTemplates() *UserUpdateOne {
-	_u.mutation.ClearTranslationTemplates()
-	return _u
-}
-
-// RemoveTranslationTemplateIDs removes the "translation_templates" edge to TranslationTemplate entities by IDs.
-func (_u *UserUpdateOne) RemoveTranslationTemplateIDs(ids ...int) *UserUpdateOne {
-	_u.mutation.RemoveTranslationTemplateIDs(ids...)
-	return _u
-}
-
-// RemoveTranslationTemplates removes "translation_templates" edges to TranslationTemplate entities.
-func (_u *UserUpdateOne) RemoveTranslationTemplates(v ...*TranslationTemplate) *UserUpdateOne {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.RemoveTranslationTemplateIDs(ids...)
 }
 
 // ClearPromptTemplates clears all "prompt_templates" edges to the PromptTemplate entity.
@@ -2115,51 +1997,6 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
-	if _u.mutation.TranslationTemplatesCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.TranslationTemplatesTable,
-			Columns: []string{user.TranslationTemplatesColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationtemplate.FieldID, field.TypeInt),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.RemovedTranslationTemplatesIDs(); len(nodes) > 0 && !_u.mutation.TranslationTemplatesCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.TranslationTemplatesTable,
-			Columns: []string{user.TranslationTemplatesColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationtemplate.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.TranslationTemplatesIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.TranslationTemplatesTable,
-			Columns: []string{user.TranslationTemplatesColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationtemplate.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

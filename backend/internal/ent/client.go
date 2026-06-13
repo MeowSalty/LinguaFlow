@@ -31,7 +31,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationtemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
@@ -74,8 +73,6 @@ type Client struct {
 	TranslationJob *TranslationJobClient
 	// TranslationProfile is the client for interacting with the TranslationProfile builders.
 	TranslationProfile *TranslationProfileClient
-	// TranslationTemplate is the client for interacting with the TranslationTemplate builders.
-	TranslationTemplate *TranslationTemplateClient
 	// UsageRecord is the client for interacting with the UsageRecord builders.
 	UsageRecord *UsageRecordClient
 	// User is the client for interacting with the User builders.
@@ -109,7 +106,6 @@ func (c *Client) init() {
 	c.TMEntry = NewTMEntryClient(c.config)
 	c.TranslationJob = NewTranslationJobClient(c.config)
 	c.TranslationProfile = NewTranslationProfileClient(c.config)
-	c.TranslationTemplate = NewTranslationTemplateClient(c.config)
 	c.UsageRecord = NewUsageRecordClient(c.config)
 	c.User = NewUserClient(c.config)
 	c.UserBackend = NewUserBackendClient(c.config)
@@ -221,7 +217,6 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		TMEntry:              NewTMEntryClient(cfg),
 		TranslationJob:       NewTranslationJobClient(cfg),
 		TranslationProfile:   NewTranslationProfileClient(cfg),
-		TranslationTemplate:  NewTranslationTemplateClient(cfg),
 		UsageRecord:          NewUsageRecordClient(cfg),
 		User:                 NewUserClient(cfg),
 		UserBackend:          NewUserBackendClient(cfg),
@@ -260,7 +255,6 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		TMEntry:              NewTMEntryClient(cfg),
 		TranslationJob:       NewTranslationJobClient(cfg),
 		TranslationProfile:   NewTranslationProfileClient(cfg),
-		TranslationTemplate:  NewTranslationTemplateClient(cfg),
 		UsageRecord:          NewUsageRecordClient(cfg),
 		User:                 NewUserClient(cfg),
 		UserBackend:          NewUserBackendClient(cfg),
@@ -296,8 +290,7 @@ func (c *Client) Use(hooks ...Hook) {
 		c.ActivityLog, c.GlossaryEntry, c.JobResource, c.OrgBackend, c.OrgMembership,
 		c.Organization, c.Project, c.ProjectBackend, c.PromptTemplate, c.RefreshToken,
 		c.Resource, c.Segment, c.StageBackendOverride, c.TMEntry, c.TranslationJob,
-		c.TranslationProfile, c.TranslationTemplate, c.UsageRecord, c.User,
-		c.UserBackend,
+		c.TranslationProfile, c.UsageRecord, c.User, c.UserBackend,
 	} {
 		n.Use(hooks...)
 	}
@@ -310,8 +303,7 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 		c.ActivityLog, c.GlossaryEntry, c.JobResource, c.OrgBackend, c.OrgMembership,
 		c.Organization, c.Project, c.ProjectBackend, c.PromptTemplate, c.RefreshToken,
 		c.Resource, c.Segment, c.StageBackendOverride, c.TMEntry, c.TranslationJob,
-		c.TranslationProfile, c.TranslationTemplate, c.UsageRecord, c.User,
-		c.UserBackend,
+		c.TranslationProfile, c.UsageRecord, c.User, c.UserBackend,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -352,8 +344,6 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.TranslationJob.mutate(ctx, m)
 	case *TranslationProfileMutation:
 		return c.TranslationProfile.mutate(ctx, m)
-	case *TranslationTemplateMutation:
-		return c.TranslationTemplate.mutate(ctx, m)
 	case *UsageRecordMutation:
 		return c.UsageRecord.mutate(ctx, m)
 	case *UserMutation:
@@ -1403,22 +1393,6 @@ func (c *OrganizationClient) QueryUsageRecords(_m *Organization) *UsageRecordQue
 			sqlgraph.From(organization.Table, organization.FieldID, id),
 			sqlgraph.To(usagerecord.Table, usagerecord.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, organization.UsageRecordsTable, organization.UsageRecordsColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// QueryTranslationTemplates queries the translation_templates edge of a Organization.
-func (c *OrganizationClient) QueryTranslationTemplates(_m *Organization) *TranslationTemplateQuery {
-	query := (&TranslationTemplateClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(organization.Table, organization.FieldID, id),
-			sqlgraph.To(translationtemplate.Table, translationtemplate.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, organization.TranslationTemplatesTable, organization.TranslationTemplatesColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -3245,171 +3219,6 @@ func (c *TranslationProfileClient) mutate(ctx context.Context, m *TranslationPro
 	}
 }
 
-// TranslationTemplateClient is a client for the TranslationTemplate schema.
-type TranslationTemplateClient struct {
-	config
-}
-
-// NewTranslationTemplateClient returns a client for the TranslationTemplate from the given config.
-func NewTranslationTemplateClient(c config) *TranslationTemplateClient {
-	return &TranslationTemplateClient{config: c}
-}
-
-// Use adds a list of mutation hooks to the hooks stack.
-// A call to `Use(f, g, h)` equals to `translationtemplate.Hooks(f(g(h())))`.
-func (c *TranslationTemplateClient) Use(hooks ...Hook) {
-	c.hooks.TranslationTemplate = append(c.hooks.TranslationTemplate, hooks...)
-}
-
-// Intercept adds a list of query interceptors to the interceptors stack.
-// A call to `Intercept(f, g, h)` equals to `translationtemplate.Intercept(f(g(h())))`.
-func (c *TranslationTemplateClient) Intercept(interceptors ...Interceptor) {
-	c.inters.TranslationTemplate = append(c.inters.TranslationTemplate, interceptors...)
-}
-
-// Create returns a builder for creating a TranslationTemplate entity.
-func (c *TranslationTemplateClient) Create() *TranslationTemplateCreate {
-	mutation := newTranslationTemplateMutation(c.config, OpCreate)
-	return &TranslationTemplateCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// CreateBulk returns a builder for creating a bulk of TranslationTemplate entities.
-func (c *TranslationTemplateClient) CreateBulk(builders ...*TranslationTemplateCreate) *TranslationTemplateCreateBulk {
-	return &TranslationTemplateCreateBulk{config: c.config, builders: builders}
-}
-
-// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
-// a builder and applies setFunc on it.
-func (c *TranslationTemplateClient) MapCreateBulk(slice any, setFunc func(*TranslationTemplateCreate, int)) *TranslationTemplateCreateBulk {
-	rv := reflect.ValueOf(slice)
-	if rv.Kind() != reflect.Slice {
-		return &TranslationTemplateCreateBulk{err: fmt.Errorf("calling to TranslationTemplateClient.MapCreateBulk with wrong type %T, need slice", slice)}
-	}
-	builders := make([]*TranslationTemplateCreate, rv.Len())
-	for i := 0; i < rv.Len(); i++ {
-		builders[i] = c.Create()
-		setFunc(builders[i], i)
-	}
-	return &TranslationTemplateCreateBulk{config: c.config, builders: builders}
-}
-
-// Update returns an update builder for TranslationTemplate.
-func (c *TranslationTemplateClient) Update() *TranslationTemplateUpdate {
-	mutation := newTranslationTemplateMutation(c.config, OpUpdate)
-	return &TranslationTemplateUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOne returns an update builder for the given entity.
-func (c *TranslationTemplateClient) UpdateOne(_m *TranslationTemplate) *TranslationTemplateUpdateOne {
-	mutation := newTranslationTemplateMutation(c.config, OpUpdateOne, withTranslationTemplate(_m))
-	return &TranslationTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOneID returns an update builder for the given id.
-func (c *TranslationTemplateClient) UpdateOneID(id int) *TranslationTemplateUpdateOne {
-	mutation := newTranslationTemplateMutation(c.config, OpUpdateOne, withTranslationTemplateID(id))
-	return &TranslationTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// Delete returns a delete builder for TranslationTemplate.
-func (c *TranslationTemplateClient) Delete() *TranslationTemplateDelete {
-	mutation := newTranslationTemplateMutation(c.config, OpDelete)
-	return &TranslationTemplateDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// DeleteOne returns a builder for deleting the given entity.
-func (c *TranslationTemplateClient) DeleteOne(_m *TranslationTemplate) *TranslationTemplateDeleteOne {
-	return c.DeleteOneID(_m.ID)
-}
-
-// DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *TranslationTemplateClient) DeleteOneID(id int) *TranslationTemplateDeleteOne {
-	builder := c.Delete().Where(translationtemplate.ID(id))
-	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
-	return &TranslationTemplateDeleteOne{builder}
-}
-
-// Query returns a query builder for TranslationTemplate.
-func (c *TranslationTemplateClient) Query() *TranslationTemplateQuery {
-	return &TranslationTemplateQuery{
-		config: c.config,
-		ctx:    &QueryContext{Type: TypeTranslationTemplate},
-		inters: c.Interceptors(),
-	}
-}
-
-// Get returns a TranslationTemplate entity by its id.
-func (c *TranslationTemplateClient) Get(ctx context.Context, id int) (*TranslationTemplate, error) {
-	return c.Query().Where(translationtemplate.ID(id)).Only(ctx)
-}
-
-// GetX is like Get, but panics if an error occurs.
-func (c *TranslationTemplateClient) GetX(ctx context.Context, id int) *TranslationTemplate {
-	obj, err := c.Get(ctx, id)
-	if err != nil {
-		panic(err)
-	}
-	return obj
-}
-
-// QueryOwnerUser queries the owner_user edge of a TranslationTemplate.
-func (c *TranslationTemplateClient) QueryOwnerUser(_m *TranslationTemplate) *UserQuery {
-	query := (&UserClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(translationtemplate.Table, translationtemplate.FieldID, id),
-			sqlgraph.To(user.Table, user.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, translationtemplate.OwnerUserTable, translationtemplate.OwnerUserColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// QueryOwnerOrg queries the owner_org edge of a TranslationTemplate.
-func (c *TranslationTemplateClient) QueryOwnerOrg(_m *TranslationTemplate) *OrganizationQuery {
-	query := (&OrganizationClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(translationtemplate.Table, translationtemplate.FieldID, id),
-			sqlgraph.To(organization.Table, organization.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, translationtemplate.OwnerOrgTable, translationtemplate.OwnerOrgColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// Hooks returns the client hooks.
-func (c *TranslationTemplateClient) Hooks() []Hook {
-	return c.hooks.TranslationTemplate
-}
-
-// Interceptors returns the client interceptors.
-func (c *TranslationTemplateClient) Interceptors() []Interceptor {
-	return c.inters.TranslationTemplate
-}
-
-func (c *TranslationTemplateClient) mutate(ctx context.Context, m *TranslationTemplateMutation) (Value, error) {
-	switch m.Op() {
-	case OpCreate:
-		return (&TranslationTemplateCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdate:
-		return (&TranslationTemplateUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdateOne:
-		return (&TranslationTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpDelete, OpDeleteOne:
-		return (&TranslationTemplateDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
-	default:
-		return nil, fmt.Errorf("ent: unknown TranslationTemplate mutation op: %q", m.Op())
-	}
-}
-
 // UsageRecordClient is a client for the UsageRecord schema.
 type UsageRecordClient struct {
 	config
@@ -3827,22 +3636,6 @@ func (c *UserClient) QueryUsageRecords(_m *User) *UsageRecordQuery {
 	return query
 }
 
-// QueryTranslationTemplates queries the translation_templates edge of a User.
-func (c *UserClient) QueryTranslationTemplates(_m *User) *TranslationTemplateQuery {
-	query := (&TranslationTemplateClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(user.Table, user.FieldID, id),
-			sqlgraph.To(translationtemplate.Table, translationtemplate.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, user.TranslationTemplatesTable, user.TranslationTemplatesColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
 // QueryPromptTemplates queries the prompt_templates edge of a User.
 func (c *UserClient) QueryPromptTemplates(_m *User) *PromptTemplateQuery {
 	query := (&PromptTemplateClient{config: c.config}).Query()
@@ -4055,12 +3848,12 @@ type (
 		ActivityLog, GlossaryEntry, JobResource, OrgBackend, OrgMembership,
 		Organization, Project, ProjectBackend, PromptTemplate, RefreshToken, Resource,
 		Segment, StageBackendOverride, TMEntry, TranslationJob, TranslationProfile,
-		TranslationTemplate, UsageRecord, User, UserBackend []ent.Hook
+		UsageRecord, User, UserBackend []ent.Hook
 	}
 	inters struct {
 		ActivityLog, GlossaryEntry, JobResource, OrgBackend, OrgMembership,
 		Organization, Project, ProjectBackend, PromptTemplate, RefreshToken, Resource,
 		Segment, StageBackendOverride, TMEntry, TranslationJob, TranslationProfile,
-		TranslationTemplate, UsageRecord, User, UserBackend []ent.Interceptor
+		UsageRecord, User, UserBackend []ent.Interceptor
 	}
 )

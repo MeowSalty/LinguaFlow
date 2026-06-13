@@ -57,15 +57,13 @@ type UserEdges struct {
 	ActivityLogs []*ActivityLog `json:"activity_logs,omitempty"`
 	// UsageRecords holds the value of the usage_records edge.
 	UsageRecords []*UsageRecord `json:"usage_records,omitempty"`
-	// TranslationTemplates holds the value of the translation_templates edge.
-	TranslationTemplates []*TranslationTemplate `json:"translation_templates,omitempty"`
 	// PromptTemplates holds the value of the prompt_templates edge.
 	PromptTemplates []*PromptTemplate `json:"prompt_templates,omitempty"`
 	// TranslationProfiles holds the value of the translation_profiles edge.
 	TranslationProfiles []*TranslationProfile `json:"translation_profiles,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [11]bool
+	loadedTypes [10]bool
 }
 
 // CreatedTranslationJobsOrErr returns the CreatedTranslationJobs value or an error if the edge
@@ -140,19 +138,10 @@ func (e UserEdges) UsageRecordsOrErr() ([]*UsageRecord, error) {
 	return nil, &NotLoadedError{edge: "usage_records"}
 }
 
-// TranslationTemplatesOrErr returns the TranslationTemplates value or an error if the edge
-// was not loaded in eager-loading.
-func (e UserEdges) TranslationTemplatesOrErr() ([]*TranslationTemplate, error) {
-	if e.loadedTypes[8] {
-		return e.TranslationTemplates, nil
-	}
-	return nil, &NotLoadedError{edge: "translation_templates"}
-}
-
 // PromptTemplatesOrErr returns the PromptTemplates value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) PromptTemplatesOrErr() ([]*PromptTemplate, error) {
-	if e.loadedTypes[9] {
+	if e.loadedTypes[8] {
 		return e.PromptTemplates, nil
 	}
 	return nil, &NotLoadedError{edge: "prompt_templates"}
@@ -161,7 +150,7 @@ func (e UserEdges) PromptTemplatesOrErr() ([]*PromptTemplate, error) {
 // TranslationProfilesOrErr returns the TranslationProfiles value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) TranslationProfilesOrErr() ([]*TranslationProfile, error) {
-	if e.loadedTypes[10] {
+	if e.loadedTypes[9] {
 		return e.TranslationProfiles, nil
 	}
 	return nil, &NotLoadedError{edge: "translation_profiles"}
@@ -300,11 +289,6 @@ func (_m *User) QueryActivityLogs() *ActivityLogQuery {
 // QueryUsageRecords queries the "usage_records" edge of the User entity.
 func (_m *User) QueryUsageRecords() *UsageRecordQuery {
 	return NewUserClient(_m.config).QueryUsageRecords(_m)
-}
-
-// QueryTranslationTemplates queries the "translation_templates" edge of the User entity.
-func (_m *User) QueryTranslationTemplates() *TranslationTemplateQuery {
-	return NewUserClient(_m.config).QueryTranslationTemplates(_m)
 }
 
 // QueryPromptTemplates queries the "prompt_templates" edge of the User entity.

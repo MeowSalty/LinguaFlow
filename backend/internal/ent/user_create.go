@@ -18,7 +18,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationtemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
@@ -237,21 +236,6 @@ func (_c *UserCreate) AddUsageRecords(v ...*UsageRecord) *UserCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddUsageRecordIDs(ids...)
-}
-
-// AddTranslationTemplateIDs adds the "translation_templates" edge to the TranslationTemplate entity by IDs.
-func (_c *UserCreate) AddTranslationTemplateIDs(ids ...int) *UserCreate {
-	_c.mutation.AddTranslationTemplateIDs(ids...)
-	return _c
-}
-
-// AddTranslationTemplates adds the "translation_templates" edges to the TranslationTemplate entity.
-func (_c *UserCreate) AddTranslationTemplates(v ...*TranslationTemplate) *UserCreate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _c.AddTranslationTemplateIDs(ids...)
 }
 
 // AddPromptTemplateIDs adds the "prompt_templates" edge to the PromptTemplate entity by IDs.
@@ -554,22 +538,6 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges = append(_spec.Edges, edge)
-	}
-	if nodes := _c.mutation.TranslationTemplatesIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.TranslationTemplatesTable,
-			Columns: []string{user.TranslationTemplatesColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationtemplate.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

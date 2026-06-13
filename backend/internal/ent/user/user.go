@@ -46,8 +46,6 @@ const (
 	EdgeActivityLogs = "activity_logs"
 	// EdgeUsageRecords holds the string denoting the usage_records edge name in mutations.
 	EdgeUsageRecords = "usage_records"
-	// EdgeTranslationTemplates holds the string denoting the translation_templates edge name in mutations.
-	EdgeTranslationTemplates = "translation_templates"
 	// EdgePromptTemplates holds the string denoting the prompt_templates edge name in mutations.
 	EdgePromptTemplates = "prompt_templates"
 	// EdgeTranslationProfiles holds the string denoting the translation_profiles edge name in mutations.
@@ -110,13 +108,6 @@ const (
 	UsageRecordsInverseTable = "usage_records"
 	// UsageRecordsColumn is the table column denoting the usage_records relation/edge.
 	UsageRecordsColumn = "user_usage_records"
-	// TranslationTemplatesTable is the table that holds the translation_templates relation/edge.
-	TranslationTemplatesTable = "translation_templates"
-	// TranslationTemplatesInverseTable is the table name for the TranslationTemplate entity.
-	// It exists in this package in order to avoid circular dependency with the "translationtemplate" package.
-	TranslationTemplatesInverseTable = "translation_templates"
-	// TranslationTemplatesColumn is the table column denoting the translation_templates relation/edge.
-	TranslationTemplatesColumn = "owner_user_id"
 	// PromptTemplatesTable is the table that holds the prompt_templates relation/edge.
 	PromptTemplatesTable = "prompt_templates"
 	// PromptTemplatesInverseTable is the table name for the PromptTemplate entity.
@@ -335,20 +326,6 @@ func ByUsageRecords(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
-// ByTranslationTemplatesCount orders the results by translation_templates count.
-func ByTranslationTemplatesCount(opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newTranslationTemplatesStep(), opts...)
-	}
-}
-
-// ByTranslationTemplates orders the results by translation_templates terms.
-func ByTranslationTemplates(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newTranslationTemplatesStep(), append([]sql.OrderTerm{term}, terms...)...)
-	}
-}
-
 // ByPromptTemplatesCount orders the results by prompt_templates count.
 func ByPromptTemplatesCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -430,13 +407,6 @@ func newUsageRecordsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(UsageRecordsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, UsageRecordsTable, UsageRecordsColumn),
-	)
-}
-func newTranslationTemplatesStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(TranslationTemplatesInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, TranslationTemplatesTable, TranslationTemplatesColumn),
 	)
 }
 func newPromptTemplatesStep() *sqlgraph.Step {

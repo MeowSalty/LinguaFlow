@@ -19,7 +19,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationtemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 )
 
@@ -201,21 +200,6 @@ func (_c *OrganizationCreate) AddUsageRecords(v ...*UsageRecord) *OrganizationCr
 		ids[i] = v[i].ID
 	}
 	return _c.AddUsageRecordIDs(ids...)
-}
-
-// AddTranslationTemplateIDs adds the "translation_templates" edge to the TranslationTemplate entity by IDs.
-func (_c *OrganizationCreate) AddTranslationTemplateIDs(ids ...int) *OrganizationCreate {
-	_c.mutation.AddTranslationTemplateIDs(ids...)
-	return _c
-}
-
-// AddTranslationTemplates adds the "translation_templates" edges to the TranslationTemplate entity.
-func (_c *OrganizationCreate) AddTranslationTemplates(v ...*TranslationTemplate) *OrganizationCreate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _c.AddTranslationTemplateIDs(ids...)
 }
 
 // AddPromptTemplateIDs adds the "prompt_templates" edge to the PromptTemplate entity by IDs.
@@ -472,22 +456,6 @@ func (_c *OrganizationCreate) createSpec() (*Organization, *sqlgraph.CreateSpec)
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges = append(_spec.Edges, edge)
-	}
-	if nodes := _c.mutation.TranslationTemplatesIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   organization.TranslationTemplatesTable,
-			Columns: []string{organization.TranslationTemplatesColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationtemplate.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

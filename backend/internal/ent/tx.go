@@ -44,8 +44,6 @@ type Tx struct {
 	TranslationJob *TranslationJobClient
 	// TranslationProfile is the client for interacting with the TranslationProfile builders.
 	TranslationProfile *TranslationProfileClient
-	// TranslationTemplate is the client for interacting with the TranslationTemplate builders.
-	TranslationTemplate *TranslationTemplateClient
 	// UsageRecord is the client for interacting with the UsageRecord builders.
 	UsageRecord *UsageRecordClient
 	// User is the client for interacting with the User builders.
@@ -199,7 +197,6 @@ func (tx *Tx) init() {
 	tx.TMEntry = NewTMEntryClient(tx.config)
 	tx.TranslationJob = NewTranslationJobClient(tx.config)
 	tx.TranslationProfile = NewTranslationProfileClient(tx.config)
-	tx.TranslationTemplate = NewTranslationTemplateClient(tx.config)
 	tx.UsageRecord = NewUsageRecordClient(tx.config)
 	tx.User = NewUserClient(tx.config)
 	tx.UserBackend = NewUserBackendClient(tx.config)

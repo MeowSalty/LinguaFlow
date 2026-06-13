@@ -704,29 +704,6 @@ func HasUsageRecordsWith(preds ...predicate.UsageRecord) predicate.User {
 	})
 }
 
-// HasTranslationTemplates applies the HasEdge predicate on the "translation_templates" edge.
-func HasTranslationTemplates() predicate.User {
-	return predicate.User(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, TranslationTemplatesTable, TranslationTemplatesColumn),
-		)
-		sqlgraph.HasNeighbors(s, step)
-	})
-}
-
-// HasTranslationTemplatesWith applies the HasEdge predicate on the "translation_templates" edge with a given conditions (other predicates).
-func HasTranslationTemplatesWith(preds ...predicate.TranslationTemplate) predicate.User {
-	return predicate.User(func(s *sql.Selector) {
-		step := newTranslationTemplatesStep()
-		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
-			for _, p := range preds {
-				p(s)
-			}
-		})
-	})
-}
-
 // HasPromptTemplates applies the HasEdge predicate on the "prompt_templates" edge.
 func HasPromptTemplates() predicate.User {
 	return predicate.User(func(s *sql.Selector) {

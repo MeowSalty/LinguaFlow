@@ -32,7 +32,6 @@ func (Organization) Edges() []ent.Edge {
 		edge.To("tm_entries", TMEntry.Type),
 		edge.To("activity_logs", ActivityLog.Type),
 		edge.To("usage_records", UsageRecord.Type),
-		edge.To("translation_templates", TranslationTemplate.Type),
 		edge.To("prompt_templates", PromptTemplate.Type),
 		edge.To("translation_profiles", TranslationProfile.Type),
 	}

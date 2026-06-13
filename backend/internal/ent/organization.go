@@ -51,15 +51,13 @@ type OrganizationEdges struct {
 	ActivityLogs []*ActivityLog `json:"activity_logs,omitempty"`
 	// UsageRecords holds the value of the usage_records edge.
 	UsageRecords []*UsageRecord `json:"usage_records,omitempty"`
-	// TranslationTemplates holds the value of the translation_templates edge.
-	TranslationTemplates []*TranslationTemplate `json:"translation_templates,omitempty"`
 	// PromptTemplates holds the value of the prompt_templates edge.
 	PromptTemplates []*PromptTemplate `json:"prompt_templates,omitempty"`
 	// TranslationProfiles holds the value of the translation_profiles edge.
 	TranslationProfiles []*TranslationProfile `json:"translation_profiles,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [10]bool
+	loadedTypes [9]bool
 }
 
 // ProjectsOrErr returns the Projects value or an error if the edge
@@ -125,19 +123,10 @@ func (e OrganizationEdges) UsageRecordsOrErr() ([]*UsageRecord, error) {
 	return nil, &NotLoadedError{edge: "usage_records"}
 }
 
-// TranslationTemplatesOrErr returns the TranslationTemplates value or an error if the edge
-// was not loaded in eager-loading.
-func (e OrganizationEdges) TranslationTemplatesOrErr() ([]*TranslationTemplate, error) {
-	if e.loadedTypes[7] {
-		return e.TranslationTemplates, nil
-	}
-	return nil, &NotLoadedError{edge: "translation_templates"}
-}
-
 // PromptTemplatesOrErr returns the PromptTemplates value or an error if the edge
 // was not loaded in eager-loading.
 func (e OrganizationEdges) PromptTemplatesOrErr() ([]*PromptTemplate, error) {
-	if e.loadedTypes[8] {
+	if e.loadedTypes[7] {
 		return e.PromptTemplates, nil
 	}
 	return nil, &NotLoadedError{edge: "prompt_templates"}
@@ -146,7 +135,7 @@ func (e OrganizationEdges) PromptTemplatesOrErr() ([]*PromptTemplate, error) {
 // TranslationProfilesOrErr returns the TranslationProfiles value or an error if the edge
 // was not loaded in eager-loading.
 func (e OrganizationEdges) TranslationProfilesOrErr() ([]*TranslationProfile, error) {
-	if e.loadedTypes[9] {
+	if e.loadedTypes[8] {
 		return e.TranslationProfiles, nil
 	}
 	return nil, &NotLoadedError{edge: "translation_profiles"}
@@ -266,11 +255,6 @@ func (_m *Organization) QueryActivityLogs() *ActivityLogQuery {
 // QueryUsageRecords queries the "usage_records" edge of the Organization entity.
 func (_m *Organization) QueryUsageRecords() *UsageRecordQuery {
 	return NewOrganizationClient(_m.config).QueryUsageRecords(_m)
-}
-
-// QueryTranslationTemplates queries the "translation_templates" edge of the Organization entity.
-func (_m *Organization) QueryTranslationTemplates() *TranslationTemplateQuery {
-	return NewOrganizationClient(_m.config).QueryTranslationTemplates(_m)
 }
 
 // QueryPromptTemplates queries the "prompt_templates" edge of the Organization entity.

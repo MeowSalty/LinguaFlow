@@ -201,18 +201,6 @@ func (f TranslationProfileFunc) Mutate(ctx context.Context, m ent.Mutation) (ent
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.TranslationProfileMutation", m)
 }
 
-// The TranslationTemplateFunc type is an adapter to allow the use of ordinary
-// function as TranslationTemplate mutator.
-type TranslationTemplateFunc func(context.Context, *ent.TranslationTemplateMutation) (ent.Value, error)
-
-// Mutate calls f(ctx, m).
-func (f TranslationTemplateFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	if mv, ok := m.(*ent.TranslationTemplateMutation); ok {
-		return f(ctx, mv)
-	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.TranslationTemplateMutation", m)
-}
-
 // The UsageRecordFunc type is an adapter to allow the use of ordinary
 // function as UsageRecord mutator.
 type UsageRecordFunc func(context.Context, *ent.UsageRecordMutation) (ent.Value, error)

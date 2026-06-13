@@ -54,9 +54,6 @@ type TranslationJob func(*sql.Selector)
 // TranslationProfile is the predicate function for translationprofile builders.
 type TranslationProfile func(*sql.Selector)
 
-// TranslationTemplate is the predicate function for translationtemplate builders.
-type TranslationTemplate func(*sql.Selector)
-
 // UsageRecord is the predicate function for usagerecord builders.
 type UsageRecord func(*sql.Selector)
 
