@@ -85,16 +85,6 @@ paths:
     $ref: './paths/translation-jobs.yaml#/translationJobRetry'
   /translation-jobs/{translationJobId}/download:
     $ref: './paths/translation-jobs.yaml#/translationJobDownload'
-  /templates:
-    $ref: './paths/templates.yaml#/templates'
-  /templates/{templateId}:
-    $ref: './paths/templates.yaml#/templateById'
-  /templates/{templateId}/copy:
-    $ref: './paths/templates.yaml#/templateCopy'
-  /orgs/{orgId}/templates:
-    $ref: './paths/templates.yaml#/orgTemplates'
-  /orgs/{orgId}/templates/{templateId}:
-    $ref: './paths/templates.yaml#/orgTemplateById'
   /prompt-templates:
     $ref: './paths/prompt-templates.yaml#/promptTemplates'
   /prompt-templates/{promptTemplateId}:
@@ -128,8 +118,6 @@ components:
       $ref: './components/parameters.yaml#/EntryId'
     Stage:
       $ref: './components/parameters.yaml#/Stage'
-    TemplateId:
-      $ref: './components/parameters.yaml#/TemplateId'
     PromptTemplateId:
       $ref: './components/parameters.yaml#/PromptTemplateId'
     TranslationProfileId:
@@ -266,16 +254,6 @@ components:
       $ref: './components/schemas/glossary.yaml#/UpdateGlossaryEntryRequest'
     GlossaryImportResult:
       $ref: './components/schemas/glossary.yaml#/GlossaryImportResult'
-    Template:
-      $ref: './components/schemas/template.yaml#/Template'
-    TemplateListResponse:
-      $ref: './components/schemas/template.yaml#/TemplateListResponse'
-    CreateTemplateRequest:
-      $ref: './components/schemas/template.yaml#/CreateTemplateRequest'
-    UpdateTemplateRequest:
-      $ref: './components/schemas/template.yaml#/UpdateTemplateRequest'
-    CopyTemplateRequest:
-      $ref: './components/schemas/template.yaml#/CopyTemplateRequest'
     PromptTemplate:
       $ref: './components/schemas/prompt-template.yaml#/PromptTemplate'
     PromptTemplateListResponse:
