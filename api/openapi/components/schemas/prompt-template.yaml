@@ -1,0 +1,63 @@
+PromptTemplateScope:
+  type: string
+  enum: [user, org]
+
+PromptTemplate:
+  type: object
+  required: [id, name, description, scope]
+  properties:
+    id:
+      type: integer
+    name:
+      type: string
+    description:
+      type: string
+    scope:
+      $ref: '#/PromptTemplateScope'
+    owner_user_id:
+      type: integer
+    owner_org_id:
+      type: integer
+    system_prompt_content:
+      type: string
+      description: 提示词内容。
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+
+PromptTemplateListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/PromptTemplate'
+
+CreatePromptTemplateRequest:
+  type: object
+  required: [name]
+  properties:
+    name:
+      type: string
+    description:
+      type: string
+    system_prompt_content:
+      type: string
+      description: 提示词内容。
+  additionalProperties: false
+
+UpdatePromptTemplateRequest:
+  type: object
+  properties:
+    name:
+      type: string
+    description:
+      type: string
+    system_prompt_content:
+      type: string
+      description: 提示词内容。
+  additionalProperties: false

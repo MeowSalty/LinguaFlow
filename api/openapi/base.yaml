@@ -95,6 +95,14 @@ paths:
     $ref: './paths/templates.yaml#/orgTemplates'
   /orgs/{orgId}/templates/{templateId}:
     $ref: './paths/templates.yaml#/orgTemplateById'
+  /prompt-templates:
+    $ref: './paths/prompt-templates.yaml#/promptTemplates'
+  /prompt-templates/{promptTemplateId}:
+    $ref: './paths/prompt-templates.yaml#/promptTemplateById'
+  /translation-profiles:
+    $ref: './paths/translation-profiles.yaml#/translationProfiles'
+  /translation-profiles/{translationProfileId}:
+    $ref: './paths/translation-profiles.yaml#/translationProfileById'
   /stats/summary:
     $ref: './paths/stats.yaml#/statsSummary'
   /activity:
@@ -122,6 +130,10 @@ components:
       $ref: './components/parameters.yaml#/Stage'
     TemplateId:
       $ref: './components/parameters.yaml#/TemplateId'
+    PromptTemplateId:
+      $ref: './components/parameters.yaml#/PromptTemplateId'
+    TranslationProfileId:
+      $ref: './components/parameters.yaml#/TranslationProfileId'
     SegmentId:
       $ref: './components/parameters_extra.yaml#/SegmentId'
     Cursor:
@@ -264,3 +276,19 @@ components:
       $ref: './components/schemas/template.yaml#/UpdateTemplateRequest'
     CopyTemplateRequest:
       $ref: './components/schemas/template.yaml#/CopyTemplateRequest'
+    PromptTemplate:
+      $ref: './components/schemas/prompt-template.yaml#/PromptTemplate'
+    PromptTemplateListResponse:
+      $ref: './components/schemas/prompt-template.yaml#/PromptTemplateListResponse'
+    CreatePromptTemplateRequest:
+      $ref: './components/schemas/prompt-template.yaml#/CreatePromptTemplateRequest'
+    UpdatePromptTemplateRequest:
+      $ref: './components/schemas/prompt-template.yaml#/UpdatePromptTemplateRequest'
+    TranslationProfile:
+      $ref: './components/schemas/translation-profile.yaml#/TranslationProfile'
+    TranslationProfileListResponse:
+      $ref: './components/schemas/translation-profile.yaml#/TranslationProfileListResponse'
+    CreateTranslationProfileRequest:
+      $ref: './components/schemas/translation-profile.yaml#/CreateTranslationProfileRequest'
+    UpdateTranslationProfileRequest:
+      $ref: './components/schemas/translation-profile.yaml#/UpdateTranslationProfileRequest'

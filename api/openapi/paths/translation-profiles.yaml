@@ -1,0 +1,83 @@
+translationProfiles:
+  get:
+    operationId: ListTranslationProfiles
+    summary: 列出当前用户的翻译配置
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 翻译配置列表
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/translation-profile.yaml#/TranslationProfileListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  post:
+    operationId: CreateTranslationProfile
+    summary: 创建翻译配置
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/translation-profile.yaml#/CreateTranslationProfileRequest'
+    responses:
+      '201':
+        description: 创建成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/translation-profile.yaml#/TranslationProfile'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+translationProfileById:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/TranslationProfileId'
+  get:
+    operationId: GetTranslationProfile
+    summary: 获取翻译配置详情
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 翻译配置详情
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/translation-profile.yaml#/TranslationProfile'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  put:
+    operationId: UpdateTranslationProfile
+    summary: 更新翻译配置
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/translation-profile.yaml#/UpdateTranslationProfileRequest'
+    responses:
+      '200':
+        description: 更新成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/translation-profile.yaml#/TranslationProfile'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  delete:
+    operationId: DeleteTranslationProfile
+    summary: 删除翻译配置
+    security:
+      - bearerAuth: []
+    responses:
+      '204':
+        description: 删除成功
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
