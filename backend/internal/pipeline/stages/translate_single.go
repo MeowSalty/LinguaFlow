@@ -13,21 +13,15 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 )
 
-// translateSingle 翻译单段（走 JSON 协议，含 S5 占位符补救）。
-// 任何 return nil 路径都表示这段处理结束（无论译完、保留原文，还是补救失败），
-// 因此函数末尾通过 defer 上报一次进度；返回非 nil error 则不计入进度（stage 终止）。
-func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document, idx int, logger *slog.Logger) (retErr error) {
-	defer func() {
-		if retErr == nil {
-			s.reporter().SegmentDone()
-		}
-	}()
-
+// translateSingleInRound 翻译单段（走 JSON 协议，含 S5 占位符补救）。
+// 成功时上报进度并返回 (true, nil)；所有后端均失败时返回 (false, nil)，由调用方 defer 到下一轮。
+// 返回非 nil error 表示 stage 级别终止（如 limiter 错误）。
+func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Document, idx int, round Round, logger *slog.Logger) (bool, error) {
 	seg := &doc.Segments[idx]
 
 	if s.Limiter != nil {
 		if err := s.Limiter.Wait(ctx); err != nil {
-			return err
+			return false, err
 		}
 	}
 
@@ -49,7 +43,7 @@ func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document,
 	}
 	sys, usr, err := s.Renderer.Render(data)
 	if err != nil {
-		return fmt.Errorf("render prompt for seg %s: %w", seg.ID, err)
+		return false, fmt.Errorf("render prompt for seg %s: %w", seg.ID, err)
 	}
 
 	wantIDs := []string{prompt.SingleID}
@@ -58,17 +52,13 @@ func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document,
 		User:       usr,
 		JSONSchema: translationsSchema(wantIDs, s.InlineBootstrap),
 	}
-	backends, err := s.plannedBackends(ctx)
-	if err != nil {
-		return err
-	}
 	var (
 		resp        *backend.Response
 		trans       map[string]string
 		glosEntries []prompt.BootstrapEntry
 		picked      backend.Backend
 	)
-	for _, b := range backends {
+	for _, b := range round.Backends {
 		resp, err = s.callOnce(ctx, b, req)
 		if err != nil {
 			logger.Warn("translate failed, trying next backend",
@@ -87,8 +77,8 @@ func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document,
 		break
 	}
 	if picked == nil {
-		seg.Target = seg.Source
-		return nil
+		seg.Target = ""
+		return false, nil
 	}
 	logger.Debug("segment translated",
 		"seg", seg.ID, "backend", picked.Name(),
@@ -128,17 +118,17 @@ func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document,
 
 		resp2, err2 := s.callOnce(ctx, picked, req2)
 		if err2 != nil {
-			logger.Warn("placeholder retry failed, keep source",
+			logger.Warn("placeholder retry failed, defer to next round",
 				"seg", seg.ID, "backend", picked.Name(), "err", err2)
-			seg.Target = seg.Source
-			return nil
+			seg.Target = ""
+			return false, nil
 		}
 		trans2, glos2, perr2 := parseBatchResponse(resp2.Text, wantIDs)
 		if perr2 != nil {
-			logger.Warn("placeholder retry response parse failed, keep source",
+			logger.Warn("placeholder retry response parse failed, defer to next round",
 				"seg", seg.ID, "backend", picked.Name(), "err", perr2)
-			seg.Target = seg.Source
-			return nil
+			seg.Target = ""
+			return false, nil
 		}
 		s.absorbInlineGlossary(ctx, glos2, trans2, doc.TargetLang, logger)
 		target2 := trans2[prompt.SingleID]
@@ -151,91 +141,13 @@ func (s *Translate) translateSingle(ctx context.Context, doc *pipeline.Document,
 		}
 		seg.Target = target2
 		if still := protect.MissingPlaceholders(seg); len(still) > 0 {
-			logger.Warn("placeholders still missing after retry, keep source",
+			logger.Warn("placeholders still missing after retry, defer to next round",
 				"seg", seg.ID, "backend", picked.Name(), "missing", still)
-			seg.Target = seg.Source
-			return nil
+			seg.Target = ""
+			return false, nil
 		}
 	}
 
-	s.addTM(ctx, doc, seg, logger)
-	return nil
-}
-
-// translateSingleInRound 是 Plan 模式下的单段翻译路径，与 translateSingle 逻辑类似，
-// 但使用 round 级别的后端选择，失败时返回 (false, nil) 以便 defer 到下一轮。
-func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Document, idx int, round runtimeRound, logger *slog.Logger) (bool, error) {
-	seg := &doc.Segments[idx]
-	if s.Limiter != nil {
-		if err := s.Limiter.Wait(ctx); err != nil {
-			return false, err
-		}
-	}
-	glos, tmHints := s.lookupHints(ctx, doc, []int{idx}, logger)
-	prev, next := prompt.BuildContext(doc, idx)
-	data := prompt.Data{
-		SourceLang:        doc.SourceLang,
-		TargetLang:        doc.TargetLang,
-		Source:            seg.Source,
-		PrevContext:       prev,
-		NextContext:       next,
-		Glossary:          glos,
-		TMHints:           tmHints,
-		Vars:              doc.Vars,
-		InlineBootstrap:   s.InlineBootstrap,
-		MaxBootstrapTerms: s.maxBootstrapTerms(),
-		StrictSchema:      true,
-	}
-	sys, usr, err := s.Renderer.Render(data)
-	if err != nil {
-		return false, fmt.Errorf("render prompt for seg %s: %w", seg.ID, err)
-	}
-	wantIDs := []string{prompt.SingleID}
-	req := backend.Request{System: sys, User: usr, JSONSchema: translationsSchema(wantIDs, s.InlineBootstrap)}
-	backends, err := s.plannedBackendsFor(ctx, round.BackendMode, round.BackendOrder)
-	if err != nil {
-		return false, err
-	}
-	var (
-		resp        *backend.Response
-		trans       map[string]string
-		glosEntries []prompt.BootstrapEntry
-		picked      backend.Backend
-	)
-	for _, b := range backends {
-		resp, err = s.callOnce(ctx, b, req)
-		if err != nil {
-			logger.Warn("translate failed, trying next backend", "seg", seg.ID, "backend", b.Name(), "round", round.Name, "err", err)
-			continue
-		}
-		var perr error
-		trans, glosEntries, perr = parseBatchResponse(resp.Text, wantIDs)
-		if perr != nil {
-			logger.Warn("single response parse failed, trying next backend", "seg", seg.ID, "backend", b.Name(), "round", round.Name, "err", perr,
-				"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200))
-			continue
-		}
-		picked = b
-		break
-	}
-	if picked == nil {
-		seg.Target = ""
-		return false, nil
-	}
-	s.absorbInlineGlossary(ctx, glosEntries, trans, doc.TargetLang, logger)
-	target := trans[prompt.SingleID]
-	if s.Repair.PlaceholderNormalize {
-		if normText, normalized := repair.NormalizePlaceholders(target, seg.Protected); len(normalized) > 0 {
-			logger.Info("placeholders normalized", "seg", seg.ID, "normalized", normalized)
-			target = normText
-		}
-	}
-	seg.Target = target
-	if missing := protect.MissingPlaceholders(seg); len(missing) > 0 {
-		logger.Warn("placeholders missing in planned single, defer to next round", "seg", seg.ID, "backend", picked.Name(), "round", round.Name, "missing", missing)
-		seg.Target = ""
-		return false, nil
-	}
 	s.addTM(ctx, doc, seg, logger)
 	s.reporter().SegmentDone()
 	return true, nil

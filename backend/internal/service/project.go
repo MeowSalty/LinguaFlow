@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
@@ -460,7 +459,7 @@ func (s *ProjectService) ResolveStagePlan(ctx context.Context, actorUserID, proj
 		}
 		selected = append(selected, item)
 	}
-	if string(override.BackendMode) == config.BackendModeRestrict {
+	if string(override.BackendMode) == "restrict" {
 		return buildBindingViews(selected), nil
 	}
 	used := make(map[string]struct{}, len(selected))
@@ -747,10 +746,10 @@ func normalizeBackendMode(raw string) (string, error) {
 	switch strings.ToLower(strings.TrimSpace(raw)) {
 	case "", BackendModeInherit:
 		return BackendModeInherit, nil
-	case config.BackendModePrepend:
-		return config.BackendModePrepend, nil
-	case config.BackendModeRestrict:
-		return config.BackendModeRestrict, nil
+	case "prepend":
+		return "prepend", nil
+	case "restrict":
+		return "restrict", nil
 	default:
 		return "", ErrBackendModeInvalid
 	}

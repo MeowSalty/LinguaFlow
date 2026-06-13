@@ -117,23 +117,7 @@ func CloneConfig(in *config.Config) *config.Config {
 	}
 	copyCfg.Prompt.Vars = cloneMap(in.Prompt.Vars)
 	copyCfg.Pipeline.Protect.Rules = append([]string(nil), in.Pipeline.Protect.Rules...)
-	copyCfg.Pipeline.Translate.BackendOrder = append([]string(nil), in.Pipeline.Translate.BackendOrder...)
-	copyCfg.Pipeline.Translate.Plan = cloneTranslatePlan(in.Pipeline.Translate.Plan)
-	copyCfg.Glossary.Bootstrap.BackendOrder = append([]string(nil), in.Glossary.Bootstrap.BackendOrder...)
 	copyCfg.Plugins.Scripts = append([]string(nil), in.Plugins.Scripts...)
 	copyCfg.Server.CORS.AllowedOrigins = append([]string(nil), in.Server.CORS.AllowedOrigins...)
 	return &copyCfg
-}
-
-func cloneTranslatePlan(in []config.TranslateRoundConfig) []config.TranslateRoundConfig {
-	if len(in) == 0 {
-		return nil
-	}
-	out := make([]config.TranslateRoundConfig, 0, len(in))
-	for _, item := range in {
-		copyItem := item
-		copyItem.BackendOrder = append([]string(nil), item.BackendOrder...)
-		out = append(out, copyItem)
-	}
-	return out
 }

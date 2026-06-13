@@ -45,7 +45,16 @@ func runTranslate(cmd *cobra.Command, rt *appCtx, opts translateOptions) error {
 	}
 	defer func() { _ = reporter.Close() }()
 
-	eng, err := engine.New(cfg, rt.logger, reporter)
+	translateBackends, err := engine.BuildBackends(cfg.Backends)
+	if err != nil {
+		return err
+	}
+	eng, err := engine.NewWithOptions(engine.Options{
+		Config:   cfg,
+		Logger:   rt.logger,
+		Reporter: reporter,
+		Rounds:   []engine.Round{{Backends: translateBackends}},
+	})
 	if err != nil {
 		return err
 	}

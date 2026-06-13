@@ -3,14 +3,12 @@ package stages
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"sort"
 	"strings"
 	"sync"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
@@ -18,6 +16,17 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
+
+// Round 描述一轮翻译的执行配置（纯数据，无后端名称引用）。
+type Round struct {
+	Name            string
+	Backends        []backend.Backend
+	BatchSize       int
+	Concurrency     int
+	FallbackShrink  float64
+	RateLimitPerSec int
+	Retry           backend.RetryPolicy
+}
 
 // Translate 对每个 Segment 调用 Backend。具备：
 //   - worker pool（Concurrency）
@@ -33,20 +42,20 @@ import (
 // 当 InlineBootstrap=true 时，回复同时携带 {"glossary":[{"source","target","notes"},...]}，
 // 解析后立刻 Add 到运行时 Glossary；严格合并去重，已存在的 source 不会被覆盖。
 type Translate struct {
-	Selector       backend.Selector
-	Renderer       *prompt.Renderer
-	Glossary       glossary.Glossary
-	TM             tm.TranslationMemory
-	Limiter        backend.RateLimiter
-	Retry          backend.RetryPolicy
+	Rounds   []Round
+	Renderer *prompt.Renderer
+	Glossary glossary.Glossary
+	TM       tm.TranslationMemory
+	Limiter  backend.RateLimiter
+	Retry    backend.RetryPolicy
+
+	// 以下字段保留供外部直接构造时使用，stage 内部使用 Round 级别字段。
 	Concurrency    int
 	BatchSize      int     // <=1 表示禁用批量
 	FallbackShrink float64 // (0,1) 启用递归缩小；0 表示失败后直接降到单段
-	BackendMode    string
-	BackendOrder   []string
-	Plan           []config.TranslateRoundConfig
-	Logger         *slog.Logger
-	Reporter       progress.Reporter
+
+	Logger   *slog.Logger
+	Reporter progress.Reporter
 
 	// Inline 模式：翻译时同时让 LLM 抽术语。
 	InlineBootstrap           bool
@@ -60,7 +69,7 @@ type Translate struct {
 	InlineConflictStrategy string
 
 	// Repair 控制 LLM 响应解析失败 / 部分缺失时的主动修复行为。零值等于不修复
-	// （行为与旧 strict 路径一致）；启用后，processBatchAtSize 改走 lenient 解析，
+	// （行为与旧 strict 路径一致）；启用后，processBatchInRound 改走 lenient 解析，
 	// 在 fatal / partial 时分别决定 shrink 或仅对缺失段单独重试。
 	Repair repair.Options
 }
@@ -75,14 +84,6 @@ func (s *Translate) reporter() progress.Reporter {
 	return s.Reporter
 }
 
-func (s *Translate) plannedBackends(ctx context.Context) ([]backend.Backend, error) {
-	return s.plannedBackendsFor(ctx, s.BackendMode, s.BackendOrder)
-}
-
-func (s *Translate) plannedBackendsFor(ctx context.Context, mode string, order []string) ([]backend.Backend, error) {
-	return s.Selector.Plan(ctx, mode, order)
-}
-
 func (s *Translate) Run(ctx context.Context, doc *pipeline.Document) error {
 	logger := s.Logger
 	if logger == nil {
@@ -91,8 +92,8 @@ func (s *Translate) Run(ctx context.Context, doc *pipeline.Document) error {
 	if s.Renderer == nil {
 		return errors.New("translate: renderer is nil")
 	}
-	if s.Selector == nil {
-		return errors.New("translate: selector is nil")
+	if len(s.Rounds) == 0 {
+		return errors.New("translate: no rounds provided")
 	}
 
 	// 先把跳过段（Skip / 空白）直接落 Target，并收集需要翻译的 idx 列表。
@@ -106,49 +107,18 @@ func (s *Translate) Run(ctx context.Context, doc *pipeline.Document) error {
 		pending = append(pending, i)
 	}
 
-	bs := max(s.BatchSize, 1)
-
-	// 按 batchSize 切批。批内段在 doc.Segments 中不必连续——
-	// 上下文（prev/next）取整批 idx 的最小/最大邻接段。
-	var batches [][]int
-	for i := 0; i < len(pending); i += bs {
-		end := min(i+bs, len(pending))
-		batches = append(batches, pending[i:end])
-	}
-
-	logger.Info("translating",
-		"segments", len(pending),
-		"batches", len(batches),
-		"concurrency", s.Concurrency,
-		"batch_size", bs)
-
 	rep := s.reporter()
 	rep.StageStart("translate", len(pending))
 	defer rep.StageDone()
 
-	if len(s.Plan) > 0 {
-		return s.runPlannedRounds(ctx, doc, pending, logger)
-	}
-
-	return runConcurrent(ctx, len(batches), s.Concurrency, func(ctx context.Context, bidx int) error {
-		return s.processBatchAtSize(ctx, doc, batches[bidx], bs, logger)
-	})
+	return s.runRounds(ctx, doc, pending, logger)
 }
 
-type runtimeRound struct {
-	Name         string
-	BatchSize    int
-	Concurrency  int
-	BackendMode  string
-	BackendOrder []string
-}
-
-func (s *Translate) runPlannedRounds(ctx context.Context, doc *pipeline.Document, pending []int, logger *slog.Logger) error {
-	rounds := s.runtimeRounds()
+func (s *Translate) runRounds(ctx context.Context, doc *pipeline.Document, pending []int, logger *slog.Logger) error {
 	remaining := append([]int(nil), pending...)
 	rep := s.reporter()
 
-	for ridx, round := range rounds {
+	for ridx, round := range s.Rounds {
 		if len(remaining) == 0 {
 			break
 		}
@@ -159,9 +129,7 @@ func (s *Translate) runPlannedRounds(ctx context.Context, doc *pipeline.Document
 			"pending", len(remaining),
 			"batches", len(batches),
 			"batch_size", round.BatchSize,
-			"concurrency", round.Concurrency,
-			"backend_mode", round.BackendMode,
-			"backend_order", round.BackendOrder)
+			"concurrency", round.Concurrency)
 
 		var (
 			mu          sync.Mutex
@@ -200,40 +168,6 @@ func (s *Translate) runPlannedRounds(ctx context.Context, doc *pipeline.Document
 		logger.Warn("translate plan exhausted, keep source for unresolved segments", "count", len(remaining))
 	}
 	return nil
-}
-
-func (s *Translate) runtimeRounds() []runtimeRound {
-	rounds := make([]runtimeRound, 0, len(s.Plan))
-	for i, r := range s.Plan {
-		name := r.Name
-		if name == "" {
-			name = fmt.Sprintf("round-%d", i+1)
-		}
-		batchSize := r.BatchSize
-		if batchSize < 1 {
-			batchSize = max(s.BatchSize, 1)
-		}
-		concurrency := r.Concurrency
-		if concurrency < 1 {
-			concurrency = max(s.Concurrency, 1)
-		}
-		mode := r.BackendMode
-		if mode == "" {
-			mode = s.BackendMode
-		}
-		order := append([]string(nil), r.BackendOrder...)
-		if len(order) == 0 && len(s.BackendOrder) > 0 {
-			order = append(order, s.BackendOrder...)
-		}
-		rounds = append(rounds, runtimeRound{
-			Name:         name,
-			BatchSize:    batchSize,
-			Concurrency:  concurrency,
-			BackendMode:  mode,
-			BackendOrder: order,
-		})
-	}
-	return rounds
 }
 
 func buildContinuousPendingBatches(pending []int, target int) [][]int {

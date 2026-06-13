@@ -129,17 +129,17 @@ func (r *BaseRunner) resolvePath(raw string) (string, error) {
 
 // buildBackendConfig 解析后端计划并填充配置。
 // 这是各 Runner 的 buildJobConfig 方法共享的公共逻辑。
-func (r *BaseRunner) buildBackendConfig(ctx context.Context, cfg *config.Config, actorUserID, projectID int) error {
+// 返回值：(translateBackends, bootstrapBackends, error)。
+// bootstrapBackends 可能为 nil（项目未配置 bootstrap 后端时）。
+func (r *BaseRunner) buildBackendConfig(ctx context.Context, cfg *config.Config, actorUserID, projectID int) ([]service.ProjectBackendBinding, []service.ProjectBackendBinding, error) {
 	translatePlan, err := r.projects.ResolveStagePlan(ctx, actorUserID, projectID, service.StageTranslate)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	if len(translatePlan) == 0 {
-		return fmt.Errorf("worker: project %d has no backend plan", projectID)
+		return nil, nil, fmt.Errorf("worker: project %d has no backend plan", projectID)
 	}
 	cfg.Backends = make([]config.BackendConfig, 0, len(translatePlan))
-	cfg.Pipeline.Translate.BackendMode = config.BackendModeRestrict
-	cfg.Pipeline.Translate.BackendOrder = make([]string, 0, len(translatePlan))
 	priorityBase := len(translatePlan)
 	for i, binding := range translatePlan {
 		cfg.Backends = append(cfg.Backends, config.BackendConfig{
@@ -149,15 +149,10 @@ func (r *BaseRunner) buildBackendConfig(ctx context.Context, cfg *config.Config,
 			Priority: priorityBase - i,
 			Options:  cloneAnyMap(binding.Options),
 		})
-		cfg.Pipeline.Translate.BackendOrder = append(cfg.Pipeline.Translate.BackendOrder, binding.Name)
 	}
 	bootstrapPlan, bootstrapErr := r.projects.ResolveStagePlan(ctx, actorUserID, projectID, service.StageBootstrap)
-	if bootstrapErr == nil && len(bootstrapPlan) > 0 {
-		cfg.Glossary.Bootstrap.BackendMode = config.BackendModeRestrict
-		cfg.Glossary.Bootstrap.BackendOrder = make([]string, 0, len(bootstrapPlan))
-		for _, binding := range bootstrapPlan {
-			cfg.Glossary.Bootstrap.BackendOrder = append(cfg.Glossary.Bootstrap.BackendOrder, binding.Name)
-		}
+	if bootstrapErr != nil {
+		bootstrapPlan = nil
 	}
-	return nil
+	return translatePlan, bootstrapPlan, nil
 }

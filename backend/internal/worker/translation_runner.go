@@ -9,6 +9,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
@@ -105,7 +106,7 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	if len(selectedRows) == 0 {
 		return r.jobs.MarkJobResourceCompleted(ctx, item.ID, outputRel, 0)
 	}
-	jobCfg, err := r.buildJobConfig(ctx, exec)
+	jobCfg, bootstrapBindings, err := r.buildJobConfig(ctx, exec)
 	if err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
@@ -126,7 +127,35 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
 	}
-	eng, err := engine.NewWithRuntime(jobCfg, r.logger, nil, engine.RuntimeResources{Glossary: runtimeGlossary, TM: memory})
+	translateBackends, err := engine.BuildBackends(jobCfg.Backends)
+	if err != nil {
+		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
+		return nil
+	}
+	var bootstrapBackends []backend.Backend
+	if len(bootstrapBindings) > 0 {
+		bootstrapCfgs := make([]config.BackendConfig, 0, len(bootstrapBindings))
+		for _, b := range bootstrapBindings {
+			bootstrapCfgs = append(bootstrapCfgs, config.BackendConfig{
+				Name: b.Name, Type: b.Type, Enabled: true, Options: b.Options,
+			})
+		}
+		bootstrapBackends, err = engine.BuildBackends(bootstrapCfgs)
+		if err != nil {
+			for _, b := range translateBackends {
+				_ = b.Close()
+			}
+			_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
+			return nil
+		}
+	}
+	eng, err := engine.NewWithOptions(engine.Options{
+		Config:            jobCfg,
+		Logger:            r.logger,
+		Resources:         engine.RuntimeResources{Glossary: runtimeGlossary, TM: memory},
+		Rounds:            []engine.Round{{Backends: translateBackends}},
+		BootstrapBackends: bootstrapBackends,
+	})
 	if err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
@@ -167,18 +196,20 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 }
 
 // buildJobConfig 构建翻译任务配置：合并翻译配置、解析后端计划、校验配置。
-func (r *TranslationRunner) buildJobConfig(ctx context.Context, exec *service.TranslationJobExecution) (*config.Config, error) {
+// 返回配置和 bootstrap 后端绑定（可能为 nil）。
+func (r *TranslationRunner) buildJobConfig(ctx context.Context, exec *service.TranslationJobExecution) (*config.Config, []service.ProjectBackendBinding, error) {
 	cfg, err := service.MergeTranslationConfig(r.baseConfig, nil, exec.Job.TranslationConfig)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if err := r.buildBackendConfig(ctx, cfg, exec.ActorUserID, exec.Project.ID); err != nil {
-		return nil, err
+	_, bootstrapBindings, err := r.buildBackendConfig(ctx, cfg, exec.ActorUserID, exec.Project.ID)
+	if err != nil {
+		return nil, nil, err
 	}
 	if err := cfg.Validate(); err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return cfg, nil
+	return cfg, bootstrapBindings, nil
 }
 
 // buildRuntimeGlossary 根据配置构建运行时术语表，未启用则返回空实现。
