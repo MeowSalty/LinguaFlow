@@ -173,21 +173,9 @@ func (s *TranslationProfileService) Delete(ctx context.Context, id int) error {
 
 // validateProfileConfig 校验翻译配置的有效性。
 func validateProfileConfig(cfg *schema.TranslationProfileConfigData) error {
-	if len(cfg.Rounds) == 0 {
-		return fmt.Errorf("%w: rounds must not be empty", ErrTranslationProfileConfigInvalid)
-	}
-	for i, round := range cfg.Rounds {
-		if round.BatchSize < 1 {
-			return fmt.Errorf("%w: rounds[%d].batch_size must be >= 1", ErrTranslationProfileConfigInvalid, i)
-		}
-		if round.Concurrency < 1 {
-			return fmt.Errorf("%w: rounds[%d].concurrency must be >= 1", ErrTranslationProfileConfigInvalid, i)
-		}
-		if round.BackendMode != "prepend" && round.BackendMode != "restrict" {
-			return fmt.Errorf("%w: rounds[%d].backend_mode must be 'prepend' or 'restrict'", ErrTranslationProfileConfigInvalid, i)
-		}
-		if round.FallbackShrink < 0 || round.FallbackShrink > 1 {
-			return fmt.Errorf("%w: rounds[%d].fallback_shrink must be in [0, 1]", ErrTranslationProfileConfigInvalid, i)
+	if cfg.Split.Enabled {
+		if cfg.Split.MaxChars < 1 {
+			return fmt.Errorf("%w: split.max_chars must be >= 1 when split is enabled", ErrTranslationProfileConfigInvalid)
 		}
 	}
 	return nil

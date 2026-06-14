@@ -142,6 +142,24 @@ func (e CreateProjectRequestResourceScope) Valid() bool {
 	}
 }
 
+// Defines values for ExecutionPlanTemplateScope.
+const (
+	ExecutionPlanTemplateScopeOrg  ExecutionPlanTemplateScope = "org"
+	ExecutionPlanTemplateScopeUser ExecutionPlanTemplateScope = "user"
+)
+
+// Valid indicates whether the value is a known member of the ExecutionPlanTemplateScope enum.
+func (e ExecutionPlanTemplateScope) Valid() bool {
+	switch e {
+	case ExecutionPlanTemplateScopeOrg:
+		return true
+	case ExecutionPlanTemplateScopeUser:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for OrganizationMemberRole.
 const (
 	OrganizationMemberRoleAdmin  OrganizationMemberRole = "admin"
@@ -196,24 +214,6 @@ func (e ProfileBootstrapConfigMode) Valid() bool {
 	case ProfileBootstrapConfigModeOff:
 		return true
 	case ProfileBootstrapConfigModePre:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for ProfileRoundConfigBackendMode.
-const (
-	ProfileRoundConfigBackendModePrepend  ProfileRoundConfigBackendMode = "prepend"
-	ProfileRoundConfigBackendModeRestrict ProfileRoundConfigBackendMode = "restrict"
-)
-
-// Valid indicates whether the value is a known member of the ProfileRoundConfigBackendMode enum.
-func (e ProfileRoundConfigBackendMode) Valid() bool {
-	switch e {
-	case ProfileRoundConfigBackendModePrepend:
-		return true
-	case ProfileRoundConfigBackendModeRestrict:
 		return true
 	default:
 		return false
@@ -349,48 +349,6 @@ func (e SegmentReviewRequestAction) Valid() bool {
 	case SegmentReviewRequestActionEdit:
 		return true
 	case SegmentReviewRequestActionReject:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for SetStageOverrideRequestBackendMode.
-const (
-	SetStageOverrideRequestBackendModeInherit  SetStageOverrideRequestBackendMode = "inherit"
-	SetStageOverrideRequestBackendModePrepend  SetStageOverrideRequestBackendMode = "prepend"
-	SetStageOverrideRequestBackendModeRestrict SetStageOverrideRequestBackendMode = "restrict"
-)
-
-// Valid indicates whether the value is a known member of the SetStageOverrideRequestBackendMode enum.
-func (e SetStageOverrideRequestBackendMode) Valid() bool {
-	switch e {
-	case SetStageOverrideRequestBackendModeInherit:
-		return true
-	case SetStageOverrideRequestBackendModePrepend:
-		return true
-	case SetStageOverrideRequestBackendModeRestrict:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for StageBackendOverrideBackendMode.
-const (
-	Inherit  StageBackendOverrideBackendMode = "inherit"
-	Prepend  StageBackendOverrideBackendMode = "prepend"
-	Restrict StageBackendOverrideBackendMode = "restrict"
-)
-
-// Valid indicates whether the value is a known member of the StageBackendOverrideBackendMode enum.
-func (e StageBackendOverrideBackendMode) Valid() bool {
-	switch e {
-	case Inherit:
-		return true
-	case Prepend:
-		return true
-	case Restrict:
 		return true
 	default:
 		return false
@@ -550,24 +508,6 @@ func (e UpdateProjectRequestResourceScope) Valid() bool {
 	case UpdateProjectRequestResourceScopeOrganization:
 		return true
 	case UpdateProjectRequestResourceScopeProject:
-		return true
-	default:
-		return false
-	}
-}
-
-// Defines values for Stage.
-const (
-	Bootstrap Stage = "bootstrap"
-	Translate Stage = "translate"
-)
-
-// Valid indicates whether the value is a known member of the Stage enum.
-func (e Stage) Valid() bool {
-	switch e {
-	case Bootstrap:
-		return true
-	case Translate:
 		return true
 	default:
 		return false
@@ -774,6 +714,13 @@ type CreateBackendRequest struct {
 // CreateBackendRequestType defines model for CreateBackendRequest.Type.
 type CreateBackendRequestType string
 
+// CreateExecutionPlanTemplateRequest defines model for CreateExecutionPlanTemplateRequest.
+type CreateExecutionPlanTemplateRequest struct {
+	Description *string                `json:"description,omitempty"`
+	Name        string                 `json:"name"`
+	Rounds      []ExecutionRoundConfig `json:"rounds"`
+}
+
 // CreateGlossaryEntryRequest defines model for CreateGlossaryEntryRequest.
 type CreateGlossaryEntryRequest struct {
 	CaseSensitive *bool   `json:"case_sensitive,omitempty"`
@@ -807,6 +754,8 @@ type CreatePromptTemplateRequest struct {
 
 // CreateTranslationJobRequest defines model for CreateTranslationJobRequest.
 type CreateTranslationJobRequest struct {
+	// ExecutionPlanId 执行计划模板 ID
+	ExecutionPlanId   int                     `json:"execution_plan_id"`
 	ResourceIds       *[]int                  `json:"resource_ids,omitempty"`
 	SegmentIds        *[]int                  `json:"segment_ids,omitempty"`
 	TranslationConfig *map[string]interface{} `json:"translation_config,omitempty"`
@@ -817,6 +766,47 @@ type CreateTranslationProfileRequest struct {
 	Config      *TranslationProfileConfig `json:"config,omitempty"`
 	Description *string                   `json:"description,omitempty"`
 	Name        string                    `json:"name"`
+}
+
+// ExecutionPlanTemplate defines model for ExecutionPlanTemplate.
+type ExecutionPlanTemplate struct {
+	CreatedAt   *time.Time                 `json:"created_at,omitempty"`
+	Description *string                    `json:"description,omitempty"`
+	Id          int                        `json:"id"`
+	Name        string                     `json:"name"`
+	OwnerOrgId  *int                       `json:"owner_org_id,omitempty"`
+	OwnerUserId *int                       `json:"owner_user_id,omitempty"`
+	Rounds      []ExecutionRoundConfig     `json:"rounds"`
+	Scope       ExecutionPlanTemplateScope `json:"scope"`
+	UpdatedAt   *time.Time                 `json:"updated_at,omitempty"`
+}
+
+// ExecutionPlanTemplateListResponse defines model for ExecutionPlanTemplateListResponse.
+type ExecutionPlanTemplateListResponse struct {
+	Items []ExecutionPlanTemplate `json:"items"`
+}
+
+// ExecutionPlanTemplateScope defines model for ExecutionPlanTemplateScope.
+type ExecutionPlanTemplateScope string
+
+// ExecutionRoundConfig defines model for ExecutionRoundConfig.
+type ExecutionRoundConfig struct {
+	// BackendId 后端 ID（Backend 单表全局唯一）
+	BackendId      int      `json:"backend_id"`
+	BatchSize      int      `json:"batch_size"`
+	Concurrency    int      `json:"concurrency"`
+	FallbackShrink *float32 `json:"fallback_shrink,omitempty"`
+
+	// Name 轮次名称（可选，空值自动生成 round-N）
+	Name *string `json:"name,omitempty"`
+
+	// ProfileId 策略模板 ID（TranslationProfile 单表全局唯一）
+	ProfileId int `json:"profile_id"`
+
+	// PromptTemplateId 提示词模板 ID（PromptTemplate 单表全局唯一）
+	PromptTemplateId int          `json:"prompt_template_id"`
+	RateLimitPerSec  *int         `json:"rate_limit_per_sec,omitempty"`
+	Retry            *RetryConfig `json:"retry,omitempty"`
 }
 
 // GlossaryEntry defines model for GlossaryEntry.
@@ -972,27 +962,6 @@ type ProfileRepairConfig struct {
 	SchemaAliases        bool    `json:"schema_aliases"`
 }
 
-// ProfileRetryConfig defines model for ProfileRetryConfig.
-type ProfileRetryConfig struct {
-	BackoffMs   int  `json:"backoff_ms"`
-	Jitter      bool `json:"jitter"`
-	MaxAttempts int  `json:"max_attempts"`
-}
-
-// ProfileRoundConfig defines model for ProfileRoundConfig.
-type ProfileRoundConfig struct {
-	BackendMode     ProfileRoundConfigBackendMode `json:"backend_mode"`
-	BackendOrder    []int                         `json:"backend_order"`
-	BatchSize       int                           `json:"batch_size"`
-	Concurrency     int                           `json:"concurrency"`
-	FallbackShrink  float64                       `json:"fallback_shrink"`
-	RateLimitPerSec int                           `json:"rate_limit_per_sec"`
-	Retry           ProfileRetryConfig            `json:"retry"`
-}
-
-// ProfileRoundConfigBackendMode defines model for ProfileRoundConfig.BackendMode.
-type ProfileRoundConfigBackendMode string
-
 // ProfileSplitConfig defines model for ProfileSplitConfig.
 type ProfileSplitConfig struct {
 	Enabled  bool   `json:"enabled"`
@@ -1017,22 +986,6 @@ type Project struct {
 
 // ProjectResourceScope defines model for Project.ResourceScope.
 type ProjectResourceScope string
-
-// ProjectBackendBinding defines model for ProjectBackendBinding.
-type ProjectBackendBinding struct {
-	BackendId  int                     `json:"backend_id"`
-	Name       string                  `json:"name"`
-	Options    *map[string]interface{} `json:"options,omitempty"`
-	OrderIndex int                     `json:"order_index"`
-	Priority   int                     `json:"priority"`
-	Type       string                  `json:"type"`
-}
-
-// ProjectBackendSettings defines model for ProjectBackendSettings.
-type ProjectBackendSettings struct {
-	Backends       []ProjectBackendBinding          `json:"backends"`
-	StageOverrides *map[string]StageBackendOverride `json:"stage_overrides,omitempty"`
-}
 
 // ProjectListResponse defines model for ProjectListResponse.
 type ProjectListResponse struct {
@@ -1181,6 +1134,13 @@ type RetranslateResponse struct {
 	ResetCount int `json:"reset_count"`
 }
 
+// RetryConfig defines model for RetryConfig.
+type RetryConfig struct {
+	BackoffMs   *int  `json:"backoff_ms,omitempty"`
+	Jitter      *bool `json:"jitter,omitempty"`
+	MaxAttempts *int  `json:"max_attempts,omitempty"`
+}
+
 // Segment defines model for Segment.
 type Segment struct {
 	CreatedAt     time.Time `json:"created_at"`
@@ -1210,39 +1170,13 @@ type SegmentReviewRequest struct {
 // SegmentReviewRequestAction 审核操作：approve=通过，reject=拒绝，edit=编辑译文
 type SegmentReviewRequestAction string
 
-// SetBackendOrderRequest defines model for SetBackendOrderRequest.
-type SetBackendOrderRequest struct {
-	Bindings []struct {
-		BackendId int `json:"backend_id"`
-	} `json:"bindings"`
-}
-
-// SetStageOverrideRequest defines model for SetStageOverrideRequest.
-type SetStageOverrideRequest struct {
-	BackendMode  SetStageOverrideRequestBackendMode `json:"backend_mode"`
-	BackendOrder *[]string                          `json:"backend_order,omitempty"`
-	Stage        string                             `json:"stage"`
-}
-
-// SetStageOverrideRequestBackendMode defines model for SetStageOverrideRequest.BackendMode.
-type SetStageOverrideRequestBackendMode string
-
-// StageBackendOverride defines model for StageBackendOverride.
-type StageBackendOverride struct {
-	BackendMode  StageBackendOverrideBackendMode `json:"backend_mode"`
-	BackendOrder *[]string                       `json:"backend_order,omitempty"`
-	Stage        string                          `json:"stage"`
-}
-
-// StageBackendOverrideBackendMode defines model for StageBackendOverride.BackendMode.
-type StageBackendOverrideBackendMode string
-
 // TranslationJob defines model for TranslationJob.
 type TranslationJob struct {
 	CompletedResources int                       `json:"completed_resources"`
 	CompletedSegments  int                       `json:"completed_segments"`
 	CreatedAt          time.Time                 `json:"created_at"`
 	ErrorMessage       *string                   `json:"error_message,omitempty"`
+	ExecutionPlanId    int                       `json:"execution_plan_id"`
 	FailedResources    int                       `json:"failed_resources"`
 	Id                 int                       `json:"id"`
 	JobResources       *[]TranslationJobResource `json:"job_resources,omitempty"`
@@ -1304,7 +1238,6 @@ type TranslationProfileConfig struct {
 	Postprocess ProfilePostprocessConfig `json:"postprocess"`
 	Protect     ProfileProtectConfig     `json:"protect"`
 	Repair      ProfileRepairConfig      `json:"repair"`
-	Rounds      []ProfileRoundConfig     `json:"rounds"`
 	Split       ProfileSplitConfig       `json:"split"`
 }
 
@@ -1331,6 +1264,13 @@ type UpdateBackendRequestType string
 type UpdateCurrentUserRequest struct {
 	DisplayName *string              `json:"display_name,omitempty"`
 	Email       *openapi_types.Email `json:"email,omitempty"`
+}
+
+// UpdateExecutionPlanTemplateRequest defines model for UpdateExecutionPlanTemplateRequest.
+type UpdateExecutionPlanTemplateRequest struct {
+	Description *string                 `json:"description,omitempty"`
+	Name        *string                 `json:"name,omitempty"`
+	Rounds      *[]ExecutionRoundConfig `json:"rounds,omitempty"`
 }
 
 // UpdateGlossaryEntryRequest defines model for UpdateGlossaryEntryRequest.
@@ -1408,6 +1348,9 @@ type Cursor = string
 // EntryId defines model for EntryId.
 type EntryId = int
 
+// ExecutionPlanTemplateId defines model for ExecutionPlanTemplateId.
+type ExecutionPlanTemplateId = int
+
 // Limit defines model for Limit.
 type Limit = int
 
@@ -1425,9 +1368,6 @@ type ResourceId = int
 
 // SegmentId defines model for SegmentId.
 type SegmentId = int
-
-// Stage defines model for Stage.
-type Stage string
 
 // TranslationJobId defines model for TranslationJobId.
 type TranslationJobId = int
@@ -1533,6 +1473,12 @@ type CreateUserBackendJSONRequestBody = CreateBackendRequest
 // UpdateUserBackendJSONRequestBody defines body for UpdateUserBackend for application/json ContentType.
 type UpdateUserBackendJSONRequestBody = UpdateBackendRequest
 
+// CreateExecutionPlanTemplateJSONRequestBody defines body for CreateExecutionPlanTemplate for application/json ContentType.
+type CreateExecutionPlanTemplateJSONRequestBody = CreateExecutionPlanTemplateRequest
+
+// UpdateExecutionPlanTemplateJSONRequestBody defines body for UpdateExecutionPlanTemplate for application/json ContentType.
+type UpdateExecutionPlanTemplateJSONRequestBody = UpdateExecutionPlanTemplateRequest
+
 // CreateOrganizationJSONRequestBody defines body for CreateOrganization for application/json ContentType.
 type CreateOrganizationJSONRequestBody = OrganizationRequest
 
@@ -1556,9 +1502,6 @@ type CreateProjectJSONRequestBody = CreateProjectRequest
 
 // UpdateProjectJSONRequestBody defines body for UpdateProject for application/json ContentType.
 type UpdateProjectJSONRequestBody = UpdateProjectRequest
-
-// SetProjectBackendOrderJSONRequestBody defines body for SetProjectBackendOrder for application/json ContentType.
-type SetProjectBackendOrderJSONRequestBody = SetBackendOrderRequest
 
 // CreateGlossaryEntryJSONRequestBody defines body for CreateGlossaryEntry for application/json ContentType.
 type CreateGlossaryEntryJSONRequestBody = CreateGlossaryEntryRequest
@@ -1589,9 +1532,6 @@ type UpdateResourceSegmentJSONRequestBody = ResourceSegmentUpdateRequest
 
 // ReviewResourceSegmentJSONRequestBody defines body for ReviewResourceSegment for application/json ContentType.
 type ReviewResourceSegmentJSONRequestBody = SegmentReviewRequest
-
-// SetStageBackendOverrideJSONRequestBody defines body for SetStageBackendOverride for application/json ContentType.
-type SetStageBackendOverrideJSONRequestBody = SetStageOverrideRequest
 
 // CreateTranslationJobJSONRequestBody defines body for CreateTranslationJob for application/json ContentType.
 type CreateTranslationJobJSONRequestBody = CreateTranslationJobRequest
@@ -1643,6 +1583,21 @@ type ServerInterface interface {
 	// 更新个人后端
 	// (PUT /backends/{backendId})
 	UpdateUserBackend(w http.ResponseWriter, r *http.Request, backendId BackendId)
+	// 列出当前用户的执行计划模板
+	// (GET /execution-plan-templates)
+	ListExecutionPlanTemplates(w http.ResponseWriter, r *http.Request)
+	// 创建执行计划模板
+	// (POST /execution-plan-templates)
+	CreateExecutionPlanTemplate(w http.ResponseWriter, r *http.Request)
+	// 删除执行计划模板
+	// (DELETE /execution-plan-templates/{executionPlanTemplateId})
+	DeleteExecutionPlanTemplate(w http.ResponseWriter, r *http.Request, executionPlanTemplateId ExecutionPlanTemplateId)
+	// 获取执行计划模板详情
+	// (GET /execution-plan-templates/{executionPlanTemplateId})
+	GetExecutionPlanTemplate(w http.ResponseWriter, r *http.Request, executionPlanTemplateId ExecutionPlanTemplateId)
+	// 更新执行计划模板
+	// (PUT /execution-plan-templates/{executionPlanTemplateId})
+	UpdateExecutionPlanTemplate(w http.ResponseWriter, r *http.Request, executionPlanTemplateId ExecutionPlanTemplateId)
 	// 列出当前用户所属组织
 	// (GET /orgs)
 	ListOrganizations(w http.ResponseWriter, r *http.Request)
@@ -1697,12 +1652,6 @@ type ServerInterface interface {
 	// 更新项目
 	// (PUT /projects/{projectId})
 	UpdateProject(w http.ResponseWriter, r *http.Request, projectId ProjectId)
-	// 获取项目后端设置
-	// (GET /projects/{projectId}/backends)
-	GetProjectBackends(w http.ResponseWriter, r *http.Request, projectId ProjectId)
-	// 设置项目后端顺序
-	// (PUT /projects/{projectId}/backends)
-	SetProjectBackendOrder(w http.ResponseWriter, r *http.Request, projectId ProjectId)
 	// 列出术语条目
 	// (GET /projects/{projectId}/glossary)
 	ListGlossaryEntries(w http.ResponseWriter, r *http.Request, projectId ProjectId)
@@ -1766,12 +1715,6 @@ type ServerInterface interface {
 	// 审核单个段落（通过/拒绝/编辑）
 	// (PATCH /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/review)
 	ReviewResourceSegment(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId, segmentId SegmentId)
-	// 设置阶段后端覆盖
-	// (PUT /projects/{projectId}/stages/{stage}/override)
-	SetStageBackendOverride(w http.ResponseWriter, r *http.Request, projectId ProjectId, stage Stage)
-	// 查询阶段执行计划
-	// (GET /projects/{projectId}/stages/{stage}/plan)
-	GetStagePlan(w http.ResponseWriter, r *http.Request, projectId ProjectId, stage Stage)
 	// 列出项目翻译任务
 	// (GET /projects/{projectId}/translation-jobs)
 	ListTranslationJobs(w http.ResponseWriter, r *http.Request, projectId ProjectId, params ListTranslationJobsParams)
@@ -1892,6 +1835,36 @@ func (_ Unimplemented) UpdateUserBackend(w http.ResponseWriter, r *http.Request,
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// 列出当前用户的执行计划模板
+// (GET /execution-plan-templates)
+func (_ Unimplemented) ListExecutionPlanTemplates(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 创建执行计划模板
+// (POST /execution-plan-templates)
+func (_ Unimplemented) CreateExecutionPlanTemplate(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 删除执行计划模板
+// (DELETE /execution-plan-templates/{executionPlanTemplateId})
+func (_ Unimplemented) DeleteExecutionPlanTemplate(w http.ResponseWriter, r *http.Request, executionPlanTemplateId ExecutionPlanTemplateId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 获取执行计划模板详情
+// (GET /execution-plan-templates/{executionPlanTemplateId})
+func (_ Unimplemented) GetExecutionPlanTemplate(w http.ResponseWriter, r *http.Request, executionPlanTemplateId ExecutionPlanTemplateId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 更新执行计划模板
+// (PUT /execution-plan-templates/{executionPlanTemplateId})
+func (_ Unimplemented) UpdateExecutionPlanTemplate(w http.ResponseWriter, r *http.Request, executionPlanTemplateId ExecutionPlanTemplateId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // 列出当前用户所属组织
 // (GET /orgs)
 func (_ Unimplemented) ListOrganizations(w http.ResponseWriter, r *http.Request) {
@@ -1997,18 +1970,6 @@ func (_ Unimplemented) GetProject(w http.ResponseWriter, r *http.Request, projec
 // 更新项目
 // (PUT /projects/{projectId})
 func (_ Unimplemented) UpdateProject(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// 获取项目后端设置
-// (GET /projects/{projectId}/backends)
-func (_ Unimplemented) GetProjectBackends(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// 设置项目后端顺序
-// (PUT /projects/{projectId}/backends)
-func (_ Unimplemented) SetProjectBackendOrder(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2135,18 +2096,6 @@ func (_ Unimplemented) UpdateResourceSegment(w http.ResponseWriter, r *http.Requ
 // 审核单个段落（通过/拒绝/编辑）
 // (PATCH /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/review)
 func (_ Unimplemented) ReviewResourceSegment(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId, segmentId SegmentId) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// 设置阶段后端覆盖
-// (PUT /projects/{projectId}/stages/{stage}/override)
-func (_ Unimplemented) SetStageBackendOverride(w http.ResponseWriter, r *http.Request, projectId ProjectId, stage Stage) {
-	w.WriteHeader(http.StatusNotImplemented)
-}
-
-// 查询阶段执行计划
-// (GET /projects/{projectId}/stages/{stage}/plan)
-func (_ Unimplemented) GetStagePlan(w http.ResponseWriter, r *http.Request, projectId ProjectId, stage Stage) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -2475,6 +2424,139 @@ func (siw *ServerInterfaceWrapper) UpdateUserBackend(w http.ResponseWriter, r *h
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateUserBackend(w, r, backendId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ListExecutionPlanTemplates operation middleware
+func (siw *ServerInterfaceWrapper) ListExecutionPlanTemplates(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ListExecutionPlanTemplates(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateExecutionPlanTemplate operation middleware
+func (siw *ServerInterfaceWrapper) CreateExecutionPlanTemplate(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateExecutionPlanTemplate(w, r)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteExecutionPlanTemplate operation middleware
+func (siw *ServerInterfaceWrapper) DeleteExecutionPlanTemplate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "executionPlanTemplateId" -------------
+	var executionPlanTemplateId ExecutionPlanTemplateId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "executionPlanTemplateId", chi.URLParam(r, "executionPlanTemplateId"), &executionPlanTemplateId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "executionPlanTemplateId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteExecutionPlanTemplate(w, r, executionPlanTemplateId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetExecutionPlanTemplate operation middleware
+func (siw *ServerInterfaceWrapper) GetExecutionPlanTemplate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "executionPlanTemplateId" -------------
+	var executionPlanTemplateId ExecutionPlanTemplateId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "executionPlanTemplateId", chi.URLParam(r, "executionPlanTemplateId"), &executionPlanTemplateId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "executionPlanTemplateId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetExecutionPlanTemplate(w, r, executionPlanTemplateId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// UpdateExecutionPlanTemplate operation middleware
+func (siw *ServerInterfaceWrapper) UpdateExecutionPlanTemplate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "executionPlanTemplateId" -------------
+	var executionPlanTemplateId ExecutionPlanTemplateId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "executionPlanTemplateId", chi.URLParam(r, "executionPlanTemplateId"), &executionPlanTemplateId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "executionPlanTemplateId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.UpdateExecutionPlanTemplate(w, r, executionPlanTemplateId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3008,68 +3090,6 @@ func (siw *ServerInterfaceWrapper) UpdateProject(w http.ResponseWriter, r *http.
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.UpdateProject(w, r, projectId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetProjectBackends operation middleware
-func (siw *ServerInterfaceWrapper) GetProjectBackends(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "projectId" -------------
-	var projectId ProjectId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetProjectBackends(w, r, projectId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// SetProjectBackendOrder operation middleware
-func (siw *ServerInterfaceWrapper) SetProjectBackendOrder(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "projectId" -------------
-	var projectId ProjectId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.SetProjectBackendOrder(w, r, projectId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -3943,86 +3963,6 @@ func (siw *ServerInterfaceWrapper) ReviewResourceSegment(w http.ResponseWriter, 
 	handler.ServeHTTP(w, r)
 }
 
-// SetStageBackendOverride operation middleware
-func (siw *ServerInterfaceWrapper) SetStageBackendOverride(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "projectId" -------------
-	var projectId ProjectId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "stage" -------------
-	var stage Stage
-
-	err = runtime.BindStyledParameterWithOptions("simple", "stage", chi.URLParam(r, "stage"), &stage, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "stage", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.SetStageBackendOverride(w, r, projectId, stage)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetStagePlan operation middleware
-func (siw *ServerInterfaceWrapper) GetStagePlan(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "projectId" -------------
-	var projectId ProjectId
-
-	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "stage" -------------
-	var stage Stage
-
-	err = runtime.BindStyledParameterWithOptions("simple", "stage", chi.URLParam(r, "stage"), &stage, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "stage", Err: err})
-		return
-	}
-
-	ctx := r.Context()
-
-	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
-
-	r = r.WithContext(ctx)
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetStagePlan(w, r, projectId, stage)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // ListTranslationJobs operation middleware
 func (siw *ServerInterfaceWrapper) ListTranslationJobs(w http.ResponseWriter, r *http.Request) {
 
@@ -4742,6 +4682,21 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Put(options.BaseURL+"/backends/{backendId}", wrapper.UpdateUserBackend)
 	})
 	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/execution-plan-templates", wrapper.ListExecutionPlanTemplates)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/execution-plan-templates", wrapper.CreateExecutionPlanTemplate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Delete(options.BaseURL+"/execution-plan-templates/{executionPlanTemplateId}", wrapper.DeleteExecutionPlanTemplate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/execution-plan-templates/{executionPlanTemplateId}", wrapper.GetExecutionPlanTemplate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Put(options.BaseURL+"/execution-plan-templates/{executionPlanTemplateId}", wrapper.UpdateExecutionPlanTemplate)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/orgs", wrapper.ListOrganizations)
 	})
 	r.Group(func(r chi.Router) {
@@ -4794,12 +4749,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Put(options.BaseURL+"/projects/{projectId}", wrapper.UpdateProject)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/projects/{projectId}/backends", wrapper.GetProjectBackends)
-	})
-	r.Group(func(r chi.Router) {
-		r.Put(options.BaseURL+"/projects/{projectId}/backends", wrapper.SetProjectBackendOrder)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/glossary", wrapper.ListGlossaryEntries)
@@ -4863,12 +4812,6 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/projects/{projectId}/resources/{resourceId}/segments/{segmentId}/review", wrapper.ReviewResourceSegment)
-	})
-	r.Group(func(r chi.Router) {
-		r.Put(options.BaseURL+"/projects/{projectId}/stages/{stage}/override", wrapper.SetStageBackendOverride)
-	})
-	r.Group(func(r chi.Router) {
-		r.Get(options.BaseURL+"/projects/{projectId}/stages/{stage}/plan", wrapper.GetStagePlan)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/translation-jobs", wrapper.ListTranslationJobs)
@@ -4937,132 +4880,131 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
-	"QZGP890AAA==",
+	"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",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

@@ -55,9 +55,11 @@ type OrganizationEdges struct {
 	PromptTemplates []*PromptTemplate `json:"prompt_templates,omitempty"`
 	// TranslationProfiles holds the value of the translation_profiles edge.
 	TranslationProfiles []*TranslationProfile `json:"translation_profiles,omitempty"`
+	// ExecutionPlanTemplates holds the value of the execution_plan_templates edge.
+	ExecutionPlanTemplates []*ExecutionPlanTemplate `json:"execution_plan_templates,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [9]bool
+	loadedTypes [10]bool
 }
 
 // ProjectsOrErr returns the Projects value or an error if the edge
@@ -139,6 +141,15 @@ func (e OrganizationEdges) TranslationProfilesOrErr() ([]*TranslationProfile, er
 		return e.TranslationProfiles, nil
 	}
 	return nil, &NotLoadedError{edge: "translation_profiles"}
+}
+
+// ExecutionPlanTemplatesOrErr returns the ExecutionPlanTemplates value or an error if the edge
+// was not loaded in eager-loading.
+func (e OrganizationEdges) ExecutionPlanTemplatesOrErr() ([]*ExecutionPlanTemplate, error) {
+	if e.loadedTypes[9] {
+		return e.ExecutionPlanTemplates, nil
+	}
+	return nil, &NotLoadedError{edge: "execution_plan_templates"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -265,6 +276,11 @@ func (_m *Organization) QueryPromptTemplates() *PromptTemplateQuery {
 // QueryTranslationProfiles queries the "translation_profiles" edge of the Organization entity.
 func (_m *Organization) QueryTranslationProfiles() *TranslationProfileQuery {
 	return NewOrganizationClient(_m.config).QueryTranslationProfiles(_m)
+}
+
+// QueryExecutionPlanTemplates queries the "execution_plan_templates" edge of the Organization entity.
+func (_m *Organization) QueryExecutionPlanTemplates() *ExecutionPlanTemplateQuery {
+	return NewOrganizationClient(_m.config).QueryExecutionPlanTemplates(_m)
 }
 
 // Update returns a builder for updating this Organization.

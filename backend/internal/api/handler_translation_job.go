@@ -17,9 +17,9 @@ import (
 )
 
 type createTranslationJobRequest struct {
-	ResourceIDs       []int          `json:"resource_ids"`
-	SegmentIDs        []int          `json:"segment_ids"`
-	TranslationConfig map[string]any `json:"translation_config"`
+	ExecutionPlanID int   `json:"execution_plan_id"`
+	ResourceIDs     []int `json:"resource_ids"`
+	SegmentIDs      []int `json:"segment_ids"`
 }
 
 type translationJobResourceResponse struct {
@@ -41,6 +41,7 @@ type translationJobResponse struct {
 	ProjectID          int                              `json:"project_id"`
 	Status             string                           `json:"status"`
 	TriggerType        string                           `json:"trigger_type"`
+	ExecutionPlanID    int                              `json:"execution_plan_id"`
 	TranslationConfig  map[string]any                   `json:"translation_config,omitempty"`
 	ResourceCount      int                              `json:"resource_count"`
 	CompletedResources int                              `json:"completed_resources"`
@@ -70,9 +71,9 @@ func (s *Server) handleCreateTranslationJob(w http.ResponseWriter, r *http.Reque
 		}
 	}
 	created, err := s.translationJobSvc.CreateManualJob(r.Context(), authUser.User.ID, projectID, service.CreateTranslationJobInput{
-		ResourceIDs:       req.ResourceIDs,
-		SegmentIDs:        req.SegmentIDs,
-		TranslationConfig: req.TranslationConfig,
+		ResourceIDs:     req.ResourceIDs,
+		SegmentIDs:      req.SegmentIDs,
+		ExecutionPlanID: req.ExecutionPlanID,
 	})
 	if err != nil {
 		writeTranslationJobServiceError(w, err)
@@ -299,6 +300,7 @@ func toTranslationJobResponse(row *ent.TranslationJob) translationJobResponse {
 		ID:                 row.ID,
 		Status:             row.Status,
 		TriggerType:        row.TriggerType,
+		ExecutionPlanID:    row.ExecutionPlanID,
 		TranslationConfig:  row.TranslationConfig,
 		ResourceCount:      row.ResourceCount,
 		CompletedResources: row.CompletedResources,

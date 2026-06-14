@@ -14,6 +14,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
@@ -43,6 +44,7 @@ type UserQuery struct {
 	withUsageRecords           *UsageRecordQuery
 	withPromptTemplates        *PromptTemplateQuery
 	withTranslationProfiles    *TranslationProfileQuery
+	withExecutionPlanTemplates *ExecutionPlanTemplateQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -299,6 +301,28 @@ func (_q *UserQuery) QueryTranslationProfiles() *TranslationProfileQuery {
 	return query
 }
 
+// QueryExecutionPlanTemplates chains the current query on the "execution_plan_templates" edge.
+func (_q *UserQuery) QueryExecutionPlanTemplates() *ExecutionPlanTemplateQuery {
+	query := (&ExecutionPlanTemplateClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(executionplantemplate.Table, executionplantemplate.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.ExecutionPlanTemplatesTable, user.ExecutionPlanTemplatesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
 // First returns the first User entity from the query.
 // Returns a *NotFoundError when no User was found.
 func (_q *UserQuery) First(ctx context.Context) (*User, error) {
@@ -501,6 +525,7 @@ func (_q *UserQuery) Clone() *UserQuery {
 		withUsageRecords:           _q.withUsageRecords.Clone(),
 		withPromptTemplates:        _q.withPromptTemplates.Clone(),
 		withTranslationProfiles:    _q.withTranslationProfiles.Clone(),
+		withExecutionPlanTemplates: _q.withExecutionPlanTemplates.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -617,6 +642,17 @@ func (_q *UserQuery) WithTranslationProfiles(opts ...func(*TranslationProfileQue
 	return _q
 }
 
+// WithExecutionPlanTemplates tells the query-builder to eager-load the nodes that are connected to
+// the "execution_plan_templates" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithExecutionPlanTemplates(opts ...func(*ExecutionPlanTemplateQuery)) *UserQuery {
+	query := (&ExecutionPlanTemplateClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withExecutionPlanTemplates = query
+	return _q
+}
+
 // GroupBy is used to group vertices by one or more fields/columns.
 // It is often used with aggregate functions, like: count, max, mean, min, sum.
 //
@@ -695,7 +731,7 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	var (
 		nodes       = []*User{}
 		_spec       = _q.querySpec()
-		loadedTypes = [10]bool{
+		loadedTypes = [11]bool{
 			_q.withCreatedTranslationJobs != nil,
 			_q.withReviewedSegments != nil,
 			_q.withRefreshTokens != nil,
@@ -706,6 +742,7 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 			_q.withUsageRecords != nil,
 			_q.withPromptTemplates != nil,
 			_q.withTranslationProfiles != nil,
+			_q.withExecutionPlanTemplates != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -796,6 +833,15 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 			func(n *User) { n.Edges.TranslationProfiles = []*TranslationProfile{} },
 			func(n *User, e *TranslationProfile) {
 				n.Edges.TranslationProfiles = append(n.Edges.TranslationProfiles, e)
+			}); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withExecutionPlanTemplates; query != nil {
+		if err := _q.loadExecutionPlanTemplates(ctx, query, nodes,
+			func(n *User) { n.Edges.ExecutionPlanTemplates = []*ExecutionPlanTemplate{} },
+			func(n *User, e *ExecutionPlanTemplate) {
+				n.Edges.ExecutionPlanTemplates = append(n.Edges.ExecutionPlanTemplates, e)
 			}); err != nil {
 			return nil, err
 		}
@@ -1103,6 +1149,39 @@ func (_q *UserQuery) loadTranslationProfiles(ctx context.Context, query *Transla
 	}
 	query.Where(predicate.TranslationProfile(func(s *sql.Selector) {
 		s.Where(sql.InValues(s.C(user.TranslationProfilesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.OwnerUserID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "owner_user_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "owner_user_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadExecutionPlanTemplates(ctx context.Context, query *ExecutionPlanTemplateQuery, nodes []*User, init func(*User), assign func(*User, *ExecutionPlanTemplate)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(executionplantemplate.FieldOwnerUserID)
+	}
+	query.Where(predicate.ExecutionPlanTemplate(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.ExecutionPlanTemplatesColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {

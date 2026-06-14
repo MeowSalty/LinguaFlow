@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -246,6 +247,21 @@ func (_u *OrganizationUpdate) AddTranslationProfiles(v ...*TranslationProfile) *
 	return _u.AddTranslationProfileIDs(ids...)
 }
 
+// AddExecutionPlanTemplateIDs adds the "execution_plan_templates" edge to the ExecutionPlanTemplate entity by IDs.
+func (_u *OrganizationUpdate) AddExecutionPlanTemplateIDs(ids ...int) *OrganizationUpdate {
+	_u.mutation.AddExecutionPlanTemplateIDs(ids...)
+	return _u
+}
+
+// AddExecutionPlanTemplates adds the "execution_plan_templates" edges to the ExecutionPlanTemplate entity.
+func (_u *OrganizationUpdate) AddExecutionPlanTemplates(v ...*ExecutionPlanTemplate) *OrganizationUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddExecutionPlanTemplateIDs(ids...)
+}
+
 // Mutation returns the OrganizationMutation object of the builder.
 func (_u *OrganizationUpdate) Mutation() *OrganizationMutation {
 	return _u.mutation
@@ -438,6 +454,27 @@ func (_u *OrganizationUpdate) RemoveTranslationProfiles(v ...*TranslationProfile
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveTranslationProfileIDs(ids...)
+}
+
+// ClearExecutionPlanTemplates clears all "execution_plan_templates" edges to the ExecutionPlanTemplate entity.
+func (_u *OrganizationUpdate) ClearExecutionPlanTemplates() *OrganizationUpdate {
+	_u.mutation.ClearExecutionPlanTemplates()
+	return _u
+}
+
+// RemoveExecutionPlanTemplateIDs removes the "execution_plan_templates" edge to ExecutionPlanTemplate entities by IDs.
+func (_u *OrganizationUpdate) RemoveExecutionPlanTemplateIDs(ids ...int) *OrganizationUpdate {
+	_u.mutation.RemoveExecutionPlanTemplateIDs(ids...)
+	return _u
+}
+
+// RemoveExecutionPlanTemplates removes "execution_plan_templates" edges to ExecutionPlanTemplate entities.
+func (_u *OrganizationUpdate) RemoveExecutionPlanTemplates(v ...*ExecutionPlanTemplate) *OrganizationUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveExecutionPlanTemplateIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -929,6 +966,51 @@ func (_u *OrganizationUpdate) sqlSave(ctx context.Context) (_node int, err error
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.ExecutionPlanTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.ExecutionPlanTemplatesTable,
+			Columns: []string{organization.ExecutionPlanTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionplantemplate.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedExecutionPlanTemplatesIDs(); len(nodes) > 0 && !_u.mutation.ExecutionPlanTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.ExecutionPlanTemplatesTable,
+			Columns: []string{organization.ExecutionPlanTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionplantemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ExecutionPlanTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.ExecutionPlanTemplatesTable,
+			Columns: []string{organization.ExecutionPlanTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionplantemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{organization.Label}
@@ -1158,6 +1240,21 @@ func (_u *OrganizationUpdateOne) AddTranslationProfiles(v ...*TranslationProfile
 	return _u.AddTranslationProfileIDs(ids...)
 }
 
+// AddExecutionPlanTemplateIDs adds the "execution_plan_templates" edge to the ExecutionPlanTemplate entity by IDs.
+func (_u *OrganizationUpdateOne) AddExecutionPlanTemplateIDs(ids ...int) *OrganizationUpdateOne {
+	_u.mutation.AddExecutionPlanTemplateIDs(ids...)
+	return _u
+}
+
+// AddExecutionPlanTemplates adds the "execution_plan_templates" edges to the ExecutionPlanTemplate entity.
+func (_u *OrganizationUpdateOne) AddExecutionPlanTemplates(v ...*ExecutionPlanTemplate) *OrganizationUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddExecutionPlanTemplateIDs(ids...)
+}
+
 // Mutation returns the OrganizationMutation object of the builder.
 func (_u *OrganizationUpdateOne) Mutation() *OrganizationMutation {
 	return _u.mutation
@@ -1350,6 +1447,27 @@ func (_u *OrganizationUpdateOne) RemoveTranslationProfiles(v ...*TranslationProf
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveTranslationProfileIDs(ids...)
+}
+
+// ClearExecutionPlanTemplates clears all "execution_plan_templates" edges to the ExecutionPlanTemplate entity.
+func (_u *OrganizationUpdateOne) ClearExecutionPlanTemplates() *OrganizationUpdateOne {
+	_u.mutation.ClearExecutionPlanTemplates()
+	return _u
+}
+
+// RemoveExecutionPlanTemplateIDs removes the "execution_plan_templates" edge to ExecutionPlanTemplate entities by IDs.
+func (_u *OrganizationUpdateOne) RemoveExecutionPlanTemplateIDs(ids ...int) *OrganizationUpdateOne {
+	_u.mutation.RemoveExecutionPlanTemplateIDs(ids...)
+	return _u
+}
+
+// RemoveExecutionPlanTemplates removes "execution_plan_templates" edges to ExecutionPlanTemplate entities.
+func (_u *OrganizationUpdateOne) RemoveExecutionPlanTemplates(v ...*ExecutionPlanTemplate) *OrganizationUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveExecutionPlanTemplateIDs(ids...)
 }
 
 // Where appends a list predicates to the OrganizationUpdate builder.
@@ -1864,6 +1982,51 @@ func (_u *OrganizationUpdateOne) sqlSave(ctx context.Context) (_node *Organizati
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ExecutionPlanTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.ExecutionPlanTemplatesTable,
+			Columns: []string{organization.ExecutionPlanTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionplantemplate.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedExecutionPlanTemplatesIDs(); len(nodes) > 0 && !_u.mutation.ExecutionPlanTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.ExecutionPlanTemplatesTable,
+			Columns: []string{organization.ExecutionPlanTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionplantemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ExecutionPlanTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.ExecutionPlanTemplatesTable,
+			Columns: []string{organization.ExecutionPlanTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionplantemplate.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

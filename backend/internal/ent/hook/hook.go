@@ -33,6 +33,18 @@ func (f BackendFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.BackendMutation", m)
 }
 
+// The ExecutionPlanTemplateFunc type is an adapter to allow the use of ordinary
+// function as ExecutionPlanTemplate mutator.
+type ExecutionPlanTemplateFunc func(context.Context, *ent.ExecutionPlanTemplateMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ExecutionPlanTemplateFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ExecutionPlanTemplateMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ExecutionPlanTemplateMutation", m)
+}
+
 // The GlossaryEntryFunc type is an adapter to allow the use of ordinary
 // function as GlossaryEntry mutator.
 type GlossaryEntryFunc func(context.Context, *ent.GlossaryEntryMutation) (ent.Value, error)
@@ -93,18 +105,6 @@ func (f ProjectFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ProjectMutation", m)
 }
 
-// The ProjectBackendFunc type is an adapter to allow the use of ordinary
-// function as ProjectBackend mutator.
-type ProjectBackendFunc func(context.Context, *ent.ProjectBackendMutation) (ent.Value, error)
-
-// Mutate calls f(ctx, m).
-func (f ProjectBackendFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	if mv, ok := m.(*ent.ProjectBackendMutation); ok {
-		return f(ctx, mv)
-	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ProjectBackendMutation", m)
-}
-
 // The PromptTemplateFunc type is an adapter to allow the use of ordinary
 // function as PromptTemplate mutator.
 type PromptTemplateFunc func(context.Context, *ent.PromptTemplateMutation) (ent.Value, error)
@@ -151,18 +151,6 @@ func (f SegmentFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SegmentMutation", m)
-}
-
-// The StageBackendOverrideFunc type is an adapter to allow the use of ordinary
-// function as StageBackendOverride mutator.
-type StageBackendOverrideFunc func(context.Context, *ent.StageBackendOverrideMutation) (ent.Value, error)
-
-// Mutate calls f(ctx, m).
-func (f StageBackendOverrideFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	if mv, ok := m.(*ent.StageBackendOverrideMutation); ok {
-		return f(ctx, mv)
-	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.StageBackendOverrideMutation", m)
 }
 
 // The TMEntryFunc type is an adapter to allow the use of ordinary

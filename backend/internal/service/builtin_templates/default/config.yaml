@@ -1,12 +1,12 @@
 prompt_template:
   id: -1001
   name: "通用翻译"
-  description: "默认配置，适用于一般文档翻译"
+  description: "默认提示词，适用于一般文档翻译"
 
 translation_profile:
   id: -2001
-  name: "通用翻译 - 默认配置"
-  description: "默认配置，适用于一般文档翻译"
+  name: "通用翻译策略"
+  description: "默认策略配置，适用于一般文档翻译"
   config:
     split:
       enabled: true
@@ -26,17 +26,6 @@ translation_profile:
       partial_threshold: 0.5
       placeholder_normalize: true
       prompt_upgrade: true
-    rounds:
-      - batch_size: 10
-        concurrency: 3
-        fallback_shrink: 0.5
-        rate_limit_per_sec: 0
-        backend_mode: "prepend"
-        backend_order: []
-        retry:
-          max_attempts: 3
-          backoff_ms: 2000
-          jitter: true
     glossary:
       enabled: false
       bootstrap:

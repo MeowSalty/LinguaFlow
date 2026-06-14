@@ -28,6 +28,8 @@ type TranslationJob struct {
 	Status string `json:"status,omitempty"`
 	// 触发类型：manual, file_update, glossary_change, web_edit
 	TriggerType string `json:"trigger_type,omitempty"`
+	// 引用的执行计划模板 ID（必填）
+	ExecutionPlanID int `json:"execution_plan_id,omitempty"`
 	// 翻译配置快照，创建时从项目配置复制并可覆盖
 	TranslationConfig map[string]interface{} `json:"translation_config,omitempty"`
 	// 关联的资源文件数
@@ -101,7 +103,7 @@ func (*TranslationJob) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case translationjob.FieldTranslationConfig:
 			values[i] = new([]byte)
-		case translationjob.FieldID, translationjob.FieldResourceCount, translationjob.FieldCompletedResources, translationjob.FieldFailedResources, translationjob.FieldTotalSegments, translationjob.FieldCompletedSegments:
+		case translationjob.FieldID, translationjob.FieldExecutionPlanID, translationjob.FieldResourceCount, translationjob.FieldCompletedResources, translationjob.FieldFailedResources, translationjob.FieldTotalSegments, translationjob.FieldCompletedSegments:
 			values[i] = new(sql.NullInt64)
 		case translationjob.FieldStatus, translationjob.FieldTriggerType, translationjob.FieldErrorMessage:
 			values[i] = new(sql.NullString)
@@ -155,6 +157,12 @@ func (_m *TranslationJob) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field trigger_type", values[i])
 			} else if value.Valid {
 				_m.TriggerType = value.String
+			}
+		case translationjob.FieldExecutionPlanID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field execution_plan_id", values[i])
+			} else if value.Valid {
+				_m.ExecutionPlanID = int(value.Int64)
 			}
 		case translationjob.FieldTranslationConfig:
 			if value, ok := values[i].(*[]byte); !ok {
@@ -277,6 +285,9 @@ func (_m *TranslationJob) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("trigger_type=")
 	builder.WriteString(_m.TriggerType)
+	builder.WriteString(", ")
+	builder.WriteString("execution_plan_id=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ExecutionPlanID))
 	builder.WriteString(", ")
 	builder.WriteString("translation_config=")
 	builder.WriteString(fmt.Sprintf("%v", _m.TranslationConfig))

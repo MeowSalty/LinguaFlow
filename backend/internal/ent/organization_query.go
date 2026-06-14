@@ -14,6 +14,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -28,19 +29,20 @@ import (
 // OrganizationQuery is the builder for querying Organization entities.
 type OrganizationQuery struct {
 	config
-	ctx                     *QueryContext
-	order                   []organization.OrderOption
-	inters                  []Interceptor
-	predicates              []predicate.Organization
-	withProjects            *ProjectQuery
-	withMemberships         *OrgMembershipQuery
-	withBackends            *BackendQuery
-	withGlossaryEntries     *GlossaryEntryQuery
-	withTmEntries           *TMEntryQuery
-	withActivityLogs        *ActivityLogQuery
-	withUsageRecords        *UsageRecordQuery
-	withPromptTemplates     *PromptTemplateQuery
-	withTranslationProfiles *TranslationProfileQuery
+	ctx                        *QueryContext
+	order                      []organization.OrderOption
+	inters                     []Interceptor
+	predicates                 []predicate.Organization
+	withProjects               *ProjectQuery
+	withMemberships            *OrgMembershipQuery
+	withBackends               *BackendQuery
+	withGlossaryEntries        *GlossaryEntryQuery
+	withTmEntries              *TMEntryQuery
+	withActivityLogs           *ActivityLogQuery
+	withUsageRecords           *UsageRecordQuery
+	withPromptTemplates        *PromptTemplateQuery
+	withTranslationProfiles    *TranslationProfileQuery
+	withExecutionPlanTemplates *ExecutionPlanTemplateQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -275,6 +277,28 @@ func (_q *OrganizationQuery) QueryTranslationProfiles() *TranslationProfileQuery
 	return query
 }
 
+// QueryExecutionPlanTemplates chains the current query on the "execution_plan_templates" edge.
+func (_q *OrganizationQuery) QueryExecutionPlanTemplates() *ExecutionPlanTemplateQuery {
+	query := (&ExecutionPlanTemplateClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(organization.Table, organization.FieldID, selector),
+			sqlgraph.To(executionplantemplate.Table, executionplantemplate.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, organization.ExecutionPlanTemplatesTable, organization.ExecutionPlanTemplatesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
 // First returns the first Organization entity from the query.
 // Returns a *NotFoundError when no Organization was found.
 func (_q *OrganizationQuery) First(ctx context.Context) (*Organization, error) {
@@ -462,20 +486,21 @@ func (_q *OrganizationQuery) Clone() *OrganizationQuery {
 		return nil
 	}
 	return &OrganizationQuery{
-		config:                  _q.config,
-		ctx:                     _q.ctx.Clone(),
-		order:                   append([]organization.OrderOption{}, _q.order...),
-		inters:                  append([]Interceptor{}, _q.inters...),
-		predicates:              append([]predicate.Organization{}, _q.predicates...),
-		withProjects:            _q.withProjects.Clone(),
-		withMemberships:         _q.withMemberships.Clone(),
-		withBackends:            _q.withBackends.Clone(),
-		withGlossaryEntries:     _q.withGlossaryEntries.Clone(),
-		withTmEntries:           _q.withTmEntries.Clone(),
-		withActivityLogs:        _q.withActivityLogs.Clone(),
-		withUsageRecords:        _q.withUsageRecords.Clone(),
-		withPromptTemplates:     _q.withPromptTemplates.Clone(),
-		withTranslationProfiles: _q.withTranslationProfiles.Clone(),
+		config:                     _q.config,
+		ctx:                        _q.ctx.Clone(),
+		order:                      append([]organization.OrderOption{}, _q.order...),
+		inters:                     append([]Interceptor{}, _q.inters...),
+		predicates:                 append([]predicate.Organization{}, _q.predicates...),
+		withProjects:               _q.withProjects.Clone(),
+		withMemberships:            _q.withMemberships.Clone(),
+		withBackends:               _q.withBackends.Clone(),
+		withGlossaryEntries:        _q.withGlossaryEntries.Clone(),
+		withTmEntries:              _q.withTmEntries.Clone(),
+		withActivityLogs:           _q.withActivityLogs.Clone(),
+		withUsageRecords:           _q.withUsageRecords.Clone(),
+		withPromptTemplates:        _q.withPromptTemplates.Clone(),
+		withTranslationProfiles:    _q.withTranslationProfiles.Clone(),
+		withExecutionPlanTemplates: _q.withExecutionPlanTemplates.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -581,6 +606,17 @@ func (_q *OrganizationQuery) WithTranslationProfiles(opts ...func(*TranslationPr
 	return _q
 }
 
+// WithExecutionPlanTemplates tells the query-builder to eager-load the nodes that are connected to
+// the "execution_plan_templates" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *OrganizationQuery) WithExecutionPlanTemplates(opts ...func(*ExecutionPlanTemplateQuery)) *OrganizationQuery {
+	query := (&ExecutionPlanTemplateClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withExecutionPlanTemplates = query
+	return _q
+}
+
 // GroupBy is used to group vertices by one or more fields/columns.
 // It is often used with aggregate functions, like: count, max, mean, min, sum.
 //
@@ -659,7 +695,7 @@ func (_q *OrganizationQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 	var (
 		nodes       = []*Organization{}
 		_spec       = _q.querySpec()
-		loadedTypes = [9]bool{
+		loadedTypes = [10]bool{
 			_q.withProjects != nil,
 			_q.withMemberships != nil,
 			_q.withBackends != nil,
@@ -669,6 +705,7 @@ func (_q *OrganizationQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 			_q.withUsageRecords != nil,
 			_q.withPromptTemplates != nil,
 			_q.withTranslationProfiles != nil,
+			_q.withExecutionPlanTemplates != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -750,6 +787,15 @@ func (_q *OrganizationQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 			func(n *Organization) { n.Edges.TranslationProfiles = []*TranslationProfile{} },
 			func(n *Organization, e *TranslationProfile) {
 				n.Edges.TranslationProfiles = append(n.Edges.TranslationProfiles, e)
+			}); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withExecutionPlanTemplates; query != nil {
+		if err := _q.loadExecutionPlanTemplates(ctx, query, nodes,
+			func(n *Organization) { n.Edges.ExecutionPlanTemplates = []*ExecutionPlanTemplate{} },
+			func(n *Organization, e *ExecutionPlanTemplate) {
+				n.Edges.ExecutionPlanTemplates = append(n.Edges.ExecutionPlanTemplates, e)
 			}); err != nil {
 			return nil, err
 		}
@@ -1030,6 +1076,39 @@ func (_q *OrganizationQuery) loadTranslationProfiles(ctx context.Context, query 
 	}
 	query.Where(predicate.TranslationProfile(func(s *sql.Selector) {
 		s.Where(sql.InValues(s.C(organization.TranslationProfilesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.OwnerOrgID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "owner_org_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "owner_org_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *OrganizationQuery) loadExecutionPlanTemplates(ctx context.Context, query *ExecutionPlanTemplateQuery, nodes []*Organization, init func(*Organization), assign func(*Organization, *ExecutionPlanTemplate)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*Organization)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(executionplantemplate.FieldOwnerOrgID)
+	}
+	query.Where(predicate.ExecutionPlanTemplate(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(organization.ExecutionPlanTemplatesColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {

@@ -100,6 +100,38 @@ var (
 			},
 		},
 	}
+	// ExecutionPlanTemplatesColumns holds the columns for the "execution_plan_templates" table.
+	ExecutionPlanTemplatesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "name", Type: field.TypeString},
+		{Name: "description", Type: field.TypeString, Default: ""},
+		{Name: "scope", Type: field.TypeString, Default: "user"},
+		{Name: "rounds", Type: field.TypeJSON},
+		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
+		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
+	}
+	// ExecutionPlanTemplatesTable holds the schema information for the "execution_plan_templates" table.
+	ExecutionPlanTemplatesTable = &schema.Table{
+		Name:       "execution_plan_templates",
+		Columns:    ExecutionPlanTemplatesColumns,
+		PrimaryKey: []*schema.Column{ExecutionPlanTemplatesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "execution_plan_templates_organizations_execution_plan_templates",
+				Columns:    []*schema.Column{ExecutionPlanTemplatesColumns[7]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "execution_plan_templates_users_execution_plan_templates",
+				Columns:    []*schema.Column{ExecutionPlanTemplatesColumns[8]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
 	// GlossaryEntriesColumns holds the columns for the "glossary_entries" table.
 	GlossaryEntriesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -261,41 +293,6 @@ var (
 			},
 		},
 	}
-	// ProjectBackendsColumns holds the columns for the "project_backends" table.
-	ProjectBackendsColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "created_at", Type: field.TypeTime},
-		{Name: "updated_at", Type: field.TypeTime},
-		{Name: "order_index", Type: field.TypeInt},
-		{Name: "backend_id", Type: field.TypeInt},
-		{Name: "project_project_backends", Type: field.TypeInt},
-	}
-	// ProjectBackendsTable holds the schema information for the "project_backends" table.
-	ProjectBackendsTable = &schema.Table{
-		Name:       "project_backends",
-		Columns:    ProjectBackendsColumns,
-		PrimaryKey: []*schema.Column{ProjectBackendsColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{
-			{
-				Symbol:     "project_backends_projects_project_backends",
-				Columns:    []*schema.Column{ProjectBackendsColumns[5]},
-				RefColumns: []*schema.Column{ProjectsColumns[0]},
-				OnDelete:   schema.NoAction,
-			},
-		},
-		Indexes: []*schema.Index{
-			{
-				Name:    "projectbackend_order_index_project_project_backends",
-				Unique:  true,
-				Columns: []*schema.Column{ProjectBackendsColumns[3], ProjectBackendsColumns[5]},
-			},
-			{
-				Name:    "projectbackend_backend_id_project_project_backends",
-				Unique:  true,
-				Columns: []*schema.Column{ProjectBackendsColumns[4], ProjectBackendsColumns[5]},
-			},
-		},
-	}
 	// PromptTemplatesColumns holds the columns for the "prompt_templates" table.
 	PromptTemplatesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -419,37 +416,6 @@ var (
 			},
 		},
 	}
-	// StageBackendOverridesColumns holds the columns for the "stage_backend_overrides" table.
-	StageBackendOverridesColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "created_at", Type: field.TypeTime},
-		{Name: "updated_at", Type: field.TypeTime},
-		{Name: "stage", Type: field.TypeEnum, Enums: []string{"translate", "bootstrap"}},
-		{Name: "backend_mode", Type: field.TypeEnum, Enums: []string{"inherit", "prepend", "restrict"}, Default: "inherit"},
-		{Name: "backend_order", Type: field.TypeJSON},
-		{Name: "project_stage_backend_overrides", Type: field.TypeInt},
-	}
-	// StageBackendOverridesTable holds the schema information for the "stage_backend_overrides" table.
-	StageBackendOverridesTable = &schema.Table{
-		Name:       "stage_backend_overrides",
-		Columns:    StageBackendOverridesColumns,
-		PrimaryKey: []*schema.Column{StageBackendOverridesColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{
-			{
-				Symbol:     "stage_backend_overrides_projects_stage_backend_overrides",
-				Columns:    []*schema.Column{StageBackendOverridesColumns[6]},
-				RefColumns: []*schema.Column{ProjectsColumns[0]},
-				OnDelete:   schema.NoAction,
-			},
-		},
-		Indexes: []*schema.Index{
-			{
-				Name:    "stagebackendoverride_stage_project_stage_backend_overrides",
-				Unique:  true,
-				Columns: []*schema.Column{StageBackendOverridesColumns[3], StageBackendOverridesColumns[6]},
-			},
-		},
-	}
 	// TmEntriesColumns holds the columns for the "tm_entries" table.
 	TmEntriesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -499,6 +465,7 @@ var (
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "status", Type: field.TypeString, Default: "pending"},
 		{Name: "trigger_type", Type: field.TypeString, Default: "manual"},
+		{Name: "execution_plan_id", Type: field.TypeInt},
 		{Name: "translation_config", Type: field.TypeJSON},
 		{Name: "resource_count", Type: field.TypeInt, Default: 0},
 		{Name: "completed_resources", Type: field.TypeInt, Default: 0},
@@ -517,13 +484,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "translation_jobs_projects_translation_jobs",
-				Columns:    []*schema.Column{TranslationJobsColumns[12]},
+				Columns:    []*schema.Column{TranslationJobsColumns[13]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "translation_jobs_users_created_translation_jobs",
-				Columns:    []*schema.Column{TranslationJobsColumns[13]},
+				Columns:    []*schema.Column{TranslationJobsColumns[14]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -624,17 +591,16 @@ var (
 	Tables = []*schema.Table{
 		ActivityLogsTable,
 		BackendsTable,
+		ExecutionPlanTemplatesTable,
 		GlossaryEntriesTable,
 		JobResourcesTable,
 		OrgMembershipsTable,
 		OrganizationsTable,
 		ProjectsTable,
-		ProjectBackendsTable,
 		PromptTemplatesTable,
 		RefreshTokensTable,
 		ResourcesTable,
 		SegmentsTable,
-		StageBackendOverridesTable,
 		TmEntriesTable,
 		TranslationJobsTable,
 		TranslationProfilesTable,
@@ -649,6 +615,8 @@ func init() {
 	ActivityLogsTable.ForeignKeys[2].RefTable = UsersTable
 	BackendsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	BackendsTable.ForeignKeys[1].RefTable = UsersTable
+	ExecutionPlanTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
+	ExecutionPlanTemplatesTable.ForeignKeys[1].RefTable = UsersTable
 	GlossaryEntriesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	GlossaryEntriesTable.ForeignKeys[1].RefTable = ProjectsTable
 	JobResourcesTable.ForeignKeys[0].RefTable = ResourcesTable
@@ -657,14 +625,12 @@ func init() {
 	OrgMembershipsTable.ForeignKeys[1].RefTable = UsersTable
 	ProjectsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	ProjectsTable.ForeignKeys[1].RefTable = UsersTable
-	ProjectBackendsTable.ForeignKeys[0].RefTable = ProjectsTable
 	PromptTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	PromptTemplatesTable.ForeignKeys[1].RefTable = UsersTable
 	RefreshTokensTable.ForeignKeys[0].RefTable = UsersTable
 	ResourcesTable.ForeignKeys[0].RefTable = ProjectsTable
 	SegmentsTable.ForeignKeys[0].RefTable = ResourcesTable
 	SegmentsTable.ForeignKeys[1].RefTable = UsersTable
-	StageBackendOverridesTable.ForeignKeys[0].RefTable = ProjectsTable
 	TmEntriesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	TmEntriesTable.ForeignKeys[1].RefTable = ProjectsTable
 	TranslationJobsTable.ForeignKeys[0].RefTable = ProjectsTable

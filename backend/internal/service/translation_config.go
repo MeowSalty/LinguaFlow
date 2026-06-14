@@ -59,9 +59,6 @@ func normalizeTranslationOverride(in map[string]any) map[string]any {
 		"batch_size",
 		"fallback_shrink",
 		"rate_limit_per_sec",
-		"backend_mode",
-		"backend_order",
-		"plan",
 		"retry",
 		"repair",
 	}

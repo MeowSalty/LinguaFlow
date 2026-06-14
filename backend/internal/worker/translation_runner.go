@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
@@ -31,7 +32,6 @@ func NewTranslationRunner(
 	cfg *config.Config,
 	logger *slog.Logger,
 	client *ent.Client,
-	projects *service.ProjectService,
 	jobs *service.TranslationJobService,
 	store *filestore.LocalStore,
 	queue *Queue,
@@ -39,7 +39,7 @@ func NewTranslationRunner(
 	r := &TranslationRunner{
 		jobs: jobs,
 	}
-	r.BaseRunner = newBaseRunner(cfg, logger, client, projects, store, queue, jobs, r.processJob, "translation worker")
+	r.BaseRunner = newBaseRunner(cfg, logger, client, store, queue, jobs, r.processJob, "translation worker")
 	return r
 }
 
@@ -69,7 +69,7 @@ func (r *TranslationRunner) processJob(ctx context.Context, jobID int) error {
 	return r.jobs.ReconcileJob(ctx, jobID)
 }
 
-// processJobResource 处理单个翻译资源：解析路径、加载片段、构建配置、调用引擎翻译并更新结果。
+// processJobResource 处理单个翻译资源：解析路径、加载片段、从快照构建引擎、调用翻译并更新结果。
 func (r *TranslationRunner) processJobResource(ctx context.Context, exec *service.TranslationJobExecution, item *ent.JobResource) error {
 	if err := r.jobs.MarkJobResourceRunning(ctx, item.ID); err != nil {
 		return err
@@ -106,61 +106,42 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	if len(selectedRows) == 0 {
 		return r.jobs.MarkJobResourceCompleted(ctx, item.ID, outputRel, 0)
 	}
-	jobCfg, bootstrapBindings, err := r.buildJobConfig(ctx, exec)
+
+	// 从任务快照获取执行参数
+	snapshot, err := service.GetSnapshot(exec.Job)
 	if err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
 	}
-	autoApprove := false
-	if exec.Job.TranslationConfig != nil {
-		if v, ok := exec.Job.TranslationConfig["auto_approve"].(bool); ok {
-			autoApprove = v
-		}
+	if snapshot == nil {
+		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, fmt.Errorf("translation job has no execution snapshot"))
+		return nil
 	}
-	runtimeGlossary, err := r.buildRuntimeGlossary(exec.Project, jobCfg)
+
+	// 从快照构建策略配置（用于运行时资源初始化）
+	cfg := buildStrategyConfig(snapshot)
+
+	autoApprove := snapshot.AutoApprove
+	runtimeGlossary, err := r.buildRuntimeGlossary(exec.Project, cfg)
 	if err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
 	}
-	memory, err := r.buildRuntimeTM(exec.Project, jobCfg)
+	memory, err := r.buildRuntimeTM(exec.Project, cfg)
 	if err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
 	}
-	translateBackends, err := engine.BuildBackends(jobCfg.Backends)
-	if err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
-		return nil
-	}
-	var bootstrapBackends []backend.Backend
-	if len(bootstrapBindings) > 0 {
-		bootstrapCfgs := make([]config.BackendConfig, 0, len(bootstrapBindings))
-		for _, b := range bootstrapBindings {
-			bootstrapCfgs = append(bootstrapCfgs, config.BackendConfig{
-				Name: b.Name, Type: b.Type, Enabled: true, Options: b.Options,
-			})
-		}
-		bootstrapBackends, err = engine.BuildBackends(bootstrapCfgs)
-		if err != nil {
-			for _, b := range translateBackends {
-				_ = b.Close()
-			}
-			_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
-			return nil
-		}
-	}
-	eng, err := engine.NewWithOptions(engine.Options{
-		Config:            jobCfg,
-		Logger:            r.logger,
-		Resources:         engine.RuntimeResources{Glossary: runtimeGlossary, TM: memory},
-		Rounds:            []engine.Round{{Backends: translateBackends}},
-		BootstrapBackends: bootstrapBackends,
-	})
+
+	// 从快照构建引擎
+	resources := engine.RuntimeResources{Glossary: runtimeGlossary, TM: memory}
+	eng, err := r.buildEngineFromSnapshot(ctx, snapshot, resources)
 	if err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
 	}
 	defer func() { _ = eng.Close() }()
+
 	selectedIndexes := make([]int, 0, len(selectedRows))
 	selectedIDsByIndex := make(map[int]int, len(selectedRows))
 	for _, row := range selectedRows {
@@ -175,8 +156,8 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		}
 	}
 	job := engine.FileJob(inputPath, outputPath)
-	job.SourceLang = jobCfg.SourceLang
-	job.TargetLang = jobCfg.TargetLang
+	job.SourceLang = snapshot.SourceLang
+	job.TargetLang = snapshot.TargetLang
 	job.SegmentIndexes = selectedIndexes
 	job.ExistingTargets = existingTargets
 	result, err := eng.TranslateWithResult(ctx, job)
@@ -195,21 +176,100 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	return r.jobs.MarkJobResourceCompleted(ctx, item.ID, outputRel, len(selectedRows))
 }
 
-// buildJobConfig 构建翻译任务配置：合并翻译配置、解析后端计划、校验配置。
-// 返回配置和 bootstrap 后端绑定（可能为 nil）。
-func (r *TranslationRunner) buildJobConfig(ctx context.Context, exec *service.TranslationJobExecution) (*config.Config, []service.ProjectBackendBinding, error) {
-	cfg, err := service.MergeTranslationConfig(r.baseConfig, nil, exec.Job.TranslationConfig)
-	if err != nil {
-		return nil, nil, err
+// buildEngineFromSnapshot 从任务快照构建引擎实例。
+// 后端实例由快照中的 Type + Options 直接构建，不依赖名称查找。
+func (r *TranslationRunner) buildEngineFromSnapshot(
+	ctx context.Context,
+	snapshot *service.JobExecutionSnapshot,
+	resources engine.RuntimeResources,
+) (*engine.Engine, error) {
+	var rounds []engine.Round
+	for _, rs := range snapshot.Rounds {
+		// 从快照直接构建后端实例（无需名称匹配）
+		cfg := config.BackendConfig{
+			Name:    rs.Backend.Name, // 仅用于日志，不用于匹配
+			Type:    rs.Backend.Type,
+			Enabled: true,
+			Options: rs.Backend.Options,
+		}
+		b, err := backend.Build(cfg)
+		if err != nil {
+			return nil, fmt.Errorf("round %q build backend: %w", rs.Name, err)
+		}
+
+		rounds = append(rounds, engine.Round{
+			Backends:        []backend.Backend{b},
+			Name:            rs.Name,
+			BatchSize:       rs.BatchSize,
+			Concurrency:     rs.Concurrency,
+			FallbackShrink:  rs.FallbackShrink,
+			RateLimitPerSec: rs.RateLimitPerSec,
+			Retry: backend.RetryPolicy{
+				MaxAttempts: rs.Retry.MaxAttempts,
+				Backoff:     time.Duration(rs.Retry.BackoffMs) * time.Millisecond,
+				Jitter:      rs.Retry.Jitter,
+			},
+		})
 	}
-	_, bootstrapBindings, err := r.buildBackendConfig(ctx, cfg, exec.ActorUserID, exec.Project.ID)
-	if err != nil {
-		return nil, nil, err
+
+	// 构建策略配置（不含后端信息）
+	cfg := buildStrategyConfig(snapshot)
+
+	return engine.NewWithOptions(engine.Options{
+		Rounds:    rounds,
+		Config:    cfg,
+		Logger:    r.logger,
+		Resources: resources,
+	})
+}
+
+// buildStrategyConfig 从快照构建策略配置。
+func buildStrategyConfig(snapshot *service.JobExecutionSnapshot) *config.Config {
+	cfg := config.Default()
+
+	// 提示词配置
+	if len(snapshot.Rounds) > 0 {
+		cfg.Prompt.SystemTemplateContent = snapshot.Rounds[0].Prompt.Content
 	}
-	if err := cfg.Validate(); err != nil {
-		return nil, nil, err
+
+	// 策略配置
+	if len(snapshot.Rounds) > 0 {
+		s := snapshot.Rounds[0].Strategy
+		cfg.Pipeline.Split = config.SplitConfig{
+			Enabled:  s.Split.Enabled,
+			Strategy: s.Split.Strategy,
+			MaxChars: s.Split.MaxChars,
+		}
+		cfg.Pipeline.Protect = config.ProtectConfig{
+			Enabled: s.Protect.Enabled,
+			Rules:   s.Protect.Rules,
+		}
+		cfg.Pipeline.Postprocess = config.PostprocessConfig{
+			Enabled:    s.Postprocess.Enabled,
+			TrimSpaces: s.Postprocess.TrimSpaces,
+		}
+		cfg.Pipeline.Translate.Repair = config.RepairConfig{
+			Enabled:              s.Repair.Enabled,
+			JSONStructural:       s.Repair.JSONStructural,
+			SchemaAliases:        s.Repair.SchemaAliases,
+			Partial:              s.Repair.Partial,
+			PartialThreshold:     s.Repair.PartialThreshold,
+			PlaceholderNormalize: s.Repair.PlaceholderNormalize,
+			PromptUpgrade:        s.Repair.PromptUpgrade,
+		}
+		cfg.Glossary = config.GlossaryConfig{
+			Enabled: s.Glossary.Enabled,
+			Bootstrap: config.BootstrapConfig{
+				Mode:                   s.Glossary.Bootstrap.Mode,
+				Save:                   s.Glossary.Bootstrap.Save,
+				MaxTermsPerBatch:       s.Glossary.Bootstrap.MaxTermsPerBatch,
+				MinSourceLen:           s.Glossary.Bootstrap.MinSourceLen,
+				InlineConflictStrategy: s.Glossary.Bootstrap.InlineConflictStrategy,
+			},
+		}
 	}
-	return cfg, bootstrapBindings, nil
+
+	return cfg
 }
 
 // buildRuntimeGlossary 根据配置构建运行时术语表，未启用则返回空实现。

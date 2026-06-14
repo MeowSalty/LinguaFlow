@@ -2,16 +2,22 @@ package service
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
 const (
@@ -38,17 +44,25 @@ var (
 	ErrTranslationJobActorMissing = errors.New("translation job actor unavailable")
 )
 
+// TranslationJobService 翻译任务服务。
 type TranslationJobService struct {
-	client   *ent.Client
-	projects *ProjectService
+	client          *ent.Client
+	projects        *ProjectService
+	executionPlans  *ExecutionPlanService
+	backends        *BackendService
+	promptTemplates *PromptTemplateService
+	profiles        *TranslationProfileService
 }
 
+// CreateTranslationJobInput 创建翻译任务的输入参数。
 type CreateTranslationJobInput struct {
-	ResourceIDs       []int
-	SegmentIDs        []int
-	TranslationConfig map[string]any
+	ResourceIDs     []int
+	SegmentIDs      []int
+	ExecutionPlanID int
+	AutoApprove     bool
 }
 
+// TranslationJobListOptions 任务列表查询选项。
 type TranslationJobListOptions struct {
 	Status      string
 	TriggerType string
@@ -56,10 +70,26 @@ type TranslationJobListOptions struct {
 	Limit       int
 }
 
-func NewTranslationJobService(client *ent.Client, projects *ProjectService) *TranslationJobService {
-	return &TranslationJobService{client: client, projects: projects}
+// NewTranslationJobService 创建翻译任务服务。
+func NewTranslationJobService(
+	client *ent.Client,
+	projects *ProjectService,
+	executionPlans *ExecutionPlanService,
+	backends *BackendService,
+	promptTemplates *PromptTemplateService,
+	profiles *TranslationProfileService,
+) *TranslationJobService {
+	return &TranslationJobService{
+		client:          client,
+		projects:        projects,
+		executionPlans:  executionPlans,
+		backends:        backends,
+		promptTemplates: promptTemplates,
+		profiles:        profiles,
+	}
 }
 
+// TranslationJobExecution 任务执行上下文。
 type TranslationJobExecution struct {
 	Job          *ent.TranslationJob
 	Project      *ent.Project
@@ -67,12 +97,91 @@ type TranslationJobExecution struct {
 	ActorUserID  int
 }
 
+// --- 快照类型定义 ---
+
+// JobExecutionSnapshot 任务执行快照，创建时生成，不可变。
+type JobExecutionSnapshot struct {
+	ExecutionPlanID   int                `json:"execution_plan_id"`
+	ExecutionPlanName string             `json:"execution_plan_name"`
+	Rounds            []JobRoundSnapshot `json:"rounds"`
+	SourceLang        string             `json:"source_lang"`
+	TargetLang        string             `json:"target_lang"`
+	AutoApprove       bool               `json:"auto_approve,omitempty"`
+}
+
+// JobRoundSnapshot 单轮的完整执行快照。
+type JobRoundSnapshot struct {
+	Name            string             `json:"name"`
+	Backend         BackendSnapshot    `json:"backend"`
+	Prompt          PromptSnapshot     `json:"prompt"`
+	Strategy        StrategySnapshot   `json:"strategy"`
+	BatchSize       int                `json:"batch_size"`
+	Concurrency     int                `json:"concurrency"`
+	FallbackShrink  float64            `json:"fallback_shrink"`
+	RateLimitPerSec int                `json:"rate_limit_per_sec"`
+	Retry           schema.RetryConfig `json:"retry"`
+}
+
+// BackendSnapshot 后端配置快照。
+type BackendSnapshot struct {
+	ID      int            `json:"id"`
+	Scope   string         `json:"scope"`
+	Name    string         `json:"name"`
+	Type    string         `json:"type"`
+	Options map[string]any `json:"options"`
+}
+
+// PromptSnapshot 提示词模板快照。
+type PromptSnapshot struct {
+	TemplateID   *int   `json:"template_id,omitempty"`
+	TemplateName string `json:"template_name"`
+	Content      string `json:"content"`
+}
+
+// StrategySnapshot 策略模板快照。
+type StrategySnapshot struct {
+	ProfileID   *int                            `json:"profile_id,omitempty"`
+	ProfileName string                          `json:"profile_name"`
+	Split       schema.ProfileSplitConfig       `json:"split"`
+	Protect     schema.ProfileProtectConfig     `json:"protect"`
+	Postprocess schema.ProfilePostprocessConfig `json:"postprocess"`
+	Repair      schema.ProfileRepairConfig      `json:"repair"`
+	Glossary    schema.ProfileGlossaryConfig    `json:"glossary"`
+}
+
+// --- CRUD 方法 ---
+
+// CreateManualJob 创建手动翻译任务。
 func (s *TranslationJobService) CreateManualJob(ctx context.Context, actorUserID, projectID int, input CreateTranslationJobInput) (*ent.TranslationJob, error) {
+	// 1. 校验项目访问权限
 	projectRow, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true)
 	if err != nil {
 		return nil, err
 	}
 
+	// 2. 加载执行计划模板（必填）
+	plan, err := s.executionPlans.GetByID(ctx, actorUserID, input.ExecutionPlanID)
+	if err != nil {
+		return nil, fmt.Errorf("execution plan: %w", err)
+	}
+
+	// 3. 校验并生成快照
+	snapshot, err := s.validateAndSnapshot(ctx, actorUserID, projectRow, plan)
+	if err != nil {
+		return nil, err
+	}
+
+	// 4. 填充通用配置
+	snapshot.SourceLang = projectRow.SourceLang
+	snapshot.TargetLang = projectRow.TargetLang
+	snapshot.AutoApprove = input.AutoApprove
+
+	snapshotBytes, err := json.Marshal(snapshot)
+	if err != nil {
+		return nil, fmt.Errorf("marshal snapshot: %w", err)
+	}
+
+	// 5. 解析任务选择
 	selection, err := s.resolveJobSelection(ctx, projectID, input)
 	if err != nil {
 		return nil, err
@@ -89,6 +198,7 @@ func (s *TranslationJobService) CreateManualJob(ctx context.Context, actorUserID
 	}
 	sort.Ints(resourceIDs)
 
+	// 6. 事务创建任务
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -100,14 +210,18 @@ func (s *TranslationJobService) CreateManualJob(ctx context.Context, actorUserID
 		}
 	}()
 
-	projectConfig := defaultProjectTranslationConfig(projectRow)
-	translationConfig := mergeConfigMaps(projectConfig, input.TranslationConfig)
+	var snapshotMap map[string]any
+	if err := json.Unmarshal(snapshotBytes, &snapshotMap); err != nil {
+		return nil, fmt.Errorf("unmarshal snapshot: %w", err)
+	}
+
 	created, err := tx.TranslationJob.Create().
 		SetProjectID(projectID).
 		SetCreatedByID(actorUserID).
 		SetStatus(TranslationJobStatusPending).
 		SetTriggerType(TranslationJobTriggerManual).
-		SetTranslationConfig(translationConfig).
+		SetExecutionPlanID(plan.ID).
+		SetTranslationConfig(snapshotMap).
 		SetResourceCount(len(selection)).
 		SetTotalSegments(totalSegments).
 		Save(ctx)
@@ -136,6 +250,155 @@ func (s *TranslationJobService) CreateManualJob(ctx context.Context, actorUserID
 
 	return s.GetJob(ctx, actorUserID, created.ID)
 }
+
+// --- 快照方法 ---
+
+// validateAndSnapshot 校验执行计划中的每轮配置，并生成完整快照。
+func (s *TranslationJobService) validateAndSnapshot(
+	ctx context.Context,
+	actorUserID int,
+	projectRow *ent.Project,
+	plan *ent.ExecutionPlanTemplate,
+) (*JobExecutionSnapshot, error) {
+	snapshot := &JobExecutionSnapshot{
+		ExecutionPlanID:   plan.ID,
+		ExecutionPlanName: plan.Name,
+		Rounds:            make([]JobRoundSnapshot, 0, len(plan.Rounds)),
+	}
+
+	for i, round := range plan.Rounds {
+		// 校验后端可访问性
+		if err := s.validateBackendAccess(ctx, projectRow, round.BackendID); err != nil {
+			return nil, fmt.Errorf("rounds[%d] backend: %w", i, err)
+		}
+
+		// 快照后端
+		backendSnap, err := s.snapshotBackend(ctx, round.BackendID)
+		if err != nil {
+			return nil, fmt.Errorf("rounds[%d] snapshot backend: %w", i, err)
+		}
+
+		// 快照提示词模板
+		promptSnap, err := s.snapshotPromptTemplate(ctx, round.PromptTemplateID)
+		if err != nil {
+			return nil, fmt.Errorf("rounds[%d] snapshot prompt: %w", i, err)
+		}
+
+		// 快照策略模板
+		strategySnap, err := s.snapshotProfile(ctx, round.ProfileID)
+		if err != nil {
+			return nil, fmt.Errorf("rounds[%d] snapshot profile: %w", i, err)
+		}
+
+		snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
+			Name:            round.Name,
+			Backend:         *backendSnap,
+			Prompt:          *promptSnap,
+			Strategy:        *strategySnap,
+			BatchSize:       round.BatchSize,
+			Concurrency:     round.Concurrency,
+			FallbackShrink:  round.FallbackShrink,
+			RateLimitPerSec: round.RateLimitPerSec,
+			Retry:           round.Retry,
+		})
+	}
+
+	return snapshot, nil
+}
+
+// validateBackendAccess 检查后端对项目是否可访问。
+func (s *TranslationJobService) validateBackendAccess(
+	ctx context.Context,
+	projectRow *ent.Project,
+	backendID int,
+) error {
+	b, err := s.backends.GetByID(ctx, backendID)
+	if err != nil {
+		return fmt.Errorf("backend %d: %w", backendID, err)
+	}
+
+	if projectRow.OwnerUserID != nil {
+		if b.Scope == ScopeUser && b.OwnerUserID != nil && *b.OwnerUserID == *projectRow.OwnerUserID {
+			return nil
+		}
+		if b.Scope == ScopeOrg && b.OwnerOrgID != nil && s.userBelongsToOrg(ctx, *projectRow.OwnerUserID, *b.OwnerOrgID) {
+			return nil
+		}
+		return fmt.Errorf("backend %d is not accessible for this project", backendID)
+	}
+
+	if projectRow.OwnerOrgID != nil {
+		if b.Scope == ScopeOrg && b.OwnerOrgID != nil && *b.OwnerOrgID == *projectRow.OwnerOrgID {
+			return nil
+		}
+		return fmt.Errorf("backend %d is not accessible for this project", backendID)
+	}
+
+	return fmt.Errorf("project has no owner")
+}
+
+// userBelongsToOrg 检查用户是否属于指定组织。
+func (s *TranslationJobService) userBelongsToOrg(ctx context.Context, userID, orgID int) bool {
+	count, err := s.client.OrgMembership.Query().
+		Where(
+			orgmembership.HasOrganizationWith(organization.IDEQ(orgID)),
+			orgmembership.HasUserWith(user.IDEQ(userID)),
+		).
+		Count(ctx)
+	return err == nil && count > 0
+}
+
+// snapshotBackend 快照后端配置。
+func (s *TranslationJobService) snapshotBackend(ctx context.Context, backendID int) (*BackendSnapshot, error) {
+	b, err := s.client.Backend.Get(ctx, backendID)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, fmt.Errorf("backend %d not found", backendID)
+		}
+		return nil, err
+	}
+	return &BackendSnapshot{
+		ID:      b.ID,
+		Scope:   b.Scope,
+		Name:    b.Name,
+		Type:    string(b.BackendType),
+		Options: cloneMap(b.Options),
+	}, nil
+}
+
+// snapshotPromptTemplate 快照提示词模板。
+func (s *TranslationJobService) snapshotPromptTemplate(ctx context.Context, templateID int) (*PromptSnapshot, error) {
+	pt, err := s.promptTemplates.GetByID(ctx, templateID)
+	if err != nil {
+		return nil, err
+	}
+	id := pt.ID
+	return &PromptSnapshot{
+		TemplateID:   &id,
+		TemplateName: pt.Name,
+		Content:      pt.SystemPromptContent,
+	}, nil
+}
+
+// snapshotProfile 快照策略模板。
+func (s *TranslationJobService) snapshotProfile(ctx context.Context, profileID int) (*StrategySnapshot, error) {
+	tp, err := s.profiles.GetByID(ctx, profileID)
+	if err != nil {
+		return nil, err
+	}
+	id := tp.ID
+	return &StrategySnapshot{
+		ProfileID:   &id,
+		ProfileName: tp.Name,
+		Split:       tp.Config.Split,
+		Protect:     tp.Config.Protect,
+		Postprocess: tp.Config.Postprocess,
+		Repair:      tp.Config.Repair,
+		Glossary:    tp.Config.Glossary,
+	}, nil
+}
+
+// --- 其他方法 ---
 
 func (s *TranslationJobService) RecoverPendingJobs(ctx context.Context) ([]int, error) {
 	jobs, err := s.client.TranslationJob.Query().
@@ -509,4 +772,20 @@ func uniqueInts(values []int) []int {
 	}
 	sort.Ints(out)
 	return out
+}
+
+// GetSnapshot 从 TranslationJob 的 TranslationConfig 字段解析快照。
+func GetSnapshot(job *ent.TranslationJob) (*JobExecutionSnapshot, error) {
+	if job.TranslationConfig == nil {
+		return nil, nil
+	}
+	raw, err := json.Marshal(job.TranslationConfig)
+	if err != nil {
+		return nil, fmt.Errorf("marshal translation config: %w", err)
+	}
+	var snap JobExecutionSnapshot
+	if err := json.Unmarshal(raw, &snap); err != nil {
+		return nil, fmt.Errorf("unmarshal snapshot: %w", err)
+	}
+	return &snap, nil
 }

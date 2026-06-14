@@ -16,6 +16,8 @@ type Tx struct {
 	ActivityLog *ActivityLogClient
 	// Backend is the client for interacting with the Backend builders.
 	Backend *BackendClient
+	// ExecutionPlanTemplate is the client for interacting with the ExecutionPlanTemplate builders.
+	ExecutionPlanTemplate *ExecutionPlanTemplateClient
 	// GlossaryEntry is the client for interacting with the GlossaryEntry builders.
 	GlossaryEntry *GlossaryEntryClient
 	// JobResource is the client for interacting with the JobResource builders.
@@ -26,8 +28,6 @@ type Tx struct {
 	Organization *OrganizationClient
 	// Project is the client for interacting with the Project builders.
 	Project *ProjectClient
-	// ProjectBackend is the client for interacting with the ProjectBackend builders.
-	ProjectBackend *ProjectBackendClient
 	// PromptTemplate is the client for interacting with the PromptTemplate builders.
 	PromptTemplate *PromptTemplateClient
 	// RefreshToken is the client for interacting with the RefreshToken builders.
@@ -36,8 +36,6 @@ type Tx struct {
 	Resource *ResourceClient
 	// Segment is the client for interacting with the Segment builders.
 	Segment *SegmentClient
-	// StageBackendOverride is the client for interacting with the StageBackendOverride builders.
-	StageBackendOverride *StageBackendOverrideClient
 	// TMEntry is the client for interacting with the TMEntry builders.
 	TMEntry *TMEntryClient
 	// TranslationJob is the client for interacting with the TranslationJob builders.
@@ -181,17 +179,16 @@ func (tx *Tx) Client() *Client {
 func (tx *Tx) init() {
 	tx.ActivityLog = NewActivityLogClient(tx.config)
 	tx.Backend = NewBackendClient(tx.config)
+	tx.ExecutionPlanTemplate = NewExecutionPlanTemplateClient(tx.config)
 	tx.GlossaryEntry = NewGlossaryEntryClient(tx.config)
 	tx.JobResource = NewJobResourceClient(tx.config)
 	tx.OrgMembership = NewOrgMembershipClient(tx.config)
 	tx.Organization = NewOrganizationClient(tx.config)
 	tx.Project = NewProjectClient(tx.config)
-	tx.ProjectBackend = NewProjectBackendClient(tx.config)
 	tx.PromptTemplate = NewPromptTemplateClient(tx.config)
 	tx.RefreshToken = NewRefreshTokenClient(tx.config)
 	tx.Resource = NewResourceClient(tx.config)
 	tx.Segment = NewSegmentClient(tx.config)
-	tx.StageBackendOverride = NewStageBackendOverrideClient(tx.config)
 	tx.TMEntry = NewTMEntryClient(tx.config)
 	tx.TranslationJob = NewTranslationJobClient(tx.config)
 	tx.TranslationProfile = NewTranslationProfileClient(tx.config)

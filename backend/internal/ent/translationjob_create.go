@@ -79,6 +79,12 @@ func (_c *TranslationJobCreate) SetNillableTriggerType(v *string) *TranslationJo
 	return _c
 }
 
+// SetExecutionPlanID sets the "execution_plan_id" field.
+func (_c *TranslationJobCreate) SetExecutionPlanID(v int) *TranslationJobCreate {
+	_c.mutation.SetExecutionPlanID(v)
+	return _c
+}
+
 // SetTranslationConfig sets the "translation_config" field.
 func (_c *TranslationJobCreate) SetTranslationConfig(v map[string]interface{}) *TranslationJobCreate {
 	_c.mutation.SetTranslationConfig(v)
@@ -305,6 +311,14 @@ func (_c *TranslationJobCreate) check() error {
 	if _, ok := _c.mutation.TriggerType(); !ok {
 		return &ValidationError{Name: "trigger_type", err: errors.New(`ent: missing required field "TranslationJob.trigger_type"`)}
 	}
+	if _, ok := _c.mutation.ExecutionPlanID(); !ok {
+		return &ValidationError{Name: "execution_plan_id", err: errors.New(`ent: missing required field "TranslationJob.execution_plan_id"`)}
+	}
+	if v, ok := _c.mutation.ExecutionPlanID(); ok {
+		if err := translationjob.ExecutionPlanIDValidator(v); err != nil {
+			return &ValidationError{Name: "execution_plan_id", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.execution_plan_id": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.TranslationConfig(); !ok {
 		return &ValidationError{Name: "translation_config", err: errors.New(`ent: missing required field "TranslationJob.translation_config"`)}
 	}
@@ -392,6 +406,10 @@ func (_c *TranslationJobCreate) createSpec() (*TranslationJob, *sqlgraph.CreateS
 	if value, ok := _c.mutation.TriggerType(); ok {
 		_spec.SetField(translationjob.FieldTriggerType, field.TypeString, value)
 		_node.TriggerType = value
+	}
+	if value, ok := _c.mutation.ExecutionPlanID(); ok {
+		_spec.SetField(translationjob.FieldExecutionPlanID, field.TypeInt, value)
+		_node.ExecutionPlanID = value
 	}
 	if value, ok := _c.mutation.TranslationConfig(); ok {
 		_spec.SetField(translationjob.FieldTranslationConfig, field.TypeJSON, value)

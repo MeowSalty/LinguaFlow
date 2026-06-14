@@ -75,6 +75,11 @@ func TriggerType(v string) predicate.TranslationJob {
 	return predicate.TranslationJob(sql.FieldEQ(FieldTriggerType, v))
 }
 
+// ExecutionPlanID applies equality check predicate on the "execution_plan_id" field. It's identical to ExecutionPlanIDEQ.
+func ExecutionPlanID(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldEQ(FieldExecutionPlanID, v))
+}
+
 // ResourceCount applies equality check predicate on the "resource_count" field. It's identical to ResourceCountEQ.
 func ResourceCount(v int) predicate.TranslationJob {
 	return predicate.TranslationJob(sql.FieldEQ(FieldResourceCount, v))
@@ -313,6 +318,46 @@ func TriggerTypeEqualFold(v string) predicate.TranslationJob {
 // TriggerTypeContainsFold applies the ContainsFold predicate on the "trigger_type" field.
 func TriggerTypeContainsFold(v string) predicate.TranslationJob {
 	return predicate.TranslationJob(sql.FieldContainsFold(FieldTriggerType, v))
+}
+
+// ExecutionPlanIDEQ applies the EQ predicate on the "execution_plan_id" field.
+func ExecutionPlanIDEQ(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldEQ(FieldExecutionPlanID, v))
+}
+
+// ExecutionPlanIDNEQ applies the NEQ predicate on the "execution_plan_id" field.
+func ExecutionPlanIDNEQ(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldNEQ(FieldExecutionPlanID, v))
+}
+
+// ExecutionPlanIDIn applies the In predicate on the "execution_plan_id" field.
+func ExecutionPlanIDIn(vs ...int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldIn(FieldExecutionPlanID, vs...))
+}
+
+// ExecutionPlanIDNotIn applies the NotIn predicate on the "execution_plan_id" field.
+func ExecutionPlanIDNotIn(vs ...int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldNotIn(FieldExecutionPlanID, vs...))
+}
+
+// ExecutionPlanIDGT applies the GT predicate on the "execution_plan_id" field.
+func ExecutionPlanIDGT(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldGT(FieldExecutionPlanID, v))
+}
+
+// ExecutionPlanIDGTE applies the GTE predicate on the "execution_plan_id" field.
+func ExecutionPlanIDGTE(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldGTE(FieldExecutionPlanID, v))
+}
+
+// ExecutionPlanIDLT applies the LT predicate on the "execution_plan_id" field.
+func ExecutionPlanIDLT(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldLT(FieldExecutionPlanID, v))
+}
+
+// ExecutionPlanIDLTE applies the LTE predicate on the "execution_plan_id" field.
+func ExecutionPlanIDLTE(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldLTE(FieldExecutionPlanID, v))
 }
 
 // ResourceCountEQ applies the EQ predicate on the "resource_count" field.

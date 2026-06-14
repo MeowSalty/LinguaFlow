@@ -9,20 +9,7 @@ type TranslationProfileConfigData struct {
 	Protect     ProfileProtectConfig     `json:"protect"     yaml:"protect"`
 	Postprocess ProfilePostprocessConfig `json:"postprocess" yaml:"postprocess"`
 	Repair      ProfileRepairConfig      `json:"repair"      yaml:"repair"`
-	Rounds      []ProfileRoundConfig     `json:"rounds"      yaml:"rounds"`
 	Glossary    ProfileGlossaryConfig    `json:"glossary"    yaml:"glossary"`
-}
-
-// ProfileRoundConfig 单轮翻译的执行策略。
-// BackendOrder 使用后端 ID，运行时根据 scope 解析。
-type ProfileRoundConfig struct {
-	BatchSize       int                `json:"batch_size"       yaml:"batch_size"`
-	Concurrency     int                `json:"concurrency"      yaml:"concurrency"`
-	FallbackShrink  float64            `json:"fallback_shrink"  yaml:"fallback_shrink"`
-	RateLimitPerSec int                `json:"rate_limit_per_sec" yaml:"rate_limit_per_sec"`
-	BackendMode     string             `json:"backend_mode"     yaml:"backend_mode"`
-	BackendOrder    []int              `json:"backend_order"    yaml:"backend_order"`
-	Retry           ProfileRetryConfig `json:"retry"            yaml:"retry"`
 }
 
 // ProfileSplitConfig 分割策略配置。
@@ -55,14 +42,6 @@ type ProfileRepairConfig struct {
 	PromptUpgrade        bool    `json:"prompt_upgrade"        yaml:"prompt_upgrade"`
 }
 
-// ProfileRetryConfig 重试策略配置。
-// BackoffMs 使用 int 毫秒，避免 time.Duration 在 JSON/SQLite 中的序列化歧义。
-type ProfileRetryConfig struct {
-	MaxAttempts int  `json:"max_attempts" yaml:"max_attempts"`
-	BackoffMs   int  `json:"backoff_ms"   yaml:"backoff_ms"`
-	Jitter      bool `json:"jitter"       yaml:"jitter"`
-}
-
 // ProfileGlossaryConfig 术语表配置。
 type ProfileGlossaryConfig struct {
 	Enabled   bool                   `json:"enabled"   yaml:"enabled"`
@@ -78,7 +57,7 @@ type ProfileBootstrapConfig struct {
 	InlineConflictStrategy string `json:"inline_conflict_strategy" yaml:"inline_conflict_strategy"`
 }
 
-// DefaultProfileConfig 返回默认的翻译配置（单轮模式）。
+// DefaultProfileConfig 返回默认的翻译配置。
 func DefaultProfileConfig() TranslationProfileConfigData {
 	return TranslationProfileConfigData{
 		Split: ProfileSplitConfig{
@@ -102,21 +81,6 @@ func DefaultProfileConfig() TranslationProfileConfigData {
 			PartialThreshold:     0.5,
 			PlaceholderNormalize: true,
 			PromptUpgrade:        true,
-		},
-		Rounds: []ProfileRoundConfig{
-			{
-				BatchSize:       10,
-				Concurrency:     3,
-				FallbackShrink:  0.5,
-				RateLimitPerSec: 0,
-				BackendMode:     "prepend",
-				BackendOrder:    []int{},
-				Retry: ProfileRetryConfig{
-					MaxAttempts: 3,
-					BackoffMs:   2000,
-					Jitter:      true,
-				},
-			},
 		},
 		Glossary: ProfileGlossaryConfig{
 			Enabled: false,

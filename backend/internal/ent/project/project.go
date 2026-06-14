@@ -38,10 +38,6 @@ const (
 	EdgeOwnerUser = "owner_user"
 	// EdgeOwnerOrg holds the string denoting the owner_org edge name in mutations.
 	EdgeOwnerOrg = "owner_org"
-	// EdgeProjectBackends holds the string denoting the project_backends edge name in mutations.
-	EdgeProjectBackends = "project_backends"
-	// EdgeStageBackendOverrides holds the string denoting the stage_backend_overrides edge name in mutations.
-	EdgeStageBackendOverrides = "stage_backend_overrides"
 	// EdgeGlossaryEntries holds the string denoting the glossary_entries edge name in mutations.
 	EdgeGlossaryEntries = "glossary_entries"
 	// EdgeTmEntries holds the string denoting the tm_entries edge name in mutations.
@@ -70,20 +66,6 @@ const (
 	OwnerOrgInverseTable = "organizations"
 	// OwnerOrgColumn is the table column denoting the owner_org relation/edge.
 	OwnerOrgColumn = "owner_org_id"
-	// ProjectBackendsTable is the table that holds the project_backends relation/edge.
-	ProjectBackendsTable = "project_backends"
-	// ProjectBackendsInverseTable is the table name for the ProjectBackend entity.
-	// It exists in this package in order to avoid circular dependency with the "projectbackend" package.
-	ProjectBackendsInverseTable = "project_backends"
-	// ProjectBackendsColumn is the table column denoting the project_backends relation/edge.
-	ProjectBackendsColumn = "project_project_backends"
-	// StageBackendOverridesTable is the table that holds the stage_backend_overrides relation/edge.
-	StageBackendOverridesTable = "stage_backend_overrides"
-	// StageBackendOverridesInverseTable is the table name for the StageBackendOverride entity.
-	// It exists in this package in order to avoid circular dependency with the "stagebackendoverride" package.
-	StageBackendOverridesInverseTable = "stage_backend_overrides"
-	// StageBackendOverridesColumn is the table column denoting the stage_backend_overrides relation/edge.
-	StageBackendOverridesColumn = "project_stage_backend_overrides"
 	// GlossaryEntriesTable is the table that holds the glossary_entries relation/edge.
 	GlossaryEntriesTable = "glossary_entries"
 	// GlossaryEntriesInverseTable is the table name for the GlossaryEntry entity.
@@ -240,34 +222,6 @@ func ByOwnerOrgField(field string, opts ...sql.OrderTermOption) OrderOption {
 	}
 }
 
-// ByProjectBackendsCount orders the results by project_backends count.
-func ByProjectBackendsCount(opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newProjectBackendsStep(), opts...)
-	}
-}
-
-// ByProjectBackends orders the results by project_backends terms.
-func ByProjectBackends(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newProjectBackendsStep(), append([]sql.OrderTerm{term}, terms...)...)
-	}
-}
-
-// ByStageBackendOverridesCount orders the results by stage_backend_overrides count.
-func ByStageBackendOverridesCount(opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newStageBackendOverridesStep(), opts...)
-	}
-}
-
-// ByStageBackendOverrides orders the results by stage_backend_overrides terms.
-func ByStageBackendOverrides(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newStageBackendOverridesStep(), append([]sql.OrderTerm{term}, terms...)...)
-	}
-}
-
 // ByGlossaryEntriesCount orders the results by glossary_entries count.
 func ByGlossaryEntriesCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -363,20 +317,6 @@ func newOwnerOrgStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(OwnerOrgInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.M2O, true, OwnerOrgTable, OwnerOrgColumn),
-	)
-}
-func newProjectBackendsStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(ProjectBackendsInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, ProjectBackendsTable, ProjectBackendsColumn),
-	)
-}
-func newStageBackendOverridesStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(StageBackendOverridesInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, StageBackendOverridesTable, StageBackendOverridesColumn),
 	)
 }
 func newGlossaryEntriesStep() *sqlgraph.Step {

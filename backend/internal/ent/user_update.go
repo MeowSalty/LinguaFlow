@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
@@ -284,6 +285,21 @@ func (_u *UserUpdate) AddTranslationProfiles(v ...*TranslationProfile) *UserUpda
 	return _u.AddTranslationProfileIDs(ids...)
 }
 
+// AddExecutionPlanTemplateIDs adds the "execution_plan_templates" edge to the ExecutionPlanTemplate entity by IDs.
+func (_u *UserUpdate) AddExecutionPlanTemplateIDs(ids ...int) *UserUpdate {
+	_u.mutation.AddExecutionPlanTemplateIDs(ids...)
+	return _u
+}
+
+// AddExecutionPlanTemplates adds the "execution_plan_templates" edges to the ExecutionPlanTemplate entity.
+func (_u *UserUpdate) AddExecutionPlanTemplates(v ...*ExecutionPlanTemplate) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddExecutionPlanTemplateIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdate) Mutation() *UserMutation {
 	return _u.mutation
@@ -497,6 +513,27 @@ func (_u *UserUpdate) RemoveTranslationProfiles(v ...*TranslationProfile) *UserU
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveTranslationProfileIDs(ids...)
+}
+
+// ClearExecutionPlanTemplates clears all "execution_plan_templates" edges to the ExecutionPlanTemplate entity.
+func (_u *UserUpdate) ClearExecutionPlanTemplates() *UserUpdate {
+	_u.mutation.ClearExecutionPlanTemplates()
+	return _u
+}
+
+// RemoveExecutionPlanTemplateIDs removes the "execution_plan_templates" edge to ExecutionPlanTemplate entities by IDs.
+func (_u *UserUpdate) RemoveExecutionPlanTemplateIDs(ids ...int) *UserUpdate {
+	_u.mutation.RemoveExecutionPlanTemplateIDs(ids...)
+	return _u
+}
+
+// RemoveExecutionPlanTemplates removes "execution_plan_templates" edges to ExecutionPlanTemplate entities.
+func (_u *UserUpdate) RemoveExecutionPlanTemplates(v ...*ExecutionPlanTemplate) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveExecutionPlanTemplateIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -1041,6 +1078,51 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.ExecutionPlanTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExecutionPlanTemplatesTable,
+			Columns: []string{user.ExecutionPlanTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionplantemplate.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedExecutionPlanTemplatesIDs(); len(nodes) > 0 && !_u.mutation.ExecutionPlanTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExecutionPlanTemplatesTable,
+			Columns: []string{user.ExecutionPlanTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionplantemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ExecutionPlanTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExecutionPlanTemplatesTable,
+			Columns: []string{user.ExecutionPlanTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionplantemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{user.Label}
@@ -1307,6 +1389,21 @@ func (_u *UserUpdateOne) AddTranslationProfiles(v ...*TranslationProfile) *UserU
 	return _u.AddTranslationProfileIDs(ids...)
 }
 
+// AddExecutionPlanTemplateIDs adds the "execution_plan_templates" edge to the ExecutionPlanTemplate entity by IDs.
+func (_u *UserUpdateOne) AddExecutionPlanTemplateIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.AddExecutionPlanTemplateIDs(ids...)
+	return _u
+}
+
+// AddExecutionPlanTemplates adds the "execution_plan_templates" edges to the ExecutionPlanTemplate entity.
+func (_u *UserUpdateOne) AddExecutionPlanTemplates(v ...*ExecutionPlanTemplate) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddExecutionPlanTemplateIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdateOne) Mutation() *UserMutation {
 	return _u.mutation
@@ -1520,6 +1617,27 @@ func (_u *UserUpdateOne) RemoveTranslationProfiles(v ...*TranslationProfile) *Us
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveTranslationProfileIDs(ids...)
+}
+
+// ClearExecutionPlanTemplates clears all "execution_plan_templates" edges to the ExecutionPlanTemplate entity.
+func (_u *UserUpdateOne) ClearExecutionPlanTemplates() *UserUpdateOne {
+	_u.mutation.ClearExecutionPlanTemplates()
+	return _u
+}
+
+// RemoveExecutionPlanTemplateIDs removes the "execution_plan_templates" edge to ExecutionPlanTemplate entities by IDs.
+func (_u *UserUpdateOne) RemoveExecutionPlanTemplateIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.RemoveExecutionPlanTemplateIDs(ids...)
+	return _u
+}
+
+// RemoveExecutionPlanTemplates removes "execution_plan_templates" edges to ExecutionPlanTemplate entities.
+func (_u *UserUpdateOne) RemoveExecutionPlanTemplates(v ...*ExecutionPlanTemplate) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveExecutionPlanTemplateIDs(ids...)
 }
 
 // Where appends a list predicates to the UserUpdate builder.
@@ -2087,6 +2205,51 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ExecutionPlanTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExecutionPlanTemplatesTable,
+			Columns: []string{user.ExecutionPlanTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionplantemplate.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedExecutionPlanTemplatesIDs(); len(nodes) > 0 && !_u.mutation.ExecutionPlanTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExecutionPlanTemplatesTable,
+			Columns: []string{user.ExecutionPlanTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionplantemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ExecutionPlanTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExecutionPlanTemplatesTable,
+			Columns: []string{user.ExecutionPlanTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionplantemplate.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

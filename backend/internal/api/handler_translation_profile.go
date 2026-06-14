@@ -50,26 +50,6 @@ func entTranslationProfileToResponse(t *ent.TranslationProfile) TranslationProfi
 
 // profileConfigToResponse 将 schema 配置转换为 API 响应。
 func profileConfigToResponse(c *schema.TranslationProfileConfigData) TranslationProfileConfig {
-	rounds := make([]ProfileRoundConfig, len(c.Rounds))
-	for i, r := range c.Rounds {
-		backendOrder := make([]int, len(r.BackendOrder))
-		copy(backendOrder, r.BackendOrder)
-
-		rounds[i] = ProfileRoundConfig{
-			BatchSize:       r.BatchSize,
-			Concurrency:     r.Concurrency,
-			FallbackShrink:  r.FallbackShrink,
-			RateLimitPerSec: r.RateLimitPerSec,
-			BackendMode:     ProfileRoundConfigBackendMode(r.BackendMode),
-			BackendOrder:    backendOrder,
-			Retry: ProfileRetryConfig{
-				MaxAttempts: r.Retry.MaxAttempts,
-				BackoffMs:   r.Retry.BackoffMs,
-				Jitter:      r.Retry.Jitter,
-			},
-		}
-	}
-
 	rules := make([]string, len(c.Protect.Rules))
 	copy(rules, c.Protect.Rules)
 
@@ -96,7 +76,6 @@ func profileConfigToResponse(c *schema.TranslationProfileConfigData) Translation
 			PlaceholderNormalize: c.Repair.PlaceholderNormalize,
 			PromptUpgrade:        c.Repair.PromptUpgrade,
 		},
-		Rounds: rounds,
 		Glossary: ProfileGlossaryConfig{
 			Enabled: c.Glossary.Enabled,
 			Bootstrap: ProfileBootstrapConfig{
@@ -114,26 +93,6 @@ func profileConfigToResponse(c *schema.TranslationProfileConfigData) Translation
 func parseProfileConfig(c *TranslationProfileConfig) *schema.TranslationProfileConfigData {
 	if c == nil {
 		return nil
-	}
-
-	rounds := make([]schema.ProfileRoundConfig, len(c.Rounds))
-	for i, r := range c.Rounds {
-		backendOrder := make([]int, len(r.BackendOrder))
-		copy(backendOrder, r.BackendOrder)
-
-		rounds[i] = schema.ProfileRoundConfig{
-			BatchSize:       r.BatchSize,
-			Concurrency:     r.Concurrency,
-			FallbackShrink:  r.FallbackShrink,
-			RateLimitPerSec: r.RateLimitPerSec,
-			BackendMode:     string(r.BackendMode),
-			BackendOrder:    backendOrder,
-			Retry: schema.ProfileRetryConfig{
-				MaxAttempts: r.Retry.MaxAttempts,
-				BackoffMs:   r.Retry.BackoffMs,
-				Jitter:      r.Retry.Jitter,
-			},
-		}
 	}
 
 	var rules []string
@@ -165,7 +124,6 @@ func parseProfileConfig(c *TranslationProfileConfig) *schema.TranslationProfileC
 			PlaceholderNormalize: c.Repair.PlaceholderNormalize,
 			PromptUpgrade:        c.Repair.PromptUpgrade,
 		},
-		Rounds: rounds,
 		Glossary: schema.ProfileGlossaryConfig{
 			Enabled: c.Glossary.Enabled,
 			Bootstrap: schema.ProfileBootstrapConfig{

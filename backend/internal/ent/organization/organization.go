@@ -44,6 +44,8 @@ const (
 	EdgePromptTemplates = "prompt_templates"
 	// EdgeTranslationProfiles holds the string denoting the translation_profiles edge name in mutations.
 	EdgeTranslationProfiles = "translation_profiles"
+	// EdgeExecutionPlanTemplates holds the string denoting the execution_plan_templates edge name in mutations.
+	EdgeExecutionPlanTemplates = "execution_plan_templates"
 	// Table holds the table name of the organization in the database.
 	Table = "organizations"
 	// ProjectsTable is the table that holds the projects relation/edge.
@@ -109,6 +111,13 @@ const (
 	TranslationProfilesInverseTable = "translation_profiles"
 	// TranslationProfilesColumn is the table column denoting the translation_profiles relation/edge.
 	TranslationProfilesColumn = "owner_org_id"
+	// ExecutionPlanTemplatesTable is the table that holds the execution_plan_templates relation/edge.
+	ExecutionPlanTemplatesTable = "execution_plan_templates"
+	// ExecutionPlanTemplatesInverseTable is the table name for the ExecutionPlanTemplate entity.
+	// It exists in this package in order to avoid circular dependency with the "executionplantemplate" package.
+	ExecutionPlanTemplatesInverseTable = "execution_plan_templates"
+	// ExecutionPlanTemplatesColumn is the table column denoting the execution_plan_templates relation/edge.
+	ExecutionPlanTemplatesColumn = "owner_org_id"
 )
 
 // Columns holds all SQL columns for organization fields.
@@ -308,6 +317,20 @@ func ByTranslationProfiles(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOpti
 		sqlgraph.OrderByNeighborTerms(s, newTranslationProfilesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByExecutionPlanTemplatesCount orders the results by execution_plan_templates count.
+func ByExecutionPlanTemplatesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newExecutionPlanTemplatesStep(), opts...)
+	}
+}
+
+// ByExecutionPlanTemplates orders the results by execution_plan_templates terms.
+func ByExecutionPlanTemplates(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newExecutionPlanTemplatesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newProjectsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -369,5 +392,12 @@ func newTranslationProfilesStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(TranslationProfilesInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, TranslationProfilesTable, TranslationProfilesColumn),
+	)
+}
+func newExecutionPlanTemplatesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(ExecutionPlanTemplatesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, ExecutionPlanTemplatesTable, ExecutionPlanTemplatesColumn),
 	)
 }

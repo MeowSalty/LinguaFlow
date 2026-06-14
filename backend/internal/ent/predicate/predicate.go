@@ -12,6 +12,9 @@ type ActivityLog func(*sql.Selector)
 // Backend is the predicate function for backend builders.
 type Backend func(*sql.Selector)
 
+// ExecutionPlanTemplate is the predicate function for executionplantemplate builders.
+type ExecutionPlanTemplate func(*sql.Selector)
+
 // GlossaryEntry is the predicate function for glossaryentry builders.
 type GlossaryEntry func(*sql.Selector)
 
@@ -27,9 +30,6 @@ type Organization func(*sql.Selector)
 // Project is the predicate function for project builders.
 type Project func(*sql.Selector)
 
-// ProjectBackend is the predicate function for projectbackend builders.
-type ProjectBackend func(*sql.Selector)
-
 // PromptTemplate is the predicate function for prompttemplate builders.
 type PromptTemplate func(*sql.Selector)
 
@@ -41,9 +41,6 @@ type Resource func(*sql.Selector)
 
 // Segment is the predicate function for segment builders.
 type Segment func(*sql.Selector)
-
-// StageBackendOverride is the predicate function for stagebackendoverride builders.
-type StageBackendOverride func(*sql.Selector)
 
 // TMEntry is the predicate function for tmentry builders.
 type TMEntry func(*sql.Selector)

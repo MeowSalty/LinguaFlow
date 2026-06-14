@@ -37,5 +37,6 @@ func (User) Edges() []ent.Edge {
 		edge.To("usage_records", UsageRecord.Type),
 		edge.To("prompt_templates", PromptTemplate.Type),
 		edge.To("translation_profiles", TranslationProfile.Type),
+		edge.To("execution_plan_templates", ExecutionPlanTemplate.Type),
 	}
 }

@@ -32,6 +32,7 @@ type Server struct {
 	promptTemplateSvc     *service.PromptTemplateService
 	translationProfileSvc *service.TranslationProfileService
 	translationJobSvc     *service.TranslationJobService
+	executionPlanSvc      *service.ExecutionPlanService
 	reviewSvc             *service.ReviewService
 	segmentSvc            *service.SegmentService
 	statsSvc              *service.StatsService
@@ -41,6 +42,7 @@ type Server struct {
 	translationJobQueue   *worker.Queue
 	translationJobRunner  *worker.TranslationRunner
 	httpServer            *http.Server
+	executionPlanHandler  *HandlerExecutionPlan
 	ready                 atomic.Bool
 }
 
@@ -58,11 +60,13 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 	}
 	s.userService = service.NewUserService(client, s.authService)
 	s.backendSvc = service.NewBackendService(client, s.userService)
-	s.projectSvc = service.NewProjectService(client, s.userService, s.backendSvc)
+	s.projectSvc = service.NewProjectService(client, s.userService)
+	s.executionPlanSvc = service.NewExecutionPlanService(client, s.userService)
 	s.glossarySvc = service.NewGlossaryService(client, s.projectSvc)
 	s.promptTemplateSvc = service.NewPromptTemplateService(client)
 	s.translationProfileSvc = service.NewTranslationProfileService(client)
-	s.translationJobSvc = service.NewTranslationJobService(client, s.projectSvc)
+	s.translationJobSvc = service.NewTranslationJobService(client, s.projectSvc, s.executionPlanSvc, s.backendSvc, s.promptTemplateSvc, s.translationProfileSvc)
+	s.executionPlanHandler = NewHandlerExecutionPlan(s.executionPlanSvc)
 	s.reviewSvc = service.NewReviewService(client, s.projectSvc)
 	s.segmentSvc = service.NewSegmentService(client, s.projectSvc)
 	s.statsSvc = service.NewStatsService(client, s.projectSvc)
@@ -78,7 +82,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 		queueSize = 16
 	}
 	s.translationJobQueue = worker.NewQueue(queueSize)
-	s.translationJobRunner = worker.NewTranslationRunner(cfg, logger, client, s.projectSvc, s.translationJobSvc, jobStore, s.translationJobQueue)
+	s.translationJobRunner = worker.NewTranslationRunner(cfg, logger, client, s.translationJobSvc, jobStore, s.translationJobQueue)
 	s.httpServer = &http.Server{
 		Addr:              cfg.Server.Address(),
 		Handler:           s.newRouter(),

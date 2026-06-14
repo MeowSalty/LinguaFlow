@@ -10,21 +10,8 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 )
-
-// cloneAnyMap 浅拷贝 map[string]any。
-func cloneAnyMap(in map[string]any) map[string]any {
-	if len(in) == 0 {
-		return map[string]any{}
-	}
-	out := make(map[string]any, len(in))
-	for k, v := range in {
-		out[k] = v
-	}
-	return out
-}
 
 // firstNonEmpty 返回参数中第一个非空白字符串。
 func firstNonEmpty(values ...string) string {
@@ -48,7 +35,6 @@ type BaseRunner struct {
 	baseConfig *config.Config
 	logger     *slog.Logger
 	client     *ent.Client
-	projects   *service.ProjectService
 	store      *filestore.LocalStore
 	queue      *Queue
 	jobCtrl    JobController                              // 任务生命周期控制器
@@ -60,7 +46,6 @@ func newBaseRunner(
 	cfg *config.Config,
 	logger *slog.Logger,
 	client *ent.Client,
-	projects *service.ProjectService,
 	store *filestore.LocalStore,
 	queue *Queue,
 	jobCtrl JobController,
@@ -74,7 +59,6 @@ func newBaseRunner(
 		baseConfig: cfg,
 		logger:     logger,
 		client:     client,
-		projects:   projects,
 		store:      store,
 		queue:      queue,
 		jobCtrl:    jobCtrl,
@@ -125,34 +109,4 @@ func (r *BaseRunner) resolvePath(raw string) (string, error) {
 		return raw, nil
 	}
 	return r.store.Absolute(raw)
-}
-
-// buildBackendConfig 解析后端计划并填充配置。
-// 这是各 Runner 的 buildJobConfig 方法共享的公共逻辑。
-// 返回值：(translateBackends, bootstrapBackends, error)。
-// bootstrapBackends 可能为 nil（项目未配置 bootstrap 后端时）。
-func (r *BaseRunner) buildBackendConfig(ctx context.Context, cfg *config.Config, actorUserID, projectID int) ([]service.ProjectBackendBinding, []service.ProjectBackendBinding, error) {
-	translatePlan, err := r.projects.ResolveStagePlan(ctx, actorUserID, projectID, service.StageTranslate)
-	if err != nil {
-		return nil, nil, err
-	}
-	if len(translatePlan) == 0 {
-		return nil, nil, fmt.Errorf("worker: project %d has no backend plan", projectID)
-	}
-	cfg.Backends = make([]config.BackendConfig, 0, len(translatePlan))
-	priorityBase := len(translatePlan)
-	for i, binding := range translatePlan {
-		cfg.Backends = append(cfg.Backends, config.BackendConfig{
-			Name:     binding.Name,
-			Type:     binding.Type,
-			Enabled:  true,
-			Priority: priorityBase - i,
-			Options:  cloneAnyMap(binding.Options),
-		})
-	}
-	bootstrapPlan, bootstrapErr := r.projects.ResolveStagePlan(ctx, actorUserID, projectID, service.StageBootstrap)
-	if bootstrapErr != nil {
-		bootstrapPlan = nil
-	}
-	return translatePlan, bootstrapPlan, nil
 }
