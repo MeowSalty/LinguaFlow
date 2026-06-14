@@ -2253,14 +2253,14 @@ components:
       type: object
       required:
         - id
-        - source
+        - scope
         - name
         - type
         - priority
       properties:
         id:
           type: integer
-        source:
+        scope:
           type: string
           enum:
             - user
@@ -2278,8 +2278,6 @@ components:
         options:
           type: object
           additionalProperties: true
-        options_visible:
-          type: boolean
         owner_user_id:
           type: integer
         owner_org_id:
@@ -2431,7 +2429,6 @@ components:
       type: object
       required:
         - order_index
-        - source
         - backend_id
         - name
         - type
@@ -2439,8 +2436,6 @@ components:
       properties:
         order_index:
           type: integer
-        source:
-          type: string
         backend_id:
           type: integer
         name:
@@ -2480,14 +2475,8 @@ components:
           items:
             type: object
             required:
-              - source
               - backend_id
             properties:
-              source:
-                type: string
-                enum:
-                  - user
-                  - org
               backend_id:
                 type: integer
       additionalProperties: false

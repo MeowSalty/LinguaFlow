@@ -84,12 +84,10 @@ UpdateProjectRequest:
 
 ProjectBackendBinding:
   type: object
-  required: [order_index, source, backend_id, name, type, priority]
+  required: [order_index, backend_id, name, type, priority]
   properties:
     order_index:
       type: integer
-    source:
-      type: string
     backend_id:
       type: integer
     name:
@@ -124,11 +122,8 @@ SetBackendOrderRequest:
       type: array
       items:
         type: object
-        required: [source, backend_id]
+        required: [backend_id]
         properties:
-          source:
-            type: string
-            enum: [user, org]
           backend_id:
             type: integer
   additionalProperties: false
