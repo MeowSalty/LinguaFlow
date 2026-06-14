@@ -1,0 +1,83 @@
+executionPlanTemplates:
+  get:
+    operationId: ListExecutionPlanTemplates
+    summary: 列出当前用户的执行计划模板
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 执行计划模板列表
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/execution-plan-template.yaml#/ExecutionPlanTemplateListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  post:
+    operationId: CreateExecutionPlanTemplate
+    summary: 创建执行计划模板
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/execution-plan-template.yaml#/CreateExecutionPlanTemplateRequest'
+    responses:
+      '201':
+        description: 创建成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/execution-plan-template.yaml#/ExecutionPlanTemplate'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+executionPlanTemplateById:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ExecutionPlanTemplateId'
+  get:
+    operationId: GetExecutionPlanTemplate
+    summary: 获取执行计划模板详情
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 执行计划模板详情
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/execution-plan-template.yaml#/ExecutionPlanTemplate'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  put:
+    operationId: UpdateExecutionPlanTemplate
+    summary: 更新执行计划模板
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/execution-plan-template.yaml#/UpdateExecutionPlanTemplateRequest'
+    responses:
+      '200':
+        description: 更新成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/execution-plan-template.yaml#/ExecutionPlanTemplate'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  delete:
+    operationId: DeleteExecutionPlanTemplate
+    summary: 删除执行计划模板
+    security:
+      - bearerAuth: []
+    responses:
+      '204':
+        description: 删除成功
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

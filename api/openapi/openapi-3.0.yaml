@@ -509,45 +509,6 @@ paths:
           description: 删除成功
         default:
           $ref: '#/components/responses/Problem'
-  /projects/{projectId}/backends:
-    parameters:
-      - $ref: '#/components/parameters/ProjectId'
-    get:
-      operationId: GetProjectBackends
-      summary: 获取项目后端设置
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: 后端设置
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProjectBackendSettings'
-        default:
-          $ref: '#/components/responses/Problem'
-    put:
-      operationId: SetProjectBackendOrder
-      summary: 设置项目后端顺序
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SetBackendOrderRequest'
-      responses:
-        '200':
-          description: 设置成功
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ProjectBackendBinding'
-        default:
-          $ref: '#/components/responses/Problem'
   /projects/{projectId}/resources:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -936,50 +897,6 @@ paths:
                 $ref: '#/components/schemas/RetranslateResponse'
         default:
           $ref: '#/components/responses/Problem'
-  /projects/{projectId}/stages/{stage}/override:
-    parameters:
-      - $ref: '#/components/parameters/ProjectId'
-      - $ref: '#/components/parameters/Stage'
-    put:
-      operationId: SetStageBackendOverride
-      summary: 设置阶段后端覆盖
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SetStageOverrideRequest'
-      responses:
-        '200':
-          description: 设置成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StageBackendOverride'
-        default:
-          $ref: '#/components/responses/Problem'
-  /projects/{projectId}/stages/{stage}/plan:
-    parameters:
-      - $ref: '#/components/parameters/ProjectId'
-      - $ref: '#/components/parameters/Stage'
-    get:
-      operationId: GetStagePlan
-      summary: 查询阶段执行计划
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: 阶段执行计划
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ProjectBackendBinding'
-        default:
-          $ref: '#/components/responses/Problem'
   /projects/{projectId}/glossary:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -1240,6 +1157,88 @@ paths:
                 format: binary
         default:
           $ref: '#/components/responses/Problem'
+  /execution-plan-templates:
+    get:
+      operationId: ListExecutionPlanTemplates
+      summary: 列出当前用户的执行计划模板
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 执行计划模板列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionPlanTemplateListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateExecutionPlanTemplate
+      summary: 创建执行计划模板
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExecutionPlanTemplateRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionPlanTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+  /execution-plan-templates/{executionPlanTemplateId}:
+    parameters:
+      - $ref: '#/components/parameters/ExecutionPlanTemplateId'
+    get:
+      operationId: GetExecutionPlanTemplate
+      summary: 获取执行计划模板详情
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 执行计划模板详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionPlanTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: UpdateExecutionPlanTemplate
+      summary: 更新执行计划模板
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateExecutionPlanTemplateRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionPlanTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteExecutionPlanTemplate
+      summary: 删除执行计划模板
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
   /prompt-templates:
     get:
       operationId: ListPromptTemplates
@@ -1493,15 +1492,6 @@ components:
       schema:
         type: integer
         minimum: 1
-    Stage:
-      name: stage
-      in: path
-      required: true
-      schema:
-        type: string
-        enum:
-          - translate
-          - bootstrap
     PromptTemplateId:
       name: promptTemplateId
       in: path
@@ -1511,6 +1501,13 @@ components:
         minimum: 1
     TranslationProfileId:
       name: translationProfileId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    ExecutionPlanTemplateId:
+      name: executionPlanTemplateId
       in: path
       required: true
       schema:
@@ -2079,7 +2076,12 @@ components:
             $ref: '#/components/schemas/ResourcePrecheckFileResult'
     CreateTranslationJobRequest:
       type: object
+      required:
+        - execution_plan_id
       properties:
+        execution_plan_id:
+          type: integer
+          description: 执行计划模板 ID
         resource_ids:
           type: array
           items:
@@ -2142,6 +2144,7 @@ components:
       required:
         - id
         - project_id
+        - execution_plan_id
         - status
         - trigger_type
         - resource_count
@@ -2155,6 +2158,8 @@ components:
         id:
           type: integer
         project_id:
+          type: integer
+        execution_plan_id:
           type: integer
         status:
           type: string
@@ -2425,93 +2430,6 @@ components:
         target_lang:
           type: string
       additionalProperties: false
-    ProjectBackendBinding:
-      type: object
-      required:
-        - order_index
-        - backend_id
-        - name
-        - type
-        - priority
-      properties:
-        order_index:
-          type: integer
-        backend_id:
-          type: integer
-        name:
-          type: string
-        type:
-          type: string
-        priority:
-          type: integer
-        options:
-          type: object
-          additionalProperties: true
-    StageBackendOverride:
-      type: object
-      required:
-        - stage
-        - backend_mode
-      properties:
-        stage:
-          type: string
-        backend_mode:
-          type: string
-          enum:
-            - inherit
-            - prepend
-            - restrict
-        backend_order:
-          type: array
-          items:
-            type: string
-    SetBackendOrderRequest:
-      type: object
-      required:
-        - bindings
-      properties:
-        bindings:
-          type: array
-          items:
-            type: object
-            required:
-              - backend_id
-            properties:
-              backend_id:
-                type: integer
-      additionalProperties: false
-    SetStageOverrideRequest:
-      type: object
-      required:
-        - stage
-        - backend_mode
-      properties:
-        stage:
-          type: string
-        backend_mode:
-          type: string
-          enum:
-            - inherit
-            - prepend
-            - restrict
-        backend_order:
-          type: array
-          items:
-            type: string
-      additionalProperties: false
-    ProjectBackendSettings:
-      type: object
-      required:
-        - backends
-      properties:
-        backends:
-          type: array
-          items:
-            $ref: '#/components/schemas/ProjectBackendBinding'
-        stage_overrides:
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/StageBackendOverride'
     GlossaryEntry:
       type: object
       required:
@@ -2716,6 +2634,75 @@ components:
         config:
           $ref: '#/components/schemas/TranslationProfileConfig'
       additionalProperties: false
+    ExecutionPlanTemplate:
+      type: object
+      required:
+        - id
+        - name
+        - scope
+        - rounds
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        scope:
+          $ref: '#/components/schemas/ExecutionPlanTemplateScope'
+        owner_user_id:
+          type: integer
+        owner_org_id:
+          type: integer
+        rounds:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutionRoundConfig'
+          minItems: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ExecutionPlanTemplateListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutionPlanTemplate'
+    CreateExecutionPlanTemplateRequest:
+      type: object
+      required:
+        - name
+        - rounds
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        rounds:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutionRoundConfig'
+          minItems: 1
+      additionalProperties: false
+    UpdateExecutionPlanTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        rounds:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutionRoundConfig'
+          minItems: 1
+      additionalProperties: false
     IncrementalUpdateChanges:
       type: object
       required:
@@ -2736,6 +2723,63 @@ components:
         deleted:
           type: integer
           description: 删除的段落数
+    ExecutionPlanTemplateScope:
+      type: string
+      enum:
+        - user
+        - org
+    RetryConfig:
+      type: object
+      properties:
+        max_attempts:
+          type: integer
+          minimum: 1
+          default: 3
+        backoff_ms:
+          type: integer
+          minimum: 0
+          default: 2000
+        jitter:
+          type: boolean
+          default: true
+    ExecutionRoundConfig:
+      type: object
+      required:
+        - backend_id
+        - prompt_template_id
+        - profile_id
+        - batch_size
+        - concurrency
+      properties:
+        name:
+          type: string
+          description: 轮次名称（可选，空值自动生成 round-N）
+        backend_id:
+          type: integer
+          description: 后端 ID（Backend 单表全局唯一）
+        prompt_template_id:
+          type: integer
+          description: 提示词模板 ID（PromptTemplate 单表全局唯一）
+        profile_id:
+          type: integer
+          description: 策略模板 ID（TranslationProfile 单表全局唯一）
+        batch_size:
+          type: integer
+          minimum: 1
+        concurrency:
+          type: integer
+          minimum: 1
+        fallback_shrink:
+          type: number
+          minimum: 0
+          maximum: 1
+          default: 0
+        rate_limit_per_sec:
+          type: integer
+          minimum: 0
+          default: 0
+        retry:
+          $ref: '#/components/schemas/RetryConfig'
     PromptTemplateScope:
       type: string
       enum:
@@ -2809,57 +2853,6 @@ components:
           type: boolean
         prompt_upgrade:
           type: boolean
-    ProfileRetryConfig:
-      type: object
-      required:
-        - max_attempts
-        - backoff_ms
-        - jitter
-      properties:
-        max_attempts:
-          type: integer
-          minimum: 1
-        backoff_ms:
-          type: integer
-          minimum: 0
-        jitter:
-          type: boolean
-    ProfileRoundConfig:
-      type: object
-      required:
-        - batch_size
-        - concurrency
-        - fallback_shrink
-        - rate_limit_per_sec
-        - backend_mode
-        - backend_order
-        - retry
-      properties:
-        batch_size:
-          type: integer
-          minimum: 1
-        concurrency:
-          type: integer
-          minimum: 1
-        fallback_shrink:
-          type: number
-          format: double
-          minimum: 0
-          maximum: 1
-        rate_limit_per_sec:
-          type: integer
-          minimum: 0
-        backend_mode:
-          type: string
-          enum:
-            - prepend
-            - restrict
-        backend_order:
-          type: array
-          items:
-            type: integer
-        retry:
-          $ref: '#/components/schemas/ProfileRetryConfig'
     ProfileBootstrapConfig:
       type: object
       required:
@@ -2905,7 +2898,6 @@ components:
         - protect
         - postprocess
         - repair
-        - rounds
         - glossary
       properties:
         split:
@@ -2916,10 +2908,5 @@ components:
           $ref: '#/components/schemas/ProfilePostprocessConfig'
         repair:
           $ref: '#/components/schemas/ProfileRepairConfig'
-        rounds:
-          type: array
-          items:
-            $ref: '#/components/schemas/ProfileRoundConfig'
-          minItems: 1
         glossary:
           $ref: '#/components/schemas/ProfileGlossaryConfig'

@@ -56,19 +56,6 @@ ProfileRepairConfig:
     prompt_upgrade:
       type: boolean
 
-ProfileRetryConfig:
-  type: object
-  required: [max_attempts, backoff_ms, jitter]
-  properties:
-    max_attempts:
-      type: integer
-      minimum: 1
-    backoff_ms:
-      type: integer
-      minimum: 0
-    jitter:
-      type: boolean
-
 ProfileBootstrapConfig:
   type: object
   required: [mode, save, max_terms_per_batch, min_source_len, inline_conflict_strategy]
@@ -97,37 +84,9 @@ ProfileGlossaryConfig:
     bootstrap:
       $ref: '#/ProfileBootstrapConfig'
 
-ProfileRoundConfig:
-  type: object
-  required: [batch_size, concurrency, fallback_shrink, rate_limit_per_sec, backend_mode, backend_order, retry]
-  properties:
-    batch_size:
-      type: integer
-      minimum: 1
-    concurrency:
-      type: integer
-      minimum: 1
-    fallback_shrink:
-      type: number
-      format: double
-      minimum: 0
-      maximum: 1
-    rate_limit_per_sec:
-      type: integer
-      minimum: 0
-    backend_mode:
-      type: string
-      enum: [prepend, restrict]
-    backend_order:
-      type: array
-      items:
-        type: integer
-    retry:
-      $ref: '#/ProfileRetryConfig'
-
 TranslationProfileConfig:
   type: object
-  required: [split, protect, postprocess, repair, rounds, glossary]
+  required: [split, protect, postprocess, repair, glossary]
   properties:
     split:
       $ref: '#/ProfileSplitConfig'
@@ -137,11 +96,6 @@ TranslationProfileConfig:
       $ref: '#/ProfilePostprocessConfig'
     repair:
       $ref: '#/ProfileRepairConfig'
-    rounds:
-      type: array
-      items:
-        $ref: '#/ProfileRoundConfig'
-      minItems: 1
     glossary:
       $ref: '#/ProfileGlossaryConfig'
 

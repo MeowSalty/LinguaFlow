@@ -39,8 +39,6 @@ paths:
     $ref: './paths/projects.yaml#/projects'
   /projects/{projectId}:
     $ref: './paths/projects.yaml#/projectById'
-  /projects/{projectId}/backends:
-    $ref: './paths/projects.yaml#/projectBackends'
   /projects/{projectId}/resources:
     $ref: './paths/resources.yaml#/projectResources'
   /projects/{projectId}/resources/precheck:
@@ -63,10 +61,6 @@ paths:
     $ref: './paths/resources.yaml#/projectResourceSegmentsApproveAll'
   /projects/{projectId}/resources/{resourceId}/retranslate-rejected:
     $ref: './paths/resources.yaml#/projectResourceRetranslateRejected'
-  /projects/{projectId}/stages/{stage}/override:
-    $ref: './paths/projects.yaml#/stageOverride'
-  /projects/{projectId}/stages/{stage}/plan:
-    $ref: './paths/projects.yaml#/stagePlan'
   /projects/{projectId}/glossary:
     $ref: './paths/glossary.yaml#/projectGlossary'
   /projects/{projectId}/glossary/{entryId}:
@@ -85,6 +79,10 @@ paths:
     $ref: './paths/translation-jobs.yaml#/translationJobRetry'
   /translation-jobs/{translationJobId}/download:
     $ref: './paths/translation-jobs.yaml#/translationJobDownload'
+  /execution-plan-templates:
+    $ref: './paths/execution-plan-templates.yaml#/executionPlanTemplates'
+  /execution-plan-templates/{executionPlanTemplateId}:
+    $ref: './paths/execution-plan-templates.yaml#/executionPlanTemplateById'
   /prompt-templates:
     $ref: './paths/prompt-templates.yaml#/promptTemplates'
   /prompt-templates/{promptTemplateId}:
@@ -116,12 +114,12 @@ components:
       $ref: './components/parameters.yaml#/BackendId'
     EntryId:
       $ref: './components/parameters.yaml#/EntryId'
-    Stage:
-      $ref: './components/parameters.yaml#/Stage'
     PromptTemplateId:
       $ref: './components/parameters.yaml#/PromptTemplateId'
     TranslationProfileId:
       $ref: './components/parameters.yaml#/TranslationProfileId'
+    ExecutionPlanTemplateId:
+      $ref: './components/parameters.yaml#/ExecutionPlanTemplateId'
     SegmentId:
       $ref: './components/parameters_extra.yaml#/SegmentId'
     Cursor:
@@ -234,16 +232,6 @@ components:
       $ref: './components/schemas/project.yaml#/CreateProjectRequest'
     UpdateProjectRequest:
       $ref: './components/schemas/project.yaml#/UpdateProjectRequest'
-    ProjectBackendBinding:
-      $ref: './components/schemas/project.yaml#/ProjectBackendBinding'
-    StageBackendOverride:
-      $ref: './components/schemas/project.yaml#/StageBackendOverride'
-    SetBackendOrderRequest:
-      $ref: './components/schemas/project.yaml#/SetBackendOrderRequest'
-    SetStageOverrideRequest:
-      $ref: './components/schemas/project.yaml#/SetStageOverrideRequest'
-    ProjectBackendSettings:
-      $ref: './components/schemas/project.yaml#/ProjectBackendSettings'
     GlossaryEntry:
       $ref: './components/schemas/glossary.yaml#/GlossaryEntry'
     GlossaryListResponse:
@@ -270,3 +258,11 @@ components:
       $ref: './components/schemas/translation-profile.yaml#/CreateTranslationProfileRequest'
     UpdateTranslationProfileRequest:
       $ref: './components/schemas/translation-profile.yaml#/UpdateTranslationProfileRequest'
+    ExecutionPlanTemplate:
+      $ref: './components/schemas/execution-plan-template.yaml#/ExecutionPlanTemplate'
+    ExecutionPlanTemplateListResponse:
+      $ref: './components/schemas/execution-plan-template.yaml#/ExecutionPlanTemplateListResponse'
+    CreateExecutionPlanTemplateRequest:
+      $ref: './components/schemas/execution-plan-template.yaml#/CreateExecutionPlanTemplateRequest'
+    UpdateExecutionPlanTemplateRequest:
+      $ref: './components/schemas/execution-plan-template.yaml#/UpdateExecutionPlanTemplateRequest'

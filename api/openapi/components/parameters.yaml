@@ -54,14 +54,6 @@ EntryId:
     type: integer
     minimum: 1
 
-Stage:
-  name: stage
-  in: path
-  required: true
-  schema:
-    type: string
-    enum: [translate, bootstrap]
-
 PromptTemplateId:
   name: promptTemplateId
   in: path
@@ -72,6 +64,14 @@ PromptTemplateId:
 
 TranslationProfileId:
   name: translationProfileId
+  in: path
+  required: true
+  schema:
+    type: integer
+    minimum: 1
+
+ExecutionPlanTemplateId:
+  name: executionPlanTemplateId
   in: path
   required: true
   schema:
