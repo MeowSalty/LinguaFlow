@@ -24,8 +24,6 @@ type ProjectBackend struct {
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
 	// OrderIndex holds the value of the "order_index" field.
 	OrderIndex int `json:"order_index,omitempty"`
-	// Source holds the value of the "source" field.
-	Source projectbackend.Source `json:"source,omitempty"`
 	// BackendID holds the value of the "backend_id" field.
 	BackendID int `json:"backend_id,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
@@ -62,8 +60,6 @@ func (*ProjectBackend) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case projectbackend.FieldID, projectbackend.FieldOrderIndex, projectbackend.FieldBackendID:
 			values[i] = new(sql.NullInt64)
-		case projectbackend.FieldSource:
-			values[i] = new(sql.NullString)
 		case projectbackend.FieldCreatedAt, projectbackend.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
 		case projectbackend.ForeignKeys[0]: // project_project_backends
@@ -106,12 +102,6 @@ func (_m *ProjectBackend) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field order_index", values[i])
 			} else if value.Valid {
 				_m.OrderIndex = int(value.Int64)
-			}
-		case projectbackend.FieldSource:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field source", values[i])
-			} else if value.Valid {
-				_m.Source = projectbackend.Source(value.String)
 			}
 		case projectbackend.FieldBackendID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -175,9 +165,6 @@ func (_m *ProjectBackend) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("order_index=")
 	builder.WriteString(fmt.Sprintf("%v", _m.OrderIndex))
-	builder.WriteString(", ")
-	builder.WriteString("source=")
-	builder.WriteString(fmt.Sprintf("%v", _m.Source))
 	builder.WriteString(", ")
 	builder.WriteString("backend_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.BackendID))

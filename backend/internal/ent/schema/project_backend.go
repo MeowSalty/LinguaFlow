@@ -18,7 +18,6 @@ func (ProjectBackend) Mixin() []ent.Mixin {
 func (ProjectBackend) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int("order_index").NonNegative(),
-		field.Enum("source").Values("user", "org"),
 		field.Int("backend_id").Positive(),
 	}
 }
@@ -35,6 +34,6 @@ func (ProjectBackend) Edges() []ent.Edge {
 func (ProjectBackend) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("order_index").Edges("project").Unique(),
-		index.Fields("source", "backend_id").Edges("project").Unique(),
+		index.Fields("backend_id").Edges("project").Unique(),
 	}
 }

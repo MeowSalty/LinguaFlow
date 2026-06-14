@@ -68,13 +68,11 @@ type UpdateProjectInput struct {
 }
 
 type ProjectBackendBindingInput struct {
-	Source    string
 	BackendID int
 }
 
 type ProjectBackendBinding struct {
 	OrderIndex int
-	Source     string
 	BackendID  int
 	Name       string
 	Type       string
@@ -343,8 +341,7 @@ func (s *ProjectService) SetBackendOrder(ctx context.Context, actorUserID, proje
 		if _, err = tx.ProjectBackend.Create().
 			SetProjectID(projectID).
 			SetOrderIndex(i).
-			SetSource(projectbackend.Source(item.Source)).
-			SetBackendID(item.BackendID).
+			SetBackendID(item.ID).
 			Save(ctx); err != nil {
 			return nil, err
 		}
@@ -451,7 +448,7 @@ func (s *ProjectService) ResolveStagePlan(ctx context.Context, actorUserID, proj
 	if err != nil {
 		return nil, err
 	}
-	selected := make([]resolvedBackend, 0, len(override.BackendOrder))
+	selected := make([]*BackendRecord, 0, len(override.BackendOrder))
 	for _, name := range override.BackendOrder {
 		item, ok := byName[name]
 		if !ok {
@@ -462,22 +459,20 @@ func (s *ProjectService) ResolveStagePlan(ctx context.Context, actorUserID, proj
 	if string(override.BackendMode) == "restrict" {
 		return buildBindingViews(selected), nil
 	}
-	used := make(map[string]struct{}, len(selected))
+	used := make(map[int]struct{}, len(selected))
 	for _, item := range selected {
-		used[backendBindingKey(item.Source, item.BackendID)] = struct{}{}
+		used[item.ID] = struct{}{}
 	}
 	for _, binding := range defaultBindings {
-		key := backendBindingKey(binding.Source, binding.BackendID)
-		if _, ok := used[key]; ok {
+		if _, ok := used[binding.BackendID]; ok {
 			continue
 		}
-		selected = append(selected, resolvedBackend{
-			Source:    binding.Source,
-			BackendID: binding.BackendID,
-			Name:      binding.Name,
-			Type:      binding.Type,
-			Priority:  binding.Priority,
-			Options:   cloneMap(binding.Options),
+		selected = append(selected, &BackendRecord{
+			ID:       binding.BackendID,
+			Name:     binding.Name,
+			Type:     binding.Type,
+			Priority: binding.Priority,
+			Options:  cloneMap(binding.Options),
 		})
 	}
 	return buildBindingViews(selected), nil
@@ -586,20 +581,19 @@ func (s *ProjectService) loadProjectBindings(ctx context.Context, projectRow *en
 	if err != nil {
 		return nil, err
 	}
-	byKey := make(map[string]resolvedBackend, len(accessible))
+	byID := make(map[int]*BackendRecord, len(accessible))
 	for _, item := range accessible {
-		byKey[backendBindingKey(item.Source, item.BackendID)] = item
+		byID[item.ID] = item
 	}
 	out := make([]ProjectBackendBinding, 0, len(rows))
 	for _, row := range rows {
-		item, ok := byKey[backendBindingKey(string(row.Source), row.BackendID)]
+		item, ok := byID[row.BackendID]
 		if !ok {
 			return nil, ErrBackendNotFound
 		}
 		out = append(out, ProjectBackendBinding{
 			OrderIndex: row.OrderIndex,
-			Source:     item.Source,
-			BackendID:  item.BackendID,
+			BackendID:  item.ID,
 			Name:       item.Name,
 			Type:       item.Type,
 			Priority:   item.Priority,
@@ -627,36 +621,31 @@ func (s *ProjectService) loadStageOverrides(ctx context.Context, projectID int) 
 	return out, nil
 }
 
-func validateBindingInputs(bindings []ProjectBackendBindingInput, accessible []resolvedBackend) ([]resolvedBackend, error) {
+func validateBindingInputs(bindings []ProjectBackendBindingInput, accessible []*BackendRecord) ([]*BackendRecord, error) {
 	if len(bindings) == 0 {
-		return []resolvedBackend{}, nil
+		return []*BackendRecord{}, nil
 	}
-	byKey := make(map[string]resolvedBackend, len(accessible))
+	byID := make(map[int]*BackendRecord, len(accessible))
 	for _, item := range accessible {
-		byKey[backendBindingKey(item.Source, item.BackendID)] = item
+		byID[item.ID] = item
 	}
-	seen := make(map[string]struct{}, len(bindings))
-	out := make([]resolvedBackend, 0, len(bindings))
+	seen := make(map[int]struct{}, len(bindings))
+	out := make([]*BackendRecord, 0, len(bindings))
 	for _, binding := range bindings {
-		source := strings.ToLower(strings.TrimSpace(binding.Source))
-		if source != BackendSourceUser && source != BackendSourceOrg {
-			return nil, ErrBackendSourceInvalid
-		}
-		key := backendBindingKey(source, binding.BackendID)
-		if _, dup := seen[key]; dup {
+		if _, dup := seen[binding.BackendID]; dup {
 			return nil, ErrBackendOrderInvalid
 		}
-		item, ok := byKey[key]
+		item, ok := byID[binding.BackendID]
 		if !ok {
 			return nil, ErrBackendNotFound
 		}
-		seen[key] = struct{}{}
+		seen[binding.BackendID] = struct{}{}
 		out = append(out, item)
 	}
 	return out, nil
 }
 
-func validateOverrideOrder(mode string, names []string, accessible []resolvedBackend) ([]string, error) {
+func validateOverrideOrder(mode string, names []string, accessible []*BackendRecord) ([]string, error) {
 	if mode == BackendModeInherit {
 		return []string{}, nil
 	}
@@ -683,11 +672,11 @@ func validateOverrideOrder(mode string, names []string, accessible []resolvedBac
 	return out, nil
 }
 
-func uniqueBackendNameMap(accessible []resolvedBackend) (map[string]resolvedBackend, error) {
-	byName := make(map[string]resolvedBackend, len(accessible))
+func uniqueBackendNameMap(accessible []*BackendRecord) (map[string]*BackendRecord, error) {
+	byName := make(map[string]*BackendRecord, len(accessible))
 	for _, item := range accessible {
 		if existing, ok := byName[item.Name]; ok {
-			if existing.BackendID != item.BackendID || existing.Source != item.Source {
+			if existing.ID != item.ID {
 				return nil, ErrBackendNameAmbiguous
 			}
 		}
@@ -696,13 +685,12 @@ func uniqueBackendNameMap(accessible []resolvedBackend) (map[string]resolvedBack
 	return byName, nil
 }
 
-func buildBindingViews(in []resolvedBackend) []ProjectBackendBinding {
+func buildBindingViews(in []*BackendRecord) []ProjectBackendBinding {
 	out := make([]ProjectBackendBinding, 0, len(in))
 	for i, item := range in {
 		out = append(out, ProjectBackendBinding{
 			OrderIndex: i,
-			Source:     item.Source,
-			BackendID:  item.BackendID,
+			BackendID:  item.ID,
 			Name:       item.Name,
 			Type:       item.Type,
 			Priority:   item.Priority,

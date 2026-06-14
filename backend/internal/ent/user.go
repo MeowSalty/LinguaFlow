@@ -49,8 +49,8 @@ type UserEdges struct {
 	RefreshTokens []*RefreshToken `json:"refresh_tokens,omitempty"`
 	// Memberships holds the value of the memberships edge.
 	Memberships []*OrgMembership `json:"memberships,omitempty"`
-	// UserBackends holds the value of the user_backends edge.
-	UserBackends []*UserBackend `json:"user_backends,omitempty"`
+	// Backends holds the value of the backends edge.
+	Backends []*Backend `json:"backends,omitempty"`
 	// OwnedProjects holds the value of the owned_projects edge.
 	OwnedProjects []*Project `json:"owned_projects,omitempty"`
 	// ActivityLogs holds the value of the activity_logs edge.
@@ -102,13 +102,13 @@ func (e UserEdges) MembershipsOrErr() ([]*OrgMembership, error) {
 	return nil, &NotLoadedError{edge: "memberships"}
 }
 
-// UserBackendsOrErr returns the UserBackends value or an error if the edge
+// BackendsOrErr returns the Backends value or an error if the edge
 // was not loaded in eager-loading.
-func (e UserEdges) UserBackendsOrErr() ([]*UserBackend, error) {
+func (e UserEdges) BackendsOrErr() ([]*Backend, error) {
 	if e.loadedTypes[4] {
-		return e.UserBackends, nil
+		return e.Backends, nil
 	}
-	return nil, &NotLoadedError{edge: "user_backends"}
+	return nil, &NotLoadedError{edge: "backends"}
 }
 
 // OwnedProjectsOrErr returns the OwnedProjects value or an error if the edge
@@ -271,9 +271,9 @@ func (_m *User) QueryMemberships() *OrgMembershipQuery {
 	return NewUserClient(_m.config).QueryMemberships(_m)
 }
 
-// QueryUserBackends queries the "user_backends" edge of the User entity.
-func (_m *User) QueryUserBackends() *UserBackendQuery {
-	return NewUserClient(_m.config).QueryUserBackends(_m)
+// QueryBackends queries the "backends" edge of the User entity.
+func (_m *User) QueryBackends() *BackendQuery {
+	return NewUserClient(_m.config).QueryBackends(_m)
 }
 
 // QueryOwnedProjects queries the "owned_projects" edge of the User entity.

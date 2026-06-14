@@ -6,10 +6,10 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/projectbackend"
@@ -24,7 +24,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
 )
 
 // The init function reads all schema descriptors with runtime code
@@ -62,6 +61,45 @@ func init() {
 	activitylogDescMetadata := activitylogFields[4].Descriptor()
 	// activitylog.DefaultMetadata holds the default value on creation for the metadata field.
 	activitylog.DefaultMetadata = activitylogDescMetadata.Default.(func() map[string]interface{})
+	backendMixin := schema.Backend{}.Mixin()
+	backendMixinFields0 := backendMixin[0].Fields()
+	_ = backendMixinFields0
+	backendFields := schema.Backend{}.Fields()
+	_ = backendFields
+	// backendDescCreatedAt is the schema descriptor for created_at field.
+	backendDescCreatedAt := backendMixinFields0[0].Descriptor()
+	// backend.DefaultCreatedAt holds the default value on creation for the created_at field.
+	backend.DefaultCreatedAt = backendDescCreatedAt.Default.(func() time.Time)
+	// backendDescUpdatedAt is the schema descriptor for updated_at field.
+	backendDescUpdatedAt := backendMixinFields0[1].Descriptor()
+	// backend.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	backend.DefaultUpdatedAt = backendDescUpdatedAt.Default.(func() time.Time)
+	// backend.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	backend.UpdateDefaultUpdatedAt = backendDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// backendDescName is the schema descriptor for name field.
+	backendDescName := backendFields[0].Descriptor()
+	// backend.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	backend.NameValidator = backendDescName.Validators[0].(func(string) error)
+	// backendDescScope is the schema descriptor for scope field.
+	backendDescScope := backendFields[1].Descriptor()
+	// backend.DefaultScope holds the default value on creation for the scope field.
+	backend.DefaultScope = backendDescScope.Default.(string)
+	// backendDescOwnerUserID is the schema descriptor for owner_user_id field.
+	backendDescOwnerUserID := backendFields[2].Descriptor()
+	// backend.OwnerUserIDValidator is a validator for the "owner_user_id" field. It is called by the builders before save.
+	backend.OwnerUserIDValidator = backendDescOwnerUserID.Validators[0].(func(int) error)
+	// backendDescOwnerOrgID is the schema descriptor for owner_org_id field.
+	backendDescOwnerOrgID := backendFields[3].Descriptor()
+	// backend.OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
+	backend.OwnerOrgIDValidator = backendDescOwnerOrgID.Validators[0].(func(int) error)
+	// backendDescPriority is the schema descriptor for priority field.
+	backendDescPriority := backendFields[5].Descriptor()
+	// backend.DefaultPriority holds the default value on creation for the priority field.
+	backend.DefaultPriority = backendDescPriority.Default.(int)
+	// backendDescOptions is the schema descriptor for options field.
+	backendDescOptions := backendFields[6].Descriptor()
+	// backend.DefaultOptions holds the default value on creation for the options field.
+	backend.DefaultOptions = backendDescOptions.Default.(func() map[string]interface{})
 	glossaryentryMixin := schema.GlossaryEntry{}.Mixin()
 	glossaryentryMixinFields0 := glossaryentryMixin[0].Fields()
 	_ = glossaryentryMixinFields0
@@ -140,33 +178,6 @@ func init() {
 	jobresource.DefaultCompletedSegments = jobresourceDescCompletedSegments.Default.(int)
 	// jobresource.CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.
 	jobresource.CompletedSegmentsValidator = jobresourceDescCompletedSegments.Validators[0].(func(int) error)
-	orgbackendMixin := schema.OrgBackend{}.Mixin()
-	orgbackendMixinFields0 := orgbackendMixin[0].Fields()
-	_ = orgbackendMixinFields0
-	orgbackendFields := schema.OrgBackend{}.Fields()
-	_ = orgbackendFields
-	// orgbackendDescCreatedAt is the schema descriptor for created_at field.
-	orgbackendDescCreatedAt := orgbackendMixinFields0[0].Descriptor()
-	// orgbackend.DefaultCreatedAt holds the default value on creation for the created_at field.
-	orgbackend.DefaultCreatedAt = orgbackendDescCreatedAt.Default.(func() time.Time)
-	// orgbackendDescUpdatedAt is the schema descriptor for updated_at field.
-	orgbackendDescUpdatedAt := orgbackendMixinFields0[1].Descriptor()
-	// orgbackend.DefaultUpdatedAt holds the default value on creation for the updated_at field.
-	orgbackend.DefaultUpdatedAt = orgbackendDescUpdatedAt.Default.(func() time.Time)
-	// orgbackend.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
-	orgbackend.UpdateDefaultUpdatedAt = orgbackendDescUpdatedAt.UpdateDefault.(func() time.Time)
-	// orgbackendDescName is the schema descriptor for name field.
-	orgbackendDescName := orgbackendFields[0].Descriptor()
-	// orgbackend.NameValidator is a validator for the "name" field. It is called by the builders before save.
-	orgbackend.NameValidator = orgbackendDescName.Validators[0].(func(string) error)
-	// orgbackendDescPriority is the schema descriptor for priority field.
-	orgbackendDescPriority := orgbackendFields[2].Descriptor()
-	// orgbackend.DefaultPriority holds the default value on creation for the priority field.
-	orgbackend.DefaultPriority = orgbackendDescPriority.Default.(int)
-	// orgbackendDescOptions is the schema descriptor for options field.
-	orgbackendDescOptions := orgbackendFields[3].Descriptor()
-	// orgbackend.DefaultOptions holds the default value on creation for the options field.
-	orgbackend.DefaultOptions = orgbackendDescOptions.Default.(func() map[string]interface{})
 	orgmembershipMixin := schema.OrgMembership{}.Mixin()
 	orgmembershipMixinFields0 := orgmembershipMixin[0].Fields()
 	_ = orgmembershipMixinFields0
@@ -276,7 +287,7 @@ func init() {
 	// projectbackend.OrderIndexValidator is a validator for the "order_index" field. It is called by the builders before save.
 	projectbackend.OrderIndexValidator = projectbackendDescOrderIndex.Validators[0].(func(int) error)
 	// projectbackendDescBackendID is the schema descriptor for backend_id field.
-	projectbackendDescBackendID := projectbackendFields[2].Descriptor()
+	projectbackendDescBackendID := projectbackendFields[1].Descriptor()
 	// projectbackend.BackendIDValidator is a validator for the "backend_id" field. It is called by the builders before save.
 	projectbackend.BackendIDValidator = projectbackendDescBackendID.Validators[0].(func(int) error)
 	prompttemplateMixin := schema.PromptTemplate{}.Mixin()
@@ -655,31 +666,4 @@ func init() {
 	userDescActive := userFields[5].Descriptor()
 	// user.DefaultActive holds the default value on creation for the active field.
 	user.DefaultActive = userDescActive.Default.(bool)
-	userbackendMixin := schema.UserBackend{}.Mixin()
-	userbackendMixinFields0 := userbackendMixin[0].Fields()
-	_ = userbackendMixinFields0
-	userbackendFields := schema.UserBackend{}.Fields()
-	_ = userbackendFields
-	// userbackendDescCreatedAt is the schema descriptor for created_at field.
-	userbackendDescCreatedAt := userbackendMixinFields0[0].Descriptor()
-	// userbackend.DefaultCreatedAt holds the default value on creation for the created_at field.
-	userbackend.DefaultCreatedAt = userbackendDescCreatedAt.Default.(func() time.Time)
-	// userbackendDescUpdatedAt is the schema descriptor for updated_at field.
-	userbackendDescUpdatedAt := userbackendMixinFields0[1].Descriptor()
-	// userbackend.DefaultUpdatedAt holds the default value on creation for the updated_at field.
-	userbackend.DefaultUpdatedAt = userbackendDescUpdatedAt.Default.(func() time.Time)
-	// userbackend.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
-	userbackend.UpdateDefaultUpdatedAt = userbackendDescUpdatedAt.UpdateDefault.(func() time.Time)
-	// userbackendDescName is the schema descriptor for name field.
-	userbackendDescName := userbackendFields[0].Descriptor()
-	// userbackend.NameValidator is a validator for the "name" field. It is called by the builders before save.
-	userbackend.NameValidator = userbackendDescName.Validators[0].(func(string) error)
-	// userbackendDescPriority is the schema descriptor for priority field.
-	userbackendDescPriority := userbackendFields[2].Descriptor()
-	// userbackend.DefaultPriority holds the default value on creation for the priority field.
-	userbackend.DefaultPriority = userbackendDescPriority.Default.(int)
-	// userbackendDescOptions is the schema descriptor for options field.
-	userbackendDescOptions := userbackendFields[3].Descriptor()
-	// userbackend.DefaultOptions holds the default value on creation for the options field.
-	userbackend.DefaultOptions = userbackendDescOptions.Default.(func() map[string]interface{})
 }

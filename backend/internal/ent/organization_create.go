@@ -11,9 +11,9 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
@@ -127,19 +127,19 @@ func (_c *OrganizationCreate) AddMemberships(v ...*OrgMembership) *OrganizationC
 	return _c.AddMembershipIDs(ids...)
 }
 
-// AddOrgBackendIDs adds the "org_backends" edge to the OrgBackend entity by IDs.
-func (_c *OrganizationCreate) AddOrgBackendIDs(ids ...int) *OrganizationCreate {
-	_c.mutation.AddOrgBackendIDs(ids...)
+// AddBackendIDs adds the "backends" edge to the Backend entity by IDs.
+func (_c *OrganizationCreate) AddBackendIDs(ids ...int) *OrganizationCreate {
+	_c.mutation.AddBackendIDs(ids...)
 	return _c
 }
 
-// AddOrgBackends adds the "org_backends" edges to the OrgBackend entity.
-func (_c *OrganizationCreate) AddOrgBackends(v ...*OrgBackend) *OrganizationCreate {
+// AddBackends adds the "backends" edges to the Backend entity.
+func (_c *OrganizationCreate) AddBackends(v ...*Backend) *OrganizationCreate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _c.AddOrgBackendIDs(ids...)
+	return _c.AddBackendIDs(ids...)
 }
 
 // AddGlossaryEntryIDs adds the "glossary_entries" edge to the GlossaryEntry entity by IDs.
@@ -383,15 +383,15 @@ func (_c *OrganizationCreate) createSpec() (*Organization, *sqlgraph.CreateSpec)
 		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
-	if nodes := _c.mutation.OrgBackendsIDs(); len(nodes) > 0 {
+	if nodes := _c.mutation.BackendsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   organization.OrgBackendsTable,
-			Columns: []string{organization.OrgBackendsColumn},
+			Table:   organization.BackendsTable,
+			Columns: []string{organization.BackendsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(orgbackend.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

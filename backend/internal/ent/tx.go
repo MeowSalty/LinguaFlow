@@ -14,12 +14,12 @@ type Tx struct {
 	config
 	// ActivityLog is the client for interacting with the ActivityLog builders.
 	ActivityLog *ActivityLogClient
+	// Backend is the client for interacting with the Backend builders.
+	Backend *BackendClient
 	// GlossaryEntry is the client for interacting with the GlossaryEntry builders.
 	GlossaryEntry *GlossaryEntryClient
 	// JobResource is the client for interacting with the JobResource builders.
 	JobResource *JobResourceClient
-	// OrgBackend is the client for interacting with the OrgBackend builders.
-	OrgBackend *OrgBackendClient
 	// OrgMembership is the client for interacting with the OrgMembership builders.
 	OrgMembership *OrgMembershipClient
 	// Organization is the client for interacting with the Organization builders.
@@ -48,8 +48,6 @@ type Tx struct {
 	UsageRecord *UsageRecordClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
-	// UserBackend is the client for interacting with the UserBackend builders.
-	UserBackend *UserBackendClient
 
 	// lazily loaded.
 	client     *Client
@@ -182,9 +180,9 @@ func (tx *Tx) Client() *Client {
 
 func (tx *Tx) init() {
 	tx.ActivityLog = NewActivityLogClient(tx.config)
+	tx.Backend = NewBackendClient(tx.config)
 	tx.GlossaryEntry = NewGlossaryEntryClient(tx.config)
 	tx.JobResource = NewJobResourceClient(tx.config)
-	tx.OrgBackend = NewOrgBackendClient(tx.config)
 	tx.OrgMembership = NewOrgMembershipClient(tx.config)
 	tx.Organization = NewOrganizationClient(tx.config)
 	tx.Project = NewProjectClient(tx.config)
@@ -199,7 +197,6 @@ func (tx *Tx) init() {
 	tx.TranslationProfile = NewTranslationProfileClient(tx.config)
 	tx.UsageRecord = NewUsageRecordClient(tx.config)
 	tx.User = NewUserClient(tx.config)
-	tx.UserBackend = NewUserBackendClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.

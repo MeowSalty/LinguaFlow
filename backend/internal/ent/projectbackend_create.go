@@ -55,12 +55,6 @@ func (_c *ProjectBackendCreate) SetOrderIndex(v int) *ProjectBackendCreate {
 	return _c
 }
 
-// SetSource sets the "source" field.
-func (_c *ProjectBackendCreate) SetSource(v projectbackend.Source) *ProjectBackendCreate {
-	_c.mutation.SetSource(v)
-	return _c
-}
-
 // SetBackendID sets the "backend_id" field.
 func (_c *ProjectBackendCreate) SetBackendID(v int) *ProjectBackendCreate {
 	_c.mutation.SetBackendID(v)
@@ -139,14 +133,6 @@ func (_c *ProjectBackendCreate) check() error {
 			return &ValidationError{Name: "order_index", err: fmt.Errorf(`ent: validator failed for field "ProjectBackend.order_index": %w`, err)}
 		}
 	}
-	if _, ok := _c.mutation.Source(); !ok {
-		return &ValidationError{Name: "source", err: errors.New(`ent: missing required field "ProjectBackend.source"`)}
-	}
-	if v, ok := _c.mutation.Source(); ok {
-		if err := projectbackend.SourceValidator(v); err != nil {
-			return &ValidationError{Name: "source", err: fmt.Errorf(`ent: validator failed for field "ProjectBackend.source": %w`, err)}
-		}
-	}
 	if _, ok := _c.mutation.BackendID(); !ok {
 		return &ValidationError{Name: "backend_id", err: errors.New(`ent: missing required field "ProjectBackend.backend_id"`)}
 	}
@@ -195,10 +181,6 @@ func (_c *ProjectBackendCreate) createSpec() (*ProjectBackend, *sqlgraph.CreateS
 	if value, ok := _c.mutation.OrderIndex(); ok {
 		_spec.SetField(projectbackend.FieldOrderIndex, field.TypeInt, value)
 		_node.OrderIndex = value
-	}
-	if value, ok := _c.mutation.Source(); ok {
-		_spec.SetField(projectbackend.FieldSource, field.TypeEnum, value)
-		_node.Source = value
 	}
 	if value, ok := _c.mutation.BackendID(); ok {
 		_spec.SetField(projectbackend.FieldBackendID, field.TypeInt, value)

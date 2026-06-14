@@ -12,10 +12,10 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
@@ -31,7 +31,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
 )
 
 const (
@@ -44,9 +43,9 @@ const (
 
 	// Node types.
 	TypeActivityLog          = "ActivityLog"
+	TypeBackend              = "Backend"
 	TypeGlossaryEntry        = "GlossaryEntry"
 	TypeJobResource          = "JobResource"
-	TypeOrgBackend           = "OrgBackend"
 	TypeOrgMembership        = "OrgMembership"
 	TypeOrganization         = "Organization"
 	TypeProject              = "Project"
@@ -61,7 +60,6 @@ const (
 	TypeTranslationProfile   = "TranslationProfile"
 	TypeUsageRecord          = "UsageRecord"
 	TypeUser                 = "User"
-	TypeUserBackend          = "UserBackend"
 )
 
 // ActivityLogMutation represents an operation that mutates the ActivityLog nodes in the graph.
@@ -975,6 +973,941 @@ func (m *ActivityLogMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown ActivityLog edge %s", name)
+}
+
+// BackendMutation represents an operation that mutates the Backend nodes in the graph.
+type BackendMutation struct {
+	config
+	op                Op
+	typ               string
+	id                *int
+	created_at        *time.Time
+	updated_at        *time.Time
+	name              *string
+	scope             *string
+	backend_type      *backend.BackendType
+	priority          *int
+	addpriority       *int
+	options           *map[string]interface{}
+	clearedFields     map[string]struct{}
+	owner_user        *int
+	clearedowner_user bool
+	owner_org         *int
+	clearedowner_org  bool
+	done              bool
+	oldValue          func(context.Context) (*Backend, error)
+	predicates        []predicate.Backend
+}
+
+var _ ent.Mutation = (*BackendMutation)(nil)
+
+// backendOption allows management of the mutation configuration using functional options.
+type backendOption func(*BackendMutation)
+
+// newBackendMutation creates new mutation for the Backend entity.
+func newBackendMutation(c config, op Op, opts ...backendOption) *BackendMutation {
+	m := &BackendMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeBackend,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withBackendID sets the ID field of the mutation.
+func withBackendID(id int) backendOption {
+	return func(m *BackendMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *Backend
+		)
+		m.oldValue = func(ctx context.Context) (*Backend, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().Backend.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withBackend sets the old Backend of the mutation.
+func withBackend(node *Backend) backendOption {
+	return func(m *BackendMutation) {
+		m.oldValue = func(context.Context) (*Backend, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m BackendMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m BackendMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *BackendMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *BackendMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().Backend.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *BackendMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *BackendMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the Backend entity.
+// If the Backend object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BackendMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *BackendMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *BackendMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *BackendMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the Backend entity.
+// If the Backend object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BackendMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *BackendMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetName sets the "name" field.
+func (m *BackendMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *BackendMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the Backend entity.
+// If the Backend object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BackendMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *BackendMutation) ResetName() {
+	m.name = nil
+}
+
+// SetScope sets the "scope" field.
+func (m *BackendMutation) SetScope(s string) {
+	m.scope = &s
+}
+
+// Scope returns the value of the "scope" field in the mutation.
+func (m *BackendMutation) Scope() (r string, exists bool) {
+	v := m.scope
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldScope returns the old "scope" field's value of the Backend entity.
+// If the Backend object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BackendMutation) OldScope(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldScope is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldScope requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldScope: %w", err)
+	}
+	return oldValue.Scope, nil
+}
+
+// ResetScope resets all changes to the "scope" field.
+func (m *BackendMutation) ResetScope() {
+	m.scope = nil
+}
+
+// SetOwnerUserID sets the "owner_user_id" field.
+func (m *BackendMutation) SetOwnerUserID(i int) {
+	m.owner_user = &i
+}
+
+// OwnerUserID returns the value of the "owner_user_id" field in the mutation.
+func (m *BackendMutation) OwnerUserID() (r int, exists bool) {
+	v := m.owner_user
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOwnerUserID returns the old "owner_user_id" field's value of the Backend entity.
+// If the Backend object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BackendMutation) OldOwnerUserID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOwnerUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOwnerUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOwnerUserID: %w", err)
+	}
+	return oldValue.OwnerUserID, nil
+}
+
+// ClearOwnerUserID clears the value of the "owner_user_id" field.
+func (m *BackendMutation) ClearOwnerUserID() {
+	m.owner_user = nil
+	m.clearedFields[backend.FieldOwnerUserID] = struct{}{}
+}
+
+// OwnerUserIDCleared returns if the "owner_user_id" field was cleared in this mutation.
+func (m *BackendMutation) OwnerUserIDCleared() bool {
+	_, ok := m.clearedFields[backend.FieldOwnerUserID]
+	return ok
+}
+
+// ResetOwnerUserID resets all changes to the "owner_user_id" field.
+func (m *BackendMutation) ResetOwnerUserID() {
+	m.owner_user = nil
+	delete(m.clearedFields, backend.FieldOwnerUserID)
+}
+
+// SetOwnerOrgID sets the "owner_org_id" field.
+func (m *BackendMutation) SetOwnerOrgID(i int) {
+	m.owner_org = &i
+}
+
+// OwnerOrgID returns the value of the "owner_org_id" field in the mutation.
+func (m *BackendMutation) OwnerOrgID() (r int, exists bool) {
+	v := m.owner_org
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOwnerOrgID returns the old "owner_org_id" field's value of the Backend entity.
+// If the Backend object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BackendMutation) OldOwnerOrgID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOwnerOrgID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOwnerOrgID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOwnerOrgID: %w", err)
+	}
+	return oldValue.OwnerOrgID, nil
+}
+
+// ClearOwnerOrgID clears the value of the "owner_org_id" field.
+func (m *BackendMutation) ClearOwnerOrgID() {
+	m.owner_org = nil
+	m.clearedFields[backend.FieldOwnerOrgID] = struct{}{}
+}
+
+// OwnerOrgIDCleared returns if the "owner_org_id" field was cleared in this mutation.
+func (m *BackendMutation) OwnerOrgIDCleared() bool {
+	_, ok := m.clearedFields[backend.FieldOwnerOrgID]
+	return ok
+}
+
+// ResetOwnerOrgID resets all changes to the "owner_org_id" field.
+func (m *BackendMutation) ResetOwnerOrgID() {
+	m.owner_org = nil
+	delete(m.clearedFields, backend.FieldOwnerOrgID)
+}
+
+// SetBackendType sets the "backend_type" field.
+func (m *BackendMutation) SetBackendType(bt backend.BackendType) {
+	m.backend_type = &bt
+}
+
+// BackendType returns the value of the "backend_type" field in the mutation.
+func (m *BackendMutation) BackendType() (r backend.BackendType, exists bool) {
+	v := m.backend_type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBackendType returns the old "backend_type" field's value of the Backend entity.
+// If the Backend object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BackendMutation) OldBackendType(ctx context.Context) (v backend.BackendType, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBackendType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBackendType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBackendType: %w", err)
+	}
+	return oldValue.BackendType, nil
+}
+
+// ResetBackendType resets all changes to the "backend_type" field.
+func (m *BackendMutation) ResetBackendType() {
+	m.backend_type = nil
+}
+
+// SetPriority sets the "priority" field.
+func (m *BackendMutation) SetPriority(i int) {
+	m.priority = &i
+	m.addpriority = nil
+}
+
+// Priority returns the value of the "priority" field in the mutation.
+func (m *BackendMutation) Priority() (r int, exists bool) {
+	v := m.priority
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldPriority returns the old "priority" field's value of the Backend entity.
+// If the Backend object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BackendMutation) OldPriority(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldPriority is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldPriority requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldPriority: %w", err)
+	}
+	return oldValue.Priority, nil
+}
+
+// AddPriority adds i to the "priority" field.
+func (m *BackendMutation) AddPriority(i int) {
+	if m.addpriority != nil {
+		*m.addpriority += i
+	} else {
+		m.addpriority = &i
+	}
+}
+
+// AddedPriority returns the value that was added to the "priority" field in this mutation.
+func (m *BackendMutation) AddedPriority() (r int, exists bool) {
+	v := m.addpriority
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetPriority resets all changes to the "priority" field.
+func (m *BackendMutation) ResetPriority() {
+	m.priority = nil
+	m.addpriority = nil
+}
+
+// SetOptions sets the "options" field.
+func (m *BackendMutation) SetOptions(value map[string]interface{}) {
+	m.options = &value
+}
+
+// Options returns the value of the "options" field in the mutation.
+func (m *BackendMutation) Options() (r map[string]interface{}, exists bool) {
+	v := m.options
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOptions returns the old "options" field's value of the Backend entity.
+// If the Backend object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BackendMutation) OldOptions(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOptions is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOptions requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOptions: %w", err)
+	}
+	return oldValue.Options, nil
+}
+
+// ResetOptions resets all changes to the "options" field.
+func (m *BackendMutation) ResetOptions() {
+	m.options = nil
+}
+
+// ClearOwnerUser clears the "owner_user" edge to the User entity.
+func (m *BackendMutation) ClearOwnerUser() {
+	m.clearedowner_user = true
+	m.clearedFields[backend.FieldOwnerUserID] = struct{}{}
+}
+
+// OwnerUserCleared reports if the "owner_user" edge to the User entity was cleared.
+func (m *BackendMutation) OwnerUserCleared() bool {
+	return m.OwnerUserIDCleared() || m.clearedowner_user
+}
+
+// OwnerUserIDs returns the "owner_user" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// OwnerUserID instead. It exists only for internal usage by the builders.
+func (m *BackendMutation) OwnerUserIDs() (ids []int) {
+	if id := m.owner_user; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetOwnerUser resets all changes to the "owner_user" edge.
+func (m *BackendMutation) ResetOwnerUser() {
+	m.owner_user = nil
+	m.clearedowner_user = false
+}
+
+// ClearOwnerOrg clears the "owner_org" edge to the Organization entity.
+func (m *BackendMutation) ClearOwnerOrg() {
+	m.clearedowner_org = true
+	m.clearedFields[backend.FieldOwnerOrgID] = struct{}{}
+}
+
+// OwnerOrgCleared reports if the "owner_org" edge to the Organization entity was cleared.
+func (m *BackendMutation) OwnerOrgCleared() bool {
+	return m.OwnerOrgIDCleared() || m.clearedowner_org
+}
+
+// OwnerOrgIDs returns the "owner_org" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// OwnerOrgID instead. It exists only for internal usage by the builders.
+func (m *BackendMutation) OwnerOrgIDs() (ids []int) {
+	if id := m.owner_org; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetOwnerOrg resets all changes to the "owner_org" edge.
+func (m *BackendMutation) ResetOwnerOrg() {
+	m.owner_org = nil
+	m.clearedowner_org = false
+}
+
+// Where appends a list predicates to the BackendMutation builder.
+func (m *BackendMutation) Where(ps ...predicate.Backend) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the BackendMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *BackendMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.Backend, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *BackendMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *BackendMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (Backend).
+func (m *BackendMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *BackendMutation) Fields() []string {
+	fields := make([]string, 0, 9)
+	if m.created_at != nil {
+		fields = append(fields, backend.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, backend.FieldUpdatedAt)
+	}
+	if m.name != nil {
+		fields = append(fields, backend.FieldName)
+	}
+	if m.scope != nil {
+		fields = append(fields, backend.FieldScope)
+	}
+	if m.owner_user != nil {
+		fields = append(fields, backend.FieldOwnerUserID)
+	}
+	if m.owner_org != nil {
+		fields = append(fields, backend.FieldOwnerOrgID)
+	}
+	if m.backend_type != nil {
+		fields = append(fields, backend.FieldBackendType)
+	}
+	if m.priority != nil {
+		fields = append(fields, backend.FieldPriority)
+	}
+	if m.options != nil {
+		fields = append(fields, backend.FieldOptions)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *BackendMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case backend.FieldCreatedAt:
+		return m.CreatedAt()
+	case backend.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case backend.FieldName:
+		return m.Name()
+	case backend.FieldScope:
+		return m.Scope()
+	case backend.FieldOwnerUserID:
+		return m.OwnerUserID()
+	case backend.FieldOwnerOrgID:
+		return m.OwnerOrgID()
+	case backend.FieldBackendType:
+		return m.BackendType()
+	case backend.FieldPriority:
+		return m.Priority()
+	case backend.FieldOptions:
+		return m.Options()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *BackendMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case backend.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case backend.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case backend.FieldName:
+		return m.OldName(ctx)
+	case backend.FieldScope:
+		return m.OldScope(ctx)
+	case backend.FieldOwnerUserID:
+		return m.OldOwnerUserID(ctx)
+	case backend.FieldOwnerOrgID:
+		return m.OldOwnerOrgID(ctx)
+	case backend.FieldBackendType:
+		return m.OldBackendType(ctx)
+	case backend.FieldPriority:
+		return m.OldPriority(ctx)
+	case backend.FieldOptions:
+		return m.OldOptions(ctx)
+	}
+	return nil, fmt.Errorf("unknown Backend field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *BackendMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case backend.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case backend.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case backend.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
+	case backend.FieldScope:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetScope(v)
+		return nil
+	case backend.FieldOwnerUserID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOwnerUserID(v)
+		return nil
+	case backend.FieldOwnerOrgID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOwnerOrgID(v)
+		return nil
+	case backend.FieldBackendType:
+		v, ok := value.(backend.BackendType)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBackendType(v)
+		return nil
+	case backend.FieldPriority:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetPriority(v)
+		return nil
+	case backend.FieldOptions:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOptions(v)
+		return nil
+	}
+	return fmt.Errorf("unknown Backend field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *BackendMutation) AddedFields() []string {
+	var fields []string
+	if m.addpriority != nil {
+		fields = append(fields, backend.FieldPriority)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *BackendMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case backend.FieldPriority:
+		return m.AddedPriority()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *BackendMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case backend.FieldPriority:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddPriority(v)
+		return nil
+	}
+	return fmt.Errorf("unknown Backend numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *BackendMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(backend.FieldOwnerUserID) {
+		fields = append(fields, backend.FieldOwnerUserID)
+	}
+	if m.FieldCleared(backend.FieldOwnerOrgID) {
+		fields = append(fields, backend.FieldOwnerOrgID)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *BackendMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *BackendMutation) ClearField(name string) error {
+	switch name {
+	case backend.FieldOwnerUserID:
+		m.ClearOwnerUserID()
+		return nil
+	case backend.FieldOwnerOrgID:
+		m.ClearOwnerOrgID()
+		return nil
+	}
+	return fmt.Errorf("unknown Backend nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *BackendMutation) ResetField(name string) error {
+	switch name {
+	case backend.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case backend.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case backend.FieldName:
+		m.ResetName()
+		return nil
+	case backend.FieldScope:
+		m.ResetScope()
+		return nil
+	case backend.FieldOwnerUserID:
+		m.ResetOwnerUserID()
+		return nil
+	case backend.FieldOwnerOrgID:
+		m.ResetOwnerOrgID()
+		return nil
+	case backend.FieldBackendType:
+		m.ResetBackendType()
+		return nil
+	case backend.FieldPriority:
+		m.ResetPriority()
+		return nil
+	case backend.FieldOptions:
+		m.ResetOptions()
+		return nil
+	}
+	return fmt.Errorf("unknown Backend field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *BackendMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.owner_user != nil {
+		edges = append(edges, backend.EdgeOwnerUser)
+	}
+	if m.owner_org != nil {
+		edges = append(edges, backend.EdgeOwnerOrg)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *BackendMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case backend.EdgeOwnerUser:
+		if id := m.owner_user; id != nil {
+			return []ent.Value{*id}
+		}
+	case backend.EdgeOwnerOrg:
+		if id := m.owner_org; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *BackendMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *BackendMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *BackendMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.clearedowner_user {
+		edges = append(edges, backend.EdgeOwnerUser)
+	}
+	if m.clearedowner_org {
+		edges = append(edges, backend.EdgeOwnerOrg)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *BackendMutation) EdgeCleared(name string) bool {
+	switch name {
+	case backend.EdgeOwnerUser:
+		return m.clearedowner_user
+	case backend.EdgeOwnerOrg:
+		return m.clearedowner_org
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *BackendMutation) ClearEdge(name string) error {
+	switch name {
+	case backend.EdgeOwnerUser:
+		m.ClearOwnerUser()
+		return nil
+	case backend.EdgeOwnerOrg:
+		m.ClearOwnerOrg()
+		return nil
+	}
+	return fmt.Errorf("unknown Backend unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *BackendMutation) ResetEdge(name string) error {
+	switch name {
+	case backend.EdgeOwnerUser:
+		m.ResetOwnerUser()
+		return nil
+	case backend.EdgeOwnerOrg:
+		m.ResetOwnerOrg()
+		return nil
+	}
+	return fmt.Errorf("unknown Backend edge %s", name)
 }
 
 // GlossaryEntryMutation represents an operation that mutates the GlossaryEntry nodes in the graph.
@@ -2908,705 +3841,6 @@ func (m *JobResourceMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown JobResource edge %s", name)
 }
 
-// OrgBackendMutation represents an operation that mutates the OrgBackend nodes in the graph.
-type OrgBackendMutation struct {
-	config
-	op                  Op
-	typ                 string
-	id                  *int
-	created_at          *time.Time
-	updated_at          *time.Time
-	name                *string
-	backend_type        *orgbackend.BackendType
-	priority            *int
-	addpriority         *int
-	options             *map[string]interface{}
-	clearedFields       map[string]struct{}
-	organization        *int
-	clearedorganization bool
-	done                bool
-	oldValue            func(context.Context) (*OrgBackend, error)
-	predicates          []predicate.OrgBackend
-}
-
-var _ ent.Mutation = (*OrgBackendMutation)(nil)
-
-// orgbackendOption allows management of the mutation configuration using functional options.
-type orgbackendOption func(*OrgBackendMutation)
-
-// newOrgBackendMutation creates new mutation for the OrgBackend entity.
-func newOrgBackendMutation(c config, op Op, opts ...orgbackendOption) *OrgBackendMutation {
-	m := &OrgBackendMutation{
-		config:        c,
-		op:            op,
-		typ:           TypeOrgBackend,
-		clearedFields: make(map[string]struct{}),
-	}
-	for _, opt := range opts {
-		opt(m)
-	}
-	return m
-}
-
-// withOrgBackendID sets the ID field of the mutation.
-func withOrgBackendID(id int) orgbackendOption {
-	return func(m *OrgBackendMutation) {
-		var (
-			err   error
-			once  sync.Once
-			value *OrgBackend
-		)
-		m.oldValue = func(ctx context.Context) (*OrgBackend, error) {
-			once.Do(func() {
-				if m.done {
-					err = errors.New("querying old values post mutation is not allowed")
-				} else {
-					value, err = m.Client().OrgBackend.Get(ctx, id)
-				}
-			})
-			return value, err
-		}
-		m.id = &id
-	}
-}
-
-// withOrgBackend sets the old OrgBackend of the mutation.
-func withOrgBackend(node *OrgBackend) orgbackendOption {
-	return func(m *OrgBackendMutation) {
-		m.oldValue = func(context.Context) (*OrgBackend, error) {
-			return node, nil
-		}
-		m.id = &node.ID
-	}
-}
-
-// Client returns a new `ent.Client` from the mutation. If the mutation was
-// executed in a transaction (ent.Tx), a transactional client is returned.
-func (m OrgBackendMutation) Client() *Client {
-	client := &Client{config: m.config}
-	client.init()
-	return client
-}
-
-// Tx returns an `ent.Tx` for mutations that were executed in transactions;
-// it returns an error otherwise.
-func (m OrgBackendMutation) Tx() (*Tx, error) {
-	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
-	}
-	tx := &Tx{config: m.config}
-	tx.init()
-	return tx, nil
-}
-
-// ID returns the ID value in the mutation. Note that the ID is only available
-// if it was provided to the builder or after it was returned from the database.
-func (m *OrgBackendMutation) ID() (id int, exists bool) {
-	if m.id == nil {
-		return
-	}
-	return *m.id, true
-}
-
-// IDs queries the database and returns the entity ids that match the mutation's predicate.
-// That means, if the mutation is applied within a transaction with an isolation level such
-// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
-// or updated by the mutation.
-func (m *OrgBackendMutation) IDs(ctx context.Context) ([]int, error) {
-	switch {
-	case m.op.Is(OpUpdateOne | OpDeleteOne):
-		id, exists := m.ID()
-		if exists {
-			return []int{id}, nil
-		}
-		fallthrough
-	case m.op.Is(OpUpdate | OpDelete):
-		return m.Client().OrgBackend.Query().Where(m.predicates...).IDs(ctx)
-	default:
-		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
-	}
-}
-
-// SetCreatedAt sets the "created_at" field.
-func (m *OrgBackendMutation) SetCreatedAt(t time.Time) {
-	m.created_at = &t
-}
-
-// CreatedAt returns the value of the "created_at" field in the mutation.
-func (m *OrgBackendMutation) CreatedAt() (r time.Time, exists bool) {
-	v := m.created_at
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldCreatedAt returns the old "created_at" field's value of the OrgBackend entity.
-// If the OrgBackend object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *OrgBackendMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
-	}
-	return oldValue.CreatedAt, nil
-}
-
-// ResetCreatedAt resets all changes to the "created_at" field.
-func (m *OrgBackendMutation) ResetCreatedAt() {
-	m.created_at = nil
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (m *OrgBackendMutation) SetUpdatedAt(t time.Time) {
-	m.updated_at = &t
-}
-
-// UpdatedAt returns the value of the "updated_at" field in the mutation.
-func (m *OrgBackendMutation) UpdatedAt() (r time.Time, exists bool) {
-	v := m.updated_at
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldUpdatedAt returns the old "updated_at" field's value of the OrgBackend entity.
-// If the OrgBackend object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *OrgBackendMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
-	}
-	return oldValue.UpdatedAt, nil
-}
-
-// ResetUpdatedAt resets all changes to the "updated_at" field.
-func (m *OrgBackendMutation) ResetUpdatedAt() {
-	m.updated_at = nil
-}
-
-// SetName sets the "name" field.
-func (m *OrgBackendMutation) SetName(s string) {
-	m.name = &s
-}
-
-// Name returns the value of the "name" field in the mutation.
-func (m *OrgBackendMutation) Name() (r string, exists bool) {
-	v := m.name
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldName returns the old "name" field's value of the OrgBackend entity.
-// If the OrgBackend object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *OrgBackendMutation) OldName(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldName is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldName requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldName: %w", err)
-	}
-	return oldValue.Name, nil
-}
-
-// ResetName resets all changes to the "name" field.
-func (m *OrgBackendMutation) ResetName() {
-	m.name = nil
-}
-
-// SetBackendType sets the "backend_type" field.
-func (m *OrgBackendMutation) SetBackendType(ot orgbackend.BackendType) {
-	m.backend_type = &ot
-}
-
-// BackendType returns the value of the "backend_type" field in the mutation.
-func (m *OrgBackendMutation) BackendType() (r orgbackend.BackendType, exists bool) {
-	v := m.backend_type
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldBackendType returns the old "backend_type" field's value of the OrgBackend entity.
-// If the OrgBackend object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *OrgBackendMutation) OldBackendType(ctx context.Context) (v orgbackend.BackendType, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldBackendType is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldBackendType requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldBackendType: %w", err)
-	}
-	return oldValue.BackendType, nil
-}
-
-// ResetBackendType resets all changes to the "backend_type" field.
-func (m *OrgBackendMutation) ResetBackendType() {
-	m.backend_type = nil
-}
-
-// SetPriority sets the "priority" field.
-func (m *OrgBackendMutation) SetPriority(i int) {
-	m.priority = &i
-	m.addpriority = nil
-}
-
-// Priority returns the value of the "priority" field in the mutation.
-func (m *OrgBackendMutation) Priority() (r int, exists bool) {
-	v := m.priority
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldPriority returns the old "priority" field's value of the OrgBackend entity.
-// If the OrgBackend object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *OrgBackendMutation) OldPriority(ctx context.Context) (v int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldPriority is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldPriority requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldPriority: %w", err)
-	}
-	return oldValue.Priority, nil
-}
-
-// AddPriority adds i to the "priority" field.
-func (m *OrgBackendMutation) AddPriority(i int) {
-	if m.addpriority != nil {
-		*m.addpriority += i
-	} else {
-		m.addpriority = &i
-	}
-}
-
-// AddedPriority returns the value that was added to the "priority" field in this mutation.
-func (m *OrgBackendMutation) AddedPriority() (r int, exists bool) {
-	v := m.addpriority
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// ResetPriority resets all changes to the "priority" field.
-func (m *OrgBackendMutation) ResetPriority() {
-	m.priority = nil
-	m.addpriority = nil
-}
-
-// SetOptions sets the "options" field.
-func (m *OrgBackendMutation) SetOptions(value map[string]interface{}) {
-	m.options = &value
-}
-
-// Options returns the value of the "options" field in the mutation.
-func (m *OrgBackendMutation) Options() (r map[string]interface{}, exists bool) {
-	v := m.options
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldOptions returns the old "options" field's value of the OrgBackend entity.
-// If the OrgBackend object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *OrgBackendMutation) OldOptions(ctx context.Context) (v map[string]interface{}, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldOptions is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldOptions requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldOptions: %w", err)
-	}
-	return oldValue.Options, nil
-}
-
-// ResetOptions resets all changes to the "options" field.
-func (m *OrgBackendMutation) ResetOptions() {
-	m.options = nil
-}
-
-// SetOrganizationID sets the "organization" edge to the Organization entity by id.
-func (m *OrgBackendMutation) SetOrganizationID(id int) {
-	m.organization = &id
-}
-
-// ClearOrganization clears the "organization" edge to the Organization entity.
-func (m *OrgBackendMutation) ClearOrganization() {
-	m.clearedorganization = true
-}
-
-// OrganizationCleared reports if the "organization" edge to the Organization entity was cleared.
-func (m *OrgBackendMutation) OrganizationCleared() bool {
-	return m.clearedorganization
-}
-
-// OrganizationID returns the "organization" edge ID in the mutation.
-func (m *OrgBackendMutation) OrganizationID() (id int, exists bool) {
-	if m.organization != nil {
-		return *m.organization, true
-	}
-	return
-}
-
-// OrganizationIDs returns the "organization" edge IDs in the mutation.
-// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
-// OrganizationID instead. It exists only for internal usage by the builders.
-func (m *OrgBackendMutation) OrganizationIDs() (ids []int) {
-	if id := m.organization; id != nil {
-		ids = append(ids, *id)
-	}
-	return
-}
-
-// ResetOrganization resets all changes to the "organization" edge.
-func (m *OrgBackendMutation) ResetOrganization() {
-	m.organization = nil
-	m.clearedorganization = false
-}
-
-// Where appends a list predicates to the OrgBackendMutation builder.
-func (m *OrgBackendMutation) Where(ps ...predicate.OrgBackend) {
-	m.predicates = append(m.predicates, ps...)
-}
-
-// WhereP appends storage-level predicates to the OrgBackendMutation builder. Using this method,
-// users can use type-assertion to append predicates that do not depend on any generated package.
-func (m *OrgBackendMutation) WhereP(ps ...func(*sql.Selector)) {
-	p := make([]predicate.OrgBackend, len(ps))
-	for i := range ps {
-		p[i] = ps[i]
-	}
-	m.Where(p...)
-}
-
-// Op returns the operation name.
-func (m *OrgBackendMutation) Op() Op {
-	return m.op
-}
-
-// SetOp allows setting the mutation operation.
-func (m *OrgBackendMutation) SetOp(op Op) {
-	m.op = op
-}
-
-// Type returns the node type of this mutation (OrgBackend).
-func (m *OrgBackendMutation) Type() string {
-	return m.typ
-}
-
-// Fields returns all fields that were changed during this mutation. Note that in
-// order to get all numeric fields that were incremented/decremented, call
-// AddedFields().
-func (m *OrgBackendMutation) Fields() []string {
-	fields := make([]string, 0, 6)
-	if m.created_at != nil {
-		fields = append(fields, orgbackend.FieldCreatedAt)
-	}
-	if m.updated_at != nil {
-		fields = append(fields, orgbackend.FieldUpdatedAt)
-	}
-	if m.name != nil {
-		fields = append(fields, orgbackend.FieldName)
-	}
-	if m.backend_type != nil {
-		fields = append(fields, orgbackend.FieldBackendType)
-	}
-	if m.priority != nil {
-		fields = append(fields, orgbackend.FieldPriority)
-	}
-	if m.options != nil {
-		fields = append(fields, orgbackend.FieldOptions)
-	}
-	return fields
-}
-
-// Field returns the value of a field with the given name. The second boolean
-// return value indicates that this field was not set, or was not defined in the
-// schema.
-func (m *OrgBackendMutation) Field(name string) (ent.Value, bool) {
-	switch name {
-	case orgbackend.FieldCreatedAt:
-		return m.CreatedAt()
-	case orgbackend.FieldUpdatedAt:
-		return m.UpdatedAt()
-	case orgbackend.FieldName:
-		return m.Name()
-	case orgbackend.FieldBackendType:
-		return m.BackendType()
-	case orgbackend.FieldPriority:
-		return m.Priority()
-	case orgbackend.FieldOptions:
-		return m.Options()
-	}
-	return nil, false
-}
-
-// OldField returns the old value of the field from the database. An error is
-// returned if the mutation operation is not UpdateOne, or the query to the
-// database failed.
-func (m *OrgBackendMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
-	switch name {
-	case orgbackend.FieldCreatedAt:
-		return m.OldCreatedAt(ctx)
-	case orgbackend.FieldUpdatedAt:
-		return m.OldUpdatedAt(ctx)
-	case orgbackend.FieldName:
-		return m.OldName(ctx)
-	case orgbackend.FieldBackendType:
-		return m.OldBackendType(ctx)
-	case orgbackend.FieldPriority:
-		return m.OldPriority(ctx)
-	case orgbackend.FieldOptions:
-		return m.OldOptions(ctx)
-	}
-	return nil, fmt.Errorf("unknown OrgBackend field %s", name)
-}
-
-// SetField sets the value of a field with the given name. It returns an error if
-// the field is not defined in the schema, or if the type mismatched the field
-// type.
-func (m *OrgBackendMutation) SetField(name string, value ent.Value) error {
-	switch name {
-	case orgbackend.FieldCreatedAt:
-		v, ok := value.(time.Time)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetCreatedAt(v)
-		return nil
-	case orgbackend.FieldUpdatedAt:
-		v, ok := value.(time.Time)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetUpdatedAt(v)
-		return nil
-	case orgbackend.FieldName:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetName(v)
-		return nil
-	case orgbackend.FieldBackendType:
-		v, ok := value.(orgbackend.BackendType)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetBackendType(v)
-		return nil
-	case orgbackend.FieldPriority:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetPriority(v)
-		return nil
-	case orgbackend.FieldOptions:
-		v, ok := value.(map[string]interface{})
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetOptions(v)
-		return nil
-	}
-	return fmt.Errorf("unknown OrgBackend field %s", name)
-}
-
-// AddedFields returns all numeric fields that were incremented/decremented during
-// this mutation.
-func (m *OrgBackendMutation) AddedFields() []string {
-	var fields []string
-	if m.addpriority != nil {
-		fields = append(fields, orgbackend.FieldPriority)
-	}
-	return fields
-}
-
-// AddedField returns the numeric value that was incremented/decremented on a field
-// with the given name. The second boolean return value indicates that this field
-// was not set, or was not defined in the schema.
-func (m *OrgBackendMutation) AddedField(name string) (ent.Value, bool) {
-	switch name {
-	case orgbackend.FieldPriority:
-		return m.AddedPriority()
-	}
-	return nil, false
-}
-
-// AddField adds the value to the field with the given name. It returns an error if
-// the field is not defined in the schema, or if the type mismatched the field
-// type.
-func (m *OrgBackendMutation) AddField(name string, value ent.Value) error {
-	switch name {
-	case orgbackend.FieldPriority:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddPriority(v)
-		return nil
-	}
-	return fmt.Errorf("unknown OrgBackend numeric field %s", name)
-}
-
-// ClearedFields returns all nullable fields that were cleared during this
-// mutation.
-func (m *OrgBackendMutation) ClearedFields() []string {
-	return nil
-}
-
-// FieldCleared returns a boolean indicating if a field with the given name was
-// cleared in this mutation.
-func (m *OrgBackendMutation) FieldCleared(name string) bool {
-	_, ok := m.clearedFields[name]
-	return ok
-}
-
-// ClearField clears the value of the field with the given name. It returns an
-// error if the field is not defined in the schema.
-func (m *OrgBackendMutation) ClearField(name string) error {
-	return fmt.Errorf("unknown OrgBackend nullable field %s", name)
-}
-
-// ResetField resets all changes in the mutation for the field with the given name.
-// It returns an error if the field is not defined in the schema.
-func (m *OrgBackendMutation) ResetField(name string) error {
-	switch name {
-	case orgbackend.FieldCreatedAt:
-		m.ResetCreatedAt()
-		return nil
-	case orgbackend.FieldUpdatedAt:
-		m.ResetUpdatedAt()
-		return nil
-	case orgbackend.FieldName:
-		m.ResetName()
-		return nil
-	case orgbackend.FieldBackendType:
-		m.ResetBackendType()
-		return nil
-	case orgbackend.FieldPriority:
-		m.ResetPriority()
-		return nil
-	case orgbackend.FieldOptions:
-		m.ResetOptions()
-		return nil
-	}
-	return fmt.Errorf("unknown OrgBackend field %s", name)
-}
-
-// AddedEdges returns all edge names that were set/added in this mutation.
-func (m *OrgBackendMutation) AddedEdges() []string {
-	edges := make([]string, 0, 1)
-	if m.organization != nil {
-		edges = append(edges, orgbackend.EdgeOrganization)
-	}
-	return edges
-}
-
-// AddedIDs returns all IDs (to other nodes) that were added for the given edge
-// name in this mutation.
-func (m *OrgBackendMutation) AddedIDs(name string) []ent.Value {
-	switch name {
-	case orgbackend.EdgeOrganization:
-		if id := m.organization; id != nil {
-			return []ent.Value{*id}
-		}
-	}
-	return nil
-}
-
-// RemovedEdges returns all edge names that were removed in this mutation.
-func (m *OrgBackendMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 1)
-	return edges
-}
-
-// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
-// the given name in this mutation.
-func (m *OrgBackendMutation) RemovedIDs(name string) []ent.Value {
-	return nil
-}
-
-// ClearedEdges returns all edge names that were cleared in this mutation.
-func (m *OrgBackendMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 1)
-	if m.clearedorganization {
-		edges = append(edges, orgbackend.EdgeOrganization)
-	}
-	return edges
-}
-
-// EdgeCleared returns a boolean which indicates if the edge with the given name
-// was cleared in this mutation.
-func (m *OrgBackendMutation) EdgeCleared(name string) bool {
-	switch name {
-	case orgbackend.EdgeOrganization:
-		return m.clearedorganization
-	}
-	return false
-}
-
-// ClearEdge clears the value of the edge with the given name. It returns an error
-// if that edge is not defined in the schema.
-func (m *OrgBackendMutation) ClearEdge(name string) error {
-	switch name {
-	case orgbackend.EdgeOrganization:
-		m.ClearOrganization()
-		return nil
-	}
-	return fmt.Errorf("unknown OrgBackend unique edge %s", name)
-}
-
-// ResetEdge resets all changes to the edge with the given name in this mutation.
-// It returns an error if the edge is not defined in the schema.
-func (m *OrgBackendMutation) ResetEdge(name string) error {
-	switch name {
-	case orgbackend.EdgeOrganization:
-		m.ResetOrganization()
-		return nil
-	}
-	return fmt.Errorf("unknown OrgBackend edge %s", name)
-}
-
 // OrgMembershipMutation represents an operation that mutates the OrgMembership nodes in the graph.
 type OrgMembershipMutation struct {
 	config
@@ -4186,9 +4420,9 @@ type OrganizationMutation struct {
 	memberships                 map[int]struct{}
 	removedmemberships          map[int]struct{}
 	clearedmemberships          bool
-	org_backends                map[int]struct{}
-	removedorg_backends         map[int]struct{}
-	clearedorg_backends         bool
+	backends                    map[int]struct{}
+	removedbackends             map[int]struct{}
+	clearedbackends             bool
 	glossary_entries            map[int]struct{}
 	removedglossary_entries     map[int]struct{}
 	clearedglossary_entries     bool
@@ -4660,58 +4894,58 @@ func (m *OrganizationMutation) ResetMemberships() {
 	m.removedmemberships = nil
 }
 
-// AddOrgBackendIDs adds the "org_backends" edge to the OrgBackend entity by ids.
-func (m *OrganizationMutation) AddOrgBackendIDs(ids ...int) {
-	if m.org_backends == nil {
-		m.org_backends = make(map[int]struct{})
+// AddBackendIDs adds the "backends" edge to the Backend entity by ids.
+func (m *OrganizationMutation) AddBackendIDs(ids ...int) {
+	if m.backends == nil {
+		m.backends = make(map[int]struct{})
 	}
 	for i := range ids {
-		m.org_backends[ids[i]] = struct{}{}
+		m.backends[ids[i]] = struct{}{}
 	}
 }
 
-// ClearOrgBackends clears the "org_backends" edge to the OrgBackend entity.
-func (m *OrganizationMutation) ClearOrgBackends() {
-	m.clearedorg_backends = true
+// ClearBackends clears the "backends" edge to the Backend entity.
+func (m *OrganizationMutation) ClearBackends() {
+	m.clearedbackends = true
 }
 
-// OrgBackendsCleared reports if the "org_backends" edge to the OrgBackend entity was cleared.
-func (m *OrganizationMutation) OrgBackendsCleared() bool {
-	return m.clearedorg_backends
+// BackendsCleared reports if the "backends" edge to the Backend entity was cleared.
+func (m *OrganizationMutation) BackendsCleared() bool {
+	return m.clearedbackends
 }
 
-// RemoveOrgBackendIDs removes the "org_backends" edge to the OrgBackend entity by IDs.
-func (m *OrganizationMutation) RemoveOrgBackendIDs(ids ...int) {
-	if m.removedorg_backends == nil {
-		m.removedorg_backends = make(map[int]struct{})
+// RemoveBackendIDs removes the "backends" edge to the Backend entity by IDs.
+func (m *OrganizationMutation) RemoveBackendIDs(ids ...int) {
+	if m.removedbackends == nil {
+		m.removedbackends = make(map[int]struct{})
 	}
 	for i := range ids {
-		delete(m.org_backends, ids[i])
-		m.removedorg_backends[ids[i]] = struct{}{}
+		delete(m.backends, ids[i])
+		m.removedbackends[ids[i]] = struct{}{}
 	}
 }
 
-// RemovedOrgBackends returns the removed IDs of the "org_backends" edge to the OrgBackend entity.
-func (m *OrganizationMutation) RemovedOrgBackendsIDs() (ids []int) {
-	for id := range m.removedorg_backends {
+// RemovedBackends returns the removed IDs of the "backends" edge to the Backend entity.
+func (m *OrganizationMutation) RemovedBackendsIDs() (ids []int) {
+	for id := range m.removedbackends {
 		ids = append(ids, id)
 	}
 	return
 }
 
-// OrgBackendsIDs returns the "org_backends" edge IDs in the mutation.
-func (m *OrganizationMutation) OrgBackendsIDs() (ids []int) {
-	for id := range m.org_backends {
+// BackendsIDs returns the "backends" edge IDs in the mutation.
+func (m *OrganizationMutation) BackendsIDs() (ids []int) {
+	for id := range m.backends {
 		ids = append(ids, id)
 	}
 	return
 }
 
-// ResetOrgBackends resets all changes to the "org_backends" edge.
-func (m *OrganizationMutation) ResetOrgBackends() {
-	m.org_backends = nil
-	m.clearedorg_backends = false
-	m.removedorg_backends = nil
+// ResetBackends resets all changes to the "backends" edge.
+func (m *OrganizationMutation) ResetBackends() {
+	m.backends = nil
+	m.clearedbackends = false
+	m.removedbackends = nil
 }
 
 // AddGlossaryEntryIDs adds the "glossary_entries" edge to the GlossaryEntry entity by ids.
@@ -5278,8 +5512,8 @@ func (m *OrganizationMutation) AddedEdges() []string {
 	if m.memberships != nil {
 		edges = append(edges, organization.EdgeMemberships)
 	}
-	if m.org_backends != nil {
-		edges = append(edges, organization.EdgeOrgBackends)
+	if m.backends != nil {
+		edges = append(edges, organization.EdgeBackends)
 	}
 	if m.glossary_entries != nil {
 		edges = append(edges, organization.EdgeGlossaryEntries)
@@ -5318,9 +5552,9 @@ func (m *OrganizationMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
-	case organization.EdgeOrgBackends:
-		ids := make([]ent.Value, 0, len(m.org_backends))
-		for id := range m.org_backends {
+	case organization.EdgeBackends:
+		ids := make([]ent.Value, 0, len(m.backends))
+		for id := range m.backends {
 			ids = append(ids, id)
 		}
 		return ids
@@ -5373,8 +5607,8 @@ func (m *OrganizationMutation) RemovedEdges() []string {
 	if m.removedmemberships != nil {
 		edges = append(edges, organization.EdgeMemberships)
 	}
-	if m.removedorg_backends != nil {
-		edges = append(edges, organization.EdgeOrgBackends)
+	if m.removedbackends != nil {
+		edges = append(edges, organization.EdgeBackends)
 	}
 	if m.removedglossary_entries != nil {
 		edges = append(edges, organization.EdgeGlossaryEntries)
@@ -5413,9 +5647,9 @@ func (m *OrganizationMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
-	case organization.EdgeOrgBackends:
-		ids := make([]ent.Value, 0, len(m.removedorg_backends))
-		for id := range m.removedorg_backends {
+	case organization.EdgeBackends:
+		ids := make([]ent.Value, 0, len(m.removedbackends))
+		for id := range m.removedbackends {
 			ids = append(ids, id)
 		}
 		return ids
@@ -5468,8 +5702,8 @@ func (m *OrganizationMutation) ClearedEdges() []string {
 	if m.clearedmemberships {
 		edges = append(edges, organization.EdgeMemberships)
 	}
-	if m.clearedorg_backends {
-		edges = append(edges, organization.EdgeOrgBackends)
+	if m.clearedbackends {
+		edges = append(edges, organization.EdgeBackends)
 	}
 	if m.clearedglossary_entries {
 		edges = append(edges, organization.EdgeGlossaryEntries)
@@ -5500,8 +5734,8 @@ func (m *OrganizationMutation) EdgeCleared(name string) bool {
 		return m.clearedprojects
 	case organization.EdgeMemberships:
 		return m.clearedmemberships
-	case organization.EdgeOrgBackends:
-		return m.clearedorg_backends
+	case organization.EdgeBackends:
+		return m.clearedbackends
 	case organization.EdgeGlossaryEntries:
 		return m.clearedglossary_entries
 	case organization.EdgeTmEntries:
@@ -5536,8 +5770,8 @@ func (m *OrganizationMutation) ResetEdge(name string) error {
 	case organization.EdgeMemberships:
 		m.ResetMemberships()
 		return nil
-	case organization.EdgeOrgBackends:
-		m.ResetOrgBackends()
+	case organization.EdgeBackends:
+		m.ResetBackends()
 		return nil
 	case organization.EdgeGlossaryEntries:
 		m.ResetGlossaryEntries()
@@ -7193,7 +7427,6 @@ type ProjectBackendMutation struct {
 	updated_at     *time.Time
 	order_index    *int
 	addorder_index *int
-	source         *projectbackend.Source
 	backend_id     *int
 	addbackend_id  *int
 	clearedFields  map[string]struct{}
@@ -7430,42 +7663,6 @@ func (m *ProjectBackendMutation) ResetOrderIndex() {
 	m.addorder_index = nil
 }
 
-// SetSource sets the "source" field.
-func (m *ProjectBackendMutation) SetSource(pr projectbackend.Source) {
-	m.source = &pr
-}
-
-// Source returns the value of the "source" field in the mutation.
-func (m *ProjectBackendMutation) Source() (r projectbackend.Source, exists bool) {
-	v := m.source
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldSource returns the old "source" field's value of the ProjectBackend entity.
-// If the ProjectBackend object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ProjectBackendMutation) OldSource(ctx context.Context) (v projectbackend.Source, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldSource is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldSource requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldSource: %w", err)
-	}
-	return oldValue.Source, nil
-}
-
-// ResetSource resets all changes to the "source" field.
-func (m *ProjectBackendMutation) ResetSource() {
-	m.source = nil
-}
-
 // SetBackendID sets the "backend_id" field.
 func (m *ProjectBackendMutation) SetBackendID(i int) {
 	m.backend_id = &i
@@ -7595,7 +7792,7 @@ func (m *ProjectBackendMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ProjectBackendMutation) Fields() []string {
-	fields := make([]string, 0, 5)
+	fields := make([]string, 0, 4)
 	if m.created_at != nil {
 		fields = append(fields, projectbackend.FieldCreatedAt)
 	}
@@ -7604,9 +7801,6 @@ func (m *ProjectBackendMutation) Fields() []string {
 	}
 	if m.order_index != nil {
 		fields = append(fields, projectbackend.FieldOrderIndex)
-	}
-	if m.source != nil {
-		fields = append(fields, projectbackend.FieldSource)
 	}
 	if m.backend_id != nil {
 		fields = append(fields, projectbackend.FieldBackendID)
@@ -7625,8 +7819,6 @@ func (m *ProjectBackendMutation) Field(name string) (ent.Value, bool) {
 		return m.UpdatedAt()
 	case projectbackend.FieldOrderIndex:
 		return m.OrderIndex()
-	case projectbackend.FieldSource:
-		return m.Source()
 	case projectbackend.FieldBackendID:
 		return m.BackendID()
 	}
@@ -7644,8 +7836,6 @@ func (m *ProjectBackendMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldUpdatedAt(ctx)
 	case projectbackend.FieldOrderIndex:
 		return m.OldOrderIndex(ctx)
-	case projectbackend.FieldSource:
-		return m.OldSource(ctx)
 	case projectbackend.FieldBackendID:
 		return m.OldBackendID(ctx)
 	}
@@ -7677,13 +7867,6 @@ func (m *ProjectBackendMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetOrderIndex(v)
-		return nil
-	case projectbackend.FieldSource:
-		v, ok := value.(projectbackend.Source)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetSource(v)
 		return nil
 	case projectbackend.FieldBackendID:
 		v, ok := value.(int)
@@ -7776,9 +7959,6 @@ func (m *ProjectBackendMutation) ResetField(name string) error {
 		return nil
 	case projectbackend.FieldOrderIndex:
 		m.ResetOrderIndex()
-		return nil
-	case projectbackend.FieldSource:
-		m.ResetSource()
 		return nil
 	case projectbackend.FieldBackendID:
 		m.ResetBackendID()
@@ -16166,9 +16346,9 @@ type UserMutation struct {
 	memberships                     map[int]struct{}
 	removedmemberships              map[int]struct{}
 	clearedmemberships              bool
-	user_backends                   map[int]struct{}
-	removeduser_backends            map[int]struct{}
-	cleareduser_backends            bool
+	backends                        map[int]struct{}
+	removedbackends                 map[int]struct{}
+	clearedbackends                 bool
 	owned_projects                  map[int]struct{}
 	removedowned_projects           map[int]struct{}
 	clearedowned_projects           bool
@@ -16804,58 +16984,58 @@ func (m *UserMutation) ResetMemberships() {
 	m.removedmemberships = nil
 }
 
-// AddUserBackendIDs adds the "user_backends" edge to the UserBackend entity by ids.
-func (m *UserMutation) AddUserBackendIDs(ids ...int) {
-	if m.user_backends == nil {
-		m.user_backends = make(map[int]struct{})
+// AddBackendIDs adds the "backends" edge to the Backend entity by ids.
+func (m *UserMutation) AddBackendIDs(ids ...int) {
+	if m.backends == nil {
+		m.backends = make(map[int]struct{})
 	}
 	for i := range ids {
-		m.user_backends[ids[i]] = struct{}{}
+		m.backends[ids[i]] = struct{}{}
 	}
 }
 
-// ClearUserBackends clears the "user_backends" edge to the UserBackend entity.
-func (m *UserMutation) ClearUserBackends() {
-	m.cleareduser_backends = true
+// ClearBackends clears the "backends" edge to the Backend entity.
+func (m *UserMutation) ClearBackends() {
+	m.clearedbackends = true
 }
 
-// UserBackendsCleared reports if the "user_backends" edge to the UserBackend entity was cleared.
-func (m *UserMutation) UserBackendsCleared() bool {
-	return m.cleareduser_backends
+// BackendsCleared reports if the "backends" edge to the Backend entity was cleared.
+func (m *UserMutation) BackendsCleared() bool {
+	return m.clearedbackends
 }
 
-// RemoveUserBackendIDs removes the "user_backends" edge to the UserBackend entity by IDs.
-func (m *UserMutation) RemoveUserBackendIDs(ids ...int) {
-	if m.removeduser_backends == nil {
-		m.removeduser_backends = make(map[int]struct{})
+// RemoveBackendIDs removes the "backends" edge to the Backend entity by IDs.
+func (m *UserMutation) RemoveBackendIDs(ids ...int) {
+	if m.removedbackends == nil {
+		m.removedbackends = make(map[int]struct{})
 	}
 	for i := range ids {
-		delete(m.user_backends, ids[i])
-		m.removeduser_backends[ids[i]] = struct{}{}
+		delete(m.backends, ids[i])
+		m.removedbackends[ids[i]] = struct{}{}
 	}
 }
 
-// RemovedUserBackends returns the removed IDs of the "user_backends" edge to the UserBackend entity.
-func (m *UserMutation) RemovedUserBackendsIDs() (ids []int) {
-	for id := range m.removeduser_backends {
+// RemovedBackends returns the removed IDs of the "backends" edge to the Backend entity.
+func (m *UserMutation) RemovedBackendsIDs() (ids []int) {
+	for id := range m.removedbackends {
 		ids = append(ids, id)
 	}
 	return
 }
 
-// UserBackendsIDs returns the "user_backends" edge IDs in the mutation.
-func (m *UserMutation) UserBackendsIDs() (ids []int) {
-	for id := range m.user_backends {
+// BackendsIDs returns the "backends" edge IDs in the mutation.
+func (m *UserMutation) BackendsIDs() (ids []int) {
+	for id := range m.backends {
 		ids = append(ids, id)
 	}
 	return
 }
 
-// ResetUserBackends resets all changes to the "user_backends" edge.
-func (m *UserMutation) ResetUserBackends() {
-	m.user_backends = nil
-	m.cleareduser_backends = false
-	m.removeduser_backends = nil
+// ResetBackends resets all changes to the "backends" edge.
+func (m *UserMutation) ResetBackends() {
+	m.backends = nil
+	m.clearedbackends = false
+	m.removedbackends = nil
 }
 
 // AddOwnedProjectIDs adds the "owned_projects" edge to the Project entity by ids.
@@ -17402,8 +17582,8 @@ func (m *UserMutation) AddedEdges() []string {
 	if m.memberships != nil {
 		edges = append(edges, user.EdgeMemberships)
 	}
-	if m.user_backends != nil {
-		edges = append(edges, user.EdgeUserBackends)
+	if m.backends != nil {
+		edges = append(edges, user.EdgeBackends)
 	}
 	if m.owned_projects != nil {
 		edges = append(edges, user.EdgeOwnedProjects)
@@ -17451,9 +17631,9 @@ func (m *UserMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
-	case user.EdgeUserBackends:
-		ids := make([]ent.Value, 0, len(m.user_backends))
-		for id := range m.user_backends {
+	case user.EdgeBackends:
+		ids := make([]ent.Value, 0, len(m.backends))
+		for id := range m.backends {
 			ids = append(ids, id)
 		}
 		return ids
@@ -17506,8 +17686,8 @@ func (m *UserMutation) RemovedEdges() []string {
 	if m.removedmemberships != nil {
 		edges = append(edges, user.EdgeMemberships)
 	}
-	if m.removeduser_backends != nil {
-		edges = append(edges, user.EdgeUserBackends)
+	if m.removedbackends != nil {
+		edges = append(edges, user.EdgeBackends)
 	}
 	if m.removedowned_projects != nil {
 		edges = append(edges, user.EdgeOwnedProjects)
@@ -17555,9 +17735,9 @@ func (m *UserMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
-	case user.EdgeUserBackends:
-		ids := make([]ent.Value, 0, len(m.removeduser_backends))
-		for id := range m.removeduser_backends {
+	case user.EdgeBackends:
+		ids := make([]ent.Value, 0, len(m.removedbackends))
+		for id := range m.removedbackends {
 			ids = append(ids, id)
 		}
 		return ids
@@ -17610,8 +17790,8 @@ func (m *UserMutation) ClearedEdges() []string {
 	if m.clearedmemberships {
 		edges = append(edges, user.EdgeMemberships)
 	}
-	if m.cleareduser_backends {
-		edges = append(edges, user.EdgeUserBackends)
+	if m.clearedbackends {
+		edges = append(edges, user.EdgeBackends)
 	}
 	if m.clearedowned_projects {
 		edges = append(edges, user.EdgeOwnedProjects)
@@ -17643,8 +17823,8 @@ func (m *UserMutation) EdgeCleared(name string) bool {
 		return m.clearedrefresh_tokens
 	case user.EdgeMemberships:
 		return m.clearedmemberships
-	case user.EdgeUserBackends:
-		return m.cleareduser_backends
+	case user.EdgeBackends:
+		return m.clearedbackends
 	case user.EdgeOwnedProjects:
 		return m.clearedowned_projects
 	case user.EdgeActivityLogs:
@@ -17683,8 +17863,8 @@ func (m *UserMutation) ResetEdge(name string) error {
 	case user.EdgeMemberships:
 		m.ResetMemberships()
 		return nil
-	case user.EdgeUserBackends:
-		m.ResetUserBackends()
+	case user.EdgeBackends:
+		m.ResetBackends()
 		return nil
 	case user.EdgeOwnedProjects:
 		m.ResetOwnedProjects()
@@ -17703,703 +17883,4 @@ func (m *UserMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown User edge %s", name)
-}
-
-// UserBackendMutation represents an operation that mutates the UserBackend nodes in the graph.
-type UserBackendMutation struct {
-	config
-	op            Op
-	typ           string
-	id            *int
-	created_at    *time.Time
-	updated_at    *time.Time
-	name          *string
-	backend_type  *userbackend.BackendType
-	priority      *int
-	addpriority   *int
-	options       *map[string]interface{}
-	clearedFields map[string]struct{}
-	user          *int
-	cleareduser   bool
-	done          bool
-	oldValue      func(context.Context) (*UserBackend, error)
-	predicates    []predicate.UserBackend
-}
-
-var _ ent.Mutation = (*UserBackendMutation)(nil)
-
-// userbackendOption allows management of the mutation configuration using functional options.
-type userbackendOption func(*UserBackendMutation)
-
-// newUserBackendMutation creates new mutation for the UserBackend entity.
-func newUserBackendMutation(c config, op Op, opts ...userbackendOption) *UserBackendMutation {
-	m := &UserBackendMutation{
-		config:        c,
-		op:            op,
-		typ:           TypeUserBackend,
-		clearedFields: make(map[string]struct{}),
-	}
-	for _, opt := range opts {
-		opt(m)
-	}
-	return m
-}
-
-// withUserBackendID sets the ID field of the mutation.
-func withUserBackendID(id int) userbackendOption {
-	return func(m *UserBackendMutation) {
-		var (
-			err   error
-			once  sync.Once
-			value *UserBackend
-		)
-		m.oldValue = func(ctx context.Context) (*UserBackend, error) {
-			once.Do(func() {
-				if m.done {
-					err = errors.New("querying old values post mutation is not allowed")
-				} else {
-					value, err = m.Client().UserBackend.Get(ctx, id)
-				}
-			})
-			return value, err
-		}
-		m.id = &id
-	}
-}
-
-// withUserBackend sets the old UserBackend of the mutation.
-func withUserBackend(node *UserBackend) userbackendOption {
-	return func(m *UserBackendMutation) {
-		m.oldValue = func(context.Context) (*UserBackend, error) {
-			return node, nil
-		}
-		m.id = &node.ID
-	}
-}
-
-// Client returns a new `ent.Client` from the mutation. If the mutation was
-// executed in a transaction (ent.Tx), a transactional client is returned.
-func (m UserBackendMutation) Client() *Client {
-	client := &Client{config: m.config}
-	client.init()
-	return client
-}
-
-// Tx returns an `ent.Tx` for mutations that were executed in transactions;
-// it returns an error otherwise.
-func (m UserBackendMutation) Tx() (*Tx, error) {
-	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
-	}
-	tx := &Tx{config: m.config}
-	tx.init()
-	return tx, nil
-}
-
-// ID returns the ID value in the mutation. Note that the ID is only available
-// if it was provided to the builder or after it was returned from the database.
-func (m *UserBackendMutation) ID() (id int, exists bool) {
-	if m.id == nil {
-		return
-	}
-	return *m.id, true
-}
-
-// IDs queries the database and returns the entity ids that match the mutation's predicate.
-// That means, if the mutation is applied within a transaction with an isolation level such
-// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
-// or updated by the mutation.
-func (m *UserBackendMutation) IDs(ctx context.Context) ([]int, error) {
-	switch {
-	case m.op.Is(OpUpdateOne | OpDeleteOne):
-		id, exists := m.ID()
-		if exists {
-			return []int{id}, nil
-		}
-		fallthrough
-	case m.op.Is(OpUpdate | OpDelete):
-		return m.Client().UserBackend.Query().Where(m.predicates...).IDs(ctx)
-	default:
-		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
-	}
-}
-
-// SetCreatedAt sets the "created_at" field.
-func (m *UserBackendMutation) SetCreatedAt(t time.Time) {
-	m.created_at = &t
-}
-
-// CreatedAt returns the value of the "created_at" field in the mutation.
-func (m *UserBackendMutation) CreatedAt() (r time.Time, exists bool) {
-	v := m.created_at
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldCreatedAt returns the old "created_at" field's value of the UserBackend entity.
-// If the UserBackend object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *UserBackendMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
-	}
-	return oldValue.CreatedAt, nil
-}
-
-// ResetCreatedAt resets all changes to the "created_at" field.
-func (m *UserBackendMutation) ResetCreatedAt() {
-	m.created_at = nil
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (m *UserBackendMutation) SetUpdatedAt(t time.Time) {
-	m.updated_at = &t
-}
-
-// UpdatedAt returns the value of the "updated_at" field in the mutation.
-func (m *UserBackendMutation) UpdatedAt() (r time.Time, exists bool) {
-	v := m.updated_at
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldUpdatedAt returns the old "updated_at" field's value of the UserBackend entity.
-// If the UserBackend object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *UserBackendMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
-	}
-	return oldValue.UpdatedAt, nil
-}
-
-// ResetUpdatedAt resets all changes to the "updated_at" field.
-func (m *UserBackendMutation) ResetUpdatedAt() {
-	m.updated_at = nil
-}
-
-// SetName sets the "name" field.
-func (m *UserBackendMutation) SetName(s string) {
-	m.name = &s
-}
-
-// Name returns the value of the "name" field in the mutation.
-func (m *UserBackendMutation) Name() (r string, exists bool) {
-	v := m.name
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldName returns the old "name" field's value of the UserBackend entity.
-// If the UserBackend object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *UserBackendMutation) OldName(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldName is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldName requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldName: %w", err)
-	}
-	return oldValue.Name, nil
-}
-
-// ResetName resets all changes to the "name" field.
-func (m *UserBackendMutation) ResetName() {
-	m.name = nil
-}
-
-// SetBackendType sets the "backend_type" field.
-func (m *UserBackendMutation) SetBackendType(ut userbackend.BackendType) {
-	m.backend_type = &ut
-}
-
-// BackendType returns the value of the "backend_type" field in the mutation.
-func (m *UserBackendMutation) BackendType() (r userbackend.BackendType, exists bool) {
-	v := m.backend_type
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldBackendType returns the old "backend_type" field's value of the UserBackend entity.
-// If the UserBackend object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *UserBackendMutation) OldBackendType(ctx context.Context) (v userbackend.BackendType, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldBackendType is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldBackendType requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldBackendType: %w", err)
-	}
-	return oldValue.BackendType, nil
-}
-
-// ResetBackendType resets all changes to the "backend_type" field.
-func (m *UserBackendMutation) ResetBackendType() {
-	m.backend_type = nil
-}
-
-// SetPriority sets the "priority" field.
-func (m *UserBackendMutation) SetPriority(i int) {
-	m.priority = &i
-	m.addpriority = nil
-}
-
-// Priority returns the value of the "priority" field in the mutation.
-func (m *UserBackendMutation) Priority() (r int, exists bool) {
-	v := m.priority
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldPriority returns the old "priority" field's value of the UserBackend entity.
-// If the UserBackend object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *UserBackendMutation) OldPriority(ctx context.Context) (v int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldPriority is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldPriority requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldPriority: %w", err)
-	}
-	return oldValue.Priority, nil
-}
-
-// AddPriority adds i to the "priority" field.
-func (m *UserBackendMutation) AddPriority(i int) {
-	if m.addpriority != nil {
-		*m.addpriority += i
-	} else {
-		m.addpriority = &i
-	}
-}
-
-// AddedPriority returns the value that was added to the "priority" field in this mutation.
-func (m *UserBackendMutation) AddedPriority() (r int, exists bool) {
-	v := m.addpriority
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// ResetPriority resets all changes to the "priority" field.
-func (m *UserBackendMutation) ResetPriority() {
-	m.priority = nil
-	m.addpriority = nil
-}
-
-// SetOptions sets the "options" field.
-func (m *UserBackendMutation) SetOptions(value map[string]interface{}) {
-	m.options = &value
-}
-
-// Options returns the value of the "options" field in the mutation.
-func (m *UserBackendMutation) Options() (r map[string]interface{}, exists bool) {
-	v := m.options
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldOptions returns the old "options" field's value of the UserBackend entity.
-// If the UserBackend object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *UserBackendMutation) OldOptions(ctx context.Context) (v map[string]interface{}, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldOptions is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldOptions requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldOptions: %w", err)
-	}
-	return oldValue.Options, nil
-}
-
-// ResetOptions resets all changes to the "options" field.
-func (m *UserBackendMutation) ResetOptions() {
-	m.options = nil
-}
-
-// SetUserID sets the "user" edge to the User entity by id.
-func (m *UserBackendMutation) SetUserID(id int) {
-	m.user = &id
-}
-
-// ClearUser clears the "user" edge to the User entity.
-func (m *UserBackendMutation) ClearUser() {
-	m.cleareduser = true
-}
-
-// UserCleared reports if the "user" edge to the User entity was cleared.
-func (m *UserBackendMutation) UserCleared() bool {
-	return m.cleareduser
-}
-
-// UserID returns the "user" edge ID in the mutation.
-func (m *UserBackendMutation) UserID() (id int, exists bool) {
-	if m.user != nil {
-		return *m.user, true
-	}
-	return
-}
-
-// UserIDs returns the "user" edge IDs in the mutation.
-// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
-// UserID instead. It exists only for internal usage by the builders.
-func (m *UserBackendMutation) UserIDs() (ids []int) {
-	if id := m.user; id != nil {
-		ids = append(ids, *id)
-	}
-	return
-}
-
-// ResetUser resets all changes to the "user" edge.
-func (m *UserBackendMutation) ResetUser() {
-	m.user = nil
-	m.cleareduser = false
-}
-
-// Where appends a list predicates to the UserBackendMutation builder.
-func (m *UserBackendMutation) Where(ps ...predicate.UserBackend) {
-	m.predicates = append(m.predicates, ps...)
-}
-
-// WhereP appends storage-level predicates to the UserBackendMutation builder. Using this method,
-// users can use type-assertion to append predicates that do not depend on any generated package.
-func (m *UserBackendMutation) WhereP(ps ...func(*sql.Selector)) {
-	p := make([]predicate.UserBackend, len(ps))
-	for i := range ps {
-		p[i] = ps[i]
-	}
-	m.Where(p...)
-}
-
-// Op returns the operation name.
-func (m *UserBackendMutation) Op() Op {
-	return m.op
-}
-
-// SetOp allows setting the mutation operation.
-func (m *UserBackendMutation) SetOp(op Op) {
-	m.op = op
-}
-
-// Type returns the node type of this mutation (UserBackend).
-func (m *UserBackendMutation) Type() string {
-	return m.typ
-}
-
-// Fields returns all fields that were changed during this mutation. Note that in
-// order to get all numeric fields that were incremented/decremented, call
-// AddedFields().
-func (m *UserBackendMutation) Fields() []string {
-	fields := make([]string, 0, 6)
-	if m.created_at != nil {
-		fields = append(fields, userbackend.FieldCreatedAt)
-	}
-	if m.updated_at != nil {
-		fields = append(fields, userbackend.FieldUpdatedAt)
-	}
-	if m.name != nil {
-		fields = append(fields, userbackend.FieldName)
-	}
-	if m.backend_type != nil {
-		fields = append(fields, userbackend.FieldBackendType)
-	}
-	if m.priority != nil {
-		fields = append(fields, userbackend.FieldPriority)
-	}
-	if m.options != nil {
-		fields = append(fields, userbackend.FieldOptions)
-	}
-	return fields
-}
-
-// Field returns the value of a field with the given name. The second boolean
-// return value indicates that this field was not set, or was not defined in the
-// schema.
-func (m *UserBackendMutation) Field(name string) (ent.Value, bool) {
-	switch name {
-	case userbackend.FieldCreatedAt:
-		return m.CreatedAt()
-	case userbackend.FieldUpdatedAt:
-		return m.UpdatedAt()
-	case userbackend.FieldName:
-		return m.Name()
-	case userbackend.FieldBackendType:
-		return m.BackendType()
-	case userbackend.FieldPriority:
-		return m.Priority()
-	case userbackend.FieldOptions:
-		return m.Options()
-	}
-	return nil, false
-}
-
-// OldField returns the old value of the field from the database. An error is
-// returned if the mutation operation is not UpdateOne, or the query to the
-// database failed.
-func (m *UserBackendMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
-	switch name {
-	case userbackend.FieldCreatedAt:
-		return m.OldCreatedAt(ctx)
-	case userbackend.FieldUpdatedAt:
-		return m.OldUpdatedAt(ctx)
-	case userbackend.FieldName:
-		return m.OldName(ctx)
-	case userbackend.FieldBackendType:
-		return m.OldBackendType(ctx)
-	case userbackend.FieldPriority:
-		return m.OldPriority(ctx)
-	case userbackend.FieldOptions:
-		return m.OldOptions(ctx)
-	}
-	return nil, fmt.Errorf("unknown UserBackend field %s", name)
-}
-
-// SetField sets the value of a field with the given name. It returns an error if
-// the field is not defined in the schema, or if the type mismatched the field
-// type.
-func (m *UserBackendMutation) SetField(name string, value ent.Value) error {
-	switch name {
-	case userbackend.FieldCreatedAt:
-		v, ok := value.(time.Time)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetCreatedAt(v)
-		return nil
-	case userbackend.FieldUpdatedAt:
-		v, ok := value.(time.Time)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetUpdatedAt(v)
-		return nil
-	case userbackend.FieldName:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetName(v)
-		return nil
-	case userbackend.FieldBackendType:
-		v, ok := value.(userbackend.BackendType)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetBackendType(v)
-		return nil
-	case userbackend.FieldPriority:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetPriority(v)
-		return nil
-	case userbackend.FieldOptions:
-		v, ok := value.(map[string]interface{})
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetOptions(v)
-		return nil
-	}
-	return fmt.Errorf("unknown UserBackend field %s", name)
-}
-
-// AddedFields returns all numeric fields that were incremented/decremented during
-// this mutation.
-func (m *UserBackendMutation) AddedFields() []string {
-	var fields []string
-	if m.addpriority != nil {
-		fields = append(fields, userbackend.FieldPriority)
-	}
-	return fields
-}
-
-// AddedField returns the numeric value that was incremented/decremented on a field
-// with the given name. The second boolean return value indicates that this field
-// was not set, or was not defined in the schema.
-func (m *UserBackendMutation) AddedField(name string) (ent.Value, bool) {
-	switch name {
-	case userbackend.FieldPriority:
-		return m.AddedPriority()
-	}
-	return nil, false
-}
-
-// AddField adds the value to the field with the given name. It returns an error if
-// the field is not defined in the schema, or if the type mismatched the field
-// type.
-func (m *UserBackendMutation) AddField(name string, value ent.Value) error {
-	switch name {
-	case userbackend.FieldPriority:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddPriority(v)
-		return nil
-	}
-	return fmt.Errorf("unknown UserBackend numeric field %s", name)
-}
-
-// ClearedFields returns all nullable fields that were cleared during this
-// mutation.
-func (m *UserBackendMutation) ClearedFields() []string {
-	return nil
-}
-
-// FieldCleared returns a boolean indicating if a field with the given name was
-// cleared in this mutation.
-func (m *UserBackendMutation) FieldCleared(name string) bool {
-	_, ok := m.clearedFields[name]
-	return ok
-}
-
-// ClearField clears the value of the field with the given name. It returns an
-// error if the field is not defined in the schema.
-func (m *UserBackendMutation) ClearField(name string) error {
-	return fmt.Errorf("unknown UserBackend nullable field %s", name)
-}
-
-// ResetField resets all changes in the mutation for the field with the given name.
-// It returns an error if the field is not defined in the schema.
-func (m *UserBackendMutation) ResetField(name string) error {
-	switch name {
-	case userbackend.FieldCreatedAt:
-		m.ResetCreatedAt()
-		return nil
-	case userbackend.FieldUpdatedAt:
-		m.ResetUpdatedAt()
-		return nil
-	case userbackend.FieldName:
-		m.ResetName()
-		return nil
-	case userbackend.FieldBackendType:
-		m.ResetBackendType()
-		return nil
-	case userbackend.FieldPriority:
-		m.ResetPriority()
-		return nil
-	case userbackend.FieldOptions:
-		m.ResetOptions()
-		return nil
-	}
-	return fmt.Errorf("unknown UserBackend field %s", name)
-}
-
-// AddedEdges returns all edge names that were set/added in this mutation.
-func (m *UserBackendMutation) AddedEdges() []string {
-	edges := make([]string, 0, 1)
-	if m.user != nil {
-		edges = append(edges, userbackend.EdgeUser)
-	}
-	return edges
-}
-
-// AddedIDs returns all IDs (to other nodes) that were added for the given edge
-// name in this mutation.
-func (m *UserBackendMutation) AddedIDs(name string) []ent.Value {
-	switch name {
-	case userbackend.EdgeUser:
-		if id := m.user; id != nil {
-			return []ent.Value{*id}
-		}
-	}
-	return nil
-}
-
-// RemovedEdges returns all edge names that were removed in this mutation.
-func (m *UserBackendMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 1)
-	return edges
-}
-
-// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
-// the given name in this mutation.
-func (m *UserBackendMutation) RemovedIDs(name string) []ent.Value {
-	return nil
-}
-
-// ClearedEdges returns all edge names that were cleared in this mutation.
-func (m *UserBackendMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 1)
-	if m.cleareduser {
-		edges = append(edges, userbackend.EdgeUser)
-	}
-	return edges
-}
-
-// EdgeCleared returns a boolean which indicates if the edge with the given name
-// was cleared in this mutation.
-func (m *UserBackendMutation) EdgeCleared(name string) bool {
-	switch name {
-	case userbackend.EdgeUser:
-		return m.cleareduser
-	}
-	return false
-}
-
-// ClearEdge clears the value of the edge with the given name. It returns an error
-// if that edge is not defined in the schema.
-func (m *UserBackendMutation) ClearEdge(name string) error {
-	switch name {
-	case userbackend.EdgeUser:
-		m.ClearUser()
-		return nil
-	}
-	return fmt.Errorf("unknown UserBackend unique edge %s", name)
-}
-
-// ResetEdge resets all changes to the edge with the given name in this mutation.
-// It returns an error if the edge is not defined in the schema.
-func (m *UserBackendMutation) ResetEdge(name string) error {
-	switch name {
-	case userbackend.EdgeUser:
-		m.ResetUser()
-		return nil
-	}
-	return fmt.Errorf("unknown UserBackend edge %s", name)
 }

@@ -68,7 +68,6 @@ func toBackendBindingResponse(bindings []service.ProjectBackendBinding) []map[st
 	for _, b := range bindings {
 		item := map[string]any{
 			"order_index": b.OrderIndex,
-			"source":      b.Source,
 			"backend_id":  b.BackendID,
 			"name":        b.Name,
 			"type":        b.Type,
@@ -236,8 +235,7 @@ func (s *Server) handleGetProjectBackends(w http.ResponseWriter, r *http.Request
 
 type setBackendOrderRequest struct {
 	Bindings []struct {
-		Source    string `json:"source"`
-		BackendID int    `json:"backend_id"`
+		BackendID int `json:"backend_id"`
 	} `json:"bindings"`
 }
 
@@ -258,7 +256,6 @@ func (s *Server) handleSetProjectBackendOrder(w http.ResponseWriter, r *http.Req
 	bindings := make([]service.ProjectBackendBindingInput, 0, len(req.Bindings))
 	for _, b := range req.Bindings {
 		bindings = append(bindings, service.ProjectBackendBindingInput{
-			Source:    b.Source,
 			BackendID: b.BackendID,
 		})
 	}

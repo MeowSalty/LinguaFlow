@@ -38,8 +38,8 @@ const (
 	EdgeRefreshTokens = "refresh_tokens"
 	// EdgeMemberships holds the string denoting the memberships edge name in mutations.
 	EdgeMemberships = "memberships"
-	// EdgeUserBackends holds the string denoting the user_backends edge name in mutations.
-	EdgeUserBackends = "user_backends"
+	// EdgeBackends holds the string denoting the backends edge name in mutations.
+	EdgeBackends = "backends"
 	// EdgeOwnedProjects holds the string denoting the owned_projects edge name in mutations.
 	EdgeOwnedProjects = "owned_projects"
 	// EdgeActivityLogs holds the string denoting the activity_logs edge name in mutations.
@@ -80,13 +80,13 @@ const (
 	MembershipsInverseTable = "org_memberships"
 	// MembershipsColumn is the table column denoting the memberships relation/edge.
 	MembershipsColumn = "user_memberships"
-	// UserBackendsTable is the table that holds the user_backends relation/edge.
-	UserBackendsTable = "user_backends"
-	// UserBackendsInverseTable is the table name for the UserBackend entity.
-	// It exists in this package in order to avoid circular dependency with the "userbackend" package.
-	UserBackendsInverseTable = "user_backends"
-	// UserBackendsColumn is the table column denoting the user_backends relation/edge.
-	UserBackendsColumn = "user_user_backends"
+	// BackendsTable is the table that holds the backends relation/edge.
+	BackendsTable = "backends"
+	// BackendsInverseTable is the table name for the Backend entity.
+	// It exists in this package in order to avoid circular dependency with the "backend" package.
+	BackendsInverseTable = "backends"
+	// BackendsColumn is the table column denoting the backends relation/edge.
+	BackendsColumn = "owner_user_id"
 	// OwnedProjectsTable is the table that holds the owned_projects relation/edge.
 	OwnedProjectsTable = "projects"
 	// OwnedProjectsInverseTable is the table name for the Project entity.
@@ -270,17 +270,17 @@ func ByMemberships(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
-// ByUserBackendsCount orders the results by user_backends count.
-func ByUserBackendsCount(opts ...sql.OrderTermOption) OrderOption {
+// ByBackendsCount orders the results by backends count.
+func ByBackendsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newUserBackendsStep(), opts...)
+		sqlgraph.OrderByNeighborsCount(s, newBackendsStep(), opts...)
 	}
 }
 
-// ByUserBackends orders the results by user_backends terms.
-func ByUserBackends(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+// ByBackends orders the results by backends terms.
+func ByBackends(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newUserBackendsStep(), append([]sql.OrderTerm{term}, terms...)...)
+		sqlgraph.OrderByNeighborTerms(s, newBackendsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
 
@@ -381,11 +381,11 @@ func newMembershipsStep() *sqlgraph.Step {
 		sqlgraph.Edge(sqlgraph.O2M, false, MembershipsTable, MembershipsColumn),
 	)
 }
-func newUserBackendsStep() *sqlgraph.Step {
+func newBackendsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(UserBackendsInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, UserBackendsTable, UserBackendsColumn),
+		sqlgraph.To(BackendsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, BackendsTable, BackendsColumn),
 	)
 }
 func newOwnedProjectsStep() *sqlgraph.Step {

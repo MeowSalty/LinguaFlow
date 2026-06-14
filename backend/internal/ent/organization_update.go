@@ -12,9 +12,9 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
@@ -141,19 +141,19 @@ func (_u *OrganizationUpdate) AddMemberships(v ...*OrgMembership) *OrganizationU
 	return _u.AddMembershipIDs(ids...)
 }
 
-// AddOrgBackendIDs adds the "org_backends" edge to the OrgBackend entity by IDs.
-func (_u *OrganizationUpdate) AddOrgBackendIDs(ids ...int) *OrganizationUpdate {
-	_u.mutation.AddOrgBackendIDs(ids...)
+// AddBackendIDs adds the "backends" edge to the Backend entity by IDs.
+func (_u *OrganizationUpdate) AddBackendIDs(ids ...int) *OrganizationUpdate {
+	_u.mutation.AddBackendIDs(ids...)
 	return _u
 }
 
-// AddOrgBackends adds the "org_backends" edges to the OrgBackend entity.
-func (_u *OrganizationUpdate) AddOrgBackends(v ...*OrgBackend) *OrganizationUpdate {
+// AddBackends adds the "backends" edges to the Backend entity.
+func (_u *OrganizationUpdate) AddBackends(v ...*Backend) *OrganizationUpdate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.AddOrgBackendIDs(ids...)
+	return _u.AddBackendIDs(ids...)
 }
 
 // AddGlossaryEntryIDs adds the "glossary_entries" edge to the GlossaryEntry entity by IDs.
@@ -293,25 +293,25 @@ func (_u *OrganizationUpdate) RemoveMemberships(v ...*OrgMembership) *Organizati
 	return _u.RemoveMembershipIDs(ids...)
 }
 
-// ClearOrgBackends clears all "org_backends" edges to the OrgBackend entity.
-func (_u *OrganizationUpdate) ClearOrgBackends() *OrganizationUpdate {
-	_u.mutation.ClearOrgBackends()
+// ClearBackends clears all "backends" edges to the Backend entity.
+func (_u *OrganizationUpdate) ClearBackends() *OrganizationUpdate {
+	_u.mutation.ClearBackends()
 	return _u
 }
 
-// RemoveOrgBackendIDs removes the "org_backends" edge to OrgBackend entities by IDs.
-func (_u *OrganizationUpdate) RemoveOrgBackendIDs(ids ...int) *OrganizationUpdate {
-	_u.mutation.RemoveOrgBackendIDs(ids...)
+// RemoveBackendIDs removes the "backends" edge to Backend entities by IDs.
+func (_u *OrganizationUpdate) RemoveBackendIDs(ids ...int) *OrganizationUpdate {
+	_u.mutation.RemoveBackendIDs(ids...)
 	return _u
 }
 
-// RemoveOrgBackends removes "org_backends" edges to OrgBackend entities.
-func (_u *OrganizationUpdate) RemoveOrgBackends(v ...*OrgBackend) *OrganizationUpdate {
+// RemoveBackends removes "backends" edges to Backend entities.
+func (_u *OrganizationUpdate) RemoveBackends(v ...*Backend) *OrganizationUpdate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.RemoveOrgBackendIDs(ids...)
+	return _u.RemoveBackendIDs(ids...)
 }
 
 // ClearGlossaryEntries clears all "glossary_entries" edges to the GlossaryEntry entity.
@@ -614,28 +614,28 @@ func (_u *OrganizationUpdate) sqlSave(ctx context.Context) (_node int, err error
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if _u.mutation.OrgBackendsCleared() {
+	if _u.mutation.BackendsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   organization.OrgBackendsTable,
-			Columns: []string{organization.OrgBackendsColumn},
+			Table:   organization.BackendsTable,
+			Columns: []string{organization.BackendsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(orgbackend.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.RemovedOrgBackendsIDs(); len(nodes) > 0 && !_u.mutation.OrgBackendsCleared() {
+	if nodes := _u.mutation.RemovedBackendsIDs(); len(nodes) > 0 && !_u.mutation.BackendsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   organization.OrgBackendsTable,
-			Columns: []string{organization.OrgBackendsColumn},
+			Table:   organization.BackendsTable,
+			Columns: []string{organization.BackendsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(orgbackend.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -643,15 +643,15 @@ func (_u *OrganizationUpdate) sqlSave(ctx context.Context) (_node int, err error
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.OrgBackendsIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.BackendsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   organization.OrgBackendsTable,
-			Columns: []string{organization.OrgBackendsColumn},
+			Table:   organization.BackendsTable,
+			Columns: []string{organization.BackendsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(orgbackend.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -1053,19 +1053,19 @@ func (_u *OrganizationUpdateOne) AddMemberships(v ...*OrgMembership) *Organizati
 	return _u.AddMembershipIDs(ids...)
 }
 
-// AddOrgBackendIDs adds the "org_backends" edge to the OrgBackend entity by IDs.
-func (_u *OrganizationUpdateOne) AddOrgBackendIDs(ids ...int) *OrganizationUpdateOne {
-	_u.mutation.AddOrgBackendIDs(ids...)
+// AddBackendIDs adds the "backends" edge to the Backend entity by IDs.
+func (_u *OrganizationUpdateOne) AddBackendIDs(ids ...int) *OrganizationUpdateOne {
+	_u.mutation.AddBackendIDs(ids...)
 	return _u
 }
 
-// AddOrgBackends adds the "org_backends" edges to the OrgBackend entity.
-func (_u *OrganizationUpdateOne) AddOrgBackends(v ...*OrgBackend) *OrganizationUpdateOne {
+// AddBackends adds the "backends" edges to the Backend entity.
+func (_u *OrganizationUpdateOne) AddBackends(v ...*Backend) *OrganizationUpdateOne {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.AddOrgBackendIDs(ids...)
+	return _u.AddBackendIDs(ids...)
 }
 
 // AddGlossaryEntryIDs adds the "glossary_entries" edge to the GlossaryEntry entity by IDs.
@@ -1205,25 +1205,25 @@ func (_u *OrganizationUpdateOne) RemoveMemberships(v ...*OrgMembership) *Organiz
 	return _u.RemoveMembershipIDs(ids...)
 }
 
-// ClearOrgBackends clears all "org_backends" edges to the OrgBackend entity.
-func (_u *OrganizationUpdateOne) ClearOrgBackends() *OrganizationUpdateOne {
-	_u.mutation.ClearOrgBackends()
+// ClearBackends clears all "backends" edges to the Backend entity.
+func (_u *OrganizationUpdateOne) ClearBackends() *OrganizationUpdateOne {
+	_u.mutation.ClearBackends()
 	return _u
 }
 
-// RemoveOrgBackendIDs removes the "org_backends" edge to OrgBackend entities by IDs.
-func (_u *OrganizationUpdateOne) RemoveOrgBackendIDs(ids ...int) *OrganizationUpdateOne {
-	_u.mutation.RemoveOrgBackendIDs(ids...)
+// RemoveBackendIDs removes the "backends" edge to Backend entities by IDs.
+func (_u *OrganizationUpdateOne) RemoveBackendIDs(ids ...int) *OrganizationUpdateOne {
+	_u.mutation.RemoveBackendIDs(ids...)
 	return _u
 }
 
-// RemoveOrgBackends removes "org_backends" edges to OrgBackend entities.
-func (_u *OrganizationUpdateOne) RemoveOrgBackends(v ...*OrgBackend) *OrganizationUpdateOne {
+// RemoveBackends removes "backends" edges to Backend entities.
+func (_u *OrganizationUpdateOne) RemoveBackends(v ...*Backend) *OrganizationUpdateOne {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.RemoveOrgBackendIDs(ids...)
+	return _u.RemoveBackendIDs(ids...)
 }
 
 // ClearGlossaryEntries clears all "glossary_entries" edges to the GlossaryEntry entity.
@@ -1556,28 +1556,28 @@ func (_u *OrganizationUpdateOne) sqlSave(ctx context.Context) (_node *Organizati
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if _u.mutation.OrgBackendsCleared() {
+	if _u.mutation.BackendsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   organization.OrgBackendsTable,
-			Columns: []string{organization.OrgBackendsColumn},
+			Table:   organization.BackendsTable,
+			Columns: []string{organization.BackendsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(orgbackend.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.RemovedOrgBackendsIDs(); len(nodes) > 0 && !_u.mutation.OrgBackendsCleared() {
+	if nodes := _u.mutation.RemovedBackendsIDs(); len(nodes) > 0 && !_u.mutation.BackendsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   organization.OrgBackendsTable,
-			Columns: []string{organization.OrgBackendsColumn},
+			Table:   organization.BackendsTable,
+			Columns: []string{organization.BackendsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(orgbackend.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -1585,15 +1585,15 @@ func (_u *OrganizationUpdateOne) sqlSave(ctx context.Context) (_node *Organizati
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.OrgBackendsIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.BackendsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   organization.OrgBackendsTable,
-			Columns: []string{organization.OrgBackendsColumn},
+			Table:   organization.BackendsTable,
+			Columns: []string{organization.BackendsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(orgbackend.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

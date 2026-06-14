@@ -195,26 +195,6 @@ func OrderIndexLTE(v int) predicate.ProjectBackend {
 	return predicate.ProjectBackend(sql.FieldLTE(FieldOrderIndex, v))
 }
 
-// SourceEQ applies the EQ predicate on the "source" field.
-func SourceEQ(v Source) predicate.ProjectBackend {
-	return predicate.ProjectBackend(sql.FieldEQ(FieldSource, v))
-}
-
-// SourceNEQ applies the NEQ predicate on the "source" field.
-func SourceNEQ(v Source) predicate.ProjectBackend {
-	return predicate.ProjectBackend(sql.FieldNEQ(FieldSource, v))
-}
-
-// SourceIn applies the In predicate on the "source" field.
-func SourceIn(vs ...Source) predicate.ProjectBackend {
-	return predicate.ProjectBackend(sql.FieldIn(FieldSource, vs...))
-}
-
-// SourceNotIn applies the NotIn predicate on the "source" field.
-func SourceNotIn(vs ...Source) predicate.ProjectBackend {
-	return predicate.ProjectBackend(sql.FieldNotIn(FieldSource, vs...))
-}
-
 // BackendIDEQ applies the EQ predicate on the "backend_id" field.
 func BackendIDEQ(v int) predicate.ProjectBackend {
 	return predicate.ProjectBackend(sql.FieldEQ(FieldBackendID, v))

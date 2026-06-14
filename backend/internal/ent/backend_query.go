@@ -11,58 +11,59 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
 )
 
-// UserBackendQuery is the builder for querying UserBackend entities.
-type UserBackendQuery struct {
+// BackendQuery is the builder for querying Backend entities.
+type BackendQuery struct {
 	config
-	ctx        *QueryContext
-	order      []userbackend.OrderOption
-	inters     []Interceptor
-	predicates []predicate.UserBackend
-	withUser   *UserQuery
-	withFKs    bool
+	ctx           *QueryContext
+	order         []backend.OrderOption
+	inters        []Interceptor
+	predicates    []predicate.Backend
+	withOwnerUser *UserQuery
+	withOwnerOrg  *OrganizationQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
 }
 
-// Where adds a new predicate for the UserBackendQuery builder.
-func (_q *UserBackendQuery) Where(ps ...predicate.UserBackend) *UserBackendQuery {
+// Where adds a new predicate for the BackendQuery builder.
+func (_q *BackendQuery) Where(ps ...predicate.Backend) *BackendQuery {
 	_q.predicates = append(_q.predicates, ps...)
 	return _q
 }
 
 // Limit the number of records to be returned by this query.
-func (_q *UserBackendQuery) Limit(limit int) *UserBackendQuery {
+func (_q *BackendQuery) Limit(limit int) *BackendQuery {
 	_q.ctx.Limit = &limit
 	return _q
 }
 
 // Offset to start from.
-func (_q *UserBackendQuery) Offset(offset int) *UserBackendQuery {
+func (_q *BackendQuery) Offset(offset int) *BackendQuery {
 	_q.ctx.Offset = &offset
 	return _q
 }
 
 // Unique configures the query builder to filter duplicate records on query.
 // By default, unique is set to true, and can be disabled using this method.
-func (_q *UserBackendQuery) Unique(unique bool) *UserBackendQuery {
+func (_q *BackendQuery) Unique(unique bool) *BackendQuery {
 	_q.ctx.Unique = &unique
 	return _q
 }
 
 // Order specifies how the records should be ordered.
-func (_q *UserBackendQuery) Order(o ...userbackend.OrderOption) *UserBackendQuery {
+func (_q *BackendQuery) Order(o ...backend.OrderOption) *BackendQuery {
 	_q.order = append(_q.order, o...)
 	return _q
 }
 
-// QueryUser chains the current query on the "user" edge.
-func (_q *UserBackendQuery) QueryUser() *UserQuery {
+// QueryOwnerUser chains the current query on the "owner_user" edge.
+func (_q *BackendQuery) QueryOwnerUser() *UserQuery {
 	query := (&UserClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
@@ -73,9 +74,9 @@ func (_q *UserBackendQuery) QueryUser() *UserQuery {
 			return nil, err
 		}
 		step := sqlgraph.NewStep(
-			sqlgraph.From(userbackend.Table, userbackend.FieldID, selector),
+			sqlgraph.From(backend.Table, backend.FieldID, selector),
 			sqlgraph.To(user.Table, user.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, userbackend.UserTable, userbackend.UserColumn),
+			sqlgraph.Edge(sqlgraph.M2O, true, backend.OwnerUserTable, backend.OwnerUserColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -83,21 +84,43 @@ func (_q *UserBackendQuery) QueryUser() *UserQuery {
 	return query
 }
 
-// First returns the first UserBackend entity from the query.
-// Returns a *NotFoundError when no UserBackend was found.
-func (_q *UserBackendQuery) First(ctx context.Context) (*UserBackend, error) {
+// QueryOwnerOrg chains the current query on the "owner_org" edge.
+func (_q *BackendQuery) QueryOwnerOrg() *OrganizationQuery {
+	query := (&OrganizationClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(backend.Table, backend.FieldID, selector),
+			sqlgraph.To(organization.Table, organization.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, backend.OwnerOrgTable, backend.OwnerOrgColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// First returns the first Backend entity from the query.
+// Returns a *NotFoundError when no Backend was found.
+func (_q *BackendQuery) First(ctx context.Context) (*Backend, error) {
 	nodes, err := _q.Limit(1).All(setContextOp(ctx, _q.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
 	if len(nodes) == 0 {
-		return nil, &NotFoundError{userbackend.Label}
+		return nil, &NotFoundError{backend.Label}
 	}
 	return nodes[0], nil
 }
 
 // FirstX is like First, but panics if an error occurs.
-func (_q *UserBackendQuery) FirstX(ctx context.Context) *UserBackend {
+func (_q *BackendQuery) FirstX(ctx context.Context) *Backend {
 	node, err := _q.First(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
@@ -105,22 +128,22 @@ func (_q *UserBackendQuery) FirstX(ctx context.Context) *UserBackend {
 	return node
 }
 
-// FirstID returns the first UserBackend ID from the query.
-// Returns a *NotFoundError when no UserBackend ID was found.
-func (_q *UserBackendQuery) FirstID(ctx context.Context) (id int, err error) {
+// FirstID returns the first Backend ID from the query.
+// Returns a *NotFoundError when no Backend ID was found.
+func (_q *BackendQuery) FirstID(ctx context.Context) (id int, err error) {
 	var ids []int
 	if ids, err = _q.Limit(1).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
 	if len(ids) == 0 {
-		err = &NotFoundError{userbackend.Label}
+		err = &NotFoundError{backend.Label}
 		return
 	}
 	return ids[0], nil
 }
 
 // FirstIDX is like FirstID, but panics if an error occurs.
-func (_q *UserBackendQuery) FirstIDX(ctx context.Context) int {
+func (_q *BackendQuery) FirstIDX(ctx context.Context) int {
 	id, err := _q.FirstID(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
@@ -128,10 +151,10 @@ func (_q *UserBackendQuery) FirstIDX(ctx context.Context) int {
 	return id
 }
 
-// Only returns a single UserBackend entity found by the query, ensuring it only returns one.
-// Returns a *NotSingularError when more than one UserBackend entity is found.
-// Returns a *NotFoundError when no UserBackend entities are found.
-func (_q *UserBackendQuery) Only(ctx context.Context) (*UserBackend, error) {
+// Only returns a single Backend entity found by the query, ensuring it only returns one.
+// Returns a *NotSingularError when more than one Backend entity is found.
+// Returns a *NotFoundError when no Backend entities are found.
+func (_q *BackendQuery) Only(ctx context.Context) (*Backend, error) {
 	nodes, err := _q.Limit(2).All(setContextOp(ctx, _q.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
@@ -140,14 +163,14 @@ func (_q *UserBackendQuery) Only(ctx context.Context) (*UserBackend, error) {
 	case 1:
 		return nodes[0], nil
 	case 0:
-		return nil, &NotFoundError{userbackend.Label}
+		return nil, &NotFoundError{backend.Label}
 	default:
-		return nil, &NotSingularError{userbackend.Label}
+		return nil, &NotSingularError{backend.Label}
 	}
 }
 
 // OnlyX is like Only, but panics if an error occurs.
-func (_q *UserBackendQuery) OnlyX(ctx context.Context) *UserBackend {
+func (_q *BackendQuery) OnlyX(ctx context.Context) *Backend {
 	node, err := _q.Only(ctx)
 	if err != nil {
 		panic(err)
@@ -155,10 +178,10 @@ func (_q *UserBackendQuery) OnlyX(ctx context.Context) *UserBackend {
 	return node
 }
 
-// OnlyID is like Only, but returns the only UserBackend ID in the query.
-// Returns a *NotSingularError when more than one UserBackend ID is found.
+// OnlyID is like Only, but returns the only Backend ID in the query.
+// Returns a *NotSingularError when more than one Backend ID is found.
 // Returns a *NotFoundError when no entities are found.
-func (_q *UserBackendQuery) OnlyID(ctx context.Context) (id int, err error) {
+func (_q *BackendQuery) OnlyID(ctx context.Context) (id int, err error) {
 	var ids []int
 	if ids, err = _q.Limit(2).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
@@ -167,15 +190,15 @@ func (_q *UserBackendQuery) OnlyID(ctx context.Context) (id int, err error) {
 	case 1:
 		id = ids[0]
 	case 0:
-		err = &NotFoundError{userbackend.Label}
+		err = &NotFoundError{backend.Label}
 	default:
-		err = &NotSingularError{userbackend.Label}
+		err = &NotSingularError{backend.Label}
 	}
 	return
 }
 
 // OnlyIDX is like OnlyID, but panics if an error occurs.
-func (_q *UserBackendQuery) OnlyIDX(ctx context.Context) int {
+func (_q *BackendQuery) OnlyIDX(ctx context.Context) int {
 	id, err := _q.OnlyID(ctx)
 	if err != nil {
 		panic(err)
@@ -183,18 +206,18 @@ func (_q *UserBackendQuery) OnlyIDX(ctx context.Context) int {
 	return id
 }
 
-// All executes the query and returns a list of UserBackends.
-func (_q *UserBackendQuery) All(ctx context.Context) ([]*UserBackend, error) {
+// All executes the query and returns a list of Backends.
+func (_q *BackendQuery) All(ctx context.Context) ([]*Backend, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryAll)
 	if err := _q.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
-	qr := querierAll[[]*UserBackend, *UserBackendQuery]()
-	return withInterceptors[[]*UserBackend](ctx, _q, qr, _q.inters)
+	qr := querierAll[[]*Backend, *BackendQuery]()
+	return withInterceptors[[]*Backend](ctx, _q, qr, _q.inters)
 }
 
 // AllX is like All, but panics if an error occurs.
-func (_q *UserBackendQuery) AllX(ctx context.Context) []*UserBackend {
+func (_q *BackendQuery) AllX(ctx context.Context) []*Backend {
 	nodes, err := _q.All(ctx)
 	if err != nil {
 		panic(err)
@@ -202,20 +225,20 @@ func (_q *UserBackendQuery) AllX(ctx context.Context) []*UserBackend {
 	return nodes
 }
 
-// IDs executes the query and returns a list of UserBackend IDs.
-func (_q *UserBackendQuery) IDs(ctx context.Context) (ids []int, err error) {
+// IDs executes the query and returns a list of Backend IDs.
+func (_q *BackendQuery) IDs(ctx context.Context) (ids []int, err error) {
 	if _q.ctx.Unique == nil && _q.path != nil {
 		_q.Unique(true)
 	}
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryIDs)
-	if err = _q.Select(userbackend.FieldID).Scan(ctx, &ids); err != nil {
+	if err = _q.Select(backend.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
 }
 
 // IDsX is like IDs, but panics if an error occurs.
-func (_q *UserBackendQuery) IDsX(ctx context.Context) []int {
+func (_q *BackendQuery) IDsX(ctx context.Context) []int {
 	ids, err := _q.IDs(ctx)
 	if err != nil {
 		panic(err)
@@ -224,16 +247,16 @@ func (_q *UserBackendQuery) IDsX(ctx context.Context) []int {
 }
 
 // Count returns the count of the given query.
-func (_q *UserBackendQuery) Count(ctx context.Context) (int, error) {
+func (_q *BackendQuery) Count(ctx context.Context) (int, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryCount)
 	if err := _q.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
-	return withInterceptors[int](ctx, _q, querierCount[*UserBackendQuery](), _q.inters)
+	return withInterceptors[int](ctx, _q, querierCount[*BackendQuery](), _q.inters)
 }
 
 // CountX is like Count, but panics if an error occurs.
-func (_q *UserBackendQuery) CountX(ctx context.Context) int {
+func (_q *BackendQuery) CountX(ctx context.Context) int {
 	count, err := _q.Count(ctx)
 	if err != nil {
 		panic(err)
@@ -242,7 +265,7 @@ func (_q *UserBackendQuery) CountX(ctx context.Context) int {
 }
 
 // Exist returns true if the query has elements in the graph.
-func (_q *UserBackendQuery) Exist(ctx context.Context) (bool, error) {
+func (_q *BackendQuery) Exist(ctx context.Context) (bool, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryExist)
 	switch _, err := _q.FirstID(ctx); {
 	case IsNotFound(err):
@@ -255,7 +278,7 @@ func (_q *UserBackendQuery) Exist(ctx context.Context) (bool, error) {
 }
 
 // ExistX is like Exist, but panics if an error occurs.
-func (_q *UserBackendQuery) ExistX(ctx context.Context) bool {
+func (_q *BackendQuery) ExistX(ctx context.Context) bool {
 	exist, err := _q.Exist(ctx)
 	if err != nil {
 		panic(err)
@@ -263,33 +286,45 @@ func (_q *UserBackendQuery) ExistX(ctx context.Context) bool {
 	return exist
 }
 
-// Clone returns a duplicate of the UserBackendQuery builder, including all associated steps. It can be
+// Clone returns a duplicate of the BackendQuery builder, including all associated steps. It can be
 // used to prepare common query builders and use them differently after the clone is made.
-func (_q *UserBackendQuery) Clone() *UserBackendQuery {
+func (_q *BackendQuery) Clone() *BackendQuery {
 	if _q == nil {
 		return nil
 	}
-	return &UserBackendQuery{
-		config:     _q.config,
-		ctx:        _q.ctx.Clone(),
-		order:      append([]userbackend.OrderOption{}, _q.order...),
-		inters:     append([]Interceptor{}, _q.inters...),
-		predicates: append([]predicate.UserBackend{}, _q.predicates...),
-		withUser:   _q.withUser.Clone(),
+	return &BackendQuery{
+		config:        _q.config,
+		ctx:           _q.ctx.Clone(),
+		order:         append([]backend.OrderOption{}, _q.order...),
+		inters:        append([]Interceptor{}, _q.inters...),
+		predicates:    append([]predicate.Backend{}, _q.predicates...),
+		withOwnerUser: _q.withOwnerUser.Clone(),
+		withOwnerOrg:  _q.withOwnerOrg.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
 	}
 }
 
-// WithUser tells the query-builder to eager-load the nodes that are connected to
-// the "user" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *UserBackendQuery) WithUser(opts ...func(*UserQuery)) *UserBackendQuery {
+// WithOwnerUser tells the query-builder to eager-load the nodes that are connected to
+// the "owner_user" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *BackendQuery) WithOwnerUser(opts ...func(*UserQuery)) *BackendQuery {
 	query := (&UserClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
-	_q.withUser = query
+	_q.withOwnerUser = query
+	return _q
+}
+
+// WithOwnerOrg tells the query-builder to eager-load the nodes that are connected to
+// the "owner_org" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *BackendQuery) WithOwnerOrg(opts ...func(*OrganizationQuery)) *BackendQuery {
+	query := (&OrganizationClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withOwnerOrg = query
 	return _q
 }
 
@@ -303,15 +338,15 @@ func (_q *UserBackendQuery) WithUser(opts ...func(*UserQuery)) *UserBackendQuery
 //		Count int `json:"count,omitempty"`
 //	}
 //
-//	client.UserBackend.Query().
-//		GroupBy(userbackend.FieldCreatedAt).
+//	client.Backend.Query().
+//		GroupBy(backend.FieldCreatedAt).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
-func (_q *UserBackendQuery) GroupBy(field string, fields ...string) *UserBackendGroupBy {
+func (_q *BackendQuery) GroupBy(field string, fields ...string) *BackendGroupBy {
 	_q.ctx.Fields = append([]string{field}, fields...)
-	grbuild := &UserBackendGroupBy{build: _q}
+	grbuild := &BackendGroupBy{build: _q}
 	grbuild.flds = &_q.ctx.Fields
-	grbuild.label = userbackend.Label
+	grbuild.label = backend.Label
 	grbuild.scan = grbuild.Scan
 	return grbuild
 }
@@ -325,23 +360,23 @@ func (_q *UserBackendQuery) GroupBy(field string, fields ...string) *UserBackend
 //		CreatedAt time.Time `json:"created_at,omitempty"`
 //	}
 //
-//	client.UserBackend.Query().
-//		Select(userbackend.FieldCreatedAt).
+//	client.Backend.Query().
+//		Select(backend.FieldCreatedAt).
 //		Scan(ctx, &v)
-func (_q *UserBackendQuery) Select(fields ...string) *UserBackendSelect {
+func (_q *BackendQuery) Select(fields ...string) *BackendSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)
-	sbuild := &UserBackendSelect{UserBackendQuery: _q}
-	sbuild.label = userbackend.Label
+	sbuild := &BackendSelect{BackendQuery: _q}
+	sbuild.label = backend.Label
 	sbuild.flds, sbuild.scan = &_q.ctx.Fields, sbuild.Scan
 	return sbuild
 }
 
-// Aggregate returns a UserBackendSelect configured with the given aggregations.
-func (_q *UserBackendQuery) Aggregate(fns ...AggregateFunc) *UserBackendSelect {
+// Aggregate returns a BackendSelect configured with the given aggregations.
+func (_q *BackendQuery) Aggregate(fns ...AggregateFunc) *BackendSelect {
 	return _q.Select().Aggregate(fns...)
 }
 
-func (_q *UserBackendQuery) prepareQuery(ctx context.Context) error {
+func (_q *BackendQuery) prepareQuery(ctx context.Context) error {
 	for _, inter := range _q.inters {
 		if inter == nil {
 			return fmt.Errorf("ent: uninitialized interceptor (forgotten import ent/runtime?)")
@@ -353,7 +388,7 @@ func (_q *UserBackendQuery) prepareQuery(ctx context.Context) error {
 		}
 	}
 	for _, f := range _q.ctx.Fields {
-		if !userbackend.ValidColumn(f) {
+		if !backend.ValidColumn(f) {
 			return &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 		}
 	}
@@ -367,26 +402,20 @@ func (_q *UserBackendQuery) prepareQuery(ctx context.Context) error {
 	return nil
 }
 
-func (_q *UserBackendQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*UserBackend, error) {
+func (_q *BackendQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Backend, error) {
 	var (
-		nodes       = []*UserBackend{}
-		withFKs     = _q.withFKs
+		nodes       = []*Backend{}
 		_spec       = _q.querySpec()
-		loadedTypes = [1]bool{
-			_q.withUser != nil,
+		loadedTypes = [2]bool{
+			_q.withOwnerUser != nil,
+			_q.withOwnerOrg != nil,
 		}
 	)
-	if _q.withUser != nil {
-		withFKs = true
-	}
-	if withFKs {
-		_spec.Node.Columns = append(_spec.Node.Columns, userbackend.ForeignKeys...)
-	}
 	_spec.ScanValues = func(columns []string) ([]any, error) {
-		return (*UserBackend).scanValues(nil, columns)
+		return (*Backend).scanValues(nil, columns)
 	}
 	_spec.Assign = func(columns []string, values []any) error {
-		node := &UserBackend{config: _q.config}
+		node := &Backend{config: _q.config}
 		nodes = append(nodes, node)
 		node.Edges.loadedTypes = loadedTypes
 		return node.assignValues(columns, values)
@@ -400,23 +429,29 @@ func (_q *UserBackendQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*
 	if len(nodes) == 0 {
 		return nodes, nil
 	}
-	if query := _q.withUser; query != nil {
-		if err := _q.loadUser(ctx, query, nodes, nil,
-			func(n *UserBackend, e *User) { n.Edges.User = e }); err != nil {
+	if query := _q.withOwnerUser; query != nil {
+		if err := _q.loadOwnerUser(ctx, query, nodes, nil,
+			func(n *Backend, e *User) { n.Edges.OwnerUser = e }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withOwnerOrg; query != nil {
+		if err := _q.loadOwnerOrg(ctx, query, nodes, nil,
+			func(n *Backend, e *Organization) { n.Edges.OwnerOrg = e }); err != nil {
 			return nil, err
 		}
 	}
 	return nodes, nil
 }
 
-func (_q *UserBackendQuery) loadUser(ctx context.Context, query *UserQuery, nodes []*UserBackend, init func(*UserBackend), assign func(*UserBackend, *User)) error {
+func (_q *BackendQuery) loadOwnerUser(ctx context.Context, query *UserQuery, nodes []*Backend, init func(*Backend), assign func(*Backend, *User)) error {
 	ids := make([]int, 0, len(nodes))
-	nodeids := make(map[int][]*UserBackend)
+	nodeids := make(map[int][]*Backend)
 	for i := range nodes {
-		if nodes[i].user_user_backends == nil {
+		if nodes[i].OwnerUserID == nil {
 			continue
 		}
-		fk := *nodes[i].user_user_backends
+		fk := *nodes[i].OwnerUserID
 		if _, ok := nodeids[fk]; !ok {
 			ids = append(ids, fk)
 		}
@@ -433,7 +468,39 @@ func (_q *UserBackendQuery) loadUser(ctx context.Context, query *UserQuery, node
 	for _, n := range neighbors {
 		nodes, ok := nodeids[n.ID]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "user_user_backends" returned %v`, n.ID)
+			return fmt.Errorf(`unexpected foreign-key "owner_user_id" returned %v`, n.ID)
+		}
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
+	}
+	return nil
+}
+func (_q *BackendQuery) loadOwnerOrg(ctx context.Context, query *OrganizationQuery, nodes []*Backend, init func(*Backend), assign func(*Backend, *Organization)) error {
+	ids := make([]int, 0, len(nodes))
+	nodeids := make(map[int][]*Backend)
+	for i := range nodes {
+		if nodes[i].OwnerOrgID == nil {
+			continue
+		}
+		fk := *nodes[i].OwnerOrgID
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	query.Where(organization.IDIn(ids...))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nodeids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "owner_org_id" returned %v`, n.ID)
 		}
 		for i := range nodes {
 			assign(nodes[i], n)
@@ -442,7 +509,7 @@ func (_q *UserBackendQuery) loadUser(ctx context.Context, query *UserQuery, node
 	return nil
 }
 
-func (_q *UserBackendQuery) sqlCount(ctx context.Context) (int, error) {
+func (_q *BackendQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := _q.querySpec()
 	_spec.Node.Columns = _q.ctx.Fields
 	if len(_q.ctx.Fields) > 0 {
@@ -451,8 +518,8 @@ func (_q *UserBackendQuery) sqlCount(ctx context.Context) (int, error) {
 	return sqlgraph.CountNodes(ctx, _q.driver, _spec)
 }
 
-func (_q *UserBackendQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := sqlgraph.NewQuerySpec(userbackend.Table, userbackend.Columns, sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt))
+func (_q *BackendQuery) querySpec() *sqlgraph.QuerySpec {
+	_spec := sqlgraph.NewQuerySpec(backend.Table, backend.Columns, sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt))
 	_spec.From = _q.sql
 	if unique := _q.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
@@ -461,11 +528,17 @@ func (_q *UserBackendQuery) querySpec() *sqlgraph.QuerySpec {
 	}
 	if fields := _q.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
-		_spec.Node.Columns = append(_spec.Node.Columns, userbackend.FieldID)
+		_spec.Node.Columns = append(_spec.Node.Columns, backend.FieldID)
 		for i := range fields {
-			if fields[i] != userbackend.FieldID {
+			if fields[i] != backend.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
+		}
+		if _q.withOwnerUser != nil {
+			_spec.Node.AddColumnOnce(backend.FieldOwnerUserID)
+		}
+		if _q.withOwnerOrg != nil {
+			_spec.Node.AddColumnOnce(backend.FieldOwnerOrgID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {
@@ -491,12 +564,12 @@ func (_q *UserBackendQuery) querySpec() *sqlgraph.QuerySpec {
 	return _spec
 }
 
-func (_q *UserBackendQuery) sqlQuery(ctx context.Context) *sql.Selector {
+func (_q *BackendQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(_q.driver.Dialect())
-	t1 := builder.Table(userbackend.Table)
+	t1 := builder.Table(backend.Table)
 	columns := _q.ctx.Fields
 	if len(columns) == 0 {
-		columns = userbackend.Columns
+		columns = backend.Columns
 	}
 	selector := builder.Select(t1.Columns(columns...)...).From(t1)
 	if _q.sql != nil {
@@ -523,28 +596,28 @@ func (_q *UserBackendQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	return selector
 }
 
-// UserBackendGroupBy is the group-by builder for UserBackend entities.
-type UserBackendGroupBy struct {
+// BackendGroupBy is the group-by builder for Backend entities.
+type BackendGroupBy struct {
 	selector
-	build *UserBackendQuery
+	build *BackendQuery
 }
 
 // Aggregate adds the given aggregation functions to the group-by query.
-func (_g *UserBackendGroupBy) Aggregate(fns ...AggregateFunc) *UserBackendGroupBy {
+func (_g *BackendGroupBy) Aggregate(fns ...AggregateFunc) *BackendGroupBy {
 	_g.fns = append(_g.fns, fns...)
 	return _g
 }
 
 // Scan applies the selector query and scans the result into the given value.
-func (_g *UserBackendGroupBy) Scan(ctx context.Context, v any) error {
+func (_g *BackendGroupBy) Scan(ctx context.Context, v any) error {
 	ctx = setContextOp(ctx, _g.build.ctx, ent.OpQueryGroupBy)
 	if err := _g.build.prepareQuery(ctx); err != nil {
 		return err
 	}
-	return scanWithInterceptors[*UserBackendQuery, *UserBackendGroupBy](ctx, _g.build, _g, _g.build.inters, v)
+	return scanWithInterceptors[*BackendQuery, *BackendGroupBy](ctx, _g.build, _g, _g.build.inters, v)
 }
 
-func (_g *UserBackendGroupBy) sqlScan(ctx context.Context, root *UserBackendQuery, v any) error {
+func (_g *BackendGroupBy) sqlScan(ctx context.Context, root *BackendQuery, v any) error {
 	selector := root.sqlQuery(ctx).Select()
 	aggregation := make([]string, 0, len(_g.fns))
 	for _, fn := range _g.fns {
@@ -571,28 +644,28 @@ func (_g *UserBackendGroupBy) sqlScan(ctx context.Context, root *UserBackendQuer
 	return sql.ScanSlice(rows, v)
 }
 
-// UserBackendSelect is the builder for selecting fields of UserBackend entities.
-type UserBackendSelect struct {
-	*UserBackendQuery
+// BackendSelect is the builder for selecting fields of Backend entities.
+type BackendSelect struct {
+	*BackendQuery
 	selector
 }
 
 // Aggregate adds the given aggregation functions to the selector query.
-func (_s *UserBackendSelect) Aggregate(fns ...AggregateFunc) *UserBackendSelect {
+func (_s *BackendSelect) Aggregate(fns ...AggregateFunc) *BackendSelect {
 	_s.fns = append(_s.fns, fns...)
 	return _s
 }
 
 // Scan applies the selector query and scans the result into the given value.
-func (_s *UserBackendSelect) Scan(ctx context.Context, v any) error {
+func (_s *BackendSelect) Scan(ctx context.Context, v any) error {
 	ctx = setContextOp(ctx, _s.ctx, ent.OpQuerySelect)
 	if err := _s.prepareQuery(ctx); err != nil {
 		return err
 	}
-	return scanWithInterceptors[*UserBackendQuery, *UserBackendSelect](ctx, _s.UserBackendQuery, _s, _s.inters, v)
+	return scanWithInterceptors[*BackendQuery, *BackendSelect](ctx, _s.BackendQuery, _s, _s.inters, v)
 }
 
-func (_s *UserBackendSelect) sqlScan(ctx context.Context, root *UserBackendQuery, v any) error {
+func (_s *BackendSelect) sqlScan(ctx context.Context, root *BackendQuery, v any) error {
 	selector := root.sqlQuery(ctx)
 	aggregation := make([]string, 0, len(_s.fns))
 	for _, fn := range _s.fns {

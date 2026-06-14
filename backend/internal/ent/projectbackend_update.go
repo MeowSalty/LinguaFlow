@@ -56,20 +56,6 @@ func (_u *ProjectBackendUpdate) AddOrderIndex(v int) *ProjectBackendUpdate {
 	return _u
 }
 
-// SetSource sets the "source" field.
-func (_u *ProjectBackendUpdate) SetSource(v projectbackend.Source) *ProjectBackendUpdate {
-	_u.mutation.SetSource(v)
-	return _u
-}
-
-// SetNillableSource sets the "source" field if the given value is not nil.
-func (_u *ProjectBackendUpdate) SetNillableSource(v *projectbackend.Source) *ProjectBackendUpdate {
-	if v != nil {
-		_u.SetSource(*v)
-	}
-	return _u
-}
-
 // SetBackendID sets the "backend_id" field.
 func (_u *ProjectBackendUpdate) SetBackendID(v int) *ProjectBackendUpdate {
 	_u.mutation.ResetBackendID()
@@ -156,11 +142,6 @@ func (_u *ProjectBackendUpdate) check() error {
 			return &ValidationError{Name: "order_index", err: fmt.Errorf(`ent: validator failed for field "ProjectBackend.order_index": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.Source(); ok {
-		if err := projectbackend.SourceValidator(v); err != nil {
-			return &ValidationError{Name: "source", err: fmt.Errorf(`ent: validator failed for field "ProjectBackend.source": %w`, err)}
-		}
-	}
 	if v, ok := _u.mutation.BackendID(); ok {
 		if err := projectbackend.BackendIDValidator(v); err != nil {
 			return &ValidationError{Name: "backend_id", err: fmt.Errorf(`ent: validator failed for field "ProjectBackend.backend_id": %w`, err)}
@@ -192,9 +173,6 @@ func (_u *ProjectBackendUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if value, ok := _u.mutation.AddedOrderIndex(); ok {
 		_spec.AddField(projectbackend.FieldOrderIndex, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.Source(); ok {
-		_spec.SetField(projectbackend.FieldSource, field.TypeEnum, value)
 	}
 	if value, ok := _u.mutation.BackendID(); ok {
 		_spec.SetField(projectbackend.FieldBackendID, field.TypeInt, value)
@@ -275,20 +253,6 @@ func (_u *ProjectBackendUpdateOne) SetNillableOrderIndex(v *int) *ProjectBackend
 // AddOrderIndex adds value to the "order_index" field.
 func (_u *ProjectBackendUpdateOne) AddOrderIndex(v int) *ProjectBackendUpdateOne {
 	_u.mutation.AddOrderIndex(v)
-	return _u
-}
-
-// SetSource sets the "source" field.
-func (_u *ProjectBackendUpdateOne) SetSource(v projectbackend.Source) *ProjectBackendUpdateOne {
-	_u.mutation.SetSource(v)
-	return _u
-}
-
-// SetNillableSource sets the "source" field if the given value is not nil.
-func (_u *ProjectBackendUpdateOne) SetNillableSource(v *projectbackend.Source) *ProjectBackendUpdateOne {
-	if v != nil {
-		_u.SetSource(*v)
-	}
 	return _u
 }
 
@@ -391,11 +355,6 @@ func (_u *ProjectBackendUpdateOne) check() error {
 			return &ValidationError{Name: "order_index", err: fmt.Errorf(`ent: validator failed for field "ProjectBackend.order_index": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.Source(); ok {
-		if err := projectbackend.SourceValidator(v); err != nil {
-			return &ValidationError{Name: "source", err: fmt.Errorf(`ent: validator failed for field "ProjectBackend.source": %w`, err)}
-		}
-	}
 	if v, ok := _u.mutation.BackendID(); ok {
 		if err := projectbackend.BackendIDValidator(v); err != nil {
 			return &ValidationError{Name: "backend_id", err: fmt.Errorf(`ent: validator failed for field "ProjectBackend.backend_id": %w`, err)}
@@ -444,9 +403,6 @@ func (_u *ProjectBackendUpdateOne) sqlSave(ctx context.Context) (_node *ProjectB
 	}
 	if value, ok := _u.mutation.AddedOrderIndex(); ok {
 		_spec.AddField(projectbackend.FieldOrderIndex, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.Source(); ok {
-		_spec.SetField(projectbackend.FieldSource, field.TypeEnum, value)
 	}
 	if value, ok := _u.mutation.BackendID(); ok {
 		_spec.SetField(projectbackend.FieldBackendID, field.TypeInt, value)

@@ -3,6 +3,7 @@
 package migrate
 
 import (
+	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/dialect/sql/schema"
 	"entgo.io/ent/schema/field"
 )
@@ -45,6 +46,57 @@ var (
 				Columns:    []*schema.Column{ActivityLogsColumns[10]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
+			},
+		},
+	}
+	// BackendsColumns holds the columns for the "backends" table.
+	BackendsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "name", Type: field.TypeString},
+		{Name: "scope", Type: field.TypeString, Default: "user"},
+		{Name: "backend_type", Type: field.TypeEnum, Enums: []string{"openai", "anthropic", "google"}},
+		{Name: "priority", Type: field.TypeInt, Default: 0},
+		{Name: "options", Type: field.TypeJSON},
+		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
+		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
+	}
+	// BackendsTable holds the schema information for the "backends" table.
+	BackendsTable = &schema.Table{
+		Name:       "backends",
+		Columns:    BackendsColumns,
+		PrimaryKey: []*schema.Column{BackendsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "backends_organizations_backends",
+				Columns:    []*schema.Column{BackendsColumns[8]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "backends_users_backends",
+				Columns:    []*schema.Column{BackendsColumns[9]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "backend_name_owner_user_id",
+				Unique:  true,
+				Columns: []*schema.Column{BackendsColumns[3], BackendsColumns[9]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "scope = 'user' AND owner_user_id IS NOT NULL",
+				},
+			},
+			{
+				Name:    "backend_name_owner_org_id",
+				Unique:  true,
+				Columns: []*schema.Column{BackendsColumns[3], BackendsColumns[8]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "scope = 'org' AND owner_org_id IS NOT NULL",
+				},
 			},
 		},
 	}
@@ -120,38 +172,6 @@ var (
 				Columns:    []*schema.Column{JobResourcesColumns[10]},
 				RefColumns: []*schema.Column{TranslationJobsColumns[0]},
 				OnDelete:   schema.NoAction,
-			},
-		},
-	}
-	// OrgBackendsColumns holds the columns for the "org_backends" table.
-	OrgBackendsColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "created_at", Type: field.TypeTime},
-		{Name: "updated_at", Type: field.TypeTime},
-		{Name: "name", Type: field.TypeString},
-		{Name: "backend_type", Type: field.TypeEnum, Enums: []string{"openai", "anthropic", "google"}},
-		{Name: "priority", Type: field.TypeInt, Default: 0},
-		{Name: "options", Type: field.TypeJSON},
-		{Name: "organization_org_backends", Type: field.TypeInt},
-	}
-	// OrgBackendsTable holds the schema information for the "org_backends" table.
-	OrgBackendsTable = &schema.Table{
-		Name:       "org_backends",
-		Columns:    OrgBackendsColumns,
-		PrimaryKey: []*schema.Column{OrgBackendsColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{
-			{
-				Symbol:     "org_backends_organizations_org_backends",
-				Columns:    []*schema.Column{OrgBackendsColumns[7]},
-				RefColumns: []*schema.Column{OrganizationsColumns[0]},
-				OnDelete:   schema.NoAction,
-			},
-		},
-		Indexes: []*schema.Index{
-			{
-				Name:    "orgbackend_name_organization_org_backends",
-				Unique:  true,
-				Columns: []*schema.Column{OrgBackendsColumns[3], OrgBackendsColumns[7]},
 			},
 		},
 	}
@@ -247,7 +267,6 @@ var (
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "order_index", Type: field.TypeInt},
-		{Name: "source", Type: field.TypeEnum, Enums: []string{"user", "org"}},
 		{Name: "backend_id", Type: field.TypeInt},
 		{Name: "project_project_backends", Type: field.TypeInt},
 	}
@@ -259,7 +278,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "project_backends_projects_project_backends",
-				Columns:    []*schema.Column{ProjectBackendsColumns[6]},
+				Columns:    []*schema.Column{ProjectBackendsColumns[5]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -268,12 +287,12 @@ var (
 			{
 				Name:    "projectbackend_order_index_project_project_backends",
 				Unique:  true,
-				Columns: []*schema.Column{ProjectBackendsColumns[3], ProjectBackendsColumns[6]},
+				Columns: []*schema.Column{ProjectBackendsColumns[3], ProjectBackendsColumns[5]},
 			},
 			{
-				Name:    "projectbackend_source_backend_id_project_project_backends",
+				Name:    "projectbackend_backend_id_project_project_backends",
 				Unique:  true,
-				Columns: []*schema.Column{ProjectBackendsColumns[4], ProjectBackendsColumns[5], ProjectBackendsColumns[6]},
+				Columns: []*schema.Column{ProjectBackendsColumns[4], ProjectBackendsColumns[5]},
 			},
 		},
 	}
@@ -601,44 +620,12 @@ var (
 		Columns:    UsersColumns,
 		PrimaryKey: []*schema.Column{UsersColumns[0]},
 	}
-	// UserBackendsColumns holds the columns for the "user_backends" table.
-	UserBackendsColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "created_at", Type: field.TypeTime},
-		{Name: "updated_at", Type: field.TypeTime},
-		{Name: "name", Type: field.TypeString},
-		{Name: "backend_type", Type: field.TypeEnum, Enums: []string{"openai", "anthropic", "google"}},
-		{Name: "priority", Type: field.TypeInt, Default: 0},
-		{Name: "options", Type: field.TypeJSON},
-		{Name: "user_user_backends", Type: field.TypeInt},
-	}
-	// UserBackendsTable holds the schema information for the "user_backends" table.
-	UserBackendsTable = &schema.Table{
-		Name:       "user_backends",
-		Columns:    UserBackendsColumns,
-		PrimaryKey: []*schema.Column{UserBackendsColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{
-			{
-				Symbol:     "user_backends_users_user_backends",
-				Columns:    []*schema.Column{UserBackendsColumns[7]},
-				RefColumns: []*schema.Column{UsersColumns[0]},
-				OnDelete:   schema.NoAction,
-			},
-		},
-		Indexes: []*schema.Index{
-			{
-				Name:    "userbackend_name_user_user_backends",
-				Unique:  true,
-				Columns: []*schema.Column{UserBackendsColumns[3], UserBackendsColumns[7]},
-			},
-		},
-	}
 	// Tables holds all the tables in the schema.
 	Tables = []*schema.Table{
 		ActivityLogsTable,
+		BackendsTable,
 		GlossaryEntriesTable,
 		JobResourcesTable,
-		OrgBackendsTable,
 		OrgMembershipsTable,
 		OrganizationsTable,
 		ProjectsTable,
@@ -653,7 +640,6 @@ var (
 		TranslationProfilesTable,
 		UsageRecordsTable,
 		UsersTable,
-		UserBackendsTable,
 	}
 )
 
@@ -661,11 +647,12 @@ func init() {
 	ActivityLogsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	ActivityLogsTable.ForeignKeys[1].RefTable = ProjectsTable
 	ActivityLogsTable.ForeignKeys[2].RefTable = UsersTable
+	BackendsTable.ForeignKeys[0].RefTable = OrganizationsTable
+	BackendsTable.ForeignKeys[1].RefTable = UsersTable
 	GlossaryEntriesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	GlossaryEntriesTable.ForeignKeys[1].RefTable = ProjectsTable
 	JobResourcesTable.ForeignKeys[0].RefTable = ResourcesTable
 	JobResourcesTable.ForeignKeys[1].RefTable = TranslationJobsTable
-	OrgBackendsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	OrgMembershipsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	OrgMembershipsTable.ForeignKeys[1].RefTable = UsersTable
 	ProjectsTable.ForeignKeys[0].RefTable = OrganizationsTable
@@ -687,5 +674,4 @@ func init() {
 	UsageRecordsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	UsageRecordsTable.ForeignKeys[1].RefTable = ProjectsTable
 	UsageRecordsTable.ForeignKeys[2].RefTable = UsersTable
-	UserBackendsTable.ForeignKeys[0].RefTable = UsersTable
 }

@@ -612,21 +612,21 @@ func HasMembershipsWith(preds ...predicate.OrgMembership) predicate.User {
 	})
 }
 
-// HasUserBackends applies the HasEdge predicate on the "user_backends" edge.
-func HasUserBackends() predicate.User {
+// HasBackends applies the HasEdge predicate on the "backends" edge.
+func HasBackends() predicate.User {
 	return predicate.User(func(s *sql.Selector) {
 		step := sqlgraph.NewStep(
 			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, UserBackendsTable, UserBackendsColumn),
+			sqlgraph.Edge(sqlgraph.O2M, false, BackendsTable, BackendsColumn),
 		)
 		sqlgraph.HasNeighbors(s, step)
 	})
 }
 
-// HasUserBackendsWith applies the HasEdge predicate on the "user_backends" edge with a given conditions (other predicates).
-func HasUserBackendsWith(preds ...predicate.UserBackend) predicate.User {
+// HasBackendsWith applies the HasEdge predicate on the "backends" edge with a given conditions (other predicates).
+func HasBackendsWith(preds ...predicate.Backend) predicate.User {
 	return predicate.User(func(s *sql.Selector) {
-		step := newUserBackendsStep()
+		step := newBackendsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

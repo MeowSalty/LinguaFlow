@@ -21,6 +21,18 @@ func (f ActivityLogFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value,
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ActivityLogMutation", m)
 }
 
+// The BackendFunc type is an adapter to allow the use of ordinary
+// function as Backend mutator.
+type BackendFunc func(context.Context, *ent.BackendMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f BackendFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.BackendMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.BackendMutation", m)
+}
+
 // The GlossaryEntryFunc type is an adapter to allow the use of ordinary
 // function as GlossaryEntry mutator.
 type GlossaryEntryFunc func(context.Context, *ent.GlossaryEntryMutation) (ent.Value, error)
@@ -43,18 +55,6 @@ func (f JobResourceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value,
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.JobResourceMutation", m)
-}
-
-// The OrgBackendFunc type is an adapter to allow the use of ordinary
-// function as OrgBackend mutator.
-type OrgBackendFunc func(context.Context, *ent.OrgBackendMutation) (ent.Value, error)
-
-// Mutate calls f(ctx, m).
-func (f OrgBackendFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	if mv, ok := m.(*ent.OrgBackendMutation); ok {
-		return f(ctx, mv)
-	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.OrgBackendMutation", m)
 }
 
 // The OrgMembershipFunc type is an adapter to allow the use of ordinary
@@ -223,18 +223,6 @@ func (f UserFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error)
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UserMutation", m)
-}
-
-// The UserBackendFunc type is an adapter to allow the use of ordinary
-// function as UserBackend mutator.
-type UserBackendFunc func(context.Context, *ent.UserBackendMutation) (ent.Value, error)
-
-// Mutate calls f(ctx, m).
-func (f UserBackendFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	if mv, ok := m.(*ent.UserBackendMutation); ok {
-		return f(ctx, mv)
-	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.UserBackendMutation", m)
 }
 
 // Condition is a hook condition function.

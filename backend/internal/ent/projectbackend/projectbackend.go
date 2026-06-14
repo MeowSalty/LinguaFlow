@@ -3,7 +3,6 @@
 package projectbackend
 
 import (
-	"fmt"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -21,8 +20,6 @@ const (
 	FieldUpdatedAt = "updated_at"
 	// FieldOrderIndex holds the string denoting the order_index field in the database.
 	FieldOrderIndex = "order_index"
-	// FieldSource holds the string denoting the source field in the database.
-	FieldSource = "source"
 	// FieldBackendID holds the string denoting the backend_id field in the database.
 	FieldBackendID = "backend_id"
 	// EdgeProject holds the string denoting the project edge name in mutations.
@@ -44,7 +41,6 @@ var Columns = []string{
 	FieldCreatedAt,
 	FieldUpdatedAt,
 	FieldOrderIndex,
-	FieldSource,
 	FieldBackendID,
 }
 
@@ -82,29 +78,6 @@ var (
 	BackendIDValidator func(int) error
 )
 
-// Source defines the type for the "source" enum field.
-type Source string
-
-// Source values.
-const (
-	SourceUser Source = "user"
-	SourceOrg  Source = "org"
-)
-
-func (s Source) String() string {
-	return string(s)
-}
-
-// SourceValidator is a validator for the "source" field enum values. It is called by the builders before save.
-func SourceValidator(s Source) error {
-	switch s {
-	case SourceUser, SourceOrg:
-		return nil
-	default:
-		return fmt.Errorf("projectbackend: invalid enum value for source field: %q", s)
-	}
-}
-
 // OrderOption defines the ordering options for the ProjectBackend queries.
 type OrderOption func(*sql.Selector)
 
@@ -126,11 +99,6 @@ func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByOrderIndex orders the results by the order_index field.
 func ByOrderIndex(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldOrderIndex, opts...).ToFunc()
-}
-
-// BySource orders the results by the source field.
-func BySource(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldSource, opts...).ToFunc()
 }
 
 // ByBackendID orders the results by the backend_id field.

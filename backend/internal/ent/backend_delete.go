@@ -8,30 +8,30 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
 )
 
-// UserBackendDelete is the builder for deleting a UserBackend entity.
-type UserBackendDelete struct {
+// BackendDelete is the builder for deleting a Backend entity.
+type BackendDelete struct {
 	config
 	hooks    []Hook
-	mutation *UserBackendMutation
+	mutation *BackendMutation
 }
 
-// Where appends a list predicates to the UserBackendDelete builder.
-func (_d *UserBackendDelete) Where(ps ...predicate.UserBackend) *UserBackendDelete {
+// Where appends a list predicates to the BackendDelete builder.
+func (_d *BackendDelete) Where(ps ...predicate.Backend) *BackendDelete {
 	_d.mutation.Where(ps...)
 	return _d
 }
 
 // Exec executes the deletion query and returns how many vertices were deleted.
-func (_d *UserBackendDelete) Exec(ctx context.Context) (int, error) {
+func (_d *BackendDelete) Exec(ctx context.Context) (int, error) {
 	return withHooks(ctx, _d.sqlExec, _d.mutation, _d.hooks)
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (_d *UserBackendDelete) ExecX(ctx context.Context) int {
+func (_d *BackendDelete) ExecX(ctx context.Context) int {
 	n, err := _d.Exec(ctx)
 	if err != nil {
 		panic(err)
@@ -39,8 +39,8 @@ func (_d *UserBackendDelete) ExecX(ctx context.Context) int {
 	return n
 }
 
-func (_d *UserBackendDelete) sqlExec(ctx context.Context) (int, error) {
-	_spec := sqlgraph.NewDeleteSpec(userbackend.Table, sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt))
+func (_d *BackendDelete) sqlExec(ctx context.Context) (int, error) {
+	_spec := sqlgraph.NewDeleteSpec(backend.Table, sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt))
 	if ps := _d.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -56,32 +56,32 @@ func (_d *UserBackendDelete) sqlExec(ctx context.Context) (int, error) {
 	return affected, err
 }
 
-// UserBackendDeleteOne is the builder for deleting a single UserBackend entity.
-type UserBackendDeleteOne struct {
-	_d *UserBackendDelete
+// BackendDeleteOne is the builder for deleting a single Backend entity.
+type BackendDeleteOne struct {
+	_d *BackendDelete
 }
 
-// Where appends a list predicates to the UserBackendDelete builder.
-func (_d *UserBackendDeleteOne) Where(ps ...predicate.UserBackend) *UserBackendDeleteOne {
+// Where appends a list predicates to the BackendDelete builder.
+func (_d *BackendDeleteOne) Where(ps ...predicate.Backend) *BackendDeleteOne {
 	_d._d.mutation.Where(ps...)
 	return _d
 }
 
 // Exec executes the deletion query.
-func (_d *UserBackendDeleteOne) Exec(ctx context.Context) error {
+func (_d *BackendDeleteOne) Exec(ctx context.Context) error {
 	n, err := _d._d.Exec(ctx)
 	switch {
 	case err != nil:
 		return err
 	case n == 0:
-		return &NotFoundError{userbackend.Label}
+		return &NotFoundError{backend.Label}
 	default:
 		return nil
 	}
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (_d *UserBackendDeleteOne) ExecX(ctx context.Context) {
+func (_d *BackendDeleteOne) ExecX(ctx context.Context) {
 	if err := _d.Exec(ctx); err != nil {
 		panic(err)
 	}

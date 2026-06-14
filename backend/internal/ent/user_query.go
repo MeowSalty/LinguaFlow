@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
@@ -23,7 +24,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
 )
 
 // UserQuery is the builder for querying User entities.
@@ -37,7 +37,7 @@ type UserQuery struct {
 	withReviewedSegments       *SegmentQuery
 	withRefreshTokens          *RefreshTokenQuery
 	withMemberships            *OrgMembershipQuery
-	withUserBackends           *UserBackendQuery
+	withBackends               *BackendQuery
 	withOwnedProjects          *ProjectQuery
 	withActivityLogs           *ActivityLogQuery
 	withUsageRecords           *UsageRecordQuery
@@ -167,9 +167,9 @@ func (_q *UserQuery) QueryMemberships() *OrgMembershipQuery {
 	return query
 }
 
-// QueryUserBackends chains the current query on the "user_backends" edge.
-func (_q *UserQuery) QueryUserBackends() *UserBackendQuery {
-	query := (&UserBackendClient{config: _q.config}).Query()
+// QueryBackends chains the current query on the "backends" edge.
+func (_q *UserQuery) QueryBackends() *BackendQuery {
+	query := (&BackendClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
 			return nil, err
@@ -180,8 +180,8 @@ func (_q *UserQuery) QueryUserBackends() *UserBackendQuery {
 		}
 		step := sqlgraph.NewStep(
 			sqlgraph.From(user.Table, user.FieldID, selector),
-			sqlgraph.To(userbackend.Table, userbackend.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, user.UserBackendsTable, user.UserBackendsColumn),
+			sqlgraph.To(backend.Table, backend.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.BackendsTable, user.BackendsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -495,7 +495,7 @@ func (_q *UserQuery) Clone() *UserQuery {
 		withReviewedSegments:       _q.withReviewedSegments.Clone(),
 		withRefreshTokens:          _q.withRefreshTokens.Clone(),
 		withMemberships:            _q.withMemberships.Clone(),
-		withUserBackends:           _q.withUserBackends.Clone(),
+		withBackends:               _q.withBackends.Clone(),
 		withOwnedProjects:          _q.withOwnedProjects.Clone(),
 		withActivityLogs:           _q.withActivityLogs.Clone(),
 		withUsageRecords:           _q.withUsageRecords.Clone(),
@@ -551,14 +551,14 @@ func (_q *UserQuery) WithMemberships(opts ...func(*OrgMembershipQuery)) *UserQue
 	return _q
 }
 
-// WithUserBackends tells the query-builder to eager-load the nodes that are connected to
-// the "user_backends" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *UserQuery) WithUserBackends(opts ...func(*UserBackendQuery)) *UserQuery {
-	query := (&UserBackendClient{config: _q.config}).Query()
+// WithBackends tells the query-builder to eager-load the nodes that are connected to
+// the "backends" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithBackends(opts ...func(*BackendQuery)) *UserQuery {
+	query := (&BackendClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
-	_q.withUserBackends = query
+	_q.withBackends = query
 	return _q
 }
 
@@ -700,7 +700,7 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 			_q.withReviewedSegments != nil,
 			_q.withRefreshTokens != nil,
 			_q.withMemberships != nil,
-			_q.withUserBackends != nil,
+			_q.withBackends != nil,
 			_q.withOwnedProjects != nil,
 			_q.withActivityLogs != nil,
 			_q.withUsageRecords != nil,
@@ -756,10 +756,10 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 			return nil, err
 		}
 	}
-	if query := _q.withUserBackends; query != nil {
-		if err := _q.loadUserBackends(ctx, query, nodes,
-			func(n *User) { n.Edges.UserBackends = []*UserBackend{} },
-			func(n *User, e *UserBackend) { n.Edges.UserBackends = append(n.Edges.UserBackends, e) }); err != nil {
+	if query := _q.withBackends; query != nil {
+		if err := _q.loadBackends(ctx, query, nodes,
+			func(n *User) { n.Edges.Backends = []*Backend{} },
+			func(n *User, e *Backend) { n.Edges.Backends = append(n.Edges.Backends, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -927,7 +927,7 @@ func (_q *UserQuery) loadMemberships(ctx context.Context, query *OrgMembershipQu
 	}
 	return nil
 }
-func (_q *UserQuery) loadUserBackends(ctx context.Context, query *UserBackendQuery, nodes []*User, init func(*User), assign func(*User, *UserBackend)) error {
+func (_q *UserQuery) loadBackends(ctx context.Context, query *BackendQuery, nodes []*User, init func(*User), assign func(*User, *Backend)) error {
 	fks := make([]driver.Value, 0, len(nodes))
 	nodeids := make(map[int]*User)
 	for i := range nodes {
@@ -937,22 +937,24 @@ func (_q *UserQuery) loadUserBackends(ctx context.Context, query *UserBackendQue
 			init(nodes[i])
 		}
 	}
-	query.withFKs = true
-	query.Where(predicate.UserBackend(func(s *sql.Selector) {
-		s.Where(sql.InValues(s.C(user.UserBackendsColumn), fks...))
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(backend.FieldOwnerUserID)
+	}
+	query.Where(predicate.Backend(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.BackendsColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
 		return err
 	}
 	for _, n := range neighbors {
-		fk := n.user_user_backends
+		fk := n.OwnerUserID
 		if fk == nil {
-			return fmt.Errorf(`foreign-key "user_user_backends" is nil for node %v`, n.ID)
+			return fmt.Errorf(`foreign-key "owner_user_id" is nil for node %v`, n.ID)
 		}
 		node, ok := nodeids[*fk]
 		if !ok {
-			return fmt.Errorf(`unexpected referenced foreign-key "user_user_backends" returned %v for node %v`, *fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "owner_user_id" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}

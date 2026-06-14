@@ -41,8 +41,8 @@ type OrganizationEdges struct {
 	Projects []*Project `json:"projects,omitempty"`
 	// Memberships holds the value of the memberships edge.
 	Memberships []*OrgMembership `json:"memberships,omitempty"`
-	// OrgBackends holds the value of the org_backends edge.
-	OrgBackends []*OrgBackend `json:"org_backends,omitempty"`
+	// Backends holds the value of the backends edge.
+	Backends []*Backend `json:"backends,omitempty"`
 	// GlossaryEntries holds the value of the glossary_entries edge.
 	GlossaryEntries []*GlossaryEntry `json:"glossary_entries,omitempty"`
 	// TmEntries holds the value of the tm_entries edge.
@@ -78,13 +78,13 @@ func (e OrganizationEdges) MembershipsOrErr() ([]*OrgMembership, error) {
 	return nil, &NotLoadedError{edge: "memberships"}
 }
 
-// OrgBackendsOrErr returns the OrgBackends value or an error if the edge
+// BackendsOrErr returns the Backends value or an error if the edge
 // was not loaded in eager-loading.
-func (e OrganizationEdges) OrgBackendsOrErr() ([]*OrgBackend, error) {
+func (e OrganizationEdges) BackendsOrErr() ([]*Backend, error) {
 	if e.loadedTypes[2] {
-		return e.OrgBackends, nil
+		return e.Backends, nil
 	}
-	return nil, &NotLoadedError{edge: "org_backends"}
+	return nil, &NotLoadedError{edge: "backends"}
 }
 
 // GlossaryEntriesOrErr returns the GlossaryEntries value or an error if the edge
@@ -232,9 +232,9 @@ func (_m *Organization) QueryMemberships() *OrgMembershipQuery {
 	return NewOrganizationClient(_m.config).QueryMemberships(_m)
 }
 
-// QueryOrgBackends queries the "org_backends" edge of the Organization entity.
-func (_m *Organization) QueryOrgBackends() *OrgBackendQuery {
-	return NewOrganizationClient(_m.config).QueryOrgBackends(_m)
+// QueryBackends queries the "backends" edge of the Organization entity.
+func (_m *Organization) QueryBackends() *BackendQuery {
+	return NewOrganizationClient(_m.config).QueryBackends(_m)
 }
 
 // QueryGlossaryEntries queries the "glossary_entries" edge of the Organization entity.

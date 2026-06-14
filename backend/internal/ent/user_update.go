@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
@@ -22,7 +23,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
 )
 
 // UserUpdate is the builder for updating User entities.
@@ -194,19 +194,19 @@ func (_u *UserUpdate) AddMemberships(v ...*OrgMembership) *UserUpdate {
 	return _u.AddMembershipIDs(ids...)
 }
 
-// AddUserBackendIDs adds the "user_backends" edge to the UserBackend entity by IDs.
-func (_u *UserUpdate) AddUserBackendIDs(ids ...int) *UserUpdate {
-	_u.mutation.AddUserBackendIDs(ids...)
+// AddBackendIDs adds the "backends" edge to the Backend entity by IDs.
+func (_u *UserUpdate) AddBackendIDs(ids ...int) *UserUpdate {
+	_u.mutation.AddBackendIDs(ids...)
 	return _u
 }
 
-// AddUserBackends adds the "user_backends" edges to the UserBackend entity.
-func (_u *UserUpdate) AddUserBackends(v ...*UserBackend) *UserUpdate {
+// AddBackends adds the "backends" edges to the Backend entity.
+func (_u *UserUpdate) AddBackends(v ...*Backend) *UserUpdate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.AddUserBackendIDs(ids...)
+	return _u.AddBackendIDs(ids...)
 }
 
 // AddOwnedProjectIDs adds the "owned_projects" edge to the Project entity by IDs.
@@ -373,25 +373,25 @@ func (_u *UserUpdate) RemoveMemberships(v ...*OrgMembership) *UserUpdate {
 	return _u.RemoveMembershipIDs(ids...)
 }
 
-// ClearUserBackends clears all "user_backends" edges to the UserBackend entity.
-func (_u *UserUpdate) ClearUserBackends() *UserUpdate {
-	_u.mutation.ClearUserBackends()
+// ClearBackends clears all "backends" edges to the Backend entity.
+func (_u *UserUpdate) ClearBackends() *UserUpdate {
+	_u.mutation.ClearBackends()
 	return _u
 }
 
-// RemoveUserBackendIDs removes the "user_backends" edge to UserBackend entities by IDs.
-func (_u *UserUpdate) RemoveUserBackendIDs(ids ...int) *UserUpdate {
-	_u.mutation.RemoveUserBackendIDs(ids...)
+// RemoveBackendIDs removes the "backends" edge to Backend entities by IDs.
+func (_u *UserUpdate) RemoveBackendIDs(ids ...int) *UserUpdate {
+	_u.mutation.RemoveBackendIDs(ids...)
 	return _u
 }
 
-// RemoveUserBackends removes "user_backends" edges to UserBackend entities.
-func (_u *UserUpdate) RemoveUserBackends(v ...*UserBackend) *UserUpdate {
+// RemoveBackends removes "backends" edges to Backend entities.
+func (_u *UserUpdate) RemoveBackends(v ...*Backend) *UserUpdate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.RemoveUserBackendIDs(ids...)
+	return _u.RemoveBackendIDs(ids...)
 }
 
 // ClearOwnedProjects clears all "owned_projects" edges to the Project entity.
@@ -771,28 +771,28 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if _u.mutation.UserBackendsCleared() {
+	if _u.mutation.BackendsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.UserBackendsTable,
-			Columns: []string{user.UserBackendsColumn},
+			Table:   user.BackendsTable,
+			Columns: []string{user.BackendsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.RemovedUserBackendsIDs(); len(nodes) > 0 && !_u.mutation.UserBackendsCleared() {
+	if nodes := _u.mutation.RemovedBackendsIDs(); len(nodes) > 0 && !_u.mutation.BackendsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.UserBackendsTable,
-			Columns: []string{user.UserBackendsColumn},
+			Table:   user.BackendsTable,
+			Columns: []string{user.BackendsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -800,15 +800,15 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.UserBackendsIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.BackendsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.UserBackendsTable,
-			Columns: []string{user.UserBackendsColumn},
+			Table:   user.BackendsTable,
+			Columns: []string{user.BackendsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -1217,19 +1217,19 @@ func (_u *UserUpdateOne) AddMemberships(v ...*OrgMembership) *UserUpdateOne {
 	return _u.AddMembershipIDs(ids...)
 }
 
-// AddUserBackendIDs adds the "user_backends" edge to the UserBackend entity by IDs.
-func (_u *UserUpdateOne) AddUserBackendIDs(ids ...int) *UserUpdateOne {
-	_u.mutation.AddUserBackendIDs(ids...)
+// AddBackendIDs adds the "backends" edge to the Backend entity by IDs.
+func (_u *UserUpdateOne) AddBackendIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.AddBackendIDs(ids...)
 	return _u
 }
 
-// AddUserBackends adds the "user_backends" edges to the UserBackend entity.
-func (_u *UserUpdateOne) AddUserBackends(v ...*UserBackend) *UserUpdateOne {
+// AddBackends adds the "backends" edges to the Backend entity.
+func (_u *UserUpdateOne) AddBackends(v ...*Backend) *UserUpdateOne {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.AddUserBackendIDs(ids...)
+	return _u.AddBackendIDs(ids...)
 }
 
 // AddOwnedProjectIDs adds the "owned_projects" edge to the Project entity by IDs.
@@ -1396,25 +1396,25 @@ func (_u *UserUpdateOne) RemoveMemberships(v ...*OrgMembership) *UserUpdateOne {
 	return _u.RemoveMembershipIDs(ids...)
 }
 
-// ClearUserBackends clears all "user_backends" edges to the UserBackend entity.
-func (_u *UserUpdateOne) ClearUserBackends() *UserUpdateOne {
-	_u.mutation.ClearUserBackends()
+// ClearBackends clears all "backends" edges to the Backend entity.
+func (_u *UserUpdateOne) ClearBackends() *UserUpdateOne {
+	_u.mutation.ClearBackends()
 	return _u
 }
 
-// RemoveUserBackendIDs removes the "user_backends" edge to UserBackend entities by IDs.
-func (_u *UserUpdateOne) RemoveUserBackendIDs(ids ...int) *UserUpdateOne {
-	_u.mutation.RemoveUserBackendIDs(ids...)
+// RemoveBackendIDs removes the "backends" edge to Backend entities by IDs.
+func (_u *UserUpdateOne) RemoveBackendIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.RemoveBackendIDs(ids...)
 	return _u
 }
 
-// RemoveUserBackends removes "user_backends" edges to UserBackend entities.
-func (_u *UserUpdateOne) RemoveUserBackends(v ...*UserBackend) *UserUpdateOne {
+// RemoveBackends removes "backends" edges to Backend entities.
+func (_u *UserUpdateOne) RemoveBackends(v ...*Backend) *UserUpdateOne {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.RemoveUserBackendIDs(ids...)
+	return _u.RemoveBackendIDs(ids...)
 }
 
 // ClearOwnedProjects clears all "owned_projects" edges to the Project entity.
@@ -1824,28 +1824,28 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if _u.mutation.UserBackendsCleared() {
+	if _u.mutation.BackendsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.UserBackendsTable,
-			Columns: []string{user.UserBackendsColumn},
+			Table:   user.BackendsTable,
+			Columns: []string{user.BackendsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.RemovedUserBackendsIDs(); len(nodes) > 0 && !_u.mutation.UserBackendsCleared() {
+	if nodes := _u.mutation.RemovedBackendsIDs(); len(nodes) > 0 && !_u.mutation.BackendsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.UserBackendsTable,
-			Columns: []string{user.UserBackendsColumn},
+			Table:   user.BackendsTable,
+			Columns: []string{user.BackendsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -1853,15 +1853,15 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.UserBackendsIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.BackendsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.UserBackendsTable,
-			Columns: []string{user.UserBackendsColumn},
+			Table:   user.BackendsTable,
+			Columns: []string{user.BackendsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

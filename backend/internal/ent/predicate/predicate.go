@@ -9,14 +9,14 @@ import (
 // ActivityLog is the predicate function for activitylog builders.
 type ActivityLog func(*sql.Selector)
 
+// Backend is the predicate function for backend builders.
+type Backend func(*sql.Selector)
+
 // GlossaryEntry is the predicate function for glossaryentry builders.
 type GlossaryEntry func(*sql.Selector)
 
 // JobResource is the predicate function for jobresource builders.
 type JobResource func(*sql.Selector)
-
-// OrgBackend is the predicate function for orgbackend builders.
-type OrgBackend func(*sql.Selector)
 
 // OrgMembership is the predicate function for orgmembership builders.
 type OrgMembership func(*sql.Selector)
@@ -59,6 +59,3 @@ type UsageRecord func(*sql.Selector)
 
 // User is the predicate function for user builders.
 type User func(*sql.Selector)
-
-// UserBackend is the predicate function for userbackend builders.
-type UserBackend func(*sql.Selector)
