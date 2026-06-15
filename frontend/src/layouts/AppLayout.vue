@@ -9,6 +9,7 @@ import { useServiceStore } from '@/stores/service'
 import { useThemeStore, type ThemeMode } from '@/stores/theme'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 const locale = useLocaleStore()
 const service = useServiceStore()
@@ -80,6 +81,34 @@ const onSelectUserAction = async (key: string | number) => {
   }
 }
 
+const templateNavOptions = computed<DropdownOption[]>(() => [
+  {
+    label: t('nav.promptTemplates'),
+    key: '/prompt-templates',
+    icon: () => h(IconifyIcon, { icon: 'carbon:prompt-template', class: 'text-base' }),
+  },
+  {
+    label: t('nav.translationProfiles'),
+    key: '/translation-profiles',
+    icon: () => h(IconifyIcon, { icon: 'carbon:flow', class: 'text-base' }),
+  },
+  {
+    label: t('nav.executionPlanTemplates'),
+    key: '/execution-plan-templates',
+    icon: () => h(IconifyIcon, { icon: 'carbon:plan', class: 'text-base' }),
+  },
+])
+
+const isTemplateRoute = computed(() =>
+  ['/prompt-templates', '/translation-profiles', '/execution-plan-templates'].some((r) =>
+    route.path.startsWith(r),
+  ),
+)
+
+const onSelectTemplateNav = (key: string | number): void => {
+  router.push(String(key))
+}
+
 const onSelectTheme = (key: string | number): void => {
   theme.setMode(String(key) as ThemeMode)
 }
@@ -120,13 +149,20 @@ const onSelectLocale = (key: string | number): void => {
         >
           {{ t('nav.backends') }}
         </RouterLink>
-        <RouterLink
-          to="/templates"
-          class="text-lf-text-muted no-underline transition-colors hover:text-brand-500"
-          active-class="!text-brand-500 font-semibold"
+        <NDropdown
+          trigger="hover"
+          :options="templateNavOptions"
+          placement="bottom-start"
+          @select="onSelectTemplateNav"
         >
-          {{ t('nav.templates') }}
-        </RouterLink>
+          <RouterLink
+            to="/prompt-templates"
+            class="text-lf-text-muted no-underline transition-colors hover:text-brand-500"
+            :class="{ '!text-brand-500 font-semibold': isTemplateRoute }"
+          >
+            {{ t('nav.translationConfig') }}
+          </RouterLink>
+        </NDropdown>
         <RouterLink
           to="/about"
           class="text-lf-text-muted no-underline transition-colors hover:text-brand-500"

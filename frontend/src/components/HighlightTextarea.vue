@@ -1,9 +1,14 @@
 ﻿<script setup lang="ts">
 const modelValue = defineModel<string>('value', { default: '' })
 
-const { placeholder = '', rows = 6 } = defineProps<{
+const {
+  placeholder = '',
+  rows = 6,
+  disabled = false,
+} = defineProps<{
   placeholder?: string
   rows?: number
+  disabled?: boolean
 }>()
 
 const textareaRef = ref<HTMLTextAreaElement | null>(null)
@@ -269,7 +274,8 @@ defineExpose({ insertAtCursor })
       :value="modelValue"
       :placeholder="placeholder"
       :rows="rows"
-      class="prompt-editor-textarea relative z-2 w-full bg-transparent p-3 text-sm leading-6 text-transparent caret-lf-text outline-none"
+      :disabled="disabled"
+      class="prompt-editor-textarea relative z-2 w-full bg-transparent p-3 text-sm leading-6 text-transparent caret-lf-text outline-none disabled:cursor-not-allowed disabled:opacity-50"
       @input="modelValue = ($event.target as HTMLTextAreaElement).value"
       @scroll="syncScroll"
     />

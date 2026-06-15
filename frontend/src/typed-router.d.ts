@@ -52,6 +52,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/execution-plan-templates': RouteRecordInfo<
+      '/execution-plan-templates',
+      '/execution-plan-templates',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/login': RouteRecordInfo<
       '/login',
       '/login',
@@ -73,6 +80,13 @@ declare module 'vue-router/auto-routes' {
       { projectId: ParamValue<false> },
       | never
     >,
+    '/prompt-templates': RouteRecordInfo<
+      '/prompt-templates',
+      '/prompt-templates',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/register': RouteRecordInfo<
       '/register',
       '/register',
@@ -87,9 +101,9 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
-    '/templates': RouteRecordInfo<
-      '/templates',
-      '/templates',
+    '/translation-profiles': RouteRecordInfo<
+      '/translation-profiles',
+      '/translation-profiles',
       Record<never, never>,
       Record<never, never>,
       | never
@@ -125,6 +139,12 @@ declare module 'vue-router/auto-routes' {
       views:
         | never
     }
+    'src/pages/execution-plan-templates.vue': {
+      routes:
+        | '/execution-plan-templates'
+      views:
+        | never
+    }
     'src/pages/login.vue': {
       routes:
         | '/login'
@@ -144,6 +164,12 @@ declare module 'vue-router/auto-routes' {
       views:
         | never
     }
+    'src/pages/prompt-templates.vue': {
+      routes:
+        | '/prompt-templates'
+      views:
+        | never
+    }
     'src/pages/register.vue': {
       routes:
         | '/register'
@@ -156,9 +182,9 @@ declare module 'vue-router/auto-routes' {
       views:
         | never
     }
-    'src/pages/templates.vue': {
+    'src/pages/translation-profiles.vue': {
       routes:
-        | '/templates'
+        | '/translation-profiles'
       views:
         | never
     }

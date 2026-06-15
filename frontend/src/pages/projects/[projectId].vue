@@ -30,6 +30,7 @@ import { useI18n } from 'vue-i18n'
 import { type ApiSchemas, type DownloadFileResult } from '@/api/client'
 import ResourceExplorer from '@/components/workspace/ResourceExplorer.vue'
 import WorkspaceMetricsBar from '@/components/workspace/WorkspaceMetricsBar.vue'
+import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import { useGlossaryStore } from '@/stores/glossary'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 
@@ -49,9 +50,7 @@ interface SegmentFormModel {
 }
 
 interface JobFormModel {
-  source_lang: string
-  target_lang: string
-  backend_order_text: string
+  execution_plan_id: number | null
 }
 
 const route = useRoute()
@@ -60,6 +59,7 @@ const message = useMessage()
 const { t } = useI18n()
 const workspace = useProjectWorkspaceStore()
 const glossary = useGlossaryStore()
+const executionPlanTemplatesStore = useExecutionPlanTemplatesStore()
 
 const activeTab = ref<WorkspaceTab>('resources')
 
@@ -296,6 +296,7 @@ const glossaryColumns = computed<DataTableColumns<ApiSchemas['GlossaryEntry']>>(
   },
 ])
 const jobDrawerVisible = ref(false)
+const jobFormRef = ref<FormInst | null>(null)
 const jobDetailDrawerVisible = ref(false)
 const jobTargetMode = ref<JobTargetMode>('resources')
 const jobTargetResourceIds = ref<number[]>([])
@@ -318,9 +319,7 @@ const inlineCommentVisible = ref<number | null>(null)
 const inlineCommentText = ref('')
 
 const jobForm = reactive<JobFormModel>({
-  source_lang: '',
-  target_lang: '',
-  backend_order_text: '',
+  execution_plan_id: null,
 })
 
 const projectId = computed(() => {
@@ -584,13 +583,23 @@ const saveInlineComment = async (segment: Segment): Promise<void> => {
 
 // ── 翻译任务操作 ──
 
-const setDefaultJobForm = (): void => {
-  jobForm.source_lang = workspace.project?.source_lang || 'auto'
-  jobForm.target_lang = workspace.project?.target_lang || 'en-US'
-  const config = workspace.project?.default_translation_config
-  const backendOrder = Array.isArray(config?.backend_order) ? config.backend_order : []
-  jobForm.backend_order_text = backendOrder.join('\n')
-}
+const executionPlanOptions = computed(() =>
+  executionPlanTemplatesStore.items.map((item) => ({
+    label: `${item.name} (${item.rounds?.length ?? 0} 轮)`,
+    value: item.id,
+  })),
+)
+
+const jobFormRules = computed<FormRules>(() => ({
+  execution_plan_id: [
+    {
+      required: true,
+      type: 'number',
+      message: t('workspace.job.validation.executionPlanRequired'),
+      trigger: ['change', 'blur'],
+    },
+  ],
+}))
 
 const openResourceJobDrawer = (): void => {
   if (!canCreateResourceJob.value) {
@@ -601,7 +610,7 @@ const openResourceJobDrawer = (): void => {
   jobTargetMode.value = 'resources'
   jobTargetResourceIds.value = selectedReadyResourceIds.value
   jobTargetSegmentIds.value = []
-  setDefaultJobForm()
+  jobForm.execution_plan_id = null
   jobDrawerVisible.value = true
 }
 
@@ -614,7 +623,7 @@ const openSegmentJobDrawer = (segment?: Segment): void => {
   jobTargetMode.value = 'segments'
   jobTargetResourceIds.value = [workspace.activeResourceId]
   jobTargetSegmentIds.value = segment ? [segment.id] : workspace.segments.map((item) => item.id)
-  setDefaultJobForm()
+  jobForm.execution_plan_id = null
   jobDrawerVisible.value = true
 }
 
@@ -622,27 +631,17 @@ const closeJobDrawer = (): void => {
   jobDrawerVisible.value = false
   jobTargetResourceIds.value = []
   jobTargetSegmentIds.value = []
-  jobForm.source_lang = ''
-  jobForm.target_lang = ''
-  jobForm.backend_order_text = ''
+  jobForm.execution_plan_id = null
 }
 
 const submitJob = async (): Promise<void> => {
-  if (!projectId.value) {
+  if (!projectId.value || !jobForm.execution_plan_id) {
     return
   }
 
-  const backendOrder = jobForm.backend_order_text
-    .split(/\r?\n|,/)
-    .map((item) => item.trim())
-    .filter(Boolean)
   const payload: CreateTranslationJobPayload = {
+    execution_plan_id: jobForm.execution_plan_id,
     resource_ids: jobTargetResourceIds.value,
-    translation_config: {
-      source_lang: jobForm.source_lang.trim(),
-      target_lang: jobForm.target_lang.trim(),
-      backend_order: backendOrder,
-    },
   }
 
   if (jobTargetMode.value === 'segments') {
@@ -895,6 +894,17 @@ const jobColumns = computed<DataTableColumns<TranslationJob>>(() => [
     render: (row) => `#${row.id}`,
   },
   {
+    title: t('workspace.job.columns.executionPlan'),
+    key: 'execution_plan_id',
+    width: 140,
+    render: (row) => {
+      if (!row.execution_plan_id) {
+        return h(NText, { depth: 3, italic: true }, () => t('workspace.job.legacyPlan'))
+      }
+      return h(NTag, { size: 'small', bordered: false }, () => `#${row.execution_plan_id}`)
+    },
+  },
+  {
     title: t('workspace.job.columns.status'),
     key: 'status',
     width: 140,
@@ -1057,6 +1067,7 @@ onMounted(() => {
   workspace.reset()
   glossary.reset()
   void reloadWorkspace()
+  void executionPlanTemplatesStore.loadTemplates()
 })
 
 onBeforeUnmount(() => {
@@ -1399,39 +1410,38 @@ onBeforeUnmount(() => {
       </NTabs>
     </NCard>
 
-    <NDrawer v-model:show="jobDrawerVisible" :width="520" placement="right">
+    <NDrawer v-model:show="jobDrawerVisible" :width="480" placement="right">
       <NDrawerContent :title="t('workspace.job.createTitle')" closable>
-        <div class="mb-5 rounded-lg bg-lf-surface-muted p-4 text-sm text-lf-text-muted">
-          {{
-            jobTargetMode === 'resources'
-              ? t('workspace.job.targetResources', { count: jobTargetResourceIds.length })
-              : t('workspace.job.targetSegments', { count: jobTargetSegmentIds.length })
-          }}
-        </div>
-        <NForm :model="jobForm" label-placement="top">
-          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <NFormItem :label="t('workspace.job.form.sourceLang')">
-              <NInput v-model:value="jobForm.source_lang" />
-            </NFormItem>
-            <NFormItem :label="t('workspace.job.form.targetLang')">
-              <NInput v-model:value="jobForm.target_lang" />
-            </NFormItem>
-          </div>
-          <NFormItem :label="t('workspace.job.form.backendOrder')">
-            <NInput
-              v-model:value="jobForm.backend_order_text"
-              type="textarea"
-              :autosize="{ minRows: 4, maxRows: 8 }"
-              :placeholder="t('workspace.job.form.backendOrderPlaceholder')"
+        <NForm ref="jobFormRef" :model="jobForm" :rules="jobFormRules" label-placement="top">
+          <NFormItem :label="t('workspace.job.form.executionPlan')" path="execution_plan_id">
+            <NSelect
+              v-model:value="jobForm.execution_plan_id"
+              :options="executionPlanOptions"
+              :loading="executionPlanTemplatesStore.loading"
+              :placeholder="t('workspace.job.form.executionPlanPlaceholder')"
+              filterable
             />
           </NFormItem>
+
+          <div v-if="jobTargetMode === 'resources'" class="text-sm text-lf-text-muted">
+            {{ t('workspace.job.targetResources', { count: jobTargetResourceIds.length }) }}
+          </div>
+          <div v-else class="text-sm text-lf-text-muted">
+            {{ t('workspace.job.targetSegments', { count: jobTargetSegmentIds.length }) }}
+          </div>
         </NForm>
+
         <template #footer>
           <div class="flex justify-end gap-3">
-            <NButton :disabled="workspace.creatingJob" @click="closeJobDrawer">{{
-              t('workspace.common.cancel')
-            }}</NButton>
-            <NButton type="primary" :loading="workspace.creatingJob" @click="submitJob">
+            <NButton :disabled="workspace.creatingJob" @click="closeJobDrawer">
+              {{ t('workspace.common.cancel') }}
+            </NButton>
+            <NButton
+              type="primary"
+              :disabled="!jobForm.execution_plan_id"
+              :loading="workspace.creatingJob"
+              @click="submitJob"
+            >
               {{ t('workspace.job.actions.submitCreate') }}
             </NButton>
           </div>
