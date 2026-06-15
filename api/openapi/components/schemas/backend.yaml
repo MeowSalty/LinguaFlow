@@ -1,6 +1,6 @@
 Backend:
   type: object
-  required: [id, scope, name, type, priority]
+  required: [id, scope, name, type]
   properties:
     id:
       type: integer
@@ -12,8 +12,6 @@ Backend:
     type:
       type: string
       enum: [openai, anthropic, google]
-    priority:
-      type: integer
     options:
       type: object
       additionalProperties: true
@@ -40,9 +38,6 @@ CreateBackendRequest:
     type:
       type: string
       enum: [openai, anthropic, google]
-    priority:
-      type: integer
-      default: 0
     options:
       type: object
       additionalProperties: true
@@ -57,8 +52,6 @@ UpdateBackendRequest:
     type:
       type: string
       enum: [openai, anthropic, google]
-    priority:
-      type: integer
     options:
       type: object
       additionalProperties: true

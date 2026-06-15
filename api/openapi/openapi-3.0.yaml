@@ -2259,7 +2259,6 @@ components:
         - scope
         - name
         - type
-        - priority
       properties:
         id:
           type: integer
@@ -2276,8 +2275,6 @@ components:
             - openai
             - anthropic
             - google
-        priority:
-          type: integer
         options:
           type: object
           additionalProperties: true
@@ -2308,9 +2305,6 @@ components:
             - openai
             - anthropic
             - google
-        priority:
-          type: integer
-          default: 0
         options:
           type: object
           additionalProperties: true
@@ -2329,8 +2323,6 @@ components:
             - openai
             - anthropic
             - google
-        priority:
-          type: integer
         options:
           type: object
           additionalProperties: true
