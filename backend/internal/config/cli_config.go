@@ -44,7 +44,6 @@ type CLIConfig struct {
 type CLIConfigBackend struct {
 	Type            string         `yaml:"type"`
 	Enabled         bool           `yaml:"enabled"`
-	Priority        int            `yaml:"priority"`
 	RateLimitPerSec int            `yaml:"rate_limit_per_sec"` // 后端级限流；0 使用全局
 	Options         map[string]any `yaml:"options"`
 }
@@ -220,7 +219,6 @@ func migrateFromLegacy(legacy *Config) *CLIConfig {
 		cliCfg.Backends[b.Name] = CLIConfigBackend{
 			Type:            b.Type,
 			Enabled:         b.Enabled,
-			Priority:        b.Priority,
 			RateLimitPerSec: b.RateLimitPerSec,
 			Options:         b.Options,
 		}

@@ -54,8 +54,8 @@ func TestValidateServerConfig_Defaults(t *testing.T) {
 func TestValidate_DuplicateBackendName(t *testing.T) {
 	cfg := Default()
 	cfg.Backends = []BackendConfig{
-		{Name: "openai", Type: "openai", Enabled: true, Priority: 100},
-		{Name: "openai", Type: "anthropic", Enabled: true, Priority: 90},
+		{Name: "openai", Type: "openai", Enabled: true},
+		{Name: "openai", Type: "anthropic", Enabled: true},
 	}
 	err := cfg.Validate()
 	if err == nil {
@@ -69,7 +69,7 @@ func TestValidate_DuplicateBackendName(t *testing.T) {
 func TestValidate_EmptyBackendName(t *testing.T) {
 	cfg := Default()
 	cfg.Backends = []BackendConfig{
-		{Name: "", Type: "openai", Enabled: true, Priority: 100},
+		{Name: "", Type: "openai", Enabled: true},
 	}
 	err := cfg.Validate()
 	if err == nil {
@@ -83,7 +83,7 @@ func TestValidate_EmptyBackendName(t *testing.T) {
 func TestValidate_EmptyBackendType(t *testing.T) {
 	cfg := Default()
 	cfg.Backends = []BackendConfig{
-		{Name: "my-backend", Type: "", Enabled: true, Priority: 100},
+		{Name: "my-backend", Type: "", Enabled: true},
 	}
 	err := cfg.Validate()
 	if err == nil {
@@ -97,8 +97,8 @@ func TestValidate_EmptyBackendType(t *testing.T) {
 func TestValidate_UniqueBackendNames(t *testing.T) {
 	cfg := Default()
 	cfg.Backends = []BackendConfig{
-		{Name: "openai-primary", Type: "openai", Enabled: true, Priority: 100},
-		{Name: "anthropic-backup", Type: "anthropic", Enabled: false, Priority: 90},
+		{Name: "openai-primary", Type: "openai", Enabled: true},
+		{Name: "anthropic-backup", Type: "anthropic", Enabled: false},
 	}
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("unexpected error: %v", err)

@@ -148,7 +148,6 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 			Name:            r.Backend,
 			Type:            bCfg.Type,
 			Enabled:         bCfg.Enabled,
-			Priority:        bCfg.Priority,
 			RateLimitPerSec: bCfg.RateLimitPerSec,
 			Options:         bCfg.Options,
 		}})

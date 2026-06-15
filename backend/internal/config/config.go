@@ -38,7 +38,6 @@ type BackendConfig struct {
 	Name            string         `yaml:"name"`
 	Type            string         `yaml:"type"`
 	Enabled         bool           `yaml:"enabled"`
-	Priority        int            `yaml:"priority"`
 	RateLimitPerSec int            `yaml:"rate_limit_per_sec"` // 按后端独立限流；0 表示使用全局限流器
 	Options         map[string]any `yaml:"options"`
 }
@@ -225,10 +224,9 @@ func Default() *Config {
 		SourceLang: "auto",
 		TargetLang: "zh",
 		Backends: []BackendConfig{{
-			Name:     "openai-default",
-			Type:     "openai",
-			Enabled:  true,
-			Priority: 100,
+			Name:    "openai-default",
+			Type:    "openai",
+			Enabled: true,
 			Options: map[string]any{
 				"api_key":         "${OPENAI_API_KEY}",
 				"base_url":        "https://api.openai.com/v1",

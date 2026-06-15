@@ -110,7 +110,6 @@ backends:
   gpt4:
     type: openai
     enabled: true
-    priority: 100
     options:
       model: gpt-4o
 prompt_templates:
@@ -198,14 +197,12 @@ backends:
   - name: openai-primary
     type: openai
     enabled: true
-    priority: 100
     rate_limit_per_sec: 10
     options:
       model: gpt-4o-mini
   - name: anthropic-backup
     type: anthropic
     enabled: false
-    priority: 90
 pipeline:
   split:
     enabled: true
@@ -437,15 +434,13 @@ func TestMigrateFromLegacy(t *testing.T) {
 				Name:            "openai-main",
 				Type:            "openai",
 				Enabled:         true,
-				Priority:        100,
 				RateLimitPerSec: 5,
 				Options:         map[string]any{"model": "gpt-4o", "temperature": 0.3},
 			},
 			{
-				Name:     "anthropic-fallback",
-				Type:     "anthropic",
-				Enabled:  false,
-				Priority: 90,
+				Name:    "anthropic-fallback",
+				Type:    "anthropic",
+				Enabled: false,
 			},
 		},
 		Pipeline: PipelineConfig{
