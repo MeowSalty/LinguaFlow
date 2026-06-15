@@ -49,7 +49,7 @@ ExecutionRoundConfig:
 
 ExecutionPlanTemplateScope:
   type: string
-  enum: [user, org]
+  enum: [user, org, system]
 
 ExecutionPlanTemplate:
   type: object

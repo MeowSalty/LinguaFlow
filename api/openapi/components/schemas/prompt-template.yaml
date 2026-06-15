@@ -1,6 +1,6 @@
 PromptTemplateScope:
   type: string
-  enum: [user, org]
+  enum: [user, org, system]
 
 PromptTemplate:
   type: object

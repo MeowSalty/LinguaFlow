@@ -1,6 +1,6 @@
 TranslationProfileScope:
   type: string
-  enum: [user, org]
+  enum: [user, org, system]
 
 ProfileSplitConfig:
   type: object

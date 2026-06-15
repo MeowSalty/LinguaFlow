@@ -1498,14 +1498,12 @@ components:
       required: true
       schema:
         type: integer
-        minimum: 1
     TranslationProfileId:
       name: translationProfileId
       in: path
       required: true
       schema:
         type: integer
-        minimum: 1
     ExecutionPlanTemplateId:
       name: executionPlanTemplateId
       in: path
@@ -2728,6 +2726,7 @@ components:
       enum:
         - user
         - org
+        - system
     RetryConfig:
       type: object
       properties:
@@ -2785,11 +2784,13 @@ components:
       enum:
         - user
         - org
+        - system
     TranslationProfileScope:
       type: string
       enum:
         - user
         - org
+        - system
     ProfileSplitConfig:
       type: object
       required:

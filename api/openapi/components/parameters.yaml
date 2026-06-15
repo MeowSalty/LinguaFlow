@@ -60,7 +60,6 @@ PromptTemplateId:
   required: true
   schema:
     type: integer
-    minimum: 1
 
 TranslationProfileId:
   name: translationProfileId
@@ -68,7 +67,6 @@ TranslationProfileId:
   required: true
   schema:
     type: integer
-    minimum: 1
 
 ExecutionPlanTemplateId:
   name: executionPlanTemplateId
