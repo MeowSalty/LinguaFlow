@@ -19,6 +19,9 @@ import (
 // 否则尝试批量发送，失败时按 round.FallbackShrink 缩小子批并发递归，直到收敛到单段。
 // 返回 unresolved 的段索引列表；非 nil error 表示 stage 级别终止。
 func (s *Translate) processBatchInRound(ctx context.Context, doc *pipeline.Document, idxs []int, round Round, logger *slog.Logger) ([]int, error) {
+	renderer := s.resolveRoundRenderer(round)
+	repairOpts := s.resolveRoundRepair(round)
+
 	bs := max(round.BatchSize, 1)
 	if len(idxs) == 1 || bs <= 1 {
 		ok, err := s.translateSingleInRound(ctx, doc, idxs[0], round, logger)
@@ -63,7 +66,7 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *pipeline.Docum
 		MaxBootstrapTerms: s.maxBootstrapTerms(),
 		StrictSchema:      true,
 	}
-	sys, usr, err := s.Renderer.Render(data)
+	sys, usr, err := renderer.Render(data)
 	if err != nil {
 		return nil, fmt.Errorf("render batch prompt (%d segs): %w", len(idxs), err)
 	}
@@ -84,21 +87,21 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *pipeline.Docum
 		bestBackend backend.Backend
 	)
 	for _, b := range round.Backends {
-		resp, err = s.callOnce(ctx, b, req)
+		resp, err = s.callOnce(ctx, b, req, round.Retry)
 		if err != nil {
 			logger.Warn("batch translate failed, trying next backend",
 				"backend", b.Name(), "batch_size", len(idxs), "err", err)
 			lastErr = err
 			continue
 		}
-		res = parseBatchResponseLenient(resp.Text, wantIDs, s.Repair)
+		res = parseBatchResponseLenient(resp.Text, wantIDs, repairOpts)
 
-		if res.ParseErr != nil && s.Repair.PromptUpgrade {
+		if res.ParseErr != nil && repairOpts.PromptUpgrade {
 			reminder := repair.BuildRetryReminder(nil, res.ParseErr, headSnippet(resp.Text, 200))
 			req2 := req
 			req2.System = req.System + reminder
-			if resp2, err2 := s.callOnce(ctx, b, req2); err2 == nil {
-				res2 := parseBatchResponseLenient(resp2.Text, wantIDs, s.Repair)
+			if resp2, err2 := s.callOnce(ctx, b, req2, round.Retry); err2 == nil {
+				res2 := parseBatchResponseLenient(resp2.Text, wantIDs, repairOpts)
 				if res2.ParseErr == nil {
 					logger.Info("batch response recovered by prompt upgrade",
 						"backend", b.Name(), "repaired", res2.Repaired)
@@ -125,7 +128,7 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *pipeline.Docum
 			bestResp = resp
 			bestBackend = b
 		}
-		if len(res.Missing) > 0 && (!s.Repair.Partial || missingRatio >= s.Repair.PartialThreshold) {
+		if len(res.Missing) > 0 && (!repairOpts.Partial || missingRatio >= repairOpts.PartialThreshold) {
 			logger.Warn("partial recovery exceeded threshold, trying next backend",
 				"backend", b.Name(), "missing", len(res.Missing), "total", len(wantIDs),
 				"threshold", s.Repair.PartialThreshold, "partial_enabled", s.Repair.Partial)
@@ -178,7 +181,7 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *pipeline.Docum
 			continue
 		}
 		// L3 占位符归一化：仅 normalize seg.Protected 中已知 key 的变体。
-		if s.Repair.PlaceholderNormalize {
+		if repairOpts.PlaceholderNormalize {
 			if normText, normalized := repair.NormalizePlaceholders(text, seg.Protected); len(normalized) > 0 {
 				logger.Info("placeholders normalized",
 					"seg", seg.ID, "normalized", normalized)

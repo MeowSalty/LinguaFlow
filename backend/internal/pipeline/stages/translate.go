@@ -26,6 +26,15 @@ type Round struct {
 	FallbackShrink  float64
 	RateLimitPerSec int
 	Retry           backend.RetryPolicy
+
+	// Renderer 本轮使用的提示词渲染器。
+	// nil 时回退到 Translate 级别的 Renderer。
+	Renderer *prompt.Renderer
+
+	// Repair 本轮的修复策略。
+	// nil 时回退到 Translate 级别的 Repair。
+	// 使用指针以区分"未设置"（nil）和"显式设为零值"（&repair.Options{}）。
+	Repair *repair.Options
 }
 
 // Translate 对每个 Segment 调用 Backend。具备：
@@ -206,9 +215,25 @@ func buildContinuousPendingBatches(pending []int, target int) [][]int {
 	return batches
 }
 
-func (s *Translate) callOnce(ctx context.Context, b backend.Backend, req backend.Request) (*backend.Response, error) {
+// resolveRoundRenderer 返回轮次级 Renderer，nil 时回退到共享默认。
+func (s *Translate) resolveRoundRenderer(round Round) *prompt.Renderer {
+	if round.Renderer != nil {
+		return round.Renderer
+	}
+	return s.Renderer
+}
+
+// resolveRoundRepair 返回轮次级 Repair，nil 时回退到共享默认。
+func (s *Translate) resolveRoundRepair(round Round) repair.Options {
+	if round.Repair != nil {
+		return *round.Repair
+	}
+	return s.Repair
+}
+
+func (s *Translate) callOnce(ctx context.Context, b backend.Backend, req backend.Request, retry backend.RetryPolicy) (*backend.Response, error) {
 	var resp *backend.Response
-	err := backend.WithRetry(ctx, s.Retry, func() error {
+	err := backend.WithRetry(ctx, retry, func() error {
 		var rerr error
 		resp, rerr = b.Translate(ctx, req)
 		return rerr

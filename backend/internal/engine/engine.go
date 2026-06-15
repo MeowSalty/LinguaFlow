@@ -374,7 +374,7 @@ func restoreUnselectedTargets(doc *pipeline.Document, selected map[int]struct{},
 }
 
 // toRepairOptions 把 config 层的 RepairConfig 翻成 repair 包消费的 Options。
-// config.RepairConfig.normalize() 已在 Validate 阶段处理 Enabled=false 的短路与
+// config.RepairConfig.Normalize() 已在 Validate 阶段处理 Enabled=false 的短路与
 // PartialThreshold 边界，这里只做字段映射。
 func toRepairOptions(c config.RepairConfig) repair.Options {
 	return repair.Options{

@@ -141,10 +141,10 @@ const (
 	InlineConflictRewriteLocal = "rewrite-local"
 )
 
-// normalize 规范化 RepairConfig：
+// Normalize 规范化 RepairConfig：
 //   - Enabled=false 时强制清零所有子开关，调用方据此短路所有修复逻辑
 //   - PartialThreshold 不在 (0,1] 时归 0.5（最常见默认）
-func (r *RepairConfig) normalize() {
+func (r *RepairConfig) Normalize() {
 	if !r.Enabled {
 		r.JSONStructural = false
 		r.SchemaAliases = false
@@ -334,7 +334,7 @@ func (c *Config) Validate() error {
 	if c.Pipeline.Split.MaxChars < 1 {
 		c.Pipeline.Split.MaxChars = 1200
 	}
-	c.Pipeline.Translate.Repair.normalize()
+	c.Pipeline.Translate.Repair.Normalize()
 	if c.Glossary.Bootstrap.MaxTermsPerBatch < 1 {
 		c.Glossary.Bootstrap.MaxTermsPerBatch = 20
 	}

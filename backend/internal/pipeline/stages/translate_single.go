@@ -17,6 +17,9 @@ import (
 // 成功时上报进度并返回 (true, nil)；所有后端均失败时返回 (false, nil)，由调用方 defer 到下一轮。
 // 返回非 nil error 表示 stage 级别终止（如 limiter 错误）。
 func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Document, idx int, round Round, logger *slog.Logger) (bool, error) {
+	renderer := s.resolveRoundRenderer(round)
+	repairOpts := s.resolveRoundRepair(round)
+
 	seg := &doc.Segments[idx]
 
 	if s.Limiter != nil {
@@ -41,7 +44,7 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Do
 		MaxBootstrapTerms: s.maxBootstrapTerms(),
 		StrictSchema:      true,
 	}
-	sys, usr, err := s.Renderer.Render(data)
+	sys, usr, err := renderer.Render(data)
 	if err != nil {
 		return false, fmt.Errorf("render prompt for seg %s: %w", seg.ID, err)
 	}
@@ -59,7 +62,7 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Do
 		picked      backend.Backend
 	)
 	for _, b := range round.Backends {
-		resp, err = s.callOnce(ctx, b, req)
+		resp, err = s.callOnce(ctx, b, req, round.Retry)
 		if err != nil {
 			logger.Warn("translate failed, trying next backend",
 				"seg", seg.ID, "backend", b.Name(), "err", err)
@@ -89,7 +92,7 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Do
 	// absorbInlineGlossary 能对 trans 做并发冲突修正，避免文档内同一术语翻译不一致。
 	s.absorbInlineGlossary(ctx, glosEntries, trans, doc.TargetLang, logger)
 	target := trans[prompt.SingleID]
-	if s.Repair.PlaceholderNormalize {
+	if repairOpts.PlaceholderNormalize {
 		if normText, normalized := repair.NormalizePlaceholders(target, seg.Protected); len(normalized) > 0 {
 			logger.Info("placeholders normalized",
 				"seg", seg.ID, "normalized", normalized)
@@ -103,7 +106,7 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Do
 		logger.Warn("placeholders missing in translation, retrying with reminder",
 			"seg", seg.ID, "backend", picked.Name(), "missing", missing)
 		var reminder string
-		if s.Repair.PromptUpgrade {
+		if repairOpts.PromptUpgrade {
 			// L4：用 repair 包提供的反例 reminder，包含 missing 列表与上次响应头摘录。
 			reminder = repair.BuildRetryReminder(missing, nil, headSnippet(resp.Text, 200))
 		} else {
@@ -116,7 +119,7 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Do
 		req2 := req
 		req2.System = req.System + reminder
 
-		resp2, err2 := s.callOnce(ctx, picked, req2)
+		resp2, err2 := s.callOnce(ctx, picked, req2, round.Retry)
 		if err2 != nil {
 			logger.Warn("placeholder retry failed, defer to next round",
 				"seg", seg.ID, "backend", picked.Name(), "err", err2)
@@ -132,7 +135,7 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Do
 		}
 		s.absorbInlineGlossary(ctx, glos2, trans2, doc.TargetLang, logger)
 		target2 := trans2[prompt.SingleID]
-		if s.Repair.PlaceholderNormalize {
+		if repairOpts.PlaceholderNormalize {
 			if normText, normalized := repair.NormalizePlaceholders(target2, seg.Protected); len(normalized) > 0 {
 				logger.Info("placeholders normalized after retry",
 					"seg", seg.ID, "normalized", normalized)

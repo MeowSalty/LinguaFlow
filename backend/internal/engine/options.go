@@ -10,6 +10,8 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline/stages"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
@@ -62,6 +64,13 @@ type Round struct {
 
 	// Retry 本轮的重试策略。零值回退到全局默认。
 	Retry backend.RetryPolicy
+
+	// Renderer 本轮使用的提示词渲染器。nil 时回退到 Options.Config 的 Prompt 配置。
+	Renderer *prompt.Renderer
+
+	// Repair 本轮的修复策略配置。nil 时回退到 Options.Config 的 Repair 配置。
+	// 使用指针以区分"未设置"（nil）和"显式设为零值"。
+	Repair *config.RepairConfig
 }
 
 // RuntimeResources 封装可选的运行时资源。
@@ -116,6 +125,16 @@ func buildStagesRounds(in []Round, cfg *config.Config) []stages.Round {
 		if retry.MaxAttempts == 0 {
 			retry = globalRetry
 		}
+
+		// 解析轮次级 Repair
+		var roundRepair *repair.Options
+		if r.Repair != nil {
+			rc := *r.Repair
+			rc.Normalize()
+			opts := toRepairOptions(rc)
+			roundRepair = &opts
+		}
+
 		out = append(out, stages.Round{
 			Name:            resolveName(r.Name, i),
 			Backends:        r.Backends,
@@ -124,6 +143,8 @@ func buildStagesRounds(in []Round, cfg *config.Config) []stages.Round {
 			FallbackShrink:  resolveShrink(r.FallbackShrink, cfg.Pipeline.Translate.FallbackShrink),
 			RateLimitPerSec: resolveDefault(r.RateLimitPerSec, cfg.Pipeline.Translate.RateLimitPerSec, 0),
 			Retry:           retry,
+			Renderer:        r.Renderer,
+			Repair:          roundRepair,
 		})
 	}
 	return out
