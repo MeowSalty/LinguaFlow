@@ -54,18 +54,24 @@ EntryId:
     type: integer
     minimum: 1
 
-Stage:
-  name: stage
-  in: path
-  required: true
-  schema:
-    type: string
-    enum: [translate, bootstrap]
-
-TemplateId:
-  name: templateId
+PromptTemplateId:
+  name: promptTemplateId
   in: path
   required: true
   schema:
     type: integer
-    description: 模板 ID。正数为用户模板，负数为内置模板。
+
+TranslationProfileId:
+  name: translationProfileId
+  in: path
+  required: true
+  schema:
+    type: integer
+
+ExecutionPlanTemplateId:
+  name: executionPlanTemplateId
+  in: path
+  required: true
+  schema:
+    type: integer
+    minimum: 1

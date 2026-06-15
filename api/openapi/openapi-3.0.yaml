@@ -509,45 +509,6 @@ paths:
           description: 删除成功
         default:
           $ref: '#/components/responses/Problem'
-  /projects/{projectId}/backends:
-    parameters:
-      - $ref: '#/components/parameters/ProjectId'
-    get:
-      operationId: GetProjectBackends
-      summary: 获取项目后端设置
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: 后端设置
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProjectBackendSettings'
-        default:
-          $ref: '#/components/responses/Problem'
-    put:
-      operationId: SetProjectBackendOrder
-      summary: 设置项目后端顺序
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SetBackendOrderRequest'
-      responses:
-        '200':
-          description: 设置成功
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ProjectBackendBinding'
-        default:
-          $ref: '#/components/responses/Problem'
   /projects/{projectId}/resources:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -936,50 +897,6 @@ paths:
                 $ref: '#/components/schemas/RetranslateResponse'
         default:
           $ref: '#/components/responses/Problem'
-  /projects/{projectId}/stages/{stage}/override:
-    parameters:
-      - $ref: '#/components/parameters/ProjectId'
-      - $ref: '#/components/parameters/Stage'
-    put:
-      operationId: SetStageBackendOverride
-      summary: 设置阶段后端覆盖
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SetStageOverrideRequest'
-      responses:
-        '200':
-          description: 设置成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StageBackendOverride'
-        default:
-          $ref: '#/components/responses/Problem'
-  /projects/{projectId}/stages/{stage}/plan:
-    parameters:
-      - $ref: '#/components/parameters/ProjectId'
-      - $ref: '#/components/parameters/Stage'
-    get:
-      operationId: GetStagePlan
-      summary: 查询阶段执行计划
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: 阶段执行计划
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ProjectBackendBinding'
-        default:
-          $ref: '#/components/responses/Problem'
   /projects/{projectId}/glossary:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -1240,25 +1157,24 @@ paths:
                 format: binary
         default:
           $ref: '#/components/responses/Problem'
-  /templates:
+  /execution-plan-templates:
     get:
-      operationId: ListTemplates
-      summary: 列出所有可用模板（内置 + 用户）
-      description: 返回内置模板和当前用户的所有模板合并列表。
+      operationId: ListExecutionPlanTemplates
+      summary: 列出当前用户的执行计划模板
       security:
         - bearerAuth: []
       responses:
         '200':
-          description: 模板列表
+          description: 执行计划模板列表
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TemplateListResponse'
+                $ref: '#/components/schemas/ExecutionPlanTemplateListResponse'
         default:
           $ref: '#/components/responses/Problem'
     post:
-      operationId: CreateTemplate
-      summary: 创建用户模板
+      operationId: CreateExecutionPlanTemplate
+      summary: 创建执行计划模板
       security:
         - bearerAuth: []
       requestBody:
@@ -1266,40 +1182,36 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateTemplateRequest'
+              $ref: '#/components/schemas/CreateExecutionPlanTemplateRequest'
       responses:
         '201':
           description: 创建成功
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Template'
+                $ref: '#/components/schemas/ExecutionPlanTemplate'
         default:
           $ref: '#/components/responses/Problem'
-  /templates/{templateId}:
+  /execution-plan-templates/{executionPlanTemplateId}:
     parameters:
-      - $ref: '#/components/parameters/TemplateId'
+      - $ref: '#/components/parameters/ExecutionPlanTemplateId'
     get:
-      operationId: GetTemplate
-      summary: 获取模板详情
-      description: |
-        获取单个模板详情。templateId 正数为用户模板，负数为内置模板。
+      operationId: GetExecutionPlanTemplate
+      summary: 获取执行计划模板详情
       security:
         - bearerAuth: []
       responses:
         '200':
-          description: 模板详情
+          description: 执行计划模板详情
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Template'
+                $ref: '#/components/schemas/ExecutionPlanTemplate'
         default:
           $ref: '#/components/responses/Problem'
     put:
-      operationId: UpdateTemplate
-      summary: 更新用户模板
-      description: |
-        仅可更新用户模板（templateId > 0）。对内置模板（templateId < 0）调用返回 403。
+      operationId: UpdateExecutionPlanTemplate
+      summary: 更新执行计划模板
       security:
         - bearerAuth: []
       requestBody:
@@ -1307,21 +1219,19 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateTemplateRequest'
+              $ref: '#/components/schemas/UpdateExecutionPlanTemplateRequest'
       responses:
         '200':
           description: 更新成功
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Template'
+                $ref: '#/components/schemas/ExecutionPlanTemplate'
         default:
           $ref: '#/components/responses/Problem'
     delete:
-      operationId: DeleteTemplate
-      summary: 删除用户模板
-      description: |
-        仅可删除用户模板（templateId > 0）。对内置模板（templateId < 0）调用返回 403。
+      operationId: DeleteExecutionPlanTemplate
+      summary: 删除执行计划模板
       security:
         - bearerAuth: []
       responses:
@@ -1329,51 +1239,24 @@ paths:
           description: 删除成功
         default:
           $ref: '#/components/responses/Problem'
-  /templates/{templateId}/copy:
-    parameters:
-      - $ref: '#/components/parameters/TemplateId'
-    post:
-      operationId: CopyTemplate
-      summary: 复制模板为自定义模板
-      description: |
-        基于指定模板（内置或用户）创建一个用户模板副本。返回新创建的用户模板，ID 为正数。
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/CopyTemplateRequest'
-      responses:
-        '201':
-          description: 复制成功
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Template'
-        default:
-          $ref: '#/components/responses/Problem'
-  /orgs/{orgId}/templates:
-    parameters:
-      - $ref: '#/components/parameters/OrgId'
+  /prompt-templates:
     get:
-      operationId: ListOrgTemplates
-      summary: 列出组织模板
+      operationId: ListPromptTemplates
+      summary: 列出当前用户的提示词模板
       security:
         - bearerAuth: []
       responses:
         '200':
-          description: 组织模板列表
+          description: 提示词模板列表
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TemplateListResponse'
+                $ref: '#/components/schemas/PromptTemplateListResponse'
         default:
           $ref: '#/components/responses/Problem'
     post:
-      operationId: CreateOrgTemplate
-      summary: 创建组织模板
+      operationId: CreatePromptTemplate
+      summary: 创建提示词模板
       security:
         - bearerAuth: []
       requestBody:
@@ -1381,23 +1264,36 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateTemplateRequest'
+              $ref: '#/components/schemas/CreatePromptTemplateRequest'
       responses:
         '201':
           description: 创建成功
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Template'
+                $ref: '#/components/schemas/PromptTemplate'
         default:
           $ref: '#/components/responses/Problem'
-  /orgs/{orgId}/templates/{templateId}:
+  /prompt-templates/{promptTemplateId}:
     parameters:
-      - $ref: '#/components/parameters/OrgId'
-      - $ref: '#/components/parameters/TemplateId'
+      - $ref: '#/components/parameters/PromptTemplateId'
+    get:
+      operationId: GetPromptTemplate
+      summary: 获取提示词模板详情
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 提示词模板详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
     put:
-      operationId: UpdateOrgTemplate
-      summary: 更新组织模板
+      operationId: UpdatePromptTemplate
+      summary: 更新提示词模板
       security:
         - bearerAuth: []
       requestBody:
@@ -1405,19 +1301,101 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateTemplateRequest'
+              $ref: '#/components/schemas/UpdatePromptTemplateRequest'
       responses:
         '200':
           description: 更新成功
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Template'
+                $ref: '#/components/schemas/PromptTemplate'
         default:
           $ref: '#/components/responses/Problem'
     delete:
-      operationId: DeleteOrgTemplate
-      summary: 删除组织模板
+      operationId: DeletePromptTemplate
+      summary: 删除提示词模板
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
+  /translation-profiles:
+    get:
+      operationId: ListTranslationProfiles
+      summary: 列出当前用户的翻译配置
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 翻译配置列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationProfileListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateTranslationProfile
+      summary: 创建翻译配置
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTranslationProfileRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationProfile'
+        default:
+          $ref: '#/components/responses/Problem'
+  /translation-profiles/{translationProfileId}:
+    parameters:
+      - $ref: '#/components/parameters/TranslationProfileId'
+    get:
+      operationId: GetTranslationProfile
+      summary: 获取翻译配置详情
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 翻译配置详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationProfile'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: UpdateTranslationProfile
+      summary: 更新翻译配置
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTranslationProfileRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationProfile'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteTranslationProfile
+      summary: 删除翻译配置
       security:
         - bearerAuth: []
       responses:
@@ -1514,22 +1492,25 @@ components:
       schema:
         type: integer
         minimum: 1
-    Stage:
-      name: stage
-      in: path
-      required: true
-      schema:
-        type: string
-        enum:
-          - translate
-          - bootstrap
-    TemplateId:
-      name: templateId
+    PromptTemplateId:
+      name: promptTemplateId
       in: path
       required: true
       schema:
         type: integer
-        description: 模板 ID。正数为用户模板，负数为内置模板。
+    TranslationProfileId:
+      name: translationProfileId
+      in: path
+      required: true
+      schema:
+        type: integer
+    ExecutionPlanTemplateId:
+      name: executionPlanTemplateId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
     SegmentId:
       name: segmentId
       in: path
@@ -2093,7 +2074,12 @@ components:
             $ref: '#/components/schemas/ResourcePrecheckFileResult'
     CreateTranslationJobRequest:
       type: object
+      required:
+        - execution_plan_id
       properties:
+        execution_plan_id:
+          type: integer
+          description: 执行计划模板 ID
         resource_ids:
           type: array
           items:
@@ -2156,6 +2142,7 @@ components:
       required:
         - id
         - project_id
+        - execution_plan_id
         - status
         - trigger_type
         - resource_count
@@ -2169,6 +2156,8 @@ components:
         id:
           type: integer
         project_id:
+          type: integer
+        execution_plan_id:
           type: integer
         status:
           type: string
@@ -2267,14 +2256,14 @@ components:
       type: object
       required:
         - id
-        - source
+        - scope
         - name
         - type
         - priority
       properties:
         id:
           type: integer
-        source:
+        scope:
           type: string
           enum:
             - user
@@ -2292,8 +2281,6 @@ components:
         options:
           type: object
           additionalProperties: true
-        options_visible:
-          type: boolean
         owner_user_id:
           type: integer
         owner_org_id:
@@ -2441,102 +2428,6 @@ components:
         target_lang:
           type: string
       additionalProperties: false
-    ProjectBackendBinding:
-      type: object
-      required:
-        - order_index
-        - source
-        - backend_id
-        - name
-        - type
-        - priority
-      properties:
-        order_index:
-          type: integer
-        source:
-          type: string
-        backend_id:
-          type: integer
-        name:
-          type: string
-        type:
-          type: string
-        priority:
-          type: integer
-        options:
-          type: object
-          additionalProperties: true
-    StageBackendOverride:
-      type: object
-      required:
-        - stage
-        - backend_mode
-      properties:
-        stage:
-          type: string
-        backend_mode:
-          type: string
-          enum:
-            - inherit
-            - prepend
-            - restrict
-        backend_order:
-          type: array
-          items:
-            type: string
-    SetBackendOrderRequest:
-      type: object
-      required:
-        - bindings
-      properties:
-        bindings:
-          type: array
-          items:
-            type: object
-            required:
-              - source
-              - backend_id
-            properties:
-              source:
-                type: string
-                enum:
-                  - user
-                  - org
-              backend_id:
-                type: integer
-      additionalProperties: false
-    SetStageOverrideRequest:
-      type: object
-      required:
-        - stage
-        - backend_mode
-      properties:
-        stage:
-          type: string
-        backend_mode:
-          type: string
-          enum:
-            - inherit
-            - prepend
-            - restrict
-        backend_order:
-          type: array
-          items:
-            type: string
-      additionalProperties: false
-    ProjectBackendSettings:
-      type: object
-      required:
-        - backends
-      properties:
-        backends:
-          type: array
-          items:
-            $ref: '#/components/schemas/ProjectBackendBinding'
-        stage_overrides:
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/StageBackendOverride'
     GlossaryEntry:
       type: object
       required:
@@ -2619,43 +2510,36 @@ components:
                 type: string
               reason:
                 type: string
-    Template:
+    PromptTemplate:
       type: object
       required:
         - id
         - name
         - description
         - scope
-        - pipeline
-        - glossary
       properties:
         id:
           type: integer
-          description: 模板 ID。正数为用户模板，负数为内置模板。
         name:
           type: string
         description:
           type: string
         scope:
-          $ref: '#/components/schemas/TemplateScope'
+          $ref: '#/components/schemas/PromptTemplateScope'
         owner_user_id:
           type: integer
         owner_org_id:
           type: integer
         system_prompt_content:
           type: string
-          description: 内联提示词内容，空则使用内置默认模板。风格/受众等翻译要求直接写在提示词中。
-        pipeline:
-          $ref: '#/components/schemas/TemplatePipelineConfig'
-        glossary:
-          $ref: '#/components/schemas/TemplateGlossaryConfig'
+          description: 提示词内容。
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
-    TemplateListResponse:
+    PromptTemplateListResponse:
       type: object
       required:
         - items
@@ -2663,8 +2547,8 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/Template'
-    CreateTemplateRequest:
+            $ref: '#/components/schemas/PromptTemplate'
+    CreatePromptTemplateRequest:
       type: object
       required:
         - name
@@ -2675,13 +2559,9 @@ components:
           type: string
         system_prompt_content:
           type: string
-          description: 内联提示词内容，空则使用内置默认模板。风格/受众等翻译要求直接写在提示词中。
-        pipeline:
-          $ref: '#/components/schemas/TemplatePipelineConfig'
-        glossary:
-          $ref: '#/components/schemas/TemplateGlossaryConfig'
+          description: 提示词内容。
       additionalProperties: false
-    UpdateTemplateRequest:
+    UpdatePromptTemplateRequest:
       type: object
       properties:
         name:
@@ -2690,18 +2570,136 @@ components:
           type: string
         system_prompt_content:
           type: string
-          description: 内联提示词内容，空则使用内置默认模板。风格/受众等翻译要求直接写在提示词中。
-        pipeline:
-          $ref: '#/components/schemas/TemplatePipelineConfig'
-        glossary:
-          $ref: '#/components/schemas/TemplateGlossaryConfig'
+          description: 提示词内容。
       additionalProperties: false
-    CopyTemplateRequest:
+    TranslationProfile:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - scope
+        - config
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        scope:
+          $ref: '#/components/schemas/TranslationProfileScope'
+        owner_user_id:
+          type: integer
+        owner_org_id:
+          type: integer
+        config:
+          $ref: '#/components/schemas/TranslationProfileConfig'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    TranslationProfileListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TranslationProfile'
+    CreateTranslationProfileRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        config:
+          $ref: '#/components/schemas/TranslationProfileConfig'
+      additionalProperties: false
+    UpdateTranslationProfileRequest:
       type: object
       properties:
         name:
           type: string
-          description: 新模板名称，留空则自动在原名后加"(副本)"
+        description:
+          type: string
+        config:
+          $ref: '#/components/schemas/TranslationProfileConfig'
+      additionalProperties: false
+    ExecutionPlanTemplate:
+      type: object
+      required:
+        - id
+        - name
+        - scope
+        - rounds
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        scope:
+          $ref: '#/components/schemas/ExecutionPlanTemplateScope'
+        owner_user_id:
+          type: integer
+        owner_org_id:
+          type: integer
+        rounds:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutionRoundConfig'
+          minItems: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ExecutionPlanTemplateListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutionPlanTemplate'
+    CreateExecutionPlanTemplateRequest:
+      type: object
+      required:
+        - name
+        - rounds
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        rounds:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutionRoundConfig'
+          minItems: 1
+      additionalProperties: false
+    UpdateExecutionPlanTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        rounds:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutionRoundConfig'
+          minItems: 1
       additionalProperties: false
     IncrementalUpdateChanges:
       type: object
@@ -2723,13 +2721,77 @@ components:
         deleted:
           type: integer
           description: 删除的段落数
-    TemplateScope:
+    ExecutionPlanTemplateScope:
       type: string
       enum:
         - user
         - org
         - system
-    TemplateSplitConfig:
+    RetryConfig:
+      type: object
+      properties:
+        max_attempts:
+          type: integer
+          minimum: 1
+          default: 3
+        backoff_ms:
+          type: integer
+          minimum: 0
+          default: 2000
+        jitter:
+          type: boolean
+          default: true
+    ExecutionRoundConfig:
+      type: object
+      required:
+        - backend_id
+        - prompt_template_id
+        - profile_id
+        - batch_size
+        - concurrency
+      properties:
+        name:
+          type: string
+          description: 轮次名称（可选，空值自动生成 round-N）
+        backend_id:
+          type: integer
+          description: 后端 ID（Backend 单表全局唯一）
+        prompt_template_id:
+          type: integer
+          description: 提示词模板 ID（PromptTemplate 单表全局唯一）
+        profile_id:
+          type: integer
+          description: 策略模板 ID（TranslationProfile 单表全局唯一）
+        batch_size:
+          type: integer
+          minimum: 1
+        concurrency:
+          type: integer
+          minimum: 1
+        fallback_shrink:
+          type: number
+          minimum: 0
+          maximum: 1
+          default: 0
+        rate_limit_per_sec:
+          type: integer
+          minimum: 0
+          default: 0
+        retry:
+          $ref: '#/components/schemas/RetryConfig'
+    PromptTemplateScope:
+      type: string
+      enum:
+        - user
+        - org
+        - system
+    TranslationProfileScope:
+      type: string
+      enum:
+        - user
+        - org
+        - system
+    ProfileSplitConfig:
       type: object
       required:
         - enabled
@@ -2743,7 +2805,7 @@ components:
         max_chars:
           type: integer
           minimum: 1
-    TemplateProtectConfig:
+    ProfileProtectConfig:
       type: object
       required:
         - enabled
@@ -2754,22 +2816,17 @@ components:
           type: array
           items:
             type: string
-    TemplateRetryConfig:
+    ProfilePostprocessConfig:
       type: object
       required:
-        - max_attempts
-        - backoff_ms
-        - jitter
+        - enabled
+        - trim_spaces
       properties:
-        max_attempts:
-          type: integer
-          minimum: 1
-        backoff_ms:
-          type: integer
-          minimum: 0
-        jitter:
+        enabled:
           type: boolean
-    TemplateRepairConfig:
+        trim_spaces:
+          type: boolean
+    ProfileRepairConfig:
       type: object
       required:
         - enabled
@@ -2793,41 +2850,11 @@ components:
           format: double
           minimum: 0
           maximum: 1
-          exclusiveMaximum: true
         placeholder_normalize:
           type: boolean
         prompt_upgrade:
           type: boolean
-    TemplatePostprocessConfig:
-      type: object
-      required:
-        - enabled
-        - trim_spaces
-      properties:
-        enabled:
-          type: boolean
-        trim_spaces:
-          type: boolean
-    TemplatePipelineConfig:
-      type: object
-      required:
-        - split
-        - protect
-        - retry
-        - repair
-        - postprocess
-      properties:
-        split:
-          $ref: '#/components/schemas/TemplateSplitConfig'
-        protect:
-          $ref: '#/components/schemas/TemplateProtectConfig'
-        retry:
-          $ref: '#/components/schemas/TemplateRetryConfig'
-        repair:
-          $ref: '#/components/schemas/TemplateRepairConfig'
-        postprocess:
-          $ref: '#/components/schemas/TemplatePostprocessConfig'
-    TemplateBootstrapConfig:
+    ProfileBootstrapConfig:
       type: object
       required:
         - mode
@@ -2855,7 +2882,7 @@ components:
           enum:
             - 'off'
             - rewrite-local
-    TemplateGlossaryConfig:
+    ProfileGlossaryConfig:
       type: object
       required:
         - enabled
@@ -2864,4 +2891,23 @@ components:
         enabled:
           type: boolean
         bootstrap:
-          $ref: '#/components/schemas/TemplateBootstrapConfig'
+          $ref: '#/components/schemas/ProfileBootstrapConfig'
+    TranslationProfileConfig:
+      type: object
+      required:
+        - split
+        - protect
+        - postprocess
+        - repair
+        - glossary
+      properties:
+        split:
+          $ref: '#/components/schemas/ProfileSplitConfig'
+        protect:
+          $ref: '#/components/schemas/ProfileProtectConfig'
+        postprocess:
+          $ref: '#/components/schemas/ProfilePostprocessConfig'
+        repair:
+          $ref: '#/components/schemas/ProfileRepairConfig'
+        glossary:
+          $ref: '#/components/schemas/ProfileGlossaryConfig'

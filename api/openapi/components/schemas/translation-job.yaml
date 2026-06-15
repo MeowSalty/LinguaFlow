@@ -1,6 +1,10 @@
 CreateTranslationJobRequest:
   type: object
+  required: [execution_plan_id]
   properties:
+    execution_plan_id:
+      type: integer
+      description: 执行计划模板 ID
     resource_ids:
       type: array
       items:
@@ -50,11 +54,13 @@ TranslationJobResource:
 
 TranslationJob:
   type: object
-  required: [id, project_id, status, trigger_type, resource_count, completed_resources, failed_resources, total_segments, completed_segments, created_at, updated_at]
+  required: [id, project_id, execution_plan_id, status, trigger_type, resource_count, completed_resources, failed_resources, total_segments, completed_segments, created_at, updated_at]
   properties:
     id:
       type: integer
     project_id:
+      type: integer
+    execution_plan_id:
       type: integer
     status:
       type: string
