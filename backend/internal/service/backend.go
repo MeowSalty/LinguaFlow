@@ -36,10 +36,9 @@ type BackendService struct {
 }
 
 type BackendInput struct {
-	Name     string
-	Type     string
-	Priority int
-	Options  map[string]any
+	Name    string
+	Type    string
+	Options map[string]any
 }
 
 type CreateBackendInput struct {
@@ -54,7 +53,6 @@ type BackendRecord struct {
 	Scope       string
 	Name        string
 	Type        string
-	Priority    int
 	Options     map[string]any
 	OwnerUserID *int
 	OwnerOrgID  *int
@@ -77,7 +75,6 @@ func (s *BackendService) Create(ctx context.Context, input CreateBackendInput) (
 	create := s.client.Backend.Create().
 		SetName(normalized.Name).
 		SetBackendType(backend.BackendType(normalized.Type)).
-		SetPriority(normalized.Priority).
 		SetOptions(cloneMap(normalized.Options)).
 		SetScope(input.Scope)
 
@@ -124,7 +121,7 @@ func (s *BackendService) List(ctx context.Context, scope string, ownerID int) ([
 		return nil, ErrBackendSourceInvalid
 	}
 	rows, err := query.
-		Order(ent.Desc(backend.FieldPriority), ent.Asc(backend.FieldID)).
+		Order(ent.Asc(backend.FieldID)).
 		All(ctx)
 	if err != nil {
 		return nil, err
@@ -189,7 +186,6 @@ func (s *BackendService) Update(ctx context.Context, actorUserID, backendID int,
 	updated, err := s.client.Backend.UpdateOneID(backendID).
 		SetName(normalized.Name).
 		SetBackendType(backend.BackendType(normalized.Type)).
-		SetPriority(normalized.Priority).
 		SetOptions(cloneMap(normalized.Options)).
 		Save(ctx)
 	if err != nil {
@@ -244,12 +240,12 @@ func (s *BackendService) resolveAccessibleBackends(ctx context.Context, project 
 						backend.OwnerOrgIDIn(orgIDs...),
 					),
 				)).
-				Order(ent.Desc(backend.FieldPriority), ent.Asc(backend.FieldID)).
+				Order(ent.Asc(backend.FieldID)).
 				All(ctx)
 		} else {
 			rows, err = s.client.Backend.Query().
 				Where(userPred).
-				Order(ent.Desc(backend.FieldPriority), ent.Asc(backend.FieldID)).
+				Order(ent.Asc(backend.FieldID)).
 				All(ctx)
 		}
 		if err != nil {
@@ -269,7 +265,7 @@ func (s *BackendService) resolveAccessibleBackends(ctx context.Context, project 
 				backend.ScopeEQ(ScopeOrg),
 				backend.OwnerOrgIDEQ(*project.OwnerOrgID),
 			).
-			Order(ent.Desc(backend.FieldPriority), ent.Asc(backend.FieldID)).
+			Order(ent.Asc(backend.FieldID)).
 			All(ctx)
 		if err != nil {
 			return nil, err
@@ -291,7 +287,6 @@ func backendRecord(row *ent.Backend) *BackendRecord {
 		Scope:       row.Scope,
 		Name:        row.Name,
 		Type:        string(row.BackendType),
-		Priority:    row.Priority,
 		Options:     cloneMap(row.Options),
 		OwnerUserID: row.OwnerUserID,
 		OwnerOrgID:  row.OwnerOrgID,
@@ -308,10 +303,9 @@ func normalizeBackendInput(input BackendInput) (BackendInput, error) {
 		return BackendInput{}, ErrBackendTypeInvalid
 	}
 	return BackendInput{
-		Name:     name,
-		Type:     typ,
-		Priority: input.Priority,
-		Options:  cloneMap(input.Options),
+		Name:    name,
+		Type:    typ,
+		Options: cloneMap(input.Options),
 	}, nil
 }
 

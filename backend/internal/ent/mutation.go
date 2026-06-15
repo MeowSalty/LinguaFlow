@@ -984,8 +984,6 @@ type BackendMutation struct {
 	name              *string
 	scope             *string
 	backend_type      *backend.BackendType
-	priority          *int
-	addpriority       *int
 	options           *map[string]interface{}
 	clearedFields     map[string]struct{}
 	owner_user        *int
@@ -1373,62 +1371,6 @@ func (m *BackendMutation) ResetBackendType() {
 	m.backend_type = nil
 }
 
-// SetPriority sets the "priority" field.
-func (m *BackendMutation) SetPriority(i int) {
-	m.priority = &i
-	m.addpriority = nil
-}
-
-// Priority returns the value of the "priority" field in the mutation.
-func (m *BackendMutation) Priority() (r int, exists bool) {
-	v := m.priority
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldPriority returns the old "priority" field's value of the Backend entity.
-// If the Backend object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *BackendMutation) OldPriority(ctx context.Context) (v int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldPriority is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldPriority requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldPriority: %w", err)
-	}
-	return oldValue.Priority, nil
-}
-
-// AddPriority adds i to the "priority" field.
-func (m *BackendMutation) AddPriority(i int) {
-	if m.addpriority != nil {
-		*m.addpriority += i
-	} else {
-		m.addpriority = &i
-	}
-}
-
-// AddedPriority returns the value that was added to the "priority" field in this mutation.
-func (m *BackendMutation) AddedPriority() (r int, exists bool) {
-	v := m.addpriority
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// ResetPriority resets all changes to the "priority" field.
-func (m *BackendMutation) ResetPriority() {
-	m.priority = nil
-	m.addpriority = nil
-}
-
 // SetOptions sets the "options" field.
 func (m *BackendMutation) SetOptions(value map[string]interface{}) {
 	m.options = &value
@@ -1553,7 +1495,7 @@ func (m *BackendMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *BackendMutation) Fields() []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 8)
 	if m.created_at != nil {
 		fields = append(fields, backend.FieldCreatedAt)
 	}
@@ -1574,9 +1516,6 @@ func (m *BackendMutation) Fields() []string {
 	}
 	if m.backend_type != nil {
 		fields = append(fields, backend.FieldBackendType)
-	}
-	if m.priority != nil {
-		fields = append(fields, backend.FieldPriority)
 	}
 	if m.options != nil {
 		fields = append(fields, backend.FieldOptions)
@@ -1603,8 +1542,6 @@ func (m *BackendMutation) Field(name string) (ent.Value, bool) {
 		return m.OwnerOrgID()
 	case backend.FieldBackendType:
 		return m.BackendType()
-	case backend.FieldPriority:
-		return m.Priority()
 	case backend.FieldOptions:
 		return m.Options()
 	}
@@ -1630,8 +1567,6 @@ func (m *BackendMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldOwnerOrgID(ctx)
 	case backend.FieldBackendType:
 		return m.OldBackendType(ctx)
-	case backend.FieldPriority:
-		return m.OldPriority(ctx)
 	case backend.FieldOptions:
 		return m.OldOptions(ctx)
 	}
@@ -1692,13 +1627,6 @@ func (m *BackendMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetBackendType(v)
 		return nil
-	case backend.FieldPriority:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetPriority(v)
-		return nil
 	case backend.FieldOptions:
 		v, ok := value.(map[string]interface{})
 		if !ok {
@@ -1714,9 +1642,6 @@ func (m *BackendMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *BackendMutation) AddedFields() []string {
 	var fields []string
-	if m.addpriority != nil {
-		fields = append(fields, backend.FieldPriority)
-	}
 	return fields
 }
 
@@ -1725,8 +1650,6 @@ func (m *BackendMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *BackendMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
-	case backend.FieldPriority:
-		return m.AddedPriority()
 	}
 	return nil, false
 }
@@ -1736,13 +1659,6 @@ func (m *BackendMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *BackendMutation) AddField(name string, value ent.Value) error {
 	switch name {
-	case backend.FieldPriority:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.AddPriority(v)
-		return nil
 	}
 	return fmt.Errorf("unknown Backend numeric field %s", name)
 }
@@ -1805,9 +1721,6 @@ func (m *BackendMutation) ResetField(name string) error {
 		return nil
 	case backend.FieldBackendType:
 		m.ResetBackendType()
-		return nil
-	case backend.FieldPriority:
-		m.ResetPriority()
 		return nil
 	case backend.FieldOptions:
 		m.ResetOptions()

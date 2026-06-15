@@ -85,11 +85,6 @@ func OwnerOrgID(v int) predicate.Backend {
 	return predicate.Backend(sql.FieldEQ(FieldOwnerOrgID, v))
 }
 
-// Priority applies equality check predicate on the "priority" field. It's identical to PriorityEQ.
-func Priority(v int) predicate.Backend {
-	return predicate.Backend(sql.FieldEQ(FieldPriority, v))
-}
-
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.Backend {
 	return predicate.Backend(sql.FieldEQ(FieldCreatedAt, v))
@@ -378,46 +373,6 @@ func BackendTypeIn(vs ...BackendType) predicate.Backend {
 // BackendTypeNotIn applies the NotIn predicate on the "backend_type" field.
 func BackendTypeNotIn(vs ...BackendType) predicate.Backend {
 	return predicate.Backend(sql.FieldNotIn(FieldBackendType, vs...))
-}
-
-// PriorityEQ applies the EQ predicate on the "priority" field.
-func PriorityEQ(v int) predicate.Backend {
-	return predicate.Backend(sql.FieldEQ(FieldPriority, v))
-}
-
-// PriorityNEQ applies the NEQ predicate on the "priority" field.
-func PriorityNEQ(v int) predicate.Backend {
-	return predicate.Backend(sql.FieldNEQ(FieldPriority, v))
-}
-
-// PriorityIn applies the In predicate on the "priority" field.
-func PriorityIn(vs ...int) predicate.Backend {
-	return predicate.Backend(sql.FieldIn(FieldPriority, vs...))
-}
-
-// PriorityNotIn applies the NotIn predicate on the "priority" field.
-func PriorityNotIn(vs ...int) predicate.Backend {
-	return predicate.Backend(sql.FieldNotIn(FieldPriority, vs...))
-}
-
-// PriorityGT applies the GT predicate on the "priority" field.
-func PriorityGT(v int) predicate.Backend {
-	return predicate.Backend(sql.FieldGT(FieldPriority, v))
-}
-
-// PriorityGTE applies the GTE predicate on the "priority" field.
-func PriorityGTE(v int) predicate.Backend {
-	return predicate.Backend(sql.FieldGTE(FieldPriority, v))
-}
-
-// PriorityLT applies the LT predicate on the "priority" field.
-func PriorityLT(v int) predicate.Backend {
-	return predicate.Backend(sql.FieldLT(FieldPriority, v))
-}
-
-// PriorityLTE applies the LTE predicate on the "priority" field.
-func PriorityLTE(v int) predicate.Backend {
-	return predicate.Backend(sql.FieldLTE(FieldPriority, v))
 }
 
 // HasOwnerUser applies the HasEdge predicate on the "owner_user" edge.

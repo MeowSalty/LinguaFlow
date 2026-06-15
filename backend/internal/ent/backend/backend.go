@@ -29,8 +29,6 @@ const (
 	FieldOwnerOrgID = "owner_org_id"
 	// FieldBackendType holds the string denoting the backend_type field in the database.
 	FieldBackendType = "backend_type"
-	// FieldPriority holds the string denoting the priority field in the database.
-	FieldPriority = "priority"
 	// FieldOptions holds the string denoting the options field in the database.
 	FieldOptions = "options"
 	// EdgeOwnerUser holds the string denoting the owner_user edge name in mutations.
@@ -65,7 +63,6 @@ var Columns = []string{
 	FieldOwnerUserID,
 	FieldOwnerOrgID,
 	FieldBackendType,
-	FieldPriority,
 	FieldOptions,
 }
 
@@ -94,8 +91,6 @@ var (
 	OwnerUserIDValidator func(int) error
 	// OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
 	OwnerOrgIDValidator func(int) error
-	// DefaultPriority holds the default value on creation for the "priority" field.
-	DefaultPriority int
 	// DefaultOptions holds the default value on creation for the "options" field.
 	DefaultOptions func() map[string]interface{}
 )
@@ -165,11 +160,6 @@ func ByOwnerOrgID(opts ...sql.OrderTermOption) OrderOption {
 // ByBackendType orders the results by the backend_type field.
 func ByBackendType(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldBackendType, opts...).ToFunc()
-}
-
-// ByPriority orders the results by the priority field.
-func ByPriority(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldPriority, opts...).ToFunc()
 }
 
 // ByOwnerUserField orders the results by owner_user field.

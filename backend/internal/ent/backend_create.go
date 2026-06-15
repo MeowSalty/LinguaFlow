@@ -104,20 +104,6 @@ func (_c *BackendCreate) SetBackendType(v backend.BackendType) *BackendCreate {
 	return _c
 }
 
-// SetPriority sets the "priority" field.
-func (_c *BackendCreate) SetPriority(v int) *BackendCreate {
-	_c.mutation.SetPriority(v)
-	return _c
-}
-
-// SetNillablePriority sets the "priority" field if the given value is not nil.
-func (_c *BackendCreate) SetNillablePriority(v *int) *BackendCreate {
-	if v != nil {
-		_c.SetPriority(*v)
-	}
-	return _c
-}
-
 // SetOptions sets the "options" field.
 func (_c *BackendCreate) SetOptions(v map[string]interface{}) *BackendCreate {
 	_c.mutation.SetOptions(v)
@@ -181,10 +167,6 @@ func (_c *BackendCreate) defaults() {
 		v := backend.DefaultScope
 		_c.mutation.SetScope(v)
 	}
-	if _, ok := _c.mutation.Priority(); !ok {
-		v := backend.DefaultPriority
-		_c.mutation.SetPriority(v)
-	}
 	if _, ok := _c.mutation.Options(); !ok {
 		v := backend.DefaultOptions()
 		_c.mutation.SetOptions(v)
@@ -227,9 +209,6 @@ func (_c *BackendCreate) check() error {
 		if err := backend.BackendTypeValidator(v); err != nil {
 			return &ValidationError{Name: "backend_type", err: fmt.Errorf(`ent: validator failed for field "Backend.backend_type": %w`, err)}
 		}
-	}
-	if _, ok := _c.mutation.Priority(); !ok {
-		return &ValidationError{Name: "priority", err: errors.New(`ent: missing required field "Backend.priority"`)}
 	}
 	if _, ok := _c.mutation.Options(); !ok {
 		return &ValidationError{Name: "options", err: errors.New(`ent: missing required field "Backend.options"`)}
@@ -279,10 +258,6 @@ func (_c *BackendCreate) createSpec() (*Backend, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.BackendType(); ok {
 		_spec.SetField(backend.FieldBackendType, field.TypeEnum, value)
 		_node.BackendType = value
-	}
-	if value, ok := _c.mutation.Priority(); ok {
-		_spec.SetField(backend.FieldPriority, field.TypeInt, value)
-		_node.Priority = value
 	}
 	if value, ok := _c.mutation.Options(); ok {
 		_spec.SetField(backend.FieldOptions, field.TypeJSON, value)

@@ -57,7 +57,6 @@ var (
 		{Name: "name", Type: field.TypeString},
 		{Name: "scope", Type: field.TypeString, Default: "user"},
 		{Name: "backend_type", Type: field.TypeEnum, Enums: []string{"openai", "anthropic", "google"}},
-		{Name: "priority", Type: field.TypeInt, Default: 0},
 		{Name: "options", Type: field.TypeJSON},
 		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
 		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
@@ -70,13 +69,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "backends_organizations_backends",
-				Columns:    []*schema.Column{BackendsColumns[8]},
+				Columns:    []*schema.Column{BackendsColumns[7]},
 				RefColumns: []*schema.Column{OrganizationsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "backends_users_backends",
-				Columns:    []*schema.Column{BackendsColumns[9]},
+				Columns:    []*schema.Column{BackendsColumns[8]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -85,7 +84,7 @@ var (
 			{
 				Name:    "backend_name_owner_user_id",
 				Unique:  true,
-				Columns: []*schema.Column{BackendsColumns[3], BackendsColumns[9]},
+				Columns: []*schema.Column{BackendsColumns[3], BackendsColumns[8]},
 				Annotation: &entsql.IndexAnnotation{
 					Where: "scope = 'user' AND owner_user_id IS NOT NULL",
 				},
@@ -93,7 +92,7 @@ var (
 			{
 				Name:    "backend_name_owner_org_id",
 				Unique:  true,
-				Columns: []*schema.Column{BackendsColumns[3], BackendsColumns[8]},
+				Columns: []*schema.Column{BackendsColumns[3], BackendsColumns[7]},
 				Annotation: &entsql.IndexAnnotation{
 					Where: "scope = 'org' AND owner_org_id IS NOT NULL",
 				},

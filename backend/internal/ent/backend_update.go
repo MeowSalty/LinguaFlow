@@ -118,27 +118,6 @@ func (_u *BackendUpdate) SetNillableBackendType(v *backend.BackendType) *Backend
 	return _u
 }
 
-// SetPriority sets the "priority" field.
-func (_u *BackendUpdate) SetPriority(v int) *BackendUpdate {
-	_u.mutation.ResetPriority()
-	_u.mutation.SetPriority(v)
-	return _u
-}
-
-// SetNillablePriority sets the "priority" field if the given value is not nil.
-func (_u *BackendUpdate) SetNillablePriority(v *int) *BackendUpdate {
-	if v != nil {
-		_u.SetPriority(*v)
-	}
-	return _u
-}
-
-// AddPriority adds value to the "priority" field.
-func (_u *BackendUpdate) AddPriority(v int) *BackendUpdate {
-	_u.mutation.AddPriority(v)
-	return _u
-}
-
 // SetOptions sets the "options" field.
 func (_u *BackendUpdate) SetOptions(v map[string]interface{}) *BackendUpdate {
 	_u.mutation.SetOptions(v)
@@ -256,12 +235,6 @@ func (_u *BackendUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.BackendType(); ok {
 		_spec.SetField(backend.FieldBackendType, field.TypeEnum, value)
-	}
-	if value, ok := _u.mutation.Priority(); ok {
-		_spec.SetField(backend.FieldPriority, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedPriority(); ok {
-		_spec.AddField(backend.FieldPriority, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.Options(); ok {
 		_spec.SetField(backend.FieldOptions, field.TypeJSON, value)
@@ -432,27 +405,6 @@ func (_u *BackendUpdateOne) SetNillableBackendType(v *backend.BackendType) *Back
 	return _u
 }
 
-// SetPriority sets the "priority" field.
-func (_u *BackendUpdateOne) SetPriority(v int) *BackendUpdateOne {
-	_u.mutation.ResetPriority()
-	_u.mutation.SetPriority(v)
-	return _u
-}
-
-// SetNillablePriority sets the "priority" field if the given value is not nil.
-func (_u *BackendUpdateOne) SetNillablePriority(v *int) *BackendUpdateOne {
-	if v != nil {
-		_u.SetPriority(*v)
-	}
-	return _u
-}
-
-// AddPriority adds value to the "priority" field.
-func (_u *BackendUpdateOne) AddPriority(v int) *BackendUpdateOne {
-	_u.mutation.AddPriority(v)
-	return _u
-}
-
 // SetOptions sets the "options" field.
 func (_u *BackendUpdateOne) SetOptions(v map[string]interface{}) *BackendUpdateOne {
 	_u.mutation.SetOptions(v)
@@ -600,12 +552,6 @@ func (_u *BackendUpdateOne) sqlSave(ctx context.Context) (_node *Backend, err er
 	}
 	if value, ok := _u.mutation.BackendType(); ok {
 		_spec.SetField(backend.FieldBackendType, field.TypeEnum, value)
-	}
-	if value, ok := _u.mutation.Priority(); ok {
-		_spec.SetField(backend.FieldPriority, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.AddedPriority(); ok {
-		_spec.AddField(backend.FieldPriority, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.Options(); ok {
 		_spec.SetField(backend.FieldOptions, field.TypeJSON, value)

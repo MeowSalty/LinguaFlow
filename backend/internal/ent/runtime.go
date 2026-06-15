@@ -91,12 +91,8 @@ func init() {
 	backendDescOwnerOrgID := backendFields[3].Descriptor()
 	// backend.OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
 	backend.OwnerOrgIDValidator = backendDescOwnerOrgID.Validators[0].(func(int) error)
-	// backendDescPriority is the schema descriptor for priority field.
-	backendDescPriority := backendFields[5].Descriptor()
-	// backend.DefaultPriority holds the default value on creation for the priority field.
-	backend.DefaultPriority = backendDescPriority.Default.(int)
 	// backendDescOptions is the schema descriptor for options field.
-	backendDescOptions := backendFields[6].Descriptor()
+	backendDescOptions := backendFields[5].Descriptor()
 	// backend.DefaultOptions holds the default value on creation for the options field.
 	backend.DefaultOptions = backendDescOptions.Default.(func() map[string]interface{})
 	executionplantemplateMixin := schema.ExecutionPlanTemplate{}.Mixin()

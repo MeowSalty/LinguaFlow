@@ -34,8 +34,6 @@ type Backend struct {
 	OwnerOrgID *int `json:"owner_org_id,omitempty"`
 	// BackendType holds the value of the "backend_type" field.
 	BackendType backend.BackendType `json:"backend_type,omitempty"`
-	// Priority holds the value of the "priority" field.
-	Priority int `json:"priority,omitempty"`
 	// Options holds the value of the "options" field.
 	Options map[string]interface{} `json:"options,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
@@ -84,7 +82,7 @@ func (*Backend) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case backend.FieldOptions:
 			values[i] = new([]byte)
-		case backend.FieldID, backend.FieldOwnerUserID, backend.FieldOwnerOrgID, backend.FieldPriority:
+		case backend.FieldID, backend.FieldOwnerUserID, backend.FieldOwnerOrgID:
 			values[i] = new(sql.NullInt64)
 		case backend.FieldName, backend.FieldScope, backend.FieldBackendType:
 			values[i] = new(sql.NullString)
@@ -154,12 +152,6 @@ func (_m *Backend) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field backend_type", values[i])
 			} else if value.Valid {
 				_m.BackendType = backend.BackendType(value.String)
-			}
-		case backend.FieldPriority:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field priority", values[i])
-			} else if value.Valid {
-				_m.Priority = int(value.Int64)
 			}
 		case backend.FieldOptions:
 			if value, ok := values[i].(*[]byte); !ok {
@@ -239,9 +231,6 @@ func (_m *Backend) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("backend_type=")
 	builder.WriteString(fmt.Sprintf("%v", _m.BackendType))
-	builder.WriteString(", ")
-	builder.WriteString("priority=")
-	builder.WriteString(fmt.Sprintf("%v", _m.Priority))
 	builder.WriteString(", ")
 	builder.WriteString("options=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Options))

@@ -10,17 +10,15 @@ import (
 )
 
 type createBackendRequest struct {
-	Name     string         `json:"name"`
-	Type     string         `json:"type"`
-	Priority int            `json:"priority"`
-	Options  map[string]any `json:"options"`
+	Name    string         `json:"name"`
+	Type    string         `json:"type"`
+	Options map[string]any `json:"options"`
 }
 
 type updateBackendRequest struct {
-	Name     string         `json:"name"`
-	Type     string         `json:"type"`
-	Priority int            `json:"priority"`
-	Options  map[string]any `json:"options"`
+	Name    string         `json:"name"`
+	Type    string         `json:"type"`
+	Options map[string]any `json:"options"`
 }
 
 type backendResponse struct {
@@ -28,7 +26,6 @@ type backendResponse struct {
 	Scope       string         `json:"scope"`
 	Name        string         `json:"name"`
 	Type        string         `json:"type"`
-	Priority    int            `json:"priority"`
 	Options     map[string]any `json:"options,omitempty"`
 	OwnerUserID *int           `json:"owner_user_id,omitempty"`
 	OwnerOrgID  *int           `json:"owner_org_id,omitempty"`
@@ -40,7 +37,6 @@ func toBackendResponse(record *service.BackendRecord, showOptions bool) backendR
 		Scope:       record.Scope,
 		Name:        record.Name,
 		Type:        record.Type,
-		Priority:    record.Priority,
 		OwnerUserID: record.OwnerUserID,
 		OwnerOrgID:  record.OwnerOrgID,
 	}
@@ -73,10 +69,9 @@ func (s *Server) handleCreateUserBackend(w http.ResponseWriter, r *http.Request)
 		Scope:       service.ScopeUser,
 		OwnerUserID: &userID,
 		BackendInput: service.BackendInput{
-			Name:     req.Name,
-			Type:     req.Type,
-			Priority: req.Priority,
-			Options:  req.Options,
+			Name:    req.Name,
+			Type:    req.Type,
+			Options: req.Options,
 		},
 	})
 	if err != nil {
@@ -115,10 +110,9 @@ func (s *Server) handleUpdateUserBackend(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	record, err := s.backendSvc.Update(r.Context(), authUser.User.ID, backendID, service.BackendInput{
-		Name:     req.Name,
-		Type:     req.Type,
-		Priority: req.Priority,
-		Options:  req.Options,
+		Name:    req.Name,
+		Type:    req.Type,
+		Options: req.Options,
 	})
 	if err != nil {
 		writeBackendServiceError(w, err)
@@ -167,10 +161,9 @@ func (s *Server) handleCreateOrgBackend(w http.ResponseWriter, r *http.Request) 
 		Scope:      service.ScopeOrg,
 		OwnerOrgID: &orgID,
 		BackendInput: service.BackendInput{
-			Name:     req.Name,
-			Type:     req.Type,
-			Priority: req.Priority,
-			Options:  req.Options,
+			Name:    req.Name,
+			Type:    req.Type,
+			Options: req.Options,
 		},
 	})
 	if err != nil {
@@ -221,10 +214,9 @@ func (s *Server) handleUpdateOrgBackend(w http.ResponseWriter, r *http.Request) 
 	}
 	// Update 内部通过 requireOwnership 验证 org 管理员权限
 	record, err := s.backendSvc.Update(r.Context(), authUser.User.ID, backendID, service.BackendInput{
-		Name:     req.Name,
-		Type:     req.Type,
-		Priority: req.Priority,
-		Options:  req.Options,
+		Name:    req.Name,
+		Type:    req.Type,
+		Options: req.Options,
 	})
 	if err != nil {
 		writeBackendServiceError(w, err)

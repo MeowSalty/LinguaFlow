@@ -24,7 +24,6 @@ func (Backend) Fields() []ent.Field {
 		field.Int("owner_user_id").Optional().Nillable().Positive(),
 		field.Int("owner_org_id").Optional().Nillable().Positive(),
 		field.Enum("backend_type").Values("openai", "anthropic", "google"),
-		field.Int("priority").Default(0),
 		field.JSON("options", map[string]any{}).
 			Default(func() map[string]any { return map[string]any{} }),
 	}
