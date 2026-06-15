@@ -14,6 +14,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
 
 var (
@@ -261,11 +262,17 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 		if round.BackendID <= 0 {
 			return fmt.Errorf("%w: rounds[%d].backend_id must be positive", ErrExecutionPlanConfigInvalid, i)
 		}
-		if round.PromptTemplateID <= 0 {
-			return fmt.Errorf("%w: rounds[%d].prompt_template_id must be positive", ErrExecutionPlanConfigInvalid, i)
+		if round.PromptTemplateID == 0 {
+			return fmt.Errorf("%w: rounds[%d].prompt_template_id must not be zero", ErrExecutionPlanConfigInvalid, i)
 		}
-		if round.ProfileID <= 0 {
-			return fmt.Errorf("%w: rounds[%d].profile_id must be positive", ErrExecutionPlanConfigInvalid, i)
+		if round.PromptTemplateID < 0 && !templates.IsBuiltinID(round.PromptTemplateID) {
+			return fmt.Errorf("%w: rounds[%d].prompt_template_id %d is not a valid builtin template", ErrExecutionPlanConfigInvalid, i, round.PromptTemplateID)
+		}
+		if round.ProfileID == 0 {
+			return fmt.Errorf("%w: rounds[%d].profile_id must not be zero", ErrExecutionPlanConfigInvalid, i)
+		}
+		if round.ProfileID < 0 && !templates.IsBuiltinID(round.ProfileID) {
+			return fmt.Errorf("%w: rounds[%d].profile_id %d is not a valid builtin template", ErrExecutionPlanConfigInvalid, i, round.ProfileID)
 		}
 		if round.BatchSize < 1 {
 			return fmt.Errorf("%w: rounds[%d].batch_size must be >= 1", ErrExecutionPlanConfigInvalid, i)

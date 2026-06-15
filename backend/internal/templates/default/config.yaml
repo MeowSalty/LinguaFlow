@@ -11,13 +11,13 @@ backend:
     response_format: json_schema
 
 prompt_template:
-  id: -1001
-  name: "通用翻译"
+  id: -1
+  name: "通用提示词"
   description: "默认提示词，适用于一般文档翻译"
 
 translation_profile:
-  id: -2001
-  name: "通用翻译策略"
+  id: -1
+  name: "通用策略"
   description: "默认策略配置，适用于一般文档翻译"
   config:
     split:
@@ -53,8 +53,8 @@ execution_plan:
   rounds:
     - name: "主翻译"
       backend: openai-default
-      prompt_template: -1001
-      profile: -2001
+      prompt_template: -1
+      profile: -1
       batch_size: 1
       concurrency: 4
       fallback_shrink: 0.5

@@ -7,6 +7,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
 
 var (
@@ -41,38 +42,45 @@ type UpdatePromptTemplateInput struct {
 	SystemPromptContent *string
 }
 
-// ListByUser 列出指定用户的所有提示词模板。
+// ListByUser 列出指定用户的所有提示词模板（包含内置模板）。
 func (s *PromptTemplateService) ListByUser(ctx context.Context, userID int) ([]*ent.PromptTemplate, error) {
-	return s.client.PromptTemplate.Query().
+	dbTemplates, err := s.client.PromptTemplate.Query().
 		Where(
 			prompttemplate.ScopeEQ("user"),
 			prompttemplate.OwnerUserIDEQ(userID),
 		).
 		Order(ent.Asc(prompttemplate.FieldID)).
 		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list prompt templates: %w", err)
+	}
+	return append(templates.BuiltinPromptTemplates(), dbTemplates...), nil
 }
 
-// ListByOrg 列出指定组织的所有提示词模板。
+// ListByOrg 列出指定组织的所有提示词模板（包含内置模板）。
 func (s *PromptTemplateService) ListByOrg(ctx context.Context, orgID int) ([]*ent.PromptTemplate, error) {
-	return s.client.PromptTemplate.Query().
+	dbTemplates, err := s.client.PromptTemplate.Query().
 		Where(
 			prompttemplate.ScopeEQ("org"),
 			prompttemplate.OwnerOrgIDEQ(orgID),
 		).
 		Order(ent.Asc(prompttemplate.FieldID)).
 		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list prompt templates: %w", err)
+	}
+	return append(templates.BuiltinPromptTemplates(), dbTemplates...), nil
 }
 
-// ListSystem 列出所有系统级提示词模板。
-func (s *PromptTemplateService) ListSystem(ctx context.Context) ([]*ent.PromptTemplate, error) {
-	return s.client.PromptTemplate.Query().
-		Where(prompttemplate.ScopeEQ("system")).
-		Order(ent.Asc(prompttemplate.FieldID)).
-		All(ctx)
-}
-
-// GetByID 根据 ID 获取提示词模板。
+// GetByID 根据 ID 获取提示词模板（支持内置模板）。
 func (s *PromptTemplateService) GetByID(ctx context.Context, id int) (*ent.PromptTemplate, error) {
+	if templates.IsBuiltinID(id) {
+		pt := templates.BuiltinPromptTemplate(id)
+		if pt == nil {
+			return nil, ErrPromptTemplateNotFound
+		}
+		return pt, nil
+	}
 	pt, err := s.client.PromptTemplate.Get(ctx, id)
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -112,8 +120,11 @@ func (s *PromptTemplateService) Create(ctx context.Context, input CreatePromptTe
 	return pt, nil
 }
 
-// Update 更新提示词模板。
+// Update 更新提示词模板（内置模板不可修改）。
 func (s *PromptTemplateService) Update(ctx context.Context, id int, input UpdatePromptTemplateInput) (*ent.PromptTemplate, error) {
+	if templates.IsBuiltinID(id) {
+		return nil, ErrPromptTemplateNotFound
+	}
 	pt, err := s.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -141,8 +152,11 @@ func (s *PromptTemplateService) Update(ctx context.Context, id int, input Update
 	return updated, nil
 }
 
-// Delete 删除提示词模板。
+// Delete 删除提示词模板（内置模板不可删除）。
 func (s *PromptTemplateService) Delete(ctx context.Context, id int) error {
+	if templates.IsBuiltinID(id) {
+		return ErrPromptTemplateNotFound
+	}
 	pt, err := s.GetByID(ctx, id)
 	if err != nil {
 		return err

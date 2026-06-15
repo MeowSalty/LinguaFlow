@@ -8,6 +8,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
 
 var (
@@ -43,38 +44,45 @@ type UpdateTranslationProfileInput struct {
 	Config      *schema.TranslationProfileConfigData
 }
 
-// ListByUser 列出指定用户的所有翻译配置。
+// ListByUser 列出指定用户的所有翻译配置（包含内置策略）。
 func (s *TranslationProfileService) ListByUser(ctx context.Context, userID int) ([]*ent.TranslationProfile, error) {
-	return s.client.TranslationProfile.Query().
+	dbProfiles, err := s.client.TranslationProfile.Query().
 		Where(
 			translationprofile.ScopeEQ("user"),
 			translationprofile.OwnerUserIDEQ(userID),
 		).
 		Order(ent.Asc(translationprofile.FieldID)).
 		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list translation profiles: %w", err)
+	}
+	return append(templates.BuiltinTranslationProfiles(), dbProfiles...), nil
 }
 
-// ListByOrg 列出指定组织的所有翻译配置。
+// ListByOrg 列出指定组织的所有翻译配置（包含内置策略）。
 func (s *TranslationProfileService) ListByOrg(ctx context.Context, orgID int) ([]*ent.TranslationProfile, error) {
-	return s.client.TranslationProfile.Query().
+	dbProfiles, err := s.client.TranslationProfile.Query().
 		Where(
 			translationprofile.ScopeEQ("org"),
 			translationprofile.OwnerOrgIDEQ(orgID),
 		).
 		Order(ent.Asc(translationprofile.FieldID)).
 		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list translation profiles: %w", err)
+	}
+	return append(templates.BuiltinTranslationProfiles(), dbProfiles...), nil
 }
 
-// ListSystem 列出所有系统级翻译配置。
-func (s *TranslationProfileService) ListSystem(ctx context.Context) ([]*ent.TranslationProfile, error) {
-	return s.client.TranslationProfile.Query().
-		Where(translationprofile.ScopeEQ("system")).
-		Order(ent.Asc(translationprofile.FieldID)).
-		All(ctx)
-}
-
-// GetByID 根据 ID 获取翻译配置。
+// GetByID 根据 ID 获取翻译配置（支持内置策略）。
 func (s *TranslationProfileService) GetByID(ctx context.Context, id int) (*ent.TranslationProfile, error) {
+	if templates.IsBuiltinID(id) {
+		tp := templates.BuiltinTranslationProfile(id)
+		if tp == nil {
+			return nil, ErrTranslationProfileNotFound
+		}
+		return tp, nil
+	}
 	tp, err := s.client.TranslationProfile.Get(ctx, id)
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -123,8 +131,11 @@ func (s *TranslationProfileService) Create(ctx context.Context, input CreateTran
 	return tp, nil
 }
 
-// Update 更新翻译配置。
+// Update 更新翻译配置（内置策略不可修改）。
 func (s *TranslationProfileService) Update(ctx context.Context, id int, input UpdateTranslationProfileInput) (*ent.TranslationProfile, error) {
+	if templates.IsBuiltinID(id) {
+		return nil, ErrTranslationProfileNotFound
+	}
 	tp, err := s.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
@@ -159,8 +170,11 @@ func (s *TranslationProfileService) Update(ctx context.Context, id int, input Up
 	return updated, nil
 }
 
-// Delete 删除翻译配置。
+// Delete 删除翻译配置（内置策略不可删除）。
 func (s *TranslationProfileService) Delete(ctx context.Context, id int) error {
+	if templates.IsBuiltinID(id) {
+		return ErrTranslationProfileNotFound
+	}
 	tp, err := s.GetByID(ctx, id)
 	if err != nil {
 		return err
