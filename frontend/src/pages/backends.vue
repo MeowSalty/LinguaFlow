@@ -33,7 +33,6 @@ type BackendType = Backend['type']
 interface BackendFormModel {
   name: string
   type: BackendType | null
-  priority: number
   api_key: string
   base_url: string
   model: string
@@ -56,7 +55,6 @@ const deletingBackend = ref<Backend | null>(null)
 const formModel = reactive<BackendFormModel>({
   name: '',
   type: null,
-  priority: 0,
   api_key: '',
   base_url: '',
   model: '',
@@ -127,7 +125,6 @@ const rules = computed<FormRules>(() => ({
 const resetForm = (): void => {
   formModel.name = ''
   formModel.type = null
-  formModel.priority = 0
   formModel.api_key = ''
   formModel.base_url = ''
   formModel.model = ''
@@ -148,7 +145,6 @@ const openEditDrawer = (backend: Backend): void => {
   editingBackend.value = backend
   formModel.name = backend.name
   formModel.type = backend.type
-  formModel.priority = backend.priority
   const opts = backend.options ?? {}
   formModel.api_key = typeof opts.api_key === 'string' ? opts.api_key : ''
   formModel.base_url = typeof opts.base_url === 'string' ? opts.base_url : ''
@@ -208,7 +204,6 @@ const onSubmit = async (): Promise<void> => {
   const payload = {
     name: formModel.name.trim(),
     type: formModel.type,
-    priority: formModel.priority,
     options: buildOptions(),
   }
 
@@ -460,11 +455,6 @@ onMounted(() => {
                   {{ getModelDisplay(backend) }}
                 </div>
               </div>
-              <div
-                class="rounded-full bg-lf-surface-elevated px-3 py-1 text-xs font-medium text-lf-text-muted shadow-sm shadow-lf-shadow"
-              >
-                {{ t('backends.card.priority') }} {{ backend.priority }}
-              </div>
             </div>
           </div>
 
@@ -520,20 +510,6 @@ onMounted(() => {
               :placeholder="t('backends.form.typePlaceholder')"
               :disabled="isEditMode"
             />
-          </NFormItem>
-
-          <NFormItem :label="t('backends.form.priority')" path="priority">
-            <div class="w-full">
-              <NInputNumber
-                v-model:value="formModel.priority"
-                :min="0"
-                :max="9999"
-                class="w-full"
-              />
-              <div class="mt-1 text-xs text-lf-text-muted">
-                {{ t('backends.form.priorityHint') }}
-              </div>
-            </div>
           </NFormItem>
 
           <NDivider />

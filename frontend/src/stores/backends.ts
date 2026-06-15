@@ -35,9 +35,7 @@ export const useBackendsStore = defineStore('backends', () => {
   const searchQuery = ref('')
   const typeFilter = ref<BackendType | 'all'>('all')
 
-  const sortedItems = computed(() =>
-    [...items.value].sort((left, right) => left.priority - right.priority),
-  )
+  const sortedItems = computed(() => [...items.value].sort((left, right) => left.id - right.id))
 
   const filteredItems = computed(() => {
     const query = searchQuery.value.trim().toLowerCase()

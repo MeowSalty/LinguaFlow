@@ -1215,7 +1215,6 @@ export interface components {
             name: string;
             /** @enum {string} */
             type: "openai" | "anthropic" | "google";
-            priority: number;
             options?: {
                 [key: string]: unknown;
             };
@@ -1229,8 +1228,6 @@ export interface components {
             name: string;
             /** @enum {string} */
             type: "openai" | "anthropic" | "google";
-            /** @default 0 */
-            priority: number;
             options?: {
                 [key: string]: unknown;
             };
@@ -1239,7 +1236,6 @@ export interface components {
             name: string;
             /** @enum {string} */
             type: "openai" | "anthropic" | "google";
-            priority?: number;
             options?: {
                 [key: string]: unknown;
             };

@@ -616,7 +616,6 @@ const messages = {
       google: 'Google Gemini',
     },
     card: {
-      priority: '优先级',
       model: '模型',
       personal: '个人',
     },
@@ -640,8 +639,6 @@ const messages = {
       namePlaceholder: '例如：My OpenAI',
       type: '后端类型',
       typePlaceholder: '选择后端类型',
-      priority: '优先级',
-      priorityHint: '数值越小优先级越高，翻译时按优先级顺序尝试',
       options: '高级配置',
       apiKey: 'API Key',
       apiKeyPlaceholder: 'sk-...',
