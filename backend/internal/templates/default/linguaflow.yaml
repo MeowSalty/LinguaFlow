@@ -1,0 +1,155 @@
+# LinguaFlow 配置文件
+# 由 `linguaflow init` 生成。所有字段均可被 CLI flag 覆盖。
+# 优先级：flag > env > yaml > 内置默认值。
+
+# 配置格式版本号，当前固定为 1。
+version: 1
+
+# 源语言。auto 表示自动检测，也可指定 BCP 47 代码如 en、ja 等。
+source_lang: auto
+
+# 目标语言。使用 BCP 47 代码，如 zh、en、ja 等。
+target_lang: zh
+
+# ─────────────────────────────────────────────────────────────
+# 后端配置
+# ─────────────────────────────────────────────────────────────
+# key 为后端名称，可在 execution.rounds[].backend 中按名称引用。
+# 支持的 type：openai、anthropic、google
+backends:
+  openai-default:
+    # 后端类型：openai / anthropic / google
+    type: openai
+    # 是否启用该后端
+    enabled: true
+    # 后端级限流（每秒请求数）；0 表示使用轮次级或全局限流
+    rate_limit_per_sec: 0
+    options:
+      # API 密钥，支持 ${ENV_VAR} 环境变量展开
+      api_key: ${OPENAI_API_KEY}
+      # API 基础地址
+      base_url: https://api.openai.com/v1
+      # 模型名称
+      model: gpt-4o-mini
+      # 采样温度，范围 0-2，越低越确定
+      temperature: 0.2
+      # 最大输出 token 数；0 表示不限制
+      max_tokens: 0
+      # 请求超时时间，支持 Go duration 格式如 30s、2m
+      timeout: 60s
+      # 响应格式：json_schema 使用严格 JSON Schema 模式，json_object 使用宽松模式
+      response_format: json_schema
+
+# ─────────────────────────────────────────────────────────────
+# 翻译提示词模板配置
+# ─────────────────────────────────────────────────────────────
+# key 为模板名称，可在 execution.rounds[].prompt 中按名称引用。
+# content 与 file 二选一：content 为内联内容，file 为外部文件路径。
+# 两者都为空时使用内置默认提示词。
+prompt_templates:
+  通用提示词:
+    # 引用 prompts/ 目录下的提示词模板文件（Go template 格式）
+    file: prompts/default.tmpl
+
+# ─────────────────────────────────────────────────────────────
+# 翻译策略配置
+# ─────────────────────────────────────────────────────────────
+# key 为策略名称，可在 execution.rounds[].profile 中按名称引用。
+# 内联配置与 file 二选一：file 为外部文件路径。
+translation_profiles:
+  通用策略:
+    # 引用同目录下的翻译策略文件
+    file: profiles/default.yaml
+
+# ─────────────────────────────────────────────────────────────
+# 执行计划配置
+# ─────────────────────────────────────────────────────────────
+# rounds 定义翻译执行轮次，按顺序执行。
+execution:
+  rounds:
+    - name: 主翻译
+      # 引用 backends 中定义的后端名称
+      backend: openai-default
+      # 引用 prompt_templates 中定义的模板名称
+      prompt: 通用翻译
+      # 引用 translation_profiles 中定义的策略名称
+      profile: 通用翻译策略
+      # 一次合并发送的段数；1 表示逐段翻译，>1 为批量模式
+      batch_size: 1
+      # 并发翻译数
+      concurrency: 4
+      # 整批失败时的缩放因子（0-1）；0 表示直接降到单段重试
+      fallback_shrink: 0.5
+      # 每秒请求数限流（覆盖后端级限流）；0 表示不限流
+      rate_limit_per_sec: 5
+      # 重试配置
+      retry:
+        # 最大重试次数
+        max_attempts: 3
+        # 重试间隔（毫秒）
+        backoff_ms: 2000
+        # 是否在重试间隔上添加随机抖动，避免雷群效应
+        jitter: true
+
+# ─────────────────────────────────────────────────────────────
+# 术语表配置
+# ─────────────────────────────────────────────────────────────
+glossary:
+  # 是否启用术语表
+  enabled: false
+  # 术语表文件路径（CSV 格式：source,target,notes）
+  path: ./glossary.csv
+  # 术语自举：用 LLM 自动从源文本中抽取领域术语
+  bootstrap:
+    # 模式：off=关闭，pre=翻译前独立扫描整篇文档，inline=翻译时顺带抽取
+    mode: "off"
+    # 翻译结束后是否将增量术语回写到 glossary 文件
+    save: true
+    # 每批最大抽取术语数
+    max_terms_per_batch: 20
+    # 术语最小源文本长度（小于此值的不抽取）
+    min_source_len: 2
+    # inline 模式下并发术语冲突策略：
+    #   rewrite-local = 后到 worker 重写本批译文中的冲突术语
+    #   off = 不处理，沿用先到版本
+    inline_conflict_strategy: "rewrite-local"
+
+# ─────────────────────────────────────────────────────────────
+# 翻译记忆库配置
+# ─────────────────────────────────────────────────────────────
+translation_memory:
+  # 是否启用翻译记忆库
+  enabled: false
+  # 存储驱动：sqlite
+  driver: sqlite
+  # 数据库文件路径
+  dsn: ./.linguaflow/tm.db
+
+# ─────────────────────────────────────────────────────────────
+# 插件配置
+# ─────────────────────────────────────────────────────────────
+plugins:
+  # 是否启用插件
+  enabled: false
+  # 脚本文件路径列表
+  scripts: []
+
+# ─────────────────────────────────────────────────────────────
+# 输出配置
+# ─────────────────────────────────────────────────────────────
+output:
+  # 输出模式：overwrite 覆盖原文件，side-by-side 并排输出
+  mode: overwrite
+  # 是否保留原始文件扩展名
+  preserve_extension: true
+  # 是否启用增量翻译（仅翻译变更部分）
+  incremental: false
+
+# ─────────────────────────────────────────────────────────────
+# 日志配置
+# ─────────────────────────────────────────────────────────────
+log:
+  # 日志级别：debug, info, warn, error
+  level: info
+  # 日志格式：text 人类可读，json 结构化
+  format: text

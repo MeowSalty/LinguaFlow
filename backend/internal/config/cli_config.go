@@ -2,11 +2,11 @@ package config
 
 import (
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 	"gopkg.in/yaml.v3"
 )
@@ -357,161 +357,78 @@ func readExternalFileBytes(relPath, configDir string) ([]byte, error) {
 // DefaultCLIConfigFromBuiltins — 从内置模板生成默认 CLIConfig
 // ---------------------------------------------------------------------------
 
-// DefaultCLIConfigFromBuiltins 从 templates.BuiltinSets 生成默认 CLIConfig。
-// 若无内置模板集合，返回一个最小化的默认配置。
+// DefaultCLIConfigFromBuiltins 返回默认 CLIConfig。
+// 从内置带注释 YAML 模板解析，与 init 输出共用同一数据源。
+// file 引用指向嵌入 FS 中的模板文件，由 resolveEmbeddedReferences 解析。
 func DefaultCLIConfigFromBuiltins() *CLIConfig {
-	if len(templates.BuiltinSets) > 0 {
-		return buildCLIConfigFromSet(&templates.BuiltinSets[0])
-	}
-	// 回退到硬编码默认值
-	return defaultCLIConfig()
-}
-
-// buildCLIConfigFromSet 从单个 templates.Set 构造 CLIConfig。
-func buildCLIConfigFromSet(set *templates.Set) *CLIConfig {
-	promptName := set.PromptTemplate.Name
-
-	cliCfg := &CLIConfig{
-		Version:    1,
-		SourceLang: "auto",
-		TargetLang: "zh",
-		Backends:   make(map[string]CLIConfigBackend),
-		PromptTemplates: map[string]CLIConfigPromptTemplate{
-			promptName: {
-				Content: set.PromptTemplate.SystemPromptContent,
-			},
-		},
-		TranslationProfiles: map[string]CLIConfigTranslationProfile{
-			promptName: {
-				Split:       convertSplitConfig(set.TranslationProfile.Config.Split),
-				Protect:     convertProtectConfig(set.TranslationProfile.Config.Protect),
-				Postprocess: convertPostprocessConfig(set.TranslationProfile.Config.Postprocess),
-				Repair:      convertRepairConfig(set.TranslationProfile.Config.Repair),
-			},
-		},
-		Glossary: GlossaryConfig{
-			Enabled: false,
-			Path:    "./glossary.csv",
-			Bootstrap: BootstrapConfig{
-				Mode:                   BootstrapModeOff,
-				Save:                   true,
-				MaxTermsPerBatch:       20,
-				MinSourceLen:           2,
-				InlineConflictStrategy: InlineConflictRewriteLocal,
-			},
-		},
-		TranslationMemory: TMConfig{Enabled: false, Driver: "sqlite", DSN: "./.linguaflow/tm.db"},
-		Plugins:           PluginsConfig{Enabled: false},
-		Output:            OutputConfig{Mode: "overwrite", PreserveExtension: true},
-		Log:               LogConfig{Level: "info", Format: "text"},
+	cliCfg := &CLIConfig{}
+	if err := yaml.Unmarshal(templates.DefaultConfigYAML(), cliCfg); err != nil {
+		// 模板损坏时回退到硬编码默认值
+		return defaultCLIConfig()
 	}
 
-	// ── Backend ──
-	if set.Backend != nil {
-		cliCfg.Backends[set.Backend.Name] = CLIConfigBackend{
-			Type:    set.Backend.Type,
-			Enabled: true,
-			Options: set.Backend.Options,
-		}
+	// 初始化 map
+	if cliCfg.Backends == nil {
+		cliCfg.Backends = make(map[string]CLIConfigBackend)
+	}
+	if cliCfg.PromptTemplates == nil {
+		cliCfg.PromptTemplates = make(map[string]CLIConfigPromptTemplate)
+	}
+	if cliCfg.TranslationProfiles == nil {
+		cliCfg.TranslationProfiles = make(map[string]CLIConfigTranslationProfile)
 	}
 
-	// ── 翻译策略使用 profileName 作为 key ──
-	profileName := promptName
-	if set.ExecutionPlan != nil && len(set.ExecutionPlan.Rounds) > 0 && set.ExecutionPlan.Rounds[0].Profile != "" {
-		profileName = set.ExecutionPlan.Rounds[0].Profile
-	}
-	if profileName != promptName {
-		if prof, ok := cliCfg.TranslationProfiles[promptName]; ok {
-			delete(cliCfg.TranslationProfiles, promptName)
-			cliCfg.TranslationProfiles[profileName] = prof
-		}
-	}
-
-	// ── Execution Rounds ──
-	if set.ExecutionPlan != nil && len(set.ExecutionPlan.Rounds) > 0 {
-		rounds := make([]CLIConfigRound, 0, len(set.ExecutionPlan.Rounds))
-		for _, r := range set.ExecutionPlan.Rounds {
-			rounds = append(rounds, CLIConfigRound{
-				Name:            r.Name,
-				Backend:         r.Backend,
-				Prompt:          r.PromptTemplate,
-				Profile:         r.Profile,
-				BatchSize:       r.BatchSize,
-				Concurrency:     r.Concurrency,
-				FallbackShrink:  r.FallbackShrink,
-				RateLimitPerSec: r.RateLimitPerSec,
-				Retry:           convertRetryConfig(r.Retry),
-			})
-		}
-		cliCfg.Execution = CLIConfigExecution{Rounds: rounds}
-	} else {
-		// 无执行计划时，构造单轮默认
-		backendName := ""
-		if set.Backend != nil {
-			backendName = set.Backend.Name
-		}
-		cliCfg.Execution = CLIConfigExecution{
-			Rounds: []CLIConfigRound{{
-				Name:    "主翻译",
-				Backend: backendName,
-				Prompt:  promptName,
-				Profile: profileName,
-			}},
-		}
+	// 从嵌入 FS 解析 file 引用
+	if err := resolveEmbeddedReferences(cliCfg); err != nil {
+		return defaultCLIConfig()
 	}
 
 	return cliCfg
 }
 
-// ---------------------------------------------------------------------------
-// schema → config 类型转换
-// ---------------------------------------------------------------------------
+// resolveEmbeddedReferences 从嵌入 FS 解析 prompt_templates 和
+// translation_profiles 中的 file 引用。
+// 与 resolveExternalReferences 功能相同，但数据源是嵌入 FS 而非用户文件系统。
+func resolveEmbeddedReferences(cliCfg *CLIConfig) error {
+	fsys := templates.EmbeddedFS()
 
-// convertSplitConfig 将 schema.ProfileSplitConfig 转换为 config.SplitConfig。
-func convertSplitConfig(s schema.ProfileSplitConfig) SplitConfig {
-	return SplitConfig{
-		Enabled:  s.Enabled,
-		Strategy: s.Strategy,
-		MaxChars: s.MaxChars,
+	// ── prompt_templates ──
+	for name, pt := range cliCfg.PromptTemplates {
+		if pt.Content != "" || pt.File == "" {
+			continue
+		}
+		data, err := fs.ReadFile(fsys, "default/"+pt.File)
+		if err != nil {
+			return fmt.Errorf("embedded prompt_templates[%q].file %q: %w", name, pt.File, err)
+		}
+		pt.Content = string(data)
+		pt.File = ""
+		cliCfg.PromptTemplates[name] = pt
 	}
-}
 
-// convertProtectConfig 将 schema.ProfileProtectConfig 转换为 config.ProtectConfig。
-func convertProtectConfig(p schema.ProfileProtectConfig) ProtectConfig {
-	return ProtectConfig{
-		Enabled: p.Enabled,
-		Rules:   p.Rules,
+	// ── translation_profiles ──
+	for name, tp := range cliCfg.TranslationProfiles {
+		if tp.File == "" {
+			continue
+		}
+		if hasInlineProfileConfig(tp) {
+			tp.File = ""
+			cliCfg.TranslationProfiles[name] = tp
+			continue
+		}
+		data, err := fs.ReadFile(fsys, "default/"+tp.File)
+		if err != nil {
+			return fmt.Errorf("embedded translation_profiles[%q].file %q: %w", name, tp.File, err)
+		}
+		var extProfile CLIConfigTranslationProfile
+		if err := yaml.Unmarshal(data, &extProfile); err != nil {
+			return fmt.Errorf("embedded translation_profiles[%q].file parse: %w", name, err)
+		}
+		extProfile.File = ""
+		cliCfg.TranslationProfiles[name] = extProfile
 	}
-}
 
-// convertPostprocessConfig 将 schema.ProfilePostprocessConfig 转换为 config.PostprocessConfig。
-func convertPostprocessConfig(p schema.ProfilePostprocessConfig) PostprocessConfig {
-	return PostprocessConfig{
-		Enabled:    p.Enabled,
-		TrimSpaces: p.TrimSpaces,
-	}
-}
-
-// convertRepairConfig 将 schema.ProfileRepairConfig 转换为 config.RepairConfig。
-func convertRepairConfig(r schema.ProfileRepairConfig) RepairConfig {
-	return RepairConfig{
-		Enabled:              r.Enabled,
-		JSONStructural:       r.JSONStructural,
-		SchemaAliases:        r.SchemaAliases,
-		Partial:              r.Partial,
-		PartialThreshold:     r.PartialThreshold,
-		PlaceholderNormalize: r.PlaceholderNormalize,
-		PromptUpgrade:        r.PromptUpgrade,
-	}
-}
-
-// convertRetryConfig 将 schema.RetryConfig 转换为 config.RetryConfig。
-func convertRetryConfig(r schema.RetryConfig) RetryConfig {
-	return RetryConfig{
-		MaxAttempts: r.MaxAttempts,
-		BackoffMs:   r.BackoffMs,
-		Jitter:      r.Jitter,
-	}
+	return nil
 }
 
 // defaultCLIConfig 返回一个硬编码的最小化默认 CLIConfig。
@@ -565,7 +482,7 @@ func defaultCLIConfig() *CLIConfig {
 				Concurrency:     4,
 				FallbackShrink:  0.5,
 				RateLimitPerSec: 5,
-				Retry:           RetryConfig{MaxAttempts: 3, BackoffMs: 2000},
+				Retry:           RetryConfig{MaxAttempts: 3, BackoffMs: 2000, Jitter: true},
 			}},
 		},
 		Glossary: GlossaryConfig{

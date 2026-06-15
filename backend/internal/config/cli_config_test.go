@@ -5,21 +5,11 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
 
 // ---------------------------------------------------------------------------
 // helpers
 // ---------------------------------------------------------------------------
-
-// setBuiltinSets 临时替换 templates.BuiltinSets，返回恢复函数。
-func setBuiltinSets(sets []templates.Set) (restore func()) {
-	old := templates.BuiltinSets
-	templates.BuiltinSets = sets
-	return func() { templates.BuiltinSets = old }
-}
 
 // writeTempFile 在 t.TempDir() 下创建文件并写入内容，返回绝对路径。
 func writeTempFile(t *testing.T, name, content string) string {
@@ -32,41 +22,10 @@ func writeTempFile(t *testing.T, name, content string) string {
 }
 
 // ---------------------------------------------------------------------------
-// Test 1: LoadCLIConfig("") 从 templates.BuiltinSets 生成默认配置
+// Test 1: LoadCLIConfig("") 从嵌入模板生成默认配置
 // ---------------------------------------------------------------------------
 
 func TestLoadCLIConfig_Default(t *testing.T) {
-	restore := setBuiltinSets([]templates.Set{{
-		PromptTemplate: templates.PromptTemplate{
-			Name:                "通用翻译",
-			SystemPromptContent: "你是 LinguaFlow 翻译引擎。",
-		},
-		TranslationProfile: templates.TranslationProfile{
-			Config: schema.TranslationProfileConfigData{
-				Split:       schema.ProfileSplitConfig{Enabled: true, Strategy: "paragraph", MaxChars: 1200},
-				Protect:     schema.ProfileProtectConfig{Enabled: true, Rules: []string{"code", "link"}},
-				Postprocess: schema.ProfilePostprocessConfig{Enabled: true, TrimSpaces: true},
-				Repair:      schema.ProfileRepairConfig{Enabled: true, JSONStructural: true, PartialThreshold: 0.5},
-			},
-		},
-		Backend: &templates.Backend{
-			Name:    "openai-default",
-			Type:    "openai",
-			Options: map[string]any{"model": "gpt-4o-mini"},
-		},
-		ExecutionPlan: &templates.ExecutionPlan{
-			Rounds: []templates.ExecutionRound{{
-				Name:           "主翻译",
-				Backend:        "openai-default",
-				PromptTemplate: "通用翻译",
-				Profile:        "通用翻译",
-				BatchSize:      1,
-				Concurrency:    4,
-			}},
-		},
-	}})
-	defer restore()
-
 	cfg, err := LoadCLIConfig("")
 	if err != nil {
 		t.Fatalf("LoadCLIConfig(\"\") error: %v", err)
@@ -81,23 +40,31 @@ func TestLoadCLIConfig_Default(t *testing.T) {
 		t.Errorf("backend type = %q, want %q", be.Type, "openai")
 	}
 
-	// ── 验证 prompt_templates ──
+	// ── 验证 prompt_templates（file 引用应被 resolveEmbeddedReferences 解析为 content）──
 	pt, ok := cfg.PromptTemplates["通用翻译"]
 	if !ok {
 		t.Fatal("expected prompt_template \"通用翻译\" in PromptTemplates map")
 	}
-	if pt.Content != "你是 LinguaFlow 翻译引擎。" {
-		t.Errorf("prompt content = %q, want %q", pt.Content, "你是 LinguaFlow 翻译引擎。")
+	if pt.Content == "" {
+		t.Error("prompt content should be resolved from embedded file, got empty")
+	}
+	if pt.File != "" {
+		t.Errorf("prompt file should be cleared after resolution, got %q", pt.File)
 	}
 
-	// ── 验证 translation_profiles ──
-	// profile key 取自 Rounds[0].Profile（与 prompt 同名时保留原 key）
-	prof, ok := cfg.TranslationProfiles["通用翻译"]
+	// ── 验证 translation_profiles（file 引用应被解析）──
+	prof, ok := cfg.TranslationProfiles["通用翻译策略"]
 	if !ok {
-		t.Fatalf("expected profile \"通用翻译\" in TranslationProfiles map; keys: %v", mapKeys(cfg.TranslationProfiles))
+		t.Fatalf("expected profile \"通用翻译策略\" in TranslationProfiles map; keys: %v", mapKeys(cfg.TranslationProfiles))
 	}
 	if prof.Split.Strategy != "paragraph" {
 		t.Errorf("profile split.strategy = %q, want %q", prof.Split.Strategy, "paragraph")
+	}
+	if prof.Split.MaxChars != 1200 {
+		t.Errorf("profile split.max_chars = %d, want 1200", prof.Split.MaxChars)
+	}
+	if !prof.Repair.Enabled {
+		t.Error("expected repair.enabled = true")
 	}
 
 	// ── 验证 execution rounds ──
@@ -111,17 +78,17 @@ func TestLoadCLIConfig_Default(t *testing.T) {
 	if r.Prompt != "通用翻译" {
 		t.Errorf("round prompt = %q, want %q", r.Prompt, "通用翻译")
 	}
+	if r.Profile != "通用翻译策略" {
+		t.Errorf("round profile = %q, want %q", r.Profile, "通用翻译策略")
+	}
+	if r.Retry.Jitter != true {
+		t.Error("expected retry.jitter = true")
+	}
 }
 
-// TestLoadCLIConfig_Default_NoProvider 验证 BuiltinSets 为空时的回退行为。
-func TestLoadCLIConfig_Default_NoProvider(t *testing.T) {
-	restore := setBuiltinSets(nil)
-	defer restore()
-
-	cfg, err := LoadCLIConfig("")
-	if err != nil {
-		t.Fatalf("LoadCLIConfig(\"\") error: %v", err)
-	}
+// TestDefaultCLIConfig_Fallback 验证 defaultCLIConfig() 回退路径的基本完整性。
+func TestDefaultCLIConfig_Fallback(t *testing.T) {
+	cfg := defaultCLIConfig()
 	if cfg.Version != 1 {
 		t.Errorf("version = %d, want 1", cfg.Version)
 	}
@@ -135,9 +102,6 @@ func TestLoadCLIConfig_Default_NoProvider(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestLoadCLIConfig_NewFormat(t *testing.T) {
-	restore := setBuiltinSets(nil)
-	defer restore()
-
 	yaml := `
 version: 1
 source_lang: en
@@ -225,9 +189,6 @@ execution:
 // ---------------------------------------------------------------------------
 
 func TestLoadCLIConfig_LegacyMigration(t *testing.T) {
-	restore := setBuiltinSets(nil)
-	defer restore()
-
 	// 旧格式：有 pipeline 字段，无 execution 字段
 	yaml := `
 version: 1
@@ -654,9 +615,6 @@ func TestMigrateFromLegacy_EmptyBackends(t *testing.T) {
 // ---------------------------------------------------------------------------
 
 func TestLoadCLIConfig_UnsupportedVersion(t *testing.T) {
-	restore := setBuiltinSets(nil)
-	defer restore()
-
 	yaml := `
 version: 99
 source_lang: auto
@@ -679,9 +637,6 @@ target_lang: zh
 
 // TestLoadCLIConfig_FileNotFound 验证文件不存在时返回 ErrConfigNotFound。
 func TestLoadCLIConfig_FileNotFound(t *testing.T) {
-	restore := setBuiltinSets(nil)
-	defer restore()
-
 	_, err := LoadCLIConfig("/nonexistent/path/linguaflow.yaml")
 	if err == nil {
 		t.Fatal("expected error, got nil")
@@ -693,9 +648,6 @@ func TestLoadCLIConfig_FileNotFound(t *testing.T) {
 
 // TestLoadCLIConfig_EnvExpansion 验证 ${ENV} 占位符展开。
 func TestLoadCLIConfig_EnvExpansion(t *testing.T) {
-	restore := setBuiltinSets(nil)
-	defer restore()
-
 	t.Setenv("TEST_API_KEY", "sk-test-12345")
 
 	yaml := `
