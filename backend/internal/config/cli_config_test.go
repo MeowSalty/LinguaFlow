@@ -41,9 +41,9 @@ func TestLoadCLIConfig_Default(t *testing.T) {
 	}
 
 	// ── 验证 prompt_templates（file 引用应被 resolveEmbeddedReferences 解析为 content）──
-	pt, ok := cfg.PromptTemplates["通用翻译"]
+	pt, ok := cfg.PromptTemplates["通用提示词"]
 	if !ok {
-		t.Fatal("expected prompt_template \"通用翻译\" in PromptTemplates map")
+		t.Fatal("expected prompt_template \"通用提示词\" in PromptTemplates map")
 	}
 	if pt.Content == "" {
 		t.Error("prompt content should be resolved from embedded file, got empty")
@@ -53,9 +53,9 @@ func TestLoadCLIConfig_Default(t *testing.T) {
 	}
 
 	// ── 验证 translation_profiles（file 引用应被解析）──
-	prof, ok := cfg.TranslationProfiles["通用翻译策略"]
+	prof, ok := cfg.TranslationProfiles["通用策略"]
 	if !ok {
-		t.Fatalf("expected profile \"通用翻译策略\" in TranslationProfiles map; keys: %v", mapKeys(cfg.TranslationProfiles))
+		t.Fatalf("expected profile \"通用策略\" in TranslationProfiles map; keys: %v", mapKeys(cfg.TranslationProfiles))
 	}
 	if prof.Split.Strategy != "paragraph" {
 		t.Errorf("profile split.strategy = %q, want %q", prof.Split.Strategy, "paragraph")
@@ -75,11 +75,11 @@ func TestLoadCLIConfig_Default(t *testing.T) {
 	if r.Backend != "openai-default" {
 		t.Errorf("round backend = %q, want %q", r.Backend, "openai-default")
 	}
-	if r.Prompt != "通用翻译" {
-		t.Errorf("round prompt = %q, want %q", r.Prompt, "通用翻译")
+	if r.Prompt != "通用提示词" {
+		t.Errorf("round prompt = %q, want %q", r.Prompt, "通用提示词")
 	}
-	if r.Profile != "通用翻译策略" {
-		t.Errorf("round profile = %q, want %q", r.Profile, "通用翻译策略")
+	if r.Profile != "通用策略" {
+		t.Errorf("round profile = %q, want %q", r.Profile, "通用策略")
 	}
 	if r.Retry.Jitter != true {
 		t.Error("expected retry.jitter = true")

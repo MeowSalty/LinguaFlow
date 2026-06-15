@@ -71,9 +71,9 @@ execution:
       # 引用 backends 中定义的后端名称
       backend: openai-default
       # 引用 prompt_templates 中定义的模板名称
-      prompt: 通用翻译
+      prompt: 通用提示词
       # 引用 translation_profiles 中定义的策略名称
-      profile: 通用翻译策略
+      profile: 通用策略
       # 一次合并发送的段数；1 表示逐段翻译，>1 为批量模式
       batch_size: 1
       # 并发翻译数
