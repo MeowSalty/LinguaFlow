@@ -15,10 +15,15 @@ type Config struct {
 	SourceLang string `yaml:"source_lang"`
 	TargetLang string `yaml:"target_lang"`
 
+	// Deprecated: CLI 端应使用 CLIConfig.Execution 替代。
+	// 保留此字段是为了 Web Server 端兼容。
 	Backends []BackendConfig `yaml:"backends"`
 
+	// Deprecated: CLI 端应使用 CLIConfig.TranslationProfiles 替代。
 	Pipeline PipelineConfig `yaml:"pipeline"`
-	Prompt   PromptConfig   `yaml:"prompt"`
+
+	// Deprecated: CLI 端应使用 CLIConfig.PromptTemplates 替代。
+	Prompt PromptConfig `yaml:"prompt"`
 
 	Glossary          GlossaryConfig `yaml:"glossary"`
 	TranslationMemory TMConfig       `yaml:"translation_memory"`

@@ -1,3 +1,15 @@
+backend:
+  name: openai-default
+  type: openai
+  options:
+    api_key: ${OPENAI_API_KEY}
+    base_url: https://api.openai.com/v1
+    model: gpt-4o-mini
+    temperature: 0.2
+    max_tokens: 0
+    timeout: 60s
+    response_format: json_schema
+
 prompt_template:
   id: -1001
   name: "通用翻译"
@@ -34,3 +46,20 @@ translation_profile:
         max_terms_per_batch: 20
         min_source_len: 2
         inline_conflict_strategy: "rewrite-local"
+
+execution_plan:
+  name: "默认执行计划"
+  description: "单轮翻译执行计划"
+  rounds:
+    - name: "主翻译"
+      backend: openai-default
+      prompt_template: -1001
+      profile: -2001
+      batch_size: 1
+      concurrency: 4
+      fallback_shrink: 0.5
+      rate_limit_per_sec: 5
+      retry:
+        max_attempts: 3
+        backoff_ms: 2000
+        jitter: true

@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/spf13/cobra"
+	"gopkg.in/yaml.v3"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 )
@@ -17,7 +18,7 @@ func newInitCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "init",
-		Short: "在当前目录生成带注释的 linguaflow.yaml",
+		Short: "在当前目录生成 linguaflow.yaml",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if path == "" {
 				path = "linguaflow.yaml"
@@ -27,7 +28,16 @@ func newInitCmd() *cobra.Command {
 			} else if err != nil && !errors.Is(err, os.ErrNotExist) {
 				return err
 			}
-			if err := os.WriteFile(path, config.DefaultYAML, 0o644); err != nil {
+
+			cliCfg := config.DefaultCLIConfigFromBuiltins()
+			data, err := yaml.Marshal(cliCfg)
+			if err != nil {
+				return fmt.Errorf("序列化配置失败：%w", err)
+			}
+
+			// 添加 YAML 头部注释
+			header := "# LinguaFlow 配置文件\n# 由 `linguaflow init` 生成。所有字段均可被 CLI flag 覆盖。\n# 优先级：flag > env > yaml > 内置默认值。\n\n"
+			if err := os.WriteFile(path, append([]byte(header), data...), 0o644); err != nil {
 				return fmt.Errorf("写入失败：%w", err)
 			}
 			fmt.Printf("已写入 %s\n", path)
