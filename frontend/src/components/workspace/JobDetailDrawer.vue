@@ -171,10 +171,7 @@ const emit = defineEmits<{
           <NButton @click="emit('update:show', false)">{{ t('workspace.common.close') }}</NButton>
           <NButton
             v-if="workspace.selectedJob"
-            :disabled="
-              workspace.selectedJob.status !== 'completed' &&
-              workspace.selectedJob.status !== 'awaiting_review'
-            "
+            :disabled="workspace.selectedJob.status !== 'completed'"
             :loading="workspace.downloadingKeys.includes(`job:${workspace.selectedJob.id}:all`)"
             type="primary"
             @click="workspace.selectedJob && emit('download', workspace.selectedJob)"

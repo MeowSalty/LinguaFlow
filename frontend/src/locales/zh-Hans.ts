@@ -500,6 +500,8 @@ const messages = {
       form: {
         executionPlan: '执行计划模板',
         executionPlanPlaceholder: '选择执行计划模板',
+        autoApprove: '翻译完成后自动审批',
+        autoApproveHint: '开启后，翻译任务完成时将自动审批通过所有段落',
         sourceLang: '源语言',
         targetLang: '目标语言',
         backendOrder: '后端顺序',
@@ -513,7 +515,6 @@ const messages = {
       status: {
         pending: '待执行',
         running: '运行中',
-        awaiting_review: '待审核',
         completed: '已完成',
         failed: '失败',
         cancelled: '已取消',

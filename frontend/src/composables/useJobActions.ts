@@ -16,6 +16,7 @@ export type JobTargetMode = 'resources' | 'segments'
 
 export interface JobFormModel {
   execution_plan_id: number | null
+  auto_approve: boolean
 }
 
 export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () => Promise<void>) {
@@ -33,6 +34,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
 
   const jobForm = reactive<JobFormModel>({
     execution_plan_id: null,
+    auto_approve: false,
   })
 
   // ── 计算属性 ──
@@ -125,6 +127,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobTargetResourceIds.value = []
     jobTargetSegmentIds.value = []
     jobForm.execution_plan_id = null
+    jobForm.auto_approve = false
   }
 
   const submitJob = async (): Promise<void> => {
@@ -135,6 +138,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     const payload: CreateTranslationJobPayload = {
       execution_plan_id: jobForm.execution_plan_id,
       resource_ids: jobTargetResourceIds.value,
+      auto_approve: jobForm.auto_approve,
     }
 
     if (jobTargetMode.value === 'segments') {

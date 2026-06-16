@@ -11,7 +11,7 @@ import {
 export const fetchTranslationJobs = async (
   projectId: number,
   params?: {
-    status?: 'pending' | 'running' | 'awaiting_review' | 'completed' | 'failed' | 'cancelled'
+    status?: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
     trigger_type?: 'manual' | 'file_update' | 'glossary_change' | 'web_edit'
     cursor?: string
     limit?: number

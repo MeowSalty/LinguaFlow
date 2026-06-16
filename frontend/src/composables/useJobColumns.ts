@@ -30,7 +30,6 @@ export function useJobColumns(actions: JobColumnActions) {
     { label: t('workspace.filters.allStatuses'), value: 'all' },
     { label: t('workspace.job.status.pending'), value: 'pending' },
     { label: t('workspace.job.status.running'), value: 'running' },
-    { label: t('workspace.job.status.awaiting_review'), value: 'awaiting_review' },
     { label: t('workspace.job.status.completed'), value: 'completed' },
     { label: t('workspace.job.status.failed'), value: 'failed' },
     { label: t('workspace.job.status.cancelled'), value: 'cancelled' },
@@ -165,7 +164,7 @@ export function useJobColumns(actions: JobColumnActions) {
               size: 'small',
               quaternary: true,
               type: 'primary',
-              disabled: row.status !== 'completed' && row.status !== 'awaiting_review',
+              disabled: row.status !== 'completed',
               loading: workspace.downloadingKeys.includes(`job:${row.id}:all`),
               onClick: (event: MouseEvent) => {
                 event.stopPropagation()

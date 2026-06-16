@@ -1143,6 +1143,11 @@ export interface components {
             execution_plan_id: number;
             resource_ids?: number[];
             segment_ids?: number[];
+            /**
+             * @description 翻译完成后是否自动审批通过所有段落
+             * @default false
+             */
+            auto_approve: boolean;
             translation_config?: {
                 [key: string]: unknown;
             };
@@ -1168,7 +1173,7 @@ export interface components {
             project_id: number;
             execution_plan_id: number;
             /** @enum {string} */
-            status: "pending" | "running" | "awaiting_review" | "completed" | "failed" | "cancelled";
+            status: "pending" | "running" | "completed" | "failed" | "cancelled";
             /** @enum {string} */
             trigger_type: "manual" | "file_update" | "glossary_change" | "web_edit";
             translation_config?: {
@@ -2783,7 +2788,7 @@ export interface operations {
     ListTranslationJobs: {
         parameters: {
             query?: {
-                status?: "pending" | "running" | "awaiting_review" | "completed" | "failed" | "cancelled";
+                status?: "pending" | "running" | "completed" | "failed" | "cancelled";
                 trigger_type?: "manual" | "file_update" | "glossary_change" | "web_edit";
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];

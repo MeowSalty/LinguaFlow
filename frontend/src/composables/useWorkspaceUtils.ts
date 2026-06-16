@@ -36,7 +36,6 @@ export const statusTagType = (status: string): StatusTagType => {
     case 'processing':
     case 'pending':
     case 'running':
-    case 'awaiting_review':
       return 'info'
     case 'error':
     case 'failed':

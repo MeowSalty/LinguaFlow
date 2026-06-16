@@ -9,6 +9,7 @@ import {
   NForm,
   NFormItem,
   NSelect,
+  NSwitch,
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
@@ -30,6 +31,7 @@ defineProps<{
   targetResourceIds: number[]
   targetSegmentIds: number[]
   executionPlanId: number | null
+  autoApprove: boolean
   formRules: FormRules
   executionPlanOptions: Array<{ label: string; value: number }>
   submitting: boolean
@@ -39,6 +41,7 @@ defineProps<{
 
 const emit = defineEmits<{
   'update:executionPlanId': [value: number | null]
+  'update:autoApprove': [value: boolean]
   submit: []
   close: []
 }>()
@@ -67,7 +70,7 @@ const emit = defineEmits<{
 
       <NForm
         ref="formRef"
-        :model="{ execution_plan_id: executionPlanId }"
+        :model="{ execution_plan_id: executionPlanId, auto_approve: autoApprove }"
         :rules="formRules"
         label-placement="top"
       >
@@ -80,6 +83,17 @@ const emit = defineEmits<{
             filterable
             @update:value="(val: number | null) => emit('update:executionPlanId', val)"
           />
+        </NFormItem>
+        <NFormItem :label="t('workspace.job.form.autoApprove')" path="auto_approve">
+          <div class="flex items-center gap-3">
+            <NSwitch
+              :value="autoApprove"
+              @update:value="(val: boolean) => emit('update:autoApprove', val)"
+            />
+            <span class="text-sm text-lf-text-muted">
+              {{ t('workspace.job.form.autoApproveHint') }}
+            </span>
+          </div>
         </NFormItem>
       </NForm>
 
