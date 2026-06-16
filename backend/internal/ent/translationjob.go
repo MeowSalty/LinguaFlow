@@ -24,7 +24,7 @@ type TranslationJob struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
-	// pending, running, awaiting_review, completed, failed, cancelled
+	// pending, running, completed, failed, cancelled
 	Status string `json:"status,omitempty"`
 	// 触发类型：manual, file_update, glossary_change, web_edit
 	TriggerType string `json:"trigger_type,omitempty"`

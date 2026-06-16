@@ -20,6 +20,7 @@ type createTranslationJobRequest struct {
 	ExecutionPlanID int   `json:"execution_plan_id"`
 	ResourceIDs     []int `json:"resource_ids"`
 	SegmentIDs      []int `json:"segment_ids"`
+	AutoApprove     bool  `json:"auto_approve"`
 }
 
 type translationJobResourceResponse struct {
@@ -74,6 +75,7 @@ func (s *Server) handleCreateTranslationJob(w http.ResponseWriter, r *http.Reque
 		ResourceIDs:     req.ResourceIDs,
 		SegmentIDs:      req.SegmentIDs,
 		ExecutionPlanID: req.ExecutionPlanID,
+		AutoApprove:     req.AutoApprove,
 	})
 	if err != nil {
 		writeTranslationJobServiceError(w, err)

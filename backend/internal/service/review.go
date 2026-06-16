@@ -8,7 +8,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 )
 
 const (
@@ -263,52 +262,6 @@ func (s *ReviewService) RetranslateRejected(ctx context.Context, actorUserID, pr
 		ClearReviewedBy().
 		ClearReviewComment().
 		Exec(ctx); err != nil {
-		return 0, err
-	}
-	return count, nil
-}
-
-// ApproveTranslationJob 批准翻译任务中所有已翻译/已编辑的段落。
-func (s *ReviewService) ApproveTranslationJob(ctx context.Context, actorUserID, jobID int) (int, error) {
-	// 加载翻译任务以获取项目 ID
-	jobRow, err := s.client.TranslationJob.Query().
-		Where(translationjob.IDEQ(jobID)).
-		WithProject().
-		WithJobResources(func(q *ent.JobResourceQuery) { q.WithResource() }).
-		Only(ctx)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return 0, ErrTranslationJobNotFound
-		}
-		return 0, err
-	}
-	projectRow, err := jobRow.Edges.ProjectOrErr()
-	if err != nil {
-		return 0, err
-	}
-	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectRow.ID, true); err != nil {
-		return 0, err
-	}
-	// 通过 JobResource 边关系获取关联的资源 ID
-	resourceIDs := make([]int, 0, len(jobRow.Edges.JobResources))
-	for _, jr := range jobRow.Edges.JobResources {
-		if res, err := jr.Edges.ResourceOrErr(); err == nil {
-			resourceIDs = append(resourceIDs, res.ID)
-		}
-	}
-	if len(resourceIDs) == 0 {
-		return 0, nil
-	}
-	count, err := s.client.Segment.Update().
-		Where(
-			segment.ResourceIDIn(resourceIDs...),
-			segment.StatusIn(SegmentStatusTranslated, SegmentStatusEdited, SegmentStatusRejected),
-		).
-		SetStatus(SegmentStatusApproved).
-		SetReviewedByID(actorUserID).
-		ClearReviewComment().
-		Save(ctx)
-	if err != nil {
 		return 0, err
 	}
 	return count, nil

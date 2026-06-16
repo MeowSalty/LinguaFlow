@@ -21,12 +21,11 @@ import (
 )
 
 const (
-	TranslationJobStatusPending        = "pending"
-	TranslationJobStatusRunning        = "running"
-	TranslationJobStatusAwaitingReview = "awaiting_review"
-	TranslationJobStatusCompleted      = "completed"
-	TranslationJobStatusFailed         = "failed"
-	TranslationJobStatusCancelled      = "cancelled"
+	TranslationJobStatusPending   = "pending"
+	TranslationJobStatusRunning   = "running"
+	TranslationJobStatusCompleted = "completed"
+	TranslationJobStatusFailed    = "failed"
+	TranslationJobStatusCancelled = "cancelled"
 
 	TranslationJobTriggerManual = "manual"
 
@@ -614,7 +613,7 @@ func deriveTranslationJobStatus(total, pendingCount, runningCount, completed, fa
 		return TranslationJobStatusRunning
 	}
 	if completed == total {
-		return TranslationJobStatusAwaitingReview
+		return TranslationJobStatusCompleted
 	}
 	if cancelled == total {
 		return TranslationJobStatusCancelled

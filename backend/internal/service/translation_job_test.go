@@ -79,3 +79,91 @@ func TestTranslationConfigJobOverrideWinsOverProjectDefaults(t *testing.T) {
 		t.Fatalf("pipeline.translate.batch_size = %v, want 16", translate["batch_size"])
 	}
 }
+
+func TestDeriveTranslationJobStatus(t *testing.T) {
+	tests := []struct {
+		name                                                  string
+		total, pending, running, completed, failed, cancelled int
+		want                                                  string
+	}{
+		{
+			name:      "zero total returns pending",
+			total:     0,
+			pending:   0,
+			running:   0,
+			completed: 0,
+			failed:    0,
+			cancelled: 0,
+			want:      TranslationJobStatusPending,
+		},
+		{
+			name:      "all pending returns pending",
+			total:     5,
+			pending:   5,
+			running:   0,
+			completed: 0,
+			failed:    0,
+			cancelled: 0,
+			want:      TranslationJobStatusPending,
+		},
+		{
+			name:      "any running returns running",
+			total:     5,
+			pending:   2,
+			running:   2,
+			completed: 1,
+			failed:    0,
+			cancelled: 0,
+			want:      TranslationJobStatusRunning,
+		},
+		{
+			name:      "all completed returns completed (not awaiting_review)",
+			total:     3,
+			pending:   0,
+			running:   0,
+			completed: 3,
+			failed:    0,
+			cancelled: 0,
+			want:      TranslationJobStatusCompleted,
+		},
+		{
+			name:      "all cancelled returns cancelled",
+			total:     3,
+			pending:   0,
+			running:   0,
+			completed: 0,
+			failed:    0,
+			cancelled: 3,
+			want:      TranslationJobStatusCancelled,
+		},
+		{
+			name:      "mixed completed and failed returns failed",
+			total:     3,
+			pending:   0,
+			running:   0,
+			completed: 2,
+			failed:    1,
+			cancelled: 0,
+			want:      TranslationJobStatusFailed,
+		},
+		{
+			name:      "mixed with partial completion returns running",
+			total:     5,
+			pending:   2,
+			running:   0,
+			completed: 2,
+			failed:    1,
+			cancelled: 0,
+			want:      TranslationJobStatusRunning,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := deriveTranslationJobStatus(tt.total, tt.pending, tt.running, tt.completed, tt.failed, tt.cancelled)
+			if got != tt.want {
+				t.Errorf("deriveTranslationJobStatus(%d,%d,%d,%d,%d,%d) = %q, want %q",
+					tt.total, tt.pending, tt.running, tt.completed, tt.failed, tt.cancelled, got, tt.want)
+			}
+		})
+	}
+}
