@@ -36,6 +36,15 @@ const executionPlanTemplatesStore = useExecutionPlanTemplatesStore()
 
 const activeTab = ref<WorkspaceTab>('resources')
 
+const resourcesTabLabel = computed(() => {
+  const base = `${t('workspace.tabs.resources')} (${workspace.resources.length})`
+  const selected = jobMgmt.selectedReadyResourceIds.value.length
+  if (selected > 0 && activeTab.value === 'resources') {
+    return `${base} · ${t('workspace.content.selectedResources', { count: selected })}`
+  }
+  return base
+})
+
 // ── projectId ──
 const projectId = computed(() => {
   const params = route.params as Partial<Record<'projectId', string | string[]>>
@@ -266,23 +275,8 @@ onMounted(() => {
     />
 
     <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-      <div
-        v-if="activeTab === 'resources' && jobMgmt.selectedReadyResourceIds.value.length > 0"
-        class="mb-3 inline-flex items-center gap-2 rounded-full bg-lf-surface-muted px-3 py-1.5 text-xs text-lf-text-muted"
-      >
-        <IconCarbonSelect-01 class="h-3.5 w-3.5" />
-        {{
-          t('workspace.content.selectedResources', {
-            count: jobMgmt.selectedReadyResourceIds.value.length,
-          })
-        }}
-      </div>
-
       <NTabs v-model:value="activeTab" animated>
-        <NTabPane
-          name="resources"
-          :tab="`${t('workspace.tabs.resources')} (${workspace.resources.length})`"
-        >
+        <NTabPane name="resources" :tab="resourcesTabLabel">
           <div class="pt-3">
             <ResourceExplorer
               v-if="projectId"

@@ -235,6 +235,31 @@ export const useResourceStore = defineStore('resource', () => {
   const selectedResources = computed<Resource[]>(() =>
     resources.value.filter((resource) => selectedResourceIds.value.includes(resource.id)),
   )
+
+  // ── Actions：资源选择 ──
+
+  /** 切换单个资源的选中状态 */
+  const toggleResourceSelection = (id: number): void => {
+    const index = selectedResourceIds.value.indexOf(id)
+    if (index === -1) {
+      selectedResourceIds.value = [...selectedResourceIds.value, id]
+    } else {
+      const copy = [...selectedResourceIds.value]
+      copy.splice(index, 1)
+      selectedResourceIds.value = copy
+    }
+  }
+
+  /** 设置选中的资源 ID 列表 */
+  const setSelectedResourceIds = (ids: number[]): void => {
+    selectedResourceIds.value = [...ids]
+  }
+
+  /** 清除所有选中 */
+  const clearSelectedResources = (): void => {
+    selectedResourceIds.value = []
+  }
+
   const availableFormats = computed<string[]>(() =>
     [...new Set(resources.value.map((resource) => resource.format).filter(Boolean))].sort(),
   )
@@ -747,6 +772,9 @@ export const useResourceStore = defineStore('resource', () => {
     deleteResource,
     downloadResource,
     downloadJobResult,
+    toggleResourceSelection,
+    setSelectedResourceIds,
+    clearSelectedResources,
     reset,
   }
 })

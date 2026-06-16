@@ -333,6 +333,9 @@ const messages = {
       refreshDirectory: '刷新目录',
       childCount: '{count} 个项目',
       currentDirectorySummary: '{directoryCount} 个文件夹 / {fileCount} 个文件',
+      headerName: '名称',
+      headerSegments: '段落',
+      headerProgress: '进度',
     },
     resource: {
       searchPlaceholder: '搜索资源路径或文件名',

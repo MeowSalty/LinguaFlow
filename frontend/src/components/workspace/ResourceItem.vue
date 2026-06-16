@@ -1,9 +1,9 @@
 ﻿<script setup lang="ts">
 import {
   NButton,
+  NCheckbox,
   NDropdown,
   NIcon,
-  NProgress,
   NTag,
   NText,
   NTooltip,
@@ -25,6 +25,8 @@ const props = defineProps<{
   deleting?: boolean
   /** 翻译进度百分比（0-100） */
   progress?: number
+  /** 是否处于选中状态 */
+  selected?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -33,6 +35,8 @@ const emit = defineEmits<{
   incrementalUpdate: [resource: Resource]
   download: [resource: Resource]
   delete: [resource: Resource]
+  /** 切换选中状态 */
+  toggleSelect: [resource: Resource]
 }>()
 
 const { t } = useI18n()
@@ -148,16 +152,28 @@ const handleDropdownSelect = (key: string) => {
 
 <template>
   <div
-    class="group rounded-lg border border-transparent bg-lf-surface/80 px-4 py-3 transition-all hover:border-lf-border-soft hover:bg-lf-surface-elevated hover:shadow-sm hover:shadow-lf-shadow"
+    class="group relative overflow-hidden rounded-lg border border-transparent bg-lf-surface/80 px-4 py-2.5 transition-all hover:border-lf-border-soft hover:bg-lf-surface-elevated hover:shadow-sm hover:shadow-lf-shadow"
   >
-    <div class="flex min-h-19 items-start gap-3">
+    <!-- 进度背景层 -->
+    <div
+      class="pointer-events-none absolute inset-y-0 left-0 bg-emerald-500/10 transition-all duration-500"
+      :style="{ width: `${props.progress ?? 0}%` }"
+    />
+    <div class="flex min-h-14 items-center gap-3">
+      <NCheckbox
+        :checked="props.selected"
+        :disabled="props.resource.status !== 'ready'"
+        class="shrink-0"
+        @update:checked="emit('toggleSelect', props.resource)"
+      />
       <div
-        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300"
+        class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300"
       >
-        <NIcon size="18"><IconCarbonDocument /></NIcon>
+        <NIcon size="14"><IconCarbonDocument /></NIcon>
       </div>
-      <div class="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div class="flex min-w-0 flex-1 items-center justify-between gap-3">
         <div class="min-w-0 flex-1">
+          <!-- 主行：文件名 + 状态 + 段落数 -->
           <div class="flex min-w-0 items-center gap-2">
             <NTooltip trigger="hover" placement="top-start">
               <template #trigger>
@@ -172,15 +188,19 @@ const handleDropdownSelect = (key: string) => {
             </NTooltip>
             <NTag
               class="shrink-0"
-              size="small"
+              size="tiny"
               :type="statusTagType(props.resource.status)"
               :bordered="false"
             >
               {{ getStatusLabel(props.resource.status) }}
             </NTag>
+            <span class="shrink-0 text-xs text-lf-text-muted">
+              {{ props.resource.total_segments }} {{ t('workspace.resource.columns.segments') }}
+            </span>
           </div>
+          <!-- 辅助行：路径 + 时间 + 格式 -->
           <div
-            class="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-lf-text-muted"
+            class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-lf-text-subtle"
           >
             <NTooltip
               v-if="props.resource.path !== props.resource.name"
@@ -189,82 +209,58 @@ const handleDropdownSelect = (key: string) => {
             >
               <template #trigger>
                 <span
-                  class="inline-flex min-w-0 max-w-full items-center gap-1.5 sm:max-w-[min(36rem,50vw)]"
+                  class="inline-flex min-w-0 max-w-[24rem] items-center gap-1 truncate"
                   :title="props.resource.path"
                 >
-                  <IconCarbonTreeView class="h-3.5 w-3.5 shrink-0 text-lf-text-subtle" />
+                  <IconCarbonTreeView class="h-3 w-3 shrink-0" />
                   <span class="truncate">{{ props.resource.path }}</span>
                 </span>
               </template>
               <span class="block max-w-sm break-all">{{ props.resource.path }}</span>
             </NTooltip>
-            <span class="inline-flex shrink-0 items-center gap-1.5">
-              <IconCarbonRow class="h-3.5 w-3.5 text-lf-text-subtle" />
-              {{ props.resource.total_segments }} {{ t('workspace.resource.columns.segments') }}
-            </span>
-            <span class="inline-flex shrink-0 items-center gap-1.5">
-              <IconCarbonTime class="h-3.5 w-3.5 text-lf-text-subtle" />
-              {{ formatDate(props.resource.updated_at) }}
-            </span>
+            <span class="shrink-0">{{ formatDate(props.resource.updated_at) }}</span>
             <span
-              class="shrink-0 rounded-full bg-lf-surface-muted px-2 py-0.5 text-[11px] uppercase tracking-wide text-lf-text-subtle dark:bg-lf-surface-elevated dark:text-slate-300"
+              class="shrink-0 rounded bg-lf-surface-muted px-1.5 py-px text-[10px] uppercase tracking-wider"
             >
               {{ props.resource.format || '-' }}
             </span>
+            <span v-if="props.progress !== undefined" class="text-[10px] text-emerald-500/80">
+              {{ props.progress }}%
+            </span>
           </div>
+          <!-- 错误信息 -->
           <NText
             v-if="props.resource.status === 'error' && props.resource.error_message"
             type="error"
-            class="mt-1 block truncate text-xs"
+            class="mt-0.5 block truncate text-xs"
             :title="props.resource.error_message"
           >
             {{ props.resource.error_message }}
           </NText>
-          <!-- 翻译进度条 -->
-          <div
-            v-if="props.progress !== undefined && props.resource.total_segments > 0"
-            class="mt-2 flex items-center gap-2"
-          >
-            <NProgress
-              type="line"
-              :percentage="props.progress"
-              :show-indicator="false"
-              :height="4"
-              :border-radius="2"
-              :color="props.progress > 0 ? undefined : '#94a3b8'"
-              :rail-color="props.progress > 0 ? undefined : '#e2e8f0'"
-              status="success"
-              class="w-32"
-            />
-            <span class="whitespace-nowrap text-[11px] text-lf-text-subtle"
-              >{{ props.progress }}%</span
-            >
-          </div>
         </div>
 
-        <!-- 操作按钮 -->
-        <div
-          class="flex w-full shrink-0 items-center justify-end gap-1 opacity-100 transition-opacity sm:w-auto md:opacity-80 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
-        >
+        <!-- 操作按钮：始终可见 -->
+        <div class="flex shrink-0 items-center gap-1">
           <NButton
-            class="hidden sm:inline-flex"
-            size="small"
+            size="tiny"
             quaternary
             type="primary"
             @click="emit('openSegments', props.resource)"
           >
-            {{ t('workspace.resource.actions.segments') }}
+            <template #icon>
+              <NIcon size="14"><IconCarbonView /></NIcon>
+            </template>
           </NButton>
           <NDropdown :options="dropdownOptions" trigger="click" @select="handleDropdownSelect">
             <NButton
-              size="small"
+              size="tiny"
               quaternary
               :loading="
                 props.replacing || props.incrementalUpdating || props.downloading || props.deleting
               "
             >
               <template #icon>
-                <NIcon><IconCarbonOverflowMenuHorizontal /></NIcon>
+                <NIcon size="14"><IconCarbonOverflowMenuHorizontal /></NIcon>
               </template>
             </NButton>
           </NDropdown>

@@ -147,6 +147,9 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     uploadResources,
     downloadResource,
     downloadJobResult,
+    toggleResourceSelection,
+    setSelectedResourceIds,
+    clearSelectedResources,
   } = resourceStore
 
   // ── 直接委托的段落方法 ──
@@ -305,6 +308,9 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     downloadJobResult,
     setActiveResource,
     preloadDirectoryProgress,
+    toggleResourceSelection,
+    setSelectedResourceIds,
+    clearSelectedResources,
     reset,
   }
 })

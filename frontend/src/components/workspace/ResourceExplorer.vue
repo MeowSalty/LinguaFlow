@@ -2,6 +2,7 @@
 import {
   NAlert,
   NButton,
+  NCheckbox,
   NEmpty,
   NIcon,
   NModal,
@@ -61,12 +62,50 @@ const isEmpty = computed(
   () => !workspace.loadingResourceTree && workspace.currentDirectoryChildren.length === 0,
 )
 
-const currentDirectorySummary = computed(() =>
-  t('workspace.explorer.currentDirectorySummary', {
-    fileCount: resourceItems.value.length,
-    directoryCount: directories.value.length,
-  }),
+// ── 资源多选 ──
+
+/** 当前目录中状态为 ready 的资源列表 */
+const currentDirectoryReadyResources = computed(() =>
+  resourceItems.value
+    .filter((item) => item.resource?.status === 'ready')
+    .map((item) => item.resource!),
 )
+
+/** 当前目录中已选中的就绪资源 ID 集合（用于快速查找） */
+const selectedReadyIdSet = computed(() => new Set(workspace.selectedResourceIds))
+
+/** 当前目录就绪资源是否全选 */
+const isCurrentDirAllSelected = computed(
+  () =>
+    currentDirectoryReadyResources.value.length > 0 &&
+    currentDirectoryReadyResources.value.every((r) => selectedReadyIdSet.value.has(r.id)),
+)
+
+/** 当前目录是否有部分选中 */
+const isCurrentDirIndeterminate = computed(
+  () =>
+    !isCurrentDirAllSelected.value &&
+    currentDirectoryReadyResources.value.some((r) => selectedReadyIdSet.value.has(r.id)),
+)
+
+const toggleCurrentDirSelectAll = (): void => {
+  const readyIds = currentDirectoryReadyResources.value.map((r) => r.id)
+  if (isCurrentDirAllSelected.value) {
+    // 取消选中当前目录的就绪资源
+    const removeSet = new Set(readyIds)
+    workspace.setSelectedResourceIds(
+      workspace.selectedResourceIds.filter((id: number) => !removeSet.has(id)),
+    )
+  } else {
+    // 选中当前目录所有就绪资源（与已有选中合并去重）
+    const merged = new Set([...workspace.selectedResourceIds, ...readyIds])
+    workspace.setSelectedResourceIds([...merged])
+  }
+}
+
+const handleToggleSelect = (resource: Resource): void => {
+  workspace.toggleResourceSelection(resource.id)
+}
 
 // ── 生命周期 ──
 
@@ -438,64 +477,54 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
 
 <template>
   <div class="space-y-4" @dragover="handleDragOver" @dragleave="handleDragLeave" @drop="handleDrop">
-    <!-- 资源路径 + 操作栏 -->
+    <!-- 资源路径 + 操作栏：平铺式工具栏 -->
     <div
-      class="overflow-hidden rounded-2xl border border-lf-border-soft bg-lf-surface shadow-sm shadow-lf-shadow/40"
+      class="flex items-center gap-3 rounded-xl border border-lf-border-soft bg-lf-surface px-4 py-2.5"
     >
-      <div class="flex flex-col gap-3 px-4 py-3 lg:flex-row lg:items-center lg:justify-between">
-        <div class="flex min-w-0 flex-1 items-center gap-3">
-          <NButton
-            quaternary
-            circle
-            size="small"
-            class="shrink-0 text-lf-text-muted hover:text-lf-text-strong"
-            :loading="workspace.loadingResourceTree"
-            :title="t('workspace.explorer.refreshDirectory')"
-            :aria-label="t('workspace.explorer.refreshDirectory')"
-            @click="handleRefreshDirectory"
-          >
+      <NButton
+        v-if="workspace.currentPath"
+        quaternary
+        circle
+        size="small"
+        class="shrink-0 text-lf-text-muted hover:text-lf-text-strong"
+        :title="t('workspace.explorer.backToParent')"
+        :aria-label="t('workspace.explorer.backToParent')"
+        @click="handleNavigateUp"
+      >
+        <template #icon>
+          <NIcon size="16"><IconCarbonArrowUp /></NIcon>
+        </template>
+      </NButton>
+      <div v-if="workspace.currentPath" class="h-4 border-l border-lf-border-soft" />
+      <ResourceBreadcrumb
+        class="min-w-0 flex-1"
+        :items="workspace.breadcrumbs"
+        :project-name="workspace.project?.name ?? ''"
+        @navigate="handleNavigate"
+      />
+      <div class="flex shrink-0 items-center gap-1.5">
+        <NButton
+          quaternary
+          circle
+          size="small"
+          class="text-lf-text-muted hover:text-lf-text-strong"
+          :loading="workspace.loadingResourceTree"
+          :title="t('workspace.explorer.refreshDirectory')"
+          :aria-label="t('workspace.explorer.refreshDirectory')"
+          @click="handleRefreshDirectory"
+        >
+          <template #icon>
+            <NIcon size="16"><IconCarbonRenew /></NIcon>
+          </template>
+        </NButton>
+        <NUpload multiple :show-file-list="false" :custom-request="handleUpload">
+          <NButton type="primary" size="small" strong :loading="workspace.hasActiveUploads">
             <template #icon>
-              <NIcon><IconCarbonRenew /></NIcon>
+              <NIcon size="16"><IconCarbonUpload /></NIcon>
             </template>
+            {{ t('workspace.resource.actions.upload') }}
           </NButton>
-          <div class="min-w-0 flex-1">
-            <div
-              class="flex max-w-full items-center gap-2 overflow-hidden rounded-xl border border-lf-border-soft bg-lf-surface-muted/45 px-2 py-2"
-            >
-              <NButton
-                v-if="workspace.currentPath"
-                quaternary
-                circle
-                size="small"
-                class="shrink-0 text-lf-text-muted hover:text-lf-text-strong"
-                :title="t('workspace.explorer.backToParent')"
-                :aria-label="t('workspace.explorer.backToParent')"
-                @click="handleNavigateUp"
-              >
-                <template #icon>
-                  <NIcon><IconCarbonArrowUp /></NIcon>
-                </template>
-              </NButton>
-              <div v-if="workspace.currentPath" class="h-5 border-l border-lf-border-soft" />
-              <ResourceBreadcrumb
-                class="min-w-0 flex-1"
-                :items="workspace.breadcrumbs"
-                :project-name="workspace.project?.name ?? ''"
-                @navigate="handleNavigate"
-              />
-            </div>
-          </div>
-        </div>
-        <div class="flex shrink-0 flex-nowrap items-center gap-2 lg:justify-end">
-          <NUpload multiple :show-file-list="false" :custom-request="handleUpload">
-            <NButton type="primary" size="small" strong :loading="workspace.hasActiveUploads">
-              <template #icon>
-                <NIcon><IconCarbonUpload /></NIcon>
-              </template>
-              {{ t('workspace.resource.actions.upload') }}
-            </NButton>
-          </NUpload>
-        </div>
+        </NUpload>
       </div>
     </div>
 
@@ -646,47 +675,58 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
 
     <!-- 目录 + 资源列表 -->
     <template v-else>
-      <div class="rounded-xl bg-lf-surface-muted/35 p-2">
-        <div class="mb-2 flex items-center justify-between px-2 pt-0.5 text-xs text-lf-text-muted">
-          <span>{{ currentDirectorySummary }}</span>
-        </div>
-
-        <!-- 目录列表 -->
-        <div v-if="directories.length > 0" class="space-y-1.5">
-          <DirectoryItem
-            v-for="dir in directories"
-            :key="dir.path"
-            :name="dir.name"
-            :path="dir.path"
-            :child-count="dir.childCount ?? 0"
-            @open="handleNavigate"
-          />
-        </div>
-
-        <!-- 分隔线 -->
-        <div
-          v-if="directories.length > 0 && resourceItems.length > 0"
-          class="my-2 border-t border-lf-border-soft"
+      <!-- 表头行 -->
+      <div
+        v-if="resourceItems.length > 0"
+        class="flex items-center gap-3 border-b border-lf-border-soft px-4 py-2 text-xs font-medium text-lf-text-muted"
+      >
+        <NCheckbox
+          v-if="currentDirectoryReadyResources.length > 0"
+          :checked="isCurrentDirAllSelected"
+          :indeterminate="isCurrentDirIndeterminate"
+          class="shrink-0"
+          @update:checked="toggleCurrentDirSelectAll"
         />
+        <div class="w-7 shrink-0" />
+        <!-- 图标占位 -->
+        <span class="flex-1">{{ t('workspace.explorer.headerName') }}</span>
+        <span class="w-16 text-right">{{ t('workspace.explorer.headerSegments') }}</span>
+        <span class="w-20 text-right">{{ t('workspace.explorer.headerProgress') }}</span>
+        <div class="w-14" />
+        <!-- 操作占位 -->
+      </div>
 
-        <!-- 资源列表 -->
-        <div v-if="resourceItems.length > 0" class="space-y-1.5">
-          <ResourceItem
-            v-for="item in resourceItems"
-            :key="item.path"
-            :resource="item.resource!"
-            :replacing="workspace.replacingResourceIds.includes(item.resource!.id)"
-            :incremental-updating="workspace.incrementalUpdatingIds.includes(item.resource!.id)"
-            :downloading="workspace.downloadingKeys.includes(`resource:${item.resource!.id}`)"
-            :deleting="workspace.deletingResourceIds.includes(item.resource!.id)"
-            :progress="workspace.getResourceProgress(item.resource!.id)"
-            @open-segments="(r) => emit('openSegments', r)"
-            @replace="(r) => chooseReplacementFile(r.id)"
-            @incremental-update="(r) => chooseIncrementalUpdateFile(r.id)"
-            @download="(r) => void downloadResource(r)"
-            @delete="(r) => void deleteResource(r)"
-          />
-        </div>
+      <!-- 目录列表 -->
+      <div v-if="directories.length > 0" class="space-y-1">
+        <DirectoryItem
+          v-for="dir in directories"
+          :key="dir.path"
+          :name="dir.name"
+          :path="dir.path"
+          :child-count="dir.childCount ?? 0"
+          @open="handleNavigate"
+        />
+      </div>
+
+      <!-- 资源列表 -->
+      <div v-if="resourceItems.length > 0" class="space-y-1">
+        <ResourceItem
+          v-for="item in resourceItems"
+          :key="item.path"
+          :resource="item.resource!"
+          :replacing="workspace.replacingResourceIds.includes(item.resource!.id)"
+          :incremental-updating="workspace.incrementalUpdatingIds.includes(item.resource!.id)"
+          :downloading="workspace.downloadingKeys.includes(`resource:${item.resource!.id}`)"
+          :deleting="workspace.deletingResourceIds.includes(item.resource!.id)"
+          :progress="workspace.getResourceProgress(item.resource!.id)"
+          :selected="selectedReadyIdSet.has(item.resource!.id)"
+          @open-segments="(r) => emit('openSegments', r)"
+          @replace="(r) => chooseReplacementFile(r.id)"
+          @incremental-update="(r) => chooseIncrementalUpdateFile(r.id)"
+          @download="(r) => void downloadResource(r)"
+          @delete="(r) => void deleteResource(r)"
+          @toggle-select="handleToggleSelect"
+        />
       </div>
     </template>
 
