@@ -16,14 +16,18 @@ defineProps<{
 }>()
 
 const emit = defineEmits<{
-  create: []
   detail: [job: TranslationJob]
   cancel: [job: TranslationJob]
   retry: [job: TranslationJob]
   download: [job: TranslationJob]
 }>()
 
-const { jobColumns, jobStatusOptions } = useJobColumns()
+const { jobColumns, jobStatusOptions } = useJobColumns({
+  openJobDetail: (job) => emit('detail', job),
+  cancelJob: (job) => emit('cancel', job),
+  retryJob: (job) => emit('retry', job),
+  downloadJob: (job) => emit('download', job),
+})
 </script>
 
 <template>
@@ -50,9 +54,6 @@ const { jobColumns, jobStatusOptions } = useJobColumns()
             @click="projectId && workspace.loadJobs(projectId)"
           >
             {{ t('workspace.actions.refresh') }}
-          </NButton>
-          <NButton type="primary" @click="emit('create')">
-            {{ t('workspace.job.actions.create') }}
           </NButton>
         </div>
       </div>

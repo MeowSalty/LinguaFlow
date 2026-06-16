@@ -15,7 +15,7 @@ import { useI18n } from 'vue-i18n'
 import { type ApiSchemas } from '@/api/client'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 
-import type { JobTargetMode } from '@/composables/useJobManagement'
+import type { JobTargetMode } from '@/composables/useJobActions'
 
 type ExecutionPlanTemplate = ApiSchemas['ExecutionPlanTemplate']
 

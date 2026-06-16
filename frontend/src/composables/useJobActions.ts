@@ -148,7 +148,6 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
       if (onJobCreated) {
         await onJobCreated()
       }
-      await workspace.loadJobs(projectId.value)
     } catch (error) {
       console.error(error)
       message.error(workspace.actionError || t('workspace.messages.jobCreateFailed'))

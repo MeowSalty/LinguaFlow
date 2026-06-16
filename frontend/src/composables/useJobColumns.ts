@@ -11,12 +11,18 @@ import {
   getJobStatusLabel,
   getJobTriggerLabel,
   statusTagType,
-  triggerBrowserDownload,
 } from '@/composables/useWorkspaceUtils'
 
 type TranslationJob = ApiSchemas['TranslationJob']
 
-export function useJobColumns() {
+export interface JobColumnActions {
+  openJobDetail: (job: TranslationJob) => void
+  cancelJob: (job: TranslationJob) => void
+  retryJob: (job: TranslationJob) => void
+  downloadJob: (job: TranslationJob) => void
+}
+
+export function useJobColumns(actions: JobColumnActions) {
   const workspace = useProjectWorkspaceStore()
 
   // ── 任务状态下拉选项 ──
@@ -29,25 +35,6 @@ export function useJobColumns() {
     { label: t('workspace.job.status.failed'), value: 'failed' },
     { label: t('workspace.job.status.cancelled'), value: 'cancelled' },
   ])
-
-  // ── 列内动作处理器（轻量级，直接调用 store 方法） ──
-  const handleOpenJobDetail = async (job: TranslationJob): Promise<void> => {
-    workspace.selectedJob = job
-    await workspace.loadJobDetail(job.id)
-  }
-
-  const handleCancelJob = async (job: TranslationJob): Promise<void> => {
-    await workspace.cancelJob(job.id)
-  }
-
-  const handleRetryJob = async (job: TranslationJob): Promise<void> => {
-    await workspace.retryJob(job.id)
-  }
-
-  const handleDownloadJob = async (job: TranslationJob): Promise<void> => {
-    const file = await workspace.downloadJobResult(job.id)
-    triggerBrowserDownload(file, `translation-job-${job.id}.zip`)
-  }
 
   // ── 表格列定义 ──
   const jobColumns = computed<DataTableColumns<TranslationJob>>(() => [
@@ -139,7 +126,7 @@ export function useJobColumns() {
               type: 'primary',
               onClick: (event: MouseEvent) => {
                 event.stopPropagation()
-                void handleOpenJobDetail(row)
+                actions.openJobDetail(row)
               },
             },
             { default: () => t('workspace.job.actions.details') },
@@ -153,7 +140,7 @@ export function useJobColumns() {
               loading: workspace.cancellingJobIds.includes(row.id),
               onClick: (event: MouseEvent) => {
                 event.stopPropagation()
-                void handleCancelJob(row)
+                actions.cancelJob(row)
               },
             },
             { default: () => t('workspace.job.actions.cancel') },
@@ -167,7 +154,7 @@ export function useJobColumns() {
               loading: workspace.retryingJobIds.includes(row.id),
               onClick: (event: MouseEvent) => {
                 event.stopPropagation()
-                void handleRetryJob(row)
+                actions.retryJob(row)
               },
             },
             { default: () => t('workspace.job.actions.retry') },
@@ -182,7 +169,7 @@ export function useJobColumns() {
               loading: workspace.downloadingKeys.includes(`job:${row.id}:all`),
               onClick: (event: MouseEvent) => {
                 event.stopPropagation()
-                void handleDownloadJob(row)
+                actions.downloadJob(row)
               },
             },
             { default: () => t('workspace.common.download') },

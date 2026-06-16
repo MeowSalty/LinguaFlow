@@ -314,8 +314,10 @@ onMounted(() => {
         <NTabPane name="jobs" :tab="`${t('workspace.tabs.jobs')} (${workspace.jobs.length})`">
           <JobPanel
             :project-id="projectId"
-            @create="jobMgmt.openResourceJobDrawer()"
             @detail="(job) => jobMgmt.openJobDetail(job)"
+            @cancel="(job) => jobMgmt.cancelJob(job)"
+            @retry="(job) => jobMgmt.retryJob(job)"
+            @download="(job) => jobMgmt.downloadJob(job)"
           />
         </NTabPane>
 
