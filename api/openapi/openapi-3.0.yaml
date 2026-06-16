@@ -1033,7 +1033,6 @@ paths:
             enum:
               - pending
               - running
-              - awaiting_review
               - completed
               - failed
               - cancelled
@@ -2097,6 +2096,10 @@ components:
           items:
             type: integer
             minimum: 1
+        auto_approve:
+          type: boolean
+          default: false
+          description: 翻译完成后是否自动审批通过所有段落
         translation_config:
           type: object
           additionalProperties: true
@@ -2171,7 +2174,6 @@ components:
           enum:
             - pending
             - running
-            - awaiting_review
             - completed
             - failed
             - cancelled
