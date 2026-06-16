@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log/slog"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -120,10 +121,19 @@ func (s *Translate) Run(ctx context.Context, doc *pipeline.Document) error {
 	rep.StageStart("translate", len(pending))
 	defer rep.StageDone()
 
-	return s.runRounds(ctx, doc, pending, logger)
+	unresolvedCount, err := s.runRounds(ctx, doc, pending, logger)
+	if err != nil {
+		return err
+	}
+	// 将未解决段数量注入到文档变量，供上层引擎读取。
+	if doc.Vars == nil {
+		doc.Vars = map[string]any{}
+	}
+	doc.Vars["_translate_unresolved_count"] = unresolvedCount
+	return nil
 }
 
-func (s *Translate) runRounds(ctx context.Context, doc *pipeline.Document, pending []int, logger *slog.Logger) error {
+func (s *Translate) runRounds(ctx context.Context, doc *pipeline.Document, pending []int, logger *slog.Logger) (int, error) {
 	remaining := append([]int(nil), pending...)
 	rep := s.reporter()
 
@@ -157,7 +167,7 @@ func (s *Translate) runRounds(ctx context.Context, doc *pipeline.Document, pendi
 			mu.Unlock()
 			return nil
 		}); err != nil {
-			return err
+			return 0, err
 		}
 
 		sort.Ints(nextPending)
@@ -169,14 +179,20 @@ func (s *Translate) runRounds(ctx context.Context, doc *pipeline.Document, pendi
 		remaining = nextPending
 	}
 
-	for _, idx := range remaining {
-		doc.Segments[idx].Target = doc.Segments[idx].Source
-		rep.SegmentDone()
-	}
+	// 不再为失败段填充原文；记录失败段索引供上层使用。
 	if len(remaining) > 0 {
-		logger.Warn("translate plan exhausted, keep source for unresolved segments", "count", len(remaining))
+		failedIndices := make([]string, 0, len(remaining))
+		for _, idx := range remaining {
+			failedIndices = append(failedIndices, strconv.Itoa(idx))
+			rep.SegmentDone()
+		}
+		if doc.Vars == nil {
+			doc.Vars = map[string]any{}
+		}
+		doc.Vars["_translate_failed_indices"] = strings.Join(failedIndices, ",")
+		logger.Warn("translate plan exhausted, keeping unresolved segments as-is", "count", len(remaining))
 	}
-	return nil
+	return len(remaining), nil
 }
 
 func buildContinuousPendingBatches(pending []int, target int) [][]int {

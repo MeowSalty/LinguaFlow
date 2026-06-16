@@ -165,6 +165,12 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
 	}
+	// 所有待翻译段均未解决，说明 AI 后端配置错误或服务不可用。
+	if result.UnresolvedCount > 0 && result.UnresolvedCount >= len(selectedRows) {
+		err := fmt.Errorf("all %d segments failed to translate: AI backend configuration error or service unavailable", result.UnresolvedCount)
+		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
+		return nil
+	}
 	if err := r.updateTranslatedSegments(ctx, selectedIDsByIndex, result.Segments, autoApprove); err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
@@ -325,6 +331,9 @@ func (r *TranslationRunner) updateTranslatedSegments(ctx context.Context, select
 		status = service.SegmentStatusApproved
 	}
 	for _, item := range segments {
+		if item.Failed {
+			continue
+		}
 		segmentID, ok := selectedIDsByIndex[item.Index]
 		if !ok {
 			continue

@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -37,11 +39,13 @@ type SegmentResult struct {
 	Index      int
 	SourceText string
 	TargetText string
+	Failed     bool // true 表示该段在所有轮次中均未成功翻译
 }
 
 type TranslateResult struct {
-	SegmentCount int
-	Segments     []SegmentResult
+	SegmentCount    int
+	Segments        []SegmentResult
+	UnresolvedCount int // 所有轮次结束后仍未解决（被原文填充）的段数量
 }
 
 // NewWithOptions 按 Options 构造 Engine。rounds 必须非空，每轮 backends 必须非空。
@@ -188,6 +192,23 @@ func (e *Engine) TranslateWithResult(ctx context.Context, job TranslateJob) (Tra
 	if err := pipe.Run(ctx, doc); err != nil {
 		return result, err
 	}
+	// 从文档变量中读取未解决段数量（由 translate stage 注入）。
+	if v, ok := doc.Vars["_translate_unresolved_count"]; ok {
+		if n, ok := v.(int); ok {
+			result.UnresolvedCount = n
+		}
+	}
+	// 从文档变量中读取失败段索引集合（由 translate stage 注入）。
+	failedSet := make(map[int]struct{})
+	if v, ok := doc.Vars["_translate_failed_indices"]; ok {
+		if s, ok := v.(string); ok && s != "" {
+			for _, idxStr := range strings.Split(s, ",") {
+				if idx, err := strconv.Atoi(strings.TrimSpace(idxStr)); err == nil {
+					failedSet[idx] = struct{}{}
+				}
+			}
+		}
+	}
 	if len(selectedSegments) > 0 {
 		restoreUnselectedTargets(doc, selectedSegments, job.ExistingTargets)
 	}
@@ -197,10 +218,12 @@ func (e *Engine) TranslateWithResult(ctx context.Context, job TranslateJob) (Tra
 		if source == "" {
 			source = seg.Source
 		}
+		_, isFailed := failedSet[i]
 		result.Segments = append(result.Segments, SegmentResult{
 			Index:      i,
 			SourceText: source,
 			TargetText: seg.Target,
+			Failed:     isFailed,
 		})
 	}
 
