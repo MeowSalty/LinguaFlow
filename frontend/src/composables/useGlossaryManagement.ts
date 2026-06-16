@@ -87,7 +87,7 @@ export function useGlossaryManagement(projectId: Ref<number | null>) {
           ? h(
               NTag,
               { size: 'small', type: 'info', bordered: false },
-              { default: () => t('workspace.segment.status.reviewed') },
+              { default: () => t('workspace.glossary.columns.caseSensitive') },
             )
           : h(NText, { depth: 3 }, { default: () => '—' }),
     },
