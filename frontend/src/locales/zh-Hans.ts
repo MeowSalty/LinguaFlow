@@ -290,6 +290,8 @@ const messages = {
     },
     selection: {
       translate: '翻译选中',
+      approve: '通过',
+      reject: '拒绝',
       clear: '取消选择',
     },
     sections: {
@@ -456,6 +458,7 @@ const messages = {
         translated: '已翻译',
         reviewed: '已审核',
         rejected: '已驳回',
+        approved: '已批准',
       },
     },
     job: {
@@ -982,6 +985,8 @@ const messages = {
       downloadResourceFailed: '下载资源失败',
       fetchSegmentsFailed: '获取段落列表失败',
       updateSegmentFailed: '更新段落失败',
+      batchReviewSegmentsFailed: '批量审核段落失败',
+      approveAllSegmentsFailed: '全部批准段落失败',
       fetchTranslationJobsFailed: '获取翻译任务失败',
       fetchTranslationJobFailed: '获取翻译任务详情失败',
       createTranslationJobFailed: '创建翻译任务失败',

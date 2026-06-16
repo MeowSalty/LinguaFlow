@@ -4,6 +4,7 @@ import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
+import { batchReviewSegments } from '@/api/projects'
 import ResourceExplorer from '@/components/workspace/ResourceExplorer.vue'
 import SelectionActionBar from '@/components/workspace/SelectionActionBar.vue'
 import WorkspaceMetricsBar from '@/components/workspace/WorkspaceMetricsBar.vue'
@@ -109,6 +110,16 @@ const handleTranslateSelectedSegments = (): void => {
 }
 
 const handleClearSelectedSegments = (): void => {
+  segmentPanelRef.value?.clearSelectedSegments()
+}
+
+const handleBatchReview = async (action: 'approve' | 'reject'): Promise<void> => {
+  if (!projectId.value || !workspace.activeResourceId) return
+  const segmentIds = segmentPanelRef.value?.selectedSegmentIds as number[] | undefined
+  if (!segmentIds || segmentIds.length === 0) return
+
+  await batchReviewSegments(projectId.value, workspace.activeResourceId, segmentIds, action)
+  await reloadSegments()
   segmentPanelRef.value?.clearSelectedSegments()
 }
 
@@ -404,8 +415,12 @@ onMounted(() => {
       v-show="activeTab === 'segments'"
       :count="selectedSegmentCount"
       :can-translate="selectedSegmentCount > 0"
+      :show-review="true"
+      :can-review="selectedSegmentCount > 0"
       @translate="handleTranslateSelectedSegments"
       @clear="handleClearSelectedSegments"
+      @approve="handleBatchReview('approve')"
+      @reject="handleBatchReview('reject')"
     />
   </div>
 </template>

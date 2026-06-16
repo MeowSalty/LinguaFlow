@@ -444,3 +444,45 @@ export const updateResourceSegment = async (
 
   return data
 }
+
+export const batchReviewSegments = async (
+  projectId: number,
+  resourceId: number,
+  segmentIds: number[],
+  action: 'approve' | 'reject',
+  comment?: string,
+  client: ApiClient = apiClient,
+): Promise<ApiSchemas['BatchReviewResponse']> => {
+  const { data, error, response } = await client.POST(
+    '/projects/{projectId}/resources/{resourceId}/segments/batch-review',
+    {
+      params: { path: { projectId, resourceId } },
+      body: { segment_ids: segmentIds, action, comment },
+    },
+  )
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.batchReviewSegmentsFailed'), error, response)
+  }
+
+  return data
+}
+
+export const approveAllSegments = async (
+  projectId: number,
+  resourceId: number,
+  client: ApiClient = apiClient,
+): Promise<ApiSchemas['ApproveAllResponse']> => {
+  const { data, error, response } = await client.POST(
+    '/projects/{projectId}/resources/{resourceId}/segments/approve-all',
+    {
+      params: { path: { projectId, resourceId } },
+    },
+  )
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.approveAllSegmentsFailed'), error, response)
+  }
+
+  return data
+}

@@ -4,14 +4,24 @@ import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
 
-defineProps<{
-  count: number
-  canTranslate: boolean
-}>()
+withDefaults(
+  defineProps<{
+    count: number
+    canTranslate: boolean
+    showReview?: boolean
+    canReview?: boolean
+  }>(),
+  {
+    showReview: false,
+    canReview: false,
+  },
+)
 
 defineEmits<{
   translate: []
   clear: []
+  approve: []
+  reject: []
 }>()
 </script>
 
@@ -43,6 +53,32 @@ defineEmits<{
             </template>
             {{ t('workspace.selection.translate') }}
           </NButton>
+          <template v-if="showReview">
+            <NButton
+              size="small"
+              type="success"
+              ghost
+              :disabled="!canReview"
+              @click="$emit('approve')"
+            >
+              <template #icon>
+                <NIcon size="14"><IconCarbonCheckmark /></NIcon>
+              </template>
+              {{ t('workspace.selection.approve') }}
+            </NButton>
+            <NButton
+              size="small"
+              type="error"
+              ghost
+              :disabled="!canReview"
+              @click="$emit('reject')"
+            >
+              <template #icon>
+                <NIcon size="14"><IconCarbonClose /></NIcon>
+              </template>
+              {{ t('workspace.selection.reject') }}
+            </NButton>
+          </template>
           <NButton quaternary size="small" @click="$emit('clear')">
             {{ t('workspace.selection.clear') }}
           </NButton>
