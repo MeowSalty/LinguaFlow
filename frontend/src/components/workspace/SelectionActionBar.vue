@@ -43,11 +43,7 @@ defineEmits<{
             </template>
             {{ t('workspace.selection.translate') }}
           </NButton>
-          <NButton
-            quaternary
-            size="small"
-            @click="$emit('clear')"
-          >
+          <NButton quaternary size="small" @click="$emit('clear')">
             {{ t('workspace.selection.clear') }}
           </NButton>
         </div>

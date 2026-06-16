@@ -227,21 +227,19 @@ const segmentColumns = computed<DataTableColumns<Segment>>(() => [
 // ── 批量选择 ──
 const selectedSegmentIds = ref<DataTableRowKey[]>([])
 
-const hasSelectedSegments = computed(() => selectedSegmentIds.value.length > 0)
-
-const handleTranslateSelected = (): void => {
-  if (selectedSegmentIds.value.length === 0) return
-  emit('translate', { segmentIds: selectedSegmentIds.value } as unknown as Segment)
+const clearSelectedSegments = (): void => {
   selectedSegmentIds.value = []
 }
+
+// ── 暴露给父组件，供浮动操作岛使用 ──
+defineExpose({
+  selectedSegmentIds,
+  clearSelectedSegments,
+})
 
 // ── 原有处理函数 ──
 const handleRefresh = (): void => {
   emit('refresh')
-}
-
-const handleTranslateAll = (): void => {
-  emit('translate')
 }
 </script>
 
@@ -286,11 +284,6 @@ const handleTranslateAll = (): void => {
           />
         </div>
         <div class="flex flex-wrap gap-3">
-          <NButton v-if="hasSelectedSegments" type="primary" @click="handleTranslateSelected">
-            {{
-              t('workspace.segment.actions.translateSelected', { count: selectedSegmentIds.length })
-            }}
-          </NButton>
           <NButton
             secondary
             :disabled="!workspace.activeResourceId"
@@ -298,13 +291,6 @@ const handleTranslateAll = (): void => {
             @click="handleRefresh"
           >
             {{ t('workspace.actions.refresh') }}
-          </NButton>
-          <NButton
-            type="primary"
-            :disabled="workspace.segments.length === 0"
-            @click="handleTranslateAll"
-          >
-            {{ t('workspace.job.actions.createFromSegments') }}
           </NButton>
         </div>
       </div>

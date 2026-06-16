@@ -489,8 +489,6 @@ const messages = {
       },
       actions: {
         create: '创建任务',
-        createFromResources: '翻译选中资源',
-        createFromSegments: '翻译当前段落',
         submitCreate: '创建任务',
         details: '详情',
         cancel: '取消',

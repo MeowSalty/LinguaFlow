@@ -102,6 +102,24 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobDrawerVisible.value = true
   }
 
+  const openSegmentJobDrawerWithIds = (segmentIds: number[]): void => {
+    if (!workspace.activeResourceId) {
+      message.warning(t('workspace.messages.selectResourceFirst'))
+      return
+    }
+
+    if (segmentIds.length === 0) {
+      message.warning(t('workspace.messages.selectReadyResource'))
+      return
+    }
+
+    jobTargetMode.value = 'segments'
+    jobTargetResourceIds.value = [workspace.activeResourceId]
+    jobTargetSegmentIds.value = segmentIds
+    jobForm.execution_plan_id = null
+    jobDrawerVisible.value = true
+  }
+
   const closeJobDrawer = (): void => {
     jobDrawerVisible.value = false
     jobTargetResourceIds.value = []
@@ -198,6 +216,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     // 方法
     openResourceJobDrawer,
     openSegmentJobDrawer,
+    openSegmentJobDrawerWithIds,
     closeJobDrawer,
     submitJob,
     cancelJob,

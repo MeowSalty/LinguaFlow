@@ -36,6 +36,7 @@ const glossary = useGlossaryStore()
 const executionPlanTemplatesStore = useExecutionPlanTemplatesStore()
 
 const activeTab = ref<WorkspaceTab>('resources')
+const segmentPanelRef = ref<InstanceType<typeof SegmentPanel> | null>(null)
 
 // ── projectId ──
 const projectId = computed(() => {
@@ -95,6 +96,20 @@ const handleExplorerOpenSegments = (resource: Resource): void => {
   workspace.setActiveResource(resource.id)
   activeTab.value = 'segments'
   void reloadSegments()
+}
+
+// ── 段落选择操作 ──
+const selectedSegmentCount = computed(() => segmentPanelRef.value?.selectedSegmentIds.length ?? 0)
+
+const handleTranslateSelectedSegments = (): void => {
+  const ids = segmentPanelRef.value?.selectedSegmentIds as number[] | undefined
+  if (!ids || ids.length === 0) return
+  jobMgmt.openSegmentJobDrawerWithIds(ids)
+  segmentPanelRef.value?.clearSelectedSegments()
+}
+
+const handleClearSelectedSegments = (): void => {
+  segmentPanelRef.value?.clearSelectedSegments()
 }
 
 // ── Watchers ──
@@ -258,7 +273,10 @@ onMounted(() => {
 
     <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
       <NTabs v-model:value="activeTab" animated>
-        <NTabPane name="resources" :tab="`${t('workspace.tabs.resources')} (${workspace.resources.length})`">
+        <NTabPane
+          name="resources"
+          :tab="`${t('workspace.tabs.resources')} (${workspace.resources.length})`"
+        >
           <div class="pt-3">
             <ResourceExplorer
               v-if="projectId"
@@ -275,6 +293,7 @@ onMounted(() => {
           :tab="`${t('workspace.tabs.segments')} (${workspace.totalSegmentCount})`"
         >
           <SegmentPanel
+            ref="segmentPanelRef"
             :project-id="projectId"
             @translate="(segment) => jobMgmt.openSegmentJobDrawer(segment)"
             @refresh="reloadSegments"
@@ -371,12 +390,22 @@ onMounted(() => {
       @import="(file) => glossaryMgmt.handleGlossaryImport(file)"
     />
 
-    <!-- 浮动操作岛 -->
+    <!-- 浮动操作岛 - 资源选择 -->
     <SelectionActionBar
+      v-show="activeTab === 'resources'"
       :count="jobMgmt.selectedReadyResourceIds.value.length"
       :can-translate="jobMgmt.canCreateResourceJob.value"
       @translate="jobMgmt.openResourceJobDrawer()"
       @clear="jobMgmt.clearResourceSelection()"
+    />
+
+    <!-- 浮动操作岛 - 段落选择 -->
+    <SelectionActionBar
+      v-show="activeTab === 'segments'"
+      :count="selectedSegmentCount"
+      :can-translate="selectedSegmentCount > 0"
+      @translate="handleTranslateSelectedSegments"
+      @clear="handleClearSelectedSegments"
     />
   </div>
 </template>
