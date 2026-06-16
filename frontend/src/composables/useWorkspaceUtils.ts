@@ -30,7 +30,8 @@ export const statusTagType = (status: string): StatusTagType => {
     case 'ready':
     case 'completed':
     case 'translated':
-    case 'reviewed':
+    case 'edited':
+    case 'approved':
       return 'success'
     case 'processing':
     case 'pending':

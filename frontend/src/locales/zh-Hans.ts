@@ -456,9 +456,9 @@ const messages = {
       status: {
         pending: '待翻译',
         translated: '已翻译',
-        reviewed: '已审核',
-        rejected: '已驳回',
+        edited: '已编辑',
         approved: '已批准',
+        rejected: '已驳回',
       },
     },
     job: {

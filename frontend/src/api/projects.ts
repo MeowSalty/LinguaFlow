@@ -402,7 +402,7 @@ export const fetchResourceSegments = async (
   projectId: number,
   resourceId: number,
   params?: {
-    status?: 'pending' | 'translated' | 'reviewed' | 'rejected'
+    status?: 'pending' | 'translated' | 'edited' | 'approved' | 'rejected'
     search?: string
     cursor?: string
     limit?: number

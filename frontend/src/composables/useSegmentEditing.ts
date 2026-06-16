@@ -38,7 +38,8 @@ export function useSegmentEditing(
     { label: t('workspace.filters.allStatuses'), value: 'all' },
     { label: t('workspace.segment.status.pending'), value: 'pending' },
     { label: t('workspace.segment.status.translated'), value: 'translated' },
-    { label: t('workspace.segment.status.reviewed'), value: 'reviewed' },
+    { label: t('workspace.segment.status.edited'), value: 'edited' },
+    { label: t('workspace.segment.status.approved'), value: 'approved' },
     { label: t('workspace.segment.status.rejected'), value: 'rejected' },
   ])
 

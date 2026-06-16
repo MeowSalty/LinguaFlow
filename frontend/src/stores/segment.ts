@@ -11,12 +11,19 @@ import { t } from '@/i18n'
 type Segment = ApiSchemas['Segment']
 type SegmentUpdatePayload = ApiSchemas['ResourceSegmentUpdateRequest']
 
-export type SegmentStatusFilter = 'pending' | 'translated' | 'reviewed' | 'rejected' | 'all'
+export type SegmentStatusFilter =
+  | 'pending'
+  | 'translated'
+  | 'edited'
+  | 'approved'
+  | 'rejected'
+  | 'all'
 
 export interface SegmentProgress {
   pending: number
   translated: number
-  reviewed: number
+  edited: number
+  approved: number
   rejected: number
   total: number
 }
@@ -46,14 +53,16 @@ export const useSegmentStore = defineStore('segment', () => {
     const counts: SegmentProgress = {
       pending: 0,
       translated: 0,
-      reviewed: 0,
+      edited: 0,
+      approved: 0,
       rejected: 0,
       total: segments.length,
     }
     for (const seg of segments) {
       if (seg.status === 'pending') counts.pending++
       else if (seg.status === 'translated') counts.translated++
-      else if (seg.status === 'reviewed') counts.reviewed++
+      else if (seg.status === 'edited') counts.edited++
+      else if (seg.status === 'approved') counts.approved++
       else if (seg.status === 'rejected') counts.rejected++
     }
     segmentProgressCache.value = new Map(segmentProgressCache.value).set(resourceId, counts)
@@ -63,14 +72,16 @@ export const useSegmentStore = defineStore('segment', () => {
   const getResourceProgress = (resourceId: number): number => {
     const progress = segmentProgressCache.value.get(resourceId)
     if (!progress || progress.total === 0) return 0
-    return Math.round(((progress.translated + progress.reviewed) / progress.total) * 100)
+    return Math.round(
+      ((progress.translated + progress.edited + progress.approved) / progress.total) * 100,
+    )
   }
 
-  /** 已加载段落中已翻译/已审核的总数（前端聚合） */
+  /** 已加载段落中已翻译/已编辑/已审核的总数（前端聚合） */
   const translatedSegmentCount = computed(() => {
     let sum = 0
     for (const progress of segmentProgressCache.value.values()) {
-      sum += progress.translated + progress.reviewed
+      sum += progress.translated + progress.edited + progress.approved
     }
     return sum
   })

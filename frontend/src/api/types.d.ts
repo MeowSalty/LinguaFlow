@@ -1002,7 +1002,8 @@ export interface components {
             segment_index: number;
             source_text: string;
             target_text?: string;
-            status: string;
+            /** @enum {string} */
+            status: "pending" | "translated" | "edited" | "approved" | "rejected";
             review_comment?: string;
             reviewed_by?: components["schemas"]["User"];
             /** Format: date-time */
@@ -2466,7 +2467,7 @@ export interface operations {
     ListResourceSegments: {
         parameters: {
             query?: {
-                status?: "pending" | "translated" | "reviewed" | "rejected";
+                status?: "pending" | "translated" | "edited" | "approved" | "rejected";
                 search?: string;
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
