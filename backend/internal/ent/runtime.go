@@ -419,10 +419,6 @@ func init() {
 	segmentDescSourceText := segmentFields[1].Descriptor()
 	// segment.SourceTextValidator is a validator for the "source_text" field. It is called by the builders before save.
 	segment.SourceTextValidator = segmentDescSourceText.Validators[0].(func(string) error)
-	// segmentDescStatus is the schema descriptor for status field.
-	segmentDescStatus := segmentFields[3].Descriptor()
-	// segment.DefaultStatus holds the default value on creation for the status field.
-	segment.DefaultStatus = segmentDescStatus.Default.(string)
 	// segmentDescResourceID is the schema descriptor for resource_id field.
 	segmentDescResourceID := segmentFields[5].Descriptor()
 	// segment.ResourceIDValidator is a validator for the "resource_id" field. It is called by the builders before save.

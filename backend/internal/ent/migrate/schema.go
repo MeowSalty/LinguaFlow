@@ -390,7 +390,7 @@ var (
 		{Name: "segment_index", Type: field.TypeInt},
 		{Name: "source_text", Type: field.TypeString},
 		{Name: "target_text", Type: field.TypeString, Nullable: true},
-		{Name: "status", Type: field.TypeString, Default: "pending"},
+		{Name: "status", Type: field.TypeEnum, Enums: []string{"pending", "translated", "edited", "approved", "rejected"}, Default: "pending"},
 		{Name: "review_comment", Type: field.TypeString, Nullable: true},
 		{Name: "resource_id", Type: field.TypeInt, Nullable: true},
 		{Name: "user_reviewed_segments", Type: field.TypeInt, Nullable: true},

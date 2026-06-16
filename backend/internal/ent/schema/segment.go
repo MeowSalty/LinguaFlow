@@ -19,7 +19,9 @@ func (Segment) Fields() []ent.Field {
 		field.Int("segment_index").NonNegative(),
 		field.String("source_text").NotEmpty(),
 		field.String("target_text").Optional().Nillable(),
-		field.String("status").Default("pending"),
+		field.Enum("status").
+			Values("pending", "translated", "edited", "approved", "rejected").
+			Default("pending"),
 		field.String("review_comment").Optional().Nillable(),
 		field.Int("resource_id").Optional().Nillable().Positive().
 			Comment("所属资源 ID"),

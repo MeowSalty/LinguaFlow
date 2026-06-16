@@ -80,11 +80,6 @@ func TargetText(v string) predicate.Segment {
 	return predicate.Segment(sql.FieldEQ(FieldTargetText, v))
 }
 
-// Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
-func Status(v string) predicate.Segment {
-	return predicate.Segment(sql.FieldEQ(FieldStatus, v))
-}
-
 // ReviewComment applies equality check predicate on the "review_comment" field. It's identical to ReviewCommentEQ.
 func ReviewComment(v string) predicate.Segment {
 	return predicate.Segment(sql.FieldEQ(FieldReviewComment, v))
@@ -356,68 +351,23 @@ func TargetTextContainsFold(v string) predicate.Segment {
 }
 
 // StatusEQ applies the EQ predicate on the "status" field.
-func StatusEQ(v string) predicate.Segment {
+func StatusEQ(v Status) predicate.Segment {
 	return predicate.Segment(sql.FieldEQ(FieldStatus, v))
 }
 
 // StatusNEQ applies the NEQ predicate on the "status" field.
-func StatusNEQ(v string) predicate.Segment {
+func StatusNEQ(v Status) predicate.Segment {
 	return predicate.Segment(sql.FieldNEQ(FieldStatus, v))
 }
 
 // StatusIn applies the In predicate on the "status" field.
-func StatusIn(vs ...string) predicate.Segment {
+func StatusIn(vs ...Status) predicate.Segment {
 	return predicate.Segment(sql.FieldIn(FieldStatus, vs...))
 }
 
 // StatusNotIn applies the NotIn predicate on the "status" field.
-func StatusNotIn(vs ...string) predicate.Segment {
+func StatusNotIn(vs ...Status) predicate.Segment {
 	return predicate.Segment(sql.FieldNotIn(FieldStatus, vs...))
-}
-
-// StatusGT applies the GT predicate on the "status" field.
-func StatusGT(v string) predicate.Segment {
-	return predicate.Segment(sql.FieldGT(FieldStatus, v))
-}
-
-// StatusGTE applies the GTE predicate on the "status" field.
-func StatusGTE(v string) predicate.Segment {
-	return predicate.Segment(sql.FieldGTE(FieldStatus, v))
-}
-
-// StatusLT applies the LT predicate on the "status" field.
-func StatusLT(v string) predicate.Segment {
-	return predicate.Segment(sql.FieldLT(FieldStatus, v))
-}
-
-// StatusLTE applies the LTE predicate on the "status" field.
-func StatusLTE(v string) predicate.Segment {
-	return predicate.Segment(sql.FieldLTE(FieldStatus, v))
-}
-
-// StatusContains applies the Contains predicate on the "status" field.
-func StatusContains(v string) predicate.Segment {
-	return predicate.Segment(sql.FieldContains(FieldStatus, v))
-}
-
-// StatusHasPrefix applies the HasPrefix predicate on the "status" field.
-func StatusHasPrefix(v string) predicate.Segment {
-	return predicate.Segment(sql.FieldHasPrefix(FieldStatus, v))
-}
-
-// StatusHasSuffix applies the HasSuffix predicate on the "status" field.
-func StatusHasSuffix(v string) predicate.Segment {
-	return predicate.Segment(sql.FieldHasSuffix(FieldStatus, v))
-}
-
-// StatusEqualFold applies the EqualFold predicate on the "status" field.
-func StatusEqualFold(v string) predicate.Segment {
-	return predicate.Segment(sql.FieldEqualFold(FieldStatus, v))
-}
-
-// StatusContainsFold applies the ContainsFold predicate on the "status" field.
-func StatusContainsFold(v string) predicate.Segment {
-	return predicate.Segment(sql.FieldContainsFold(FieldStatus, v))
 }
 
 // ReviewCommentEQ applies the EQ predicate on the "review_comment" field.

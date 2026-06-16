@@ -77,13 +77,13 @@ func (_c *SegmentCreate) SetNillableTargetText(v *string) *SegmentCreate {
 }
 
 // SetStatus sets the "status" field.
-func (_c *SegmentCreate) SetStatus(v string) *SegmentCreate {
+func (_c *SegmentCreate) SetStatus(v segment.Status) *SegmentCreate {
 	_c.mutation.SetStatus(v)
 	return _c
 }
 
 // SetNillableStatus sets the "status" field if the given value is not nil.
-func (_c *SegmentCreate) SetNillableStatus(v *string) *SegmentCreate {
+func (_c *SegmentCreate) SetNillableStatus(v *segment.Status) *SegmentCreate {
 	if v != nil {
 		_c.SetStatus(*v)
 	}
@@ -218,6 +218,11 @@ func (_c *SegmentCreate) check() error {
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "Segment.status"`)}
 	}
+	if v, ok := _c.mutation.Status(); ok {
+		if err := segment.StatusValidator(v); err != nil {
+			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Segment.status": %w`, err)}
+		}
+	}
 	if v, ok := _c.mutation.ResourceID(); ok {
 		if err := segment.ResourceIDValidator(v); err != nil {
 			return &ValidationError{Name: "resource_id", err: fmt.Errorf(`ent: validator failed for field "Segment.resource_id": %w`, err)}
@@ -270,7 +275,7 @@ func (_c *SegmentCreate) createSpec() (*Segment, *sqlgraph.CreateSpec) {
 		_node.TargetText = &value
 	}
 	if value, ok := _c.mutation.Status(); ok {
-		_spec.SetField(segment.FieldStatus, field.TypeString, value)
+		_spec.SetField(segment.FieldStatus, field.TypeEnum, value)
 		_node.Status = value
 	}
 	if value, ok := _c.mutation.ReviewComment(); ok {

@@ -12,12 +12,11 @@ import (
 )
 
 const (
-	SegmentStatusPending    = "pending"
-	SegmentStatusTranslated = "translated"
-	SegmentStatusReviewed   = "reviewed"
-	SegmentStatusEdited     = "edited"
-	SegmentStatusApproved   = "approved"
-	SegmentStatusRejected   = "rejected"
+	SegmentStatusPending    = segment.StatusPending
+	SegmentStatusTranslated = segment.StatusTranslated
+	SegmentStatusEdited     = segment.StatusEdited
+	SegmentStatusApproved   = segment.StatusApproved
+	SegmentStatusRejected   = segment.StatusRejected
 )
 
 var (

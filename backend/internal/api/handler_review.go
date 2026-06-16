@@ -70,7 +70,7 @@ func toSegmentResponse(row *ent.Segment) segmentResponse {
 		ID:            row.ID,
 		SegmentIndex:  row.SegmentIndex,
 		SourceText:    row.SourceText,
-		Status:        row.Status,
+		Status:        string(row.Status),
 		ReviewComment: row.ReviewComment,
 		CreatedAt:     row.CreatedAt.Format(timeRFC3339),
 		UpdatedAt:     row.UpdatedAt.Format(timeRFC3339),

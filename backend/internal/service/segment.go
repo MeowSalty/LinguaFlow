@@ -47,8 +47,8 @@ func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, 
 	if opts.AfterID > 0 {
 		q = q.Where(segment.IDGT(opts.AfterID))
 	}
-	if strings.TrimSpace(opts.Status) != "" {
-		q = q.Where(segment.StatusEQ(strings.TrimSpace(opts.Status)))
+	if s := strings.TrimSpace(opts.Status); s != "" {
+		q = q.Where(segment.StatusEQ(segment.Status(s)))
 	}
 	if search := strings.TrimSpace(opts.Search); search != "" {
 		q = q.Where(segment.Or(segment.SourceTextContains(search), segment.TargetTextContains(search)))
@@ -96,7 +96,7 @@ func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID,
 		if target == "" {
 			return nil, ErrInvalidInput
 		}
-		update.SetTargetText(target).SetStatus(SegmentStatusReviewed).SetReviewedByID(actorUserID)
+		update.SetTargetText(target).SetStatus(SegmentStatusEdited).SetReviewedByID(actorUserID)
 		changed = true
 		targetChanged = true
 	}

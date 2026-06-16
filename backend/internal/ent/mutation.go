@@ -10657,7 +10657,7 @@ type SegmentMutation struct {
 	addsegment_index   *int
 	source_text        *string
 	target_text        *string
-	status             *string
+	status             *segment.Status
 	review_comment     *string
 	clearedFields      map[string]struct{}
 	resource           *int
@@ -10981,12 +10981,12 @@ func (m *SegmentMutation) ResetTargetText() {
 }
 
 // SetStatus sets the "status" field.
-func (m *SegmentMutation) SetStatus(s string) {
+func (m *SegmentMutation) SetStatus(s segment.Status) {
 	m.status = &s
 }
 
 // Status returns the value of the "status" field in the mutation.
-func (m *SegmentMutation) Status() (r string, exists bool) {
+func (m *SegmentMutation) Status() (r segment.Status, exists bool) {
 	v := m.status
 	if v == nil {
 		return
@@ -10997,7 +10997,7 @@ func (m *SegmentMutation) Status() (r string, exists bool) {
 // OldStatus returns the old "status" field's value of the Segment entity.
 // If the Segment object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *SegmentMutation) OldStatus(ctx context.Context) (v string, err error) {
+func (m *SegmentMutation) OldStatus(ctx context.Context) (v segment.Status, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldStatus is only allowed on UpdateOne operations")
 	}
@@ -11333,7 +11333,7 @@ func (m *SegmentMutation) SetField(name string, value ent.Value) error {
 		m.SetTargetText(v)
 		return nil
 	case segment.FieldStatus:
-		v, ok := value.(string)
+		v, ok := value.(segment.Status)
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}

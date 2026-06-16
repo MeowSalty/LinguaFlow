@@ -3,6 +3,7 @@
 package segment
 
 import (
+	"fmt"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -97,11 +98,38 @@ var (
 	SegmentIndexValidator func(int) error
 	// SourceTextValidator is a validator for the "source_text" field. It is called by the builders before save.
 	SourceTextValidator func(string) error
-	// DefaultStatus holds the default value on creation for the "status" field.
-	DefaultStatus string
 	// ResourceIDValidator is a validator for the "resource_id" field. It is called by the builders before save.
 	ResourceIDValidator func(int) error
 )
+
+// Status defines the type for the "status" enum field.
+type Status string
+
+// StatusPending is the default value of the Status enum.
+const DefaultStatus = StatusPending
+
+// Status values.
+const (
+	StatusPending    Status = "pending"
+	StatusTranslated Status = "translated"
+	StatusEdited     Status = "edited"
+	StatusApproved   Status = "approved"
+	StatusRejected   Status = "rejected"
+)
+
+func (s Status) String() string {
+	return string(s)
+}
+
+// StatusValidator is a validator for the "status" field enum values. It is called by the builders before save.
+func StatusValidator(s Status) error {
+	switch s {
+	case StatusPending, StatusTranslated, StatusEdited, StatusApproved, StatusRejected:
+		return nil
+	default:
+		return fmt.Errorf("segment: invalid enum value for status field: %q", s)
+	}
+}
 
 // OrderOption defines the ordering options for the Segment queries.
 type OrderOption func(*sql.Selector)

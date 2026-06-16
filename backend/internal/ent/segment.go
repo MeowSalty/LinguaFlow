@@ -30,7 +30,7 @@ type Segment struct {
 	// TargetText holds the value of the "target_text" field.
 	TargetText *string `json:"target_text,omitempty"`
 	// Status holds the value of the "status" field.
-	Status string `json:"status,omitempty"`
+	Status segment.Status `json:"status,omitempty"`
 	// ReviewComment holds the value of the "review_comment" field.
 	ReviewComment *string `json:"review_comment,omitempty"`
 	// 所属资源 ID
@@ -144,7 +144,7 @@ func (_m *Segment) assignValues(columns []string, values []any) error {
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field status", values[i])
 			} else if value.Valid {
-				_m.Status = value.String
+				_m.Status = segment.Status(value.String)
 			}
 		case segment.FieldReviewComment:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -231,7 +231,7 @@ func (_m *Segment) String() string {
 	}
 	builder.WriteString(", ")
 	builder.WriteString("status=")
-	builder.WriteString(_m.Status)
+	builder.WriteString(fmt.Sprintf("%v", _m.Status))
 	builder.WriteString(", ")
 	if v := _m.ReviewComment; v != nil {
 		builder.WriteString("review_comment=")

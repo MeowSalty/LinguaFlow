@@ -92,13 +92,13 @@ func (_u *SegmentUpdate) ClearTargetText() *SegmentUpdate {
 }
 
 // SetStatus sets the "status" field.
-func (_u *SegmentUpdate) SetStatus(v string) *SegmentUpdate {
+func (_u *SegmentUpdate) SetStatus(v segment.Status) *SegmentUpdate {
 	_u.mutation.SetStatus(v)
 	return _u
 }
 
 // SetNillableStatus sets the "status" field if the given value is not nil.
-func (_u *SegmentUpdate) SetNillableStatus(v *string) *SegmentUpdate {
+func (_u *SegmentUpdate) SetNillableStatus(v *segment.Status) *SegmentUpdate {
 	if v != nil {
 		_u.SetStatus(*v)
 	}
@@ -234,6 +234,11 @@ func (_u *SegmentUpdate) check() error {
 			return &ValidationError{Name: "source_text", err: fmt.Errorf(`ent: validator failed for field "Segment.source_text": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Status(); ok {
+		if err := segment.StatusValidator(v); err != nil {
+			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Segment.status": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.ResourceID(); ok {
 		if err := segment.ResourceIDValidator(v); err != nil {
 			return &ValidationError{Name: "resource_id", err: fmt.Errorf(`ent: validator failed for field "Segment.resource_id": %w`, err)}
@@ -273,7 +278,7 @@ func (_u *SegmentUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		_spec.ClearField(segment.FieldTargetText, field.TypeString)
 	}
 	if value, ok := _u.mutation.Status(); ok {
-		_spec.SetField(segment.FieldStatus, field.TypeString, value)
+		_spec.SetField(segment.FieldStatus, field.TypeEnum, value)
 	}
 	if value, ok := _u.mutation.ReviewComment(); ok {
 		_spec.SetField(segment.FieldReviewComment, field.TypeString, value)
@@ -421,13 +426,13 @@ func (_u *SegmentUpdateOne) ClearTargetText() *SegmentUpdateOne {
 }
 
 // SetStatus sets the "status" field.
-func (_u *SegmentUpdateOne) SetStatus(v string) *SegmentUpdateOne {
+func (_u *SegmentUpdateOne) SetStatus(v segment.Status) *SegmentUpdateOne {
 	_u.mutation.SetStatus(v)
 	return _u
 }
 
 // SetNillableStatus sets the "status" field if the given value is not nil.
-func (_u *SegmentUpdateOne) SetNillableStatus(v *string) *SegmentUpdateOne {
+func (_u *SegmentUpdateOne) SetNillableStatus(v *segment.Status) *SegmentUpdateOne {
 	if v != nil {
 		_u.SetStatus(*v)
 	}
@@ -576,6 +581,11 @@ func (_u *SegmentUpdateOne) check() error {
 			return &ValidationError{Name: "source_text", err: fmt.Errorf(`ent: validator failed for field "Segment.source_text": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Status(); ok {
+		if err := segment.StatusValidator(v); err != nil {
+			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Segment.status": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.ResourceID(); ok {
 		if err := segment.ResourceIDValidator(v); err != nil {
 			return &ValidationError{Name: "resource_id", err: fmt.Errorf(`ent: validator failed for field "Segment.resource_id": %w`, err)}
@@ -632,7 +642,7 @@ func (_u *SegmentUpdateOne) sqlSave(ctx context.Context) (_node *Segment, err er
 		_spec.ClearField(segment.FieldTargetText, field.TypeString)
 	}
 	if value, ok := _u.mutation.Status(); ok {
-		_spec.SetField(segment.FieldStatus, field.TypeString, value)
+		_spec.SetField(segment.FieldStatus, field.TypeEnum, value)
 	}
 	if value, ok := _u.mutation.ReviewComment(); ok {
 		_spec.SetField(segment.FieldReviewComment, field.TypeString, value)
