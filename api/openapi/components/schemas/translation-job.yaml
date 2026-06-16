@@ -15,6 +15,10 @@ CreateTranslationJobRequest:
       items:
         type: integer
         minimum: 1
+    auto_approve:
+      type: boolean
+      default: false
+      description: 翻译完成后是否自动审批通过所有段落
     translation_config:
       type: object
       additionalProperties: true
@@ -64,7 +68,7 @@ TranslationJob:
       type: integer
     status:
       type: string
-      enum: [pending, running, awaiting_review, completed, failed, cancelled]
+      enum: [pending, running, completed, failed, cancelled]
     trigger_type:
       type: string
       enum: [manual, file_update, glossary_change, web_edit]

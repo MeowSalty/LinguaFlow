@@ -12,7 +12,7 @@ projectTranslationJobs:
         required: false
         schema:
           type: string
-          enum: [pending, running, awaiting_review, completed, failed, cancelled]
+          enum: [pending, running, completed, failed, cancelled]
       - name: trigger_type
         in: query
         required: false
