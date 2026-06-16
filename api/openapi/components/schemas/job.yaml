@@ -132,6 +132,7 @@ Segment:
       type: string
     status:
       type: string
+      enum: [pending, translated, edited, approved, rejected]
     review_comment:
       type: string
     reviewed_by:
