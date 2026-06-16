@@ -254,7 +254,7 @@ projectResourceSegments:
         required: false
         schema:
           type: string
-          enum: [pending, translated, reviewed, rejected]
+          enum: [pending, translated, edited, approved, rejected]
       - name: search
         in: query
         required: false

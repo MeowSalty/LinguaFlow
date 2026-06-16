@@ -769,7 +769,8 @@ paths:
             enum:
               - pending
               - translated
-              - reviewed
+              - edited
+              - approved
               - rejected
         - name: search
           in: query
@@ -1782,6 +1783,12 @@ components:
           type: string
         status:
           type: string
+          enum:
+            - pending
+            - translated
+            - edited
+            - approved
+            - rejected
         review_comment:
           type: string
         reviewed_by:
