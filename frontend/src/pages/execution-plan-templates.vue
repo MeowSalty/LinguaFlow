@@ -362,8 +362,8 @@ onMounted(async () => {
       </div>
     </NCard>
 
-    <!-- 错误提示 -->
-    <NAlert v-if="store.error" type="error" :bordered="false">
+    <!-- 错误提示（抽屉关闭时显示在主页面） -->
+    <NAlert v-if="store.error && !drawerVisible" type="error" :bordered="false">
       {{ store.error }}
     </NAlert>
 
@@ -505,6 +505,11 @@ onMounted(async () => {
             <div class="text-lg font-semibold">{{ drawerTitle }}</div>
           </div>
         </template>
+
+        <!-- 错误提示（抽屉打开时显示在抽屉内部） -->
+        <NAlert v-if="store.error && drawerVisible" type="error" class="mb-4">
+          {{ store.error }}
+        </NAlert>
 
         <NForm
           ref="formRef"
