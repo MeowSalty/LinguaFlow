@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { toRef } from 'vue'
 import { NAlert, NButton, NDataTable, NEmpty, NSelect } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
-import { useJobManagement } from '@/composables/useJobManagement'
+import { useJobColumns } from '@/composables/useJobColumns'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 
 type TranslationJob = ApiSchemas['TranslationJob']
@@ -12,7 +11,7 @@ type TranslationJob = ApiSchemas['TranslationJob']
 const { t } = useI18n()
 const workspace = useProjectWorkspaceStore()
 
-const props = defineProps<{
+defineProps<{
   projectId: number | null
 }>()
 
@@ -24,8 +23,7 @@ const emit = defineEmits<{
   download: [job: TranslationJob]
 }>()
 
-const projectIdRef = toRef(props, 'projectId')
-const { jobColumns, jobStatusOptions } = useJobManagement(projectIdRef)
+const { jobColumns, jobStatusOptions } = useJobColumns()
 </script>
 
 <template>

@@ -1,10 +1,27 @@
 <script setup lang="ts">
-import { NAlert, NButton, NDataTable, NEmpty, NInput, NSelect } from 'naive-ui'
-import { toRef } from 'vue'
+import type { DataTableColumns, DataTableRowKey } from 'naive-ui'
+import {
+  NAlert,
+  NButton,
+  NDataTable,
+  NEmpty,
+  NInput,
+  NPopover,
+  NSelect,
+  NSpace,
+  NTag,
+  NText,
+} from 'naive-ui'
+import { computed, h, ref, toRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
-import { useSegmentEditing } from '@/composables/useSegmentEditing'
+import {
+  useSegmentEditing,
+  formatDate,
+  getSegmentStatusLabel,
+  statusTagType,
+} from '@/composables/useSegmentEditing'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 
 type Segment = ApiSchemas['Segment']
@@ -24,12 +41,201 @@ const emit = defineEmits<{
 const projectIdRef = toRef(props, 'projectId')
 const activeResourceIdRef = toRef(workspace, 'activeResourceId')
 
-const { segmentColumns, segmentStatusOptions } = useSegmentEditing(
-  projectIdRef,
-  activeResourceIdRef,
-  (segment) => emit('translate', segment),
-)
+const {
+  segmentStatusOptions,
+  inlineEditingSegmentId,
+  inlineEditForm,
+  inlineCommentVisible,
+  inlineCommentText,
+  startInlineEdit,
+  cancelInlineEdit,
+  saveInlineEdit,
+  openInlineComment,
+  saveInlineComment,
+} = useSegmentEditing(projectIdRef, activeResourceIdRef)
 
+// ── 表格列定义 ──
+const segmentColumns = computed<DataTableColumns<Segment>>(() => [
+  {
+    type: 'selection',
+  },
+  {
+    title: '#',
+    key: 'segment_index',
+    width: 76,
+  },
+  {
+    title: t('workspace.segment.columns.source'),
+    key: 'source_text',
+    minWidth: 260,
+    render: (row) => {
+      if (inlineEditingSegmentId.value === row.id) {
+        return h(NInput, {
+          value: inlineEditForm.source_text,
+          type: 'textarea',
+          autosize: { minRows: 2, maxRows: 6 },
+          'onUpdate:value': (val: string) => {
+            inlineEditForm.source_text = val
+          },
+        })
+      }
+      return row.source_text
+    },
+  },
+  {
+    title: t('workspace.segment.columns.target'),
+    key: 'target_text',
+    minWidth: 260,
+    render: (row) => {
+      if (inlineEditingSegmentId.value === row.id) {
+        return h(NInput, {
+          value: inlineEditForm.target_text,
+          type: 'textarea',
+          autosize: { minRows: 2, maxRows: 6 },
+          placeholder: t('workspace.segment.form.target'),
+          'onUpdate:value': (val: string) => {
+            inlineEditForm.target_text = val
+          },
+        })
+      }
+      return (
+        row.target_text ||
+        h(NText, { depth: 3 }, { default: () => t('workspace.segment.emptyTarget') })
+      )
+    },
+  },
+  {
+    title: t('workspace.segment.columns.status'),
+    key: 'status',
+    width: 120,
+    render: (row) =>
+      h(
+        NTag,
+        { size: 'small', type: statusTagType(row.status) },
+        { default: () => getSegmentStatusLabel(row.status) },
+      ),
+  },
+  {
+    title: t('workspace.common.updatedAt'),
+    key: 'updated_at',
+    width: 170,
+    render: (row) => formatDate(row.updated_at),
+  },
+  {
+    title: t('workspace.common.actions'),
+    key: 'actions',
+    width: 220,
+    fixed: 'right',
+    render: (row) => {
+      if (inlineEditingSegmentId.value === row.id) {
+        return h(NSpace, { size: 4, wrap: false }, () => [
+          h(
+            NButton,
+            {
+              size: 'small',
+              quaternary: true,
+              onClick: () => cancelInlineEdit(),
+            },
+            { default: () => t('workspace.segment.actions.cancelInline') },
+          ),
+          h(
+            NButton,
+            {
+              size: 'small',
+              type: 'primary',
+              loading: workspace.editingSegmentIds.includes(row.id),
+              onClick: () => saveInlineEdit(row),
+            },
+            { default: () => t('workspace.segment.actions.saveInline') },
+          ),
+        ])
+      }
+      return h(NSpace, { size: 4, wrap: false }, () => [
+        h(
+          NButton,
+          {
+            size: 'small',
+            quaternary: true,
+            type: 'primary',
+            loading: workspace.editingSegmentIds.includes(row.id),
+            onClick: () => startInlineEdit(row),
+          },
+          { default: () => t('workspace.segment.actions.edit') },
+        ),
+        h(
+          NPopover,
+          {
+            show: inlineCommentVisible.value === row.id,
+            trigger: 'click',
+            placement: 'bottom',
+            'onUpdate:show': (show: boolean) => {
+              if (show) {
+                openInlineComment(row)
+              } else {
+                inlineCommentVisible.value = null
+              }
+            },
+          },
+          {
+            trigger: () =>
+              h(
+                NButton,
+                {
+                  size: 'small',
+                  quaternary: true,
+                },
+                { default: () => t('workspace.segment.actions.comment') },
+              ),
+            default: () =>
+              h('div', { class: 'w-64 space-y-3' }, [
+                h(NInput, {
+                  value: inlineCommentText.value,
+                  type: 'textarea',
+                  autosize: { minRows: 2, maxRows: 4 },
+                  placeholder: t('workspace.segment.form.comment'),
+                  'onUpdate:value': (val: string) => {
+                    inlineCommentText.value = val
+                  },
+                }),
+                h(
+                  NButton,
+                  {
+                    size: 'small',
+                    type: 'primary',
+                    block: true,
+                    onClick: () => saveInlineComment(row),
+                  },
+                  { default: () => t('workspace.common.save') },
+                ),
+              ]),
+          },
+        ),
+        h(
+          NButton,
+          {
+            size: 'small',
+            quaternary: true,
+            onClick: () => emit('translate', row),
+          },
+          { default: () => t('workspace.segment.actions.translate') },
+        ),
+      ])
+    },
+  },
+])
+
+// ── 批量选择 ──
+const selectedSegmentIds = ref<DataTableRowKey[]>([])
+
+const hasSelectedSegments = computed(() => selectedSegmentIds.value.length > 0)
+
+const handleTranslateSelected = (): void => {
+  if (selectedSegmentIds.value.length === 0) return
+  emit('translate', { segmentIds: selectedSegmentIds.value } as unknown as Segment)
+  selectedSegmentIds.value = []
+}
+
+// ── 原有处理函数 ──
 const handleRefresh = (): void => {
   emit('refresh')
 }
@@ -80,6 +286,11 @@ const handleTranslateAll = (): void => {
           />
         </div>
         <div class="flex flex-wrap gap-3">
+          <NButton v-if="hasSelectedSegments" type="primary" @click="handleTranslateSelected">
+            {{
+              t('workspace.segment.actions.translateSelected', { count: selectedSegmentIds.length })
+            }}
+          </NButton>
           <NButton
             secondary
             :disabled="!workspace.activeResourceId"
@@ -116,6 +327,7 @@ const handleTranslateAll = (): void => {
         :loading="workspace.loadingSegments"
         :row-key="(row: Segment) => row.id"
         :scroll-x="1040"
+        v-model:checked-row-keys="selectedSegmentIds"
       />
       <div v-if="workspace.segmentsCursor" class="flex justify-center pt-3">
         <NButton

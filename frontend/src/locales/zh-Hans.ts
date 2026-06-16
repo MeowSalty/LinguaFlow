@@ -438,6 +438,7 @@ const messages = {
       actions: {
         edit: '编辑',
         translate: '翻译',
+        translateSelected: '翻译选中 ({count})',
         saveInline: '保存',
         cancelInline: '取消',
         comment: '备注',
@@ -463,6 +464,15 @@ const messages = {
       resourcesTitle: '资源执行明细',
       targetResources: '将为 {count} 个资源创建翻译任务。',
       targetSegments: '将为 {count} 个段落创建翻译任务。',
+      executionPlanLabel: '{name}（{rounds} 轮）',
+      contentSummaryTitle: '翻译内容摘要',
+      contentSummaryResources: '{count} 个资源文件',
+      contentSummarySegments: '{count} 个待翻译段落',
+      planPreviewTitle: '执行计划详情',
+      planPreviewRounds: '共 {count} 个轮次',
+      planPreviewRoundItem: '轮次 {index}：批次 {batchSize}，并发 {concurrency}',
+      confirmSummary:
+        '将使用「{planName}」为 {resourceCount} 个资源（{segmentCount} 个段落）创建翻译任务。',
       columns: {
         id: '任务',
         status: '状态',

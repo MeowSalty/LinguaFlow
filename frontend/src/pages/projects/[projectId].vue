@@ -16,7 +16,7 @@ import JobDetailDrawer from '@/components/workspace/JobDetailDrawer.vue'
 import ConflictDialog from '@/components/workspace/ConflictDialog.vue'
 import IncrementalResultModal from '@/components/workspace/IncrementalResultModal.vue'
 import { useGlossaryManagement } from '@/composables/useGlossaryManagement'
-import { useJobManagement } from '@/composables/useJobManagement'
+import { useJobActions } from '@/composables/useJobActions'
 import { useConflictHandling } from '@/composables/useConflictHandling'
 import { formatDate } from '@/composables/useWorkspaceUtils'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
@@ -51,7 +51,18 @@ const switchToJobsTab = async (): Promise<void> => {
   activeTab.value = 'jobs'
 }
 
-const jobMgmt = useJobManagement(projectId, switchToJobsTab)
+const jobMgmt = useJobActions(projectId, switchToJobsTab)
+
+// ── 翻译内容段落数量（用于 JobCreateDrawer 摘要）──
+const drawerSegmentCount = computed(() => {
+  if (jobMgmt.jobTargetMode.value === 'segments') {
+    return jobMgmt.jobTargetSegmentIds.value.length
+  }
+  // 资源模式：使用已选就绪资源的总段落数
+  return workspace.selectedResources
+    .filter((r) => r.status === 'ready')
+    .reduce((sum, r) => sum + (r.total_segments ?? 0), 0)
+})
 
 const reloadSegments = async (): Promise<void> => {
   if (!projectId.value || !workspace.activeResourceId) {
@@ -120,16 +131,69 @@ watch(activeTab, (tab) => {
   }
 })
 
+// ── 5.1 任务进度轮询 ──
+const hasRunningJobs = computed(() =>
+  workspace.jobs.some((j) => j.status === 'pending' || j.status === 'running'),
+)
+
+const pollingTimer = ref<ReturnType<typeof setInterval> | null>(null)
+
+watch(
+  hasRunningJobs,
+  (running) => {
+    if (running && !pollingTimer.value) {
+      pollingTimer.value = setInterval(() => {
+        if (projectId.value) {
+          void workspace.loadJobs(projectId.value)
+        }
+      }, 5000)
+    } else if (!running && pollingTimer.value) {
+      clearInterval(pollingTimer.value)
+      pollingTimer.value = null
+    }
+  },
+  { immediate: true },
+)
+
+onBeforeUnmount(() => {
+  if (pollingTimer.value) {
+    clearInterval(pollingTimer.value)
+    pollingTimer.value = null
+  }
+  workspace.reset()
+  glossary.reset()
+})
+
+// ── 5.2 段落状态联动刷新 ──
+watch(
+  () => workspace.jobs.map((j) => `${j.id}:${j.status}`),
+  (newVal, oldVal) => {
+    if (!oldVal) return
+    // 检测到任务状态从 running/pending 变为其他状态
+    for (let i = 0; i < newVal.length; i++) {
+      const newStatus = newVal[i]!.split(':')[1]
+      const oldStatus = oldVal[i]?.split(':')[1]
+      if (
+        oldStatus &&
+        (oldStatus === 'running' || oldStatus === 'pending') &&
+        newStatus !== 'running' &&
+        newStatus !== 'pending'
+      ) {
+        // 任务完成或取消，刷新段落
+        if (projectId.value && workspace.activeResourceId) {
+          void workspace.loadSegments(projectId.value, workspace.activeResourceId)
+        }
+        break
+      }
+    }
+  },
+)
+
 onMounted(() => {
   workspace.reset()
   glossary.reset()
   void reloadWorkspace()
   void executionPlanTemplatesStore.loadTemplates()
-})
-
-onBeforeUnmount(() => {
-  workspace.reset()
-  glossary.reset()
 })
 </script>
 
@@ -270,6 +334,8 @@ onBeforeUnmount(() => {
       :form-rules="jobMgmt.jobFormRules.value"
       :execution-plan-options="jobMgmt.executionPlanOptions.value"
       :submitting="workspace.creatingJob"
+      :segment-count="drawerSegmentCount"
+      :selected-plan-template="jobMgmt.selectedPlanTemplate.value"
       @update:execution-plan-id="(val) => (jobMgmt.jobForm.execution_plan_id = val)"
       @submit="jobMgmt.submitJob()"
       @close="jobMgmt.closeJobDrawer()"
