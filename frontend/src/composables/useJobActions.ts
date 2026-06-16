@@ -73,6 +73,9 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
   const canCreateSegmentJob = computed(() => workspace.segments.length > 0)
 
   // ── 方法 ──
+  const clearResourceSelection = (): void => {
+    workspace.clearSelectedResources()
+  }
   const openResourceJobDrawer = (): void => {
     if (!canCreateResourceJob.value) {
       message.warning(t('workspace.messages.selectReadyResource'))
@@ -201,5 +204,6 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     retryJob,
     downloadJob,
     openJobDetail,
+    clearResourceSelection,
   }
 }

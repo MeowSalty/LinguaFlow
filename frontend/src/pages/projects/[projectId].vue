@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
 import ResourceExplorer from '@/components/workspace/ResourceExplorer.vue'
+import SelectionActionBar from '@/components/workspace/SelectionActionBar.vue'
 import WorkspaceMetricsBar from '@/components/workspace/WorkspaceMetricsBar.vue'
 import GlossaryPanel from '@/components/workspace/GlossaryPanel.vue'
 import GlossaryDrawer from '@/components/workspace/GlossaryDrawer.vue'
@@ -35,15 +36,6 @@ const glossary = useGlossaryStore()
 const executionPlanTemplatesStore = useExecutionPlanTemplatesStore()
 
 const activeTab = ref<WorkspaceTab>('resources')
-
-const resourcesTabLabel = computed(() => {
-  const base = `${t('workspace.tabs.resources')} (${workspace.resources.length})`
-  const selected = jobMgmt.selectedReadyResourceIds.value.length
-  if (selected > 0 && activeTab.value === 'resources') {
-    return `${base} · ${t('workspace.content.selectedResources', { count: selected })}`
-  }
-  return base
-})
 
 // ── projectId ──
 const projectId = computed(() => {
@@ -248,16 +240,6 @@ onMounted(() => {
             </template>
             {{ t('workspace.actions.refresh') }}
           </NButton>
-          <NButton
-            type="primary"
-            :disabled="!jobMgmt.canCreateResourceJob.value"
-            @click="jobMgmt.openResourceJobDrawer()"
-          >
-            <template #icon>
-              <NIcon><IconCarbonMagicWand /></NIcon>
-            </template>
-            {{ t('workspace.job.actions.createFromResources') }}
-          </NButton>
         </div>
       </div>
     </NCard>
@@ -276,7 +258,7 @@ onMounted(() => {
 
     <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
       <NTabs v-model:value="activeTab" animated>
-        <NTabPane name="resources" :tab="resourcesTabLabel">
+        <NTabPane name="resources" :tab="`${t('workspace.tabs.resources')} (${workspace.resources.length})`">
           <div class="pt-3">
             <ResourceExplorer
               v-if="projectId"
@@ -387,6 +369,14 @@ onMounted(() => {
     <GlossaryImportModal
       v-model:show="glossaryMgmt.glossaryImportVisible.value"
       @import="(file) => glossaryMgmt.handleGlossaryImport(file)"
+    />
+
+    <!-- 浮动操作岛 -->
+    <SelectionActionBar
+      :count="jobMgmt.selectedReadyResourceIds.value.length"
+      :can-translate="jobMgmt.canCreateResourceJob.value"
+      @translate="jobMgmt.openResourceJobDrawer()"
+      @clear="jobMgmt.clearResourceSelection()"
     />
   </div>
 </template>

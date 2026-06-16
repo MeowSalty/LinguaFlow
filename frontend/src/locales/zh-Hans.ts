@@ -288,8 +288,9 @@ const messages = {
       runningJobs: '运行中任务',
       progress: '已翻译',
     },
-    content: {
-      selectedResources: '已选 {count} 个资源',
+    selection: {
+      translate: '翻译选中',
+      clear: '取消选择',
     },
     sections: {
       resources: {
