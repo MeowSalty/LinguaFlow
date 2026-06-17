@@ -22,11 +22,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 )
 
-const (
-	ResourceStatusReady = "ready"
-	ResourceStatusError = "error"
-)
-
 // segmentBatchSize 每批插入的最大 Segment 数量。
 // SQLite 默认绑定变量上限为 999，每条 Segment 记录约 4 个字段，
 // 100 条 × 4 字段 = 400，安全低于限制。
@@ -238,17 +233,17 @@ func (s *ResourceService) uploadSingleResource(ctx context.Context, projectID in
 
 	// 解析文件段落
 	parsedSegments, parseErr := s.parseResourceSegments(relPath)
+	if parseErr != nil {
+		// 解析失败：删除已写入的文件，不落库
+		_ = s.fileStore.Delete(relPath)
+		if errors.Is(parseErr, parser.ErrNoParser) {
+			return nil, fmt.Errorf("unsupported format: %s", format)
+		}
+		return nil, fmt.Errorf("parse failed: %w", parseErr)
+	}
 	segmentCount := len(parsedSegments)
 
 	// 事务包裹：Resource 创建 + Segment 插入，保证原子性
-	status := ResourceStatusReady
-	var errMsg *string
-	if parseErr != nil {
-		status = ResourceStatusError
-		msg := fmt.Sprintf("parse failed: %v", parseErr)
-		errMsg = &msg
-	}
-
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
 		_ = s.fileStore.Delete(relPath)
@@ -259,10 +254,8 @@ func (s *ResourceService) uploadSingleResource(ctx context.Context, projectID in
 		SetPath(resourcePath).
 		SetFormat(format).
 		SetStoragePath(relPath).
-		SetStatus(status).
 		SetNillableProjectID(&projectID).
 		SetTotalSegments(segmentCount).
-		SetNillableErrorMessage(errMsg).
 		Save(ctx)
 	if err != nil {
 		_ = tx.Rollback()
@@ -274,30 +267,15 @@ func (s *ResourceService) uploadSingleResource(ctx context.Context, projectID in
 	}
 
 	// 在事务中创建段落记录（需要 res.ID）
-	if parseErr == nil {
-		if err := replaceResourceSegmentsBatch(ctx, tx.Segment, res.ID, parsedSegments); err != nil {
-			_ = tx.Rollback()
-			_ = s.fileStore.Delete(relPath)
-			return nil, fmt.Errorf("resource: create segments: %w", err)
-		}
+	if err := replaceResourceSegmentsBatch(ctx, tx.Segment, res.ID, parsedSegments); err != nil {
+		_ = tx.Rollback()
+		_ = s.fileStore.Delete(relPath)
+		return nil, fmt.Errorf("resource: create segments: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
 		_ = s.fileStore.Delete(relPath)
 		return nil, fmt.Errorf("resource: commit transaction: %w", err)
-	}
-
-	if parseErr != nil {
-		if errors.Is(parseErr, parser.ErrNoParser) {
-			return &ResourceUploadResult{
-				Resource:      res,
-				TotalSegments: segmentCount,
-			}, fmt.Errorf("%w: %s", ErrUnsupportedFormat, format)
-		}
-		return &ResourceUploadResult{
-			Resource:      res,
-			TotalSegments: segmentCount,
-		}, fmt.Errorf("%w: %v", ErrParseFailed, parseErr)
 	}
 
 	return &ResourceUploadResult{
@@ -315,9 +293,6 @@ func (s *ResourceService) ListResources(ctx context.Context, actorUserID, projec
 	q := s.client.Resource.Query().
 		Where(resource.ProjectID(projectID))
 
-	if opts.Status != "" {
-		q = q.Where(resource.StatusEQ(opts.Status))
-	}
 	if opts.Format != "" {
 		q = q.Where(resource.FormatEQ(opts.Format))
 	}
@@ -430,24 +405,28 @@ func (s *ResourceService) UpdateResource(ctx context.Context, actorUserID, proje
 	cleanName := sanitizeFilename(pathBase(res.Path))
 	format := strings.TrimPrefix(strings.ToLower(filepath.Ext(cleanName)), ".")
 
-	// 删除旧文件
-	if res.StoragePath != "" {
-		_ = s.fileStore.Delete(res.StoragePath)
-	}
-
-	// 保存新文件
-	relPath := s.buildResourcePath(projectID, fmt.Sprintf("resource-%d", res.ID), resourcePathForStorage(res.Path, cleanName))
-	if err := s.fileStore.Write(ctx, relPath, file.Reader); err != nil {
-		_, _ = s.client.Resource.UpdateOneID(res.ID).
-			SetStatus(ResourceStatusError).
-			SetErrorMessage(fmt.Sprintf("file save failed: %v", err)).
-			Save(ctx)
+	// 保存新文件到新路径（不先删除旧文件，保证解析失败时原资源不受影响）
+	newRelPath := s.buildResourcePath(projectID, fmt.Sprintf("resource-%d", res.ID), resourcePathForStorage(res.Path, cleanName))
+	if err := s.fileStore.Write(ctx, newRelPath, file.Reader); err != nil {
 		return nil, fmt.Errorf("resource: save file: %w", err)
 	}
 
 	// 解析新文件
-	parsedSegments, parseErr := s.parseResourceSegments(relPath)
+	parsedSegments, parseErr := s.parseResourceSegments(newRelPath)
+	if parseErr != nil {
+		// 解析失败：删除新文件，旧文件保持不变，不更新 DB
+		_ = s.fileStore.Delete(newRelPath)
+		if errors.Is(parseErr, parser.ErrNoParser) {
+			return nil, fmt.Errorf("unsupported format: %s", format)
+		}
+		return nil, fmt.Errorf("parse failed: %w", parseErr)
+	}
 	segmentCount := len(parsedSegments)
+
+	// 删除旧文件（解析成功后才替换）
+	if res.StoragePath != "" && res.StoragePath != newRelPath {
+		_ = s.fileStore.Delete(res.StoragePath)
+	}
 
 	// 事务包裹：段落替换 + Resource 更新，保证原子性
 	tx, err := s.client.Tx(ctx)
@@ -455,27 +434,16 @@ func (s *ResourceService) UpdateResource(ctx context.Context, actorUserID, proje
 		return nil, fmt.Errorf("resource: begin transaction: %w", err)
 	}
 
-	if parseErr == nil {
-		if err := replaceResourceSegmentsBatch(ctx, tx.Segment, res.ID, parsedSegments); err != nil {
-			_ = tx.Rollback()
-			return nil, fmt.Errorf("resource: replace segments: %w", err)
-		}
+	if err := replaceResourceSegmentsBatch(ctx, tx.Segment, res.ID, parsedSegments); err != nil {
+		_ = tx.Rollback()
+		return nil, fmt.Errorf("resource: replace segments: %w", err)
 	}
 
-	update := tx.Resource.UpdateOneID(res.ID).
+	updated, err := tx.Resource.UpdateOneID(res.ID).
 		SetFormat(format).
-		SetStoragePath(relPath).
-		SetTotalSegments(segmentCount)
-	if parseErr != nil {
-		update = update.
-			SetStatus(ResourceStatusError).
-			SetErrorMessage(fmt.Sprintf("parse failed: %v", parseErr))
-	} else {
-		update = update.
-			SetStatus(ResourceStatusReady).
-			ClearErrorMessage()
-	}
-	updated, err := update.Save(ctx)
+		SetStoragePath(newRelPath).
+		SetTotalSegments(segmentCount).
+		Save(ctx)
 	if err != nil {
 		_ = tx.Rollback()
 		return nil, fmt.Errorf("resource: update record: %w", err)
@@ -483,13 +451,6 @@ func (s *ResourceService) UpdateResource(ctx context.Context, actorUserID, proje
 
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("resource: commit transaction: %w", err)
-	}
-
-	if parseErr != nil {
-		if errors.Is(parseErr, parser.ErrNoParser) {
-			return updated, fmt.Errorf("%w: %s", ErrUnsupportedFormat, format)
-		}
-		return updated, fmt.Errorf("%w: %v", ErrParseFailed, parseErr)
 	}
 
 	return updated, nil
@@ -608,7 +569,6 @@ func (s *ResourceService) replaceResourceSegments(ctx context.Context, resourceI
 
 // ResourceListOptions 资源列表查询选项。
 type ResourceListOptions struct {
-	Status string
 	Format string
 	Search string
 	Limit  int
@@ -808,38 +768,28 @@ func (s *ResourceService) IncrementalUpdateResource(
 		return nil, nil, err
 	}
 
-	// 删除旧文件
-	if res.StoragePath != "" {
-		_ = s.fileStore.Delete(res.StoragePath)
-	}
-
-	// 保存新文件
+	// 保存新文件到新路径（不先删除旧文件，保证解析失败时原资源不受影响）
 	cleanName := sanitizeFilename(pathBase(res.Path))
 	format := strings.TrimPrefix(strings.ToLower(filepath.Ext(cleanName)), ".")
-	relPath := s.buildResourcePath(projectID, fmt.Sprintf("resource-%d", res.ID), resourcePathForStorage(res.Path, cleanName))
-	if err := s.fileStore.Write(ctx, relPath, file.Reader); err != nil {
-		_, _ = s.client.Resource.UpdateOneID(res.ID).
-			SetStatus(ResourceStatusError).
-			SetErrorMessage(fmt.Sprintf("file save failed: %v", err)).
-			Save(ctx)
+	newRelPath := s.buildResourcePath(projectID, fmt.Sprintf("resource-%d", res.ID), resourcePathForStorage(res.Path, cleanName))
+	if err := s.fileStore.Write(ctx, newRelPath, file.Reader); err != nil {
 		return nil, nil, fmt.Errorf("resource: save file: %w", err)
 	}
 
 	// 解析新文件段落
-	newSegments, parseErr := s.parseResourceSegments(relPath)
+	newSegments, parseErr := s.parseResourceSegments(newRelPath)
 	if parseErr != nil {
-		// 解析失败，更新资源状态
-		update := s.client.Resource.UpdateOneID(res.ID).
-			SetFormat(format).
-			SetStoragePath(relPath).
-			SetStatus(ResourceStatusError).
-			SetErrorMessage(fmt.Sprintf("parse failed: %v", parseErr))
-		updated, _ := update.Save(ctx)
-
+		// 解析失败：删除新文件，旧文件保持不变，不更新 DB
+		_ = s.fileStore.Delete(newRelPath)
 		if errors.Is(parseErr, parser.ErrNoParser) {
-			return updated, nil, fmt.Errorf("%w: %s", ErrUnsupportedFormat, format)
+			return nil, nil, fmt.Errorf("unsupported format: %s", format)
 		}
-		return updated, nil, fmt.Errorf("%w: %v", ErrParseFailed, parseErr)
+		return nil, nil, fmt.Errorf("parse failed: %w", parseErr)
+	}
+
+	// 删除旧文件（解析成功后才替换）
+	if res.StoragePath != "" && res.StoragePath != newRelPath {
+		_ = s.fileStore.Delete(res.StoragePath)
 	}
 
 	// 查询旧段落
@@ -877,10 +827,8 @@ func (s *ResourceService) IncrementalUpdateResource(
 	// 更新资源元数据
 	updated, err := s.client.Resource.UpdateOneID(res.ID).
 		SetFormat(format).
-		SetStoragePath(relPath).
+		SetStoragePath(newRelPath).
 		SetTotalSegments(len(newSegments)).
-		SetStatus(ResourceStatusReady).
-		ClearErrorMessage().
 		Save(ctx)
 	if err != nil {
 		return nil, nil, fmt.Errorf("resource: update record: %w", err)

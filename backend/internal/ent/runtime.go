@@ -388,12 +388,8 @@ func init() {
 	resource.DefaultTotalSegments = resourceDescTotalSegments.Default.(int)
 	// resource.TotalSegmentsValidator is a validator for the "total_segments" field. It is called by the builders before save.
 	resource.TotalSegmentsValidator = resourceDescTotalSegments.Validators[0].(func(int) error)
-	// resourceDescStatus is the schema descriptor for status field.
-	resourceDescStatus := resourceFields[4].Descriptor()
-	// resource.DefaultStatus holds the default value on creation for the status field.
-	resource.DefaultStatus = resourceDescStatus.Default.(string)
 	// resourceDescProjectID is the schema descriptor for project_id field.
-	resourceDescProjectID := resourceFields[6].Descriptor()
+	resourceDescProjectID := resourceFields[4].Descriptor()
 	// resource.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
 	resource.ProjectIDValidator = resourceDescProjectID.Validators[0].(func(int) error)
 	segmentMixin := schema.Segment{}.Mixin()

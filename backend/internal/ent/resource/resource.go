@@ -26,10 +26,6 @@ const (
 	FieldStoragePath = "storage_path"
 	// FieldTotalSegments holds the string denoting the total_segments field in the database.
 	FieldTotalSegments = "total_segments"
-	// FieldStatus holds the string denoting the status field in the database.
-	FieldStatus = "status"
-	// FieldErrorMessage holds the string denoting the error_message field in the database.
-	FieldErrorMessage = "error_message"
 	// FieldProjectID holds the string denoting the project_id field in the database.
 	FieldProjectID = "project_id"
 	// EdgeProject holds the string denoting the project edge name in mutations.
@@ -72,8 +68,6 @@ var Columns = []string{
 	FieldFormat,
 	FieldStoragePath,
 	FieldTotalSegments,
-	FieldStatus,
-	FieldErrorMessage,
 	FieldProjectID,
 }
 
@@ -104,8 +98,6 @@ var (
 	DefaultTotalSegments int
 	// TotalSegmentsValidator is a validator for the "total_segments" field. It is called by the builders before save.
 	TotalSegmentsValidator func(int) error
-	// DefaultStatus holds the default value on creation for the "status" field.
-	DefaultStatus string
 	// ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
 	ProjectIDValidator func(int) error
 )
@@ -146,16 +138,6 @@ func ByStoragePath(opts ...sql.OrderTermOption) OrderOption {
 // ByTotalSegments orders the results by the total_segments field.
 func ByTotalSegments(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTotalSegments, opts...).ToFunc()
-}
-
-// ByStatus orders the results by the status field.
-func ByStatus(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldStatus, opts...).ToFunc()
-}
-
-// ByErrorMessage orders the results by the error_message field.
-func ByErrorMessage(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldErrorMessage, opts...).ToFunc()
 }
 
 // ByProjectID orders the results by the project_id field.

@@ -30,10 +30,6 @@ type Resource struct {
 	StoragePath string `json:"storage_path,omitempty"`
 	// 文件解析后的总段落数
 	TotalSegments int `json:"total_segments,omitempty"`
-	// 资源状态：ready, processing, error
-	Status string `json:"status,omitempty"`
-	// 解析错误信息
-	ErrorMessage *string `json:"error_message,omitempty"`
 	// 所属项目 ID
 	ProjectID *int `json:"project_id,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
@@ -91,7 +87,7 @@ func (*Resource) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case resource.FieldID, resource.FieldTotalSegments, resource.FieldProjectID:
 			values[i] = new(sql.NullInt64)
-		case resource.FieldPath, resource.FieldFormat, resource.FieldStoragePath, resource.FieldStatus, resource.FieldErrorMessage:
+		case resource.FieldPath, resource.FieldFormat, resource.FieldStoragePath:
 			values[i] = new(sql.NullString)
 		case resource.FieldCreatedAt, resource.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -151,19 +147,6 @@ func (_m *Resource) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field total_segments", values[i])
 			} else if value.Valid {
 				_m.TotalSegments = int(value.Int64)
-			}
-		case resource.FieldStatus:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field status", values[i])
-			} else if value.Valid {
-				_m.Status = value.String
-			}
-		case resource.FieldErrorMessage:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field error_message", values[i])
-			} else if value.Valid {
-				_m.ErrorMessage = new(string)
-				*_m.ErrorMessage = value.String
 			}
 		case resource.FieldProjectID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -240,14 +223,6 @@ func (_m *Resource) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("total_segments=")
 	builder.WriteString(fmt.Sprintf("%v", _m.TotalSegments))
-	builder.WriteString(", ")
-	builder.WriteString("status=")
-	builder.WriteString(_m.Status)
-	builder.WriteString(", ")
-	if v := _m.ErrorMessage; v != nil {
-		builder.WriteString("error_message=")
-		builder.WriteString(*v)
-	}
 	builder.WriteString(", ")
 	if v := _m.ProjectID; v != nil {
 		builder.WriteString("project_id=")

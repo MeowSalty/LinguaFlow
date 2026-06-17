@@ -357,8 +357,6 @@ var (
 		{Name: "format", Type: field.TypeString},
 		{Name: "storage_path", Type: field.TypeString},
 		{Name: "total_segments", Type: field.TypeInt, Default: 0},
-		{Name: "status", Type: field.TypeString, Default: "ready"},
-		{Name: "error_message", Type: field.TypeString, Nullable: true},
 		{Name: "project_id", Type: field.TypeInt, Nullable: true},
 	}
 	// ResourcesTable holds the schema information for the "resources" table.
@@ -369,7 +367,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "resources_projects_resources",
-				Columns:    []*schema.Column{ResourcesColumns[9]},
+				Columns:    []*schema.Column{ResourcesColumns[7]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -378,7 +376,7 @@ var (
 			{
 				Name:    "resource_project_id_path",
 				Unique:  true,
-				Columns: []*schema.Column{ResourcesColumns[9], ResourcesColumns[3]},
+				Columns: []*schema.Column{ResourcesColumns[7], ResourcesColumns[3]},
 			},
 		},
 	}

@@ -20,16 +20,14 @@ import (
 const maxResourceUploadFiles = 50
 
 type resourceResponse struct {
-	ID            int     `json:"id"`
-	Path          string  `json:"path"`
-	Name          string  `json:"name"`
-	Directory     string  `json:"directory"`
-	Format        string  `json:"format"`
-	TotalSegments int     `json:"total_segments"`
-	Status        string  `json:"status"`
-	ErrorMessage  *string `json:"error_message,omitempty"`
-	CreatedAt     string  `json:"created_at"`
-	UpdatedAt     string  `json:"updated_at"`
+	ID            int    `json:"id"`
+	Path          string `json:"path"`
+	Name          string `json:"name"`
+	Directory     string `json:"directory"`
+	Format        string `json:"format"`
+	TotalSegments int    `json:"total_segments"`
+	CreatedAt     string `json:"created_at"`
+	UpdatedAt     string `json:"updated_at"`
 }
 
 func toResourceResponse(r *ent.Resource) resourceResponse {
@@ -41,8 +39,6 @@ func toResourceResponse(r *ent.Resource) resourceResponse {
 		Directory:     resourceResponseDirectory(pathValue),
 		Format:        r.Format,
 		TotalSegments: r.TotalSegments,
-		Status:        r.Status,
-		ErrorMessage:  r.ErrorMessage,
 		CreatedAt:     r.CreatedAt.Format(timeRFC3339),
 		UpdatedAt:     r.UpdatedAt.Format(timeRFC3339),
 	}
@@ -58,8 +54,6 @@ func toGeneratedResource(r *ent.Resource) Resource {
 		Directory:     resourceResponseDirectory(pathValue),
 		Format:        r.Format,
 		TotalSegments: r.TotalSegments,
-		Status:        ResourceStatus(r.Status),
-		ErrorMessage:  r.ErrorMessage,
 		CreatedAt:     r.CreatedAt,
 		UpdatedAt:     r.UpdatedAt,
 	}
@@ -267,7 +261,6 @@ func (s *Server) handleListProjectResources(w http.ResponseWriter, r *http.Reque
 	}
 
 	opts := service.ResourceListOptions{
-		Status: strings.TrimSpace(r.URL.Query().Get("status")),
 		Format: strings.TrimSpace(r.URL.Query().Get("format")),
 		Search: strings.TrimSpace(r.URL.Query().Get("search")),
 		Limit:  100,

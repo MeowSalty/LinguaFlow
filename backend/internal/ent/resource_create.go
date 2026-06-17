@@ -83,34 +83,6 @@ func (_c *ResourceCreate) SetNillableTotalSegments(v *int) *ResourceCreate {
 	return _c
 }
 
-// SetStatus sets the "status" field.
-func (_c *ResourceCreate) SetStatus(v string) *ResourceCreate {
-	_c.mutation.SetStatus(v)
-	return _c
-}
-
-// SetNillableStatus sets the "status" field if the given value is not nil.
-func (_c *ResourceCreate) SetNillableStatus(v *string) *ResourceCreate {
-	if v != nil {
-		_c.SetStatus(*v)
-	}
-	return _c
-}
-
-// SetErrorMessage sets the "error_message" field.
-func (_c *ResourceCreate) SetErrorMessage(v string) *ResourceCreate {
-	_c.mutation.SetErrorMessage(v)
-	return _c
-}
-
-// SetNillableErrorMessage sets the "error_message" field if the given value is not nil.
-func (_c *ResourceCreate) SetNillableErrorMessage(v *string) *ResourceCreate {
-	if v != nil {
-		_c.SetErrorMessage(*v)
-	}
-	return _c
-}
-
 // SetProjectID sets the "project_id" field.
 func (_c *ResourceCreate) SetProjectID(v int) *ResourceCreate {
 	_c.mutation.SetProjectID(v)
@@ -207,10 +179,6 @@ func (_c *ResourceCreate) defaults() {
 		v := resource.DefaultTotalSegments
 		_c.mutation.SetTotalSegments(v)
 	}
-	if _, ok := _c.mutation.Status(); !ok {
-		v := resource.DefaultStatus
-		_c.mutation.SetStatus(v)
-	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -252,9 +220,6 @@ func (_c *ResourceCreate) check() error {
 		if err := resource.TotalSegmentsValidator(v); err != nil {
 			return &ValidationError{Name: "total_segments", err: fmt.Errorf(`ent: validator failed for field "Resource.total_segments": %w`, err)}
 		}
-	}
-	if _, ok := _c.mutation.Status(); !ok {
-		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "Resource.status"`)}
 	}
 	if v, ok := _c.mutation.ProjectID(); ok {
 		if err := resource.ProjectIDValidator(v); err != nil {
@@ -310,14 +275,6 @@ func (_c *ResourceCreate) createSpec() (*Resource, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.TotalSegments(); ok {
 		_spec.SetField(resource.FieldTotalSegments, field.TypeInt, value)
 		_node.TotalSegments = value
-	}
-	if value, ok := _c.mutation.Status(); ok {
-		_spec.SetField(resource.FieldStatus, field.TypeString, value)
-		_node.Status = value
-	}
-	if value, ok := _c.mutation.ErrorMessage(); ok {
-		_spec.SetField(resource.FieldErrorMessage, field.TypeString, value)
-		_node.ErrorMessage = &value
 	}
 	if nodes := _c.mutation.ProjectIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

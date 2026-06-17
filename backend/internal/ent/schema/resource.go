@@ -25,10 +25,6 @@ func (Resource) Fields() []ent.Field {
 			Comment("文件存储路径"),
 		field.Int("total_segments").Default(0).NonNegative().
 			Comment("文件解析后的总段落数"),
-		field.String("status").Default("ready").
-			Comment("资源状态：ready, processing, error"),
-		field.String("error_message").Optional().Nillable().
-			Comment("解析错误信息"),
 		field.Int("project_id").Optional().Nillable().Positive().
 			Comment("所属项目 ID"),
 	}
