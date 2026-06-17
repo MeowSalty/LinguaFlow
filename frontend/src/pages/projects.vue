@@ -246,8 +246,12 @@ const selectMoreAction = (project: Project, key: string | number): void => {
     return
   }
 
+  if (key === 'glossary') {
+    openProjectWorkspace(project, 'glossary')
+    return
+  }
+
   const featureKeyMap: Record<string, string> = {
-    glossary: 'projects.features.glossary',
     backends: 'projects.features.backends',
   }
   showPlaceholder(featureKeyMap[String(key)] ?? 'projects.features.details')

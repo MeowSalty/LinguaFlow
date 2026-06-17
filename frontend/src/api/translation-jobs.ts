@@ -2,16 +2,12 @@ import { t } from '@/i18n'
 
 import type { ApiClient, ApiSchemas } from './client'
 import { apiClient } from './client'
-import {
-  buildRequestFailureError,
-  type DownloadFileResult,
-  getContentDispositionFilename,
-} from './utils'
+import { buildRequestFailureError } from './utils'
 
 export const fetchTranslationJobs = async (
   projectId: number,
   params?: {
-    status?: 'pending' | 'running' | 'awaiting_review' | 'completed' | 'failed' | 'cancelled'
+    status?: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
     trigger_type?: 'manual' | 'file_update' | 'glossary_change' | 'web_edit'
     cursor?: string
     limit?: number
@@ -95,27 +91,4 @@ export const retryTranslationJob = async (
   }
 
   return data
-}
-
-export const downloadTranslationJobResult = async (
-  translationJobId: number,
-  resourceId?: number,
-  client: ApiClient = apiClient,
-): Promise<DownloadFileResult> => {
-  const { data, error, response } = await client.GET(
-    '/translation-jobs/{translationJobId}/download',
-    {
-      params: { path: { translationJobId }, query: { resource_id: resourceId } },
-      parseAs: 'blob',
-    },
-  )
-
-  if (!data) {
-    throw buildRequestFailureError(t('api.errors.downloadTranslationJobFailed'), error, response)
-  }
-
-  return {
-    blob: data as Blob,
-    filename: getContentDispositionFilename(response),
-  }
 }

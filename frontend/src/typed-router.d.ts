@@ -45,6 +45,20 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/backends': RouteRecordInfo<
+      '/backends',
+      '/backends',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/execution-plan-templates': RouteRecordInfo<
+      '/execution-plan-templates',
+      '/execution-plan-templates',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/login': RouteRecordInfo<
       '/login',
       '/login',
@@ -66,6 +80,13 @@ declare module 'vue-router/auto-routes' {
       { projectId: ParamValue<false> },
       | never
     >,
+    '/prompt-templates': RouteRecordInfo<
+      '/prompt-templates',
+      '/prompt-templates',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/register': RouteRecordInfo<
       '/register',
       '/register',
@@ -76,6 +97,13 @@ declare module 'vue-router/auto-routes' {
     '/service': RouteRecordInfo<
       '/service',
       '/service',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/translation-profiles': RouteRecordInfo<
+      '/translation-profiles',
+      '/translation-profiles',
       Record<never, never>,
       Record<never, never>,
       | never
@@ -105,6 +133,18 @@ declare module 'vue-router/auto-routes' {
       views:
         | never
     }
+    'src/pages/backends.vue': {
+      routes:
+        | '/backends'
+      views:
+        | never
+    }
+    'src/pages/execution-plan-templates.vue': {
+      routes:
+        | '/execution-plan-templates'
+      views:
+        | never
+    }
     'src/pages/login.vue': {
       routes:
         | '/login'
@@ -124,6 +164,12 @@ declare module 'vue-router/auto-routes' {
       views:
         | never
     }
+    'src/pages/prompt-templates.vue': {
+      routes:
+        | '/prompt-templates'
+      views:
+        | never
+    }
     'src/pages/register.vue': {
       routes:
         | '/register'
@@ -133,6 +179,12 @@ declare module 'vue-router/auto-routes' {
     'src/pages/service.vue': {
       routes:
         | '/service'
+      views:
+        | never
+    }
+    'src/pages/translation-profiles.vue': {
+      routes:
+        | '/translation-profiles'
       views:
         | never
     }

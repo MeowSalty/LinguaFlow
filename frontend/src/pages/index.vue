@@ -42,25 +42,25 @@ onMounted(() => {
       <StatsCard
         :title="t('dashboard.stats.apiCalls')"
         :value="stats.stats?.api_calls ?? 0"
-        icon="🔗"
+        icon="carbon:api"
         :loading="stats.statsLoading"
       />
       <StatsCard
         :title="t('dashboard.stats.inputTokens')"
         :value="stats.stats?.input_tokens ?? 0"
-        icon="📥"
+        icon="carbon:cloud-upload"
         :loading="stats.statsLoading"
       />
       <StatsCard
         :title="t('dashboard.stats.outputTokens')"
         :value="stats.stats?.output_tokens ?? 0"
-        icon="📤"
+        icon="carbon:cloud-download"
         :loading="stats.statsLoading"
       />
       <StatsCard
         :title="t('dashboard.stats.segmentCount')"
         :value="stats.stats?.segment_count ?? 0"
-        icon="📊"
+        icon="carbon:chart-column"
         :loading="stats.statsLoading"
       />
     </div>
@@ -87,7 +87,7 @@ onMounted(() => {
           <div
             class="flex h-10 w-10 items-center justify-center rounded-lg bg-lf-brand-soft text-brand-500"
           >
-            ➕
+            <IconCarbonAddAlt />
           </div>
           <div>
             <div class="font-medium text-lf-text-strong">
@@ -110,7 +110,7 @@ onMounted(() => {
           <div
             class="flex h-10 w-10 items-center justify-center rounded-lg bg-lf-info-soft text-blue-500"
           >
-            📋
+            <IconCarbonDocument />
           </div>
           <div>
             <div class="font-medium text-lf-text-strong">
@@ -132,7 +132,7 @@ onMounted(() => {
           <div
             class="flex h-10 w-10 items-center justify-center rounded-lg bg-lf-info-soft text-purple-500"
           >
-            🏢
+            <IconCarbonEnterprise />
           </div>
           <div>
             <div class="font-medium text-lf-text-strong">

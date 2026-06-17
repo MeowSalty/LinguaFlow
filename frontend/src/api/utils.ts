@@ -10,9 +10,18 @@ export const buildRequestFailureError = (
   error?: unknown,
   response?: Response,
 ): Error => {
-  if (error) {
-    return error as Error
+  // 检查是否是 Problem 对象 (RFC 7807 格式)
+  if (error && typeof error === 'object' && 'title' in error) {
+    const problem = error as { title?: string; detail?: string; status?: number }
+    // 优先使用 detail，其次 title，最后使用 fallbackMessage
+    const message = problem.detail || problem.title || fallbackMessage
+    return new Error(message)
   }
+
+  if (error instanceof Error) {
+    return error
+  }
+
   const status = response?.status
   const reason = status
     ? t('api.errors.serverReturned', { status })

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 import { useMessage, type DropdownOption } from 'naive-ui'
+import { Icon as IconifyIcon } from '@iconify/vue'
 
 import { useAuthStore } from '@/stores/auth'
 import { useLocaleStore } from '@/stores/locale'
@@ -8,6 +9,7 @@ import { useServiceStore } from '@/stores/service'
 import { useThemeStore, type ThemeMode } from '@/stores/theme'
 
 const router = useRouter()
+const route = useRoute()
 const auth = useAuthStore()
 const locale = useLocaleStore()
 const service = useServiceStore()
@@ -59,9 +61,9 @@ const themeOptions = computed<DropdownOption[]>(() => [
 
 const themeIcon = computed(() => {
   if (theme.mode === 'system') {
-    return '◐'
+    return 'carbon:contrast'
   }
-  return theme.resolvedTheme === 'dark' ? '☾' : '☀'
+  return theme.resolvedTheme === 'dark' ? 'carbon:moon' : 'carbon:sun'
 })
 
 const onSelectUserAction = async (key: string | number) => {
@@ -77,6 +79,34 @@ const onSelectUserAction = async (key: string | number) => {
   } else if (key === 'switch-service') {
     await router.push({ path: '/service' })
   }
+}
+
+const templateNavOptions = computed<DropdownOption[]>(() => [
+  {
+    label: t('nav.promptTemplates'),
+    key: '/prompt-templates',
+    icon: () => h(IconifyIcon, { icon: 'carbon:prompt-template', class: 'text-base' }),
+  },
+  {
+    label: t('nav.translationProfiles'),
+    key: '/translation-profiles',
+    icon: () => h(IconifyIcon, { icon: 'carbon:flow', class: 'text-base' }),
+  },
+  {
+    label: t('nav.executionPlanTemplates'),
+    key: '/execution-plan-templates',
+    icon: () => h(IconifyIcon, { icon: 'carbon:plan', class: 'text-base' }),
+  },
+])
+
+const isTemplateRoute = computed(() =>
+  ['/prompt-templates', '/translation-profiles', '/execution-plan-templates'].some((r) =>
+    route.path.startsWith(r),
+  ),
+)
+
+const onSelectTemplateNav = (key: string | number): void => {
+  router.push(String(key))
 }
 
 const onSelectTheme = (key: string | number): void => {
@@ -113,6 +143,27 @@ const onSelectLocale = (key: string | number): void => {
           {{ t('nav.projects') }}
         </RouterLink>
         <RouterLink
+          to="/backends"
+          class="text-lf-text-muted no-underline transition-colors hover:text-brand-500"
+          active-class="!text-brand-500 font-semibold"
+        >
+          {{ t('nav.backends') }}
+        </RouterLink>
+        <NDropdown
+          trigger="hover"
+          :options="templateNavOptions"
+          placement="bottom-start"
+          @select="onSelectTemplateNav"
+        >
+          <RouterLink
+            to="/prompt-templates"
+            class="text-lf-text-muted no-underline transition-colors hover:text-brand-500"
+            :class="{ '!text-brand-500 font-semibold': isTemplateRoute }"
+          >
+            {{ t('nav.translationConfig') }}
+          </RouterLink>
+        </NDropdown>
+        <RouterLink
           to="/about"
           class="text-lf-text-muted no-underline transition-colors hover:text-brand-500"
           active-class="!text-brand-500 font-semibold"
@@ -140,7 +191,9 @@ const onSelectLocale = (key: string | number): void => {
           @select="onSelectTheme"
         >
           <NButton quaternary circle :title="t('common.theme')" :aria-label="t('common.theme')">
-            {{ themeIcon }}
+            <template #icon>
+              <IconifyIcon :icon="themeIcon" class="text-lg" />
+            </template>
           </NButton>
         </NDropdown>
         <span class="hidden text-xs text-lf-text-subtle sm:inline" :title="service.baseUrl">

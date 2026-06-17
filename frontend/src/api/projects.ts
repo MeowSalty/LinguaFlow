@@ -127,7 +127,6 @@ export const deleteProject = async (
 export const fetchProjectResources = async (
   projectId: number,
   params?: {
-    status?: 'ready' | 'error'
     format?: string
     search?: string
     cursor?: string
@@ -383,6 +382,33 @@ export const downloadProjectResource = async (
   }
 }
 
+export const downloadTranslatedResource = async (
+  projectId: number,
+  resourceId: number,
+  client: ApiClient = apiClient,
+): Promise<DownloadFileResult> => {
+  const { data, error, response } = await client.GET(
+    '/projects/{projectId}/resources/{resourceId}/download-translated',
+    {
+      params: { path: { projectId, resourceId } },
+      parseAs: 'blob',
+    },
+  )
+
+  if (!data) {
+    throw buildRequestFailureError(
+      t('api.errors.downloadTranslatedResourceFailed'),
+      error,
+      response,
+    )
+  }
+
+  return {
+    blob: data as Blob,
+    filename: getContentDispositionFilename(response),
+  }
+}
+
 export const fetchProjectResourceTree = async (
   projectId: number,
   client: ApiClient = apiClient,
@@ -402,7 +428,7 @@ export const fetchResourceSegments = async (
   projectId: number,
   resourceId: number,
   params?: {
-    status?: 'pending' | 'translated' | 'reviewed' | 'rejected'
+    status?: 'pending' | 'translated' | 'edited' | 'approved' | 'rejected'
     search?: string
     cursor?: string
     limit?: number
@@ -440,6 +466,48 @@ export const updateResourceSegment = async (
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.updateSegmentFailed'), error, response)
+  }
+
+  return data
+}
+
+export const batchReviewSegments = async (
+  projectId: number,
+  resourceId: number,
+  segmentIds: number[],
+  action: 'approve' | 'reject',
+  comment?: string,
+  client: ApiClient = apiClient,
+): Promise<ApiSchemas['BatchReviewResponse']> => {
+  const { data, error, response } = await client.POST(
+    '/projects/{projectId}/resources/{resourceId}/segments/batch-review',
+    {
+      params: { path: { projectId, resourceId } },
+      body: { segment_ids: segmentIds, action, comment },
+    },
+  )
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.batchReviewSegmentsFailed'), error, response)
+  }
+
+  return data
+}
+
+export const approveAllSegments = async (
+  projectId: number,
+  resourceId: number,
+  client: ApiClient = apiClient,
+): Promise<ApiSchemas['ApproveAllResponse']> => {
+  const { data, error, response } = await client.POST(
+    '/projects/{projectId}/resources/{resourceId}/segments/approve-all',
+    {
+      params: { path: { projectId, resourceId } },
+    },
+  )
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.approveAllSegmentsFailed'), error, response)
   }
 
   return data

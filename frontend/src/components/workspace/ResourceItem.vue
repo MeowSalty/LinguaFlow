@@ -1,11 +1,9 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import {
   NButton,
+  NCheckbox,
   NDropdown,
   NIcon,
-  NProgress,
-  NTag,
-  NText,
   NTooltip,
   useDialog,
   type DropdownOption,
@@ -22,9 +20,12 @@ const props = defineProps<{
   replacing?: boolean
   incrementalUpdating?: boolean
   downloading?: boolean
+  downloadingTranslated?: boolean
   deleting?: boolean
   /** 翻译进度百分比（0-100） */
   progress?: number
+  /** 是否处于选中状态 */
+  selected?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -32,7 +33,10 @@ const emit = defineEmits<{
   replace: [resource: Resource]
   incrementalUpdate: [resource: Resource]
   download: [resource: Resource]
+  downloadTranslated: [resource: Resource]
   delete: [resource: Resource]
+  /** 切换选中状态 */
+  toggleSelect: [resource: Resource]
 }>()
 
 const { t } = useI18n()
@@ -51,22 +55,13 @@ const formatDate = (value?: string): string => {
   }).format(new Date(value))
 }
 
-const statusTagType = (status: string): 'success' | 'error' | 'default' => {
-  switch (status) {
-    case 'ready':
-      return 'success'
-    case 'error':
-      return 'error'
-    default:
-      return 'default'
-  }
-}
-
-const getStatusLabel = (status: Resource['status']): string =>
-  t(`workspace.resource.status.${status}`)
-
 const isBusy = computed(
-  () => props.replacing || props.incrementalUpdating || props.downloading || props.deleting,
+  () =>
+    props.replacing ||
+    props.incrementalUpdating ||
+    props.downloading ||
+    props.downloadingTranslated ||
+    props.deleting,
 )
 
 const dropdownOptions = computed<DropdownOption[]>(() => [
@@ -98,6 +93,13 @@ const dropdownOptions = computed<DropdownOption[]>(() => [
       ? t('workspace.resource.actions.downloading')
       : t('workspace.common.download'),
     key: 'download',
+    disabled: isBusy.value,
+  },
+  {
+    label: props.downloadingTranslated
+      ? t('workspace.resource.actions.downloadingTranslated')
+      : t('workspace.resource.actions.downloadTranslated'),
+    key: 'download-translated',
     disabled: isBusy.value,
   },
   {
@@ -139,6 +141,9 @@ const handleDropdownSelect = (key: string) => {
     case 'download':
       emit('download', props.resource)
       break
+    case 'download-translated':
+      emit('downloadTranslated', props.resource)
+      break
     case 'delete':
       confirmDelete()
       break
@@ -148,16 +153,27 @@ const handleDropdownSelect = (key: string) => {
 
 <template>
   <div
-    class="group rounded-lg border border-transparent bg-lf-surface/80 px-4 py-3 transition-all hover:border-lf-border-soft hover:bg-lf-surface-elevated hover:shadow-sm hover:shadow-lf-shadow"
+    class="group relative overflow-hidden rounded-lg border border-transparent bg-lf-surface/80 px-4 py-2.5 transition-all hover:border-lf-border-soft hover:bg-lf-surface-elevated hover:shadow-sm hover:shadow-lf-shadow"
   >
-    <div class="flex min-h-19 items-start gap-3">
+    <!-- 进度背景层 -->
+    <div
+      class="pointer-events-none absolute inset-y-0 left-0 bg-emerald-500/10 transition-all duration-500"
+      :style="{ width: `${props.progress ?? 0}%` }"
+    />
+    <div class="flex min-h-14 items-center gap-3">
+      <NCheckbox
+        :checked="props.selected"
+        class="shrink-0"
+        @update:checked="emit('toggleSelect', props.resource)"
+      />
       <div
-        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300"
+        class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300"
       >
-        <NIcon size="18"><IconLucideFile /></NIcon>
+        <NIcon size="14"><IconCarbonDocument /></NIcon>
       </div>
-      <div class="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+      <div class="flex min-w-0 flex-1 items-center justify-between gap-3">
         <div class="min-w-0 flex-1">
+          <!-- 主行：文件名 + 状态 + 段落数 -->
           <div class="flex min-w-0 items-center gap-2">
             <NTooltip trigger="hover" placement="top-start">
               <template #trigger>
@@ -170,17 +186,13 @@ const handleDropdownSelect = (key: string) => {
               </template>
               <span class="block max-w-xs break-all">{{ props.resource.name }}</span>
             </NTooltip>
-            <NTag
-              class="shrink-0"
-              size="small"
-              :type="statusTagType(props.resource.status)"
-              :bordered="false"
-            >
-              {{ getStatusLabel(props.resource.status) }}
-            </NTag>
+            <span class="shrink-0 text-xs text-lf-text-muted">
+              {{ props.resource.total_segments }} {{ t('workspace.resource.columns.segments') }}
+            </span>
           </div>
+          <!-- 辅助行：路径 + 时间 + 格式 -->
           <div
-            class="mt-1.5 flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-lf-text-muted"
+            class="mt-0.5 flex min-w-0 flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-lf-text-subtle"
           >
             <NTooltip
               v-if="props.resource.path !== props.resource.name"
@@ -189,77 +201,53 @@ const handleDropdownSelect = (key: string) => {
             >
               <template #trigger>
                 <span
-                  class="inline-flex min-w-0 max-w-full items-center gap-1.5 sm:max-w-[min(36rem,50vw)]"
+                  class="inline-flex min-w-0 max-w-[24rem] items-center gap-1 truncate"
                   :title="props.resource.path"
                 >
-                  <IconLucideFolderTree class="h-3.5 w-3.5 shrink-0 text-lf-text-subtle" />
+                  <IconCarbonTreeView class="h-3 w-3 shrink-0" />
                   <span class="truncate">{{ props.resource.path }}</span>
                 </span>
               </template>
               <span class="block max-w-sm break-all">{{ props.resource.path }}</span>
             </NTooltip>
-            <span class="inline-flex shrink-0 items-center gap-1.5">
-              <IconLucideRows3 class="h-3.5 w-3.5 text-lf-text-subtle" />
-              {{ props.resource.total_segments }} {{ t('workspace.resource.columns.segments') }}
-            </span>
-            <span class="inline-flex shrink-0 items-center gap-1.5">
-              <IconLucideClock3 class="h-3.5 w-3.5 text-lf-text-subtle" />
-              {{ formatDate(props.resource.updated_at) }}
-            </span>
+            <span class="shrink-0">{{ formatDate(props.resource.updated_at) }}</span>
             <span
-              class="shrink-0 rounded-full bg-lf-surface-muted px-2 py-0.5 text-[11px] uppercase tracking-wide text-lf-text-subtle dark:bg-lf-surface-elevated dark:text-slate-300"
+              class="shrink-0 rounded bg-lf-surface-muted px-1.5 py-px text-[10px] uppercase tracking-wider"
             >
               {{ props.resource.format || '-' }}
             </span>
-          </div>
-          <NText
-            v-if="props.resource.status === 'error' && props.resource.error_message"
-            type="error"
-            class="mt-1 block truncate text-xs"
-            :title="props.resource.error_message"
-          >
-            {{ props.resource.error_message }}
-          </NText>
-          <!-- 翻译进度条 -->
-          <div v-if="props.progress !== undefined && props.resource.total_segments > 0" class="mt-2 flex items-center gap-2">
-            <NProgress
-              type="line"
-              :percentage="props.progress"
-              :show-indicator="false"
-              :height="4"
-              :border-radius="2"
-              :color="props.progress > 0 ? undefined : '#94a3b8'"
-              :rail-color="props.progress > 0 ? undefined : '#e2e8f0'"
-              status="success"
-              class="w-32"
-            />
-            <span class="whitespace-nowrap text-[11px] text-lf-text-subtle">{{ props.progress }}%</span>
+            <span v-if="props.progress !== undefined" class="text-[10px] text-emerald-500/80">
+              {{ props.progress }}%
+            </span>
           </div>
         </div>
 
-        <!-- 操作按钮 -->
-        <div
-          class="flex w-full shrink-0 items-center justify-end gap-1 opacity-100 transition-opacity sm:w-auto md:opacity-80 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
-        >
+        <!-- 操作按钮：始终可见 -->
+        <div class="flex shrink-0 items-center gap-1">
           <NButton
-            class="hidden sm:inline-flex"
-            size="small"
+            size="tiny"
             quaternary
             type="primary"
             @click="emit('openSegments', props.resource)"
           >
-            {{ t('workspace.resource.actions.segments') }}
+            <template #icon>
+              <NIcon size="14"><IconCarbonView /></NIcon>
+            </template>
           </NButton>
           <NDropdown :options="dropdownOptions" trigger="click" @select="handleDropdownSelect">
             <NButton
-              size="small"
+              size="tiny"
               quaternary
               :loading="
-                props.replacing || props.incrementalUpdating || props.downloading || props.deleting
+                props.replacing ||
+                props.incrementalUpdating ||
+                props.downloading ||
+                props.downloadingTranslated ||
+                props.deleting
               "
             >
               <template #icon>
-                <NIcon><IconLucideMoreHorizontal /></NIcon>
+                <NIcon size="14"><IconCarbonOverflowMenuHorizontal /></NIcon>
               </template>
             </NButton>
           </NDropdown>

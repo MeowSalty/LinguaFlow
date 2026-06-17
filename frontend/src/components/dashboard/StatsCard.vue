@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { Icon as IconifyIcon } from '@iconify/vue'
+
 defineProps<{
   title: string
   value: number | string
@@ -15,9 +17,9 @@ const trendColors: Record<string, string> = {
 }
 
 const trendIcons: Record<string, string> = {
-  up: '↑',
-  down: '↓',
-  neutral: '→',
+  up: 'carbon:arrow-up',
+  down: 'carbon:arrow-down',
+  neutral: 'carbon:arrows-horizontal',
 }
 </script>
 
@@ -39,7 +41,7 @@ const trendIcons: Record<string, string> = {
         <div
           class="flex h-10 w-10 items-center justify-center rounded-full bg-lf-brand-soft text-lg"
         >
-          {{ icon }}
+          <IconifyIcon :icon="icon" />
         </div>
       </div>
 
@@ -53,7 +55,7 @@ const trendIcons: Record<string, string> = {
           class="mt-1 flex items-center gap-1 text-xs"
           :class="trendColors[trend]"
         >
-          <span>{{ trendIcons[trend] }}</span>
+          <IconifyIcon :icon="trendIcons[trend] ?? 'carbon:arrows-horizontal'" class="text-xs" />
           <span>{{ trendValue }}</span>
         </div>
       </div>

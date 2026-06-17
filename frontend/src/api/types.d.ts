@@ -324,26 +324,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/projects/{projectId}/backends": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                projectId: components["parameters"]["ProjectId"];
-            };
-            cookie?: never;
-        };
-        /** 获取项目后端设置 */
-        get: operations["GetProjectBackends"];
-        /** 设置项目后端顺序 */
-        put: operations["SetProjectBackendOrder"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/projects/{projectId}/resources": {
         parameters: {
             query?: never;
@@ -470,6 +450,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/resources/{resourceId}/download-translated": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * 下载资源的翻译结果文件
+         * @description 基于资源当前所有已翻译/已编辑的 segments，渲染并下载翻译后的文件。
+         *     不依赖翻译任务状态，直接读取资源级别的最新翻译数据。
+         *     如果没有任何已翻译的段落，返回 409 Conflict。
+         */
+        get: operations["DownloadTranslatedResourceFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/resources/{resourceId}/segments": {
         parameters: {
             query?: never;
@@ -511,40 +516,81 @@ export interface paths {
         patch: operations["UpdateResourceSegment"];
         trace?: never;
     };
-    "/projects/{projectId}/stages/{stage}/override": {
+    "/projects/{projectId}/resources/{resourceId}/segments/{segmentId}/review": {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 projectId: components["parameters"]["ProjectId"];
-                stage: components["parameters"]["Stage"];
+                resourceId: components["parameters"]["ResourceId"];
+                segmentId: components["parameters"]["SegmentId"];
             };
             cookie?: never;
         };
         get?: never;
-        /** 设置阶段后端覆盖 */
-        put: operations["SetStageBackendOverride"];
+        put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 审核单个段落（通过/拒绝/编辑） */
+        patch: operations["ReviewResourceSegment"];
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/{resourceId}/segments/batch-review": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 批量审核段落 */
+        post: operations["BatchReviewResourceSegments"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/projects/{projectId}/stages/{stage}/plan": {
+    "/projects/{projectId}/resources/{resourceId}/segments/approve-all": {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 projectId: components["parameters"]["ProjectId"];
-                stage: components["parameters"]["Stage"];
+                resourceId: components["parameters"]["ResourceId"];
             };
             cookie?: never;
         };
-        /** 查询阶段执行计划 */
-        get: operations["GetStagePlan"];
+        get?: never;
         put?: never;
-        post?: never;
+        /** 批准资源中所有已翻译/已编辑的段落 */
+        post: operations["ApproveAllResourceSegments"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/resources/{resourceId}/retranslate-rejected": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** 将资源中被拒绝的段落重置为待翻译 */
+        post: operations["RetranslateRejectedSegments"];
         delete?: never;
         options?: never;
         head?: never;
@@ -707,20 +753,118 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/translation-jobs/{translationJobId}/download": {
+    "/execution-plan-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出当前用户的执行计划模板 */
+        get: operations["ListExecutionPlanTemplates"];
+        put?: never;
+        /** 创建执行计划模板 */
+        post: operations["CreateExecutionPlanTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/execution-plan-templates/{executionPlanTemplateId}": {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                translationJobId: components["parameters"]["TranslationJobId"];
+                executionPlanTemplateId: components["parameters"]["ExecutionPlanTemplateId"];
             };
             cookie?: never;
         };
-        /** 下载翻译任务结果 */
-        get: operations["DownloadTranslationJobResult"];
-        put?: never;
+        /** 获取执行计划模板详情 */
+        get: operations["GetExecutionPlanTemplate"];
+        /** 更新执行计划模板 */
+        put: operations["UpdateExecutionPlanTemplate"];
         post?: never;
+        /** 删除执行计划模板 */
+        delete: operations["DeleteExecutionPlanTemplate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/prompt-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出当前用户的提示词模板 */
+        get: operations["ListPromptTemplates"];
+        put?: never;
+        /** 创建提示词模板 */
+        post: operations["CreatePromptTemplate"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/prompt-templates/{promptTemplateId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                promptTemplateId: components["parameters"]["PromptTemplateId"];
+            };
+            cookie?: never;
+        };
+        /** 获取提示词模板详情 */
+        get: operations["GetPromptTemplate"];
+        /** 更新提示词模板 */
+        put: operations["UpdatePromptTemplate"];
+        post?: never;
+        /** 删除提示词模板 */
+        delete: operations["DeletePromptTemplate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/translation-profiles": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出当前用户的翻译配置 */
+        get: operations["ListTranslationProfiles"];
+        put?: never;
+        /** 创建翻译配置 */
+        post: operations["CreateTranslationProfile"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/translation-profiles/{translationProfileId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                translationProfileId: components["parameters"]["TranslationProfileId"];
+            };
+            cookie?: never;
+        };
+        /** 获取翻译配置详情 */
+        get: operations["GetTranslationProfile"];
+        /** 更新翻译配置 */
+        put: operations["UpdateTranslationProfile"];
+        post?: never;
+        /** 删除翻译配置 */
+        delete: operations["DeleteTranslationProfile"];
         options?: never;
         head?: never;
         patch?: never;
@@ -864,7 +1008,8 @@ export interface components {
             segment_index: number;
             source_text: string;
             target_text?: string;
-            status: string;
+            /** @enum {string} */
+            status: "pending" | "translated" | "edited" | "approved" | "rejected";
             review_comment?: string;
             reviewed_by?: components["schemas"]["User"];
             /** Format: date-time */
@@ -895,9 +1040,6 @@ export interface components {
             directory: string;
             format: string;
             total_segments: number;
-            /** @enum {string} */
-            status: "ready" | "error";
-            error_message?: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -927,6 +1069,39 @@ export interface components {
             items: components["schemas"]["Segment"][];
             next_cursor?: string;
         };
+        SegmentReviewRequest: {
+            /**
+             * @description 审核操作：approve=通过，reject=拒绝，edit=编辑译文
+             * @enum {string}
+             */
+            action: "approve" | "reject" | "edit";
+            /** @description 编辑译文时必填 */
+            target_text?: string;
+            /** @description 审核备注 */
+            comment?: string;
+        };
+        BatchReviewRequest: {
+            /** @description 待审核的段落 ID 列表 */
+            segment_ids: number[];
+            /**
+             * @description 批量审核操作
+             * @enum {string}
+             */
+            action: "approve" | "reject";
+            /** @description 审核备注 */
+            comment?: string;
+        };
+        BatchReviewResponse: {
+            items: components["schemas"]["Segment"][];
+        };
+        ApproveAllResponse: {
+            /** @description 批准的段落数 */
+            approved_count: number;
+        };
+        RetranslateResponse: {
+            /** @description 重置为待翻译的段落数 */
+            reset_count: number;
+        };
         IncrementalUpdateResponse: {
             resource: components["schemas"]["Resource"];
             changes: components["schemas"]["IncrementalUpdateChanges"];
@@ -938,7 +1113,7 @@ export interface components {
             /** @description 资源项目内规范化相对路径 */
             path: string;
             /**
-             * @description 处理结果：created=创建成功, conflict=与已有资源冲突, failed=处理失败
+             * @description 处理结果：created=创建成功，conflict=与已有资源冲突，failed=处理失败
              * @enum {string}
              */
             action: "created" | "conflict" | "failed";
@@ -956,7 +1131,7 @@ export interface components {
             /** @description 资源项目内规范化相对路径 */
             path: string;
             /**
-             * @description 建议操作：create=可直接创建, conflict=与已有资源冲突, duplicate=批次内重复路径
+             * @description 建议操作：create=可直接创建，conflict=与已有资源冲突，duplicate=批次内重复路径
              * @enum {string}
              */
             action: "create" | "conflict" | "duplicate";
@@ -967,8 +1142,15 @@ export interface components {
             items: components["schemas"]["ResourcePrecheckFileResult"][];
         };
         CreateTranslationJobRequest: {
+            /** @description 执行计划模板 ID */
+            execution_plan_id: number;
             resource_ids?: number[];
             segment_ids?: number[];
+            /**
+             * @description 翻译完成后是否自动审批通过所有段落
+             * @default false
+             */
+            auto_approve: boolean;
             translation_config?: {
                 [key: string]: unknown;
             };
@@ -992,8 +1174,9 @@ export interface components {
         TranslationJob: {
             id: number;
             project_id: number;
+            execution_plan_id: number;
             /** @enum {string} */
-            status: "pending" | "running" | "awaiting_review" | "completed" | "failed" | "cancelled";
+            status: "pending" | "running" | "completed" | "failed" | "cancelled";
             /** @enum {string} */
             trigger_type: "manual" | "file_update" | "glossary_change" | "web_edit";
             translation_config?: {
@@ -1037,15 +1220,13 @@ export interface components {
         Backend: {
             id: number;
             /** @enum {string} */
-            source: "user" | "org";
+            scope: "user" | "org";
             name: string;
             /** @enum {string} */
             type: "openai" | "anthropic" | "google";
-            priority: number;
             options?: {
                 [key: string]: unknown;
             };
-            options_visible?: boolean;
             owner_user_id?: number;
             owner_org_id?: number;
         };
@@ -1056,8 +1237,6 @@ export interface components {
             name: string;
             /** @enum {string} */
             type: "openai" | "anthropic" | "google";
-            /** @default 0 */
-            priority: number;
             options?: {
                 [key: string]: unknown;
             };
@@ -1066,7 +1245,6 @@ export interface components {
             name: string;
             /** @enum {string} */
             type: "openai" | "anthropic" | "google";
-            priority?: number;
             options?: {
                 [key: string]: unknown;
             };
@@ -1121,42 +1299,6 @@ export interface components {
             source_lang?: string;
             target_lang?: string;
         };
-        ProjectBackendBinding: {
-            order_index: number;
-            source: string;
-            backend_id: number;
-            name: string;
-            type: string;
-            priority: number;
-            options?: {
-                [key: string]: unknown;
-            };
-        };
-        StageBackendOverride: {
-            stage: string;
-            /** @enum {string} */
-            backend_mode: "inherit" | "prepend" | "restrict";
-            backend_order?: string[];
-        };
-        SetBackendOrderRequest: {
-            bindings: {
-                /** @enum {string} */
-                source: "user" | "org";
-                backend_id: number;
-            }[];
-        };
-        SetStageOverrideRequest: {
-            stage: string;
-            /** @enum {string} */
-            backend_mode: "inherit" | "prepend" | "restrict";
-            backend_order?: string[];
-        };
-        ProjectBackendSettings: {
-            backends: components["schemas"]["ProjectBackendBinding"][];
-            stage_overrides?: {
-                [key: string]: components["schemas"]["StageBackendOverride"];
-            };
-        };
         GlossaryEntry: {
             id: number;
             source: string;
@@ -1192,6 +1334,87 @@ export interface components {
                 reason?: string;
             }[];
         };
+        PromptTemplate: {
+            id: number;
+            name: string;
+            description: string;
+            scope: components["schemas"]["PromptTemplateScope"];
+            owner_user_id?: number;
+            owner_org_id?: number;
+            /** @description 提示词内容。 */
+            system_prompt_content?: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        PromptTemplateListResponse: {
+            items: components["schemas"]["PromptTemplate"][];
+        };
+        CreatePromptTemplateRequest: {
+            name: string;
+            description?: string;
+            /** @description 提示词内容。 */
+            system_prompt_content?: string;
+        };
+        UpdatePromptTemplateRequest: {
+            name?: string;
+            description?: string;
+            /** @description 提示词内容。 */
+            system_prompt_content?: string;
+        };
+        TranslationProfile: {
+            id: number;
+            name: string;
+            description: string;
+            scope: components["schemas"]["TranslationProfileScope"];
+            owner_user_id?: number;
+            owner_org_id?: number;
+            config: components["schemas"]["TranslationProfileConfig"];
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        TranslationProfileListResponse: {
+            items: components["schemas"]["TranslationProfile"][];
+        };
+        CreateTranslationProfileRequest: {
+            name: string;
+            description?: string;
+            config?: components["schemas"]["TranslationProfileConfig"];
+        };
+        UpdateTranslationProfileRequest: {
+            name?: string;
+            description?: string;
+            config?: components["schemas"]["TranslationProfileConfig"];
+        };
+        ExecutionPlanTemplate: {
+            id: number;
+            name: string;
+            description?: string;
+            scope: components["schemas"]["ExecutionPlanTemplateScope"];
+            owner_user_id?: number;
+            owner_org_id?: number;
+            rounds: components["schemas"]["ExecutionRoundConfig"][];
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        ExecutionPlanTemplateListResponse: {
+            items: components["schemas"]["ExecutionPlanTemplate"][];
+        };
+        CreateExecutionPlanTemplateRequest: {
+            name: string;
+            description?: string;
+            rounds: components["schemas"]["ExecutionRoundConfig"][];
+        };
+        UpdateExecutionPlanTemplateRequest: {
+            name?: string;
+            description?: string;
+            rounds?: components["schemas"]["ExecutionRoundConfig"][];
+        };
         IncrementalUpdateChanges: {
             /** @description 新增段落数 */
             added: number;
@@ -1201,6 +1424,80 @@ export interface components {
             unchanged: number;
             /** @description 删除的段落数 */
             deleted: number;
+        };
+        /** @enum {string} */
+        ExecutionPlanTemplateScope: "user" | "org" | "system";
+        RetryConfig: {
+            /** @default 3 */
+            max_attempts: number;
+            /** @default 2000 */
+            backoff_ms: number;
+            /** @default true */
+            jitter: boolean;
+        };
+        ExecutionRoundConfig: {
+            /** @description 轮次名称（可选，空值自动生成 round-N） */
+            name?: string;
+            /** @description 后端 ID（Backend 单表全局唯一） */
+            backend_id: number;
+            /** @description 提示词模板 ID（PromptTemplate 单表全局唯一） */
+            prompt_template_id: number;
+            /** @description 策略模板 ID（TranslationProfile 单表全局唯一） */
+            profile_id: number;
+            batch_size: number;
+            concurrency: number;
+            /** @default 0 */
+            fallback_shrink: number;
+            /** @default 0 */
+            rate_limit_per_sec: number;
+            retry?: components["schemas"]["RetryConfig"];
+        };
+        /** @enum {string} */
+        PromptTemplateScope: "user" | "org" | "system";
+        /** @enum {string} */
+        TranslationProfileScope: "user" | "org" | "system";
+        ProfileSplitConfig: {
+            enabled: boolean;
+            strategy: string;
+            max_chars: number;
+        };
+        ProfileProtectConfig: {
+            enabled: boolean;
+            rules?: string[];
+        };
+        ProfilePostprocessConfig: {
+            enabled: boolean;
+            trim_spaces: boolean;
+        };
+        ProfileRepairConfig: {
+            enabled: boolean;
+            json_structural: boolean;
+            schema_aliases: boolean;
+            partial: boolean;
+            /** Format: double */
+            partial_threshold: number;
+            placeholder_normalize: boolean;
+            prompt_upgrade: boolean;
+        };
+        ProfileBootstrapConfig: {
+            /** @enum {string} */
+            mode: "off" | "pre" | "inline";
+            save: boolean;
+            max_terms_per_batch: number;
+            min_source_len: number;
+            /** @enum {string} */
+            inline_conflict_strategy: "off" | "rewrite-local";
+        };
+        ProfileGlossaryConfig: {
+            enabled: boolean;
+            bootstrap: components["schemas"]["ProfileBootstrapConfig"];
+        };
+        TranslationProfileConfig: {
+            split: components["schemas"]["ProfileSplitConfig"];
+            protect: components["schemas"]["ProfileProtectConfig"];
+            postprocess: components["schemas"]["ProfilePostprocessConfig"];
+            repair: components["schemas"]["ProfileRepairConfig"];
+            glossary: components["schemas"]["ProfileGlossaryConfig"];
         };
     };
     responses: {
@@ -1222,7 +1519,9 @@ export interface components {
         TranslationJobId: number;
         BackendId: number;
         EntryId: number;
-        Stage: "translate" | "bootstrap";
+        PromptTemplateId: number;
+        TranslationProfileId: number;
+        ExecutionPlanTemplateId: number;
         SegmentId: number;
         Cursor: string;
         Limit: number;
@@ -1928,60 +2227,9 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    GetProjectBackends: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                projectId: components["parameters"]["ProjectId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 后端设置 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectBackendSettings"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    SetProjectBackendOrder: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                projectId: components["parameters"]["ProjectId"];
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SetBackendOrderRequest"];
-            };
-        };
-        responses: {
-            /** @description 设置成功 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ProjectBackendBinding"][];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
     ListProjectResources: {
         parameters: {
             query?: {
-                status?: "ready" | "error";
                 format?: string;
                 search?: string;
                 cursor?: components["parameters"]["Cursor"];
@@ -2223,10 +2471,34 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    DownloadTranslatedResourceFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 翻译结果文件 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": File;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     ListResourceSegments: {
         parameters: {
             query?: {
-                status?: "pending" | "translated" | "reviewed" | "rejected";
+                status?: "pending" | "translated" | "edited" | "approved" | "rejected";
                 search?: string;
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
@@ -2281,53 +2553,106 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    SetStageBackendOverride: {
+    ReviewResourceSegment: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 projectId: components["parameters"]["ProjectId"];
-                stage: components["parameters"]["Stage"];
+                resourceId: components["parameters"]["ResourceId"];
+                segmentId: components["parameters"]["SegmentId"];
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["SetStageOverrideRequest"];
+                "application/json": components["schemas"]["SegmentReviewRequest"];
             };
         };
         responses: {
-            /** @description 设置成功 */
+            /** @description 审核成功 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["StageBackendOverride"];
+                    "application/json": components["schemas"]["Segment"];
                 };
             };
             default: components["responses"]["Problem"];
         };
     };
-    GetStagePlan: {
+    BatchReviewResourceSegments: {
         parameters: {
             query?: never;
             header?: never;
             path: {
                 projectId: components["parameters"]["ProjectId"];
-                stage: components["parameters"]["Stage"];
+                resourceId: components["parameters"]["ResourceId"];
             };
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BatchReviewRequest"];
+            };
+        };
         responses: {
-            /** @description 阶段执行计划 */
+            /** @description 批量审核结果 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ProjectBackendBinding"][];
+                    "application/json": components["schemas"]["BatchReviewResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ApproveAllResourceSegments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 批准结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApproveAllResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    RetranslateRejectedSegments: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 重置结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RetranslateResponse"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -2489,7 +2814,7 @@ export interface operations {
     ListTranslationJobs: {
         parameters: {
             query?: {
-                status?: "pending" | "running" | "awaiting_review" | "completed" | "failed" | "cancelled";
+                status?: "pending" | "running" | "completed" | "failed" | "cancelled";
                 trigger_type?: "manual" | "file_update" | "glossary_change" | "web_edit";
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
@@ -2610,28 +2935,353 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    DownloadTranslationJobResult: {
+    ListExecutionPlanTemplates: {
         parameters: {
-            query?: {
-                resource_id?: number;
-            };
+            query?: never;
             header?: never;
-            path: {
-                translationJobId: components["parameters"]["TranslationJobId"];
-            };
+            path?: never;
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 翻译结果文件 */
+            /** @description 执行计划模板列表 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/octet-stream": File;
-                    "application/zip": File;
+                    "application/json": components["schemas"]["ExecutionPlanTemplateListResponse"];
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateExecutionPlanTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateExecutionPlanTemplateRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionPlanTemplate"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetExecutionPlanTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                executionPlanTemplateId: components["parameters"]["ExecutionPlanTemplateId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 执行计划模板详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionPlanTemplate"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateExecutionPlanTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                executionPlanTemplateId: components["parameters"]["ExecutionPlanTemplateId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateExecutionPlanTemplateRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ExecutionPlanTemplate"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteExecutionPlanTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                executionPlanTemplateId: components["parameters"]["ExecutionPlanTemplateId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 删除成功 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListPromptTemplates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 提示词模板列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptTemplateListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreatePromptTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePromptTemplateRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptTemplate"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetPromptTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                promptTemplateId: components["parameters"]["PromptTemplateId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 提示词模板详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptTemplate"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdatePromptTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                promptTemplateId: components["parameters"]["PromptTemplateId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePromptTemplateRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PromptTemplate"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeletePromptTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                promptTemplateId: components["parameters"]["PromptTemplateId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 删除成功 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListTranslationProfiles: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 翻译配置列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslationProfileListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateTranslationProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateTranslationProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslationProfile"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetTranslationProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                translationProfileId: components["parameters"]["TranslationProfileId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 翻译配置详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslationProfile"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateTranslationProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                translationProfileId: components["parameters"]["TranslationProfileId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateTranslationProfileRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TranslationProfile"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteTranslationProfile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                translationProfileId: components["parameters"]["TranslationProfileId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 删除成功 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };
