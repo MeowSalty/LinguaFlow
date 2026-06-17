@@ -4,9 +4,7 @@ import (
 	"archive/zip"
 	"errors"
 	"fmt"
-	"io"
 	"net/http"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -215,7 +213,7 @@ func (s *Server) handleDownloadTranslationJobResult(w http.ResponseWriter, r *ht
 				continue
 			}
 		}
-		if item.Status == service.JobResourceStatusCompleted && strings.TrimSpace(item.OutputPath) != "" {
+		if item.Status == service.JobResourceStatusCompleted {
 			ready = append(ready, item)
 		}
 	}
@@ -224,55 +222,50 @@ func (s *Server) handleDownloadTranslationJobResult(w http.ResponseWriter, r *ht
 		return
 	}
 	if len(ready) == 1 {
-		s.downloadSingleTranslationOutput(w, ready[0])
+		s.downloadSingleTranslationOutput(w, r, authUser.User.ID, job.ID, ready[0])
 		return
 	}
-	s.downloadZipTranslationOutputs(w, job.ID, ready)
+	s.downloadZipTranslationOutputs(w, r, authUser.User.ID, job.ID, ready)
 }
 
-func (s *Server) downloadSingleTranslationOutput(w http.ResponseWriter, item *ent.JobResource) {
-	absolutePath, err := s.jobStore.Absolute(item.OutputPath)
+func (s *Server) downloadSingleTranslationOutput(w http.ResponseWriter, r *http.Request, userID, jobID int, item *ent.JobResource) {
+	res, err := item.Edges.ResourceOrErr()
 	if err != nil {
 		writeServiceError(w, err)
 		return
 	}
-	file, err := os.Open(absolutePath)
-	if err != nil {
-		writeServiceError(w, err)
-		return
-	}
-	defer file.Close()
-	filename := filepath.Base(absolutePath)
+	filename := safeZipResourceEntryName(res)
+
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
-	_, _ = io.Copy(w, file)
+
+	if err := s.translationJobSvc.RenderTranslatedResource(r.Context(), userID, jobID, res.ID, w); err != nil {
+		w.Header().Del("Content-Disposition")
+		w.Header().Del("Content-Type")
+		if ent.IsNotFound(err) || strings.Contains(err.Error(), "原始文件不存在") {
+			writeProblem(w, http.StatusNotFound, "not_found", "原始文件不存在或已被删除")
+			return
+		}
+		writeServiceError(w, err)
+	}
 }
 
-func (s *Server) downloadZipTranslationOutputs(w http.ResponseWriter, jobID int, items []*ent.JobResource) {
+func (s *Server) downloadZipTranslationOutputs(w http.ResponseWriter, r *http.Request, userID, jobID int, items []*ent.JobResource) {
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fmt.Sprintf("translation-job-%d-results.zip", jobID)))
 	zw := zip.NewWriter(w)
 	defer zw.Close()
 	for _, item := range items {
-		absolutePath, err := s.jobStore.Absolute(item.OutputPath)
+		res, err := item.Edges.ResourceOrErr()
 		if err != nil {
 			continue
 		}
-		file, err := os.Open(absolutePath)
-		if err != nil {
-			continue
-		}
-		entryName := filepath.Base(absolutePath)
-		if item.Edges.Resource != nil {
-			entryName = safeZipResourceEntryName(item.Edges.Resource)
-		}
+		entryName := safeZipResourceEntryName(res)
 		entry, err := zw.Create(entryName)
 		if err != nil {
-			_ = file.Close()
 			continue
 		}
-		_, _ = io.Copy(entry, file)
-		_ = file.Close()
+		_ = s.translationJobSvc.RenderTranslatedResource(r.Context(), userID, jobID, res.ID, entry)
 	}
 }
 

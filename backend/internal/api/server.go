@@ -65,17 +65,17 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 	s.glossarySvc = service.NewGlossaryService(client, s.projectSvc)
 	s.promptTemplateSvc = service.NewPromptTemplateService(client)
 	s.translationProfileSvc = service.NewTranslationProfileService(client)
-	s.translationJobSvc = service.NewTranslationJobService(client, s.projectSvc, s.executionPlanSvc, s.backendSvc, s.promptTemplateSvc, s.translationProfileSvc)
-	s.executionPlanHandler = NewHandlerExecutionPlan(s.executionPlanSvc)
-	s.reviewSvc = service.NewReviewService(client, s.projectSvc)
-	s.segmentSvc = service.NewSegmentService(client, s.projectSvc)
-	s.statsSvc = service.NewStatsService(client, s.projectSvc)
-	s.auditSvc = service.NewAuditService(client, s.userService, s.projectSvc)
 	jobStore, err := filestore.NewLocal(filepath.Join(cfg.Server.DataDir, "jobs"))
 	if err != nil {
 		return nil, err
 	}
 	s.jobStore = jobStore
+	s.translationJobSvc = service.NewTranslationJobService(client, s.projectSvc, s.executionPlanSvc, s.backendSvc, s.promptTemplateSvc, s.translationProfileSvc, jobStore)
+	s.executionPlanHandler = NewHandlerExecutionPlan(s.executionPlanSvc)
+	s.reviewSvc = service.NewReviewService(client, s.projectSvc)
+	s.segmentSvc = service.NewSegmentService(client, s.projectSvc)
+	s.statsSvc = service.NewStatsService(client, s.projectSvc)
+	s.auditSvc = service.NewAuditService(client, s.userService, s.projectSvc)
 	s.resourceSvc = service.NewResourceService(client, s.projectSvc, jobStore)
 	queueSize := cfg.Pipeline.Translate.Concurrency * 8
 	if queueSize < 16 {

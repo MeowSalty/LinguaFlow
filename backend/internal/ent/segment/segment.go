@@ -31,6 +31,8 @@ const (
 	FieldReviewComment = "review_comment"
 	// FieldResourceID holds the string denoting the resource_id field in the database.
 	FieldResourceID = "resource_id"
+	// FieldMeta holds the string denoting the meta field in the database.
+	FieldMeta = "meta"
 	// EdgeResource holds the string denoting the resource edge name in mutations.
 	EdgeResource = "resource"
 	// EdgeReviewedBy holds the string denoting the reviewed_by edge name in mutations.
@@ -64,6 +66,7 @@ var Columns = []string{
 	FieldStatus,
 	FieldReviewComment,
 	FieldResourceID,
+	FieldMeta,
 }
 
 // ForeignKeys holds the SQL foreign-keys that are owned by the "segments"
@@ -177,6 +180,11 @@ func ByReviewComment(opts ...sql.OrderTermOption) OrderOption {
 // ByResourceID orders the results by the resource_id field.
 func ByResourceID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldResourceID, opts...).ToFunc()
+}
+
+// ByMeta orders the results by the meta field.
+func ByMeta(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMeta, opts...).ToFunc()
 }
 
 // ByResourceField orders the results by resource field.

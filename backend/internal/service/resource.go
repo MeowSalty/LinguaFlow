@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -49,9 +50,10 @@ const (
 // SegmentChange 段落变更详情。
 type SegmentChange struct {
 	ChangeType SegmentChangeType
-	OldSegment *ent.Segment // 旧段落（updated/unchanged/deleted 时有值）
-	NewIndex   int          // 新文件中的索引
-	NewSource  string       // 新源文本
+	OldSegment *ent.Segment   // 旧段落（updated/unchanged/deleted 时有值）
+	NewIndex   int            // 新文件中的索引
+	NewSource  string         // 新源文本
+	NewMeta    map[string]any // 新增：格式元数据
 }
 
 // IncrementalUpdateStats 增量更新统计信息。
@@ -478,6 +480,7 @@ type parsedResourceSegment struct {
 	Index      int
 	SourceText string
 	TargetText string
+	Meta       map[string]any // 新增：格式元数据
 }
 
 // parseResourceSegments 解析文件并返回 Resource 级段落。
@@ -512,7 +515,7 @@ func (s *ResourceService) parseResourceSegments(relPath string) ([]parsedResourc
 		if sourceText == "" {
 			sourceText = " "
 		}
-		items = append(items, parsedResourceSegment{Index: i, SourceText: sourceText, TargetText: item.Target})
+		items = append(items, parsedResourceSegment{Index: i, SourceText: sourceText, TargetText: item.Target, Meta: item.Meta})
 	}
 	return items, nil
 }
@@ -548,6 +551,10 @@ func replaceResourceSegmentsBatch(ctx context.Context, accessor segmentClientAcc
 				SetStatus(SegmentStatusPending)
 			if strings.TrimSpace(item.TargetText) != "" {
 				create.SetTargetText(item.TargetText).SetStatus(SegmentStatusTranslated)
+			}
+			if item.Meta != nil {
+				metaJSON, _ := json.Marshal(item.Meta)
+				create = create.SetMeta(string(metaJSON))
 			}
 			builders = append(builders, create)
 		}
@@ -724,6 +731,7 @@ func diffSegments(oldSegments []*ent.Segment, newSegments []parsedResourceSegmen
 				ChangeType: SegmentChangeAdded,
 				NewIndex:   newSeg.Index,
 				NewSource:  newSeg.SourceText,
+				NewMeta:    newSeg.Meta,
 			})
 		}
 	}
@@ -892,6 +900,10 @@ func (s *ResourceService) applySegmentChanges(ctx context.Context, resourceID in
 				SetSegmentIndex(c.NewIndex).
 				SetSourceText(c.NewSource).
 				SetStatus(SegmentStatusPending)
+			if c.NewMeta != nil {
+				metaJSON, _ := json.Marshal(c.NewMeta)
+				create = create.SetMeta(string(metaJSON))
+			}
 			if _, err := create.Save(ctx); err != nil {
 				return err
 			}

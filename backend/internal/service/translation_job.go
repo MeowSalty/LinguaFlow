@@ -5,9 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"os"
 	"sort"
+	"strconv"
 	"strings"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
@@ -18,6 +22,8 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 )
 
 const (
@@ -51,6 +57,7 @@ type TranslationJobService struct {
 	backends        *BackendService
 	promptTemplates *PromptTemplateService
 	profiles        *TranslationProfileService
+	store           *filestore.LocalStore
 }
 
 // CreateTranslationJobInput 创建翻译任务的输入参数。
@@ -77,6 +84,7 @@ func NewTranslationJobService(
 	backends *BackendService,
 	promptTemplates *PromptTemplateService,
 	profiles *TranslationProfileService,
+	store *filestore.LocalStore,
 ) *TranslationJobService {
 	return &TranslationJobService{
 		client:          client,
@@ -85,6 +93,7 @@ func NewTranslationJobService(
 		backends:        backends,
 		promptTemplates: promptTemplates,
 		profiles:        profiles,
+		store:           store,
 	}
 }
 
@@ -787,4 +796,139 @@ func GetSnapshot(job *ent.TranslationJob) (*JobExecutionSnapshot, error) {
 		return nil, fmt.Errorf("unmarshal snapshot: %w", err)
 	}
 	return &snap, nil
+}
+
+// GetTranslationSnapshot 从翻译任务获取执行快照。
+func (s *TranslationJobService) GetTranslationSnapshot(ctx context.Context, jobID int) (*JobExecutionSnapshot, error) {
+	job, err := s.client.TranslationJob.Get(ctx, jobID)
+	if err != nil {
+		return nil, fmt.Errorf("load job: %w", err)
+	}
+	return GetSnapshot(job)
+}
+
+// RenderTranslatedResource 从 DB segments 按需渲染翻译后的资源文件。
+func (s *TranslationJobService) RenderTranslatedResource(
+	ctx context.Context,
+	actorUserID, jobID, resourceID int,
+	writer io.Writer,
+) error {
+	// 1. 校验权限并加载数据
+	segments, res, sourceLang, targetLang, err := s.loadResourceForRender(ctx, jobID, resourceID)
+	if err != nil {
+		return err
+	}
+
+	// 2. 加载原始文件
+	original, err := s.loadOriginalFile(res.StoragePath)
+	if err != nil {
+		return fmt.Errorf("原始文件不存在或已被删除，无法渲染资源 %d: %w", resourceID, err)
+	}
+
+	// 3. 构建 Document 并填充 Target
+	inputs := buildSegmentInputsWithTarget(segments)
+	doc := engine.BuildDocumentFromSegments(inputs, sourceLang, targetLang, res.Format)
+
+	// 4. 解析格式并渲染
+	p, err := parser.Resolve(res.Format)
+	if err != nil {
+		return fmt.Errorf("resolve parser for format %q: %w", res.Format, err)
+	}
+	return p.Render(ctx, doc, original, writer)
+}
+
+// loadResourceForRender 加载渲染所需的资源数据。
+func (s *TranslationJobService) loadResourceForRender(
+	ctx context.Context,
+	jobID, resourceID int,
+) ([]*ent.Segment, *ent.Resource, string, string, error) {
+	// 1. 加载资源
+	res, err := s.client.Resource.Get(ctx, resourceID)
+	if err != nil {
+		return nil, nil, "", "", fmt.Errorf("load resource: %w", err)
+	}
+
+	// 2. 加载 segments（含 Source + Target + Meta）
+	segments, err := s.client.Segment.Query().
+		Where(segment.ResourceIDEQ(resourceID)).
+		Order(ent.Asc(segment.FieldSegmentIndex)).
+		All(ctx)
+	if err != nil {
+		return nil, nil, "", "", fmt.Errorf("load segments: %w", err)
+	}
+
+	// 3. 获取语言配置（从 job snapshot）
+	job, err := s.client.TranslationJob.Query().
+		Where(translationjob.IDEQ(jobID)).
+		WithProject().
+		Only(ctx)
+	if err != nil {
+		return nil, nil, "", "", fmt.Errorf("load job: %w", err)
+	}
+	snapshot, err := GetSnapshot(job)
+	if err != nil {
+		return nil, nil, "", "", fmt.Errorf("get snapshot: %w", err)
+	}
+	sourceLang := snapshot.SourceLang
+	targetLang := snapshot.TargetLang
+
+	return segments, res, sourceLang, targetLang, nil
+}
+
+// CheckJobAccess 校验用户是否有权访问翻译任务。
+func (s *TranslationJobService) CheckJobAccess(ctx context.Context, userID, jobID int) error {
+	job, err := s.client.TranslationJob.Query().
+		Where(translationjob.IDEQ(jobID)).
+		WithProject().
+		Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return ErrTranslationJobNotFound
+		}
+		return fmt.Errorf("load job: %w", err)
+	}
+	// 通过项目权限校验：用户必须是任务所属项目的访问者
+	projectRow, err := job.Edges.ProjectOrErr()
+	if err != nil {
+		return fmt.Errorf("load project: %w", err)
+	}
+	if _, err := s.projects.requireProjectAccess(ctx, userID, projectRow.ID, false); err != nil {
+		return fmt.Errorf("access denied: %w", err)
+	}
+	return nil
+}
+
+// loadOriginalFile 加载原始文件流。
+func (s *TranslationJobService) loadOriginalFile(storagePath string) (io.ReadCloser, error) {
+	absolutePath, err := s.store.Absolute(storagePath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve path: %w", err)
+	}
+	f, err := os.Open(absolutePath)
+	if err != nil {
+		return nil, fmt.Errorf("open original file: %w", err)
+	}
+	return f, nil
+}
+
+// buildSegmentInputsWithTarget 同时填充 Target（用于按需渲染）。
+func buildSegmentInputsWithTarget(rows []*ent.Segment) []engine.SegmentInput {
+	inputs := make([]engine.SegmentInput, len(rows))
+	for i, row := range rows {
+		var meta map[string]any
+		if row.Meta != nil {
+			_ = json.Unmarshal([]byte(*row.Meta), &meta)
+		}
+		var target string
+		if row.TargetText != nil {
+			target = *row.TargetText
+		}
+		inputs[i] = engine.SegmentInput{
+			ID:         strconv.Itoa(row.SegmentIndex),
+			SourceText: row.SourceText,
+			Meta:       meta,
+			TargetText: target,
+		}
+	}
+	return inputs
 }

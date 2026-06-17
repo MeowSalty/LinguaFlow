@@ -35,6 +35,8 @@ type Segment struct {
 	ReviewComment *string `json:"review_comment,omitempty"`
 	// 所属资源 ID
 	ResourceID *int `json:"resource_id,omitempty"`
+	// parser 注入的格式元数据（JSON 序列化），用于按需渲染时还原格式
+	Meta *string `json:"meta,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the SegmentQuery when eager-loading is set.
 	Edges                  SegmentEdges `json:"edges"`
@@ -82,7 +84,7 @@ func (*Segment) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case segment.FieldID, segment.FieldSegmentIndex, segment.FieldResourceID:
 			values[i] = new(sql.NullInt64)
-		case segment.FieldSourceText, segment.FieldTargetText, segment.FieldStatus, segment.FieldReviewComment:
+		case segment.FieldSourceText, segment.FieldTargetText, segment.FieldStatus, segment.FieldReviewComment, segment.FieldMeta:
 			values[i] = new(sql.NullString)
 		case segment.FieldCreatedAt, segment.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -159,6 +161,13 @@ func (_m *Segment) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.ResourceID = new(int)
 				*_m.ResourceID = int(value.Int64)
+			}
+		case segment.FieldMeta:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field meta", values[i])
+			} else if value.Valid {
+				_m.Meta = new(string)
+				*_m.Meta = value.String
 			}
 		case segment.ForeignKeys[0]:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -241,6 +250,11 @@ func (_m *Segment) String() string {
 	if v := _m.ResourceID; v != nil {
 		builder.WriteString("resource_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.Meta; v != nil {
+		builder.WriteString("meta=")
+		builder.WriteString(*v)
 	}
 	builder.WriteByte(')')
 	return builder.String()

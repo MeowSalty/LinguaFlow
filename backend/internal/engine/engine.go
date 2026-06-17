@@ -16,7 +16,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline/stages"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
@@ -32,7 +31,6 @@ type Engine struct {
 	bootstrapRenderer *prompt.BootstrapRenderer
 	glossary          glossary.Glossary
 	tm                tm.TranslationMemory
-	limiter           backend.RateLimiter // 当前活跃的限流器，Close 时释放
 }
 
 type SegmentResult struct {
@@ -105,11 +103,8 @@ func NewWithOptions(opts Options) (*Engine, error) {
 	return e, nil
 }
 
-// Close 释放限流器与后端连接。
+// Close 释放后端连接。
 func (e *Engine) Close() error {
-	if e.limiter != nil {
-		e.limiter.Close()
-	}
 	seen := make(map[backend.Backend]struct{})
 	var firstErr error
 	for _, r := range e.rounds {
@@ -187,7 +182,8 @@ func (e *Engine) TranslateWithResult(ctx context.Context, job TranslateJob) (Tra
 		"source_lang", doc.SourceLang,
 		"target_lang", doc.TargetLang)
 
-	pipe := e.buildPipeline()
+	pipe, limiter := e.buildPipeline(pipelineOptions{})
+	defer limiter.Close()
 	e.logger.Info("pipeline start", "stages", stageNames(pipe.Stages()))
 	if err := pipe.Run(ctx, doc); err != nil {
 		return result, err
@@ -252,71 +248,6 @@ func (e *Engine) TranslateWithResult(ctx context.Context, job TranslateJob) (Tra
 		"segments", len(doc.Segments),
 		"duration", time.Since(start).Round(time.Millisecond))
 	return result, nil
-}
-
-func (e *Engine) buildPipeline() *pipeline.Pipeline {
-	pc := e.cfg.Pipeline
-
-	protector := protect.FromRules(pc.Protect.Rules)
-	// 关闭旧的 limiter（如果存在），避免 goroutine 泄漏。
-	if e.limiter != nil {
-		e.limiter.Close()
-	}
-	limiter := backend.NewRateLimiter(pc.Translate.RateLimitPerSec)
-	e.limiter = limiter
-	retry := backend.RetryPolicy{
-		MaxAttempts: pc.Translate.Retry.MaxAttempts,
-		Backoff:     time.Duration(pc.Translate.Retry.BackoffMs) * time.Millisecond,
-		Jitter:      pc.Translate.Retry.Jitter,
-	}
-
-	var s []pipeline.Stage
-	if pc.Split.Enabled {
-		s = append(s, stages.NewSplit(pc.Split.MaxChars))
-	}
-	if pc.Protect.Enabled {
-		s = append(s, stages.NewProtect(protector))
-	}
-
-	bootstrapMode := e.cfg.Glossary.Bootstrap.Mode
-	inlineBootstrap := e.cfg.Glossary.Enabled && bootstrapMode == config.BootstrapModeInline
-	repairOpts := toRepairOptions(pc.Translate.Repair)
-
-	if e.cfg.Glossary.Enabled && bootstrapMode == config.BootstrapModePre && e.bootstrapRenderer != nil {
-		s = append(s, &stages.Bootstrap{
-			Backends:         e.bootstrapBackends,
-			Renderer:         e.bootstrapRenderer,
-			Glossary:         e.glossary,
-			Limiter:          limiter,
-			Retry:            retry,
-			Concurrency:      pc.Translate.Concurrency,
-			BatchSize:        pc.Translate.BatchSize,
-			MaxTermsPerBatch: e.cfg.Glossary.Bootstrap.MaxTermsPerBatch,
-			MinSourceLen:     e.cfg.Glossary.Bootstrap.MinSourceLen,
-			Logger:           e.logger,
-			Reporter:         e.reporter,
-			Repair:           repairOpts,
-		})
-	}
-	s = append(s, &stages.Translate{
-		Rounds:                    e.rounds,
-		Renderer:                  e.renderer,
-		Glossary:                  e.glossary,
-		TM:                        e.tm,
-		Limiter:                   limiter,
-		Retry:                     retry,
-		Logger:                    e.logger,
-		Reporter:                  e.reporter,
-		InlineBootstrap:           inlineBootstrap,
-		MaxBootstrapTermsPerBatch: e.cfg.Glossary.Bootstrap.MaxTermsPerBatch,
-		MinBootstrapSourceLen:     e.cfg.Glossary.Bootstrap.MinSourceLen,
-		InlineConflictStrategy:    e.cfg.Glossary.Bootstrap.InlineConflictStrategy,
-		Repair:                    repairOpts,
-	})
-	if pc.Protect.Enabled {
-		s = append(s, stages.NewUnprotect(protector))
-	}
-	return pipeline.New(e.logger, s...)
 }
 
 // maybeSaveGlossary 在 bootstrap.save=true 且 glossary 实现 Saver 时回写到磁盘。

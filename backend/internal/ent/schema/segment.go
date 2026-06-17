@@ -25,6 +25,8 @@ func (Segment) Fields() []ent.Field {
 		field.String("review_comment").Optional().Nillable(),
 		field.Int("resource_id").Optional().Nillable().Positive().
 			Comment("所属资源 ID"),
+		field.Text("meta").Optional().Nillable().
+			Comment("parser 注入的格式元数据（JSON 序列化），用于按需渲染时还原格式"),
 	}
 }
 

@@ -2,12 +2,10 @@ package worker
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
-	"os"
-	"path/filepath"
-	"sort"
-	"strings"
+	"strconv"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -69,8 +67,10 @@ func (r *TranslationRunner) processJob(ctx context.Context, jobID int) error {
 	return r.jobs.ReconcileJob(ctx, jobID)
 }
 
-// processJobResource 处理单个翻译资源：解析路径、加载片段、从快照构建引擎、调用翻译并更新结果。
+// processJobResource 处理单个翻译资源：从 DB 加载段落、纯翻译、写回 DB。
 func (r *TranslationRunner) processJobResource(ctx context.Context, exec *service.TranslationJobExecution, item *ent.JobResource) error {
+	job := exec.Job
+
 	if err := r.jobs.MarkJobResourceRunning(ctx, item.ID); err != nil {
 		return err
 	}
@@ -79,44 +79,30 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
 	}
-	inputPath, err := r.store.Absolute(res.StoragePath)
-	if err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
-		return nil
-	}
-	outputRel := strings.TrimSpace(item.OutputPath)
-	outputPath := ""
-	if outputRel == "" {
-		outputRel = translationOutputPath(exec.Job.ID, item.ID, resourceOutputName(res))
-	}
-	outputPath, err = r.store.Absolute(outputRel)
-	if err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
-		return nil
-	}
-	if err := os.MkdirAll(filepath.Dir(outputPath), 0o755); err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
-		return nil
-	}
+
+	// 1. 从 DB 加载 segments（含 meta 字段）
 	selectedRows, allRows, err := r.loadSegments(ctx, res.ID, item.SegmentIds)
 	if err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
 	}
 	if len(selectedRows) == 0 {
-		return r.jobs.MarkJobResourceCompleted(ctx, item.ID, outputRel, 0)
+		return r.jobs.MarkJobResourceCompleted(ctx, item.ID, "", 0)
 	}
 
-	// 从任务快照获取执行参数
-	snapshot, err := service.GetSnapshot(exec.Job)
+	// 2. 构建 SegmentInput（反序列化 meta）
+	inputs := buildSegmentInputs(allRows)
+
+	// 3. 获取语言配置（从 job snapshot）
+	snapshot, err := r.jobs.GetTranslationSnapshot(ctx, job.ID)
 	if err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
+		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, fmt.Errorf("get translation snapshot: %w", err))
 		return nil
 	}
-	if snapshot == nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, fmt.Errorf("translation job has no execution snapshot"))
-		return nil
-	}
+
+	// 4. 构建 Document（从 DB 数据直接构建，不读文件）
+	doc := engine.BuildDocumentFromSegments(inputs,
+		snapshot.SourceLang, snapshot.TargetLang, res.Format)
 
 	// 从快照构建策略配置（用于运行时资源初始化）
 	cfg := buildStrategyConfig(snapshot)
@@ -142,27 +128,13 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	}
 	defer func() { _ = eng.Close() }()
 
-	selectedIndexes := make([]int, 0, len(selectedRows))
-	selectedIDsByIndex := make(map[int]int, len(selectedRows))
-	for _, row := range selectedRows {
-		selectedIndexes = append(selectedIndexes, row.SegmentIndex)
-		selectedIDsByIndex[row.SegmentIndex] = row.ID
-	}
-	sort.Ints(selectedIndexes)
-	existingTargets := make(map[int]string, len(allRows))
-	for _, row := range allRows {
-		if row.TargetText != nil {
-			existingTargets[row.SegmentIndex] = *row.TargetText
-		}
-	}
-	job := engine.FileJob(inputPath, outputPath)
-	job.SourceLang = snapshot.SourceLang
-	job.TargetLang = snapshot.TargetLang
-	job.SegmentIndexes = selectedIndexes
-	job.ExistingTargets = existingTargets
-	result, err := eng.TranslateWithResult(ctx, job)
+	// 5. 纯翻译（无解析、无渲染、无文件 I/O）
+	result, err := eng.TranslateSegments(ctx, engine.TranslateSegmentsInput{
+		Document:       doc,
+		SegmentIndexes: item.SegmentIds,
+	})
 	if err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
+		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, fmt.Errorf("translate segments: %w", err))
 		return nil
 	}
 	// 所有待翻译段均未解决，说明 AI 后端配置错误或服务不可用。
@@ -170,6 +142,12 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		err := fmt.Errorf("all %d segments failed to translate: AI backend configuration error or service unavailable", result.UnresolvedCount)
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
+	}
+
+	// 6. 写回 DB
+	selectedIDsByIndex := make(map[int]int, len(selectedRows))
+	for _, row := range selectedRows {
+		selectedIDsByIndex[row.SegmentIndex] = row.ID
 	}
 	if err := r.updateTranslatedSegments(ctx, selectedIDsByIndex, result.Segments, autoApprove); err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
@@ -179,7 +157,26 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
 	}
-	return r.jobs.MarkJobResourceCompleted(ctx, item.ID, outputRel, len(selectedRows))
+
+	// 7. 标记完成（OutputPath 为空，不再依赖预生成文件）
+	return r.jobs.MarkJobResourceCompleted(ctx, item.ID, "", len(selectedRows))
+}
+
+// buildSegmentInputs 将 DB segments 转换为 SegmentInput 切片。
+func buildSegmentInputs(rows []*ent.Segment) []engine.SegmentInput {
+	inputs := make([]engine.SegmentInput, len(rows))
+	for i, row := range rows {
+		var meta map[string]any
+		if row.Meta != nil {
+			_ = json.Unmarshal([]byte(*row.Meta), &meta)
+		}
+		inputs[i] = engine.SegmentInput{
+			ID:         strconv.Itoa(row.SegmentIndex),
+			SourceText: row.SourceText,
+			Meta:       meta,
+		}
+	}
+	return inputs
 }
 
 // buildEngineFromSnapshot 从任务快照构建引擎实例。
@@ -367,37 +364,4 @@ func (r *TranslationRunner) recordUsage(ctx context.Context, exec *service.Trans
 		usage.SetOrganizationID(*exec.Project.OwnerOrgID)
 	}
 	return usage.Exec(ctx)
-}
-
-// translationOutputPath 生成翻译输出文件的相对路径。
-func translationOutputPath(jobID, jobResourceID int, filename string) string {
-	cleanName := cleanOutputResourcePath(filename)
-	return filepath.ToSlash(filepath.Join("translation_outputs", fmt.Sprintf("job-%d", jobID), fmt.Sprintf("resource-%d", jobResourceID), filepath.FromSlash(cleanName)))
-}
-
-// resourceOutputName 获取资源的输出文件名，为空时返回默认值 "resource"。
-func resourceOutputName(res *ent.Resource) string {
-	if res != nil && strings.TrimSpace(res.Path) != "" {
-		return res.Path
-	}
-	return "resource"
-}
-
-// cleanOutputResourcePath 清理输出路径中的非法字符，确保路径安全。
-func cleanOutputResourcePath(value string) string {
-	clean := strings.TrimSpace(strings.ReplaceAll(value, "\\", "/"))
-	clean = filepath.ToSlash(filepath.Clean(clean))
-	if clean == "" || clean == "." || clean == ".." || strings.HasPrefix(clean, "../") || strings.HasPrefix(clean, "/") {
-		return "resource"
-	}
-	parts := strings.Split(clean, "/")
-	for i, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" || part == "." || part == ".." {
-			parts[i] = "resource"
-			continue
-		}
-		parts[i] = strings.NewReplacer(":", "_", "*", "_", "?", "_", "\"", "_", "<", "_", ">", "_", "|", "_").Replace(part)
-	}
-	return strings.Join(parts, "/")
 }

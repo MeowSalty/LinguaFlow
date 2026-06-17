@@ -90,6 +90,11 @@ func ResourceID(v int) predicate.Segment {
 	return predicate.Segment(sql.FieldEQ(FieldResourceID, v))
 }
 
+// Meta applies equality check predicate on the "meta" field. It's identical to MetaEQ.
+func Meta(v string) predicate.Segment {
+	return predicate.Segment(sql.FieldEQ(FieldMeta, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.Segment {
 	return predicate.Segment(sql.FieldEQ(FieldCreatedAt, v))
@@ -473,6 +478,81 @@ func ResourceIDIsNil() predicate.Segment {
 // ResourceIDNotNil applies the NotNil predicate on the "resource_id" field.
 func ResourceIDNotNil() predicate.Segment {
 	return predicate.Segment(sql.FieldNotNull(FieldResourceID))
+}
+
+// MetaEQ applies the EQ predicate on the "meta" field.
+func MetaEQ(v string) predicate.Segment {
+	return predicate.Segment(sql.FieldEQ(FieldMeta, v))
+}
+
+// MetaNEQ applies the NEQ predicate on the "meta" field.
+func MetaNEQ(v string) predicate.Segment {
+	return predicate.Segment(sql.FieldNEQ(FieldMeta, v))
+}
+
+// MetaIn applies the In predicate on the "meta" field.
+func MetaIn(vs ...string) predicate.Segment {
+	return predicate.Segment(sql.FieldIn(FieldMeta, vs...))
+}
+
+// MetaNotIn applies the NotIn predicate on the "meta" field.
+func MetaNotIn(vs ...string) predicate.Segment {
+	return predicate.Segment(sql.FieldNotIn(FieldMeta, vs...))
+}
+
+// MetaGT applies the GT predicate on the "meta" field.
+func MetaGT(v string) predicate.Segment {
+	return predicate.Segment(sql.FieldGT(FieldMeta, v))
+}
+
+// MetaGTE applies the GTE predicate on the "meta" field.
+func MetaGTE(v string) predicate.Segment {
+	return predicate.Segment(sql.FieldGTE(FieldMeta, v))
+}
+
+// MetaLT applies the LT predicate on the "meta" field.
+func MetaLT(v string) predicate.Segment {
+	return predicate.Segment(sql.FieldLT(FieldMeta, v))
+}
+
+// MetaLTE applies the LTE predicate on the "meta" field.
+func MetaLTE(v string) predicate.Segment {
+	return predicate.Segment(sql.FieldLTE(FieldMeta, v))
+}
+
+// MetaContains applies the Contains predicate on the "meta" field.
+func MetaContains(v string) predicate.Segment {
+	return predicate.Segment(sql.FieldContains(FieldMeta, v))
+}
+
+// MetaHasPrefix applies the HasPrefix predicate on the "meta" field.
+func MetaHasPrefix(v string) predicate.Segment {
+	return predicate.Segment(sql.FieldHasPrefix(FieldMeta, v))
+}
+
+// MetaHasSuffix applies the HasSuffix predicate on the "meta" field.
+func MetaHasSuffix(v string) predicate.Segment {
+	return predicate.Segment(sql.FieldHasSuffix(FieldMeta, v))
+}
+
+// MetaIsNil applies the IsNil predicate on the "meta" field.
+func MetaIsNil() predicate.Segment {
+	return predicate.Segment(sql.FieldIsNull(FieldMeta))
+}
+
+// MetaNotNil applies the NotNil predicate on the "meta" field.
+func MetaNotNil() predicate.Segment {
+	return predicate.Segment(sql.FieldNotNull(FieldMeta))
+}
+
+// MetaEqualFold applies the EqualFold predicate on the "meta" field.
+func MetaEqualFold(v string) predicate.Segment {
+	return predicate.Segment(sql.FieldEqualFold(FieldMeta, v))
+}
+
+// MetaContainsFold applies the ContainsFold predicate on the "meta" field.
+func MetaContainsFold(v string) predicate.Segment {
+	return predicate.Segment(sql.FieldContainsFold(FieldMeta, v))
 }
 
 // HasResource applies the HasEdge predicate on the "resource" edge.

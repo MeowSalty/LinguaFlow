@@ -10659,6 +10659,7 @@ type SegmentMutation struct {
 	target_text        *string
 	status             *segment.Status
 	review_comment     *string
+	meta               *string
 	clearedFields      map[string]struct{}
 	resource           *int
 	clearedresource    bool
@@ -11114,6 +11115,55 @@ func (m *SegmentMutation) ResetResourceID() {
 	delete(m.clearedFields, segment.FieldResourceID)
 }
 
+// SetMeta sets the "meta" field.
+func (m *SegmentMutation) SetMeta(s string) {
+	m.meta = &s
+}
+
+// Meta returns the value of the "meta" field in the mutation.
+func (m *SegmentMutation) Meta() (r string, exists bool) {
+	v := m.meta
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMeta returns the old "meta" field's value of the Segment entity.
+// If the Segment object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SegmentMutation) OldMeta(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMeta is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMeta requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMeta: %w", err)
+	}
+	return oldValue.Meta, nil
+}
+
+// ClearMeta clears the value of the "meta" field.
+func (m *SegmentMutation) ClearMeta() {
+	m.meta = nil
+	m.clearedFields[segment.FieldMeta] = struct{}{}
+}
+
+// MetaCleared returns if the "meta" field was cleared in this mutation.
+func (m *SegmentMutation) MetaCleared() bool {
+	_, ok := m.clearedFields[segment.FieldMeta]
+	return ok
+}
+
+// ResetMeta resets all changes to the "meta" field.
+func (m *SegmentMutation) ResetMeta() {
+	m.meta = nil
+	delete(m.clearedFields, segment.FieldMeta)
+}
+
 // ClearResource clears the "resource" edge to the Resource entity.
 func (m *SegmentMutation) ClearResource() {
 	m.clearedresource = true
@@ -11214,7 +11264,7 @@ func (m *SegmentMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SegmentMutation) Fields() []string {
-	fields := make([]string, 0, 8)
+	fields := make([]string, 0, 9)
 	if m.created_at != nil {
 		fields = append(fields, segment.FieldCreatedAt)
 	}
@@ -11238,6 +11288,9 @@ func (m *SegmentMutation) Fields() []string {
 	}
 	if m.resource != nil {
 		fields = append(fields, segment.FieldResourceID)
+	}
+	if m.meta != nil {
+		fields = append(fields, segment.FieldMeta)
 	}
 	return fields
 }
@@ -11263,6 +11316,8 @@ func (m *SegmentMutation) Field(name string) (ent.Value, bool) {
 		return m.ReviewComment()
 	case segment.FieldResourceID:
 		return m.ResourceID()
+	case segment.FieldMeta:
+		return m.Meta()
 	}
 	return nil, false
 }
@@ -11288,6 +11343,8 @@ func (m *SegmentMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldReviewComment(ctx)
 	case segment.FieldResourceID:
 		return m.OldResourceID(ctx)
+	case segment.FieldMeta:
+		return m.OldMeta(ctx)
 	}
 	return nil, fmt.Errorf("unknown Segment field %s", name)
 }
@@ -11353,6 +11410,13 @@ func (m *SegmentMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetResourceID(v)
 		return nil
+	case segment.FieldMeta:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMeta(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Segment field %s", name)
 }
@@ -11407,6 +11471,9 @@ func (m *SegmentMutation) ClearedFields() []string {
 	if m.FieldCleared(segment.FieldResourceID) {
 		fields = append(fields, segment.FieldResourceID)
 	}
+	if m.FieldCleared(segment.FieldMeta) {
+		fields = append(fields, segment.FieldMeta)
+	}
 	return fields
 }
 
@@ -11429,6 +11496,9 @@ func (m *SegmentMutation) ClearField(name string) error {
 		return nil
 	case segment.FieldResourceID:
 		m.ClearResourceID()
+		return nil
+	case segment.FieldMeta:
+		m.ClearMeta()
 		return nil
 	}
 	return fmt.Errorf("unknown Segment nullable field %s", name)
@@ -11461,6 +11531,9 @@ func (m *SegmentMutation) ResetField(name string) error {
 		return nil
 	case segment.FieldResourceID:
 		m.ResetResourceID()
+		return nil
+	case segment.FieldMeta:
+		m.ResetMeta()
 		return nil
 	}
 	return fmt.Errorf("unknown Segment field %s", name)

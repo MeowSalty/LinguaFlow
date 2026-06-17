@@ -59,3 +59,21 @@ func DetectByExt(path string) (Parser, error) {
 	}
 	return p, nil
 }
+
+// Resolve 按格式名称或扩展名获取 parser。
+// 优先按名称匹配（如 "markdown"），失败时尝试扩展名检测（如 ".md"）。
+// 统一封装 Get + DetectByExt 的组合逻辑，供 Service 层按需渲染使用。
+func Resolve(format string) (Parser, error) {
+	if p, ok := Get(format); ok {
+		return p, nil
+	}
+	// 尝试作为扩展名处理
+	if !strings.HasPrefix(format, ".") {
+		format = "." + format
+	}
+	p, err := DetectByExt(format)
+	if err != nil {
+		return nil, fmt.Errorf("parser: unsupported format %q: %w", format, err)
+	}
+	return p, nil
+}

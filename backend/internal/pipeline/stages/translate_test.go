@@ -698,7 +698,13 @@ func TestTranslatePlan_ExhaustedRoundsKeepSource(t *testing.T) {
 	if doc.Segments[0].Target != "ok" {
 		t.Fatalf("seg0=%q want ok", doc.Segments[0].Target)
 	}
-	if doc.Segments[1].Target != doc.Segments[1].Source {
-		t.Fatalf("seg1=%q want source fallback %q", doc.Segments[1].Target, doc.Segments[1].Source)
+	// 重构后：失败段不再填充原文，而是通过 _translate_failed_indices 记录。
+	if doc.Segments[1].Target != "" {
+		t.Fatalf("seg1=%q want empty (failed segment keeps empty target)", doc.Segments[1].Target)
+	}
+	if v, ok := doc.Vars["_translate_failed_indices"]; !ok {
+		t.Fatal("expected _translate_failed_indices to be set")
+	} else if s, ok := v.(string); !ok || s != "1" {
+		t.Fatalf("_translate_failed_indices=%v want \"1\"", v)
 	}
 }

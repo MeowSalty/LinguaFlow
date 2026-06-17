@@ -118,6 +118,20 @@ func (_c *SegmentCreate) SetNillableResourceID(v *int) *SegmentCreate {
 	return _c
 }
 
+// SetMeta sets the "meta" field.
+func (_c *SegmentCreate) SetMeta(v string) *SegmentCreate {
+	_c.mutation.SetMeta(v)
+	return _c
+}
+
+// SetNillableMeta sets the "meta" field if the given value is not nil.
+func (_c *SegmentCreate) SetNillableMeta(v *string) *SegmentCreate {
+	if v != nil {
+		_c.SetMeta(*v)
+	}
+	return _c
+}
+
 // SetResource sets the "resource" edge to the Resource entity.
 func (_c *SegmentCreate) SetResource(v *Resource) *SegmentCreate {
 	return _c.SetResourceID(v.ID)
@@ -281,6 +295,10 @@ func (_c *SegmentCreate) createSpec() (*Segment, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.ReviewComment(); ok {
 		_spec.SetField(segment.FieldReviewComment, field.TypeString, value)
 		_node.ReviewComment = &value
+	}
+	if value, ok := _c.mutation.Meta(); ok {
+		_spec.SetField(segment.FieldMeta, field.TypeString, value)
+		_node.Meta = &value
 	}
 	if nodes := _c.mutation.ResourceIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

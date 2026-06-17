@@ -145,6 +145,26 @@ func (_u *SegmentUpdate) ClearResourceID() *SegmentUpdate {
 	return _u
 }
 
+// SetMeta sets the "meta" field.
+func (_u *SegmentUpdate) SetMeta(v string) *SegmentUpdate {
+	_u.mutation.SetMeta(v)
+	return _u
+}
+
+// SetNillableMeta sets the "meta" field if the given value is not nil.
+func (_u *SegmentUpdate) SetNillableMeta(v *string) *SegmentUpdate {
+	if v != nil {
+		_u.SetMeta(*v)
+	}
+	return _u
+}
+
+// ClearMeta clears the value of the "meta" field.
+func (_u *SegmentUpdate) ClearMeta() *SegmentUpdate {
+	_u.mutation.ClearMeta()
+	return _u
+}
+
 // SetResource sets the "resource" edge to the Resource entity.
 func (_u *SegmentUpdate) SetResource(v *Resource) *SegmentUpdate {
 	return _u.SetResourceID(v.ID)
@@ -285,6 +305,12 @@ func (_u *SegmentUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.ReviewCommentCleared() {
 		_spec.ClearField(segment.FieldReviewComment, field.TypeString)
+	}
+	if value, ok := _u.mutation.Meta(); ok {
+		_spec.SetField(segment.FieldMeta, field.TypeString, value)
+	}
+	if _u.mutation.MetaCleared() {
+		_spec.ClearField(segment.FieldMeta, field.TypeString)
 	}
 	if _u.mutation.ResourceCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -479,6 +505,26 @@ func (_u *SegmentUpdateOne) ClearResourceID() *SegmentUpdateOne {
 	return _u
 }
 
+// SetMeta sets the "meta" field.
+func (_u *SegmentUpdateOne) SetMeta(v string) *SegmentUpdateOne {
+	_u.mutation.SetMeta(v)
+	return _u
+}
+
+// SetNillableMeta sets the "meta" field if the given value is not nil.
+func (_u *SegmentUpdateOne) SetNillableMeta(v *string) *SegmentUpdateOne {
+	if v != nil {
+		_u.SetMeta(*v)
+	}
+	return _u
+}
+
+// ClearMeta clears the value of the "meta" field.
+func (_u *SegmentUpdateOne) ClearMeta() *SegmentUpdateOne {
+	_u.mutation.ClearMeta()
+	return _u
+}
+
 // SetResource sets the "resource" edge to the Resource entity.
 func (_u *SegmentUpdateOne) SetResource(v *Resource) *SegmentUpdateOne {
 	return _u.SetResourceID(v.ID)
@@ -649,6 +695,12 @@ func (_u *SegmentUpdateOne) sqlSave(ctx context.Context) (_node *Segment, err er
 	}
 	if _u.mutation.ReviewCommentCleared() {
 		_spec.ClearField(segment.FieldReviewComment, field.TypeString)
+	}
+	if value, ok := _u.mutation.Meta(); ok {
+		_spec.SetField(segment.FieldMeta, field.TypeString, value)
+	}
+	if _u.mutation.MetaCleared() {
+		_spec.ClearField(segment.FieldMeta, field.TypeString)
 	}
 	if _u.mutation.ResourceCleared() {
 		edge := &sqlgraph.EdgeSpec{
