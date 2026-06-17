@@ -18,7 +18,6 @@ import DirectoryItem from '@/components/workspace/DirectoryItem.vue'
 import ResourceBreadcrumb from '@/components/workspace/ResourceBreadcrumb.vue'
 import ResourceItem from '@/components/workspace/ResourceItem.vue'
 import UploadPrecheckPanel from '@/components/workspace/UploadPrecheckPanel.vue'
-import UploadResultPanel from '@/components/workspace/UploadResultPanel.vue'
 import {
   useProjectWorkspaceStore,
   type PendingUploadItem,
@@ -44,7 +43,6 @@ const workspace = useProjectWorkspaceStore()
 
 const dragOver = ref(false)
 const uploadPrecheckVisible = ref(false)
-const uploadResultVisible = ref(false)
 const uploadConfirming = ref(false)
 const pendingUploadTaskId = ref<string | null>(null)
 
@@ -238,14 +236,6 @@ const computeUploadPaths = (files: File[], directoryPrefix: string): string[] | 
 const summarizeUploadName = (files: File[]): string =>
   files.length === 1 ? files[0]!.name : t('workspace.upload.batchName', { count: files.length })
 
-const closeUploadResult = (): void => {
-  uploadResultVisible.value = false
-}
-
-const finishUploadTaskLater = (taskId: string, delay = 4000): void => {
-  setTimeout(() => workspace.removeUploadTask(taskId), delay)
-}
-
 const executeIncrementalUploadItems = async (
   items: PendingUploadItem[],
 ): Promise<import('@/stores/projectWorkspace').IncrementalUploadResult[]> => {
@@ -318,23 +308,27 @@ const executeUploadItems = async (items: PendingUploadItem[], taskId: string): P
     skippedItems,
   )
 
-  workspace.updateUploadTaskStage(taskId, 'processing')
+  if (incrementalItems.length > 0 || replaceItems.length > 0) {
+    workspace.updateUploadTaskStage(taskId, 'processing')
+  }
   const incrementalResults = await executeIncrementalUploadItems(incrementalItems)
   const replaceResults = await executeReplaceUploadItems(replaceItems)
   const mergedResult = workspace.mergeLastUploadResult(incrementalResults, replaceResults)
 
   await workspace.loadResourceTree(props.projectId)
-  uploadResultVisible.value = true
-  if (
+  if (mergedResult.summary.failed === mergedResult.summary.total) {
+    workspace.updateUploadTaskStage(taskId, 'error', undefined, mergedResult.summary)
+    message.error(t('workspace.messages.uploadFailed'))
+  } else if (
     mergedResult.summary.failed > 0 ||
     mergedResult.summary.conflicts > 0 ||
     mergedResult.summary.skipped > 0
   ) {
+    workspace.updateUploadTaskStage(taskId, 'partial', undefined, mergedResult.summary)
     message.warning(t('workspace.messages.uploadPartialSuccess', { ...mergedResult.summary }))
-    finishUploadTaskLater(taskId, 6000)
   } else {
+    workspace.updateUploadTaskStage(taskId, 'complete', undefined, mergedResult.summary)
     message.success(t('workspace.messages.uploadSuccess'))
-    finishUploadTaskLater(taskId)
   }
 }
 
@@ -570,86 +564,6 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
       </div>
     </Transition>
 
-    <!-- 上传进度卡片 -->
-    <TransitionGroup
-      enter-active-class="transition-all duration-300 ease-out"
-      leave-active-class="transition-all duration-200 ease-in"
-      enter-from-class="opacity-0 -translate-y-2"
-      leave-to-class="opacity-0 -translate-y-2"
-      move-class="transition-transform duration-200"
-      tag="div"
-      class="space-y-2"
-    >
-      <div
-        v-for="task in workspace.uploadTasks"
-        :key="task.id"
-        class="overflow-hidden rounded-xl border border-lf-border-soft bg-lf-surface/80 px-4 py-3 shadow-sm shadow-lf-shadow/50"
-      >
-        <div class="flex items-center justify-between">
-          <div class="flex min-w-0 flex-1 items-center gap-3">
-            <div
-              class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
-              :class="{
-                'bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300':
-                  task.stage === 'uploading',
-                'bg-indigo-50 text-indigo-600 dark:bg-indigo-500/15 dark:text-indigo-300':
-                  task.stage === 'prechecking',
-                'bg-amber-50 text-amber-600 dark:bg-amber-500/15 dark:text-amber-300':
-                  task.stage === 'processing' || task.stage === 'partial',
-                'bg-emerald-50 text-emerald-600 dark:bg-emerald-500/15 dark:text-emerald-300':
-                  task.stage === 'complete',
-                'bg-red-50 text-red-600 dark:bg-red-500/15 dark:text-red-300':
-                  task.stage === 'error',
-              }"
-            >
-              <IconCarbonUpload v-if="task.stage === 'uploading'" class="h-4.5 w-4.5" />
-              <IconCarbonAsync
-                v-else-if="task.stage === 'prechecking' || task.stage === 'processing'"
-                class="h-4.5 w-4.5 animate-spin"
-              />
-              <IconCarbonCheckmark v-else-if="task.stage === 'complete'" class="h-4.5 w-4.5" />
-              <IconCarbonWarningAlt v-else class="h-4.5 w-4.5" />
-            </div>
-            <div class="min-w-0 flex-1">
-              <span class="truncate text-sm font-medium text-lf-text-strong">
-                {{ task.fileName }}
-              </span>
-              <span class="ml-2 shrink-0 text-xs text-lf-text-muted">
-                <template v-if="task.stage === 'uploading'">
-                  {{ t('workspace.upload.uploadingPercent', { percent: task.progress }) }}
-                </template>
-                <template v-else-if="task.stage === 'prechecking'">
-                  {{ t('workspace.upload.prechecking') }}
-                </template>
-                <template v-else-if="task.stage === 'processing'">
-                  {{ t('workspace.upload.processing') }}
-                </template>
-                <template v-else-if="task.stage === 'complete'">
-                  {{ t('workspace.upload.complete') }}
-                </template>
-                <template v-else-if="task.stage === 'partial'">
-                  {{ t('workspace.upload.partialComplete', task.summary ?? {}) }}
-                </template>
-                <template v-else>
-                  {{ task.errorMessage || t('workspace.upload.failed') }}
-                </template>
-              </span>
-            </div>
-          </div>
-          <NButton
-            quaternary
-            size="tiny"
-            class="ml-2 shrink-0"
-            @click="workspace.removeUploadTask(task.id)"
-          >
-            <template #icon>
-              <NIcon><IconCarbonClose /></NIcon>
-            </template>
-          </NButton>
-        </div>
-      </div>
-    </TransitionGroup>
-
     <!-- 加载状态 -->
     <div
       v-if="workspace.loadingResourceTree"
@@ -762,19 +676,6 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
         @update-selected="workspace.setPendingUploadItemSelected"
         @update-strategy="workspace.setPendingUploadItemStrategy"
         @update-all-creatable="workspace.setAllCreatablePendingUploadItemsSelected"
-      />
-    </NModal>
-
-    <NModal
-      v-model:show="uploadResultVisible"
-      preset="card"
-      :title="t('workspace.uploadResult.modalTitle')"
-      :style="{ width: 'min(960px, calc(100vw - 32px))' }"
-    >
-      <UploadResultPanel
-        v-if="workspace.lastUploadResult"
-        :result="workspace.lastUploadResult"
-        @close="closeUploadResult"
       />
     </NModal>
   </div>

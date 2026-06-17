@@ -545,9 +545,11 @@ export const useResourceStore = defineStore('resource', () => {
       if (taskId) {
         updateUploadTaskStage(
           taskId,
-          summary.failed > 0 || summary.conflicts > 0 || summary.skipped > 0
-            ? 'partial'
-            : 'complete',
+          summary.failed === summary.total
+            ? 'error'
+            : summary.failed > 0 || summary.conflicts > 0 || summary.skipped > 0
+              ? 'partial'
+              : 'complete',
           undefined,
           summary,
         )

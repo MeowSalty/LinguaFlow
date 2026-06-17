@@ -7,6 +7,7 @@ import { type ApiSchemas } from '@/api/client'
 import { batchReviewSegments } from '@/api/projects'
 import ResourceExplorer from '@/components/workspace/ResourceExplorer.vue'
 import SelectionActionBar from '@/components/workspace/SelectionActionBar.vue'
+import UploadPanel from '@/components/workspace/UploadPanel.vue'
 import WorkspaceMetricsBar from '@/components/workspace/WorkspaceMetricsBar.vue'
 import GlossaryPanel from '@/components/workspace/GlossaryPanel.vue'
 import GlossaryDrawer from '@/components/workspace/GlossaryDrawer.vue'
@@ -397,6 +398,13 @@ onMounted(() => {
     <GlossaryImportModal
       v-model:show="glossaryMgmt.glossaryImportVisible.value"
       @import="(file) => glossaryMgmt.handleGlossaryImport(file)"
+    />
+
+    <!-- 上传面板 -->
+    <UploadPanel
+      v-show="workspace.uploadTasks.length > 0"
+      :project-id="projectId!"
+      @refresh="() => workspace.loadResourceTree(projectId!)"
     />
 
     <!-- 浮动操作岛 - 资源选择 -->

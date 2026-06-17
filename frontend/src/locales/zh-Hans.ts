@@ -371,6 +371,22 @@ const messages = {
         '部分完成：创建 {created}，增量更新 {incrementallyUpdated}，覆盖 {replaced}，跳过 {skipped}，失败 {failed}',
       failed: '上传失败',
     },
+    uploadPanel: {
+      title: '上传面板',
+      clearAll: '清除全部',
+      collapsedPrechecking: '{count} 个文件正在预检…',
+      collapsedUploading: '{count} 个文件正在上传… {percent}%',
+      collapsedProcessing: '服务端处理中…',
+      collapsedComplete: '{count} 个文件上传完成',
+      collapsedPartial: '{count} 个文件部分完成',
+      collapsedError: '{count} 个文件上传失败',
+      expandedPrechecking: '正在预检 {count} 个文件',
+      expandedUploading: '正在上传 {count} 个文件',
+      expandedProcessing: '服务端处理中',
+      expandedComplete: '上传完成',
+      expandedPartial: '部分完成',
+      expandedError: '上传失败',
+    },
     uploadPrecheck: {
       modalTitle: '上传预检',
       title: '确认上传文件',
@@ -411,7 +427,6 @@ const messages = {
       },
     },
     uploadResult: {
-      modalTitle: '上传结果',
       summary: {
         created: '已创建',
         incrementallyUpdated: '已增量更新',
@@ -422,13 +437,12 @@ const messages = {
       },
       details: {
         created: '资源已创建并完成解析。',
+        conflict: '已存在同名资源「{name}」，请选择增量更新、覆盖或跳过。',
         incrementalUpdated: '资源已增量更新，未变化段落的译文已保留。',
         replaced: '资源已被新文件覆盖并重新解析。',
         failed: '服务端处理失败。',
         missingExistingResource: '缺少已有资源信息，无法执行冲突处理。',
         skipped: '用户未选择处理。',
-        skippedConflict: '预检发现已有资源，本次已跳过。',
-        skippedDuplicate: '预检发现批次内重复路径，本次已跳过。',
       },
     },
     segment: {
