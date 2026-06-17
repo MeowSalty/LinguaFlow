@@ -22,6 +22,8 @@ const (
 	FieldStatus = "status"
 	// FieldTriggerType holds the string denoting the trigger_type field in the database.
 	FieldTriggerType = "trigger_type"
+	// FieldExecutionPlanID holds the string denoting the execution_plan_id field in the database.
+	FieldExecutionPlanID = "execution_plan_id"
 	// FieldTranslationConfig holds the string denoting the translation_config field in the database.
 	FieldTranslationConfig = "translation_config"
 	// FieldResourceCount holds the string denoting the resource_count field in the database.
@@ -74,6 +76,7 @@ var Columns = []string{
 	FieldUpdatedAt,
 	FieldStatus,
 	FieldTriggerType,
+	FieldExecutionPlanID,
 	FieldTranslationConfig,
 	FieldResourceCount,
 	FieldCompletedResources,
@@ -116,6 +119,8 @@ var (
 	DefaultStatus string
 	// DefaultTriggerType holds the default value on creation for the "trigger_type" field.
 	DefaultTriggerType string
+	// ExecutionPlanIDValidator is a validator for the "execution_plan_id" field. It is called by the builders before save.
+	ExecutionPlanIDValidator func(int) error
 	// DefaultTranslationConfig holds the default value on creation for the "translation_config" field.
 	DefaultTranslationConfig func() map[string]interface{}
 	// DefaultResourceCount holds the default value on creation for the "resource_count" field.
@@ -166,6 +171,11 @@ func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 // ByTriggerType orders the results by the trigger_type field.
 func ByTriggerType(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTriggerType, opts...).ToFunc()
+}
+
+// ByExecutionPlanID orders the results by the execution_plan_id field.
+func ByExecutionPlanID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldExecutionPlanID, opts...).ToFunc()
 }
 
 // ByResourceCount orders the results by the resource_count field.

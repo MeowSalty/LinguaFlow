@@ -20,7 +20,7 @@ func detectFormat(content string) string {
 	switch {
 	case first == '{' || first == '[':
 		return "json"
-	case first == '#' || first == '[':
+	case first == '#':
 		// TOML 可能以 #（注释）或 [table] 开头
 		// YAML 也可以用 # 开头，此处保守返回 toml
 		// 若解析失败会在 Parse 中回退

@@ -61,6 +61,7 @@ type Data struct {
 	Vars              map[string]any
 	InlineBootstrap   bool // 是否在 system prompt 中追加 inline 抽取指令（mode=inline 时由 translate stage 设为 true）
 	MaxBootstrapTerms int  // inline 模式每批返回上限；仅在 InlineBootstrap=true 时有效
+	StrictSchema      bool // 当后端使用 json_schema 强制输出时为 true；模板据此精简协议描述以节省 token
 }
 
 // Renderer 持有已编译的 system 模板。user 由 Render 直接 JSON 序列化生成，无模板。
@@ -68,14 +69,17 @@ type Renderer struct {
 	system *template.Template
 }
 
-// NewRenderer 按配置创建 Renderer。SystemTemplate 为空则使用内置默认。
+// NewRenderer 按配置创建 Renderer。
+// 优先级：SystemTemplateContent（内联内容）> SystemTemplate（文件路径）> 内置默认。
 // UserTemplate 字段保留以兼容旧 yaml，但当前协议下不再使用，非空时构造会失败提醒。
 func NewRenderer(cfg config.PromptConfig) (*Renderer, error) {
 	if cfg.UserTemplate != "" {
 		return nil, fmt.Errorf("prompt: user_template is no longer supported (user message is built as JSON); remove it from config")
 	}
 	sys := defaultSystemTmpl
-	if cfg.SystemTemplate != "" {
+	if cfg.SystemTemplateContent != "" {
+		sys = cfg.SystemTemplateContent // 内联内容优先
+	} else if cfg.SystemTemplate != "" {
 		b, err := os.ReadFile(cfg.SystemTemplate)
 		if err != nil {
 			return nil, fmt.Errorf("prompt: read system template: %w", err)

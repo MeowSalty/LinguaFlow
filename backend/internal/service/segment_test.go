@@ -2,8 +2,8 @@ package service
 
 import "testing"
 
-func TestResourceSegmentReviewedStatus(t *testing.T) {
-	if SegmentStatusReviewed != "reviewed" {
-		t.Fatalf("SegmentStatusReviewed = %q, want reviewed", SegmentStatusReviewed)
+func TestResourceSegmentEditedStatus(t *testing.T) {
+	if SegmentStatusEdited != "edited" {
+		t.Fatalf("SegmentStatusEdited = %q, want edited", SegmentStatusEdited)
 	}
 }

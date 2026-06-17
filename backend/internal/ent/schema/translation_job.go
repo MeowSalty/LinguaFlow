@@ -17,9 +17,11 @@ func (TranslationJob) Mixin() []ent.Mixin {
 func (TranslationJob) Fields() []ent.Field {
 	return []ent.Field{
 		field.String("status").Default("pending").
-			Comment("pending, running, awaiting_review, completed, failed, cancelled"),
+			Comment("pending, running, completed, failed, cancelled"),
 		field.String("trigger_type").Default("manual").
 			Comment("触发类型：manual, file_update, glossary_change, web_edit"),
+		field.Int("execution_plan_id").Positive().
+			Comment("引用的执行计划模板 ID（必填）"),
 		field.JSON("translation_config", map[string]any{}).
 			Default(func() map[string]any { return map[string]any{} }).
 			Comment("翻译配置快照，创建时从项目配置复制并可覆盖"),

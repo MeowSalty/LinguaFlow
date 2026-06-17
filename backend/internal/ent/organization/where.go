@@ -491,21 +491,21 @@ func HasMembershipsWith(preds ...predicate.OrgMembership) predicate.Organization
 	})
 }
 
-// HasOrgBackends applies the HasEdge predicate on the "org_backends" edge.
-func HasOrgBackends() predicate.Organization {
+// HasBackends applies the HasEdge predicate on the "backends" edge.
+func HasBackends() predicate.Organization {
 	return predicate.Organization(func(s *sql.Selector) {
 		step := sqlgraph.NewStep(
 			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, OrgBackendsTable, OrgBackendsColumn),
+			sqlgraph.Edge(sqlgraph.O2M, false, BackendsTable, BackendsColumn),
 		)
 		sqlgraph.HasNeighbors(s, step)
 	})
 }
 
-// HasOrgBackendsWith applies the HasEdge predicate on the "org_backends" edge with a given conditions (other predicates).
-func HasOrgBackendsWith(preds ...predicate.OrgBackend) predicate.Organization {
+// HasBackendsWith applies the HasEdge predicate on the "backends" edge with a given conditions (other predicates).
+func HasBackendsWith(preds ...predicate.Backend) predicate.Organization {
 	return predicate.Organization(func(s *sql.Selector) {
-		step := newOrgBackendsStep()
+		step := newBackendsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)
@@ -598,6 +598,75 @@ func HasUsageRecords() predicate.Organization {
 func HasUsageRecordsWith(preds ...predicate.UsageRecord) predicate.Organization {
 	return predicate.Organization(func(s *sql.Selector) {
 		step := newUsageRecordsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasPromptTemplates applies the HasEdge predicate on the "prompt_templates" edge.
+func HasPromptTemplates() predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, PromptTemplatesTable, PromptTemplatesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasPromptTemplatesWith applies the HasEdge predicate on the "prompt_templates" edge with a given conditions (other predicates).
+func HasPromptTemplatesWith(preds ...predicate.PromptTemplate) predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := newPromptTemplatesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasTranslationProfiles applies the HasEdge predicate on the "translation_profiles" edge.
+func HasTranslationProfiles() predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, TranslationProfilesTable, TranslationProfilesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasTranslationProfilesWith applies the HasEdge predicate on the "translation_profiles" edge with a given conditions (other predicates).
+func HasTranslationProfilesWith(preds ...predicate.TranslationProfile) predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := newTranslationProfilesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasExecutionPlanTemplates applies the HasEdge predicate on the "execution_plan_templates" edge.
+func HasExecutionPlanTemplates() predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, ExecutionPlanTemplatesTable, ExecutionPlanTemplatesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasExecutionPlanTemplatesWith applies the HasEdge predicate on the "execution_plan_templates" edge with a given conditions (other predicates).
+func HasExecutionPlanTemplatesWith(preds ...predicate.ExecutionPlanTemplate) predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := newExecutionPlanTemplatesStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

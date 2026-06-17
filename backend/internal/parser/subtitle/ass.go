@@ -2,6 +2,8 @@ package subtitle
 
 import (
 	"bufio"
+	"fmt"
+	"io"
 	"regexp"
 	"strings"
 
@@ -29,7 +31,7 @@ func parseASS(content string) (*pipeline.Document, error) {
 
 	// 非 Dialogue 行的累积缓冲区（头部、样式、注释等）
 	var buf strings.Builder
-	flushBuf := func() {
+	flushBuf := func(startLine, endLine int) {
 		if buf.Len() == 0 {
 			return
 		}
@@ -39,19 +41,20 @@ func parseASS(content string) (*pipeline.Document, error) {
 				ID:     hash.Short(s),
 				Source: s,
 				Skip:   true,
+				Meta: map[string]any{
+					"pos_lines": []int{startLine, endLine},
+				},
 			})
 		}
 		buf.Reset()
 	}
 
 	// 字段索引：在 Events 节中通过 Format 行确定各字段位置
-	// 标准 Events Format: Layer, Start, End, Style, Actor, MarginL, MarginR, MarginZ, Effect, Text
-	// Text 总是末位字段
 	textFieldIdx := -1
+	bufStartLine := 0 // 当前缓冲区起始行号（0-based）
 
-	for _, raw := range lines {
-		line := raw
-		_ = line
+	for lineIdx, raw := range lines {
+		_ = raw
 
 		// 检查是否进入 Events 节
 		m := assSectionRE.FindStringSubmatch(strings.TrimSpace(raw))
@@ -63,7 +66,7 @@ func parseASS(content string) (*pipeline.Document, error) {
 			} else {
 				// 切换出 Events 节时，刷新缓冲区
 				if textFieldIdx >= 0 {
-					flushBuf()
+					flushBuf(bufStartLine, lineIdx)
 				}
 				textFieldIdx = -2 // 非 Events 节标记
 			}
@@ -120,8 +123,9 @@ func parseASS(content string) (*pipeline.Document, error) {
 			continue
 		}
 
-		// Dialogue 行 → 创建翻译段
-		flushBuf()
+		// Dialogue 行 → 先刷新之前的缓冲区
+		flushBuf(bufStartLine, lineIdx)
+		bufStartLine = lineIdx
 
 		prefix, text := splitASSFields(body, textFieldIdx)
 		if text == "" {
@@ -130,7 +134,12 @@ func parseASS(content string) (*pipeline.Document, error) {
 				ID:     hash.Short(raw),
 				Source: raw,
 				Skip:   true,
+				Meta: map[string]any{
+					"pos_line": lineIdx, // 0-based
+				},
 			})
+			buf.Reset()
+			bufStartLine = lineIdx + 1
 			continue
 		}
 
@@ -140,12 +149,15 @@ func parseASS(content string) (*pipeline.Document, error) {
 			Meta: map[string]any{
 				"type":           "ass",
 				"dialogue_start": "Dialogue: " + prefix,
+				"pos_line":       lineIdx, // 0-based 行索引
 			},
 		})
+		buf.Reset()
+		bufStartLine = lineIdx + 1
 	}
 
 	// 尾部非 Dialogue 内容
-	flushBuf()
+	flushBuf(bufStartLine, len(lines))
 
 	if len(segs) == 0 {
 		return &pipeline.Document{Format: "ass"}, nil
@@ -155,8 +167,6 @@ func parseASS(content string) (*pipeline.Document, error) {
 }
 
 // findTextFieldIndex 从 ASS Format 行内容中定位 Text 字段的索引（0-based）。
-// 标准格式："Layer, Start, End, Style, Actor, MarginL, MarginR, MarginZ, Effect, Text"
-// Text 是末位字段。
 func findTextFieldIndex(formatLine string) int {
 	fields := strings.Split(formatLine, ",")
 	for i, f := range fields {
@@ -164,22 +174,18 @@ func findTextFieldIndex(formatLine string) int {
 			return i
 		}
 	}
-	// 未找到 Text 字段则默认末位
 	if len(fields) > 0 {
 		return len(fields) - 1
 	}
-	return 9 // 标准 ASS 中 Text 是第 10 个字段（0-based=9）
+	return 9
 }
 
-// splitASSFields 将 Dialogue 行 body 按逗号分割，返回前缀（前 textFieldIdx 个字段 + 逗号）
-// 和文本（剩余部分）。文本可能包含逗号。
+// splitASSFields 将 Dialogue 行 body 按逗号分割，返回前缀和文本。
 func splitASSFields(body string, textIdx int) (prefix, text string) {
 	if textIdx <= 0 {
-		// Text 是第一个字段：整个 body 都是文本
 		return "", body
 	}
 
-	// 找到第 textIdx 个逗号
 	count := 0
 	for i := 0; i < len(body); i++ {
 		if body[i] == ',' {
@@ -189,24 +195,44 @@ func splitASSFields(body string, textIdx int) (prefix, text string) {
 			}
 		}
 	}
-	// 字段数不足：整个 body 作为前缀，文本为空
 	return body + ",", ""
 }
 
-func renderASS(doc *pipeline.Document, bw *bufio.Writer) error {
-	// 处理可能存在的头部/样式等非 Dialogue 内容
-	// 这些内容以 Skip=true 的 Segment 存储在开头
+func renderASS(doc *pipeline.Document, original io.Reader, bw *bufio.Writer) error {
+	// 读取原始文件所有行
+	raw, err := io.ReadAll(original)
+	if err != nil {
+		return fmt.Errorf("ass: read original: %w", err)
+	}
+	origLines := strings.Split(string(raw), "\n")
+
+	// 构建行索引 → Segment 的映射（仅可翻译行）
+	lineToSeg := make(map[int]pipeline.Segment)
 	for _, seg := range doc.Segments {
 		if seg.Skip {
-			bw.WriteString(seg.Source)
-			bw.WriteString("\n")
+			continue
+		}
+		lineIdx, ok := seg.Meta["pos_line"].(int)
+		if !ok {
+			continue
+		}
+		lineToSeg[lineIdx] = seg
+	}
+
+	// 按行输出，可翻译行替换文本部分
+	for i, line := range origLines {
+		seg, ok := lineToSeg[i]
+		if !ok {
+			bw.WriteString(line)
+			bw.WriteByte('\n')
 			continue
 		}
 
 		prefix, ok := seg.Meta["dialogue_start"].(string)
 		if !ok || prefix == "" {
-			// 没有前缀，尝试用默认格式重建
-			prefix = "Dialogue: 0,0:00:00.00,0:00:00.00,Default,,0,0,0,,"
+			bw.WriteString(line)
+			bw.WriteByte('\n')
+			continue
 		}
 
 		text := seg.Target
@@ -216,7 +242,7 @@ func renderASS(doc *pipeline.Document, bw *bufio.Writer) error {
 
 		bw.WriteString(prefix)
 		bw.WriteString(text)
-		bw.WriteString("\n")
+		bw.WriteByte('\n')
 	}
 	return bw.Flush()
 }

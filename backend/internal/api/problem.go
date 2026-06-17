@@ -47,7 +47,7 @@ func writeServiceError(w http.ResponseWriter, err error) {
 		writeProblem(w, http.StatusConflict, "conflict", "用户已存在")
 	case errors.Is(err, service.ErrForbidden):
 		writeProblem(w, http.StatusForbidden, "forbidden", "没有权限执行该操作")
-	case errors.Is(err, service.ErrProjectNotFound), errors.Is(err, service.ErrJobNotFound), errors.Is(err, service.ErrSubJobNotFound):
+	case errors.Is(err, service.ErrProjectNotFound):
 		writeProblem(w, http.StatusNotFound, "not_found", "资源不存在")
 	default:
 		writeProblem(w, http.StatusInternalServerError, "internal_error", "服务器内部错误")
@@ -63,9 +63,6 @@ func writeProjectServiceError(w http.ResponseWriter, err error) {
 	case errors.Is(err, service.ErrInvalidInput),
 		errors.Is(err, service.ErrProjectOwnerConflict),
 		errors.Is(err, service.ErrResourceScopeInvalid),
-		errors.Is(err, service.ErrStageInvalid),
-		errors.Is(err, service.ErrBackendModeInvalid),
-		errors.Is(err, service.ErrBackendOrderInvalid),
 		errors.Is(err, service.ErrBackendSourceInvalid),
 		errors.Is(err, service.ErrBackendNameAmbiguous):
 		writeProblem(w, http.StatusBadRequest, "invalid_input", err.Error())

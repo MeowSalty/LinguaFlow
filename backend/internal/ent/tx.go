@@ -14,42 +14,38 @@ type Tx struct {
 	config
 	// ActivityLog is the client for interacting with the ActivityLog builders.
 	ActivityLog *ActivityLogClient
+	// Backend is the client for interacting with the Backend builders.
+	Backend *BackendClient
+	// ExecutionPlanTemplate is the client for interacting with the ExecutionPlanTemplate builders.
+	ExecutionPlanTemplate *ExecutionPlanTemplateClient
 	// GlossaryEntry is the client for interacting with the GlossaryEntry builders.
 	GlossaryEntry *GlossaryEntryClient
-	// Job is the client for interacting with the Job builders.
-	Job *JobClient
 	// JobResource is the client for interacting with the JobResource builders.
 	JobResource *JobResourceClient
-	// OrgBackend is the client for interacting with the OrgBackend builders.
-	OrgBackend *OrgBackendClient
 	// OrgMembership is the client for interacting with the OrgMembership builders.
 	OrgMembership *OrgMembershipClient
 	// Organization is the client for interacting with the Organization builders.
 	Organization *OrganizationClient
 	// Project is the client for interacting with the Project builders.
 	Project *ProjectClient
-	// ProjectBackend is the client for interacting with the ProjectBackend builders.
-	ProjectBackend *ProjectBackendClient
+	// PromptTemplate is the client for interacting with the PromptTemplate builders.
+	PromptTemplate *PromptTemplateClient
 	// RefreshToken is the client for interacting with the RefreshToken builders.
 	RefreshToken *RefreshTokenClient
 	// Resource is the client for interacting with the Resource builders.
 	Resource *ResourceClient
 	// Segment is the client for interacting with the Segment builders.
 	Segment *SegmentClient
-	// StageBackendOverride is the client for interacting with the StageBackendOverride builders.
-	StageBackendOverride *StageBackendOverrideClient
-	// SubJob is the client for interacting with the SubJob builders.
-	SubJob *SubJobClient
 	// TMEntry is the client for interacting with the TMEntry builders.
 	TMEntry *TMEntryClient
 	// TranslationJob is the client for interacting with the TranslationJob builders.
 	TranslationJob *TranslationJobClient
+	// TranslationProfile is the client for interacting with the TranslationProfile builders.
+	TranslationProfile *TranslationProfileClient
 	// UsageRecord is the client for interacting with the UsageRecord builders.
 	UsageRecord *UsageRecordClient
 	// User is the client for interacting with the User builders.
 	User *UserClient
-	// UserBackend is the client for interacting with the UserBackend builders.
-	UserBackend *UserBackendClient
 
 	// lazily loaded.
 	client     *Client
@@ -182,24 +178,22 @@ func (tx *Tx) Client() *Client {
 
 func (tx *Tx) init() {
 	tx.ActivityLog = NewActivityLogClient(tx.config)
+	tx.Backend = NewBackendClient(tx.config)
+	tx.ExecutionPlanTemplate = NewExecutionPlanTemplateClient(tx.config)
 	tx.GlossaryEntry = NewGlossaryEntryClient(tx.config)
-	tx.Job = NewJobClient(tx.config)
 	tx.JobResource = NewJobResourceClient(tx.config)
-	tx.OrgBackend = NewOrgBackendClient(tx.config)
 	tx.OrgMembership = NewOrgMembershipClient(tx.config)
 	tx.Organization = NewOrganizationClient(tx.config)
 	tx.Project = NewProjectClient(tx.config)
-	tx.ProjectBackend = NewProjectBackendClient(tx.config)
+	tx.PromptTemplate = NewPromptTemplateClient(tx.config)
 	tx.RefreshToken = NewRefreshTokenClient(tx.config)
 	tx.Resource = NewResourceClient(tx.config)
 	tx.Segment = NewSegmentClient(tx.config)
-	tx.StageBackendOverride = NewStageBackendOverrideClient(tx.config)
-	tx.SubJob = NewSubJobClient(tx.config)
 	tx.TMEntry = NewTMEntryClient(tx.config)
 	tx.TranslationJob = NewTranslationJobClient(tx.config)
+	tx.TranslationProfile = NewTranslationProfileClient(tx.config)
 	tx.UsageRecord = NewUsageRecordClient(tx.config)
 	tx.User = NewUserClient(tx.config)
-	tx.UserBackend = NewUserBackendClient(tx.config)
 }
 
 // txDriver wraps the given dialect.Tx with a nop dialect.Driver implementation.

@@ -1,0 +1,157 @@
+TranslationProfileScope:
+  type: string
+  enum: [user, org, system]
+
+ProfileSplitConfig:
+  type: object
+  required: [enabled, strategy, max_chars]
+  properties:
+    enabled:
+      type: boolean
+    strategy:
+      type: string
+    max_chars:
+      type: integer
+      minimum: 1
+
+ProfileProtectConfig:
+  type: object
+  required: [enabled]
+  properties:
+    enabled:
+      type: boolean
+    rules:
+      type: array
+      items:
+        type: string
+
+ProfilePostprocessConfig:
+  type: object
+  required: [enabled, trim_spaces]
+  properties:
+    enabled:
+      type: boolean
+    trim_spaces:
+      type: boolean
+
+ProfileRepairConfig:
+  type: object
+  required: [enabled, json_structural, schema_aliases, partial, partial_threshold, placeholder_normalize, prompt_upgrade]
+  properties:
+    enabled:
+      type: boolean
+    json_structural:
+      type: boolean
+    schema_aliases:
+      type: boolean
+    partial:
+      type: boolean
+    partial_threshold:
+      type: number
+      format: double
+      minimum: 0
+      maximum: 1
+    placeholder_normalize:
+      type: boolean
+    prompt_upgrade:
+      type: boolean
+
+ProfileBootstrapConfig:
+  type: object
+  required: [mode, save, max_terms_per_batch, min_source_len, inline_conflict_strategy]
+  properties:
+    mode:
+      type: string
+      enum: [off, pre, inline]
+    save:
+      type: boolean
+    max_terms_per_batch:
+      type: integer
+      minimum: 1
+    min_source_len:
+      type: integer
+      minimum: 1
+    inline_conflict_strategy:
+      type: string
+      enum: [off, rewrite-local]
+
+ProfileGlossaryConfig:
+  type: object
+  required: [enabled, bootstrap]
+  properties:
+    enabled:
+      type: boolean
+    bootstrap:
+      $ref: '#/ProfileBootstrapConfig'
+
+TranslationProfileConfig:
+  type: object
+  required: [split, protect, postprocess, repair, glossary]
+  properties:
+    split:
+      $ref: '#/ProfileSplitConfig'
+    protect:
+      $ref: '#/ProfileProtectConfig'
+    postprocess:
+      $ref: '#/ProfilePostprocessConfig'
+    repair:
+      $ref: '#/ProfileRepairConfig'
+    glossary:
+      $ref: '#/ProfileGlossaryConfig'
+
+TranslationProfile:
+  type: object
+  required: [id, name, description, scope, config]
+  properties:
+    id:
+      type: integer
+    name:
+      type: string
+    description:
+      type: string
+    scope:
+      $ref: '#/TranslationProfileScope'
+    owner_user_id:
+      type: integer
+    owner_org_id:
+      type: integer
+    config:
+      $ref: '#/TranslationProfileConfig'
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+
+TranslationProfileListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/TranslationProfile'
+
+CreateTranslationProfileRequest:
+  type: object
+  required: [name]
+  properties:
+    name:
+      type: string
+    description:
+      type: string
+    config:
+      $ref: '#/TranslationProfileConfig'
+  additionalProperties: false
+
+UpdateTranslationProfileRequest:
+  type: object
+  properties:
+    name:
+      type: string
+    description:
+      type: string
+    config:
+      $ref: '#/TranslationProfileConfig'
+  additionalProperties: false

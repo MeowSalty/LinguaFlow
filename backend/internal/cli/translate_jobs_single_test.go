@@ -3,6 +3,8 @@ package cli
 import (
 	"path/filepath"
 	"testing"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
 )
 
 func TestBuildTranslateJobsSingleFile(t *testing.T) {
@@ -21,11 +23,19 @@ func TestBuildTranslateJobsSingleFile(t *testing.T) {
 	if len(jobs) != 1 {
 		t.Fatalf("jobs = %d, want 1", len(jobs))
 	}
-	if jobs[0].InputPath != input {
-		t.Fatalf("InputPath = %q, want %q", jobs[0].InputPath, input)
+	reader, ok := jobs[0].Source.(*engine.FileReader)
+	if !ok {
+		t.Fatalf("Source type = %T, want *engine.FileReader", jobs[0].Source)
 	}
-	if jobs[0].OutputPath != output {
-		t.Fatalf("OutputPath = %q, want %q", jobs[0].OutputPath, output)
+	if reader.Path != input {
+		t.Fatalf("Source.Path = %q, want %q", reader.Path, input)
+	}
+	writer, ok := jobs[0].Sink.(*engine.FileWriter)
+	if !ok {
+		t.Fatalf("Sink type = %T, want *engine.FileWriter", jobs[0].Sink)
+	}
+	if writer.Path != output {
+		t.Fatalf("Sink.Path = %q, want %q", writer.Path, output)
 	}
 }
 

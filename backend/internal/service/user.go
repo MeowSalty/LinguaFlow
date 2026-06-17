@@ -278,6 +278,12 @@ func (s *UserService) RemoveMember(ctx context.Context, actorUserID, orgID, memb
 	return s.client.OrgMembership.DeleteOneID(membership.ID).Exec(ctx)
 }
 
+// RequireMembership 验证用户是否为指定组织的成员，并检查其角色是否满足最低要求。
+// 供 handler 层在调用 BackendService.Create/List 前进行组织权限校验。
+func (s *UserService) RequireMembership(ctx context.Context, actorUserID, orgID int, minRole string) (*ent.OrgMembership, error) {
+	return s.requireMembership(ctx, actorUserID, orgID, minRole)
+}
+
 func (s *UserService) requireMembership(ctx context.Context, actorUserID, orgID int, minRole string) (*ent.OrgMembership, error) {
 	membership, err := s.client.OrgMembership.Query().
 		Where(

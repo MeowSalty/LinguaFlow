@@ -100,40 +100,6 @@ func (_u *ResourceUpdate) AddTotalSegments(v int) *ResourceUpdate {
 	return _u
 }
 
-// SetStatus sets the "status" field.
-func (_u *ResourceUpdate) SetStatus(v string) *ResourceUpdate {
-	_u.mutation.SetStatus(v)
-	return _u
-}
-
-// SetNillableStatus sets the "status" field if the given value is not nil.
-func (_u *ResourceUpdate) SetNillableStatus(v *string) *ResourceUpdate {
-	if v != nil {
-		_u.SetStatus(*v)
-	}
-	return _u
-}
-
-// SetErrorMessage sets the "error_message" field.
-func (_u *ResourceUpdate) SetErrorMessage(v string) *ResourceUpdate {
-	_u.mutation.SetErrorMessage(v)
-	return _u
-}
-
-// SetNillableErrorMessage sets the "error_message" field if the given value is not nil.
-func (_u *ResourceUpdate) SetNillableErrorMessage(v *string) *ResourceUpdate {
-	if v != nil {
-		_u.SetErrorMessage(*v)
-	}
-	return _u
-}
-
-// ClearErrorMessage clears the value of the "error_message" field.
-func (_u *ResourceUpdate) ClearErrorMessage() *ResourceUpdate {
-	_u.mutation.ClearErrorMessage()
-	return _u
-}
-
 // SetProjectID sets the "project_id" field.
 func (_u *ResourceUpdate) SetProjectID(v int) *ResourceUpdate {
 	_u.mutation.SetProjectID(v)
@@ -337,15 +303,6 @@ func (_u *ResourceUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.AddedTotalSegments(); ok {
 		_spec.AddField(resource.FieldTotalSegments, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.Status(); ok {
-		_spec.SetField(resource.FieldStatus, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.ErrorMessage(); ok {
-		_spec.SetField(resource.FieldErrorMessage, field.TypeString, value)
-	}
-	if _u.mutation.ErrorMessageCleared() {
-		_spec.ClearField(resource.FieldErrorMessage, field.TypeString)
 	}
 	if _u.mutation.ProjectCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -552,40 +509,6 @@ func (_u *ResourceUpdateOne) SetNillableTotalSegments(v *int) *ResourceUpdateOne
 // AddTotalSegments adds value to the "total_segments" field.
 func (_u *ResourceUpdateOne) AddTotalSegments(v int) *ResourceUpdateOne {
 	_u.mutation.AddTotalSegments(v)
-	return _u
-}
-
-// SetStatus sets the "status" field.
-func (_u *ResourceUpdateOne) SetStatus(v string) *ResourceUpdateOne {
-	_u.mutation.SetStatus(v)
-	return _u
-}
-
-// SetNillableStatus sets the "status" field if the given value is not nil.
-func (_u *ResourceUpdateOne) SetNillableStatus(v *string) *ResourceUpdateOne {
-	if v != nil {
-		_u.SetStatus(*v)
-	}
-	return _u
-}
-
-// SetErrorMessage sets the "error_message" field.
-func (_u *ResourceUpdateOne) SetErrorMessage(v string) *ResourceUpdateOne {
-	_u.mutation.SetErrorMessage(v)
-	return _u
-}
-
-// SetNillableErrorMessage sets the "error_message" field if the given value is not nil.
-func (_u *ResourceUpdateOne) SetNillableErrorMessage(v *string) *ResourceUpdateOne {
-	if v != nil {
-		_u.SetErrorMessage(*v)
-	}
-	return _u
-}
-
-// ClearErrorMessage clears the value of the "error_message" field.
-func (_u *ResourceUpdateOne) ClearErrorMessage() *ResourceUpdateOne {
-	_u.mutation.ClearErrorMessage()
 	return _u
 }
 
@@ -822,15 +745,6 @@ func (_u *ResourceUpdateOne) sqlSave(ctx context.Context) (_node *Resource, err 
 	}
 	if value, ok := _u.mutation.AddedTotalSegments(); ok {
 		_spec.AddField(resource.FieldTotalSegments, field.TypeInt, value)
-	}
-	if value, ok := _u.mutation.Status(); ok {
-		_spec.SetField(resource.FieldStatus, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.ErrorMessage(); ok {
-		_spec.SetField(resource.FieldErrorMessage, field.TypeString, value)
-	}
-	if _u.mutation.ErrorMessageCleared() {
-		_spec.ClearField(resource.FieldErrorMessage, field.TypeString)
 	}
 	if _u.mutation.ProjectCleared() {
 		edge := &sqlgraph.EdgeSpec{

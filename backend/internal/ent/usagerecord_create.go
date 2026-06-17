@@ -10,7 +10,6 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
@@ -191,25 +190,6 @@ func (_c *UsageRecordCreate) SetNillableProjectID(id *int) *UsageRecordCreate {
 // SetProject sets the "project" edge to the Project entity.
 func (_c *UsageRecordCreate) SetProject(v *Project) *UsageRecordCreate {
 	return _c.SetProjectID(v.ID)
-}
-
-// SetJobID sets the "job" edge to the Job entity by ID.
-func (_c *UsageRecordCreate) SetJobID(id int) *UsageRecordCreate {
-	_c.mutation.SetJobID(id)
-	return _c
-}
-
-// SetNillableJobID sets the "job" edge to the Job entity by ID if the given value is not nil.
-func (_c *UsageRecordCreate) SetNillableJobID(id *int) *UsageRecordCreate {
-	if id != nil {
-		_c = _c.SetJobID(*id)
-	}
-	return _c
-}
-
-// SetJob sets the "job" edge to the Job entity.
-func (_c *UsageRecordCreate) SetJob(v *Job) *UsageRecordCreate {
-	return _c.SetJobID(v.ID)
 }
 
 // Mutation returns the UsageRecordMutation object of the builder.
@@ -427,23 +407,6 @@ func (_c *UsageRecordCreate) createSpec() (*UsageRecord, *sqlgraph.CreateSpec) {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		_node.project_usage_records = &nodes[0]
-		_spec.Edges = append(_spec.Edges, edge)
-	}
-	if nodes := _c.mutation.JobIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   usagerecord.JobTable,
-			Columns: []string{usagerecord.JobColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_node.job_usage_records = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec

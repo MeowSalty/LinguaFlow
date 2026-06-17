@@ -39,8 +39,6 @@ paths:
     $ref: './paths/projects.yaml#/projects'
   /projects/{projectId}:
     $ref: './paths/projects.yaml#/projectById'
-  /projects/{projectId}/backends:
-    $ref: './paths/projects.yaml#/projectBackends'
   /projects/{projectId}/resources:
     $ref: './paths/resources.yaml#/projectResources'
   /projects/{projectId}/resources/precheck:
@@ -51,14 +49,20 @@ paths:
     $ref: './paths/resources.yaml#/projectResourceById'
   /projects/{projectId}/resources/{resourceId}/download:
     $ref: './paths/resources.yaml#/projectResourceDownload'
+  /projects/{projectId}/resources/{resourceId}/download-translated:
+    $ref: './paths/resources.yaml#/projectResourceDownloadTranslated'
   /projects/{projectId}/resources/{resourceId}/segments:
     $ref: './paths/resources.yaml#/projectResourceSegments'
   /projects/{projectId}/resources/{resourceId}/segments/{segmentId}:
     $ref: './paths/resources.yaml#/projectResourceSegmentById'
-  /projects/{projectId}/stages/{stage}/override:
-    $ref: './paths/projects.yaml#/stageOverride'
-  /projects/{projectId}/stages/{stage}/plan:
-    $ref: './paths/projects.yaml#/stagePlan'
+  /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/review:
+    $ref: './paths/resources.yaml#/projectResourceSegmentReview'
+  /projects/{projectId}/resources/{resourceId}/segments/batch-review:
+    $ref: './paths/resources.yaml#/projectResourceSegmentsBatchReview'
+  /projects/{projectId}/resources/{resourceId}/segments/approve-all:
+    $ref: './paths/resources.yaml#/projectResourceSegmentsApproveAll'
+  /projects/{projectId}/resources/{resourceId}/retranslate-rejected:
+    $ref: './paths/resources.yaml#/projectResourceRetranslateRejected'
   /projects/{projectId}/glossary:
     $ref: './paths/glossary.yaml#/projectGlossary'
   /projects/{projectId}/glossary/{entryId}:
@@ -75,8 +79,18 @@ paths:
     $ref: './paths/translation-jobs.yaml#/translationJobCancel'
   /translation-jobs/{translationJobId}/retry:
     $ref: './paths/translation-jobs.yaml#/translationJobRetry'
-  /translation-jobs/{translationJobId}/download:
-    $ref: './paths/translation-jobs.yaml#/translationJobDownload'
+  /execution-plan-templates:
+    $ref: './paths/execution-plan-templates.yaml#/executionPlanTemplates'
+  /execution-plan-templates/{executionPlanTemplateId}:
+    $ref: './paths/execution-plan-templates.yaml#/executionPlanTemplateById'
+  /prompt-templates:
+    $ref: './paths/prompt-templates.yaml#/promptTemplates'
+  /prompt-templates/{promptTemplateId}:
+    $ref: './paths/prompt-templates.yaml#/promptTemplateById'
+  /translation-profiles:
+    $ref: './paths/translation-profiles.yaml#/translationProfiles'
+  /translation-profiles/{translationProfileId}:
+    $ref: './paths/translation-profiles.yaml#/translationProfileById'
   /stats/summary:
     $ref: './paths/stats.yaml#/statsSummary'
   /activity:
@@ -100,8 +114,12 @@ components:
       $ref: './components/parameters.yaml#/BackendId'
     EntryId:
       $ref: './components/parameters.yaml#/EntryId'
-    Stage:
-      $ref: './components/parameters.yaml#/Stage'
+    PromptTemplateId:
+      $ref: './components/parameters.yaml#/PromptTemplateId'
+    TranslationProfileId:
+      $ref: './components/parameters.yaml#/TranslationProfileId'
+    ExecutionPlanTemplateId:
+      $ref: './components/parameters.yaml#/ExecutionPlanTemplateId'
     SegmentId:
       $ref: './components/parameters_extra.yaml#/SegmentId'
     Cursor:
@@ -164,6 +182,16 @@ components:
       $ref: './components/schemas/resource.yaml#/ResourceSegmentUpdateRequest'
     ResourceSegmentListResponse:
       $ref: './components/schemas/resource.yaml#/ResourceSegmentListResponse'
+    SegmentReviewRequest:
+      $ref: './components/schemas/resource.yaml#/SegmentReviewRequest'
+    BatchReviewRequest:
+      $ref: './components/schemas/resource.yaml#/BatchReviewRequest'
+    BatchReviewResponse:
+      $ref: './components/schemas/resource.yaml#/BatchReviewResponse'
+    ApproveAllResponse:
+      $ref: './components/schemas/resource.yaml#/ApproveAllResponse'
+    RetranslateResponse:
+      $ref: './components/schemas/resource.yaml#/RetranslateResponse'
     IncrementalUpdateResponse:
       $ref: './components/schemas/resource.yaml#/IncrementalUpdateResponse'
     ResourceConflictResponse:
@@ -204,16 +232,6 @@ components:
       $ref: './components/schemas/project.yaml#/CreateProjectRequest'
     UpdateProjectRequest:
       $ref: './components/schemas/project.yaml#/UpdateProjectRequest'
-    ProjectBackendBinding:
-      $ref: './components/schemas/project.yaml#/ProjectBackendBinding'
-    StageBackendOverride:
-      $ref: './components/schemas/project.yaml#/StageBackendOverride'
-    SetBackendOrderRequest:
-      $ref: './components/schemas/project.yaml#/SetBackendOrderRequest'
-    SetStageOverrideRequest:
-      $ref: './components/schemas/project.yaml#/SetStageOverrideRequest'
-    ProjectBackendSettings:
-      $ref: './components/schemas/project.yaml#/ProjectBackendSettings'
     GlossaryEntry:
       $ref: './components/schemas/glossary.yaml#/GlossaryEntry'
     GlossaryListResponse:
@@ -224,3 +242,27 @@ components:
       $ref: './components/schemas/glossary.yaml#/UpdateGlossaryEntryRequest'
     GlossaryImportResult:
       $ref: './components/schemas/glossary.yaml#/GlossaryImportResult'
+    PromptTemplate:
+      $ref: './components/schemas/prompt-template.yaml#/PromptTemplate'
+    PromptTemplateListResponse:
+      $ref: './components/schemas/prompt-template.yaml#/PromptTemplateListResponse'
+    CreatePromptTemplateRequest:
+      $ref: './components/schemas/prompt-template.yaml#/CreatePromptTemplateRequest'
+    UpdatePromptTemplateRequest:
+      $ref: './components/schemas/prompt-template.yaml#/UpdatePromptTemplateRequest'
+    TranslationProfile:
+      $ref: './components/schemas/translation-profile.yaml#/TranslationProfile'
+    TranslationProfileListResponse:
+      $ref: './components/schemas/translation-profile.yaml#/TranslationProfileListResponse'
+    CreateTranslationProfileRequest:
+      $ref: './components/schemas/translation-profile.yaml#/CreateTranslationProfileRequest'
+    UpdateTranslationProfileRequest:
+      $ref: './components/schemas/translation-profile.yaml#/UpdateTranslationProfileRequest'
+    ExecutionPlanTemplate:
+      $ref: './components/schemas/execution-plan-template.yaml#/ExecutionPlanTemplate'
+    ExecutionPlanTemplateListResponse:
+      $ref: './components/schemas/execution-plan-template.yaml#/ExecutionPlanTemplateListResponse'
+    CreateExecutionPlanTemplateRequest:
+      $ref: './components/schemas/execution-plan-template.yaml#/CreateExecutionPlanTemplateRequest'
+    UpdateExecutionPlanTemplateRequest:
+      $ref: './components/schemas/execution-plan-template.yaml#/UpdateExecutionPlanTemplateRequest'

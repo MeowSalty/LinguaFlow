@@ -509,45 +509,6 @@ paths:
           description: 删除成功
         default:
           $ref: '#/components/responses/Problem'
-  /projects/{projectId}/backends:
-    parameters:
-      - $ref: '#/components/parameters/ProjectId'
-    get:
-      operationId: GetProjectBackends
-      summary: 获取项目后端设置
-      security:
-        - bearerAuth: []
-      responses:
-        '200':
-          description: 后端设置
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ProjectBackendSettings'
-        default:
-          $ref: '#/components/responses/Problem'
-    put:
-      operationId: SetProjectBackendOrder
-      summary: 设置项目后端顺序
-      security:
-        - bearerAuth: []
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/SetBackendOrderRequest'
-      responses:
-        '200':
-          description: 设置成功
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ProjectBackendBinding'
-        default:
-          $ref: '#/components/responses/Problem'
   /projects/{projectId}/resources:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -557,14 +518,6 @@ paths:
       security:
         - bearerAuth: []
       parameters:
-        - name: status
-          in: query
-          required: false
-          schema:
-            type: string
-            enum:
-              - ready
-              - error
         - name: format
           in: query
           required: false
@@ -790,6 +743,29 @@ paths:
                 format: binary
         default:
           $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/download-translated:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      operationId: DownloadTranslatedResourceFile
+      summary: 下载资源的翻译结果文件
+      description: |
+        基于资源当前所有已翻译/已编辑的 segments，渲染并下载翻译后的文件。
+        不依赖翻译任务状态，直接读取资源级别的最新翻译数据。
+        如果没有任何已翻译的段落，返回 409 Conflict。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 翻译结果文件
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        default:
+          $ref: '#/components/responses/Problem'
   /projects/{projectId}/resources/{resourceId}/segments:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -808,7 +784,8 @@ paths:
             enum:
               - pending
               - translated
-              - reviewed
+              - edited
+              - approved
               - rejected
         - name: search
           in: query
@@ -851,13 +828,14 @@ paths:
                 $ref: '#/components/schemas/Segment'
         default:
           $ref: '#/components/responses/Problem'
-  /projects/{projectId}/stages/{stage}/override:
+  /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/review:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
-      - $ref: '#/components/parameters/Stage'
-    put:
-      operationId: SetStageBackendOverride
-      summary: 设置阶段后端覆盖
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/SegmentId'
+    patch:
+      operationId: ReviewResourceSegment
+      summary: 审核单个段落（通过/拒绝/编辑）
       security:
         - bearerAuth: []
       requestBody:
@@ -865,34 +843,74 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/SetStageOverrideRequest'
+              $ref: '#/components/schemas/SegmentReviewRequest'
       responses:
         '200':
-          description: 设置成功
+          description: 审核成功
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StageBackendOverride'
+                $ref: '#/components/schemas/Segment'
         default:
           $ref: '#/components/responses/Problem'
-  /projects/{projectId}/stages/{stage}/plan:
+  /projects/{projectId}/resources/{resourceId}/segments/batch-review:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
-      - $ref: '#/components/parameters/Stage'
-    get:
-      operationId: GetStagePlan
-      summary: 查询阶段执行计划
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: BatchReviewResourceSegments
+      summary: 批量审核段落
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchReviewRequest'
+      responses:
+        '200':
+          description: 批量审核结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchReviewResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/segments/approve-all:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: ApproveAllResourceSegments
+      summary: 批准资源中所有已翻译/已编辑的段落
       security:
         - bearerAuth: []
       responses:
         '200':
-          description: 阶段执行计划
+          description: 批准结果
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/ProjectBackendBinding'
+                $ref: '#/components/schemas/ApproveAllResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/retranslate-rejected:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: RetranslateRejectedSegments
+      summary: 将资源中被拒绝的段落重置为待翻译
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 重置结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetranslateResponse'
         default:
           $ref: '#/components/responses/Problem'
   /projects/{projectId}/glossary:
@@ -1030,7 +1048,6 @@ paths:
             enum:
               - pending
               - running
-              - awaiting_review
               - completed
               - failed
               - cancelled
@@ -1126,33 +1143,250 @@ paths:
                 $ref: '#/components/schemas/TranslationJob'
         default:
           $ref: '#/components/responses/Problem'
-  /translation-jobs/{translationJobId}/download:
-    parameters:
-      - $ref: '#/components/parameters/TranslationJobId'
+  /execution-plan-templates:
     get:
-      operationId: DownloadTranslationJobResult
-      summary: 下载翻译任务结果
+      operationId: ListExecutionPlanTemplates
+      summary: 列出当前用户的执行计划模板
       security:
         - bearerAuth: []
-      parameters:
-        - name: resource_id
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
       responses:
         '200':
-          description: 翻译结果文件
+          description: 执行计划模板列表
           content:
-            application/octet-stream:
+            application/json:
               schema:
-                type: string
-                format: binary
-            application/zip:
+                $ref: '#/components/schemas/ExecutionPlanTemplateListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateExecutionPlanTemplate
+      summary: 创建执行计划模板
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExecutionPlanTemplateRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
               schema:
-                type: string
-                format: binary
+                $ref: '#/components/schemas/ExecutionPlanTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+  /execution-plan-templates/{executionPlanTemplateId}:
+    parameters:
+      - $ref: '#/components/parameters/ExecutionPlanTemplateId'
+    get:
+      operationId: GetExecutionPlanTemplate
+      summary: 获取执行计划模板详情
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 执行计划模板详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionPlanTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: UpdateExecutionPlanTemplate
+      summary: 更新执行计划模板
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateExecutionPlanTemplateRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionPlanTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteExecutionPlanTemplate
+      summary: 删除执行计划模板
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
+  /prompt-templates:
+    get:
+      operationId: ListPromptTemplates
+      summary: 列出当前用户的提示词模板
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 提示词模板列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptTemplateListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreatePromptTemplate
+      summary: 创建提示词模板
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePromptTemplateRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+  /prompt-templates/{promptTemplateId}:
+    parameters:
+      - $ref: '#/components/parameters/PromptTemplateId'
+    get:
+      operationId: GetPromptTemplate
+      summary: 获取提示词模板详情
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 提示词模板详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: UpdatePromptTemplate
+      summary: 更新提示词模板
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePromptTemplateRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PromptTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeletePromptTemplate
+      summary: 删除提示词模板
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
+  /translation-profiles:
+    get:
+      operationId: ListTranslationProfiles
+      summary: 列出当前用户的翻译配置
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 翻译配置列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationProfileListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateTranslationProfile
+      summary: 创建翻译配置
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTranslationProfileRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationProfile'
+        default:
+          $ref: '#/components/responses/Problem'
+  /translation-profiles/{translationProfileId}:
+    parameters:
+      - $ref: '#/components/parameters/TranslationProfileId'
+    get:
+      operationId: GetTranslationProfile
+      summary: 获取翻译配置详情
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 翻译配置详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationProfile'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: UpdateTranslationProfile
+      summary: 更新翻译配置
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTranslationProfileRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationProfile'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteTranslationProfile
+      summary: 删除翻译配置
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
         default:
           $ref: '#/components/responses/Problem'
   /stats/summary:
@@ -1244,15 +1478,25 @@ components:
       schema:
         type: integer
         minimum: 1
-    Stage:
-      name: stage
+    PromptTemplateId:
+      name: promptTemplateId
       in: path
       required: true
       schema:
-        type: string
-        enum:
-          - translate
-          - bootstrap
+        type: integer
+    TranslationProfileId:
+      name: translationProfileId
+      in: path
+      required: true
+      schema:
+        type: integer
+    ExecutionPlanTemplateId:
+      name: executionPlanTemplateId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
     SegmentId:
       name: segmentId
       in: path
@@ -1524,6 +1768,12 @@ components:
           type: string
         status:
           type: string
+          enum:
+            - pending
+            - translated
+            - edited
+            - approved
+            - rejected
         review_comment:
           type: string
         reviewed_by:
@@ -1579,7 +1829,6 @@ components:
         - directory
         - format
         - total_segments
-        - status
         - created_at
         - updated_at
       properties:
@@ -1598,13 +1847,6 @@ components:
           type: string
         total_segments:
           type: integer
-        status:
-          type: string
-          enum:
-            - ready
-            - error
-        error_message:
-          type: string
         created_at:
           type: string
           format: date-time
@@ -1671,6 +1913,70 @@ components:
             $ref: '#/components/schemas/Segment'
         next_cursor:
           type: string
+    SegmentReviewRequest:
+      type: object
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          enum:
+            - approve
+            - reject
+            - edit
+          description: 审核操作：approve=通过，reject=拒绝，edit=编辑译文
+        target_text:
+          type: string
+          description: 编辑译文时必填
+        comment:
+          type: string
+          description: 审核备注
+    BatchReviewRequest:
+      type: object
+      required:
+        - segment_ids
+        - action
+      properties:
+        segment_ids:
+          type: array
+          items:
+            type: integer
+          minItems: 1
+          description: 待审核的段落 ID 列表
+        action:
+          type: string
+          enum:
+            - approve
+            - reject
+          description: 批量审核操作
+        comment:
+          type: string
+          description: 审核备注
+    BatchReviewResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Segment'
+    ApproveAllResponse:
+      type: object
+      required:
+        - approved_count
+      properties:
+        approved_count:
+          type: integer
+          description: 批准的段落数
+    RetranslateResponse:
+      type: object
+      required:
+        - reset_count
+      properties:
+        reset_count:
+          type: integer
+          description: 重置为待翻译的段落数
     IncrementalUpdateResponse:
       type: object
       required:
@@ -1703,7 +2009,7 @@ components:
             - created
             - conflict
             - failed
-          description: 处理结果：created=创建成功, conflict=与已有资源冲突, failed=处理失败
+          description: 处理结果：created=创建成功，conflict=与已有资源冲突，failed=处理失败
         resource:
           $ref: '#/components/schemas/Resource'
           description: 创建成功时返回新资源
@@ -1737,7 +2043,7 @@ components:
             - create
             - conflict
             - duplicate
-          description: 建议操作：create=可直接创建, conflict=与已有资源冲突, duplicate=批次内重复路径
+          description: 建议操作：create=可直接创建，conflict=与已有资源冲突，duplicate=批次内重复路径
         existing_resource:
           $ref: '#/components/schemas/Resource'
           description: 冲突时返回已有资源信息
@@ -1752,7 +2058,12 @@ components:
             $ref: '#/components/schemas/ResourcePrecheckFileResult'
     CreateTranslationJobRequest:
       type: object
+      required:
+        - execution_plan_id
       properties:
+        execution_plan_id:
+          type: integer
+          description: 执行计划模板 ID
         resource_ids:
           type: array
           items:
@@ -1763,6 +2074,10 @@ components:
           items:
             type: integer
             minimum: 1
+        auto_approve:
+          type: boolean
+          default: false
+          description: 翻译完成后是否自动审批通过所有段落
         translation_config:
           type: object
           additionalProperties: true
@@ -1815,6 +2130,7 @@ components:
       required:
         - id
         - project_id
+        - execution_plan_id
         - status
         - trigger_type
         - resource_count
@@ -1829,12 +2145,13 @@ components:
           type: integer
         project_id:
           type: integer
+        execution_plan_id:
+          type: integer
         status:
           type: string
           enum:
             - pending
             - running
-            - awaiting_review
             - completed
             - failed
             - cancelled
@@ -1926,14 +2243,13 @@ components:
       type: object
       required:
         - id
-        - source
+        - scope
         - name
         - type
-        - priority
       properties:
         id:
           type: integer
-        source:
+        scope:
           type: string
           enum:
             - user
@@ -1946,13 +2262,9 @@ components:
             - openai
             - anthropic
             - google
-        priority:
-          type: integer
         options:
           type: object
           additionalProperties: true
-        options_visible:
-          type: boolean
         owner_user_id:
           type: integer
         owner_org_id:
@@ -1980,9 +2292,6 @@ components:
             - openai
             - anthropic
             - google
-        priority:
-          type: integer
-          default: 0
         options:
           type: object
           additionalProperties: true
@@ -2001,8 +2310,6 @@ components:
             - openai
             - anthropic
             - google
-        priority:
-          type: integer
         options:
           type: object
           additionalProperties: true
@@ -2100,102 +2407,6 @@ components:
         target_lang:
           type: string
       additionalProperties: false
-    ProjectBackendBinding:
-      type: object
-      required:
-        - order_index
-        - source
-        - backend_id
-        - name
-        - type
-        - priority
-      properties:
-        order_index:
-          type: integer
-        source:
-          type: string
-        backend_id:
-          type: integer
-        name:
-          type: string
-        type:
-          type: string
-        priority:
-          type: integer
-        options:
-          type: object
-          additionalProperties: true
-    StageBackendOverride:
-      type: object
-      required:
-        - stage
-        - backend_mode
-      properties:
-        stage:
-          type: string
-        backend_mode:
-          type: string
-          enum:
-            - inherit
-            - prepend
-            - restrict
-        backend_order:
-          type: array
-          items:
-            type: string
-    SetBackendOrderRequest:
-      type: object
-      required:
-        - bindings
-      properties:
-        bindings:
-          type: array
-          items:
-            type: object
-            required:
-              - source
-              - backend_id
-            properties:
-              source:
-                type: string
-                enum:
-                  - user
-                  - org
-              backend_id:
-                type: integer
-      additionalProperties: false
-    SetStageOverrideRequest:
-      type: object
-      required:
-        - stage
-        - backend_mode
-      properties:
-        stage:
-          type: string
-        backend_mode:
-          type: string
-          enum:
-            - inherit
-            - prepend
-            - restrict
-        backend_order:
-          type: array
-          items:
-            type: string
-      additionalProperties: false
-    ProjectBackendSettings:
-      type: object
-      required:
-        - backends
-      properties:
-        backends:
-          type: array
-          items:
-            $ref: '#/components/schemas/ProjectBackendBinding'
-        stage_overrides:
-          type: object
-          additionalProperties:
-            $ref: '#/components/schemas/StageBackendOverride'
     GlossaryEntry:
       type: object
       required:
@@ -2278,6 +2489,197 @@ components:
                 type: string
               reason:
                 type: string
+    PromptTemplate:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - scope
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        scope:
+          $ref: '#/components/schemas/PromptTemplateScope'
+        owner_user_id:
+          type: integer
+        owner_org_id:
+          type: integer
+        system_prompt_content:
+          type: string
+          description: 提示词内容。
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    PromptTemplateListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PromptTemplate'
+    CreatePromptTemplateRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        system_prompt_content:
+          type: string
+          description: 提示词内容。
+      additionalProperties: false
+    UpdatePromptTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        system_prompt_content:
+          type: string
+          description: 提示词内容。
+      additionalProperties: false
+    TranslationProfile:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - scope
+        - config
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        scope:
+          $ref: '#/components/schemas/TranslationProfileScope'
+        owner_user_id:
+          type: integer
+        owner_org_id:
+          type: integer
+        config:
+          $ref: '#/components/schemas/TranslationProfileConfig'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    TranslationProfileListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TranslationProfile'
+    CreateTranslationProfileRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        config:
+          $ref: '#/components/schemas/TranslationProfileConfig'
+      additionalProperties: false
+    UpdateTranslationProfileRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        config:
+          $ref: '#/components/schemas/TranslationProfileConfig'
+      additionalProperties: false
+    ExecutionPlanTemplate:
+      type: object
+      required:
+        - id
+        - name
+        - scope
+        - rounds
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        scope:
+          $ref: '#/components/schemas/ExecutionPlanTemplateScope'
+        owner_user_id:
+          type: integer
+        owner_org_id:
+          type: integer
+        rounds:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutionRoundConfig'
+          minItems: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ExecutionPlanTemplateListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutionPlanTemplate'
+    CreateExecutionPlanTemplateRequest:
+      type: object
+      required:
+        - name
+        - rounds
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        rounds:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutionRoundConfig'
+          minItems: 1
+      additionalProperties: false
+    UpdateExecutionPlanTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        rounds:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutionRoundConfig'
+          minItems: 1
+      additionalProperties: false
     IncrementalUpdateChanges:
       type: object
       required:
@@ -2298,3 +2700,193 @@ components:
         deleted:
           type: integer
           description: 删除的段落数
+    ExecutionPlanTemplateScope:
+      type: string
+      enum:
+        - user
+        - org
+        - system
+    RetryConfig:
+      type: object
+      properties:
+        max_attempts:
+          type: integer
+          minimum: 1
+          default: 3
+        backoff_ms:
+          type: integer
+          minimum: 0
+          default: 2000
+        jitter:
+          type: boolean
+          default: true
+    ExecutionRoundConfig:
+      type: object
+      required:
+        - backend_id
+        - prompt_template_id
+        - profile_id
+        - batch_size
+        - concurrency
+      properties:
+        name:
+          type: string
+          description: 轮次名称（可选，空值自动生成 round-N）
+        backend_id:
+          type: integer
+          description: 后端 ID（Backend 单表全局唯一）
+        prompt_template_id:
+          type: integer
+          description: 提示词模板 ID（PromptTemplate 单表全局唯一）
+        profile_id:
+          type: integer
+          description: 策略模板 ID（TranslationProfile 单表全局唯一）
+        batch_size:
+          type: integer
+          minimum: 1
+        concurrency:
+          type: integer
+          minimum: 1
+        fallback_shrink:
+          type: number
+          minimum: 0
+          maximum: 1
+          default: 0
+        rate_limit_per_sec:
+          type: integer
+          minimum: 0
+          default: 0
+        retry:
+          $ref: '#/components/schemas/RetryConfig'
+    PromptTemplateScope:
+      type: string
+      enum:
+        - user
+        - org
+        - system
+    TranslationProfileScope:
+      type: string
+      enum:
+        - user
+        - org
+        - system
+    ProfileSplitConfig:
+      type: object
+      required:
+        - enabled
+        - strategy
+        - max_chars
+      properties:
+        enabled:
+          type: boolean
+        strategy:
+          type: string
+        max_chars:
+          type: integer
+          minimum: 1
+    ProfileProtectConfig:
+      type: object
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+        rules:
+          type: array
+          items:
+            type: string
+    ProfilePostprocessConfig:
+      type: object
+      required:
+        - enabled
+        - trim_spaces
+      properties:
+        enabled:
+          type: boolean
+        trim_spaces:
+          type: boolean
+    ProfileRepairConfig:
+      type: object
+      required:
+        - enabled
+        - json_structural
+        - schema_aliases
+        - partial
+        - partial_threshold
+        - placeholder_normalize
+        - prompt_upgrade
+      properties:
+        enabled:
+          type: boolean
+        json_structural:
+          type: boolean
+        schema_aliases:
+          type: boolean
+        partial:
+          type: boolean
+        partial_threshold:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        placeholder_normalize:
+          type: boolean
+        prompt_upgrade:
+          type: boolean
+    ProfileBootstrapConfig:
+      type: object
+      required:
+        - mode
+        - save
+        - max_terms_per_batch
+        - min_source_len
+        - inline_conflict_strategy
+      properties:
+        mode:
+          type: string
+          enum:
+            - 'off'
+            - pre
+            - inline
+        save:
+          type: boolean
+        max_terms_per_batch:
+          type: integer
+          minimum: 1
+        min_source_len:
+          type: integer
+          minimum: 1
+        inline_conflict_strategy:
+          type: string
+          enum:
+            - 'off'
+            - rewrite-local
+    ProfileGlossaryConfig:
+      type: object
+      required:
+        - enabled
+        - bootstrap
+      properties:
+        enabled:
+          type: boolean
+        bootstrap:
+          $ref: '#/components/schemas/ProfileBootstrapConfig'
+    TranslationProfileConfig:
+      type: object
+      required:
+        - split
+        - protect
+        - postprocess
+        - repair
+        - glossary
+      properties:
+        split:
+          $ref: '#/components/schemas/ProfileSplitConfig'
+        protect:
+          $ref: '#/components/schemas/ProfileProtectConfig'
+        postprocess:
+          $ref: '#/components/schemas/ProfilePostprocessConfig'
+        repair:
+          $ref: '#/components/schemas/ProfileRepairConfig'
+        glossary:
+          $ref: '#/components/schemas/ProfileGlossaryConfig'

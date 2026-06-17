@@ -11,15 +11,17 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
 )
 
 // UserCreate is the builder for creating a User entity.
@@ -117,21 +119,6 @@ func (_c *UserCreate) SetNillableActive(v *bool) *UserCreate {
 	return _c
 }
 
-// AddJobIDs adds the "jobs" edge to the Job entity by IDs.
-func (_c *UserCreate) AddJobIDs(ids ...int) *UserCreate {
-	_c.mutation.AddJobIDs(ids...)
-	return _c
-}
-
-// AddJobs adds the "jobs" edges to the Job entity.
-func (_c *UserCreate) AddJobs(v ...*Job) *UserCreate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _c.AddJobIDs(ids...)
-}
-
 // AddCreatedTranslationJobIDs adds the "created_translation_jobs" edge to the TranslationJob entity by IDs.
 func (_c *UserCreate) AddCreatedTranslationJobIDs(ids ...int) *UserCreate {
 	_c.mutation.AddCreatedTranslationJobIDs(ids...)
@@ -192,19 +179,19 @@ func (_c *UserCreate) AddMemberships(v ...*OrgMembership) *UserCreate {
 	return _c.AddMembershipIDs(ids...)
 }
 
-// AddUserBackendIDs adds the "user_backends" edge to the UserBackend entity by IDs.
-func (_c *UserCreate) AddUserBackendIDs(ids ...int) *UserCreate {
-	_c.mutation.AddUserBackendIDs(ids...)
+// AddBackendIDs adds the "backends" edge to the Backend entity by IDs.
+func (_c *UserCreate) AddBackendIDs(ids ...int) *UserCreate {
+	_c.mutation.AddBackendIDs(ids...)
 	return _c
 }
 
-// AddUserBackends adds the "user_backends" edges to the UserBackend entity.
-func (_c *UserCreate) AddUserBackends(v ...*UserBackend) *UserCreate {
+// AddBackends adds the "backends" edges to the Backend entity.
+func (_c *UserCreate) AddBackends(v ...*Backend) *UserCreate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _c.AddUserBackendIDs(ids...)
+	return _c.AddBackendIDs(ids...)
 }
 
 // AddOwnedProjectIDs adds the "owned_projects" edge to the Project entity by IDs.
@@ -250,6 +237,51 @@ func (_c *UserCreate) AddUsageRecords(v ...*UsageRecord) *UserCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddUsageRecordIDs(ids...)
+}
+
+// AddPromptTemplateIDs adds the "prompt_templates" edge to the PromptTemplate entity by IDs.
+func (_c *UserCreate) AddPromptTemplateIDs(ids ...int) *UserCreate {
+	_c.mutation.AddPromptTemplateIDs(ids...)
+	return _c
+}
+
+// AddPromptTemplates adds the "prompt_templates" edges to the PromptTemplate entity.
+func (_c *UserCreate) AddPromptTemplates(v ...*PromptTemplate) *UserCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddPromptTemplateIDs(ids...)
+}
+
+// AddTranslationProfileIDs adds the "translation_profiles" edge to the TranslationProfile entity by IDs.
+func (_c *UserCreate) AddTranslationProfileIDs(ids ...int) *UserCreate {
+	_c.mutation.AddTranslationProfileIDs(ids...)
+	return _c
+}
+
+// AddTranslationProfiles adds the "translation_profiles" edges to the TranslationProfile entity.
+func (_c *UserCreate) AddTranslationProfiles(v ...*TranslationProfile) *UserCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddTranslationProfileIDs(ids...)
+}
+
+// AddExecutionPlanTemplateIDs adds the "execution_plan_templates" edge to the ExecutionPlanTemplate entity by IDs.
+func (_c *UserCreate) AddExecutionPlanTemplateIDs(ids ...int) *UserCreate {
+	_c.mutation.AddExecutionPlanTemplateIDs(ids...)
+	return _c
+}
+
+// AddExecutionPlanTemplates adds the "execution_plan_templates" edges to the ExecutionPlanTemplate entity.
+func (_c *UserCreate) AddExecutionPlanTemplates(v ...*ExecutionPlanTemplate) *UserCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddExecutionPlanTemplateIDs(ids...)
 }
 
 // Mutation returns the UserMutation object of the builder.
@@ -401,22 +433,6 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		_spec.SetField(user.FieldActive, field.TypeBool, value)
 		_node.Active = value
 	}
-	if nodes := _c.mutation.JobsIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.JobsTable,
-			Columns: []string{user.JobsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges = append(_spec.Edges, edge)
-	}
 	if nodes := _c.mutation.CreatedTranslationJobsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -481,15 +497,15 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
-	if nodes := _c.mutation.UserBackendsIDs(); len(nodes) > 0 {
+	if nodes := _c.mutation.BackendsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.UserBackendsTable,
-			Columns: []string{user.UserBackendsColumn},
+			Table:   user.BackendsTable,
+			Columns: []string{user.BackendsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -538,6 +554,54 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.PromptTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PromptTemplatesTable,
+			Columns: []string{user.PromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(prompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.TranslationProfilesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.TranslationProfilesTable,
+			Columns: []string{user.TranslationProfilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.ExecutionPlanTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExecutionPlanTemplatesTable,
+			Columns: []string{user.ExecutionPlanTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionplantemplate.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

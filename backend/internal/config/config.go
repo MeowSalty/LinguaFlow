@@ -15,10 +15,15 @@ type Config struct {
 	SourceLang string `yaml:"source_lang"`
 	TargetLang string `yaml:"target_lang"`
 
+	// Deprecated: CLI 端应使用 CLIConfig.Execution 替代。
+	// 保留此字段是为了 Web Server 端兼容。
 	Backends []BackendConfig `yaml:"backends"`
 
+	// Deprecated: CLI 端应使用 CLIConfig.TranslationProfiles 替代。
 	Pipeline PipelineConfig `yaml:"pipeline"`
-	Prompt   PromptConfig   `yaml:"prompt"`
+
+	// Deprecated: CLI 端应使用 CLIConfig.PromptTemplates 替代。
+	Prompt PromptConfig `yaml:"prompt"`
 
 	Glossary          GlossaryConfig `yaml:"glossary"`
 	TranslationMemory TMConfig       `yaml:"translation_memory"`
@@ -30,11 +35,11 @@ type Config struct {
 }
 
 type BackendConfig struct {
-	Name     string         `yaml:"name"`
-	Type     string         `yaml:"type"`
-	Enabled  bool           `yaml:"enabled"`
-	Priority int            `yaml:"priority"`
-	Options  map[string]any `yaml:"options"`
+	Name            string         `yaml:"name"`
+	Type            string         `yaml:"type"`
+	Enabled         bool           `yaml:"enabled"`
+	RateLimitPerSec int            `yaml:"rate_limit_per_sec"` // 按后端独立限流；0 表示使用全局限流器
+	Options         map[string]any `yaml:"options"`
 }
 
 type PipelineConfig struct {
@@ -56,38 +61,18 @@ type ProtectConfig struct {
 }
 
 type TranslateConfig struct {
-	Concurrency     int                    `yaml:"concurrency"`
-	BatchSize       int                    `yaml:"batch_size"`      // 一次合并发送的段数；<=1 表示禁用批量
-	FallbackShrink  float64                `yaml:"fallback_shrink"` // 整批失败时下一级 batch = floor(cur*shrink)；0 = 直接降到单段；必须 <1
-	RateLimitPerSec int                    `yaml:"rate_limit_per_sec"`
-	BackendMode     string                 `yaml:"backend_mode"`
-	BackendOrder    []string               `yaml:"backend_order"`
-	Plan            []TranslateRoundConfig `yaml:"plan"`
-	Retry           RetryConfig            `yaml:"retry"`
-	Repair          RepairConfig           `yaml:"repair"`
-}
-
-// TranslateRoundConfig 描述一轮显式的翻译计划。
-//
-// 语义：本轮只处理上一轮遗留的 pending 段，成功段出队，未成功段留给下一轮。
-// 为保证上下文连续性，批次始终由“连续待翻译段”组成；如果没有连续段能凑满
-// BatchSize，则发送当前最长连续段。
-//
-// 零值继承 TranslateConfig 的同名字段：
-//   - BatchSize <= 0   → 继承 translate.batch_size（再兜底为 1）
-//   - Concurrency <= 0 → 继承 translate.concurrency（再兜底为 1）
-//   - BackendMode == "" && BackendOrder 为空 → 继承全局 translate 后端策略
-type TranslateRoundConfig struct {
-	Name         string   `yaml:"name"`
-	BatchSize    int      `yaml:"batch_size"`
-	Concurrency  int      `yaml:"concurrency"`
-	BackendMode  string   `yaml:"backend_mode"`
-	BackendOrder []string `yaml:"backend_order"`
+	Concurrency     int          `yaml:"concurrency"`
+	BatchSize       int          `yaml:"batch_size"`      // 一次合并发送的段数；<=1 表示禁用批量
+	FallbackShrink  float64      `yaml:"fallback_shrink"` // 整批失败时下一级 batch = floor(cur*shrink)；0 = 直接降到单段；必须 <1
+	RateLimitPerSec int          `yaml:"rate_limit_per_sec"`
+	Retry           RetryConfig  `yaml:"retry"`
+	Repair          RepairConfig `yaml:"repair"`
 }
 
 type RetryConfig struct {
-	MaxAttempts int           `yaml:"max_attempts"`
-	Backoff     time.Duration `yaml:"backoff"`
+	MaxAttempts int  `yaml:"max_attempts"`
+	BackoffMs   int  `yaml:"backoff_ms"` // 毫秒，废弃 time.Duration
+	Jitter      bool `yaml:"jitter"`
 }
 
 // RepairConfig 控制 LLM 响应解析失败 / 部分缺失时的"主动修复"行为。
@@ -111,9 +96,10 @@ type PostprocessConfig struct {
 }
 
 type PromptConfig struct {
-	SystemTemplate string         `yaml:"system_template"`
-	UserTemplate   string         `yaml:"user_template"`
-	Vars           map[string]any `yaml:"vars"`
+	SystemTemplate        string         `yaml:"system_template"`
+	SystemTemplateContent string         `yaml:"system_template_content"` // 新增：内联内容，优先级高于 SystemTemplate
+	UserTemplate          string         `yaml:"user_template"`
+	Vars                  map[string]any `yaml:"vars"`
 }
 
 type GlossaryConfig struct {
@@ -139,13 +125,11 @@ type GlossaryConfig struct {
 //     权威表中的版本；CJK 直接替换，拉丁系按词边界，歧义场景仅 Warn 不动。
 //   - off：完全不处理，沿用旧行为（First-Wins + 不一致译文）。
 type BootstrapConfig struct {
-	Mode                   string   `yaml:"mode"`
-	Save                   bool     `yaml:"save"`
-	MaxTermsPerBatch       int      `yaml:"max_terms_per_batch"`
-	MinSourceLen           int      `yaml:"min_source_len"`
-	BackendMode            string   `yaml:"backend_mode"`
-	BackendOrder           []string `yaml:"backend_order"`
-	InlineConflictStrategy string   `yaml:"inline_conflict_strategy"`
+	Mode                   string `yaml:"mode"`
+	Save                   bool   `yaml:"save"`
+	MaxTermsPerBatch       int    `yaml:"max_terms_per_batch"`
+	MinSourceLen           int    `yaml:"min_source_len"`
+	InlineConflictStrategy string `yaml:"inline_conflict_strategy"`
 }
 
 // Bootstrap 模式常量。
@@ -161,15 +145,10 @@ const (
 	InlineConflictRewriteLocal = "rewrite-local"
 )
 
-const (
-	BackendModePrepend  = "prepend"
-	BackendModeRestrict = "restrict"
-)
-
-// normalize 规范化 RepairConfig：
+// Normalize 规范化 RepairConfig：
 //   - Enabled=false 时强制清零所有子开关，调用方据此短路所有修复逻辑
 //   - PartialThreshold 不在 (0,1] 时归 0.5（最常见默认）
-func (r *RepairConfig) normalize() {
+func (r *RepairConfig) Normalize() {
 	if !r.Enabled {
 		r.JSONStructural = false
 		r.SchemaAliases = false
@@ -245,10 +224,9 @@ func Default() *Config {
 		SourceLang: "auto",
 		TargetLang: "zh",
 		Backends: []BackendConfig{{
-			Name:     "openai-default",
-			Type:     "openai",
-			Enabled:  true,
-			Priority: 100,
+			Name:    "openai-default",
+			Type:    "openai",
+			Enabled: true,
 			Options: map[string]any{
 				"api_key":         "${OPENAI_API_KEY}",
 				"base_url":        "https://api.openai.com/v1",
@@ -267,7 +245,7 @@ func Default() *Config {
 				BatchSize:       1,
 				FallbackShrink:  0.5,
 				RateLimitPerSec: 5,
-				Retry:           RetryConfig{MaxAttempts: 3, Backoff: time.Second},
+				Retry:           RetryConfig{MaxAttempts: 3, BackoffMs: 2000},
 				Repair: RepairConfig{
 					Enabled:              true,
 					JSONStructural:       true,
@@ -321,6 +299,21 @@ func (c *Config) Validate() error {
 	if c.TargetLang == "" {
 		return errEmptyTargetLang
 	}
+	// 校验后端 name 唯一性和 name/type 非空
+	seen := make(map[string]int, len(c.Backends))
+	for i, b := range c.Backends {
+		if b.Name == "" {
+			return fmt.Errorf("配置错误：backends[%d].name 不能为空", i)
+		}
+		if b.Type == "" {
+			return fmt.Errorf("配置错误：backends[%d].type 不能为空（后端 %q）", i, b.Name)
+		}
+		if prev, dup := seen[b.Name]; dup {
+			return fmt.Errorf("%w：%q 在 backends[%d] 与 backends[%d] 重复",
+				errDuplicateBackendName, b.Name, i, prev)
+		}
+		seen[b.Name] = i
+	}
 	enabled := 0
 	for _, b := range c.Backends {
 		if b.Enabled {
@@ -333,6 +326,9 @@ func (c *Config) Validate() error {
 	if c.Pipeline.Translate.Concurrency < 1 {
 		c.Pipeline.Translate.Concurrency = 1
 	}
+	if c.Pipeline.Translate.Retry.BackoffMs < 1000 {
+		c.Pipeline.Translate.Retry.BackoffMs = 1000
+	}
 	if shrink := c.Pipeline.Translate.FallbackShrink; math.IsNaN(shrink) || math.IsInf(shrink, 0) || shrink < 0 {
 		c.Pipeline.Translate.FallbackShrink = 0
 	} else if shrink >= 1 {
@@ -341,21 +337,12 @@ func (c *Config) Validate() error {
 	if c.Pipeline.Split.MaxChars < 1 {
 		c.Pipeline.Split.MaxChars = 1200
 	}
-	if err := validateBackendOrder("pipeline.translate", c.Backends, c.Pipeline.Translate.BackendMode, c.Pipeline.Translate.BackendOrder); err != nil {
-		return err
-	}
-	if err := validateTranslatePlan(c.Backends, &c.Pipeline.Translate); err != nil {
-		return err
-	}
-	c.Pipeline.Translate.Repair.normalize()
+	c.Pipeline.Translate.Repair.Normalize()
 	if c.Glossary.Bootstrap.MaxTermsPerBatch < 1 {
 		c.Glossary.Bootstrap.MaxTermsPerBatch = 20
 	}
 	if c.Glossary.Bootstrap.MinSourceLen < 1 {
 		c.Glossary.Bootstrap.MinSourceLen = 2
-	}
-	if err := validateBackendOrder("glossary.bootstrap", c.Backends, c.Glossary.Bootstrap.BackendMode, c.Glossary.Bootstrap.BackendOrder); err != nil {
-		return err
 	}
 	switch c.Glossary.Bootstrap.Mode {
 	case "":
@@ -404,68 +391,6 @@ func (c *Config) Validate() error {
 	}
 	if len(c.Server.CORS.AllowedOrigins) == 0 {
 		c.Server.CORS.AllowedOrigins = []string{"*"}
-	}
-	return nil
-}
-
-func validateTranslatePlan(backends []BackendConfig, tc *TranslateConfig) error {
-	for i := range tc.Plan {
-		r := &tc.Plan[i]
-		if r.BatchSize < 1 {
-			if tc.BatchSize > 0 {
-				r.BatchSize = tc.BatchSize
-			} else {
-				r.BatchSize = 1
-			}
-		}
-		if r.Concurrency < 1 {
-			if tc.Concurrency > 0 {
-				r.Concurrency = tc.Concurrency
-			} else {
-				r.Concurrency = 1
-			}
-		}
-		if r.BackendMode == "" {
-			r.BackendMode = tc.BackendMode
-		}
-		if len(r.BackendOrder) == 0 && len(tc.BackendOrder) > 0 {
-			r.BackendOrder = append([]string(nil), tc.BackendOrder...)
-		}
-		if err := validateBackendOrder(fmt.Sprintf("pipeline.translate.plan[%d]", i), backends, r.BackendMode, r.BackendOrder); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func validateBackendOrder(path string, backends []BackendConfig, mode string, order []string) error {
-	enabled := make(map[string]struct{}, len(backends))
-	for _, b := range backends {
-		if b.Enabled {
-			enabled[b.Name] = struct{}{}
-		}
-	}
-	switch mode {
-	case "", BackendModePrepend, BackendModeRestrict:
-		// ok
-	default:
-		return fmt.Errorf("%s.backend_mode must be one of prepend|restrict, got %q", path, mode)
-	}
-	if mode == BackendModeRestrict && len(order) == 0 {
-		return fmt.Errorf("%s.backend_order must not be empty when backend_mode=restrict", path)
-	}
-	seen := make(map[string]struct{}, len(order))
-	for _, name := range order {
-		if name == "" {
-			return fmt.Errorf("%s.backend_order must not contain empty backend names", path)
-		}
-		if _, ok := seen[name]; ok {
-			return fmt.Errorf("%s.backend_order contains duplicate backend %q", path, name)
-		}
-		seen[name] = struct{}{}
-		if _, ok := enabled[name]; !ok {
-			return fmt.Errorf("%s.backend_order references unknown or disabled backend %q", path, name)
-		}
 	}
 	return nil
 }

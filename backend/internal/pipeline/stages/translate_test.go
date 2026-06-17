@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
@@ -370,10 +371,6 @@ func TestAbsorbInlineGlossary_ProposedTargetMissingInTranslations(t *testing.T) 
 }
 
 // ---------- 集成测试：partial recovery / normalize 救回 / L4 升级重试 ----------
-//
-// 复用 bootstrap_test.go 中已有的 fakeBackend / fakeSelector：
-//   - fakeBackend{responses: []string, errs: []error} 按调用序号返回内容
-//   - fakeSelector 把单 backend 挂给 selector
 
 // countingReporter 计算 SegmentDone 调用次数；用于检测 partial 路径是否双计进度。
 type countingReporter struct {
@@ -444,6 +441,16 @@ func defaultRepairOpts() repair.Options {
 	}
 }
 
+// defaultTestRound 构造单轮 Round，简化测试代码。
+func defaultTestRound(fb backend.Backend, batchSize, concurrency int) []Round {
+	return []Round{{
+		Name:        "default",
+		Backends:    []backend.Backend{fb},
+		BatchSize:   batchSize,
+		Concurrency: concurrency,
+	}}
+}
+
 // TestProcessBatch_PartialRecovery_BelowThreshold 验证 partial 模式下，缺失少量 ID
 // 时已成功段直接写回，缺失段仅触发额外 LLM 调用，不走 shrink。
 func TestProcessBatch_PartialRecovery_BelowThreshold(t *testing.T) {
@@ -455,18 +462,16 @@ func TestProcessBatch_PartialRecovery_BelowThreshold(t *testing.T) {
 		responses: []string{
 			// 第 1 次（batch）：缺 "4"
 			`{"translations":{"1":"a","2":"b","3":"c"}}`,
-			// 第 2 次（translateSingle for seg 3）：用 SingleID "0"
+			// 第 2 次（translateSingleInRound for seg 3）：用 SingleID "0"
 			`{"translations":{"0":"d"}}`,
 		},
 	}
 	s := &Translate{
-		Selector:    &fakeSelector{b: fb},
-		Renderer:    newTestRenderer(t),
-		BatchSize:   4,
-		Concurrency: 1,
-		Logger:      quietLogger(),
-		Reporter:    rep,
-		Repair:      defaultRepairOpts(),
+		Rounds:   defaultTestRound(fb, 4, 1),
+		Renderer: newTestRenderer(t),
+		Logger:   quietLogger(),
+		Reporter: rep,
+		Repair:   defaultRepairOpts(),
 	}
 	if err := s.Run(context.Background(), doc); err != nil {
 		t.Fatalf("run: %v", err)
@@ -479,14 +484,15 @@ func TestProcessBatch_PartialRecovery_BelowThreshold(t *testing.T) {
 	if got := int(fb.idx.Load()); got != 2 {
 		t.Errorf("backend calls: %d want 2 (1 batch + 1 single)", got)
 	}
-	// 4 段都应该恰好被 SegmentDone 一次：成功 3 段在 batch path、缺失 1 段在 translateSingle 内 defer。
+	// 4 段都应该恰好被 SegmentDone 一次：成功 3 段在 batch path、缺失 1 段在 translateSingleInRound 内。
 	if got := atomic.LoadInt32(&rep.segmentDones); got != 4 {
 		t.Errorf("SegmentDone calls=%d want 4 (no double-count, no missing)", got)
 	}
 }
 
-// TestProcessBatch_PartialRecovery_AboveThresholdShrinks 缺失率超阈值时走 shrink，
-// 不应触发 N 次 translateSingle。FallbackShrink=0 时直接坍缩到单段。
+// TestProcessBatch_PartialRecovery_AboveThresholdShrinks 缺失率超阈值时，
+// 使用最佳部分结果（不丢弃已翻译段），缺失段通过 translateSingleInRound 补救。
+// FallbackShrink=0 时直接坍缩到单段。
 func TestProcessBatch_PartialRecovery_AboveThresholdShrinks(t *testing.T) {
 	doc := newTestDoc(4)
 	rep := &countingReporter{}
@@ -494,31 +500,33 @@ func TestProcessBatch_PartialRecovery_AboveThresholdShrinks(t *testing.T) {
 	fb := &fakeBackend{
 		name: "fake",
 		responses: []string{
-			// 第 1 次 batch：仅返回 1 个 → 缺失率 0.75 > 0.5 阈值 → shrink
+			// 第 1 次 batch：仅返回 1 个 → 缺失率 0.75 > 0.5 阈值
+			// 使用最佳部分结果，缺失 3 段走 translateSingleInRound
 			`{"translations":{"1":"a"}}`,
-			// 后续 4 次 single 都返回完整
-			`{"translations":{"0":"x0"}}`,
+			// 后续 3 次 single 补救缺失段
 			`{"translations":{"0":"x1"}}`,
 			`{"translations":{"0":"x2"}}`,
 			`{"translations":{"0":"x3"}}`,
 		},
 	}
 	s := &Translate{
-		Selector:       &fakeSelector{b: fb},
-		Renderer:       newTestRenderer(t),
-		BatchSize:      4,
-		Concurrency:    1,
-		FallbackShrink: 0,
-		Logger:         quietLogger(),
-		Reporter:       rep,
-		Repair:         defaultRepairOpts(),
+		Rounds:   []Round{{Name: "default", Backends: []backend.Backend{fb}, BatchSize: 4, Concurrency: 1, FallbackShrink: 0}},
+		Renderer: newTestRenderer(t),
+		Logger:   quietLogger(),
+		Reporter: rep,
+		Repair:   defaultRepairOpts(),
 	}
 	if err := s.Run(context.Background(), doc); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	// 预期：1 次 batch（partial 超阈值）+ 4 次 single = 5 次后端调用
-	if got := int(fb.idx.Load()); got != 5 {
-		t.Errorf("backend calls: %d want 5 (1 batch shrink-trigger + 4 single fallback)", got)
+	// 预期：1 次 batch + 3 次 single 补救 = 4 次后端调用（最佳部分结果不丢弃）
+	if got := int(fb.idx.Load()); got != 4 {
+		t.Errorf("backend calls: %d want 4 (1 batch + 3 single recovery)", got)
+	}
+	for i, want := range []string{"a", "x1", "x2", "x3"} {
+		if got := doc.Segments[i].Target; got != want {
+			t.Errorf("seg %d: target=%q want %q", i, got, want)
+		}
 	}
 	if got := atomic.LoadInt32(&rep.segmentDones); got != 4 {
 		t.Errorf("SegmentDone calls=%d want 4", got)
@@ -541,13 +549,11 @@ func TestProcessBatch_PlaceholderNormalizeAvoidsRetry(t *testing.T) {
 		},
 	}
 	s := &Translate{
-		Selector:    &fakeSelector{b: fb},
-		Renderer:    newTestRenderer(t),
-		BatchSize:   1,
-		Concurrency: 1,
-		Logger:      quietLogger(),
-		Reporter:    rep,
-		Repair:      defaultRepairOpts(),
+		Rounds:   defaultTestRound(fb, 1, 1),
+		Renderer: newTestRenderer(t),
+		Logger:   quietLogger(),
+		Reporter: rep,
+		Repair:   defaultRepairOpts(),
 	}
 	if err := s.Run(context.Background(), doc); err != nil {
 		t.Fatalf("run: %v", err)
@@ -575,13 +581,11 @@ func TestProcessBatch_PromptUpgradeRecovers(t *testing.T) {
 		},
 	}
 	s := &Translate{
-		Selector:    &fakeSelector{b: fb},
-		Renderer:    newTestRenderer(t),
-		BatchSize:   2,
-		Concurrency: 1,
-		Logger:      quietLogger(),
-		Reporter:    rep,
-		Repair:      defaultRepairOpts(),
+		Rounds:   defaultTestRound(fb, 2, 1),
+		Renderer: newTestRenderer(t),
+		Logger:   quietLogger(),
+		Reporter: rep,
+		Repair:   defaultRepairOpts(),
 	}
 	if err := s.Run(context.Background(), doc); err != nil {
 		t.Fatalf("run: %v", err)
@@ -610,14 +614,11 @@ func TestProcessBatch_PromptUpgradeDisabledFallsBack(t *testing.T) {
 	opts := defaultRepairOpts()
 	opts.PromptUpgrade = false
 	s := &Translate{
-		Selector:       &fakeSelector{b: fb},
-		Renderer:       newTestRenderer(t),
-		BatchSize:      2,
-		Concurrency:    1,
-		FallbackShrink: 0,
-		Logger:         quietLogger(),
-		Reporter:       rep,
-		Repair:         opts,
+		Rounds:   []Round{{Name: "default", Backends: []backend.Backend{fb}, BatchSize: 2, Concurrency: 1, FallbackShrink: 0}},
+		Renderer: newTestRenderer(t),
+		Logger:   quietLogger(),
+		Reporter: rep,
+		Repair:   opts,
 	}
 	if err := s.Run(context.Background(), doc); err != nil {
 		t.Fatalf("run: %v", err)
@@ -642,17 +643,14 @@ func TestTranslatePlan_UsesLongestContinuousRunsAndNextRoundFallback(t *testing.
 		},
 	}
 	s := &Translate{
-		Selector:    &fakeSelector{b: fb},
-		Renderer:    newTestRenderer(t),
-		BatchSize:   3,
-		Concurrency: 1,
-		Logger:      quietLogger(),
-		Reporter:    &countingReporter{},
-		Plan: []config.TranslateRoundConfig{
-			{Name: "bulk", BatchSize: 3, Concurrency: 1},
-			{Name: "single", BatchSize: 1, Concurrency: 1},
+		Rounds: []Round{
+			{Name: "bulk", Backends: []backend.Backend{fb}, BatchSize: 3, Concurrency: 1},
+			{Name: "single", Backends: []backend.Backend{fb}, BatchSize: 1, Concurrency: 1},
 		},
-		Repair: defaultRepairOpts(),
+		Renderer: newTestRenderer(t),
+		Logger:   quietLogger(),
+		Reporter: &countingReporter{},
+		Repair:   defaultRepairOpts(),
 	}
 	if err := s.Run(context.Background(), doc); err != nil {
 		t.Fatalf("run: %v", err)
@@ -686,14 +684,13 @@ func TestTranslatePlan_ExhaustedRoundsKeepSource(t *testing.T) {
 		responses: []string{`{"translations":{"1":"ok"}}`},
 	}
 	s := &Translate{
-		Selector:    &fakeSelector{b: fb},
-		Renderer:    newTestRenderer(t),
-		BatchSize:   2,
-		Concurrency: 1,
-		Logger:      quietLogger(),
-		Reporter:    &countingReporter{},
-		Plan:        []config.TranslateRoundConfig{{Name: "only", BatchSize: 2, Concurrency: 1}},
-		Repair:      defaultRepairOpts(),
+		Rounds: []Round{
+			{Name: "only", Backends: []backend.Backend{fb}, BatchSize: 2, Concurrency: 1},
+		},
+		Renderer: newTestRenderer(t),
+		Logger:   quietLogger(),
+		Reporter: &countingReporter{},
+		Repair:   defaultRepairOpts(),
 	}
 	if err := s.Run(context.Background(), doc); err != nil {
 		t.Fatalf("run: %v", err)
@@ -701,7 +698,13 @@ func TestTranslatePlan_ExhaustedRoundsKeepSource(t *testing.T) {
 	if doc.Segments[0].Target != "ok" {
 		t.Fatalf("seg0=%q want ok", doc.Segments[0].Target)
 	}
-	if doc.Segments[1].Target != doc.Segments[1].Source {
-		t.Fatalf("seg1=%q want source fallback %q", doc.Segments[1].Target, doc.Segments[1].Source)
+	// 重构后：失败段不再填充原文，而是通过 _translate_failed_indices 记录。
+	if doc.Segments[1].Target != "" {
+		t.Fatalf("seg1=%q want empty (failed segment keeps empty target)", doc.Segments[1].Target)
+	}
+	if v, ok := doc.Vars["_translate_failed_indices"]; !ok {
+		t.Fatal("expected _translate_failed_indices to be set")
+	} else if s, ok := v.(string); !ok || s != "1" {
+		t.Fatalf("_translate_failed_indices=%v want \"1\"", v)
 	}
 }

@@ -1,48 +1,11 @@
 package config
 
 import (
+	"errors"
+	"strings"
 	"testing"
 	"time"
 )
-
-func TestValidateTranslatePlan_InheritsDefaults(t *testing.T) {
-	cfg := Default()
-	cfg.Pipeline.Translate.BatchSize = 40
-	cfg.Pipeline.Translate.Concurrency = 4
-	cfg.Pipeline.Translate.BackendMode = BackendModeRestrict
-	cfg.Pipeline.Translate.BackendOrder = []string{"openai-default"}
-	cfg.Pipeline.Translate.Plan = []TranslateRoundConfig{{Name: "bulk"}}
-
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("validate: %v", err)
-	}
-	round := cfg.Pipeline.Translate.Plan[0]
-	if round.BatchSize != 40 {
-		t.Fatalf("batch_size=%d want 40", round.BatchSize)
-	}
-	if round.Concurrency != 4 {
-		t.Fatalf("concurrency=%d want 4", round.Concurrency)
-	}
-	if round.BackendMode != BackendModeRestrict {
-		t.Fatalf("backend_mode=%q want %q", round.BackendMode, BackendModeRestrict)
-	}
-	if len(round.BackendOrder) != 1 || round.BackendOrder[0] != "openai-default" {
-		t.Fatalf("backend_order=%v want [openai-default]", round.BackendOrder)
-	}
-}
-
-func TestValidateTranslatePlan_InvalidBackendOrder(t *testing.T) {
-	cfg := Default()
-	cfg.Pipeline.Translate.Plan = []TranslateRoundConfig{{
-		Name:         "bulk",
-		BackendMode:  BackendModeRestrict,
-		BackendOrder: []string{"missing-backend"},
-	}}
-
-	if err := cfg.Validate(); err == nil {
-		t.Fatal("expected validate error for invalid plan backend_order")
-	}
-}
 
 func TestValidateServerConfig_Defaults(t *testing.T) {
 	cfg := Default()
@@ -85,5 +48,59 @@ func TestValidateServerConfig_Defaults(t *testing.T) {
 	}
 	if len(cfg.Server.CORS.AllowedOrigins) != 1 || cfg.Server.CORS.AllowedOrigins[0] != "*" {
 		t.Fatalf("allowed_origins=%v want [*]", cfg.Server.CORS.AllowedOrigins)
+	}
+}
+
+func TestValidate_DuplicateBackendName(t *testing.T) {
+	cfg := Default()
+	cfg.Backends = []BackendConfig{
+		{Name: "openai", Type: "openai", Enabled: true},
+		{Name: "openai", Type: "anthropic", Enabled: true},
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for duplicate backend name")
+	}
+	if !errors.Is(err, errDuplicateBackendName) {
+		t.Errorf("expected errDuplicateBackendName, got: %v", err)
+	}
+}
+
+func TestValidate_EmptyBackendName(t *testing.T) {
+	cfg := Default()
+	cfg.Backends = []BackendConfig{
+		{Name: "", Type: "openai", Enabled: true},
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for empty backend name")
+	}
+	if !strings.Contains(err.Error(), "name 不能为空") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestValidate_EmptyBackendType(t *testing.T) {
+	cfg := Default()
+	cfg.Backends = []BackendConfig{
+		{Name: "my-backend", Type: "", Enabled: true},
+	}
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for empty backend type")
+	}
+	if !strings.Contains(err.Error(), "type 不能为空") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestValidate_UniqueBackendNames(t *testing.T) {
+	cfg := Default()
+	cfg.Backends = []BackendConfig{
+		{Name: "openai-primary", Type: "openai", Enabled: true},
+		{Name: "anthropic-backup", Type: "anthropic", Enabled: false},
+	}
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

@@ -35,7 +35,6 @@ type Backend struct {
 	name              string
 	client            sdk.Client
 	model             string
-	temperature       float64
 	maxTokens         int64
 	timeout           time.Duration
 	responseFormat    string
@@ -53,10 +52,6 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 	model := req.Model
 	if model == "" {
 		model = b.model
-	}
-	temp := req.Temperature
-	if temp == 0 {
-		temp = b.temperature
 	}
 	maxTok := req.MaxTokens
 	if maxTok == 0 {
@@ -98,8 +93,8 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 			sdk.NewUserMessage(sdk.NewTextBlock(req.User)),
 		},
 	}
-	if temp != 0 {
-		params.Temperature = sdk.Float(temp)
+	if req.Temperature != nil {
+		params.Temperature = sdk.Float(*req.Temperature)
 	}
 
 	useToolPath := rf == respFmtJSONSchema && req.JSONSchema != nil
@@ -118,7 +113,7 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 
 	msg, err := b.client.Messages.New(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("anthropic: messages: %w", err)
+		return nil, wrapAnthropicError(err)
 	}
 
 	// 截断会让 tool_use 的 JSON 残缺，显式失败以触发上层 shrinkOrFallback
@@ -143,6 +138,16 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 }
 
 func (b *Backend) Close() error { return nil }
+
+// wrapAnthropicError 将 Anthropic SDK 错误包装为 backend.StatusError。
+// 与 OpenAI 类似，apierror.Error 在 internal 包中。
+func wrapAnthropicError(err error) error {
+	if code, ok := backend.ExtractHTTPStatusCode(err.Error()); ok {
+		return fmt.Errorf("anthropic: messages: %w",
+			&backend.StatusError{StatusCode: code, Err: err})
+	}
+	return fmt.Errorf("anthropic: messages: %w", err)
+}
 
 // extractResponseText 把响应内容拼成可供上层 parseBatchResponse 解析的字符串。
 // useToolPath=true 时优先在 content 中找 emit_translations 的 tool_use 块，
@@ -211,7 +216,6 @@ func buildToolInputSchema(schema map[string]any) sdk.ToolInputSchemaParam {
 //   - api_key (必填)
 //   - base_url (留空走 SDK 默认)
 //   - model (默认 claude-sonnet-4-5)
-//   - temperature (默认 0.2)
 //   - max_tokens (默认 8192,Anthropic 必填)
 //   - timeout (默认 60s,duration 字符串)
 //   - response_format (json_schema|json_object|none，默认 json_schema)
@@ -234,7 +238,6 @@ func factory(opts map[string]any) (backend.Backend, error) {
 	b := &Backend{
 		client:            sdk.NewClient(clientOpts...),
 		model:             backend.StringOpt(opts, "model", defaultModel),
-		temperature:       backend.Float64Opt(opts, "temperature", 0.2),
 		maxTokens:         backend.Int64Opt(opts, "max_tokens", defaultMaxTokens),
 		responseFormat:    rf,
 		enablePromptCache: backend.BoolOpt(opts, "enable_prompt_cache", true),

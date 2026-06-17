@@ -1,0 +1,83 @@
+promptTemplates:
+  get:
+    operationId: ListPromptTemplates
+    summary: 列出当前用户的提示词模板
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 提示词模板列表
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/prompt-template.yaml#/PromptTemplateListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  post:
+    operationId: CreatePromptTemplate
+    summary: 创建提示词模板
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/prompt-template.yaml#/CreatePromptTemplateRequest'
+    responses:
+      '201':
+        description: 创建成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/prompt-template.yaml#/PromptTemplate'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+promptTemplateById:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/PromptTemplateId'
+  get:
+    operationId: GetPromptTemplate
+    summary: 获取提示词模板详情
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 提示词模板详情
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/prompt-template.yaml#/PromptTemplate'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  put:
+    operationId: UpdatePromptTemplate
+    summary: 更新提示词模板
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/prompt-template.yaml#/UpdatePromptTemplateRequest'
+    responses:
+      '200':
+        description: 更新成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/prompt-template.yaml#/PromptTemplate'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  delete:
+    operationId: DeletePromptTemplate
+    summary: 删除提示词模板
+    security:
+      - bearerAuth: []
+    responses:
+      '204':
+        description: 删除成功
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

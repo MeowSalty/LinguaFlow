@@ -489,29 +489,6 @@ func HasProjectWith(preds ...predicate.Project) predicate.ActivityLog {
 	})
 }
 
-// HasJob applies the HasEdge predicate on the "job" edge.
-func HasJob() predicate.ActivityLog {
-	return predicate.ActivityLog(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, JobTable, JobColumn),
-		)
-		sqlgraph.HasNeighbors(s, step)
-	})
-}
-
-// HasJobWith applies the HasEdge predicate on the "job" edge with a given conditions (other predicates).
-func HasJobWith(preds ...predicate.Job) predicate.ActivityLog {
-	return predicate.ActivityLog(func(s *sql.Selector) {
-		step := newJobStep()
-		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
-			for _, p := range preds {
-				p(s)
-			}
-		})
-	})
-}
-
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.ActivityLog) predicate.ActivityLog {
 	return predicate.ActivityLog(sql.AndPredicates(predicates...))

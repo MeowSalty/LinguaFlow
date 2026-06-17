@@ -41,7 +41,7 @@ func buildTranslateJobs(inputs []string, output string) ([]engine.TranslateJob, 
 		if stat, err := os.Stat(output); err == nil && stat.IsDir() {
 			return nil, report, fmt.Errorf("单文件输入时 --output/-o 必须是输出文件路径，当前为目录: %s", output)
 		}
-		return []engine.TranslateJob{{InputPath: entries[0].path, OutputPath: output}}, report, nil
+		return []engine.TranslateJob{engine.FileJob(entries[0].path, output)}, report, nil
 	}
 
 	if err := os.MkdirAll(output, 0o755); err != nil {
@@ -58,10 +58,7 @@ func buildTranslateJobs(inputs []string, output string) ([]engine.TranslateJob, 
 	jobs := make([]engine.TranslateJob, 0, len(entries))
 	for _, entry := range entries {
 		rel := entry.outputRelativePath()
-		jobs = append(jobs, engine.TranslateJob{
-			InputPath:  entry.path,
-			OutputPath: filepath.Join(output, rel),
-		})
+		jobs = append(jobs, engine.FileJob(entry.path, filepath.Join(output, rel)))
 	}
 	return jobs, report, nil
 }

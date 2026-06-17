@@ -1,0 +1,37 @@
+# 翻译策略配置
+# 由 `linguaflow init` 生成，可在 linguaflow.yaml 的 translation_profiles 中通过 file 引用。
+# 字段说明参见 linguaflow.yaml 中的注释。
+
+# ── 段落拆分 ──
+split:
+  enabled: true
+  strategy: paragraph
+  max_chars: 1200
+
+# ── 内容保护 ──
+protect:
+  enabled: true
+  rules: [code, link, placeholder, xml]
+
+# ── 后处理 ──
+postprocess:
+  enabled: true
+  trim_spaces: true
+
+# ── 响应修复 ──
+# LLM 响应解析失败时的自动修复行为。
+# 各子开关默认开启；enabled: false 时强制全部关闭。
+repair:
+  enabled: true
+  # JSON 结构修复（BOM 剥离、尾随逗号、括号补齐、控制字符清理）
+  json_structural: true
+  # schema 别名映射（translation/result/output/data.translations → translations）
+  schema_aliases: true
+  # 部分 ID 缺失时仅重试缺失段，而非整批 shrink
+  partial: true
+  # 缺失率 >= 此阈值时走 shrink 而非 partial（取值范围 0-1）
+  partial_threshold: 0.5
+  # 占位符大小写/下划线变体归一化
+  placeholder_normalize: true
+  # 解析失败或占位符仍缺失时附加反例 reminder 重试一次
+  prompt_upgrade: true

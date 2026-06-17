@@ -1,6 +1,10 @@
 CreateTranslationJobRequest:
   type: object
+  required: [execution_plan_id]
   properties:
+    execution_plan_id:
+      type: integer
+      description: 执行计划模板 ID
     resource_ids:
       type: array
       items:
@@ -11,6 +15,10 @@ CreateTranslationJobRequest:
       items:
         type: integer
         minimum: 1
+    auto_approve:
+      type: boolean
+      default: false
+      description: 翻译完成后是否自动审批通过所有段落
     translation_config:
       type: object
       additionalProperties: true
@@ -50,15 +58,17 @@ TranslationJobResource:
 
 TranslationJob:
   type: object
-  required: [id, project_id, status, trigger_type, resource_count, completed_resources, failed_resources, total_segments, completed_segments, created_at, updated_at]
+  required: [id, project_id, execution_plan_id, status, trigger_type, resource_count, completed_resources, failed_resources, total_segments, completed_segments, created_at, updated_at]
   properties:
     id:
       type: integer
     project_id:
       type: integer
+    execution_plan_id:
+      type: integer
     status:
       type: string
-      enum: [pending, running, awaiting_review, completed, failed, cancelled]
+      enum: [pending, running, completed, failed, cancelled]
     trigger_type:
       type: string
       enum: [manual, file_update, glossary_change, web_edit]

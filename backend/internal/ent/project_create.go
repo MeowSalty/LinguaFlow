@@ -12,12 +12,9 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/projectbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
@@ -157,36 +154,6 @@ func (_c *ProjectCreate) SetOwnerOrg(v *Organization) *ProjectCreate {
 	return _c.SetOwnerOrgID(v.ID)
 }
 
-// AddProjectBackendIDs adds the "project_backends" edge to the ProjectBackend entity by IDs.
-func (_c *ProjectCreate) AddProjectBackendIDs(ids ...int) *ProjectCreate {
-	_c.mutation.AddProjectBackendIDs(ids...)
-	return _c
-}
-
-// AddProjectBackends adds the "project_backends" edges to the ProjectBackend entity.
-func (_c *ProjectCreate) AddProjectBackends(v ...*ProjectBackend) *ProjectCreate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _c.AddProjectBackendIDs(ids...)
-}
-
-// AddStageBackendOverrideIDs adds the "stage_backend_overrides" edge to the StageBackendOverride entity by IDs.
-func (_c *ProjectCreate) AddStageBackendOverrideIDs(ids ...int) *ProjectCreate {
-	_c.mutation.AddStageBackendOverrideIDs(ids...)
-	return _c
-}
-
-// AddStageBackendOverrides adds the "stage_backend_overrides" edges to the StageBackendOverride entity.
-func (_c *ProjectCreate) AddStageBackendOverrides(v ...*StageBackendOverride) *ProjectCreate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _c.AddStageBackendOverrideIDs(ids...)
-}
-
 // AddGlossaryEntryIDs adds the "glossary_entries" edge to the GlossaryEntry entity by IDs.
 func (_c *ProjectCreate) AddGlossaryEntryIDs(ids ...int) *ProjectCreate {
 	_c.mutation.AddGlossaryEntryIDs(ids...)
@@ -215,21 +182,6 @@ func (_c *ProjectCreate) AddTmEntries(v ...*TMEntry) *ProjectCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddTmEntryIDs(ids...)
-}
-
-// AddJobIDs adds the "jobs" edge to the Job entity by IDs.
-func (_c *ProjectCreate) AddJobIDs(ids ...int) *ProjectCreate {
-	_c.mutation.AddJobIDs(ids...)
-	return _c
-}
-
-// AddJobs adds the "jobs" edges to the Job entity.
-func (_c *ProjectCreate) AddJobs(v ...*Job) *ProjectCreate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _c.AddJobIDs(ids...)
 }
 
 // AddTranslationJobIDs adds the "translation_jobs" edge to the TranslationJob entity by IDs.
@@ -490,38 +442,6 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 		_node.OwnerOrgID = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
-	if nodes := _c.mutation.ProjectBackendsIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   project.ProjectBackendsTable,
-			Columns: []string{project.ProjectBackendsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(projectbackend.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges = append(_spec.Edges, edge)
-	}
-	if nodes := _c.mutation.StageBackendOverridesIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   project.StageBackendOverridesTable,
-			Columns: []string{project.StageBackendOverridesColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(stagebackendoverride.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges = append(_spec.Edges, edge)
-	}
 	if nodes := _c.mutation.GlossaryEntriesIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -547,22 +467,6 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(tmentry.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges = append(_spec.Edges, edge)
-	}
-	if nodes := _c.mutation.JobsIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   project.JobsTable,
-			Columns: []string{project.JobsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

@@ -20,29 +20,30 @@ import (
 const readinessPingTimeout = 2 * time.Second
 
 type Server struct {
-	config               *config.Config
-	logger               *slog.Logger
-	db                   *sql.DB
-	entClient            *ent.Client
-	authService          *service.AuthService
-	userService          *service.UserService
-	backendSvc           *service.BackendService
-	projectSvc           *service.ProjectService
-	glossarySvc          *service.GlossaryService
-	jobService           *service.JobService
-	translationJobSvc    *service.TranslationJobService
-	reviewSvc            *service.ReviewService
-	segmentSvc           *service.SegmentService
-	statsSvc             *service.StatsService
-	auditSvc             *service.AuditService
-	resourceSvc          *service.ResourceService
-	jobStore             *filestore.LocalStore
-	jobQueue             *worker.Queue
-	jobRunner            *worker.Runner
-	translationJobQueue  *worker.Queue
-	translationJobRunner *worker.TranslationRunner
-	httpServer           *http.Server
-	ready                atomic.Bool
+	config                *config.Config
+	logger                *slog.Logger
+	db                    *sql.DB
+	entClient             *ent.Client
+	authService           *service.AuthService
+	userService           *service.UserService
+	backendSvc            *service.BackendService
+	projectSvc            *service.ProjectService
+	glossarySvc           *service.GlossaryService
+	promptTemplateSvc     *service.PromptTemplateService
+	translationProfileSvc *service.TranslationProfileService
+	translationJobSvc     *service.TranslationJobService
+	executionPlanSvc      *service.ExecutionPlanService
+	reviewSvc             *service.ReviewService
+	segmentSvc            *service.SegmentService
+	statsSvc              *service.StatsService
+	auditSvc              *service.AuditService
+	resourceSvc           *service.ResourceService
+	jobStore              *filestore.LocalStore
+	translationJobQueue   *worker.Queue
+	translationJobRunner  *worker.TranslationRunner
+	httpServer            *http.Server
+	executionPlanHandler  *HandlerExecutionPlan
+	ready                 atomic.Bool
 }
 
 func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.Client) (*Server, error) {
@@ -59,28 +60,29 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 	}
 	s.userService = service.NewUserService(client, s.authService)
 	s.backendSvc = service.NewBackendService(client, s.userService)
-	s.projectSvc = service.NewProjectService(client, s.userService, s.backendSvc)
+	s.projectSvc = service.NewProjectService(client, s.userService)
+	s.executionPlanSvc = service.NewExecutionPlanService(client, s.userService)
 	s.glossarySvc = service.NewGlossaryService(client, s.projectSvc)
-	s.jobService = service.NewJobService(client, s.projectSvc)
-	s.translationJobSvc = service.NewTranslationJobService(client, s.projectSvc)
-	s.reviewSvc = service.NewReviewService(client, s.projectSvc)
-	s.segmentSvc = service.NewSegmentService(client, s.projectSvc)
-	s.statsSvc = service.NewStatsService(client, s.projectSvc)
-	s.auditSvc = service.NewAuditService(client, s.userService, s.projectSvc)
+	s.promptTemplateSvc = service.NewPromptTemplateService(client)
+	s.translationProfileSvc = service.NewTranslationProfileService(client)
 	jobStore, err := filestore.NewLocal(filepath.Join(cfg.Server.DataDir, "jobs"))
 	if err != nil {
 		return nil, err
 	}
 	s.jobStore = jobStore
+	s.translationJobSvc = service.NewTranslationJobService(client, s.projectSvc, s.executionPlanSvc, s.backendSvc, s.promptTemplateSvc, s.translationProfileSvc, jobStore)
+	s.executionPlanHandler = NewHandlerExecutionPlan(s.executionPlanSvc)
+	s.reviewSvc = service.NewReviewService(client, s.projectSvc)
+	s.segmentSvc = service.NewSegmentService(client, s.projectSvc)
+	s.statsSvc = service.NewStatsService(client, s.projectSvc)
+	s.auditSvc = service.NewAuditService(client, s.userService, s.projectSvc)
 	s.resourceSvc = service.NewResourceService(client, s.projectSvc, jobStore)
 	queueSize := cfg.Pipeline.Translate.Concurrency * 8
 	if queueSize < 16 {
 		queueSize = 16
 	}
-	s.jobQueue = worker.NewQueue(queueSize)
-	s.jobRunner = worker.NewRunner(cfg, logger, client, s.projectSvc, s.jobService, jobStore, s.jobQueue)
 	s.translationJobQueue = worker.NewQueue(queueSize)
-	s.translationJobRunner = worker.NewTranslationRunner(cfg, logger, client, s.projectSvc, s.translationJobSvc, jobStore, s.translationJobQueue)
+	s.translationJobRunner = worker.NewTranslationRunner(cfg, logger, client, s.translationJobSvc, jobStore, s.translationJobQueue)
 	s.httpServer = &http.Server{
 		Addr:              cfg.Server.Address(),
 		Handler:           s.newRouter(),
@@ -92,16 +94,6 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 
 func (s *Server) Run(ctx context.Context) error {
 	serveErr := make(chan error, 1)
-	if s.jobRunner != nil {
-		if err := s.jobRunner.Recover(ctx); err != nil {
-			return err
-		}
-		go func() {
-			if err := s.jobRunner.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-				s.logger.Error("job runner stopped with error", "err", err)
-			}
-		}()
-	}
 	if s.translationJobRunner != nil {
 		if err := s.translationJobRunner.Recover(ctx); err != nil {
 			return err

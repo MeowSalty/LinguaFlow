@@ -30,8 +30,6 @@ const (
 	FieldRole = "role"
 	// FieldActive holds the string denoting the active field in the database.
 	FieldActive = "active"
-	// EdgeJobs holds the string denoting the jobs edge name in mutations.
-	EdgeJobs = "jobs"
 	// EdgeCreatedTranslationJobs holds the string denoting the created_translation_jobs edge name in mutations.
 	EdgeCreatedTranslationJobs = "created_translation_jobs"
 	// EdgeReviewedSegments holds the string denoting the reviewed_segments edge name in mutations.
@@ -40,23 +38,22 @@ const (
 	EdgeRefreshTokens = "refresh_tokens"
 	// EdgeMemberships holds the string denoting the memberships edge name in mutations.
 	EdgeMemberships = "memberships"
-	// EdgeUserBackends holds the string denoting the user_backends edge name in mutations.
-	EdgeUserBackends = "user_backends"
+	// EdgeBackends holds the string denoting the backends edge name in mutations.
+	EdgeBackends = "backends"
 	// EdgeOwnedProjects holds the string denoting the owned_projects edge name in mutations.
 	EdgeOwnedProjects = "owned_projects"
 	// EdgeActivityLogs holds the string denoting the activity_logs edge name in mutations.
 	EdgeActivityLogs = "activity_logs"
 	// EdgeUsageRecords holds the string denoting the usage_records edge name in mutations.
 	EdgeUsageRecords = "usage_records"
+	// EdgePromptTemplates holds the string denoting the prompt_templates edge name in mutations.
+	EdgePromptTemplates = "prompt_templates"
+	// EdgeTranslationProfiles holds the string denoting the translation_profiles edge name in mutations.
+	EdgeTranslationProfiles = "translation_profiles"
+	// EdgeExecutionPlanTemplates holds the string denoting the execution_plan_templates edge name in mutations.
+	EdgeExecutionPlanTemplates = "execution_plan_templates"
 	// Table holds the table name of the user in the database.
 	Table = "users"
-	// JobsTable is the table that holds the jobs relation/edge.
-	JobsTable = "jobs"
-	// JobsInverseTable is the table name for the Job entity.
-	// It exists in this package in order to avoid circular dependency with the "job" package.
-	JobsInverseTable = "jobs"
-	// JobsColumn is the table column denoting the jobs relation/edge.
-	JobsColumn = "user_jobs"
 	// CreatedTranslationJobsTable is the table that holds the created_translation_jobs relation/edge.
 	CreatedTranslationJobsTable = "translation_jobs"
 	// CreatedTranslationJobsInverseTable is the table name for the TranslationJob entity.
@@ -85,13 +82,13 @@ const (
 	MembershipsInverseTable = "org_memberships"
 	// MembershipsColumn is the table column denoting the memberships relation/edge.
 	MembershipsColumn = "user_memberships"
-	// UserBackendsTable is the table that holds the user_backends relation/edge.
-	UserBackendsTable = "user_backends"
-	// UserBackendsInverseTable is the table name for the UserBackend entity.
-	// It exists in this package in order to avoid circular dependency with the "userbackend" package.
-	UserBackendsInverseTable = "user_backends"
-	// UserBackendsColumn is the table column denoting the user_backends relation/edge.
-	UserBackendsColumn = "user_user_backends"
+	// BackendsTable is the table that holds the backends relation/edge.
+	BackendsTable = "backends"
+	// BackendsInverseTable is the table name for the Backend entity.
+	// It exists in this package in order to avoid circular dependency with the "backend" package.
+	BackendsInverseTable = "backends"
+	// BackendsColumn is the table column denoting the backends relation/edge.
+	BackendsColumn = "owner_user_id"
 	// OwnedProjectsTable is the table that holds the owned_projects relation/edge.
 	OwnedProjectsTable = "projects"
 	// OwnedProjectsInverseTable is the table name for the Project entity.
@@ -113,6 +110,27 @@ const (
 	UsageRecordsInverseTable = "usage_records"
 	// UsageRecordsColumn is the table column denoting the usage_records relation/edge.
 	UsageRecordsColumn = "user_usage_records"
+	// PromptTemplatesTable is the table that holds the prompt_templates relation/edge.
+	PromptTemplatesTable = "prompt_templates"
+	// PromptTemplatesInverseTable is the table name for the PromptTemplate entity.
+	// It exists in this package in order to avoid circular dependency with the "prompttemplate" package.
+	PromptTemplatesInverseTable = "prompt_templates"
+	// PromptTemplatesColumn is the table column denoting the prompt_templates relation/edge.
+	PromptTemplatesColumn = "owner_user_id"
+	// TranslationProfilesTable is the table that holds the translation_profiles relation/edge.
+	TranslationProfilesTable = "translation_profiles"
+	// TranslationProfilesInverseTable is the table name for the TranslationProfile entity.
+	// It exists in this package in order to avoid circular dependency with the "translationprofile" package.
+	TranslationProfilesInverseTable = "translation_profiles"
+	// TranslationProfilesColumn is the table column denoting the translation_profiles relation/edge.
+	TranslationProfilesColumn = "owner_user_id"
+	// ExecutionPlanTemplatesTable is the table that holds the execution_plan_templates relation/edge.
+	ExecutionPlanTemplatesTable = "execution_plan_templates"
+	// ExecutionPlanTemplatesInverseTable is the table name for the ExecutionPlanTemplate entity.
+	// It exists in this package in order to avoid circular dependency with the "executionplantemplate" package.
+	ExecutionPlanTemplatesInverseTable = "execution_plan_templates"
+	// ExecutionPlanTemplatesColumn is the table column denoting the execution_plan_templates relation/edge.
+	ExecutionPlanTemplatesColumn = "owner_user_id"
 )
 
 // Columns holds all SQL columns for user fields.
@@ -205,20 +223,6 @@ func ByActive(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldActive, opts...).ToFunc()
 }
 
-// ByJobsCount orders the results by jobs count.
-func ByJobsCount(opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newJobsStep(), opts...)
-	}
-}
-
-// ByJobs orders the results by jobs terms.
-func ByJobs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newJobsStep(), append([]sql.OrderTerm{term}, terms...)...)
-	}
-}
-
 // ByCreatedTranslationJobsCount orders the results by created_translation_jobs count.
 func ByCreatedTranslationJobsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -275,17 +279,17 @@ func ByMemberships(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
-// ByUserBackendsCount orders the results by user_backends count.
-func ByUserBackendsCount(opts ...sql.OrderTermOption) OrderOption {
+// ByBackendsCount orders the results by backends count.
+func ByBackendsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newUserBackendsStep(), opts...)
+		sqlgraph.OrderByNeighborsCount(s, newBackendsStep(), opts...)
 	}
 }
 
-// ByUserBackends orders the results by user_backends terms.
-func ByUserBackends(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+// ByBackends orders the results by backends terms.
+func ByBackends(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newUserBackendsStep(), append([]sql.OrderTerm{term}, terms...)...)
+		sqlgraph.OrderByNeighborTerms(s, newBackendsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
 
@@ -330,12 +334,47 @@ func ByUsageRecords(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newUsageRecordsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
-func newJobsStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(JobsInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, JobsTable, JobsColumn),
-	)
+
+// ByPromptTemplatesCount orders the results by prompt_templates count.
+func ByPromptTemplatesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newPromptTemplatesStep(), opts...)
+	}
+}
+
+// ByPromptTemplates orders the results by prompt_templates terms.
+func ByPromptTemplates(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newPromptTemplatesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByTranslationProfilesCount orders the results by translation_profiles count.
+func ByTranslationProfilesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newTranslationProfilesStep(), opts...)
+	}
+}
+
+// ByTranslationProfiles orders the results by translation_profiles terms.
+func ByTranslationProfiles(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newTranslationProfilesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByExecutionPlanTemplatesCount orders the results by execution_plan_templates count.
+func ByExecutionPlanTemplatesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newExecutionPlanTemplatesStep(), opts...)
+	}
+}
+
+// ByExecutionPlanTemplates orders the results by execution_plan_templates terms.
+func ByExecutionPlanTemplates(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newExecutionPlanTemplatesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
 }
 func newCreatedTranslationJobsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
@@ -365,11 +404,11 @@ func newMembershipsStep() *sqlgraph.Step {
 		sqlgraph.Edge(sqlgraph.O2M, false, MembershipsTable, MembershipsColumn),
 	)
 }
-func newUserBackendsStep() *sqlgraph.Step {
+func newBackendsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(UserBackendsInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, UserBackendsTable, UserBackendsColumn),
+		sqlgraph.To(BackendsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, BackendsTable, BackendsColumn),
 	)
 }
 func newOwnedProjectsStep() *sqlgraph.Step {
@@ -391,5 +430,26 @@ func newUsageRecordsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(UsageRecordsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, UsageRecordsTable, UsageRecordsColumn),
+	)
+}
+func newPromptTemplatesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(PromptTemplatesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, PromptTemplatesTable, PromptTemplatesColumn),
+	)
+}
+func newTranslationProfilesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(TranslationProfilesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, TranslationProfilesTable, TranslationProfilesColumn),
+	)
+}
+func newExecutionPlanTemplatesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(ExecutionPlanTemplatesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, ExecutionPlanTemplatesTable, ExecutionPlanTemplatesColumn),
 	)
 }

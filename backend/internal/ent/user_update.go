@@ -12,16 +12,18 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
 )
 
 // UserUpdate is the builder for updating User entities.
@@ -133,21 +135,6 @@ func (_u *UserUpdate) SetNillableActive(v *bool) *UserUpdate {
 	return _u
 }
 
-// AddJobIDs adds the "jobs" edge to the Job entity by IDs.
-func (_u *UserUpdate) AddJobIDs(ids ...int) *UserUpdate {
-	_u.mutation.AddJobIDs(ids...)
-	return _u
-}
-
-// AddJobs adds the "jobs" edges to the Job entity.
-func (_u *UserUpdate) AddJobs(v ...*Job) *UserUpdate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.AddJobIDs(ids...)
-}
-
 // AddCreatedTranslationJobIDs adds the "created_translation_jobs" edge to the TranslationJob entity by IDs.
 func (_u *UserUpdate) AddCreatedTranslationJobIDs(ids ...int) *UserUpdate {
 	_u.mutation.AddCreatedTranslationJobIDs(ids...)
@@ -208,19 +195,19 @@ func (_u *UserUpdate) AddMemberships(v ...*OrgMembership) *UserUpdate {
 	return _u.AddMembershipIDs(ids...)
 }
 
-// AddUserBackendIDs adds the "user_backends" edge to the UserBackend entity by IDs.
-func (_u *UserUpdate) AddUserBackendIDs(ids ...int) *UserUpdate {
-	_u.mutation.AddUserBackendIDs(ids...)
+// AddBackendIDs adds the "backends" edge to the Backend entity by IDs.
+func (_u *UserUpdate) AddBackendIDs(ids ...int) *UserUpdate {
+	_u.mutation.AddBackendIDs(ids...)
 	return _u
 }
 
-// AddUserBackends adds the "user_backends" edges to the UserBackend entity.
-func (_u *UserUpdate) AddUserBackends(v ...*UserBackend) *UserUpdate {
+// AddBackends adds the "backends" edges to the Backend entity.
+func (_u *UserUpdate) AddBackends(v ...*Backend) *UserUpdate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.AddUserBackendIDs(ids...)
+	return _u.AddBackendIDs(ids...)
 }
 
 // AddOwnedProjectIDs adds the "owned_projects" edge to the Project entity by IDs.
@@ -268,30 +255,54 @@ func (_u *UserUpdate) AddUsageRecords(v ...*UsageRecord) *UserUpdate {
 	return _u.AddUsageRecordIDs(ids...)
 }
 
-// Mutation returns the UserMutation object of the builder.
-func (_u *UserUpdate) Mutation() *UserMutation {
-	return _u.mutation
-}
-
-// ClearJobs clears all "jobs" edges to the Job entity.
-func (_u *UserUpdate) ClearJobs() *UserUpdate {
-	_u.mutation.ClearJobs()
+// AddPromptTemplateIDs adds the "prompt_templates" edge to the PromptTemplate entity by IDs.
+func (_u *UserUpdate) AddPromptTemplateIDs(ids ...int) *UserUpdate {
+	_u.mutation.AddPromptTemplateIDs(ids...)
 	return _u
 }
 
-// RemoveJobIDs removes the "jobs" edge to Job entities by IDs.
-func (_u *UserUpdate) RemoveJobIDs(ids ...int) *UserUpdate {
-	_u.mutation.RemoveJobIDs(ids...)
-	return _u
-}
-
-// RemoveJobs removes "jobs" edges to Job entities.
-func (_u *UserUpdate) RemoveJobs(v ...*Job) *UserUpdate {
+// AddPromptTemplates adds the "prompt_templates" edges to the PromptTemplate entity.
+func (_u *UserUpdate) AddPromptTemplates(v ...*PromptTemplate) *UserUpdate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.RemoveJobIDs(ids...)
+	return _u.AddPromptTemplateIDs(ids...)
+}
+
+// AddTranslationProfileIDs adds the "translation_profiles" edge to the TranslationProfile entity by IDs.
+func (_u *UserUpdate) AddTranslationProfileIDs(ids ...int) *UserUpdate {
+	_u.mutation.AddTranslationProfileIDs(ids...)
+	return _u
+}
+
+// AddTranslationProfiles adds the "translation_profiles" edges to the TranslationProfile entity.
+func (_u *UserUpdate) AddTranslationProfiles(v ...*TranslationProfile) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddTranslationProfileIDs(ids...)
+}
+
+// AddExecutionPlanTemplateIDs adds the "execution_plan_templates" edge to the ExecutionPlanTemplate entity by IDs.
+func (_u *UserUpdate) AddExecutionPlanTemplateIDs(ids ...int) *UserUpdate {
+	_u.mutation.AddExecutionPlanTemplateIDs(ids...)
+	return _u
+}
+
+// AddExecutionPlanTemplates adds the "execution_plan_templates" edges to the ExecutionPlanTemplate entity.
+func (_u *UserUpdate) AddExecutionPlanTemplates(v ...*ExecutionPlanTemplate) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddExecutionPlanTemplateIDs(ids...)
+}
+
+// Mutation returns the UserMutation object of the builder.
+func (_u *UserUpdate) Mutation() *UserMutation {
+	return _u.mutation
 }
 
 // ClearCreatedTranslationJobs clears all "created_translation_jobs" edges to the TranslationJob entity.
@@ -378,25 +389,25 @@ func (_u *UserUpdate) RemoveMemberships(v ...*OrgMembership) *UserUpdate {
 	return _u.RemoveMembershipIDs(ids...)
 }
 
-// ClearUserBackends clears all "user_backends" edges to the UserBackend entity.
-func (_u *UserUpdate) ClearUserBackends() *UserUpdate {
-	_u.mutation.ClearUserBackends()
+// ClearBackends clears all "backends" edges to the Backend entity.
+func (_u *UserUpdate) ClearBackends() *UserUpdate {
+	_u.mutation.ClearBackends()
 	return _u
 }
 
-// RemoveUserBackendIDs removes the "user_backends" edge to UserBackend entities by IDs.
-func (_u *UserUpdate) RemoveUserBackendIDs(ids ...int) *UserUpdate {
-	_u.mutation.RemoveUserBackendIDs(ids...)
+// RemoveBackendIDs removes the "backends" edge to Backend entities by IDs.
+func (_u *UserUpdate) RemoveBackendIDs(ids ...int) *UserUpdate {
+	_u.mutation.RemoveBackendIDs(ids...)
 	return _u
 }
 
-// RemoveUserBackends removes "user_backends" edges to UserBackend entities.
-func (_u *UserUpdate) RemoveUserBackends(v ...*UserBackend) *UserUpdate {
+// RemoveBackends removes "backends" edges to Backend entities.
+func (_u *UserUpdate) RemoveBackends(v ...*Backend) *UserUpdate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.RemoveUserBackendIDs(ids...)
+	return _u.RemoveBackendIDs(ids...)
 }
 
 // ClearOwnedProjects clears all "owned_projects" edges to the Project entity.
@@ -460,6 +471,69 @@ func (_u *UserUpdate) RemoveUsageRecords(v ...*UsageRecord) *UserUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveUsageRecordIDs(ids...)
+}
+
+// ClearPromptTemplates clears all "prompt_templates" edges to the PromptTemplate entity.
+func (_u *UserUpdate) ClearPromptTemplates() *UserUpdate {
+	_u.mutation.ClearPromptTemplates()
+	return _u
+}
+
+// RemovePromptTemplateIDs removes the "prompt_templates" edge to PromptTemplate entities by IDs.
+func (_u *UserUpdate) RemovePromptTemplateIDs(ids ...int) *UserUpdate {
+	_u.mutation.RemovePromptTemplateIDs(ids...)
+	return _u
+}
+
+// RemovePromptTemplates removes "prompt_templates" edges to PromptTemplate entities.
+func (_u *UserUpdate) RemovePromptTemplates(v ...*PromptTemplate) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemovePromptTemplateIDs(ids...)
+}
+
+// ClearTranslationProfiles clears all "translation_profiles" edges to the TranslationProfile entity.
+func (_u *UserUpdate) ClearTranslationProfiles() *UserUpdate {
+	_u.mutation.ClearTranslationProfiles()
+	return _u
+}
+
+// RemoveTranslationProfileIDs removes the "translation_profiles" edge to TranslationProfile entities by IDs.
+func (_u *UserUpdate) RemoveTranslationProfileIDs(ids ...int) *UserUpdate {
+	_u.mutation.RemoveTranslationProfileIDs(ids...)
+	return _u
+}
+
+// RemoveTranslationProfiles removes "translation_profiles" edges to TranslationProfile entities.
+func (_u *UserUpdate) RemoveTranslationProfiles(v ...*TranslationProfile) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveTranslationProfileIDs(ids...)
+}
+
+// ClearExecutionPlanTemplates clears all "execution_plan_templates" edges to the ExecutionPlanTemplate entity.
+func (_u *UserUpdate) ClearExecutionPlanTemplates() *UserUpdate {
+	_u.mutation.ClearExecutionPlanTemplates()
+	return _u
+}
+
+// RemoveExecutionPlanTemplateIDs removes the "execution_plan_templates" edge to ExecutionPlanTemplate entities by IDs.
+func (_u *UserUpdate) RemoveExecutionPlanTemplateIDs(ids ...int) *UserUpdate {
+	_u.mutation.RemoveExecutionPlanTemplateIDs(ids...)
+	return _u
+}
+
+// RemoveExecutionPlanTemplates removes "execution_plan_templates" edges to ExecutionPlanTemplate entities.
+func (_u *UserUpdate) RemoveExecutionPlanTemplates(v ...*ExecutionPlanTemplate) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveExecutionPlanTemplateIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -553,51 +627,6 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Active(); ok {
 		_spec.SetField(user.FieldActive, field.TypeBool, value)
-	}
-	if _u.mutation.JobsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.JobsTable,
-			Columns: []string{user.JobsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.RemovedJobsIDs(); len(nodes) > 0 && !_u.mutation.JobsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.JobsTable,
-			Columns: []string{user.JobsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.JobsIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.JobsTable,
-			Columns: []string{user.JobsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
 	if _u.mutation.CreatedTranslationJobsCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -779,28 +808,28 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if _u.mutation.UserBackendsCleared() {
+	if _u.mutation.BackendsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.UserBackendsTable,
-			Columns: []string{user.UserBackendsColumn},
+			Table:   user.BackendsTable,
+			Columns: []string{user.BackendsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.RemovedUserBackendsIDs(); len(nodes) > 0 && !_u.mutation.UserBackendsCleared() {
+	if nodes := _u.mutation.RemovedBackendsIDs(); len(nodes) > 0 && !_u.mutation.BackendsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.UserBackendsTable,
-			Columns: []string{user.UserBackendsColumn},
+			Table:   user.BackendsTable,
+			Columns: []string{user.BackendsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -808,15 +837,15 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.UserBackendsIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.BackendsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.UserBackendsTable,
-			Columns: []string{user.UserBackendsColumn},
+			Table:   user.BackendsTable,
+			Columns: []string{user.BackendsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -959,6 +988,141 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.PromptTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PromptTemplatesTable,
+			Columns: []string{user.PromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(prompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedPromptTemplatesIDs(); len(nodes) > 0 && !_u.mutation.PromptTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PromptTemplatesTable,
+			Columns: []string{user.PromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(prompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.PromptTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PromptTemplatesTable,
+			Columns: []string{user.PromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(prompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.TranslationProfilesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.TranslationProfilesTable,
+			Columns: []string{user.TranslationProfilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedTranslationProfilesIDs(); len(nodes) > 0 && !_u.mutation.TranslationProfilesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.TranslationProfilesTable,
+			Columns: []string{user.TranslationProfilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.TranslationProfilesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.TranslationProfilesTable,
+			Columns: []string{user.TranslationProfilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ExecutionPlanTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExecutionPlanTemplatesTable,
+			Columns: []string{user.ExecutionPlanTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionplantemplate.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedExecutionPlanTemplatesIDs(); len(nodes) > 0 && !_u.mutation.ExecutionPlanTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExecutionPlanTemplatesTable,
+			Columns: []string{user.ExecutionPlanTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionplantemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ExecutionPlanTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExecutionPlanTemplatesTable,
+			Columns: []string{user.ExecutionPlanTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionplantemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{user.Label}
@@ -1075,21 +1239,6 @@ func (_u *UserUpdateOne) SetNillableActive(v *bool) *UserUpdateOne {
 	return _u
 }
 
-// AddJobIDs adds the "jobs" edge to the Job entity by IDs.
-func (_u *UserUpdateOne) AddJobIDs(ids ...int) *UserUpdateOne {
-	_u.mutation.AddJobIDs(ids...)
-	return _u
-}
-
-// AddJobs adds the "jobs" edges to the Job entity.
-func (_u *UserUpdateOne) AddJobs(v ...*Job) *UserUpdateOne {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.AddJobIDs(ids...)
-}
-
 // AddCreatedTranslationJobIDs adds the "created_translation_jobs" edge to the TranslationJob entity by IDs.
 func (_u *UserUpdateOne) AddCreatedTranslationJobIDs(ids ...int) *UserUpdateOne {
 	_u.mutation.AddCreatedTranslationJobIDs(ids...)
@@ -1150,19 +1299,19 @@ func (_u *UserUpdateOne) AddMemberships(v ...*OrgMembership) *UserUpdateOne {
 	return _u.AddMembershipIDs(ids...)
 }
 
-// AddUserBackendIDs adds the "user_backends" edge to the UserBackend entity by IDs.
-func (_u *UserUpdateOne) AddUserBackendIDs(ids ...int) *UserUpdateOne {
-	_u.mutation.AddUserBackendIDs(ids...)
+// AddBackendIDs adds the "backends" edge to the Backend entity by IDs.
+func (_u *UserUpdateOne) AddBackendIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.AddBackendIDs(ids...)
 	return _u
 }
 
-// AddUserBackends adds the "user_backends" edges to the UserBackend entity.
-func (_u *UserUpdateOne) AddUserBackends(v ...*UserBackend) *UserUpdateOne {
+// AddBackends adds the "backends" edges to the Backend entity.
+func (_u *UserUpdateOne) AddBackends(v ...*Backend) *UserUpdateOne {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.AddUserBackendIDs(ids...)
+	return _u.AddBackendIDs(ids...)
 }
 
 // AddOwnedProjectIDs adds the "owned_projects" edge to the Project entity by IDs.
@@ -1210,30 +1359,54 @@ func (_u *UserUpdateOne) AddUsageRecords(v ...*UsageRecord) *UserUpdateOne {
 	return _u.AddUsageRecordIDs(ids...)
 }
 
-// Mutation returns the UserMutation object of the builder.
-func (_u *UserUpdateOne) Mutation() *UserMutation {
-	return _u.mutation
-}
-
-// ClearJobs clears all "jobs" edges to the Job entity.
-func (_u *UserUpdateOne) ClearJobs() *UserUpdateOne {
-	_u.mutation.ClearJobs()
+// AddPromptTemplateIDs adds the "prompt_templates" edge to the PromptTemplate entity by IDs.
+func (_u *UserUpdateOne) AddPromptTemplateIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.AddPromptTemplateIDs(ids...)
 	return _u
 }
 
-// RemoveJobIDs removes the "jobs" edge to Job entities by IDs.
-func (_u *UserUpdateOne) RemoveJobIDs(ids ...int) *UserUpdateOne {
-	_u.mutation.RemoveJobIDs(ids...)
-	return _u
-}
-
-// RemoveJobs removes "jobs" edges to Job entities.
-func (_u *UserUpdateOne) RemoveJobs(v ...*Job) *UserUpdateOne {
+// AddPromptTemplates adds the "prompt_templates" edges to the PromptTemplate entity.
+func (_u *UserUpdateOne) AddPromptTemplates(v ...*PromptTemplate) *UserUpdateOne {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.RemoveJobIDs(ids...)
+	return _u.AddPromptTemplateIDs(ids...)
+}
+
+// AddTranslationProfileIDs adds the "translation_profiles" edge to the TranslationProfile entity by IDs.
+func (_u *UserUpdateOne) AddTranslationProfileIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.AddTranslationProfileIDs(ids...)
+	return _u
+}
+
+// AddTranslationProfiles adds the "translation_profiles" edges to the TranslationProfile entity.
+func (_u *UserUpdateOne) AddTranslationProfiles(v ...*TranslationProfile) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddTranslationProfileIDs(ids...)
+}
+
+// AddExecutionPlanTemplateIDs adds the "execution_plan_templates" edge to the ExecutionPlanTemplate entity by IDs.
+func (_u *UserUpdateOne) AddExecutionPlanTemplateIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.AddExecutionPlanTemplateIDs(ids...)
+	return _u
+}
+
+// AddExecutionPlanTemplates adds the "execution_plan_templates" edges to the ExecutionPlanTemplate entity.
+func (_u *UserUpdateOne) AddExecutionPlanTemplates(v ...*ExecutionPlanTemplate) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddExecutionPlanTemplateIDs(ids...)
+}
+
+// Mutation returns the UserMutation object of the builder.
+func (_u *UserUpdateOne) Mutation() *UserMutation {
+	return _u.mutation
 }
 
 // ClearCreatedTranslationJobs clears all "created_translation_jobs" edges to the TranslationJob entity.
@@ -1320,25 +1493,25 @@ func (_u *UserUpdateOne) RemoveMemberships(v ...*OrgMembership) *UserUpdateOne {
 	return _u.RemoveMembershipIDs(ids...)
 }
 
-// ClearUserBackends clears all "user_backends" edges to the UserBackend entity.
-func (_u *UserUpdateOne) ClearUserBackends() *UserUpdateOne {
-	_u.mutation.ClearUserBackends()
+// ClearBackends clears all "backends" edges to the Backend entity.
+func (_u *UserUpdateOne) ClearBackends() *UserUpdateOne {
+	_u.mutation.ClearBackends()
 	return _u
 }
 
-// RemoveUserBackendIDs removes the "user_backends" edge to UserBackend entities by IDs.
-func (_u *UserUpdateOne) RemoveUserBackendIDs(ids ...int) *UserUpdateOne {
-	_u.mutation.RemoveUserBackendIDs(ids...)
+// RemoveBackendIDs removes the "backends" edge to Backend entities by IDs.
+func (_u *UserUpdateOne) RemoveBackendIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.RemoveBackendIDs(ids...)
 	return _u
 }
 
-// RemoveUserBackends removes "user_backends" edges to UserBackend entities.
-func (_u *UserUpdateOne) RemoveUserBackends(v ...*UserBackend) *UserUpdateOne {
+// RemoveBackends removes "backends" edges to Backend entities.
+func (_u *UserUpdateOne) RemoveBackends(v ...*Backend) *UserUpdateOne {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.RemoveUserBackendIDs(ids...)
+	return _u.RemoveBackendIDs(ids...)
 }
 
 // ClearOwnedProjects clears all "owned_projects" edges to the Project entity.
@@ -1402,6 +1575,69 @@ func (_u *UserUpdateOne) RemoveUsageRecords(v ...*UsageRecord) *UserUpdateOne {
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveUsageRecordIDs(ids...)
+}
+
+// ClearPromptTemplates clears all "prompt_templates" edges to the PromptTemplate entity.
+func (_u *UserUpdateOne) ClearPromptTemplates() *UserUpdateOne {
+	_u.mutation.ClearPromptTemplates()
+	return _u
+}
+
+// RemovePromptTemplateIDs removes the "prompt_templates" edge to PromptTemplate entities by IDs.
+func (_u *UserUpdateOne) RemovePromptTemplateIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.RemovePromptTemplateIDs(ids...)
+	return _u
+}
+
+// RemovePromptTemplates removes "prompt_templates" edges to PromptTemplate entities.
+func (_u *UserUpdateOne) RemovePromptTemplates(v ...*PromptTemplate) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemovePromptTemplateIDs(ids...)
+}
+
+// ClearTranslationProfiles clears all "translation_profiles" edges to the TranslationProfile entity.
+func (_u *UserUpdateOne) ClearTranslationProfiles() *UserUpdateOne {
+	_u.mutation.ClearTranslationProfiles()
+	return _u
+}
+
+// RemoveTranslationProfileIDs removes the "translation_profiles" edge to TranslationProfile entities by IDs.
+func (_u *UserUpdateOne) RemoveTranslationProfileIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.RemoveTranslationProfileIDs(ids...)
+	return _u
+}
+
+// RemoveTranslationProfiles removes "translation_profiles" edges to TranslationProfile entities.
+func (_u *UserUpdateOne) RemoveTranslationProfiles(v ...*TranslationProfile) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveTranslationProfileIDs(ids...)
+}
+
+// ClearExecutionPlanTemplates clears all "execution_plan_templates" edges to the ExecutionPlanTemplate entity.
+func (_u *UserUpdateOne) ClearExecutionPlanTemplates() *UserUpdateOne {
+	_u.mutation.ClearExecutionPlanTemplates()
+	return _u
+}
+
+// RemoveExecutionPlanTemplateIDs removes the "execution_plan_templates" edge to ExecutionPlanTemplate entities by IDs.
+func (_u *UserUpdateOne) RemoveExecutionPlanTemplateIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.RemoveExecutionPlanTemplateIDs(ids...)
+	return _u
+}
+
+// RemoveExecutionPlanTemplates removes "execution_plan_templates" edges to ExecutionPlanTemplate entities.
+func (_u *UserUpdateOne) RemoveExecutionPlanTemplates(v ...*ExecutionPlanTemplate) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveExecutionPlanTemplateIDs(ids...)
 }
 
 // Where appends a list predicates to the UserUpdate builder.
@@ -1526,51 +1762,6 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	if value, ok := _u.mutation.Active(); ok {
 		_spec.SetField(user.FieldActive, field.TypeBool, value)
 	}
-	if _u.mutation.JobsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.JobsTable,
-			Columns: []string{user.JobsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.RemovedJobsIDs(); len(nodes) > 0 && !_u.mutation.JobsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.JobsTable,
-			Columns: []string{user.JobsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.JobsIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   user.JobsTable,
-			Columns: []string{user.JobsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
 	if _u.mutation.CreatedTranslationJobsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -1751,28 +1942,28 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if _u.mutation.UserBackendsCleared() {
+	if _u.mutation.BackendsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.UserBackendsTable,
-			Columns: []string{user.UserBackendsColumn},
+			Table:   user.BackendsTable,
+			Columns: []string{user.BackendsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.RemovedUserBackendsIDs(); len(nodes) > 0 && !_u.mutation.UserBackendsCleared() {
+	if nodes := _u.mutation.RemovedBackendsIDs(); len(nodes) > 0 && !_u.mutation.BackendsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.UserBackendsTable,
-			Columns: []string{user.UserBackendsColumn},
+			Table:   user.BackendsTable,
+			Columns: []string{user.BackendsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -1780,15 +1971,15 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.UserBackendsIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.BackendsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.UserBackendsTable,
-			Columns: []string{user.UserBackendsColumn},
+			Table:   user.BackendsTable,
+			Columns: []string{user.BackendsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -1924,6 +2115,141 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.PromptTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PromptTemplatesTable,
+			Columns: []string{user.PromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(prompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedPromptTemplatesIDs(); len(nodes) > 0 && !_u.mutation.PromptTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PromptTemplatesTable,
+			Columns: []string{user.PromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(prompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.PromptTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PromptTemplatesTable,
+			Columns: []string{user.PromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(prompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.TranslationProfilesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.TranslationProfilesTable,
+			Columns: []string{user.TranslationProfilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedTranslationProfilesIDs(); len(nodes) > 0 && !_u.mutation.TranslationProfilesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.TranslationProfilesTable,
+			Columns: []string{user.TranslationProfilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.TranslationProfilesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.TranslationProfilesTable,
+			Columns: []string{user.TranslationProfilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ExecutionPlanTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExecutionPlanTemplatesTable,
+			Columns: []string{user.ExecutionPlanTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionplantemplate.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedExecutionPlanTemplatesIDs(); len(nodes) > 0 && !_u.mutation.ExecutionPlanTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExecutionPlanTemplatesTable,
+			Columns: []string{user.ExecutionPlanTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionplantemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ExecutionPlanTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExecutionPlanTemplatesTable,
+			Columns: []string{user.ExecutionPlanTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionplantemplate.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

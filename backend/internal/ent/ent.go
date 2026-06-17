@@ -13,24 +13,22 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/projectbackend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
 )
 
 // ent aliases to avoid import conflicts in user's code.
@@ -91,25 +89,23 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			activitylog.Table:          activitylog.ValidColumn,
-			glossaryentry.Table:        glossaryentry.ValidColumn,
-			job.Table:                  job.ValidColumn,
-			jobresource.Table:          jobresource.ValidColumn,
-			orgbackend.Table:           orgbackend.ValidColumn,
-			orgmembership.Table:        orgmembership.ValidColumn,
-			organization.Table:         organization.ValidColumn,
-			project.Table:              project.ValidColumn,
-			projectbackend.Table:       projectbackend.ValidColumn,
-			refreshtoken.Table:         refreshtoken.ValidColumn,
-			resource.Table:             resource.ValidColumn,
-			segment.Table:              segment.ValidColumn,
-			stagebackendoverride.Table: stagebackendoverride.ValidColumn,
-			subjob.Table:               subjob.ValidColumn,
-			tmentry.Table:              tmentry.ValidColumn,
-			translationjob.Table:       translationjob.ValidColumn,
-			usagerecord.Table:          usagerecord.ValidColumn,
-			user.Table:                 user.ValidColumn,
-			userbackend.Table:          userbackend.ValidColumn,
+			activitylog.Table:           activitylog.ValidColumn,
+			backend.Table:               backend.ValidColumn,
+			executionplantemplate.Table: executionplantemplate.ValidColumn,
+			glossaryentry.Table:         glossaryentry.ValidColumn,
+			jobresource.Table:           jobresource.ValidColumn,
+			orgmembership.Table:         orgmembership.ValidColumn,
+			organization.Table:          organization.ValidColumn,
+			project.Table:               project.ValidColumn,
+			prompttemplate.Table:        prompttemplate.ValidColumn,
+			refreshtoken.Table:          refreshtoken.ValidColumn,
+			resource.Table:              resource.ValidColumn,
+			segment.Table:               segment.ValidColumn,
+			tmentry.Table:               tmentry.ValidColumn,
+			translationjob.Table:        translationjob.ValidColumn,
+			translationprofile.Table:    translationprofile.ValidColumn,
+			usagerecord.Table:           usagerecord.ValidColumn,
+			user.Table:                  user.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

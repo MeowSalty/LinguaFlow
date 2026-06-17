@@ -65,6 +65,27 @@ func (_u *TranslationJobUpdate) SetNillableTriggerType(v *string) *TranslationJo
 	return _u
 }
 
+// SetExecutionPlanID sets the "execution_plan_id" field.
+func (_u *TranslationJobUpdate) SetExecutionPlanID(v int) *TranslationJobUpdate {
+	_u.mutation.ResetExecutionPlanID()
+	_u.mutation.SetExecutionPlanID(v)
+	return _u
+}
+
+// SetNillableExecutionPlanID sets the "execution_plan_id" field if the given value is not nil.
+func (_u *TranslationJobUpdate) SetNillableExecutionPlanID(v *int) *TranslationJobUpdate {
+	if v != nil {
+		_u.SetExecutionPlanID(*v)
+	}
+	return _u
+}
+
+// AddExecutionPlanID adds value to the "execution_plan_id" field.
+func (_u *TranslationJobUpdate) AddExecutionPlanID(v int) *TranslationJobUpdate {
+	_u.mutation.AddExecutionPlanID(v)
+	return _u
+}
+
 // SetTranslationConfig sets the "translation_config" field.
 func (_u *TranslationJobUpdate) SetTranslationConfig(v map[string]interface{}) *TranslationJobUpdate {
 	_u.mutation.SetTranslationConfig(v)
@@ -317,6 +338,11 @@ func (_u *TranslationJobUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *TranslationJobUpdate) check() error {
+	if v, ok := _u.mutation.ExecutionPlanID(); ok {
+		if err := translationjob.ExecutionPlanIDValidator(v); err != nil {
+			return &ValidationError{Name: "execution_plan_id", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.execution_plan_id": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.ResourceCount(); ok {
 		if err := translationjob.ResourceCountValidator(v); err != nil {
 			return &ValidationError{Name: "resource_count", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.resource_count": %w`, err)}
@@ -368,6 +394,12 @@ func (_u *TranslationJobUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if value, ok := _u.mutation.TriggerType(); ok {
 		_spec.SetField(translationjob.FieldTriggerType, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ExecutionPlanID(); ok {
+		_spec.SetField(translationjob.FieldExecutionPlanID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedExecutionPlanID(); ok {
+		_spec.AddField(translationjob.FieldExecutionPlanID, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.TranslationConfig(); ok {
 		_spec.SetField(translationjob.FieldTranslationConfig, field.TypeJSON, value)
@@ -562,6 +594,27 @@ func (_u *TranslationJobUpdateOne) SetNillableTriggerType(v *string) *Translatio
 	if v != nil {
 		_u.SetTriggerType(*v)
 	}
+	return _u
+}
+
+// SetExecutionPlanID sets the "execution_plan_id" field.
+func (_u *TranslationJobUpdateOne) SetExecutionPlanID(v int) *TranslationJobUpdateOne {
+	_u.mutation.ResetExecutionPlanID()
+	_u.mutation.SetExecutionPlanID(v)
+	return _u
+}
+
+// SetNillableExecutionPlanID sets the "execution_plan_id" field if the given value is not nil.
+func (_u *TranslationJobUpdateOne) SetNillableExecutionPlanID(v *int) *TranslationJobUpdateOne {
+	if v != nil {
+		_u.SetExecutionPlanID(*v)
+	}
+	return _u
+}
+
+// AddExecutionPlanID adds value to the "execution_plan_id" field.
+func (_u *TranslationJobUpdateOne) AddExecutionPlanID(v int) *TranslationJobUpdateOne {
+	_u.mutation.AddExecutionPlanID(v)
 	return _u
 }
 
@@ -830,6 +883,11 @@ func (_u *TranslationJobUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *TranslationJobUpdateOne) check() error {
+	if v, ok := _u.mutation.ExecutionPlanID(); ok {
+		if err := translationjob.ExecutionPlanIDValidator(v); err != nil {
+			return &ValidationError{Name: "execution_plan_id", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.execution_plan_id": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.ResourceCount(); ok {
 		if err := translationjob.ResourceCountValidator(v); err != nil {
 			return &ValidationError{Name: "resource_count", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.resource_count": %w`, err)}
@@ -898,6 +956,12 @@ func (_u *TranslationJobUpdateOne) sqlSave(ctx context.Context) (_node *Translat
 	}
 	if value, ok := _u.mutation.TriggerType(); ok {
 		_spec.SetField(translationjob.FieldTriggerType, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.ExecutionPlanID(); ok {
+		_spec.SetField(translationjob.FieldExecutionPlanID, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedExecutionPlanID(); ok {
+		_spec.AddField(translationjob.FieldExecutionPlanID, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.TranslationConfig(); ok {
 		_spec.SetField(translationjob.FieldTranslationConfig, field.TypeJSON, value)

@@ -40,11 +40,8 @@ func (Project) Edges() []ent.Edge {
 			Ref("projects").
 			Field("owner_org_id").
 			Unique(),
-		edge.To("project_backends", ProjectBackend.Type),
-		edge.To("stage_backend_overrides", StageBackendOverride.Type),
 		edge.To("glossary_entries", GlossaryEntry.Type),
 		edge.To("tm_entries", TMEntry.Type),
-		edge.To("jobs", Job.Type),
 		edge.To("translation_jobs", TranslationJob.Type),
 		edge.To("activity_logs", ActivityLog.Type),
 		edge.To("usage_records", UsageRecord.Type),

@@ -1,10 +1,10 @@
 Backend:
   type: object
-  required: [id, source, name, type, priority]
+  required: [id, scope, name, type]
   properties:
     id:
       type: integer
-    source:
+    scope:
       type: string
       enum: [user, org]
     name:
@@ -12,13 +12,9 @@ Backend:
     type:
       type: string
       enum: [openai, anthropic, google]
-    priority:
-      type: integer
     options:
       type: object
       additionalProperties: true
-    options_visible:
-      type: boolean
     owner_user_id:
       type: integer
     owner_org_id:
@@ -42,9 +38,6 @@ CreateBackendRequest:
     type:
       type: string
       enum: [openai, anthropic, google]
-    priority:
-      type: integer
-      default: 0
     options:
       type: object
       additionalProperties: true
@@ -59,8 +52,6 @@ UpdateBackendRequest:
     type:
       type: string
       enum: [openai, anthropic, google]
-    priority:
-      type: integer
     options:
       type: object
       additionalProperties: true

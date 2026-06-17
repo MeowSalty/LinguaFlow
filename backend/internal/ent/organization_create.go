@@ -11,12 +11,15 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 )
 
@@ -125,19 +128,19 @@ func (_c *OrganizationCreate) AddMemberships(v ...*OrgMembership) *OrganizationC
 	return _c.AddMembershipIDs(ids...)
 }
 
-// AddOrgBackendIDs adds the "org_backends" edge to the OrgBackend entity by IDs.
-func (_c *OrganizationCreate) AddOrgBackendIDs(ids ...int) *OrganizationCreate {
-	_c.mutation.AddOrgBackendIDs(ids...)
+// AddBackendIDs adds the "backends" edge to the Backend entity by IDs.
+func (_c *OrganizationCreate) AddBackendIDs(ids ...int) *OrganizationCreate {
+	_c.mutation.AddBackendIDs(ids...)
 	return _c
 }
 
-// AddOrgBackends adds the "org_backends" edges to the OrgBackend entity.
-func (_c *OrganizationCreate) AddOrgBackends(v ...*OrgBackend) *OrganizationCreate {
+// AddBackends adds the "backends" edges to the Backend entity.
+func (_c *OrganizationCreate) AddBackends(v ...*Backend) *OrganizationCreate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _c.AddOrgBackendIDs(ids...)
+	return _c.AddBackendIDs(ids...)
 }
 
 // AddGlossaryEntryIDs adds the "glossary_entries" edge to the GlossaryEntry entity by IDs.
@@ -198,6 +201,51 @@ func (_c *OrganizationCreate) AddUsageRecords(v ...*UsageRecord) *OrganizationCr
 		ids[i] = v[i].ID
 	}
 	return _c.AddUsageRecordIDs(ids...)
+}
+
+// AddPromptTemplateIDs adds the "prompt_templates" edge to the PromptTemplate entity by IDs.
+func (_c *OrganizationCreate) AddPromptTemplateIDs(ids ...int) *OrganizationCreate {
+	_c.mutation.AddPromptTemplateIDs(ids...)
+	return _c
+}
+
+// AddPromptTemplates adds the "prompt_templates" edges to the PromptTemplate entity.
+func (_c *OrganizationCreate) AddPromptTemplates(v ...*PromptTemplate) *OrganizationCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddPromptTemplateIDs(ids...)
+}
+
+// AddTranslationProfileIDs adds the "translation_profiles" edge to the TranslationProfile entity by IDs.
+func (_c *OrganizationCreate) AddTranslationProfileIDs(ids ...int) *OrganizationCreate {
+	_c.mutation.AddTranslationProfileIDs(ids...)
+	return _c
+}
+
+// AddTranslationProfiles adds the "translation_profiles" edges to the TranslationProfile entity.
+func (_c *OrganizationCreate) AddTranslationProfiles(v ...*TranslationProfile) *OrganizationCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddTranslationProfileIDs(ids...)
+}
+
+// AddExecutionPlanTemplateIDs adds the "execution_plan_templates" edge to the ExecutionPlanTemplate entity by IDs.
+func (_c *OrganizationCreate) AddExecutionPlanTemplateIDs(ids ...int) *OrganizationCreate {
+	_c.mutation.AddExecutionPlanTemplateIDs(ids...)
+	return _c
+}
+
+// AddExecutionPlanTemplates adds the "execution_plan_templates" edges to the ExecutionPlanTemplate entity.
+func (_c *OrganizationCreate) AddExecutionPlanTemplates(v ...*ExecutionPlanTemplate) *OrganizationCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddExecutionPlanTemplateIDs(ids...)
 }
 
 // Mutation returns the OrganizationMutation object of the builder.
@@ -351,15 +399,15 @@ func (_c *OrganizationCreate) createSpec() (*Organization, *sqlgraph.CreateSpec)
 		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
-	if nodes := _c.mutation.OrgBackendsIDs(); len(nodes) > 0 {
+	if nodes := _c.mutation.BackendsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   organization.OrgBackendsTable,
-			Columns: []string{organization.OrgBackendsColumn},
+			Table:   organization.BackendsTable,
+			Columns: []string{organization.BackendsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(orgbackend.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -424,6 +472,54 @@ func (_c *OrganizationCreate) createSpec() (*Organization, *sqlgraph.CreateSpec)
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.PromptTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.PromptTemplatesTable,
+			Columns: []string{organization.PromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(prompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.TranslationProfilesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.TranslationProfilesTable,
+			Columns: []string{organization.TranslationProfilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.ExecutionPlanTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.ExecutionPlanTemplatesTable,
+			Columns: []string{organization.ExecutionPlanTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionplantemplate.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

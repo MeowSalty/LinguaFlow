@@ -28,7 +28,6 @@ type Backend struct {
 	name           string
 	client         openaigo.Client
 	model          string
-	temperature    float64
 	maxTokens      int64
 	timeout        time.Duration
 	responseFormat string // backend 默认的响应格式：json_schema | json_object | none
@@ -46,10 +45,6 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 	model := req.Model
 	if model == "" {
 		model = b.model
-	}
-	temp := req.Temperature
-	if temp == 0 {
-		temp = b.temperature
 	}
 	maxTok := req.MaxTokens
 	if maxTok == 0 {
@@ -69,8 +64,8 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 			openaigo.UserMessage(req.User),
 		},
 	}
-	if temp != 0 {
-		params.Temperature = openaigo.Float(temp)
+	if req.Temperature != nil {
+		params.Temperature = openaigo.Float(*req.Temperature)
 	}
 	if maxTok > 0 {
 		params.MaxTokens = openaigo.Int(maxTok)
@@ -103,7 +98,7 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 
 	resp, err := b.client.Chat.Completions.New(ctx, params)
 	if err != nil {
-		return nil, fmt.Errorf("openai: chat completion: %w", err)
+		return nil, wrapOpenAIError(err)
 	}
 	if len(resp.Choices) == 0 {
 		return nil, errors.New("openai: empty choices")
@@ -121,8 +116,20 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 
 func (b *Backend) Close() error { return nil }
 
+// wrapOpenAIError 将 OpenAI SDK 错误包装为 backend.StatusError。
+// OpenAI SDK 的 apierror.Error 在 internal 包中，无法直接类型断言。
+// 使用字符串解析提取 HTTP 状态码作为兜底方案。
+// 错误格式：POST "/v1/chat/completions": 401 Unauthorized {...}
+func wrapOpenAIError(err error) error {
+	if code, ok := backend.ExtractHTTPStatusCode(err.Error()); ok {
+		return fmt.Errorf("openai: chat completion: %w",
+			&backend.StatusError{StatusCode: code, Err: err})
+	}
+	return fmt.Errorf("openai: chat completion: %w", err)
+}
+
 // factory 从 BackendConfig.Options 构造实例。
-// 期望的键：api_key, base_url, model, temperature, max_tokens, timeout（duration 字符串）,
+// 期望的键：api_key, base_url, model, max_tokens, timeout（duration 字符串）,
 // response_format（json_schema | json_object | none，默认 json_schema）。
 func factory(opts map[string]any) (backend.Backend, error) {
 	apiKey, _ := opts["api_key"].(string)
@@ -142,7 +149,6 @@ func factory(opts map[string]any) (backend.Backend, error) {
 	b := &Backend{
 		client:         openaigo.NewClient(clientOpts...),
 		model:          backend.StringOpt(opts, "model", "gpt-4o-mini"),
-		temperature:    backend.Float64Opt(opts, "temperature", 0.2),
 		maxTokens:      backend.Int64Opt(opts, "max_tokens", 0),
 		responseFormat: rf,
 	}

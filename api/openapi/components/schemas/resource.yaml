@@ -1,6 +1,6 @@
 Resource:
   type: object
-  required: [id, path, name, directory, format, total_segments, status, created_at, updated_at]
+  required: [id, path, name, directory, format, total_segments, created_at, updated_at]
   properties:
     id:
       type: integer
@@ -17,11 +17,6 @@ Resource:
       type: string
     total_segments:
       type: integer
-    status:
-      type: string
-      enum: [ready, error]
-    error_message:
-      type: string
     created_at:
       type: string
       format: date-time
@@ -119,6 +114,64 @@ ResourceSegmentUpdateRequest:
     comment:
       type: string
   additionalProperties: false
+
+SegmentReviewRequest:
+  type: object
+  required: [action]
+  properties:
+    action:
+      type: string
+      enum: [approve, reject, edit]
+      description: 审核操作：approve=通过，reject=拒绝，edit=编辑译文
+    target_text:
+      type: string
+      description: 编辑译文时必填
+    comment:
+      type: string
+      description: 审核备注
+
+BatchReviewRequest:
+  type: object
+  required: [segment_ids, action]
+  properties:
+    segment_ids:
+      type: array
+      items:
+        type: integer
+      minItems: 1
+      description: 待审核的段落 ID 列表
+    action:
+      type: string
+      enum: [approve, reject]
+      description: 批量审核操作
+    comment:
+      type: string
+      description: 审核备注
+
+BatchReviewResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '../schemas/job.yaml#/Segment'
+
+ApproveAllResponse:
+  type: object
+  required: [approved_count]
+  properties:
+    approved_count:
+      type: integer
+      description: 批准的段落数
+
+RetranslateResponse:
+  type: object
+  required: [reset_count]
+  properties:
+    reset_count:
+      type: integer
+      description: 重置为待翻译的段落数
 
 IncrementalUpdateChanges:
   type: object

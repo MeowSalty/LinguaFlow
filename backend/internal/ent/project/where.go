@@ -541,52 +541,6 @@ func HasOwnerOrgWith(preds ...predicate.Organization) predicate.Project {
 	})
 }
 
-// HasProjectBackends applies the HasEdge predicate on the "project_backends" edge.
-func HasProjectBackends() predicate.Project {
-	return predicate.Project(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, ProjectBackendsTable, ProjectBackendsColumn),
-		)
-		sqlgraph.HasNeighbors(s, step)
-	})
-}
-
-// HasProjectBackendsWith applies the HasEdge predicate on the "project_backends" edge with a given conditions (other predicates).
-func HasProjectBackendsWith(preds ...predicate.ProjectBackend) predicate.Project {
-	return predicate.Project(func(s *sql.Selector) {
-		step := newProjectBackendsStep()
-		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
-			for _, p := range preds {
-				p(s)
-			}
-		})
-	})
-}
-
-// HasStageBackendOverrides applies the HasEdge predicate on the "stage_backend_overrides" edge.
-func HasStageBackendOverrides() predicate.Project {
-	return predicate.Project(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, StageBackendOverridesTable, StageBackendOverridesColumn),
-		)
-		sqlgraph.HasNeighbors(s, step)
-	})
-}
-
-// HasStageBackendOverridesWith applies the HasEdge predicate on the "stage_backend_overrides" edge with a given conditions (other predicates).
-func HasStageBackendOverridesWith(preds ...predicate.StageBackendOverride) predicate.Project {
-	return predicate.Project(func(s *sql.Selector) {
-		step := newStageBackendOverridesStep()
-		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
-			for _, p := range preds {
-				p(s)
-			}
-		})
-	})
-}
-
 // HasGlossaryEntries applies the HasEdge predicate on the "glossary_entries" edge.
 func HasGlossaryEntries() predicate.Project {
 	return predicate.Project(func(s *sql.Selector) {
@@ -625,29 +579,6 @@ func HasTmEntries() predicate.Project {
 func HasTmEntriesWith(preds ...predicate.TMEntry) predicate.Project {
 	return predicate.Project(func(s *sql.Selector) {
 		step := newTmEntriesStep()
-		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
-			for _, p := range preds {
-				p(s)
-			}
-		})
-	})
-}
-
-// HasJobs applies the HasEdge predicate on the "jobs" edge.
-func HasJobs() predicate.Project {
-	return predicate.Project(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, JobsTable, JobsColumn),
-		)
-		sqlgraph.HasNeighbors(s, step)
-	})
-}
-
-// HasJobsWith applies the HasEdge predicate on the "jobs" edge with a given conditions (other predicates).
-func HasJobsWith(preds ...predicate.Job) predicate.Project {
-	return predicate.Project(func(s *sql.Selector) {
-		step := newJobsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

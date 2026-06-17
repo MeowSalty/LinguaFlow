@@ -118,14 +118,6 @@ func (s *Server) UpdateProject(w http.ResponseWriter, r *http.Request, _ Project
 	s.requireAuth(http.HandlerFunc(s.handleUpdateProject)).ServeHTTP(w, r)
 }
 
-func (s *Server) GetProjectBackends(w http.ResponseWriter, r *http.Request, _ ProjectId) {
-	s.requireAuth(http.HandlerFunc(s.handleGetProjectBackends)).ServeHTTP(w, r)
-}
-
-func (s *Server) SetProjectBackendOrder(w http.ResponseWriter, r *http.Request, _ ProjectId) {
-	s.requireAuth(http.HandlerFunc(s.handleSetProjectBackendOrder)).ServeHTTP(w, r)
-}
-
 func (s *Server) ListGlossaryEntries(w http.ResponseWriter, r *http.Request, _ ProjectId) {
 	s.requireAuth(http.HandlerFunc(s.handleListGlossaryEntries)).ServeHTTP(w, r)
 }
@@ -148,14 +140,6 @@ func (s *Server) DeleteGlossaryEntry(w http.ResponseWriter, r *http.Request, _ P
 
 func (s *Server) UpdateGlossaryEntry(w http.ResponseWriter, r *http.Request, _ ProjectId, _ EntryId) {
 	s.requireAuth(http.HandlerFunc(s.handleUpdateGlossaryEntry)).ServeHTTP(w, r)
-}
-
-func (s *Server) SetStageBackendOverride(w http.ResponseWriter, r *http.Request, _ ProjectId, _ Stage) {
-	s.requireAuth(http.HandlerFunc(s.handleSetStageBackendOverride)).ServeHTTP(w, r)
-}
-
-func (s *Server) GetStagePlan(w http.ResponseWriter, r *http.Request, _ ProjectId, _ Stage) {
-	s.requireAuth(http.HandlerFunc(s.handleGetStagePlan)).ServeHTTP(w, r)
 }
 
 func (s *Server) ListProjectResources(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ListProjectResourcesParams) {
@@ -222,8 +206,8 @@ func (s *Server) RetryTranslationJob(w http.ResponseWriter, r *http.Request, _ T
 	s.requireAuth(http.HandlerFunc(s.handleRetryTranslationJob)).ServeHTTP(w, r)
 }
 
-func (s *Server) DownloadTranslationJobResult(w http.ResponseWriter, r *http.Request, _ TranslationJobId, _ DownloadTranslationJobResultParams) {
-	s.requireAuth(http.HandlerFunc(s.handleDownloadTranslationJobResult)).ServeHTTP(w, r)
+func (s *Server) DownloadTranslatedResourceFile(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
+	s.requireAuth(http.HandlerFunc(s.handleDownloadTranslatedResourceFile)).ServeHTTP(w, r)
 }
 
 func (s *Server) ListActivity(w http.ResponseWriter, r *http.Request, _ ListActivityParams) {
@@ -232,4 +216,121 @@ func (s *Server) ListActivity(w http.ResponseWriter, r *http.Request, _ ListActi
 
 func (s *Server) GetStatsSummary(w http.ResponseWriter, r *http.Request) {
 	s.requireAuth(http.HandlerFunc(s.handleStatsSummary)).ServeHTTP(w, r)
+}
+
+func (s *Server) ReviewResourceSegment(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId, _ SegmentId) {
+	s.requireAuth(http.HandlerFunc(s.handleReviewSegment)).ServeHTTP(w, r)
+}
+
+func (s *Server) BatchReviewResourceSegments(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
+	s.requireAuth(http.HandlerFunc(s.handleBatchReviewSegments)).ServeHTTP(w, r)
+}
+
+func (s *Server) ApproveAllResourceSegments(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
+	s.requireAuth(http.HandlerFunc(s.handleApproveAllResourceSegments)).ServeHTTP(w, r)
+}
+
+func (s *Server) RetranslateRejectedSegments(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
+	s.requireAuth(http.HandlerFunc(s.handleRetranslateRejected)).ServeHTTP(w, r)
+}
+
+// ---- 提示词模板适配器 ----
+
+func (s *Server) ListPromptTemplates(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleListPromptTemplates)).ServeHTTP(w, r)
+}
+
+func (s *Server) CreatePromptTemplate(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleCreatePromptTemplate)).ServeHTTP(w, r)
+}
+
+func (s *Server) GetPromptTemplate(w http.ResponseWriter, r *http.Request, _ PromptTemplateId) {
+	s.requireAuth(http.HandlerFunc(s.handleGetPromptTemplate)).ServeHTTP(w, r)
+}
+
+func (s *Server) UpdatePromptTemplate(w http.ResponseWriter, r *http.Request, _ PromptTemplateId) {
+	s.requireAuth(http.HandlerFunc(s.handleUpdatePromptTemplate)).ServeHTTP(w, r)
+}
+
+func (s *Server) DeletePromptTemplate(w http.ResponseWriter, r *http.Request, _ PromptTemplateId) {
+	s.requireAuth(http.HandlerFunc(s.handleDeletePromptTemplate)).ServeHTTP(w, r)
+}
+
+// ---- 翻译配置适配器 ----
+
+func (s *Server) ListTranslationProfiles(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleListTranslationProfiles)).ServeHTTP(w, r)
+}
+
+// ---- 执行计划模板适配器 ----
+
+func (s *Server) ListExecutionPlanTemplates(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authUser, ok := authUserFromContext(r.Context())
+		if !ok {
+			writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+			return
+		}
+		s.executionPlanHandler.handleList(w, r, authUser.User.ID)
+	})).ServeHTTP(w, r)
+}
+
+func (s *Server) CreateExecutionPlanTemplate(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authUser, ok := authUserFromContext(r.Context())
+		if !ok {
+			writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+			return
+		}
+		s.executionPlanHandler.handleCreate(w, r, authUser.User.ID)
+	})).ServeHTTP(w, r)
+}
+
+func (s *Server) GetExecutionPlanTemplate(w http.ResponseWriter, r *http.Request, executionPlanTemplateId ExecutionPlanTemplateId) {
+	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authUser, ok := authUserFromContext(r.Context())
+		if !ok {
+			writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+			return
+		}
+		s.executionPlanHandler.handleGet(w, r, authUser.User.ID, executionPlanTemplateId)
+	})).ServeHTTP(w, r)
+}
+
+func (s *Server) UpdateExecutionPlanTemplate(w http.ResponseWriter, r *http.Request, executionPlanTemplateId ExecutionPlanTemplateId) {
+	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authUser, ok := authUserFromContext(r.Context())
+		if !ok {
+			writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+			return
+		}
+		s.executionPlanHandler.handleUpdate(w, r, authUser.User.ID, executionPlanTemplateId)
+	})).ServeHTTP(w, r)
+}
+
+func (s *Server) DeleteExecutionPlanTemplate(w http.ResponseWriter, r *http.Request, executionPlanTemplateId ExecutionPlanTemplateId) {
+	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authUser, ok := authUserFromContext(r.Context())
+		if !ok {
+			writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+			return
+		}
+		s.executionPlanHandler.handleDelete(w, r, authUser.User.ID, executionPlanTemplateId)
+	})).ServeHTTP(w, r)
+}
+
+func (s *Server) CreateTranslationProfile(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleCreateTranslationProfile)).ServeHTTP(w, r)
+}
+
+func (s *Server) GetTranslationProfile(w http.ResponseWriter, r *http.Request, _ TranslationProfileId) {
+	s.requireAuth(http.HandlerFunc(s.handleGetTranslationProfile)).ServeHTTP(w, r)
+}
+
+func (s *Server) UpdateTranslationProfile(w http.ResponseWriter, r *http.Request, _ TranslationProfileId) {
+	s.requireAuth(http.HandlerFunc(s.handleUpdateTranslationProfile)).ServeHTTP(w, r)
+}
+
+func (s *Server) DeleteTranslationProfile(w http.ResponseWriter, r *http.Request, _ TranslationProfileId) {
+	s.requireAuth(http.HandlerFunc(s.handleDeleteTranslationProfile)).ServeHTTP(w, r)
 }

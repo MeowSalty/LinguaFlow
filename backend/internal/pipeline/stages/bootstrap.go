@@ -19,15 +19,13 @@ import (
 // 整个 stage 是「尽力而为」：单批失败仅 warn，不阻断 pipeline——下游 translate 仍能
 // 在没有增量术语的情况下跑完。
 type Bootstrap struct {
-	Selector         backend.Selector
+	Backends         []backend.Backend
 	Renderer         *prompt.BootstrapRenderer
 	Glossary         glossary.Glossary
 	Limiter          backend.RateLimiter
 	Retry            backend.RetryPolicy
 	Concurrency      int
 	BatchSize        int
-	BackendMode      string
-	BackendOrder     []string
 	MaxTermsPerBatch int
 	MinSourceLen     int
 	Logger           *slog.Logger
@@ -54,8 +52,8 @@ func (s *Bootstrap) Run(ctx context.Context, doc *pipeline.Document) error {
 	if s.Renderer == nil {
 		return errors.New("bootstrap: renderer is nil")
 	}
-	if s.Selector == nil {
-		return errors.New("bootstrap: selector is nil")
+	if len(s.Backends) == 0 {
+		return errors.New("bootstrap: no backends provided")
 	}
 	if s.Glossary == nil {
 		// 没有可写的 Glossary 等于自举无意义；安全地早退。
@@ -163,13 +161,8 @@ func (s *Bootstrap) processBatch(ctx context.Context, texts []string, doc *pipel
 		ResponseFormat: "json_schema",
 		JSONSchema:     prompt.BootstrapSchema(),
 	}
-	backends, err := s.Selector.Plan(ctx, s.BackendMode, s.BackendOrder)
-	if err != nil {
-		logger.Warn("bootstrap resolve backends failed", "err", err)
-		return 0, err
-	}
 	var lastErr error
-	for _, b := range backends {
+	for _, b := range s.Backends {
 		var resp *backend.Response
 		callErr := backend.WithRetry(ctx, s.Retry, func() error {
 			var rerr error

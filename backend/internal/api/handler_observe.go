@@ -8,12 +8,12 @@ import (
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	jobCount, err := s.entClient.Job.Query().Count(ctx)
+	translationJobCount, err := s.entClient.TranslationJob.Query().Count(ctx)
 	if err != nil {
 		writeServiceError(w, err)
 		return
 	}
-	subJobCount, err := s.entClient.SubJob.Query().Count(ctx)
+	resourceCount, err := s.entClient.Resource.Query().Count(ctx)
 	if err != nil {
 		writeServiceError(w, err)
 		return
@@ -35,12 +35,12 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-	_, _ = fmt.Fprintf(w, "# HELP linguaflow_jobs_total Total jobs persisted.\n")
-	_, _ = fmt.Fprintf(w, "# TYPE linguaflow_jobs_total gauge\n")
-	_, _ = fmt.Fprintf(w, "linguaflow_jobs_total %d\n", jobCount)
-	_, _ = fmt.Fprintf(w, "# HELP linguaflow_subjobs_total Total subjobs persisted.\n")
-	_, _ = fmt.Fprintf(w, "# TYPE linguaflow_subjobs_total gauge\n")
-	_, _ = fmt.Fprintf(w, "linguaflow_subjobs_total %d\n", subJobCount)
+	_, _ = fmt.Fprintf(w, "# HELP linguaflow_translation_jobs_total Total translation jobs persisted.\n")
+	_, _ = fmt.Fprintf(w, "# TYPE linguaflow_translation_jobs_total gauge\n")
+	_, _ = fmt.Fprintf(w, "linguaflow_translation_jobs_total %d\n", translationJobCount)
+	_, _ = fmt.Fprintf(w, "# HELP linguaflow_resources_total Total resources persisted.\n")
+	_, _ = fmt.Fprintf(w, "# TYPE linguaflow_resources_total gauge\n")
+	_, _ = fmt.Fprintf(w, "linguaflow_resources_total %d\n", resourceCount)
 	_, _ = fmt.Fprintf(w, "# HELP linguaflow_segments_total Total review segments persisted.\n")
 	_, _ = fmt.Fprintf(w, "# TYPE linguaflow_segments_total gauge\n")
 	_, _ = fmt.Fprintf(w, "linguaflow_segments_total %d\n", segmentCount)

@@ -1,0 +1,118 @@
+RetryConfig:
+  type: object
+  properties:
+    max_attempts:
+      type: integer
+      minimum: 1
+      default: 3
+    backoff_ms:
+      type: integer
+      minimum: 0
+      default: 2000
+    jitter:
+      type: boolean
+      default: true
+
+ExecutionRoundConfig:
+  type: object
+  required: [backend_id, prompt_template_id, profile_id, batch_size, concurrency]
+  properties:
+    name:
+      type: string
+      description: 轮次名称（可选，空值自动生成 round-N）
+    backend_id:
+      type: integer
+      description: 后端 ID（Backend 单表全局唯一）
+    prompt_template_id:
+      type: integer
+      description: 提示词模板 ID（PromptTemplate 单表全局唯一）
+    profile_id:
+      type: integer
+      description: 策略模板 ID（TranslationProfile 单表全局唯一）
+    batch_size:
+      type: integer
+      minimum: 1
+    concurrency:
+      type: integer
+      minimum: 1
+    fallback_shrink:
+      type: number
+      minimum: 0
+      maximum: 1
+      default: 0
+    rate_limit_per_sec:
+      type: integer
+      minimum: 0
+      default: 0
+    retry:
+      $ref: '#/RetryConfig'
+
+ExecutionPlanTemplateScope:
+  type: string
+  enum: [user, org, system]
+
+ExecutionPlanTemplate:
+  type: object
+  required: [id, name, scope, rounds]
+  properties:
+    id:
+      type: integer
+    name:
+      type: string
+    description:
+      type: string
+    scope:
+      $ref: '#/ExecutionPlanTemplateScope'
+    owner_user_id:
+      type: integer
+    owner_org_id:
+      type: integer
+    rounds:
+      type: array
+      items:
+        $ref: '#/ExecutionRoundConfig'
+      minItems: 1
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+
+ExecutionPlanTemplateListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/ExecutionPlanTemplate'
+
+CreateExecutionPlanTemplateRequest:
+  type: object
+  required: [name, rounds]
+  properties:
+    name:
+      type: string
+    description:
+      type: string
+    rounds:
+      type: array
+      items:
+        $ref: '#/ExecutionRoundConfig'
+      minItems: 1
+  additionalProperties: false
+
+UpdateExecutionPlanTemplateRequest:
+  type: object
+  properties:
+    name:
+      type: string
+    description:
+      type: string
+    rounds:
+      type: array
+      items:
+        $ref: '#/ExecutionRoundConfig'
+      minItems: 1
+  additionalProperties: false

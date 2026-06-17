@@ -46,17 +46,6 @@ func (f *fakeBackend) Translate(_ context.Context, req backend.Request) (*backen
 
 func (f *fakeBackend) Close() error { return nil }
 
-type fakeSelector struct{ b backend.Backend }
-
-func (s *fakeSelector) Pick(context.Context, string) (backend.Backend, error) {
-	return s.b, nil
-}
-func (s *fakeSelector) Plan(context.Context, string, []string) ([]backend.Backend, error) {
-	return []backend.Backend{s.b}, nil
-}
-func (s *fakeSelector) All() []backend.Backend { return []backend.Backend{s.b} }
-func (s *fakeSelector) Close() error           { return nil }
-
 func newBootstrapRenderer(t *testing.T) *prompt.BootstrapRenderer {
 	t.Helper()
 	r, err := prompt.NewBootstrapRenderer()
@@ -86,7 +75,7 @@ func TestBootstrap_AddsExtractedTermsToGlossary(t *testing.T) {
 	g := glossary.NewMemory()
 
 	s := &Bootstrap{
-		Selector:         &fakeSelector{b: fb},
+		Backends:         []backend.Backend{fb},
 		Renderer:         newBootstrapRenderer(t),
 		Glossary:         g,
 		BatchSize:        10,
@@ -117,7 +106,7 @@ func TestBootstrap_FiltersTooShortTerms(t *testing.T) {
 	g := glossary.NewMemory()
 
 	s := &Bootstrap{
-		Selector:         &fakeSelector{b: fb},
+		Backends:         []backend.Backend{fb},
 		Renderer:         newBootstrapRenderer(t),
 		Glossary:         g,
 		BatchSize:        10,
@@ -155,7 +144,7 @@ func TestBootstrap_BatchFailureDoesNotAbortStage(t *testing.T) {
 	g := glossary.NewMemory()
 
 	s := &Bootstrap{
-		Selector:         &fakeSelector{b: fb},
+		Backends:         []backend.Backend{fb},
 		Renderer:         newBootstrapRenderer(t),
 		Glossary:         g,
 		BatchSize:        1,
@@ -182,7 +171,7 @@ func TestBootstrap_NoSegments(t *testing.T) {
 	g := glossary.NewMemory()
 
 	s := &Bootstrap{
-		Selector:    &fakeSelector{b: fb},
+		Backends:    []backend.Backend{fb},
 		Renderer:    newBootstrapRenderer(t),
 		Glossary:    g,
 		BatchSize:   10,

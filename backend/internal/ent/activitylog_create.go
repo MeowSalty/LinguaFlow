@@ -11,7 +11,6 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
@@ -153,25 +152,6 @@ func (_c *ActivityLogCreate) SetNillableProjectID(id *int) *ActivityLogCreate {
 // SetProject sets the "project" edge to the Project entity.
 func (_c *ActivityLogCreate) SetProject(v *Project) *ActivityLogCreate {
 	return _c.SetProjectID(v.ID)
-}
-
-// SetJobID sets the "job" edge to the Job entity by ID.
-func (_c *ActivityLogCreate) SetJobID(id int) *ActivityLogCreate {
-	_c.mutation.SetJobID(id)
-	return _c
-}
-
-// SetNillableJobID sets the "job" edge to the Job entity by ID if the given value is not nil.
-func (_c *ActivityLogCreate) SetNillableJobID(id *int) *ActivityLogCreate {
-	if id != nil {
-		_c = _c.SetJobID(*id)
-	}
-	return _c
-}
-
-// SetJob sets the "job" edge to the Job entity.
-func (_c *ActivityLogCreate) SetJob(v *Job) *ActivityLogCreate {
-	return _c.SetJobID(v.ID)
 }
 
 // Mutation returns the ActivityLogMutation object of the builder.
@@ -358,23 +338,6 @@ func (_c *ActivityLogCreate) createSpec() (*ActivityLog, *sqlgraph.CreateSpec) {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		_node.project_activity_logs = &nodes[0]
-		_spec.Edges = append(_spec.Edges, edge)
-	}
-	if nodes := _c.mutation.JobIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   activitylog.JobTable,
-			Columns: []string{activitylog.JobColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_node.job_activity_logs = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec

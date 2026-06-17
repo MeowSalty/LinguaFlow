@@ -19,18 +19,19 @@ func (Segment) Fields() []ent.Field {
 		field.Int("segment_index").NonNegative(),
 		field.String("source_text").NotEmpty(),
 		field.String("target_text").Optional().Nillable(),
-		field.String("status").Default("pending"),
+		field.Enum("status").
+			Values("pending", "translated", "edited", "approved", "rejected").
+			Default("pending"),
 		field.String("review_comment").Optional().Nillable(),
 		field.Int("resource_id").Optional().Nillable().Positive().
-			Comment("所属资源 ID（新路径，与 sub_job 二选一）"),
+			Comment("所属资源 ID"),
+		field.Text("meta").Optional().Nillable().
+			Comment("parser 注入的格式元数据（JSON 序列化），用于按需渲染时还原格式"),
 	}
 }
 
 func (Segment) Edges() []ent.Edge {
 	return []ent.Edge{
-		edge.From("sub_job", SubJob.Type).
-			Ref("segments").
-			Unique(),
 		edge.From("resource", Resource.Type).
 			Ref("segments").
 			Field("resource_id").

@@ -1,13 +1,8 @@
 package api
 
 import (
-	"archive/zip"
 	"errors"
-	"fmt"
-	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -17,9 +12,10 @@ import (
 )
 
 type createTranslationJobRequest struct {
-	ResourceIDs       []int          `json:"resource_ids"`
-	SegmentIDs        []int          `json:"segment_ids"`
-	TranslationConfig map[string]any `json:"translation_config"`
+	ExecutionPlanID int   `json:"execution_plan_id"`
+	ResourceIDs     []int `json:"resource_ids"`
+	SegmentIDs      []int `json:"segment_ids"`
+	AutoApprove     bool  `json:"auto_approve"`
 }
 
 type translationJobResourceResponse struct {
@@ -41,6 +37,7 @@ type translationJobResponse struct {
 	ProjectID          int                              `json:"project_id"`
 	Status             string                           `json:"status"`
 	TriggerType        string                           `json:"trigger_type"`
+	ExecutionPlanID    int                              `json:"execution_plan_id"`
 	TranslationConfig  map[string]any                   `json:"translation_config,omitempty"`
 	ResourceCount      int                              `json:"resource_count"`
 	CompletedResources int                              `json:"completed_resources"`
@@ -70,9 +67,10 @@ func (s *Server) handleCreateTranslationJob(w http.ResponseWriter, r *http.Reque
 		}
 	}
 	created, err := s.translationJobSvc.CreateManualJob(r.Context(), authUser.User.ID, projectID, service.CreateTranslationJobInput{
-		ResourceIDs:       req.ResourceIDs,
-		SegmentIDs:        req.SegmentIDs,
-		TranslationConfig: req.TranslationConfig,
+		ResourceIDs:     req.ResourceIDs,
+		SegmentIDs:      req.SegmentIDs,
+		ExecutionPlanID: req.ExecutionPlanID,
+		AutoApprove:     req.AutoApprove,
 	})
 	if err != nil {
 		writeTranslationJobServiceError(w, err)
@@ -181,124 +179,12 @@ func (s *Server) handleRetryTranslationJob(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, toTranslationJobResponse(job))
 }
 
-func (s *Server) handleDownloadTranslationJobResult(w http.ResponseWriter, r *http.Request) {
-	authUser, ok := authUserFromContext(r.Context())
-	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
-		return
-	}
-	jobID, ok := parseIntParam(w, chi.URLParam(r, "translationJobId"), "translationJobId")
-	if !ok {
-		return
-	}
-	job, err := s.translationJobSvc.GetJob(r.Context(), authUser.User.ID, jobID)
-	if err != nil {
-		writeTranslationJobServiceError(w, err)
-		return
-	}
-	resourceID := 0
-	if raw := strings.TrimSpace(r.URL.Query().Get("resource_id")); raw != "" {
-		parsed, parsedOK := parseIntParam(w, raw, "resource_id")
-		if !parsedOK {
-			return
-		}
-		resourceID = parsed
-	}
-	ready := make([]*ent.JobResource, 0, len(job.Edges.JobResources))
-	for _, item := range job.Edges.JobResources {
-		if resourceID > 0 {
-			res, err := item.Edges.ResourceOrErr()
-			if err != nil || res.ID != resourceID {
-				continue
-			}
-		}
-		if item.Status == service.JobResourceStatusCompleted && strings.TrimSpace(item.OutputPath) != "" {
-			ready = append(ready, item)
-		}
-	}
-	if len(ready) == 0 {
-		writeProblem(w, http.StatusConflict, "result_not_ready", "当前没有可下载输出")
-		return
-	}
-	if len(ready) == 1 {
-		s.downloadSingleTranslationOutput(w, ready[0])
-		return
-	}
-	s.downloadZipTranslationOutputs(w, job.ID, ready)
-}
-
-func (s *Server) downloadSingleTranslationOutput(w http.ResponseWriter, item *ent.JobResource) {
-	absolutePath, err := s.jobStore.Absolute(item.OutputPath)
-	if err != nil {
-		writeServiceError(w, err)
-		return
-	}
-	file, err := os.Open(absolutePath)
-	if err != nil {
-		writeServiceError(w, err)
-		return
-	}
-	defer file.Close()
-	filename := filepath.Base(absolutePath)
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
-	_, _ = io.Copy(w, file)
-}
-
-func (s *Server) downloadZipTranslationOutputs(w http.ResponseWriter, jobID int, items []*ent.JobResource) {
-	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fmt.Sprintf("translation-job-%d-results.zip", jobID)))
-	zw := zip.NewWriter(w)
-	defer zw.Close()
-	for _, item := range items {
-		absolutePath, err := s.jobStore.Absolute(item.OutputPath)
-		if err != nil {
-			continue
-		}
-		file, err := os.Open(absolutePath)
-		if err != nil {
-			continue
-		}
-		entryName := filepath.Base(absolutePath)
-		if item.Edges.Resource != nil {
-			entryName = safeZipResourceEntryName(item.Edges.Resource)
-		}
-		entry, err := zw.Create(entryName)
-		if err != nil {
-			_ = file.Close()
-			continue
-		}
-		_, _ = io.Copy(entry, file)
-		_ = file.Close()
-	}
-}
-
-func safeZipResourceEntryName(res *ent.Resource) string {
-	candidate := ""
-	if res != nil {
-		candidate = strings.TrimSpace(res.Path)
-	}
-	candidate = filepath.ToSlash(filepath.Clean(strings.ReplaceAll(candidate, "\\", "/")))
-	if candidate == "" || candidate == "." || candidate == ".." || strings.HasPrefix(candidate, "../") || strings.HasPrefix(candidate, "/") {
-		return "resource"
-	}
-	parts := strings.Split(candidate, "/")
-	for i, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" || part == "." || part == ".." {
-			parts[i] = "resource"
-			continue
-		}
-		parts[i] = strings.NewReplacer(":", "_", "*", "_", "?", "_", "\"", "_", "<", "_", ">", "_", "|", "_").Replace(part)
-	}
-	return strings.Join(parts, "/")
-}
-
 func toTranslationJobResponse(row *ent.TranslationJob) translationJobResponse {
 	resp := translationJobResponse{
 		ID:                 row.ID,
 		Status:             row.Status,
 		TriggerType:        row.TriggerType,
+		ExecutionPlanID:    row.ExecutionPlanID,
 		TranslationConfig:  row.TranslationConfig,
 		ResourceCount:      row.ResourceCount,
 		CompletedResources: row.CompletedResources,

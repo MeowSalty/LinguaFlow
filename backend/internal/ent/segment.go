@@ -11,7 +11,6 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
@@ -31,41 +30,29 @@ type Segment struct {
 	// TargetText holds the value of the "target_text" field.
 	TargetText *string `json:"target_text,omitempty"`
 	// Status holds the value of the "status" field.
-	Status string `json:"status,omitempty"`
+	Status segment.Status `json:"status,omitempty"`
 	// ReviewComment holds the value of the "review_comment" field.
 	ReviewComment *string `json:"review_comment,omitempty"`
-	// 所属资源 ID（新路径，与 sub_job 二选一）
+	// 所属资源 ID
 	ResourceID *int `json:"resource_id,omitempty"`
+	// parser 注入的格式元数据（JSON 序列化），用于按需渲染时还原格式
+	Meta *string `json:"meta,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the SegmentQuery when eager-loading is set.
 	Edges                  SegmentEdges `json:"edges"`
-	sub_job_segments       *int
 	user_reviewed_segments *int
 	selectValues           sql.SelectValues
 }
 
 // SegmentEdges holds the relations/edges for other nodes in the graph.
 type SegmentEdges struct {
-	// SubJob holds the value of the sub_job edge.
-	SubJob *SubJob `json:"sub_job,omitempty"`
 	// Resource holds the value of the resource edge.
 	Resource *Resource `json:"resource,omitempty"`
 	// ReviewedBy holds the value of the reviewed_by edge.
 	ReviewedBy *User `json:"reviewed_by,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [3]bool
-}
-
-// SubJobOrErr returns the SubJob value or an error if the edge
-// was not loaded in eager-loading, or loaded but was not found.
-func (e SegmentEdges) SubJobOrErr() (*SubJob, error) {
-	if e.SubJob != nil {
-		return e.SubJob, nil
-	} else if e.loadedTypes[0] {
-		return nil, &NotFoundError{label: subjob.Label}
-	}
-	return nil, &NotLoadedError{edge: "sub_job"}
+	loadedTypes [2]bool
 }
 
 // ResourceOrErr returns the Resource value or an error if the edge
@@ -73,7 +60,7 @@ func (e SegmentEdges) SubJobOrErr() (*SubJob, error) {
 func (e SegmentEdges) ResourceOrErr() (*Resource, error) {
 	if e.Resource != nil {
 		return e.Resource, nil
-	} else if e.loadedTypes[1] {
+	} else if e.loadedTypes[0] {
 		return nil, &NotFoundError{label: resource.Label}
 	}
 	return nil, &NotLoadedError{edge: "resource"}
@@ -84,7 +71,7 @@ func (e SegmentEdges) ResourceOrErr() (*Resource, error) {
 func (e SegmentEdges) ReviewedByOrErr() (*User, error) {
 	if e.ReviewedBy != nil {
 		return e.ReviewedBy, nil
-	} else if e.loadedTypes[2] {
+	} else if e.loadedTypes[1] {
 		return nil, &NotFoundError{label: user.Label}
 	}
 	return nil, &NotLoadedError{edge: "reviewed_by"}
@@ -97,13 +84,11 @@ func (*Segment) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case segment.FieldID, segment.FieldSegmentIndex, segment.FieldResourceID:
 			values[i] = new(sql.NullInt64)
-		case segment.FieldSourceText, segment.FieldTargetText, segment.FieldStatus, segment.FieldReviewComment:
+		case segment.FieldSourceText, segment.FieldTargetText, segment.FieldStatus, segment.FieldReviewComment, segment.FieldMeta:
 			values[i] = new(sql.NullString)
 		case segment.FieldCreatedAt, segment.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
-		case segment.ForeignKeys[0]: // sub_job_segments
-			values[i] = new(sql.NullInt64)
-		case segment.ForeignKeys[1]: // user_reviewed_segments
+		case segment.ForeignKeys[0]: // user_reviewed_segments
 			values[i] = new(sql.NullInt64)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -161,7 +146,7 @@ func (_m *Segment) assignValues(columns []string, values []any) error {
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field status", values[i])
 			} else if value.Valid {
-				_m.Status = value.String
+				_m.Status = segment.Status(value.String)
 			}
 		case segment.FieldReviewComment:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -177,14 +162,14 @@ func (_m *Segment) assignValues(columns []string, values []any) error {
 				_m.ResourceID = new(int)
 				*_m.ResourceID = int(value.Int64)
 			}
-		case segment.ForeignKeys[0]:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for edge-field sub_job_segments", value)
+		case segment.FieldMeta:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field meta", values[i])
 			} else if value.Valid {
-				_m.sub_job_segments = new(int)
-				*_m.sub_job_segments = int(value.Int64)
+				_m.Meta = new(string)
+				*_m.Meta = value.String
 			}
-		case segment.ForeignKeys[1]:
+		case segment.ForeignKeys[0]:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for edge-field user_reviewed_segments", value)
 			} else if value.Valid {
@@ -202,11 +187,6 @@ func (_m *Segment) assignValues(columns []string, values []any) error {
 // This includes values selected through modifiers, order, etc.
 func (_m *Segment) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
-}
-
-// QuerySubJob queries the "sub_job" edge of the Segment entity.
-func (_m *Segment) QuerySubJob() *SubJobQuery {
-	return NewSegmentClient(_m.config).QuerySubJob(_m)
 }
 
 // QueryResource queries the "resource" edge of the Segment entity.
@@ -260,7 +240,7 @@ func (_m *Segment) String() string {
 	}
 	builder.WriteString(", ")
 	builder.WriteString("status=")
-	builder.WriteString(_m.Status)
+	builder.WriteString(fmt.Sprintf("%v", _m.Status))
 	builder.WriteString(", ")
 	if v := _m.ReviewComment; v != nil {
 		builder.WriteString("review_comment=")
@@ -270,6 +250,11 @@ func (_m *Segment) String() string {
 	if v := _m.ResourceID; v != nil {
 		builder.WriteString("resource_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
+	}
+	builder.WriteString(", ")
+	if v := _m.Meta; v != nil {
+		builder.WriteString("meta=")
+		builder.WriteString(*v)
 	}
 	builder.WriteByte(')')
 	return builder.String()
