@@ -36,7 +36,7 @@ func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error)
 		segStart int // 当前段落起始行号（1-based）
 		lineNo   int // 当前行号（1-based）
 	)
-	flush := func() {
+	flush := func(endLine int) {
 		if buf.Len() == 0 {
 			return
 		}
@@ -45,7 +45,7 @@ func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error)
 			ID:     shortHash(text),
 			Source: text,
 			Meta: map[string]any{
-				"pos_lines": []int{segStart, lineNo},
+				"pos_lines": []int{segStart, endLine},
 			},
 		}
 		segments = append(segments, seg)
@@ -60,7 +60,7 @@ func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error)
 			inFence = !inFence
 		}
 		if !inFence && strings.TrimSpace(line) == "" {
-			flush()
+			flush(lineNo - 1)
 			continue
 		}
 		if buf.Len() == 0 {
@@ -72,7 +72,7 @@ func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error)
 	if err := scanner.Err(); err != nil {
 		return nil, err
 	}
-	flush()
+	flush(lineNo)
 
 	return &pipeline.Document{
 		Segments: segments,

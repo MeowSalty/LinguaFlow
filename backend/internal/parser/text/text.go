@@ -67,7 +67,7 @@ func parseText(content string) (*pipeline.Document, error) {
 		segStart int // 当前段落起始行号（1-based）
 		lineNo   int // 当前行号（1-based）
 	)
-	flush := func() {
+	flush := func(endLine int) {
 		if buf.Len() == 0 {
 			return
 		}
@@ -76,7 +76,7 @@ func parseText(content string) (*pipeline.Document, error) {
 			ID:     shortHash(text),
 			Source: text,
 			Meta: map[string]any{
-				"pos_lines": []int{segStart, lineNo},
+				"pos_lines": []int{segStart, endLine},
 			},
 		})
 		buf.Reset()
@@ -85,7 +85,7 @@ func parseText(content string) (*pipeline.Document, error) {
 	for _, line := range lines {
 		lineNo++
 		if strings.TrimSpace(line) == "" {
-			flush()
+			flush(lineNo - 1)
 			continue
 		}
 		if buf.Len() == 0 {
@@ -94,7 +94,7 @@ func parseText(content string) (*pipeline.Document, error) {
 		buf.WriteString(line)
 		buf.WriteByte('\n')
 	}
-	flush()
+	flush(lineNo)
 
 	return &pipeline.Document{
 		Segments: segments,

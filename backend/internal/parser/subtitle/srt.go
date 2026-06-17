@@ -164,7 +164,7 @@ func splitBlocksWithOffsets(raw []byte) []blockWithOffset {
 
 	for _, line := range lines {
 		lineLen := len(line)
-		if bytes.TrimSpace(line) == nil || bytes.TrimSpace(line) == nil && len(line) == 0 {
+		if len(bytes.TrimSpace(line)) == 0 {
 			// 空行：结束当前 block
 			if blockStart >= 0 {
 				blocks = append(blocks, blockWithOffset{start: blockStart, end: offset})

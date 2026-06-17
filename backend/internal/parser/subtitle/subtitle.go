@@ -10,6 +10,7 @@ package subtitle
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -59,13 +60,21 @@ func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error)
 func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Reader, w io.Writer) error {
 	bw := bufio.NewWriter(w)
 
+	// 读取原始内容并规范化换行符，以匹配 Parse 阶段的偏移计算
+	raw, err := io.ReadAll(original)
+	if err != nil {
+		return fmt.Errorf("subtitle: read original: %w", err)
+	}
+	normalized := bytes.ReplaceAll(raw, []byte("\r\n"), []byte("\n"))
+	normalizedReader := bytes.NewReader(normalized)
+
 	switch doc.Format {
 	case "srt":
-		return renderSRT(doc, original, bw)
+		return renderSRT(doc, normalizedReader, bw)
 	case "vtt":
-		return renderVTT(doc, original, bw)
+		return renderVTT(doc, normalizedReader, bw)
 	case "ass":
-		return renderASS(doc, original, bw)
+		return renderASS(doc, normalizedReader, bw)
 	default:
 		return fmt.Errorf("subtitle: unsupported format %q", doc.Format)
 	}
