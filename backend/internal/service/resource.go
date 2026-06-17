@@ -15,6 +15,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
@@ -352,6 +353,8 @@ func (s *ResourceService) GetResource(ctx context.Context, actorUserID, projectI
 }
 
 // DeleteResource 删除资源文件及其存储。
+// 在事务中按依赖顺序级联删除关联记录（JobResource → Segment → Resource），
+// 避免 FOREIGN KEY constraint failed 错误。
 func (s *ResourceService) DeleteResource(ctx context.Context, actorUserID, projectID, resourceID int) error {
 	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true); err != nil {
 		return err
@@ -367,13 +370,44 @@ func (s *ResourceService) DeleteResource(ctx context.Context, actorUserID, proje
 		return err
 	}
 
-	// 删除存储文件
+	// 使用事务保证级联删除的原子性
+	tx, err := s.client.Tx(ctx)
+	if err != nil {
+		return fmt.Errorf("resource: begin transaction: %w", err)
+	}
+
+	// 1. 删除关联的 JobResource 记录（引用 resource_id 外键）
+	if _, err := tx.JobResource.Delete().
+		Where(jobresource.HasResourceWith(resource.ID(res.ID))).
+		Exec(ctx); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("resource: delete job_resources: %w", err)
+	}
+
+	// 2. 删除关联的 Segment 记录（引用 resource_id 外键）
+	if _, err := tx.Segment.Delete().
+		Where(segment.ResourceID(res.ID)).
+		Exec(ctx); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("resource: delete segments: %w", err)
+	}
+
+	// 3. 删除 Resource 记录本身
+	if err := tx.Resource.DeleteOneID(res.ID).Exec(ctx); err != nil {
+		_ = tx.Rollback()
+		return fmt.Errorf("resource: delete resource: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("resource: commit transaction: %w", err)
+	}
+
+	// 删除存储文件（事务提交成功后再删除物理文件）
 	if res.StoragePath != "" {
 		_ = s.fileStore.Delete(res.StoragePath)
 	}
 
-	// 删除数据库记录
-	return s.client.Resource.DeleteOneID(res.ID).Exec(ctx)
+	return nil
 }
 
 // UpdateResource 替换资源文件内容。
