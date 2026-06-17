@@ -1,6 +1,6 @@
 Resource:
   type: object
-  required: [id, path, name, directory, format, total_segments, status, created_at, updated_at]
+  required: [id, path, name, directory, format, total_segments, created_at, updated_at]
   properties:
     id:
       type: integer
@@ -17,11 +17,6 @@ Resource:
       type: string
     total_segments:
       type: integer
-    status:
-      type: string
-      enum: [ready, error]
-    error_message:
-      type: string
     created_at:
       type: string
       format: date-time

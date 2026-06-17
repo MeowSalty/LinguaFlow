@@ -518,14 +518,6 @@ paths:
       security:
         - bearerAuth: []
       parameters:
-        - name: status
-          in: query
-          required: false
-          schema:
-            type: string
-            enum:
-              - ready
-              - error
         - name: format
           in: query
           required: false
@@ -1837,7 +1829,6 @@ components:
         - directory
         - format
         - total_segments
-        - status
         - created_at
         - updated_at
       properties:
@@ -1856,13 +1847,6 @@ components:
           type: string
         total_segments:
           type: integer
-        status:
-          type: string
-          enum:
-            - ready
-            - error
-        error_message:
-          type: string
         created_at:
           type: string
           format: date-time
