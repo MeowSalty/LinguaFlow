@@ -34,13 +34,14 @@ type ResultRow =
       item: PendingUploadItem
     }
 
-type SummaryTone = 'emerald' | 'blue' | 'purple' | 'amber' | 'red' | 'slate'
+type MetricTier = 'primary' | 'secondary'
 
 interface SummaryItem {
   key: keyof UploadExecutionResult['summary']
   label: string
   value: number
-  tone: SummaryTone
+  tier: MetricTier
+  dotColor: string
 }
 
 const props = defineProps<{
@@ -82,37 +83,43 @@ const summaryItems = computed<SummaryItem[]>(() => [
     key: 'created',
     label: t('workspace.uploadResult.summary.created'),
     value: props.result.summary.created,
-    tone: 'emerald',
+    tier: 'primary',
+    dotColor: 'bg-emerald-500',
   },
   {
     key: 'incrementallyUpdated',
     label: t('workspace.uploadResult.summary.incrementallyUpdated'),
     value: props.result.summary.incrementallyUpdated,
-    tone: 'blue',
+    tier: 'secondary',
+    dotColor: 'bg-blue-400',
   },
   {
     key: 'replaced',
     label: t('workspace.uploadResult.summary.replaced'),
     value: props.result.summary.replaced,
-    tone: 'purple',
+    tier: 'secondary',
+    dotColor: 'bg-violet-400',
   },
   {
     key: 'conflicts',
     label: t('workspace.uploadResult.summary.conflicts'),
     value: props.result.summary.conflicts,
-    tone: 'amber',
+    tier: 'primary',
+    dotColor: 'bg-amber-500',
   },
   {
     key: 'failed',
     label: t('workspace.uploadResult.summary.failed'),
     value: props.result.summary.failed,
-    tone: 'red',
+    tier: 'primary',
+    dotColor: 'bg-red-500',
   },
   {
     key: 'skipped',
     label: t('workspace.uploadResult.summary.skipped'),
     value: props.result.summary.skipped,
-    tone: 'slate',
+    tier: 'secondary',
+    dotColor: 'bg-slate-400 dark:bg-slate-500',
   },
 ])
 
@@ -129,34 +136,14 @@ const tagType = (action: ResultRow['action']): 'success' | 'warning' | 'error' |
   return 'default'
 }
 
-const rowToneClass = (action: ResultRow['action']): string => {
-  if (action === 'created' || action === 'incremental_updated' || action === 'replaced') {
-    return 'border-emerald-200 bg-emerald-50/40 dark:border-emerald-500/20 dark:bg-emerald-500/5'
-  }
+const rowAccentClass = (action: ResultRow['action']): string => {
   if (action === 'failed') {
-    return 'border-red-200 bg-red-50/40 dark:border-red-500/20 dark:bg-red-500/5'
+    return 'border-l-red-300 dark:border-l-red-500/60'
   }
   if (action === 'conflict') {
-    return 'border-amber-200 bg-amber-50/40 dark:border-amber-500/20 dark:bg-amber-500/5'
+    return 'border-l-amber-300 dark:border-l-amber-500/60'
   }
-  return 'border-lf-border bg-lf-surface-muted/50'
-}
-
-const summaryToneClass = (tone: SummaryTone): string => {
-  switch (tone) {
-    case 'emerald':
-      return 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300'
-    case 'blue':
-      return 'bg-blue-50 text-blue-700 dark:bg-blue-500/10 dark:text-blue-300'
-    case 'purple':
-      return 'bg-purple-50 text-purple-700 dark:bg-purple-500/10 dark:text-purple-300'
-    case 'amber':
-      return 'bg-amber-50 text-amber-700 dark:bg-amber-500/10 dark:text-amber-300'
-    case 'red':
-      return 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-300'
-    default:
-      return 'bg-slate-100 text-lf-text-muted dark:bg-white/10'
-  }
+  return 'border-l-transparent'
 }
 
 const getDetail = (row: ResultRow): string => {
@@ -191,45 +178,60 @@ const getDetail = (row: ResultRow): string => {
 
 <template>
   <div class="space-y-5">
-    <div class="rounded-2xl border border-lf-border bg-lf-surface-muted/70 p-4 shadow-sm">
-      <div class="grid grid-cols-2 gap-2 md:grid-cols-6">
-        <div
-          v-for="item in summaryItems"
-          :key="item.key"
-          class="rounded-xl px-3 py-3 text-center"
-          :class="summaryToneClass(item.tone)"
-        >
-          <div class="text-2xl font-bold">{{ item.value }}</div>
-          <div class="mt-1 text-xs">{{ item.label }}</div>
-        </div>
-      </div>
-    </div>
-
-    <div class="max-h-[52vh] space-y-3 overflow-y-auto pr-1">
+    <!-- Summary metrics -->
+    <div class="grid grid-cols-3 gap-2 sm:grid-cols-3 lg:grid-cols-6">
       <div
-        v-for="row in rows"
-        :key="`${row.rowType}:${row.path}:${row.action}`"
-        class="rounded-2xl border p-4 transition-colors"
-        :class="rowToneClass(row.action)"
+        v-for="item in summaryItems"
+        :key="item.key"
+        class="flex items-center gap-2.5 rounded-lg px-3 py-2.5"
+        :class="item.value === 0 ? 'opacity-40' : ''"
       >
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div class="min-w-0 flex-1">
-            <div class="flex flex-wrap items-center gap-2">
-              <div class="min-w-0 truncate text-sm font-semibold text-lf-text-strong">
-                {{ row.path }}
-              </div>
-              <NTag :type="tagType(row.action)" size="small" :bordered="false">
-                {{ t(`workspace.uploadResult.actions.${row.action}`) }}
-              </NTag>
-            </div>
-            <p class="mt-1 text-xs leading-5 text-lf-text-muted">
-              {{ getDetail(row) }}
-            </p>
+        <span
+          class="h-2 w-2 shrink-0 rounded-full"
+          :class="item.dotColor"
+        />
+        <div class="min-w-0">
+          <div
+            class="leading-none font-semibold text-lf-text-strong"
+            :class="item.tier === 'primary' ? 'text-xl' : 'text-base'"
+          >
+            {{ item.value }}
+          </div>
+          <div class="mt-0.5 truncate text-[11px] text-lf-text-muted">
+            {{ item.label }}
           </div>
         </div>
       </div>
     </div>
 
+    <!-- Divider -->
+    <div class="border-t border-lf-border" />
+
+    <!-- File detail list -->
+    <div class="max-h-[52vh] space-y-1.5 overflow-y-auto pr-1">
+      <div
+        v-for="row in rows"
+        :key="`${row.rowType}:${row.path}:${row.action}`"
+        class="flex flex-col gap-2 rounded-lg border border-l-3 border-lf-border/60 bg-lf-surface px-4 py-3 sm:flex-row sm:items-start sm:justify-between"
+        :class="rowAccentClass(row.action)"
+      >
+        <div class="min-w-0 flex-1">
+          <div class="flex flex-wrap items-center gap-2">
+            <div class="min-w-0 truncate text-sm font-medium text-lf-text-strong">
+              {{ row.path }}
+            </div>
+            <NTag :type="tagType(row.action)" size="small" :bordered="false">
+              {{ t(`workspace.uploadResult.actions.${row.action}`) }}
+            </NTag>
+          </div>
+          <p class="mt-1 text-xs leading-5 text-lf-text-muted">
+            {{ getDetail(row) }}
+          </p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Actions -->
     <div class="flex justify-end border-t border-lf-border pt-4">
       <NButton type="primary" @click="emit('close')">
         {{ t('workspace.common.confirm') }}

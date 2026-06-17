@@ -664,7 +664,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
 
     <!-- 空状态 -->
     <div
-      v-else-if="isEmpty"
+      v-else-if="isEmpty && !dragOver"
       class="rounded-xl border border-dashed border-lf-border-soft bg-lf-surface-muted/60 px-6 py-12"
     >
       <NEmpty :description="t('workspace.explorer.emptyDirectory')">
@@ -751,7 +751,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
       v-model:show="uploadPrecheckVisible"
       preset="card"
       :title="t('workspace.uploadPrecheck.modalTitle')"
-      class="w-[min(1120px,calc(100vw-32px))]"
+      :style="{ width: 'min(1120px, calc(100vw - 32px))' }"
       :mask-closable="false"
     >
       <UploadPrecheckPanel
@@ -769,7 +769,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
       v-model:show="uploadResultVisible"
       preset="card"
       :title="t('workspace.uploadResult.modalTitle')"
-      class="w-[min(960px,calc(100vw-32px))]"
+      :style="{ width: 'min(960px, calc(100vw - 32px))' }"
     >
       <UploadResultPanel
         v-if="workspace.lastUploadResult"
