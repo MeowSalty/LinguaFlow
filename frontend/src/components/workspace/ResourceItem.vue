@@ -22,6 +22,7 @@ const props = defineProps<{
   replacing?: boolean
   incrementalUpdating?: boolean
   downloading?: boolean
+  downloadingTranslated?: boolean
   deleting?: boolean
   /** 翻译进度百分比（0-100） */
   progress?: number
@@ -34,6 +35,7 @@ const emit = defineEmits<{
   replace: [resource: Resource]
   incrementalUpdate: [resource: Resource]
   download: [resource: Resource]
+  downloadTranslated: [resource: Resource]
   delete: [resource: Resource]
   /** 切换选中状态 */
   toggleSelect: [resource: Resource]
@@ -70,7 +72,12 @@ const getStatusLabel = (status: Resource['status']): string =>
   t(`workspace.resource.status.${status}`)
 
 const isBusy = computed(
-  () => props.replacing || props.incrementalUpdating || props.downloading || props.deleting,
+  () =>
+    props.replacing ||
+    props.incrementalUpdating ||
+    props.downloading ||
+    props.downloadingTranslated ||
+    props.deleting,
 )
 
 const dropdownOptions = computed<DropdownOption[]>(() => [
@@ -102,6 +109,13 @@ const dropdownOptions = computed<DropdownOption[]>(() => [
       ? t('workspace.resource.actions.downloading')
       : t('workspace.common.download'),
     key: 'download',
+    disabled: isBusy.value,
+  },
+  {
+    label: props.downloadingTranslated
+      ? t('workspace.resource.actions.downloadingTranslated')
+      : t('workspace.resource.actions.downloadTranslated'),
+    key: 'download-translated',
     disabled: isBusy.value,
   },
   {
@@ -142,6 +156,9 @@ const handleDropdownSelect = (key: string) => {
       break
     case 'download':
       emit('download', props.resource)
+      break
+    case 'download-translated':
+      emit('downloadTranslated', props.resource)
       break
     case 'delete':
       confirmDelete()
@@ -256,7 +273,11 @@ const handleDropdownSelect = (key: string) => {
               size="tiny"
               quaternary
               :loading="
-                props.replacing || props.incrementalUpdating || props.downloading || props.deleting
+                props.replacing ||
+                props.incrementalUpdating ||
+                props.downloading ||
+                props.downloadingTranslated ||
+                props.deleting
               "
             >
               <template #icon>

@@ -36,7 +36,6 @@ defineProps<{
 
 const emit = defineEmits<{
   'update:show': [value: boolean]
-  download: [job: TranslationJob]
 }>()
 </script>
 
@@ -169,15 +168,6 @@ const emit = defineEmits<{
       <template #footer>
         <div class="flex flex-wrap justify-end gap-3">
           <NButton @click="emit('update:show', false)">{{ t('workspace.common.close') }}</NButton>
-          <NButton
-            v-if="workspace.selectedJob"
-            :disabled="workspace.selectedJob.status !== 'completed'"
-            :loading="workspace.downloadingKeys.includes(`job:${workspace.selectedJob.id}:all`)"
-            type="primary"
-            @click="workspace.selectedJob && emit('download', workspace.selectedJob)"
-          >
-            {{ t('workspace.common.download') }}
-          </NButton>
         </div>
       </template>
     </NDrawerContent>

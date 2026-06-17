@@ -6,7 +6,6 @@ import { type ApiSchemas } from '@/api/client'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 import { t } from '@/i18n'
-import { triggerBrowserDownload } from '@/composables/useWorkspaceUtils'
 
 type Segment = ApiSchemas['Segment']
 type TranslationJob = ApiSchemas['TranslationJob']
@@ -178,16 +177,6 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     }
   }
 
-  const downloadJob = async (job: TranslationJob): Promise<void> => {
-    try {
-      const file = await workspace.downloadJobResult(job.id)
-      triggerBrowserDownload(file, `translation-job-${job.id}.zip`)
-    } catch (error) {
-      console.error(error)
-      message.error(workspace.actionError || t('workspace.messages.downloadFailed'))
-    }
-  }
-
   const openJobDetail = async (job: TranslationJob): Promise<void> => {
     jobDetailDrawerVisible.value = true
     workspace.selectedJob = job
@@ -224,7 +213,6 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     submitJob,
     cancelJob,
     retryJob,
-    downloadJob,
     openJobDetail,
     clearResourceSelection,
   }

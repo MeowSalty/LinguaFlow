@@ -196,6 +196,21 @@ const downloadResource = async (resource: Resource): Promise<void> => {
   }
 }
 
+const downloadTranslatedResource = async (resource: Resource): Promise<void> => {
+  try {
+    const file = await workspace.downloadTranslatedResource(props.projectId, resource.id)
+    const url = URL.createObjectURL(file.blob)
+    const anchor = document.createElement('a')
+    anchor.href = url
+    anchor.download = file.filename || `translated-${resource.name}`
+    anchor.click()
+    URL.revokeObjectURL(url)
+  } catch (error) {
+    console.error(error)
+    message.error(workspace.actionError || t('workspace.messages.downloadFailed'))
+  }
+}
+
 const deleteResource = async (resource: Resource): Promise<void> => {
   try {
     await workspace.deleteResource(props.projectId, resource.id)
@@ -717,6 +732,9 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
           :replacing="workspace.replacingResourceIds.includes(item.resource!.id)"
           :incremental-updating="workspace.incrementalUpdatingIds.includes(item.resource!.id)"
           :downloading="workspace.downloadingKeys.includes(`resource:${item.resource!.id}`)"
+          :downloading-translated="
+            workspace.downloadingKeys.includes(`resource:${item.resource!.id}:translated`)
+          "
           :deleting="workspace.deletingResourceIds.includes(item.resource!.id)"
           :progress="workspace.getResourceProgress(item.resource!.id)"
           :selected="selectedReadyIdSet.has(item.resource!.id)"
@@ -724,6 +742,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
           @replace="(r) => chooseReplacementFile(r.id)"
           @incremental-update="(r) => chooseIncrementalUpdateFile(r.id)"
           @download="(r) => void downloadResource(r)"
+          @download-translated="(r) => void downloadTranslatedResource(r)"
           @delete="(r) => void deleteResource(r)"
           @toggle-select="handleToggleSelect"
         />

@@ -6,7 +6,7 @@ import {
   type DownloadFileResult,
   deleteProjectResource as deleteProjectResourceRequest,
   downloadProjectResource as downloadProjectResourceRequest,
-  downloadTranslationJobResult as downloadTranslationJobResultRequest,
+  downloadTranslatedResource as downloadTranslatedResourceRequest,
   fetchProjectResources,
   fetchProjectResourceTree,
   incrementalUpdateResource as incrementalUpdateResourceRequest,
@@ -670,18 +670,18 @@ export const useResourceStore = defineStore('resource', () => {
     }
   }
 
-  const downloadJobResult = async (
-    translationJobId: number,
-    resourceId?: number,
+  const downloadTranslatedResource = async (
+    projectId: number,
+    resourceId: number,
   ): Promise<DownloadFileResult> => {
-    const key = `job:${translationJobId}:${resourceId ?? 'all'}`
+    const key = `resource:${resourceId}:translated`
     downloadingKeys.value = [...downloadingKeys.value, key]
     actionError.value = null
 
     try {
-      return await downloadTranslationJobResultRequest(translationJobId, resourceId)
+      return await downloadTranslatedResourceRequest(projectId, resourceId)
     } catch (error) {
-      actionError.value = getErrorMessage(error, t('api.errors.downloadTranslationJobFailed'))
+      actionError.value = getErrorMessage(error, t('api.errors.downloadTranslatedResourceFailed'))
       throw error
     } finally {
       downloadingKeys.value = downloadingKeys.value.filter((item) => item !== key)
@@ -771,7 +771,7 @@ export const useResourceStore = defineStore('resource', () => {
     incrementalUpdateResource,
     deleteResource,
     downloadResource,
-    downloadJobResult,
+    downloadTranslatedResource,
     toggleResourceSelection,
     setSelectedResourceIds,
     clearSelectedResources,

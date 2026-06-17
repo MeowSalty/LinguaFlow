@@ -19,14 +19,12 @@ const emit = defineEmits<{
   detail: [job: TranslationJob]
   cancel: [job: TranslationJob]
   retry: [job: TranslationJob]
-  download: [job: TranslationJob]
 }>()
 
 const { jobColumns, jobStatusOptions } = useJobColumns({
   openJobDetail: (job) => emit('detail', job),
   cancelJob: (job) => emit('cancel', job),
   retryJob: (job) => emit('retry', job),
-  downloadJob: (job) => emit('download', job),
 })
 </script>
 

@@ -383,6 +383,33 @@ export const downloadProjectResource = async (
   }
 }
 
+export const downloadTranslatedResource = async (
+  projectId: number,
+  resourceId: number,
+  client: ApiClient = apiClient,
+): Promise<DownloadFileResult> => {
+  const { data, error, response } = await client.GET(
+    '/projects/{projectId}/resources/{resourceId}/download-translated',
+    {
+      params: { path: { projectId, resourceId } },
+      parseAs: 'blob',
+    },
+  )
+
+  if (!data) {
+    throw buildRequestFailureError(
+      t('api.errors.downloadTranslatedResourceFailed'),
+      error,
+      response,
+    )
+  }
+
+  return {
+    blob: data as Blob,
+    filename: getContentDispositionFilename(response),
+  }
+}
+
 export const fetchProjectResourceTree = async (
   projectId: number,
   client: ApiClient = apiClient,

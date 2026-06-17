@@ -450,6 +450,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/resources/{resourceId}/download-translated": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * 下载资源的翻译结果文件
+         * @description 基于资源当前所有已翻译/已编辑的 segments，渲染并下载翻译后的文件。
+         *     不依赖翻译任务状态，直接读取资源级别的最新翻译数据。
+         *     如果没有任何已翻译的段落，返回 409 Conflict。
+         */
+        get: operations["DownloadTranslatedResourceFile"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/resources/{resourceId}/segments": {
         parameters: {
             query?: never;
@@ -722,25 +747,6 @@ export interface paths {
         put?: never;
         /** 重试失败的资源翻译 */
         post: operations["RetryTranslationJob"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/translation-jobs/{translationJobId}/download": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                translationJobId: components["parameters"]["TranslationJobId"];
-            };
-            cookie?: never;
-        };
-        /** 下载翻译任务结果 */
-        get: operations["DownloadTranslationJobResult"];
-        put?: never;
-        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -2469,6 +2475,30 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    DownloadTranslatedResourceFile: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 翻译结果文件 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/octet-stream": File;
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     ListResourceSegments: {
         parameters: {
             query?: {
@@ -2904,32 +2934,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TranslationJob"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    DownloadTranslationJobResult: {
-        parameters: {
-            query?: {
-                resource_id?: number;
-            };
-            header?: never;
-            path: {
-                translationJobId: components["parameters"]["TranslationJobId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 翻译结果文件 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/octet-stream": File;
-                    "application/zip": File;
                 };
             };
             default: components["responses"]["Problem"];

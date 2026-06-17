@@ -19,7 +19,6 @@ export interface JobColumnActions {
   openJobDetail: (job: TranslationJob) => void
   cancelJob: (job: TranslationJob) => void
   retryJob: (job: TranslationJob) => void
-  downloadJob: (job: TranslationJob) => void
 }
 
 export function useJobColumns(actions: JobColumnActions) {
@@ -157,21 +156,6 @@ export function useJobColumns(actions: JobColumnActions) {
               },
             },
             { default: () => t('workspace.job.actions.retry') },
-          ),
-          h(
-            NButton,
-            {
-              size: 'small',
-              quaternary: true,
-              type: 'primary',
-              disabled: row.status !== 'completed',
-              loading: workspace.downloadingKeys.includes(`job:${row.id}:all`),
-              onClick: (event: MouseEvent) => {
-                event.stopPropagation()
-                actions.downloadJob(row)
-              },
-            },
-            { default: () => t('workspace.common.download') },
           ),
         ]),
     },

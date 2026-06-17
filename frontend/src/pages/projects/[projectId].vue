@@ -317,7 +317,6 @@ onMounted(() => {
             @detail="(job) => jobMgmt.openJobDetail(job)"
             @cancel="(job) => jobMgmt.cancelJob(job)"
             @retry="(job) => jobMgmt.retryJob(job)"
-            @download="(job) => jobMgmt.downloadJob(job)"
           />
         </NTabPane>
 
@@ -352,10 +351,7 @@ onMounted(() => {
     />
 
     <!-- 任务详情抽屉 -->
-    <JobDetailDrawer
-      v-model:show="jobMgmt.jobDetailDrawerVisible.value"
-      @download="(job) => jobMgmt.downloadJob(job)"
-    />
+    <JobDetailDrawer v-model:show="jobMgmt.jobDetailDrawerVisible.value" />
 
     <!-- 冲突对话框 -->
     <ConflictDialog
