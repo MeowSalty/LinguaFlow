@@ -129,9 +129,21 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	defer func() { _ = eng.Close() }()
 
 	// 5. 纯翻译（无解析、无渲染、无文件 I/O）
+	// 将 DB 主键 ID 转换为 doc.Segments 的 0-based 数组索引。
+	dbIDToIndex := make(map[int]int, len(allRows))
+	for i, row := range allRows {
+		dbIDToIndex[row.ID] = i
+	}
+	segmentIndexes := make([]int, 0, len(item.SegmentIds))
+	for _, dbID := range item.SegmentIds {
+		if idx, ok := dbIDToIndex[dbID]; ok {
+			segmentIndexes = append(segmentIndexes, idx)
+		}
+	}
+
 	result, err := eng.TranslateSegments(ctx, engine.TranslateSegmentsInput{
 		Document:       doc,
-		SegmentIndexes: item.SegmentIds,
+		SegmentIndexes: segmentIndexes,
 	})
 	if err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, fmt.Errorf("translate segments: %w", err))
