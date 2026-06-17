@@ -10,8 +10,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
@@ -35,6 +37,7 @@ var (
 	ErrResourcePathInvalid   = errors.New("resource path invalid")
 	ErrUnsupportedFormat     = errors.New("unsupported file format")
 	ErrParseFailed           = errors.New("file parse failed")
+	ErrNoTranslatedSegments  = errors.New("resource has no translated segments")
 )
 
 // SegmentChangeType 段落变更类型。
@@ -188,7 +191,7 @@ func (s *ResourceService) PrecheckResources(ctx context.Context, actorUserID, pr
 		// 检查与已有资源冲突
 		existing, err := s.FindResourceByPath(ctx, projectID, resourcePath)
 		if err != nil {
-			return nil, fmt.Errorf("检查资源路径冲突失败: %w", err)
+			return nil, fmt.Errorf("检查资源路径冲突失败：%w", err)
 		}
 		if existing != nil {
 			results = append(results, PrecheckFileResult{
@@ -911,4 +914,118 @@ func (s *ResourceService) applySegmentChanges(ctx context.Context, resourceID in
 	}
 
 	return nil
+}
+
+// normalizeMeta 将 json.Unmarshal 产生的 float64 / []interface{}
+// 转换回 int / []int，以便 Parser Render 阶段的类型断言成功。
+func normalizeMeta(meta map[string]any) map[string]any {
+	for k, v := range meta {
+		switch val := v.(type) {
+		case float64:
+			if val == float64(int(val)) {
+				meta[k] = int(val)
+			}
+		case []interface{}:
+			ints := make([]int, 0, len(val))
+			allInt := true
+			for _, item := range val {
+				if f, ok := item.(float64); ok && f == float64(int(f)) {
+					ints = append(ints, int(f))
+				} else {
+					allInt = false
+					break
+				}
+			}
+			if allInt {
+				meta[k] = ints
+			}
+		}
+	}
+	return meta
+}
+
+// BuildSegmentInputsWithTarget 将 DB segments 转换为引擎输入，包含 Target 文本。
+func BuildSegmentInputsWithTarget(rows []*ent.Segment) []engine.SegmentInput {
+	inputs := make([]engine.SegmentInput, len(rows))
+	for i, row := range rows {
+		var meta map[string]any
+		if row.Meta != nil {
+			_ = json.Unmarshal([]byte(*row.Meta), &meta)
+			meta = normalizeMeta(meta)
+		}
+		var target string
+		if row.TargetText != nil {
+			target = *row.TargetText
+		}
+		inputs[i] = engine.SegmentInput{
+			ID:         strconv.Itoa(row.SegmentIndex),
+			SourceText: row.SourceText,
+			Meta:       meta,
+			TargetText: target,
+		}
+	}
+	return inputs
+}
+
+// loadOriginalFile 加载原始文件流。
+func (s *ResourceService) loadOriginalFile(storagePath string) (io.ReadCloser, error) {
+	absolutePath, err := s.fileStore.Absolute(storagePath)
+	if err != nil {
+		return nil, fmt.Errorf("resolve path: %w", err)
+	}
+	f, err := os.Open(absolutePath)
+	if err != nil {
+		return nil, fmt.Errorf("open original file: %w", err)
+	}
+	return f, nil
+}
+
+// RenderTranslatedResource 渲染资源的翻译结果并写入 writer。
+// 不依赖翻译任务，直接基于资源当前的 segments 和项目语言配置。
+func (s *ResourceService) RenderTranslatedResource(
+	ctx context.Context,
+	actorUserID int,
+	res *ent.Resource,
+	writer io.Writer,
+) error {
+	// 1. 加载资源的所有 segments
+	segments, err := s.client.Segment.Query().
+		Where(segment.ResourceIDEQ(res.ID)).
+		Order(ent.Asc(segment.FieldSegmentIndex)).
+		All(ctx)
+	if err != nil {
+		return fmt.Errorf("load segments: %w", err)
+	}
+	if len(segments) == 0 {
+		return ErrNoTranslatedSegments
+	}
+
+	// 2. 获取语言配置（从 Project）
+	if res.ProjectID == nil {
+		return fmt.Errorf("resource %d has no project association", res.ID)
+	}
+	project, err := s.client.Project.Get(ctx, *res.ProjectID)
+	if err != nil {
+		return fmt.Errorf("load project: %w", err)
+	}
+	sourceLang := project.SourceLang
+	targetLang := project.TargetLang
+
+	// 3. 加载原始文件
+	original, err := s.loadOriginalFile(res.StoragePath)
+	if err != nil {
+		return fmt.Errorf("原始文件不存在或已被删除，无法渲染资源 %d: %w", res.ID, err)
+	}
+	defer original.Close()
+
+	// 4. 构建 Document 并填充 Target
+	inputs := BuildSegmentInputsWithTarget(segments)
+	doc := engine.BuildDocumentFromSegments(inputs, sourceLang, targetLang, res.Format)
+
+	// 5. 解析格式并渲染
+	p, err := parser.Resolve(res.Format)
+	if err != nil {
+		return fmt.Errorf("resolve parser for format %q: %w", res.Format, err)
+	}
+	return p.Render(ctx, doc, original, writer)
 }

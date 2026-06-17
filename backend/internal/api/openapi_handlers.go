@@ -206,8 +206,8 @@ func (s *Server) RetryTranslationJob(w http.ResponseWriter, r *http.Request, _ T
 	s.requireAuth(http.HandlerFunc(s.handleRetryTranslationJob)).ServeHTTP(w, r)
 }
 
-func (s *Server) DownloadTranslationJobResult(w http.ResponseWriter, r *http.Request, _ TranslationJobId, _ DownloadTranslationJobResultParams) {
-	s.requireAuth(http.HandlerFunc(s.handleDownloadTranslationJobResult)).ServeHTTP(w, r)
+func (s *Server) DownloadTranslatedResourceFile(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
+	s.requireAuth(http.HandlerFunc(s.handleDownloadTranslatedResourceFile)).ServeHTTP(w, r)
 }
 
 func (s *Server) ListActivity(w http.ResponseWriter, r *http.Request, _ ListActivityParams) {

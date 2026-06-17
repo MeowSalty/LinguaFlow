@@ -646,3 +646,69 @@ func (s *Server) writeResourceServiceError(w http.ResponseWriter, r *http.Reques
 		writeProblem(w, http.StatusInternalServerError, "internal_error", "服务器内部错误")
 	}
 }
+
+// safeZipResourceEntryName 根据资源路径生成安全的 ZIP 条目名称。
+// 过滤路径遍历、绝对路径及文件系统特殊字符。
+func safeZipResourceEntryName(res *ent.Resource) string {
+	candidate := ""
+	if res != nil {
+		candidate = strings.TrimSpace(res.Path)
+	}
+	candidate = filepath.ToSlash(filepath.Clean(strings.ReplaceAll(candidate, "\\", "/")))
+	if candidate == "" || candidate == "." || candidate == ".." || strings.HasPrefix(candidate, "../") || strings.HasPrefix(candidate, "/") {
+		return "resource"
+	}
+	parts := strings.Split(candidate, "/")
+	for i, part := range parts {
+		part = strings.TrimSpace(part)
+		if part == "" || part == "." || part == ".." {
+			parts[i] = "resource"
+			continue
+		}
+		parts[i] = strings.NewReplacer(":", "_", "*", "_", "?", "_", "\"", "_", "<", "_", ">", "_", "|", "_").Replace(part)
+	}
+	return strings.Join(parts, "/")
+}
+
+// handleDownloadTranslatedResourceFile 处理下载资源翻译结果文件。
+func (s *Server) handleDownloadTranslatedResourceFile(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	if !ok {
+		return
+	}
+	resourceID, ok := parseIntParam(w, chi.URLParam(r, "resourceId"), "resourceId")
+	if !ok {
+		return
+	}
+
+	res, err := s.resourceSvc.GetResource(r.Context(), authUser.User.ID, projectID, resourceID)
+	if err != nil {
+		s.writeResourceServiceError(w, r, err)
+		return
+	}
+
+	filename := safeZipResourceEntryName(res)
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	// 注意：Content-Type 和 Content-Disposition 在渲染前设置。
+	// 如果 Render 已向 w 写入部分数据，后续 header 修改可能无效（headers 已 flush）。
+	// 这与现有 downloadSingleTranslationOutput 的行为一致。
+
+	if err := s.resourceSvc.RenderTranslatedResource(r.Context(), authUser.User.ID, res, w); err != nil {
+		w.Header().Del("Content-Disposition")
+		w.Header().Del("Content-Type")
+		switch {
+		case errors.Is(err, service.ErrNoTranslatedSegments):
+			writeProblem(w, http.StatusConflict, "no_translated_segments", "资源没有已翻译的段落")
+		case errors.Is(err, service.ErrResourceNotFound):
+			writeProblem(w, http.StatusNotFound, "not_found", "资源不存在")
+		default:
+			s.writeResourceServiceError(w, r, err)
+		}
+	}
+}

@@ -1,11 +1,8 @@
 package api
 
 import (
-	"archive/zip"
 	"errors"
-	"fmt"
 	"net/http"
-	"path/filepath"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -180,114 +177,6 @@ func (s *Server) handleRetryTranslationJob(w http.ResponseWriter, r *http.Reques
 		}
 	}
 	writeJSON(w, http.StatusOK, toTranslationJobResponse(job))
-}
-
-func (s *Server) handleDownloadTranslationJobResult(w http.ResponseWriter, r *http.Request) {
-	authUser, ok := authUserFromContext(r.Context())
-	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
-		return
-	}
-	jobID, ok := parseIntParam(w, chi.URLParam(r, "translationJobId"), "translationJobId")
-	if !ok {
-		return
-	}
-	job, err := s.translationJobSvc.GetJob(r.Context(), authUser.User.ID, jobID)
-	if err != nil {
-		writeTranslationJobServiceError(w, err)
-		return
-	}
-	resourceID := 0
-	if raw := strings.TrimSpace(r.URL.Query().Get("resource_id")); raw != "" {
-		parsed, parsedOK := parseIntParam(w, raw, "resource_id")
-		if !parsedOK {
-			return
-		}
-		resourceID = parsed
-	}
-	ready := make([]*ent.JobResource, 0, len(job.Edges.JobResources))
-	for _, item := range job.Edges.JobResources {
-		if resourceID > 0 {
-			res, err := item.Edges.ResourceOrErr()
-			if err != nil || res.ID != resourceID {
-				continue
-			}
-		}
-		if item.Status == service.JobResourceStatusCompleted {
-			ready = append(ready, item)
-		}
-	}
-	if len(ready) == 0 {
-		writeProblem(w, http.StatusConflict, "result_not_ready", "当前没有可下载输出")
-		return
-	}
-	if len(ready) == 1 {
-		s.downloadSingleTranslationOutput(w, r, authUser.User.ID, job.ID, ready[0])
-		return
-	}
-	s.downloadZipTranslationOutputs(w, r, authUser.User.ID, job.ID, ready)
-}
-
-func (s *Server) downloadSingleTranslationOutput(w http.ResponseWriter, r *http.Request, userID, jobID int, item *ent.JobResource) {
-	res, err := item.Edges.ResourceOrErr()
-	if err != nil {
-		writeServiceError(w, err)
-		return
-	}
-	filename := safeZipResourceEntryName(res)
-
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
-
-	if err := s.translationJobSvc.RenderTranslatedResource(r.Context(), userID, jobID, res.ID, w); err != nil {
-		w.Header().Del("Content-Disposition")
-		w.Header().Del("Content-Type")
-		if ent.IsNotFound(err) || strings.Contains(err.Error(), "原始文件不存在") {
-			writeProblem(w, http.StatusNotFound, "not_found", "原始文件不存在或已被删除")
-			return
-		}
-		writeServiceError(w, err)
-	}
-}
-
-func (s *Server) downloadZipTranslationOutputs(w http.ResponseWriter, r *http.Request, userID, jobID int, items []*ent.JobResource) {
-	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fmt.Sprintf("translation-job-%d-results.zip", jobID)))
-	zw := zip.NewWriter(w)
-	defer zw.Close()
-	for _, item := range items {
-		res, err := item.Edges.ResourceOrErr()
-		if err != nil {
-			continue
-		}
-		entryName := safeZipResourceEntryName(res)
-		entry, err := zw.Create(entryName)
-		if err != nil {
-			continue
-		}
-		_ = s.translationJobSvc.RenderTranslatedResource(r.Context(), userID, jobID, res.ID, entry)
-	}
-}
-
-func safeZipResourceEntryName(res *ent.Resource) string {
-	candidate := ""
-	if res != nil {
-		candidate = strings.TrimSpace(res.Path)
-	}
-	candidate = filepath.ToSlash(filepath.Clean(strings.ReplaceAll(candidate, "\\", "/")))
-	if candidate == "" || candidate == "." || candidate == ".." || strings.HasPrefix(candidate, "../") || strings.HasPrefix(candidate, "/") {
-		return "resource"
-	}
-	parts := strings.Split(candidate, "/")
-	for i, part := range parts {
-		part = strings.TrimSpace(part)
-		if part == "" || part == "." || part == ".." {
-			parts[i] = "resource"
-			continue
-		}
-		parts[i] = strings.NewReplacer(":", "_", "*", "_", "?", "_", "\"", "_", "<", "_", ">", "_", "|", "_").Replace(part)
-	}
-	return strings.Join(parts, "/")
 }
 
 func toTranslationJobResponse(row *ent.TranslationJob) translationJobResponse {
