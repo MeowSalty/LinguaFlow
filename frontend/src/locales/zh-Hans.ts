@@ -609,7 +609,7 @@ const messages = {
       jobCancelFailed: '任务取消失败',
       jobRetried: '任务已重试',
       jobRetryFailed: '任务重试失败',
-      selectReadyResource: '请选择至少一个就绪资源',
+      selectReadyResource: '请选择至少一个资源',
       selectResourceFirst: '请先选择资源文件',
     },
   },

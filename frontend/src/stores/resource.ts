@@ -84,8 +84,6 @@ export interface UploadExecutionResult {
   summary: UploadResultSummary
 }
 
-export type ResourceStatusFilter = Resource['status'] | 'all'
-
 const getErrorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error ? error.message : fallback
 
@@ -163,7 +161,6 @@ export const useResourceStore = defineStore('resource', () => {
 
   // ── 筛选器 ──
   const resourceSearch = ref('')
-  const resourceStatusFilter = ref<ResourceStatusFilter>('all')
   const resourceFormatFilter = ref<string>('all')
 
   // ── 计算属性：资源树导航 ──
@@ -263,9 +260,7 @@ export const useResourceStore = defineStore('resource', () => {
   const availableFormats = computed<string[]>(() =>
     [...new Set(resources.value.map((resource) => resource.format).filter(Boolean))].sort(),
   )
-  const readyResourceCount = computed(
-    () => resources.value.filter((resource) => resource.status === 'ready').length,
-  )
+  const readyResourceCount = computed(() => resources.value.length)
   const totalSegmentCount = computed(() =>
     resources.value.reduce((total, resource) => total + resource.total_segments, 0),
   )
@@ -346,7 +341,6 @@ export const useResourceStore = defineStore('resource', () => {
 
     try {
       const response = await fetchProjectResources(projectId, {
-        status: resourceStatusFilter.value === 'all' ? undefined : resourceStatusFilter.value,
         format: resourceFormatFilter.value === 'all' ? undefined : resourceFormatFilter.value,
         search: resourceSearch.value.trim() || undefined,
         cursor: append ? (resourcesCursor.value ?? undefined) : undefined,
@@ -701,7 +695,6 @@ export const useResourceStore = defineStore('resource', () => {
     resourcesCursor.value = null
     resourcesError.value = null
     resourceSearch.value = ''
-    resourceStatusFilter.value = 'all'
     resourceFormatFilter.value = 'all'
     clearAllUploadTasks()
     clearPendingUploadItems()
@@ -730,7 +723,6 @@ export const useResourceStore = defineStore('resource', () => {
     loadingResources,
     resourcesError,
     resourceSearch,
-    resourceStatusFilter,
     resourceFormatFilter,
     // 上传
     uploadTasks,

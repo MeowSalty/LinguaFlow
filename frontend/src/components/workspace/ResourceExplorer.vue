@@ -64,41 +64,39 @@ const isEmpty = computed(
 
 // ── 资源多选 ──
 
-/** 当前目录中状态为 ready 的资源列表 */
-const currentDirectoryReadyResources = computed(() =>
-  resourceItems.value
-    .filter((item) => item.resource?.status === 'ready')
-    .map((item) => item.resource!),
+/** 当前目录中的资源列表 */
+const currentDirectoryAllResources = computed(() =>
+  resourceItems.value.map((item) => item.resource!),
 )
 
-/** 当前目录中已选中的就绪资源 ID 集合（用于快速查找） */
-const selectedReadyIdSet = computed(() => new Set(workspace.selectedResourceIds))
+/** 当前目录中已选中的资源 ID 集合（用于快速查找） */
+const selectedIdSet = computed(() => new Set(workspace.selectedResourceIds))
 
-/** 当前目录就绪资源是否全选 */
+/** 当前目录资源是否全选 */
 const isCurrentDirAllSelected = computed(
   () =>
-    currentDirectoryReadyResources.value.length > 0 &&
-    currentDirectoryReadyResources.value.every((r) => selectedReadyIdSet.value.has(r.id)),
+    currentDirectoryAllResources.value.length > 0 &&
+    currentDirectoryAllResources.value.every((r) => selectedIdSet.value.has(r.id)),
 )
 
 /** 当前目录是否有部分选中 */
 const isCurrentDirIndeterminate = computed(
   () =>
     !isCurrentDirAllSelected.value &&
-    currentDirectoryReadyResources.value.some((r) => selectedReadyIdSet.value.has(r.id)),
+    currentDirectoryAllResources.value.some((r) => selectedIdSet.value.has(r.id)),
 )
 
 const toggleCurrentDirSelectAll = (): void => {
-  const readyIds = currentDirectoryReadyResources.value.map((r) => r.id)
+  const allIds = currentDirectoryAllResources.value.map((r) => r.id)
   if (isCurrentDirAllSelected.value) {
-    // 取消选中当前目录的就绪资源
-    const removeSet = new Set(readyIds)
+    // 取消选中当前目录的资源
+    const removeSet = new Set(allIds)
     workspace.setSelectedResourceIds(
       workspace.selectedResourceIds.filter((id: number) => !removeSet.has(id)),
     )
   } else {
-    // 选中当前目录所有就绪资源（与已有选中合并去重）
-    const merged = new Set([...workspace.selectedResourceIds, ...readyIds])
+    // 选中当前目录所有资源（与已有选中合并去重）
+    const merged = new Set([...workspace.selectedResourceIds, ...allIds])
     workspace.setSelectedResourceIds([...merged])
   }
 }
@@ -696,7 +694,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
         class="flex items-center gap-3 border-b border-lf-border-soft px-4 py-2 text-xs font-medium text-lf-text-muted"
       >
         <NCheckbox
-          v-if="currentDirectoryReadyResources.length > 0"
+          v-if="currentDirectoryAllResources.length > 0"
           :checked="isCurrentDirAllSelected"
           :indeterminate="isCurrentDirIndeterminate"
           class="shrink-0"
@@ -737,7 +735,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
           "
           :deleting="workspace.deletingResourceIds.includes(item.resource!.id)"
           :progress="workspace.getResourceProgress(item.resource!.id)"
-          :selected="selectedReadyIdSet.has(item.resource!.id)"
+          :selected="selectedIdSet.has(item.resource!.id)"
           @open-segments="(r) => emit('openSegments', r)"
           @replace="(r) => chooseReplacementFile(r.id)"
           @incremental-update="(r) => chooseIncrementalUpdateFile(r.id)"

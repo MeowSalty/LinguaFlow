@@ -1040,9 +1040,6 @@ export interface components {
             directory: string;
             format: string;
             total_segments: number;
-            /** @enum {string} */
-            status: "ready" | "error";
-            error_message?: string;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -2233,7 +2230,6 @@ export interface operations {
     ListProjectResources: {
         parameters: {
             query?: {
-                status?: "ready" | "error";
                 format?: string;
                 search?: string;
                 cursor?: components["parameters"]["Cursor"];

@@ -64,13 +64,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     ],
   }))
 
-  const selectedReadyResourceIds = computed(() =>
-    workspace.selectedResources
-      .filter((resource) => resource.status === 'ready')
-      .map((resource) => resource.id),
-  )
-
-  const canCreateResourceJob = computed(() => selectedReadyResourceIds.value.length > 0)
+  const canCreateResourceJob = computed(() => workspace.selectedResourceIds.length > 0)
   const canCreateSegmentJob = computed(() => workspace.segments.length > 0)
 
   // ── 方法 ──
@@ -84,7 +78,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     }
 
     jobTargetMode.value = 'resources'
-    jobTargetResourceIds.value = selectedReadyResourceIds.value
+    jobTargetResourceIds.value = [...workspace.selectedResourceIds]
     jobTargetSegmentIds.value = []
     jobForm.execution_plan_id = null
     jobDrawerVisible.value = true
@@ -202,7 +196,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     executionPlanOptions,
     selectedPlanTemplate,
     jobFormRules,
-    selectedReadyResourceIds,
+    selectedResourceIds: computed(() => workspace.selectedResourceIds),
     canCreateResourceJob,
     canCreateSegmentJob,
     // 方法

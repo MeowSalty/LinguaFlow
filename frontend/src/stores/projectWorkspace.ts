@@ -18,7 +18,6 @@ export type {
   ReplaceUploadResult,
   UploadResultSummary,
   UploadExecutionResult,
-  ResourceStatusFilter,
 } from './resource'
 
 export type { SegmentStatusFilter } from './segment'
@@ -52,7 +51,6 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     loadingResources,
     resourcesError,
     resourceSearch,
-    resourceStatusFilter,
     resourceFormatFilter,
     uploadTasks,
     pendingUploadItems,
@@ -258,7 +256,6 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     actionError,
     // 筛选器
     resourceSearch,
-    resourceStatusFilter,
     resourceFormatFilter,
     segmentSearch,
     segmentStatusFilter,

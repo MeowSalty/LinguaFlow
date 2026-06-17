@@ -27,7 +27,6 @@ type StatusTagType = 'default' | 'success' | 'warning' | 'error' | 'info'
 
 export const statusTagType = (status: string): StatusTagType => {
   switch (status) {
-    case 'ready':
     case 'completed':
     case 'translated':
     case 'edited':

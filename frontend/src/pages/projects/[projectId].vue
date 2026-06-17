@@ -61,10 +61,8 @@ const drawerSegmentCount = computed(() => {
   if (jobMgmt.jobTargetMode.value === 'segments') {
     return jobMgmt.jobTargetSegmentIds.value.length
   }
-  // 资源模式：使用已选就绪资源的总段落数
-  return workspace.selectedResources
-    .filter((r) => r.status === 'ready')
-    .reduce((sum, r) => sum + (r.total_segments ?? 0), 0)
+  // 资源模式：使用已选资源的总段落数
+  return workspace.selectedResources.reduce((sum, r) => sum + (r.total_segments ?? 0), 0)
 })
 
 const reloadSegments = async (): Promise<void> => {
@@ -404,7 +402,7 @@ onMounted(() => {
     <!-- 浮动操作岛 - 资源选择 -->
     <SelectionActionBar
       v-show="activeTab === 'resources'"
-      :count="jobMgmt.selectedReadyResourceIds.value.length"
+      :count="jobMgmt.selectedResourceIds.value.length"
       :can-translate="jobMgmt.canCreateResourceJob.value"
       @translate="jobMgmt.openResourceJobDrawer()"
       @clear="jobMgmt.clearResourceSelection()"

@@ -4,8 +4,6 @@ import {
   NCheckbox,
   NDropdown,
   NIcon,
-  NTag,
-  NText,
   NTooltip,
   useDialog,
   type DropdownOption,
@@ -56,20 +54,6 @@ const formatDate = (value?: string): string => {
     minute: '2-digit',
   }).format(new Date(value))
 }
-
-const statusTagType = (status: string): 'success' | 'error' | 'default' => {
-  switch (status) {
-    case 'ready':
-      return 'success'
-    case 'error':
-      return 'error'
-    default:
-      return 'default'
-  }
-}
-
-const getStatusLabel = (status: Resource['status']): string =>
-  t(`workspace.resource.status.${status}`)
 
 const isBusy = computed(
   () =>
@@ -179,7 +163,6 @@ const handleDropdownSelect = (key: string) => {
     <div class="flex min-h-14 items-center gap-3">
       <NCheckbox
         :checked="props.selected"
-        :disabled="props.resource.status !== 'ready'"
         class="shrink-0"
         @update:checked="emit('toggleSelect', props.resource)"
       />
@@ -203,14 +186,6 @@ const handleDropdownSelect = (key: string) => {
               </template>
               <span class="block max-w-xs break-all">{{ props.resource.name }}</span>
             </NTooltip>
-            <NTag
-              class="shrink-0"
-              size="tiny"
-              :type="statusTagType(props.resource.status)"
-              :bordered="false"
-            >
-              {{ getStatusLabel(props.resource.status) }}
-            </NTag>
             <span class="shrink-0 text-xs text-lf-text-muted">
               {{ props.resource.total_segments }} {{ t('workspace.resource.columns.segments') }}
             </span>
@@ -245,15 +220,6 @@ const handleDropdownSelect = (key: string) => {
               {{ props.progress }}%
             </span>
           </div>
-          <!-- 错误信息 -->
-          <NText
-            v-if="props.resource.status === 'error' && props.resource.error_message"
-            type="error"
-            class="mt-0.5 block truncate text-xs"
-            :title="props.resource.error_message"
-          >
-            {{ props.resource.error_message }}
-          </NText>
         </div>
 
         <!-- 操作按钮：始终可见 -->
