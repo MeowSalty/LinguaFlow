@@ -239,6 +239,30 @@ projectResourceDownload:
       default:
         $ref: '../base.yaml#/components/responses/Problem'
 
+projectResourceDownloadTranslated:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+    - $ref: '../base.yaml#/components/parameters/ResourceId'
+  get:
+    operationId: DownloadTranslatedResourceFile
+    summary: 下载资源的翻译结果文件
+    description: |
+      基于资源当前所有已翻译/已编辑的 segments，渲染并下载翻译后的文件。
+      不依赖翻译任务状态，直接读取资源级别的最新翻译数据。
+      如果没有任何已翻译的段落，返回 409 Conflict。
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 翻译结果文件
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
 projectResourceSegments:
   parameters:
     - $ref: '../base.yaml#/components/parameters/ProjectId'

@@ -49,6 +49,8 @@ paths:
     $ref: './paths/resources.yaml#/projectResourceById'
   /projects/{projectId}/resources/{resourceId}/download:
     $ref: './paths/resources.yaml#/projectResourceDownload'
+  /projects/{projectId}/resources/{resourceId}/download-translated:
+    $ref: './paths/resources.yaml#/projectResourceDownloadTranslated'
   /projects/{projectId}/resources/{resourceId}/segments:
     $ref: './paths/resources.yaml#/projectResourceSegments'
   /projects/{projectId}/resources/{resourceId}/segments/{segmentId}:
@@ -77,8 +79,6 @@ paths:
     $ref: './paths/translation-jobs.yaml#/translationJobCancel'
   /translation-jobs/{translationJobId}/retry:
     $ref: './paths/translation-jobs.yaml#/translationJobRetry'
-  /translation-jobs/{translationJobId}/download:
-    $ref: './paths/translation-jobs.yaml#/translationJobDownload'
   /execution-plan-templates:
     $ref: './paths/execution-plan-templates.yaml#/executionPlanTemplates'
   /execution-plan-templates/{executionPlanTemplateId}:
