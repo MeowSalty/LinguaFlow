@@ -105,32 +105,3 @@ translationJobRetry:
       default:
         $ref: '../base.yaml#/components/responses/Problem'
 
-translationJobDownload:
-  parameters:
-    - $ref: '../base.yaml#/components/parameters/TranslationJobId'
-  get:
-    operationId: DownloadTranslationJobResult
-    summary: 下载翻译任务结果
-    security:
-      - bearerAuth: []
-    parameters:
-      - name: resource_id
-        in: query
-        required: false
-        schema:
-          type: integer
-          minimum: 1
-    responses:
-      '200':
-        description: 翻译结果文件
-        content:
-          application/octet-stream:
-            schema:
-              type: string
-              format: binary
-          application/zip:
-            schema:
-              type: string
-              format: binary
-      default:
-        $ref: '../base.yaml#/components/responses/Problem'
