@@ -51,12 +51,6 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 		maxTok = b.maxTokens
 	}
 
-	if b.timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, b.timeout)
-		defer cancel()
-	}
-
 	params := openaigo.ChatCompletionNewParams{
 		Model: shared.ChatModel(model),
 		Messages: []openaigo.ChatCompletionMessageParamUnion{
@@ -96,7 +90,11 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 		return nil, fmt.Errorf("openai: unknown response_format %q", rf)
 	}
 
-	resp, err := b.client.Chat.Completions.New(ctx, params)
+	callOpts := []option.RequestOption{}
+	if b.timeout > 0 {
+		callOpts = append(callOpts, option.WithRequestTimeout(b.timeout))
+	}
+	resp, err := b.client.Chat.Completions.New(ctx, params, callOpts...)
 	if err != nil {
 		return nil, wrapOpenAIError(err)
 	}
