@@ -15,6 +15,14 @@ CreateTranslationJobRequest:
       items:
         type: integer
         minimum: 1
+    segment_group_keys:
+      type: array
+      items:
+        type: string
+      description: |
+        按章节分组键选择 segments（仅适用于 EPUB 等多章节资源）。
+        传入 meta.epub_file 值（如 ["OEBPS/chapter1.xhtml"]），后端自动解析为对应的 segment_ids。
+        与 segment_ids 互斥，优先级：segment_group_keys > segment_ids > resource_ids。
     auto_approve:
       type: boolean
       default: false

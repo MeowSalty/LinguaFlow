@@ -63,6 +63,8 @@ paths:
     $ref: './paths/resources.yaml#/projectResourceSegmentsApproveAll'
   /projects/{projectId}/resources/{resourceId}/retranslate-rejected:
     $ref: './paths/resources.yaml#/projectResourceRetranslateRejected'
+  /projects/{projectId}/resources/{resourceId}/segments/groups:
+    $ref: './paths/resources.yaml#/projectResourceSegmentGroups'
   /projects/{projectId}/glossary:
     $ref: './paths/glossary.yaml#/projectGlossary'
   /projects/{projectId}/glossary/{entryId}:
@@ -204,6 +206,10 @@ components:
       $ref: './components/schemas/resource.yaml#/ResourcePrecheckFileResult'
     ResourcePrecheckBatchResponse:
       $ref: './components/schemas/resource.yaml#/ResourcePrecheckBatchResponse'
+    ResourceSegmentGroup:
+      $ref: './components/schemas/resource.yaml#/ResourceSegmentGroup'
+    ResourceSegmentGroupListResponse:
+      $ref: './components/schemas/resource.yaml#/ResourceSegmentGroupListResponse'
     CreateTranslationJobRequest:
       $ref: './components/schemas/translation-job.yaml#/CreateTranslationJobRequest'
     TranslationJobResource:

@@ -278,6 +278,12 @@ projectResourceSegments:
         required: false
         schema:
           type: string
+      - name: group_key
+        in: query
+        required: false
+        schema:
+          type: string
+        description: 按分组键过滤 segments（如 epub_file 路径），仅返回属于指定分组的 segments
       - $ref: '../base.yaml#/components/parameters/Cursor'
       - $ref: '../base.yaml#/components/parameters/Limit'
     responses:
@@ -402,5 +408,28 @@ projectResourceRetranslateRejected:
           application/json:
             schema:
               $ref: '../base.yaml#/components/schemas/RetranslateResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+projectResourceSegmentGroups:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+    - $ref: '../base.yaml#/components/parameters/ResourceId'
+  get:
+    operationId: ListResourceSegmentGroups
+    summary: 列出资源段落分组（按章节）
+    description: |
+      按 meta.epub_file 将 segments 归为章节组，返回每组的统计信息。
+      适用于 EPUB 等多章节资源的分组展示。
+      非 EPUB 资源会返回一个包含所有 segments 的单一组。
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 段落分组列表
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/ResourceSegmentGroupListResponse'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
