@@ -174,13 +174,26 @@ const formatDate = (value?: string): string => {
   }).format(new Date(value))
 }
 
-const getOrganizationName = (orgId?: number): string => {
-  const organization = projects.organizations.find((item) => item.id === orgId)
-  return (
-    organization?.display_name?.trim() ||
-    organization?.name ||
-    t('projects.card.unknownOrganization')
-  )
+const formatRelativeTime = (dateStr: string | null): string => {
+  if (!dateStr) return '暂无更新'
+
+  const now = Date.now()
+  const date = new Date(dateStr).getTime()
+  const diffMs = now - date
+
+  if (diffMs < 0) return '刚刚'
+
+  const diffSeconds = Math.floor(diffMs / 1000)
+  const diffMinutes = Math.floor(diffSeconds / 60)
+  const diffHours = Math.floor(diffMinutes / 60)
+  const diffDays = Math.floor(diffHours / 24)
+
+  if (diffSeconds < 60) return '刚刚'
+  if (diffMinutes < 60) return `${diffMinutes} 分钟前`
+  if (diffHours < 24) return `${diffHours} 小时前`
+  if (diffDays < 7) return `${diffDays} 天前`
+
+  return formatDate(dateStr)
 }
 
 const buildProjectPayload = (): ApiSchemas['CreateProjectRequest'] => {
@@ -227,34 +240,11 @@ const submitProject = async (): Promise<void> => {
   }
 }
 
-const moreActionOptions = computed<DropdownOption[]>(() => [
-  { label: t('projects.actions.jobs'), key: 'jobs' },
-  { label: t('projects.actions.glossary'), key: 'glossary' },
-  { label: t('projects.actions.backends'), key: 'backends' },
-])
-
 const openProjectWorkspace = (project: Project, tab?: string): void => {
   void router.push({
     path: `/projects/${project.id}`,
     query: tab ? { tab } : undefined,
   })
-}
-
-const selectMoreAction = (project: Project, key: string | number): void => {
-  if (key === 'jobs') {
-    openProjectWorkspace(project, 'jobs')
-    return
-  }
-
-  if (key === 'glossary') {
-    openProjectWorkspace(project, 'glossary')
-    return
-  }
-
-  const featureKeyMap: Record<string, string> = {
-    backends: 'projects.features.backends',
-  }
-  showPlaceholder(featureKeyMap[String(key)] ?? 'projects.features.details')
 }
 
 const deleteSelectedProject = async (project: Project): Promise<void> => {
@@ -267,8 +257,33 @@ const deleteSelectedProject = async (project: Project): Promise<void> => {
   }
 }
 
-const showPlaceholder = (featureKey: string): void => {
-  message.info(t('projects.messages.featureComingSoon', { feature: t(featureKey) }))
+const cardDropdownOptions: DropdownOption[] = [
+  { label: '查看详情', key: 'details' },
+  { label: '编辑', key: 'edit' },
+  { label: '任务', key: 'jobs' },
+  { label: '术语表', key: 'glossary' },
+  { type: 'divider', key: 'd1' },
+  { label: '删除', key: 'delete', props: { style: 'color: #e53e3e' } },
+]
+
+const handleCardDropdownSelect = (project: Project, key: string | number): void => {
+  switch (key) {
+    case 'details':
+      openProjectWorkspace(project)
+      break
+    case 'edit':
+      void openEditDrawer(project)
+      break
+    case 'jobs':
+      openProjectWorkspace(project, 'jobs')
+      break
+    case 'glossary':
+      openProjectWorkspace(project, 'glossary')
+      break
+    case 'delete':
+      void deleteSelectedProject(project)
+      break
+  }
 }
 
 watch(
@@ -406,122 +421,67 @@ onMounted(() => {
     </NEmpty>
 
     <div v-else class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <NCard
+      <div
         v-for="project in projects.filteredItems"
         :key="project.id"
-        hoverable
-        :bordered="false"
-        class="group shadow-sm shadow-lf-shadow transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-lf-shadow-strong"
+        class="group relative cursor-pointer overflow-hidden rounded-2xl border border-lf-border-soft bg-lf-surface p-5 shadow-sm shadow-lf-shadow transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-lf-shadow-strong"
+        @click="openProjectWorkspace(project)"
       >
-        <div class="flex h-full flex-col gap-5">
-          <div class="flex items-start justify-between gap-4">
-            <div class="min-w-0">
-              <h2 class="truncate text-lg font-semibold text-lf-text-strong">
-                {{ project.name }}
-              </h2>
-              <p class="mt-1 text-xs text-lf-text-subtle">
-                {{ t('projects.card.projectId', { id: project.id }) }}
-              </p>
-            </div>
+        <!-- 左侧色条 -->
+        <div
+          class="absolute inset-y-0 left-0 w-1"
+          :class="project.resource_scope === 'organization' ? 'bg-blue-500' : 'bg-emerald-500'"
+        />
+
+        <div class="flex h-full flex-col gap-3 pl-4">
+          <!-- 标题行：项目名称 + Scope Tag -->
+          <div class="flex items-start justify-between gap-3">
+            <h2
+              class="min-w-0 flex-1 truncate text-base font-semibold text-lf-text-strong"
+              :title="`Project #${project.id}`"
+            >
+              {{ project.name }}
+            </h2>
             <NTag
+              v-if="project.resource_scope === 'organization'"
               round
               size="small"
-              :type="project.resource_scope === 'organization' ? 'info' : 'success'"
+              type="info"
+              class="shrink-0"
             >
-              {{ t(`projects.scopes.${project.resource_scope}`) }}
+              {{ t('projects.scopes.organization') }}
             </NTag>
           </div>
 
-          <div class="rounded-2xl bg-lf-surface-muted p-4">
-            <div class="flex items-center justify-between gap-3">
-              <div class="min-w-0">
-                <div class="text-xs text-lf-text-subtle">
-                  {{ t('projects.card.source') }}
-                </div>
-                <div class="mt-1 truncate text-base font-semibold text-lf-text">
-                  {{ project.source_lang || '-' }}
-                </div>
-              </div>
-              <div
-                class="rounded-full bg-lf-surface-elevated px-3 py-1 text-sm text-brand-500 shadow-sm shadow-lf-shadow"
-              >
-                →
-              </div>
-              <div class="min-w-0 text-right">
-                <div class="text-xs text-lf-text-subtle">
-                  {{ t('projects.card.target') }}
-                </div>
-                <div class="mt-1 truncate text-base font-semibold text-lf-text">
-                  {{ project.target_lang || '-' }}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="mt-auto space-y-2 text-xs text-lf-text-muted">
-            <div
-              v-if="project.resource_scope === 'organization'"
-              class="flex justify-between gap-3"
-            >
-              <span>{{ t('projects.card.organization') }}</span>
-              <span class="truncate font-medium text-lf-text">
-                {{ getOrganizationName(project.owner_org_id) }}
-              </span>
-            </div>
-            <div class="flex justify-between gap-3">
-              <span>{{ t('projects.card.updatedAt') }}</span>
-              <span class="font-medium text-lf-text">
-                {{ formatDate(project.updated_at ?? project.created_at) }}
-              </span>
-            </div>
-          </div>
-
-          <div class="border-t border-lf-border-soft pt-4">
-            <div class="flex items-center justify-between gap-3">
-              <NButton
-                text
-                type="primary"
-                class="font-medium"
-                @click="openProjectWorkspace(project)"
-              >
-                {{ t('projects.actions.details') }}
-              </NButton>
-              <div class="flex items-center gap-1.5">
-                <NButton quaternary size="small" @click="openEditDrawer(project)">
-                  {{ t('projects.actions.edit') }}
-                </NButton>
-                <NDropdown
-                  trigger="click"
-                  :options="moreActionOptions"
-                  placement="bottom-end"
-                  @select="(key: string | number) => selectMoreAction(project, key)"
-                >
-                  <NButton quaternary size="small">
-                    {{ t('projects.actions.more') }}
-                  </NButton>
-                </NDropdown>
-                <NPopconfirm
-                  :positive-text="t('projects.actions.confirmDelete')"
-                  :negative-text="t('projects.actions.cancel')"
-                  @positive-click="deleteSelectedProject(project)"
-                >
-                  <template #trigger>
-                    <NButton
-                      quaternary
-                      size="small"
-                      type="error"
-                      :loading="projects.isDeletingProject(project.id)"
-                    >
-                      {{ t('projects.actions.delete') }}
-                    </NButton>
-                  </template>
-                  {{ t('projects.delete.confirm', { name: project.name }) }}
-                </NPopconfirm>
-              </div>
-            </div>
-          </div>
+          <!-- 第二行：语言方向 + 更新时间 -->
+          <p class="text-xs text-lf-text-muted">
+            {{ project.source_lang || 'auto' }} → {{ project.target_lang }}
+            <span class="mx-1.5">·</span>
+            {{ formatRelativeTime(project.updated_at ?? project.created_at ?? null) }}
+          </p>
         </div>
-      </NCard>
+
+        <!-- 悬显更多菜单 -->
+        <div
+          class="absolute right-3 top-3 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+          @click.stop
+        >
+          <NDropdown
+            trigger="click"
+            :options="cardDropdownOptions"
+            placement="bottom-end"
+            @select="(key: string | number) => handleCardDropdownSelect(project, key)"
+          >
+            <NButton quaternary circle size="small">
+              <template #icon>
+                <NIcon size="16">
+                  <IconCarbonOverflowMenuHorizontal />
+                </NIcon>
+              </template>
+            </NButton>
+          </NDropdown>
+        </div>
+      </div>
     </div>
 
     <NDrawer v-model:show="drawerVisible" :width="480" placement="right">
