@@ -708,3 +708,160 @@ func TestTranslatePlan_ExhaustedRoundsKeepSource(t *testing.T) {
 		t.Fatalf("_translate_failed_indices=%v want \"1\"", v)
 	}
 }
+
+func TestIsPlaceholderOnly(t *testing.T) {
+	tests := []struct {
+		name string
+		seg  pipeline.Segment
+		want bool
+	}{
+		{
+			name: "single placeholder only",
+			seg: pipeline.Segment{
+				Source:    "__LF_000001__",
+				Protected: map[string]string{"__LF_000001__": "<br/>"},
+			},
+			want: true,
+		},
+		{
+			name: "multiple placeholders with whitespace",
+			seg: pipeline.Segment{
+				Source: "__LF_000001__ \n __LF_000002__",
+				Protected: map[string]string{
+					"__LF_000001__": "<br/>",
+					"__LF_000002__": "<br/>",
+				},
+			},
+			want: true,
+		},
+		{
+			name: "empty source",
+			seg: pipeline.Segment{
+				Source:    "",
+				Protected: map[string]string{"__LF_000001__": "<br/>"},
+			},
+			want: true,
+		},
+		{
+			name: "whitespace-only source with placeholder in protected",
+			seg: pipeline.Segment{
+				Source:    "   ",
+				Protected: map[string]string{"__LF_000001__": "<br/>"},
+			},
+			want: true,
+		},
+		{
+			name: "placeholder mixed with text",
+			seg: pipeline.Segment{
+				Source:    "Hello __LF_000001__",
+				Protected: map[string]string{"__LF_000001__": "<br/>"},
+			},
+			want: false,
+		},
+		{
+			name: "plain text without placeholders",
+			seg: pipeline.Segment{
+				Source:    "Hello World",
+				Protected: map[string]string{},
+			},
+			want: false,
+		},
+		{
+			name: "nil protected map",
+			seg: pipeline.Segment{
+				Source: "__LF_000001__",
+			},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isPlaceholderOnly(&tt.seg); got != tt.want {
+				t.Errorf("isPlaceholderOnly() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestIsDecorativeSeparator(t *testing.T) {
+	tests := []struct {
+		name string
+		seg  pipeline.Segment
+		want bool
+	}{
+		{
+			name: "decorative diamond separators",
+			seg:  pipeline.Segment{Source: "◇ ◇ ◇ ◇"},
+			want: true,
+		},
+		{
+			name: "decorative asterisk separators",
+			seg:  pipeline.Segment{Source: "* * *"},
+			want: true,
+		},
+		{
+			name: "decorative em-dash separators",
+			seg:  pipeline.Segment{Source: "— — —"},
+			want: true,
+		},
+		{
+			name: "decorative star separators",
+			seg:  pipeline.Segment{Source: "★ ★ ★"},
+			want: true,
+		},
+		{
+			name: "decorative circle separators",
+			seg:  pipeline.Segment{Source: "● ● ●"},
+			want: true,
+		},
+		{
+			name: "decorative tilde separators",
+			seg:  pipeline.Segment{Source: "~ ~ ~"},
+			want: true,
+		},
+		{
+			name: "decorative reference mark separators",
+			seg:  pipeline.Segment{Source: "※ ※ ※"},
+			want: true,
+		},
+		{
+			name: "plain text not separator",
+			seg:  pipeline.Segment{Source: "Hello"},
+			want: false,
+		},
+		{
+			name: "japanese text not separator",
+			seg:  pipeline.Segment{Source: "名前の呼び方と。"},
+			want: false,
+		},
+		{
+			name: "chapter with digit not separator",
+			seg:  pipeline.Segment{Source: "第1章"},
+			want: false,
+		},
+		{
+			name: "empty string not separator",
+			seg:  pipeline.Segment{Source: ""},
+			want: false,
+		},
+		{
+			name: "whitespace only not separator",
+			seg:  pipeline.Segment{Source: "   "},
+			want: false,
+		},
+		{
+			name: "mixed text and symbols not separator",
+			seg:  pipeline.Segment{Source: "Hello ◇ ◇"},
+			want: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isDecorativeSeparator(&tt.seg); got != tt.want {
+				t.Errorf("isDecorativeSeparator() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}

@@ -234,6 +234,10 @@ func (s *Server) RetranslateRejectedSegments(w http.ResponseWriter, r *http.Requ
 	s.requireAuth(http.HandlerFunc(s.handleRetranslateRejected)).ServeHTTP(w, r)
 }
 
+func (s *Server) ListResourceSegmentGroups(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
+	s.requireAuth(http.HandlerFunc(s.handleListResourceSegmentGroups)).ServeHTTP(w, r)
+}
+
 // ---- 提示词模板适配器 ----
 
 func (s *Server) ListPromptTemplates(w http.ResponseWriter, r *http.Request) {

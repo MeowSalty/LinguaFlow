@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"unicode"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
@@ -106,11 +107,11 @@ func (s *Translate) Run(ctx context.Context, doc *pipeline.Document) error {
 		return errors.New("translate: no rounds provided")
 	}
 
-	// 先把跳过段（Skip / 空白）直接落 Target，并收集需要翻译的 idx 列表。
+	// 先把跳过段（Skip / 空白 / 仅含占位符）直接落 Target，并收集需要翻译的 idx 列表。
 	var pending []int
 	for i := range doc.Segments {
 		seg := &doc.Segments[i]
-		if seg.Skip || strings.TrimSpace(seg.Source) == "" {
+		if seg.Skip || strings.TrimSpace(seg.Source) == "" || isPlaceholderOnly(seg) || isDecorativeSeparator(seg) {
 			seg.Target = seg.Source
 			continue
 		}
@@ -270,4 +271,42 @@ func headSnippet(s string, n int) string {
 		return s
 	}
 	return s[:n] + "…"
+}
+
+// isDecorativeSeparator 检查段落是否仅包含装饰性/分隔符字符
+// （非字母、非数字符号），没有实际的文本内容。
+// 常见示例："◇ ◇ ◇ ◇"、"* * *"、"— — —"、"★ ★ ★"
+func isDecorativeSeparator(seg *pipeline.Segment) bool {
+	text := strings.TrimSpace(seg.Source)
+	if text == "" {
+		return false // already handled by empty check
+	}
+	// Remove all whitespace
+	text = strings.ReplaceAll(text, " ", "")
+	text = strings.ReplaceAll(text, "\t", "")
+	text = strings.ReplaceAll(text, "\n", "")
+	text = strings.ReplaceAll(text, "\r", "")
+	if text == "" {
+		return false
+	}
+	// Check if all characters are non-letter, non-digit (i.e., only symbols/punctuation)
+	for _, r := range text {
+		if unicode.IsLetter(r) || unicode.IsDigit(r) {
+			return false
+		}
+	}
+	return true
+}
+
+// isPlaceholderOnly 检查段落是否仅包含占位符标记，
+// 没有实际可翻译的文本内容。
+func isPlaceholderOnly(seg *pipeline.Segment) bool {
+	if len(seg.Protected) == 0 {
+		return false
+	}
+	text := seg.Source
+	for key := range seg.Protected {
+		text = strings.ReplaceAll(text, key, "")
+	}
+	return strings.TrimSpace(text) == ""
 }

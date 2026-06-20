@@ -12,10 +12,11 @@ import (
 )
 
 type createTranslationJobRequest struct {
-	ExecutionPlanID int   `json:"execution_plan_id"`
-	ResourceIDs     []int `json:"resource_ids"`
-	SegmentIDs      []int `json:"segment_ids"`
-	AutoApprove     bool  `json:"auto_approve"`
+	ExecutionPlanID  int      `json:"execution_plan_id"`
+	ResourceIDs      []int    `json:"resource_ids"`
+	SegmentIDs       []int    `json:"segment_ids"`
+	SegmentGroupKeys []string `json:"segment_group_keys"`
+	AutoApprove      bool     `json:"auto_approve"`
 }
 
 type translationJobResourceResponse struct {
@@ -67,10 +68,11 @@ func (s *Server) handleCreateTranslationJob(w http.ResponseWriter, r *http.Reque
 		}
 	}
 	created, err := s.translationJobSvc.CreateManualJob(r.Context(), authUser.User.ID, projectID, service.CreateTranslationJobInput{
-		ResourceIDs:     req.ResourceIDs,
-		SegmentIDs:      req.SegmentIDs,
-		ExecutionPlanID: req.ExecutionPlanID,
-		AutoApprove:     req.AutoApprove,
+		ResourceIDs:      req.ResourceIDs,
+		SegmentIDs:       req.SegmentIDs,
+		SegmentGroupKeys: req.SegmentGroupKeys,
+		ExecutionPlanID:  req.ExecutionPlanID,
+		AutoApprove:      req.AutoApprove,
 	})
 	if err != nil {
 		writeTranslationJobServiceError(w, err)

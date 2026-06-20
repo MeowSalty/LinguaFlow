@@ -35,10 +35,11 @@ func (s *Server) handleListResourceSegments(w http.ResponseWriter, r *http.Reque
 	}
 
 	page, err := s.segmentSvc.ListResourceSegments(r.Context(), authUser.User.ID, projectID, resourceID, service.ResourceSegmentListOptions{
-		AfterID: pageReq.AfterID,
-		Limit:   pageReq.Limit,
-		Status:  strings.TrimSpace(r.URL.Query().Get("status")),
-		Search:  strings.TrimSpace(r.URL.Query().Get("search")),
+		AfterID:  pageReq.AfterID,
+		Limit:    pageReq.Limit,
+		Status:   strings.TrimSpace(r.URL.Query().Get("status")),
+		Search:   strings.TrimSpace(r.URL.Query().Get("search")),
+		GroupKey: strings.TrimSpace(r.URL.Query().Get("group_key")),
 	})
 	if err != nil {
 		writeReviewServiceError(w, err)
@@ -88,4 +89,37 @@ func (s *Server) handleUpdateResourceSegment(w http.ResponseWriter, r *http.Requ
 
 	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "resource.segment.update", ResourceType: "segment", ResourceID: segmentID, Message: "编辑资源段落"})
 	writeJSON(w, http.StatusOK, toSegmentResponse(updated))
+}
+
+func (s *Server) handleListResourceSegmentGroups(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	if !ok {
+		return
+	}
+	resourceID, ok := parseIntParam(w, chi.URLParam(r, "resourceId"), "resourceId")
+	if !ok {
+		return
+	}
+
+	groups, err := s.segmentSvc.ListResourceSegmentGroups(r.Context(), authUser.User.ID, projectID, resourceID)
+	if err != nil {
+		writeReviewServiceError(w, err)
+		return
+	}
+
+	items := make([]ResourceSegmentGroup, 0, len(groups))
+	for _, g := range groups {
+		items = append(items, ResourceSegmentGroup{
+			GroupKey:        g.GroupKey,
+			GroupTitle:      g.GroupTitle,
+			SegmentCount:    g.SegmentCount,
+			TranslatedCount: g.TranslatedCount,
+		})
+	}
+	writeJSON(w, http.StatusOK, ResourceSegmentGroupListResponse{Items: items})
 }

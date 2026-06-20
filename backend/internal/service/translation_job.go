@@ -57,10 +57,11 @@ type TranslationJobService struct {
 
 // CreateTranslationJobInput 创建翻译任务的输入参数。
 type CreateTranslationJobInput struct {
-	ResourceIDs     []int
-	SegmentIDs      []int
-	ExecutionPlanID int
-	AutoApprove     bool
+	ResourceIDs      []int
+	SegmentIDs       []int
+	SegmentGroupKeys []string
+	ExecutionPlanID  int
+	AutoApprove      bool
 }
 
 // TranslationJobListOptions 任务列表查询选项。
@@ -682,6 +683,9 @@ func (s *TranslationJobService) GetJob(ctx context.Context, actorUserID, jobID i
 }
 
 func (s *TranslationJobService) resolveJobSelection(ctx context.Context, projectID int, input CreateTranslationJobInput) (map[int][]int, error) {
+	if len(input.SegmentGroupKeys) > 0 {
+		return s.resolveGroupKeySelection(ctx, projectID, input.SegmentGroupKeys)
+	}
 	if len(input.SegmentIDs) > 0 {
 		return s.resolveSegmentSelection(ctx, projectID, input.SegmentIDs)
 	}
@@ -705,6 +709,53 @@ func (s *TranslationJobService) resolveSegmentSelection(ctx context.Context, pro
 		}
 		selection[*row.ResourceID] = append(selection[*row.ResourceID], row.ID)
 	}
+	return selection, nil
+}
+
+func (s *TranslationJobService) resolveGroupKeySelection(ctx context.Context, projectID int, groupKeys []string) (map[int][]int, error) {
+	uniqueKeys := make(map[string]struct{}, len(groupKeys))
+	for _, key := range groupKeys {
+		k := strings.TrimSpace(key)
+		if k != "" {
+			uniqueKeys[k] = struct{}{}
+		}
+	}
+	if len(uniqueKeys) == 0 {
+		return nil, fmt.Errorf("segment_group_keys 不能为空")
+	}
+
+	// 查询该项目下所有资源的 segments（带 meta 字段）
+	rows, err := s.client.Segment.Query().
+		Where(segment.HasResourceWith(resource.ProjectIDEQ(projectID))).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("查询 segments 失败: %w", err)
+	}
+
+	selection := make(map[int][]int)
+	matchedCount := 0
+	for _, row := range rows {
+		if row.Meta == nil || row.ResourceID == nil {
+			continue
+		}
+		var meta map[string]any
+		if err := json.Unmarshal([]byte(*row.Meta), &meta); err != nil {
+			continue
+		}
+		epubFile, ok := meta["epub_file"].(string)
+		if !ok {
+			continue
+		}
+		if _, matched := uniqueKeys[epubFile]; matched {
+			selection[*row.ResourceID] = append(selection[*row.ResourceID], row.ID)
+			matchedCount++
+		}
+	}
+
+	if matchedCount == 0 {
+		return nil, fmt.Errorf("未找到匹配指定章节的 segments")
+	}
+
 	return selection, nil
 }
 

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -10,17 +11,18 @@ import (
 )
 
 type segmentResponse struct {
-	ID            int           `json:"id"`
-	SubJobID      int           `json:"sub_job_id,omitempty"`
-	ResourceID    int           `json:"resource_id,omitempty"`
-	SegmentIndex  int           `json:"segment_index"`
-	SourceText    string        `json:"source_text"`
-	TargetText    string        `json:"target_text,omitempty"`
-	Status        string        `json:"status"`
-	ReviewComment *string       `json:"review_comment,omitempty"`
-	ReviewedBy    *userResponse `json:"reviewed_by,omitempty"`
-	CreatedAt     string        `json:"created_at"`
-	UpdatedAt     string        `json:"updated_at"`
+	ID            int            `json:"id"`
+	SubJobID      int            `json:"sub_job_id,omitempty"`
+	ResourceID    int            `json:"resource_id,omitempty"`
+	SegmentIndex  int            `json:"segment_index"`
+	SourceText    string         `json:"source_text"`
+	TargetText    string         `json:"target_text,omitempty"`
+	Status        string         `json:"status"`
+	ReviewComment *string        `json:"review_comment,omitempty"`
+	ReviewedBy    *userResponse  `json:"reviewed_by,omitempty"`
+	Meta          map[string]any `json:"meta,omitempty"`
+	CreatedAt     string         `json:"created_at"`
+	UpdatedAt     string         `json:"updated_at"`
 }
 
 type segmentListResponse struct {
@@ -87,6 +89,12 @@ func toSegmentResponse(row *ent.Segment) segmentResponse {
 	if row.Edges.ReviewedBy != nil {
 		reviewer := toUserResponse(row.Edges.ReviewedBy)
 		resp.ReviewedBy = &reviewer
+	}
+	if row.Meta != nil {
+		var meta map[string]any
+		if err := json.Unmarshal([]byte(*row.Meta), &meta); err == nil {
+			resp.Meta = meta
+		}
 	}
 	return resp
 }
