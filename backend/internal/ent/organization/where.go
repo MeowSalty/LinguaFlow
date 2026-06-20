@@ -514,29 +514,6 @@ func HasBackendsWith(preds ...predicate.Backend) predicate.Organization {
 	})
 }
 
-// HasGlossaryEntries applies the HasEdge predicate on the "glossary_entries" edge.
-func HasGlossaryEntries() predicate.Organization {
-	return predicate.Organization(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, GlossaryEntriesTable, GlossaryEntriesColumn),
-		)
-		sqlgraph.HasNeighbors(s, step)
-	})
-}
-
-// HasGlossaryEntriesWith applies the HasEdge predicate on the "glossary_entries" edge with a given conditions (other predicates).
-func HasGlossaryEntriesWith(preds ...predicate.GlossaryEntry) predicate.Organization {
-	return predicate.Organization(func(s *sql.Selector) {
-		step := newGlossaryEntriesStep()
-		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
-			for _, p := range preds {
-				p(s)
-			}
-		})
-	})
-}
-
 // HasTmEntries applies the HasEdge predicate on the "tm_entries" edge.
 func HasTmEntries() predicate.Organization {
 	return predicate.Organization(func(s *sql.Selector) {

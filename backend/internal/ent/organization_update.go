@@ -14,7 +14,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
@@ -155,21 +154,6 @@ func (_u *OrganizationUpdate) AddBackends(v ...*Backend) *OrganizationUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.AddBackendIDs(ids...)
-}
-
-// AddGlossaryEntryIDs adds the "glossary_entries" edge to the GlossaryEntry entity by IDs.
-func (_u *OrganizationUpdate) AddGlossaryEntryIDs(ids ...int) *OrganizationUpdate {
-	_u.mutation.AddGlossaryEntryIDs(ids...)
-	return _u
-}
-
-// AddGlossaryEntries adds the "glossary_entries" edges to the GlossaryEntry entity.
-func (_u *OrganizationUpdate) AddGlossaryEntries(v ...*GlossaryEntry) *OrganizationUpdate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.AddGlossaryEntryIDs(ids...)
 }
 
 // AddTmEntryIDs adds the "tm_entries" edge to the TMEntry entity by IDs.
@@ -328,27 +312,6 @@ func (_u *OrganizationUpdate) RemoveBackends(v ...*Backend) *OrganizationUpdate 
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveBackendIDs(ids...)
-}
-
-// ClearGlossaryEntries clears all "glossary_entries" edges to the GlossaryEntry entity.
-func (_u *OrganizationUpdate) ClearGlossaryEntries() *OrganizationUpdate {
-	_u.mutation.ClearGlossaryEntries()
-	return _u
-}
-
-// RemoveGlossaryEntryIDs removes the "glossary_entries" edge to GlossaryEntry entities by IDs.
-func (_u *OrganizationUpdate) RemoveGlossaryEntryIDs(ids ...int) *OrganizationUpdate {
-	_u.mutation.RemoveGlossaryEntryIDs(ids...)
-	return _u
-}
-
-// RemoveGlossaryEntries removes "glossary_entries" edges to GlossaryEntry entities.
-func (_u *OrganizationUpdate) RemoveGlossaryEntries(v ...*GlossaryEntry) *OrganizationUpdate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.RemoveGlossaryEntryIDs(ids...)
 }
 
 // ClearTmEntries clears all "tm_entries" edges to the TMEntry entity.
@@ -689,51 +652,6 @@ func (_u *OrganizationUpdate) sqlSave(ctx context.Context) (_node int, err error
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
-	if _u.mutation.GlossaryEntriesCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   organization.GlossaryEntriesTable,
-			Columns: []string{organization.GlossaryEntriesColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(glossaryentry.FieldID, field.TypeInt),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.RemovedGlossaryEntriesIDs(); len(nodes) > 0 && !_u.mutation.GlossaryEntriesCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   organization.GlossaryEntriesTable,
-			Columns: []string{organization.GlossaryEntriesColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(glossaryentry.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.GlossaryEntriesIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   organization.GlossaryEntriesTable,
-			Columns: []string{organization.GlossaryEntriesColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(glossaryentry.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -1150,21 +1068,6 @@ func (_u *OrganizationUpdateOne) AddBackends(v ...*Backend) *OrganizationUpdateO
 	return _u.AddBackendIDs(ids...)
 }
 
-// AddGlossaryEntryIDs adds the "glossary_entries" edge to the GlossaryEntry entity by IDs.
-func (_u *OrganizationUpdateOne) AddGlossaryEntryIDs(ids ...int) *OrganizationUpdateOne {
-	_u.mutation.AddGlossaryEntryIDs(ids...)
-	return _u
-}
-
-// AddGlossaryEntries adds the "glossary_entries" edges to the GlossaryEntry entity.
-func (_u *OrganizationUpdateOne) AddGlossaryEntries(v ...*GlossaryEntry) *OrganizationUpdateOne {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.AddGlossaryEntryIDs(ids...)
-}
-
 // AddTmEntryIDs adds the "tm_entries" edge to the TMEntry entity by IDs.
 func (_u *OrganizationUpdateOne) AddTmEntryIDs(ids ...int) *OrganizationUpdateOne {
 	_u.mutation.AddTmEntryIDs(ids...)
@@ -1321,27 +1224,6 @@ func (_u *OrganizationUpdateOne) RemoveBackends(v ...*Backend) *OrganizationUpda
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveBackendIDs(ids...)
-}
-
-// ClearGlossaryEntries clears all "glossary_entries" edges to the GlossaryEntry entity.
-func (_u *OrganizationUpdateOne) ClearGlossaryEntries() *OrganizationUpdateOne {
-	_u.mutation.ClearGlossaryEntries()
-	return _u
-}
-
-// RemoveGlossaryEntryIDs removes the "glossary_entries" edge to GlossaryEntry entities by IDs.
-func (_u *OrganizationUpdateOne) RemoveGlossaryEntryIDs(ids ...int) *OrganizationUpdateOne {
-	_u.mutation.RemoveGlossaryEntryIDs(ids...)
-	return _u
-}
-
-// RemoveGlossaryEntries removes "glossary_entries" edges to GlossaryEntry entities.
-func (_u *OrganizationUpdateOne) RemoveGlossaryEntries(v ...*GlossaryEntry) *OrganizationUpdateOne {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.RemoveGlossaryEntryIDs(ids...)
 }
 
 // ClearTmEntries clears all "tm_entries" edges to the TMEntry entity.
@@ -1712,51 +1594,6 @@ func (_u *OrganizationUpdateOne) sqlSave(ctx context.Context) (_node *Organizati
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
-	if _u.mutation.GlossaryEntriesCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   organization.GlossaryEntriesTable,
-			Columns: []string{organization.GlossaryEntriesColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(glossaryentry.FieldID, field.TypeInt),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.RemovedGlossaryEntriesIDs(); len(nodes) > 0 && !_u.mutation.GlossaryEntriesCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   organization.GlossaryEntriesTable,
-			Columns: []string{organization.GlossaryEntriesColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(glossaryentry.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.GlossaryEntriesIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   organization.GlossaryEntriesTable,
-			Columns: []string{organization.GlossaryEntriesColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(glossaryentry.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

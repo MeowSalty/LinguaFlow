@@ -28,7 +28,6 @@ func (Organization) Edges() []ent.Edge {
 		edge.To("projects", Project.Type),
 		edge.To("memberships", OrgMembership.Type),
 		edge.To("backends", Backend.Type),
-		edge.To("glossary_entries", GlossaryEntry.Type),
 		edge.To("tm_entries", TMEntry.Type),
 		edge.To("activity_logs", ActivityLog.Type),
 		edge.To("usage_records", UsageRecord.Type),

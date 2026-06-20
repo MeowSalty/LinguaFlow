@@ -65,11 +65,6 @@ func UpdatedAt(v time.Time) predicate.GlossaryEntry {
 	return predicate.GlossaryEntry(sql.FieldEQ(FieldUpdatedAt, v))
 }
 
-// ScopeKey applies equality check predicate on the "scope_key" field. It's identical to ScopeKeyEQ.
-func ScopeKey(v string) predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldEQ(FieldScopeKey, v))
-}
-
 // SourceKey applies equality check predicate on the "source_key" field. It's identical to SourceKeyEQ.
 func SourceKey(v string) predicate.GlossaryEntry {
 	return predicate.GlossaryEntry(sql.FieldEQ(FieldSourceKey, v))
@@ -98,11 +93,6 @@ func Notes(v string) predicate.GlossaryEntry {
 // ProjectID applies equality check predicate on the "project_id" field. It's identical to ProjectIDEQ.
 func ProjectID(v int) predicate.GlossaryEntry {
 	return predicate.GlossaryEntry(sql.FieldEQ(FieldProjectID, v))
-}
-
-// OrganizationID applies equality check predicate on the "organization_id" field. It's identical to OrganizationIDEQ.
-func OrganizationID(v int) predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldEQ(FieldOrganizationID, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
@@ -183,71 +173,6 @@ func UpdatedAtLT(v time.Time) predicate.GlossaryEntry {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.GlossaryEntry {
 	return predicate.GlossaryEntry(sql.FieldLTE(FieldUpdatedAt, v))
-}
-
-// ScopeKeyEQ applies the EQ predicate on the "scope_key" field.
-func ScopeKeyEQ(v string) predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldEQ(FieldScopeKey, v))
-}
-
-// ScopeKeyNEQ applies the NEQ predicate on the "scope_key" field.
-func ScopeKeyNEQ(v string) predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldNEQ(FieldScopeKey, v))
-}
-
-// ScopeKeyIn applies the In predicate on the "scope_key" field.
-func ScopeKeyIn(vs ...string) predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldIn(FieldScopeKey, vs...))
-}
-
-// ScopeKeyNotIn applies the NotIn predicate on the "scope_key" field.
-func ScopeKeyNotIn(vs ...string) predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldNotIn(FieldScopeKey, vs...))
-}
-
-// ScopeKeyGT applies the GT predicate on the "scope_key" field.
-func ScopeKeyGT(v string) predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldGT(FieldScopeKey, v))
-}
-
-// ScopeKeyGTE applies the GTE predicate on the "scope_key" field.
-func ScopeKeyGTE(v string) predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldGTE(FieldScopeKey, v))
-}
-
-// ScopeKeyLT applies the LT predicate on the "scope_key" field.
-func ScopeKeyLT(v string) predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldLT(FieldScopeKey, v))
-}
-
-// ScopeKeyLTE applies the LTE predicate on the "scope_key" field.
-func ScopeKeyLTE(v string) predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldLTE(FieldScopeKey, v))
-}
-
-// ScopeKeyContains applies the Contains predicate on the "scope_key" field.
-func ScopeKeyContains(v string) predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldContains(FieldScopeKey, v))
-}
-
-// ScopeKeyHasPrefix applies the HasPrefix predicate on the "scope_key" field.
-func ScopeKeyHasPrefix(v string) predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldHasPrefix(FieldScopeKey, v))
-}
-
-// ScopeKeyHasSuffix applies the HasSuffix predicate on the "scope_key" field.
-func ScopeKeyHasSuffix(v string) predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldHasSuffix(FieldScopeKey, v))
-}
-
-// ScopeKeyEqualFold applies the EqualFold predicate on the "scope_key" field.
-func ScopeKeyEqualFold(v string) predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldEqualFold(FieldScopeKey, v))
-}
-
-// ScopeKeyContainsFold applies the ContainsFold predicate on the "scope_key" field.
-func ScopeKeyContainsFold(v string) predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldContainsFold(FieldScopeKey, v))
 }
 
 // SourceKeyEQ applies the EQ predicate on the "source_key" field.
@@ -550,46 +475,6 @@ func ProjectIDNotIn(vs ...int) predicate.GlossaryEntry {
 	return predicate.GlossaryEntry(sql.FieldNotIn(FieldProjectID, vs...))
 }
 
-// ProjectIDIsNil applies the IsNil predicate on the "project_id" field.
-func ProjectIDIsNil() predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldIsNull(FieldProjectID))
-}
-
-// ProjectIDNotNil applies the NotNil predicate on the "project_id" field.
-func ProjectIDNotNil() predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldNotNull(FieldProjectID))
-}
-
-// OrganizationIDEQ applies the EQ predicate on the "organization_id" field.
-func OrganizationIDEQ(v int) predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldEQ(FieldOrganizationID, v))
-}
-
-// OrganizationIDNEQ applies the NEQ predicate on the "organization_id" field.
-func OrganizationIDNEQ(v int) predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldNEQ(FieldOrganizationID, v))
-}
-
-// OrganizationIDIn applies the In predicate on the "organization_id" field.
-func OrganizationIDIn(vs ...int) predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldIn(FieldOrganizationID, vs...))
-}
-
-// OrganizationIDNotIn applies the NotIn predicate on the "organization_id" field.
-func OrganizationIDNotIn(vs ...int) predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldNotIn(FieldOrganizationID, vs...))
-}
-
-// OrganizationIDIsNil applies the IsNil predicate on the "organization_id" field.
-func OrganizationIDIsNil() predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldIsNull(FieldOrganizationID))
-}
-
-// OrganizationIDNotNil applies the NotNil predicate on the "organization_id" field.
-func OrganizationIDNotNil() predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(sql.FieldNotNull(FieldOrganizationID))
-}
-
 // HasProject applies the HasEdge predicate on the "project" edge.
 func HasProject() predicate.GlossaryEntry {
 	return predicate.GlossaryEntry(func(s *sql.Selector) {
@@ -605,29 +490,6 @@ func HasProject() predicate.GlossaryEntry {
 func HasProjectWith(preds ...predicate.Project) predicate.GlossaryEntry {
 	return predicate.GlossaryEntry(func(s *sql.Selector) {
 		step := newProjectStep()
-		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
-			for _, p := range preds {
-				p(s)
-			}
-		})
-	})
-}
-
-// HasOrganization applies the HasEdge predicate on the "organization" edge.
-func HasOrganization() predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, OrganizationTable, OrganizationColumn),
-		)
-		sqlgraph.HasNeighbors(s, step)
-	})
-}
-
-// HasOrganizationWith applies the HasEdge predicate on the "organization" edge with a given conditions (other predicates).
-func HasOrganizationWith(preds ...predicate.Organization) predicate.GlossaryEntry {
-	return predicate.GlossaryEntry(func(s *sql.Selector) {
-		step := newOrganizationStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

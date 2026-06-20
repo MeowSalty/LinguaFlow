@@ -974,22 +974,6 @@ func (c *GlossaryEntryClient) QueryProject(_m *GlossaryEntry) *ProjectQuery {
 	return query
 }
 
-// QueryOrganization queries the organization edge of a GlossaryEntry.
-func (c *GlossaryEntryClient) QueryOrganization(_m *GlossaryEntry) *OrganizationQuery {
-	query := (&OrganizationClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(glossaryentry.Table, glossaryentry.FieldID, id),
-			sqlgraph.To(organization.Table, organization.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, glossaryentry.OrganizationTable, glossaryentry.OrganizationColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
 // Hooks returns the client hooks.
 func (c *GlossaryEntryClient) Hooks() []Hook {
 	return c.hooks.GlossaryEntry
@@ -1494,22 +1478,6 @@ func (c *OrganizationClient) QueryBackends(_m *Organization) *BackendQuery {
 			sqlgraph.From(organization.Table, organization.FieldID, id),
 			sqlgraph.To(backend.Table, backend.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, organization.BackendsTable, organization.BackendsColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// QueryGlossaryEntries queries the glossary_entries edge of a Organization.
-func (c *OrganizationClient) QueryGlossaryEntries(_m *Organization) *GlossaryEntryQuery {
-	query := (&GlossaryEntryClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(organization.Table, organization.FieldID, id),
-			sqlgraph.To(glossaryentry.Table, glossaryentry.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, organization.GlossaryEntriesTable, organization.GlossaryEntriesColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil

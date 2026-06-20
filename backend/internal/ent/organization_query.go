@@ -15,7 +15,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
@@ -36,7 +35,6 @@ type OrganizationQuery struct {
 	withProjects               *ProjectQuery
 	withMemberships            *OrgMembershipQuery
 	withBackends               *BackendQuery
-	withGlossaryEntries        *GlossaryEntryQuery
 	withTmEntries              *TMEntryQuery
 	withActivityLogs           *ActivityLogQuery
 	withUsageRecords           *UsageRecordQuery
@@ -138,28 +136,6 @@ func (_q *OrganizationQuery) QueryBackends() *BackendQuery {
 			sqlgraph.From(organization.Table, organization.FieldID, selector),
 			sqlgraph.To(backend.Table, backend.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, organization.BackendsTable, organization.BackendsColumn),
-		)
-		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
-		return fromU, nil
-	}
-	return query
-}
-
-// QueryGlossaryEntries chains the current query on the "glossary_entries" edge.
-func (_q *OrganizationQuery) QueryGlossaryEntries() *GlossaryEntryQuery {
-	query := (&GlossaryEntryClient{config: _q.config}).Query()
-	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
-		if err := _q.prepareQuery(ctx); err != nil {
-			return nil, err
-		}
-		selector := _q.sqlQuery(ctx)
-		if err := selector.Err(); err != nil {
-			return nil, err
-		}
-		step := sqlgraph.NewStep(
-			sqlgraph.From(organization.Table, organization.FieldID, selector),
-			sqlgraph.To(glossaryentry.Table, glossaryentry.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, organization.GlossaryEntriesTable, organization.GlossaryEntriesColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -494,7 +470,6 @@ func (_q *OrganizationQuery) Clone() *OrganizationQuery {
 		withProjects:               _q.withProjects.Clone(),
 		withMemberships:            _q.withMemberships.Clone(),
 		withBackends:               _q.withBackends.Clone(),
-		withGlossaryEntries:        _q.withGlossaryEntries.Clone(),
 		withTmEntries:              _q.withTmEntries.Clone(),
 		withActivityLogs:           _q.withActivityLogs.Clone(),
 		withUsageRecords:           _q.withUsageRecords.Clone(),
@@ -537,17 +512,6 @@ func (_q *OrganizationQuery) WithBackends(opts ...func(*BackendQuery)) *Organiza
 		opt(query)
 	}
 	_q.withBackends = query
-	return _q
-}
-
-// WithGlossaryEntries tells the query-builder to eager-load the nodes that are connected to
-// the "glossary_entries" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *OrganizationQuery) WithGlossaryEntries(opts ...func(*GlossaryEntryQuery)) *OrganizationQuery {
-	query := (&GlossaryEntryClient{config: _q.config}).Query()
-	for _, opt := range opts {
-		opt(query)
-	}
-	_q.withGlossaryEntries = query
 	return _q
 }
 
@@ -695,11 +659,10 @@ func (_q *OrganizationQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 	var (
 		nodes       = []*Organization{}
 		_spec       = _q.querySpec()
-		loadedTypes = [10]bool{
+		loadedTypes = [9]bool{
 			_q.withProjects != nil,
 			_q.withMemberships != nil,
 			_q.withBackends != nil,
-			_q.withGlossaryEntries != nil,
 			_q.withTmEntries != nil,
 			_q.withActivityLogs != nil,
 			_q.withUsageRecords != nil,
@@ -744,13 +707,6 @@ func (_q *OrganizationQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 		if err := _q.loadBackends(ctx, query, nodes,
 			func(n *Organization) { n.Edges.Backends = []*Backend{} },
 			func(n *Organization, e *Backend) { n.Edges.Backends = append(n.Edges.Backends, e) }); err != nil {
-			return nil, err
-		}
-	}
-	if query := _q.withGlossaryEntries; query != nil {
-		if err := _q.loadGlossaryEntries(ctx, query, nodes,
-			func(n *Organization) { n.Edges.GlossaryEntries = []*GlossaryEntry{} },
-			func(n *Organization, e *GlossaryEntry) { n.Edges.GlossaryEntries = append(n.Edges.GlossaryEntries, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -895,39 +851,6 @@ func (_q *OrganizationQuery) loadBackends(ctx context.Context, query *BackendQue
 		node, ok := nodeids[*fk]
 		if !ok {
 			return fmt.Errorf(`unexpected referenced foreign-key "owner_org_id" returned %v for node %v`, *fk, n.ID)
-		}
-		assign(node, n)
-	}
-	return nil
-}
-func (_q *OrganizationQuery) loadGlossaryEntries(ctx context.Context, query *GlossaryEntryQuery, nodes []*Organization, init func(*Organization), assign func(*Organization, *GlossaryEntry)) error {
-	fks := make([]driver.Value, 0, len(nodes))
-	nodeids := make(map[int]*Organization)
-	for i := range nodes {
-		fks = append(fks, nodes[i].ID)
-		nodeids[nodes[i].ID] = nodes[i]
-		if init != nil {
-			init(nodes[i])
-		}
-	}
-	if len(query.ctx.Fields) > 0 {
-		query.ctx.AppendFieldOnce(glossaryentry.FieldOrganizationID)
-	}
-	query.Where(predicate.GlossaryEntry(func(s *sql.Selector) {
-		s.Where(sql.InValues(s.C(organization.GlossaryEntriesColumn), fks...))
-	}))
-	neighbors, err := query.All(ctx)
-	if err != nil {
-		return err
-	}
-	for _, n := range neighbors {
-		fk := n.OrganizationID
-		if fk == nil {
-			return fmt.Errorf(`foreign-key "organization_id" is nil for node %v`, n.ID)
-		}
-		node, ok := nodeids[*fk]
-		if !ok {
-			return fmt.Errorf(`unexpected referenced foreign-key "organization_id" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}

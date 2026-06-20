@@ -2688,25 +2688,22 @@ func (m *ExecutionPlanTemplateMutation) ResetEdge(name string) error {
 // GlossaryEntryMutation represents an operation that mutates the GlossaryEntry nodes in the graph.
 type GlossaryEntryMutation struct {
 	config
-	op                  Op
-	typ                 string
-	id                  *int
-	created_at          *time.Time
-	updated_at          *time.Time
-	scope_key           *string
-	source_key          *string
-	source              *string
-	target              *string
-	case_sensitive      *bool
-	notes               *string
-	clearedFields       map[string]struct{}
-	project             *int
-	clearedproject      bool
-	organization        *int
-	clearedorganization bool
-	done                bool
-	oldValue            func(context.Context) (*GlossaryEntry, error)
-	predicates          []predicate.GlossaryEntry
+	op             Op
+	typ            string
+	id             *int
+	created_at     *time.Time
+	updated_at     *time.Time
+	source_key     *string
+	source         *string
+	target         *string
+	case_sensitive *bool
+	notes          *string
+	clearedFields  map[string]struct{}
+	project        *int
+	clearedproject bool
+	done           bool
+	oldValue       func(context.Context) (*GlossaryEntry, error)
+	predicates     []predicate.GlossaryEntry
 }
 
 var _ ent.Mutation = (*GlossaryEntryMutation)(nil)
@@ -2877,42 +2874,6 @@ func (m *GlossaryEntryMutation) OldUpdatedAt(ctx context.Context) (v time.Time, 
 // ResetUpdatedAt resets all changes to the "updated_at" field.
 func (m *GlossaryEntryMutation) ResetUpdatedAt() {
 	m.updated_at = nil
-}
-
-// SetScopeKey sets the "scope_key" field.
-func (m *GlossaryEntryMutation) SetScopeKey(s string) {
-	m.scope_key = &s
-}
-
-// ScopeKey returns the value of the "scope_key" field in the mutation.
-func (m *GlossaryEntryMutation) ScopeKey() (r string, exists bool) {
-	v := m.scope_key
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldScopeKey returns the old "scope_key" field's value of the GlossaryEntry entity.
-// If the GlossaryEntry object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GlossaryEntryMutation) OldScopeKey(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldScopeKey is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldScopeKey requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldScopeKey: %w", err)
-	}
-	return oldValue.ScopeKey, nil
-}
-
-// ResetScopeKey resets all changes to the "scope_key" field.
-func (m *GlossaryEntryMutation) ResetScopeKey() {
-	m.scope_key = nil
 }
 
 // SetSourceKey sets the "source_key" field.
@@ -3125,7 +3086,7 @@ func (m *GlossaryEntryMutation) ProjectID() (r int, exists bool) {
 // OldProjectID returns the old "project_id" field's value of the GlossaryEntry entity.
 // If the GlossaryEntry object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GlossaryEntryMutation) OldProjectID(ctx context.Context) (v *int, err error) {
+func (m *GlossaryEntryMutation) OldProjectID(ctx context.Context) (v int, err error) {
 	if !m.op.Is(OpUpdateOne) {
 		return v, errors.New("OldProjectID is only allowed on UpdateOne operations")
 	}
@@ -3139,71 +3100,9 @@ func (m *GlossaryEntryMutation) OldProjectID(ctx context.Context) (v *int, err e
 	return oldValue.ProjectID, nil
 }
 
-// ClearProjectID clears the value of the "project_id" field.
-func (m *GlossaryEntryMutation) ClearProjectID() {
-	m.project = nil
-	m.clearedFields[glossaryentry.FieldProjectID] = struct{}{}
-}
-
-// ProjectIDCleared returns if the "project_id" field was cleared in this mutation.
-func (m *GlossaryEntryMutation) ProjectIDCleared() bool {
-	_, ok := m.clearedFields[glossaryentry.FieldProjectID]
-	return ok
-}
-
 // ResetProjectID resets all changes to the "project_id" field.
 func (m *GlossaryEntryMutation) ResetProjectID() {
 	m.project = nil
-	delete(m.clearedFields, glossaryentry.FieldProjectID)
-}
-
-// SetOrganizationID sets the "organization_id" field.
-func (m *GlossaryEntryMutation) SetOrganizationID(i int) {
-	m.organization = &i
-}
-
-// OrganizationID returns the value of the "organization_id" field in the mutation.
-func (m *GlossaryEntryMutation) OrganizationID() (r int, exists bool) {
-	v := m.organization
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldOrganizationID returns the old "organization_id" field's value of the GlossaryEntry entity.
-// If the GlossaryEntry object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *GlossaryEntryMutation) OldOrganizationID(ctx context.Context) (v *int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldOrganizationID is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldOrganizationID requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldOrganizationID: %w", err)
-	}
-	return oldValue.OrganizationID, nil
-}
-
-// ClearOrganizationID clears the value of the "organization_id" field.
-func (m *GlossaryEntryMutation) ClearOrganizationID() {
-	m.organization = nil
-	m.clearedFields[glossaryentry.FieldOrganizationID] = struct{}{}
-}
-
-// OrganizationIDCleared returns if the "organization_id" field was cleared in this mutation.
-func (m *GlossaryEntryMutation) OrganizationIDCleared() bool {
-	_, ok := m.clearedFields[glossaryentry.FieldOrganizationID]
-	return ok
-}
-
-// ResetOrganizationID resets all changes to the "organization_id" field.
-func (m *GlossaryEntryMutation) ResetOrganizationID() {
-	m.organization = nil
-	delete(m.clearedFields, glossaryentry.FieldOrganizationID)
 }
 
 // ClearProject clears the "project" edge to the Project entity.
@@ -3214,7 +3113,7 @@ func (m *GlossaryEntryMutation) ClearProject() {
 
 // ProjectCleared reports if the "project" edge to the Project entity was cleared.
 func (m *GlossaryEntryMutation) ProjectCleared() bool {
-	return m.ProjectIDCleared() || m.clearedproject
+	return m.clearedproject
 }
 
 // ProjectIDs returns the "project" edge IDs in the mutation.
@@ -3231,33 +3130,6 @@ func (m *GlossaryEntryMutation) ProjectIDs() (ids []int) {
 func (m *GlossaryEntryMutation) ResetProject() {
 	m.project = nil
 	m.clearedproject = false
-}
-
-// ClearOrganization clears the "organization" edge to the Organization entity.
-func (m *GlossaryEntryMutation) ClearOrganization() {
-	m.clearedorganization = true
-	m.clearedFields[glossaryentry.FieldOrganizationID] = struct{}{}
-}
-
-// OrganizationCleared reports if the "organization" edge to the Organization entity was cleared.
-func (m *GlossaryEntryMutation) OrganizationCleared() bool {
-	return m.OrganizationIDCleared() || m.clearedorganization
-}
-
-// OrganizationIDs returns the "organization" edge IDs in the mutation.
-// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
-// OrganizationID instead. It exists only for internal usage by the builders.
-func (m *GlossaryEntryMutation) OrganizationIDs() (ids []int) {
-	if id := m.organization; id != nil {
-		ids = append(ids, *id)
-	}
-	return
-}
-
-// ResetOrganization resets all changes to the "organization" edge.
-func (m *GlossaryEntryMutation) ResetOrganization() {
-	m.organization = nil
-	m.clearedorganization = false
 }
 
 // Where appends a list predicates to the GlossaryEntryMutation builder.
@@ -3294,15 +3166,12 @@ func (m *GlossaryEntryMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GlossaryEntryMutation) Fields() []string {
-	fields := make([]string, 0, 10)
+	fields := make([]string, 0, 8)
 	if m.created_at != nil {
 		fields = append(fields, glossaryentry.FieldCreatedAt)
 	}
 	if m.updated_at != nil {
 		fields = append(fields, glossaryentry.FieldUpdatedAt)
-	}
-	if m.scope_key != nil {
-		fields = append(fields, glossaryentry.FieldScopeKey)
 	}
 	if m.source_key != nil {
 		fields = append(fields, glossaryentry.FieldSourceKey)
@@ -3322,9 +3191,6 @@ func (m *GlossaryEntryMutation) Fields() []string {
 	if m.project != nil {
 		fields = append(fields, glossaryentry.FieldProjectID)
 	}
-	if m.organization != nil {
-		fields = append(fields, glossaryentry.FieldOrganizationID)
-	}
 	return fields
 }
 
@@ -3337,8 +3203,6 @@ func (m *GlossaryEntryMutation) Field(name string) (ent.Value, bool) {
 		return m.CreatedAt()
 	case glossaryentry.FieldUpdatedAt:
 		return m.UpdatedAt()
-	case glossaryentry.FieldScopeKey:
-		return m.ScopeKey()
 	case glossaryentry.FieldSourceKey:
 		return m.SourceKey()
 	case glossaryentry.FieldSource:
@@ -3351,8 +3215,6 @@ func (m *GlossaryEntryMutation) Field(name string) (ent.Value, bool) {
 		return m.Notes()
 	case glossaryentry.FieldProjectID:
 		return m.ProjectID()
-	case glossaryentry.FieldOrganizationID:
-		return m.OrganizationID()
 	}
 	return nil, false
 }
@@ -3366,8 +3228,6 @@ func (m *GlossaryEntryMutation) OldField(ctx context.Context, name string) (ent.
 		return m.OldCreatedAt(ctx)
 	case glossaryentry.FieldUpdatedAt:
 		return m.OldUpdatedAt(ctx)
-	case glossaryentry.FieldScopeKey:
-		return m.OldScopeKey(ctx)
 	case glossaryentry.FieldSourceKey:
 		return m.OldSourceKey(ctx)
 	case glossaryentry.FieldSource:
@@ -3380,8 +3240,6 @@ func (m *GlossaryEntryMutation) OldField(ctx context.Context, name string) (ent.
 		return m.OldNotes(ctx)
 	case glossaryentry.FieldProjectID:
 		return m.OldProjectID(ctx)
-	case glossaryentry.FieldOrganizationID:
-		return m.OldOrganizationID(ctx)
 	}
 	return nil, fmt.Errorf("unknown GlossaryEntry field %s", name)
 }
@@ -3404,13 +3262,6 @@ func (m *GlossaryEntryMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetUpdatedAt(v)
-		return nil
-	case glossaryentry.FieldScopeKey:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetScopeKey(v)
 		return nil
 	case glossaryentry.FieldSourceKey:
 		v, ok := value.(string)
@@ -3454,13 +3305,6 @@ func (m *GlossaryEntryMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetProjectID(v)
 		return nil
-	case glossaryentry.FieldOrganizationID:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetOrganizationID(v)
-		return nil
 	}
 	return fmt.Errorf("unknown GlossaryEntry field %s", name)
 }
@@ -3497,12 +3341,6 @@ func (m *GlossaryEntryMutation) ClearedFields() []string {
 	if m.FieldCleared(glossaryentry.FieldNotes) {
 		fields = append(fields, glossaryentry.FieldNotes)
 	}
-	if m.FieldCleared(glossaryentry.FieldProjectID) {
-		fields = append(fields, glossaryentry.FieldProjectID)
-	}
-	if m.FieldCleared(glossaryentry.FieldOrganizationID) {
-		fields = append(fields, glossaryentry.FieldOrganizationID)
-	}
 	return fields
 }
 
@@ -3520,12 +3358,6 @@ func (m *GlossaryEntryMutation) ClearField(name string) error {
 	case glossaryentry.FieldNotes:
 		m.ClearNotes()
 		return nil
-	case glossaryentry.FieldProjectID:
-		m.ClearProjectID()
-		return nil
-	case glossaryentry.FieldOrganizationID:
-		m.ClearOrganizationID()
-		return nil
 	}
 	return fmt.Errorf("unknown GlossaryEntry nullable field %s", name)
 }
@@ -3539,9 +3371,6 @@ func (m *GlossaryEntryMutation) ResetField(name string) error {
 		return nil
 	case glossaryentry.FieldUpdatedAt:
 		m.ResetUpdatedAt()
-		return nil
-	case glossaryentry.FieldScopeKey:
-		m.ResetScopeKey()
 		return nil
 	case glossaryentry.FieldSourceKey:
 		m.ResetSourceKey()
@@ -3561,21 +3390,15 @@ func (m *GlossaryEntryMutation) ResetField(name string) error {
 	case glossaryentry.FieldProjectID:
 		m.ResetProjectID()
 		return nil
-	case glossaryentry.FieldOrganizationID:
-		m.ResetOrganizationID()
-		return nil
 	}
 	return fmt.Errorf("unknown GlossaryEntry field %s", name)
 }
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *GlossaryEntryMutation) AddedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 1)
 	if m.project != nil {
 		edges = append(edges, glossaryentry.EdgeProject)
-	}
-	if m.organization != nil {
-		edges = append(edges, glossaryentry.EdgeOrganization)
 	}
 	return edges
 }
@@ -3588,17 +3411,13 @@ func (m *GlossaryEntryMutation) AddedIDs(name string) []ent.Value {
 		if id := m.project; id != nil {
 			return []ent.Value{*id}
 		}
-	case glossaryentry.EdgeOrganization:
-		if id := m.organization; id != nil {
-			return []ent.Value{*id}
-		}
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *GlossaryEntryMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 1)
 	return edges
 }
 
@@ -3610,12 +3429,9 @@ func (m *GlossaryEntryMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *GlossaryEntryMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 1)
 	if m.clearedproject {
 		edges = append(edges, glossaryentry.EdgeProject)
-	}
-	if m.clearedorganization {
-		edges = append(edges, glossaryentry.EdgeOrganization)
 	}
 	return edges
 }
@@ -3626,8 +3442,6 @@ func (m *GlossaryEntryMutation) EdgeCleared(name string) bool {
 	switch name {
 	case glossaryentry.EdgeProject:
 		return m.clearedproject
-	case glossaryentry.EdgeOrganization:
-		return m.clearedorganization
 	}
 	return false
 }
@@ -3639,9 +3453,6 @@ func (m *GlossaryEntryMutation) ClearEdge(name string) error {
 	case glossaryentry.EdgeProject:
 		m.ClearProject()
 		return nil
-	case glossaryentry.EdgeOrganization:
-		m.ClearOrganization()
-		return nil
 	}
 	return fmt.Errorf("unknown GlossaryEntry unique edge %s", name)
 }
@@ -3652,9 +3463,6 @@ func (m *GlossaryEntryMutation) ResetEdge(name string) error {
 	switch name {
 	case glossaryentry.EdgeProject:
 		m.ResetProject()
-		return nil
-	case glossaryentry.EdgeOrganization:
-		m.ResetOrganization()
 		return nil
 	}
 	return fmt.Errorf("unknown GlossaryEntry edge %s", name)
@@ -5198,9 +5006,6 @@ type OrganizationMutation struct {
 	backends                        map[int]struct{}
 	removedbackends                 map[int]struct{}
 	clearedbackends                 bool
-	glossary_entries                map[int]struct{}
-	removedglossary_entries         map[int]struct{}
-	clearedglossary_entries         bool
 	tm_entries                      map[int]struct{}
 	removedtm_entries               map[int]struct{}
 	clearedtm_entries               bool
@@ -5724,60 +5529,6 @@ func (m *OrganizationMutation) ResetBackends() {
 	m.backends = nil
 	m.clearedbackends = false
 	m.removedbackends = nil
-}
-
-// AddGlossaryEntryIDs adds the "glossary_entries" edge to the GlossaryEntry entity by ids.
-func (m *OrganizationMutation) AddGlossaryEntryIDs(ids ...int) {
-	if m.glossary_entries == nil {
-		m.glossary_entries = make(map[int]struct{})
-	}
-	for i := range ids {
-		m.glossary_entries[ids[i]] = struct{}{}
-	}
-}
-
-// ClearGlossaryEntries clears the "glossary_entries" edge to the GlossaryEntry entity.
-func (m *OrganizationMutation) ClearGlossaryEntries() {
-	m.clearedglossary_entries = true
-}
-
-// GlossaryEntriesCleared reports if the "glossary_entries" edge to the GlossaryEntry entity was cleared.
-func (m *OrganizationMutation) GlossaryEntriesCleared() bool {
-	return m.clearedglossary_entries
-}
-
-// RemoveGlossaryEntryIDs removes the "glossary_entries" edge to the GlossaryEntry entity by IDs.
-func (m *OrganizationMutation) RemoveGlossaryEntryIDs(ids ...int) {
-	if m.removedglossary_entries == nil {
-		m.removedglossary_entries = make(map[int]struct{})
-	}
-	for i := range ids {
-		delete(m.glossary_entries, ids[i])
-		m.removedglossary_entries[ids[i]] = struct{}{}
-	}
-}
-
-// RemovedGlossaryEntries returns the removed IDs of the "glossary_entries" edge to the GlossaryEntry entity.
-func (m *OrganizationMutation) RemovedGlossaryEntriesIDs() (ids []int) {
-	for id := range m.removedglossary_entries {
-		ids = append(ids, id)
-	}
-	return
-}
-
-// GlossaryEntriesIDs returns the "glossary_entries" edge IDs in the mutation.
-func (m *OrganizationMutation) GlossaryEntriesIDs() (ids []int) {
-	for id := range m.glossary_entries {
-		ids = append(ids, id)
-	}
-	return
-}
-
-// ResetGlossaryEntries resets all changes to the "glossary_entries" edge.
-func (m *OrganizationMutation) ResetGlossaryEntries() {
-	m.glossary_entries = nil
-	m.clearedglossary_entries = false
-	m.removedglossary_entries = nil
 }
 
 // AddTmEntryIDs adds the "tm_entries" edge to the TMEntry entity by ids.
@@ -6337,7 +6088,7 @@ func (m *OrganizationMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *OrganizationMutation) AddedEdges() []string {
-	edges := make([]string, 0, 10)
+	edges := make([]string, 0, 9)
 	if m.projects != nil {
 		edges = append(edges, organization.EdgeProjects)
 	}
@@ -6346,9 +6097,6 @@ func (m *OrganizationMutation) AddedEdges() []string {
 	}
 	if m.backends != nil {
 		edges = append(edges, organization.EdgeBackends)
-	}
-	if m.glossary_entries != nil {
-		edges = append(edges, organization.EdgeGlossaryEntries)
 	}
 	if m.tm_entries != nil {
 		edges = append(edges, organization.EdgeTmEntries)
@@ -6390,12 +6138,6 @@ func (m *OrganizationMutation) AddedIDs(name string) []ent.Value {
 	case organization.EdgeBackends:
 		ids := make([]ent.Value, 0, len(m.backends))
 		for id := range m.backends {
-			ids = append(ids, id)
-		}
-		return ids
-	case organization.EdgeGlossaryEntries:
-		ids := make([]ent.Value, 0, len(m.glossary_entries))
-		for id := range m.glossary_entries {
 			ids = append(ids, id)
 		}
 		return ids
@@ -6441,7 +6183,7 @@ func (m *OrganizationMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *OrganizationMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 10)
+	edges := make([]string, 0, 9)
 	if m.removedprojects != nil {
 		edges = append(edges, organization.EdgeProjects)
 	}
@@ -6450,9 +6192,6 @@ func (m *OrganizationMutation) RemovedEdges() []string {
 	}
 	if m.removedbackends != nil {
 		edges = append(edges, organization.EdgeBackends)
-	}
-	if m.removedglossary_entries != nil {
-		edges = append(edges, organization.EdgeGlossaryEntries)
 	}
 	if m.removedtm_entries != nil {
 		edges = append(edges, organization.EdgeTmEntries)
@@ -6494,12 +6233,6 @@ func (m *OrganizationMutation) RemovedIDs(name string) []ent.Value {
 	case organization.EdgeBackends:
 		ids := make([]ent.Value, 0, len(m.removedbackends))
 		for id := range m.removedbackends {
-			ids = append(ids, id)
-		}
-		return ids
-	case organization.EdgeGlossaryEntries:
-		ids := make([]ent.Value, 0, len(m.removedglossary_entries))
-		for id := range m.removedglossary_entries {
 			ids = append(ids, id)
 		}
 		return ids
@@ -6545,7 +6278,7 @@ func (m *OrganizationMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *OrganizationMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 10)
+	edges := make([]string, 0, 9)
 	if m.clearedprojects {
 		edges = append(edges, organization.EdgeProjects)
 	}
@@ -6554,9 +6287,6 @@ func (m *OrganizationMutation) ClearedEdges() []string {
 	}
 	if m.clearedbackends {
 		edges = append(edges, organization.EdgeBackends)
-	}
-	if m.clearedglossary_entries {
-		edges = append(edges, organization.EdgeGlossaryEntries)
 	}
 	if m.clearedtm_entries {
 		edges = append(edges, organization.EdgeTmEntries)
@@ -6589,8 +6319,6 @@ func (m *OrganizationMutation) EdgeCleared(name string) bool {
 		return m.clearedmemberships
 	case organization.EdgeBackends:
 		return m.clearedbackends
-	case organization.EdgeGlossaryEntries:
-		return m.clearedglossary_entries
 	case organization.EdgeTmEntries:
 		return m.clearedtm_entries
 	case organization.EdgeActivityLogs:
@@ -6627,9 +6355,6 @@ func (m *OrganizationMutation) ResetEdge(name string) error {
 		return nil
 	case organization.EdgeBackends:
 		m.ResetBackends()
-		return nil
-	case organization.EdgeGlossaryEntries:
-		m.ResetGlossaryEntries()
 		return nil
 	case organization.EdgeTmEntries:
 		m.ResetTmEntries()

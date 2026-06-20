@@ -10,16 +10,15 @@ import (
 )
 
 type DatabaseGlossary struct {
-	client *ent.Client
-	scope  glossaryScope
+	client    *ent.Client
+	projectID int
 }
 
 func NewDatabaseGlossary(client *ent.Client, projectRow *ent.Project) (*DatabaseGlossary, error) {
-	scope, err := glossaryScopeFromProject(projectRow)
-	if err != nil {
-		return nil, err
+	if projectRow == nil {
+		return nil, ErrProjectNotFound
 	}
-	return &DatabaseGlossary{client: client, scope: scope}, nil
+	return &DatabaseGlossary{client: client, projectID: projectRow.ID}, nil
 }
 
 func (g *DatabaseGlossary) Lookup(ctx context.Context, text, _, _ string) ([]glossary.Entry, error) {
@@ -28,7 +27,7 @@ func (g *DatabaseGlossary) Lookup(ctx context.Context, text, _, _ string) ([]glo
 		return nil, nil
 	}
 	rows, err := g.client.GlossaryEntry.Query().
-		Where(glossaryentry.ScopeKeyEQ(g.scope.key)).
+		Where(glossaryentry.ProjectIDEQ(g.projectID)).
 		Order(ent.Asc(glossaryentry.FieldSourceKey), ent.Asc(glossaryentry.FieldID)).
 		All(ctx)
 	if err != nil {
@@ -72,7 +71,7 @@ func (g *DatabaseGlossary) Add(ctx context.Context, entries ...glossary.Entry) (
 			continue
 		}
 		existing, err := g.client.GlossaryEntry.Query().
-			Where(glossaryentry.ScopeKeyEQ(g.scope.key), glossaryentry.SourceKeyEQ(glossarySourceKey(normalized.Source))).
+			Where(glossaryentry.ProjectIDEQ(g.projectID), glossaryentry.SourceKeyEQ(glossarySourceKey(normalized.Source))).
 			Only(ctx)
 		if err != nil && !ent.IsNotFound(err) {
 			return result, err
@@ -84,7 +83,7 @@ func (g *DatabaseGlossary) Add(ctx context.Context, entries ...glossary.Entry) (
 			}
 			continue
 		}
-		created, err := createGlossaryEntry(ctx, g.client, g.scope, normalized)
+		created, err := createGlossaryEntry(ctx, g.client, g.projectID, normalized)
 		if err != nil {
 			if strings.Contains(err.Error(), ErrGlossaryEntryExists.Error()) {
 				continue

@@ -136,14 +136,12 @@ var (
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
-		{Name: "scope_key", Type: field.TypeString},
 		{Name: "source_key", Type: field.TypeString},
 		{Name: "source", Type: field.TypeString},
 		{Name: "target", Type: field.TypeString},
 		{Name: "case_sensitive", Type: field.TypeBool, Default: false},
 		{Name: "notes", Type: field.TypeString, Nullable: true},
-		{Name: "organization_id", Type: field.TypeInt, Nullable: true},
-		{Name: "project_id", Type: field.TypeInt, Nullable: true},
+		{Name: "project_id", Type: field.TypeInt},
 	}
 	// GlossaryEntriesTable holds the schema information for the "glossary_entries" table.
 	GlossaryEntriesTable = &schema.Table{
@@ -152,23 +150,17 @@ var (
 		PrimaryKey: []*schema.Column{GlossaryEntriesColumns[0]},
 		ForeignKeys: []*schema.ForeignKey{
 			{
-				Symbol:     "glossary_entries_organizations_glossary_entries",
-				Columns:    []*schema.Column{GlossaryEntriesColumns[9]},
-				RefColumns: []*schema.Column{OrganizationsColumns[0]},
-				OnDelete:   schema.SetNull,
-			},
-			{
 				Symbol:     "glossary_entries_projects_glossary_entries",
-				Columns:    []*schema.Column{GlossaryEntriesColumns[10]},
+				Columns:    []*schema.Column{GlossaryEntriesColumns[8]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
-				OnDelete:   schema.SetNull,
+				OnDelete:   schema.NoAction,
 			},
 		},
 		Indexes: []*schema.Index{
 			{
-				Name:    "glossaryentry_scope_key_source_key",
+				Name:    "glossaryentry_project_id_source_key",
 				Unique:  true,
-				Columns: []*schema.Column{GlossaryEntriesColumns[3], GlossaryEntriesColumns[4]},
+				Columns: []*schema.Column{GlossaryEntriesColumns[8], GlossaryEntriesColumns[3]},
 			},
 		},
 	}
@@ -615,8 +607,7 @@ func init() {
 	BackendsTable.ForeignKeys[1].RefTable = UsersTable
 	ExecutionPlanTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	ExecutionPlanTemplatesTable.ForeignKeys[1].RefTable = UsersTable
-	GlossaryEntriesTable.ForeignKeys[0].RefTable = OrganizationsTable
-	GlossaryEntriesTable.ForeignKeys[1].RefTable = ProjectsTable
+	GlossaryEntriesTable.ForeignKeys[0].RefTable = ProjectsTable
 	JobResourcesTable.ForeignKeys[0].RefTable = ResourcesTable
 	JobResourcesTable.ForeignKeys[1].RefTable = TranslationJobsTable
 	OrgMembershipsTable.ForeignKeys[0].RefTable = OrganizationsTable

@@ -18,8 +18,6 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
-	// FieldScopeKey holds the string denoting the scope_key field in the database.
-	FieldScopeKey = "scope_key"
 	// FieldSourceKey holds the string denoting the source_key field in the database.
 	FieldSourceKey = "source_key"
 	// FieldSource holds the string denoting the source field in the database.
@@ -32,12 +30,8 @@ const (
 	FieldNotes = "notes"
 	// FieldProjectID holds the string denoting the project_id field in the database.
 	FieldProjectID = "project_id"
-	// FieldOrganizationID holds the string denoting the organization_id field in the database.
-	FieldOrganizationID = "organization_id"
 	// EdgeProject holds the string denoting the project edge name in mutations.
 	EdgeProject = "project"
-	// EdgeOrganization holds the string denoting the organization edge name in mutations.
-	EdgeOrganization = "organization"
 	// Table holds the table name of the glossaryentry in the database.
 	Table = "glossary_entries"
 	// ProjectTable is the table that holds the project relation/edge.
@@ -47,13 +41,6 @@ const (
 	ProjectInverseTable = "projects"
 	// ProjectColumn is the table column denoting the project relation/edge.
 	ProjectColumn = "project_id"
-	// OrganizationTable is the table that holds the organization relation/edge.
-	OrganizationTable = "glossary_entries"
-	// OrganizationInverseTable is the table name for the Organization entity.
-	// It exists in this package in order to avoid circular dependency with the "organization" package.
-	OrganizationInverseTable = "organizations"
-	// OrganizationColumn is the table column denoting the organization relation/edge.
-	OrganizationColumn = "organization_id"
 )
 
 // Columns holds all SQL columns for glossaryentry fields.
@@ -61,14 +48,12 @@ var Columns = []string{
 	FieldID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
-	FieldScopeKey,
 	FieldSourceKey,
 	FieldSource,
 	FieldTarget,
 	FieldCaseSensitive,
 	FieldNotes,
 	FieldProjectID,
-	FieldOrganizationID,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -88,8 +73,6 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
-	// ScopeKeyValidator is a validator for the "scope_key" field. It is called by the builders before save.
-	ScopeKeyValidator func(string) error
 	// SourceKeyValidator is a validator for the "source_key" field. It is called by the builders before save.
 	SourceKeyValidator func(string) error
 	// SourceValidator is a validator for the "source" field. It is called by the builders before save.
@@ -100,8 +83,6 @@ var (
 	DefaultCaseSensitive bool
 	// ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
 	ProjectIDValidator func(int) error
-	// OrganizationIDValidator is a validator for the "organization_id" field. It is called by the builders before save.
-	OrganizationIDValidator func(int) error
 )
 
 // OrderOption defines the ordering options for the GlossaryEntry queries.
@@ -120,11 +101,6 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUpdatedAt orders the results by the updated_at field.
 func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
-}
-
-// ByScopeKey orders the results by the scope_key field.
-func ByScopeKey(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldScopeKey, opts...).ToFunc()
 }
 
 // BySourceKey orders the results by the source_key field.
@@ -157,22 +133,10 @@ func ByProjectID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldProjectID, opts...).ToFunc()
 }
 
-// ByOrganizationID orders the results by the organization_id field.
-func ByOrganizationID(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldOrganizationID, opts...).ToFunc()
-}
-
 // ByProjectField orders the results by project field.
 func ByProjectField(field string, opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
 		sqlgraph.OrderByNeighborTerms(s, newProjectStep(), sql.OrderByField(field, opts...))
-	}
-}
-
-// ByOrganizationField orders the results by organization field.
-func ByOrganizationField(field string, opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newOrganizationStep(), sql.OrderByField(field, opts...))
 	}
 }
 func newProjectStep() *sqlgraph.Step {
@@ -180,12 +144,5 @@ func newProjectStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(ProjectInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.M2O, true, ProjectTable, ProjectColumn),
-	)
-}
-func newOrganizationStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(OrganizationInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.M2O, true, OrganizationTable, OrganizationColumn),
 	)
 }

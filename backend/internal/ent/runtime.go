@@ -145,34 +145,26 @@ func init() {
 	glossaryentry.DefaultUpdatedAt = glossaryentryDescUpdatedAt.Default.(func() time.Time)
 	// glossaryentry.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	glossaryentry.UpdateDefaultUpdatedAt = glossaryentryDescUpdatedAt.UpdateDefault.(func() time.Time)
-	// glossaryentryDescScopeKey is the schema descriptor for scope_key field.
-	glossaryentryDescScopeKey := glossaryentryFields[0].Descriptor()
-	// glossaryentry.ScopeKeyValidator is a validator for the "scope_key" field. It is called by the builders before save.
-	glossaryentry.ScopeKeyValidator = glossaryentryDescScopeKey.Validators[0].(func(string) error)
 	// glossaryentryDescSourceKey is the schema descriptor for source_key field.
-	glossaryentryDescSourceKey := glossaryentryFields[1].Descriptor()
+	glossaryentryDescSourceKey := glossaryentryFields[0].Descriptor()
 	// glossaryentry.SourceKeyValidator is a validator for the "source_key" field. It is called by the builders before save.
 	glossaryentry.SourceKeyValidator = glossaryentryDescSourceKey.Validators[0].(func(string) error)
 	// glossaryentryDescSource is the schema descriptor for source field.
-	glossaryentryDescSource := glossaryentryFields[2].Descriptor()
+	glossaryentryDescSource := glossaryentryFields[1].Descriptor()
 	// glossaryentry.SourceValidator is a validator for the "source" field. It is called by the builders before save.
 	glossaryentry.SourceValidator = glossaryentryDescSource.Validators[0].(func(string) error)
 	// glossaryentryDescTarget is the schema descriptor for target field.
-	glossaryentryDescTarget := glossaryentryFields[3].Descriptor()
+	glossaryentryDescTarget := glossaryentryFields[2].Descriptor()
 	// glossaryentry.TargetValidator is a validator for the "target" field. It is called by the builders before save.
 	glossaryentry.TargetValidator = glossaryentryDescTarget.Validators[0].(func(string) error)
 	// glossaryentryDescCaseSensitive is the schema descriptor for case_sensitive field.
-	glossaryentryDescCaseSensitive := glossaryentryFields[4].Descriptor()
+	glossaryentryDescCaseSensitive := glossaryentryFields[3].Descriptor()
 	// glossaryentry.DefaultCaseSensitive holds the default value on creation for the case_sensitive field.
 	glossaryentry.DefaultCaseSensitive = glossaryentryDescCaseSensitive.Default.(bool)
 	// glossaryentryDescProjectID is the schema descriptor for project_id field.
-	glossaryentryDescProjectID := glossaryentryFields[6].Descriptor()
+	glossaryentryDescProjectID := glossaryentryFields[5].Descriptor()
 	// glossaryentry.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
 	glossaryentry.ProjectIDValidator = glossaryentryDescProjectID.Validators[0].(func(int) error)
-	// glossaryentryDescOrganizationID is the schema descriptor for organization_id field.
-	glossaryentryDescOrganizationID := glossaryentryFields[7].Descriptor()
-	// glossaryentry.OrganizationIDValidator is a validator for the "organization_id" field. It is called by the builders before save.
-	glossaryentry.OrganizationIDValidator = glossaryentryDescOrganizationID.Validators[0].(func(int) error)
 	jobresourceMixin := schema.JobResource{}.Mixin()
 	jobresourceMixinFields0 := jobresourceMixin[0].Fields()
 	_ = jobresourceMixinFields0
