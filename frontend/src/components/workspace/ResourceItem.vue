@@ -8,7 +8,7 @@ import {
   useDialog,
   type DropdownOption,
 } from 'naive-ui'
-import { h } from 'vue'
+import { computed, h } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
@@ -29,6 +29,8 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
+  /** 进入资源（EPUB 虚拟目录） */
+  open: [resource: Resource]
   openSegments: [resource: Resource]
   replace: [resource: Resource]
   incrementalUpdate: [resource: Resource]
@@ -54,6 +56,30 @@ const formatDate = (value?: string): string => {
     minute: '2-digit',
   }).format(new Date(value))
 }
+
+const formatConfig = computed(() => {
+  const format = props.resource.format
+  const map: Record<string, { bgClass: string; textClass: string }> = {
+    epub: {
+      bgClass: 'bg-indigo-50 dark:bg-indigo-500/15',
+      textClass: 'text-indigo-600 dark:text-indigo-300',
+    },
+    json: {
+      bgClass: 'bg-emerald-50 dark:bg-emerald-500/15',
+      textClass: 'text-emerald-600 dark:text-emerald-300',
+    },
+    srt: {
+      bgClass: 'bg-purple-50 dark:bg-purple-500/15',
+      textClass: 'text-purple-600 dark:text-purple-300',
+    },
+  }
+  return (
+    map[format] ?? {
+      bgClass: 'bg-blue-50 dark:bg-blue-500/15',
+      textClass: 'text-blue-600 dark:text-blue-300',
+    }
+  )
+})
 
 const isBusy = computed(
   () =>
@@ -127,6 +153,15 @@ const confirmDelete = (): void => {
   })
 }
 
+/** EPUB 资源可点击进入虚拟目录 */
+const isEpub = computed(() => props.resource.format === 'epub')
+
+const handleRowClick = (): void => {
+  if (isEpub.value) {
+    emit('open', props.resource)
+  }
+}
+
 const handleDropdownSelect = (key: string) => {
   switch (key) {
     case 'openSegments':
@@ -153,7 +188,10 @@ const handleDropdownSelect = (key: string) => {
 
 <template>
   <div
-    class="group relative overflow-hidden rounded-lg border border-transparent bg-lf-surface/80 px-4 py-2.5 transition-all hover:border-lf-border-soft hover:bg-lf-surface-elevated hover:shadow-sm hover:shadow-lf-shadow"
+    :class="[
+      'group relative overflow-hidden rounded-lg border border-transparent bg-lf-surface/80 px-4 py-2.5 transition-all hover:border-lf-border-soft hover:bg-lf-surface-elevated hover:shadow-sm hover:shadow-lf-shadow',
+    ]"
+    @click="handleRowClick"
   >
     <!-- 进度背景层 -->
     <div
@@ -164,12 +202,20 @@ const handleDropdownSelect = (key: string) => {
       <NCheckbox
         :checked="props.selected"
         class="shrink-0"
+        @click.stop
         @update:checked="emit('toggleSelect', props.resource)"
       />
       <div
-        class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-blue-50 text-blue-600 dark:bg-blue-500/15 dark:text-blue-300"
+        :class="[
+          'flex h-7 w-7 shrink-0 items-center justify-center rounded-md',
+          formatConfig.bgClass,
+          formatConfig.textClass,
+        ]"
       >
-        <NIcon size="14"><IconCarbonDocument /></NIcon>
+        <NIcon v-if="props.resource.format === 'epub'" size="14"><IconCarbonDocument /></NIcon>
+        <NIcon v-else-if="props.resource.format === 'json'" size="14"><IconCarbonDocument /></NIcon>
+        <NIcon v-else-if="props.resource.format === 'srt'" size="14"><IconCarbonDocument /></NIcon>
+        <NIcon v-else size="14"><IconCarbonDocument /></NIcon>
       </div>
       <div class="flex min-w-0 flex-1 items-center justify-between gap-3">
         <div class="min-w-0 flex-1">
@@ -224,20 +270,24 @@ const handleDropdownSelect = (key: string) => {
 
         <!-- 操作按钮：始终可见 -->
         <div class="flex shrink-0 items-center gap-1">
+          <!-- 非 EPUB 资源的查看按钮 -->
           <NButton
+            v-if="!isEpub"
             size="tiny"
             quaternary
             type="primary"
-            @click="emit('openSegments', props.resource)"
+            @click.stop="emit('openSegments', props.resource)"
           >
             <template #icon>
               <NIcon size="14"><IconCarbonView /></NIcon>
             </template>
           </NButton>
+          <!-- 操作菜单（始终显示） -->
           <NDropdown :options="dropdownOptions" trigger="click" @select="handleDropdownSelect">
             <NButton
               size="tiny"
               quaternary
+              @click.stop
               :loading="
                 props.replacing ||
                 props.incrementalUpdating ||
@@ -251,6 +301,14 @@ const handleDropdownSelect = (key: string) => {
               </template>
             </NButton>
           </NDropdown>
+          <!-- EPUB 箭头指示器（最右侧，与文件夹一致） -->
+          <NIcon
+            v-if="isEpub"
+            size="16"
+            class="shrink-0 text-lf-text-muted opacity-60 transition-all group-hover:translate-x-0.5 group-hover:opacity-100"
+          >
+            <IconCarbonChevronRight />
+          </NIcon>
         </div>
       </div>
     </div>

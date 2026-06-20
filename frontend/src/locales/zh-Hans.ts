@@ -447,6 +447,8 @@ const messages = {
     },
     segment: {
       resourcePlaceholder: '选择资源文件',
+      chapterAll: '全部章节',
+      chapterPlaceholder: '选择章节...',
       searchPlaceholder: '搜索原文或译文',
       noResource: '请先选择一个资源文件查看段落。',
       empty: '当前资源没有符合条件的段落。',
@@ -554,6 +556,22 @@ const messages = {
       updated: '已修改',
       unchanged: '未变化',
       deleted: '已删除',
+    },
+    epub: {
+      chapters: '章节',
+      chapterCount: '{count} 个章节',
+      translatedProgress: '{translated}/{total} 已翻译',
+      translateChapter: '翻译本章',
+      approveChapter: '审批本章',
+      backToChapterList: '返回章节列表',
+      backToResources: '返回资源列表',
+      chapterList: '章节列表',
+      showHtml: '显示 HTML',
+      hideHtml: '隐藏 HTML',
+      noChapters: '暂无章节信息',
+      loadingChapters: '加载章节中...',
+      pendingSegments: '{count} 条待翻译',
+      translateAll: '翻译全部',
     },
     glossary: {
       actions: {
@@ -1042,6 +1060,7 @@ const messages = {
       createExecutionPlanTemplateFailed: '创建执行计划模板失败',
       updateExecutionPlanTemplateFailed: '更新执行计划模板失败',
       deleteExecutionPlanTemplateFailed: '删除执行计划模板失败',
+      fetchSegmentGroupsFailed: '获取章节分组失败',
     },
   },
 } as const

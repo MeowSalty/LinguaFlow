@@ -84,6 +84,20 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobDrawerVisible.value = true
   }
 
+  /** 使用指定的资源 ID 列表打开任务创建抽屉（用于 EPUB 章节翻译等场景） */
+  const openResourceJobDrawerWithIds = (resourceIds: number[]): void => {
+    if (resourceIds.length === 0) {
+      message.warning(t('workspace.messages.selectReadyResource'))
+      return
+    }
+
+    jobTargetMode.value = 'resources'
+    jobTargetResourceIds.value = [...resourceIds]
+    jobTargetSegmentIds.value = []
+    jobForm.execution_plan_id = null
+    jobDrawerVisible.value = true
+  }
+
   const openSegmentJobDrawer = (segment?: Segment): void => {
     if (!workspace.activeResourceId) {
       message.warning(t('workspace.messages.selectResourceFirst'))
@@ -201,6 +215,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     canCreateSegmentJob,
     // 方法
     openResourceJobDrawer,
+    openResourceJobDrawerWithIds,
     openSegmentJobDrawer,
     openSegmentJobDrawerWithIds,
     closeJobDrawer,

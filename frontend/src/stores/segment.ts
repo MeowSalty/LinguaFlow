@@ -6,7 +6,10 @@ import {
   fetchResourceSegments,
   updateResourceSegment as updateResourceSegmentRequest,
 } from '@/api/client'
+import { fetchSegmentGroups, type ResourceSegmentGroup } from '@/api/epub'
 import { t } from '@/i18n'
+
+export type { ResourceSegmentGroup }
 
 type Segment = ApiSchemas['Segment']
 type SegmentUpdatePayload = ApiSchemas['ResourceSegmentUpdateRequest']
@@ -43,6 +46,26 @@ export const useSegmentStore = defineStore('segment', () => {
   // ── 筛选器 ──
   const segmentSearch = ref('')
   const segmentStatusFilter = ref<SegmentStatusFilter>('all')
+
+  // ── EPUB 章节导航状态 ──
+
+  /** 章节分组列表 */
+  const segmentGroups = ref<ResourceSegmentGroup[]>([])
+
+  /** 章节分组加载状态 */
+  const loadingSegmentGroups = ref(false)
+
+  /** 章节分组错误信息 */
+  const segmentGroupsError = ref<string | null>(null)
+
+  /** EPUB 导航层：null = 章节列表, string = 当前查看的 chapter group_key */
+  const epubActiveGroupKey = ref<string | null>(null)
+
+  /** 当前章节的标题（用于面包屑） */
+  const epubActiveGroupTitle = ref<string>('')
+
+  /** 章节级选中的 group_key 集合（用于批量翻译） */
+  const epubSelectedGroupKeys = ref<Set<string>>(new Set())
 
   // ── 段落进度缓存 ──
 
@@ -86,12 +109,30 @@ export const useSegmentStore = defineStore('segment', () => {
     return sum
   })
 
+  // ── EPUB 计算属性 ──
+
+  /** 当前资源是否为 EPUB（基于 groups 数据判断） */
+  const isEpubResource = computed(() => {
+    if (segmentGroups.value.length > 1) return true
+    if (segmentGroups.value.length === 1) {
+      return segmentGroups.value[0]?.group_key !== ''
+    }
+    return false
+  })
+
+  /** 章节总数 */
+  const epubChapterCount = computed(() => segmentGroups.value.length)
+
+  /** 是否在章节内容视图中（vs 章节列表） */
+  const isInChapterView = computed(() => epubActiveGroupKey.value !== null)
+
   // ── Actions：段落 ──
 
   const loadSegments = async (
     projectId: number,
     resourceId: number,
     append = false,
+    groupKey?: string,
   ): Promise<void> => {
     loadingSegments.value = true
     segmentsError.value = null
@@ -102,6 +143,7 @@ export const useSegmentStore = defineStore('segment', () => {
         search: segmentSearch.value.trim() || undefined,
         cursor: append ? (segmentsCursor.value ?? undefined) : undefined,
         limit: 50,
+        ...(groupKey ? { group_key: groupKey } : {}),
       })
       segments.value = append ? [...segments.value, ...response.items] : response.items
       segmentsCursor.value = response.next_cursor ?? null
@@ -158,12 +200,68 @@ export const useSegmentStore = defineStore('segment', () => {
     try {
       const segment = await updateResourceSegmentRequest(projectId, resourceId, segmentId, payload)
       segments.value = segments.value.map((item) => (item.id === segment.id ? segment : item))
+
+      // 刷新章节分组进度
+      await refreshChapterGroups(projectId, resourceId)
+
       return segment
     } catch (error) {
       actionError.value = getErrorMessage(error, t('api.errors.updateSegmentFailed'))
       throw error
     } finally {
       editingSegmentIds.value = editingSegmentIds.value.filter((id) => id !== segmentId)
+    }
+  }
+
+  /**
+   * 加载章节分组列表
+   */
+  const loadSegmentGroups = async (projectId: number, resourceId: number): Promise<void> => {
+    loadingSegmentGroups.value = true
+    segmentGroupsError.value = null
+
+    try {
+      const response = await fetchSegmentGroups(projectId, resourceId)
+      segmentGroups.value = response.items
+    } catch (error) {
+      segmentGroupsError.value = getErrorMessage(error, t('api.errors.fetchSegmentGroupsFailed'))
+    } finally {
+      loadingSegmentGroups.value = false
+    }
+  }
+
+  /** 进入某个章节 */
+  const enterChapter = (groupKey: string, groupTitle: string): void => {
+    epubActiveGroupKey.value = groupKey
+    epubActiveGroupTitle.value = groupTitle
+  }
+
+  /** 返回章节列表 */
+  const exitChapter = (): void => {
+    epubActiveGroupKey.value = null
+    epubActiveGroupTitle.value = ''
+  }
+
+  /** 切换章节选中状态 */
+  const toggleEpubGroupSelection = (groupKey: string): void => {
+    const newSet = new Set(epubSelectedGroupKeys.value)
+    if (newSet.has(groupKey)) {
+      newSet.delete(groupKey)
+    } else {
+      newSet.add(groupKey)
+    }
+    epubSelectedGroupKeys.value = newSet
+  }
+
+  /**
+   * 刷新章节分组进度
+   */
+  const refreshChapterGroups = async (projectId: number, resourceId: number): Promise<void> => {
+    try {
+      const response = await fetchSegmentGroups(projectId, resourceId)
+      segmentGroups.value = response.items
+    } catch {
+      // 静默失败，不影响用户操作
     }
   }
 
@@ -175,6 +273,18 @@ export const useSegmentStore = defineStore('segment', () => {
     segmentsCursor.value = null
   }
 
+  /**
+   * 重置 EPUB 章节状态
+   */
+  const resetEpubState = (): void => {
+    segmentGroups.value = []
+    loadingSegmentGroups.value = false
+    segmentGroupsError.value = null
+    epubActiveGroupKey.value = null
+    epubActiveGroupTitle.value = ''
+    epubSelectedGroupKeys.value = new Set()
+  }
+
   const reset = (): void => {
     segments.value = []
     segmentsCursor.value = null
@@ -183,6 +293,7 @@ export const useSegmentStore = defineStore('segment', () => {
     segmentStatusFilter.value = 'all'
     segmentProgressCache.value = new Map()
     actionError.value = null
+    resetEpubState()
   }
 
   return {
@@ -203,5 +314,21 @@ export const useSegmentStore = defineStore('segment', () => {
     updateSegment,
     resetSegments,
     reset,
+    // ── EPUB 新增导出 ──
+    segmentGroups,
+    loadingSegmentGroups,
+    segmentGroupsError,
+    epubActiveGroupKey,
+    epubActiveGroupTitle,
+    epubSelectedGroupKeys,
+    isEpubResource,
+    epubChapterCount,
+    isInChapterView,
+    loadSegmentGroups,
+    enterChapter,
+    exitChapter,
+    toggleEpubGroupSelection,
+    refreshChapterGroups,
+    resetEpubState,
   }
 })

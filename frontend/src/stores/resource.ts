@@ -14,7 +14,11 @@ import {
   replaceProjectResource as replaceProjectResourceRequest,
   uploadProjectResourcesWithProgress,
 } from '@/api/client'
+import { fetchSegmentGroups, type ResourceSegmentGroup } from '@/api/epub'
 import { t } from '@/i18n'
+
+// Re-export SegmentGroup 类型供外部使用
+export type { ResourceSegmentGroup as SegmentGroup }
 
 type Resource = ApiSchemas['Resource']
 type ResourceTreeNode = ApiSchemas['ResourceTreeNode']
@@ -163,19 +167,53 @@ export const useResourceStore = defineStore('resource', () => {
   const resourceSearch = ref('')
   const resourceFormatFilter = ref<string>('all')
 
+  // ── EPUB 虚拟目录导航状态 ──
+
+  /** 当前 EPUB 资源 ID（进入 EPUB 时设置，退出时清空） */
+  const epubDirectoryResourceId = ref<number | null>(null)
+
+  /** 当前 EPUB 资源名称 */
+  const epubDirectoryResourceName = ref<string>('')
+
+  /** 当前 EPUB 的章节列表 */
+  const epubDirectoryChapters = ref<ResourceSegmentGroup[]>([])
+
+  /** EPUB 章节列表加载状态 */
+  const epubDirectoryLoading = ref(false)
+
+  /** 是否处于 EPUB 虚拟目录中 */
+  const isInEpubDirectory = computed(() => epubDirectoryResourceId.value !== null)
+
+  /** 面包屑末尾追加的 EPUB 名称（仅在 EPUB 目录中时非空） */
+  const epubDirectoryBreadcrumbSuffix = computed(() =>
+    isInEpubDirectory.value ? epubDirectoryResourceName.value : '',
+  )
+
   // ── 计算属性：资源树导航 ──
 
   /** 面包屑路径列表 */
   const breadcrumbs = computed<BreadcrumbItem[]>(() => {
-    if (!currentPath.value) {
-      return []
+    const items: BreadcrumbItem[] = []
+
+    if (currentPath.value) {
+      const parts = currentPath.value.split('/')
+      for (const [index, part] of parts.entries()) {
+        items.push({
+          label: part,
+          path: parts.slice(0, index + 1).join('/'),
+        })
+      }
     }
 
-    const parts = currentPath.value.split('/')
-    return parts.map((part, index) => ({
-      label: part,
-      path: parts.slice(0, index + 1).join('/'),
-    }))
+    // EPUB 虚拟目录模式下，追加 EPUB 名称到面包屑末尾
+    if (isInEpubDirectory.value && epubDirectoryResourceName.value) {
+      items.push({
+        label: epubDirectoryResourceName.value,
+        path: currentPath.value, // 点击返回 EPUB 所在目录
+      })
+    }
+
+    return items
   })
 
   /** 当前目录的树节点 */
@@ -286,13 +324,60 @@ export const useResourceStore = defineStore('resource', () => {
     }
   }
 
+  /** 进入 EPUB 虚拟目录 */
+  const enterEpub = async (
+    projectId: number,
+    resource: { id: number; name: string },
+  ): Promise<void> => {
+    epubDirectoryResourceId.value = resource.id
+    epubDirectoryResourceName.value = resource.name
+    epubDirectoryLoading.value = true
+    try {
+      const response = await fetchSegmentGroups(projectId, resource.id)
+      epubDirectoryChapters.value = response.items
+    } finally {
+      epubDirectoryLoading.value = false
+    }
+  }
+
+  /** 退出 EPUB 虚拟目录 */
+  const exitEpub = (): void => {
+    epubDirectoryResourceId.value = null
+    epubDirectoryResourceName.value = ''
+    epubDirectoryChapters.value = []
+  }
+
+  /** 刷新当前 EPUB 的章节列表 */
+  const refreshEpubChapters = async (projectId: number): Promise<void> => {
+    if (epubDirectoryResourceId.value === null) return
+    epubDirectoryLoading.value = true
+    try {
+      const response = await fetchSegmentGroups(projectId, epubDirectoryResourceId.value)
+      epubDirectoryChapters.value = response.items
+    } finally {
+      epubDirectoryLoading.value = false
+    }
+  }
+
   /** 导航到指定目录路径 */
   const navigateTo = (path: string): void => {
+    // 如果当前在 EPUB 虚拟目录中，先退出
+    // 面包屑组件已通过 isEpubSuffixItem 阻止了 EPUB 末尾项的点击，
+    // 所以此处无需额外判断，直接退出 EPUB 并导航到目标路径
+    if (isInEpubDirectory.value) {
+      exitEpub()
+    }
     currentPath.value = path
   }
 
   /** 返回上级目录 */
   const navigateUp = (): void => {
+    // 如果在 EPUB 虚拟目录中，退出 EPUB 而不是目录上移
+    if (isInEpubDirectory.value) {
+      exitEpub()
+      return
+    }
+
     const parts = currentPath.value.split('/')
     parts.pop()
     currentPath.value = parts.join('/')
@@ -703,6 +788,7 @@ export const useResourceStore = defineStore('resource', () => {
     lastUploadResult.value = null
     incrementalUpdatingIds.value = []
     actionError.value = null
+    exitEpub()
   }
 
   return {
@@ -740,6 +826,13 @@ export const useResourceStore = defineStore('resource', () => {
     availableFormats,
     readyResourceCount,
     totalSegmentCount,
+    // EPUB 虚拟目录
+    epubDirectoryResourceId,
+    epubDirectoryResourceName,
+    epubDirectoryChapters,
+    epubDirectoryLoading,
+    isInEpubDirectory,
+    epubDirectoryBreadcrumbSuffix,
     // Actions
     loadResourceTree,
     navigateTo,
@@ -769,6 +862,9 @@ export const useResourceStore = defineStore('resource', () => {
     toggleResourceSelection,
     setSelectedResourceIds,
     clearSelectedResources,
+    enterEpub,
+    exitEpub,
+    refreshEpubChapters,
     reset,
   }
 })

@@ -597,6 +597,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/resources/{resourceId}/segments/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * 列出资源段落分组（按章节）
+         * @description 按 meta.epub_file 将 segments 归为章节组，返回每组的统计信息。
+         *     适用于 EPUB 等多章节资源的分组展示。
+         *     非 EPUB 资源会返回一个包含所有 segments 的单一组。
+         */
+        get: operations["ListResourceSegmentGroups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/glossary": {
         parameters: {
             query?: never;
@@ -1141,11 +1166,30 @@ export interface components {
         ResourcePrecheckBatchResponse: {
             items: components["schemas"]["ResourcePrecheckFileResult"][];
         };
+        ResourceSegmentGroup: {
+            /** @description 分组键（如 epub_file 路径） */
+            group_key: string;
+            /** @description 分组标题（如章节标题） */
+            group_title: string;
+            /** @description 该组的 segment 总数 */
+            segment_count: number;
+            /** @description 已翻译的 segment 数量 */
+            translated_count: number;
+        };
+        ResourceSegmentGroupListResponse: {
+            items: components["schemas"]["ResourceSegmentGroup"][];
+        };
         CreateTranslationJobRequest: {
             /** @description 执行计划模板 ID */
             execution_plan_id: number;
             resource_ids?: number[];
             segment_ids?: number[];
+            /**
+             * @description 按章节分组键选择 segments（仅适用于 EPUB 等多章节资源）。
+             *     传入 meta.epub_file 值（如 ["OEBPS/chapter1.xhtml"]），后端自动解析为对应的 segment_ids。
+             *     与 segment_ids 互斥，优先级：segment_group_keys > segment_ids > resource_ids。
+             */
+            segment_group_keys?: string[];
             /**
              * @description 翻译完成后是否自动审批通过所有段落
              * @default false
@@ -2500,6 +2544,8 @@ export interface operations {
             query?: {
                 status?: "pending" | "translated" | "edited" | "approved" | "rejected";
                 search?: string;
+                /** @description 按分组键过滤 segments（如 epub_file 路径），仅返回属于指定分组的 segments */
+                group_key?: string;
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };
@@ -2653,6 +2699,30 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RetranslateResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListResourceSegmentGroups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 段落分组列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceSegmentGroupListResponse"];
                 };
             };
             default: components["responses"]["Problem"];

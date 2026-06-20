@@ -2,7 +2,6 @@
 import {
   NAlert,
   NButton,
-  NCheckbox,
   NEmpty,
   NIcon,
   NModal,
@@ -14,10 +13,9 @@ import { computed, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
-import DirectoryItem from '@/components/workspace/DirectoryItem.vue'
 import ResourceBreadcrumb from '@/components/workspace/ResourceBreadcrumb.vue'
-import ResourceItem from '@/components/workspace/ResourceItem.vue'
 import UploadPrecheckPanel from '@/components/workspace/UploadPrecheckPanel.vue'
+import { useResourceViewStrategy } from '@/composables/workspace/useResourceViewStrategy'
 import {
   useProjectWorkspaceStore,
   type PendingUploadItem,
@@ -35,11 +33,13 @@ const emit = defineEmits<{
   openSegments: [resource: Resource]
   conflict: [resource: Resource, file: File]
   incrementalResult: [result: IncrementalUpdateResponse]
+  openEpubSegments: [resourceId: number, groupKey: string]
 }>()
 
 const message = useMessage()
 const { t } = useI18n()
 const workspace = useProjectWorkspaceStore()
+const { currentStrategyName, toolbarMeta, activeViewComponent } = useResourceViewStrategy()
 
 const dragOver = ref(false)
 const uploadPrecheckVisible = ref(false)
@@ -57,51 +57,14 @@ const resourceItems = computed(() =>
 )
 
 const isEmpty = computed(
-  () => !workspace.loadingResourceTree && workspace.currentDirectoryChildren.length === 0,
-)
-
-// ── 资源多选 ──
-
-/** 当前目录中的资源列表 */
-const currentDirectoryAllResources = computed(() =>
-  resourceItems.value.map((item) => item.resource!),
+  () =>
+    !workspace.loadingResourceTree &&
+    workspace.currentDirectoryChildren.length === 0 &&
+    !workspace.isInEpubDirectory,
 )
 
 /** 当前目录中已选中的资源 ID 集合（用于快速查找） */
 const selectedIdSet = computed(() => new Set(workspace.selectedResourceIds))
-
-/** 当前目录资源是否全选 */
-const isCurrentDirAllSelected = computed(
-  () =>
-    currentDirectoryAllResources.value.length > 0 &&
-    currentDirectoryAllResources.value.every((r) => selectedIdSet.value.has(r.id)),
-)
-
-/** 当前目录是否有部分选中 */
-const isCurrentDirIndeterminate = computed(
-  () =>
-    !isCurrentDirAllSelected.value &&
-    currentDirectoryAllResources.value.some((r) => selectedIdSet.value.has(r.id)),
-)
-
-const toggleCurrentDirSelectAll = (): void => {
-  const allIds = currentDirectoryAllResources.value.map((r) => r.id)
-  if (isCurrentDirAllSelected.value) {
-    // 取消选中当前目录的资源
-    const removeSet = new Set(allIds)
-    workspace.setSelectedResourceIds(
-      workspace.selectedResourceIds.filter((id: number) => !removeSet.has(id)),
-    )
-  } else {
-    // 选中当前目录所有资源（与已有选中合并去重）
-    const merged = new Set([...workspace.selectedResourceIds, ...allIds])
-    workspace.setSelectedResourceIds([...merged])
-  }
-}
-
-const handleToggleSelect = (resource: Resource): void => {
-  workspace.toggleResourceSelection(resource.id)
-}
 
 // ── 生命周期 ──
 
@@ -123,6 +86,14 @@ const handleNavigate = (path: string): void => {
 
 const handleNavigateUp = (): void => {
   workspace.navigateUp()
+}
+
+// ── EPUB 章节操作 ──
+
+const handleChapterClick = (groupKey: string): void => {
+  const resourceId = workspace.epubDirectoryResourceId
+  if (!resourceId) return
+  emit('openEpubSegments', resourceId, groupKey)
 }
 
 const handleRefreshDirectory = async (): Promise<void> => {
@@ -480,6 +451,63 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
 
   await beginUpload(files, paths, summarizeUploadName(files))
 }
+
+// ── 视图 Props / Events 桥接 ──
+
+/** 传递给当前活跃视图组件的 props */
+const currentViewProps = computed(() => {
+  if (currentStrategyName.value === 'epub-directory') {
+    return {
+      loading: workspace.epubDirectoryLoading,
+      chapters: workspace.epubDirectoryChapters,
+      selectedGroupKeys: workspace.epubSelectedGroupKeys,
+    }
+  }
+  return {
+    directories: directories.value,
+    resourceItems: resourceItems.value,
+    selectedIdSet: selectedIdSet.value,
+    replacingResourceIds: workspace.replacingResourceIds,
+    incrementalUpdatingIds: workspace.incrementalUpdatingIds,
+    downloadingKeys: workspace.downloadingKeys,
+    deletingResourceIds: workspace.deletingResourceIds,
+  }
+})
+
+/** 传递给当前活跃视图组件的事件处理器 */
+const currentViewEvents = computed(() => {
+  if (currentStrategyName.value === 'epub-directory') {
+    return {
+      click: handleChapterClick,
+      toggleSelect: (groupKey: string) => workspace.toggleEpubGroupSelection(groupKey),
+    }
+  }
+  return {
+    navigate: handleNavigate,
+    openSegments: (r: Resource) => emit('openSegments', r),
+    openEpubDirectory: (r: Resource) => emit('openSegments', r),
+    replace: (r: Resource) => chooseReplacementFile(r.id),
+    incrementalUpdate: (r: Resource) => chooseIncrementalUpdateFile(r.id),
+    download: (r: Resource) => void downloadResource(r),
+    downloadTranslated: (r: Resource) => void downloadTranslatedResource(r),
+    delete: (r: Resource) => void deleteResource(r),
+    toggleSelect: (r: Resource) => workspace.toggleResourceSelection(r.id),
+    toggleSelectAll: (): void => {
+      const allIds = resourceItems.value.map((item) => item.resource!.id)
+      const selectedSet = new Set(workspace.selectedResourceIds)
+      const allSelected = allIds.length > 0 && allIds.every((id) => selectedSet.has(id))
+      if (allSelected) {
+        const removeSet = new Set(allIds)
+        workspace.setSelectedResourceIds(
+          workspace.selectedResourceIds.filter((id: number) => !removeSet.has(id)),
+        )
+      } else {
+        const merged = new Set([...workspace.selectedResourceIds, ...allIds])
+        workspace.setSelectedResourceIds([...merged])
+      }
+    },
+  }
+})
 </script>
 
 <template>
@@ -489,7 +517,7 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
       class="flex items-center gap-3 rounded-xl border border-lf-border-soft bg-lf-surface px-4 py-2.5"
     >
       <NButton
-        v-if="workspace.currentPath"
+        v-if="toolbarMeta.showBackButton"
         quaternary
         circle
         size="small"
@@ -502,29 +530,40 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
           <NIcon size="16"><IconCarbonArrowUp /></NIcon>
         </template>
       </NButton>
-      <div v-if="workspace.currentPath" class="h-4 border-l border-lf-border-soft" />
+      <div v-if="toolbarMeta.showDivider" class="h-4 border-l border-lf-border-soft" />
       <ResourceBreadcrumb
         class="min-w-0 flex-1"
         :items="workspace.breadcrumbs"
         :project-name="workspace.project?.name ?? ''"
+        :epub-directory-active="toolbarMeta.epubDirectoryActive"
         @navigate="handleNavigate"
       />
       <div class="flex shrink-0 items-center gap-1.5">
-        <NButton
-          quaternary
-          circle
-          size="small"
-          class="text-lf-text-muted hover:text-lf-text-strong"
-          :loading="workspace.loadingResourceTree"
-          :title="t('workspace.explorer.refreshDirectory')"
-          :aria-label="t('workspace.explorer.refreshDirectory')"
-          @click="handleRefreshDirectory"
+        <span v-if="toolbarMeta.epubDirectoryActive" class="text-xs text-lf-text-muted">
+          {{ workspace.epubDirectoryChapters.length }} {{ t('workspace.epub.chapters') }}
+        </span>
+        <template v-if="toolbarMeta.showRefreshButton">
+          <NButton
+            quaternary
+            circle
+            size="small"
+            class="text-lf-text-muted hover:text-lf-text-strong"
+            :loading="workspace.loadingResourceTree"
+            :title="t('workspace.explorer.refreshDirectory')"
+            :aria-label="t('workspace.explorer.refreshDirectory')"
+            @click="handleRefreshDirectory"
+          >
+            <template #icon>
+              <NIcon size="16"><IconCarbonRenew /></NIcon>
+            </template>
+          </NButton>
+        </template>
+        <NUpload
+          v-if="toolbarMeta.showUploadButton"
+          multiple
+          :show-file-list="false"
+          :custom-request="handleUpload"
         >
-          <template #icon>
-            <NIcon size="16"><IconCarbonRenew /></NIcon>
-          </template>
-        </NButton>
-        <NUpload multiple :show-file-list="false" :custom-request="handleUpload">
           <NButton type="primary" size="small" strong :loading="workspace.hasActiveUploads">
             <template #icon>
               <NIcon size="16"><IconCarbonUpload /></NIcon>
@@ -600,66 +639,13 @@ const handleDrop = async (event: DragEvent): Promise<void> => {
       </NEmpty>
     </div>
 
-    <!-- 目录 + 资源列表 -->
-    <template v-else>
-      <!-- 表头行 -->
-      <div
-        v-if="resourceItems.length > 0"
-        class="flex items-center gap-3 border-b border-lf-border-soft px-4 py-2 text-xs font-medium text-lf-text-muted"
-      >
-        <NCheckbox
-          v-if="currentDirectoryAllResources.length > 0"
-          :checked="isCurrentDirAllSelected"
-          :indeterminate="isCurrentDirIndeterminate"
-          class="shrink-0"
-          @update:checked="toggleCurrentDirSelectAll"
-        />
-        <div class="w-7 shrink-0" />
-        <!-- 图标占位 -->
-        <span class="flex-1">{{ t('workspace.explorer.headerName') }}</span>
-        <span class="w-16 text-right">{{ t('workspace.explorer.headerSegments') }}</span>
-        <span class="w-20 text-right">{{ t('workspace.explorer.headerProgress') }}</span>
-        <div class="w-14" />
-        <!-- 操作占位 -->
-      </div>
-
-      <!-- 目录列表 -->
-      <div v-if="directories.length > 0" class="space-y-1">
-        <DirectoryItem
-          v-for="dir in directories"
-          :key="dir.path"
-          :name="dir.name"
-          :path="dir.path"
-          :child-count="dir.childCount ?? 0"
-          @open="handleNavigate"
-        />
-      </div>
-
-      <!-- 资源列表 -->
-      <div v-if="resourceItems.length > 0" class="space-y-1">
-        <ResourceItem
-          v-for="item in resourceItems"
-          :key="item.path"
-          :resource="item.resource!"
-          :replacing="workspace.replacingResourceIds.includes(item.resource!.id)"
-          :incremental-updating="workspace.incrementalUpdatingIds.includes(item.resource!.id)"
-          :downloading="workspace.downloadingKeys.includes(`resource:${item.resource!.id}`)"
-          :downloading-translated="
-            workspace.downloadingKeys.includes(`resource:${item.resource!.id}:translated`)
-          "
-          :deleting="workspace.deletingResourceIds.includes(item.resource!.id)"
-          :progress="workspace.getResourceProgress(item.resource!.id)"
-          :selected="selectedIdSet.has(item.resource!.id)"
-          @open-segments="(r) => emit('openSegments', r)"
-          @replace="(r) => chooseReplacementFile(r.id)"
-          @incremental-update="(r) => chooseIncrementalUpdateFile(r.id)"
-          @download="(r) => void downloadResource(r)"
-          @download-translated="(r) => void downloadTranslatedResource(r)"
-          @delete="(r) => void deleteResource(r)"
-          @toggle-select="handleToggleSelect"
-        />
-      </div>
-    </template>
+    <!-- 动态视图组件：根据策略模式切换 DirectoryView / EpubDirectoryView -->
+    <component
+      :is="activeViewComponent"
+      v-else
+      v-bind="currentViewProps"
+      v-on="currentViewEvents"
+    />
 
     <NModal
       v-model:show="uploadPrecheckVisible"

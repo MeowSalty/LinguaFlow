@@ -18,9 +18,11 @@ export type {
   ReplaceUploadResult,
   UploadResultSummary,
   UploadExecutionResult,
+  SegmentGroup,
 } from './resource'
 
 export type { SegmentStatusFilter } from './segment'
+export type { ResourceSegmentGroup } from './segment'
 export type { JobStatusFilter } from './translationJob'
 
 export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
@@ -63,6 +65,13 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     availableFormats,
     readyResourceCount,
     totalSegmentCount,
+    // EPUB 虚拟目录
+    epubDirectoryResourceId,
+    epubDirectoryResourceName,
+    epubDirectoryChapters,
+    epubDirectoryLoading,
+    isInEpubDirectory,
+    epubDirectoryBreadcrumbSuffix,
   } = storeToRefs(resourceStore)
 
   // ── 重新导出段落 Store 的响应式状态 ──
@@ -76,6 +85,16 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     segmentStatusFilter,
     segmentProgressCache,
     translatedSegmentCount,
+    // EPUB 章节导航状态
+    segmentGroups,
+    loadingSegmentGroups,
+    segmentGroupsError,
+    epubActiveGroupKey,
+    epubActiveGroupTitle,
+    epubSelectedGroupKeys,
+    // isEpubResource 由下方跨域计算属性覆盖，不再从 segmentStore 导出
+    epubChapterCount,
+    isInChapterView,
   } = storeToRefs(segmentStore)
 
   // ── 重新导出任务 Store 的响应式状态 ──
@@ -108,6 +127,14 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   const actionError = computed(
     () => resourceStore.actionError ?? segmentStore.actionError ?? jobStore.actionError ?? null,
   )
+
+  /**
+   * 当前激活资源是否为 EPUB（基于 resource.format 判断，立即可用）
+   *
+   * 覆盖 segmentStore 中基于 segmentGroups 数据的 isEpubResource，
+   * 避免 resetEpubState() 清空 segmentGroups 后误判为非 EPUB。
+   */
+  const isEpubResource = computed(() => activeResource.value?.format === 'epub')
 
   // ── 监听目录变化，自动预加载当前目录下资源的段落进度 ──
   watch(currentPath, () => {
@@ -148,10 +175,23 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     toggleResourceSelection,
     setSelectedResourceIds,
     clearSelectedResources,
+    enterEpub,
+    exitEpub,
+    refreshEpubChapters,
   } = resourceStore
 
   // ── 直接委托的段落方法 ──
   const { loadSegments, updateSegment, getResourceProgress } = segmentStore
+
+  // ── 直接委托的 EPUB 方法 ──
+  const {
+    loadSegmentGroups,
+    enterChapter,
+    exitChapter,
+    toggleEpubGroupSelection,
+    refreshChapterGroups,
+    resetEpubState,
+  } = segmentStore
 
   // ── 直接委托的任务方法 ──
   const { loadJobs, loadJobDetail, createJob, cancelJob, retryJob } = jobStore
@@ -160,7 +200,10 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
 
   /** 设置当前激活资源并清空段落 */
   const setActiveResource = (resourceId: number | null): void => {
-    resourceStore.setActiveResource(resourceId, segmentStore.resetSegments)
+    resourceStore.setActiveResource(resourceId, () => {
+      segmentStore.resetSegments()
+      segmentStore.resetEpubState()
+    })
   }
 
   /** 替换资源并清空关联段落 */
@@ -193,6 +236,13 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
       .filter((r) => r.total_segments > 0)
       .map((r) => r.id)
     return segmentStore.preloadDirectoryProgress(projectId, resourceIds)
+  }
+
+  /**
+   * 加载 EPUB 资源的章节数据
+   */
+  const loadEpubData = async (projectId: number, resourceId: number): Promise<void> => {
+    await loadSegmentGroups(projectId, resourceId)
   }
 
   // ── 重置所有子 Store ──
@@ -265,6 +315,23 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     getResourceProgress,
     translatedSegmentCount,
     translationProgress,
+    // EPUB 章节导航
+    segmentGroups,
+    loadingSegmentGroups,
+    segmentGroupsError,
+    epubActiveGroupKey,
+    epubActiveGroupTitle,
+    epubSelectedGroupKeys,
+    isEpubResource,
+    epubChapterCount,
+    isInChapterView,
+    // EPUB 虚拟目录
+    epubDirectoryResourceId,
+    epubDirectoryResourceName,
+    epubDirectoryChapters,
+    epubDirectoryLoading,
+    isInEpubDirectory,
+    epubDirectoryBreadcrumbSuffix,
     // 计算属性
     availableFormats,
     readyResourceCount,
@@ -305,6 +372,18 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     downloadTranslatedResource,
     setActiveResource,
     preloadDirectoryProgress,
+    // EPUB
+    loadSegmentGroups,
+    loadEpubData,
+    enterChapter,
+    exitChapter,
+    toggleEpubGroupSelection,
+    refreshChapterGroups,
+    resetEpubState,
+    // EPUB 虚拟目录
+    enterEpub,
+    exitEpub,
+    refreshEpubChapters,
     toggleResourceSelection,
     setSelectedResourceIds,
     clearSelectedResources,

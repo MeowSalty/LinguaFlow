@@ -430,6 +430,7 @@ export const fetchResourceSegments = async (
   params?: {
     status?: 'pending' | 'translated' | 'edited' | 'approved' | 'rejected'
     search?: string
+    group_key?: string
     cursor?: string
     limit?: number
   },
