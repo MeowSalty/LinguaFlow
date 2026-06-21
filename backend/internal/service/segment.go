@@ -241,7 +241,10 @@ func (s *SegmentService) ListResourceSegmentGroups(ctx context.Context, actorUse
 				if v, ok := meta["epub_file"].(string); ok && v != "" {
 					groupKey = v
 				}
-				if v, ok := meta["epub_title"].(string); ok && v != "" {
+				// 优先使用章节标题，无法提取时回退到书籍标题
+				if v, ok := meta["epub_chapter_title"].(string); ok && v != "" {
+					groupTitle = v
+				} else if v, ok := meta["epub_chapter_title"].(string); ok && v != "" {
 					groupTitle = v
 				}
 			}

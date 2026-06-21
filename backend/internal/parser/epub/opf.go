@@ -189,3 +189,148 @@ func isXHTML(mediaType string) bool {
 	}
 	return false
 }
+
+// --------------------------------------------------------------------------
+// NCX（Navigation Center eXtended）解析
+// --------------------------------------------------------------------------
+
+// ncxXML 表示 toc.ncx 的 XML 结构。
+type ncxXML struct {
+	NavMap ncxNavMap `xml:"navMap"`
+}
+
+// ncxNavMap 表示 NCX 中的 <navMap> 元素。
+type ncxNavMap struct {
+	NavPoints []ncxNavPoint `xml:"navPoint"`
+}
+
+// ncxNavPoint 表示 NCX 中的 <navPoint> 元素（支持嵌套）。
+type ncxNavPoint struct {
+	NavLabel ncxNavLabel   `xml:"navLabel"`
+	Content  ncxContent    `xml:"content"`
+	Children []ncxNavPoint `xml:"navPoint"` // 嵌套的子 navPoint
+}
+
+// ncxNavLabel 表示 NCX 中的 <navLabel> 元素。
+type ncxNavLabel struct {
+	Text string `xml:"text"`
+}
+
+// ncxContent 表示 NCX 中的 <content> 元素。
+type ncxContent struct {
+	Src string `xml:"src,attr"`
+}
+
+// findNCXPath 从 OPF manifest 中查找 NCX 文件路径。
+//
+// 查找策略：
+//  1. media-type 为 "application/x-dtbncx+xml" 的条目
+//  2. id 包含 "ncx" 的条目
+//  3. href 以 "toc.ncx" 结尾的条目
+func findNCXPath(zr *zip.Reader, opfPath string) (string, bool) {
+	f, err := openZipFile(zr, opfPath)
+	if err != nil {
+		return "", false
+	}
+	defer f.Close()
+
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return "", false
+	}
+
+	var pkg opfPackage
+	if err := xml.Unmarshal(data, &pkg); err != nil {
+		return "", false
+	}
+
+	opfDir := path.Dir(opfPath)
+
+	for _, item := range pkg.Manifest {
+		// 策略1: media-type 匹配
+		if strings.EqualFold(item.MediaType, "application/x-dtbncx+xml") {
+			href := path.Clean(path.Join(opfDir, item.Href))
+			slog.Debug("[epub:findNCXPath] found by media-type", "href", href)
+			return href, true
+		}
+		// 策略2: id 包含 "ncx"
+		if strings.Contains(strings.ToLower(item.ID), "ncx") {
+			href := path.Clean(path.Join(opfDir, item.Href))
+			slog.Debug("[epub:findNCXPath] found by id", "href", href)
+			return href, true
+		}
+		// 策略3: href 以 toc.ncx 结尾
+		if strings.HasSuffix(strings.ToLower(item.Href), "toc.ncx") {
+			href := path.Clean(path.Join(opfDir, item.Href))
+			slog.Debug("[epub:findNCXPath] found by href suffix", "href", href)
+			return href, true
+		}
+	}
+
+	return "", false
+}
+
+// extractNCXTitles 解析 NCX 文件，提取每个 navPoint 对应的章节标题。
+//
+// 返回 map[content_src]title，其中 content_src 是 XHTML 文件相对于 OPF 目录的路径。
+// 例如：{"chapter1.xhtml": "第一章 开始", "chapter2.xhtml": "第二章 发展"}
+func extractNCXTitles(zr *zip.Reader, ncxPath string) map[string]string {
+	ncxData, err := readZipFile(zr, ncxPath)
+	if err != nil {
+		slog.Debug("[epub:extractNCXTitles] read ncx failed", "path", ncxPath, "error", err)
+		return nil
+	}
+
+	var ncx ncxXML
+	if err := xml.Unmarshal(ncxData, &ncx); err != nil {
+		slog.Debug("[epub:extractNCXTitles] parse ncx failed", "path", ncxPath, "error", err)
+		return nil
+	}
+
+	ncxDir := path.Dir(ncxPath)
+	titles := make(map[string]string)
+	collectNavPoints(ncx.NavMap.NavPoints, ncxDir, titles)
+
+	slog.Debug("[epub:extractNCXTitles] extracted titles", "count", len(titles))
+	for src, title := range titles {
+		slog.Debug("[epub:extractNCXTitles] title mapping", "src", src, "title", title)
+	}
+
+	return titles
+}
+
+// collectNavPoints 递归收集 navPoint 中的章节标题映射。
+// 处理嵌套的 navPoint 子节点。
+func collectNavPoints(navPoints []ncxNavPoint, ncxDir string, titles map[string]string) {
+	for _, np := range navPoints {
+		src := np.Content.Src
+		title := strings.TrimSpace(np.NavLabel.Text)
+
+		if src != "" && title != "" {
+			// 规范化 src：去除 fragment（#锚点），拼接为 ZIP 内绝对路径
+			if idx := strings.IndexByte(src, '#'); idx >= 0 {
+				src = src[:idx]
+			}
+			fullSrc := path.Clean(path.Join(ncxDir, src))
+
+			// 仅在尚未有标题映射时设置（保留第一个匹配的标题）
+			if _, exists := titles[fullSrc]; !exists {
+				titles[fullSrc] = title
+				slog.Debug("[epub:collectNavPoints] mapped", "src", fullSrc, "title", title)
+			}
+		}
+
+		// 递归处理子 navPoint
+		if len(np.Children) > 0 {
+			collectNavPoints(np.Children, ncxDir, titles)
+		}
+	}
+}
+
+// isTOCFile 检测文件名是否表示目录（Contents）文件。
+//
+// 检查文件名中是否包含 "toc"（不区分大小写）。
+func isTOCFile(filename string) bool {
+	base := strings.ToLower(path.Base(filename))
+	return strings.Contains(base, "toc")
+}

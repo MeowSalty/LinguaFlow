@@ -9,6 +9,8 @@ import (
 	"encoding/xml"
 	"fmt"
 	"html"
+	"log/slog"
+	"path"
 	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
@@ -344,4 +346,199 @@ func isBlockElement(tag string) bool {
 // shouldSkipTag 判断标签是否应被跳过。
 func shouldSkipTag(tag string) bool {
 	return skipTags[tag]
+}
+
+// extractXHTMLTOCTitles 从 XHTML 目录文件中提取章节标题映射。
+//
+// 解析 XHTML 内容，提取所有 <a href="file.xhtml#anchor">标题</a> 链接，
+// 返回 map[resolvedHref]title。
+//
+// 例如：{"OEBPS/p-003.xhtml": "プロローグ", "OEBPS/p-004.xhtml": "一章 一年次の春に"}
+//
+// tocHref 是 TOC 文件在 ZIP 内的路径，用于将相对 href 解析为绝对路径。
+func extractXHTMLTOCTitles(data []byte, tocHref string) map[string]string {
+	decoder := xml.NewDecoder(strings.NewReader(string(data)))
+	decoder.Strict = false
+	decoder.AutoClose = xml.HTMLAutoClose
+	decoder.Entity = xml.HTMLEntity
+
+	titles := make(map[string]string)
+	inTocLink := false
+	linkHref := ""
+	var linkText strings.Builder
+
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			break
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			tag := t.Name.Local
+
+			// 收集所有 <a href="..."> 标签
+			if tag == "a" {
+				for _, attr := range t.Attr {
+					if attr.Name.Local == "href" && attr.Name.Space == "" {
+						href := attr.Value
+						// 只处理指向 XHTML 文件的链接（排除外部链接和纯锚点链接）
+						if href != "" && !strings.HasPrefix(href, "http") && !strings.HasPrefix(href, "#") {
+							inTocLink = true
+							linkHref = href
+							linkText.Reset()
+						}
+						break
+					}
+				}
+			}
+
+		case xml.EndElement:
+			if inTocLink && t.Name.Local == "a" {
+				text := strings.TrimSpace(linkText.String())
+				if text != "" && linkHref != "" {
+					// 解析 href：去除 fragment（#锚点）
+					href := linkHref
+					if idx := strings.IndexByte(href, '#'); idx >= 0 {
+						href = href[:idx]
+					}
+
+					// 将相对路径解析为 ZIP 内绝对路径
+					tocDir := path.Dir(tocHref)
+					fullHref := path.Clean(path.Join(tocDir, href))
+
+					// 仅在尚未有标题映射时设置（保留第一个匹配的标题）
+					if _, exists := titles[fullHref]; !exists {
+						titles[fullHref] = text
+					}
+				}
+				inTocLink = false
+				linkHref = ""
+				linkText.Reset()
+			}
+
+		case xml.CharData:
+			if inTocLink {
+				linkText.WriteString(string(t))
+			}
+		}
+	}
+
+	slog.Debug("[epub:extractXHTMLTOCTitles] extracted titles", "count", len(titles), "tocHref", tocHref)
+	for src, title := range titles {
+		slog.Debug("[epub:extractXHTMLTOCTitles] title mapping", "src", src, "title", title)
+	}
+
+	return titles
+}
+
+// resolveChapterTitle 按优先级解析章节标题。
+//
+// 提取优先级（从高到低）：
+//  1. 目录文件（TOC）→ 使用固定名称
+//  2. XHTML TOC 文件中的标题（最可靠，从 <a> 链接提取）
+//  3. NCX 目录中的标题
+//  4. XHTML <head> 中的 <title> 标签
+//  5. 正文中第一个 <h1>/<h2>/<h3> 标题
+//  6. 文件名（最终回退）
+func resolveChapterTitle(href string, xhtmlData []byte, xhtmlTOCTitles, ncxTitles map[string]string, bookTitle string) string {
+	// 优先级 1: 目录文件使用固定名称
+	if isTOCFile(href) {
+		slog.Debug("[epub:resolveChapterTitle] TOC file detected", "href", href)
+		return "Contents"
+	}
+
+	// 优先级 2: XHTML TOC 文件中的标题
+	if title, ok := xhtmlTOCTitles[path.Clean(href)]; ok {
+		slog.Debug("[epub:resolveChapterTitle] XHTML TOC title found", "href", href, "title", title)
+		return title
+	}
+
+	// 优先级 3: NCX 目录中的标题
+	if title, ok := ncxTitles[path.Clean(href)]; ok {
+		slog.Debug("[epub:resolveChapterTitle] NCX title found", "href", href, "title", title)
+		return title
+	}
+
+	// 优先级 4 & 5: 从 XHTML 内容中提取 <title> 或 <h1>/<h2>/<h3>
+	if title := extractChapterTitle(xhtmlData); title != "" {
+		slog.Debug("[epub:resolveChapterTitle] XHTML title found", "href", href, "title", title)
+		return title
+	}
+
+	// 优先级 6: 文件名作为最终回退
+	return path.Base(href)
+}
+
+// extractChapterTitle 从 XHTML 数据中提取章节标题。
+//
+// 提取优先级：
+//  1. <head> 中的 <title> 标签内容
+//  2. 正文中第一个 <h1>/<h2>/<h3> 标题文本
+//  3. 返回空字符串（调用方应回退到文件名）
+func extractChapterTitle(data []byte) string {
+	decoder := xml.NewDecoder(strings.NewReader(string(data)))
+	decoder.Strict = false
+	decoder.AutoClose = xml.HTMLAutoClose
+	decoder.Entity = xml.HTMLEntity
+
+	headingTags := map[string]bool{
+		"h1": true, "h2": true, "h3": true,
+	}
+
+	inHead := false
+
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			break
+		}
+
+		switch t := tok.(type) {
+		case xml.StartElement:
+			tag := t.Name.Local
+			switch {
+			case tag == "head":
+				inHead = true
+			case tag == "title" && inHead:
+				if title := extractTextUntilClose(decoder, "title"); title != "" {
+					return title
+				}
+			case headingTags[tag]:
+				if heading := extractTextUntilClose(decoder, tag); heading != "" {
+					return heading
+				}
+			}
+		case xml.EndElement:
+			if t.Name.Local == "head" {
+				inHead = false
+			}
+		}
+	}
+
+	return ""
+}
+
+// extractTextUntilClose 从当前位置提取到匹配闭合标签之间的纯文本内容。
+// 支持嵌套子标签，正确跟踪深度。
+func extractTextUntilClose(decoder *xml.Decoder, endTag string) string {
+	var text strings.Builder
+	depth := 1
+	for depth > 0 {
+		tok, err := decoder.Token()
+		if err != nil {
+			break
+		}
+		switch t := tok.(type) {
+		case xml.StartElement:
+			depth++
+		case xml.EndElement:
+			depth--
+		case xml.CharData:
+			if depth > 0 {
+				text.WriteString(string(t))
+			}
+		}
+	}
+	return strings.TrimSpace(text.String())
 }

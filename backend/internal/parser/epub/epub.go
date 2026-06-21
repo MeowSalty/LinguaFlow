@@ -82,7 +82,18 @@ func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error)
 
 	metadata := extractMetadata(zipReader, opfPath)
 
-	// 6. 按 spine 顺序遍历 XHTML 文件
+	// 6. 从 NCX 文件提取章节标题映射
+	ncxTitles := make(map[string]string)
+	if ncxPath, ok := findNCXPath(zipReader, opfPath); ok {
+		ncxTitles = extractNCXTitles(zipReader, ncxPath)
+		slog.Debug("[epub:parse] ncx titles loaded", "count", len(ncxTitles))
+	} else {
+		slog.Debug("[epub:parse] no ncx file found")
+	}
+
+	// 7. 按 spine 顺序遍历 XHTML 文件
+	// 先收集 XHTML TOC 标题（从目录文件中的 <a> 链接提取）
+	xhtmlTOCTitles := make(map[string]string)
 	var segments []pipeline.Segment
 	for _, item := range spine {
 		if !isXHTML(item.MediaType) {
@@ -96,6 +107,17 @@ func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error)
 			continue // 跳过无法读取的文件
 		}
 
+		// 如果是 TOC 文件，提取其中的章节标题映射
+		if isTOCFile(item.Href) {
+			titles := extractXHTMLTOCTitles(xhtmlData, item.Href)
+			for k, v := range titles {
+				if _, exists := xhtmlTOCTitles[k]; !exists {
+					xhtmlTOCTitles[k] = v
+				}
+			}
+			slog.Debug("[epub:parse] xhtml toc titles loaded from", "href", item.Href, "newTitles", len(titles), "totalTitles", len(xhtmlTOCTitles))
+		}
+
 		fileSegments, err := extractSegmentsFromXHTML(xhtmlData, item.Href)
 		if err != nil {
 			slog.Debug("[epub:parse] extractSegmentsFromXHTML failed", "href", item.Href, "error", err)
@@ -103,12 +125,23 @@ func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error)
 		}
 		slog.Debug("[epub:parse] parsed file", "href", item.Href, "segments", len(fileSegments))
 
+		// 提取章节标题（优先级从高到低）：
+		//  1. 目录文件（TOC）→ 使用固定名称 "Contents"
+		//  2. XHTML TOC 文件中的标题（最可靠，从 <a> 链接提取）
+		//  3. NCX 目录中的标题
+		//  4. XHTML <head> 中的 <title> 标签
+		//  5. 正文中第一个 <h1>/<h2>/<h3> 标题
+		//  6. 文件名（最终回退）
+		chapterTitle := resolveChapterTitle(item.Href, xhtmlData, xhtmlTOCTitles, ncxTitles, metadata.Title)
+		slog.Debug("[epub:parse] chapter title", "href", item.Href, "chapterTitle", chapterTitle)
+
 		// 为每个 Segment 补充章节级元数据
 		for i := range fileSegments {
 			if fileSegments[i].Meta == nil {
 				fileSegments[i].Meta = map[string]any{}
 			}
 			fileSegments[i].Meta["epub_title"] = metadata.Title
+			fileSegments[i].Meta["epub_chapter_title"] = chapterTitle
 			fileSegments[i].Meta["epub_id"] = item.ID
 		}
 

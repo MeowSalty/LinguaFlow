@@ -19,6 +19,7 @@ type testChapter struct {
 	filename string // ZIP 内文件名，如 "OEBPS/chapter1.xhtml"
 	content  string // XHTML body 内容
 	id       string // manifest 中的 id
+	title    string // <head><title> 内容，为空时使用 "Chapter"
 }
 
 // createTestEPUB 在内存中创建一个最小的 EPUB ZIP。
@@ -97,14 +98,18 @@ func createTestEPUBWithTitle(t *testing.T, chapters []testChapter, title string)
 		if err != nil {
 			t.Fatalf("create %s: %v", ch.filename, err)
 		}
+		chTitle := ch.title
+		if chTitle == "" {
+			chTitle = "Chapter"
+		}
 		xhtml := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
-<head><title>Chapter</title></head>
+<head><title>%s</title></head>
 <body>
 %s
 </body>
-</html>`, ch.content)
+</html>`, chTitle, ch.content)
 		if _, err := io.WriteString(cw, xhtml); err != nil {
 			t.Fatalf("write %s: %v", ch.filename, err)
 		}
@@ -184,14 +189,18 @@ func createTestEPUBWithExtraFiles(t *testing.T, chapters []testChapter, extraFil
 		if err != nil {
 			t.Fatalf("create %s: %v", ch.filename, err)
 		}
+		chTitle := ch.title
+		if chTitle == "" {
+			chTitle = "Chapter"
+		}
 		xhtml := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE html>
 <html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
-<head><title>Chapter</title></head>
+<head><title>%s</title></head>
 <body>
 %s
 </body>
-</html>`, ch.content)
+</html>`, chTitle, ch.content)
 		if _, err := io.WriteString(cw, xhtml); err != nil {
 			t.Fatalf("write %s: %v", ch.filename, err)
 		}
@@ -254,7 +263,7 @@ func testParseSimpleEPUB(t *testing.T) {
 		t.Errorf("Source = %q, want %q", seg.Source, "こんにちは世界")
 	}
 
-	requiredMeta := []string{"epub_file", "epub_title", "epub_id", "element_path", "content_hash", "tag"}
+	requiredMeta := []string{"epub_file", "epub_title", "epub_chapter_title", "epub_id", "element_path", "content_hash", "tag"}
 	for _, key := range requiredMeta {
 		if _, ok := seg.Meta[key]; !ok {
 			t.Errorf("Meta missing key %q", key)
@@ -264,9 +273,9 @@ func testParseSimpleEPUB(t *testing.T) {
 
 func testParseMultiChapterEPUB(t *testing.T) {
 	data := createTestEPUB(t, []testChapter{
-		{filename: "OEBPS/ch1.xhtml", content: "<p>第一章内容</p>", id: "ch1"},
-		{filename: "OEBPS/ch2.xhtml", content: "<p>第二章内容</p>", id: "ch2"},
-		{filename: "OEBPS/ch3.xhtml", content: "<p>第三章内容</p>", id: "ch3"},
+		{filename: "OEBPS/ch1.xhtml", content: "<p>第一章内容</p>", id: "ch1", title: "第一章 开始"},
+		{filename: "OEBPS/ch2.xhtml", content: "<p>第二章内容</p>", id: "ch2", title: "第二章 发展"},
+		{filename: "OEBPS/ch3.xhtml", content: "<p>第三章内容</p>", id: "ch3", title: "第三章 结局"},
 	})
 
 	p := newParser()
@@ -279,27 +288,28 @@ func testParseMultiChapterEPUB(t *testing.T) {
 	}
 
 	expected := []struct {
-		file  string
-		title string
-		id    string
+		file         string
+		bookTitle    string
+		chapterTitle string
+		id           string
 	}{
-		{"OEBPS/ch1.xhtml", "Test Book", "ch1"},
-		{"OEBPS/ch2.xhtml", "Test Book", "ch2"},
-		{"OEBPS/ch3.xhtml", "Test Book", "ch3"},
+		{"OEBPS/ch1.xhtml", "Test Book", "第一章 开始", "ch1"},
+		{"OEBPS/ch2.xhtml", "Test Book", "第二章 发展", "ch2"},
+		{"OEBPS/ch3.xhtml", "Test Book", "第三章 结局", "ch3"},
 	}
 
 	for i, seg := range doc.Segments {
-		if seg.Source != expected[i].title[:0]+"第" {
-			// 只检查 epub_file 和 epub_id
-		}
 		if ep, ok := seg.Meta["epub_file"].(string); !ok || ep != expected[i].file {
 			t.Errorf("segment[%d] epub_file = %v, want %q", i, ep, expected[i].file)
 		}
 		if id, ok := seg.Meta["epub_id"].(string); !ok || id != expected[i].id {
 			t.Errorf("segment[%d] epub_id = %v, want %q", i, id, expected[i].id)
 		}
-		if et, ok := seg.Meta["epub_title"].(string); !ok || et != expected[i].title {
-			t.Errorf("segment[%d] epub_title = %v, want %q", i, et, expected[i].title)
+		if et, ok := seg.Meta["epub_title"].(string); !ok || et != expected[i].bookTitle {
+			t.Errorf("segment[%d] epub_title = %v, want %q", i, et, expected[i].bookTitle)
+		}
+		if ct, ok := seg.Meta["epub_chapter_title"].(string); !ok || ct != expected[i].chapterTitle {
+			t.Errorf("segment[%d] epub_chapter_title = %v, want %q", i, ct, expected[i].chapterTitle)
 		}
 	}
 }
@@ -492,7 +502,7 @@ func testParseEPUBMeta(t *testing.T) {
 }
 
 func testParseEPUBNestedXHTML(t *testing.T) {
-	content := `<div><p>段落1</p><p>段落2</p></div>`
+	content := `<div><p>段落 1</p><p>段落 2</p></div>`
 	data := createTestEPUB(t, []testChapter{
 		{filename: "OEBPS/ch1.xhtml", content: content, id: "ch1"},
 	})
@@ -505,10 +515,10 @@ func testParseEPUBNestedXHTML(t *testing.T) {
 	if len(doc.Segments) != 2 {
 		t.Fatalf("expected 2 segments, got %d", len(doc.Segments))
 	}
-	if doc.Segments[0].Source != "段落1" {
+	if doc.Segments[0].Source != "段落 1" {
 		t.Errorf("segment[0] Source = %q, want %q", doc.Segments[0].Source, "段落1")
 	}
-	if doc.Segments[1].Source != "段落2" {
+	if doc.Segments[1].Source != "段落 2" {
 		t.Errorf("segment[1] Source = %q, want %q", doc.Segments[1].Source, "段落2")
 	}
 }
@@ -1255,7 +1265,7 @@ func TestRenderPreservesXMLProcessingInstruction(t *testing.T) {
 func TestPathTrackerChildCounterReset(t *testing.T) {
 	pt := newPathTracker()
 
-	// 构建路径: div/div/p
+	// 构建路径：div/div/p
 	pt.push("div") // 外层 div
 	pt.push("div") // 第一个内层 div
 	pt.push("p")   // 第一个内层 div 中的 p
@@ -1340,5 +1350,700 @@ func TestRenderReplacesMultipleParagraphs(t *testing.T) {
 		if err != nil {
 			t.Fatalf("输出不是合法的 XML: %v\n%s", err, output)
 		}
+	}
+}
+
+// TestExtractChapterTitle 验证 extractChapterTitle 的标题提取逻辑。
+func TestExtractChapterTitle(t *testing.T) {
+	tests := []struct {
+		name     string
+		xhtml    string
+		expected string
+	}{
+		{
+			name: "优先使用 head 中的 title",
+			xhtml: `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>第一章 序言</title></head>
+<body><h1>不应使用此标题</h1><p>内容</p></body>
+</html>`,
+			expected: "第一章 序言",
+		},
+		{
+			name: "回退到 h1 标题",
+			xhtml: `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head></head>
+<body><h1>章节标题</h1><p>内容</p></body>
+</html>`,
+			expected: "章节标题",
+		},
+		{
+			name: "回退到 h2 标题",
+			xhtml: `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head></head>
+<body><p>段落</p><h2>二级标题</h2><p>内容</p></body>
+</html>`,
+			expected: "二级标题",
+		},
+		{
+			name: "回退到 h3 标题",
+			xhtml: `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head></head>
+<body><p>段落</p><h3>三级标题</h3></body>
+</html>`,
+			expected: "三级标题",
+		},
+		{
+			name: "无标题时返回空字符串",
+			xhtml: `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head></head>
+<body><p>只有段落没有标题</p></body>
+</html>`,
+			expected: "",
+		},
+		{
+			name: "title 为空时回退到 h1",
+			xhtml: `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>  </title></head>
+<body><h1>实际标题</h1></body>
+</html>`,
+			expected: "实际标题",
+		},
+		{
+			name: "标题含内联标签时提取纯文本",
+			xhtml: `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>第<b>一</b>章</title></head>
+<body><p>内容</p></body>
+</html>`,
+			expected: "第一章",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractChapterTitle([]byte(tt.xhtml))
+			if got != tt.expected {
+				t.Errorf("extractChapterTitle() = %q, want %q", got, tt.expected)
+			}
+		})
+	}
+}
+
+// ==========================================================================
+// NCX 目录标题提取测试
+// ==========================================================================
+
+func TestNCXTitleExtraction(t *testing.T) {
+	t.Run("testNCXTitlesPriority", testNCXTitlesPriority)
+	t.Run("testNCXTitlesOverwriteXHTMLTitle", testNCXTitlesOverwriteXHTMLTitle)
+	t.Run("testNCXNestedNavPoints", testNCXNestedNavPoints)
+	t.Run("testTOCFileFixedTitle", testTOCFileFixedTitle)
+	t.Run("testNoNCXFallsBackToXHTMLTitle", testNoNCXFallsBackToXHTMLTitle)
+	t.Run("testNCXWithAnchorInSrc", testNCXWithAnchorInSrc)
+}
+
+// createTestEPUBWithNCX 创建包含 NCX 文件的测试 EPUB。
+// ncxNavPoints 定义 NCX 中的章节映射，格式为 []struct{Src, Label string}。
+func createTestEPUBWithNCX(t *testing.T, chapters []testChapter, ncxNavPoints []struct{ Src, Label string }) []byte {
+	t.Helper()
+
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+
+	// 1. mimetype
+	mw, err := w.CreateHeader(&zip.FileHeader{
+		Name:   "mimetype",
+		Method: zip.Store,
+	})
+	if err != nil {
+		t.Fatalf("create mimetype: %v", err)
+	}
+	if _, err := io.WriteString(mw, "application/epub+zip"); err != nil {
+		t.Fatalf("write mimetype: %v", err)
+	}
+
+	// 2. container.xml
+	cw, err := w.Create("META-INF/container.xml")
+	if err != nil {
+		t.Fatalf("create container.xml: %v", err)
+	}
+	if _, err := io.WriteString(cw, `<?xml version="1.0" encoding="UTF-8"?>
+<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`); err != nil {
+		t.Fatalf("write container.xml: %v", err)
+	}
+
+	// 3. content.opf (包含 NCX manifest 条目)
+	var manifestItems, spineItems string
+	for _, ch := range chapters {
+		manifestItems += fmt.Sprintf(`    <item id="%s" href="%s" media-type="application/xhtml+xml"/>
+`, ch.id, path.Base(ch.filename))
+		spineItems += fmt.Sprintf(`    <itemref idref="%s"/>
+`, ch.id)
+	}
+
+	opf := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    <dc:identifier id="uid">urn:uuid:12345</dc:identifier>
+  </metadata>
+  <manifest>
+%s    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+  </manifest>
+  <spine>
+%s  </spine>
+</package>`, manifestItems, spineItems)
+
+	ow, err := w.Create("OEBPS/content.opf")
+	if err != nil {
+		t.Fatalf("create content.opf: %v", err)
+	}
+	if _, err := io.WriteString(ow, opf); err != nil {
+		t.Fatalf("write content.opf: %v", err)
+	}
+
+	// 4. toc.ncx
+	var navPointsXML string
+	for _, np := range ncxNavPoints {
+		navPointsXML += fmt.Sprintf(`    <navPoint>
+      <navLabel><text>%s</text></navLabel>
+      <content src="%s"/>
+    </navPoint>
+`, np.Label, np.Src)
+	}
+
+	ncxXML := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head>
+    <meta name="dtb:uid" content="urn:uuid:12345"/>
+  </head>
+  <docTitle><text>Test Book</text></docTitle>
+  <navMap>
+%s  </navMap>
+</ncx>`, navPointsXML)
+
+	ncxw, err := w.Create("OEBPS/toc.ncx")
+	if err != nil {
+		t.Fatalf("create toc.ncx: %v", err)
+	}
+	if _, err := io.WriteString(ncxw, ncxXML); err != nil {
+		t.Fatalf("write toc.ncx: %v", err)
+	}
+
+	// 5. 各章节 XHTML
+	for _, ch := range chapters {
+		cw, err := w.Create(ch.filename)
+		if err != nil {
+			t.Fatalf("create %s: %v", ch.filename, err)
+		}
+		chTitle := ch.title
+		if chTitle == "" {
+			chTitle = "Chapter"
+		}
+		xhtml := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>%s</title></head>
+<body>
+%s
+</body>
+</html>`, chTitle, ch.content)
+		if _, err := io.WriteString(cw, xhtml); err != nil {
+			t.Fatalf("write %s: %v", ch.filename, err)
+		}
+	}
+
+	if err := w.Close(); err != nil {
+		t.Fatalf("close zip: %v", err)
+	}
+	return buf.Bytes()
+}
+
+// testNCXTitlesPriority 验证 NCX 中的标题优先于 XHTML 中的 <title>。
+func testNCXTitlesPriority(t *testing.T) {
+	data := createTestEPUBWithNCX(t, []testChapter{
+		{filename: "OEBPS/ch1.xhtml", content: "<p>内容 1</p>", id: "ch1", title: "XHTML 标题 1"},
+		{filename: "OEBPS/ch2.xhtml", content: "<p>内容 2</p>", id: "ch2", title: "XHTML 标题 2"},
+	}, []struct{ Src, Label string }{
+		{"ch1.xhtml", "NCX 第一章"},
+		{"ch2.xhtml", "NCX 第二章"},
+	})
+
+	p := newParser()
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(doc.Segments) != 2 {
+		t.Fatalf("expected 2 segments, got %d", len(doc.Segments))
+	}
+
+	// NCX 标题应优先于 XHTML <title>
+	if ct, ok := doc.Segments[0].Meta["epub_chapter_title"].(string); !ok || ct != "NCX 第一章" {
+		t.Errorf("segment[0] epub_chapter_title = %v, want %q", doc.Segments[0].Meta["epub_chapter_title"], "NCX第一章")
+	}
+	if ct, ok := doc.Segments[1].Meta["epub_chapter_title"].(string); !ok || ct != "NCX 第二章" {
+		t.Errorf("segment[1] epub_chapter_title = %v, want %q", doc.Segments[1].Meta["epub_chapter_title"], "NCX第二章")
+	}
+}
+
+// testNCXTitlesOverwriteXHTMLTitle 验证 NCX 中有标题时，XHTML <title> 不会被使用。
+func testNCXTitlesOverwriteXHTMLTitle(t *testing.T) {
+	data := createTestEPUBWithNCX(t, []testChapter{
+		{filename: "OEBPS/ch1.xhtml", content: "<p>内容</p>", id: "ch1", title: "书籍名称"},
+	}, []struct{ Src, Label string }{
+		{"ch1.xhtml", "プロローグ"},
+	})
+
+	p := newParser()
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(doc.Segments) != 1 {
+		t.Fatalf("expected 1 segment, got %d", len(doc.Segments))
+	}
+
+	// NCX 标题 "プロローグ" 应优先于 XHTML <title> "书籍名称"
+	ct, ok := doc.Segments[0].Meta["epub_chapter_title"].(string)
+	if !ok || ct != "プロローグ" {
+		t.Errorf("epub_chapter_title = %v, want %q", ct, "プロローグ")
+	}
+}
+
+// testNCXNestedNavPoints 验证嵌套的 navPoint 也能正确提取标题。
+func testNCXNestedNavPoints(t *testing.T) {
+	// 手动构建带嵌套 navPoint 的 EPUB
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+
+	// mimetype
+	mw, _ := w.CreateHeader(&zip.FileHeader{Name: "mimetype", Method: zip.Store})
+	io.WriteString(mw, "application/epub+zip")
+
+	// container.xml
+	cw, _ := w.Create("META-INF/container.xml")
+	io.WriteString(cw, `<?xml version="1.0" encoding="UTF-8"?>
+<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`)
+
+	// content.opf
+	ow, _ := w.Create("OEBPS/content.opf")
+	io.WriteString(ow, `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    <dc:identifier id="uid">urn:uuid:12345</dc:identifier>
+  </metadata>
+  <manifest>
+    <item id="ch1" href="ch1.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch2" href="ch2.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="ch1"/>
+    <itemref idref="ch2"/>
+  </spine>
+</package>`)
+
+	// toc.ncx with nested navPoints
+	ncxw, _ := w.Create("OEBPS/toc.ncx")
+	io.WriteString(ncxw, `<?xml version="1.0" encoding="UTF-8"?>
+<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">
+  <head/>
+  <docTitle><text>Test</text></docTitle>
+  <navMap>
+    <navPoint>
+      <navLabel><text>第一部</text></navLabel>
+      <content src="ch1.xhtml"/>
+      <navPoint>
+        <navLabel><text>第一章</text></navLabel>
+        <content src="ch2.xhtml"/>
+      </navPoint>
+    </navPoint>
+  </navMap>
+</ncx>`)
+
+	// ch1.xhtml
+	c1w, _ := w.Create("OEBPS/ch1.xhtml")
+	io.WriteString(c1w, `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>嵌套测试</title></head>
+<body><p>内容 1</p></body>
+</html>`)
+
+	// ch2.xhtml
+	c2w, _ := w.Create("OEBPS/ch2.xhtml")
+	io.WriteString(c2w, `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>嵌套测试 2</title></head>
+<body><p>内容 2</p></body>
+</html>`)
+
+	w.Close()
+
+	p := newParser()
+	doc, err := p.Parse(context.Background(), bytes.NewReader(buf.Bytes()))
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(doc.Segments) != 2 {
+		t.Fatalf("expected 2 segments, got %d", len(doc.Segments))
+	}
+
+	// ch1 应使用嵌套 navPoint 中的第一个匹配（第一部）
+	if ct, ok := doc.Segments[0].Meta["epub_chapter_title"].(string); !ok || ct != "第一部" {
+		t.Errorf("segment[0] epub_chapter_title = %v, want %q", doc.Segments[0].Meta["epub_chapter_title"], "第一部")
+	}
+	// ch2 应使用嵌套的 navPoint（第一章）
+	if ct, ok := doc.Segments[1].Meta["epub_chapter_title"].(string); !ok || ct != "第一章" {
+		t.Errorf("segment[1] epub_chapter_title = %v, want %q", doc.Segments[1].Meta["epub_chapter_title"], "第一章")
+	}
+}
+
+// testTOCFileFixedTitle 验证目录文件（文件名含 "toc"）使用固定名称 "Contents"。
+func testTOCFileFixedTitle(t *testing.T) {
+	// 使用 NCX，但其中一个章节文件名含 "toc"
+	data := createTestEPUBWithNCX(t, []testChapter{
+		{filename: "OEBPS/p-toc-001.xhtml", content: "<p>目录内容</p>", id: "toc", title: "书籍名称"},
+		{filename: "OEBPS/ch1.xhtml", content: "<p>章节内容</p>", id: "ch1", title: "第一章"},
+	}, []struct{ Src, Label string }{
+		{"p-toc-001.xhtml", "不应使用此标题"},
+		{"ch1.xhtml", "NCX 第一章"},
+	})
+
+	p := newParser()
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(doc.Segments) != 2 {
+		t.Fatalf("expected 2 segments, got %d", len(doc.Segments))
+	}
+
+	// TOC 文件应使用固定名称 "Contents"（优先级最高）
+	ct, ok := doc.Segments[0].Meta["epub_chapter_title"].(string)
+	if !ok || ct != "Contents" {
+		t.Errorf("TOC segment epub_chapter_title = %v, want %q", ct, "Contents")
+	}
+
+	// 非 TOC 文件应使用 NCX 标题
+	ct2, ok := doc.Segments[1].Meta["epub_chapter_title"].(string)
+	if !ok || ct2 != "NCX 第一章" {
+		t.Errorf("ch1 segment epub_chapter_title = %v, want %q", ct2, "NCX第一章")
+	}
+}
+
+// testNoNCXFallsBackToXHTMLTitle 验证没有 NCX 文件时回退到 XHTML <title>。
+func testNoNCXFallsBackToXHTMLTitle(t *testing.T) {
+	// 使用普通 EPUB（无 NCX）
+	data := createTestEPUB(t, []testChapter{
+		{filename: "OEBPS/ch1.xhtml", content: "<p>内容</p>", id: "ch1", title: "第一章 开始"},
+	})
+
+	p := newParser()
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(doc.Segments) != 1 {
+		t.Fatalf("expected 1 segment, got %d", len(doc.Segments))
+	}
+
+	// 无 NCX 时应回退到 XHTML <title>
+	ct, ok := doc.Segments[0].Meta["epub_chapter_title"].(string)
+	if !ok || ct != "第一章 开始" {
+		t.Errorf("epub_chapter_title = %v, want %q", ct, "第一章 开始")
+	}
+}
+
+// testNCXWithAnchorInSrc 验证 NCX content src 中的锚点（#fragment）被正确处理。
+func testNCXWithAnchorInSrc(t *testing.T) {
+	data := createTestEPUBWithNCX(t, []testChapter{
+		{filename: "OEBPS/ch1.xhtml", content: "<p>内容</p>", id: "ch1", title: "XHTML 标题"},
+	}, []struct{ Src, Label string }{
+		{"ch1.xhtml#section1", "带锚点的章节"},
+	})
+
+	p := newParser()
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+	if len(doc.Segments) != 1 {
+		t.Fatalf("expected 1 segment, got %d", len(doc.Segments))
+	}
+
+	// 应该能正确匹配（去掉 #section1 后匹配 ch1.xhtml）
+	ct, ok := doc.Segments[0].Meta["epub_chapter_title"].(string)
+	if !ok || ct != "带锚点的章节" {
+		t.Errorf("epub_chapter_title = %v, want %q", ct, "带锚点的章节")
+	}
+}
+
+// TestIsTOCFile 验证 isTOCFile 函数的正确性。
+func TestIsTOCFile(t *testing.T) {
+	tests := []struct {
+		filename string
+		expected bool
+	}{
+		{"OEBPS/p-toc-001.xhtml", true},
+		{"OEBPS/toc.xhtml", true},
+		{"OEBPS/TOC.xhtml", true},
+		{"OEBPS/my-toc-file.xhtml", true},
+		{"OEBPS/chapter1.xhtml", false},
+		{"OEBPS/nav.xhtml", false},
+		{"OEBPS/content.opf", false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.filename, func(t *testing.T) {
+			got := isTOCFile(tt.filename)
+			if got != tt.expected {
+				t.Errorf("isTOCFile(%q) = %v, want %v", tt.filename, got, tt.expected)
+			}
+		})
+	}
+}
+
+// TestExtractXHTMLTOCTitles 验证 extractXHTMLTOCTitles 函数的正确性。
+func TestExtractXHTMLTOCTitles(t *testing.T) {
+	tests := []struct {
+		name     string
+		xhtml    string
+		tocHref  string
+		expected map[string]string
+	}{
+		{
+			name: "标准 XHTML 目录",
+			xhtml: `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>目次</title></head>
+<body>
+<nav epub:type="toc" xmlns:epub="http://www.idpf.org/2007/ops">
+<h1>目次</h1>
+<p><a href="p-003.xhtml#toc-001">プロローグ</a></p>
+<p><a href="p-004.xhtml#toc-002">一章 一年次の春に</a></p>
+<p><a href="p-005.xhtml#toc-003">二章 獅子聖庁の長官</a></p>
+</nav>
+</body>
+</html>`,
+			tocHref: "OEBPS/p-toc-001.xhtml",
+			expected: map[string]string{
+				"OEBPS/p-003.xhtml": "プロローグ",
+				"OEBPS/p-004.xhtml": "一章 一年次の春に",
+				"OEBPS/p-005.xhtml": "二章 獅子聖庁の長官",
+			},
+		},
+		{
+			name: "无 nav 标签的目录",
+			xhtml: `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head><title>TOC</title></head>
+<body>
+<p><a href="chapter1.xhtml">Chapter 1</a></p>
+<p><a href="chapter2.xhtml">Chapter 2</a></p>
+</body>
+</html>`,
+			tocHref: "OEBPS/toc.xhtml",
+			expected: map[string]string{
+				"OEBPS/chapter1.xhtml": "Chapter 1",
+				"OEBPS/chapter2.xhtml": "Chapter 2",
+			},
+		},
+		{
+			name: "带子目录路径的 TOC",
+			xhtml: `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<body>
+<p><a href="../Text/ch1.xhtml">第一章</a></p>
+</body>
+</html>`,
+			tocHref: "OEBPS/nav/toc.xhtml",
+			expected: map[string]string{
+				"OEBPS/Text/ch1.xhtml": "第一章",
+			},
+		},
+		{
+			name: "忽略外部链接和纯锚点",
+			xhtml: `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<body>
+<p><a href="http://example.com">External</a></p>
+<p><a href="#local-anchor">Anchor</a></p>
+<p><a href="real.xhtml">Real Chapter</a></p>
+</body>
+</html>`,
+			tocHref: "OEBPS/toc.xhtml",
+			expected: map[string]string{
+				"OEBPS/real.xhtml": "Real Chapter",
+			},
+		},
+		{
+			name:     "空内容",
+			xhtml:    `<html><body></body></html>`,
+			tocHref:  "OEBPS/toc.xhtml",
+			expected: map[string]string{},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := extractXHTMLTOCTitles([]byte(tt.xhtml), tt.tocHref)
+			if len(got) != len(tt.expected) {
+				t.Errorf("extractXHTMLTOCTitles returned %d entries, want %d\ngot: %v\nwant: %v",
+					len(got), len(tt.expected), got, tt.expected)
+				return
+			}
+			for k, wantTitle := range tt.expected {
+				gotTitle, ok := got[k]
+				if !ok {
+					t.Errorf("missing key %q in result", k)
+					continue
+				}
+				if gotTitle != wantTitle {
+					t.Errorf("titles[%q] = %q, want %q", k, gotTitle, wantTitle)
+				}
+			}
+		})
+	}
+}
+
+// TestXHTMLTOCIntegration 端到端测试：验证 XHTML 目录文件中的章节标题
+// 能正确传递给其他章节文件。
+func TestXHTMLTOCIntegration(t *testing.T) {
+	// 构建一个 EPUB，其中包含一个 XHTML TOC 文件（p-toc-001.xhtml），
+	// TOC 文件中的 <a> 链接指向其他章节文件。
+	// 验证：TOC 文件本身应获得 "Contents" 标题，
+	// 其他章节文件应从 TOC 的 <a> 链接中提取标题。
+	var buf bytes.Buffer
+	w := zip.NewWriter(&buf)
+
+	// mimetype
+	mw, _ := w.CreateHeader(&zip.FileHeader{Name: "mimetype", Method: zip.Store})
+	io.WriteString(mw, "application/epub+zip")
+
+	// container.xml
+	cw, _ := w.Create("META-INF/container.xml")
+	io.WriteString(cw, `<?xml version="1.0" encoding="UTF-8"?>
+<container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">
+  <rootfiles>
+    <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+  </rootfiles>
+</container>`)
+
+	// content.opf — TOC 在 spine 的第一个位置
+	ow, _ := w.Create("OEBPS/content.opf")
+	io.WriteString(ow, `<?xml version="1.0" encoding="UTF-8"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0" unique-identifier="uid">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title>Test Book</dc:title>
+    <dc:identifier id="uid">urn:uuid:12345</dc:identifier>
+  </metadata>
+  <manifest>
+    <item id="toc" href="p-toc-001.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch1" href="p-003.xhtml" media-type="application/xhtml+xml"/>
+    <item id="ch2" href="p-004.xhtml" media-type="application/xhtml+xml"/>
+  </manifest>
+  <spine>
+    <itemref idref="toc"/>
+    <itemref idref="ch1"/>
+    <itemref idref="ch2"/>
+  </spine>
+</package>`)
+
+	// TOC 文件 — 包含指向章节的 <a> 链接
+	tocW, _ := w.Create("OEBPS/p-toc-001.xhtml")
+	io.WriteString(tocW, `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml" xmlns:epub="http://www.idpf.org/2007/ops">
+<head><title>目次</title></head>
+<body>
+<nav epub:type="toc">
+<h1>目次</h1>
+<p><a href="p-003.xhtml#toc-001">プロローグ</a></p>
+<p><a href="p-004.xhtml#toc-002">一章 一年次の春に</a></p>
+</nav>
+</body>
+</html>`)
+
+	// 章节文件 1 — 没有 h1 标题
+	ch1W, _ := w.Create("OEBPS/p-003.xhtml")
+	io.WriteString(ch1W, `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<body>
+<p>本文内容</p>
+</body>
+</html>`)
+
+	// 章节文件 2 — 也没有 h1 标题
+	ch2W, _ := w.Create("OEBPS/p-004.xhtml")
+	io.WriteString(ch2W, `<?xml version="1.0" encoding="UTF-8"?>
+<html xmlns="http://www.w3.org/1999/xhtml">
+<body>
+<p>第二章内容</p>
+</body>
+</html>`)
+
+	w.Close()
+
+	p := newParser()
+	doc, err := p.Parse(context.Background(), bytes.NewReader(buf.Bytes()))
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+
+	// 应该有 3 个 segment：TOC 的 h1 + 两个章节的 p
+	if len(doc.Segments) < 3 {
+		t.Fatalf("expected at least 3 segments, got %d", len(doc.Segments))
+	}
+
+	// 验证 TOC 文件的章节标题是 "Contents"
+	tocSegFound := false
+	for _, seg := range doc.Segments {
+		if ep, ok := seg.Meta["epub_file"].(string); ok && ep == "OEBPS/p-toc-001.xhtml" {
+			ct, ok := seg.Meta["epub_chapter_title"].(string)
+			if !ok || ct != "Contents" {
+				t.Errorf("TOC segment epub_chapter_title = %v, want %q", ct, "Contents")
+			}
+			tocSegFound = true
+			break
+		}
+	}
+	if !tocSegFound {
+		t.Error("no segment found for TOC file")
+	}
+
+	// 验证章节文件从 XHTML TOC 中提取到正确标题
+	ch1Title := ""
+	ch2Title := ""
+	for _, seg := range doc.Segments {
+		ep, _ := seg.Meta["epub_file"].(string)
+		ct, _ := seg.Meta["epub_chapter_title"].(string)
+		switch ep {
+		case "OEBPS/p-003.xhtml":
+			ch1Title = ct
+		case "OEBPS/p-004.xhtml":
+			ch2Title = ct
+		}
+	}
+
+	if ch1Title != "プロローグ" {
+		t.Errorf("ch1 epub_chapter_title = %q, want %q", ch1Title, "プロローグ")
+	}
+	if ch2Title != "一章 一年次の春に" {
+		t.Errorf("ch2 epub_chapter_title = %q, want %q", ch2Title, "一章　一年次の春に")
 	}
 }
