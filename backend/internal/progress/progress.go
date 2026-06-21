@@ -23,6 +23,7 @@ import (
 type Reporter interface {
 	StageStart(name string, total int)
 	SegmentDone()
+	BatchComplete() // 批次完成时调用，触发缓冲区 flush
 	StageDone()
 	Close() error
 }
@@ -32,6 +33,7 @@ type Nop struct{}
 
 func (Nop) StageStart(string, int) {}
 func (Nop) SegmentDone()           {}
+func (Nop) BatchComplete()         {}
 func (Nop) StageDone()             {}
 func (Nop) Close() error           { return nil }
 
@@ -110,6 +112,8 @@ func (r *terminalReporter) SegmentDone() {
 	}
 	_ = bar.Add(1)
 }
+
+func (r *terminalReporter) BatchComplete() {}
 
 func (r *terminalReporter) StageDone() {
 	r.mu.Lock()
@@ -236,6 +240,8 @@ func (r *logReporter) StageDone() {
 		r.logger.Info("stage done", "stage", r.stage)
 	}
 }
+
+func (r *logReporter) BatchComplete() {}
 
 func (r *logReporter) Close() error { return nil }
 

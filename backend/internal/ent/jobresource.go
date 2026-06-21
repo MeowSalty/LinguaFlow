@@ -36,6 +36,14 @@ type JobResource struct {
 	OutputPath string `json:"output_path,omitempty"`
 	// 翻译错误信息
 	ErrorMessage *string `json:"error_message,omitempty"`
+	// 当前执行阶段名称：translate, bootstrap 等
+	CurrentStage string `json:"current_stage,omitempty"`
+	// 当前阶段的总段落数（StageStart 时写入）
+	StageTotal int `json:"stage_total,omitempty"`
+	// 当前阶段已完成的段落数（SegmentDone 时递增）
+	StageCompleted int `json:"stage_completed,omitempty"`
+	// 资源开始执行的时间
+	StartedAt *time.Time `json:"started_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the JobResourceQuery when eager-loading is set.
 	Edges                         JobResourceEdges `json:"edges"`
@@ -84,11 +92,11 @@ func (*JobResource) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case jobresource.FieldSegmentIds:
 			values[i] = new([]byte)
-		case jobresource.FieldID, jobresource.FieldSegmentCount, jobresource.FieldCompletedSegments:
+		case jobresource.FieldID, jobresource.FieldSegmentCount, jobresource.FieldCompletedSegments, jobresource.FieldStageTotal, jobresource.FieldStageCompleted:
 			values[i] = new(sql.NullInt64)
-		case jobresource.FieldStatus, jobresource.FieldOutputPath, jobresource.FieldErrorMessage:
+		case jobresource.FieldStatus, jobresource.FieldOutputPath, jobresource.FieldErrorMessage, jobresource.FieldCurrentStage:
 			values[i] = new(sql.NullString)
-		case jobresource.FieldCreatedAt, jobresource.FieldUpdatedAt:
+		case jobresource.FieldCreatedAt, jobresource.FieldUpdatedAt, jobresource.FieldStartedAt:
 			values[i] = new(sql.NullTime)
 		case jobresource.ForeignKeys[0]: // resource_job_resources
 			values[i] = new(sql.NullInt64)
@@ -165,6 +173,31 @@ func (_m *JobResource) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.ErrorMessage = new(string)
 				*_m.ErrorMessage = value.String
+			}
+		case jobresource.FieldCurrentStage:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field current_stage", values[i])
+			} else if value.Valid {
+				_m.CurrentStage = value.String
+			}
+		case jobresource.FieldStageTotal:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field stage_total", values[i])
+			} else if value.Valid {
+				_m.StageTotal = int(value.Int64)
+			}
+		case jobresource.FieldStageCompleted:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field stage_completed", values[i])
+			} else if value.Valid {
+				_m.StageCompleted = int(value.Int64)
+			}
+		case jobresource.FieldStartedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field started_at", values[i])
+			} else if value.Valid {
+				_m.StartedAt = new(time.Time)
+				*_m.StartedAt = value.Time
 			}
 		case jobresource.ForeignKeys[0]:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -250,6 +283,20 @@ func (_m *JobResource) String() string {
 	if v := _m.ErrorMessage; v != nil {
 		builder.WriteString("error_message=")
 		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	builder.WriteString("current_stage=")
+	builder.WriteString(_m.CurrentStage)
+	builder.WriteString(", ")
+	builder.WriteString("stage_total=")
+	builder.WriteString(fmt.Sprintf("%v", _m.StageTotal))
+	builder.WriteString(", ")
+	builder.WriteString("stage_completed=")
+	builder.WriteString(fmt.Sprintf("%v", _m.StageCompleted))
+	builder.WriteString(", ")
+	if v := _m.StartedAt; v != nil {
+		builder.WriteString("started_at=")
+		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteByte(')')
 	return builder.String()

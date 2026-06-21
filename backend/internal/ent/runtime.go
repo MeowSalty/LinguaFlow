@@ -9,6 +9,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -166,6 +167,33 @@ func init() {
 	glossaryentryDescProjectID := glossaryentryFields[5].Descriptor()
 	// glossaryentry.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
 	glossaryentry.ProjectIDValidator = glossaryentryDescProjectID.Validators[0].(func(int) error)
+	jobeventMixin := schema.JobEvent{}.Mixin()
+	jobeventMixinFields0 := jobeventMixin[0].Fields()
+	_ = jobeventMixinFields0
+	jobeventFields := schema.JobEvent{}.Fields()
+	_ = jobeventFields
+	// jobeventDescCreatedAt is the schema descriptor for created_at field.
+	jobeventDescCreatedAt := jobeventMixinFields0[0].Descriptor()
+	// jobevent.DefaultCreatedAt holds the default value on creation for the created_at field.
+	jobevent.DefaultCreatedAt = jobeventDescCreatedAt.Default.(func() time.Time)
+	// jobeventDescUpdatedAt is the schema descriptor for updated_at field.
+	jobeventDescUpdatedAt := jobeventMixinFields0[1].Descriptor()
+	// jobevent.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	jobevent.DefaultUpdatedAt = jobeventDescUpdatedAt.Default.(func() time.Time)
+	// jobevent.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	jobevent.UpdateDefaultUpdatedAt = jobeventDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// jobeventDescLevel is the schema descriptor for level field.
+	jobeventDescLevel := jobeventFields[0].Descriptor()
+	// jobevent.DefaultLevel holds the default value on creation for the level field.
+	jobevent.DefaultLevel = jobeventDescLevel.Default.(string)
+	// jobeventDescStage is the schema descriptor for stage field.
+	jobeventDescStage := jobeventFields[1].Descriptor()
+	// jobevent.DefaultStage holds the default value on creation for the stage field.
+	jobevent.DefaultStage = jobeventDescStage.Default.(string)
+	// jobeventDescMessage is the schema descriptor for message field.
+	jobeventDescMessage := jobeventFields[2].Descriptor()
+	// jobevent.MessageValidator is a validator for the "message" field. It is called by the builders before save.
+	jobevent.MessageValidator = jobeventDescMessage.Validators[0].(func(string) error)
 	jobresourceMixin := schema.JobResource{}.Mixin()
 	jobresourceMixinFields0 := jobresourceMixin[0].Fields()
 	_ = jobresourceMixinFields0
@@ -201,6 +229,22 @@ func init() {
 	jobresource.DefaultCompletedSegments = jobresourceDescCompletedSegments.Default.(int)
 	// jobresource.CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.
 	jobresource.CompletedSegmentsValidator = jobresourceDescCompletedSegments.Validators[0].(func(int) error)
+	// jobresourceDescCurrentStage is the schema descriptor for current_stage field.
+	jobresourceDescCurrentStage := jobresourceFields[6].Descriptor()
+	// jobresource.DefaultCurrentStage holds the default value on creation for the current_stage field.
+	jobresource.DefaultCurrentStage = jobresourceDescCurrentStage.Default.(string)
+	// jobresourceDescStageTotal is the schema descriptor for stage_total field.
+	jobresourceDescStageTotal := jobresourceFields[7].Descriptor()
+	// jobresource.DefaultStageTotal holds the default value on creation for the stage_total field.
+	jobresource.DefaultStageTotal = jobresourceDescStageTotal.Default.(int)
+	// jobresource.StageTotalValidator is a validator for the "stage_total" field. It is called by the builders before save.
+	jobresource.StageTotalValidator = jobresourceDescStageTotal.Validators[0].(func(int) error)
+	// jobresourceDescStageCompleted is the schema descriptor for stage_completed field.
+	jobresourceDescStageCompleted := jobresourceFields[8].Descriptor()
+	// jobresource.DefaultStageCompleted holds the default value on creation for the stage_completed field.
+	jobresource.DefaultStageCompleted = jobresourceDescStageCompleted.Default.(int)
+	// jobresource.StageCompletedValidator is a validator for the "stage_completed" field. It is called by the builders before save.
+	jobresource.StageCompletedValidator = jobresourceDescStageCompleted.Validators[0].(func(int) error)
 	orgmembershipMixin := schema.OrgMembership{}.Mixin()
 	orgmembershipMixinFields0 := orgmembershipMixin[0].Fields()
 	_ = orgmembershipMixinFields0

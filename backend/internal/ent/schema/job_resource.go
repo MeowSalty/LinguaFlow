@@ -29,6 +29,14 @@ func (JobResource) Fields() []ent.Field {
 			Comment("输出文件路径"),
 		field.String("error_message").Optional().Nillable().
 			Comment("翻译错误信息"),
+		field.String("current_stage").Optional().Default("").
+			Comment("当前执行阶段名称：translate, bootstrap 等"),
+		field.Int("stage_total").Default(0).NonNegative().
+			Comment("当前阶段的总段落数（StageStart 时写入）"),
+		field.Int("stage_completed").Default(0).NonNegative().
+			Comment("当前阶段已完成的段落数（SegmentDone 时递增）"),
+		field.Time("started_at").Optional().Nillable().
+			Comment("资源开始执行的时间"),
 	}
 }
 

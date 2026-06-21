@@ -20,6 +20,8 @@ type Tx struct {
 	ExecutionPlanTemplate *ExecutionPlanTemplateClient
 	// GlossaryEntry is the client for interacting with the GlossaryEntry builders.
 	GlossaryEntry *GlossaryEntryClient
+	// JobEvent is the client for interacting with the JobEvent builders.
+	JobEvent *JobEventClient
 	// JobResource is the client for interacting with the JobResource builders.
 	JobResource *JobResourceClient
 	// OrgMembership is the client for interacting with the OrgMembership builders.
@@ -183,6 +185,7 @@ func (tx *Tx) init() {
 	tx.Backend = NewBackendClient(tx.config)
 	tx.ExecutionPlanTemplate = NewExecutionPlanTemplateClient(tx.config)
 	tx.GlossaryEntry = NewGlossaryEntryClient(tx.config)
+	tx.JobEvent = NewJobEventClient(tx.config)
 	tx.JobResource = NewJobResourceClient(tx.config)
 	tx.OrgMembership = NewOrgMembershipClient(tx.config)
 	tx.Organization = NewOrganizationClient(tx.config)

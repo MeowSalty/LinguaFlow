@@ -44,6 +44,8 @@ type TranslationJob struct {
 	CompletedSegments int `json:"completed_segments,omitempty"`
 	// 任务级错误信息
 	ErrorMessage *string `json:"error_message,omitempty"`
+	// 任务开始执行的时间，MarkJobRunning 时写入
+	StartedAt *time.Time `json:"started_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the TranslationJobQuery when eager-loading is set.
 	Edges                         TranslationJobEdges `json:"edges"`
@@ -60,9 +62,11 @@ type TranslationJobEdges struct {
 	CreatedBy *User `json:"created_by,omitempty"`
 	// JobResources holds the value of the job_resources edge.
 	JobResources []*JobResource `json:"job_resources,omitempty"`
+	// JobEvents holds the value of the job_events edge.
+	JobEvents []*JobEvent `json:"job_events,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [3]bool
+	loadedTypes [4]bool
 }
 
 // ProjectOrErr returns the Project value or an error if the edge
@@ -96,6 +100,15 @@ func (e TranslationJobEdges) JobResourcesOrErr() ([]*JobResource, error) {
 	return nil, &NotLoadedError{edge: "job_resources"}
 }
 
+// JobEventsOrErr returns the JobEvents value or an error if the edge
+// was not loaded in eager-loading.
+func (e TranslationJobEdges) JobEventsOrErr() ([]*JobEvent, error) {
+	if e.loadedTypes[3] {
+		return e.JobEvents, nil
+	}
+	return nil, &NotLoadedError{edge: "job_events"}
+}
+
 // scanValues returns the types for scanning values from sql.Rows.
 func (*TranslationJob) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
@@ -107,7 +120,7 @@ func (*TranslationJob) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullInt64)
 		case translationjob.FieldStatus, translationjob.FieldTriggerType, translationjob.FieldErrorMessage:
 			values[i] = new(sql.NullString)
-		case translationjob.FieldCreatedAt, translationjob.FieldUpdatedAt:
+		case translationjob.FieldCreatedAt, translationjob.FieldUpdatedAt, translationjob.FieldStartedAt:
 			values[i] = new(sql.NullTime)
 		case translationjob.ForeignKeys[0]: // project_translation_jobs
 			values[i] = new(sql.NullInt64)
@@ -209,6 +222,13 @@ func (_m *TranslationJob) assignValues(columns []string, values []any) error {
 				_m.ErrorMessage = new(string)
 				*_m.ErrorMessage = value.String
 			}
+		case translationjob.FieldStartedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field started_at", values[i])
+			} else if value.Valid {
+				_m.StartedAt = new(time.Time)
+				*_m.StartedAt = value.Time
+			}
 		case translationjob.ForeignKeys[0]:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for edge-field project_translation_jobs", value)
@@ -249,6 +269,11 @@ func (_m *TranslationJob) QueryCreatedBy() *UserQuery {
 // QueryJobResources queries the "job_resources" edge of the TranslationJob entity.
 func (_m *TranslationJob) QueryJobResources() *JobResourceQuery {
 	return NewTranslationJobClient(_m.config).QueryJobResources(_m)
+}
+
+// QueryJobEvents queries the "job_events" edge of the TranslationJob entity.
+func (_m *TranslationJob) QueryJobEvents() *JobEventQuery {
+	return NewTranslationJobClient(_m.config).QueryJobEvents(_m)
 }
 
 // Update returns a builder for updating this TranslationJob.
@@ -310,6 +335,11 @@ func (_m *TranslationJob) String() string {
 	if v := _m.ErrorMessage; v != nil {
 		builder.WriteString("error_message=")
 		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.StartedAt; v != nil {
+		builder.WriteString("started_at=")
+		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteByte(')')
 	return builder.String()

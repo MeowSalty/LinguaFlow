@@ -10,6 +10,7 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
@@ -175,6 +176,20 @@ func (_c *TranslationJobCreate) SetNillableErrorMessage(v *string) *TranslationJ
 	return _c
 }
 
+// SetStartedAt sets the "started_at" field.
+func (_c *TranslationJobCreate) SetStartedAt(v time.Time) *TranslationJobCreate {
+	_c.mutation.SetStartedAt(v)
+	return _c
+}
+
+// SetNillableStartedAt sets the "started_at" field if the given value is not nil.
+func (_c *TranslationJobCreate) SetNillableStartedAt(v *time.Time) *TranslationJobCreate {
+	if v != nil {
+		_c.SetStartedAt(*v)
+	}
+	return _c
+}
+
 // SetProjectID sets the "project" edge to the Project entity by ID.
 func (_c *TranslationJobCreate) SetProjectID(id int) *TranslationJobCreate {
 	_c.mutation.SetProjectID(id)
@@ -218,6 +233,21 @@ func (_c *TranslationJobCreate) AddJobResources(v ...*JobResource) *TranslationJ
 		ids[i] = v[i].ID
 	}
 	return _c.AddJobResourceIDs(ids...)
+}
+
+// AddJobEventIDs adds the "job_events" edge to the JobEvent entity by IDs.
+func (_c *TranslationJobCreate) AddJobEventIDs(ids ...int) *TranslationJobCreate {
+	_c.mutation.AddJobEventIDs(ids...)
+	return _c
+}
+
+// AddJobEvents adds the "job_events" edges to the JobEvent entity.
+func (_c *TranslationJobCreate) AddJobEvents(v ...*JobEvent) *TranslationJobCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddJobEventIDs(ids...)
 }
 
 // Mutation returns the TranslationJobMutation object of the builder.
@@ -439,6 +469,10 @@ func (_c *TranslationJobCreate) createSpec() (*TranslationJob, *sqlgraph.CreateS
 		_spec.SetField(translationjob.FieldErrorMessage, field.TypeString, value)
 		_node.ErrorMessage = &value
 	}
+	if value, ok := _c.mutation.StartedAt(); ok {
+		_spec.SetField(translationjob.FieldStartedAt, field.TypeTime, value)
+		_node.StartedAt = &value
+	}
 	if nodes := _c.mutation.ProjectIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
@@ -482,6 +516,22 @@ func (_c *TranslationJobCreate) createSpec() (*TranslationJob, *sqlgraph.CreateS
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.JobEventsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   translationjob.JobEventsTable,
+			Columns: []string{translationjob.JobEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobevent.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

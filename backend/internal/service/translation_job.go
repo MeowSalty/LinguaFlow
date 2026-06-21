@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -465,6 +467,22 @@ func (s *TranslationJobService) MarkJobRunning(ctx context.Context, jobID int) e
 	return s.client.TranslationJob.UpdateOneID(jobID).SetStatus(TranslationJobStatusRunning).Exec(ctx)
 }
 
+// MarkJobStarted 记录任务开始时间。
+func (s *TranslationJobService) MarkJobStarted(ctx context.Context, jobID int) error {
+	now := time.Now()
+	return s.client.TranslationJob.UpdateOneID(jobID).
+		SetStartedAt(now).
+		Exec(ctx)
+}
+
+// MarkJobResourceStarted 记录资源开始时间。
+func (s *TranslationJobService) MarkJobResourceStarted(ctx context.Context, jobResourceID int) error {
+	now := time.Now()
+	return s.client.JobResource.UpdateOneID(jobResourceID).
+		SetStartedAt(now).
+		Exec(ctx)
+}
+
 func (s *TranslationJobService) MarkJobResourceRunning(ctx context.Context, jobResourceID int) error {
 	if err := s.client.JobResource.UpdateOneID(jobResourceID).
 		SetStatus(JobResourceStatusRunning).
@@ -680,6 +698,39 @@ func (s *TranslationJobService) GetJob(ctx context.Context, actorUserID, jobID i
 		return nil, err
 	}
 	return row, nil
+}
+
+// ListJobEvents 查询翻译任务事件列表。
+func (s *TranslationJobService) ListJobEvents(ctx context.Context, actorUserID, jobID int, limit int) ([]*ent.JobEvent, error) {
+	// 验证任务存在且有权限访问
+	job, err := s.client.TranslationJob.Query().
+		Where(translationjob.IDEQ(jobID)).
+		WithProject().
+		Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, ErrTranslationJobNotFound
+		}
+		return nil, err
+	}
+	projectRow, err := job.Edges.ProjectOrErr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectRow.ID, false); err != nil {
+		return nil, err
+	}
+
+	// 查询事件列表，按 created_at 倒序
+	events, err := s.client.JobEvent.Query().
+		Where(jobevent.HasJobWith(translationjob.IDEQ(jobID))).
+		Order(ent.Desc(jobevent.FieldCreatedAt)).
+		Limit(limit).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return events, nil
 }
 
 func (s *TranslationJobService) resolveJobSelection(ctx context.Context, projectID int, input CreateTranslationJobInput) (map[int][]int, error) {

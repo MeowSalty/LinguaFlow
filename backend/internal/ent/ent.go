@@ -16,6 +16,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -94,6 +95,7 @@ func checkColumn(t, c string) error {
 			backend.Table:               backend.ValidColumn,
 			executionplantemplate.Table: executionplantemplate.ValidColumn,
 			glossaryentry.Table:         glossaryentry.ValidColumn,
+			jobevent.Table:              jobevent.ValidColumn,
 			jobresource.Table:           jobresource.ValidColumn,
 			orgmembership.Table:         orgmembership.ValidColumn,
 			organization.Table:          organization.ValidColumn,

@@ -14,6 +14,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
@@ -59,6 +60,8 @@ func (r *TranslationRunner) processJob(ctx context.Context, jobID int) error {
 	if err := r.jobs.MarkJobRunning(ctx, jobID); err != nil {
 		return err
 	}
+	// 记录任务开始时间
+	_ = r.jobs.MarkJobStarted(ctx, jobID)
 	for _, item := range pending {
 		if err := r.processJobResource(ctx, exec, item); err != nil {
 			r.logger.Warn("translation job resource failed", "job_id", jobID, "job_resource_id", item.ID, "err", err)
@@ -74,6 +77,18 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	if err := r.jobs.MarkJobResourceRunning(ctx, item.ID); err != nil {
 		return err
 	}
+	// 写入资源开始时间
+	_ = r.jobs.MarkJobResourceStarted(ctx, item.ID)
+
+	// 创建 DBReporter 将翻译进度写入数据库
+	reporter := progress.NewDBReporter(progress.DBReporterOptions{
+		Client:        r.client,
+		JobID:         exec.Job.ID,
+		JobResourceID: item.ID,
+		Logger:        r.logger,
+	})
+	defer reporter.Close()
+
 	res, err := item.Edges.ResourceOrErr()
 	if err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
@@ -121,7 +136,7 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 
 	// 从快照构建引擎
 	resources := engine.RuntimeResources{Glossary: runtimeGlossary, TM: memory}
-	eng, err := r.buildEngineFromSnapshot(ctx, snapshot, resources)
+	eng, err := r.buildEngineFromSnapshot(ctx, snapshot, resources, reporter)
 	if err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
@@ -197,6 +212,7 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 	ctx context.Context,
 	snapshot *service.JobExecutionSnapshot,
 	resources engine.RuntimeResources,
+	reporter progress.Reporter,
 ) (*engine.Engine, error) {
 	var rounds []engine.Round
 	for _, rs := range snapshot.Rounds {
@@ -235,6 +251,7 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 		Config:    cfg,
 		Logger:    r.logger,
 		Resources: resources,
+		Reporter:  reporter,
 	})
 }
 

@@ -110,6 +110,11 @@ func ErrorMessage(v string) predicate.TranslationJob {
 	return predicate.TranslationJob(sql.FieldEQ(FieldErrorMessage, v))
 }
 
+// StartedAt applies equality check predicate on the "started_at" field. It's identical to StartedAtEQ.
+func StartedAt(v time.Time) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldEQ(FieldStartedAt, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.TranslationJob {
 	return predicate.TranslationJob(sql.FieldEQ(FieldCreatedAt, v))
@@ -635,6 +640,56 @@ func ErrorMessageContainsFold(v string) predicate.TranslationJob {
 	return predicate.TranslationJob(sql.FieldContainsFold(FieldErrorMessage, v))
 }
 
+// StartedAtEQ applies the EQ predicate on the "started_at" field.
+func StartedAtEQ(v time.Time) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldEQ(FieldStartedAt, v))
+}
+
+// StartedAtNEQ applies the NEQ predicate on the "started_at" field.
+func StartedAtNEQ(v time.Time) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldNEQ(FieldStartedAt, v))
+}
+
+// StartedAtIn applies the In predicate on the "started_at" field.
+func StartedAtIn(vs ...time.Time) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldIn(FieldStartedAt, vs...))
+}
+
+// StartedAtNotIn applies the NotIn predicate on the "started_at" field.
+func StartedAtNotIn(vs ...time.Time) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldNotIn(FieldStartedAt, vs...))
+}
+
+// StartedAtGT applies the GT predicate on the "started_at" field.
+func StartedAtGT(v time.Time) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldGT(FieldStartedAt, v))
+}
+
+// StartedAtGTE applies the GTE predicate on the "started_at" field.
+func StartedAtGTE(v time.Time) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldGTE(FieldStartedAt, v))
+}
+
+// StartedAtLT applies the LT predicate on the "started_at" field.
+func StartedAtLT(v time.Time) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldLT(FieldStartedAt, v))
+}
+
+// StartedAtLTE applies the LTE predicate on the "started_at" field.
+func StartedAtLTE(v time.Time) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldLTE(FieldStartedAt, v))
+}
+
+// StartedAtIsNil applies the IsNil predicate on the "started_at" field.
+func StartedAtIsNil() predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldIsNull(FieldStartedAt))
+}
+
+// StartedAtNotNil applies the NotNil predicate on the "started_at" field.
+func StartedAtNotNil() predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldNotNull(FieldStartedAt))
+}
+
 // HasProject applies the HasEdge predicate on the "project" edge.
 func HasProject() predicate.TranslationJob {
 	return predicate.TranslationJob(func(s *sql.Selector) {
@@ -696,6 +751,29 @@ func HasJobResources() predicate.TranslationJob {
 func HasJobResourcesWith(preds ...predicate.JobResource) predicate.TranslationJob {
 	return predicate.TranslationJob(func(s *sql.Selector) {
 		step := newJobResourcesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasJobEvents applies the HasEdge predicate on the "job_events" edge.
+func HasJobEvents() predicate.TranslationJob {
+	return predicate.TranslationJob(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, JobEventsTable, JobEventsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasJobEventsWith applies the HasEdge predicate on the "job_events" edge with a given conditions (other predicates).
+func HasJobEventsWith(preds ...predicate.JobEvent) predicate.TranslationJob {
+	return predicate.TranslationJob(func(s *sql.Selector) {
+		step := newJobEventsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)
