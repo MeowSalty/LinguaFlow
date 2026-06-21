@@ -999,7 +999,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GlossaryEntry'
+                $ref: '#/components/schemas/UpdateGlossaryEntryResponse'
         default:
           $ref: '#/components/responses/Problem'
     delete:
@@ -1057,6 +1057,119 @@ paths:
               schema:
                 type: string
                 format: binary
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/glossary/{entryId}/sync-impact:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/EntryId'
+    post:
+      operationId: AnalyzeGlossarySyncImpact
+      summary: 分析术语修改对已翻译内容的影响
+      description: |
+        当用户修改术语条目的 target 时，调用此 API 分析受影响的段落数量和分布。
+        仅在 target 发生变更时有意义。
+        支持 resource_ids 参数限定分析范围。
+        采用两阶段匹配：先检查 source_text 包含术语 source，再检查 target_text 包含 old_target。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GlossarySyncImpactRequest'
+      responses:
+        '200':
+          description: 影响分析结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossarySyncImpactResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/glossary/{entryId}/sync-execute:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/EntryId'
+    post:
+      operationId: ExecuteGlossarySyncUpdate
+      summary: 提交术语同步更新异步任务
+      description: |
+        提交异步同步更新任务，将受影响段落中的旧译文替换为新译文。
+        返回任务 ID 和状态轮询端点，前端通过 GET /sync-tasks/{taskId} 查询进度。
+        替换后的段落状态将被设置为 edited，需要人工复核。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GlossarySyncExecuteRequest'
+      responses:
+        '202':
+          description: 任务已提交
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossarySyncExecuteResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/sync-tasks/{taskId}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 同步任务 ID
+    get:
+      operationId: GetGlossarySyncTaskStatus
+      summary: 查询术语同步任务状态
+      description: |
+        查询同步更新任务的执行进度和结果。
+        前端应以 500ms 间隔轮询此端点，任务完成后停止轮询。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 任务状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossarySyncTaskStatusResponse'
+        '404':
+          description: 任务不存在
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/sync-tasks/{taskId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 同步任务 ID
+    post:
+      operationId: CancelGlossarySyncTask
+      summary: 取消术语同步任务
+      description: |
+        取消正在执行或等待执行的同步任务。
+        pending 状态的任务直接取消；running 状态的任务在完成当前批次后停止。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 任务已取消
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossarySyncTaskCancelResponse'
+        '409':
+          description: 任务已完成或已失败，无法取消
         default:
           $ref: '#/components/responses/Problem'
   /projects/{projectId}/translation-jobs:
@@ -2536,6 +2649,14 @@ components:
         notes:
           type: string
       additionalProperties: false
+    UpdateGlossaryEntryResponse:
+      allOf:
+        - $ref: '#/components/schemas/GlossaryEntry'
+        - type: object
+          properties:
+            target_changed:
+              type: boolean
+              description: target 字段是否发生变更
     GlossaryImportResult:
       type: object
       required:
@@ -2554,6 +2675,132 @@ components:
                 type: string
               reason:
                 type: string
+    GlossarySyncImpactRequest:
+      type: object
+      required:
+        - old_target
+      properties:
+        old_target:
+          type: string
+          description: 修改前的旧 target 值
+        new_target:
+          type: string
+          description: 修改后的新 target 值
+        resource_ids:
+          type: array
+          items:
+            type: integer
+          description: 限定影响分析的资源范围（可选，为空则分析所有资源）
+      additionalProperties: false
+    GlossarySyncImpactResponse:
+      type: object
+      required:
+        - old_target
+        - new_target
+        - total_affected
+        - resources
+      properties:
+        old_target:
+          type: string
+        new_target:
+          type: string
+        total_affected:
+          type: integer
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/GlossarySyncImpactResource'
+    GlossarySyncExecuteRequest:
+      type: object
+      required:
+        - old_target
+        - new_target
+      properties:
+        old_target:
+          type: string
+        new_target:
+          type: string
+        resource_ids:
+          type: array
+          items:
+            type: integer
+          description: 限定同步的资源范围
+      additionalProperties: false
+    GlossarySyncExecuteResponse:
+      type: object
+      required:
+        - task_id
+        - status
+        - status_url
+      properties:
+        task_id:
+          type: string
+          description: 异步任务唯一标识
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
+            - cancelled
+        status_url:
+          type: string
+          description: 任务状态轮询端点
+    GlossarySyncTaskStatusResponse:
+      type: object
+      required:
+        - task_id
+        - status
+        - processed
+        - total
+      properties:
+        task_id:
+          type: string
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
+            - cancelled
+        processed:
+          type: integer
+          description: 已处理的段落数
+        total:
+          type: integer
+          description: 待处理的段落总数
+        result:
+          type: object
+          description: 任务完成后的结果摘要（仅 status=completed 时存在）
+          properties:
+            total_updated:
+              type: integer
+            total_skipped:
+              type: integer
+            resources:
+              type: array
+              items:
+                $ref: '#/components/schemas/GlossarySyncExecuteResourceResult'
+        error:
+          type: string
+          description: 错误信息（仅 status=failed 时存在）
+        cancelled_at:
+          type: string
+          format: date-time
+    GlossarySyncTaskCancelResponse:
+      type: object
+      required:
+        - task_id
+        - status
+      properties:
+        task_id:
+          type: string
+        status:
+          type: string
+          enum:
+            - cancelled
     PromptTemplate:
       type: object
       required:
@@ -2765,6 +3012,35 @@ components:
         deleted:
           type: integer
           description: 删除的段落数
+    GlossarySyncImpactResource:
+      type: object
+      required:
+        - resource_id
+        - resource_path
+        - affected_count
+      properties:
+        resource_id:
+          type: integer
+        resource_path:
+          type: string
+        affected_count:
+          type: integer
+    GlossarySyncExecuteResourceResult:
+      type: object
+      required:
+        - resource_id
+        - resource_path
+        - updated_count
+        - skipped_count
+      properties:
+        resource_id:
+          type: integer
+        resource_path:
+          type: string
+        updated_count:
+          type: integer
+        skipped_count:
+          type: integer
     ExecutionPlanTemplateScope:
       type: string
       enum:

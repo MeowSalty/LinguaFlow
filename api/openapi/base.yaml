@@ -73,6 +73,14 @@ paths:
     $ref: './paths/glossary.yaml#/glossaryImport'
   /projects/{projectId}/glossary/export:
     $ref: './paths/glossary.yaml#/glossaryExport'
+  /projects/{projectId}/glossary/{entryId}/sync-impact:
+    $ref: './paths/glossary.yaml#/glossarySyncImpact'
+  /projects/{projectId}/glossary/{entryId}/sync-execute:
+    $ref: './paths/glossary.yaml#/glossarySyncExecute'
+  /projects/{projectId}/sync-tasks/{taskId}:
+    $ref: './paths/glossary.yaml#/glossarySyncTaskStatus'
+  /projects/{projectId}/sync-tasks/{taskId}/cancel:
+    $ref: './paths/glossary.yaml#/glossarySyncTaskCancel'
   /projects/{projectId}/translation-jobs:
     $ref: './paths/translation-jobs.yaml#/projectTranslationJobs'
   /translation-jobs/{translationJobId}:
@@ -246,8 +254,22 @@ components:
       $ref: './components/schemas/glossary.yaml#/CreateGlossaryEntryRequest'
     UpdateGlossaryEntryRequest:
       $ref: './components/schemas/glossary.yaml#/UpdateGlossaryEntryRequest'
+    UpdateGlossaryEntryResponse:
+      $ref: './components/schemas/glossary.yaml#/UpdateGlossaryEntryResponse'
     GlossaryImportResult:
       $ref: './components/schemas/glossary.yaml#/GlossaryImportResult'
+    GlossarySyncImpactRequest:
+      $ref: './components/schemas/glossary.yaml#/GlossarySyncImpactRequest'
+    GlossarySyncImpactResponse:
+      $ref: './components/schemas/glossary.yaml#/GlossarySyncImpactResponse'
+    GlossarySyncExecuteRequest:
+      $ref: './components/schemas/glossary.yaml#/GlossarySyncExecuteRequest'
+    GlossarySyncExecuteResponse:
+      $ref: './components/schemas/glossary.yaml#/GlossarySyncExecuteResponse'
+    GlossarySyncTaskStatusResponse:
+      $ref: './components/schemas/glossary.yaml#/GlossarySyncTaskStatusResponse'
+    GlossarySyncTaskCancelResponse:
+      $ref: './components/schemas/glossary.yaml#/GlossarySyncTaskCancelResponse'
     PromptTemplate:
       $ref: './components/schemas/prompt-template.yaml#/PromptTemplate'
     PromptTemplateListResponse:
