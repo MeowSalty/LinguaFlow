@@ -1250,6 +1250,33 @@ paths:
                 $ref: '#/components/schemas/TranslationJob'
         default:
           $ref: '#/components/responses/Problem'
+  /translation-jobs/{translationJobId}/events:
+    parameters:
+      - $ref: '#/components/parameters/TranslationJobId'
+    get:
+      operationId: ListTranslationJobEvents
+      summary: 获取翻译任务事件列表
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        '200':
+          description: 事件列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/JobEvent'
+        default:
+          $ref: '#/components/responses/Problem'
   /translation-jobs/{translationJobId}/cancel:
     parameters:
       - $ref: '#/components/parameters/TranslationJobId'
@@ -2303,6 +2330,19 @@ components:
         updated_at:
           type: string
           format: date-time
+        current_stage:
+          type: string
+          description: 当前执行阶段名称
+        stage_total:
+          type: integer
+          description: 当前阶段的总段落数
+        stage_completed:
+          type: integer
+          description: 当前阶段已完成的段落数
+        started_at:
+          type: string
+          format: date-time
+          description: 资源开始执行的时间
     TranslationJob:
       type: object
       required:
@@ -2365,6 +2405,27 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TranslationJobResource'
+        started_at:
+          type: string
+          format: date-time
+          description: 任务开始执行的时间
+        current_stage:
+          type: string
+          description: 当前活跃的执行阶段名称（聚合自 JobResource）
+        progress_percentage:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          description: 整体进度百分比（0-100），由后端计算
+        queue_position:
+          type: integer
+          nullable: true
+          description: 在队列中的位置（1-based），null 表示不在队列中
+        queue_size:
+          type: integer
+          nullable: true
+          description: 当前队列中的任务总数
     TranslationJobListResponse:
       type: object
       required:
@@ -2376,6 +2437,34 @@ components:
             $ref: '#/components/schemas/TranslationJob'
         next_cursor:
           type: string
+    JobEvent:
+      type: object
+      required:
+        - id
+        - job_id
+        - level
+        - message
+        - created_at
+      properties:
+        id:
+          type: integer
+        job_id:
+          type: integer
+        level:
+          type: string
+          enum:
+            - info
+            - warn
+            - error
+        stage:
+          type: string
+        message:
+          type: string
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
     Activity:
       type: object
       required:

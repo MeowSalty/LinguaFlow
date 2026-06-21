@@ -105,3 +105,30 @@ translationJobRetry:
       default:
         $ref: '../base.yaml#/components/responses/Problem'
 
+translationJobEvents:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/TranslationJobId'
+  get:
+    operationId: ListTranslationJobEvents
+    summary: 获取翻译任务事件列表
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: limit
+        in: query
+        required: false
+        schema:
+          type: integer
+          default: 50
+          maximum: 200
+    responses:
+      '200':
+        description: 事件列表
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '../base.yaml#/components/schemas/JobEvent'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
