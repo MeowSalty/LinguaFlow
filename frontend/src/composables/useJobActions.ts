@@ -30,6 +30,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
   const jobTargetMode = ref<JobTargetMode>('resources')
   const jobTargetResourceIds = ref<number[]>([])
   const jobTargetSegmentIds = ref<number[]>([])
+  const jobTargetGroupKeys = ref<string[]>([])
 
   const jobForm = reactive<JobFormModel>({
     execution_plan_id: null,
@@ -85,7 +86,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
   }
 
   /** 使用指定的资源 ID 列表打开任务创建抽屉（用于 EPUB 章节翻译等场景） */
-  const openResourceJobDrawerWithIds = (resourceIds: number[]): void => {
+  const openResourceJobDrawerWithIds = (resourceIds: number[], groupKeys?: string[]): void => {
     if (resourceIds.length === 0) {
       message.warning(t('workspace.messages.selectReadyResource'))
       return
@@ -94,6 +95,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobTargetMode.value = 'resources'
     jobTargetResourceIds.value = [...resourceIds]
     jobTargetSegmentIds.value = []
+    jobTargetGroupKeys.value = groupKeys ? [...groupKeys] : []
     jobForm.execution_plan_id = null
     jobDrawerVisible.value = true
   }
@@ -133,6 +135,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobDrawerVisible.value = false
     jobTargetResourceIds.value = []
     jobTargetSegmentIds.value = []
+    jobTargetGroupKeys.value = []
     jobForm.execution_plan_id = null
     jobForm.auto_approve = false
   }
@@ -146,6 +149,10 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
       execution_plan_id: jobForm.execution_plan_id,
       resource_ids: jobTargetResourceIds.value,
       auto_approve: jobForm.auto_approve,
+    }
+
+    if (jobTargetGroupKeys.value.length > 0) {
+      payload.segment_group_keys = jobTargetGroupKeys.value
     }
 
     if (jobTargetMode.value === 'segments') {
@@ -205,6 +212,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobTargetMode,
     jobTargetResourceIds,
     jobTargetSegmentIds,
+    jobTargetGroupKeys,
     jobForm,
     // 计算属性
     executionPlanOptions,
