@@ -12,6 +12,7 @@ import WorkspaceMetricsBar from '@/components/workspace/WorkspaceMetricsBar.vue'
 import GlossaryPanel from '@/components/workspace/GlossaryPanel.vue'
 import GlossaryDrawer from '@/components/workspace/GlossaryDrawer.vue'
 import GlossaryImportModal from '@/components/workspace/GlossaryImportModal.vue'
+import GlossarySyncDialog from '@/components/workspace/GlossarySyncDialog.vue'
 import SegmentPanel from '@/components/workspace/SegmentPanel.vue'
 import JobPanel from '@/components/workspace/JobPanel.vue'
 import JobCreateDrawer from '@/components/workspace/JobCreateDrawer.vue'
@@ -75,6 +76,12 @@ const reloadSegments = async (): Promise<void> => {
     return
   }
   await workspace.loadSegments(projectId.value, workspace.activeResourceId)
+}
+
+const handleGlossarySynced = async (): Promise<void> => {
+  if (projectId.value && workspace.activeResourceId) {
+    await workspace.loadSegments(projectId.value, workspace.activeResourceId)
+  }
 }
 
 const conflictMgmt = useConflictHandling()
@@ -460,6 +467,14 @@ onMounted(() => {
     <GlossaryImportModal
       v-model:show="glossaryMgmt.glossaryImportVisible.value"
       @import="(file) => glossaryMgmt.handleGlossaryImport(file)"
+    />
+
+    <!-- 术语表同步对话框 -->
+    <GlossarySyncDialog
+      v-model:show="glossaryMgmt.syncDialogVisible.value"
+      :project-id="projectId!"
+      @close="glossaryMgmt.closeSyncDialog"
+      @synced="handleGlossarySynced"
     />
 
     <!-- 上传面板 -->

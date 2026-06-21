@@ -619,6 +619,61 @@ const messages = {
         importFailed: '术语表导入失败',
         exportFailed: '术语表导出失败',
       },
+      sync: {
+        // 对话框标题
+        titleImpact: '术语同步更新',
+        titleExecuting: '术语同步更新 — 执行中',
+        titleCompleted: '术语同步更新 — 已完成',
+        titleCancelled: '术语同步更新 — 已取消',
+        titleError: '术语同步更新 — 失败',
+
+        // 步骤指示器
+        stepImpact: '影响分析',
+        stepExecute: '同步执行',
+        stepResult: '结果摘要',
+
+        // 步骤 1: 影响分析
+        targetChanged: '术语译文已更新，以下是新旧译文对比：',
+        targetChangedWithSource: "术语 '{source}' 的译文已更新，以下是新旧译文对比：",
+        noImpact: '当前已翻译段落中未发现需要同步的内容。',
+        impactSummary: '发现 {count} 个已翻译段落包含旧译文，分布在 {resourceCount} 个资源文件中。',
+        impactLoadFailed: '影响分析加载失败，请重试。',
+        resourcePath: '资源文件',
+        affectedCount: '受影响段落',
+        skip: '跳过',
+        syncSelected: '限定范围同步 ({count})',
+        syncAll: '全部同步',
+        retry: '重试',
+
+        // 步骤 2: 执行进度
+        pending: '等待执行...',
+        executingWithSource: "正在同步术语 '{source}' 的译文...",
+        progress: '已处理 {processed} / {total} 段落',
+        cancel: '取消同步',
+
+        // 步骤 3: 结果摘要
+        completed: '术语译文同步完成。',
+        updated: '已更新',
+        skipped: '已跳过',
+        updatedCount: '已更新',
+        skippedCount: '已跳过',
+        reviewHint: '已更新的段落状态已设为「待审核」，请在段落列表中检查并确认。',
+
+        // 取消状态
+        cancelled: '术语译文同步已取消。',
+        processed: '已处理',
+        unprocessed: '未处理',
+        cancelledHint: '已更新的段落已保留在数据库中，未处理的段落仍保留旧译文。',
+
+        // 错误状态
+        unknownError: '同步过程中发生未知错误。',
+        networkError: '网络连接异常，轮询已停止。请检查网络后重试。',
+        taskFailed: '同步任务执行失败。',
+        executeFailed: '同步任务提交失败。',
+
+        // Store 方法错误
+        impactFailed: '影响分析请求失败。',
+      },
     },
     messages: {
       uploadSuccess: '资源已上传',
@@ -1061,6 +1116,10 @@ const messages = {
       updateExecutionPlanTemplateFailed: '更新执行计划模板失败',
       deleteExecutionPlanTemplateFailed: '删除执行计划模板失败',
       fetchSegmentGroupsFailed: '获取章节分组失败',
+      glossarySyncImpactFailed: '术语同步影响分析失败',
+      glossarySyncExecuteFailed: '术语同步任务提交失败',
+      glossarySyncStatusFailed: '术语同步任务状态查询失败',
+      glossarySyncCancelFailed: '术语同步任务取消失败',
     },
   },
 } as const

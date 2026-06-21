@@ -701,6 +701,107 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/glossary/{entryId}/sync-impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                entryId: components["parameters"]["EntryId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 分析术语修改对已翻译内容的影响
+         * @description 当用户修改术语条目的 target 时，调用此 API 分析受影响的段落数量和分布。
+         *     仅在 target 发生变更时有意义。
+         *     支持 resource_ids 参数限定分析范围。
+         *     采用两阶段匹配：先检查 source_text 包含术语 source，再检查 target_text 包含 old_target。
+         */
+        post: operations["AnalyzeGlossarySyncImpact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/glossary/{entryId}/sync-execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                entryId: components["parameters"]["EntryId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 提交术语同步更新异步任务
+         * @description 提交异步同步更新任务，将受影响段落中的旧译文替换为新译文。
+         *     返回任务 ID 和状态轮询端点，前端通过 GET /sync-tasks/{taskId} 查询进度。
+         *     替换后的段落状态将被设置为 edited，需要人工复核。
+         */
+        post: operations["ExecuteGlossarySyncUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/sync-tasks/{taskId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /** @description 同步任务 ID */
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * 查询术语同步任务状态
+         * @description 查询同步更新任务的执行进度和结果。
+         *     前端应以 500ms 间隔轮询此端点，任务完成后停止轮询。
+         */
+        get: operations["GetGlossarySyncTaskStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/sync-tasks/{taskId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /** @description 同步任务 ID */
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 取消术语同步任务
+         * @description 取消正在执行或等待执行的同步任务。
+         *     pending 状态的任务直接取消；running 状态的任务在完成当前批次后停止。
+         */
+        post: operations["CancelGlossarySyncTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/translation-jobs": {
         parameters: {
             query?: never;
@@ -1370,6 +1471,10 @@ export interface components {
             case_sensitive?: boolean;
             notes?: string;
         };
+        UpdateGlossaryEntryResponse: components["schemas"]["GlossaryEntry"] & {
+            /** @description target 字段是否发生变更 */
+            target_changed?: boolean;
+        };
         GlossaryImportResult: {
             added: number;
             skipped?: {
@@ -1377,6 +1482,58 @@ export interface components {
                 source?: string;
                 reason?: string;
             }[];
+        };
+        GlossarySyncImpactRequest: {
+            /** @description 修改前的旧 target 值 */
+            old_target: string;
+            /** @description 修改后的新 target 值 */
+            new_target?: string;
+            /** @description 限定影响分析的资源范围（可选，为空则分析所有资源） */
+            resource_ids?: number[];
+        };
+        GlossarySyncImpactResponse: {
+            old_target: string;
+            new_target: string;
+            total_affected: number;
+            resources: components["schemas"]["GlossarySyncImpactResource"][];
+        };
+        GlossarySyncExecuteRequest: {
+            old_target: string;
+            new_target: string;
+            /** @description 限定同步的资源范围 */
+            resource_ids?: number[];
+        };
+        GlossarySyncExecuteResponse: {
+            /** @description 异步任务唯一标识 */
+            task_id: string;
+            /** @enum {string} */
+            status: "pending" | "running" | "completed" | "failed" | "cancelled";
+            /** @description 任务状态轮询端点 */
+            status_url: string;
+        };
+        GlossarySyncTaskStatusResponse: {
+            task_id: string;
+            /** @enum {string} */
+            status: "pending" | "running" | "completed" | "failed" | "cancelled";
+            /** @description 已处理的段落数 */
+            processed: number;
+            /** @description 待处理的段落总数 */
+            total: number;
+            /** @description 任务完成后的结果摘要（仅 status=completed 时存在） */
+            result?: {
+                total_updated?: number;
+                total_skipped?: number;
+                resources?: components["schemas"]["GlossarySyncExecuteResourceResult"][];
+            };
+            /** @description 错误信息（仅 status=failed 时存在） */
+            error?: string;
+            /** Format: date-time */
+            cancelled_at?: string;
+        };
+        GlossarySyncTaskCancelResponse: {
+            task_id: string;
+            /** @enum {string} */
+            status: "cancelled";
         };
         PromptTemplate: {
             id: number;
@@ -1468,6 +1625,17 @@ export interface components {
             unchanged: number;
             /** @description 删除的段落数 */
             deleted: number;
+        };
+        GlossarySyncImpactResource: {
+            resource_id: number;
+            resource_path: string;
+            affected_count: number;
+        };
+        GlossarySyncExecuteResourceResult: {
+            resource_id: number;
+            resource_path: string;
+            updated_count: number;
+            skipped_count: number;
         };
         /** @enum {string} */
         ExecutionPlanTemplateScope: "user" | "org" | "system";
@@ -2800,7 +2968,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GlossaryEntry"];
+                    "application/json": components["schemas"]["UpdateGlossaryEntryResponse"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -2877,6 +3045,126 @@ export interface operations {
                 content: {
                     "text/csv": File;
                 };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AnalyzeGlossarySyncImpact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                entryId: components["parameters"]["EntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GlossarySyncImpactRequest"];
+            };
+        };
+        responses: {
+            /** @description 影响分析结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlossarySyncImpactResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ExecuteGlossarySyncUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                entryId: components["parameters"]["EntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GlossarySyncExecuteRequest"];
+            };
+        };
+        responses: {
+            /** @description 任务已提交 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlossarySyncExecuteResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetGlossarySyncTaskStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /** @description 同步任务 ID */
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 任务状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlossarySyncTaskStatusResponse"];
+                };
+            };
+            /** @description 任务不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CancelGlossarySyncTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /** @description 同步任务 ID */
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 任务已取消 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlossarySyncTaskCancelResponse"];
+                };
+            };
+            /** @description 任务已完成或已失败，无法取消 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
             default: components["responses"]["Problem"];
         };
