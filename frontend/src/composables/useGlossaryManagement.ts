@@ -1,4 +1,4 @@
-import { computed, h, reactive, ref, type Ref } from 'vue'
+import { computed, h, reactive, ref, type InjectionKey, type Ref } from 'vue'
 import type { DataTableColumns, FormInst, FormRules } from 'naive-ui'
 import { NButton, NSpace, NTag, NText, useMessage } from 'naive-ui'
 
@@ -15,6 +15,12 @@ export interface GlossaryFormModel {
   case_sensitive: boolean
   notes: string
 }
+
+/** useGlossaryManagement 的返回类型 */
+export type GlossaryManagement = ReturnType<typeof useGlossaryManagement>
+
+/** 术语表管理的 InjectionKey，用于 provide/inject 类型安全共享 */
+export const GlossaryMgmtKey: InjectionKey<GlossaryManagement> = Symbol('glossaryMgmt')
 
 export function useGlossaryManagement(projectId: Ref<number | null>) {
   const message = useMessage()

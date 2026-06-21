@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { NAlert, NButton, NCard, NIcon, NTabPane, NTabs } from 'naive-ui'
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, watch, onMounted, onBeforeUnmount, provide } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
@@ -18,7 +18,7 @@ import JobCreateDrawer from '@/components/workspace/JobCreateDrawer.vue'
 import JobDetailDrawer from '@/components/workspace/JobDetailDrawer.vue'
 import ConflictDialog from '@/components/workspace/ConflictDialog.vue'
 import IncrementalResultModal from '@/components/workspace/IncrementalResultModal.vue'
-import { useGlossaryManagement } from '@/composables/useGlossaryManagement'
+import { useGlossaryManagement, GlossaryMgmtKey } from '@/composables/useGlossaryManagement'
 import { useJobActions } from '@/composables/useJobActions'
 import { useConflictHandling } from '@/composables/useConflictHandling'
 import { formatDate } from '@/composables/useWorkspaceUtils'
@@ -50,6 +50,7 @@ const projectId = computed(() => {
 
 // ── Composables ──
 const glossaryMgmt = useGlossaryManagement(projectId)
+provide(GlossaryMgmtKey, glossaryMgmt)
 
 const switchToJobsTab = async (): Promise<void> => {
   activeTab.value = 'jobs'
@@ -385,11 +386,7 @@ onMounted(() => {
         </NTabPane>
 
         <NTabPane name="glossary" :tab="`${t('workspace.tabs.glossary')} (${glossary.entryCount})`">
-          <GlossaryPanel
-            :project-id="projectId"
-            @create="glossaryMgmt.openCreateGlossaryDrawer()"
-            @import="glossaryMgmt.glossaryImportVisible.value = true"
-          />
+          <GlossaryPanel :project-id="projectId" />
         </NTabPane>
       </NTabs>
     </NCard>
