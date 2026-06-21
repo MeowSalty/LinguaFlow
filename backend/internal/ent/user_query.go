@@ -21,6 +21,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
@@ -45,6 +46,7 @@ type UserQuery struct {
 	withPromptTemplates        *PromptTemplateQuery
 	withTranslationProfiles    *TranslationProfileQuery
 	withExecutionPlanTemplates *ExecutionPlanTemplateQuery
+	withSyncTasks              *SyncTaskQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -323,6 +325,28 @@ func (_q *UserQuery) QueryExecutionPlanTemplates() *ExecutionPlanTemplateQuery {
 	return query
 }
 
+// QuerySyncTasks chains the current query on the "sync_tasks" edge.
+func (_q *UserQuery) QuerySyncTasks() *SyncTaskQuery {
+	query := (&SyncTaskClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(synctask.Table, synctask.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.SyncTasksTable, user.SyncTasksColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
 // First returns the first User entity from the query.
 // Returns a *NotFoundError when no User was found.
 func (_q *UserQuery) First(ctx context.Context) (*User, error) {
@@ -526,6 +550,7 @@ func (_q *UserQuery) Clone() *UserQuery {
 		withPromptTemplates:        _q.withPromptTemplates.Clone(),
 		withTranslationProfiles:    _q.withTranslationProfiles.Clone(),
 		withExecutionPlanTemplates: _q.withExecutionPlanTemplates.Clone(),
+		withSyncTasks:              _q.withSyncTasks.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -653,6 +678,17 @@ func (_q *UserQuery) WithExecutionPlanTemplates(opts ...func(*ExecutionPlanTempl
 	return _q
 }
 
+// WithSyncTasks tells the query-builder to eager-load the nodes that are connected to
+// the "sync_tasks" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithSyncTasks(opts ...func(*SyncTaskQuery)) *UserQuery {
+	query := (&SyncTaskClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withSyncTasks = query
+	return _q
+}
+
 // GroupBy is used to group vertices by one or more fields/columns.
 // It is often used with aggregate functions, like: count, max, mean, min, sum.
 //
@@ -731,7 +767,7 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	var (
 		nodes       = []*User{}
 		_spec       = _q.querySpec()
-		loadedTypes = [11]bool{
+		loadedTypes = [12]bool{
 			_q.withCreatedTranslationJobs != nil,
 			_q.withReviewedSegments != nil,
 			_q.withRefreshTokens != nil,
@@ -743,6 +779,7 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 			_q.withPromptTemplates != nil,
 			_q.withTranslationProfiles != nil,
 			_q.withExecutionPlanTemplates != nil,
+			_q.withSyncTasks != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -843,6 +880,13 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 			func(n *User, e *ExecutionPlanTemplate) {
 				n.Edges.ExecutionPlanTemplates = append(n.Edges.ExecutionPlanTemplates, e)
 			}); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withSyncTasks; query != nil {
+		if err := _q.loadSyncTasks(ctx, query, nodes,
+			func(n *User) { n.Edges.SyncTasks = []*SyncTask{} },
+			func(n *User, e *SyncTask) { n.Edges.SyncTasks = append(n.Edges.SyncTasks, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -1195,6 +1239,36 @@ func (_q *UserQuery) loadExecutionPlanTemplates(ctx context.Context, query *Exec
 		node, ok := nodeids[*fk]
 		if !ok {
 			return fmt.Errorf(`unexpected referenced foreign-key "owner_user_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadSyncTasks(ctx context.Context, query *SyncTaskQuery, nodes []*User, init func(*User), assign func(*User, *SyncTask)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(synctask.FieldActorUserID)
+	}
+	query.Where(predicate.SyncTask(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.SyncTasksColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.ActorUserID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "actor_user_id" returned %v for node %v`, fk, n.ID)
 		}
 		assign(node, n)
 	}

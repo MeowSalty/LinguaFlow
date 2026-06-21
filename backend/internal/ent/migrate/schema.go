@@ -406,6 +406,63 @@ var (
 			},
 		},
 	}
+	// SyncTasksColumns holds the columns for the "sync_tasks" table.
+	SyncTasksColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "old_target", Type: field.TypeString},
+		{Name: "new_target", Type: field.TypeString},
+		{Name: "total_segments", Type: field.TypeInt},
+		{Name: "processed_segments", Type: field.TypeInt, Default: 0},
+		{Name: "status", Type: field.TypeString, Default: "pending"},
+		{Name: "segment_ids", Type: field.TypeString, Size: 2147483647},
+		{Name: "resource_ids", Type: field.TypeString, Size: 2147483647},
+		{Name: "result", Type: field.TypeString, Nullable: true, Size: 2147483647},
+		{Name: "error", Type: field.TypeString, Nullable: true},
+		{Name: "cancelled_at", Type: field.TypeTime, Nullable: true},
+		{Name: "entry_id", Type: field.TypeInt},
+		{Name: "project_id", Type: field.TypeInt},
+		{Name: "actor_user_id", Type: field.TypeInt},
+	}
+	// SyncTasksTable holds the schema information for the "sync_tasks" table.
+	SyncTasksTable = &schema.Table{
+		Name:       "sync_tasks",
+		Columns:    SyncTasksColumns,
+		PrimaryKey: []*schema.Column{SyncTasksColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "sync_tasks_glossary_entries_sync_tasks",
+				Columns:    []*schema.Column{SyncTasksColumns[13]},
+				RefColumns: []*schema.Column{GlossaryEntriesColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "sync_tasks_projects_sync_tasks",
+				Columns:    []*schema.Column{SyncTasksColumns[14]},
+				RefColumns: []*schema.Column{ProjectsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "sync_tasks_users_sync_tasks",
+				Columns:    []*schema.Column{SyncTasksColumns[15]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "synctask_project_id_status",
+				Unique:  false,
+				Columns: []*schema.Column{SyncTasksColumns[14], SyncTasksColumns[7]},
+			},
+			{
+				Name:    "synctask_status_created_at",
+				Unique:  false,
+				Columns: []*schema.Column{SyncTasksColumns[7], SyncTasksColumns[1]},
+			},
+		},
+	}
 	// TmEntriesColumns holds the columns for the "tm_entries" table.
 	TmEntriesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -591,6 +648,7 @@ var (
 		RefreshTokensTable,
 		ResourcesTable,
 		SegmentsTable,
+		SyncTasksTable,
 		TmEntriesTable,
 		TranslationJobsTable,
 		TranslationProfilesTable,
@@ -620,6 +678,9 @@ func init() {
 	ResourcesTable.ForeignKeys[0].RefTable = ProjectsTable
 	SegmentsTable.ForeignKeys[0].RefTable = ResourcesTable
 	SegmentsTable.ForeignKeys[1].RefTable = UsersTable
+	SyncTasksTable.ForeignKeys[0].RefTable = GlossaryEntriesTable
+	SyncTasksTable.ForeignKeys[1].RefTable = ProjectsTable
+	SyncTasksTable.ForeignKeys[2].RefTable = UsersTable
 	TmEntriesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	TmEntriesTable.ForeignKeys[1].RefTable = ProjectsTable
 	TranslationJobsTable.ForeignKeys[0].RefTable = ProjectsTable

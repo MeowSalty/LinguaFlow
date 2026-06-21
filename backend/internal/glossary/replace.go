@@ -98,3 +98,40 @@ func isIndependentMatch(s string, start, end int) bool {
 func isWordChar(r rune) bool {
 	return r == '_' || unicode.IsLetter(r) || unicode.IsDigit(r)
 }
+
+// CaseInsensitiveReplace 在 s 中查找 old 的大小写不敏感匹配，替换为 new。
+// 返回替换后的字符串、是否发生了替换。
+// 该函数仅在 case_sensitive == false 且 SafeReplace 未命中时作为降级路径调用。
+func CaseInsensitiveReplace(s, old, new string) (string, bool) {
+	if old == "" {
+		return s, false
+	}
+
+	lowerS := strings.ToLower(s)
+	lowerOld := strings.ToLower(old)
+
+	// 1. 检查是否存在大小写不敏感匹配
+	if !strings.Contains(lowerS, lowerOld) {
+		return s, false
+	}
+
+	// 2. 使用 strings.ToLower 的索引定位匹配位置，然后按原始位置替换
+	var b strings.Builder
+	b.Grow(len(s))
+	i := 0
+	replaced := false
+	for i < len(s) {
+		j := strings.Index(lowerS[i:], lowerOld)
+		if j < 0 {
+			b.WriteString(s[i:])
+			break
+		}
+		absStart := i + j
+		absEnd := absStart + len(old)
+		b.WriteString(s[i:absStart])
+		b.WriteString(new)
+		replaced = true
+		i = absEnd
+	}
+	return b.String(), replaced
+}

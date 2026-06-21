@@ -4,7 +4,6 @@ package ent
 
 import (
 	"context"
-	"database/sql/driver"
 	"fmt"
 	"math"
 
@@ -16,55 +15,57 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
-// GlossaryEntryQuery is the builder for querying GlossaryEntry entities.
-type GlossaryEntryQuery struct {
+// SyncTaskQuery is the builder for querying SyncTask entities.
+type SyncTaskQuery struct {
 	config
-	ctx           *QueryContext
-	order         []glossaryentry.OrderOption
-	inters        []Interceptor
-	predicates    []predicate.GlossaryEntry
-	withProject   *ProjectQuery
-	withSyncTasks *SyncTaskQuery
+	ctx         *QueryContext
+	order       []synctask.OrderOption
+	inters      []Interceptor
+	predicates  []predicate.SyncTask
+	withProject *ProjectQuery
+	withEntry   *GlossaryEntryQuery
+	withActor   *UserQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
 }
 
-// Where adds a new predicate for the GlossaryEntryQuery builder.
-func (_q *GlossaryEntryQuery) Where(ps ...predicate.GlossaryEntry) *GlossaryEntryQuery {
+// Where adds a new predicate for the SyncTaskQuery builder.
+func (_q *SyncTaskQuery) Where(ps ...predicate.SyncTask) *SyncTaskQuery {
 	_q.predicates = append(_q.predicates, ps...)
 	return _q
 }
 
 // Limit the number of records to be returned by this query.
-func (_q *GlossaryEntryQuery) Limit(limit int) *GlossaryEntryQuery {
+func (_q *SyncTaskQuery) Limit(limit int) *SyncTaskQuery {
 	_q.ctx.Limit = &limit
 	return _q
 }
 
 // Offset to start from.
-func (_q *GlossaryEntryQuery) Offset(offset int) *GlossaryEntryQuery {
+func (_q *SyncTaskQuery) Offset(offset int) *SyncTaskQuery {
 	_q.ctx.Offset = &offset
 	return _q
 }
 
 // Unique configures the query builder to filter duplicate records on query.
 // By default, unique is set to true, and can be disabled using this method.
-func (_q *GlossaryEntryQuery) Unique(unique bool) *GlossaryEntryQuery {
+func (_q *SyncTaskQuery) Unique(unique bool) *SyncTaskQuery {
 	_q.ctx.Unique = &unique
 	return _q
 }
 
 // Order specifies how the records should be ordered.
-func (_q *GlossaryEntryQuery) Order(o ...glossaryentry.OrderOption) *GlossaryEntryQuery {
+func (_q *SyncTaskQuery) Order(o ...synctask.OrderOption) *SyncTaskQuery {
 	_q.order = append(_q.order, o...)
 	return _q
 }
 
 // QueryProject chains the current query on the "project" edge.
-func (_q *GlossaryEntryQuery) QueryProject() *ProjectQuery {
+func (_q *SyncTaskQuery) QueryProject() *ProjectQuery {
 	query := (&ProjectClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
@@ -75,9 +76,9 @@ func (_q *GlossaryEntryQuery) QueryProject() *ProjectQuery {
 			return nil, err
 		}
 		step := sqlgraph.NewStep(
-			sqlgraph.From(glossaryentry.Table, glossaryentry.FieldID, selector),
+			sqlgraph.From(synctask.Table, synctask.FieldID, selector),
 			sqlgraph.To(project.Table, project.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, glossaryentry.ProjectTable, glossaryentry.ProjectColumn),
+			sqlgraph.Edge(sqlgraph.M2O, true, synctask.ProjectTable, synctask.ProjectColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -85,9 +86,9 @@ func (_q *GlossaryEntryQuery) QueryProject() *ProjectQuery {
 	return query
 }
 
-// QuerySyncTasks chains the current query on the "sync_tasks" edge.
-func (_q *GlossaryEntryQuery) QuerySyncTasks() *SyncTaskQuery {
-	query := (&SyncTaskClient{config: _q.config}).Query()
+// QueryEntry chains the current query on the "entry" edge.
+func (_q *SyncTaskQuery) QueryEntry() *GlossaryEntryQuery {
+	query := (&GlossaryEntryClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
 			return nil, err
@@ -97,9 +98,9 @@ func (_q *GlossaryEntryQuery) QuerySyncTasks() *SyncTaskQuery {
 			return nil, err
 		}
 		step := sqlgraph.NewStep(
-			sqlgraph.From(glossaryentry.Table, glossaryentry.FieldID, selector),
-			sqlgraph.To(synctask.Table, synctask.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, glossaryentry.SyncTasksTable, glossaryentry.SyncTasksColumn),
+			sqlgraph.From(synctask.Table, synctask.FieldID, selector),
+			sqlgraph.To(glossaryentry.Table, glossaryentry.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, synctask.EntryTable, synctask.EntryColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -107,21 +108,43 @@ func (_q *GlossaryEntryQuery) QuerySyncTasks() *SyncTaskQuery {
 	return query
 }
 
-// First returns the first GlossaryEntry entity from the query.
-// Returns a *NotFoundError when no GlossaryEntry was found.
-func (_q *GlossaryEntryQuery) First(ctx context.Context) (*GlossaryEntry, error) {
+// QueryActor chains the current query on the "actor" edge.
+func (_q *SyncTaskQuery) QueryActor() *UserQuery {
+	query := (&UserClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(synctask.Table, synctask.FieldID, selector),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, synctask.ActorTable, synctask.ActorColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// First returns the first SyncTask entity from the query.
+// Returns a *NotFoundError when no SyncTask was found.
+func (_q *SyncTaskQuery) First(ctx context.Context) (*SyncTask, error) {
 	nodes, err := _q.Limit(1).All(setContextOp(ctx, _q.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
 	if len(nodes) == 0 {
-		return nil, &NotFoundError{glossaryentry.Label}
+		return nil, &NotFoundError{synctask.Label}
 	}
 	return nodes[0], nil
 }
 
 // FirstX is like First, but panics if an error occurs.
-func (_q *GlossaryEntryQuery) FirstX(ctx context.Context) *GlossaryEntry {
+func (_q *SyncTaskQuery) FirstX(ctx context.Context) *SyncTask {
 	node, err := _q.First(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
@@ -129,22 +152,22 @@ func (_q *GlossaryEntryQuery) FirstX(ctx context.Context) *GlossaryEntry {
 	return node
 }
 
-// FirstID returns the first GlossaryEntry ID from the query.
-// Returns a *NotFoundError when no GlossaryEntry ID was found.
-func (_q *GlossaryEntryQuery) FirstID(ctx context.Context) (id int, err error) {
+// FirstID returns the first SyncTask ID from the query.
+// Returns a *NotFoundError when no SyncTask ID was found.
+func (_q *SyncTaskQuery) FirstID(ctx context.Context) (id int, err error) {
 	var ids []int
 	if ids, err = _q.Limit(1).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
 	if len(ids) == 0 {
-		err = &NotFoundError{glossaryentry.Label}
+		err = &NotFoundError{synctask.Label}
 		return
 	}
 	return ids[0], nil
 }
 
 // FirstIDX is like FirstID, but panics if an error occurs.
-func (_q *GlossaryEntryQuery) FirstIDX(ctx context.Context) int {
+func (_q *SyncTaskQuery) FirstIDX(ctx context.Context) int {
 	id, err := _q.FirstID(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
@@ -152,10 +175,10 @@ func (_q *GlossaryEntryQuery) FirstIDX(ctx context.Context) int {
 	return id
 }
 
-// Only returns a single GlossaryEntry entity found by the query, ensuring it only returns one.
-// Returns a *NotSingularError when more than one GlossaryEntry entity is found.
-// Returns a *NotFoundError when no GlossaryEntry entities are found.
-func (_q *GlossaryEntryQuery) Only(ctx context.Context) (*GlossaryEntry, error) {
+// Only returns a single SyncTask entity found by the query, ensuring it only returns one.
+// Returns a *NotSingularError when more than one SyncTask entity is found.
+// Returns a *NotFoundError when no SyncTask entities are found.
+func (_q *SyncTaskQuery) Only(ctx context.Context) (*SyncTask, error) {
 	nodes, err := _q.Limit(2).All(setContextOp(ctx, _q.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
@@ -164,14 +187,14 @@ func (_q *GlossaryEntryQuery) Only(ctx context.Context) (*GlossaryEntry, error) 
 	case 1:
 		return nodes[0], nil
 	case 0:
-		return nil, &NotFoundError{glossaryentry.Label}
+		return nil, &NotFoundError{synctask.Label}
 	default:
-		return nil, &NotSingularError{glossaryentry.Label}
+		return nil, &NotSingularError{synctask.Label}
 	}
 }
 
 // OnlyX is like Only, but panics if an error occurs.
-func (_q *GlossaryEntryQuery) OnlyX(ctx context.Context) *GlossaryEntry {
+func (_q *SyncTaskQuery) OnlyX(ctx context.Context) *SyncTask {
 	node, err := _q.Only(ctx)
 	if err != nil {
 		panic(err)
@@ -179,10 +202,10 @@ func (_q *GlossaryEntryQuery) OnlyX(ctx context.Context) *GlossaryEntry {
 	return node
 }
 
-// OnlyID is like Only, but returns the only GlossaryEntry ID in the query.
-// Returns a *NotSingularError when more than one GlossaryEntry ID is found.
+// OnlyID is like Only, but returns the only SyncTask ID in the query.
+// Returns a *NotSingularError when more than one SyncTask ID is found.
 // Returns a *NotFoundError when no entities are found.
-func (_q *GlossaryEntryQuery) OnlyID(ctx context.Context) (id int, err error) {
+func (_q *SyncTaskQuery) OnlyID(ctx context.Context) (id int, err error) {
 	var ids []int
 	if ids, err = _q.Limit(2).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
@@ -191,15 +214,15 @@ func (_q *GlossaryEntryQuery) OnlyID(ctx context.Context) (id int, err error) {
 	case 1:
 		id = ids[0]
 	case 0:
-		err = &NotFoundError{glossaryentry.Label}
+		err = &NotFoundError{synctask.Label}
 	default:
-		err = &NotSingularError{glossaryentry.Label}
+		err = &NotSingularError{synctask.Label}
 	}
 	return
 }
 
 // OnlyIDX is like OnlyID, but panics if an error occurs.
-func (_q *GlossaryEntryQuery) OnlyIDX(ctx context.Context) int {
+func (_q *SyncTaskQuery) OnlyIDX(ctx context.Context) int {
 	id, err := _q.OnlyID(ctx)
 	if err != nil {
 		panic(err)
@@ -207,18 +230,18 @@ func (_q *GlossaryEntryQuery) OnlyIDX(ctx context.Context) int {
 	return id
 }
 
-// All executes the query and returns a list of GlossaryEntries.
-func (_q *GlossaryEntryQuery) All(ctx context.Context) ([]*GlossaryEntry, error) {
+// All executes the query and returns a list of SyncTasks.
+func (_q *SyncTaskQuery) All(ctx context.Context) ([]*SyncTask, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryAll)
 	if err := _q.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
-	qr := querierAll[[]*GlossaryEntry, *GlossaryEntryQuery]()
-	return withInterceptors[[]*GlossaryEntry](ctx, _q, qr, _q.inters)
+	qr := querierAll[[]*SyncTask, *SyncTaskQuery]()
+	return withInterceptors[[]*SyncTask](ctx, _q, qr, _q.inters)
 }
 
 // AllX is like All, but panics if an error occurs.
-func (_q *GlossaryEntryQuery) AllX(ctx context.Context) []*GlossaryEntry {
+func (_q *SyncTaskQuery) AllX(ctx context.Context) []*SyncTask {
 	nodes, err := _q.All(ctx)
 	if err != nil {
 		panic(err)
@@ -226,20 +249,20 @@ func (_q *GlossaryEntryQuery) AllX(ctx context.Context) []*GlossaryEntry {
 	return nodes
 }
 
-// IDs executes the query and returns a list of GlossaryEntry IDs.
-func (_q *GlossaryEntryQuery) IDs(ctx context.Context) (ids []int, err error) {
+// IDs executes the query and returns a list of SyncTask IDs.
+func (_q *SyncTaskQuery) IDs(ctx context.Context) (ids []int, err error) {
 	if _q.ctx.Unique == nil && _q.path != nil {
 		_q.Unique(true)
 	}
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryIDs)
-	if err = _q.Select(glossaryentry.FieldID).Scan(ctx, &ids); err != nil {
+	if err = _q.Select(synctask.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
 }
 
 // IDsX is like IDs, but panics if an error occurs.
-func (_q *GlossaryEntryQuery) IDsX(ctx context.Context) []int {
+func (_q *SyncTaskQuery) IDsX(ctx context.Context) []int {
 	ids, err := _q.IDs(ctx)
 	if err != nil {
 		panic(err)
@@ -248,16 +271,16 @@ func (_q *GlossaryEntryQuery) IDsX(ctx context.Context) []int {
 }
 
 // Count returns the count of the given query.
-func (_q *GlossaryEntryQuery) Count(ctx context.Context) (int, error) {
+func (_q *SyncTaskQuery) Count(ctx context.Context) (int, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryCount)
 	if err := _q.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
-	return withInterceptors[int](ctx, _q, querierCount[*GlossaryEntryQuery](), _q.inters)
+	return withInterceptors[int](ctx, _q, querierCount[*SyncTaskQuery](), _q.inters)
 }
 
 // CountX is like Count, but panics if an error occurs.
-func (_q *GlossaryEntryQuery) CountX(ctx context.Context) int {
+func (_q *SyncTaskQuery) CountX(ctx context.Context) int {
 	count, err := _q.Count(ctx)
 	if err != nil {
 		panic(err)
@@ -266,7 +289,7 @@ func (_q *GlossaryEntryQuery) CountX(ctx context.Context) int {
 }
 
 // Exist returns true if the query has elements in the graph.
-func (_q *GlossaryEntryQuery) Exist(ctx context.Context) (bool, error) {
+func (_q *SyncTaskQuery) Exist(ctx context.Context) (bool, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryExist)
 	switch _, err := _q.FirstID(ctx); {
 	case IsNotFound(err):
@@ -279,7 +302,7 @@ func (_q *GlossaryEntryQuery) Exist(ctx context.Context) (bool, error) {
 }
 
 // ExistX is like Exist, but panics if an error occurs.
-func (_q *GlossaryEntryQuery) ExistX(ctx context.Context) bool {
+func (_q *SyncTaskQuery) ExistX(ctx context.Context) bool {
 	exist, err := _q.Exist(ctx)
 	if err != nil {
 		panic(err)
@@ -287,20 +310,21 @@ func (_q *GlossaryEntryQuery) ExistX(ctx context.Context) bool {
 	return exist
 }
 
-// Clone returns a duplicate of the GlossaryEntryQuery builder, including all associated steps. It can be
+// Clone returns a duplicate of the SyncTaskQuery builder, including all associated steps. It can be
 // used to prepare common query builders and use them differently after the clone is made.
-func (_q *GlossaryEntryQuery) Clone() *GlossaryEntryQuery {
+func (_q *SyncTaskQuery) Clone() *SyncTaskQuery {
 	if _q == nil {
 		return nil
 	}
-	return &GlossaryEntryQuery{
-		config:        _q.config,
-		ctx:           _q.ctx.Clone(),
-		order:         append([]glossaryentry.OrderOption{}, _q.order...),
-		inters:        append([]Interceptor{}, _q.inters...),
-		predicates:    append([]predicate.GlossaryEntry{}, _q.predicates...),
-		withProject:   _q.withProject.Clone(),
-		withSyncTasks: _q.withSyncTasks.Clone(),
+	return &SyncTaskQuery{
+		config:      _q.config,
+		ctx:         _q.ctx.Clone(),
+		order:       append([]synctask.OrderOption{}, _q.order...),
+		inters:      append([]Interceptor{}, _q.inters...),
+		predicates:  append([]predicate.SyncTask{}, _q.predicates...),
+		withProject: _q.withProject.Clone(),
+		withEntry:   _q.withEntry.Clone(),
+		withActor:   _q.withActor.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -309,7 +333,7 @@ func (_q *GlossaryEntryQuery) Clone() *GlossaryEntryQuery {
 
 // WithProject tells the query-builder to eager-load the nodes that are connected to
 // the "project" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *GlossaryEntryQuery) WithProject(opts ...func(*ProjectQuery)) *GlossaryEntryQuery {
+func (_q *SyncTaskQuery) WithProject(opts ...func(*ProjectQuery)) *SyncTaskQuery {
 	query := (&ProjectClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
@@ -318,14 +342,25 @@ func (_q *GlossaryEntryQuery) WithProject(opts ...func(*ProjectQuery)) *Glossary
 	return _q
 }
 
-// WithSyncTasks tells the query-builder to eager-load the nodes that are connected to
-// the "sync_tasks" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *GlossaryEntryQuery) WithSyncTasks(opts ...func(*SyncTaskQuery)) *GlossaryEntryQuery {
-	query := (&SyncTaskClient{config: _q.config}).Query()
+// WithEntry tells the query-builder to eager-load the nodes that are connected to
+// the "entry" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *SyncTaskQuery) WithEntry(opts ...func(*GlossaryEntryQuery)) *SyncTaskQuery {
+	query := (&GlossaryEntryClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
-	_q.withSyncTasks = query
+	_q.withEntry = query
+	return _q
+}
+
+// WithActor tells the query-builder to eager-load the nodes that are connected to
+// the "actor" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *SyncTaskQuery) WithActor(opts ...func(*UserQuery)) *SyncTaskQuery {
+	query := (&UserClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withActor = query
 	return _q
 }
 
@@ -339,15 +374,15 @@ func (_q *GlossaryEntryQuery) WithSyncTasks(opts ...func(*SyncTaskQuery)) *Gloss
 //		Count int `json:"count,omitempty"`
 //	}
 //
-//	client.GlossaryEntry.Query().
-//		GroupBy(glossaryentry.FieldCreatedAt).
+//	client.SyncTask.Query().
+//		GroupBy(synctask.FieldCreatedAt).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
-func (_q *GlossaryEntryQuery) GroupBy(field string, fields ...string) *GlossaryEntryGroupBy {
+func (_q *SyncTaskQuery) GroupBy(field string, fields ...string) *SyncTaskGroupBy {
 	_q.ctx.Fields = append([]string{field}, fields...)
-	grbuild := &GlossaryEntryGroupBy{build: _q}
+	grbuild := &SyncTaskGroupBy{build: _q}
 	grbuild.flds = &_q.ctx.Fields
-	grbuild.label = glossaryentry.Label
+	grbuild.label = synctask.Label
 	grbuild.scan = grbuild.Scan
 	return grbuild
 }
@@ -361,23 +396,23 @@ func (_q *GlossaryEntryQuery) GroupBy(field string, fields ...string) *GlossaryE
 //		CreatedAt time.Time `json:"created_at,omitempty"`
 //	}
 //
-//	client.GlossaryEntry.Query().
-//		Select(glossaryentry.FieldCreatedAt).
+//	client.SyncTask.Query().
+//		Select(synctask.FieldCreatedAt).
 //		Scan(ctx, &v)
-func (_q *GlossaryEntryQuery) Select(fields ...string) *GlossaryEntrySelect {
+func (_q *SyncTaskQuery) Select(fields ...string) *SyncTaskSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)
-	sbuild := &GlossaryEntrySelect{GlossaryEntryQuery: _q}
-	sbuild.label = glossaryentry.Label
+	sbuild := &SyncTaskSelect{SyncTaskQuery: _q}
+	sbuild.label = synctask.Label
 	sbuild.flds, sbuild.scan = &_q.ctx.Fields, sbuild.Scan
 	return sbuild
 }
 
-// Aggregate returns a GlossaryEntrySelect configured with the given aggregations.
-func (_q *GlossaryEntryQuery) Aggregate(fns ...AggregateFunc) *GlossaryEntrySelect {
+// Aggregate returns a SyncTaskSelect configured with the given aggregations.
+func (_q *SyncTaskQuery) Aggregate(fns ...AggregateFunc) *SyncTaskSelect {
 	return _q.Select().Aggregate(fns...)
 }
 
-func (_q *GlossaryEntryQuery) prepareQuery(ctx context.Context) error {
+func (_q *SyncTaskQuery) prepareQuery(ctx context.Context) error {
 	for _, inter := range _q.inters {
 		if inter == nil {
 			return fmt.Errorf("ent: uninitialized interceptor (forgotten import ent/runtime?)")
@@ -389,7 +424,7 @@ func (_q *GlossaryEntryQuery) prepareQuery(ctx context.Context) error {
 		}
 	}
 	for _, f := range _q.ctx.Fields {
-		if !glossaryentry.ValidColumn(f) {
+		if !synctask.ValidColumn(f) {
 			return &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 		}
 	}
@@ -403,20 +438,21 @@ func (_q *GlossaryEntryQuery) prepareQuery(ctx context.Context) error {
 	return nil
 }
 
-func (_q *GlossaryEntryQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*GlossaryEntry, error) {
+func (_q *SyncTaskQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*SyncTask, error) {
 	var (
-		nodes       = []*GlossaryEntry{}
+		nodes       = []*SyncTask{}
 		_spec       = _q.querySpec()
-		loadedTypes = [2]bool{
+		loadedTypes = [3]bool{
 			_q.withProject != nil,
-			_q.withSyncTasks != nil,
+			_q.withEntry != nil,
+			_q.withActor != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
-		return (*GlossaryEntry).scanValues(nil, columns)
+		return (*SyncTask).scanValues(nil, columns)
 	}
 	_spec.Assign = func(columns []string, values []any) error {
-		node := &GlossaryEntry{config: _q.config}
+		node := &SyncTask{config: _q.config}
 		nodes = append(nodes, node)
 		node.Edges.loadedTypes = loadedTypes
 		return node.assignValues(columns, values)
@@ -432,23 +468,28 @@ func (_q *GlossaryEntryQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([
 	}
 	if query := _q.withProject; query != nil {
 		if err := _q.loadProject(ctx, query, nodes, nil,
-			func(n *GlossaryEntry, e *Project) { n.Edges.Project = e }); err != nil {
+			func(n *SyncTask, e *Project) { n.Edges.Project = e }); err != nil {
 			return nil, err
 		}
 	}
-	if query := _q.withSyncTasks; query != nil {
-		if err := _q.loadSyncTasks(ctx, query, nodes,
-			func(n *GlossaryEntry) { n.Edges.SyncTasks = []*SyncTask{} },
-			func(n *GlossaryEntry, e *SyncTask) { n.Edges.SyncTasks = append(n.Edges.SyncTasks, e) }); err != nil {
+	if query := _q.withEntry; query != nil {
+		if err := _q.loadEntry(ctx, query, nodes, nil,
+			func(n *SyncTask, e *GlossaryEntry) { n.Edges.Entry = e }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withActor; query != nil {
+		if err := _q.loadActor(ctx, query, nodes, nil,
+			func(n *SyncTask, e *User) { n.Edges.Actor = e }); err != nil {
 			return nil, err
 		}
 	}
 	return nodes, nil
 }
 
-func (_q *GlossaryEntryQuery) loadProject(ctx context.Context, query *ProjectQuery, nodes []*GlossaryEntry, init func(*GlossaryEntry), assign func(*GlossaryEntry, *Project)) error {
+func (_q *SyncTaskQuery) loadProject(ctx context.Context, query *ProjectQuery, nodes []*SyncTask, init func(*SyncTask), assign func(*SyncTask, *Project)) error {
 	ids := make([]int, 0, len(nodes))
-	nodeids := make(map[int][]*GlossaryEntry)
+	nodeids := make(map[int][]*SyncTask)
 	for i := range nodes {
 		fk := nodes[i].ProjectID
 		if _, ok := nodeids[fk]; !ok {
@@ -475,38 +516,66 @@ func (_q *GlossaryEntryQuery) loadProject(ctx context.Context, query *ProjectQue
 	}
 	return nil
 }
-func (_q *GlossaryEntryQuery) loadSyncTasks(ctx context.Context, query *SyncTaskQuery, nodes []*GlossaryEntry, init func(*GlossaryEntry), assign func(*GlossaryEntry, *SyncTask)) error {
-	fks := make([]driver.Value, 0, len(nodes))
-	nodeids := make(map[int]*GlossaryEntry)
+func (_q *SyncTaskQuery) loadEntry(ctx context.Context, query *GlossaryEntryQuery, nodes []*SyncTask, init func(*SyncTask), assign func(*SyncTask, *GlossaryEntry)) error {
+	ids := make([]int, 0, len(nodes))
+	nodeids := make(map[int][]*SyncTask)
 	for i := range nodes {
-		fks = append(fks, nodes[i].ID)
-		nodeids[nodes[i].ID] = nodes[i]
-		if init != nil {
-			init(nodes[i])
+		fk := nodes[i].EntryID
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
 		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
 	}
-	if len(query.ctx.Fields) > 0 {
-		query.ctx.AppendFieldOnce(synctask.FieldEntryID)
+	if len(ids) == 0 {
+		return nil
 	}
-	query.Where(predicate.SyncTask(func(s *sql.Selector) {
-		s.Where(sql.InValues(s.C(glossaryentry.SyncTasksColumn), fks...))
-	}))
+	query.Where(glossaryentry.IDIn(ids...))
 	neighbors, err := query.All(ctx)
 	if err != nil {
 		return err
 	}
 	for _, n := range neighbors {
-		fk := n.EntryID
-		node, ok := nodeids[fk]
+		nodes, ok := nodeids[n.ID]
 		if !ok {
-			return fmt.Errorf(`unexpected referenced foreign-key "entry_id" returned %v for node %v`, fk, n.ID)
+			return fmt.Errorf(`unexpected foreign-key "entry_id" returned %v`, n.ID)
 		}
-		assign(node, n)
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
+	}
+	return nil
+}
+func (_q *SyncTaskQuery) loadActor(ctx context.Context, query *UserQuery, nodes []*SyncTask, init func(*SyncTask), assign func(*SyncTask, *User)) error {
+	ids := make([]int, 0, len(nodes))
+	nodeids := make(map[int][]*SyncTask)
+	for i := range nodes {
+		fk := nodes[i].ActorUserID
+		if _, ok := nodeids[fk]; !ok {
+			ids = append(ids, fk)
+		}
+		nodeids[fk] = append(nodeids[fk], nodes[i])
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	query.Where(user.IDIn(ids...))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		nodes, ok := nodeids[n.ID]
+		if !ok {
+			return fmt.Errorf(`unexpected foreign-key "actor_user_id" returned %v`, n.ID)
+		}
+		for i := range nodes {
+			assign(nodes[i], n)
+		}
 	}
 	return nil
 }
 
-func (_q *GlossaryEntryQuery) sqlCount(ctx context.Context) (int, error) {
+func (_q *SyncTaskQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := _q.querySpec()
 	_spec.Node.Columns = _q.ctx.Fields
 	if len(_q.ctx.Fields) > 0 {
@@ -515,8 +584,8 @@ func (_q *GlossaryEntryQuery) sqlCount(ctx context.Context) (int, error) {
 	return sqlgraph.CountNodes(ctx, _q.driver, _spec)
 }
 
-func (_q *GlossaryEntryQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := sqlgraph.NewQuerySpec(glossaryentry.Table, glossaryentry.Columns, sqlgraph.NewFieldSpec(glossaryentry.FieldID, field.TypeInt))
+func (_q *SyncTaskQuery) querySpec() *sqlgraph.QuerySpec {
+	_spec := sqlgraph.NewQuerySpec(synctask.Table, synctask.Columns, sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt))
 	_spec.From = _q.sql
 	if unique := _q.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
@@ -525,14 +594,20 @@ func (_q *GlossaryEntryQuery) querySpec() *sqlgraph.QuerySpec {
 	}
 	if fields := _q.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
-		_spec.Node.Columns = append(_spec.Node.Columns, glossaryentry.FieldID)
+		_spec.Node.Columns = append(_spec.Node.Columns, synctask.FieldID)
 		for i := range fields {
-			if fields[i] != glossaryentry.FieldID {
+			if fields[i] != synctask.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
 		}
 		if _q.withProject != nil {
-			_spec.Node.AddColumnOnce(glossaryentry.FieldProjectID)
+			_spec.Node.AddColumnOnce(synctask.FieldProjectID)
+		}
+		if _q.withEntry != nil {
+			_spec.Node.AddColumnOnce(synctask.FieldEntryID)
+		}
+		if _q.withActor != nil {
+			_spec.Node.AddColumnOnce(synctask.FieldActorUserID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {
@@ -558,12 +633,12 @@ func (_q *GlossaryEntryQuery) querySpec() *sqlgraph.QuerySpec {
 	return _spec
 }
 
-func (_q *GlossaryEntryQuery) sqlQuery(ctx context.Context) *sql.Selector {
+func (_q *SyncTaskQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(_q.driver.Dialect())
-	t1 := builder.Table(glossaryentry.Table)
+	t1 := builder.Table(synctask.Table)
 	columns := _q.ctx.Fields
 	if len(columns) == 0 {
-		columns = glossaryentry.Columns
+		columns = synctask.Columns
 	}
 	selector := builder.Select(t1.Columns(columns...)...).From(t1)
 	if _q.sql != nil {
@@ -590,28 +665,28 @@ func (_q *GlossaryEntryQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	return selector
 }
 
-// GlossaryEntryGroupBy is the group-by builder for GlossaryEntry entities.
-type GlossaryEntryGroupBy struct {
+// SyncTaskGroupBy is the group-by builder for SyncTask entities.
+type SyncTaskGroupBy struct {
 	selector
-	build *GlossaryEntryQuery
+	build *SyncTaskQuery
 }
 
 // Aggregate adds the given aggregation functions to the group-by query.
-func (_g *GlossaryEntryGroupBy) Aggregate(fns ...AggregateFunc) *GlossaryEntryGroupBy {
+func (_g *SyncTaskGroupBy) Aggregate(fns ...AggregateFunc) *SyncTaskGroupBy {
 	_g.fns = append(_g.fns, fns...)
 	return _g
 }
 
 // Scan applies the selector query and scans the result into the given value.
-func (_g *GlossaryEntryGroupBy) Scan(ctx context.Context, v any) error {
+func (_g *SyncTaskGroupBy) Scan(ctx context.Context, v any) error {
 	ctx = setContextOp(ctx, _g.build.ctx, ent.OpQueryGroupBy)
 	if err := _g.build.prepareQuery(ctx); err != nil {
 		return err
 	}
-	return scanWithInterceptors[*GlossaryEntryQuery, *GlossaryEntryGroupBy](ctx, _g.build, _g, _g.build.inters, v)
+	return scanWithInterceptors[*SyncTaskQuery, *SyncTaskGroupBy](ctx, _g.build, _g, _g.build.inters, v)
 }
 
-func (_g *GlossaryEntryGroupBy) sqlScan(ctx context.Context, root *GlossaryEntryQuery, v any) error {
+func (_g *SyncTaskGroupBy) sqlScan(ctx context.Context, root *SyncTaskQuery, v any) error {
 	selector := root.sqlQuery(ctx).Select()
 	aggregation := make([]string, 0, len(_g.fns))
 	for _, fn := range _g.fns {
@@ -638,28 +713,28 @@ func (_g *GlossaryEntryGroupBy) sqlScan(ctx context.Context, root *GlossaryEntry
 	return sql.ScanSlice(rows, v)
 }
 
-// GlossaryEntrySelect is the builder for selecting fields of GlossaryEntry entities.
-type GlossaryEntrySelect struct {
-	*GlossaryEntryQuery
+// SyncTaskSelect is the builder for selecting fields of SyncTask entities.
+type SyncTaskSelect struct {
+	*SyncTaskQuery
 	selector
 }
 
 // Aggregate adds the given aggregation functions to the selector query.
-func (_s *GlossaryEntrySelect) Aggregate(fns ...AggregateFunc) *GlossaryEntrySelect {
+func (_s *SyncTaskSelect) Aggregate(fns ...AggregateFunc) *SyncTaskSelect {
 	_s.fns = append(_s.fns, fns...)
 	return _s
 }
 
 // Scan applies the selector query and scans the result into the given value.
-func (_s *GlossaryEntrySelect) Scan(ctx context.Context, v any) error {
+func (_s *SyncTaskSelect) Scan(ctx context.Context, v any) error {
 	ctx = setContextOp(ctx, _s.ctx, ent.OpQuerySelect)
 	if err := _s.prepareQuery(ctx); err != nil {
 		return err
 	}
-	return scanWithInterceptors[*GlossaryEntryQuery, *GlossaryEntrySelect](ctx, _s.GlossaryEntryQuery, _s, _s.inters, v)
+	return scanWithInterceptors[*SyncTaskQuery, *SyncTaskSelect](ctx, _s.SyncTaskQuery, _s, _s.inters, v)
 }
 
-func (_s *GlossaryEntrySelect) sqlScan(ctx context.Context, root *GlossaryEntryQuery, v any) error {
+func (_s *SyncTaskSelect) sqlScan(ctx context.Context, root *SyncTaskQuery, v any) error {
 	selector := root.sqlQuery(ctx)
 	aggregation := make([]string, 0, len(_s.fns))
 	for _, fn := range _s.fns {

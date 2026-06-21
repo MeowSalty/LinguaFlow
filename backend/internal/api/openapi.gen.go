@@ -163,6 +163,75 @@ func (e ExecutionPlanTemplateScope) Valid() bool {
 	}
 }
 
+// Defines values for GlossarySyncExecuteResponseStatus.
+const (
+	GlossarySyncExecuteResponseStatusCancelled GlossarySyncExecuteResponseStatus = "cancelled"
+	GlossarySyncExecuteResponseStatusCompleted GlossarySyncExecuteResponseStatus = "completed"
+	GlossarySyncExecuteResponseStatusFailed    GlossarySyncExecuteResponseStatus = "failed"
+	GlossarySyncExecuteResponseStatusPending   GlossarySyncExecuteResponseStatus = "pending"
+	GlossarySyncExecuteResponseStatusRunning   GlossarySyncExecuteResponseStatus = "running"
+)
+
+// Valid indicates whether the value is a known member of the GlossarySyncExecuteResponseStatus enum.
+func (e GlossarySyncExecuteResponseStatus) Valid() bool {
+	switch e {
+	case GlossarySyncExecuteResponseStatusCancelled:
+		return true
+	case GlossarySyncExecuteResponseStatusCompleted:
+		return true
+	case GlossarySyncExecuteResponseStatusFailed:
+		return true
+	case GlossarySyncExecuteResponseStatusPending:
+		return true
+	case GlossarySyncExecuteResponseStatusRunning:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GlossarySyncTaskCancelResponseStatus.
+const (
+	GlossarySyncTaskCancelResponseStatusCancelled GlossarySyncTaskCancelResponseStatus = "cancelled"
+)
+
+// Valid indicates whether the value is a known member of the GlossarySyncTaskCancelResponseStatus enum.
+func (e GlossarySyncTaskCancelResponseStatus) Valid() bool {
+	switch e {
+	case GlossarySyncTaskCancelResponseStatusCancelled:
+		return true
+	default:
+		return false
+	}
+}
+
+// Defines values for GlossarySyncTaskStatusResponseStatus.
+const (
+	GlossarySyncTaskStatusResponseStatusCancelled GlossarySyncTaskStatusResponseStatus = "cancelled"
+	GlossarySyncTaskStatusResponseStatusCompleted GlossarySyncTaskStatusResponseStatus = "completed"
+	GlossarySyncTaskStatusResponseStatusFailed    GlossarySyncTaskStatusResponseStatus = "failed"
+	GlossarySyncTaskStatusResponseStatusPending   GlossarySyncTaskStatusResponseStatus = "pending"
+	GlossarySyncTaskStatusResponseStatusRunning   GlossarySyncTaskStatusResponseStatus = "running"
+)
+
+// Valid indicates whether the value is a known member of the GlossarySyncTaskStatusResponseStatus enum.
+func (e GlossarySyncTaskStatusResponseStatus) Valid() bool {
+	switch e {
+	case GlossarySyncTaskStatusResponseStatusCancelled:
+		return true
+	case GlossarySyncTaskStatusResponseStatusCompleted:
+		return true
+	case GlossarySyncTaskStatusResponseStatusFailed:
+		return true
+	case GlossarySyncTaskStatusResponseStatusPending:
+		return true
+	case GlossarySyncTaskStatusResponseStatusRunning:
+		return true
+	default:
+		return false
+	}
+}
+
 // Defines values for OrganizationMemberRole.
 const (
 	OrganizationMemberRoleAdmin  OrganizationMemberRole = "admin"
@@ -264,19 +333,19 @@ func (e PromptTemplateScope) Valid() bool {
 
 // Defines values for ResourcePrecheckFileResultAction.
 const (
-	ResourcePrecheckFileResultActionConflict  ResourcePrecheckFileResultAction = "conflict"
-	ResourcePrecheckFileResultActionCreate    ResourcePrecheckFileResultAction = "create"
-	ResourcePrecheckFileResultActionDuplicate ResourcePrecheckFileResultAction = "duplicate"
+	Conflict  ResourcePrecheckFileResultAction = "conflict"
+	Create    ResourcePrecheckFileResultAction = "create"
+	Duplicate ResourcePrecheckFileResultAction = "duplicate"
 )
 
 // Valid indicates whether the value is a known member of the ResourcePrecheckFileResultAction enum.
 func (e ResourcePrecheckFileResultAction) Valid() bool {
 	switch e {
-	case ResourcePrecheckFileResultActionConflict:
+	case Conflict:
 		return true
-	case ResourcePrecheckFileResultActionCreate:
+	case Create:
 		return true
-	case ResourcePrecheckFileResultActionDuplicate:
+	case Duplicate:
 		return true
 	default:
 		return false
@@ -838,6 +907,99 @@ type GlossaryListResponse struct {
 	Items []GlossaryEntry `json:"items"`
 }
 
+// GlossarySyncExecuteRequest defines model for GlossarySyncExecuteRequest.
+type GlossarySyncExecuteRequest struct {
+	NewTarget string `json:"new_target"`
+	OldTarget string `json:"old_target"`
+
+	// ResourceIds 限定同步的资源范围
+	ResourceIds *[]int `json:"resource_ids,omitempty"`
+}
+
+// GlossarySyncExecuteResourceResult defines model for GlossarySyncExecuteResourceResult.
+type GlossarySyncExecuteResourceResult struct {
+	ResourceId   int    `json:"resource_id"`
+	ResourcePath string `json:"resource_path"`
+	SkippedCount int    `json:"skipped_count"`
+	UpdatedCount int    `json:"updated_count"`
+}
+
+// GlossarySyncExecuteResponse defines model for GlossarySyncExecuteResponse.
+type GlossarySyncExecuteResponse struct {
+	Status GlossarySyncExecuteResponseStatus `json:"status"`
+
+	// StatusUrl 任务状态轮询端点
+	StatusUrl string `json:"status_url"`
+
+	// TaskId 异步任务唯一标识
+	TaskId string `json:"task_id"`
+}
+
+// GlossarySyncExecuteResponseStatus defines model for GlossarySyncExecuteResponse.Status.
+type GlossarySyncExecuteResponseStatus string
+
+// GlossarySyncImpactRequest defines model for GlossarySyncImpactRequest.
+type GlossarySyncImpactRequest struct {
+	// NewTarget 修改后的新 target 值
+	NewTarget *string `json:"new_target,omitempty"`
+
+	// OldTarget 修改前的旧 target 值
+	OldTarget string `json:"old_target"`
+
+	// ResourceIds 限定影响分析的资源范围（可选，为空则分析所有资源）
+	ResourceIds *[]int `json:"resource_ids,omitempty"`
+}
+
+// GlossarySyncImpactResource defines model for GlossarySyncImpactResource.
+type GlossarySyncImpactResource struct {
+	AffectedCount int    `json:"affected_count"`
+	ResourceId    int    `json:"resource_id"`
+	ResourcePath  string `json:"resource_path"`
+}
+
+// GlossarySyncImpactResponse defines model for GlossarySyncImpactResponse.
+type GlossarySyncImpactResponse struct {
+	NewTarget     string                       `json:"new_target"`
+	OldTarget     string                       `json:"old_target"`
+	Resources     []GlossarySyncImpactResource `json:"resources"`
+	TotalAffected int                          `json:"total_affected"`
+}
+
+// GlossarySyncTaskCancelResponse defines model for GlossarySyncTaskCancelResponse.
+type GlossarySyncTaskCancelResponse struct {
+	Status GlossarySyncTaskCancelResponseStatus `json:"status"`
+	TaskId string                               `json:"task_id"`
+}
+
+// GlossarySyncTaskCancelResponseStatus defines model for GlossarySyncTaskCancelResponse.Status.
+type GlossarySyncTaskCancelResponseStatus string
+
+// GlossarySyncTaskStatusResponse defines model for GlossarySyncTaskStatusResponse.
+type GlossarySyncTaskStatusResponse struct {
+	CancelledAt *time.Time `json:"cancelled_at,omitempty"`
+
+	// Error 错误信息（仅 status=failed 时存在）
+	Error *string `json:"error,omitempty"`
+
+	// Processed 已处理的段落数
+	Processed int `json:"processed"`
+
+	// Result 任务完成后的结果摘要（仅 status=completed 时存在）
+	Result *struct {
+		Resources    *[]GlossarySyncExecuteResourceResult `json:"resources,omitempty"`
+		TotalSkipped *int                                 `json:"total_skipped,omitempty"`
+		TotalUpdated *int                                 `json:"total_updated,omitempty"`
+	} `json:"result,omitempty"`
+	Status GlossarySyncTaskStatusResponseStatus `json:"status"`
+	TaskId string                               `json:"task_id"`
+
+	// Total 待处理的段落总数
+	Total int `json:"total"`
+}
+
+// GlossarySyncTaskStatusResponseStatus defines model for GlossarySyncTaskStatusResponse.Status.
+type GlossarySyncTaskStatusResponseStatus string
+
 // HealthResponse defines model for HealthResponse.
 type HealthResponse struct {
 	Service *string `json:"service,omitempty"`
@@ -1301,6 +1463,20 @@ type UpdateGlossaryEntryRequest struct {
 	Target        string  `json:"target"`
 }
 
+// UpdateGlossaryEntryResponse defines model for UpdateGlossaryEntryResponse.
+type UpdateGlossaryEntryResponse struct {
+	CaseSensitive bool       `json:"case_sensitive"`
+	CreatedAt     *time.Time `json:"created_at,omitempty"`
+	Id            int        `json:"id"`
+	Notes         *string    `json:"notes,omitempty"`
+	Source        string     `json:"source"`
+	Target        string     `json:"target"`
+
+	// TargetChanged target 字段是否发生变更
+	TargetChanged *bool      `json:"target_changed,omitempty"`
+	UpdatedAt     *time.Time `json:"updated_at,omitempty"`
+}
+
 // UpdateOrganizationMemberRequest defines model for UpdateOrganizationMemberRequest.
 type UpdateOrganizationMemberRequest struct {
 	Role UpdateOrganizationMemberRequestRole `json:"role"`
@@ -1526,6 +1702,12 @@ type ImportGlossaryCSVMultipartRequestBody ImportGlossaryCSVMultipartBody
 // UpdateGlossaryEntryJSONRequestBody defines body for UpdateGlossaryEntry for application/json ContentType.
 type UpdateGlossaryEntryJSONRequestBody = UpdateGlossaryEntryRequest
 
+// ExecuteGlossarySyncUpdateJSONRequestBody defines body for ExecuteGlossarySyncUpdate for application/json ContentType.
+type ExecuteGlossarySyncUpdateJSONRequestBody = GlossarySyncExecuteRequest
+
+// AnalyzeGlossarySyncImpactJSONRequestBody defines body for AnalyzeGlossarySyncImpact for application/json ContentType.
+type AnalyzeGlossarySyncImpactJSONRequestBody = GlossarySyncImpactRequest
+
 // UploadProjectResourcesMultipartRequestBody defines body for UploadProjectResources for multipart/form-data ContentType.
 type UploadProjectResourcesMultipartRequestBody UploadProjectResourcesMultipartBody
 
@@ -1684,6 +1866,12 @@ type ServerInterface interface {
 	// 更新术语条目
 	// (PUT /projects/{projectId}/glossary/{entryId})
 	UpdateGlossaryEntry(w http.ResponseWriter, r *http.Request, projectId ProjectId, entryId EntryId)
+	// 提交术语同步更新异步任务
+	// (POST /projects/{projectId}/glossary/{entryId}/sync-execute)
+	ExecuteGlossarySyncUpdate(w http.ResponseWriter, r *http.Request, projectId ProjectId, entryId EntryId)
+	// 分析术语修改对已翻译内容的影响
+	// (POST /projects/{projectId}/glossary/{entryId}/sync-impact)
+	AnalyzeGlossarySyncImpact(w http.ResponseWriter, r *http.Request, projectId ProjectId, entryId EntryId)
 	// 列出项目资源文件
 	// (GET /projects/{projectId}/resources)
 	ListProjectResources(w http.ResponseWriter, r *http.Request, projectId ProjectId, params ListProjectResourcesParams)
@@ -1735,6 +1923,12 @@ type ServerInterface interface {
 	// 审核单个段落（通过/拒绝/编辑）
 	// (PATCH /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/review)
 	ReviewResourceSegment(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId, segmentId SegmentId)
+	// 查询术语同步任务状态
+	// (GET /projects/{projectId}/sync-tasks/{taskId})
+	GetGlossarySyncTaskStatus(w http.ResponseWriter, r *http.Request, projectId ProjectId, taskId string)
+	// 取消术语同步任务
+	// (POST /projects/{projectId}/sync-tasks/{taskId}/cancel)
+	CancelGlossarySyncTask(w http.ResponseWriter, r *http.Request, projectId ProjectId, taskId string)
 	// 列出项目翻译任务
 	// (GET /projects/{projectId}/translation-jobs)
 	ListTranslationJobs(w http.ResponseWriter, r *http.Request, projectId ProjectId, params ListTranslationJobsParams)
@@ -2026,6 +2220,18 @@ func (_ Unimplemented) UpdateGlossaryEntry(w http.ResponseWriter, r *http.Reques
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
+// 提交术语同步更新异步任务
+// (POST /projects/{projectId}/glossary/{entryId}/sync-execute)
+func (_ Unimplemented) ExecuteGlossarySyncUpdate(w http.ResponseWriter, r *http.Request, projectId ProjectId, entryId EntryId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 分析术语修改对已翻译内容的影响
+// (POST /projects/{projectId}/glossary/{entryId}/sync-impact)
+func (_ Unimplemented) AnalyzeGlossarySyncImpact(w http.ResponseWriter, r *http.Request, projectId ProjectId, entryId EntryId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
 // 列出项目资源文件
 // (GET /projects/{projectId}/resources)
 func (_ Unimplemented) ListProjectResources(w http.ResponseWriter, r *http.Request, projectId ProjectId, params ListProjectResourcesParams) {
@@ -2125,6 +2331,18 @@ func (_ Unimplemented) UpdateResourceSegment(w http.ResponseWriter, r *http.Requ
 // 审核单个段落（通过/拒绝/编辑）
 // (PATCH /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/review)
 func (_ Unimplemented) ReviewResourceSegment(w http.ResponseWriter, r *http.Request, projectId ProjectId, resourceId ResourceId, segmentId SegmentId) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 查询术语同步任务状态
+// (GET /projects/{projectId}/sync-tasks/{taskId})
+func (_ Unimplemented) GetGlossarySyncTaskStatus(w http.ResponseWriter, r *http.Request, projectId ProjectId, taskId string) {
+	w.WriteHeader(http.StatusNotImplemented)
+}
+
+// 取消术语同步任务
+// (POST /projects/{projectId}/sync-tasks/{taskId}/cancel)
+func (_ Unimplemented) CancelGlossarySyncTask(w http.ResponseWriter, r *http.Request, projectId ProjectId, taskId string) {
 	w.WriteHeader(http.StatusNotImplemented)
 }
 
@@ -3326,6 +3544,86 @@ func (siw *ServerInterfaceWrapper) UpdateGlossaryEntry(w http.ResponseWriter, r 
 	handler.ServeHTTP(w, r)
 }
 
+// ExecuteGlossarySyncUpdate operation middleware
+func (siw *ServerInterfaceWrapper) ExecuteGlossarySyncUpdate(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "entryId" -------------
+	var entryId EntryId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "entryId", chi.URLParam(r, "entryId"), &entryId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entryId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ExecuteGlossarySyncUpdate(w, r, projectId, entryId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// AnalyzeGlossarySyncImpact operation middleware
+func (siw *ServerInterfaceWrapper) AnalyzeGlossarySyncImpact(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "entryId" -------------
+	var entryId EntryId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "entryId", chi.URLParam(r, "entryId"), &entryId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "entryId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.AnalyzeGlossarySyncImpact(w, r, projectId, entryId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
 // ListProjectResources operation middleware
 func (siw *ServerInterfaceWrapper) ListProjectResources(w http.ResponseWriter, r *http.Request) {
 
@@ -4057,6 +4355,86 @@ func (siw *ServerInterfaceWrapper) ReviewResourceSegment(w http.ResponseWriter, 
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		siw.Handler.ReviewResourceSegment(w, r, projectId, resourceId, segmentId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetGlossarySyncTaskStatus operation middleware
+func (siw *ServerInterfaceWrapper) GetGlossarySyncTaskStatus(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "taskId" -------------
+	var taskId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "taskId", chi.URLParam(r, "taskId"), &taskId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "taskId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetGlossarySyncTaskStatus(w, r, projectId, taskId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CancelGlossarySyncTask operation middleware
+func (siw *ServerInterfaceWrapper) CancelGlossarySyncTask(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "projectId" -------------
+	var projectId ProjectId
+
+	err = runtime.BindStyledParameterWithOptions("simple", "projectId", chi.URLParam(r, "projectId"), &projectId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "integer", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "projectId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "taskId" -------------
+	var taskId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "taskId", chi.URLParam(r, "taskId"), &taskId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true, Type: "string", Format: ""})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "taskId", Err: err})
+		return
+	}
+
+	ctx := r.Context()
+
+	ctx = context.WithValue(ctx, BearerAuthScopes, []string{})
+
+	r = r.WithContext(ctx)
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CancelGlossarySyncTask(w, r, projectId, taskId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -4830,6 +5208,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 		r.Put(options.BaseURL+"/projects/{projectId}/glossary/{entryId}", wrapper.UpdateGlossaryEntry)
 	})
 	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/projects/{projectId}/glossary/{entryId}/sync-execute", wrapper.ExecuteGlossarySyncUpdate)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/projects/{projectId}/glossary/{entryId}/sync-impact", wrapper.AnalyzeGlossarySyncImpact)
+	})
+	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/resources", wrapper.ListProjectResources)
 	})
 	r.Group(func(r chi.Router) {
@@ -4879,6 +5263,12 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	})
 	r.Group(func(r chi.Router) {
 		r.Patch(options.BaseURL+"/projects/{projectId}/resources/{resourceId}/segments/{segmentId}/review", wrapper.ReviewResourceSegment)
+	})
+	r.Group(func(r chi.Router) {
+		r.Get(options.BaseURL+"/projects/{projectId}/sync-tasks/{taskId}", wrapper.GetGlossarySyncTaskStatus)
+	})
+	r.Group(func(r chi.Router) {
+		r.Post(options.BaseURL+"/projects/{projectId}/sync-tasks/{taskId}/cancel", wrapper.CancelGlossarySyncTask)
 	})
 	r.Group(func(r chi.Router) {
 		r.Get(options.BaseURL+"/projects/{projectId}/translation-jobs", wrapper.ListTranslationJobs)
@@ -4944,141 +5334,163 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 // Base64 encoded, gzipped, json marshaled Swagger object
 var swaggerSpec = []string{
 
-	"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",
+	"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",
+	"sBclje//AAA=",
 }
 
 // GetSwagger returns the content of the embedded swagger specification file

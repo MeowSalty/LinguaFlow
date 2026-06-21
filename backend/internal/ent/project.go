@@ -64,9 +64,11 @@ type ProjectEdges struct {
 	UsageRecords []*UsageRecord `json:"usage_records,omitempty"`
 	// Resources holds the value of the resources edge.
 	Resources []*Resource `json:"resources,omitempty"`
+	// SyncTasks holds the value of the sync_tasks edge.
+	SyncTasks []*SyncTask `json:"sync_tasks,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [8]bool
+	loadedTypes [9]bool
 }
 
 // OwnerUserOrErr returns the OwnerUser value or an error if the edge
@@ -143,6 +145,15 @@ func (e ProjectEdges) ResourcesOrErr() ([]*Resource, error) {
 		return e.Resources, nil
 	}
 	return nil, &NotLoadedError{edge: "resources"}
+}
+
+// SyncTasksOrErr returns the SyncTasks value or an error if the edge
+// was not loaded in eager-loading.
+func (e ProjectEdges) SyncTasksOrErr() ([]*SyncTask, error) {
+	if e.loadedTypes[8] {
+		return e.SyncTasks, nil
+	}
+	return nil, &NotLoadedError{edge: "sync_tasks"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -296,6 +307,11 @@ func (_m *Project) QueryUsageRecords() *UsageRecordQuery {
 // QueryResources queries the "resources" edge of the Project entity.
 func (_m *Project) QueryResources() *ResourceQuery {
 	return NewProjectClient(_m.config).QueryResources(_m)
+}
+
+// QuerySyncTasks queries the "sync_tasks" edge of the Project entity.
+func (_m *Project) QuerySyncTasks() *SyncTaskQuery {
+	return NewProjectClient(_m.config).QuerySyncTasks(_m)
 }
 
 // Update returns a builder for updating this Project.

@@ -113,7 +113,7 @@ func (s *Server) handleUpdateGlossaryEntry(w http.ResponseWriter, r *http.Reques
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	entry, err := s.glossarySvc.UpdateEntry(r.Context(), authUser.User.ID, projectID, entryID, service.GlossaryEntryInput{
+	result, err := s.glossarySvc.UpdateEntry(r.Context(), authUser.User.ID, projectID, entryID, service.GlossaryEntryInput{
 		Source:        req.Source,
 		Target:        req.Target,
 		CaseSensitive: req.CaseSensitive,
@@ -123,7 +123,17 @@ func (s *Server) handleUpdateGlossaryEntry(w http.ResponseWriter, r *http.Reques
 		writeGlossaryServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toGlossaryEntryResponse(entry))
+	entry := result.Entry
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id":             entry.ID,
+		"source":         entry.Source,
+		"target":         entry.Target,
+		"case_sensitive": entry.CaseSensitive,
+		"notes":          entry.Notes,
+		"created_at":     entry.CreatedAt,
+		"updated_at":     entry.UpdatedAt,
+		"target_changed": result.TargetChanged,
+	})
 }
 
 func (s *Server) handleDeleteGlossaryEntry(w http.ResponseWriter, r *http.Request) {

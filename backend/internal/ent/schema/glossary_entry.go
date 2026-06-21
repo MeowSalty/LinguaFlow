@@ -33,6 +33,7 @@ func (GlossaryEntry) Edges() []ent.Edge {
 			Field("project_id").
 			Unique().
 			Required(),
+		edge.To("sync_tasks", SyncTask.Type),
 	}
 }
 

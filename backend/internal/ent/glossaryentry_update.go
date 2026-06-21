@@ -14,6 +14,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 )
 
 // GlossaryEntryUpdate is the builder for updating GlossaryEntry entities.
@@ -130,6 +131,21 @@ func (_u *GlossaryEntryUpdate) SetProject(v *Project) *GlossaryEntryUpdate {
 	return _u.SetProjectID(v.ID)
 }
 
+// AddSyncTaskIDs adds the "sync_tasks" edge to the SyncTask entity by IDs.
+func (_u *GlossaryEntryUpdate) AddSyncTaskIDs(ids ...int) *GlossaryEntryUpdate {
+	_u.mutation.AddSyncTaskIDs(ids...)
+	return _u
+}
+
+// AddSyncTasks adds the "sync_tasks" edges to the SyncTask entity.
+func (_u *GlossaryEntryUpdate) AddSyncTasks(v ...*SyncTask) *GlossaryEntryUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddSyncTaskIDs(ids...)
+}
+
 // Mutation returns the GlossaryEntryMutation object of the builder.
 func (_u *GlossaryEntryUpdate) Mutation() *GlossaryEntryMutation {
 	return _u.mutation
@@ -139,6 +155,27 @@ func (_u *GlossaryEntryUpdate) Mutation() *GlossaryEntryMutation {
 func (_u *GlossaryEntryUpdate) ClearProject() *GlossaryEntryUpdate {
 	_u.mutation.ClearProject()
 	return _u
+}
+
+// ClearSyncTasks clears all "sync_tasks" edges to the SyncTask entity.
+func (_u *GlossaryEntryUpdate) ClearSyncTasks() *GlossaryEntryUpdate {
+	_u.mutation.ClearSyncTasks()
+	return _u
+}
+
+// RemoveSyncTaskIDs removes the "sync_tasks" edge to SyncTask entities by IDs.
+func (_u *GlossaryEntryUpdate) RemoveSyncTaskIDs(ids ...int) *GlossaryEntryUpdate {
+	_u.mutation.RemoveSyncTaskIDs(ids...)
+	return _u
+}
+
+// RemoveSyncTasks removes "sync_tasks" edges to SyncTask entities.
+func (_u *GlossaryEntryUpdate) RemoveSyncTasks(v ...*SyncTask) *GlossaryEntryUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveSyncTaskIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -267,6 +304,51 @@ func (_u *GlossaryEntryUpdate) sqlSave(ctx context.Context) (_node int, err erro
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.SyncTasksCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   glossaryentry.SyncTasksTable,
+			Columns: []string{glossaryentry.SyncTasksColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedSyncTasksIDs(); len(nodes) > 0 && !_u.mutation.SyncTasksCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   glossaryentry.SyncTasksTable,
+			Columns: []string{glossaryentry.SyncTasksColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.SyncTasksIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   glossaryentry.SyncTasksTable,
+			Columns: []string{glossaryentry.SyncTasksColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{glossaryentry.Label}
@@ -388,6 +470,21 @@ func (_u *GlossaryEntryUpdateOne) SetProject(v *Project) *GlossaryEntryUpdateOne
 	return _u.SetProjectID(v.ID)
 }
 
+// AddSyncTaskIDs adds the "sync_tasks" edge to the SyncTask entity by IDs.
+func (_u *GlossaryEntryUpdateOne) AddSyncTaskIDs(ids ...int) *GlossaryEntryUpdateOne {
+	_u.mutation.AddSyncTaskIDs(ids...)
+	return _u
+}
+
+// AddSyncTasks adds the "sync_tasks" edges to the SyncTask entity.
+func (_u *GlossaryEntryUpdateOne) AddSyncTasks(v ...*SyncTask) *GlossaryEntryUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddSyncTaskIDs(ids...)
+}
+
 // Mutation returns the GlossaryEntryMutation object of the builder.
 func (_u *GlossaryEntryUpdateOne) Mutation() *GlossaryEntryMutation {
 	return _u.mutation
@@ -397,6 +494,27 @@ func (_u *GlossaryEntryUpdateOne) Mutation() *GlossaryEntryMutation {
 func (_u *GlossaryEntryUpdateOne) ClearProject() *GlossaryEntryUpdateOne {
 	_u.mutation.ClearProject()
 	return _u
+}
+
+// ClearSyncTasks clears all "sync_tasks" edges to the SyncTask entity.
+func (_u *GlossaryEntryUpdateOne) ClearSyncTasks() *GlossaryEntryUpdateOne {
+	_u.mutation.ClearSyncTasks()
+	return _u
+}
+
+// RemoveSyncTaskIDs removes the "sync_tasks" edge to SyncTask entities by IDs.
+func (_u *GlossaryEntryUpdateOne) RemoveSyncTaskIDs(ids ...int) *GlossaryEntryUpdateOne {
+	_u.mutation.RemoveSyncTaskIDs(ids...)
+	return _u
+}
+
+// RemoveSyncTasks removes "sync_tasks" edges to SyncTask entities.
+func (_u *GlossaryEntryUpdateOne) RemoveSyncTasks(v ...*SyncTask) *GlossaryEntryUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveSyncTaskIDs(ids...)
 }
 
 // Where appends a list predicates to the GlossaryEntryUpdate builder.
@@ -548,6 +666,51 @@ func (_u *GlossaryEntryUpdateOne) sqlSave(ctx context.Context) (_node *GlossaryE
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(project.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.SyncTasksCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   glossaryentry.SyncTasksTable,
+			Columns: []string{glossaryentry.SyncTasksColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedSyncTasksIDs(); len(nodes) > 0 && !_u.mutation.SyncTasksCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   glossaryentry.SyncTasksTable,
+			Columns: []string{glossaryentry.SyncTasksColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.SyncTasksIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   glossaryentry.SyncTasksTable,
+			Columns: []string{glossaryentry.SyncTasksColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

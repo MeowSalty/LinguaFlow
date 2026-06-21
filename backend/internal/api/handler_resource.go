@@ -225,15 +225,15 @@ func (s *Server) handlePrecheckProjectResources(w http.ResponseWriter, r *http.R
 		}
 		switch result.Action {
 		case "create":
-			item.Action = ResourcePrecheckFileResultActionCreate
+			item.Action = Create
 		case "conflict":
-			item.Action = ResourcePrecheckFileResultActionConflict
+			item.Action = Conflict
 			if result.ExistingResource != nil {
 				gr := toGeneratedResource(result.ExistingResource)
 				item.ExistingResource = &gr
 			}
 		case "duplicate":
-			item.Action = ResourcePrecheckFileResultActionDuplicate
+			item.Action = Duplicate
 		}
 		respItems = append(respItems, item)
 	}

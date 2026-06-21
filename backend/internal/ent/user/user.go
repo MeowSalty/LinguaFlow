@@ -52,6 +52,8 @@ const (
 	EdgeTranslationProfiles = "translation_profiles"
 	// EdgeExecutionPlanTemplates holds the string denoting the execution_plan_templates edge name in mutations.
 	EdgeExecutionPlanTemplates = "execution_plan_templates"
+	// EdgeSyncTasks holds the string denoting the sync_tasks edge name in mutations.
+	EdgeSyncTasks = "sync_tasks"
 	// Table holds the table name of the user in the database.
 	Table = "users"
 	// CreatedTranslationJobsTable is the table that holds the created_translation_jobs relation/edge.
@@ -131,6 +133,13 @@ const (
 	ExecutionPlanTemplatesInverseTable = "execution_plan_templates"
 	// ExecutionPlanTemplatesColumn is the table column denoting the execution_plan_templates relation/edge.
 	ExecutionPlanTemplatesColumn = "owner_user_id"
+	// SyncTasksTable is the table that holds the sync_tasks relation/edge.
+	SyncTasksTable = "sync_tasks"
+	// SyncTasksInverseTable is the table name for the SyncTask entity.
+	// It exists in this package in order to avoid circular dependency with the "synctask" package.
+	SyncTasksInverseTable = "sync_tasks"
+	// SyncTasksColumn is the table column denoting the sync_tasks relation/edge.
+	SyncTasksColumn = "actor_user_id"
 )
 
 // Columns holds all SQL columns for user fields.
@@ -376,6 +385,20 @@ func ByExecutionPlanTemplates(term sql.OrderTerm, terms ...sql.OrderTerm) OrderO
 		sqlgraph.OrderByNeighborTerms(s, newExecutionPlanTemplatesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// BySyncTasksCount orders the results by sync_tasks count.
+func BySyncTasksCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newSyncTasksStep(), opts...)
+	}
+}
+
+// BySyncTasks orders the results by sync_tasks terms.
+func BySyncTasks(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newSyncTasksStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newCreatedTranslationJobsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -451,5 +474,12 @@ func newExecutionPlanTemplatesStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(ExecutionPlanTemplatesInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, ExecutionPlanTemplatesTable, ExecutionPlanTemplatesColumn),
+	)
+}
+func newSyncTasksStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(SyncTasksInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, SyncTasksTable, SyncTasksColumn),
 	)
 }

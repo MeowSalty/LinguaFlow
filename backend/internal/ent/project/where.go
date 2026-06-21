@@ -679,6 +679,29 @@ func HasResourcesWith(preds ...predicate.Resource) predicate.Project {
 	})
 }
 
+// HasSyncTasks applies the HasEdge predicate on the "sync_tasks" edge.
+func HasSyncTasks() predicate.Project {
+	return predicate.Project(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, SyncTasksTable, SyncTasksColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasSyncTasksWith applies the HasEdge predicate on the "sync_tasks" edge with a given conditions (other predicates).
+func HasSyncTasksWith(preds ...predicate.SyncTask) predicate.Project {
+	return predicate.Project(func(s *sql.Selector) {
+		step := newSyncTasksStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.Project) predicate.Project {
 	return predicate.Project(sql.AndPredicates(predicates...))

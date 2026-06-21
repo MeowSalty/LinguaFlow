@@ -142,6 +142,30 @@ func (s *Server) UpdateGlossaryEntry(w http.ResponseWriter, r *http.Request, _ P
 	s.requireAuth(http.HandlerFunc(s.handleUpdateGlossaryEntry)).ServeHTTP(w, r)
 }
 
+func (s *Server) AnalyzeGlossarySyncImpact(w http.ResponseWriter, r *http.Request, projectId ProjectId, entryId EntryId) {
+	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.handleAnalyzeGlossarySyncImpact(w, r, projectId, entryId)
+	})).ServeHTTP(w, r)
+}
+
+func (s *Server) ExecuteGlossarySyncUpdate(w http.ResponseWriter, r *http.Request, projectId ProjectId, entryId EntryId) {
+	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.handleExecuteGlossarySyncUpdate(w, r, projectId, entryId)
+	})).ServeHTTP(w, r)
+}
+
+func (s *Server) GetGlossarySyncTaskStatus(w http.ResponseWriter, r *http.Request, projectId ProjectId, taskId string) {
+	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.handleGetGlossarySyncTaskStatus(w, r, projectId, taskId)
+	})).ServeHTTP(w, r)
+}
+
+func (s *Server) CancelGlossarySyncTask(w http.ResponseWriter, r *http.Request, projectId ProjectId, taskId string) {
+	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.handleCancelGlossarySyncTask(w, r, projectId, taskId)
+	})).ServeHTTP(w, r)
+}
+
 func (s *Server) ListProjectResources(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ListProjectResourcesParams) {
 	s.requireAuth(http.HandlerFunc(s.handleListProjectResources)).ServeHTTP(w, r)
 }

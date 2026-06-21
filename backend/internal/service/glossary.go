@@ -43,6 +43,12 @@ type GlossaryImportResult struct {
 	Skipped []GlossaryImportSkipped
 }
 
+// GlossaryEntryUpdateResult 包含更新结果和变更信息
+type GlossaryEntryUpdateResult struct {
+	Entry         *ent.GlossaryEntry
+	TargetChanged bool
+}
+
 func NewGlossaryService(client *ent.Client, projects *ProjectService) *GlossaryService {
 	return &GlossaryService{client: client, projects: projects}
 }
@@ -57,6 +63,23 @@ func (s *GlossaryService) ListEntries(ctx context.Context, actorUserID, projectI
 		All(ctx)
 }
 
+// GetEntry 获取单个术语条目，验证项目归属。
+func (s *GlossaryService) GetEntry(ctx context.Context, actorUserID, projectID, entryID int) (*ent.GlossaryEntry, error) {
+	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, false); err != nil {
+		return nil, err
+	}
+	entry, err := s.client.GlossaryEntry.Query().
+		Where(glossaryentry.IDEQ(entryID), glossaryentry.ProjectIDEQ(projectID)).
+		Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, ErrGlossaryEntryNotFound
+		}
+		return nil, err
+	}
+	return entry, nil
+}
+
 func (s *GlossaryService) CreateEntry(ctx context.Context, actorUserID, projectID int, input GlossaryEntryInput) (*ent.GlossaryEntry, error) {
 	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true); err != nil {
 		return nil, err
@@ -68,7 +91,7 @@ func (s *GlossaryService) CreateEntry(ctx context.Context, actorUserID, projectI
 	return createGlossaryEntry(ctx, s.client, projectID, normalized)
 }
 
-func (s *GlossaryService) UpdateEntry(ctx context.Context, actorUserID, projectID, entryID int, input GlossaryEntryInput) (*ent.GlossaryEntry, error) {
+func (s *GlossaryService) UpdateEntry(ctx context.Context, actorUserID, projectID, entryID int, input GlossaryEntryInput) (*GlossaryEntryUpdateResult, error) {
 	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true); err != nil {
 		return nil, err
 	}
@@ -76,7 +99,7 @@ func (s *GlossaryService) UpdateEntry(ctx context.Context, actorUserID, projectI
 	if err != nil {
 		return nil, err
 	}
-	target, err := s.client.GlossaryEntry.Query().
+	oldEntry, err := s.client.GlossaryEntry.Query().
 		Where(glossaryentry.IDEQ(entryID), glossaryentry.ProjectIDEQ(projectID)).
 		Only(ctx)
 	if err != nil {
@@ -85,7 +108,8 @@ func (s *GlossaryService) UpdateEntry(ctx context.Context, actorUserID, projectI
 		}
 		return nil, err
 	}
-	updated, err := s.client.GlossaryEntry.UpdateOneID(target.ID).
+	oldTarget := oldEntry.Target
+	updated, err := s.client.GlossaryEntry.UpdateOneID(oldEntry.ID).
 		SetSource(normalized.Source).
 		SetSourceKey(glossarySourceKey(normalized.Source)).
 		SetTarget(normalized.Target).
@@ -98,7 +122,11 @@ func (s *GlossaryService) UpdateEntry(ctx context.Context, actorUserID, projectI
 		}
 		return nil, err
 	}
-	return updated, nil
+	targetChanged := oldTarget != normalized.Target
+	return &GlossaryEntryUpdateResult{
+		Entry:         updated,
+		TargetChanged: targetChanged,
+	}, nil
 }
 
 func (s *GlossaryService) DeleteEntry(ctx context.Context, actorUserID, projectID, entryID int) error {

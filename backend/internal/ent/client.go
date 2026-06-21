@@ -27,6 +27,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
@@ -63,6 +64,8 @@ type Client struct {
 	Resource *ResourceClient
 	// Segment is the client for interacting with the Segment builders.
 	Segment *SegmentClient
+	// SyncTask is the client for interacting with the SyncTask builders.
+	SyncTask *SyncTaskClient
 	// TMEntry is the client for interacting with the TMEntry builders.
 	TMEntry *TMEntryClient
 	// TranslationJob is the client for interacting with the TranslationJob builders.
@@ -96,6 +99,7 @@ func (c *Client) init() {
 	c.RefreshToken = NewRefreshTokenClient(c.config)
 	c.Resource = NewResourceClient(c.config)
 	c.Segment = NewSegmentClient(c.config)
+	c.SyncTask = NewSyncTaskClient(c.config)
 	c.TMEntry = NewTMEntryClient(c.config)
 	c.TranslationJob = NewTranslationJobClient(c.config)
 	c.TranslationProfile = NewTranslationProfileClient(c.config)
@@ -205,6 +209,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		RefreshToken:          NewRefreshTokenClient(cfg),
 		Resource:              NewResourceClient(cfg),
 		Segment:               NewSegmentClient(cfg),
+		SyncTask:              NewSyncTaskClient(cfg),
 		TMEntry:               NewTMEntryClient(cfg),
 		TranslationJob:        NewTranslationJobClient(cfg),
 		TranslationProfile:    NewTranslationProfileClient(cfg),
@@ -241,6 +246,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		RefreshToken:          NewRefreshTokenClient(cfg),
 		Resource:              NewResourceClient(cfg),
 		Segment:               NewSegmentClient(cfg),
+		SyncTask:              NewSyncTaskClient(cfg),
 		TMEntry:               NewTMEntryClient(cfg),
 		TranslationJob:        NewTranslationJobClient(cfg),
 		TranslationProfile:    NewTranslationProfileClient(cfg),
@@ -277,7 +283,7 @@ func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.ActivityLog, c.Backend, c.ExecutionPlanTemplate, c.GlossaryEntry,
 		c.JobResource, c.OrgMembership, c.Organization, c.Project, c.PromptTemplate,
-		c.RefreshToken, c.Resource, c.Segment, c.TMEntry, c.TranslationJob,
+		c.RefreshToken, c.Resource, c.Segment, c.SyncTask, c.TMEntry, c.TranslationJob,
 		c.TranslationProfile, c.UsageRecord, c.User,
 	} {
 		n.Use(hooks...)
@@ -290,7 +296,7 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.ActivityLog, c.Backend, c.ExecutionPlanTemplate, c.GlossaryEntry,
 		c.JobResource, c.OrgMembership, c.Organization, c.Project, c.PromptTemplate,
-		c.RefreshToken, c.Resource, c.Segment, c.TMEntry, c.TranslationJob,
+		c.RefreshToken, c.Resource, c.Segment, c.SyncTask, c.TMEntry, c.TranslationJob,
 		c.TranslationProfile, c.UsageRecord, c.User,
 	} {
 		n.Intercept(interceptors...)
@@ -324,6 +330,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Resource.mutate(ctx, m)
 	case *SegmentMutation:
 		return c.Segment.mutate(ctx, m)
+	case *SyncTaskMutation:
+		return c.SyncTask.mutate(ctx, m)
 	case *TMEntryMutation:
 		return c.TMEntry.mutate(ctx, m)
 	case *TranslationJobMutation:
@@ -967,6 +975,22 @@ func (c *GlossaryEntryClient) QueryProject(_m *GlossaryEntry) *ProjectQuery {
 			sqlgraph.From(glossaryentry.Table, glossaryentry.FieldID, id),
 			sqlgraph.To(project.Table, project.FieldID),
 			sqlgraph.Edge(sqlgraph.M2O, true, glossaryentry.ProjectTable, glossaryentry.ProjectColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QuerySyncTasks queries the sync_tasks edge of a GlossaryEntry.
+func (c *GlossaryEntryClient) QuerySyncTasks(_m *GlossaryEntry) *SyncTaskQuery {
+	query := (&SyncTaskClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(glossaryentry.Table, glossaryentry.FieldID, id),
+			sqlgraph.To(synctask.Table, synctask.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, glossaryentry.SyncTasksTable, glossaryentry.SyncTasksColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -1842,6 +1866,22 @@ func (c *ProjectClient) QueryResources(_m *Project) *ResourceQuery {
 	return query
 }
 
+// QuerySyncTasks queries the sync_tasks edge of a Project.
+func (c *ProjectClient) QuerySyncTasks(_m *Project) *SyncTaskQuery {
+	query := (&SyncTaskClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(project.Table, project.FieldID, id),
+			sqlgraph.To(synctask.Table, synctask.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, project.SyncTasksTable, project.SyncTasksColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *ProjectClient) Hooks() []Hook {
 	return c.hooks.Project
@@ -2524,6 +2564,187 @@ func (c *SegmentClient) mutate(ctx context.Context, m *SegmentMutation) (Value, 
 		return (&SegmentDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown Segment mutation op: %q", m.Op())
+	}
+}
+
+// SyncTaskClient is a client for the SyncTask schema.
+type SyncTaskClient struct {
+	config
+}
+
+// NewSyncTaskClient returns a client for the SyncTask from the given config.
+func NewSyncTaskClient(c config) *SyncTaskClient {
+	return &SyncTaskClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `synctask.Hooks(f(g(h())))`.
+func (c *SyncTaskClient) Use(hooks ...Hook) {
+	c.hooks.SyncTask = append(c.hooks.SyncTask, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `synctask.Intercept(f(g(h())))`.
+func (c *SyncTaskClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SyncTask = append(c.inters.SyncTask, interceptors...)
+}
+
+// Create returns a builder for creating a SyncTask entity.
+func (c *SyncTaskClient) Create() *SyncTaskCreate {
+	mutation := newSyncTaskMutation(c.config, OpCreate)
+	return &SyncTaskCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SyncTask entities.
+func (c *SyncTaskClient) CreateBulk(builders ...*SyncTaskCreate) *SyncTaskCreateBulk {
+	return &SyncTaskCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SyncTaskClient) MapCreateBulk(slice any, setFunc func(*SyncTaskCreate, int)) *SyncTaskCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SyncTaskCreateBulk{err: fmt.Errorf("calling to SyncTaskClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SyncTaskCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SyncTaskCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SyncTask.
+func (c *SyncTaskClient) Update() *SyncTaskUpdate {
+	mutation := newSyncTaskMutation(c.config, OpUpdate)
+	return &SyncTaskUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SyncTaskClient) UpdateOne(_m *SyncTask) *SyncTaskUpdateOne {
+	mutation := newSyncTaskMutation(c.config, OpUpdateOne, withSyncTask(_m))
+	return &SyncTaskUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SyncTaskClient) UpdateOneID(id int) *SyncTaskUpdateOne {
+	mutation := newSyncTaskMutation(c.config, OpUpdateOne, withSyncTaskID(id))
+	return &SyncTaskUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SyncTask.
+func (c *SyncTaskClient) Delete() *SyncTaskDelete {
+	mutation := newSyncTaskMutation(c.config, OpDelete)
+	return &SyncTaskDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SyncTaskClient) DeleteOne(_m *SyncTask) *SyncTaskDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SyncTaskClient) DeleteOneID(id int) *SyncTaskDeleteOne {
+	builder := c.Delete().Where(synctask.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SyncTaskDeleteOne{builder}
+}
+
+// Query returns a query builder for SyncTask.
+func (c *SyncTaskClient) Query() *SyncTaskQuery {
+	return &SyncTaskQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSyncTask},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SyncTask entity by its id.
+func (c *SyncTaskClient) Get(ctx context.Context, id int) (*SyncTask, error) {
+	return c.Query().Where(synctask.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SyncTaskClient) GetX(ctx context.Context, id int) *SyncTask {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryProject queries the project edge of a SyncTask.
+func (c *SyncTaskClient) QueryProject(_m *SyncTask) *ProjectQuery {
+	query := (&ProjectClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(synctask.Table, synctask.FieldID, id),
+			sqlgraph.To(project.Table, project.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, synctask.ProjectTable, synctask.ProjectColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryEntry queries the entry edge of a SyncTask.
+func (c *SyncTaskClient) QueryEntry(_m *SyncTask) *GlossaryEntryQuery {
+	query := (&GlossaryEntryClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(synctask.Table, synctask.FieldID, id),
+			sqlgraph.To(glossaryentry.Table, glossaryentry.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, synctask.EntryTable, synctask.EntryColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryActor queries the actor edge of a SyncTask.
+func (c *SyncTaskClient) QueryActor(_m *SyncTask) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(synctask.Table, synctask.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, synctask.ActorTable, synctask.ActorColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *SyncTaskClient) Hooks() []Hook {
+	return c.hooks.SyncTask
+}
+
+// Interceptors returns the client interceptors.
+func (c *SyncTaskClient) Interceptors() []Interceptor {
+	return c.inters.SyncTask
+}
+
+func (c *SyncTaskClient) mutate(ctx context.Context, m *SyncTaskMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SyncTaskCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SyncTaskUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SyncTaskUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SyncTaskDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SyncTask mutation op: %q", m.Op())
 	}
 }
 
@@ -3503,6 +3724,22 @@ func (c *UserClient) QueryExecutionPlanTemplates(_m *User) *ExecutionPlanTemplat
 	return query
 }
 
+// QuerySyncTasks queries the sync_tasks edge of a User.
+func (c *UserClient) QuerySyncTasks(_m *User) *SyncTaskQuery {
+	query := (&SyncTaskClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(synctask.Table, synctask.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.SyncTasksTable, user.SyncTasksColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *UserClient) Hooks() []Hook {
 	return c.hooks.User
@@ -3533,13 +3770,13 @@ type (
 	hooks struct {
 		ActivityLog, Backend, ExecutionPlanTemplate, GlossaryEntry, JobResource,
 		OrgMembership, Organization, Project, PromptTemplate, RefreshToken, Resource,
-		Segment, TMEntry, TranslationJob, TranslationProfile, UsageRecord,
+		Segment, SyncTask, TMEntry, TranslationJob, TranslationProfile, UsageRecord,
 		User []ent.Hook
 	}
 	inters struct {
 		ActivityLog, Backend, ExecutionPlanTemplate, GlossaryEntry, JobResource,
 		OrgMembership, Organization, Project, PromptTemplate, RefreshToken, Resource,
-		Segment, TMEntry, TranslationJob, TranslationProfile, UsageRecord,
+		Segment, SyncTask, TMEntry, TranslationJob, TranslationProfile, UsageRecord,
 		User []ent.Interceptor
 	}
 )

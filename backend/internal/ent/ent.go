@@ -24,6 +24,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
@@ -101,6 +102,7 @@ func checkColumn(t, c string) error {
 			refreshtoken.Table:          refreshtoken.ValidColumn,
 			resource.Table:              resource.ValidColumn,
 			segment.Table:               segment.ValidColumn,
+			synctask.Table:              synctask.ValidColumn,
 			tmentry.Table:               tmentry.ValidColumn,
 			translationjob.Table:        translationjob.ValidColumn,
 			translationprofile.Table:    translationprofile.ValidColumn,

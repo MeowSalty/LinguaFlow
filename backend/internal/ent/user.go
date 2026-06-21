@@ -63,9 +63,11 @@ type UserEdges struct {
 	TranslationProfiles []*TranslationProfile `json:"translation_profiles,omitempty"`
 	// ExecutionPlanTemplates holds the value of the execution_plan_templates edge.
 	ExecutionPlanTemplates []*ExecutionPlanTemplate `json:"execution_plan_templates,omitempty"`
+	// SyncTasks holds the value of the sync_tasks edge.
+	SyncTasks []*SyncTask `json:"sync_tasks,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [11]bool
+	loadedTypes [12]bool
 }
 
 // CreatedTranslationJobsOrErr returns the CreatedTranslationJobs value or an error if the edge
@@ -165,6 +167,15 @@ func (e UserEdges) ExecutionPlanTemplatesOrErr() ([]*ExecutionPlanTemplate, erro
 		return e.ExecutionPlanTemplates, nil
 	}
 	return nil, &NotLoadedError{edge: "execution_plan_templates"}
+}
+
+// SyncTasksOrErr returns the SyncTasks value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) SyncTasksOrErr() ([]*SyncTask, error) {
+	if e.loadedTypes[11] {
+		return e.SyncTasks, nil
+	}
+	return nil, &NotLoadedError{edge: "sync_tasks"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -315,6 +326,11 @@ func (_m *User) QueryTranslationProfiles() *TranslationProfileQuery {
 // QueryExecutionPlanTemplates queries the "execution_plan_templates" edge of the User entity.
 func (_m *User) QueryExecutionPlanTemplates() *ExecutionPlanTemplateQuery {
 	return NewUserClient(_m.config).QueryExecutionPlanTemplates(_m)
+}
+
+// QuerySyncTasks queries the "sync_tasks" edge of the User entity.
+func (_m *User) QuerySyncTasks() *SyncTaskQuery {
+	return NewUserClient(_m.config).QuerySyncTasks(_m)
 }
 
 // Update returns a builder for updating this User.

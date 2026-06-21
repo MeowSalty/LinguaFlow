@@ -20,6 +20,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
@@ -300,6 +301,21 @@ func (_u *UserUpdate) AddExecutionPlanTemplates(v ...*ExecutionPlanTemplate) *Us
 	return _u.AddExecutionPlanTemplateIDs(ids...)
 }
 
+// AddSyncTaskIDs adds the "sync_tasks" edge to the SyncTask entity by IDs.
+func (_u *UserUpdate) AddSyncTaskIDs(ids ...int) *UserUpdate {
+	_u.mutation.AddSyncTaskIDs(ids...)
+	return _u
+}
+
+// AddSyncTasks adds the "sync_tasks" edges to the SyncTask entity.
+func (_u *UserUpdate) AddSyncTasks(v ...*SyncTask) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddSyncTaskIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdate) Mutation() *UserMutation {
 	return _u.mutation
@@ -534,6 +550,27 @@ func (_u *UserUpdate) RemoveExecutionPlanTemplates(v ...*ExecutionPlanTemplate) 
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveExecutionPlanTemplateIDs(ids...)
+}
+
+// ClearSyncTasks clears all "sync_tasks" edges to the SyncTask entity.
+func (_u *UserUpdate) ClearSyncTasks() *UserUpdate {
+	_u.mutation.ClearSyncTasks()
+	return _u
+}
+
+// RemoveSyncTaskIDs removes the "sync_tasks" edge to SyncTask entities by IDs.
+func (_u *UserUpdate) RemoveSyncTaskIDs(ids ...int) *UserUpdate {
+	_u.mutation.RemoveSyncTaskIDs(ids...)
+	return _u
+}
+
+// RemoveSyncTasks removes "sync_tasks" edges to SyncTask entities.
+func (_u *UserUpdate) RemoveSyncTasks(v ...*SyncTask) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveSyncTaskIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -1123,6 +1160,51 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.SyncTasksCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.SyncTasksTable,
+			Columns: []string{user.SyncTasksColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedSyncTasksIDs(); len(nodes) > 0 && !_u.mutation.SyncTasksCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.SyncTasksTable,
+			Columns: []string{user.SyncTasksColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.SyncTasksIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.SyncTasksTable,
+			Columns: []string{user.SyncTasksColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
 			err = &NotFoundError{user.Label}
@@ -1404,6 +1486,21 @@ func (_u *UserUpdateOne) AddExecutionPlanTemplates(v ...*ExecutionPlanTemplate) 
 	return _u.AddExecutionPlanTemplateIDs(ids...)
 }
 
+// AddSyncTaskIDs adds the "sync_tasks" edge to the SyncTask entity by IDs.
+func (_u *UserUpdateOne) AddSyncTaskIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.AddSyncTaskIDs(ids...)
+	return _u
+}
+
+// AddSyncTasks adds the "sync_tasks" edges to the SyncTask entity.
+func (_u *UserUpdateOne) AddSyncTasks(v ...*SyncTask) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddSyncTaskIDs(ids...)
+}
+
 // Mutation returns the UserMutation object of the builder.
 func (_u *UserUpdateOne) Mutation() *UserMutation {
 	return _u.mutation
@@ -1638,6 +1735,27 @@ func (_u *UserUpdateOne) RemoveExecutionPlanTemplates(v ...*ExecutionPlanTemplat
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveExecutionPlanTemplateIDs(ids...)
+}
+
+// ClearSyncTasks clears all "sync_tasks" edges to the SyncTask entity.
+func (_u *UserUpdateOne) ClearSyncTasks() *UserUpdateOne {
+	_u.mutation.ClearSyncTasks()
+	return _u
+}
+
+// RemoveSyncTaskIDs removes the "sync_tasks" edge to SyncTask entities by IDs.
+func (_u *UserUpdateOne) RemoveSyncTaskIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.RemoveSyncTaskIDs(ids...)
+	return _u
+}
+
+// RemoveSyncTasks removes "sync_tasks" edges to SyncTask entities.
+func (_u *UserUpdateOne) RemoveSyncTasks(v ...*SyncTask) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveSyncTaskIDs(ids...)
 }
 
 // Where appends a list predicates to the UserUpdate builder.
@@ -2250,6 +2368,51 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(executionplantemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.SyncTasksCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.SyncTasksTable,
+			Columns: []string{user.SyncTasksColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedSyncTasksIDs(); len(nodes) > 0 && !_u.mutation.SyncTasksCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.SyncTasksTable,
+			Columns: []string{user.SyncTasksColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.SyncTasksIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.SyncTasksTable,
+			Columns: []string{user.SyncTasksColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

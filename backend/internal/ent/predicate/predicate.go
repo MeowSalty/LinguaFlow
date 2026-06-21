@@ -42,6 +42,9 @@ type Resource func(*sql.Selector)
 // Segment is the predicate function for segment builders.
 type Segment func(*sql.Selector)
 
+// SyncTask is the predicate function for synctask builders.
+type SyncTask func(*sql.Selector)
+
 // TMEntry is the predicate function for tmentry builders.
 type TMEntry func(*sql.Selector)
 

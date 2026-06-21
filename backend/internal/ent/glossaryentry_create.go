@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 )
 
 // GlossaryEntryCreate is the builder for creating a GlossaryEntry entity.
@@ -104,6 +105,21 @@ func (_c *GlossaryEntryCreate) SetProjectID(v int) *GlossaryEntryCreate {
 // SetProject sets the "project" edge to the Project entity.
 func (_c *GlossaryEntryCreate) SetProject(v *Project) *GlossaryEntryCreate {
 	return _c.SetProjectID(v.ID)
+}
+
+// AddSyncTaskIDs adds the "sync_tasks" edge to the SyncTask entity by IDs.
+func (_c *GlossaryEntryCreate) AddSyncTaskIDs(ids ...int) *GlossaryEntryCreate {
+	_c.mutation.AddSyncTaskIDs(ids...)
+	return _c
+}
+
+// AddSyncTasks adds the "sync_tasks" edges to the SyncTask entity.
+func (_c *GlossaryEntryCreate) AddSyncTasks(v ...*SyncTask) *GlossaryEntryCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddSyncTaskIDs(ids...)
 }
 
 // Mutation returns the GlossaryEntryMutation object of the builder.
@@ -270,6 +286,22 @@ func (_c *GlossaryEntryCreate) createSpec() (*GlossaryEntry, *sqlgraph.CreateSpe
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		_node.ProjectID = nodes[0]
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.SyncTasksIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   glossaryentry.SyncTasksTable,
+			Columns: []string{glossaryentry.SyncTasksColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec

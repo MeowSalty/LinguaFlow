@@ -18,6 +18,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
@@ -411,6 +412,57 @@ func init() {
 	segmentDescResourceID := segmentFields[5].Descriptor()
 	// segment.ResourceIDValidator is a validator for the "resource_id" field. It is called by the builders before save.
 	segment.ResourceIDValidator = segmentDescResourceID.Validators[0].(func(int) error)
+	synctaskMixin := schema.SyncTask{}.Mixin()
+	synctaskMixinFields0 := synctaskMixin[0].Fields()
+	_ = synctaskMixinFields0
+	synctaskFields := schema.SyncTask{}.Fields()
+	_ = synctaskFields
+	// synctaskDescCreatedAt is the schema descriptor for created_at field.
+	synctaskDescCreatedAt := synctaskMixinFields0[0].Descriptor()
+	// synctask.DefaultCreatedAt holds the default value on creation for the created_at field.
+	synctask.DefaultCreatedAt = synctaskDescCreatedAt.Default.(func() time.Time)
+	// synctaskDescUpdatedAt is the schema descriptor for updated_at field.
+	synctaskDescUpdatedAt := synctaskMixinFields0[1].Descriptor()
+	// synctask.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	synctask.DefaultUpdatedAt = synctaskDescUpdatedAt.Default.(func() time.Time)
+	// synctask.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	synctask.UpdateDefaultUpdatedAt = synctaskDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// synctaskDescProjectID is the schema descriptor for project_id field.
+	synctaskDescProjectID := synctaskFields[0].Descriptor()
+	// synctask.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
+	synctask.ProjectIDValidator = synctaskDescProjectID.Validators[0].(func(int) error)
+	// synctaskDescEntryID is the schema descriptor for entry_id field.
+	synctaskDescEntryID := synctaskFields[1].Descriptor()
+	// synctask.EntryIDValidator is a validator for the "entry_id" field. It is called by the builders before save.
+	synctask.EntryIDValidator = synctaskDescEntryID.Validators[0].(func(int) error)
+	// synctaskDescActorUserID is the schema descriptor for actor_user_id field.
+	synctaskDescActorUserID := synctaskFields[2].Descriptor()
+	// synctask.ActorUserIDValidator is a validator for the "actor_user_id" field. It is called by the builders before save.
+	synctask.ActorUserIDValidator = synctaskDescActorUserID.Validators[0].(func(int) error)
+	// synctaskDescOldTarget is the schema descriptor for old_target field.
+	synctaskDescOldTarget := synctaskFields[3].Descriptor()
+	// synctask.OldTargetValidator is a validator for the "old_target" field. It is called by the builders before save.
+	synctask.OldTargetValidator = synctaskDescOldTarget.Validators[0].(func(string) error)
+	// synctaskDescNewTarget is the schema descriptor for new_target field.
+	synctaskDescNewTarget := synctaskFields[4].Descriptor()
+	// synctask.NewTargetValidator is a validator for the "new_target" field. It is called by the builders before save.
+	synctask.NewTargetValidator = synctaskDescNewTarget.Validators[0].(func(string) error)
+	// synctaskDescTotalSegments is the schema descriptor for total_segments field.
+	synctaskDescTotalSegments := synctaskFields[5].Descriptor()
+	// synctask.TotalSegmentsValidator is a validator for the "total_segments" field. It is called by the builders before save.
+	synctask.TotalSegmentsValidator = synctaskDescTotalSegments.Validators[0].(func(int) error)
+	// synctaskDescProcessedSegments is the schema descriptor for processed_segments field.
+	synctaskDescProcessedSegments := synctaskFields[6].Descriptor()
+	// synctask.DefaultProcessedSegments holds the default value on creation for the processed_segments field.
+	synctask.DefaultProcessedSegments = synctaskDescProcessedSegments.Default.(int)
+	// synctask.ProcessedSegmentsValidator is a validator for the "processed_segments" field. It is called by the builders before save.
+	synctask.ProcessedSegmentsValidator = synctaskDescProcessedSegments.Validators[0].(func(int) error)
+	// synctaskDescStatus is the schema descriptor for status field.
+	synctaskDescStatus := synctaskFields[7].Descriptor()
+	// synctask.DefaultStatus holds the default value on creation for the status field.
+	synctask.DefaultStatus = synctaskDescStatus.Default.(string)
+	// synctask.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	synctask.StatusValidator = synctaskDescStatus.Validators[0].(func(string) error)
 	tmentryMixin := schema.TMEntry{}.Mixin()
 	tmentryMixinFields0 := tmentryMixin[0].Fields()
 	_ = tmentryMixinFields0

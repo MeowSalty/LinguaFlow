@@ -50,6 +50,8 @@ const (
 	EdgeUsageRecords = "usage_records"
 	// EdgeResources holds the string denoting the resources edge name in mutations.
 	EdgeResources = "resources"
+	// EdgeSyncTasks holds the string denoting the sync_tasks edge name in mutations.
+	EdgeSyncTasks = "sync_tasks"
 	// Table holds the table name of the project in the database.
 	Table = "projects"
 	// OwnerUserTable is the table that holds the owner_user relation/edge.
@@ -108,6 +110,13 @@ const (
 	ResourcesInverseTable = "resources"
 	// ResourcesColumn is the table column denoting the resources relation/edge.
 	ResourcesColumn = "project_id"
+	// SyncTasksTable is the table that holds the sync_tasks relation/edge.
+	SyncTasksTable = "sync_tasks"
+	// SyncTasksInverseTable is the table name for the SyncTask entity.
+	// It exists in this package in order to avoid circular dependency with the "synctask" package.
+	SyncTasksInverseTable = "sync_tasks"
+	// SyncTasksColumn is the table column denoting the sync_tasks relation/edge.
+	SyncTasksColumn = "project_id"
 )
 
 // Columns holds all SQL columns for project fields.
@@ -305,6 +314,20 @@ func ByResources(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newResourcesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// BySyncTasksCount orders the results by sync_tasks count.
+func BySyncTasksCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newSyncTasksStep(), opts...)
+	}
+}
+
+// BySyncTasks orders the results by sync_tasks terms.
+func BySyncTasks(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newSyncTasksStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newOwnerUserStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -359,5 +382,12 @@ func newResourcesStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(ResourcesInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, ResourcesTable, ResourcesColumn),
+	)
+}
+func newSyncTasksStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(SyncTasksInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, SyncTasksTable, SyncTasksColumn),
 	)
 }

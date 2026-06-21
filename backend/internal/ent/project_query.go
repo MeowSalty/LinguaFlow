@@ -18,6 +18,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
@@ -39,6 +40,7 @@ type ProjectQuery struct {
 	withActivityLogs    *ActivityLogQuery
 	withUsageRecords    *UsageRecordQuery
 	withResources       *ResourceQuery
+	withSyncTasks       *SyncTaskQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -251,6 +253,28 @@ func (_q *ProjectQuery) QueryResources() *ResourceQuery {
 	return query
 }
 
+// QuerySyncTasks chains the current query on the "sync_tasks" edge.
+func (_q *ProjectQuery) QuerySyncTasks() *SyncTaskQuery {
+	query := (&SyncTaskClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(project.Table, project.FieldID, selector),
+			sqlgraph.To(synctask.Table, synctask.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, project.SyncTasksTable, project.SyncTasksColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
 // First returns the first Project entity from the query.
 // Returns a *NotFoundError when no Project was found.
 func (_q *ProjectQuery) First(ctx context.Context) (*Project, error) {
@@ -451,6 +475,7 @@ func (_q *ProjectQuery) Clone() *ProjectQuery {
 		withActivityLogs:    _q.withActivityLogs.Clone(),
 		withUsageRecords:    _q.withUsageRecords.Clone(),
 		withResources:       _q.withResources.Clone(),
+		withSyncTasks:       _q.withSyncTasks.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -545,6 +570,17 @@ func (_q *ProjectQuery) WithResources(opts ...func(*ResourceQuery)) *ProjectQuer
 	return _q
 }
 
+// WithSyncTasks tells the query-builder to eager-load the nodes that are connected to
+// the "sync_tasks" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *ProjectQuery) WithSyncTasks(opts ...func(*SyncTaskQuery)) *ProjectQuery {
+	query := (&SyncTaskClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withSyncTasks = query
+	return _q
+}
+
 // GroupBy is used to group vertices by one or more fields/columns.
 // It is often used with aggregate functions, like: count, max, mean, min, sum.
 //
@@ -623,7 +659,7 @@ func (_q *ProjectQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Proj
 	var (
 		nodes       = []*Project{}
 		_spec       = _q.querySpec()
-		loadedTypes = [8]bool{
+		loadedTypes = [9]bool{
 			_q.withOwnerUser != nil,
 			_q.withOwnerOrg != nil,
 			_q.withGlossaryEntries != nil,
@@ -632,6 +668,7 @@ func (_q *ProjectQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Proj
 			_q.withActivityLogs != nil,
 			_q.withUsageRecords != nil,
 			_q.withResources != nil,
+			_q.withSyncTasks != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -703,6 +740,13 @@ func (_q *ProjectQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Proj
 		if err := _q.loadResources(ctx, query, nodes,
 			func(n *Project) { n.Edges.Resources = []*Resource{} },
 			func(n *Project, e *Resource) { n.Edges.Resources = append(n.Edges.Resources, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withSyncTasks; query != nil {
+		if err := _q.loadSyncTasks(ctx, query, nodes,
+			func(n *Project) { n.Edges.SyncTasks = []*SyncTask{} },
+			func(n *Project, e *SyncTask) { n.Edges.SyncTasks = append(n.Edges.SyncTasks, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -957,6 +1001,36 @@ func (_q *ProjectQuery) loadResources(ctx context.Context, query *ResourceQuery,
 		node, ok := nodeids[*fk]
 		if !ok {
 			return fmt.Errorf(`unexpected referenced foreign-key "project_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *ProjectQuery) loadSyncTasks(ctx context.Context, query *SyncTaskQuery, nodes []*Project, init func(*Project), assign func(*Project, *SyncTask)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*Project)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(synctask.FieldProjectID)
+	}
+	query.Where(predicate.SyncTask(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(project.SyncTasksColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.ProjectID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "project_id" returned %v for node %v`, fk, n.ID)
 		}
 		assign(node, n)
 	}
