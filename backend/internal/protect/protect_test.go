@@ -157,49 +157,83 @@ func TestMissingPlaceholders(t *testing.T) {
 	}
 }
 
-// S6: 相邻占位符之间应插入零宽空格分隔符。
-func TestInsertPlaceholderSeparators(t *testing.T) {
+// S6: mergeAdjacentPlaceholders 应将相邻占位符合并为单个占位符。
+func TestMergeAdjacentPlaceholders(t *testing.T) {
 	cases := []struct {
-		name  string
-		input string
-		want  string
+		name      string
+		source    string
+		protected map[string]string
+		wantSrc   string
+		wantKeys  []string // 合并后应存在的 key
 	}{
 		{
-			name:  "two adjacent placeholders",
-			input: "__LF_000001____LF_000002__",
-			want:  "__LF_000001__\u200B__LF_000002__",
+			name:   "two adjacent placeholders",
+			source: "__LF_000001____LF_000002__after",
+			protected: map[string]string{
+				"__LF_000001__": "<ruby>",
+				"__LF_000002__": "<rt>",
+			},
+			wantSrc:  "__LF_000003__after",
+			wantKeys: []string{"__LF_000003__"},
 		},
 		{
-			name:  "three adjacent placeholders",
-			input: "__LF_000001____LF_000002____LF_000003__",
-			want:  "__LF_000001__\u200B__LF_000002__\u200B__LF_000003__",
+			name:   "two groups of adjacent placeholders",
+			source: "__LF_000001____LF_000002__じゅ__LF_000003____LF_000004__",
+			protected: map[string]string{
+				"__LF_000001__": "<ruby>",
+				"__LF_000002__": "<rt>",
+				"__LF_000003__": "</rt>",
+				"__LF_000004__": "</ruby>",
+			},
+			wantSrc:  "__LF_000005__じゅ__LF_000006__",
+			wantKeys: []string{"__LF_000005__", "__LF_000006__"},
 		},
 		{
-			name:  "non-adjacent placeholders unchanged",
-			input: "__LF_000001__ text __LF_000002__",
-			want:  "__LF_000001__ text __LF_000002__",
+			name:   "non-adjacent placeholders not merged",
+			source: "__LF_000001__ text __LF_000002__",
+			protected: map[string]string{
+				"__LF_000001__": "A",
+				"__LF_000002__": "B",
+			},
+			wantSrc:  "__LF_000001__ text __LF_000002__",
+			wantKeys: []string{"__LF_000001__", "__LF_000002__"},
 		},
 		{
-			name:  "single placeholder unchanged",
-			input: "text __LF_000001__ more",
-			want:  "text __LF_000001__ more",
+			name:   "single placeholder unchanged",
+			source: "text __LF_000001__ more",
+			protected: map[string]string{
+				"__LF_000001__": "A",
+			},
+			wantSrc:  "text __LF_000001__ more",
+			wantKeys: []string{"__LF_000001__"},
 		},
 		{
-			name:  "no placeholders",
-			input: "plain text",
-			want:  "plain text",
-		},
-		{
-			name:  "adjacent with surrounding text",
-			input: "before__LF_000001____LF_000002__after",
-			want:  "before__LF_000001__\u200B__LF_000002__after",
+			name:   "no placeholders",
+			source: "plain text",
+			protected: map[string]string{
+				"__LF_000001__": "A",
+			},
+			wantSrc:  "plain text",
+			wantKeys: []string{"__LF_000001__"},
 		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := insertPlaceholderSeparators(tc.input)
-			if got != tc.want {
-				t.Errorf("got %q, want %q", got, tc.want)
+			seg := &pipeline.Segment{
+				Source:    tc.source,
+				Protected: make(map[string]string),
+			}
+			for k, v := range tc.protected {
+				seg.Protected[k] = v
+			}
+			mergeAdjacentPlaceholders(seg)
+			if seg.Source != tc.wantSrc {
+				t.Errorf("source: got %q, want %q", seg.Source, tc.wantSrc)
+			}
+			for _, k := range tc.wantKeys {
+				if _, ok := seg.Protected[k]; !ok {
+					t.Errorf("expected key %q not found in Protected map", k)
+				}
 			}
 		})
 	}
@@ -328,5 +362,39 @@ func TestRubyProtector_NoRtTags(t *testing.T) {
 		if seg.Source != c {
 			t.Errorf("RubyProtector modified non-ruby text: %q → %q", c, seg.Source)
 		}
+	}
+}
+
+// S15: mergeAdjacentPlaceholders 合并后的值应正确拼接。
+func TestMergeAdjacentPlaceholders_MergedValue(t *testing.T) {
+	seg := &pipeline.Segment{
+		Source: "__LF_000001____LF_000002__",
+		Protected: map[string]string{
+			"__LF_000001__": "<ruby>",
+			"__LF_000002__": "<rt>",
+		},
+	}
+	mergeAdjacentPlaceholders(seg)
+	// 合并后应只剩一个 key，值为 "<ruby><rt>"
+	if len(seg.Protected) != 1 {
+		t.Fatalf("expected 1 key, got %d: %v", len(seg.Protected), seg.Protected)
+	}
+	for _, v := range seg.Protected {
+		if v != "<ruby><rt>" {
+			t.Errorf("merged value: got %q, want %q", v, "<ruby><rt>")
+		}
+	}
+}
+
+// S16: mergeAdjacentPlaceholders 合并后 round-trip 应正确还原。
+func TestMergeAdjacentPlaceholders_RoundTrip(t *testing.T) {
+	cases := []string{
+		`<ruby>呪<rt>じゅ</rt></ruby>`,
+		`────</span><ruby>椎名<rt>しいな</rt></ruby>`,
+		`<ruby>微<rt>ほほ</rt></ruby><ruby>笑<rt>え</rt></ruby>`,
+	}
+	p := Compose(&RubyProtector{}, &XMLProtector{})
+	for _, c := range cases {
+		roundTrip(t, p, c)
 	}
 }

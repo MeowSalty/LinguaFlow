@@ -11,20 +11,13 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 )
 
-// placeholderSep 是插入相邻占位符之间的分隔符（零宽空格 U+200B）。
-// 当 __LF_000002__ 紧跟 __LF_000003__ 时，中间出现 4 个连续下划线（____），
-// LLM 容易混淆占位符边界、剥离尾部下划线。插入零宽空格后变成
-// __LF_000002__\u200B__LF_000003__，LLM 能更清晰地区分两个独立占位符。
-// 还原阶段先剥离此分隔符再做 restoreAll。
-const placeholderSep = "\u200B"
+// mergeAdjacentPlaceholderRE 匹配一个占位符后跟一个或多个（可选空白 + 占位符）的序列。
+// 当两个占位符之间没有非空白字符（或只有空白字符）时，视为相邻，可以合并。
+// 例如 __LF_000001____LF_000002__ 或 __LF_000001__ __LF_000002__ 都会匹配。
+var mergeAdjacentPlaceholderRE = regexp.MustCompile(`__LF_\d{6}__(?:\s*__LF_\d{6}__)+`)
 
-// placeholderLen 是标准占位符 __LF_NNNNNN__ 的固定长度（13 字符）。
-const placeholderLen = 13
-
-// adjacentPlaceholdersRE 匹配 2 个及以上连续相邻的占位符序列。
-// 例如 __LF_000001____LF_000002____LF_000003__ 整体作为一个 match，
-// 随后由 insertPlaceholderSeparators 按固定长度切片并插入分隔符。
-var adjacentPlaceholdersRE = regexp.MustCompile(`(?:__LF_\d{6}__){2,}`)
+// singlePlaceholderRE 匹配单个 __LF_NNNNNN__ 占位符，用于从合并序列中提取各个占位符。
+var singlePlaceholderRE = regexp.MustCompile(`__LF_\d{6}__`)
 
 // Protector 把不应翻译的片段替换为占位符，并在翻译后还原。
 type Protector interface {
@@ -67,41 +60,64 @@ func (c *composed) Protect(seg *pipeline.Segment) error {
 			return fmt.Errorf("%s.protect: %w", p.Name(), err)
 		}
 	}
-	// 在相邻占位符之间插入零宽空格分隔符，防止 LLM 混淆边界。
-	// 例如 __LF_000002____LF_000003__ → __LF_000002__\u200B__LF_000003__
-	seg.Source = insertPlaceholderSeparators(seg.Source)
+	// 合并相邻占位符为单个占位符，减少 LLM 需要保留的占位符数量。
+	// 例如 __LF_000001____LF_000002__ → __LF_NNNNNN__（映射为两者拼接）
+	mergeAdjacentPlaceholders(seg)
 	return nil
 }
 
 func (c *composed) Unprotect(seg *pipeline.Segment) error {
-	// 先剥离保护阶段插入的零宽空格分隔符，再还原占位符。
-	seg.Target = strings.ReplaceAll(seg.Target, placeholderSep, "")
 	seg.Target = restoreAll(seg.Target, seg.Protected)
 	return nil
 }
 
-// insertPlaceholderSeparators 在相邻占位符之间插入零宽空格分隔符。
-// 当两个 __LF_NNNNNN__ 占位符紧邻时（如 __LF_000002____LF_000003__），
-// 中间的 4 个连续下划线会让 LLM 混淆占位符边界。
-// 插入 \u200B 后变成 __LF_000002__\u200B__LF_000003__，LLM 能更清晰地区分。
+// mergeAdjacentPlaceholders 扫描 seg.Source 中的相邻占位符序列，将每个序列合并为
+// 单个占位符。合并后的新占位符映射为原始占位符映射的拼接（保留中间的空白字符）。
+// 这减少了 LLM 需要保留的占位符数量，降低占位符丢失的概率。
 //
-// 所有占位符固定 13 字符（__LF_%06d__），因此连续序列可按 13 字节切片。
-func insertPlaceholderSeparators(text string) string {
-	return adjacentPlaceholdersRE.ReplaceAllStringFunc(text, func(match string) string {
-		// 按固定长度 13 切成各占位符，用零宽空格拼接
-		var b strings.Builder
-		b.Grow(len(match) + (len(match)/placeholderLen-1)*len(placeholderSep))
-		for i := 0; i < len(match); i += placeholderLen {
-			if i > 0 {
-				b.WriteString(placeholderSep)
-			}
-			end := i + placeholderLen
-			if end > len(match) {
-				end = len(match)
-			}
-			b.WriteString(match[i:end])
+// 例如，给定：
+//
+//	__LF_000001____LF_000002__じゅ__LF_000003____LF_000004__
+//
+// 产生：
+//
+//	__LF_NNNNNN__じゅ__LF_MMMMMM__
+//
+// 其中每个合并占位符的值是原始占位符值的拼接。
+func mergeAdjacentPlaceholders(seg *pipeline.Segment) {
+	if len(seg.Protected) == 0 {
+		return
+	}
+	seg.Source = mergeAdjacentPlaceholderRE.ReplaceAllStringFunc(seg.Source, func(match string) string {
+		locs := singlePlaceholderRE.FindAllStringIndex(match, -1)
+		if len(locs) < 2 {
+			return match
 		}
-		return b.String()
+
+		// 拼接所有原始占位符的值，保留占位符之间的空白字符。
+		var mergedValue strings.Builder
+		for i, loc := range locs {
+			ph := match[loc[0]:loc[1]]
+			if i > 0 {
+				// 保留前一个占位符与当前占位符之间的空白。
+				between := match[locs[i-1][1]:loc[0]]
+				mergedValue.WriteString(between)
+			}
+			if val, ok := seg.Protected[ph]; ok {
+				mergedValue.WriteString(val)
+			}
+		}
+
+		// 分配合并占位符的唯一 key。
+		newKey := nextKey(seg)
+		seg.Protected[newKey] = mergedValue.String()
+
+		// 删除已合并的原始条目。
+		for _, loc := range locs {
+			delete(seg.Protected, match[loc[0]:loc[1]])
+		}
+
+		return newKey
 	})
 }
 
