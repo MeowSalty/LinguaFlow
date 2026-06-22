@@ -1,15 +1,17 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 import {
   type ApiSchemas,
   cancelTranslationJob as cancelTranslationJobRequest,
   createTranslationJob as createTranslationJobRequest,
+  fetchJobEvents,
   fetchTranslationJob,
   fetchTranslationJobs,
   retryTranslationJob as retryTranslationJobRequest,
 } from '@/api/client'
 import { t } from '@/i18n'
+import { getJobProgress } from '@/composables/useWorkspaceUtils'
 
 type TranslationJob = ApiSchemas['TranslationJob']
 type CreateTranslationJobPayload = ApiSchemas['CreateTranslationJobRequest']
@@ -37,6 +39,14 @@ export const useTranslationJobStore = defineStore('translationJob', () => {
   const cancellingJobIds = ref<number[]>([])
   const retryingJobIds = ref<number[]>([])
   const actionError = ref<string | null>(null)
+
+  // ── 事件状态 ──
+  const events = ref<ApiSchemas['JobEvent'][]>([])
+  const loadingEvents = ref(false)
+  const eventsError = ref<string | null>(null)
+
+  // ── 轮询状态 ──
+  const activePollingJobIds = ref<Set<number>>(new Set())
 
   // ── 筛选器 ──
   const jobStatusFilter = ref<JobStatusFilter>('all')
@@ -128,6 +138,46 @@ export const useTranslationJobStore = defineStore('translationJob', () => {
     }
   }
 
+  // ── 加载事件 ──
+  const loadEvents = async (translationJobId: number, limit = 50): Promise<void> => {
+    loadingEvents.value = true
+    eventsError.value = null
+    try {
+      events.value = await fetchJobEvents(translationJobId, { limit })
+    } catch (error) {
+      eventsError.value = getErrorMessage(error, t('api.errors.fetchJobEventsFailed'))
+    } finally {
+      loadingEvents.value = false
+    }
+  }
+
+  const clearEvents = (): void => {
+    events.value = []
+    eventsError.value = null
+  }
+
+  // ── 轮询控制 ──
+  const startPolling = (jobId: number): void => {
+    activePollingJobIds.value = new Set([...activePollingJobIds.value, jobId])
+  }
+
+  const stopPolling = (jobId: number): void => {
+    const next = new Set(activePollingJobIds.value)
+    next.delete(jobId)
+    activePollingJobIds.value = next
+  }
+
+  const isPolling = (jobId: number): boolean => activePollingJobIds.value.has(jobId)
+
+  // ── Getters ──
+  /** 获取 selectedJob 的进度百分比（优先使用后端计算值） */
+  const selectedJobProgress = computed<number>(() => {
+    const job = selectedJob.value
+    if (!job) return 0
+    if (job.progress_percentage != null) return Math.round(job.progress_percentage)
+    return getJobProgress(job) // 回退到前端计算
+  })
+
   const reset = (): void => {
     jobs.value = []
     selectedJob.value = null
@@ -136,6 +186,9 @@ export const useTranslationJobStore = defineStore('translationJob', () => {
     jobDetailError.value = null
     jobStatusFilter.value = 'all'
     actionError.value = null
+    events.value = []
+    eventsError.value = null
+    activePollingJobIds.value = new Set()
   }
 
   return {
@@ -151,6 +204,15 @@ export const useTranslationJobStore = defineStore('translationJob', () => {
     retryingJobIds,
     actionError,
     jobStatusFilter,
+    events,
+    loadingEvents,
+    eventsError,
+    loadEvents,
+    clearEvents,
+    startPolling,
+    stopPolling,
+    isPolling,
+    selectedJobProgress,
     loadJobs,
     loadJobDetail,
     createJob,

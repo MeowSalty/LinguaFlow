@@ -2,6 +2,8 @@ import { type ApiSchemas, type DownloadFileResult } from '@/api/client'
 import { t } from '@/i18n'
 
 type TranslationJob = ApiSchemas['TranslationJob']
+type TranslationJobResource = ApiSchemas['TranslationJobResource']
+type JobEvent = ApiSchemas['JobEvent']
 
 /**
  * 格式化日期为中文格式 (yyyy/MM/dd HH:mm)
@@ -105,4 +107,122 @@ export const formatConfigValue = (value: unknown): string => {
   }
 
   return String(value)
+}
+
+// ── 阶段名称映射 ──
+
+/** 将后端阶段标识转为用户可读的中文标签 */
+export const getStageLabel = (stage: string | undefined): string => {
+  if (!stage) return ''
+  return t(`workspace.job.stage.${stage}`, stage)
+}
+
+// ── 进度文案 ──
+
+/**
+ * 生成进度描述文案，整合阶段、段落计数、队列信息
+ */
+export const getJobProgressText = (job: TranslationJob): string => {
+  if (job.status === 'pending') {
+    if (job.queue_position != null && job.queue_position > 1) {
+      return t('workspace.job.progress.queued', { ahead: job.queue_position - 1 })
+    }
+    if (job.queue_position === 1) {
+      return t('workspace.job.progress.startingSoon')
+    }
+    return t('workspace.job.progress.waiting')
+  }
+
+  if (job.status === 'running') {
+    const stage = job.current_stage ? `${getStageLabel(job.current_stage)} · ` : ''
+    return t('workspace.job.progress.running', {
+      stage,
+      completed: job.completed_segments,
+      total: job.total_segments,
+    })
+  }
+
+  if (job.status === 'completed') return t('workspace.job.progress.completed')
+  if (job.status === 'failed') return t('workspace.job.progress.failed')
+  if (job.status === 'cancelled') return t('workspace.job.progress.cancelled')
+  return ''
+}
+
+// ── ETA 计算 ──
+
+/**
+ * 计算预估剩余秒数。
+ * 返回 null 表示无法计算（未开始、无完成段落、已完成）。
+ */
+export const calculateJobETA = (job: TranslationJob): number | null => {
+  if (!job.started_at || job.completed_segments < 3) return null
+  if (job.status !== 'running') return null
+
+  const elapsed = (Date.now() - new Date(job.started_at).getTime()) / 1000
+  if (elapsed <= 0) return null
+
+  const speed = job.completed_segments / elapsed
+  const remaining = job.total_segments - job.completed_segments
+  return remaining / speed
+}
+
+/** 将秒数格式化为人类可读的中文时长 */
+export const formatETA = (seconds: number | null): string => {
+  if (seconds === null || seconds <= 0) return ''
+
+  const minutes = Math.ceil(seconds / 60)
+  if (minutes < 1) return t('workspace.job.eta.lessThanOneMin')
+  if (minutes < 60) return t('workspace.job.eta.minutes', { count: minutes })
+
+  const hours = Math.floor(minutes / 60)
+  const remainMinutes = minutes % 60
+  if (remainMinutes === 0) return t('workspace.job.eta.hours', { count: hours })
+  return t('workspace.job.eta.hoursMinutes', { hours, minutes: remainMinutes })
+}
+
+// ── 速度计算 ──
+
+/**
+ * 计算当前翻译速度（段落/分钟）。
+ * 返回 null 表示无法计算。
+ * 建议在 completed_segments >= 3 后再展示。
+ */
+export const calculateJobSpeed = (job: TranslationJob): number | null => {
+  if (!job.started_at || job.completed_segments < 3) return null
+  if (job.status !== 'running') return null
+
+  const elapsed = (Date.now() - new Date(job.started_at).getTime()) / 1000
+  if (elapsed <= 0) return null
+
+  return (job.completed_segments / elapsed) * 60 // 转为 段落/分钟
+}
+
+/** 将速度格式化为可读文案，如 "3.2 段落/分钟" */
+export const formatJobSpeed = (speed: number | null): string => {
+  if (speed === null || speed <= 0) return ''
+  if (speed < 1) return t('workspace.job.speed.verySlow')
+  return t('workspace.job.speed.perMinute', { count: speed.toFixed(1) })
+}
+
+// ── 资源级阶段进度 ──
+
+/** 获取资源的阶段进度文案，如 "翻译 18/30" */
+export const getResourceStageProgress = (resource: TranslationJobResource): string => {
+  if (!resource.current_stage || !resource.stage_total) return ''
+  const label = getStageLabel(resource.current_stage)
+  return `${label} ${resource.stage_completed ?? 0}/${resource.stage_total}`
+}
+
+// ── 事件工具 ──
+
+/** 事件级别对应的 naive-ui 类型 */
+export const eventLevelType = (level: JobEvent['level']): 'info' | 'warning' | 'error' => {
+  switch (level) {
+    case 'info':
+      return 'info'
+    case 'warn':
+      return 'warning'
+    case 'error':
+      return 'error'
+  }
 }

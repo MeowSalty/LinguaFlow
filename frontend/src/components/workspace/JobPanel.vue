@@ -1,9 +1,11 @@
 <script setup lang="ts">
+import { toRef } from 'vue'
 import { NAlert, NButton, NDataTable, NEmpty, NSelect } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
 import { useJobColumns } from '@/composables/useJobColumns'
+import { useJobPolling } from '@/composables/useJobPolling'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 
 type TranslationJob = ApiSchemas['TranslationJob']
@@ -11,7 +13,7 @@ type TranslationJob = ApiSchemas['TranslationJob']
 const { t } = useI18n()
 const workspace = useProjectWorkspaceStore()
 
-defineProps<{
+const props = defineProps<{
   projectId: number | null
 }>()
 
@@ -26,6 +28,10 @@ const { jobColumns, jobStatusOptions } = useJobColumns({
   cancelJob: (job) => emit('cancel', job),
   retryJob: (job) => emit('retry', job),
 })
+
+// ── 自适应轮询：面板挂载时自动轮询运行中的任务 ──
+const projectIdRef = toRef(props, 'projectId')
+const { isPolling } = useJobPolling({ projectId: projectIdRef })
 </script>
 
 <template>
@@ -45,7 +51,11 @@ const { jobColumns, jobStatusOptions } = useJobColumns({
           class="md:w-56"
           :options="jobStatusOptions"
         />
-        <div class="flex flex-wrap gap-3">
+        <div class="flex flex-wrap items-center gap-3">
+          <span v-if="isPolling" class="inline-flex items-center gap-1 text-xs text-lf-text-muted">
+            <span class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-green-500" />
+            {{ t('workspace.job.polling') }}
+          </span>
           <NButton
             secondary
             :loading="workspace.loadingJobs"
@@ -73,7 +83,7 @@ const { jobColumns, jobStatusOptions } = useJobColumns({
           onClick: () => emit('detail', row),
         })
       "
-      :scroll-x="1320"
+      :scroll-x="1180"
     />
     <div v-if="workspace.jobsCursor" class="flex justify-center pt-3">
       <NButton :loading="workspace.loadingJobs" @click="workspace.loadJobs(projectId!, true)">

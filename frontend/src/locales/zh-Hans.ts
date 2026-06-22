@@ -481,6 +481,7 @@ const messages = {
     },
     job: {
       empty: '暂无翻译任务。',
+      polling: '自动刷新中',
       legacyPlan: '旧版任务',
       createTitle: '创建翻译任务',
       detailTitle: '任务 #{id}',
@@ -492,6 +493,7 @@ const messages = {
       executionPlanLabel: '{name}（{rounds} 轮）',
       contentSummaryTitle: '翻译内容摘要',
       contentSummaryResources: '{count} 个资源文件',
+      contentSummaryChapters: '{count} 个章节',
       contentSummarySegments: '{count} 个待翻译段落',
       planPreviewTitle: '执行计划详情',
       planPreviewRounds: '共 {count} 个轮次',
@@ -507,6 +509,8 @@ const messages = {
         segments: '段落',
         trigger: '触发方式',
         error: '错误信息',
+        stage: '阶段',
+        startedAt: '开始时间',
       },
       actions: {
         create: '创建任务',
@@ -522,10 +526,43 @@ const messages = {
         autoApproveHint: '开启后，翻译任务完成时将自动审批通过所有段落',
         sourceLang: '源语言',
         targetLang: '目标语言',
-        backendOrder: '后端顺序',
       },
       validation: {
         executionPlanRequired: '请选择执行计划模板',
+      },
+      // 阶段名称
+      stage: {
+        bootstrap: '术语提取',
+        translate: '翻译',
+        review: '审校',
+        finalize: '收尾',
+      },
+      // 进度文案
+      progress: {
+        waiting: '等待中...',
+        startingSoon: '即将开始',
+        queued: '排队中，前面有 {ahead} 个任务',
+        running: '{stage}{completed}/{total} 段落',
+        completed: '翻译完成',
+        failed: '翻译失败',
+        cancelled: '已取消',
+      },
+      // ETA 文案
+      eta: {
+        lessThanOneMin: '不到 1 分钟',
+        minutes: '约 {count} 分钟',
+        hours: '约 {count} 小时',
+        hoursMinutes: '约 {hours} 小时 {minutes} 分钟',
+      },
+      // 速度文案
+      speed: {
+        verySlow: '速度较慢',
+        perMinute: '{count} 段落/分钟',
+      },
+      // 事件日志
+      events: {
+        title: '事件日志',
+        empty: '暂无事件记录',
       },
       detail: {
         executionPlan: '执行计划',
@@ -1120,6 +1157,7 @@ const messages = {
       glossarySyncExecuteFailed: '术语同步任务提交失败',
       glossarySyncStatusFailed: '术语同步任务状态查询失败',
       glossarySyncCancelFailed: '术语同步任务取消失败',
+      fetchJobEventsFailed: '获取任务事件失败',
     },
   },
 } as const

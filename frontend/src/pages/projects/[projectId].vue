@@ -64,7 +64,16 @@ const drawerSegmentCount = computed(() => {
   if (jobMgmt.jobTargetMode.value === 'segments') {
     return jobMgmt.jobTargetSegmentIds.value.length
   }
-  // 资源模式：使用任务目标资源 ID 列表查找总段落数
+
+  // EPUB 章节翻译模式：从 epubDirectoryChapters 按 groupKey 筛选段落数
+  if (jobMgmt.jobTargetGroupKeys.value.length > 0) {
+    const selectedKeys = new Set(jobMgmt.jobTargetGroupKeys.value)
+    return workspace.epubDirectoryChapters
+      .filter((ch) => selectedKeys.has(ch.group_key))
+      .reduce((sum, ch) => sum + ch.segment_count, 0)
+  }
+
+  // 普通资源模式：使用任务目标资源 ID 列表查找总段落数
   const targetIdSet = new Set(jobMgmt.jobTargetResourceIds.value)
   return workspace.resources
     .filter((r) => targetIdSet.has(r.id))
@@ -133,8 +142,17 @@ const epubSelectedChapterCount = computed(() => workspace.epubSelectedGroupKeys.
 const handleTranslateEpubChapters = (): void => {
   const epubResourceId = workspace.epubDirectoryResourceId
   if (!epubResourceId) return
-  jobMgmt.openResourceJobDrawerWithIds([epubResourceId])
+  const groupKeys = [...workspace.epubSelectedGroupKeys]
+  console.debug('[projectId] handleTranslateEpubChapters:', {
+    epubResourceId,
+    groupKeys,
+    setBeforeClear: [...workspace.epubSelectedGroupKeys],
+  })
+  jobMgmt.openResourceJobDrawerWithIds([epubResourceId], groupKeys)
   workspace.epubSelectedGroupKeys = new Set()
+  console.debug('[projectId] after clear:', {
+    setAfterClear: [...workspace.epubSelectedGroupKeys],
+  })
 }
 
 /** 清除 EPUB 章节选中 */
@@ -405,6 +423,7 @@ onMounted(() => {
       :target-mode="jobMgmt.jobTargetMode.value"
       :target-resource-ids="jobMgmt.jobTargetResourceIds.value"
       :target-segment-ids="jobMgmt.jobTargetSegmentIds.value"
+      :target-group-keys="jobMgmt.jobTargetGroupKeys.value"
       :execution-plan-id="jobMgmt.jobForm.execution_plan_id"
       :auto-approve="jobMgmt.jobForm.auto_approve"
       :form-rules="jobMgmt.jobFormRules.value"

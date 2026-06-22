@@ -342,6 +342,7 @@ export const useResourceStore = defineStore('resource', () => {
 
   /** 退出 EPUB 虚拟目录 */
   const exitEpub = (): void => {
+    console.debug('[resourceStore] exitEpub called')
     epubDirectoryResourceId.value = null
     epubDirectoryResourceName.value = ''
     epubDirectoryChapters.value = []

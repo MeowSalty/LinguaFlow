@@ -841,6 +841,25 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/translation-jobs/{translationJobId}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                translationJobId: components["parameters"]["TranslationJobId"];
+            };
+            cookie?: never;
+        };
+        /** 获取翻译任务事件列表 */
+        get: operations["ListTranslationJobEvents"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/translation-jobs/{translationJobId}/cancel": {
         parameters: {
             query?: never;
@@ -1315,6 +1334,17 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            /** @description 当前执行阶段名称 */
+            current_stage?: string;
+            /** @description 当前阶段的总段落数 */
+            stage_total?: number;
+            /** @description 当前阶段已完成的段落数 */
+            stage_completed?: number;
+            /**
+             * Format: date-time
+             * @description 资源开始执行的时间
+             */
+            started_at?: string;
         };
         TranslationJob: {
             id: number;
@@ -1338,10 +1368,37 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
             job_resources?: components["schemas"]["TranslationJobResource"][];
+            /**
+             * Format: date-time
+             * @description 任务开始执行的时间
+             */
+            started_at?: string;
+            /** @description 当前活跃的执行阶段名称（聚合自 JobResource） */
+            current_stage?: string;
+            /**
+             * Format: float
+             * @description 整体进度百分比（0-100），由后端计算
+             */
+            progress_percentage?: number;
+            /** @description 在队列中的位置（1-based），null 表示不在队列中 */
+            queue_position?: number | null;
+            /** @description 当前队列中的任务总数 */
+            queue_size?: number | null;
         };
         TranslationJobListResponse: {
             items: components["schemas"]["TranslationJob"][];
             next_cursor?: string;
+        };
+        JobEvent: {
+            id: number;
+            job_id: number;
+            /** @enum {string} */
+            level: "info" | "warn" | "error";
+            stage?: string;
+            message: string;
+            metadata?: Record<string, never>;
+            /** Format: date-time */
+            created_at: string;
         };
         Activity: {
             id: number;
@@ -3242,6 +3299,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TranslationJob"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListTranslationJobEvents: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                translationJobId: components["parameters"]["TranslationJobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 事件列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobEvent"][];
                 };
             };
             default: components["responses"]["Problem"];

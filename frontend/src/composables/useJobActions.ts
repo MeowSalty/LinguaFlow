@@ -96,6 +96,11 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobTargetResourceIds.value = [...resourceIds]
     jobTargetSegmentIds.value = []
     jobTargetGroupKeys.value = groupKeys ? [...groupKeys] : []
+    console.debug('[useJobActions] openResourceJobDrawerWithIds:', {
+      resourceIds: [...resourceIds],
+      groupKeys: groupKeys ? [...groupKeys] : [],
+      jobTargetGroupKeys: [...jobTargetGroupKeys.value],
+    })
     jobForm.execution_plan_id = null
     jobDrawerVisible.value = true
   }
@@ -158,6 +163,15 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     if (jobTargetMode.value === 'segments') {
       payload.segment_ids = jobTargetSegmentIds.value
     }
+
+    console.debug('[useJobActions] submitJob payload:', {
+      targetMode: jobTargetMode.value,
+      resourceIds: [...jobTargetResourceIds.value],
+      groupKeys: [...jobTargetGroupKeys.value],
+      segmentIds: [...jobTargetSegmentIds.value],
+      payloadGroupKeys: payload.segment_group_keys ? [...payload.segment_group_keys] : undefined,
+      payloadSegmentIds: payload.segment_ids ? [...payload.segment_ids] : undefined,
+    })
 
     try {
       await workspace.createJob(projectId.value, payload)

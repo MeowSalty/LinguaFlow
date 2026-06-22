@@ -244,6 +244,7 @@ export const useSegmentStore = defineStore('segment', () => {
 
   /** 切换章节选中状态 */
   const toggleEpubGroupSelection = (groupKey: string): void => {
+    const currentKeys = [...epubSelectedGroupKeys.value]
     const newSet = new Set(epubSelectedGroupKeys.value)
     if (newSet.has(groupKey)) {
       newSet.delete(groupKey)
@@ -251,6 +252,12 @@ export const useSegmentStore = defineStore('segment', () => {
       newSet.add(groupKey)
     }
     epubSelectedGroupKeys.value = newSet
+    console.debug('[segmentStore] toggleEpubGroupSelection:', {
+      toggledKey: groupKey,
+      before: currentKeys,
+      after: [...newSet],
+      storeId: 'segment',
+    })
   }
 
   /**
@@ -282,7 +289,12 @@ export const useSegmentStore = defineStore('segment', () => {
     segmentGroupsError.value = null
     epubActiveGroupKey.value = null
     epubActiveGroupTitle.value = ''
+    const before = [...epubSelectedGroupKeys.value]
     epubSelectedGroupKeys.value = new Set()
+    console.debug('[segmentStore] resetEpubState:', {
+      clearedKeys: before,
+      after: [...epubSelectedGroupKeys.value],
+    })
   }
 
   const reset = (): void => {
