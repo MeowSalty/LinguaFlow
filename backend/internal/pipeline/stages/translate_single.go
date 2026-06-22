@@ -64,8 +64,13 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Do
 	for _, b := range round.Backends {
 		resp, err = s.callOnce(ctx, b, req, round.Retry)
 		if err != nil {
-			logger.Warn("translate failed, trying next backend",
-				"seg", seg.ID, "backend", b.Name(), "err", err)
+			if isFatalBackendError(err) {
+				logger.Error("backend returned fatal error",
+					"backend", b.Name(), "seg", seg.ID, "err", err)
+			} else {
+				logger.Warn("translate failed, trying next backend",
+					"seg", seg.ID, "backend", b.Name(), "err", err)
+			}
 			continue
 		}
 		var perr error

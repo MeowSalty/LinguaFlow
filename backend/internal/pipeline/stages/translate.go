@@ -139,6 +139,10 @@ func (s *Translate) runRounds(ctx context.Context, doc *pipeline.Document, pendi
 	rep := s.reporter()
 
 	for ridx, round := range s.Rounds {
+		// 检查 context 是否已取消
+		if ctx.Err() != nil {
+			return 0, ctx.Err()
+		}
 		if len(remaining) == 0 {
 			break
 		}

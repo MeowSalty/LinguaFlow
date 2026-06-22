@@ -183,6 +183,10 @@ func (s *Server) handleCancelTranslationJob(w http.ResponseWriter, r *http.Reque
 		writeTranslationJobServiceError(w, err)
 		return
 	}
+	// 通知正在运行的 worker 立即停止
+	if s.translationJobRunner != nil {
+		s.translationJobRunner.CancelRunningJob(jobID)
+	}
 	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "translation_job.cancel", ResourceType: "translation_job", ResourceID: job.ID, Message: "取消翻译任务"})
 	writeJSON(w, http.StatusOK, toTranslationJobResponse(job, s.queueInfoForJob(job.ID)))
 }

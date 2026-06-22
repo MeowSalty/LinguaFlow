@@ -2,6 +2,7 @@ package stages
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math"
@@ -89,8 +90,13 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *pipeline.Docum
 	for _, b := range round.Backends {
 		resp, err = s.callOnce(ctx, b, req, round.Retry)
 		if err != nil {
-			logger.Warn("batch translate failed, trying next backend",
-				"backend", b.Name(), "batch_size", len(idxs), "err", err)
+			if isFatalBackendError(err) {
+				logger.Error("backend returned fatal error",
+					"backend", b.Name(), "batch_size", len(idxs), "err", err)
+			} else {
+				logger.Warn("batch translate failed, trying next backend",
+					"backend", b.Name(), "batch_size", len(idxs), "err", err)
+			}
 			lastErr = err
 			continue
 		}
@@ -148,7 +154,7 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *pipeline.Docum
 			if lastErr != nil {
 				logger.Warn("all backends failed for batch, shrinking or falling back", "batch_size", len(idxs), "err", lastErr)
 			}
-			return s.shrinkOrFallback(ctx, doc, idxs, round, logger)
+			return s.shrinkOrFallback(ctx, doc, idxs, round, lastErr, logger)
 		}
 	}
 
@@ -219,7 +225,12 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *pipeline.Docum
 // shrinkOrFallback 根据 round.FallbackShrink 决定：
 //   - 缩小到 >=2 的子批并发递归（每个子批又可能继续缩小）
 //   - 否则坍缩到顺序单段（调用 translateSingleInRound）
-func (s *Translate) shrinkOrFallback(ctx context.Context, doc *pipeline.Document, idxs []int, round Round, logger *slog.Logger) ([]int, error) {
+func (s *Translate) shrinkOrFallback(ctx context.Context, doc *pipeline.Document, idxs []int, round Round, lastErr error, logger *slog.Logger) ([]int, error) {
+	if isFatalBackendError(lastErr) {
+		logger.Warn("all backends failed with fatal error, segments will be marked as unresolved",
+			"batch_size", len(idxs), "err", lastErr)
+		return idxs, nil
+	}
 	nextSize := shrinkNext(len(idxs), round.FallbackShrink)
 	if nextSize < 2 {
 		// 坍缩到顺序单段
@@ -281,4 +292,15 @@ func shrinkNext(cur int, shrink float64) int {
 		return 0
 	}
 	return next
+}
+
+// isFatalBackendError 判断是否为不可恢复的致命错误（如 401、403 认证失败）。
+// 遇到此类错误时当前 backend 被视为不可用，段将推迟到后续轮次处理。
+func isFatalBackendError(err error) bool {
+	var hsErr backend.HTTPStatusError
+	if errors.As(err, &hsErr) {
+		code := hsErr.HTTPStatus()
+		return code == 401 || code == 403
+	}
+	return false
 }

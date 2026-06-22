@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -24,6 +25,10 @@ import (
 type TranslationRunner struct {
 	*BaseRunner
 	jobs *service.TranslationJobService
+
+	// per-job 取消注册表：jobID → cancel 函数
+	mu         sync.Mutex
+	activeJobs map[int]context.CancelFunc
 }
 
 // NewTranslationRunner 创建一个新的翻译任务执行器。
@@ -36,15 +41,41 @@ func NewTranslationRunner(
 	queue *Queue,
 ) *TranslationRunner {
 	r := &TranslationRunner{
-		jobs: jobs,
+		jobs:       jobs,
+		activeJobs: make(map[int]context.CancelFunc),
 	}
 	r.BaseRunner = newBaseRunner(cfg, logger, client, store, queue, jobs, r.processJob, "translation worker")
 	return r
 }
 
+// CancelRunningJob 通知运行中的翻译任务立即停止。
+func (r *TranslationRunner) CancelRunningJob(jobID int) {
+	r.mu.Lock()
+	cancel, ok := r.activeJobs[jobID]
+	r.mu.Unlock()
+	if ok {
+		r.logger.Info("cancelling running translation job", "job_id", jobID)
+		cancel()
+	}
+}
+
 // processJob 处理单个翻译任务：加载执行上下文，筛选待处理的资源并依次执行。
 func (r *TranslationRunner) processJob(ctx context.Context, jobID int) error {
-	exec, err := r.jobs.LoadJobExecution(ctx, jobID)
+	// 创建 per-job context，支持外部取消
+	jobCtx, jobCancel := context.WithCancel(ctx)
+	defer jobCancel()
+
+	// 注册到 activeJobs，使 CancelRunningJob 能触发取消
+	r.mu.Lock()
+	r.activeJobs[jobID] = jobCancel
+	r.mu.Unlock()
+	defer func() {
+		r.mu.Lock()
+		delete(r.activeJobs, jobID)
+		r.mu.Unlock()
+	}()
+
+	exec, err := r.jobs.LoadJobExecution(jobCtx, jobID)
 	if err != nil {
 		return err
 	}
@@ -55,19 +86,24 @@ func (r *TranslationRunner) processJob(ctx context.Context, jobID int) error {
 		}
 	}
 	if len(pending) == 0 {
-		return r.jobs.ReconcileJob(ctx, jobID)
+		return r.jobs.ReconcileJob(jobCtx, jobID)
 	}
-	if err := r.jobs.MarkJobRunning(ctx, jobID); err != nil {
+	if err := r.jobs.MarkJobRunning(jobCtx, jobID); err != nil {
 		return err
 	}
 	// 记录任务开始时间
-	_ = r.jobs.MarkJobStarted(ctx, jobID)
+	_ = r.jobs.MarkJobStarted(jobCtx, jobID)
 	for _, item := range pending {
-		if err := r.processJobResource(ctx, exec, item); err != nil {
+		// 每次处理资源前检查 context 是否已取消
+		if jobCtx.Err() != nil {
+			r.logger.Info("job context cancelled, stopping", "job_id", jobID)
+			return jobCtx.Err()
+		}
+		if err := r.processJobResource(jobCtx, exec, item); err != nil {
 			r.logger.Warn("translation job resource failed", "job_id", jobID, "job_resource_id", item.ID, "err", err)
 		}
 	}
-	return r.jobs.ReconcileJob(ctx, jobID)
+	return r.jobs.ReconcileJob(jobCtx, jobID)
 }
 
 // processJobResource 处理单个翻译资源：从 DB 加载段落、纯翻译、写回 DB。
@@ -164,9 +200,17 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, fmt.Errorf("translate segments: %w", err))
 		return nil
 	}
-	// 所有待翻译段均未解决，说明 AI 后端配置错误或服务不可用。
-	if result.UnresolvedCount > 0 && result.UnresolvedCount >= len(selectedRows) {
-		err := fmt.Errorf("all %d segments failed to translate: AI backend configuration error or service unavailable", result.UnresolvedCount)
+	// 有任何未解决段落就标记为 failed，避免部分失败时误标为 completed。
+	if result.UnresolvedCount > 0 {
+		actualCompleted := len(selectedRows) - result.UnresolvedCount
+		r.logger.Warn("translation partially failed: some segments could not be resolved",
+			"resource_id", item.ID,
+			"unresolved_count", result.UnresolvedCount,
+			"total_segments", len(selectedRows),
+			"completed_count", actualCompleted,
+		)
+		err := fmt.Errorf("%d/%d segments failed to translate (completed: %d): LLM could not preserve all protected placeholders after retries",
+			result.UnresolvedCount, len(selectedRows), actualCompleted)
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
 	}
@@ -358,6 +402,11 @@ func (r *TranslationRunner) updateTranslatedSegments(ctx context.Context, select
 	}
 	for _, item := range segments {
 		if item.Failed {
+			continue
+		}
+		if item.TargetText == "" {
+			r.logger.Warn("skipping segment with empty target text",
+				"segment_index", item.Index)
 			continue
 		}
 		segmentID, ok := selectedIDsByIndex[item.Index]

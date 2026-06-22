@@ -377,10 +377,12 @@ type countingReporter struct {
 	stageStartCalls int32
 	segmentDones    int32
 	stageDoneCalls  int32
+	batchCompletes  int32
 }
 
 func (r *countingReporter) StageStart(string, int) { atomic.AddInt32(&r.stageStartCalls, 1) }
 func (r *countingReporter) SegmentDone()           { atomic.AddInt32(&r.segmentDones, 1) }
+func (r *countingReporter) BatchComplete()         { atomic.AddInt32(&r.batchCompletes, 1) }
 func (r *countingReporter) StageDone()             { atomic.AddInt32(&r.stageDoneCalls, 1) }
 func (r *countingReporter) Close() error           { return nil }
 
