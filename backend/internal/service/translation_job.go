@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
 	"time"
@@ -588,8 +589,16 @@ func (s *TranslationJobService) ReconcileJob(ctx context.Context, jobID int) err
 	}
 	var pendingCount, runningCount, completed, failed, cancelled, completedSegments int
 	var firstFailure *string
+	// [DEBUG] 诊断：记录每个资源的状态
 	for _, item := range current.Edges.JobResources {
 		completedSegments += item.CompletedSegments
+		slog.Info("[DEBUG] ReconcileJob resource status",
+			"job_id", jobID,
+			"resource_id", item.ID,
+			"status", item.Status,
+			"segment_count", item.SegmentCount,
+			"completed_segments", item.CompletedSegments,
+		)
 		switch item.Status {
 		case JobResourceStatusPending:
 			pendingCount++
@@ -607,7 +616,26 @@ func (s *TranslationJobService) ReconcileJob(ctx context.Context, jobID int) err
 			}
 		}
 	}
+	// [DEBUG] 诊断：记录汇总信息
+	total := len(current.Edges.JobResources)
+	slog.Info("[DEBUG] ReconcileJob summary",
+		"job_id", jobID,
+		"total_resources", total,
+		"pending", pendingCount,
+		"running", runningCount,
+		"completed", completed,
+		"failed", failed,
+		"cancelled", cancelled,
+		"completed_segments", completedSegments,
+	)
 	status := deriveTranslationJobStatus(len(current.Edges.JobResources), pendingCount, runningCount, completed, failed, cancelled)
+	// [DEBUG] 诊断：记录最终决定的作业状态
+	slog.Info("[DEBUG] ReconcileJob derived status",
+		"job_id", jobID,
+		"derived_status", status,
+		"completed_resources", completed,
+		"total_resources", len(current.Edges.JobResources),
+	)
 	update := s.client.TranslationJob.UpdateOneID(jobID).
 		SetStatus(status).
 		SetResourceCount(len(current.Edges.JobResources)).
@@ -735,7 +763,7 @@ func (s *TranslationJobService) ListJobEvents(ctx context.Context, actorUserID, 
 
 func (s *TranslationJobService) resolveJobSelection(ctx context.Context, projectID int, input CreateTranslationJobInput) (map[int][]int, error) {
 	if len(input.SegmentGroupKeys) > 0 {
-		return s.resolveGroupKeySelection(ctx, projectID, input.SegmentGroupKeys)
+		return s.resolveGroupKeySelection(ctx, projectID, input.SegmentGroupKeys, input.ResourceIDs)
 	}
 	if len(input.SegmentIDs) > 0 {
 		return s.resolveSegmentSelection(ctx, projectID, input.SegmentIDs)
@@ -763,7 +791,7 @@ func (s *TranslationJobService) resolveSegmentSelection(ctx context.Context, pro
 	return selection, nil
 }
 
-func (s *TranslationJobService) resolveGroupKeySelection(ctx context.Context, projectID int, groupKeys []string) (map[int][]int, error) {
+func (s *TranslationJobService) resolveGroupKeySelection(ctx context.Context, projectID int, groupKeys []string, resourceIDs []int) (map[int][]int, error) {
 	uniqueKeys := make(map[string]struct{}, len(groupKeys))
 	for _, key := range groupKeys {
 		k := strings.TrimSpace(key)
@@ -775,10 +803,13 @@ func (s *TranslationJobService) resolveGroupKeySelection(ctx context.Context, pr
 		return nil, fmt.Errorf("segment_group_keys 不能为空")
 	}
 
-	// 查询该项目下所有资源的 segments（带 meta 字段）
-	rows, err := s.client.Segment.Query().
-		Where(segment.HasResourceWith(resource.ProjectIDEQ(projectID))).
-		All(ctx)
+	// 查询该项目下指定资源的 segments（带 meta 字段）
+	segQuery := s.client.Segment.Query().
+		Where(segment.HasResourceWith(resource.ProjectIDEQ(projectID)))
+	if len(resourceIDs) > 0 {
+		segQuery = segQuery.Where(segment.HasResourceWith(resource.IDIn(uniqueInts(resourceIDs)...)))
+	}
+	rows, err := segQuery.All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("查询 segments 失败: %w", err)
 	}
@@ -800,8 +831,19 @@ func (s *TranslationJobService) resolveGroupKeySelection(ctx context.Context, pr
 		if _, matched := uniqueKeys[epubFile]; matched {
 			selection[*row.ResourceID] = append(selection[*row.ResourceID], row.ID)
 			matchedCount++
+			slog.Debug("[resolveGroupKeySelection] resource matched",
+				"resource_id", *row.ResourceID,
+				"segment_count", len(selection[*row.ResourceID]),
+				"segment_ids", selection[*row.ResourceID])
 		}
 	}
+
+	slog.Debug("[resolveGroupKeySelection] diagnostic",
+		"project_id", projectID,
+		"group_keys", groupKeys,
+		"total_segments_in_project", len(rows),
+		"matched_segments", matchedCount,
+		"matched_resources", len(selection))
 
 	if matchedCount == 0 {
 		return nil, fmt.Errorf("未找到匹配指定章节的 segments")
