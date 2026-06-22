@@ -156,3 +156,177 @@ func TestMissingPlaceholders(t *testing.T) {
 		}
 	}
 }
+
+// S6: 相邻占位符之间应插入零宽空格分隔符。
+func TestInsertPlaceholderSeparators(t *testing.T) {
+	cases := []struct {
+		name  string
+		input string
+		want  string
+	}{
+		{
+			name:  "two adjacent placeholders",
+			input: "__LF_000001____LF_000002__",
+			want:  "__LF_000001__\u200B__LF_000002__",
+		},
+		{
+			name:  "three adjacent placeholders",
+			input: "__LF_000001____LF_000002____LF_000003__",
+			want:  "__LF_000001__\u200B__LF_000002__\u200B__LF_000003__",
+		},
+		{
+			name:  "non-adjacent placeholders unchanged",
+			input: "__LF_000001__ text __LF_000002__",
+			want:  "__LF_000001__ text __LF_000002__",
+		},
+		{
+			name:  "single placeholder unchanged",
+			input: "text __LF_000001__ more",
+			want:  "text __LF_000001__ more",
+		},
+		{
+			name:  "no placeholders",
+			input: "plain text",
+			want:  "plain text",
+		},
+		{
+			name:  "adjacent with surrounding text",
+			input: "before__LF_000001____LF_000002__after",
+			want:  "before__LF_000001__\u200B__LF_000002__after",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := insertPlaceholderSeparators(tc.input)
+			if got != tc.want {
+				t.Errorf("got %q, want %q", got, tc.want)
+			}
+		})
+	}
+}
+
+// S7: composed Protect+Unprotect 对含相邻占位符的 HTML 应正确 round-trip。
+func TestCompose_AdjacentPlaceholders_RoundTrip(t *testing.T) {
+	// 模拟 epub 中 </span><ruby> 的场景
+	source := `────</span><ruby>椎名<rt>しいな</rt></ruby>`
+	p := Compose(&XMLProtector{})
+	roundTrip(t, p, source)
+}
+
+// S8: 含相邻占位符的 unprotect 应正确还原（中间有文本内容）。
+func TestCompose_Unprotect_AdjacentPlaceholders(t *testing.T) {
+	seg := &pipeline.Segment{
+		Protected: map[string]string{
+			"__LF_000001__": `<span class="x">`,
+			"__LF_000002__": "</span>",
+			"__LF_000003__": "<ruby>",
+			"__LF_000004__": "<rt>",
+			"__LF_000005__": "</rt>",
+			"__LF_000006__": "</ruby>",
+		},
+		// 相邻占位符：__LF_000002____LF_000003__ 和 __LF_000005____LF_000006__
+		Target: "────__LF_000002____LF_000003__椎名__LF_000004__しいな__LF_000005____LF_000006__",
+	}
+	c := Compose(&XMLProtector{})
+	if err := c.Unprotect(seg); err != nil {
+		t.Fatal(err)
+	}
+	want := `────</span><ruby>椎名<rt>しいな</rt></ruby>`
+	if seg.Target != want {
+		t.Fatalf("unprotect mismatch\nwant: %q\ngot:  %q", want, seg.Target)
+	}
+}
+
+// S9: RubyProtector 单独 round-trip。
+func TestRubyProtector_RoundTrip(t *testing.T) {
+	cases := []string{
+		`<ruby>呪<rt>じゅ</rt></ruby>`,
+		`<ruby>勤<rt>いそ</rt></ruby>`,
+		`<ruby>微<rt>ほほ</rt></ruby><ruby>笑<rt>え</rt></ruby>`,
+		`plain text without ruby`,
+		`<ruby>椎名<rt>しいな</rt></ruby>`,
+	}
+	for _, c := range cases {
+		roundTrip(t, &RubyProtector{}, c)
+	}
+}
+
+// S10: RubyProtector 保护后 <rt> 内容应被替换为占位符，但标签保留。
+func TestRubyProtector_ProtectsContent(t *testing.T) {
+	seg := &pipeline.Segment{Source: `<ruby>呪<rt>じゅ</rt></ruby>`}
+	if err := (&RubyProtector{}).Protect(seg); err != nil {
+		t.Fatal(err)
+	}
+	// 标签应保留
+	if !strings.Contains(seg.Source, "<rt>") {
+		t.Errorf("<rt> tag lost: %q", seg.Source)
+	}
+	if !strings.Contains(seg.Source, "</rt>") {
+		t.Errorf("</rt> tag lost: %q", seg.Source)
+	}
+	if !strings.Contains(seg.Source, "<ruby>") {
+		t.Errorf("<ruby> tag lost: %q", seg.Source)
+	}
+	if !strings.Contains(seg.Source, "</ruby>") {
+		t.Errorf("</ruby> tag lost: %q", seg.Source)
+	}
+	// 注音内容应被保护
+	if strings.Contains(seg.Source, "じゅ") {
+		t.Errorf("furigana not protected: %q", seg.Source)
+	}
+}
+
+// S11: RubyProtector + XMLProtector 组合 round-trip（模拟实际使用）。
+func TestCompose_RubyAndXML_RoundTrip(t *testing.T) {
+	cases := []string{
+		`<ruby>呪<rt>じゅ</rt></ruby>`,
+		`────</span><ruby>椎名<rt>しいな</rt></ruby>`,
+		`<ruby>微<rt>ほほ</rt></ruby><ruby>笑<rt>え</rt></ruby>`,
+		`click <a href="x">here</a> with <ruby>呪<rt>じゅ</rt></ruby>`,
+	}
+	p := Compose(&RubyProtector{}, &XMLProtector{})
+	for _, c := range cases {
+		roundTrip(t, p, c)
+	}
+}
+
+// S12: RubyProtector + XMLProtector 组合保护后，LLM 看不到注音内容。
+func TestCompose_RubyAndXML_HidesContent(t *testing.T) {
+	seg := &pipeline.Segment{Source: `<ruby>呪<rt>じゅ</rt></ruby>`}
+	p := Compose(&RubyProtector{}, &XMLProtector{})
+	if err := p.Protect(seg); err != nil {
+		t.Fatal(err)
+	}
+	// 注音内容应被保护
+	if strings.Contains(seg.Source, "じゅ") {
+		t.Errorf("furigana visible to LLM: %q", seg.Source)
+	}
+	// 汉字仍应可见（可翻译）
+	if !strings.Contains(seg.Source, "呪") {
+		t.Errorf("kanji lost: %q", seg.Source)
+	}
+}
+
+// S13: FromRules("ruby") 应返回包含 RubyProtector 的组合保护器。
+func TestFromRules_WithRuby(t *testing.T) {
+	p := FromRules([]string{"code", "link", "placeholder", "ruby", "xml"})
+	source := `<ruby>呪<rt>じゅ</rt></ruby>`
+	roundTrip(t, p, source)
+}
+
+// S14: 无 <rt> 标签时 RubyProtector 不影响内容。
+func TestRubyProtector_NoRtTags(t *testing.T) {
+	cases := []string{
+		`plain text`,
+		`<p>no ruby here</p>`,
+	}
+	for _, c := range cases {
+		seg := &pipeline.Segment{Source: c}
+		if err := (&RubyProtector{}).Protect(seg); err != nil {
+			t.Fatal(err)
+		}
+		if seg.Source != c {
+			t.Errorf("RubyProtector modified non-ruby text: %q → %q", c, seg.Source)
+		}
+	}
+}
