@@ -19,7 +19,11 @@ type TranslationProfileConfig = ApiSchemas['TranslationProfileConfig']
 
 const CONFIG_DEFAULTS: TranslationProfileConfig = {
   split: { enabled: true, strategy: 'paragraph', max_chars: 1200 },
-  protect: { enabled: true, rules: ['code', 'link', 'placeholder', 'xml'] },
+  protect: {
+    enabled: true,
+    rules: ['code', 'link', 'placeholder', 'xml'],
+    ruby: { enabled: false, output_format: 'ruby_output' },
+  },
   postprocess: { enabled: true, trim_spaces: true },
   repair: {
     enabled: true,
@@ -56,6 +60,10 @@ function mergeConfig(source?: Partial<TranslationProfileConfig>): TranslationPro
       ...CONFIG_DEFAULTS.protect,
       ...source.protect,
       rules: source.protect?.rules ?? CONFIG_DEFAULTS.protect.rules,
+      ruby: {
+        ...CONFIG_DEFAULTS.protect.ruby,
+        ...source.protect?.ruby,
+      } as NonNullable<TranslationProfileConfig['protect']['ruby']>,
     },
     postprocess: { ...CONFIG_DEFAULTS.postprocess, ...source.postprocess },
     repair: { ...CONFIG_DEFAULTS.repair, ...source.repair },
@@ -133,6 +141,32 @@ const inlineConflictStrategyOptions = computed(() => [
 ])
 
 const splitStrategyOptions = computed(() => [{ label: 'paragraph', value: 'paragraph' }])
+
+const rubyOutputFormatOptions = computed(() => [
+  { label: 'Ruby 输出', value: 'ruby_output' },
+  { label: '内联标记', value: 'inline_markers' },
+])
+
+function onProtectRubyUpdate(field: 'enabled', value: boolean): void
+function onProtectRubyUpdate(field: 'output_format', value: 'ruby_output' | 'inline_markers'): void
+function onProtectRubyUpdate(field: string, value: unknown): void {
+  if (!configModel.value.protect) {
+    configModel.value.protect = {
+      enabled: false,
+      rules: [],
+      ruby: { enabled: false, output_format: 'ruby_output' },
+    }
+  }
+  if (!configModel.value.protect.ruby) {
+    configModel.value.protect.ruby = { enabled: false, output_format: 'ruby_output' }
+  }
+  const ruby = configModel.value.protect.ruby
+  if (field === 'enabled') {
+    ruby.enabled = value as boolean
+  } else if (field === 'output_format') {
+    ruby.output_format = value as 'ruby_output' | 'inline_markers'
+  }
+}
 </script>
 
 <template>
@@ -204,6 +238,27 @@ const splitStrategyOptions = computed(() => [{ label: 'paragraph', value: 'parag
           </div>
         </NCheckboxGroup>
       </div>
+      <!-- Ruby 注释保护 -->
+      <NGrid :cols="2" :x-gap="16" class="mt-4">
+        <NGi>
+          <div class="flex items-center gap-2">
+            <NSwitch
+              :value="configModel.protect?.ruby?.enabled ?? false"
+              :disabled="disabled || !configModel.protect?.enabled"
+              @update:value="(val: boolean) => onProtectRubyUpdate('enabled', val)"
+            />
+            <span class="text-sm">{{ t('profileConfigEditor.protect.ruby.title') }}</span>
+          </div>
+        </NGi>
+        <NGi>
+          <NSelect
+            :value="configModel.protect?.ruby?.output_format ?? 'ruby_output'"
+            :options="rubyOutputFormatOptions"
+            :disabled="disabled || !configModel.protect?.enabled || !(configModel.protect?.ruby?.enabled ?? false)"
+            @update:value="(val: 'ruby_output' | 'inline_markers') => onProtectRubyUpdate('output_format', val)"
+          />
+        </NGi>
+      </NGrid>
     </NCard>
 
     <!-- 后处理 -->

@@ -1730,9 +1730,18 @@ export interface components {
             strategy: string;
             max_chars: number;
         };
+        ProfileRubyConfig: {
+            enabled: boolean;
+            /**
+             * @default ruby_output
+             * @enum {string}
+             */
+            output_format: "ruby_output" | "inline_markers";
+        };
         ProfileProtectConfig: {
             enabled: boolean;
-            rules?: string[];
+            rules?: ("code" | "link" | "placeholder" | "xml")[];
+            ruby?: components["schemas"]["ProfileRubyConfig"];
         };
         ProfilePostprocessConfig: {
             enabled: boolean;
