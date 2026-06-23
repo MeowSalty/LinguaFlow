@@ -3214,6 +3214,19 @@ components:
         max_chars:
           type: integer
           minimum: 1
+    ProfileRubyConfig:
+      type: object
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+        output_format:
+          type: string
+          enum:
+            - ruby_output
+            - inline_markers
+          default: ruby_output
     ProfileProtectConfig:
       type: object
       required:
@@ -3225,6 +3238,13 @@ components:
           type: array
           items:
             type: string
+            enum:
+              - code
+              - link
+              - placeholder
+              - xml
+        ruby:
+          $ref: '#/components/schemas/ProfileRubyConfig'
     ProfilePostprocessConfig:
       type: object
       required:
