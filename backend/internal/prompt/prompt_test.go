@@ -9,6 +9,14 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 )
 
+// defaultTestSystemTmpl 是测试用的最小系统模板。
+// 内容与 templates/default/prompts/default.tmpl 的关键子集保持一致。
+const defaultTestSystemTmpl = `你是 LinguaFlow，一个专业的翻译引擎。
+将用户的文本从 {{.SourceLang}} 翻译为 {{.TargetLang}}。
+协议：
+- 你的回复必须是一个 JSON 对象：{"translations":{"<id>":"<翻译>", ...}}
+- 仅输出 JSON，无 markdown 围栏、无额外文字。`
+
 func TestBuildContext_PrefersOriginalSource(t *testing.T) {
 	doc := &pipeline.Document{
 		Segments: []pipeline.Segment{
@@ -76,7 +84,9 @@ func mustUnmarshalUser(t *testing.T, s string) userMsg {
 }
 
 func TestRenderer_BatchMode(t *testing.T) {
-	r, err := NewRenderer(config.PromptConfig{})
+	r, err := NewRenderer(config.PromptConfig{
+		SystemTemplateContent: defaultTestSystemTmpl,
+	})
 	if err != nil {
 		t.Fatalf("renderer: %v", err)
 	}
@@ -104,7 +114,9 @@ func TestRenderer_BatchMode(t *testing.T) {
 }
 
 func TestRenderer_SingleMode(t *testing.T) {
-	r, err := NewRenderer(config.PromptConfig{})
+	r, err := NewRenderer(config.PromptConfig{
+		SystemTemplateContent: defaultTestSystemTmpl,
+	})
 	if err != nil {
 		t.Fatalf("renderer: %v", err)
 	}
@@ -126,7 +138,9 @@ func TestRenderer_SingleMode(t *testing.T) {
 }
 
 func TestRenderer_EmbedsContext(t *testing.T) {
-	r, err := NewRenderer(config.PromptConfig{})
+	r, err := NewRenderer(config.PromptConfig{
+		SystemTemplateContent: defaultTestSystemTmpl,
+	})
 	if err != nil {
 		t.Fatalf("renderer: %v", err)
 	}

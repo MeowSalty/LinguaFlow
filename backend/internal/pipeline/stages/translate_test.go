@@ -389,9 +389,16 @@ func (r *countingReporter) BatchComplete()         { atomic.AddInt32(&r.batchCom
 func (r *countingReporter) StageDone()             { atomic.AddInt32(&r.stageDoneCalls, 1) }
 func (r *countingReporter) Close() error           { return nil }
 
+// testSystemTmpl 是测试用的最小系统模板。
+const testSystemTmpl = `你是 LinguaFlow，一个专业的翻译引擎。
+将用户的文本从 {{.SourceLang}} 翻译为 {{.TargetLang}}。
+协议：你的回复必须是 {"translations":{"<id>":"<翻译>", ...}}，仅输出 JSON。`
+
 func newTestRenderer(t *testing.T) *prompt.Renderer {
 	t.Helper()
-	r, err := prompt.NewRenderer(config.PromptConfig{})
+	r, err := prompt.NewRenderer(config.PromptConfig{
+		SystemTemplateContent: testSystemTmpl,
+	})
 	if err != nil {
 		t.Fatalf("renderer: %v", err)
 	}

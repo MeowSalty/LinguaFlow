@@ -11,6 +11,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
 
 type translateOptions struct {
@@ -108,6 +109,9 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 
 	// 全局 Prompt 配置：使用第一轮的提示词模板作为回退
 	firstPromptContent := resolvePromptContent(cliCfg, firstRound.Prompt)
+	if firstPromptContent == "" {
+		firstPromptContent = templates.EmbeddedPromptTemplate()
+	}
 
 	cfg := &config.Config{
 		Version:    cliCfg.Version,

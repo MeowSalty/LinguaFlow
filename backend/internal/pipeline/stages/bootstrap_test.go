@@ -46,9 +46,14 @@ func (f *fakeBackend) Translate(_ context.Context, req backend.Request) (*backen
 
 func (f *fakeBackend) Close() error { return nil }
 
+// testBootstrapTmpl 是测试用的最小 bootstrap 模板。
+const testBootstrapTmpl = `You are LinguaFlow, a glossary-bootstrap assistant.
+Task: extract domain-specific terms from {{.SourceLang}} to {{.TargetLang}}.
+Return AT MOST {{.MaxTerms}} entries. Reply as JSON: {"glossary":[...]}.`
+
 func newBootstrapRenderer(t *testing.T) *prompt.BootstrapRenderer {
 	t.Helper()
-	r, err := prompt.NewBootstrapRenderer()
+	r, err := prompt.NewBootstrapRenderer(testBootstrapTmpl)
 	if err != nil {
 		t.Fatalf("renderer: %v", err)
 	}

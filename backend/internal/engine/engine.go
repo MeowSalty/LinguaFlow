@@ -17,6 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
@@ -94,7 +95,7 @@ func NewWithOptions(opts Options) (*Engine, error) {
 		tm:                translationMemory,
 	}
 	if opts.Config.Glossary.Enabled && opts.Config.Glossary.Bootstrap.Mode == config.BootstrapModePre {
-		br, err := prompt.NewBootstrapRenderer()
+		br, err := prompt.NewBootstrapRenderer(templates.EmbeddedBootstrapTemplate())
 		if err != nil {
 			return nil, fmt.Errorf("engine: build bootstrap renderer: %w", err)
 		}

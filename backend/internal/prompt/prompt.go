@@ -11,7 +11,6 @@ package prompt
 
 import (
 	"bytes"
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -19,9 +18,6 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 )
-
-//go:embed templates/system.tmpl
-var defaultSystemTmpl string
 
 // SingleID 是单段模式下 envelope 内唯一段的 id。translate stage 用它回写。
 const SingleID = "0"
@@ -89,16 +85,18 @@ type Renderer struct {
 }
 
 // NewRenderer 按配置创建 Renderer。
-// 优先级：SystemTemplateContent（内联内容）> SystemTemplate（文件路径）> 内置默认。
+// 优先级：SystemTemplateContent（内联内容）> SystemTemplate（文件路径）。
+// 缺少配置时直接报错，不再使用内置默认值。
 // UserTemplate 字段保留以兼容旧 yaml，但当前协议下不再使用，非空时构造会失败提醒。
 func NewRenderer(cfg config.PromptConfig) (*Renderer, error) {
 	if cfg.UserTemplate != "" {
 		return nil, fmt.Errorf("prompt: user_template is no longer supported (user message is built as JSON); remove it from config")
 	}
-	sys := defaultSystemTmpl
-	if cfg.SystemTemplateContent != "" {
-		sys = cfg.SystemTemplateContent // 内联内容优先
-	} else if cfg.SystemTemplate != "" {
+	if cfg.SystemTemplateContent == "" && cfg.SystemTemplate == "" {
+		return nil, fmt.Errorf("prompt: system_template_content and system_template are both empty; configure a prompt template in your config file")
+	}
+	sys := cfg.SystemTemplateContent
+	if cfg.SystemTemplate != "" {
 		b, err := os.ReadFile(cfg.SystemTemplate)
 		if err != nil {
 			return nil, fmt.Errorf("prompt: read system template: %w", err)
