@@ -846,6 +846,7 @@ const messages = {
       createdAt: '创建时间',
       noDescription: '暂无描述',
       noPromptContent: '暂无提示词内容',
+      noBootstrapPromptContent: '暂无 Bootstrap 提示词内容',
     },
     form: {
       name: '模板名称',
@@ -853,6 +854,8 @@ const messages = {
       description: '模板描述',
       descriptionPlaceholder: '简要说明模板的用途和适用场景',
       systemPromptContent: '系统提示词',
+      bootstrapPromptContent: 'Bootstrap 术语抽取提示词',
+      bootstrapPromptContentPlaceholder: '输入 Bootstrap 术语抽取提示词内容',
       contentPlaceholder: '输入提示词内容',
       insertBuiltinVar: '插入变量：',
     },

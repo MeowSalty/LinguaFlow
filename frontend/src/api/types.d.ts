@@ -1599,8 +1599,10 @@ export interface components {
             scope: components["schemas"]["PromptTemplateScope"];
             owner_user_id?: number;
             owner_org_id?: number;
-            /** @description 提示词内容。 */
+            /** @description 翻译提示词内容。 */
             system_prompt_content?: string;
+            /** @description Bootstrap 术语抽取提示词内容。启用 glossary.bootstrap 时必填。 */
+            bootstrap_prompt_content?: string;
             /** Format: date-time */
             created_at?: string;
             /** Format: date-time */
@@ -1612,14 +1614,18 @@ export interface components {
         CreatePromptTemplateRequest: {
             name: string;
             description?: string;
-            /** @description 提示词内容。 */
+            /** @description 翻译提示词内容。 */
             system_prompt_content?: string;
+            /** @description Bootstrap 术语抽取提示词内容。 */
+            bootstrap_prompt_content?: string;
         };
         UpdatePromptTemplateRequest: {
             name?: string;
             description?: string;
-            /** @description 提示词内容。 */
+            /** @description 翻译提示词内容。 */
             system_prompt_content?: string;
+            /** @description Bootstrap 术语抽取提示词内容。 */
+            bootstrap_prompt_content?: string;
         };
         TranslationProfile: {
             id: number;

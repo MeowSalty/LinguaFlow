@@ -6,13 +6,14 @@ import HighlightTextarea from '@/components/HighlightTextarea.vue'
 
 // ─── Props & Emits ──────────────────────────────────────────
 
-withDefaults(
+const props = withDefaults(
   defineProps<{
     modelValue: string
     disabled?: boolean
     rows?: number
+    variableSet?: 'system' | 'bootstrap'
   }>(),
-  { disabled: false, rows: 6 },
+  { disabled: false, rows: 6, variableSet: 'system' },
 )
 
 const emit = defineEmits<{
@@ -26,7 +27,7 @@ const editorRef = ref<InstanceType<typeof HighlightTextarea> | null>(null)
 
 // ─── 内置变量列表 ────────────────────────────────────────────
 
-const builtinVariables = [
+const systemVariables = [
   { key: 'SourceLang', label: '源语言' },
   { key: 'TargetLang', label: '目标语言' },
   { key: 'SourceContent', label: '源内容' },
@@ -37,6 +38,16 @@ const builtinVariables = [
   { key: 'OriginalText', label: '原始文本' },
   { key: 'TranslatedText', label: '已翻译文本' },
 ] as const
+
+const bootstrapVariables = [
+  { key: 'SourceLang', label: '源语言' },
+  { key: 'TargetLang', label: '目标语言' },
+  { key: 'MaxTerms', label: '最大术语数' },
+] as const
+
+const builtinVariables = computed(() =>
+  props.variableSet === 'bootstrap' ? bootstrapVariables : systemVariables,
+)
 
 // ─── 方法 ────────────────────────────────────────────────────
 

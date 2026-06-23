@@ -254,8 +254,14 @@ function onProtectRubyUpdate(field: string, value: unknown): void {
           <NSelect
             :value="configModel.protect?.ruby?.output_format ?? 'ruby_output'"
             :options="rubyOutputFormatOptions"
-            :disabled="disabled || !configModel.protect?.enabled || !(configModel.protect?.ruby?.enabled ?? false)"
-            @update:value="(val: 'ruby_output' | 'inline_markers') => onProtectRubyUpdate('output_format', val)"
+            :disabled="
+              disabled ||
+              !configModel.protect?.enabled ||
+              !(configModel.protect?.ruby?.enabled ?? false)
+            "
+            @update:value="
+              (val: 'ruby_output' | 'inline_markers') => onProtectRubyUpdate('output_format', val)
+            "
           />
         </NGi>
       </NGrid>
