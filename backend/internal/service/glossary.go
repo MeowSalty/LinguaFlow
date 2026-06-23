@@ -11,6 +11,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 )
 
 var (
@@ -132,6 +133,12 @@ func (s *GlossaryService) UpdateEntry(ctx context.Context, actorUserID, projectI
 func (s *GlossaryService) DeleteEntry(ctx context.Context, actorUserID, projectID, entryID int) error {
 	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true); err != nil {
 		return err
+	}
+	// 先删除关联的 SyncTask 记录，避免外键约束 NoAction 导致删除失败
+	if _, err := s.client.SyncTask.Delete().
+		Where(synctask.EntryIDEQ(entryID)).
+		Exec(ctx); err != nil {
+		return fmt.Errorf("delete sync tasks for entry %d: %w", entryID, err)
 	}
 	deleted, err := s.client.GlossaryEntry.Delete().
 		Where(glossaryentry.IDEQ(entryID), glossaryentry.ProjectIDEQ(projectID)).

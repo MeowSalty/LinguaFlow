@@ -8,6 +8,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -15,6 +16,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
@@ -193,7 +195,17 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 		}
 	}
 
-	// Step 2: 删除 TranslationJob
+	// Step 2: 删除 JobEvent（依赖 TranslationJob，NoAction）
+	if len(tjIDs) > 0 {
+		_, err = tx.JobEvent.Delete().
+			Where(jobevent.HasJobWith(translationjob.IDIn(tjIDs...))).
+			Exec(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("delete job events: %w", err)
+		}
+	}
+
+	// Step 3: 删除 TranslationJob
 	if len(tjIDs) > 0 {
 		_, err = tx.TranslationJob.Delete().
 			Where(translationjob.IDIn(tjIDs...)).
@@ -203,7 +215,7 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 		}
 	}
 
-	// Step 3: 删除 Segment（依赖 Resource）
+	// Step 4: 删除 Segment（依赖 Resource）
 	if len(resIDs) > 0 {
 		_, err = tx.Segment.Delete().
 			Where(segment.ResourceIDIn(resIDs...)).
@@ -213,7 +225,7 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 		}
 	}
 
-	// Step 4: 删除 Resource DB 记录
+	// Step 5: 删除 Resource DB 记录
 	if len(resIDs) > 0 {
 		_, err = tx.Resource.Delete().
 			Where(resource.IDIn(resIDs...)).
@@ -223,7 +235,15 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 		}
 	}
 
-	// Step 5: 删除 GlossaryEntry
+	// Step 6: 删除 SyncTask（必须在 GlossaryEntry 和 Project 之前，因为它同时依赖两者）
+	_, err = tx.SyncTask.Delete().
+		Where(synctask.ProjectIDEQ(projectID)).
+		Exec(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("delete sync tasks: %w", err)
+	}
+
+	// Step 7: 删除 GlossaryEntry
 	_, err = tx.GlossaryEntry.Delete().
 		Where(glossaryentry.HasProjectWith(project.IDEQ(projectID))).
 		Exec(ctx)
@@ -231,7 +251,7 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 		return nil, fmt.Errorf("delete glossary entries: %w", err)
 	}
 
-	// Step 6: 删除 TMEntry
+	// Step 8: 删除 TMEntry
 	_, err = tx.TMEntry.Delete().
 		Where(tmentry.HasProjectWith(project.IDEQ(projectID))).
 		Exec(ctx)
@@ -241,7 +261,7 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 
 	// ActivityLog 保留，SetNull 由 FK 策略自动处理
 
-	// Step 7: 删除 Project
+	// Step 9: 删除 Project
 	err = tx.Project.DeleteOneID(projectID).Exec(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("delete project: %w", err)
