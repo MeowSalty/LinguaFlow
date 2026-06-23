@@ -200,22 +200,9 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, fmt.Errorf("translate segments: %w", err))
 		return nil
 	}
-	// 有任何未解决段落就标记为 failed，避免部分失败时误标为 completed。
-	if result.UnresolvedCount > 0 {
-		actualCompleted := len(selectedRows) - result.UnresolvedCount
-		r.logger.Warn("translation partially failed: some segments could not be resolved",
-			"resource_id", item.ID,
-			"unresolved_count", result.UnresolvedCount,
-			"total_segments", len(selectedRows),
-			"completed_count", actualCompleted,
-		)
-		err := fmt.Errorf("%d/%d segments failed to translate (completed: %d): LLM could not preserve all protected placeholders after retries",
-			result.UnresolvedCount, len(selectedRows), actualCompleted)
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
-		return nil
-	}
 
-	// 6. 写回 DB
+	// 6. 先写回 DB，将成功翻译的段落持久化（updateTranslatedSegments 会跳过 Failed 和空译文段落）。
+	//    必须在 unresolved 检查之前执行，确保部分成功时已翻译的段落不会丢失。
 	selectedIDsByIndex := make(map[int]int, len(selectedRows))
 	for _, row := range selectedRows {
 		selectedIDsByIndex[row.SegmentIndex] = row.ID
@@ -224,12 +211,33 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
 	}
+
+	// 7. 写入成功后，再检查是否有未解决段落
+	if result.UnresolvedCount > 0 {
+		actualCompleted := len(selectedRows) - result.UnresolvedCount
+		r.logger.Warn("translation partially failed: some segments could not be resolved",
+			"resource_id", item.ID,
+			"unresolved_count", result.UnresolvedCount,
+			"total_segments", len(selectedRows),
+			"completed_count", actualCompleted,
+		)
+		// 记录成功部分的用量
+		_ = r.recordUsage(ctx, exec, actualCompleted)
+		// 记录已完成的段落数（MarkJobResourceFailed 不会设置此字段）
+		_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(actualCompleted).Exec(ctx)
+		err := fmt.Errorf("%d/%d segments failed to translate (completed: %d): LLM could not preserve all protected placeholders after retries",
+			result.UnresolvedCount, len(selectedRows), actualCompleted)
+		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
+		return nil
+	}
+
+	// 8. 全部成功：记录用量并标记完成
 	if err := r.recordUsage(ctx, exec, len(selectedRows)); err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
 	}
 
-	// 7. 标记完成（OutputPath 为空，不再依赖预生成文件）
+	// 9. 标记完成（OutputPath 为空，不再依赖预生成文件）
 	return r.jobs.MarkJobResourceCompleted(ctx, item.ID, "", len(selectedRows))
 }
 
