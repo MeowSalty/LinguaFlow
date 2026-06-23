@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -13,15 +14,17 @@ import (
 // ---- 请求/响应辅助结构体 ----
 
 type createPromptTemplateRequest struct {
-	Name                string  `json:"name"`
-	Description         *string `json:"description,omitempty"`
-	SystemPromptContent *string `json:"system_prompt_content,omitempty"`
+	Name                   string  `json:"name"`
+	Description            *string `json:"description,omitempty"`
+	SystemPromptContent    *string `json:"system_prompt_content,omitempty"`
+	BootstrapPromptContent *string `json:"bootstrap_prompt_content,omitempty"`
 }
 
 type updatePromptTemplateRequest struct {
-	Name                *string `json:"name,omitempty"`
-	Description         *string `json:"description,omitempty"`
-	SystemPromptContent *string `json:"system_prompt_content,omitempty"`
+	Name                   *string `json:"name,omitempty"`
+	Description            *string `json:"description,omitempty"`
+	SystemPromptContent    *string `json:"system_prompt_content,omitempty"`
+	BootstrapPromptContent *string `json:"bootstrap_prompt_content,omitempty"`
 }
 
 // ---- 辅助函数 ----
@@ -47,6 +50,9 @@ func entPromptTemplateToResponse(t *ent.PromptTemplate) PromptTemplate {
 	}
 	if t.SystemPromptContent != "" {
 		resp.SystemPromptContent = &t.SystemPromptContent
+	}
+	if t.BootstrapPromptContent != "" {
+		resp.BootstrapPromptContent = &t.BootstrapPromptContent
 	}
 	if t.OwnerUserID != nil {
 		resp.OwnerUserId = t.OwnerUserID
@@ -115,6 +121,9 @@ func (s *Server) handleCreatePromptTemplate(w http.ResponseWriter, r *http.Reque
 	if req.SystemPromptContent != nil {
 		input.SystemPromptContent = *req.SystemPromptContent
 	}
+	if req.BootstrapPromptContent != nil {
+		input.BootstrapPromptContent = *req.BootstrapPromptContent
+	}
 
 	pt, err := s.promptTemplateSvc.Create(r.Context(), input)
 	if err != nil {
@@ -156,9 +165,10 @@ func (s *Server) handleUpdatePromptTemplate(w http.ResponseWriter, r *http.Reque
 	}
 
 	input := service.UpdatePromptTemplateInput{
-		Name:                req.Name,
-		Description:         req.Description,
-		SystemPromptContent: req.SystemPromptContent,
+		Name:                   req.Name,
+		Description:            req.Description,
+		SystemPromptContent:    req.SystemPromptContent,
+		BootstrapPromptContent: req.BootstrapPromptContent,
 	}
 
 	pt, err := s.promptTemplateSvc.Update(r.Context(), id, input)
@@ -184,6 +194,10 @@ func (s *Server) handleDeletePromptTemplate(w http.ResponseWriter, r *http.Reque
 	if err != nil {
 		if err == service.ErrPromptTemplateNotFound {
 			writeProblem(w, http.StatusNotFound, "not_found", "提示词模板不存在")
+			return
+		}
+		if errors.Is(err, service.ErrPromptTemplateInUse) {
+			writeProblem(w, http.StatusConflict, "conflict", err.Error())
 			return
 		}
 		writeProblem(w, http.StatusInternalServerError, "internal_error", "删除提示词模板失败")

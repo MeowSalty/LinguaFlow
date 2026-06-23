@@ -50,8 +50,10 @@ type CLIConfigBackend struct {
 
 // CLIConfigPromptTemplate 提示词模板配置。
 type CLIConfigPromptTemplate struct {
-	Content string `yaml:"content"` // 内联内容
-	File    string `yaml:"file"`    // 外部文件引用（与 Content 二选一）
+	Content          string `yaml:"content"`           // 翻译提示词内联内容
+	File             string `yaml:"file"`              // 翻译提示词外部文件引用（与 Content 二选一）
+	BootstrapContent string `yaml:"bootstrap_content"` // bootstrap 模板内联内容
+	BootstrapFile    string `yaml:"bootstrap_file"`    // bootstrap 模板外部文件引用（与 BootstrapContent 二选一）
 }
 
 // CLIConfigTranslationProfile 翻译策略配置。
@@ -263,15 +265,24 @@ func resolveExternalReferences(cliCfg *CLIConfig, configDir string) error {
 
 	// ── prompt_templates ──
 	for name, pt := range cliCfg.PromptTemplates {
-		if pt.Content != "" || pt.File == "" {
-			continue
+		// 解析翻译提示词 file 引用
+		if pt.Content == "" && pt.File != "" {
+			content, err := readExternalFile(pt.File, absConfigDir)
+			if err != nil {
+				return fmt.Errorf("prompt_templates[%q].file: %w", name, err)
+			}
+			pt.Content = content
+			pt.File = ""
 		}
-		content, err := readExternalFile(pt.File, absConfigDir)
-		if err != nil {
-			return fmt.Errorf("prompt_templates[%q].file: %w", name, err)
+		// 解析 bootstrap 模板 file 引用
+		if pt.BootstrapContent == "" && pt.BootstrapFile != "" {
+			content, err := readExternalFile(pt.BootstrapFile, absConfigDir)
+			if err != nil {
+				return fmt.Errorf("prompt_templates[%q].bootstrap_file: %w", name, err)
+			}
+			pt.BootstrapContent = content
+			pt.BootstrapFile = ""
 		}
-		pt.Content = content
-		pt.File = ""
 		cliCfg.PromptTemplates[name] = pt
 	}
 
@@ -392,15 +403,24 @@ func resolveEmbeddedReferences(cliCfg *CLIConfig) error {
 
 	// ── prompt_templates ──
 	for name, pt := range cliCfg.PromptTemplates {
-		if pt.Content != "" || pt.File == "" {
-			continue
+		// 解析翻译提示词 file 引用
+		if pt.Content == "" && pt.File != "" {
+			data, err := fs.ReadFile(fsys, "default/"+pt.File)
+			if err != nil {
+				return fmt.Errorf("embedded prompt_templates[%q].file %q: %w", name, pt.File, err)
+			}
+			pt.Content = string(data)
+			pt.File = ""
 		}
-		data, err := fs.ReadFile(fsys, "default/"+pt.File)
-		if err != nil {
-			return fmt.Errorf("embedded prompt_templates[%q].file %q: %w", name, pt.File, err)
+		// 解析 bootstrap 模板 file 引用
+		if pt.BootstrapContent == "" && pt.BootstrapFile != "" {
+			data, err := fs.ReadFile(fsys, "default/"+pt.BootstrapFile)
+			if err != nil {
+				return fmt.Errorf("embedded prompt_templates[%q].bootstrap_file %q: %w", name, pt.BootstrapFile, err)
+			}
+			pt.BootstrapContent = string(data)
+			pt.BootstrapFile = ""
 		}
-		pt.Content = string(data)
-		pt.File = ""
 		cliCfg.PromptTemplates[name] = pt
 	}
 

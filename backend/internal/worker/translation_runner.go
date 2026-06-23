@@ -349,6 +349,7 @@ func buildStrategyConfig(snapshot *service.JobExecutionSnapshot) *config.Config 
 			Enabled: s.Glossary.Enabled,
 			Bootstrap: config.BootstrapConfig{
 				Mode:                   s.Glossary.Bootstrap.Mode,
+				TemplateContent:        snapshot.Rounds[0].Prompt.BootstrapContent,
 				Save:                   s.Glossary.Bootstrap.Save,
 				MaxTermsPerBatch:       s.Glossary.Bootstrap.MaxTermsPerBatch,
 				MinSourceLen:           s.Glossary.Bootstrap.MinSourceLen,

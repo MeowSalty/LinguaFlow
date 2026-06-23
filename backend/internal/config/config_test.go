@@ -104,3 +104,67 @@ func TestValidate_UniqueBackendNames(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Bootstrap 模板必填校验
+// ---------------------------------------------------------------------------
+
+func TestValidate_BootstrapTemplateRequired_PreMode(t *testing.T) {
+	cfg := Default()
+	cfg.Glossary.Bootstrap.Mode = BootstrapModePre
+	cfg.Glossary.Bootstrap.Template = "" // 缺少模板引用
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for missing bootstrap template in pre mode")
+	}
+	if !strings.Contains(err.Error(), "glossary.bootstrap.template is required") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestValidate_BootstrapTemplateRequired_InlineMode(t *testing.T) {
+	cfg := Default()
+	cfg.Glossary.Bootstrap.Mode = BootstrapModeInline
+	cfg.Glossary.Bootstrap.Template = "" // 缺少模板引用
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for missing bootstrap template in inline mode")
+	}
+	if !strings.Contains(err.Error(), "glossary.bootstrap.template is required") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestValidate_BootstrapTemplateNotRequired_OffMode(t *testing.T) {
+	cfg := Default()
+	cfg.Glossary.Bootstrap.Mode = BootstrapModeOff
+	cfg.Glossary.Bootstrap.Template = "" // off 模式下不要求模板
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("unexpected error in off mode: %v", err)
+	}
+}
+
+func TestValidate_BootstrapTemplateProvided(t *testing.T) {
+	cfg := Default()
+	cfg.Glossary.Bootstrap.Mode = BootstrapModePre
+	cfg.Glossary.Bootstrap.Template = "通用提示词" // 提供模板引用
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("unexpected error when template is provided: %v", err)
+	}
+	// 校验 Glossary 被自动开启
+	if !cfg.Glossary.Enabled {
+		t.Error("expected glossary.enabled to be auto-set to true when bootstrap mode is not off")
+	}
+}
+
+func TestValidate_BootstrapModeInvalid(t *testing.T) {
+	cfg := Default()
+	cfg.Glossary.Bootstrap.Mode = "invalid"
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for invalid bootstrap mode")
+	}
+	if !strings.Contains(err.Error(), "glossary.bootstrap.mode must be one of") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}

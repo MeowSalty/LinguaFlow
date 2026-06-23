@@ -30,6 +30,8 @@ const (
 	FieldOwnerOrgID = "owner_org_id"
 	// FieldSystemPromptContent holds the string denoting the system_prompt_content field in the database.
 	FieldSystemPromptContent = "system_prompt_content"
+	// FieldBootstrapPromptContent holds the string denoting the bootstrap_prompt_content field in the database.
+	FieldBootstrapPromptContent = "bootstrap_prompt_content"
 	// EdgeOwnerUser holds the string denoting the owner_user edge name in mutations.
 	EdgeOwnerUser = "owner_user"
 	// EdgeOwnerOrg holds the string denoting the owner_org edge name in mutations.
@@ -63,6 +65,7 @@ var Columns = []string{
 	FieldOwnerUserID,
 	FieldOwnerOrgID,
 	FieldSystemPromptContent,
+	FieldBootstrapPromptContent,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -94,6 +97,8 @@ var (
 	OwnerOrgIDValidator func(int) error
 	// DefaultSystemPromptContent holds the default value on creation for the "system_prompt_content" field.
 	DefaultSystemPromptContent string
+	// DefaultBootstrapPromptContent holds the default value on creation for the "bootstrap_prompt_content" field.
+	DefaultBootstrapPromptContent string
 )
 
 // OrderOption defines the ordering options for the PromptTemplate queries.
@@ -142,6 +147,11 @@ func ByOwnerOrgID(opts ...sql.OrderTermOption) OrderOption {
 // BySystemPromptContent orders the results by the system_prompt_content field.
 func BySystemPromptContent(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldSystemPromptContent, opts...).ToFunc()
+}
+
+// ByBootstrapPromptContent orders the results by the bootstrap_prompt_content field.
+func ByBootstrapPromptContent(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldBootstrapPromptContent, opts...).ToFunc()
 }
 
 // ByOwnerUserField orders the results by owner_user field.

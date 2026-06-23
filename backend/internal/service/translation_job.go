@@ -140,9 +140,10 @@ type BackendSnapshot struct {
 
 // PromptSnapshot 提示词模板快照。
 type PromptSnapshot struct {
-	TemplateID   *int   `json:"template_id,omitempty"`
-	TemplateName string `json:"template_name"`
-	Content      string `json:"content"`
+	TemplateID       *int   `json:"template_id,omitempty"`
+	TemplateName     string `json:"template_name"`
+	Content          string `json:"content"`
+	BootstrapContent string `json:"bootstrap_content,omitempty"`
 }
 
 // StrategySnapshot 策略模板快照。
@@ -297,6 +298,17 @@ func (s *TranslationJobService) validateAndSnapshot(
 			return nil, fmt.Errorf("rounds[%d] snapshot profile: %w", i, err)
 		}
 
+		// 校验翻译模板必填
+		if promptSnap.Content == "" {
+			return nil, fmt.Errorf("rounds[%d] prompt_template %q has no system_prompt_content (translation prompt is required)", i, promptSnap.TemplateName)
+		}
+
+		// 校验 bootstrap 模板必填（当 bootstrap 启用时）
+		if strategySnap.Glossary.Bootstrap.Mode != "off" && promptSnap.BootstrapContent == "" {
+			return nil, fmt.Errorf("rounds[%d] prompt_template %q has no bootstrap_prompt_content (required when glossary.bootstrap.mode is %q)",
+				i, promptSnap.TemplateName, strategySnap.Glossary.Bootstrap.Mode)
+		}
+
 		snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
 			Name:            round.Name,
 			Backend:         *backendSnap,
@@ -381,9 +393,10 @@ func (s *TranslationJobService) snapshotPromptTemplate(ctx context.Context, temp
 	}
 	id := pt.ID
 	return &PromptSnapshot{
-		TemplateID:   &id,
-		TemplateName: pt.Name,
-		Content:      pt.SystemPromptContent,
+		TemplateID:       &id,
+		TemplateName:     pt.Name,
+		Content:          pt.SystemPromptContent,
+		BootstrapContent: pt.BootstrapPromptContent,
 	}, nil
 }
 

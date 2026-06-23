@@ -24,7 +24,9 @@ func (PromptTemplate) Fields() []ent.Field {
 		field.Int("owner_user_id").Optional().Nillable().Positive(),
 		field.Int("owner_org_id").Optional().Nillable().Positive(),
 		field.Text("system_prompt_content").Default("").
-			Comment("提示词内容"),
+			Comment("翻译提示词内容"),
+		field.Text("bootstrap_prompt_content").Default("").
+			Comment("Bootstrap 术语抽取提示词内容"),
 	}
 }
 

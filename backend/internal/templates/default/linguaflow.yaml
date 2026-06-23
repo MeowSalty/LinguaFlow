@@ -50,6 +50,8 @@ prompt_templates:
   通用提示词:
     # 引用 prompts/ 目录下的提示词模板文件（Go template 格式）
     file: prompts/default.tmpl
+    # 引用 prompts/ 目录下的 bootstrap 模板文件（Go template 格式）
+    bootstrap_file: prompts/bootstrap_system.tmpl
 
 # ─────────────────────────────────────────────────────────────
 # 翻译策略配置
@@ -103,6 +105,8 @@ glossary:
   bootstrap:
     # 模式：off=关闭，pre=翻译前独立扫描整篇文档，inline=翻译时顺带抽取
     mode: "off"
+    # 引用 prompt_templates 中定义的模板名称，用于 bootstrap 的系统提示词
+    template: 通用提示词
     # 翻译结束后是否将增量术语回写到 glossary 文件
     save: true
     # 每批最大抽取术语数

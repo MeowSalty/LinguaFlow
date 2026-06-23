@@ -322,6 +322,7 @@ var (
 		{Name: "description", Type: field.TypeString, Default: ""},
 		{Name: "scope", Type: field.TypeString, Default: "user"},
 		{Name: "system_prompt_content", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "bootstrap_prompt_content", Type: field.TypeString, Size: 2147483647, Default: ""},
 		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
 		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
 	}
@@ -333,13 +334,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "prompt_templates_organizations_prompt_templates",
-				Columns:    []*schema.Column{PromptTemplatesColumns[7]},
+				Columns:    []*schema.Column{PromptTemplatesColumns[8]},
 				RefColumns: []*schema.Column{OrganizationsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "prompt_templates_users_prompt_templates",
-				Columns:    []*schema.Column{PromptTemplatesColumns[8]},
+				Columns:    []*schema.Column{PromptTemplatesColumns[9]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},

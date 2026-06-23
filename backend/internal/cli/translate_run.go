@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -11,7 +12,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
 
 type translateOptions struct {
@@ -107,10 +107,10 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 	firstRound := cliCfg.Execution.Rounds[0]
 	firstProfile := resolveProfile(cliCfg, firstRound.Profile)
 
-	// 全局 Prompt 配置：使用第一轮的提示词模板作为回退
+	// 全局 Prompt 配置：翻译模板必填，不再回退到内置默认值
 	firstPromptContent := resolvePromptContent(cliCfg, firstRound.Prompt)
 	if firstPromptContent == "" {
-		firstPromptContent = templates.EmbeddedPromptTemplate()
+		return nil, fmt.Errorf("prompt_templates %q has no content (translation prompt is required)", firstRound.Prompt)
 	}
 
 	cfg := &config.Config{
@@ -138,6 +138,27 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 		Plugins:           cliCfg.Plugins,
 		Output:            cliCfg.Output,
 		Log:               cliCfg.Log,
+	}
+
+	// ── 1b. 解析 bootstrap 模板引用 ──
+	if cliCfg.Glossary.Bootstrap.Mode != config.BootstrapModeOff {
+		pt, ok := cliCfg.PromptTemplates[cliCfg.Glossary.Bootstrap.Template]
+		if !ok {
+			return nil, fmt.Errorf("prompt_templates %q not found (referenced by glossary.bootstrap.template)", cliCfg.Glossary.Bootstrap.Template)
+		}
+		bootstrapContent := pt.BootstrapContent
+		if bootstrapContent == "" && pt.BootstrapFile != "" {
+			data, err := os.ReadFile(pt.BootstrapFile)
+			if err != nil {
+				return nil, fmt.Errorf("read bootstrap file %q: %w", pt.BootstrapFile, err)
+			}
+			bootstrapContent = string(data)
+		}
+		if bootstrapContent == "" {
+			return nil, fmt.Errorf("prompt_templates %q has no bootstrap_content (required when glossary.bootstrap.mode is %q)",
+				cliCfg.Glossary.Bootstrap.Template, cliCfg.Glossary.Bootstrap.Mode)
+		}
+		cfg.Glossary.Bootstrap.TemplateContent = bootstrapContent
 	}
 
 	// ── 2. 构造每轮配置 ──

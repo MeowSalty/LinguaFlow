@@ -33,8 +33,10 @@ type PromptTemplate struct {
 	OwnerUserID *int `json:"owner_user_id,omitempty"`
 	// OwnerOrgID holds the value of the "owner_org_id" field.
 	OwnerOrgID *int `json:"owner_org_id,omitempty"`
-	// 提示词内容
+	// 翻译提示词内容
 	SystemPromptContent string `json:"system_prompt_content,omitempty"`
+	// Bootstrap 术语抽取提示词内容
+	BootstrapPromptContent string `json:"bootstrap_prompt_content,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the PromptTemplateQuery when eager-loading is set.
 	Edges        PromptTemplateEdges `json:"edges"`
@@ -81,7 +83,7 @@ func (*PromptTemplate) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case prompttemplate.FieldID, prompttemplate.FieldOwnerUserID, prompttemplate.FieldOwnerOrgID:
 			values[i] = new(sql.NullInt64)
-		case prompttemplate.FieldName, prompttemplate.FieldDescription, prompttemplate.FieldScope, prompttemplate.FieldSystemPromptContent:
+		case prompttemplate.FieldName, prompttemplate.FieldDescription, prompttemplate.FieldScope, prompttemplate.FieldSystemPromptContent, prompttemplate.FieldBootstrapPromptContent:
 			values[i] = new(sql.NullString)
 		case prompttemplate.FieldCreatedAt, prompttemplate.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -156,6 +158,12 @@ func (_m *PromptTemplate) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.SystemPromptContent = value.String
 			}
+		case prompttemplate.FieldBootstrapPromptContent:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field bootstrap_prompt_content", values[i])
+			} else if value.Valid {
+				_m.BootstrapPromptContent = value.String
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -229,6 +237,9 @@ func (_m *PromptTemplate) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("system_prompt_content=")
 	builder.WriteString(_m.SystemPromptContent)
+	builder.WriteString(", ")
+	builder.WriteString("bootstrap_prompt_content=")
+	builder.WriteString(_m.BootstrapPromptContent)
 	builder.WriteByte(')')
 	return builder.String()
 }

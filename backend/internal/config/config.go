@@ -139,10 +139,12 @@ type GlossaryConfig struct {
 //   - off：完全不处理，沿用旧行为（First-Wins + 不一致译文）。
 type BootstrapConfig struct {
 	Mode                   string `yaml:"mode"`
+	Template               string `yaml:"template"` // 引用 prompt_templates 中的 key
 	Save                   bool   `yaml:"save"`
 	MaxTermsPerBatch       int    `yaml:"max_terms_per_batch"`
 	MinSourceLen           int    `yaml:"min_source_len"`
 	InlineConflictStrategy string `yaml:"inline_conflict_strategy"`
+	TemplateContent        string `yaml:"-"` // 运行时解析后的 bootstrap 模板内容（不序列化）
 }
 
 // Bootstrap 模式常量。
@@ -381,6 +383,10 @@ func (c *Config) Validate() error {
 	if c.Glossary.Bootstrap.Mode != BootstrapModeOff {
 		// 自举要落到 Glossary，强制开启。
 		c.Glossary.Enabled = true
+		// bootstrap 模板引用必填。
+		if c.Glossary.Bootstrap.Template == "" {
+			return fmt.Errorf("glossary.bootstrap.template is required when mode is %q", c.Glossary.Bootstrap.Mode)
+		}
 	}
 	switch c.Glossary.Bootstrap.InlineConflictStrategy {
 	case "":

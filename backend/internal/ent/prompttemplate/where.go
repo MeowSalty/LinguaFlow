@@ -95,6 +95,11 @@ func SystemPromptContent(v string) predicate.PromptTemplate {
 	return predicate.PromptTemplate(sql.FieldEQ(FieldSystemPromptContent, v))
 }
 
+// BootstrapPromptContent applies equality check predicate on the "bootstrap_prompt_content" field. It's identical to BootstrapPromptContentEQ.
+func BootstrapPromptContent(v string) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldEQ(FieldBootstrapPromptContent, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.PromptTemplate {
 	return predicate.PromptTemplate(sql.FieldEQ(FieldCreatedAt, v))
@@ -493,6 +498,71 @@ func SystemPromptContentEqualFold(v string) predicate.PromptTemplate {
 // SystemPromptContentContainsFold applies the ContainsFold predicate on the "system_prompt_content" field.
 func SystemPromptContentContainsFold(v string) predicate.PromptTemplate {
 	return predicate.PromptTemplate(sql.FieldContainsFold(FieldSystemPromptContent, v))
+}
+
+// BootstrapPromptContentEQ applies the EQ predicate on the "bootstrap_prompt_content" field.
+func BootstrapPromptContentEQ(v string) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldEQ(FieldBootstrapPromptContent, v))
+}
+
+// BootstrapPromptContentNEQ applies the NEQ predicate on the "bootstrap_prompt_content" field.
+func BootstrapPromptContentNEQ(v string) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldNEQ(FieldBootstrapPromptContent, v))
+}
+
+// BootstrapPromptContentIn applies the In predicate on the "bootstrap_prompt_content" field.
+func BootstrapPromptContentIn(vs ...string) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldIn(FieldBootstrapPromptContent, vs...))
+}
+
+// BootstrapPromptContentNotIn applies the NotIn predicate on the "bootstrap_prompt_content" field.
+func BootstrapPromptContentNotIn(vs ...string) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldNotIn(FieldBootstrapPromptContent, vs...))
+}
+
+// BootstrapPromptContentGT applies the GT predicate on the "bootstrap_prompt_content" field.
+func BootstrapPromptContentGT(v string) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldGT(FieldBootstrapPromptContent, v))
+}
+
+// BootstrapPromptContentGTE applies the GTE predicate on the "bootstrap_prompt_content" field.
+func BootstrapPromptContentGTE(v string) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldGTE(FieldBootstrapPromptContent, v))
+}
+
+// BootstrapPromptContentLT applies the LT predicate on the "bootstrap_prompt_content" field.
+func BootstrapPromptContentLT(v string) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldLT(FieldBootstrapPromptContent, v))
+}
+
+// BootstrapPromptContentLTE applies the LTE predicate on the "bootstrap_prompt_content" field.
+func BootstrapPromptContentLTE(v string) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldLTE(FieldBootstrapPromptContent, v))
+}
+
+// BootstrapPromptContentContains applies the Contains predicate on the "bootstrap_prompt_content" field.
+func BootstrapPromptContentContains(v string) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldContains(FieldBootstrapPromptContent, v))
+}
+
+// BootstrapPromptContentHasPrefix applies the HasPrefix predicate on the "bootstrap_prompt_content" field.
+func BootstrapPromptContentHasPrefix(v string) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldHasPrefix(FieldBootstrapPromptContent, v))
+}
+
+// BootstrapPromptContentHasSuffix applies the HasSuffix predicate on the "bootstrap_prompt_content" field.
+func BootstrapPromptContentHasSuffix(v string) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldHasSuffix(FieldBootstrapPromptContent, v))
+}
+
+// BootstrapPromptContentEqualFold applies the EqualFold predicate on the "bootstrap_prompt_content" field.
+func BootstrapPromptContentEqualFold(v string) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldEqualFold(FieldBootstrapPromptContent, v))
+}
+
+// BootstrapPromptContentContainsFold applies the ContainsFold predicate on the "bootstrap_prompt_content" field.
+func BootstrapPromptContentContainsFold(v string) predicate.PromptTemplate {
+	return predicate.PromptTemplate(sql.FieldContainsFold(FieldBootstrapPromptContent, v))
 }
 
 // HasOwnerUser applies the HasEdge predicate on the "owner_user" edge.

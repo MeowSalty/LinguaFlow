@@ -373,6 +373,10 @@ func init() {
 	prompttemplateDescSystemPromptContent := prompttemplateFields[5].Descriptor()
 	// prompttemplate.DefaultSystemPromptContent holds the default value on creation for the system_prompt_content field.
 	prompttemplate.DefaultSystemPromptContent = prompttemplateDescSystemPromptContent.Default.(string)
+	// prompttemplateDescBootstrapPromptContent is the schema descriptor for bootstrap_prompt_content field.
+	prompttemplateDescBootstrapPromptContent := prompttemplateFields[6].Descriptor()
+	// prompttemplate.DefaultBootstrapPromptContent holds the default value on creation for the bootstrap_prompt_content field.
+	prompttemplate.DefaultBootstrapPromptContent = prompttemplateDescBootstrapPromptContent.Default.(string)
 	refreshtokenMixin := schema.RefreshToken{}.Mixin()
 	refreshtokenMixinFields0 := refreshtokenMixin[0].Fields()
 	_ = refreshtokenMixinFields0

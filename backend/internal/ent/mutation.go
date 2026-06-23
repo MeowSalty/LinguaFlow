@@ -9033,23 +9033,24 @@ func (m *ProjectMutation) ResetEdge(name string) error {
 // PromptTemplateMutation represents an operation that mutates the PromptTemplate nodes in the graph.
 type PromptTemplateMutation struct {
 	config
-	op                    Op
-	typ                   string
-	id                    *int
-	created_at            *time.Time
-	updated_at            *time.Time
-	name                  *string
-	description           *string
-	scope                 *string
-	system_prompt_content *string
-	clearedFields         map[string]struct{}
-	owner_user            *int
-	clearedowner_user     bool
-	owner_org             *int
-	clearedowner_org      bool
-	done                  bool
-	oldValue              func(context.Context) (*PromptTemplate, error)
-	predicates            []predicate.PromptTemplate
+	op                       Op
+	typ                      string
+	id                       *int
+	created_at               *time.Time
+	updated_at               *time.Time
+	name                     *string
+	description              *string
+	scope                    *string
+	system_prompt_content    *string
+	bootstrap_prompt_content *string
+	clearedFields            map[string]struct{}
+	owner_user               *int
+	clearedowner_user        bool
+	owner_org                *int
+	clearedowner_org         bool
+	done                     bool
+	oldValue                 func(context.Context) (*PromptTemplate, error)
+	predicates               []predicate.PromptTemplate
 }
 
 var _ ent.Mutation = (*PromptTemplateMutation)(nil)
@@ -9464,6 +9465,42 @@ func (m *PromptTemplateMutation) ResetSystemPromptContent() {
 	m.system_prompt_content = nil
 }
 
+// SetBootstrapPromptContent sets the "bootstrap_prompt_content" field.
+func (m *PromptTemplateMutation) SetBootstrapPromptContent(s string) {
+	m.bootstrap_prompt_content = &s
+}
+
+// BootstrapPromptContent returns the value of the "bootstrap_prompt_content" field in the mutation.
+func (m *PromptTemplateMutation) BootstrapPromptContent() (r string, exists bool) {
+	v := m.bootstrap_prompt_content
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldBootstrapPromptContent returns the old "bootstrap_prompt_content" field's value of the PromptTemplate entity.
+// If the PromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PromptTemplateMutation) OldBootstrapPromptContent(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldBootstrapPromptContent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldBootstrapPromptContent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldBootstrapPromptContent: %w", err)
+	}
+	return oldValue.BootstrapPromptContent, nil
+}
+
+// ResetBootstrapPromptContent resets all changes to the "bootstrap_prompt_content" field.
+func (m *PromptTemplateMutation) ResetBootstrapPromptContent() {
+	m.bootstrap_prompt_content = nil
+}
+
 // ClearOwnerUser clears the "owner_user" edge to the User entity.
 func (m *PromptTemplateMutation) ClearOwnerUser() {
 	m.clearedowner_user = true
@@ -9552,7 +9589,7 @@ func (m *PromptTemplateMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *PromptTemplateMutation) Fields() []string {
-	fields := make([]string, 0, 8)
+	fields := make([]string, 0, 9)
 	if m.created_at != nil {
 		fields = append(fields, prompttemplate.FieldCreatedAt)
 	}
@@ -9576,6 +9613,9 @@ func (m *PromptTemplateMutation) Fields() []string {
 	}
 	if m.system_prompt_content != nil {
 		fields = append(fields, prompttemplate.FieldSystemPromptContent)
+	}
+	if m.bootstrap_prompt_content != nil {
+		fields = append(fields, prompttemplate.FieldBootstrapPromptContent)
 	}
 	return fields
 }
@@ -9601,6 +9641,8 @@ func (m *PromptTemplateMutation) Field(name string) (ent.Value, bool) {
 		return m.OwnerOrgID()
 	case prompttemplate.FieldSystemPromptContent:
 		return m.SystemPromptContent()
+	case prompttemplate.FieldBootstrapPromptContent:
+		return m.BootstrapPromptContent()
 	}
 	return nil, false
 }
@@ -9626,6 +9668,8 @@ func (m *PromptTemplateMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldOwnerOrgID(ctx)
 	case prompttemplate.FieldSystemPromptContent:
 		return m.OldSystemPromptContent(ctx)
+	case prompttemplate.FieldBootstrapPromptContent:
+		return m.OldBootstrapPromptContent(ctx)
 	}
 	return nil, fmt.Errorf("unknown PromptTemplate field %s", name)
 }
@@ -9690,6 +9734,13 @@ func (m *PromptTemplateMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetSystemPromptContent(v)
+		return nil
+	case prompttemplate.FieldBootstrapPromptContent:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetBootstrapPromptContent(v)
 		return nil
 	}
 	return fmt.Errorf("unknown PromptTemplate field %s", name)
@@ -9781,6 +9832,9 @@ func (m *PromptTemplateMutation) ResetField(name string) error {
 		return nil
 	case prompttemplate.FieldSystemPromptContent:
 		m.ResetSystemPromptContent()
+		return nil
+	case prompttemplate.FieldBootstrapPromptContent:
+		m.ResetBootstrapPromptContent()
 		return nil
 	}
 	return fmt.Errorf("unknown PromptTemplate field %s", name)

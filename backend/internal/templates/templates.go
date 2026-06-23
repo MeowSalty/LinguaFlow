@@ -106,11 +106,12 @@ var builtinPromptTemplate *ent.PromptTemplate
 func init() {
 	meta := parseBuiltinConfig()
 	builtinPromptTemplate = &ent.PromptTemplate{
-		ID:                  BuiltinPromptTemplateID,
-		Name:                meta.PromptTemplate.Name,
-		Description:         meta.PromptTemplate.Description,
-		Scope:               "system",
-		SystemPromptContent: EmbeddedPromptTemplate(),
+		ID:                     BuiltinPromptTemplateID,
+		Name:                   meta.PromptTemplate.Name,
+		Description:            meta.PromptTemplate.Description,
+		Scope:                  "system",
+		SystemPromptContent:    EmbeddedPromptTemplate(),
+		BootstrapPromptContent: EmbeddedBootstrapTemplate(),
 	}
 }
 
