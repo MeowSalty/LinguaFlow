@@ -2912,7 +2912,10 @@ components:
           type: integer
         system_prompt_content:
           type: string
-          description: 提示词内容。
+          description: 翻译提示词内容。
+        bootstrap_prompt_content:
+          type: string
+          description: Bootstrap 术语抽取提示词内容。启用 glossary.bootstrap 时必填。
         created_at:
           type: string
           format: date-time
@@ -2939,7 +2942,10 @@ components:
           type: string
         system_prompt_content:
           type: string
-          description: 提示词内容。
+          description: 翻译提示词内容。
+        bootstrap_prompt_content:
+          type: string
+          description: Bootstrap 术语抽取提示词内容。
       additionalProperties: false
     UpdatePromptTemplateRequest:
       type: object
@@ -2950,7 +2956,10 @@ components:
           type: string
         system_prompt_content:
           type: string
-          description: 提示词内容。
+          description: 翻译提示词内容。
+        bootstrap_prompt_content:
+          type: string
+          description: Bootstrap 术语抽取提示词内容。
       additionalProperties: false
     TranslationProfile:
       type: object
