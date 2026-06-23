@@ -56,9 +56,22 @@ type SplitConfig struct {
 }
 
 type ProtectConfig struct {
-	Enabled bool     `yaml:"enabled"`
-	Rules   []string `yaml:"rules"`
+	Enabled bool       `yaml:"enabled"`
+	Rules   []string   `yaml:"rules"`
+	Ruby    RubyConfig `yaml:"ruby"`
 }
+
+// RubyConfig 控制 Ruby 注音保护的行为。
+type RubyConfig struct {
+	Enabled      bool   `yaml:"enabled"`
+	OutputFormat string `yaml:"output_format"` // "ruby_output" (默认) | "inline_markers"
+}
+
+// Ruby 输出格式常量。
+const (
+	RubyOutputInlineMarkers = "inline_markers"
+	RubyOutputDefault       = "ruby_output"
+)
 
 type TranslateConfig struct {
 	Concurrency     int          `yaml:"concurrency"`
@@ -238,8 +251,12 @@ func Default() *Config {
 			},
 		}},
 		Pipeline: PipelineConfig{
-			Split:   SplitConfig{Enabled: true, Strategy: "paragraph", MaxChars: 1200},
-			Protect: ProtectConfig{Enabled: true, Rules: []string{"code", "link", "placeholder", "xml"}},
+			Split: SplitConfig{Enabled: true, Strategy: "paragraph", MaxChars: 1200},
+			Protect: ProtectConfig{
+				Enabled: true,
+				Rules:   []string{"code", "link", "placeholder", "xml"},
+				Ruby:    RubyConfig{Enabled: false, OutputFormat: RubyOutputDefault},
+			},
 			Translate: TranslateConfig{
 				Concurrency:     4,
 				BatchSize:       1,
@@ -336,6 +353,15 @@ func (c *Config) Validate() error {
 	}
 	if c.Pipeline.Split.MaxChars < 1 {
 		c.Pipeline.Split.MaxChars = 1200
+	}
+	switch c.Pipeline.Protect.Ruby.OutputFormat {
+	case "":
+		c.Pipeline.Protect.Ruby.OutputFormat = RubyOutputDefault
+	case RubyOutputDefault, RubyOutputInlineMarkers:
+		// ok
+	default:
+		return fmt.Errorf("pipeline.protect.ruby.output_format must be one of %s|%s, got %q",
+			RubyOutputDefault, RubyOutputInlineMarkers, c.Pipeline.Protect.Ruby.OutputFormat)
 	}
 	c.Pipeline.Translate.Repair.Normalize()
 	if c.Glossary.Bootstrap.MaxTermsPerBatch < 1 {

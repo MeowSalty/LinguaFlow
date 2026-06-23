@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 )
 
 // Options 控制各层修复算子的启用。零值（所有 bool=false）等于"不修复"——
@@ -28,12 +29,13 @@ type Options struct {
 //   - Fatal=false 且 Missing 非空：partial。调用方据 Options.PartialThreshold 决定
 //     仅对缺失 ID 单独重试，还是因缺失率过高放弃。
 type Result struct {
-	Trans    map[string]string
-	Glos     []prompt.BootstrapEntry
-	Missing  []string // wantIDs 中未出现在 Trans 里的子集
-	Repaired []string // 修复算子链，便于日志诊断
-	Fatal    bool
-	ParseErr error
+	Trans      map[string]string
+	Glos       []prompt.BootstrapEntry
+	RubyOutput map[string][]protect.RubyOutputEntry // segment ID → ruby 输出条目
+	Missing    []string                             // wantIDs 中未出现在 Trans 里的子集
+	Repaired   []string                             // 修复算子链，便于日志诊断
+	Fatal      bool
+	ParseErr   error
 }
 
 // TryRepair 尝试解析 LLM 响应 text 为 envelope {"translations":{...}, "glossary":[...]}。
@@ -135,6 +137,13 @@ func finalizeResult(raw map[string]any, wantIDs []string, repaired []string, opt
 		}
 	}
 
+	var rubyOutput map[string][]protect.RubyOutputEntry
+	if rubyRaw, ok := raw["ruby_output"]; ok {
+		if b, mErr := json.Marshal(rubyRaw); mErr == nil {
+			_ = json.Unmarshal(b, &rubyOutput)
+		}
+	}
+
 	var missing []string
 	for _, id := range wantIDs {
 		if _, ok := trans[id]; !ok {
@@ -143,10 +152,11 @@ func finalizeResult(raw map[string]any, wantIDs []string, repaired []string, opt
 	}
 
 	return Result{
-		Trans:    trans,
-		Glos:     glos,
-		Missing:  missing,
-		Repaired: repaired,
+		Trans:      trans,
+		Glos:       glos,
+		RubyOutput: rubyOutput,
+		Missing:    missing,
+		Repaired:   repaired,
 	}
 }
 

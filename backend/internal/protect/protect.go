@@ -161,11 +161,11 @@ func MissingPlaceholders(seg *pipeline.Segment) []string {
 	return missing
 }
 
-// FromRules 按规则名（"code"/"link"/"placeholder"/"ruby"/"xml"）构造 Protector。
+// FromRules 按规则名（"code"/"link"/"placeholder"/"xml"）构造 Protector。
 // 未知规则名会被忽略。
 //
-// 注意规则顺序：ruby 必须在 xml 之前，因为 RubyProtector 替换 <rt> 内的
-// 文本内容为占位符，随后 XMLProtector 再替换 <rt> 和 </rt> 标签本身。
+// 注意：不再处理 "ruby"，RubyProtector 由 buildPipeline 根据 ruby.enabled
+// 单独控制，在其他 Protector 之前运行（先剥离 ruby 标签，再处理剩余 XML）。
 func FromRules(rules []string) Protector {
 	var ps []Protector
 	for _, r := range rules {
@@ -176,8 +176,6 @@ func FromRules(rules []string) Protector {
 			ps = append(ps, &LinkProtector{})
 		case "placeholder":
 			ps = append(ps, &PlaceholderProtector{})
-		case "ruby":
-			ps = append(ps, &RubyProtector{})
 		case "xml":
 			ps = append(ps, &XMLProtector{})
 		}

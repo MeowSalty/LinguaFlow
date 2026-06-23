@@ -54,6 +54,7 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *pipeline.Docum
 	minIdx, maxIdx := idxs[0], idxs[len(idxs)-1]
 	prev, next := prompt.BuildContextRange(doc, minIdx, maxIdx)
 
+	rubyAnns := extractRubyAnnotationsFromDoc(doc, idxs)
 	data := prompt.Data{
 		SourceLang:        doc.SourceLang,
 		TargetLang:        doc.TargetLang,
@@ -66,6 +67,8 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *pipeline.Docum
 		InlineBootstrap:   s.InlineBootstrap,
 		MaxBootstrapTerms: s.maxBootstrapTerms(),
 		StrictSchema:      true,
+		RubyAnnotations:   rubyAnns,
+		RubyOutputFormat:  s.RubyOutputFormat,
 	}
 	sys, usr, err := renderer.Render(data)
 	if err != nil {
@@ -75,7 +78,7 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *pipeline.Docum
 	req := backend.Request{
 		System:     sys,
 		User:       usr,
-		JSONSchema: translationsSchema(wantIDs, s.InlineBootstrap),
+		JSONSchema: translationsSchema(wantIDs, s.InlineBootstrap, s.RubyOutputFormat != ""),
 	}
 
 	var (
@@ -163,7 +166,7 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *pipeline.Docum
 			"missing", len(res.Missing))
 	}
 
-	trans, glosEntries := res.Trans, res.Glos
+	trans, glosEntries, rubyOutputMap := res.Trans, res.Glos, res.RubyOutput
 
 	logger.Debug("batch translated",
 		"backend", picked.Name(), "batch_size", len(idxs),
@@ -185,6 +188,16 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *pipeline.Docum
 		if !ok {
 			missingIdxs = append(missingIdxs, idx)
 			continue
+		}
+		// 分发 ruby_output 到各段
+		if rubyOutputMap != nil {
+			id := wantIDs[k]
+			if ro, rok := rubyOutputMap[id]; rok && len(ro) > 0 {
+				if seg.Meta == nil {
+					seg.Meta = make(map[string]any)
+				}
+				seg.Meta["ruby_output"] = ro
+			}
 		}
 		// L3 占位符归一化：仅 normalize seg.Protected 中已知 key 的变体。
 		if repairOpts.PlaceholderNormalize {

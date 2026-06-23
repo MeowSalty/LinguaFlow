@@ -20,7 +20,7 @@ import (
 
 func TestParseBatchResponse_OK(t *testing.T) {
 	resp := `{"translations":{"1":"hello","2":"world"}}`
-	got, glos, err := parseBatchResponse(resp, []string{"1", "2"})
+	got, glos, rubyOut, err := parseBatchResponse(resp, []string{"1", "2"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -30,11 +30,14 @@ func TestParseBatchResponse_OK(t *testing.T) {
 	if glos != nil {
 		t.Errorf("glossary should be nil when field absent, got %#v", glos)
 	}
+	if rubyOut != nil {
+		t.Errorf("ruby_output should be nil when field absent, got %#v", rubyOut)
+	}
 }
 
 func TestParseBatchResponse_PreservesInternalNewlines(t *testing.T) {
 	resp := `{"translations":{"1":"line1\nline2"}}`
-	got, _, err := parseBatchResponse(resp, []string{"1"})
+	got, _, _, err := parseBatchResponse(resp, []string{"1"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -45,14 +48,14 @@ func TestParseBatchResponse_PreservesInternalNewlines(t *testing.T) {
 
 func TestParseBatchResponse_MissingID(t *testing.T) {
 	resp := `{"translations":{"1":"a"}}`
-	if _, _, err := parseBatchResponse(resp, []string{"1", "2"}); err == nil {
+	if _, _, _, err := parseBatchResponse(resp, []string{"1", "2"}); err == nil {
 		t.Fatal("expected error for missing id")
 	}
 }
 
 func TestParseBatchResponse_ExtraID(t *testing.T) {
 	resp := `{"translations":{"1":"a","2":"b","3":"c"}}`
-	_, _, err := parseBatchResponse(resp, []string{"1", "2"})
+	_, _, _, err := parseBatchResponse(resp, []string{"1", "2"})
 	if err == nil {
 		t.Fatal("expected error for extra translation")
 	}
@@ -61,7 +64,7 @@ func TestParseBatchResponse_ExtraID(t *testing.T) {
 func TestParseBatchResponse_IgnoresCodeFenceAndPreamble(t *testing.T) {
 	// 模型偶尔在 JSON 前后多说话或加 ``` 围栏；只要能找到 {…} 就接受。
 	resp := "Sure! Here you go:\n```json\n{\"translations\":{\"1\":\"a\",\"2\":\"b\"}}\n```\nDone."
-	got, _, err := parseBatchResponse(resp, []string{"1", "2"})
+	got, _, _, err := parseBatchResponse(resp, []string{"1", "2"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -73,7 +76,7 @@ func TestParseBatchResponse_IgnoresCodeFenceAndPreamble(t *testing.T) {
 func TestParseBatchResponse_HandlesEscapedBraceInValue(t *testing.T) {
 	// 译文里出现 `}` 或转义引号时，jsonObjectSlice 必须能正确配对。
 	resp := `{"translations":{"1":"value with } and \"quote\" inside"}}`
-	got, _, err := parseBatchResponse(resp, []string{"1"})
+	got, _, _, err := parseBatchResponse(resp, []string{"1"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -84,14 +87,14 @@ func TestParseBatchResponse_HandlesEscapedBraceInValue(t *testing.T) {
 }
 
 func TestParseBatchResponse_NotJSON(t *testing.T) {
-	if _, _, err := parseBatchResponse("totally not json", []string{"1"}); err == nil {
+	if _, _, _, err := parseBatchResponse("totally not json", []string{"1"}); err == nil {
 		t.Fatal("expected error")
 	}
 }
 
 func TestParseBatchResponse_ParsesInlineGlossary(t *testing.T) {
 	resp := `{"translations":{"1":"你好"},"glossary":[{"source":"Hello","target":"你好","notes":""},{"source":"World","target":"世界","notes":"greeting suffix"}]}`
-	got, glos, err := parseBatchResponse(resp, []string{"1"})
+	got, glos, _, err := parseBatchResponse(resp, []string{"1"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -108,7 +111,7 @@ func TestParseBatchResponse_ParsesInlineGlossary(t *testing.T) {
 
 func TestParseBatchResponse_EmptyGlossaryArray(t *testing.T) {
 	resp := `{"translations":{"1":"a"},"glossary":[]}`
-	got, glos, err := parseBatchResponse(resp, []string{"1"})
+	got, glos, _, err := parseBatchResponse(resp, []string{"1"})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -121,7 +124,7 @@ func TestParseBatchResponse_EmptyGlossaryArray(t *testing.T) {
 }
 
 func TestTranslationsSchema_NoGlossary(t *testing.T) {
-	schema := translationsSchema([]string{"1", "2", "3"}, false)
+	schema := translationsSchema([]string{"1", "2", "3"}, false, false)
 	if schema["additionalProperties"] != false {
 		t.Errorf("outer additionalProperties should be false")
 	}
@@ -154,7 +157,7 @@ func TestTranslationsSchema_NoGlossary(t *testing.T) {
 }
 
 func TestTranslationsSchema_WithGlossary(t *testing.T) {
-	schema := translationsSchema([]string{"1"}, true)
+	schema := translationsSchema([]string{"1"}, true, false)
 	outerRequired, _ := schema["required"].([]string)
 	if !reflect.DeepEqual(outerRequired, []string{"translations", "glossary"}) {
 		t.Errorf("outer required should list both fields, got %#v", outerRequired)

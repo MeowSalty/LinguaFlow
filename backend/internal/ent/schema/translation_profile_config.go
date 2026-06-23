@@ -21,8 +21,15 @@ type ProfileSplitConfig struct {
 
 // ProfileProtectConfig 保护规则配置。
 type ProfileProtectConfig struct {
-	Enabled bool     `json:"enabled" yaml:"enabled"`
-	Rules   []string `json:"rules"   yaml:"rules"`
+	Enabled bool              `json:"enabled" yaml:"enabled"`
+	Rules   []string          `json:"rules"   yaml:"rules"`
+	Ruby    ProfileRubyConfig `json:"ruby"    yaml:"ruby"`
+}
+
+// ProfileRubyConfig Ruby 注音保护配置。
+type ProfileRubyConfig struct {
+	Enabled      bool   `json:"enabled"       yaml:"enabled"`
+	OutputFormat string `json:"output_format" yaml:"output_format"`
 }
 
 // ProfilePostprocessConfig 后处理配置。
@@ -68,6 +75,7 @@ func DefaultProfileConfig() TranslationProfileConfigData {
 		Protect: ProfileProtectConfig{
 			Enabled: true,
 			Rules:   []string{"code", "link", "placeholder", "xml"},
+			Ruby:    ProfileRubyConfig{Enabled: false, OutputFormat: "ruby_output"},
 		},
 		Postprocess: ProfilePostprocessConfig{
 			Enabled:    true,

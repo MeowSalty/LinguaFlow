@@ -28,7 +28,14 @@ type pipelineOptions struct {
 func (e *Engine) buildPipeline(opts pipelineOptions) (*pipeline.Pipeline, backend.RateLimiter) {
 	pc := e.cfg.Pipeline
 
-	protector := protect.FromRules(pc.Protect.Rules)
+	// 构建 protector 列表：RubyProtector 从 rules 中独立出来，由 ruby.enabled 控制。
+	// RubyProtector 必须在其他 protector 之前运行（剥离 ruby 标签后再处理剩余 XML）。
+	var ps []protect.Protector
+	if pc.Protect.Ruby.Enabled {
+		ps = append(ps, &protect.RubyProtector{})
+	}
+	ps = append(ps, protect.FromRules(pc.Protect.Rules))
+	protector := protect.Compose(ps...)
 
 	// limiter 作为局部变量，不存入 e.limiter 字段，避免并发竞态。
 	limiter := backend.NewRateLimiter(pc.Translate.RateLimitPerSec)
@@ -81,9 +88,15 @@ func (e *Engine) buildPipeline(opts pipelineOptions) (*pipeline.Pipeline, backen
 		MinBootstrapSourceLen:     e.cfg.Glossary.Bootstrap.MinSourceLen,
 		InlineConflictStrategy:    e.cfg.Glossary.Bootstrap.InlineConflictStrategy,
 		Repair:                    repairOpts,
+		RubyOutputFormat:          pc.Protect.Ruby.OutputFormat,
 	})
 	if pc.Protect.Enabled {
 		s = append(s, stages.NewUnprotect(protector))
+	}
+	// 如果启用 ruby 注音保护，在 unprotect 之后添加 restore stage。
+	if pc.Protect.Ruby.Enabled {
+		restorer := protect.NewRubyRestorer(pc.Protect.Ruby.OutputFormat)
+		s = append(s, stages.NewRubyRestore(restorer, e.logger))
 	}
 	return pipeline.New(e.logger, s...), limiter
 }

@@ -7,40 +7,43 @@ import (
 	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 )
 
 // parseBatchResponse 解析 {"translations":{"<id>":"<text>", ...}} 并校验 wantIDs 完整。
 // 当响应携带 inline 抽取的 {"glossary":[...]} 时，一并解析返回；缺失视作空切片。
+// 当响应携带 {"ruby_output":{...}} 时，一并解析返回；缺失视作 nil。
 // 容错：模型有时把 JSON 包在 ```json … ``` 围栏里或夹带前后说明文字，
 // 这里用 jsonObjectSlice 抽出第一段完整的 JSON 对象。
 //
 // 这是严格语义：缺一 ID 即 err、多一 ID 即 err；调用方包括 translateSingle 的 S5
 // 占位符补救路径仍依赖该行为。批量主路径走 parseBatchResponseLenient（允许 partial）。
-func parseBatchResponse(text string, wantIDs []string) (map[string]string, []prompt.BootstrapEntry, error) {
+func parseBatchResponse(text string, wantIDs []string) (map[string]string, []prompt.BootstrapEntry, map[string][]protect.RubyOutputEntry, error) {
 	body := jsonObjectSlice(text)
 	if body == "" {
-		return nil, nil, fmt.Errorf("no JSON object found in response")
+		return nil, nil, nil, fmt.Errorf("no JSON object found in response")
 	}
 	var env struct {
-		Translations map[string]string       `json:"translations"`
-		Glossary     []prompt.BootstrapEntry `json:"glossary"`
+		Translations map[string]string                    `json:"translations"`
+		Glossary     []prompt.BootstrapEntry              `json:"glossary"`
+		RubyOutput   map[string][]protect.RubyOutputEntry `json:"ruby_output"`
 	}
 	if err := json.Unmarshal([]byte(body), &env); err != nil {
-		return nil, nil, fmt.Errorf("unmarshal translations: %w", err)
+		return nil, nil, nil, fmt.Errorf("unmarshal translations: %w", err)
 	}
 	if env.Translations == nil {
-		return nil, nil, errors.New("response missing \"translations\" field")
+		return nil, nil, nil, errors.New("response missing \"translations\" field")
 	}
 	for _, id := range wantIDs {
 		if _, ok := env.Translations[id]; !ok {
-			return nil, nil, fmt.Errorf("missing translation for id %q", id)
+			return nil, nil, nil, fmt.Errorf("missing translation for id %q", id)
 		}
 	}
 	if len(env.Translations) != len(wantIDs) {
-		return nil, nil, fmt.Errorf("expected %d translations, got %d", len(wantIDs), len(env.Translations))
+		return nil, nil, nil, fmt.Errorf("expected %d translations, got %d", len(wantIDs), len(env.Translations))
 	}
-	return env.Translations, env.Glossary, nil
+	return env.Translations, env.Glossary, env.RubyOutput, nil
 }
 
 // parseBatchResponseLenient 是 parseBatchResponse 的"宽容"版本：委托 repair.TryRepair
@@ -95,7 +98,9 @@ func jsonObjectSlice(text string) string {
 // 要求 translations 下的属性集合与 wantIDs 完全一致。
 // 当 includeGlossary=true 时，在外层属性里再加一个 "glossary" 数组，要求 items 严格匹配
 // {source,target,notes}；外层 required 同步加入 "glossary"。
-func translationsSchema(wantIDs []string, includeGlossary bool) map[string]any {
+// 当 includeRuby=true 时，在外层属性里加一个 "ruby_output" 对象，按 wantIDs 键控，
+// 每个值为 {base,text} 数组；ruby_output 不加入 required（LLM 可以不输出）。
+func translationsSchema(wantIDs []string, includeGlossary bool, includeRuby bool) map[string]any {
 	props := make(map[string]any, len(wantIDs))
 	for _, id := range wantIDs {
 		props[id] = map[string]any{"type": "string"}
@@ -127,6 +132,30 @@ func translationsSchema(wantIDs []string, includeGlossary bool) map[string]any {
 		}
 		outerRequired = append(outerRequired, "glossary")
 	}
+
+	if includeRuby {
+		rubyOutputProps := make(map[string]any)
+		for _, id := range wantIDs {
+			rubyOutputProps[id] = map[string]any{
+				"type": "array",
+				"items": map[string]any{
+					"type": "object",
+					"properties": map[string]any{
+						"base": map[string]any{"type": "string"},
+						"text": map[string]any{"type": "string"},
+					},
+					"required":             []string{"base", "text"},
+					"additionalProperties": false,
+				},
+			}
+		}
+		outerProps["ruby_output"] = map[string]any{
+			"type":       "object",
+			"properties": rubyOutputProps,
+		}
+		// ruby_output 不加入 outerRequired，允许 LLM 不输出
+	}
+
 	return map[string]any{
 		"type":                 "object",
 		"properties":           outerProps,

@@ -271,60 +271,93 @@ func TestCompose_Unprotect_AdjacentPlaceholders(t *testing.T) {
 	}
 }
 
-// S9: RubyProtector 单独 round-trip。
-func TestRubyProtector_RoundTrip(t *testing.T) {
-	cases := []string{
-		`<ruby>呪<rt>じゅ</rt></ruby>`,
-		`<ruby>勤<rt>いそ</rt></ruby>`,
-		`<ruby>微<rt>ほほ</rt></ruby><ruby>笑<rt>え</rt></ruby>`,
-		`plain text without ruby`,
-		`<ruby>椎名<rt>しいな</rt></ruby>`,
+// S9: RubyProtector Protect 应剥离 ruby 标签并存储注音到 Meta。
+// 注音还原委托给 RubyRestorer（RubyRestore stage），而非 Unprotect。
+func TestRubyProtector_ProtectAndRestore(t *testing.T) {
+	restorer := NewRubyRestorer("ruby_output")
+
+	cases := []struct {
+		input    string
+		base     string // protect 后 Source 应仅保留基底文本
+		restored string // 还原后期望的 Target（相邻逐字注音会被合并为词级注音）
+	}{
+		{`<ruby>呪<rt>じゅ</rt></ruby>`, `呪`, `<ruby>呪<rt>じゅ</rt></ruby>`},
+		{`<ruby>勤<rt>いそ</rt></ruby>`, `勤`, `<ruby>勤<rt>いそ</rt></ruby>`},
+		// 相邻 per-kanji ruby 被合并为词级注音
+		{`<ruby>微<rt>ほほ</rt></ruby><ruby>笑<rt>え</rt></ruby>`, `微笑`, `<ruby>微笑<rt>ほほえ</rt></ruby>`},
+		{`plain text without ruby`, `plain text without ruby`, `plain text without ruby`},
+		{`<ruby>椎名<rt>しいな</rt></ruby>`, `椎名`, `<ruby>椎名<rt>しいな</rt></ruby>`},
 	}
-	for _, c := range cases {
-		roundTrip(t, &RubyProtector{}, c)
+	for _, tc := range cases {
+		seg := &pipeline.Segment{Source: tc.input}
+		if err := (&RubyProtector{}).Protect(seg); err != nil {
+			t.Fatalf("protect(%q): %v", tc.input, err)
+		}
+		if seg.Source != tc.base {
+			t.Errorf("protect(%q): got source %q, want %q", tc.input, seg.Source, tc.base)
+		}
+
+		// 模拟 LLM 返回：target = 保护后的 source
+		seg.Target = seg.Source
+
+		// 通过 RubyRestorer 还原注音：从 Meta 中提取 ruby_annotations 并转换
+		if seg.Meta != nil {
+			if annotations, ok := seg.Meta["ruby_annotations"].([]RubyAnnotation); ok {
+				rubyOutput := make([]RubyOutputEntry, len(annotations))
+				for i, a := range annotations {
+					rubyOutput[i] = RubyOutputEntry{Base: a.Base, Text: a.Text}
+				}
+				if err := restorer.Restore(seg, rubyOutput); err != nil {
+					t.Fatalf("restore(%q): %v", tc.input, err)
+				}
+			}
+		}
+
+		if seg.Target != tc.restored {
+			t.Errorf("round-trip(%q):\n  want: %q\n  got:  %q", tc.input, tc.restored, seg.Target)
+		}
 	}
 }
 
-// S10: RubyProtector 保护后 <rt> 内容应被替换为占位符，但标签保留。
+// S10: RubyProtector 保护后 ruby 标签应被剥离，基底文本保留，注音存入 Meta。
 func TestRubyProtector_ProtectsContent(t *testing.T) {
 	seg := &pipeline.Segment{Source: `<ruby>呪<rt>じゅ</rt></ruby>`}
 	if err := (&RubyProtector{}).Protect(seg); err != nil {
 		t.Fatal(err)
 	}
-	// 标签应保留
-	if !strings.Contains(seg.Source, "<rt>") {
-		t.Errorf("<rt> tag lost: %q", seg.Source)
+	// ruby 标签应被剥离
+	if strings.Contains(seg.Source, "<ruby>") {
+		t.Errorf("<ruby> tag should be stripped: %q", seg.Source)
 	}
-	if !strings.Contains(seg.Source, "</rt>") {
-		t.Errorf("</rt> tag lost: %q", seg.Source)
+	if strings.Contains(seg.Source, "<rt>") {
+		t.Errorf("<rt> tag should be stripped: %q", seg.Source)
 	}
-	if !strings.Contains(seg.Source, "<ruby>") {
-		t.Errorf("<ruby> tag lost: %q", seg.Source)
-	}
-	if !strings.Contains(seg.Source, "</ruby>") {
-		t.Errorf("</ruby> tag lost: %q", seg.Source)
-	}
-	// 注音内容应被保护
+	// 注音内容不应出现在 Source 中
 	if strings.Contains(seg.Source, "じゅ") {
 		t.Errorf("furigana not protected: %q", seg.Source)
 	}
+	// 基底文本应保留
+	if !strings.Contains(seg.Source, "呪") {
+		t.Errorf("kanji lost: %q", seg.Source)
+	}
+	// 注音应存入 Meta
+	if seg.Meta == nil {
+		t.Fatal("Meta is nil after protect")
+	}
+	annotations, ok := seg.Meta["ruby_annotations"].([]RubyAnnotation)
+	if !ok {
+		t.Fatalf("ruby_annotations not found or wrong type in Meta: %v", seg.Meta)
+	}
+	if len(annotations) == 0 {
+		t.Fatal("ruby_annotations is empty")
+	}
+	if annotations[0].Base != "呪" || annotations[0].Text != "じゅ" {
+		t.Errorf("annotation mismatch: got base=%q text=%q, want base=呪 text=じゅ",
+			annotations[0].Base, annotations[0].Text)
+	}
 }
 
-// S11: RubyProtector + XMLProtector 组合 round-trip（模拟实际使用）。
-func TestCompose_RubyAndXML_RoundTrip(t *testing.T) {
-	cases := []string{
-		`<ruby>呪<rt>じゅ</rt></ruby>`,
-		`────</span><ruby>椎名<rt>しいな</rt></ruby>`,
-		`<ruby>微<rt>ほほ</rt></ruby><ruby>笑<rt>え</rt></ruby>`,
-		`click <a href="x">here</a> with <ruby>呪<rt>じゅ</rt></ruby>`,
-	}
-	p := Compose(&RubyProtector{}, &XMLProtector{})
-	for _, c := range cases {
-		roundTrip(t, p, c)
-	}
-}
-
-// S12: RubyProtector + XMLProtector 组合保护后，LLM 看不到注音内容。
+// S11: RubyProtector + XMLProtector 组合保护后，LLM 看不到注音内容。
 func TestCompose_RubyAndXML_HidesContent(t *testing.T) {
 	seg := &pipeline.Segment{Source: `<ruby>呪<rt>じゅ</rt></ruby>`}
 	p := Compose(&RubyProtector{}, &XMLProtector{})
@@ -341,11 +374,21 @@ func TestCompose_RubyAndXML_HidesContent(t *testing.T) {
 	}
 }
 
-// S13: FromRules("ruby") 应返回包含 RubyProtector 的组合保护器。
-func TestFromRules_WithRuby(t *testing.T) {
+// S12: FromRules 不再处理 "ruby"，RubyProtector 由 buildPipeline 单独处理。
+func TestFromRules_NoRuby(t *testing.T) {
 	p := FromRules([]string{"code", "link", "placeholder", "ruby", "xml"})
 	source := `<ruby>呪<rt>じゅ</rt></ruby>`
-	roundTrip(t, p, source)
+	seg := &pipeline.Segment{Source: source}
+	if err := p.Protect(seg); err != nil {
+		t.Fatal(err)
+	}
+	// FromRules 不含 RubyProtector，所以 ruby 标签应原样保留给 XMLProtector 处理
+	// 但 "じゅ" 不应通过 RubyProtector 被提取
+	if seg.Meta != nil {
+		if _, ok := seg.Meta["ruby_annotations"]; ok {
+			t.Error("FromRules should not include RubyProtector")
+		}
+	}
 }
 
 // S14: 无 <rt> 标签时 RubyProtector 不影响内容。
@@ -386,15 +429,46 @@ func TestMergeAdjacentPlaceholders_MergedValue(t *testing.T) {
 	}
 }
 
-// S16: mergeAdjacentPlaceholders 合并后 round-trip 应正确还原。
+// S16: RubyProtector + XMLProtector + mergeAdjacentPlaceholders + RubyRestorer 完整 round-trip。
+// 模拟实际 pipeline：Protect → LLM → Unprotect → RubyRestore。
 func TestMergeAdjacentPlaceholders_RoundTrip(t *testing.T) {
-	cases := []string{
-		`<ruby>呪<rt>じゅ</rt></ruby>`,
-		`────</span><ruby>椎名<rt>しいな</rt></ruby>`,
-		`<ruby>微<rt>ほほ</rt></ruby><ruby>笑<rt>え</rt></ruby>`,
+	restorer := NewRubyRestorer("ruby_output")
+	cases := []struct {
+		input    string
+		restored string // 还原后期望的 Target（相邻逐字注音会被合并为词级注音）
+	}{
+		{`<ruby>呪<rt>じゅ</rt></ruby>`, `<ruby>呪<rt>じゅ</rt></ruby>`},
+		{`────</span><ruby>椎名<rt>しいな</rt></ruby>`, `────</span><ruby>椎名<rt>しいな</rt></ruby>`},
+		{`<ruby>微<rt>ほほ</rt></ruby><ruby>笑<rt>え</rt></ruby>`, `<ruby>微笑<rt>ほほえ</rt></ruby>`},
 	}
 	p := Compose(&RubyProtector{}, &XMLProtector{})
-	for _, c := range cases {
-		roundTrip(t, p, c)
+	for _, tc := range cases {
+		seg := &pipeline.Segment{Source: tc.input}
+		if err := p.Protect(seg); err != nil {
+			t.Fatalf("protect(%q): %v", tc.input, err)
+		}
+		// 模拟 LLM 返回
+		seg.Target = seg.Source
+		// Unprotect 还原 XML 占位符
+		if err := p.Unprotect(seg); err != nil {
+			t.Fatalf("unprotect(%q): %v", tc.input, err)
+		}
+		// RubyRestorer 还原注音
+		if seg.Meta != nil {
+			if annotations, ok := seg.Meta["ruby_annotations"].([]RubyAnnotation); ok {
+				rubyOutput := make([]RubyOutputEntry, len(annotations))
+				for i, a := range annotations {
+					rubyOutput[i] = RubyOutputEntry{Base: a.Base, Text: a.Text}
+				}
+				if len(rubyOutput) > 0 {
+					if err := restorer.Restore(seg, rubyOutput); err != nil {
+						t.Fatalf("restore(%q): %v", tc.input, err)
+					}
+				}
+			}
+		}
+		if seg.Target != tc.restored {
+			t.Errorf("round-trip(%q):\n  want: %q\n  got:  %q", tc.input, tc.restored, seg.Target)
+		}
 	}
 }

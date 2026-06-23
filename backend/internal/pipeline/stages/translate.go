@@ -15,6 +15,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
@@ -83,6 +84,12 @@ type Translate struct {
 	// （行为与旧 strict 路径一致）；启用后，processBatchInRound 改走 lenient 解析，
 	// 在 fatal / partial 时分别决定 shrink 或仅对缺失段单独重试。
 	Repair repair.Options
+
+	// RubyOutputFormat 控制 LLM 返回注音的方式：
+	//   - "ruby_output"：LLM 在 ruby_output 字段返回结构化注音数据
+	//   - "inline_markers"：LLM 在译文中插入 ⟦ruby:base/text⟧ 标记
+	//   - ""（空）：不启用注音处理
+	RubyOutputFormat string
 }
 
 func (*Translate) Name() string { return "translate" }
@@ -313,4 +320,29 @@ func isPlaceholderOnly(seg *pipeline.Segment) bool {
 		text = strings.ReplaceAll(text, key, "")
 	}
 	return strings.TrimSpace(text) == ""
+}
+
+// extractRubyAnnotationsFromDoc 从 Document 中提取指定段的注音信息。
+// 返回 map[segmentID]annotations，供 prompt.Data 使用。
+func extractRubyAnnotationsFromDoc(doc *pipeline.Document, idxs []int) map[string][]prompt.RubyAnnotation {
+	result := make(map[string][]prompt.RubyAnnotation)
+	for _, idx := range idxs {
+		seg := doc.Segments[idx]
+		raw, ok := seg.Meta["ruby_annotations"]
+		if !ok {
+			continue
+		}
+		annots, ok := raw.([]protect.RubyAnnotation)
+		if !ok {
+			continue
+		}
+		converted := make([]prompt.RubyAnnotation, len(annots))
+		for i, a := range annots {
+			converted[i] = prompt.RubyAnnotation{Base: a.Base, Text: a.Text}
+		}
+		if len(converted) > 0 {
+			result[seg.ID] = converted
+		}
+	}
+	return result
 }

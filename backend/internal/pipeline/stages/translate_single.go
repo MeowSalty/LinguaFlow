@@ -31,6 +31,7 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Do
 	glos, tmHints := s.lookupHints(ctx, doc, []int{idx}, logger)
 	prev, next := prompt.BuildContext(doc, idx)
 
+	rubyAnns := extractRubyAnnotationsFromDoc(doc, []int{idx})
 	data := prompt.Data{
 		SourceLang:        doc.SourceLang,
 		TargetLang:        doc.TargetLang,
@@ -43,6 +44,8 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Do
 		InlineBootstrap:   s.InlineBootstrap,
 		MaxBootstrapTerms: s.maxBootstrapTerms(),
 		StrictSchema:      true,
+		RubyAnnotations:   rubyAnns,
+		RubyOutputFormat:  s.RubyOutputFormat,
 	}
 	sys, usr, err := renderer.Render(data)
 	if err != nil {
@@ -53,12 +56,13 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Do
 	req := backend.Request{
 		System:     sys,
 		User:       usr,
-		JSONSchema: translationsSchema(wantIDs, s.InlineBootstrap),
+		JSONSchema: translationsSchema(wantIDs, s.InlineBootstrap, s.RubyOutputFormat != ""),
 	}
 	var (
 		resp        *backend.Response
 		trans       map[string]string
 		glosEntries []prompt.BootstrapEntry
+		rubyOutput  map[string][]protect.RubyOutputEntry
 		picked      backend.Backend
 	)
 	for _, b := range round.Backends {
@@ -74,7 +78,7 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Do
 			continue
 		}
 		var perr error
-		trans, glosEntries, perr = parseBatchResponse(resp.Text, wantIDs)
+		trans, glosEntries, rubyOutput, perr = parseBatchResponse(resp.Text, wantIDs)
 		if perr != nil {
 			logger.Warn("single response parse failed, trying next backend",
 				"seg", seg.ID, "backend", b.Name(), "err", perr,
@@ -93,6 +97,16 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Do
 		"prompt_tokens", resp.Usage.PromptTokens,
 		"completion_tokens", resp.Usage.CompletionTokens,
 		"inline_glossary", len(glosEntries))
+	// 存储 ruby_output 到 seg.Meta
+	if rubyOutput != nil {
+		if ro, ok := rubyOutput[prompt.SingleID]; ok && len(ro) > 0 {
+			if seg.Meta == nil {
+				seg.Meta = make(map[string]any)
+			}
+			seg.Meta["ruby_output"] = ro
+		}
+	}
+
 	// 先吸收术语并就地修正冲突，再做占位符 normalize / 写回 seg.Target——保证
 	// absorbInlineGlossary 能对 trans 做并发冲突修正，避免文档内同一术语翻译不一致。
 	s.absorbInlineGlossary(ctx, glosEntries, trans, doc.TargetLang, logger)
@@ -131,7 +145,7 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Do
 			seg.Target = ""
 			return false, nil
 		}
-		trans2, glos2, perr2 := parseBatchResponse(resp2.Text, wantIDs)
+		trans2, glos2, rubyOutput2, perr2 := parseBatchResponse(resp2.Text, wantIDs)
 		if perr2 != nil {
 			logger.Warn("placeholder retry response parse failed, defer to next round",
 				"seg", seg.ID, "backend", picked.Name(), "err", perr2)
@@ -139,6 +153,15 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Do
 			return false, nil
 		}
 		s.absorbInlineGlossary(ctx, glos2, trans2, doc.TargetLang, logger)
+		// 占位符补救路径也存储 ruby_output
+		if rubyOutput2 != nil {
+			if ro, ok := rubyOutput2[prompt.SingleID]; ok && len(ro) > 0 {
+				if seg.Meta == nil {
+					seg.Meta = make(map[string]any)
+				}
+				seg.Meta["ruby_output"] = ro
+			}
+		}
 		target2 := trans2[prompt.SingleID]
 		if repairOpts.PlaceholderNormalize {
 			if normText, normalized := repair.NormalizePlaceholders(target2, seg.Protected); len(normalized) > 0 {
