@@ -42,8 +42,6 @@ CreateProjectRequest:
   properties:
     name:
       type: string
-    owner_org_id:
-      type: integer
     config:
       type: object
       additionalProperties: true

@@ -39,6 +39,8 @@ paths:
     $ref: './paths/projects.yaml#/projects'
   /projects/{projectId}:
     $ref: './paths/projects.yaml#/projectById'
+  /orgs/{orgId}/projects:
+    $ref: './paths/projects.yaml#/orgProjects'
   /projects/{projectId}/resources:
     $ref: './paths/resources.yaml#/projectResources'
   /projects/{projectId}/resources/precheck:
