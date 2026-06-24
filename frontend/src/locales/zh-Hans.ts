@@ -252,6 +252,10 @@ const messages = {
       scope: '资源范围',
       organization: '所属组织',
       organizationPlaceholder: '选择组织',
+      ownerType: '项目归属',
+      personal: '个人',
+      orgOwner: '组织',
+      comingSoon: '还没做',
     },
     validation: {
       nameRequired: '请输入项目名称',

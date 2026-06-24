@@ -513,3 +513,35 @@ export const approveAllSegments = async (
 
   return data
 }
+
+export const createOrgProject = async (
+  orgId: number,
+  payload: ApiSchemas['CreateProjectRequest'],
+  client: ApiClient = apiClient,
+): Promise<ApiSchemas['Project']> => {
+  const { data, error, response } = await client.POST('/orgs/{orgId}/projects', {
+    params: { path: { orgId } },
+    body: payload,
+  })
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.createProjectFailed'), error, response)
+  }
+
+  return data
+}
+
+export const fetchOrgProjects = async (
+  orgId: number,
+  client: ApiClient = apiClient,
+): Promise<ApiSchemas['ProjectListResponse']> => {
+  const { data, error, response } = await client.GET('/orgs/{orgId}/projects', {
+    params: { path: { orgId } },
+  })
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.fetchProjectsFailed'), error, response)
+  }
+
+  return data
+}

@@ -17,7 +17,7 @@ interface ProjectFormModel {
   name: string
   source_lang: string
   target_lang: string
-  owner_org_id: number | null
+  owner_type: 'personal' | 'organization'
 }
 
 const route = useRoute()
@@ -33,7 +33,7 @@ const formModel = reactive<ProjectFormModel>({
   name: '',
   source_lang: 'auto',
   target_lang: 'zh-Hans',
-  owner_org_id: null,
+  owner_type: 'personal',
 })
 
 const targetLanguageOptions = computed<SelectOption[]>(() => [
@@ -53,17 +53,7 @@ const sourceLanguageOptions = computed<SelectOption[]>(() => [
   ...targetLanguageOptions.value,
 ])
 
-
-const organizationOptions = computed<SelectOption[]>(() =>
-  projects.organizations.map((organization) => ({
-    label: organization.display_name?.trim() || organization.name,
-    value: organization.id,
-  })),
-)
-
-const hasActiveFilters = computed(
-  () => projects.searchQuery.trim().length > 0,
-)
+const hasActiveFilters = computed(() => projects.searchQuery.trim().length > 0)
 
 const isEditMode = computed(() => Boolean(editingProject.value))
 const drawerTitle = computed(() =>
@@ -100,37 +90,28 @@ const rules = computed<FormRules>(() => ({
       trigger: ['change', 'blur'],
     },
   ],
-  owner_org_id: [],
 }))
 
 const resetForm = (): void => {
   formModel.name = ''
   formModel.source_lang = 'auto'
   formModel.target_lang = 'en-US'
-  formModel.owner_org_id = null
+  formModel.owner_type = 'personal'
 }
 
-const ensureOrganizationsLoaded = async (): Promise<void> => {
-  if (projects.organizations.length === 0 && !projects.organizationsLoading) {
-    await projects.loadOrganizations()
-  }
-}
-
-const openCreateDrawer = async (): Promise<void> => {
+const openCreateDrawer = (): void => {
   editingProject.value = null
   resetForm()
   drawerVisible.value = true
-  await ensureOrganizationsLoaded()
 }
 
-const openEditDrawer = async (project: Project): Promise<void> => {
+const openEditDrawer = (project: Project): void => {
   editingProject.value = project
   formModel.name = project.name
   formModel.source_lang = project.source_lang || 'auto'
   formModel.target_lang = project.target_lang || 'en-US'
-  formModel.owner_org_id = project.owner_org_id ?? null
+  formModel.owner_type = 'personal'
   drawerVisible.value = true
-  await ensureOrganizationsLoaded()
 }
 
 const closeCreateDrawer = (): void => {
@@ -176,17 +157,11 @@ const formatRelativeTime = (dateStr: string | null): string => {
 }
 
 const buildProjectPayload = (): ApiSchemas['CreateProjectRequest'] => {
-  const payload: ApiSchemas['CreateProjectRequest'] = {
+  return {
     name: formModel.name.trim(),
     source_lang: formModel.source_lang.trim(),
     target_lang: formModel.target_lang.trim(),
   }
-
-  if (formModel.owner_org_id) {
-    payload.owner_org_id = formModel.owner_org_id
-  }
-
-  return payload
 }
 
 const submitProject = async (): Promise<void> => {
@@ -420,10 +395,6 @@ onMounted(() => {
           {{ drawerDescription }}
         </div>
 
-        <NAlert v-if="projects.organizationsError" type="warning" :bordered="false" class="mb-4">
-          {{ projects.organizationsError }}
-        </NAlert>
-
         <NForm ref="formRef" :model="formModel" :rules="rules" label-placement="top">
           <NFormItem path="name" :label="t('projects.form.name')">
             <NInput
@@ -455,18 +426,18 @@ onMounted(() => {
             </NFormItem>
           </div>
 
-          <NFormItem
-            path="owner_org_id"
-            :label="t('projects.form.organization')"
-          >
-            <NSelect
-              v-model:value="formModel.owner_org_id"
-              filterable
-              clearable
-              :loading="projects.organizationsLoading"
-              :options="organizationOptions"
-              :placeholder="t('projects.form.organizationPlaceholder')"
-            />
+          <NFormItem :label="t('projects.form.ownerType')">
+            <NRadioGroup v-model:value="formModel.owner_type">
+              <NRadio value="personal">
+                {{ t('projects.form.personal') }}
+              </NRadio>
+              <NRadio value="organization" disabled>
+                {{ t('projects.form.orgOwner') }}
+                <NText depth="3" style="margin-left: 4px; font-size: 12px">
+                  ({{ t('projects.form.comingSoon') }})
+                </NText>
+              </NRadio>
+            </NRadioGroup>
           </NFormItem>
         </NForm>
 
