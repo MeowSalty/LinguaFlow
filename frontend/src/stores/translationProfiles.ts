@@ -61,10 +61,7 @@ export const useTranslationProfilesStore = defineStore('translationProfiles', ()
 
   // ── 配置特征统计 ──
   const withGlossaryCount = computed(
-    () =>
-      items.value.filter(
-        (i) => i.config?.glossary?.bootstrap?.mode && i.config.glossary.bootstrap.mode !== 'off',
-      ).length,
+    () => items.value.filter((i) => i.config?.glossary?.bootstrap?.max_terms_per_batch).length,
   )
   const withSplitCount = computed(() => items.value.filter((i) => i.config?.split?.enabled).length)
 

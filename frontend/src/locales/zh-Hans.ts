@@ -990,8 +990,7 @@ const messages = {
     },
     glossary: {
       title: '术语表',
-      bootstrapMode: '自举模式',
-      bootstrapSave: '保存提取结果',
+      bootstrapEnabled: '启用内联自举',
       bootstrapMaxTerms: '每批最大术语数',
       bootstrapMinSourceLen: '最短源术语长度',
       bootstrapConflictStrategy: '冲突策略',
@@ -1069,6 +1068,18 @@ const messages = {
     },
   },
   executionPlanEditor: {
+    bootstrap: {
+      title: '自举配置（Bootstrap）',
+      enabled: '启用独立自举',
+      backend: '自举后端',
+      backendPlaceholder: '选择自举后端',
+      promptTemplate: '自举提示词模板',
+      promptTemplatePlaceholder: '选择提示词模板（仅用其 bootstrap 提示词）',
+      batchSize: '每批源文段数',
+      concurrency: '自举并发数',
+      maxTermsPerBatch: '每批最大术语数',
+      minSourceLen: '术语最短源文长度',
+    },
     round: {
       name: '轮次名称',
       namePlaceholder: '留空自动生成 round-{n}',

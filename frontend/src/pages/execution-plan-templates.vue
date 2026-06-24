@@ -29,6 +29,7 @@ import { useTranslationProfilesStore } from '@/stores/translationProfiles'
 
 type ExecutionPlanTemplate = ApiSchemas['ExecutionPlanTemplate']
 type ExecutionRoundConfig = ApiSchemas['ExecutionRoundConfig']
+type ExecutionPlanBootstrapConfig = ApiSchemas['ExecutionPlanBootstrapConfig']
 type CreateRequest = ApiSchemas['CreateExecutionPlanTemplateRequest']
 type UpdateRequest = ApiSchemas['UpdateExecutionPlanTemplateRequest']
 type Scope = ExecutionPlanTemplate['scope']
@@ -36,10 +37,11 @@ type Scope = ExecutionPlanTemplate['scope']
 interface FormModel {
   name: string
   description: string
+  bootstrap: ExecutionPlanBootstrapConfig
   rounds: ExecutionRoundConfig[]
 }
 
-// ── 默认轮次 ──────────────────────────────────────────────────
+// ── 默认值 ────────────────────────────────────────────────────
 
 const DEFAULT_ROUND: ExecutionRoundConfig = {
   backend_id: 0,
@@ -50,6 +52,16 @@ const DEFAULT_ROUND: ExecutionRoundConfig = {
   fallback_shrink: 0,
   rate_limit_per_sec: 0,
   retry: { max_attempts: 3, backoff_ms: 2000, jitter: true },
+}
+
+const DEFAULT_BOOTSTRAP: ExecutionPlanBootstrapConfig = {
+  enabled: false,
+  backend_id: 0,
+  prompt_template_id: 0,
+  batch_size: 20,
+  concurrency: 2,
+  max_terms_per_batch: 20,
+  min_source_len: 2,
 }
 
 function deepClone<T>(obj: T): T {
@@ -76,6 +88,7 @@ const deletingItem = ref<ExecutionPlanTemplate | null>(null)
 const formModel = reactive<FormModel>({
   name: '',
   description: '',
+  bootstrap: deepClone(DEFAULT_BOOTSTRAP),
   rounds: [],
 })
 
@@ -129,6 +142,7 @@ const rules = computed<FormRules>(() => ({
 const resetForm = (): void => {
   formModel.name = ''
   formModel.description = ''
+  formModel.bootstrap = deepClone(DEFAULT_BOOTSTRAP)
   formModel.rounds = [deepClone(DEFAULT_ROUND)]
   editingItem.value = null
 }
@@ -142,6 +156,7 @@ const openEditDrawer = (item: ExecutionPlanTemplate): void => {
   editingItem.value = item
   formModel.name = item.name
   formModel.description = item.description ?? ''
+  formModel.bootstrap = item.bootstrap ? deepClone(item.bootstrap) : deepClone(DEFAULT_BOOTSTRAP)
   formModel.rounds = item.rounds?.length ? deepClone(item.rounds) : [deepClone(DEFAULT_ROUND)]
   drawerVisible.value = true
 }
@@ -191,6 +206,10 @@ const buildPayload = (): CreateRequest => {
   }
   if (formModel.description.trim()) {
     payload.description = formModel.description.trim()
+  }
+  // 仅当 bootstrap.enabled 为 true 时才包含 bootstrap 配置
+  if (formModel.bootstrap.enabled) {
+    payload.bootstrap = deepClone(formModel.bootstrap)
   }
   return payload
 }
@@ -536,18 +555,20 @@ onMounted(async () => {
             />
           </NFormItem>
 
-          <!-- 轮次编辑器 -->
+          <!-- Bootstrap + 轮次编辑器 -->
           <div class="mb-4">
             <span class="mb-2 block text-sm font-medium text-lf-text-strong">
               {{ t('executionPlanTemplates.form.rounds') }}
             </span>
             <ExecutionPlanEditor
               :rounds="formModel.rounds"
+              :bootstrap="formModel.bootstrap"
               :backends="backendOptions"
               :prompt-templates="promptTemplateOptions"
               :translation-profiles="translationProfileOptions"
               :disabled="isSystemScope"
               @update:rounds="formModel.rounds = $event"
+              @update:bootstrap="formModel.bootstrap = $event"
             />
           </div>
         </NForm>

@@ -53,8 +53,7 @@ const CONFIG_DEFAULTS: TranslationProfileConfig = {
   },
   glossary: {
     bootstrap: {
-      mode: 'off',
-      save: false,
+      enabled: false,
       max_terms_per_batch: 20,
       min_source_len: 2,
       inline_conflict_strategy: 'off',
@@ -410,14 +409,7 @@ onMounted(() => {
             <NTag v-if="item.config?.postprocess?.enabled" size="small" :bordered="false">
               {{ t('translationProfiles.feature.postprocess') }}
             </NTag>
-            <NTag
-              v-if="
-                item.config?.glossary?.bootstrap?.mode &&
-                item.config.glossary.bootstrap.mode !== 'off'
-              "
-              size="small"
-              :bordered="false"
-            >
+            <NTag v-if="item.config?.glossary?.bootstrap?.enabled" size="small" :bordered="false">
               {{ t('translationProfiles.feature.glossary') }}
             </NTag>
           </div>

@@ -1685,6 +1685,7 @@ export interface components {
             scope: components["schemas"]["ExecutionPlanTemplateScope"];
             owner_user_id?: number;
             owner_org_id?: number;
+            bootstrap?: components["schemas"]["ExecutionPlanBootstrapConfig"];
             rounds: components["schemas"]["ExecutionRoundConfig"][];
             /** Format: date-time */
             created_at?: string;
@@ -1697,11 +1698,13 @@ export interface components {
         CreateExecutionPlanTemplateRequest: {
             name: string;
             description?: string;
+            bootstrap?: components["schemas"]["ExecutionPlanBootstrapConfig"];
             rounds: components["schemas"]["ExecutionRoundConfig"][];
         };
         UpdateExecutionPlanTemplateRequest: {
             name?: string;
             description?: string;
+            bootstrap?: components["schemas"]["ExecutionPlanBootstrapConfig"];
             rounds?: components["schemas"]["ExecutionRoundConfig"][];
         };
         IncrementalUpdateChanges: {
@@ -1727,6 +1730,37 @@ export interface components {
         };
         /** @enum {string} */
         ExecutionPlanTemplateScope: "user" | "org" | "system";
+        ExecutionPlanBootstrapConfig: {
+            /**
+             * @description 是否启用独立自举
+             * @default false
+             */
+            enabled: boolean;
+            /** @description 自举使用的后端 ID */
+            backend_id: number;
+            /** @description 自举使用的提示词模板 ID（仅用其 bootstrap_prompt_content） */
+            prompt_template_id: number;
+            /**
+             * @description 每批发送给 LLM 的源文段数
+             * @default 20
+             */
+            batch_size: number;
+            /**
+             * @description 自举并发数
+             * @default 2
+             */
+            concurrency: number;
+            /**
+             * @description 每批最多抽取的术语数
+             * @default 20
+             */
+            max_terms_per_batch: number;
+            /**
+             * @description 术语源文最短字符数
+             * @default 2
+             */
+            min_source_len: number;
+        };
         RetryConfig: {
             /** @default 3 */
             max_attempts: number;
@@ -1789,12 +1823,19 @@ export interface components {
             prompt_upgrade: boolean;
         };
         ProfileBootstrapConfig: {
-            /** @enum {string} */
-            mode: "off" | "pre" | "inline";
-            save: boolean;
+            /**
+             * @description 是否启用内联自举
+             * @default false
+             */
+            enabled: boolean;
+            /** @description 内联自举每批最多抽取术语数 */
             max_terms_per_batch: number;
+            /** @description 内联自举术语源文最短字符数 */
             min_source_len: number;
-            /** @enum {string} */
+            /**
+             * @description 并发术语冲突处理策略
+             * @enum {string}
+             */
             inline_conflict_strategy: "off" | "rewrite-local";
         };
         ProfileGlossaryConfig: {

@@ -36,8 +36,7 @@ const CONFIG_DEFAULTS: TranslationProfileConfig = {
   },
   glossary: {
     bootstrap: {
-      mode: 'off',
-      save: false,
+      enabled: false,
       max_terms_per_batch: 20,
       min_source_len: 2,
       inline_conflict_strategy: 'off',
@@ -125,12 +124,6 @@ const protectRuleOptions = computed(() => [
   { label: 'link', value: 'link' },
   { label: 'placeholder', value: 'placeholder' },
   { label: 'xml', value: 'xml' },
-])
-
-const bootstrapModeOptions = computed(() => [
-  { label: 'off', value: 'off' },
-  { label: 'pre', value: 'pre' },
-  { label: 'inline', value: 'inline' },
 ])
 
 const inlineConflictStrategyOptions = computed(() => [
@@ -388,28 +381,15 @@ function onProtectRubyUpdate(field: string, value: unknown): void {
         <span class="text-sm font-semibold">📚 {{ t('profileConfigEditor.glossary.title') }}</span>
       </template>
       <div class="flex flex-col gap-3">
-        <div>
-          <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('profileConfigEditor.glossary.bootstrapMode') }}
-          </div>
-          <NSelect
-            v-model:value="configModel.glossary.bootstrap.mode"
-            :options="bootstrapModeOptions"
+        <div class="flex items-center justify-between">
+          <span class="text-sm">{{ t('profileConfigEditor.glossary.bootstrapEnabled') }}</span>
+          <NSwitch
+            v-model:value="configModel.glossary.bootstrap.enabled"
             size="small"
             :disabled="disabled"
           />
         </div>
-        <div v-if="configModel.glossary.bootstrap.mode !== 'off'" class="flex flex-col gap-2 ml-4">
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-lf-text-subtle">{{
-              t('profileConfigEditor.glossary.bootstrapSave')
-            }}</span>
-            <NSwitch
-              v-model:value="configModel.glossary.bootstrap.save"
-              size="small"
-              :disabled="disabled"
-            />
-          </div>
+        <div :class="{ 'opacity-50 pointer-events-none': !configModel.glossary.bootstrap.enabled }">
           <div class="flex items-center gap-2">
             <span class="text-xs text-lf-text-subtle">{{
               t('profileConfigEditor.glossary.bootstrapMaxTerms')
@@ -420,7 +400,7 @@ function onProtectRubyUpdate(field: string, value: unknown): void {
               :max="100"
               :step="1"
               size="tiny"
-              :disabled="disabled"
+              :disabled="disabled || !configModel.glossary.bootstrap.enabled"
               class="w-24"
             />
           </div>
@@ -434,7 +414,7 @@ function onProtectRubyUpdate(field: string, value: unknown): void {
               :max="100"
               :step="1"
               size="tiny"
-              :disabled="disabled"
+              :disabled="disabled || !configModel.glossary.bootstrap.enabled"
               class="w-24"
             />
           </div>
@@ -446,7 +426,7 @@ function onProtectRubyUpdate(field: string, value: unknown): void {
               v-model:value="configModel.glossary.bootstrap.inline_conflict_strategy"
               :options="inlineConflictStrategyOptions"
               size="small"
-              :disabled="disabled"
+              :disabled="disabled || !configModel.glossary.bootstrap.enabled"
             />
           </div>
         </div>
