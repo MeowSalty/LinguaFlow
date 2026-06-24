@@ -305,9 +305,9 @@ func (s *TranslationJobService) validateAndSnapshot(
 			return nil, fmt.Errorf("rounds[%d] prompt_template %q has no system_prompt_content (translation prompt is required)", i, promptSnap.TemplateName)
 		}
 
-		// 校验 bootstrap 模板必填（当 bootstrap 启用时）
-		if strategySnap.Glossary.Bootstrap.Mode != "off" && promptSnap.BootstrapContent == "" {
-			return nil, fmt.Errorf("rounds[%d] prompt_template %q has no bootstrap_prompt_content (required when glossary.bootstrap.mode is %q)",
+		// 校验 bootstrap 模板必填（当术语表启用且 bootstrap 非 off 时）
+		if projectRow.GlossaryEnabled && strategySnap.Glossary.Bootstrap.Mode != "off" && promptSnap.BootstrapContent == "" {
+			return nil, fmt.Errorf("rounds[%d] prompt_template %q has no bootstrap_prompt_content (required when glossary_enabled=true and glossary.bootstrap.mode is %q)",
 				i, promptSnap.TemplateName, strategySnap.Glossary.Bootstrap.Mode)
 		}
 
