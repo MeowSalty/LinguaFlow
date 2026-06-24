@@ -72,22 +72,24 @@ ProfileRepairConfig:
 
 ProfileBootstrapConfig:
   type: object
-  required: [mode, save, max_terms_per_batch, min_source_len, inline_conflict_strategy]
+  required: [enabled, max_terms_per_batch, min_source_len, inline_conflict_strategy]
   properties:
-    mode:
-      type: string
-      enum: [off, pre, inline]
-    save:
+    enabled:
       type: boolean
+      default: false
+      description: 是否启用内联自举
     max_terms_per_batch:
       type: integer
       minimum: 1
+      description: 内联自举每批最多抽取术语数
     min_source_len:
       type: integer
       minimum: 1
+      description: 内联自举术语源文最短字符数
     inline_conflict_strategy:
       type: string
       enum: [off, rewrite-local]
+      description: 并发术语冲突处理策略
 
 ProfileGlossaryConfig:
   type: object
