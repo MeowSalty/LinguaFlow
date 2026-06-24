@@ -18,6 +18,7 @@ interface ProjectFormModel {
   source_lang: string
   target_lang: string
   owner_type: 'personal' | 'organization'
+  glossary_enabled: boolean
 }
 
 const route = useRoute()
@@ -34,6 +35,7 @@ const formModel = reactive<ProjectFormModel>({
   source_lang: 'auto',
   target_lang: 'zh-Hans',
   owner_type: 'personal',
+  glossary_enabled: false,
 })
 
 const targetLanguageOptions = computed<SelectOption[]>(() => [
@@ -97,6 +99,7 @@ const resetForm = (): void => {
   formModel.source_lang = 'auto'
   formModel.target_lang = 'en-US'
   formModel.owner_type = 'personal'
+  formModel.glossary_enabled = false
 }
 
 const openCreateDrawer = (): void => {
@@ -111,6 +114,7 @@ const openEditDrawer = (project: Project): void => {
   formModel.source_lang = project.source_lang || 'auto'
   formModel.target_lang = project.target_lang || 'en-US'
   formModel.owner_type = 'personal'
+  formModel.glossary_enabled = project.glossary_enabled ?? false
   drawerVisible.value = true
 }
 
@@ -161,6 +165,7 @@ const buildProjectPayload = (): ApiSchemas['CreateProjectRequest'] => {
     name: formModel.name.trim(),
     source_lang: formModel.source_lang.trim(),
     target_lang: formModel.target_lang.trim(),
+    glossary_enabled: formModel.glossary_enabled,
   }
 }
 
@@ -174,6 +179,7 @@ const submitProject = async (): Promise<void> => {
         name: payload.name,
         source_lang: payload.source_lang,
         target_lang: payload.target_lang,
+        glossary_enabled: payload.glossary_enabled,
       })
       message.success(t('projects.messages.updateSuccess'))
     } else {
@@ -403,6 +409,10 @@ onMounted(() => {
               maxlength="80"
               show-count
             />
+          </NFormItem>
+
+          <NFormItem path="glossary_enabled" :label="t('projects.form.glossaryEnabled')">
+            <NSwitch v-model:value="formModel.glossary_enabled" />
           </NFormItem>
 
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">

@@ -256,6 +256,7 @@ const messages = {
       personal: '个人',
       orgOwner: '组织',
       comingSoon: '还没做',
+      glossaryEnabled: '启用术语表',
     },
     validation: {
       nameRequired: '请输入项目名称',
@@ -989,7 +990,6 @@ const messages = {
     },
     glossary: {
       title: '术语表',
-      enabled: '启用术语表',
       bootstrapMode: '自举模式',
       bootstrapSave: '保存提取结果',
       bootstrapMaxTerms: '每批最大术语数',

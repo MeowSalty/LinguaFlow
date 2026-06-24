@@ -52,7 +52,6 @@ const CONFIG_DEFAULTS: TranslationProfileConfig = {
     prompt_upgrade: true,
   },
   glossary: {
-    enabled: false,
     bootstrap: {
       mode: 'off',
       save: false,
@@ -134,7 +133,6 @@ function extractConfig(profile: TranslationProfile): TranslationProfileConfig {
     postprocess: { ...CONFIG_DEFAULTS.postprocess, ...src.postprocess },
     repair: { ...CONFIG_DEFAULTS.repair, ...src.repair },
     glossary: {
-      enabled: src.glossary?.enabled ?? CONFIG_DEFAULTS.glossary.enabled,
       bootstrap: { ...CONFIG_DEFAULTS.glossary.bootstrap, ...src.glossary?.bootstrap },
     },
   }
@@ -412,7 +410,14 @@ onMounted(() => {
             <NTag v-if="item.config?.postprocess?.enabled" size="small" :bordered="false">
               {{ t('translationProfiles.feature.postprocess') }}
             </NTag>
-            <NTag v-if="item.config?.glossary?.enabled" size="small" :bordered="false">
+            <NTag
+              v-if="
+                item.config?.glossary?.bootstrap?.mode &&
+                item.config.glossary.bootstrap.mode !== 'off'
+              "
+              size="small"
+              :bordered="false"
+            >
               {{ t('translationProfiles.feature.glossary') }}
             </NTag>
           </div>

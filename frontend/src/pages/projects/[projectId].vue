@@ -10,6 +10,7 @@ import {
   NIcon,
   NInput,
   NSelect,
+  NSwitch,
   NTabPane,
   NTabs,
   useMessage,
@@ -94,6 +95,7 @@ const editFormModel = reactive({
   name: '',
   source_lang: 'auto',
   target_lang: 'en-US',
+  glossary_enabled: false,
 })
 
 const targetLanguageOptions = computed<SelectOption[]>(() => [
@@ -142,6 +144,7 @@ const openEditDrawer = (): void => {
   editFormModel.name = workspace.project.name
   editFormModel.source_lang = workspace.project.source_lang || 'auto'
   editFormModel.target_lang = workspace.project.target_lang || 'en-US'
+  editFormModel.glossary_enabled = workspace.project.glossary_enabled ?? false
   editDrawerVisible.value = true
 }
 
@@ -159,6 +162,7 @@ const submitEditProject = async (): Promise<void> => {
       name: editFormModel.name.trim(),
       source_lang: editFormModel.source_lang.trim(),
       target_lang: editFormModel.target_lang.trim(),
+      glossary_enabled: editFormModel.glossary_enabled,
     })
     workspace.project = updated
     message.success(t('projects.messages.updateSuccess'))
@@ -717,6 +721,10 @@ onMounted(() => {
               maxlength="80"
               show-count
             />
+          </NFormItem>
+
+          <NFormItem path="glossary_enabled" :label="t('projects.form.glossaryEnabled')">
+            <NSwitch v-model:value="editFormModel.glossary_enabled" />
           </NFormItem>
 
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">

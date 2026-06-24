@@ -1482,6 +1482,11 @@ export interface components {
             default_translation_config?: {
                 [key: string]: unknown;
             };
+            /**
+             * @description 翻译过程中是否启用术语表
+             * @default false
+             */
+            glossary_enabled: boolean;
             source_lang: string;
             target_lang: string;
             /** Format: date-time */
@@ -1500,6 +1505,11 @@ export interface components {
             default_translation_config?: {
                 [key: string]: unknown;
             };
+            /**
+             * @description 翻译过程中是否启用术语表
+             * @default false
+             */
+            glossary_enabled: boolean;
             source_lang?: string;
             target_lang?: string;
         };
@@ -1511,6 +1521,8 @@ export interface components {
             default_translation_config?: {
                 [key: string]: unknown;
             };
+            /** @description 翻译过程中是否启用术语表 */
+            glossary_enabled?: boolean;
             source_lang?: string;
             target_lang?: string;
         };
@@ -1786,7 +1798,6 @@ export interface components {
             inline_conflict_strategy: "off" | "rewrite-local";
         };
         ProfileGlossaryConfig: {
-            enabled: boolean;
             bootstrap: components["schemas"]["ProfileBootstrapConfig"];
         };
         TranslationProfileConfig: {

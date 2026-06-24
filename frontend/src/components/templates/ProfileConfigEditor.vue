@@ -35,7 +35,6 @@ const CONFIG_DEFAULTS: TranslationProfileConfig = {
     prompt_upgrade: true,
   },
   glossary: {
-    enabled: false,
     bootstrap: {
       mode: 'off',
       save: false,
@@ -68,7 +67,6 @@ function mergeConfig(source?: Partial<TranslationProfileConfig>): TranslationPro
     postprocess: { ...CONFIG_DEFAULTS.postprocess, ...source.postprocess },
     repair: { ...CONFIG_DEFAULTS.repair, ...source.repair },
     glossary: {
-      enabled: source.glossary?.enabled ?? CONFIG_DEFAULTS.glossary.enabled,
       bootstrap: { ...CONFIG_DEFAULTS.glossary.bootstrap, ...source.glossary?.bootstrap },
     },
   }
@@ -390,11 +388,7 @@ function onProtectRubyUpdate(field: string, value: unknown): void {
         <span class="text-sm font-semibold">📚 {{ t('profileConfigEditor.glossary.title') }}</span>
       </template>
       <div class="flex flex-col gap-3">
-        <div class="flex items-center justify-between">
-          <span class="text-sm">{{ t('profileConfigEditor.glossary.enabled') }}</span>
-          <NSwitch v-model:value="configModel.glossary.enabled" size="small" :disabled="disabled" />
-        </div>
-        <div :class="{ 'opacity-50 pointer-events-none': !configModel.glossary.enabled }">
+        <div>
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('profileConfigEditor.glossary.bootstrapMode') }}
           </div>
@@ -402,7 +396,7 @@ function onProtectRubyUpdate(field: string, value: unknown): void {
             v-model:value="configModel.glossary.bootstrap.mode"
             :options="bootstrapModeOptions"
             size="small"
-            :disabled="disabled || !configModel.glossary.enabled"
+            :disabled="disabled"
           />
         </div>
         <div v-if="configModel.glossary.bootstrap.mode !== 'off'" class="flex flex-col gap-2 ml-4">
@@ -413,7 +407,7 @@ function onProtectRubyUpdate(field: string, value: unknown): void {
             <NSwitch
               v-model:value="configModel.glossary.bootstrap.save"
               size="small"
-              :disabled="disabled || !configModel.glossary.enabled"
+              :disabled="disabled"
             />
           </div>
           <div class="flex items-center gap-2">
@@ -426,7 +420,7 @@ function onProtectRubyUpdate(field: string, value: unknown): void {
               :max="100"
               :step="1"
               size="tiny"
-              :disabled="disabled || !configModel.glossary.enabled"
+              :disabled="disabled"
               class="w-24"
             />
           </div>
@@ -440,7 +434,7 @@ function onProtectRubyUpdate(field: string, value: unknown): void {
               :max="100"
               :step="1"
               size="tiny"
-              :disabled="disabled || !configModel.glossary.enabled"
+              :disabled="disabled"
               class="w-24"
             />
           </div>
@@ -452,7 +446,7 @@ function onProtectRubyUpdate(field: string, value: unknown): void {
               v-model:value="configModel.glossary.bootstrap.inline_conflict_strategy"
               :options="inlineConflictStrategyOptions"
               size="small"
-              :disabled="disabled || !configModel.glossary.enabled"
+              :disabled="disabled"
             />
           </div>
         </div>
