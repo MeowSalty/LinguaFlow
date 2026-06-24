@@ -2586,7 +2586,6 @@ components:
       required:
         - id
         - name
-        - resource_scope
         - source_lang
         - target_lang
       properties:
@@ -2594,11 +2593,6 @@ components:
           type: integer
         name:
           type: string
-        resource_scope:
-          type: string
-          enum:
-            - project
-            - organization
         owner_user_id:
           type: integer
         owner_org_id:
@@ -2637,11 +2631,6 @@ components:
           type: string
         owner_org_id:
           type: integer
-        resource_scope:
-          type: string
-          enum:
-            - project
-            - organization
         config:
           type: object
           additionalProperties: true
@@ -2658,11 +2647,6 @@ components:
       properties:
         name:
           type: string
-        resource_scope:
-          type: string
-          enum:
-            - project
-            - organization
         config:
           type: object
           additionalProperties: true

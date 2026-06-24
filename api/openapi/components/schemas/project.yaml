@@ -1,14 +1,11 @@
 Project:
   type: object
-  required: [id, name, resource_scope, source_lang, target_lang]
+  required: [id, name, source_lang, target_lang]
   properties:
     id:
       type: integer
     name:
       type: string
-    resource_scope:
-      type: string
-      enum: [project, organization]
     owner_user_id:
       type: integer
     owner_org_id:
@@ -47,9 +44,6 @@ CreateProjectRequest:
       type: string
     owner_org_id:
       type: integer
-    resource_scope:
-      type: string
-      enum: [project, organization]
     config:
       type: object
       additionalProperties: true
@@ -67,9 +61,6 @@ UpdateProjectRequest:
   properties:
     name:
       type: string
-    resource_scope:
-      type: string
-      enum: [project, organization]
     config:
       type: object
       additionalProperties: true
