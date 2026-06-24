@@ -509,6 +509,43 @@ paths:
           description: 删除成功
         default:
           $ref: '#/components/responses/Problem'
+  /orgs/{orgId}/projects:
+    parameters:
+      - $ref: '#/components/parameters/OrgId'
+    post:
+      operationId: CreateOrgProject
+      summary: 创建组织项目
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: ListOrgProjects
+      summary: 列出组织项目
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 项目列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
   /projects/{projectId}/resources:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -2629,8 +2666,6 @@ components:
       properties:
         name:
           type: string
-        owner_org_id:
-          type: integer
         config:
           type: object
           additionalProperties: true
