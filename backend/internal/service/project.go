@@ -68,9 +68,30 @@ func (s *ProjectService) CreateProject(ctx context.Context, actorUserID int, inp
 	if normalized.OwnerUserID != nil {
 		create.SetOwnerUserID(*normalized.OwnerUserID)
 	}
-	if normalized.OwnerOrgID != nil {
-		create.SetOwnerOrgID(*normalized.OwnerOrgID)
+	created, err := create.Save(ctx)
+	if err != nil {
+		if ent.IsConstraintError(err) {
+			return nil, ErrInvalidInput
+		}
+		return nil, err
 	}
+	return created, nil
+}
+
+// CreateOrgProject 创建组织项目。
+// 权限校验由 handler 层负责（handler 必须先验证 actorUserID 是 orgID 的管理员）。
+func (s *ProjectService) CreateOrgProject(ctx context.Context, actorUserID, orgID int, input CreateProjectInput) (*ent.Project, error) {
+	name := strings.TrimSpace(input.Name)
+	if name == "" {
+		return nil, ErrInvalidInput
+	}
+	create := s.client.Project.Create().
+		SetName(name).
+		SetOwnerOrgID(orgID).
+		SetConfig(cloneMap(input.Config)).
+		SetDefaultTranslationConfig(cloneMap(input.DefaultTranslationConfig)).
+		SetSourceLang(normalizeLangOrDefault(input.SourceLang, "auto")).
+		SetTargetLang(normalizeLangOrDefault(input.TargetLang, "zh"))
 	created, err := create.Save(ctx)
 	if err != nil {
 		if ent.IsConstraintError(err) {
@@ -87,6 +108,15 @@ func (s *ProjectService) ListProjectsForUser(ctx context.Context, actorUserID in
 			project.OwnerUserIDEQ(actorUserID),
 			project.HasOwnerOrgWith(organization.HasMembershipsWith(orgmembership.HasUserWith(user.IDEQ(actorUserID)))),
 		)).
+		Order(ent.Asc(project.FieldID)).
+		All(ctx)
+}
+
+// ListOrgProjects 列出指定组织的所有项目。
+// 权限校验由 handler 层负责（handler 必须先验证 actorUserID 是 orgID 的成员）。
+func (s *ProjectService) ListOrgProjects(ctx context.Context, actorUserID, orgID int) ([]*ent.Project, error) {
+	return s.client.Project.Query().
+		Where(project.OwnerOrgIDEQ(orgID)).
 		Order(ent.Asc(project.FieldID)).
 		All(ctx)
 }
@@ -297,26 +327,14 @@ func (s *ProjectService) normalizeCreateInput(ctx context.Context, actorUserID i
 	if name == "" {
 		return CreateProjectInput{}, ErrInvalidInput
 	}
-	ownerUserID := input.OwnerUserID
-	ownerOrgID := input.OwnerOrgID
-	if ownerUserID == nil && ownerOrgID == nil {
-		ownerUserID = &actorUserID
-	}
-	if ownerUserID != nil && ownerOrgID != nil {
-		return CreateProjectInput{}, ErrProjectOwnerConflict
-	}
-	if ownerUserID != nil && *ownerUserID != actorUserID {
-		return CreateProjectInput{}, ErrForbidden
-	}
-	if ownerOrgID != nil {
-		if _, err := s.users.requireMembership(ctx, actorUserID, *ownerOrgID, OrgRoleAdmin); err != nil {
-			return CreateProjectInput{}, err
-		}
+	// 个人项目：固定归属当前用户
+	ownerUserID := &actorUserID
+	if input.OwnerOrgID != nil {
+		return CreateProjectInput{}, ErrForbidden // 不应通过此路径创建组织项目
 	}
 	return CreateProjectInput{
 		Name:                     name,
 		OwnerUserID:              ownerUserID,
-		OwnerOrgID:               ownerOrgID,
 		Config:                   cloneMap(input.Config),
 		DefaultTranslationConfig: cloneMap(input.DefaultTranslationConfig),
 		SourceLang:               normalizeLangOrDefault(input.SourceLang, "auto"),

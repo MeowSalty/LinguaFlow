@@ -98,6 +98,14 @@ func (s *Server) UpdateOrgBackend(w http.ResponseWriter, r *http.Request, _ OrgI
 	s.requireAuth(http.HandlerFunc(s.handleUpdateOrgBackend)).ServeHTTP(w, r)
 }
 
+func (s *Server) ListOrgProjects(w http.ResponseWriter, r *http.Request, _ OrgId) {
+	s.requireAuth(http.HandlerFunc(s.handleListOrgProjects)).ServeHTTP(w, r)
+}
+
+func (s *Server) CreateOrgProject(w http.ResponseWriter, r *http.Request, _ OrgId) {
+	s.requireAuth(http.HandlerFunc(s.handleCreateOrgProject)).ServeHTTP(w, r)
+}
+
 func (s *Server) ListProjects(w http.ResponseWriter, r *http.Request) {
 	s.requireAuth(http.HandlerFunc(s.handleListProjects)).ServeHTTP(w, r)
 }
