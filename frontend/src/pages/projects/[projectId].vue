@@ -1,6 +1,23 @@
 <script setup lang="ts">
-import { NAlert, NButton, NCard, NIcon, NTabPane, NTabs } from 'naive-ui'
-import { ref, computed, watch, onMounted, onBeforeUnmount, provide } from 'vue'
+import {
+  NAlert,
+  NButton,
+  NCard,
+  NDrawer,
+  NDrawerContent,
+  NForm,
+  NFormItem,
+  NIcon,
+  NInput,
+  NSelect,
+  NTabPane,
+  NTabs,
+  useMessage,
+  type FormInst,
+  type FormRules,
+  type SelectOption,
+} from 'naive-ui'
+import { ref, computed, reactive, watch, onMounted, onBeforeUnmount, provide } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
@@ -25,6 +42,7 @@ import { useConflictHandling } from '@/composables/useConflictHandling'
 import { formatDate } from '@/composables/useWorkspaceUtils'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import { useGlossaryStore } from '@/stores/glossary'
+import { useProjectsStore } from '@/stores/projects'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 
 type Resource = ApiSchemas['Resource']
@@ -34,12 +52,124 @@ type WorkspaceTab = 'resources' | 'segments' | 'jobs' | 'glossary'
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
+const message = useMessage()
 const workspace = useProjectWorkspaceStore()
 const glossary = useGlossaryStore()
 const executionPlanTemplatesStore = useExecutionPlanTemplatesStore()
+const projectsStore = useProjectsStore()
 
 const activeTab = ref<WorkspaceTab>('resources')
 const segmentPanelRef = ref<InstanceType<typeof SegmentPanel> | null>(null)
+
+// ── 标签页懒加载 ──
+const loadedTabs = new Set<string>()
+
+const loadTabData = async (tab: WorkspaceTab): Promise<void> => {
+  if (loadedTabs.has(tab) || !projectId.value) return
+
+  switch (tab) {
+    case 'resources':
+      // 资源数据已通过 syncResourcesFromTree 加载
+      break
+    case 'segments':
+      // 段落数据在用户选择资源时按需加载
+      break
+    case 'jobs':
+      await workspace.loadJobs(projectId.value)
+      break
+    case 'glossary':
+      await glossary.loadEntries(projectId.value)
+      break
+  }
+
+  loadedTabs.add(tab)
+}
+
+// ── 编辑项目抽屉 ──
+const editDrawerVisible = ref(false)
+const editFormRef = ref<FormInst | null>(null)
+const editSubmitting = ref(false)
+
+const editFormModel = reactive({
+  name: '',
+  source_lang: 'auto',
+  target_lang: 'en-US',
+})
+
+const targetLanguageOptions = computed<SelectOption[]>(() => [
+  { label: t('projects.languages.zhHans'), value: 'zh-Hans' },
+  { label: t('projects.languages.zhHant'), value: 'zh-Hant' },
+  { label: t('projects.languages.enUS'), value: 'en-US' },
+  { label: t('projects.languages.enGB'), value: 'en-GB' },
+  { label: t('projects.languages.ja'), value: 'ja' },
+  { label: t('projects.languages.ko'), value: 'ko' },
+  { label: t('projects.languages.fr'), value: 'fr' },
+  { label: t('projects.languages.de'), value: 'de' },
+  { label: t('projects.languages.es'), value: 'es' },
+])
+
+const sourceLanguageOptions = computed<SelectOption[]>(() => [
+  { label: t('projects.languages.auto'), value: 'auto' },
+  ...targetLanguageOptions.value,
+])
+
+const editFormRules = computed<FormRules>(() => ({
+  name: [
+    {
+      required: true,
+      message: t('projects.validation.nameRequired'),
+      trigger: ['input', 'blur'],
+    },
+  ],
+  source_lang: [
+    {
+      required: true,
+      message: t('projects.validation.sourceLangRequired'),
+      trigger: ['change', 'blur'],
+    },
+  ],
+  target_lang: [
+    {
+      required: true,
+      message: t('projects.validation.targetLangRequired'),
+      trigger: ['change', 'blur'],
+    },
+  ],
+}))
+
+const openEditDrawer = (): void => {
+  if (!workspace.project) return
+  editFormModel.name = workspace.project.name
+  editFormModel.source_lang = workspace.project.source_lang || 'auto'
+  editFormModel.target_lang = workspace.project.target_lang || 'en-US'
+  editDrawerVisible.value = true
+}
+
+const closeEditDrawer = (): void => {
+  editDrawerVisible.value = false
+}
+
+const submitEditProject = async (): Promise<void> => {
+  await editFormRef.value?.validate()
+  if (!projectId.value) return
+
+  editSubmitting.value = true
+  try {
+    const updated = await projectsStore.updateProject(projectId.value, {
+      name: editFormModel.name.trim(),
+      source_lang: editFormModel.source_lang.trim(),
+      target_lang: editFormModel.target_lang.trim(),
+    })
+    workspace.project = updated
+    message.success(t('projects.messages.updateSuccess'))
+    closeEditDrawer()
+  } catch (err) {
+    console.error(err)
+    message.error(projectsStore.updateError || t('projects.messages.updateFailed'))
+  } finally {
+    editSubmitting.value = false
+  }
+}
 
 // ── projectId ──
 const projectId = computed(() => {
@@ -58,6 +188,16 @@ const switchToJobsTab = async (): Promise<void> => {
 }
 
 const jobMgmt = useJobActions(projectId, switchToJobsTab)
+
+// ── 执行计划模板按需加载 ──
+watch(
+  () => jobMgmt.jobDrawerVisible.value,
+  async (visible) => {
+    if (visible && executionPlanTemplatesStore.items.length === 0) {
+      await executionPlanTemplatesStore.loadTemplates()
+    }
+  },
+)
 
 // ── 翻译内容段落数量（用于 JobCreateDrawer 摘要）──
 const drawerSegmentCount = computed(() => {
@@ -104,11 +244,12 @@ const reloadWorkspace = async (): Promise<void> => {
   await Promise.all([
     workspace.loadProject(projectId.value),
     workspace.loadResourceTree(projectId.value),
-    workspace.loadResources(projectId.value),
-    workspace.loadJobs(projectId.value),
-    glossary.loadEntries(projectId.value),
   ])
   workspace.syncResourcesFromTree()
+
+  // 重新加载当前标签页数据
+  loadedTabs.clear()
+  await loadTabData(activeTab.value)
 }
 
 // ── ResourceExplorer 事件处理 ──
@@ -220,7 +361,7 @@ watch(
 watch(
   () => workspace.jobStatusFilter,
   () => {
-    if (projectId.value) {
+    if (projectId.value && loadedTabs.has('jobs')) {
       void workspace.loadJobs(projectId.value)
     }
   },
@@ -230,6 +371,7 @@ watch(activeTab, (tab) => {
   if (route.query.tab !== tab) {
     void router.replace({ query: { ...route.query, tab } })
   }
+  void loadTabData(tab)
 })
 
 // ── 5.1 任务进度轮询 ──
@@ -308,26 +450,43 @@ watch(
 onMounted(() => {
   workspace.reset()
   glossary.reset()
+  loadedTabs.clear()
   void reloadWorkspace()
-  void executionPlanTemplatesStore.loadTemplates()
 })
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="space-y-5">
+    <!-- 项目头部 -->
     <NCard :bordered="false" class="overflow-hidden shadow-sm shadow-lf-shadow">
-      <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
           <NButton quaternary size="small" @click="router.push('/projects')">
             <template #icon>
               <NIcon><IconCarbonArrowLeft /></NIcon>
             </template>
           </NButton>
-          <h1 class="truncate text-lg font-semibold tracking-tight text-lf-text-strong">
+
+          <h1 class="truncate text-xl font-bold tracking-tight text-lf-text-strong">
             {{ workspace.project?.name || t('workspace.loadingProject') }}
           </h1>
-          <span class="inline-block h-4 w-px bg-lf-border-soft" />
-          <span class="inline-flex items-center gap-1.5 text-sm text-lf-text-muted">
+
+          <!-- 编辑按钮 -->
+          <NButton
+            v-if="workspace.project"
+            quaternary
+            circle
+            size="tiny"
+            :title="t('projects.actions.edit')"
+            @click="openEditDrawer"
+          >
+            <template #icon>
+              <NIcon size="14"><IconCarbonEdit /></NIcon>
+            </template>
+          </NButton>
+
+          <span class="hidden h-4 w-px bg-lf-border-soft sm:inline-block" />
+          <span class="hidden items-center gap-1.5 text-sm text-lf-text-muted sm:inline-flex">
             <IconCarbonLanguage class="h-3.5 w-3.5 text-lf-text-subtle" />
             {{ workspace.project?.source_lang || '-' }} →
             {{ workspace.project?.target_lang || '-' }}
@@ -342,9 +501,11 @@ onMounted(() => {
             }}
           </span>
         </div>
-        <div class="flex shrink-0 flex-wrap gap-3">
+
+        <div class="flex shrink-0 items-center gap-2">
           <NButton
             secondary
+            size="small"
             :loading="
               workspace.loadingProject || workspace.loadingResourceTree || workspace.loadingJobs
             "
@@ -363,6 +524,7 @@ onMounted(() => {
       {{ workspace.projectError }}
     </NAlert>
 
+    <!-- 统计指标栏 -->
     <WorkspaceMetricsBar
       :total-resources="workspace.resources.length"
       :ready-resources="workspace.readyResourceCount"
@@ -371,6 +533,7 @@ onMounted(() => {
       :running-jobs="workspace.runningJobCount"
     />
 
+    <!-- 标签页 -->
     <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
       <NTabs v-model:value="activeTab" animated>
         <NTabPane
@@ -533,5 +696,62 @@ onMounted(() => {
       @approve="handleBatchReview('approve')"
       @reject="handleBatchReview('reject')"
     />
+
+    <!-- 编辑项目抽屉 -->
+    <NDrawer v-model:show="editDrawerVisible" :width="420" placement="right">
+      <NDrawerContent :title="t('projects.edit.title')" closable>
+        <div class="mb-4 rounded-lg bg-lf-surface-muted p-3 text-sm leading-6 text-lf-text-muted">
+          {{ t('projects.edit.description') }}
+        </div>
+
+        <NForm
+          ref="editFormRef"
+          :model="editFormModel"
+          :rules="editFormRules"
+          label-placement="top"
+        >
+          <NFormItem path="name" :label="t('projects.form.name')">
+            <NInput
+              v-model:value="editFormModel.name"
+              :placeholder="t('projects.form.namePlaceholder')"
+              maxlength="80"
+              show-count
+            />
+          </NFormItem>
+
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <NFormItem path="source_lang" :label="t('projects.form.sourceLang')">
+              <NSelect
+                v-model:value="editFormModel.source_lang"
+                filterable
+                tag
+                :options="sourceLanguageOptions"
+                :placeholder="t('projects.form.languagePlaceholder')"
+              />
+            </NFormItem>
+            <NFormItem path="target_lang" :label="t('projects.form.targetLang')">
+              <NSelect
+                v-model:value="editFormModel.target_lang"
+                filterable
+                tag
+                :options="targetLanguageOptions"
+                :placeholder="t('projects.form.languagePlaceholder')"
+              />
+            </NFormItem>
+          </div>
+        </NForm>
+
+        <template #footer>
+          <div class="flex justify-end gap-3">
+            <NButton :disabled="editSubmitting" @click="closeEditDrawer">
+              {{ t('projects.actions.cancel') }}
+            </NButton>
+            <NButton type="primary" :loading="editSubmitting" @click="submitEditProject">
+              {{ t('projects.actions.submitUpdate') }}
+            </NButton>
+          </div>
+        </template>
+      </NDrawerContent>
+    </NDrawer>
   </div>
 </template>
