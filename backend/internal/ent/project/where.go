@@ -80,6 +80,11 @@ func OwnerOrgID(v int) predicate.Project {
 	return predicate.Project(sql.FieldEQ(FieldOwnerOrgID, v))
 }
 
+// GlossaryEnabled applies equality check predicate on the "glossary_enabled" field. It's identical to GlossaryEnabledEQ.
+func GlossaryEnabled(v bool) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldGlossaryEnabled, v))
+}
+
 // SourceLang applies equality check predicate on the "source_lang" field. It's identical to SourceLangEQ.
 func SourceLang(v string) predicate.Project {
 	return predicate.Project(sql.FieldEQ(FieldSourceLang, v))
@@ -293,6 +298,16 @@ func OwnerOrgIDIsNil() predicate.Project {
 // OwnerOrgIDNotNil applies the NotNil predicate on the "owner_org_id" field.
 func OwnerOrgIDNotNil() predicate.Project {
 	return predicate.Project(sql.FieldNotNull(FieldOwnerOrgID))
+}
+
+// GlossaryEnabledEQ applies the EQ predicate on the "glossary_enabled" field.
+func GlossaryEnabledEQ(v bool) predicate.Project {
+	return predicate.Project(sql.FieldEQ(FieldGlossaryEnabled, v))
+}
+
+// GlossaryEnabledNEQ applies the NEQ predicate on the "glossary_enabled" field.
+func GlossaryEnabledNEQ(v bool) predicate.Project {
+	return predicate.Project(sql.FieldNEQ(FieldGlossaryEnabled, v))
 }
 
 // SourceLangEQ applies the EQ predicate on the "source_lang" field.

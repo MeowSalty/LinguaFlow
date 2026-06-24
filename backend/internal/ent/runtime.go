@@ -322,12 +322,16 @@ func init() {
 	projectDescDefaultTranslationConfig := projectFields[4].Descriptor()
 	// project.DefaultDefaultTranslationConfig holds the default value on creation for the default_translation_config field.
 	project.DefaultDefaultTranslationConfig = projectDescDefaultTranslationConfig.Default.(func() map[string]interface{})
+	// projectDescGlossaryEnabled is the schema descriptor for glossary_enabled field.
+	projectDescGlossaryEnabled := projectFields[5].Descriptor()
+	// project.DefaultGlossaryEnabled holds the default value on creation for the glossary_enabled field.
+	project.DefaultGlossaryEnabled = projectDescGlossaryEnabled.Default.(bool)
 	// projectDescSourceLang is the schema descriptor for source_lang field.
-	projectDescSourceLang := projectFields[5].Descriptor()
+	projectDescSourceLang := projectFields[6].Descriptor()
 	// project.DefaultSourceLang holds the default value on creation for the source_lang field.
 	project.DefaultSourceLang = projectDescSourceLang.Default.(string)
 	// projectDescTargetLang is the schema descriptor for target_lang field.
-	projectDescTargetLang := projectFields[6].Descriptor()
+	projectDescTargetLang := projectFields[7].Descriptor()
 	// project.DefaultTargetLang holds the default value on creation for the target_lang field.
 	project.DefaultTargetLang = projectDescTargetLang.Default.(string)
 	prompttemplateMixin := schema.PromptTemplate{}.Mixin()

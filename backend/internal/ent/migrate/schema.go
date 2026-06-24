@@ -287,6 +287,7 @@ var (
 		{Name: "name", Type: field.TypeString},
 		{Name: "config", Type: field.TypeJSON},
 		{Name: "default_translation_config", Type: field.TypeJSON},
+		{Name: "glossary_enabled", Type: field.TypeBool, Default: false},
 		{Name: "source_lang", Type: field.TypeString, Default: "auto"},
 		{Name: "target_lang", Type: field.TypeString, Default: "zh"},
 		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
@@ -300,13 +301,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "projects_organizations_projects",
-				Columns:    []*schema.Column{ProjectsColumns[8]},
+				Columns:    []*schema.Column{ProjectsColumns[9]},
 				RefColumns: []*schema.Column{OrganizationsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "projects_users_owned_projects",
-				Columns:    []*schema.Column{ProjectsColumns[9]},
+				Columns:    []*schema.Column{ProjectsColumns[10]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},

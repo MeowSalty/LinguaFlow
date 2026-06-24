@@ -346,7 +346,7 @@ func buildStrategyConfig(snapshot *service.JobExecutionSnapshot) *config.Config 
 			PromptUpgrade:        s.Repair.PromptUpgrade,
 		}
 		cfg.Glossary = config.GlossaryConfig{
-			Enabled: s.Glossary.Enabled,
+			Enabled: snapshot.GlossaryEnabled,
 			Bootstrap: config.BootstrapConfig{
 				Mode:                   s.Glossary.Bootstrap.Mode,
 				TemplateContent:        snapshot.Rounds[0].Prompt.BootstrapContent,

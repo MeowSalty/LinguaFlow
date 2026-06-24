@@ -24,6 +24,8 @@ func (Project) Fields() []ent.Field {
 		field.JSON("default_translation_config", map[string]any{}).
 			Default(func() map[string]any { return map[string]any{} }).
 			Comment("默认翻译配置，创建翻译任务时作为任务配置基底"),
+		field.Bool("glossary_enabled").Default(false).
+			Comment("翻译过程中是否启用术语表"),
 		field.String("source_lang").Default("auto"),
 		field.String("target_lang").Default("zh"),
 	}

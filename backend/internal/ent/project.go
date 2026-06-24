@@ -34,6 +34,8 @@ type Project struct {
 	Config map[string]interface{} `json:"config,omitempty"`
 	// 默认翻译配置，创建翻译任务时作为任务配置基底
 	DefaultTranslationConfig map[string]interface{} `json:"default_translation_config,omitempty"`
+	// 翻译过程中是否启用术语表
+	GlossaryEnabled bool `json:"glossary_enabled,omitempty"`
 	// SourceLang holds the value of the "source_lang" field.
 	SourceLang string `json:"source_lang,omitempty"`
 	// TargetLang holds the value of the "target_lang" field.
@@ -161,6 +163,8 @@ func (*Project) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case project.FieldConfig, project.FieldDefaultTranslationConfig:
 			values[i] = new([]byte)
+		case project.FieldGlossaryEnabled:
+			values[i] = new(sql.NullBool)
 		case project.FieldID, project.FieldOwnerUserID, project.FieldOwnerOrgID:
 			values[i] = new(sql.NullInt64)
 		case project.FieldName, project.FieldSourceLang, project.FieldTargetLang:
@@ -235,6 +239,12 @@ func (_m *Project) assignValues(columns []string, values []any) error {
 				if err := json.Unmarshal(*value, &_m.DefaultTranslationConfig); err != nil {
 					return fmt.Errorf("unmarshal field default_translation_config: %w", err)
 				}
+			}
+		case project.FieldGlossaryEnabled:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field glossary_enabled", values[i])
+			} else if value.Valid {
+				_m.GlossaryEnabled = value.Bool
 			}
 		case project.FieldSourceLang:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -353,6 +363,9 @@ func (_m *Project) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("default_translation_config=")
 	builder.WriteString(fmt.Sprintf("%v", _m.DefaultTranslationConfig))
+	builder.WriteString(", ")
+	builder.WriteString("glossary_enabled=")
+	builder.WriteString(fmt.Sprintf("%v", _m.GlossaryEnabled))
 	builder.WriteString(", ")
 	builder.WriteString("source_lang=")
 	builder.WriteString(_m.SourceLang)

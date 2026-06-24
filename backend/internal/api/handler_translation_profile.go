@@ -85,7 +85,6 @@ func profileConfigToResponse(c *schema.TranslationProfileConfigData) Translation
 			PromptUpgrade:        c.Repair.PromptUpgrade,
 		},
 		Glossary: ProfileGlossaryConfig{
-			Enabled: c.Glossary.Enabled,
 			Bootstrap: ProfileBootstrapConfig{
 				Mode:                   ProfileBootstrapConfigMode(c.Glossary.Bootstrap.Mode),
 				Save:                   c.Glossary.Bootstrap.Save,
@@ -144,7 +143,6 @@ func parseProfileConfig(c *TranslationProfileConfig) *schema.TranslationProfileC
 			PromptUpgrade:        c.Repair.PromptUpgrade,
 		},
 		Glossary: schema.ProfileGlossaryConfig{
-			Enabled: c.Glossary.Enabled,
 			Bootstrap: schema.ProfileBootstrapConfig{
 				Mode:                   string(c.Glossary.Bootstrap.Mode),
 				Save:                   c.Glossary.Bootstrap.Save,

@@ -113,6 +113,7 @@ type JobExecutionSnapshot struct {
 	Rounds            []JobRoundSnapshot `json:"rounds"`
 	SourceLang        string             `json:"source_lang"`
 	TargetLang        string             `json:"target_lang"`
+	GlossaryEnabled   bool               `json:"glossary_enabled"`
 	AutoApprove       bool               `json:"auto_approve,omitempty"`
 }
 
@@ -182,6 +183,7 @@ func (s *TranslationJobService) CreateManualJob(ctx context.Context, actorUserID
 	// 4. 填充通用配置
 	snapshot.SourceLang = projectRow.SourceLang
 	snapshot.TargetLang = projectRow.TargetLang
+	snapshot.GlossaryEnabled = projectRow.GlossaryEnabled
 	snapshot.AutoApprove = input.AutoApprove
 
 	snapshotBytes, err := json.Marshal(snapshot)

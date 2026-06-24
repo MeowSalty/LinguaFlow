@@ -51,7 +51,6 @@ type ProfileRepairConfig struct {
 
 // ProfileGlossaryConfig 术语表配置。
 type ProfileGlossaryConfig struct {
-	Enabled   bool                   `json:"enabled"   yaml:"enabled"`
 	Bootstrap ProfileBootstrapConfig `json:"bootstrap" yaml:"bootstrap"`
 }
 
@@ -91,7 +90,6 @@ func DefaultProfileConfig() TranslationProfileConfigData {
 			PromptUpgrade:        true,
 		},
 		Glossary: ProfileGlossaryConfig{
-			Enabled: false,
 			Bootstrap: ProfileBootstrapConfig{
 				Mode:                   "off",
 				Save:                   true,

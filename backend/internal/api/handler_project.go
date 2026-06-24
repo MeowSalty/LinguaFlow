@@ -15,6 +15,7 @@ type createProjectRequest struct {
 	// OwnerOrgID 已移除 — 组织项目通过专用路由创建
 	Config                   map[string]any `json:"config"`
 	DefaultTranslationConfig map[string]any `json:"default_translation_config"`
+	GlossaryEnabled          *bool          `json:"glossary_enabled"`
 	SourceLang               string         `json:"source_lang"`
 	TargetLang               string         `json:"target_lang"`
 }
@@ -23,6 +24,7 @@ type updateProjectRequest struct {
 	Name                     string         `json:"name"`
 	Config                   map[string]any `json:"config"`
 	DefaultTranslationConfig map[string]any `json:"default_translation_config"`
+	GlossaryEnabled          *bool          `json:"glossary_enabled"`
 	SourceLang               string         `json:"source_lang"`
 	TargetLang               string         `json:"target_lang"`
 }
@@ -34,6 +36,7 @@ type projectResponse struct {
 	OwnerOrgID               *int           `json:"owner_org_id,omitempty"`
 	Config                   map[string]any `json:"config,omitempty"`
 	DefaultTranslationConfig map[string]any `json:"default_translation_config,omitempty"`
+	GlossaryEnabled          bool           `json:"glossary_enabled"`
 	SourceLang               string         `json:"source_lang"`
 	TargetLang               string         `json:"target_lang"`
 }
@@ -46,6 +49,7 @@ func toProjectResponse(p *ent.Project) projectResponse {
 		OwnerOrgID:               p.OwnerOrgID,
 		Config:                   p.Config,
 		DefaultTranslationConfig: p.DefaultTranslationConfig,
+		GlossaryEnabled:          p.GlossaryEnabled,
 		SourceLang:               p.SourceLang,
 		TargetLang:               p.TargetLang,
 	}
@@ -73,6 +77,7 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		Name:                     req.Name,
 		Config:                   req.Config,
 		DefaultTranslationConfig: req.DefaultTranslationConfig,
+		GlossaryEnabled:          req.GlossaryEnabled,
 		SourceLang:               req.SourceLang,
 		TargetLang:               req.TargetLang,
 	})
@@ -106,6 +111,7 @@ func (s *Server) handleCreateOrgProject(w http.ResponseWriter, r *http.Request) 
 		Name:                     req.Name,
 		Config:                   req.Config,
 		DefaultTranslationConfig: req.DefaultTranslationConfig,
+		GlossaryEnabled:          req.GlossaryEnabled,
 		SourceLang:               req.SourceLang,
 		TargetLang:               req.TargetLang,
 	})
@@ -189,6 +195,7 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 		Name:                     req.Name,
 		Config:                   req.Config,
 		DefaultTranslationConfig: req.DefaultTranslationConfig,
+		GlossaryEnabled:          req.GlossaryEnabled,
 		SourceLang:               req.SourceLang,
 		TargetLang:               req.TargetLang,
 	})

@@ -7419,6 +7419,7 @@ type ProjectMutation struct {
 	name                       *string
 	_config                    *map[string]interface{}
 	default_translation_config *map[string]interface{}
+	glossary_enabled           *bool
 	source_lang                *string
 	target_lang                *string
 	clearedFields              map[string]struct{}
@@ -7826,6 +7827,42 @@ func (m *ProjectMutation) OldDefaultTranslationConfig(ctx context.Context) (v ma
 // ResetDefaultTranslationConfig resets all changes to the "default_translation_config" field.
 func (m *ProjectMutation) ResetDefaultTranslationConfig() {
 	m.default_translation_config = nil
+}
+
+// SetGlossaryEnabled sets the "glossary_enabled" field.
+func (m *ProjectMutation) SetGlossaryEnabled(b bool) {
+	m.glossary_enabled = &b
+}
+
+// GlossaryEnabled returns the value of the "glossary_enabled" field in the mutation.
+func (m *ProjectMutation) GlossaryEnabled() (r bool, exists bool) {
+	v := m.glossary_enabled
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldGlossaryEnabled returns the old "glossary_enabled" field's value of the Project entity.
+// If the Project object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ProjectMutation) OldGlossaryEnabled(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldGlossaryEnabled is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldGlossaryEnabled requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldGlossaryEnabled: %w", err)
+	}
+	return oldValue.GlossaryEnabled, nil
+}
+
+// ResetGlossaryEnabled resets all changes to the "glossary_enabled" field.
+func (m *ProjectMutation) ResetGlossaryEnabled() {
+	m.glossary_enabled = nil
 }
 
 // SetSourceLang sets the "source_lang" field.
@@ -8366,7 +8403,7 @@ func (m *ProjectMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ProjectMutation) Fields() []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 10)
 	if m.created_at != nil {
 		fields = append(fields, project.FieldCreatedAt)
 	}
@@ -8387,6 +8424,9 @@ func (m *ProjectMutation) Fields() []string {
 	}
 	if m.default_translation_config != nil {
 		fields = append(fields, project.FieldDefaultTranslationConfig)
+	}
+	if m.glossary_enabled != nil {
+		fields = append(fields, project.FieldGlossaryEnabled)
 	}
 	if m.source_lang != nil {
 		fields = append(fields, project.FieldSourceLang)
@@ -8416,6 +8456,8 @@ func (m *ProjectMutation) Field(name string) (ent.Value, bool) {
 		return m.Config()
 	case project.FieldDefaultTranslationConfig:
 		return m.DefaultTranslationConfig()
+	case project.FieldGlossaryEnabled:
+		return m.GlossaryEnabled()
 	case project.FieldSourceLang:
 		return m.SourceLang()
 	case project.FieldTargetLang:
@@ -8443,6 +8485,8 @@ func (m *ProjectMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldConfig(ctx)
 	case project.FieldDefaultTranslationConfig:
 		return m.OldDefaultTranslationConfig(ctx)
+	case project.FieldGlossaryEnabled:
+		return m.OldGlossaryEnabled(ctx)
 	case project.FieldSourceLang:
 		return m.OldSourceLang(ctx)
 	case project.FieldTargetLang:
@@ -8504,6 +8548,13 @@ func (m *ProjectMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetDefaultTranslationConfig(v)
+		return nil
+	case project.FieldGlossaryEnabled:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetGlossaryEnabled(v)
 		return nil
 	case project.FieldSourceLang:
 		v, ok := value.(string)
@@ -8606,6 +8657,9 @@ func (m *ProjectMutation) ResetField(name string) error {
 		return nil
 	case project.FieldDefaultTranslationConfig:
 		m.ResetDefaultTranslationConfig()
+		return nil
+	case project.FieldGlossaryEnabled:
+		m.ResetGlossaryEnabled()
 		return nil
 	case project.FieldSourceLang:
 		m.ResetSourceLang()

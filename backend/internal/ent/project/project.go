@@ -28,6 +28,8 @@ const (
 	FieldConfig = "config"
 	// FieldDefaultTranslationConfig holds the string denoting the default_translation_config field in the database.
 	FieldDefaultTranslationConfig = "default_translation_config"
+	// FieldGlossaryEnabled holds the string denoting the glossary_enabled field in the database.
+	FieldGlossaryEnabled = "glossary_enabled"
 	// FieldSourceLang holds the string denoting the source_lang field in the database.
 	FieldSourceLang = "source_lang"
 	// FieldTargetLang holds the string denoting the target_lang field in the database.
@@ -127,6 +129,7 @@ var Columns = []string{
 	FieldOwnerOrgID,
 	FieldConfig,
 	FieldDefaultTranslationConfig,
+	FieldGlossaryEnabled,
 	FieldSourceLang,
 	FieldTargetLang,
 }
@@ -158,6 +161,8 @@ var (
 	DefaultConfig func() map[string]interface{}
 	// DefaultDefaultTranslationConfig holds the default value on creation for the "default_translation_config" field.
 	DefaultDefaultTranslationConfig func() map[string]interface{}
+	// DefaultGlossaryEnabled holds the default value on creation for the "glossary_enabled" field.
+	DefaultGlossaryEnabled bool
 	// DefaultSourceLang holds the default value on creation for the "source_lang" field.
 	DefaultSourceLang string
 	// DefaultTargetLang holds the default value on creation for the "target_lang" field.
@@ -195,6 +200,11 @@ func ByOwnerUserID(opts ...sql.OrderTermOption) OrderOption {
 // ByOwnerOrgID orders the results by the owner_org_id field.
 func ByOwnerOrgID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldOwnerOrgID, opts...).ToFunc()
+}
+
+// ByGlossaryEnabled orders the results by the glossary_enabled field.
+func ByGlossaryEnabled(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldGlossaryEnabled, opts...).ToFunc()
 }
 
 // BySourceLang orders the results by the source_lang field.

@@ -38,6 +38,7 @@ type CreateProjectInput struct {
 	OwnerOrgID               *int
 	Config                   map[string]any
 	DefaultTranslationConfig map[string]any
+	GlossaryEnabled          *bool
 	SourceLang               string
 	TargetLang               string
 }
@@ -46,6 +47,7 @@ type UpdateProjectInput struct {
 	Name                     string
 	Config                   map[string]any
 	DefaultTranslationConfig map[string]any
+	GlossaryEnabled          *bool
 	SourceLang               string
 	TargetLang               string
 }
@@ -63,6 +65,7 @@ func (s *ProjectService) CreateProject(ctx context.Context, actorUserID int, inp
 		SetName(normalized.Name).
 		SetConfig(cloneMap(normalized.Config)).
 		SetDefaultTranslationConfig(cloneMap(normalized.DefaultTranslationConfig)).
+		SetGlossaryEnabled(normalized.GlossaryEnabled != nil && *normalized.GlossaryEnabled).
 		SetSourceLang(normalized.SourceLang).
 		SetTargetLang(normalized.TargetLang)
 	if normalized.OwnerUserID != nil {
@@ -90,6 +93,7 @@ func (s *ProjectService) CreateOrgProject(ctx context.Context, actorUserID, orgI
 		SetOwnerOrgID(orgID).
 		SetConfig(cloneMap(input.Config)).
 		SetDefaultTranslationConfig(cloneMap(input.DefaultTranslationConfig)).
+		SetGlossaryEnabled(input.GlossaryEnabled != nil && *input.GlossaryEnabled).
 		SetSourceLang(normalizeLangOrDefault(input.SourceLang, "auto")).
 		SetTargetLang(normalizeLangOrDefault(input.TargetLang, "zh"))
 	created, err := create.Save(ctx)
@@ -134,10 +138,12 @@ func (s *ProjectService) UpdateProject(ctx context.Context, actorUserID, project
 	if err != nil {
 		return nil, err
 	}
+	glossaryEnabled := normalized.GlossaryEnabled
 	updated, err := s.client.Project.UpdateOneID(projectID).
 		SetName(normalized.Name).
 		SetConfig(cloneMap(normalized.Config)).
 		SetDefaultTranslationConfig(cloneMap(normalized.DefaultTranslationConfig)).
+		SetGlossaryEnabled(glossaryEnabled != nil && *glossaryEnabled).
 		SetSourceLang(normalized.SourceLang).
 		SetTargetLang(normalized.TargetLang).
 		Save(ctx)
@@ -337,6 +343,7 @@ func (s *ProjectService) normalizeCreateInput(ctx context.Context, actorUserID i
 		OwnerUserID:              ownerUserID,
 		Config:                   cloneMap(input.Config),
 		DefaultTranslationConfig: cloneMap(input.DefaultTranslationConfig),
+		GlossaryEnabled:          input.GlossaryEnabled,
 		SourceLang:               normalizeLangOrDefault(input.SourceLang, "auto"),
 		TargetLang:               normalizeLangOrDefault(input.TargetLang, "zh"),
 	}, nil
@@ -355,10 +362,16 @@ func (s *ProjectService) normalizeUpdateInput(current *ent.Project, input Update
 	if len(defaultTranslationConfig) == 0 {
 		defaultTranslationConfig = cloneMap(current.DefaultTranslationConfig)
 	}
+	glossaryEnabled := input.GlossaryEnabled
+	if glossaryEnabled == nil {
+		currentVal := current.GlossaryEnabled
+		glossaryEnabled = &currentVal
+	}
 	return UpdateProjectInput{
 		Name:                     name,
 		Config:                   configValue,
 		DefaultTranslationConfig: defaultTranslationConfig,
+		GlossaryEnabled:          glossaryEnabled,
 		SourceLang:               normalizeLangOrDefault(input.SourceLang, current.SourceLang),
 		TargetLang:               normalizeLangOrDefault(input.TargetLang, current.TargetLang),
 	}, nil

@@ -103,6 +103,20 @@ func (_c *ProjectCreate) SetDefaultTranslationConfig(v map[string]interface{}) *
 	return _c
 }
 
+// SetGlossaryEnabled sets the "glossary_enabled" field.
+func (_c *ProjectCreate) SetGlossaryEnabled(v bool) *ProjectCreate {
+	_c.mutation.SetGlossaryEnabled(v)
+	return _c
+}
+
+// SetNillableGlossaryEnabled sets the "glossary_enabled" field if the given value is not nil.
+func (_c *ProjectCreate) SetNillableGlossaryEnabled(v *bool) *ProjectCreate {
+	if v != nil {
+		_c.SetGlossaryEnabled(*v)
+	}
+	return _c
+}
+
 // SetSourceLang sets the "source_lang" field.
 func (_c *ProjectCreate) SetSourceLang(v string) *ProjectCreate {
 	_c.mutation.SetSourceLang(v)
@@ -297,6 +311,10 @@ func (_c *ProjectCreate) defaults() {
 		v := project.DefaultDefaultTranslationConfig()
 		_c.mutation.SetDefaultTranslationConfig(v)
 	}
+	if _, ok := _c.mutation.GlossaryEnabled(); !ok {
+		v := project.DefaultGlossaryEnabled
+		_c.mutation.SetGlossaryEnabled(v)
+	}
 	if _, ok := _c.mutation.SourceLang(); !ok {
 		v := project.DefaultSourceLang
 		_c.mutation.SetSourceLang(v)
@@ -338,6 +356,9 @@ func (_c *ProjectCreate) check() error {
 	}
 	if _, ok := _c.mutation.DefaultTranslationConfig(); !ok {
 		return &ValidationError{Name: "default_translation_config", err: errors.New(`ent: missing required field "Project.default_translation_config"`)}
+	}
+	if _, ok := _c.mutation.GlossaryEnabled(); !ok {
+		return &ValidationError{Name: "glossary_enabled", err: errors.New(`ent: missing required field "Project.glossary_enabled"`)}
 	}
 	if _, ok := _c.mutation.SourceLang(); !ok {
 		return &ValidationError{Name: "source_lang", err: errors.New(`ent: missing required field "Project.source_lang"`)}
@@ -390,6 +411,10 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.DefaultTranslationConfig(); ok {
 		_spec.SetField(project.FieldDefaultTranslationConfig, field.TypeJSON, value)
 		_node.DefaultTranslationConfig = value
+	}
+	if value, ok := _c.mutation.GlossaryEnabled(); ok {
+		_spec.SetField(project.FieldGlossaryEnabled, field.TypeBool, value)
+		_node.GlossaryEnabled = value
 	}
 	if value, ok := _c.mutation.SourceLang(); ok {
 		_spec.SetField(project.FieldSourceLang, field.TypeString, value)
