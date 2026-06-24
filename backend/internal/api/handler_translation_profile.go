@@ -86,8 +86,7 @@ func profileConfigToResponse(c *schema.TranslationProfileConfigData) Translation
 		},
 		Glossary: ProfileGlossaryConfig{
 			Bootstrap: ProfileBootstrapConfig{
-				Mode:                   ProfileBootstrapConfigMode(c.Glossary.Bootstrap.Mode),
-				Save:                   c.Glossary.Bootstrap.Save,
+				Enabled:                c.Glossary.Bootstrap.Enabled,
 				MaxTermsPerBatch:       c.Glossary.Bootstrap.MaxTermsPerBatch,
 				MinSourceLen:           c.Glossary.Bootstrap.MinSourceLen,
 				InlineConflictStrategy: ProfileBootstrapConfigInlineConflictStrategy(c.Glossary.Bootstrap.InlineConflictStrategy),
@@ -144,8 +143,7 @@ func parseProfileConfig(c *TranslationProfileConfig) *schema.TranslationProfileC
 		},
 		Glossary: schema.ProfileGlossaryConfig{
 			Bootstrap: schema.ProfileBootstrapConfig{
-				Mode:                   string(c.Glossary.Bootstrap.Mode),
-				Save:                   c.Glossary.Bootstrap.Save,
+				Enabled:                c.Glossary.Bootstrap.Enabled,
 				MaxTermsPerBatch:       c.Glossary.Bootstrap.MaxTermsPerBatch,
 				MinSourceLen:           c.Glossary.Bootstrap.MinSourceLen,
 				InlineConflictStrategy: string(c.Glossary.Bootstrap.InlineConflictStrategy),

@@ -348,13 +348,22 @@ func buildStrategyConfig(snapshot *service.JobExecutionSnapshot) *config.Config 
 		cfg.Glossary = config.GlossaryConfig{
 			Enabled: snapshot.GlossaryEnabled,
 			Bootstrap: config.BootstrapConfig{
-				Mode:                   s.Glossary.Bootstrap.Mode,
-				TemplateContent:        snapshot.Rounds[0].Prompt.BootstrapContent,
-				Save:                   s.Glossary.Bootstrap.Save,
 				MaxTermsPerBatch:       s.Glossary.Bootstrap.MaxTermsPerBatch,
 				MinSourceLen:           s.Glossary.Bootstrap.MinSourceLen,
 				InlineConflictStrategy: s.Glossary.Bootstrap.InlineConflictStrategy,
 			},
+		}
+
+		// 独立自举配置从 snapshot.Bootstrap 读取
+		if snapshot.Bootstrap != nil {
+			cfg.Glossary.Standalone = config.StandaloneBootstrapConfig{
+				Enabled:          snapshot.Bootstrap.Enabled,
+				TemplateContent:  snapshot.Bootstrap.TemplateContent,
+				BatchSize:        snapshot.Bootstrap.BatchSize,
+				Concurrency:      snapshot.Bootstrap.Concurrency,
+				MaxTermsPerBatch: snapshot.Bootstrap.MaxTermsPerBatch,
+				MinSourceLen:     snapshot.Bootstrap.MinSourceLen,
+			}
 		}
 	}
 

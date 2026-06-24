@@ -106,65 +106,40 @@ func TestValidate_UniqueBackendNames(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Bootstrap 模板必填校验
+// Standalone Bootstrap 模板必填校验
 // ---------------------------------------------------------------------------
 
-func TestValidate_BootstrapTemplateRequired_PreMode(t *testing.T) {
+func TestValidate_StandaloneBootstrapTemplateRequired(t *testing.T) {
 	cfg := Default()
-	cfg.Glossary.Bootstrap.Mode = BootstrapModePre
-	cfg.Glossary.Bootstrap.Template = "" // 缺少模板引用
+	cfg.Glossary.Standalone.Enabled = true
+	cfg.Glossary.Standalone.TemplateContent = "" // 缺少模板内容
 	err := cfg.Validate()
 	if err == nil {
-		t.Fatal("expected error for missing bootstrap template in pre mode")
+		t.Fatal("expected error for missing standalone bootstrap template content")
 	}
-	if !strings.Contains(err.Error(), "glossary.bootstrap.template is required") {
+	if !strings.Contains(err.Error(), "glossary.standalone.template_content is required") {
 		t.Errorf("unexpected error message: %v", err)
 	}
 }
 
-func TestValidate_BootstrapTemplateRequired_InlineMode(t *testing.T) {
+func TestValidate_StandaloneBootstrapNotRequired_WhenDisabled(t *testing.T) {
 	cfg := Default()
-	cfg.Glossary.Bootstrap.Mode = BootstrapModeInline
-	cfg.Glossary.Bootstrap.Template = "" // 缺少模板引用
-	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected error for missing bootstrap template in inline mode")
-	}
-	if !strings.Contains(err.Error(), "glossary.bootstrap.template is required") {
-		t.Errorf("unexpected error message: %v", err)
-	}
-}
-
-func TestValidate_BootstrapTemplateNotRequired_OffMode(t *testing.T) {
-	cfg := Default()
-	cfg.Glossary.Bootstrap.Mode = BootstrapModeOff
-	cfg.Glossary.Bootstrap.Template = "" // off 模式下不要求模板
+	cfg.Glossary.Standalone.Enabled = false
+	cfg.Glossary.Standalone.TemplateContent = "" // 禁用时不要求模板
 	if err := cfg.Validate(); err != nil {
-		t.Fatalf("unexpected error in off mode: %v", err)
+		t.Fatalf("unexpected error when standalone is disabled: %v", err)
 	}
 }
 
-func TestValidate_BootstrapTemplateProvided(t *testing.T) {
+func TestValidate_StandaloneBootstrapTemplateProvided(t *testing.T) {
 	cfg := Default()
-	cfg.Glossary.Bootstrap.Mode = BootstrapModePre
-	cfg.Glossary.Bootstrap.Template = "通用提示词" // 提供模板引用
+	cfg.Glossary.Standalone.Enabled = true
+	cfg.Glossary.Standalone.TemplateContent = "bootstrap prompt content"
 	if err := cfg.Validate(); err != nil {
 		t.Fatalf("unexpected error when template is provided: %v", err)
 	}
 	// 校验 Glossary 被自动开启
 	if !cfg.Glossary.Enabled {
-		t.Error("expected glossary.enabled to be auto-set to true when bootstrap mode is not off")
-	}
-}
-
-func TestValidate_BootstrapModeInvalid(t *testing.T) {
-	cfg := Default()
-	cfg.Glossary.Bootstrap.Mode = "invalid"
-	err := cfg.Validate()
-	if err == nil {
-		t.Fatal("expected error for invalid bootstrap mode")
-	}
-	if !strings.Contains(err.Error(), "glossary.bootstrap.mode must be one of") {
-		t.Errorf("unexpected error message: %v", err)
+		t.Error("expected glossary.enabled to be auto-set to true when standalone bootstrap is enabled")
 	}
 }

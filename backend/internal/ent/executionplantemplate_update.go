@@ -120,6 +120,26 @@ func (_u *ExecutionPlanTemplateUpdate) ClearOwnerOrgID() *ExecutionPlanTemplateU
 	return _u
 }
 
+// SetBootstrap sets the "bootstrap" field.
+func (_u *ExecutionPlanTemplateUpdate) SetBootstrap(v schema.ExecutionPlanBootstrapConfig) *ExecutionPlanTemplateUpdate {
+	_u.mutation.SetBootstrap(v)
+	return _u
+}
+
+// SetNillableBootstrap sets the "bootstrap" field if the given value is not nil.
+func (_u *ExecutionPlanTemplateUpdate) SetNillableBootstrap(v *schema.ExecutionPlanBootstrapConfig) *ExecutionPlanTemplateUpdate {
+	if v != nil {
+		_u.SetBootstrap(*v)
+	}
+	return _u
+}
+
+// ClearBootstrap clears the value of the "bootstrap" field.
+func (_u *ExecutionPlanTemplateUpdate) ClearBootstrap() *ExecutionPlanTemplateUpdate {
+	_u.mutation.ClearBootstrap()
+	return _u
+}
+
 // SetRounds sets the "rounds" field.
 func (_u *ExecutionPlanTemplateUpdate) SetRounds(v []schema.ExecutionRoundConfig) *ExecutionPlanTemplateUpdate {
 	_u.mutation.SetRounds(v)
@@ -238,6 +258,12 @@ func (_u *ExecutionPlanTemplateUpdate) sqlSave(ctx context.Context) (_node int, 
 	}
 	if value, ok := _u.mutation.Scope(); ok {
 		_spec.SetField(executionplantemplate.FieldScope, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Bootstrap(); ok {
+		_spec.SetField(executionplantemplate.FieldBootstrap, field.TypeJSON, value)
+	}
+	if _u.mutation.BootstrapCleared() {
+		_spec.ClearField(executionplantemplate.FieldBootstrap, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.Rounds(); ok {
 		_spec.SetField(executionplantemplate.FieldRounds, field.TypeJSON, value)
@@ -413,6 +439,26 @@ func (_u *ExecutionPlanTemplateUpdateOne) ClearOwnerOrgID() *ExecutionPlanTempla
 	return _u
 }
 
+// SetBootstrap sets the "bootstrap" field.
+func (_u *ExecutionPlanTemplateUpdateOne) SetBootstrap(v schema.ExecutionPlanBootstrapConfig) *ExecutionPlanTemplateUpdateOne {
+	_u.mutation.SetBootstrap(v)
+	return _u
+}
+
+// SetNillableBootstrap sets the "bootstrap" field if the given value is not nil.
+func (_u *ExecutionPlanTemplateUpdateOne) SetNillableBootstrap(v *schema.ExecutionPlanBootstrapConfig) *ExecutionPlanTemplateUpdateOne {
+	if v != nil {
+		_u.SetBootstrap(*v)
+	}
+	return _u
+}
+
+// ClearBootstrap clears the value of the "bootstrap" field.
+func (_u *ExecutionPlanTemplateUpdateOne) ClearBootstrap() *ExecutionPlanTemplateUpdateOne {
+	_u.mutation.ClearBootstrap()
+	return _u
+}
+
 // SetRounds sets the "rounds" field.
 func (_u *ExecutionPlanTemplateUpdateOne) SetRounds(v []schema.ExecutionRoundConfig) *ExecutionPlanTemplateUpdateOne {
 	_u.mutation.SetRounds(v)
@@ -561,6 +607,12 @@ func (_u *ExecutionPlanTemplateUpdateOne) sqlSave(ctx context.Context) (_node *E
 	}
 	if value, ok := _u.mutation.Scope(); ok {
 		_spec.SetField(executionplantemplate.FieldScope, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Bootstrap(); ok {
+		_spec.SetField(executionplantemplate.FieldBootstrap, field.TypeJSON, value)
+	}
+	if _u.mutation.BootstrapCleared() {
+		_spec.ClearField(executionplantemplate.FieldBootstrap, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.Rounds(); ok {
 		_spec.SetField(executionplantemplate.FieldRounds, field.TypeJSON, value)

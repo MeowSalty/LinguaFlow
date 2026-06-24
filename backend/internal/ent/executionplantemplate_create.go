@@ -113,6 +113,20 @@ func (_c *ExecutionPlanTemplateCreate) SetNillableOwnerOrgID(v *int) *ExecutionP
 	return _c
 }
 
+// SetBootstrap sets the "bootstrap" field.
+func (_c *ExecutionPlanTemplateCreate) SetBootstrap(v schema.ExecutionPlanBootstrapConfig) *ExecutionPlanTemplateCreate {
+	_c.mutation.SetBootstrap(v)
+	return _c
+}
+
+// SetNillableBootstrap sets the "bootstrap" field if the given value is not nil.
+func (_c *ExecutionPlanTemplateCreate) SetNillableBootstrap(v *schema.ExecutionPlanBootstrapConfig) *ExecutionPlanTemplateCreate {
+	if v != nil {
+		_c.SetBootstrap(*v)
+	}
+	return _c
+}
+
 // SetRounds sets the "rounds" field.
 func (_c *ExecutionPlanTemplateCreate) SetRounds(v []schema.ExecutionRoundConfig) *ExecutionPlanTemplateCreate {
 	_c.mutation.SetRounds(v)
@@ -262,6 +276,10 @@ func (_c *ExecutionPlanTemplateCreate) createSpec() (*ExecutionPlanTemplate, *sq
 	if value, ok := _c.mutation.Scope(); ok {
 		_spec.SetField(executionplantemplate.FieldScope, field.TypeString, value)
 		_node.Scope = value
+	}
+	if value, ok := _c.mutation.Bootstrap(); ok {
+		_spec.SetField(executionplantemplate.FieldBootstrap, field.TypeJSON, value)
+		_node.Bootstrap = value
 	}
 	if value, ok := _c.mutation.Rounds(); ok {
 		_spec.SetField(executionplantemplate.FieldRounds, field.TypeJSON, value)

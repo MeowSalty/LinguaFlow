@@ -54,10 +54,9 @@ type ProfileGlossaryConfig struct {
 	Bootstrap ProfileBootstrapConfig `json:"bootstrap" yaml:"bootstrap"`
 }
 
-// ProfileBootstrapConfig 术语自举配置。
+// ProfileBootstrapConfig 术语自举配置（仅内联自举相关）。
 type ProfileBootstrapConfig struct {
-	Mode                   string `json:"mode"                     yaml:"mode"`
-	Save                   bool   `json:"save"                     yaml:"save"`
+	Enabled                bool   `json:"enabled"                 yaml:"enabled"`
 	MaxTermsPerBatch       int    `json:"max_terms_per_batch"      yaml:"max_terms_per_batch"`
 	MinSourceLen           int    `json:"min_source_len"           yaml:"min_source_len"`
 	InlineConflictStrategy string `json:"inline_conflict_strategy" yaml:"inline_conflict_strategy"`
@@ -91,8 +90,7 @@ func DefaultProfileConfig() TranslationProfileConfigData {
 		},
 		Glossary: ProfileGlossaryConfig{
 			Bootstrap: ProfileBootstrapConfig{
-				Mode:                   "off",
-				Save:                   true,
+				Enabled:                true,
 				MaxTermsPerBatch:       20,
 				MinSourceLen:           2,
 				InlineConflictStrategy: "rewrite-local",

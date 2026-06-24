@@ -41,8 +41,6 @@ translation_profile:
     glossary:
       enabled: false
       bootstrap:
-        mode: "off"
-        save: true
         max_terms_per_batch: 20
         min_source_len: 2
         inline_conflict_strategy: "rewrite-local"

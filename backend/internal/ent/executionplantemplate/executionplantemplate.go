@@ -28,6 +28,8 @@ const (
 	FieldOwnerUserID = "owner_user_id"
 	// FieldOwnerOrgID holds the string denoting the owner_org_id field in the database.
 	FieldOwnerOrgID = "owner_org_id"
+	// FieldBootstrap holds the string denoting the bootstrap field in the database.
+	FieldBootstrap = "bootstrap"
 	// FieldRounds holds the string denoting the rounds field in the database.
 	FieldRounds = "rounds"
 	// EdgeOwnerUser holds the string denoting the owner_user edge name in mutations.
@@ -62,6 +64,7 @@ var Columns = []string{
 	FieldScope,
 	FieldOwnerUserID,
 	FieldOwnerOrgID,
+	FieldBootstrap,
 	FieldRounds,
 }
 

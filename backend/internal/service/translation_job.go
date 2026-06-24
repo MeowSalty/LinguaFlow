@@ -108,13 +108,25 @@ type TranslationJobExecution struct {
 
 // JobExecutionSnapshot 任务执行快照，创建时生成，不可变。
 type JobExecutionSnapshot struct {
-	ExecutionPlanID   int                `json:"execution_plan_id"`
-	ExecutionPlanName string             `json:"execution_plan_name"`
-	Rounds            []JobRoundSnapshot `json:"rounds"`
-	SourceLang        string             `json:"source_lang"`
-	TargetLang        string             `json:"target_lang"`
-	GlossaryEnabled   bool               `json:"glossary_enabled"`
-	AutoApprove       bool               `json:"auto_approve,omitempty"`
+	ExecutionPlanID   int                             `json:"execution_plan_id"`
+	ExecutionPlanName string                          `json:"execution_plan_name"`
+	Rounds            []JobRoundSnapshot              `json:"rounds"`
+	SourceLang        string                          `json:"source_lang"`
+	TargetLang        string                          `json:"target_lang"`
+	GlossaryEnabled   bool                            `json:"glossary_enabled"`
+	AutoApprove       bool                            `json:"auto_approve,omitempty"`
+	Bootstrap         *ExecutionPlanBootstrapSnapshot `json:"bootstrap,omitempty"`
+}
+
+// ExecutionPlanBootstrapSnapshot 独立自举快照。
+type ExecutionPlanBootstrapSnapshot struct {
+	Enabled          bool            `json:"enabled"`
+	Backend          BackendSnapshot `json:"backend"`
+	TemplateContent  string          `json:"template_content"`
+	BatchSize        int             `json:"batch_size"`
+	Concurrency      int             `json:"concurrency"`
+	MaxTermsPerBatch int             `json:"max_terms_per_batch"`
+	MinSourceLen     int             `json:"min_source_len"`
 }
 
 // JobRoundSnapshot 单轮的完整执行快照。
@@ -305,11 +317,7 @@ func (s *TranslationJobService) validateAndSnapshot(
 			return nil, fmt.Errorf("rounds[%d] prompt_template %q has no system_prompt_content (translation prompt is required)", i, promptSnap.TemplateName)
 		}
 
-		// 校验 bootstrap 模板必填（当术语表启用且 bootstrap 非 off 时）
-		if projectRow.GlossaryEnabled && strategySnap.Glossary.Bootstrap.Mode != "off" && promptSnap.BootstrapContent == "" {
-			return nil, fmt.Errorf("rounds[%d] prompt_template %q has no bootstrap_prompt_content (required when glossary_enabled=true and glossary.bootstrap.mode is %q)",
-				i, promptSnap.TemplateName, strategySnap.Glossary.Bootstrap.Mode)
-		}
+		// 内联自举不再需要独立的 bootstrap 模板（inline 是翻译 prompt 的一部分）
 
 		snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
 			Name:            round.Name,
@@ -322,6 +330,43 @@ func (s *TranslationJobService) validateAndSnapshot(
 			RateLimitPerSec: round.RateLimitPerSec,
 			Retry:           round.Retry,
 		})
+	}
+
+	// 独立自举快照
+	if plan.Bootstrap.Enabled {
+		bs := &plan.Bootstrap
+
+		// 校验自举后端可访问性
+		if err := s.validateBackendAccess(ctx, projectRow, bs.BackendID); err != nil {
+			return nil, fmt.Errorf("bootstrap backend: %w", err)
+		}
+
+		// 快照自举后端
+		bootstrapBackendSnap, err := s.snapshotBackend(ctx, bs.BackendID)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap snapshot backend: %w", err)
+		}
+
+		// 快照自举提示词模板（仅用其 bootstrap_prompt_content）
+		bootstrapPromptSnap, err := s.snapshotPromptTemplate(ctx, bs.PromptTemplateID)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap snapshot prompt: %w", err)
+		}
+
+		if bootstrapPromptSnap.BootstrapContent == "" {
+			return nil, fmt.Errorf("bootstrap prompt_template %q has no bootstrap_prompt_content", bootstrapPromptSnap.TemplateName)
+		}
+
+		snapshot.GlossaryEnabled = true
+		snapshot.Bootstrap = &ExecutionPlanBootstrapSnapshot{
+			Enabled:          true,
+			Backend:          *bootstrapBackendSnap,
+			TemplateContent:  bootstrapPromptSnap.BootstrapContent,
+			BatchSize:        bs.BatchSize,
+			Concurrency:      bs.Concurrency,
+			MaxTermsPerBatch: bs.MaxTermsPerBatch,
+			MinSourceLen:     bs.MinSourceLen,
+		}
 	}
 
 	return snapshot, nil

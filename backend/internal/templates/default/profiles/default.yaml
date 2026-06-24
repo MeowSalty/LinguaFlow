@@ -39,3 +39,10 @@ repair:
   placeholder_normalize: true
   # 解析失败或占位符仍缺失时附加反例 reminder 重试一次
   prompt_upgrade: true
+
+# ── 术语自举 ──
+bootstrap:
+  enabled: false
+  max_terms_per_batch: 5
+  min_source_len: 2
+  inline_conflict_strategy: "rewrite-local"

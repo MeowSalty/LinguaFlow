@@ -19,6 +19,17 @@ type ExecutionRoundConfig struct {
 	Retry            RetryConfig `json:"retry"              yaml:"retry"`
 }
 
+// ExecutionPlanBootstrapConfig 独立自举配置。
+type ExecutionPlanBootstrapConfig struct {
+	Enabled          bool `json:"enabled"             yaml:"enabled"`
+	BackendID        int  `json:"backend_id"          yaml:"backend_id"`
+	PromptTemplateID int  `json:"prompt_template_id"  yaml:"prompt_template_id"`
+	BatchSize        int  `json:"batch_size"          yaml:"batch_size"`
+	Concurrency      int  `json:"concurrency"         yaml:"concurrency"`
+	MaxTermsPerBatch int  `json:"max_terms_per_batch" yaml:"max_terms_per_batch"`
+	MinSourceLen     int  `json:"min_source_len"      yaml:"min_source_len"`
+}
+
 // RetryConfig 重试策略。
 type RetryConfig struct {
 	MaxAttempts int  `json:"max_attempts" yaml:"max_attempts"`
@@ -43,6 +54,9 @@ func (ExecutionPlanTemplate) Fields() []ent.Field {
 			Comment("user / org"),
 		field.Int("owner_user_id").Optional().Nillable().Positive(),
 		field.Int("owner_org_id").Optional().Nillable().Positive(),
+		field.JSON("bootstrap", ExecutionPlanBootstrapConfig{}).
+			Optional().
+			Comment("独立自举配置"),
 		field.JSON("rounds", []ExecutionRoundConfig{}).
 			Comment("轮次配置列表，每轮引用后端+提示词+策略"),
 	}

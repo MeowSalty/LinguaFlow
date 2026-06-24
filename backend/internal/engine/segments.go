@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline/stages"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
@@ -54,21 +53,20 @@ func (e *Engine) buildPipeline(opts pipelineOptions) (*pipeline.Pipeline, backen
 		s = append(s, stages.NewProtect(protector))
 	}
 
-	bootstrapMode := e.cfg.Glossary.Bootstrap.Mode
-	inlineBootstrap := e.cfg.Glossary.Enabled && bootstrapMode == config.BootstrapModeInline
+	inlineBootstrap := e.cfg.Glossary.Enabled && e.cfg.Glossary.Bootstrap.Enabled
 	repairOpts := toRepairOptions(pc.Translate.Repair)
 
-	if e.cfg.Glossary.Enabled && bootstrapMode == config.BootstrapModePre && e.bootstrapRenderer != nil {
+	if e.standaloneBootstrap != nil && e.standaloneBootstrap.Enabled && e.bootstrapRenderer != nil {
 		s = append(s, &stages.Bootstrap{
 			Backends:         e.bootstrapBackends,
 			Renderer:         e.bootstrapRenderer,
 			Glossary:         e.glossary,
 			Limiter:          limiter,
 			Retry:            retry,
-			Concurrency:      pc.Translate.Concurrency,
-			BatchSize:        pc.Translate.BatchSize,
-			MaxTermsPerBatch: e.cfg.Glossary.Bootstrap.MaxTermsPerBatch,
-			MinSourceLen:     e.cfg.Glossary.Bootstrap.MinSourceLen,
+			Concurrency:      e.standaloneBootstrap.Concurrency,
+			BatchSize:        e.standaloneBootstrap.BatchSize,
+			MaxTermsPerBatch: e.standaloneBootstrap.MaxTermsPerBatch,
+			MinSourceLen:     e.standaloneBootstrap.MinSourceLen,
 			Logger:           e.logger,
 			Reporter:         e.reporter,
 			Repair:           repairOpts,

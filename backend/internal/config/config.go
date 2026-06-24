@@ -116,38 +116,41 @@ type PromptConfig struct {
 }
 
 type GlossaryConfig struct {
-	Enabled   bool            `yaml:"enabled"`
-	Path      string          `yaml:"path"`
-	Bootstrap BootstrapConfig `yaml:"bootstrap"`
+	Enabled    bool                      `yaml:"enabled"`
+	Path       string                    `yaml:"path"`
+	Save       bool                      `yaml:"save"`
+	Bootstrap  BootstrapConfig           `yaml:"bootstrap"`  // inline 配置
+	Standalone StandaloneBootstrapConfig `yaml:"standalone"` // 独立自举配置
 }
 
-// BootstrapConfig 控制术语自举：用 LLM 抽取并翻译领域术语，写入运行时 Glossary。
+// BootstrapConfig 控制内联自举（inline）：翻译的 LLM 调用顺带返回术语。
 //
-// Mode 选择策略：
-//   - off：关闭自举（默认）。
-//   - pre：translate 之前独立扫一遍文档，整篇翻译都能用上抽到的术语；多一次 LLM 调用。
-//   - inline：translate 的 LLM 调用顺带返回术语；只对后续 batch 生效，省一次扫描。
-//
-// 任一非 off 模式都隐含要求 Glossary.Enabled=true，Validate 会自动设上。
-// Save 控制结束后是否把增量回写到 Glossary.Path；off 模式下没有 dirty 自然不会写。
-//
-// InlineConflictStrategy 仅 inline 模式下生效，控制并发 worker 给同一 source 提交不同
+// InlineConflictStrategy 控制并发 worker 给同一 source 提交不同
 // target 时的处理方式：First-Wins 保证全局术语表里只保留先到的版本，但后到 worker 的
 // 译文已经用了被丢弃的版本，会导致文档内同一术语翻译不一致。
 //   - rewrite-local（默认）：后到 worker 把本批译文里自己用的 target 字面值替换为
 //     权威表中的版本；CJK 直接替换，拉丁系按词边界，歧义场景仅 Warn 不动。
 //   - off：完全不处理，沿用旧行为（First-Wins + 不一致译文）。
 type BootstrapConfig struct {
-	Mode                   string `yaml:"mode"`
-	Template               string `yaml:"template"` // 引用 prompt_templates 中的 key
-	Save                   bool   `yaml:"save"`
+	Enabled                bool   `yaml:"enabled"`
 	MaxTermsPerBatch       int    `yaml:"max_terms_per_batch"`
 	MinSourceLen           int    `yaml:"min_source_len"`
 	InlineConflictStrategy string `yaml:"inline_conflict_strategy"`
-	TemplateContent        string `yaml:"-"` // 运行时解析后的 bootstrap 模板内容（不序列化）
 }
 
-// Bootstrap 模式常量。
+// StandaloneBootstrapConfig 控制独立自举（pre）：translate 之前独立扫一遍文档，
+// 整篇翻译都能用上抽到的术语；多一次 LLM 调用。
+type StandaloneBootstrapConfig struct {
+	Enabled          bool   `yaml:"enabled"`
+	Template         string `yaml:"template"` // 引用 prompt_templates 中的 key（CLI 用）
+	TemplateContent  string `yaml:"-"`        // 运行时解析后的 bootstrap 模板内容（不序列化）
+	BatchSize        int    `yaml:"batch_size"`
+	Concurrency      int    `yaml:"concurrency"`
+	MaxTermsPerBatch int    `yaml:"max_terms_per_batch"`
+	MinSourceLen     int    `yaml:"min_source_len"`
+}
+
+// Bootstrap 模式常量（保留用于向后兼容）。
 const (
 	BootstrapModeOff    = "off"
 	BootstrapModePre    = "pre"
@@ -283,12 +286,18 @@ func Default() *Config {
 		Glossary: GlossaryConfig{
 			Enabled: false,
 			Path:    "./glossary.csv",
+			Save:    true,
 			Bootstrap: BootstrapConfig{
-				Mode:                   BootstrapModeOff,
-				Save:                   true,
 				MaxTermsPerBatch:       20,
 				MinSourceLen:           2,
 				InlineConflictStrategy: InlineConflictRewriteLocal,
+			},
+			Standalone: StandaloneBootstrapConfig{
+				Enabled:          false,
+				BatchSize:        20,
+				Concurrency:      2,
+				MaxTermsPerBatch: 20,
+				MinSourceLen:     2,
 			},
 		},
 		TranslationMemory: TMConfig{Enabled: false, Driver: "sqlite", DSN: "./.linguaflow/tm.db"},
@@ -366,27 +375,12 @@ func (c *Config) Validate() error {
 			RubyOutputDefault, RubyOutputInlineMarkers, c.Pipeline.Protect.Ruby.OutputFormat)
 	}
 	c.Pipeline.Translate.Repair.Normalize()
+	// Inline bootstrap 校验
 	if c.Glossary.Bootstrap.MaxTermsPerBatch < 1 {
 		c.Glossary.Bootstrap.MaxTermsPerBatch = 20
 	}
 	if c.Glossary.Bootstrap.MinSourceLen < 1 {
 		c.Glossary.Bootstrap.MinSourceLen = 2
-	}
-	switch c.Glossary.Bootstrap.Mode {
-	case "":
-		c.Glossary.Bootstrap.Mode = BootstrapModeOff
-	case BootstrapModeOff, BootstrapModePre, BootstrapModeInline:
-		// ok
-	default:
-		return fmt.Errorf("glossary.bootstrap.mode must be one of off|pre|inline, got %q", c.Glossary.Bootstrap.Mode)
-	}
-	if c.Glossary.Bootstrap.Mode != BootstrapModeOff {
-		// 自举要落到 Glossary，强制开启。
-		c.Glossary.Enabled = true
-		// bootstrap 模板引用必填。
-		if c.Glossary.Bootstrap.Template == "" {
-			return fmt.Errorf("glossary.bootstrap.template is required when mode is %q", c.Glossary.Bootstrap.Mode)
-		}
 	}
 	switch c.Glossary.Bootstrap.InlineConflictStrategy {
 	case "":
@@ -396,6 +390,25 @@ func (c *Config) Validate() error {
 	default:
 		return fmt.Errorf("glossary.bootstrap.inline_conflict_strategy must be one of off|rewrite-local, got %q",
 			c.Glossary.Bootstrap.InlineConflictStrategy)
+	}
+	// Standalone bootstrap 校验
+	if c.Glossary.Standalone.Enabled {
+		c.Glossary.Enabled = true
+		if c.Glossary.Standalone.TemplateContent == "" {
+			return fmt.Errorf("glossary.standalone.template_content is required when enabled is true")
+		}
+	}
+	if c.Glossary.Standalone.BatchSize < 1 {
+		c.Glossary.Standalone.BatchSize = 20
+	}
+	if c.Glossary.Standalone.Concurrency < 1 {
+		c.Glossary.Standalone.Concurrency = 2
+	}
+	if c.Glossary.Standalone.MaxTermsPerBatch < 1 {
+		c.Glossary.Standalone.MaxTermsPerBatch = 20
+	}
+	if c.Glossary.Standalone.MinSourceLen < 1 {
+		c.Glossary.Standalone.MinSourceLen = 2
 	}
 	if c.Server.Host == "" {
 		c.Server.Host = "0.0.0.0"

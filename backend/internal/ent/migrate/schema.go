@@ -107,6 +107,7 @@ var (
 		{Name: "name", Type: field.TypeString},
 		{Name: "description", Type: field.TypeString, Default: ""},
 		{Name: "scope", Type: field.TypeString, Default: "user"},
+		{Name: "bootstrap", Type: field.TypeJSON, Nullable: true},
 		{Name: "rounds", Type: field.TypeJSON},
 		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
 		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
@@ -119,13 +120,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "execution_plan_templates_organizations_execution_plan_templates",
-				Columns:    []*schema.Column{ExecutionPlanTemplatesColumns[7]},
+				Columns:    []*schema.Column{ExecutionPlanTemplatesColumns[8]},
 				RefColumns: []*schema.Column{OrganizationsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "execution_plan_templates_users_execution_plan_templates",
-				Columns:    []*schema.Column{ExecutionPlanTemplatesColumns[8]},
+				Columns:    []*schema.Column{ExecutionPlanTemplatesColumns[9]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},

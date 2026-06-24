@@ -22,15 +22,16 @@ import (
 
 // Engine 封装一次进程内的翻译能力。它持有 rounds / Renderer 等可复用组件。
 type Engine struct {
-	cfg               *config.Config
-	logger            *slog.Logger
-	reporter          progress.Reporter
-	rounds            []stages.Round    // 替代 selector
-	bootstrapBackends []backend.Backend // 自举后端
-	renderer          *prompt.Renderer
-	bootstrapRenderer *prompt.BootstrapRenderer
-	glossary          glossary.Glossary
-	tm                tm.TranslationMemory
+	cfg                 *config.Config
+	logger              *slog.Logger
+	reporter            progress.Reporter
+	rounds              []stages.Round                    // 替代 selector
+	bootstrapBackends   []backend.Backend                 // 自举后端
+	standaloneBootstrap *config.StandaloneBootstrapConfig // 独立自举配置
+	renderer            *prompt.Renderer
+	bootstrapRenderer   *prompt.BootstrapRenderer
+	glossary            glossary.Glossary
+	tm                  tm.TranslationMemory
 }
 
 type SegmentResult struct {
@@ -84,20 +85,21 @@ func NewWithOptions(opts Options) (*Engine, error) {
 		bootstrapBackends = opts.Rounds[0].Backends
 	}
 	e := &Engine{
-		cfg:               opts.Config,
-		logger:            opts.Logger,
-		reporter:          opts.Reporter,
-		rounds:            rounds,
-		bootstrapBackends: bootstrapBackends,
-		renderer:          rend,
-		glossary:          glos,
-		tm:                translationMemory,
+		cfg:                 opts.Config,
+		logger:              opts.Logger,
+		reporter:            opts.Reporter,
+		rounds:              rounds,
+		bootstrapBackends:   bootstrapBackends,
+		standaloneBootstrap: &opts.Config.Glossary.Standalone,
+		renderer:            rend,
+		glossary:            glos,
+		tm:                  translationMemory,
 	}
-	if opts.Config.Glossary.Enabled && opts.Config.Glossary.Bootstrap.Mode == config.BootstrapModePre {
-		if opts.Config.Glossary.Bootstrap.TemplateContent == "" {
-			return nil, fmt.Errorf("engine: bootstrap template content is required when mode is %q", config.BootstrapModePre)
+	if opts.Config.Glossary.Standalone.Enabled {
+		if opts.Config.Glossary.Standalone.TemplateContent == "" {
+			return nil, fmt.Errorf("engine: standalone bootstrap template content is required when enabled")
 		}
-		br, err := prompt.NewBootstrapRenderer(opts.Config.Glossary.Bootstrap.TemplateContent)
+		br, err := prompt.NewBootstrapRenderer(opts.Config.Glossary.Standalone.TemplateContent)
 		if err != nil {
 			return nil, fmt.Errorf("engine: build bootstrap renderer: %w", err)
 		}
@@ -256,7 +258,7 @@ func (e *Engine) TranslateWithResult(ctx context.Context, job TranslateJob) (Tra
 // maybeSaveGlossary 在 bootstrap.save=true 且 glossary 实现 Saver 时回写到磁盘。
 // FileGlossary 还会通过 Dirty() 跳过无变化情况，避免无意义的文件写。
 func (e *Engine) maybeSaveGlossary(ctx context.Context) {
-	if !e.cfg.Glossary.Enabled || !e.cfg.Glossary.Bootstrap.Save {
+	if !e.cfg.Glossary.Enabled || !e.cfg.Glossary.Save {
 		return
 	}
 	type dirtyChecker interface{ Dirty() bool }
