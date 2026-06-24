@@ -2625,6 +2625,7 @@ components:
         - name
         - source_lang
         - target_lang
+        - glossary_enabled
       properties:
         id:
           type: integer
@@ -2640,6 +2641,10 @@ components:
         default_translation_config:
           type: object
           additionalProperties: true
+        glossary_enabled:
+          type: boolean
+          default: false
+          description: 翻译过程中是否启用术语表
         source_lang:
           type: string
         target_lang:
@@ -2672,6 +2677,10 @@ components:
         default_translation_config:
           type: object
           additionalProperties: true
+        glossary_enabled:
+          type: boolean
+          default: false
+          description: 翻译过程中是否启用术语表
         source_lang:
           type: string
         target_lang:
@@ -2688,6 +2697,9 @@ components:
         default_translation_config:
           type: object
           additionalProperties: true
+        glossary_enabled:
+          type: boolean
+          description: 翻译过程中是否启用术语表
         source_lang:
           type: string
         target_lang:
@@ -3342,11 +3354,8 @@ components:
     ProfileGlossaryConfig:
       type: object
       required:
-        - enabled
         - bootstrap
       properties:
-        enabled:
-          type: boolean
         bootstrap:
           $ref: '#/components/schemas/ProfileBootstrapConfig'
     TranslationProfileConfig:

@@ -91,10 +91,8 @@ ProfileBootstrapConfig:
 
 ProfileGlossaryConfig:
   type: object
-  required: [enabled, bootstrap]
+  required: [bootstrap]
   properties:
-    enabled:
-      type: boolean
     bootstrap:
       $ref: '#/ProfileBootstrapConfig'
 
