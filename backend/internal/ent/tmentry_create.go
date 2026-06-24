@@ -10,7 +10,6 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 )
@@ -114,28 +113,9 @@ func (_c *TMEntryCreate) SetNillableProjectID(v *int) *TMEntryCreate {
 	return _c
 }
 
-// SetOrganizationID sets the "organization_id" field.
-func (_c *TMEntryCreate) SetOrganizationID(v int) *TMEntryCreate {
-	_c.mutation.SetOrganizationID(v)
-	return _c
-}
-
-// SetNillableOrganizationID sets the "organization_id" field if the given value is not nil.
-func (_c *TMEntryCreate) SetNillableOrganizationID(v *int) *TMEntryCreate {
-	if v != nil {
-		_c.SetOrganizationID(*v)
-	}
-	return _c
-}
-
 // SetProject sets the "project" edge to the Project entity.
 func (_c *TMEntryCreate) SetProject(v *Project) *TMEntryCreate {
 	return _c.SetProjectID(v.ID)
-}
-
-// SetOrganization sets the "organization" edge to the Organization entity.
-func (_c *TMEntryCreate) SetOrganization(v *Organization) *TMEntryCreate {
-	return _c.SetOrganizationID(v.ID)
 }
 
 // Mutation returns the TMEntryMutation object of the builder.
@@ -256,11 +236,6 @@ func (_c *TMEntryCreate) check() error {
 			return &ValidationError{Name: "project_id", err: fmt.Errorf(`ent: validator failed for field "TMEntry.project_id": %w`, err)}
 		}
 	}
-	if v, ok := _c.mutation.OrganizationID(); ok {
-		if err := tmentry.OrganizationIDValidator(v); err != nil {
-			return &ValidationError{Name: "organization_id", err: fmt.Errorf(`ent: validator failed for field "TMEntry.organization_id": %w`, err)}
-		}
-	}
 	return nil
 }
 
@@ -338,23 +313,6 @@ func (_c *TMEntryCreate) createSpec() (*TMEntry, *sqlgraph.CreateSpec) {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		_node.ProjectID = &nodes[0]
-		_spec.Edges = append(_spec.Edges, edge)
-	}
-	if nodes := _c.mutation.OrganizationIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   tmentry.OrganizationTable,
-			Columns: []string{tmentry.OrganizationColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_node.OrganizationID = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec

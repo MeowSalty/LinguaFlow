@@ -314,24 +314,20 @@ func init() {
 	projectDescOwnerOrgID := projectFields[2].Descriptor()
 	// project.OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
 	project.OwnerOrgIDValidator = projectDescOwnerOrgID.Validators[0].(func(int) error)
-	// projectDescResourceScope is the schema descriptor for resource_scope field.
-	projectDescResourceScope := projectFields[3].Descriptor()
-	// project.DefaultResourceScope holds the default value on creation for the resource_scope field.
-	project.DefaultResourceScope = projectDescResourceScope.Default.(string)
 	// projectDescConfig is the schema descriptor for config field.
-	projectDescConfig := projectFields[4].Descriptor()
+	projectDescConfig := projectFields[3].Descriptor()
 	// project.DefaultConfig holds the default value on creation for the config field.
 	project.DefaultConfig = projectDescConfig.Default.(func() map[string]interface{})
 	// projectDescDefaultTranslationConfig is the schema descriptor for default_translation_config field.
-	projectDescDefaultTranslationConfig := projectFields[5].Descriptor()
+	projectDescDefaultTranslationConfig := projectFields[4].Descriptor()
 	// project.DefaultDefaultTranslationConfig holds the default value on creation for the default_translation_config field.
 	project.DefaultDefaultTranslationConfig = projectDescDefaultTranslationConfig.Default.(func() map[string]interface{})
 	// projectDescSourceLang is the schema descriptor for source_lang field.
-	projectDescSourceLang := projectFields[6].Descriptor()
+	projectDescSourceLang := projectFields[5].Descriptor()
 	// project.DefaultSourceLang holds the default value on creation for the source_lang field.
 	project.DefaultSourceLang = projectDescSourceLang.Default.(string)
 	// projectDescTargetLang is the schema descriptor for target_lang field.
-	projectDescTargetLang := projectFields[7].Descriptor()
+	projectDescTargetLang := projectFields[6].Descriptor()
 	// project.DefaultTargetLang holds the default value on creation for the target_lang field.
 	project.DefaultTargetLang = projectDescTargetLang.Default.(string)
 	prompttemplateMixin := schema.PromptTemplate{}.Mixin()
@@ -560,10 +556,6 @@ func init() {
 	tmentryDescProjectID := tmentryFields[7].Descriptor()
 	// tmentry.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
 	tmentry.ProjectIDValidator = tmentryDescProjectID.Validators[0].(func(int) error)
-	// tmentryDescOrganizationID is the schema descriptor for organization_id field.
-	tmentryDescOrganizationID := tmentryFields[8].Descriptor()
-	// tmentry.OrganizationIDValidator is a validator for the "organization_id" field. It is called by the builders before save.
-	tmentry.OrganizationIDValidator = tmentryDescOrganizationID.Validators[0].(func(int) error)
 	translationjobMixin := schema.TranslationJob{}.Mixin()
 	translationjobMixinFields0 := translationjobMixin[0].Fields()
 	_ = translationjobMixinFields0

@@ -30,8 +30,6 @@ type Project struct {
 	OwnerUserID *int `json:"owner_user_id,omitempty"`
 	// OwnerOrgID holds the value of the "owner_org_id" field.
 	OwnerOrgID *int `json:"owner_org_id,omitempty"`
-	// ResourceScope holds the value of the "resource_scope" field.
-	ResourceScope string `json:"resource_scope,omitempty"`
 	// Config holds the value of the "config" field.
 	Config map[string]interface{} `json:"config,omitempty"`
 	// 默认翻译配置，创建翻译任务时作为任务配置基底
@@ -165,7 +163,7 @@ func (*Project) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case project.FieldID, project.FieldOwnerUserID, project.FieldOwnerOrgID:
 			values[i] = new(sql.NullInt64)
-		case project.FieldName, project.FieldResourceScope, project.FieldSourceLang, project.FieldTargetLang:
+		case project.FieldName, project.FieldSourceLang, project.FieldTargetLang:
 			values[i] = new(sql.NullString)
 		case project.FieldCreatedAt, project.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -221,12 +219,6 @@ func (_m *Project) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.OwnerOrgID = new(int)
 				*_m.OwnerOrgID = int(value.Int64)
-			}
-		case project.FieldResourceScope:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field resource_scope", values[i])
-			} else if value.Valid {
-				_m.ResourceScope = value.String
 			}
 		case project.FieldConfig:
 			if value, ok := values[i].(*[]byte); !ok {
@@ -355,9 +347,6 @@ func (_m *Project) String() string {
 		builder.WriteString("owner_org_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
-	builder.WriteString(", ")
-	builder.WriteString("resource_scope=")
-	builder.WriteString(_m.ResourceScope)
 	builder.WriteString(", ")
 	builder.WriteString("config=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Config))

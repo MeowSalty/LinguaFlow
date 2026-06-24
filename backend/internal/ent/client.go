@@ -1666,22 +1666,6 @@ func (c *OrganizationClient) QueryBackends(_m *Organization) *BackendQuery {
 	return query
 }
 
-// QueryTmEntries queries the tm_entries edge of a Organization.
-func (c *OrganizationClient) QueryTmEntries(_m *Organization) *TMEntryQuery {
-	query := (&TMEntryClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(organization.Table, organization.FieldID, id),
-			sqlgraph.To(tmentry.Table, tmentry.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, organization.TmEntriesTable, organization.TmEntriesColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
 // QueryActivityLogs queries the activity_logs edge of a Organization.
 func (c *OrganizationClient) QueryActivityLogs(_m *Organization) *ActivityLogQuery {
 	query := (&ActivityLogClient{config: c.config}).Query()
@@ -3022,22 +3006,6 @@ func (c *TMEntryClient) QueryProject(_m *TMEntry) *ProjectQuery {
 			sqlgraph.From(tmentry.Table, tmentry.FieldID, id),
 			sqlgraph.To(project.Table, project.FieldID),
 			sqlgraph.Edge(sqlgraph.M2O, true, tmentry.ProjectTable, tmentry.ProjectColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// QueryOrganization queries the organization edge of a TMEntry.
-func (c *TMEntryClient) QueryOrganization(_m *TMEntry) *OrganizationQuery {
-	query := (&OrganizationClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(tmentry.Table, tmentry.FieldID, id),
-			sqlgraph.To(organization.Table, organization.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, tmentry.OrganizationTable, tmentry.OrganizationColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil

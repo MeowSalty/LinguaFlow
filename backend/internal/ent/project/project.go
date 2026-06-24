@@ -24,8 +24,6 @@ const (
 	FieldOwnerUserID = "owner_user_id"
 	// FieldOwnerOrgID holds the string denoting the owner_org_id field in the database.
 	FieldOwnerOrgID = "owner_org_id"
-	// FieldResourceScope holds the string denoting the resource_scope field in the database.
-	FieldResourceScope = "resource_scope"
 	// FieldConfig holds the string denoting the config field in the database.
 	FieldConfig = "config"
 	// FieldDefaultTranslationConfig holds the string denoting the default_translation_config field in the database.
@@ -127,7 +125,6 @@ var Columns = []string{
 	FieldName,
 	FieldOwnerUserID,
 	FieldOwnerOrgID,
-	FieldResourceScope,
 	FieldConfig,
 	FieldDefaultTranslationConfig,
 	FieldSourceLang,
@@ -157,8 +154,6 @@ var (
 	OwnerUserIDValidator func(int) error
 	// OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
 	OwnerOrgIDValidator func(int) error
-	// DefaultResourceScope holds the default value on creation for the "resource_scope" field.
-	DefaultResourceScope string
 	// DefaultConfig holds the default value on creation for the "config" field.
 	DefaultConfig func() map[string]interface{}
 	// DefaultDefaultTranslationConfig holds the default value on creation for the "default_translation_config" field.
@@ -200,11 +195,6 @@ func ByOwnerUserID(opts ...sql.OrderTermOption) OrderOption {
 // ByOwnerOrgID orders the results by the owner_org_id field.
 func ByOwnerOrgID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldOwnerOrgID, opts...).ToFunc()
-}
-
-// ByResourceScope orders the results by the resource_scope field.
-func ByResourceScope(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldResourceScope, opts...).ToFunc()
 }
 
 // BySourceLang orders the results by the source_lang field.

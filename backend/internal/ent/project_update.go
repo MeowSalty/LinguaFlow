@@ -97,20 +97,6 @@ func (_u *ProjectUpdate) ClearOwnerOrgID() *ProjectUpdate {
 	return _u
 }
 
-// SetResourceScope sets the "resource_scope" field.
-func (_u *ProjectUpdate) SetResourceScope(v string) *ProjectUpdate {
-	_u.mutation.SetResourceScope(v)
-	return _u
-}
-
-// SetNillableResourceScope sets the "resource_scope" field if the given value is not nil.
-func (_u *ProjectUpdate) SetNillableResourceScope(v *string) *ProjectUpdate {
-	if v != nil {
-		_u.SetResourceScope(*v)
-	}
-	return _u
-}
-
 // SetConfig sets the "config" field.
 func (_u *ProjectUpdate) SetConfig(v map[string]interface{}) *ProjectUpdate {
 	_u.mutation.SetConfig(v)
@@ -503,9 +489,6 @@ func (_u *ProjectUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(project.FieldName, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.ResourceScope(); ok {
-		_spec.SetField(project.FieldResourceScope, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Config(); ok {
 		_spec.SetField(project.FieldConfig, field.TypeJSON, value)
@@ -972,20 +955,6 @@ func (_u *ProjectUpdateOne) ClearOwnerOrgID() *ProjectUpdateOne {
 	return _u
 }
 
-// SetResourceScope sets the "resource_scope" field.
-func (_u *ProjectUpdateOne) SetResourceScope(v string) *ProjectUpdateOne {
-	_u.mutation.SetResourceScope(v)
-	return _u
-}
-
-// SetNillableResourceScope sets the "resource_scope" field if the given value is not nil.
-func (_u *ProjectUpdateOne) SetNillableResourceScope(v *string) *ProjectUpdateOne {
-	if v != nil {
-		_u.SetResourceScope(*v)
-	}
-	return _u
-}
-
 // SetConfig sets the "config" field.
 func (_u *ProjectUpdateOne) SetConfig(v map[string]interface{}) *ProjectUpdateOne {
 	_u.mutation.SetConfig(v)
@@ -1408,9 +1377,6 @@ func (_u *ProjectUpdateOne) sqlSave(ctx context.Context) (_node *Project, err er
 	}
 	if value, ok := _u.mutation.Name(); ok {
 		_spec.SetField(project.FieldName, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.ResourceScope(); ok {
-		_spec.SetField(project.FieldResourceScope, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Config(); ok {
 		_spec.SetField(project.FieldConfig, field.TypeJSON, value)

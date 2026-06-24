@@ -6119,9 +6119,6 @@ type OrganizationMutation struct {
 	backends                        map[int]struct{}
 	removedbackends                 map[int]struct{}
 	clearedbackends                 bool
-	tm_entries                      map[int]struct{}
-	removedtm_entries               map[int]struct{}
-	clearedtm_entries               bool
 	activity_logs                   map[int]struct{}
 	removedactivity_logs            map[int]struct{}
 	clearedactivity_logs            bool
@@ -6644,60 +6641,6 @@ func (m *OrganizationMutation) ResetBackends() {
 	m.removedbackends = nil
 }
 
-// AddTmEntryIDs adds the "tm_entries" edge to the TMEntry entity by ids.
-func (m *OrganizationMutation) AddTmEntryIDs(ids ...int) {
-	if m.tm_entries == nil {
-		m.tm_entries = make(map[int]struct{})
-	}
-	for i := range ids {
-		m.tm_entries[ids[i]] = struct{}{}
-	}
-}
-
-// ClearTmEntries clears the "tm_entries" edge to the TMEntry entity.
-func (m *OrganizationMutation) ClearTmEntries() {
-	m.clearedtm_entries = true
-}
-
-// TmEntriesCleared reports if the "tm_entries" edge to the TMEntry entity was cleared.
-func (m *OrganizationMutation) TmEntriesCleared() bool {
-	return m.clearedtm_entries
-}
-
-// RemoveTmEntryIDs removes the "tm_entries" edge to the TMEntry entity by IDs.
-func (m *OrganizationMutation) RemoveTmEntryIDs(ids ...int) {
-	if m.removedtm_entries == nil {
-		m.removedtm_entries = make(map[int]struct{})
-	}
-	for i := range ids {
-		delete(m.tm_entries, ids[i])
-		m.removedtm_entries[ids[i]] = struct{}{}
-	}
-}
-
-// RemovedTmEntries returns the removed IDs of the "tm_entries" edge to the TMEntry entity.
-func (m *OrganizationMutation) RemovedTmEntriesIDs() (ids []int) {
-	for id := range m.removedtm_entries {
-		ids = append(ids, id)
-	}
-	return
-}
-
-// TmEntriesIDs returns the "tm_entries" edge IDs in the mutation.
-func (m *OrganizationMutation) TmEntriesIDs() (ids []int) {
-	for id := range m.tm_entries {
-		ids = append(ids, id)
-	}
-	return
-}
-
-// ResetTmEntries resets all changes to the "tm_entries" edge.
-func (m *OrganizationMutation) ResetTmEntries() {
-	m.tm_entries = nil
-	m.clearedtm_entries = false
-	m.removedtm_entries = nil
-}
-
 // AddActivityLogIDs adds the "activity_logs" edge to the ActivityLog entity by ids.
 func (m *OrganizationMutation) AddActivityLogIDs(ids ...int) {
 	if m.activity_logs == nil {
@@ -7201,7 +7144,7 @@ func (m *OrganizationMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *OrganizationMutation) AddedEdges() []string {
-	edges := make([]string, 0, 9)
+	edges := make([]string, 0, 8)
 	if m.projects != nil {
 		edges = append(edges, organization.EdgeProjects)
 	}
@@ -7210,9 +7153,6 @@ func (m *OrganizationMutation) AddedEdges() []string {
 	}
 	if m.backends != nil {
 		edges = append(edges, organization.EdgeBackends)
-	}
-	if m.tm_entries != nil {
-		edges = append(edges, organization.EdgeTmEntries)
 	}
 	if m.activity_logs != nil {
 		edges = append(edges, organization.EdgeActivityLogs)
@@ -7254,12 +7194,6 @@ func (m *OrganizationMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
-	case organization.EdgeTmEntries:
-		ids := make([]ent.Value, 0, len(m.tm_entries))
-		for id := range m.tm_entries {
-			ids = append(ids, id)
-		}
-		return ids
 	case organization.EdgeActivityLogs:
 		ids := make([]ent.Value, 0, len(m.activity_logs))
 		for id := range m.activity_logs {
@@ -7296,7 +7230,7 @@ func (m *OrganizationMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *OrganizationMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 9)
+	edges := make([]string, 0, 8)
 	if m.removedprojects != nil {
 		edges = append(edges, organization.EdgeProjects)
 	}
@@ -7305,9 +7239,6 @@ func (m *OrganizationMutation) RemovedEdges() []string {
 	}
 	if m.removedbackends != nil {
 		edges = append(edges, organization.EdgeBackends)
-	}
-	if m.removedtm_entries != nil {
-		edges = append(edges, organization.EdgeTmEntries)
 	}
 	if m.removedactivity_logs != nil {
 		edges = append(edges, organization.EdgeActivityLogs)
@@ -7349,12 +7280,6 @@ func (m *OrganizationMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
-	case organization.EdgeTmEntries:
-		ids := make([]ent.Value, 0, len(m.removedtm_entries))
-		for id := range m.removedtm_entries {
-			ids = append(ids, id)
-		}
-		return ids
 	case organization.EdgeActivityLogs:
 		ids := make([]ent.Value, 0, len(m.removedactivity_logs))
 		for id := range m.removedactivity_logs {
@@ -7391,7 +7316,7 @@ func (m *OrganizationMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *OrganizationMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 9)
+	edges := make([]string, 0, 8)
 	if m.clearedprojects {
 		edges = append(edges, organization.EdgeProjects)
 	}
@@ -7400,9 +7325,6 @@ func (m *OrganizationMutation) ClearedEdges() []string {
 	}
 	if m.clearedbackends {
 		edges = append(edges, organization.EdgeBackends)
-	}
-	if m.clearedtm_entries {
-		edges = append(edges, organization.EdgeTmEntries)
 	}
 	if m.clearedactivity_logs {
 		edges = append(edges, organization.EdgeActivityLogs)
@@ -7432,8 +7354,6 @@ func (m *OrganizationMutation) EdgeCleared(name string) bool {
 		return m.clearedmemberships
 	case organization.EdgeBackends:
 		return m.clearedbackends
-	case organization.EdgeTmEntries:
-		return m.clearedtm_entries
 	case organization.EdgeActivityLogs:
 		return m.clearedactivity_logs
 	case organization.EdgeUsageRecords:
@@ -7469,9 +7389,6 @@ func (m *OrganizationMutation) ResetEdge(name string) error {
 	case organization.EdgeBackends:
 		m.ResetBackends()
 		return nil
-	case organization.EdgeTmEntries:
-		m.ResetTmEntries()
-		return nil
 	case organization.EdgeActivityLogs:
 		m.ResetActivityLogs()
 		return nil
@@ -7500,7 +7417,6 @@ type ProjectMutation struct {
 	created_at                 *time.Time
 	updated_at                 *time.Time
 	name                       *string
-	resource_scope             *string
 	_config                    *map[string]interface{}
 	default_translation_config *map[string]interface{}
 	source_lang                *string
@@ -7838,42 +7754,6 @@ func (m *ProjectMutation) OwnerOrgIDCleared() bool {
 func (m *ProjectMutation) ResetOwnerOrgID() {
 	m.owner_org = nil
 	delete(m.clearedFields, project.FieldOwnerOrgID)
-}
-
-// SetResourceScope sets the "resource_scope" field.
-func (m *ProjectMutation) SetResourceScope(s string) {
-	m.resource_scope = &s
-}
-
-// ResourceScope returns the value of the "resource_scope" field in the mutation.
-func (m *ProjectMutation) ResourceScope() (r string, exists bool) {
-	v := m.resource_scope
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldResourceScope returns the old "resource_scope" field's value of the Project entity.
-// If the Project object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ProjectMutation) OldResourceScope(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldResourceScope is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldResourceScope requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldResourceScope: %w", err)
-	}
-	return oldValue.ResourceScope, nil
-}
-
-// ResetResourceScope resets all changes to the "resource_scope" field.
-func (m *ProjectMutation) ResetResourceScope() {
-	m.resource_scope = nil
 }
 
 // SetConfig sets the "config" field.
@@ -8486,7 +8366,7 @@ func (m *ProjectMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ProjectMutation) Fields() []string {
-	fields := make([]string, 0, 10)
+	fields := make([]string, 0, 9)
 	if m.created_at != nil {
 		fields = append(fields, project.FieldCreatedAt)
 	}
@@ -8501,9 +8381,6 @@ func (m *ProjectMutation) Fields() []string {
 	}
 	if m.owner_org != nil {
 		fields = append(fields, project.FieldOwnerOrgID)
-	}
-	if m.resource_scope != nil {
-		fields = append(fields, project.FieldResourceScope)
 	}
 	if m._config != nil {
 		fields = append(fields, project.FieldConfig)
@@ -8535,8 +8412,6 @@ func (m *ProjectMutation) Field(name string) (ent.Value, bool) {
 		return m.OwnerUserID()
 	case project.FieldOwnerOrgID:
 		return m.OwnerOrgID()
-	case project.FieldResourceScope:
-		return m.ResourceScope()
 	case project.FieldConfig:
 		return m.Config()
 	case project.FieldDefaultTranslationConfig:
@@ -8564,8 +8439,6 @@ func (m *ProjectMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldOwnerUserID(ctx)
 	case project.FieldOwnerOrgID:
 		return m.OldOwnerOrgID(ctx)
-	case project.FieldResourceScope:
-		return m.OldResourceScope(ctx)
 	case project.FieldConfig:
 		return m.OldConfig(ctx)
 	case project.FieldDefaultTranslationConfig:
@@ -8617,13 +8490,6 @@ func (m *ProjectMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetOwnerOrgID(v)
-		return nil
-	case project.FieldResourceScope:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetResourceScope(v)
 		return nil
 	case project.FieldConfig:
 		v, ok := value.(map[string]interface{})
@@ -8734,9 +8600,6 @@ func (m *ProjectMutation) ResetField(name string) error {
 		return nil
 	case project.FieldOwnerOrgID:
 		m.ResetOwnerOrgID()
-		return nil
-	case project.FieldResourceScope:
-		m.ResetResourceScope()
 		return nil
 	case project.FieldConfig:
 		m.ResetConfig()
@@ -13852,27 +13715,25 @@ func (m *SyncTaskMutation) ResetEdge(name string) error {
 // TMEntryMutation represents an operation that mutates the TMEntry nodes in the graph.
 type TMEntryMutation struct {
 	config
-	op                  Op
-	typ                 string
-	id                  *int
-	created_at          *time.Time
-	updated_at          *time.Time
-	scope_key           *string
-	source_hash         *string
-	source_text         *string
-	target_text         *string
-	source_lang         *string
-	target_lang         *string
-	usage_count         *int
-	addusage_count      *int
-	clearedFields       map[string]struct{}
-	project             *int
-	clearedproject      bool
-	organization        *int
-	clearedorganization bool
-	done                bool
-	oldValue            func(context.Context) (*TMEntry, error)
-	predicates          []predicate.TMEntry
+	op             Op
+	typ            string
+	id             *int
+	created_at     *time.Time
+	updated_at     *time.Time
+	scope_key      *string
+	source_hash    *string
+	source_text    *string
+	target_text    *string
+	source_lang    *string
+	target_lang    *string
+	usage_count    *int
+	addusage_count *int
+	clearedFields  map[string]struct{}
+	project        *int
+	clearedproject bool
+	done           bool
+	oldValue       func(context.Context) (*TMEntry, error)
+	predicates     []predicate.TMEntry
 }
 
 var _ ent.Mutation = (*TMEntryMutation)(nil)
@@ -14366,55 +14227,6 @@ func (m *TMEntryMutation) ResetProjectID() {
 	delete(m.clearedFields, tmentry.FieldProjectID)
 }
 
-// SetOrganizationID sets the "organization_id" field.
-func (m *TMEntryMutation) SetOrganizationID(i int) {
-	m.organization = &i
-}
-
-// OrganizationID returns the value of the "organization_id" field in the mutation.
-func (m *TMEntryMutation) OrganizationID() (r int, exists bool) {
-	v := m.organization
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldOrganizationID returns the old "organization_id" field's value of the TMEntry entity.
-// If the TMEntry object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *TMEntryMutation) OldOrganizationID(ctx context.Context) (v *int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldOrganizationID is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldOrganizationID requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldOrganizationID: %w", err)
-	}
-	return oldValue.OrganizationID, nil
-}
-
-// ClearOrganizationID clears the value of the "organization_id" field.
-func (m *TMEntryMutation) ClearOrganizationID() {
-	m.organization = nil
-	m.clearedFields[tmentry.FieldOrganizationID] = struct{}{}
-}
-
-// OrganizationIDCleared returns if the "organization_id" field was cleared in this mutation.
-func (m *TMEntryMutation) OrganizationIDCleared() bool {
-	_, ok := m.clearedFields[tmentry.FieldOrganizationID]
-	return ok
-}
-
-// ResetOrganizationID resets all changes to the "organization_id" field.
-func (m *TMEntryMutation) ResetOrganizationID() {
-	m.organization = nil
-	delete(m.clearedFields, tmentry.FieldOrganizationID)
-}
-
 // ClearProject clears the "project" edge to the Project entity.
 func (m *TMEntryMutation) ClearProject() {
 	m.clearedproject = true
@@ -14440,33 +14252,6 @@ func (m *TMEntryMutation) ProjectIDs() (ids []int) {
 func (m *TMEntryMutation) ResetProject() {
 	m.project = nil
 	m.clearedproject = false
-}
-
-// ClearOrganization clears the "organization" edge to the Organization entity.
-func (m *TMEntryMutation) ClearOrganization() {
-	m.clearedorganization = true
-	m.clearedFields[tmentry.FieldOrganizationID] = struct{}{}
-}
-
-// OrganizationCleared reports if the "organization" edge to the Organization entity was cleared.
-func (m *TMEntryMutation) OrganizationCleared() bool {
-	return m.OrganizationIDCleared() || m.clearedorganization
-}
-
-// OrganizationIDs returns the "organization" edge IDs in the mutation.
-// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
-// OrganizationID instead. It exists only for internal usage by the builders.
-func (m *TMEntryMutation) OrganizationIDs() (ids []int) {
-	if id := m.organization; id != nil {
-		ids = append(ids, *id)
-	}
-	return
-}
-
-// ResetOrganization resets all changes to the "organization" edge.
-func (m *TMEntryMutation) ResetOrganization() {
-	m.organization = nil
-	m.clearedorganization = false
 }
 
 // Where appends a list predicates to the TMEntryMutation builder.
@@ -14503,7 +14288,7 @@ func (m *TMEntryMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TMEntryMutation) Fields() []string {
-	fields := make([]string, 0, 11)
+	fields := make([]string, 0, 10)
 	if m.created_at != nil {
 		fields = append(fields, tmentry.FieldCreatedAt)
 	}
@@ -14534,9 +14319,6 @@ func (m *TMEntryMutation) Fields() []string {
 	if m.project != nil {
 		fields = append(fields, tmentry.FieldProjectID)
 	}
-	if m.organization != nil {
-		fields = append(fields, tmentry.FieldOrganizationID)
-	}
 	return fields
 }
 
@@ -14565,8 +14347,6 @@ func (m *TMEntryMutation) Field(name string) (ent.Value, bool) {
 		return m.UsageCount()
 	case tmentry.FieldProjectID:
 		return m.ProjectID()
-	case tmentry.FieldOrganizationID:
-		return m.OrganizationID()
 	}
 	return nil, false
 }
@@ -14596,8 +14376,6 @@ func (m *TMEntryMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldUsageCount(ctx)
 	case tmentry.FieldProjectID:
 		return m.OldProjectID(ctx)
-	case tmentry.FieldOrganizationID:
-		return m.OldOrganizationID(ctx)
 	}
 	return nil, fmt.Errorf("unknown TMEntry field %s", name)
 }
@@ -14677,13 +14455,6 @@ func (m *TMEntryMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetProjectID(v)
 		return nil
-	case tmentry.FieldOrganizationID:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetOrganizationID(v)
-		return nil
 	}
 	return fmt.Errorf("unknown TMEntry field %s", name)
 }
@@ -14732,9 +14503,6 @@ func (m *TMEntryMutation) ClearedFields() []string {
 	if m.FieldCleared(tmentry.FieldProjectID) {
 		fields = append(fields, tmentry.FieldProjectID)
 	}
-	if m.FieldCleared(tmentry.FieldOrganizationID) {
-		fields = append(fields, tmentry.FieldOrganizationID)
-	}
 	return fields
 }
 
@@ -14751,9 +14519,6 @@ func (m *TMEntryMutation) ClearField(name string) error {
 	switch name {
 	case tmentry.FieldProjectID:
 		m.ClearProjectID()
-		return nil
-	case tmentry.FieldOrganizationID:
-		m.ClearOrganizationID()
 		return nil
 	}
 	return fmt.Errorf("unknown TMEntry nullable field %s", name)
@@ -14793,21 +14558,15 @@ func (m *TMEntryMutation) ResetField(name string) error {
 	case tmentry.FieldProjectID:
 		m.ResetProjectID()
 		return nil
-	case tmentry.FieldOrganizationID:
-		m.ResetOrganizationID()
-		return nil
 	}
 	return fmt.Errorf("unknown TMEntry field %s", name)
 }
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *TMEntryMutation) AddedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 1)
 	if m.project != nil {
 		edges = append(edges, tmentry.EdgeProject)
-	}
-	if m.organization != nil {
-		edges = append(edges, tmentry.EdgeOrganization)
 	}
 	return edges
 }
@@ -14820,17 +14579,13 @@ func (m *TMEntryMutation) AddedIDs(name string) []ent.Value {
 		if id := m.project; id != nil {
 			return []ent.Value{*id}
 		}
-	case tmentry.EdgeOrganization:
-		if id := m.organization; id != nil {
-			return []ent.Value{*id}
-		}
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *TMEntryMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 1)
 	return edges
 }
 
@@ -14842,12 +14597,9 @@ func (m *TMEntryMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *TMEntryMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 2)
+	edges := make([]string, 0, 1)
 	if m.clearedproject {
 		edges = append(edges, tmentry.EdgeProject)
-	}
-	if m.clearedorganization {
-		edges = append(edges, tmentry.EdgeOrganization)
 	}
 	return edges
 }
@@ -14858,8 +14610,6 @@ func (m *TMEntryMutation) EdgeCleared(name string) bool {
 	switch name {
 	case tmentry.EdgeProject:
 		return m.clearedproject
-	case tmentry.EdgeOrganization:
-		return m.clearedorganization
 	}
 	return false
 }
@@ -14871,9 +14621,6 @@ func (m *TMEntryMutation) ClearEdge(name string) error {
 	case tmentry.EdgeProject:
 		m.ClearProject()
 		return nil
-	case tmentry.EdgeOrganization:
-		m.ClearOrganization()
-		return nil
 	}
 	return fmt.Errorf("unknown TMEntry unique edge %s", name)
 }
@@ -14884,9 +14631,6 @@ func (m *TMEntryMutation) ResetEdge(name string) error {
 	switch name {
 	case tmentry.EdgeProject:
 		m.ResetProject()
-		return nil
-	case tmentry.EdgeOrganization:
-		m.ResetOrganization()
 		return nil
 	}
 	return fmt.Errorf("unknown TMEntry edge %s", name)

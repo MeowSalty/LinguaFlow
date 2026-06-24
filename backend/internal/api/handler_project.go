@@ -13,7 +13,6 @@ import (
 type createProjectRequest struct {
 	Name                     string         `json:"name"`
 	OwnerOrgID               *int           `json:"owner_org_id"`
-	ResourceScope            string         `json:"resource_scope"`
 	Config                   map[string]any `json:"config"`
 	DefaultTranslationConfig map[string]any `json:"default_translation_config"`
 	SourceLang               string         `json:"source_lang"`
@@ -22,7 +21,6 @@ type createProjectRequest struct {
 
 type updateProjectRequest struct {
 	Name                     string         `json:"name"`
-	ResourceScope            string         `json:"resource_scope"`
 	Config                   map[string]any `json:"config"`
 	DefaultTranslationConfig map[string]any `json:"default_translation_config"`
 	SourceLang               string         `json:"source_lang"`
@@ -32,7 +30,6 @@ type updateProjectRequest struct {
 type projectResponse struct {
 	ID                       int            `json:"id"`
 	Name                     string         `json:"name"`
-	ResourceScope            string         `json:"resource_scope"`
 	OwnerUserID              *int           `json:"owner_user_id,omitempty"`
 	OwnerOrgID               *int           `json:"owner_org_id,omitempty"`
 	Config                   map[string]any `json:"config,omitempty"`
@@ -45,7 +42,6 @@ func toProjectResponse(p *ent.Project) projectResponse {
 	return projectResponse{
 		ID:                       p.ID,
 		Name:                     p.Name,
-		ResourceScope:            p.ResourceScope,
 		OwnerUserID:              p.OwnerUserID,
 		OwnerOrgID:               p.OwnerOrgID,
 		Config:                   p.Config,
@@ -76,7 +72,6 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 	p, err := s.projectSvc.CreateProject(r.Context(), authUser.User.ID, service.CreateProjectInput{
 		Name:                     req.Name,
 		OwnerOrgID:               req.OwnerOrgID,
-		ResourceScope:            req.ResourceScope,
 		Config:                   req.Config,
 		DefaultTranslationConfig: req.DefaultTranslationConfig,
 		SourceLang:               req.SourceLang,
@@ -137,7 +132,6 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 	}
 	p, err := s.projectSvc.UpdateProject(r.Context(), authUser.User.ID, projectID, service.UpdateProjectInput{
 		Name:                     req.Name,
-		ResourceScope:            req.ResourceScope,
 		Config:                   req.Config,
 		DefaultTranslationConfig: req.DefaultTranslationConfig,
 		SourceLang:               req.SourceLang,

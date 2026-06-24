@@ -91,20 +91,6 @@ func (_c *ProjectCreate) SetNillableOwnerOrgID(v *int) *ProjectCreate {
 	return _c
 }
 
-// SetResourceScope sets the "resource_scope" field.
-func (_c *ProjectCreate) SetResourceScope(v string) *ProjectCreate {
-	_c.mutation.SetResourceScope(v)
-	return _c
-}
-
-// SetNillableResourceScope sets the "resource_scope" field if the given value is not nil.
-func (_c *ProjectCreate) SetNillableResourceScope(v *string) *ProjectCreate {
-	if v != nil {
-		_c.SetResourceScope(*v)
-	}
-	return _c
-}
-
 // SetConfig sets the "config" field.
 func (_c *ProjectCreate) SetConfig(v map[string]interface{}) *ProjectCreate {
 	_c.mutation.SetConfig(v)
@@ -303,10 +289,6 @@ func (_c *ProjectCreate) defaults() {
 		v := project.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
-	if _, ok := _c.mutation.ResourceScope(); !ok {
-		v := project.DefaultResourceScope
-		_c.mutation.SetResourceScope(v)
-	}
 	if _, ok := _c.mutation.Config(); !ok {
 		v := project.DefaultConfig()
 		_c.mutation.SetConfig(v)
@@ -350,9 +332,6 @@ func (_c *ProjectCreate) check() error {
 		if err := project.OwnerOrgIDValidator(v); err != nil {
 			return &ValidationError{Name: "owner_org_id", err: fmt.Errorf(`ent: validator failed for field "Project.owner_org_id": %w`, err)}
 		}
-	}
-	if _, ok := _c.mutation.ResourceScope(); !ok {
-		return &ValidationError{Name: "resource_scope", err: errors.New(`ent: missing required field "Project.resource_scope"`)}
 	}
 	if _, ok := _c.mutation.Config(); !ok {
 		return &ValidationError{Name: "config", err: errors.New(`ent: missing required field "Project.config"`)}
@@ -403,10 +382,6 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Name(); ok {
 		_spec.SetField(project.FieldName, field.TypeString, value)
 		_node.Name = value
-	}
-	if value, ok := _c.mutation.ResourceScope(); ok {
-		_spec.SetField(project.FieldResourceScope, field.TypeString, value)
-		_node.ResourceScope = value
 	}
 	if value, ok := _c.mutation.Config(); ok {
 		_spec.SetField(project.FieldConfig, field.TypeJSON, value)

@@ -22,15 +22,9 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
-const (
-	ProjectResourceScopeProject      = "project"
-	ProjectResourceScopeOrganization = "organization"
-)
-
 var (
 	ErrProjectNotFound      = errors.New("project not found")
 	ErrProjectOwnerConflict = errors.New("project owner conflict")
-	ErrResourceScopeInvalid = errors.New("resource scope invalid")
 )
 
 type ProjectService struct {
@@ -42,7 +36,6 @@ type CreateProjectInput struct {
 	Name                     string
 	OwnerUserID              *int
 	OwnerOrgID               *int
-	ResourceScope            string
 	Config                   map[string]any
 	DefaultTranslationConfig map[string]any
 	SourceLang               string
@@ -51,7 +44,6 @@ type CreateProjectInput struct {
 
 type UpdateProjectInput struct {
 	Name                     string
-	ResourceScope            string
 	Config                   map[string]any
 	DefaultTranslationConfig map[string]any
 	SourceLang               string
@@ -69,7 +61,6 @@ func (s *ProjectService) CreateProject(ctx context.Context, actorUserID int, inp
 	}
 	create := s.client.Project.Create().
 		SetName(normalized.Name).
-		SetResourceScope(normalized.ResourceScope).
 		SetConfig(cloneMap(normalized.Config)).
 		SetDefaultTranslationConfig(cloneMap(normalized.DefaultTranslationConfig)).
 		SetSourceLang(normalized.SourceLang).
@@ -115,7 +106,6 @@ func (s *ProjectService) UpdateProject(ctx context.Context, actorUserID, project
 	}
 	updated, err := s.client.Project.UpdateOneID(projectID).
 		SetName(normalized.Name).
-		SetResourceScope(normalized.ResourceScope).
 		SetConfig(cloneMap(normalized.Config)).
 		SetDefaultTranslationConfig(cloneMap(normalized.DefaultTranslationConfig)).
 		SetSourceLang(normalized.SourceLang).
@@ -323,15 +313,10 @@ func (s *ProjectService) normalizeCreateInput(ctx context.Context, actorUserID i
 			return CreateProjectInput{}, err
 		}
 	}
-	scope, err := normalizeResourceScope(input.ResourceScope, ownerOrgID != nil)
-	if err != nil {
-		return CreateProjectInput{}, err
-	}
 	return CreateProjectInput{
 		Name:                     name,
 		OwnerUserID:              ownerUserID,
 		OwnerOrgID:               ownerOrgID,
-		ResourceScope:            scope,
 		Config:                   cloneMap(input.Config),
 		DefaultTranslationConfig: cloneMap(input.DefaultTranslationConfig),
 		SourceLang:               normalizeLangOrDefault(input.SourceLang, "auto"),
@@ -344,10 +329,6 @@ func (s *ProjectService) normalizeUpdateInput(current *ent.Project, input Update
 	if name == "" {
 		name = current.Name
 	}
-	scope, err := normalizeResourceScope(input.ResourceScope, current.OwnerOrgID != nil)
-	if err != nil {
-		return UpdateProjectInput{}, err
-	}
 	configValue := cloneMap(input.Config)
 	if len(configValue) == 0 {
 		configValue = cloneMap(current.Config)
@@ -358,31 +339,11 @@ func (s *ProjectService) normalizeUpdateInput(current *ent.Project, input Update
 	}
 	return UpdateProjectInput{
 		Name:                     name,
-		ResourceScope:            scope,
 		Config:                   configValue,
 		DefaultTranslationConfig: defaultTranslationConfig,
 		SourceLang:               normalizeLangOrDefault(input.SourceLang, current.SourceLang),
 		TargetLang:               normalizeLangOrDefault(input.TargetLang, current.TargetLang),
 	}, nil
-}
-
-func normalizeResourceScope(raw string, orgOwned bool) (string, error) {
-	switch strings.ToLower(strings.TrimSpace(raw)) {
-	case "":
-		if orgOwned {
-			return ProjectResourceScopeOrganization, nil
-		}
-		return ProjectResourceScopeProject, nil
-	case ProjectResourceScopeProject:
-		return ProjectResourceScopeProject, nil
-	case ProjectResourceScopeOrganization:
-		if !orgOwned {
-			return "", ErrResourceScopeInvalid
-		}
-		return ProjectResourceScopeOrganization, nil
-	default:
-		return "", ErrResourceScopeInvalid
-	}
 }
 
 func normalizeLangOrDefault(raw, fallback string) string {

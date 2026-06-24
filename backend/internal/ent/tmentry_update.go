@@ -11,7 +11,6 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
@@ -161,34 +160,9 @@ func (_u *TMEntryUpdate) ClearProjectID() *TMEntryUpdate {
 	return _u
 }
 
-// SetOrganizationID sets the "organization_id" field.
-func (_u *TMEntryUpdate) SetOrganizationID(v int) *TMEntryUpdate {
-	_u.mutation.SetOrganizationID(v)
-	return _u
-}
-
-// SetNillableOrganizationID sets the "organization_id" field if the given value is not nil.
-func (_u *TMEntryUpdate) SetNillableOrganizationID(v *int) *TMEntryUpdate {
-	if v != nil {
-		_u.SetOrganizationID(*v)
-	}
-	return _u
-}
-
-// ClearOrganizationID clears the value of the "organization_id" field.
-func (_u *TMEntryUpdate) ClearOrganizationID() *TMEntryUpdate {
-	_u.mutation.ClearOrganizationID()
-	return _u
-}
-
 // SetProject sets the "project" edge to the Project entity.
 func (_u *TMEntryUpdate) SetProject(v *Project) *TMEntryUpdate {
 	return _u.SetProjectID(v.ID)
-}
-
-// SetOrganization sets the "organization" edge to the Organization entity.
-func (_u *TMEntryUpdate) SetOrganization(v *Organization) *TMEntryUpdate {
-	return _u.SetOrganizationID(v.ID)
 }
 
 // Mutation returns the TMEntryMutation object of the builder.
@@ -199,12 +173,6 @@ func (_u *TMEntryUpdate) Mutation() *TMEntryMutation {
 // ClearProject clears the "project" edge to the Project entity.
 func (_u *TMEntryUpdate) ClearProject() *TMEntryUpdate {
 	_u.mutation.ClearProject()
-	return _u
-}
-
-// ClearOrganization clears the "organization" edge to the Organization entity.
-func (_u *TMEntryUpdate) ClearOrganization() *TMEntryUpdate {
-	_u.mutation.ClearOrganization()
 	return _u
 }
 
@@ -286,11 +254,6 @@ func (_u *TMEntryUpdate) check() error {
 			return &ValidationError{Name: "project_id", err: fmt.Errorf(`ent: validator failed for field "TMEntry.project_id": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.OrganizationID(); ok {
-		if err := tmentry.OrganizationIDValidator(v); err != nil {
-			return &ValidationError{Name: "organization_id", err: fmt.Errorf(`ent: validator failed for field "TMEntry.organization_id": %w`, err)}
-		}
-	}
 	return nil
 }
 
@@ -355,35 +318,6 @@ func (_u *TMEntryUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(project.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
-	if _u.mutation.OrganizationCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   tmentry.OrganizationTable,
-			Columns: []string{tmentry.OrganizationColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.OrganizationIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   tmentry.OrganizationTable,
-			Columns: []string{tmentry.OrganizationColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -542,34 +476,9 @@ func (_u *TMEntryUpdateOne) ClearProjectID() *TMEntryUpdateOne {
 	return _u
 }
 
-// SetOrganizationID sets the "organization_id" field.
-func (_u *TMEntryUpdateOne) SetOrganizationID(v int) *TMEntryUpdateOne {
-	_u.mutation.SetOrganizationID(v)
-	return _u
-}
-
-// SetNillableOrganizationID sets the "organization_id" field if the given value is not nil.
-func (_u *TMEntryUpdateOne) SetNillableOrganizationID(v *int) *TMEntryUpdateOne {
-	if v != nil {
-		_u.SetOrganizationID(*v)
-	}
-	return _u
-}
-
-// ClearOrganizationID clears the value of the "organization_id" field.
-func (_u *TMEntryUpdateOne) ClearOrganizationID() *TMEntryUpdateOne {
-	_u.mutation.ClearOrganizationID()
-	return _u
-}
-
 // SetProject sets the "project" edge to the Project entity.
 func (_u *TMEntryUpdateOne) SetProject(v *Project) *TMEntryUpdateOne {
 	return _u.SetProjectID(v.ID)
-}
-
-// SetOrganization sets the "organization" edge to the Organization entity.
-func (_u *TMEntryUpdateOne) SetOrganization(v *Organization) *TMEntryUpdateOne {
-	return _u.SetOrganizationID(v.ID)
 }
 
 // Mutation returns the TMEntryMutation object of the builder.
@@ -580,12 +489,6 @@ func (_u *TMEntryUpdateOne) Mutation() *TMEntryMutation {
 // ClearProject clears the "project" edge to the Project entity.
 func (_u *TMEntryUpdateOne) ClearProject() *TMEntryUpdateOne {
 	_u.mutation.ClearProject()
-	return _u
-}
-
-// ClearOrganization clears the "organization" edge to the Organization entity.
-func (_u *TMEntryUpdateOne) ClearOrganization() *TMEntryUpdateOne {
-	_u.mutation.ClearOrganization()
 	return _u
 }
 
@@ -680,11 +583,6 @@ func (_u *TMEntryUpdateOne) check() error {
 			return &ValidationError{Name: "project_id", err: fmt.Errorf(`ent: validator failed for field "TMEntry.project_id": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.OrganizationID(); ok {
-		if err := tmentry.OrganizationIDValidator(v); err != nil {
-			return &ValidationError{Name: "organization_id", err: fmt.Errorf(`ent: validator failed for field "TMEntry.organization_id": %w`, err)}
-		}
-	}
 	return nil
 }
 
@@ -766,35 +664,6 @@ func (_u *TMEntryUpdateOne) sqlSave(ctx context.Context) (_node *TMEntry, err er
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(project.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
-	if _u.mutation.OrganizationCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   tmentry.OrganizationTable,
-			Columns: []string{tmentry.OrganizationColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.OrganizationIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   tmentry.OrganizationTable,
-			Columns: []string{tmentry.OrganizationColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

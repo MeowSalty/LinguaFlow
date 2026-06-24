@@ -19,7 +19,6 @@ func (Project) Fields() []ent.Field {
 		field.String("name").NotEmpty(),
 		field.Int("owner_user_id").Optional().Nillable().Positive(),
 		field.Int("owner_org_id").Optional().Nillable().Positive(),
-		field.String("resource_scope").Default("project"),
 		field.JSON("config", map[string]any{}).
 			Default(func() map[string]any { return map[string]any{} }),
 		field.JSON("default_translation_config", map[string]any{}).

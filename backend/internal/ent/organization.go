@@ -43,8 +43,6 @@ type OrganizationEdges struct {
 	Memberships []*OrgMembership `json:"memberships,omitempty"`
 	// Backends holds the value of the backends edge.
 	Backends []*Backend `json:"backends,omitempty"`
-	// TmEntries holds the value of the tm_entries edge.
-	TmEntries []*TMEntry `json:"tm_entries,omitempty"`
 	// ActivityLogs holds the value of the activity_logs edge.
 	ActivityLogs []*ActivityLog `json:"activity_logs,omitempty"`
 	// UsageRecords holds the value of the usage_records edge.
@@ -57,7 +55,7 @@ type OrganizationEdges struct {
 	ExecutionPlanTemplates []*ExecutionPlanTemplate `json:"execution_plan_templates,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [9]bool
+	loadedTypes [8]bool
 }
 
 // ProjectsOrErr returns the Projects value or an error if the edge
@@ -87,19 +85,10 @@ func (e OrganizationEdges) BackendsOrErr() ([]*Backend, error) {
 	return nil, &NotLoadedError{edge: "backends"}
 }
 
-// TmEntriesOrErr returns the TmEntries value or an error if the edge
-// was not loaded in eager-loading.
-func (e OrganizationEdges) TmEntriesOrErr() ([]*TMEntry, error) {
-	if e.loadedTypes[3] {
-		return e.TmEntries, nil
-	}
-	return nil, &NotLoadedError{edge: "tm_entries"}
-}
-
 // ActivityLogsOrErr returns the ActivityLogs value or an error if the edge
 // was not loaded in eager-loading.
 func (e OrganizationEdges) ActivityLogsOrErr() ([]*ActivityLog, error) {
-	if e.loadedTypes[4] {
+	if e.loadedTypes[3] {
 		return e.ActivityLogs, nil
 	}
 	return nil, &NotLoadedError{edge: "activity_logs"}
@@ -108,7 +97,7 @@ func (e OrganizationEdges) ActivityLogsOrErr() ([]*ActivityLog, error) {
 // UsageRecordsOrErr returns the UsageRecords value or an error if the edge
 // was not loaded in eager-loading.
 func (e OrganizationEdges) UsageRecordsOrErr() ([]*UsageRecord, error) {
-	if e.loadedTypes[5] {
+	if e.loadedTypes[4] {
 		return e.UsageRecords, nil
 	}
 	return nil, &NotLoadedError{edge: "usage_records"}
@@ -117,7 +106,7 @@ func (e OrganizationEdges) UsageRecordsOrErr() ([]*UsageRecord, error) {
 // PromptTemplatesOrErr returns the PromptTemplates value or an error if the edge
 // was not loaded in eager-loading.
 func (e OrganizationEdges) PromptTemplatesOrErr() ([]*PromptTemplate, error) {
-	if e.loadedTypes[6] {
+	if e.loadedTypes[5] {
 		return e.PromptTemplates, nil
 	}
 	return nil, &NotLoadedError{edge: "prompt_templates"}
@@ -126,7 +115,7 @@ func (e OrganizationEdges) PromptTemplatesOrErr() ([]*PromptTemplate, error) {
 // TranslationProfilesOrErr returns the TranslationProfiles value or an error if the edge
 // was not loaded in eager-loading.
 func (e OrganizationEdges) TranslationProfilesOrErr() ([]*TranslationProfile, error) {
-	if e.loadedTypes[7] {
+	if e.loadedTypes[6] {
 		return e.TranslationProfiles, nil
 	}
 	return nil, &NotLoadedError{edge: "translation_profiles"}
@@ -135,7 +124,7 @@ func (e OrganizationEdges) TranslationProfilesOrErr() ([]*TranslationProfile, er
 // ExecutionPlanTemplatesOrErr returns the ExecutionPlanTemplates value or an error if the edge
 // was not loaded in eager-loading.
 func (e OrganizationEdges) ExecutionPlanTemplatesOrErr() ([]*ExecutionPlanTemplate, error) {
-	if e.loadedTypes[8] {
+	if e.loadedTypes[7] {
 		return e.ExecutionPlanTemplates, nil
 	}
 	return nil, &NotLoadedError{edge: "execution_plan_templates"}
@@ -235,11 +224,6 @@ func (_m *Organization) QueryMemberships() *OrgMembershipQuery {
 // QueryBackends queries the "backends" edge of the Organization entity.
 func (_m *Organization) QueryBackends() *BackendQuery {
 	return NewOrganizationClient(_m.config).QueryBackends(_m)
-}
-
-// QueryTmEntries queries the "tm_entries" edge of the Organization entity.
-func (_m *Organization) QueryTmEntries() *TMEntryQuery {
-	return NewOrganizationClient(_m.config).QueryTmEntries(_m)
 }
 
 // QueryActivityLogs queries the "activity_logs" edge of the Organization entity.

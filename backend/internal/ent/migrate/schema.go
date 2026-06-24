@@ -285,7 +285,6 @@ var (
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "name", Type: field.TypeString},
-		{Name: "resource_scope", Type: field.TypeString, Default: "project"},
 		{Name: "config", Type: field.TypeJSON},
 		{Name: "default_translation_config", Type: field.TypeJSON},
 		{Name: "source_lang", Type: field.TypeString, Default: "auto"},
@@ -301,13 +300,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "projects_organizations_projects",
-				Columns:    []*schema.Column{ProjectsColumns[9]},
+				Columns:    []*schema.Column{ProjectsColumns[8]},
 				RefColumns: []*schema.Column{OrganizationsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "projects_users_owned_projects",
-				Columns:    []*schema.Column{ProjectsColumns[10]},
+				Columns:    []*schema.Column{ProjectsColumns[9]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -505,7 +504,6 @@ var (
 		{Name: "source_lang", Type: field.TypeString},
 		{Name: "target_lang", Type: field.TypeString},
 		{Name: "usage_count", Type: field.TypeInt, Default: 0},
-		{Name: "organization_id", Type: field.TypeInt, Nullable: true},
 		{Name: "project_id", Type: field.TypeInt, Nullable: true},
 	}
 	// TmEntriesTable holds the schema information for the "tm_entries" table.
@@ -515,14 +513,8 @@ var (
 		PrimaryKey: []*schema.Column{TmEntriesColumns[0]},
 		ForeignKeys: []*schema.ForeignKey{
 			{
-				Symbol:     "tm_entries_organizations_tm_entries",
-				Columns:    []*schema.Column{TmEntriesColumns[10]},
-				RefColumns: []*schema.Column{OrganizationsColumns[0]},
-				OnDelete:   schema.SetNull,
-			},
-			{
 				Symbol:     "tm_entries_projects_tm_entries",
-				Columns:    []*schema.Column{TmEntriesColumns[11]},
+				Columns:    []*schema.Column{TmEntriesColumns[10]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -714,8 +706,7 @@ func init() {
 	SyncTasksTable.ForeignKeys[0].RefTable = GlossaryEntriesTable
 	SyncTasksTable.ForeignKeys[1].RefTable = ProjectsTable
 	SyncTasksTable.ForeignKeys[2].RefTable = UsersTable
-	TmEntriesTable.ForeignKeys[0].RefTable = OrganizationsTable
-	TmEntriesTable.ForeignKeys[1].RefTable = ProjectsTable
+	TmEntriesTable.ForeignKeys[0].RefTable = ProjectsTable
 	TranslationJobsTable.ForeignKeys[0].RefTable = ProjectsTable
 	TranslationJobsTable.ForeignKeys[1].RefTable = UsersTable
 	TranslationProfilesTable.ForeignKeys[0].RefTable = OrganizationsTable

@@ -80,11 +80,6 @@ func OwnerOrgID(v int) predicate.Project {
 	return predicate.Project(sql.FieldEQ(FieldOwnerOrgID, v))
 }
 
-// ResourceScope applies equality check predicate on the "resource_scope" field. It's identical to ResourceScopeEQ.
-func ResourceScope(v string) predicate.Project {
-	return predicate.Project(sql.FieldEQ(FieldResourceScope, v))
-}
-
 // SourceLang applies equality check predicate on the "source_lang" field. It's identical to SourceLangEQ.
 func SourceLang(v string) predicate.Project {
 	return predicate.Project(sql.FieldEQ(FieldSourceLang, v))
@@ -298,71 +293,6 @@ func OwnerOrgIDIsNil() predicate.Project {
 // OwnerOrgIDNotNil applies the NotNil predicate on the "owner_org_id" field.
 func OwnerOrgIDNotNil() predicate.Project {
 	return predicate.Project(sql.FieldNotNull(FieldOwnerOrgID))
-}
-
-// ResourceScopeEQ applies the EQ predicate on the "resource_scope" field.
-func ResourceScopeEQ(v string) predicate.Project {
-	return predicate.Project(sql.FieldEQ(FieldResourceScope, v))
-}
-
-// ResourceScopeNEQ applies the NEQ predicate on the "resource_scope" field.
-func ResourceScopeNEQ(v string) predicate.Project {
-	return predicate.Project(sql.FieldNEQ(FieldResourceScope, v))
-}
-
-// ResourceScopeIn applies the In predicate on the "resource_scope" field.
-func ResourceScopeIn(vs ...string) predicate.Project {
-	return predicate.Project(sql.FieldIn(FieldResourceScope, vs...))
-}
-
-// ResourceScopeNotIn applies the NotIn predicate on the "resource_scope" field.
-func ResourceScopeNotIn(vs ...string) predicate.Project {
-	return predicate.Project(sql.FieldNotIn(FieldResourceScope, vs...))
-}
-
-// ResourceScopeGT applies the GT predicate on the "resource_scope" field.
-func ResourceScopeGT(v string) predicate.Project {
-	return predicate.Project(sql.FieldGT(FieldResourceScope, v))
-}
-
-// ResourceScopeGTE applies the GTE predicate on the "resource_scope" field.
-func ResourceScopeGTE(v string) predicate.Project {
-	return predicate.Project(sql.FieldGTE(FieldResourceScope, v))
-}
-
-// ResourceScopeLT applies the LT predicate on the "resource_scope" field.
-func ResourceScopeLT(v string) predicate.Project {
-	return predicate.Project(sql.FieldLT(FieldResourceScope, v))
-}
-
-// ResourceScopeLTE applies the LTE predicate on the "resource_scope" field.
-func ResourceScopeLTE(v string) predicate.Project {
-	return predicate.Project(sql.FieldLTE(FieldResourceScope, v))
-}
-
-// ResourceScopeContains applies the Contains predicate on the "resource_scope" field.
-func ResourceScopeContains(v string) predicate.Project {
-	return predicate.Project(sql.FieldContains(FieldResourceScope, v))
-}
-
-// ResourceScopeHasPrefix applies the HasPrefix predicate on the "resource_scope" field.
-func ResourceScopeHasPrefix(v string) predicate.Project {
-	return predicate.Project(sql.FieldHasPrefix(FieldResourceScope, v))
-}
-
-// ResourceScopeHasSuffix applies the HasSuffix predicate on the "resource_scope" field.
-func ResourceScopeHasSuffix(v string) predicate.Project {
-	return predicate.Project(sql.FieldHasSuffix(FieldResourceScope, v))
-}
-
-// ResourceScopeEqualFold applies the EqualFold predicate on the "resource_scope" field.
-func ResourceScopeEqualFold(v string) predicate.Project {
-	return predicate.Project(sql.FieldEqualFold(FieldResourceScope, v))
-}
-
-// ResourceScopeContainsFold applies the ContainsFold predicate on the "resource_scope" field.
-func ResourceScopeContainsFold(v string) predicate.Project {
-	return predicate.Project(sql.FieldContainsFold(FieldResourceScope, v))
 }
 
 // SourceLangEQ applies the EQ predicate on the "source_lang" field.

@@ -19,7 +19,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 )
@@ -154,21 +153,6 @@ func (_u *OrganizationUpdate) AddBackends(v ...*Backend) *OrganizationUpdate {
 		ids[i] = v[i].ID
 	}
 	return _u.AddBackendIDs(ids...)
-}
-
-// AddTmEntryIDs adds the "tm_entries" edge to the TMEntry entity by IDs.
-func (_u *OrganizationUpdate) AddTmEntryIDs(ids ...int) *OrganizationUpdate {
-	_u.mutation.AddTmEntryIDs(ids...)
-	return _u
-}
-
-// AddTmEntries adds the "tm_entries" edges to the TMEntry entity.
-func (_u *OrganizationUpdate) AddTmEntries(v ...*TMEntry) *OrganizationUpdate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.AddTmEntryIDs(ids...)
 }
 
 // AddActivityLogIDs adds the "activity_logs" edge to the ActivityLog entity by IDs.
@@ -312,27 +296,6 @@ func (_u *OrganizationUpdate) RemoveBackends(v ...*Backend) *OrganizationUpdate 
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveBackendIDs(ids...)
-}
-
-// ClearTmEntries clears all "tm_entries" edges to the TMEntry entity.
-func (_u *OrganizationUpdate) ClearTmEntries() *OrganizationUpdate {
-	_u.mutation.ClearTmEntries()
-	return _u
-}
-
-// RemoveTmEntryIDs removes the "tm_entries" edge to TMEntry entities by IDs.
-func (_u *OrganizationUpdate) RemoveTmEntryIDs(ids ...int) *OrganizationUpdate {
-	_u.mutation.RemoveTmEntryIDs(ids...)
-	return _u
-}
-
-// RemoveTmEntries removes "tm_entries" edges to TMEntry entities.
-func (_u *OrganizationUpdate) RemoveTmEntries(v ...*TMEntry) *OrganizationUpdate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.RemoveTmEntryIDs(ids...)
 }
 
 // ClearActivityLogs clears all "activity_logs" edges to the ActivityLog entity.
@@ -652,51 +615,6 @@ func (_u *OrganizationUpdate) sqlSave(ctx context.Context) (_node int, err error
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
-	if _u.mutation.TmEntriesCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   organization.TmEntriesTable,
-			Columns: []string{organization.TmEntriesColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(tmentry.FieldID, field.TypeInt),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.RemovedTmEntriesIDs(); len(nodes) > 0 && !_u.mutation.TmEntriesCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   organization.TmEntriesTable,
-			Columns: []string{organization.TmEntriesColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(tmentry.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.TmEntriesIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   organization.TmEntriesTable,
-			Columns: []string{organization.TmEntriesColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(tmentry.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -1068,21 +986,6 @@ func (_u *OrganizationUpdateOne) AddBackends(v ...*Backend) *OrganizationUpdateO
 	return _u.AddBackendIDs(ids...)
 }
 
-// AddTmEntryIDs adds the "tm_entries" edge to the TMEntry entity by IDs.
-func (_u *OrganizationUpdateOne) AddTmEntryIDs(ids ...int) *OrganizationUpdateOne {
-	_u.mutation.AddTmEntryIDs(ids...)
-	return _u
-}
-
-// AddTmEntries adds the "tm_entries" edges to the TMEntry entity.
-func (_u *OrganizationUpdateOne) AddTmEntries(v ...*TMEntry) *OrganizationUpdateOne {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.AddTmEntryIDs(ids...)
-}
-
 // AddActivityLogIDs adds the "activity_logs" edge to the ActivityLog entity by IDs.
 func (_u *OrganizationUpdateOne) AddActivityLogIDs(ids ...int) *OrganizationUpdateOne {
 	_u.mutation.AddActivityLogIDs(ids...)
@@ -1224,27 +1127,6 @@ func (_u *OrganizationUpdateOne) RemoveBackends(v ...*Backend) *OrganizationUpda
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveBackendIDs(ids...)
-}
-
-// ClearTmEntries clears all "tm_entries" edges to the TMEntry entity.
-func (_u *OrganizationUpdateOne) ClearTmEntries() *OrganizationUpdateOne {
-	_u.mutation.ClearTmEntries()
-	return _u
-}
-
-// RemoveTmEntryIDs removes the "tm_entries" edge to TMEntry entities by IDs.
-func (_u *OrganizationUpdateOne) RemoveTmEntryIDs(ids ...int) *OrganizationUpdateOne {
-	_u.mutation.RemoveTmEntryIDs(ids...)
-	return _u
-}
-
-// RemoveTmEntries removes "tm_entries" edges to TMEntry entities.
-func (_u *OrganizationUpdateOne) RemoveTmEntries(v ...*TMEntry) *OrganizationUpdateOne {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.RemoveTmEntryIDs(ids...)
 }
 
 // ClearActivityLogs clears all "activity_logs" edges to the ActivityLog entity.
@@ -1594,51 +1476,6 @@ func (_u *OrganizationUpdateOne) sqlSave(ctx context.Context) (_node *Organizati
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
-	if _u.mutation.TmEntriesCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   organization.TmEntriesTable,
-			Columns: []string{organization.TmEntriesColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(tmentry.FieldID, field.TypeInt),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.RemovedTmEntriesIDs(); len(nodes) > 0 && !_u.mutation.TmEntriesCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   organization.TmEntriesTable,
-			Columns: []string{organization.TmEntriesColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(tmentry.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.TmEntriesIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   organization.TmEntriesTable,
-			Columns: []string{organization.TmEntriesColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(tmentry.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
