@@ -15,9 +15,6 @@ type Project = ApiSchemas['Project']
 type Organization = ApiSchemas['Organization']
 type CreateProjectPayload = ApiSchemas['CreateProjectRequest']
 type UpdateProjectPayload = ApiSchemas['UpdateProjectRequest']
-type ResourceScope = Project['resource_scope']
-
-type ScopeFilter = ResourceScope | 'all'
 
 const getProjectTime = (project: Project): number => {
   const timestamp = project.updated_at ?? project.created_at
@@ -50,7 +47,6 @@ export const useProjectsStore = defineStore('projects', () => {
   const deleteError = ref<string | null>(null)
 
   const searchQuery = ref('')
-  const scopeFilter = ref<ScopeFilter>('all')
 
   const sortedItems = computed(() =>
     [...items.value].sort((left, right) => getProjectTime(right) - getProjectTime(left)),
@@ -60,25 +56,17 @@ export const useProjectsStore = defineStore('projects', () => {
     const query = searchQuery.value.trim().toLowerCase()
 
     return sortedItems.value.filter((project) => {
-      const matchesScope =
-        scopeFilter.value === 'all' || project.resource_scope === scopeFilter.value
       const matchesQuery =
         query.length === 0 ||
         includesNormalized(project.name, query) ||
         includesNormalized(project.source_lang, query) ||
         includesNormalized(project.target_lang, query)
 
-      return matchesScope && matchesQuery
+      return matchesQuery
     })
   })
 
   const projectCount = computed(() => items.value.length)
-  const personalProjectCount = computed(
-    () => items.value.filter((project) => project.resource_scope === 'project').length,
-  )
-  const organizationProjectCount = computed(
-    () => items.value.filter((project) => project.resource_scope === 'organization').length,
-  )
   const languagePairCount = computed(
     () =>
       new Set(
@@ -174,7 +162,6 @@ export const useProjectsStore = defineStore('projects', () => {
 
   const resetFilters = (): void => {
     searchQuery.value = ''
-    scopeFilter.value = 'all'
   }
 
   return {
@@ -191,12 +178,9 @@ export const useProjectsStore = defineStore('projects', () => {
     updateError,
     deleteError,
     searchQuery,
-    scopeFilter,
     sortedItems,
     filteredItems,
     projectCount,
-    personalProjectCount,
-    organizationProjectCount,
     languagePairCount,
     loadProjects,
     loadOrganizations,

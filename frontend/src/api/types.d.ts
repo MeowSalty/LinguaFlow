@@ -1454,8 +1454,6 @@ export interface components {
         Project: {
             id: number;
             name: string;
-            /** @enum {string} */
-            resource_scope: "project" | "organization";
             owner_user_id?: number;
             owner_org_id?: number;
             config?: {
@@ -1477,8 +1475,6 @@ export interface components {
         CreateProjectRequest: {
             name: string;
             owner_org_id?: number;
-            /** @enum {string} */
-            resource_scope?: "project" | "organization";
             config?: {
                 [key: string]: unknown;
             };
@@ -1490,8 +1486,6 @@ export interface components {
         };
         UpdateProjectRequest: {
             name?: string;
-            /** @enum {string} */
-            resource_scope?: "project" | "organization";
             config?: {
                 [key: string]: unknown;
             };
