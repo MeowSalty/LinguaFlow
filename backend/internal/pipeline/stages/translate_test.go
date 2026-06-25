@@ -262,7 +262,7 @@ func TestAbsorbInlineGlossary_RewritesConflictInBatch(t *testing.T) {
 		Glossary:                  g,
 		InlineBootstrap:           true,
 		MinBootstrapSourceLen:     2,
-		MaxBootstrapTermsPerBatch: 20,
+		MaxTermsPer1000Chars:   3.0,
 		InlineConflictStrategy:    config.InlineConflictRewriteLocal,
 	}
 	// Worker B 的本批响应：translations 用了 "并发池"；glossary 项也提议 thread pool→并发池。
@@ -298,7 +298,7 @@ func TestAbsorbInlineGlossary_StrategyOffKeepsConflict(t *testing.T) {
 		Glossary:                  g,
 		InlineBootstrap:           true,
 		MinBootstrapSourceLen:     2,
-		MaxBootstrapTermsPerBatch: 20,
+		MaxTermsPer1000Chars:   3.0,
 		InlineConflictStrategy:    config.InlineConflictOff,
 	}
 	entries := []prompt.BootstrapEntry{
@@ -318,7 +318,7 @@ func TestAbsorbInlineGlossary_NoConflictNoChange(t *testing.T) {
 		Glossary:                  g,
 		InlineBootstrap:           true,
 		MinBootstrapSourceLen:     2,
-		MaxBootstrapTermsPerBatch: 20,
+		MaxTermsPer1000Chars:   3.0,
 		InlineConflictStrategy:    config.InlineConflictRewriteLocal,
 	}
 	entries := []prompt.BootstrapEntry{
@@ -339,7 +339,7 @@ func TestAbsorbInlineGlossary_SameTargetIsNoop(t *testing.T) {
 		Glossary:                  g,
 		InlineBootstrap:           true,
 		MinBootstrapSourceLen:     2,
-		MaxBootstrapTermsPerBatch: 20,
+		MaxTermsPer1000Chars:   3.0,
 		InlineConflictStrategy:    config.InlineConflictRewriteLocal,
 	}
 	entries := []prompt.BootstrapEntry{
@@ -360,7 +360,7 @@ func TestAbsorbInlineGlossary_ProposedTargetMissingInTranslations(t *testing.T) 
 		Glossary:                  g,
 		InlineBootstrap:           true,
 		MinBootstrapSourceLen:     2,
-		MaxBootstrapTermsPerBatch: 20,
+		MaxTermsPer1000Chars:   3.0,
 		InlineConflictStrategy:    config.InlineConflictRewriteLocal,
 	}
 	entries := []prompt.BootstrapEntry{

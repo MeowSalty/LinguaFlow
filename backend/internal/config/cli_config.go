@@ -513,7 +513,7 @@ func defaultCLIConfig() *CLIConfig {
 					PromptUpgrade:        true,
 				},
 				Bootstrap: BootstrapConfig{
-					MaxTermsPerBatch:       20,
+					MaxTermsPer1000Chars:   3.0,
 					MinSourceLen:           2,
 					InlineConflictStrategy: InlineConflictRewriteLocal,
 				},

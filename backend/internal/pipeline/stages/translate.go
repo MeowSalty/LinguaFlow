@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"math"
 	"sort"
 	"strconv"
 	"strings"
@@ -71,8 +72,8 @@ type Translate struct {
 
 	// Inline 模式：翻译时同时让 LLM 抽术语。
 	InlineBootstrap           bool
-	MaxBootstrapTermsPerBatch int // 给 prompt 的术语数量上限；<=0 默认 20
-	MinBootstrapSourceLen     int // 抽出的术语短于此值则丢弃；<=0 默认 2
+	MaxTermsPer1000Chars      float64 // 每 1000 字符的术语缩放系数；<=0 默认 3.0
+	MinBootstrapSourceLen     int     // 抽出的术语短于此值则丢弃；<=0 默认 2
 	// InlineConflictStrategy 控制并发下后到 worker 提交同 source 不同 target 时的处理：
 	//   - config.InlineConflictRewriteLocal（默认）：把本批译文里的冲突 target 字面值
 	//     替换为权威表中已有版本，CJK 直替、拉丁系按词边界、歧义仅 Warn 不动。
@@ -269,12 +270,18 @@ func (s *Translate) callOnce(ctx context.Context, b backend.Backend, req backend
 	return resp, err
 }
 
-// maxBootstrapTerms 返回传给 prompt 的 inline 术语上限；<=0 用默认 20。
-func (s *Translate) maxBootstrapTerms() int {
-	if s.MaxBootstrapTermsPerBatch > 0 {
-		return s.MaxBootstrapTermsPerBatch
+// calcMaxBootstrapTerms 根据系数和本批实际字符数计算 inline 术语上限。
+func (s *Translate) calcMaxBootstrapTerms(segments []string) int {
+	coeff := s.MaxTermsPer1000Chars
+	if coeff <= 0 {
+		coeff = 3.0
 	}
-	return 20
+	totalRunes := 0
+	for _, seg := range segments {
+		totalRunes += len([]rune(seg))
+	}
+	maxTerms := int(math.Ceil(float64(totalRunes) / 1000.0 * coeff))
+	return max(maxTerms, 1)
 }
 
 func headSnippet(s string, n int) string {

@@ -72,7 +72,7 @@ func (e *Engine) buildPipeline(opts pipelineOptions) (*pipeline.Pipeline, backen
 			Repair:           repairOpts,
 		})
 	}
-	s = append(s, &stages.Translate{
+		s = append(s, &stages.Translate{
 		Rounds:                    e.rounds,
 		Renderer:                  e.renderer,
 		Glossary:                  e.glossary,
@@ -82,7 +82,7 @@ func (e *Engine) buildPipeline(opts pipelineOptions) (*pipeline.Pipeline, backen
 		Logger:                    e.logger,
 		Reporter:                  e.reporter,
 		InlineBootstrap:           inlineBootstrap,
-		MaxBootstrapTermsPerBatch: e.cfg.Glossary.Bootstrap.MaxTermsPerBatch,
+		MaxTermsPer1000Chars:      e.cfg.Glossary.Bootstrap.MaxTermsPer1000Chars,
 		MinBootstrapSourceLen:     e.cfg.Glossary.Bootstrap.MinSourceLen,
 		InlineConflictStrategy:    e.cfg.Glossary.Bootstrap.InlineConflictStrategy,
 		Repair:                    repairOpts,

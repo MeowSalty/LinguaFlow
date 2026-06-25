@@ -56,10 +56,10 @@ type ProfileGlossaryConfig struct {
 
 // ProfileBootstrapConfig 术语自举配置（仅内联自举相关）。
 type ProfileBootstrapConfig struct {
-	Enabled                bool   `json:"enabled"                 yaml:"enabled"`
-	MaxTermsPerBatch       int    `json:"max_terms_per_batch"      yaml:"max_terms_per_batch"`
-	MinSourceLen           int    `json:"min_source_len"           yaml:"min_source_len"`
-	InlineConflictStrategy string `json:"inline_conflict_strategy" yaml:"inline_conflict_strategy"`
+	Enabled                bool    `json:"enabled"                  yaml:"enabled"`
+	MaxTermsPer1000Chars   float64 `json:"max_terms_per_1000_chars" yaml:"max_terms_per_1000_chars"`
+	MinSourceLen           int     `json:"min_source_len"           yaml:"min_source_len"`
+	InlineConflictStrategy string  `json:"inline_conflict_strategy" yaml:"inline_conflict_strategy"`
 }
 
 // DefaultProfileConfig 返回默认的翻译配置。
@@ -91,7 +91,7 @@ func DefaultProfileConfig() TranslationProfileConfigData {
 		Glossary: ProfileGlossaryConfig{
 			Bootstrap: ProfileBootstrapConfig{
 				Enabled:                true,
-				MaxTermsPerBatch:       20,
+				MaxTermsPer1000Chars:   3.0,
 				MinSourceLen:           2,
 				InlineConflictStrategy: "rewrite-local",
 			},

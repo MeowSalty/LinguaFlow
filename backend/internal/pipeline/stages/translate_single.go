@@ -42,7 +42,7 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Do
 		TMHints:           tmHints,
 		Vars:              doc.Vars,
 		InlineBootstrap:   s.InlineBootstrap,
-		MaxBootstrapTerms: s.maxBootstrapTerms(),
+		MaxBootstrapTerms: s.calcMaxBootstrapTerms([]string{seg.Source}),
 		StrictSchema:      true,
 		RubyAnnotations:   rubyAnns,
 		RubyOutputFormat:  s.RubyOutputFormat,

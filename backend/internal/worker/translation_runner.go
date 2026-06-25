@@ -348,7 +348,7 @@ func buildStrategyConfig(snapshot *service.JobExecutionSnapshot) *config.Config 
 		cfg.Glossary = config.GlossaryConfig{
 			Enabled: snapshot.GlossaryEnabled,
 			Bootstrap: config.BootstrapConfig{
-				MaxTermsPerBatch:       s.Glossary.Bootstrap.MaxTermsPerBatch,
+				MaxTermsPer1000Chars:   s.Glossary.Bootstrap.MaxTermsPer1000Chars,
 				MinSourceLen:           s.Glossary.Bootstrap.MinSourceLen,
 				InlineConflictStrategy: s.Glossary.Bootstrap.InlineConflictStrategy,
 			},

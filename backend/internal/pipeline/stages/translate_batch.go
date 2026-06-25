@@ -45,10 +45,12 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *pipeline.Docum
 
 	inputs := make([]prompt.SegmentInput, len(idxs))
 	wantIDs := make([]string, len(idxs))
+	batchSources := make([]string, len(idxs))
 	for k, idx := range idxs {
 		id := strconv.Itoa(k + 1)
 		inputs[k] = prompt.SegmentInput{ID: id, Source: doc.Segments[idx].Source}
 		wantIDs[k] = id
+		batchSources[k] = doc.Segments[idx].Source
 	}
 
 	minIdx, maxIdx := idxs[0], idxs[len(idxs)-1]
@@ -65,7 +67,7 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *pipeline.Docum
 		TMHints:           tmHints,
 		Vars:              doc.Vars,
 		InlineBootstrap:   s.InlineBootstrap,
-		MaxBootstrapTerms: s.maxBootstrapTerms(),
+		MaxBootstrapTerms: s.calcMaxBootstrapTerms(batchSources),
 		StrictSchema:      true,
 		RubyAnnotations:   rubyAnns,
 		RubyOutputFormat:  s.RubyOutputFormat,

@@ -122,8 +122,8 @@ func TestDefaultCLIConfig_Fallback(t *testing.T) {
 	if !ok {
 		t.Fatal("expected profile \"default\" in fallback config")
 	}
-	if defProf.Bootstrap.MaxTermsPerBatch != 20 {
-		t.Errorf("profile bootstrap.max_terms_per_batch = %d, want 20", defProf.Bootstrap.MaxTermsPerBatch)
+	if defProf.Bootstrap.MaxTermsPer1000Chars != 3.0 {
+		t.Errorf("profile bootstrap.max_terms_per_1000_chars = %v, want 3.0", defProf.Bootstrap.MaxTermsPer1000Chars)
 	}
 	if defProf.Bootstrap.InlineConflictStrategy != InlineConflictRewriteLocal {
 		t.Errorf("profile bootstrap.inline_conflict_strategy = %q, want %q",
@@ -412,8 +412,8 @@ glossary:
 	if !ok {
 		t.Fatal("expected profile \"default\"")
 	}
-	if defProf.Bootstrap.MaxTermsPerBatch != 0 {
-		t.Errorf("profile bootstrap.max_terms_per_batch = %d, want 0 (legacy had no bootstrap)", defProf.Bootstrap.MaxTermsPerBatch)
+	if defProf.Bootstrap.MaxTermsPer1000Chars != 0 {
+		t.Errorf("profile bootstrap.max_terms_per_1000_chars = %v, want 0 (legacy had no bootstrap)", defProf.Bootstrap.MaxTermsPer1000Chars)
 	}
 }
 
@@ -761,7 +761,7 @@ func TestMigrateFromLegacy(t *testing.T) {
 			Save:    true,
 			Bootstrap: BootstrapConfig{
 				Enabled:                true,
-				MaxTermsPerBatch:       30,
+				MaxTermsPer1000Chars:   3.0,
 				MinSourceLen:           5,
 				InlineConflictStrategy: InlineConflictOff,
 			},
@@ -841,8 +841,8 @@ func TestMigrateFromLegacy(t *testing.T) {
 	if !prof.Bootstrap.Enabled {
 		t.Error("expected profile bootstrap.enabled = true (migrated from glossary.bootstrap)")
 	}
-	if prof.Bootstrap.MaxTermsPerBatch != 30 {
-		t.Errorf("profile bootstrap.max_terms_per_batch = %d, want 30", prof.Bootstrap.MaxTermsPerBatch)
+	if prof.Bootstrap.MaxTermsPer1000Chars != 3.0 {
+		t.Errorf("profile bootstrap.max_terms_per_1000_chars = %v, want 3.0", prof.Bootstrap.MaxTermsPer1000Chars)
 	}
 	if prof.Bootstrap.MinSourceLen != 5 {
 		t.Errorf("profile bootstrap.min_source_len = %d, want 5", prof.Bootstrap.MinSourceLen)

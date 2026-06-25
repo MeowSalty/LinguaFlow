@@ -132,10 +132,10 @@ type GlossaryConfig struct {
 //     权威表中的版本；CJK 直接替换，拉丁系按词边界，歧义场景仅 Warn 不动。
 //   - off：完全不处理，沿用旧行为（First-Wins + 不一致译文）。
 type BootstrapConfig struct {
-	Enabled                bool   `yaml:"enabled"`
-	MaxTermsPerBatch       int    `yaml:"max_terms_per_batch"`
-	MinSourceLen           int    `yaml:"min_source_len"`
-	InlineConflictStrategy string `yaml:"inline_conflict_strategy"`
+	Enabled                bool    `yaml:"enabled"`
+	MaxTermsPer1000Chars   float64 `yaml:"max_terms_per_1000_chars"`
+	MinSourceLen           int     `yaml:"min_source_len"`
+	InlineConflictStrategy string  `yaml:"inline_conflict_strategy"`
 }
 
 // StandaloneBootstrapConfig 控制独立自举（pre）：translate 之前独立扫一遍文档，
@@ -288,7 +288,7 @@ func Default() *Config {
 			Path:    "./glossary.csv",
 			Save:    true,
 			Bootstrap: BootstrapConfig{
-				MaxTermsPerBatch:       20,
+				MaxTermsPer1000Chars:   3.0,
 				MinSourceLen:           2,
 				InlineConflictStrategy: InlineConflictRewriteLocal,
 			},
@@ -376,8 +376,8 @@ func (c *Config) Validate() error {
 	}
 	c.Pipeline.Translate.Repair.Normalize()
 	// Inline bootstrap 校验
-	if c.Glossary.Bootstrap.MaxTermsPerBatch < 1 {
-		c.Glossary.Bootstrap.MaxTermsPerBatch = 20
+	if c.Glossary.Bootstrap.MaxTermsPer1000Chars <= 0 {
+		c.Glossary.Bootstrap.MaxTermsPer1000Chars = 3.0
 	}
 	if c.Glossary.Bootstrap.MinSourceLen < 1 {
 		c.Glossary.Bootstrap.MinSourceLen = 2
