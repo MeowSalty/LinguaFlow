@@ -37,21 +37,23 @@ func NewExecutionPlanService(client *ent.Client, users *UserService) *ExecutionP
 
 // CreateExecutionPlanTemplateInput 创建执行计划模板的输入参数。
 type CreateExecutionPlanTemplateInput struct {
-	Name        string                              `json:"name"`
-	Description string                              `json:"description"`
-	Scope       string                              `json:"scope"` // user / org
-	OwnerUserID *int                                `json:"owner_user_id,omitempty"`
-	OwnerOrgID  *int                                `json:"owner_org_id,omitempty"`
-	Bootstrap   schema.ExecutionPlanBootstrapConfig `json:"bootstrap"`
-	Rounds      []schema.ExecutionRoundConfig       `json:"rounds"`
+	Name        string                                `json:"name"`
+	Description string                                `json:"description"`
+	Scope       string                                `json:"scope"` // user / org
+	OwnerUserID *int                                  `json:"owner_user_id,omitempty"`
+	OwnerOrgID  *int                                  `json:"owner_org_id,omitempty"`
+	Bootstrap   schema.ExecutionPlanBootstrapConfig   `json:"bootstrap"`
+	RubyRetry   schema.ExecutionPlanRubyRetryConfig   `json:"ruby_retry"`
+	Rounds      []schema.ExecutionRoundConfig          `json:"rounds"`
 }
 
 // UpdateExecutionPlanTemplateInput 更新执行计划模板的输入参数。
 type UpdateExecutionPlanTemplateInput struct {
-	Name        *string                              `json:"name,omitempty"`
-	Description *string                              `json:"description,omitempty"`
-	Bootstrap   *schema.ExecutionPlanBootstrapConfig `json:"bootstrap,omitempty"`
-	Rounds      []schema.ExecutionRoundConfig        `json:"rounds,omitempty"`
+	Name        *string                                `json:"name,omitempty"`
+	Description *string                                `json:"description,omitempty"`
+	Bootstrap   *schema.ExecutionPlanBootstrapConfig   `json:"bootstrap,omitempty"`
+	RubyRetry   *schema.ExecutionPlanRubyRetryConfig   `json:"ruby_retry,omitempty"`
+	Rounds      []schema.ExecutionRoundConfig           `json:"rounds,omitempty"`
 }
 
 // ListByUser 列出用户可访问的执行计划模板。
@@ -142,6 +144,7 @@ func (s *ExecutionPlanService) Create(ctx context.Context, input CreateExecution
 		SetDescription(strings.TrimSpace(input.Description)).
 		SetScope(input.Scope).
 		SetBootstrap(input.Bootstrap).
+		SetRubyRetry(input.RubyRetry).
 		SetRounds(input.Rounds)
 
 	switch input.Scope {
@@ -195,6 +198,9 @@ func (s *ExecutionPlanService) Update(ctx context.Context, userID, planID int, i
 	}
 	if input.Bootstrap != nil {
 		update.SetBootstrap(*input.Bootstrap)
+	}
+	if input.RubyRetry != nil {
+		update.SetRubyRetry(*input.RubyRetry)
 	}
 	if input.Rounds != nil {
 		update.SetRounds(input.Rounds)

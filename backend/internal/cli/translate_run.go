@@ -221,9 +221,30 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 		})
 	}
 
+	// 解析注音对齐重试后端
+	var rubyRetryBackends []backend.Backend
+	if retryName := cfg.Pipeline.Protect.Ruby.RetryBackend; retryName != "" {
+		bCfg, ok := cliCfg.Backends[retryName]
+		if !ok {
+			return nil, fmt.Errorf("ruby retry backend %q not found in backends", retryName)
+		}
+		b, bErr := engine.BuildBackends([]config.BackendConfig{{
+			Name:            retryName,
+			Type:            bCfg.Type,
+			Enabled:         bCfg.Enabled,
+			RateLimitPerSec: bCfg.RateLimitPerSec,
+			Options:         bCfg.Options,
+		}})
+		if bErr != nil {
+			return nil, fmt.Errorf("build ruby retry backend %q: %w", retryName, bErr)
+		}
+		rubyRetryBackends = b
+	}
+
 	return &engine.Options{
-		Config: cfg,
-		Rounds: rounds,
+		Config:            cfg,
+		Rounds:            rounds,
+		RubyRetryBackends: rubyRetryBackends,
 	}, nil
 }
 

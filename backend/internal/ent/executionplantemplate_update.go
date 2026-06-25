@@ -140,6 +140,26 @@ func (_u *ExecutionPlanTemplateUpdate) ClearBootstrap() *ExecutionPlanTemplateUp
 	return _u
 }
 
+// SetRubyRetry sets the "ruby_retry" field.
+func (_u *ExecutionPlanTemplateUpdate) SetRubyRetry(v schema.ExecutionPlanRubyRetryConfig) *ExecutionPlanTemplateUpdate {
+	_u.mutation.SetRubyRetry(v)
+	return _u
+}
+
+// SetNillableRubyRetry sets the "ruby_retry" field if the given value is not nil.
+func (_u *ExecutionPlanTemplateUpdate) SetNillableRubyRetry(v *schema.ExecutionPlanRubyRetryConfig) *ExecutionPlanTemplateUpdate {
+	if v != nil {
+		_u.SetRubyRetry(*v)
+	}
+	return _u
+}
+
+// ClearRubyRetry clears the value of the "ruby_retry" field.
+func (_u *ExecutionPlanTemplateUpdate) ClearRubyRetry() *ExecutionPlanTemplateUpdate {
+	_u.mutation.ClearRubyRetry()
+	return _u
+}
+
 // SetRounds sets the "rounds" field.
 func (_u *ExecutionPlanTemplateUpdate) SetRounds(v []schema.ExecutionRoundConfig) *ExecutionPlanTemplateUpdate {
 	_u.mutation.SetRounds(v)
@@ -264,6 +284,12 @@ func (_u *ExecutionPlanTemplateUpdate) sqlSave(ctx context.Context) (_node int, 
 	}
 	if _u.mutation.BootstrapCleared() {
 		_spec.ClearField(executionplantemplate.FieldBootstrap, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.RubyRetry(); ok {
+		_spec.SetField(executionplantemplate.FieldRubyRetry, field.TypeJSON, value)
+	}
+	if _u.mutation.RubyRetryCleared() {
+		_spec.ClearField(executionplantemplate.FieldRubyRetry, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.Rounds(); ok {
 		_spec.SetField(executionplantemplate.FieldRounds, field.TypeJSON, value)
@@ -459,6 +485,26 @@ func (_u *ExecutionPlanTemplateUpdateOne) ClearBootstrap() *ExecutionPlanTemplat
 	return _u
 }
 
+// SetRubyRetry sets the "ruby_retry" field.
+func (_u *ExecutionPlanTemplateUpdateOne) SetRubyRetry(v schema.ExecutionPlanRubyRetryConfig) *ExecutionPlanTemplateUpdateOne {
+	_u.mutation.SetRubyRetry(v)
+	return _u
+}
+
+// SetNillableRubyRetry sets the "ruby_retry" field if the given value is not nil.
+func (_u *ExecutionPlanTemplateUpdateOne) SetNillableRubyRetry(v *schema.ExecutionPlanRubyRetryConfig) *ExecutionPlanTemplateUpdateOne {
+	if v != nil {
+		_u.SetRubyRetry(*v)
+	}
+	return _u
+}
+
+// ClearRubyRetry clears the value of the "ruby_retry" field.
+func (_u *ExecutionPlanTemplateUpdateOne) ClearRubyRetry() *ExecutionPlanTemplateUpdateOne {
+	_u.mutation.ClearRubyRetry()
+	return _u
+}
+
 // SetRounds sets the "rounds" field.
 func (_u *ExecutionPlanTemplateUpdateOne) SetRounds(v []schema.ExecutionRoundConfig) *ExecutionPlanTemplateUpdateOne {
 	_u.mutation.SetRounds(v)
@@ -613,6 +659,12 @@ func (_u *ExecutionPlanTemplateUpdateOne) sqlSave(ctx context.Context) (_node *E
 	}
 	if _u.mutation.BootstrapCleared() {
 		_spec.ClearField(executionplantemplate.FieldBootstrap, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.RubyRetry(); ok {
+		_spec.SetField(executionplantemplate.FieldRubyRetry, field.TypeJSON, value)
+	}
+	if _u.mutation.RubyRetryCleared() {
+		_spec.ClearField(executionplantemplate.FieldRubyRetry, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.Rounds(); ok {
 		_spec.SetField(executionplantemplate.FieldRounds, field.TypeJSON, value)

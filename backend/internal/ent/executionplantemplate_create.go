@@ -127,6 +127,20 @@ func (_c *ExecutionPlanTemplateCreate) SetNillableBootstrap(v *schema.ExecutionP
 	return _c
 }
 
+// SetRubyRetry sets the "ruby_retry" field.
+func (_c *ExecutionPlanTemplateCreate) SetRubyRetry(v schema.ExecutionPlanRubyRetryConfig) *ExecutionPlanTemplateCreate {
+	_c.mutation.SetRubyRetry(v)
+	return _c
+}
+
+// SetNillableRubyRetry sets the "ruby_retry" field if the given value is not nil.
+func (_c *ExecutionPlanTemplateCreate) SetNillableRubyRetry(v *schema.ExecutionPlanRubyRetryConfig) *ExecutionPlanTemplateCreate {
+	if v != nil {
+		_c.SetRubyRetry(*v)
+	}
+	return _c
+}
+
 // SetRounds sets the "rounds" field.
 func (_c *ExecutionPlanTemplateCreate) SetRounds(v []schema.ExecutionRoundConfig) *ExecutionPlanTemplateCreate {
 	_c.mutation.SetRounds(v)
@@ -280,6 +294,10 @@ func (_c *ExecutionPlanTemplateCreate) createSpec() (*ExecutionPlanTemplate, *sq
 	if value, ok := _c.mutation.Bootstrap(); ok {
 		_spec.SetField(executionplantemplate.FieldBootstrap, field.TypeJSON, value)
 		_node.Bootstrap = value
+	}
+	if value, ok := _c.mutation.RubyRetry(); ok {
+		_spec.SetField(executionplantemplate.FieldRubyRetry, field.TypeJSON, value)
+		_node.RubyRetry = value
 	}
 	if value, ok := _c.mutation.Rounds(); ok {
 		_spec.SetField(executionplantemplate.FieldRounds, field.TypeJSON, value)

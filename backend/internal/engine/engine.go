@@ -27,6 +27,7 @@ type Engine struct {
 	reporter            progress.Reporter
 	rounds              []stages.Round                    // 替代 selector
 	bootstrapBackends   []backend.Backend                 // 自举后端
+	rubyRetryBackends   []backend.Backend                 // 注音对齐重试后端
 	standaloneBootstrap *config.StandaloneBootstrapConfig // 独立自举配置
 	renderer            *prompt.Renderer
 	bootstrapRenderer   *prompt.BootstrapRenderer
@@ -84,12 +85,17 @@ func NewWithOptions(opts Options) (*Engine, error) {
 	if len(bootstrapBackends) == 0 {
 		bootstrapBackends = opts.Rounds[0].Backends
 	}
+	rubyRetryBackends := opts.RubyRetryBackends
+	if len(rubyRetryBackends) == 0 {
+		rubyRetryBackends = opts.Rounds[0].Backends
+	}
 	e := &Engine{
 		cfg:                 opts.Config,
 		logger:              opts.Logger,
 		reporter:            opts.Reporter,
 		rounds:              rounds,
 		bootstrapBackends:   bootstrapBackends,
+		rubyRetryBackends:   rubyRetryBackends,
 		standaloneBootstrap: &opts.Config.Glossary.Standalone,
 		renderer:            rend,
 		glossary:            glos,

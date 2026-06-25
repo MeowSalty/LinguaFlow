@@ -116,6 +116,7 @@ type JobExecutionSnapshot struct {
 	GlossaryEnabled   bool                            `json:"glossary_enabled"`
 	AutoApprove       bool                            `json:"auto_approve,omitempty"`
 	Bootstrap         *ExecutionPlanBootstrapSnapshot `json:"bootstrap,omitempty"`
+	RubyRetry         *ExecutionPlanRubyRetrySnapshot `json:"ruby_retry,omitempty"`
 }
 
 // ExecutionPlanBootstrapSnapshot 独立自举快照。
@@ -127,6 +128,12 @@ type ExecutionPlanBootstrapSnapshot struct {
 	Concurrency      int             `json:"concurrency"`
 	MaxTermsPerBatch int             `json:"max_terms_per_batch"`
 	MinSourceLen     int             `json:"min_source_len"`
+}
+
+// ExecutionPlanRubyRetrySnapshot 注音对齐重试快照。
+type ExecutionPlanRubyRetrySnapshot struct {
+	Enabled bool            `json:"enabled"`
+	Backend BackendSnapshot `json:"backend"`
 }
 
 // JobRoundSnapshot 单轮的完整执行快照。
@@ -366,6 +373,25 @@ func (s *TranslationJobService) validateAndSnapshot(
 			Concurrency:      bs.Concurrency,
 			MaxTermsPerBatch: bs.MaxTermsPerBatch,
 			MinSourceLen:     bs.MinSourceLen,
+		}
+	}
+
+	// 注音对齐重试快照
+	if plan.RubyRetry.Enabled && plan.RubyRetry.BackendID > 0 {
+		rr := &plan.RubyRetry
+
+		if err := s.validateBackendAccess(ctx, projectRow, rr.BackendID); err != nil {
+			return nil, fmt.Errorf("ruby retry backend: %w", err)
+		}
+
+		rrBackendSnap, err := s.snapshotBackend(ctx, rr.BackendID)
+		if err != nil {
+			return nil, fmt.Errorf("ruby retry snapshot backend: %w", err)
+		}
+
+		snapshot.RubyRetry = &ExecutionPlanRubyRetrySnapshot{
+			Enabled: true,
+			Backend: *rrBackendSnap,
 		}
 	}
 

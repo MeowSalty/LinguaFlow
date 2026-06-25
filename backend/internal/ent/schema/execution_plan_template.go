@@ -30,6 +30,12 @@ type ExecutionPlanBootstrapConfig struct {
 	MinSourceLen     int  `json:"min_source_len"      yaml:"min_source_len"`
 }
 
+// ExecutionPlanRubyRetryConfig 注音对齐重试配置。
+type ExecutionPlanRubyRetryConfig struct {
+	Enabled   bool `json:"enabled"    yaml:"enabled"`    // 是否启用注音对齐重试
+	BackendID int  `json:"backend_id" yaml:"backend_id"` // 引用的后端 ID；0 时使用翻译主后端
+}
+
 // RetryConfig 重试策略。
 type RetryConfig struct {
 	MaxAttempts int  `json:"max_attempts" yaml:"max_attempts"`
@@ -57,6 +63,9 @@ func (ExecutionPlanTemplate) Fields() []ent.Field {
 		field.JSON("bootstrap", ExecutionPlanBootstrapConfig{}).
 			Optional().
 			Comment("独立自举配置"),
+		field.JSON("ruby_retry", ExecutionPlanRubyRetryConfig{}).
+			Optional().
+			Comment("注音对齐重试配置"),
 		field.JSON("rounds", []ExecutionRoundConfig{}).
 			Comment("轮次配置列表，每轮引用后端+提示词+策略"),
 	}

@@ -27,6 +27,10 @@ type Options struct {
 	// 为空时回退到 Rounds[0].Backends。
 	BootstrapBackends []backend.Backend
 
+	// RubyRetryBackends 是注音对齐重试使用的后端列表。
+	// 为空时回退到 Rounds[0].Backends。
+	RubyRetryBackends []backend.Backend
+
 	// Config 是策略配置（分割、保护、提示词、术语表等）。
 	// 不包含 backends、backend_mode、backend_order 字段。
 	Config *config.Config

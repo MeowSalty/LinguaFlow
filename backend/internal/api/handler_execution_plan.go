@@ -101,6 +101,11 @@ func toExecutionPlanTemplateResponse(t *ent.ExecutionPlanTemplate) ExecutionPlan
 		bs := toBootstrapConfigAPI(t.Bootstrap)
 		resp.Bootstrap = &bs
 	}
+	// 注音对齐重试配置
+	if t.RubyRetry.Enabled {
+		rr := toRubyRetryConfigAPI(t.RubyRetry)
+		resp.RubyRetry = &rr
+	}
 	rounds := make([]ExecutionRoundConfig, 0, len(t.Rounds))
 	for _, rc := range t.Rounds {
 		rounds = append(rounds, toExecutionRoundConfigAPI(rc))
@@ -144,6 +149,31 @@ func parseBootstrapConfig(api *ExecutionPlanBootstrapConfig) schema.ExecutionPla
 	}
 	if api.MinSourceLen != nil {
 		result.MinSourceLen = *api.MinSourceLen
+	}
+	return result
+}
+
+// toRubyRetryConfigAPI 将 schema 层的注音对齐重试配置转换为 API 响应类型。
+func toRubyRetryConfigAPI(rr schema.ExecutionPlanRubyRetryConfig) ExecutionPlanRubyRetryConfig {
+	result := ExecutionPlanRubyRetryConfig{
+		Enabled: rr.Enabled,
+	}
+	if rr.BackendID > 0 {
+		result.BackendId = &rr.BackendID
+	}
+	return result
+}
+
+// parseRubyRetryConfig 将 API 请求中的注音对齐重试配置转换为 schema 层。
+func parseRubyRetryConfig(api *ExecutionPlanRubyRetryConfig) schema.ExecutionPlanRubyRetryConfig {
+	if api == nil {
+		return schema.ExecutionPlanRubyRetryConfig{}
+	}
+	result := schema.ExecutionPlanRubyRetryConfig{
+		Enabled: api.Enabled,
+	}
+	if api.BackendId != nil {
+		result.BackendID = *api.BackendId
 	}
 	return result
 }
@@ -216,6 +246,7 @@ func (h *HandlerExecutionPlan) handleCreate(w http.ResponseWriter, r *http.Reque
 		Scope:       "user",
 		OwnerUserID: &userID,
 		Bootstrap:   parseBootstrapConfig(req.Bootstrap),
+		RubyRetry:   parseRubyRetryConfig(req.RubyRetry),
 		Rounds:      toExecutionPlanRoundsAPI(req.Rounds),
 	}
 	if req.Description != nil {
@@ -254,6 +285,10 @@ func (h *HandlerExecutionPlan) handleUpdate(w http.ResponseWriter, r *http.Reque
 	if req.Bootstrap != nil {
 		bs := parseBootstrapConfig(req.Bootstrap)
 		input.Bootstrap = &bs
+	}
+	if req.RubyRetry != nil {
+		rr := parseRubyRetryConfig(req.RubyRetry)
+		input.RubyRetry = &rr
 	}
 	if req.Rounds != nil {
 		rounds := toExecutionPlanRoundsAPI(*req.Rounds)

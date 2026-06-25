@@ -94,7 +94,7 @@ func (e *Engine) buildPipeline(opts pipelineOptions) (*pipeline.Pipeline, backen
 	// 如果启用 ruby 注音保护，在 unprotect 之后添加 restore stage。
 	if pc.Protect.Ruby.Enabled {
 		restorer := protect.NewRubyRestorer(pc.Protect.Ruby.OutputFormat)
-		s = append(s, stages.NewRubyRestore(restorer, e.logger))
+		s = append(s, stages.NewRubyRestore(restorer, e.logger, e.rubyRetryBackends, retry, pc.Protect.Ruby.OutputFormat))
 	}
 	return pipeline.New(e.logger, s...), limiter
 }
@@ -273,3 +273,4 @@ func parseFailedIndices(vars map[string]any) map[int]struct{} {
 	}
 	return failedSet
 }
+

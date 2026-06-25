@@ -21,14 +21,16 @@ func NewRubyRestorer(outputFormat string) *RubyRestorer {
 }
 
 // Restore 根据输出模式还原注音标签。
-func (r *RubyRestorer) Restore(seg *pipeline.Segment, rubyOutput []RubyOutputEntry) error {
+// originalAnnotations 为 Protect 阶段提取的原始注音，用于 ruby_output 模式的双源匹配回退；
+// inline_markers 模式忽略此参数。可传 nil。
+func (r *RubyRestorer) Restore(seg *pipeline.Segment, rubyOutput []RubyOutputEntry, originalAnnotations []RubyAnnotation) error {
 	switch r.OutputFormat {
 	case "inline_markers":
 		return r.restoreInlineMarkers(seg)
 	case "ruby_output":
 		fallthrough
 	default:
-		return r.restoreRubyOutput(seg, rubyOutput)
+		return r.restoreRubyOutput(seg, rubyOutput, originalAnnotations)
 	}
 }
 
@@ -38,13 +40,22 @@ type RubyOutputEntry struct {
 	Text string `json:"text"`
 }
 
+// insertInfo 记录一次注音插入的位置和内容。
+type insertInfo struct {
+	pos  int
+	end  int
+	base string
+	text string
+}
+
 // restoreRubyOutput 通过文本匹配将注音还原为 <ruby> 标签。
 // 核心逻辑：在译文中找到基底文本的对应位置，插入注音。
 //
-// 匹配策略：
+// 匹配策略（双源匹配）：
 //  1. 按 rubyOutput 的顺序，为每个条目在译文中查找第一个未被分配的基底文本出现位置
-//  2. 从右到左应用替换，避免索引偏移
-func (r *RubyRestorer) restoreRubyOutput(seg *pipeline.Segment, rubyOutput []RubyOutputEntry) error {
+//  2. 若 LLM 返回的 base 未匹配，回退到原始 annotations 中对应位置的 base 再试一次
+//  3. 从右到左应用替换，避免索引偏移
+func (r *RubyRestorer) restoreRubyOutput(seg *pipeline.Segment, rubyOutput []RubyOutputEntry, originalAnnotations []RubyAnnotation) error {
 	if len(rubyOutput) == 0 {
 		return nil
 	}
@@ -54,38 +65,21 @@ func (r *RubyRestorer) restoreRubyOutput(seg *pipeline.Segment, rubyOutput []Rub
 	// 记录已分配的字节位置
 	assigned := make(map[int]bool)
 
-	type insertInfo struct {
-		pos  int
-		end  int
-		base string
-		text string
-	}
-
 	var inserts []insertInfo
 
-	for _, entry := range rubyOutput {
+	for i, entry := range rubyOutput {
 		if entry.Base == "" {
 			continue
 		}
-		// 在译文中查找第一个未被分配的基底文本出现位置
-		searchFrom := 0
-		for {
-			idx := strings.Index(target[searchFrom:], entry.Base)
-			if idx == -1 {
-				break
+		// 第一优先：用 LLM 返回的 base（译文中的对应文本）匹配
+		found := r.findAndInsert(target, entry.Base, entry.Text, assigned, &inserts)
+
+		// 第二优先：回退到原始 annotation 的 base（原文基底）匹配
+		if !found && i < len(originalAnnotations) {
+			origBase := originalAnnotations[i].Base
+			if origBase != "" && origBase != entry.Base {
+				r.findAndInsert(target, origBase, entry.Text, assigned, &inserts)
 			}
-			absIdx := searchFrom + idx
-			if !assigned[absIdx] {
-				assigned[absIdx] = true
-				inserts = append(inserts, insertInfo{
-					pos:  absIdx,
-					end:  absIdx + len(entry.Base),
-					base: entry.Base,
-					text: entry.Text,
-				})
-				break
-			}
-			searchFrom = absIdx + 1
 		}
 	}
 
@@ -106,6 +100,31 @@ func (r *RubyRestorer) restoreRubyOutput(seg *pipeline.Segment, rubyOutput []Rub
 
 	seg.Target = target
 	return nil
+}
+
+// findAndInsert 在 target 中查找 base 的第一个未分配出现位置，
+// 找到后记录到 inserts 并标记 assigned，返回 true；未找到返回 false。
+func (r *RubyRestorer) findAndInsert(target, base, text string, assigned map[int]bool, inserts *[]insertInfo) bool {
+	searchFrom := 0
+	for {
+		idx := strings.Index(target[searchFrom:], base)
+		if idx == -1 {
+			break
+		}
+		absIdx := searchFrom + idx
+		if !assigned[absIdx] {
+			assigned[absIdx] = true
+			*inserts = append(*inserts, insertInfo{
+				pos:  absIdx,
+				end:  absIdx + len(base),
+				base: base,
+				text: text,
+			})
+			return true
+		}
+		searchFrom = absIdx + 1
+	}
+	return false
 }
 
 // inlineMarkerRe 匹配 ⟦ruby:base/text⟧ 格式的内联标记。

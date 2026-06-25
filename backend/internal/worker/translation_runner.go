@@ -298,12 +298,29 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 	// 构建策略配置（不含后端信息）
 	cfg := buildStrategyConfig(snapshot)
 
+	// 构建注音对齐重试后端
+	var rubyRetryBackends []backend.Backend
+	if snapshot.RubyRetry != nil && snapshot.RubyRetry.Enabled {
+		rrCfg := config.BackendConfig{
+			Name:    snapshot.RubyRetry.Backend.Name,
+			Type:    snapshot.RubyRetry.Backend.Type,
+			Enabled: true,
+			Options: snapshot.RubyRetry.Backend.Options,
+		}
+		rrBackend, err := backend.Build(rrCfg)
+		if err != nil {
+			return nil, fmt.Errorf("ruby retry backend: %w", err)
+		}
+		rubyRetryBackends = []backend.Backend{rrBackend}
+	}
+
 	return engine.NewWithOptions(engine.Options{
-		Rounds:    rounds,
-		Config:    cfg,
-		Logger:    r.logger,
-		Resources: resources,
-		Reporter:  reporter,
+		Rounds:            rounds,
+		RubyRetryBackends: rubyRetryBackends,
+		Config:            cfg,
+		Logger:            r.logger,
+		Resources:         resources,
+		Reporter:          reporter,
 	})
 }
 

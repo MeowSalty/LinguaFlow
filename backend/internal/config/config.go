@@ -65,6 +65,7 @@ type ProtectConfig struct {
 type RubyConfig struct {
 	Enabled      bool   `yaml:"enabled"`
 	OutputFormat string `yaml:"output_format"` // "ruby_output" (默认) | "inline_markers"
+	RetryBackend string `yaml:"retry_backend"` // 注音对齐重试后端名称；空时使用翻译主后端
 }
 
 // Ruby 输出格式常量。

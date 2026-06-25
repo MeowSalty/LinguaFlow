@@ -307,7 +307,7 @@ func TestRubyProtector_ProtectAndRestore(t *testing.T) {
 				for i, a := range annotations {
 					rubyOutput[i] = RubyOutputEntry{Base: a.Base, Text: a.Text}
 				}
-				if err := restorer.Restore(seg, rubyOutput); err != nil {
+				if err := restorer.Restore(seg, rubyOutput, annotations); err != nil {
 					t.Fatalf("restore(%q): %v", tc.input, err)
 				}
 			}
@@ -461,7 +461,7 @@ func TestMergeAdjacentPlaceholders_RoundTrip(t *testing.T) {
 					rubyOutput[i] = RubyOutputEntry{Base: a.Base, Text: a.Text}
 				}
 				if len(rubyOutput) > 0 {
-					if err := restorer.Restore(seg, rubyOutput); err != nil {
+					if err := restorer.Restore(seg, rubyOutput, annotations); err != nil {
 						t.Fatalf("restore(%q): %v", tc.input, err)
 					}
 				}
