@@ -201,6 +201,14 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *pipeline.Docum
 				seg.Meta["ruby_output"] = ro
 			}
 		}
+		if s.RubyOutputFormat != "" {
+			_, hasAnnots := seg.Meta["ruby_annotations"]
+			_, hasOutput := seg.Meta["ruby_output"]
+			if hasAnnots && !hasOutput {
+				logger.Warn("LLM response missing ruby_output for segment with annotations",
+					"seg", seg.ID, "backend", picked.Name())
+			}
+		}
 		// L3 占位符归一化：仅 normalize seg.Protected 中已知 key 的变体。
 		if repairOpts.PlaceholderNormalize {
 			if normText, normalized := repair.NormalizePlaceholders(text, seg.Protected); len(normalized) > 0 {

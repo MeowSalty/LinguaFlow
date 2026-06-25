@@ -30,10 +30,13 @@ func (s *RubyRestore) Run(_ context.Context, doc *pipeline.Document) error {
 		seg := &doc.Segments[i]
 		rubyOutput := extractRubyOutputFromSeg(seg)
 		if len(rubyOutput) > 0 {
+			before := seg.Target
 			if err := s.Restorer.Restore(seg, rubyOutput); err != nil {
 				logger.Warn("ruby restore failed, keeping translated text as-is",
 					"seg", seg.ID, "err", err)
-				// 不阻塞 pipeline，保留译文原样
+			} else if seg.Target == before {
+				logger.Warn("ruby restore: no base text matched in translation, annotations lost",
+					"seg", seg.ID, "entries", len(rubyOutput))
 			}
 		}
 	}

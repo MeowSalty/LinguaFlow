@@ -180,6 +180,46 @@ func TestTranslationsSchema_WithGlossary(t *testing.T) {
 	}
 }
 
+func TestTranslationsSchema_WithRuby(t *testing.T) {
+	schema := translationsSchema([]string{"1", "2"}, false, true)
+	outerRequired, _ := schema["required"].([]string)
+	if !reflect.DeepEqual(outerRequired, []string{"translations", "ruby_output"}) {
+		t.Errorf("outer required should include ruby_output, got %#v", outerRequired)
+	}
+	props := schema["properties"].(map[string]any)
+	ro, ok := props["ruby_output"].(map[string]any)
+	if !ok {
+		t.Fatalf("ruby_output missing from properties: %#v", props)
+	}
+	if ro["type"] != "object" {
+		t.Errorf("ruby_output should be object, got %v", ro["type"])
+	}
+	roProps := ro["properties"].(map[string]any)
+	for _, id := range []string{"1", "2"} {
+		arr, ok := roProps[id].(map[string]any)
+		if !ok {
+			t.Fatalf("ruby_output missing property %q: %#v", id, roProps)
+		}
+		if arr["type"] != "array" {
+			t.Errorf("ruby_output[%q] should be array, got %v", id, arr["type"])
+		}
+		item := arr["items"].(map[string]any)
+		itemReq, _ := item["required"].([]string)
+		if !reflect.DeepEqual(itemReq, []string{"base", "text"}) {
+			t.Errorf("item required mismatch: %#v", itemReq)
+		}
+	}
+}
+
+func TestTranslationsSchema_WithGlossaryAndRuby(t *testing.T) {
+	schema := translationsSchema([]string{"1"}, true, true)
+	outerRequired, _ := schema["required"].([]string)
+	want := []string{"translations", "glossary", "ruby_output"}
+	if !reflect.DeepEqual(outerRequired, want) {
+		t.Errorf("outer required mismatch: %#v, want %#v", outerRequired, want)
+	}
+}
+
 func TestJSONObjectSlice_FindsNested(t *testing.T) {
 	in := `noise {"a":{"b":1}} trailing`
 	got := jsonObjectSlice(in)

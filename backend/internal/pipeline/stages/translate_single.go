@@ -106,6 +106,15 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Do
 			seg.Meta["ruby_output"] = ro
 		}
 	}
+	// 当段有注音数据但 LLM 未返回 ruby_output 时记录警告
+	if s.RubyOutputFormat != "" {
+		_, hasAnnots := seg.Meta["ruby_annotations"]
+		_, hasOutput := seg.Meta["ruby_output"]
+		if hasAnnots && !hasOutput {
+			logger.Warn("LLM response missing ruby_output for segment with annotations",
+				"seg", seg.ID, "backend", picked.Name())
+		}
+	}
 
 	// 先吸收术语并就地修正冲突，再做占位符 normalize / 写回 seg.Target——保证
 	// absorbInlineGlossary 能对 trans 做并发冲突修正，避免文档内同一术语翻译不一致。
@@ -160,6 +169,14 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Do
 					seg.Meta = make(map[string]any)
 				}
 				seg.Meta["ruby_output"] = ro
+			}
+		}
+		if s.RubyOutputFormat != "" {
+			_, hasAnnots := seg.Meta["ruby_annotations"]
+			_, hasOutput := seg.Meta["ruby_output"]
+			if hasAnnots && !hasOutput {
+				logger.Warn("LLM response missing ruby_output after placeholder retry",
+					"seg", seg.ID, "backend", picked.Name())
 			}
 		}
 		target2 := trans2[prompt.SingleID]

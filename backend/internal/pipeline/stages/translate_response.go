@@ -153,7 +153,7 @@ func translationsSchema(wantIDs []string, includeGlossary bool, includeRuby bool
 			"type":       "object",
 			"properties": rubyOutputProps,
 		}
-		// ruby_output 不加入 outerRequired，允许 LLM 不输出
+		outerRequired = append(outerRequired, "ruby_output")
 	}
 
 	return map[string]any{
