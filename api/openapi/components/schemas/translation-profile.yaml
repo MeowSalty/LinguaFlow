@@ -72,16 +72,17 @@ ProfileRepairConfig:
 
 ProfileBootstrapConfig:
   type: object
-  required: [enabled, max_terms_per_batch, min_source_len, inline_conflict_strategy]
+  required: [enabled, max_terms_per_1000_chars, min_source_len, inline_conflict_strategy]
   properties:
     enabled:
       type: boolean
       default: false
       description: 是否启用内联自举
-    max_terms_per_batch:
-      type: integer
-      minimum: 1
-      description: 内联自举每批最多抽取术语数
+    max_terms_per_1000_chars:
+      type: number
+      format: double
+      minimum: 0
+      description: 每 1000 源文字符（rune）最多抽取的术语条数（缩放系数）
     min_source_len:
       type: integer
       minimum: 1
