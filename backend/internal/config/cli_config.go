@@ -15,6 +15,14 @@ import (
 // CLI 新配置结构体
 // ---------------------------------------------------------------------------
 
+// CLIConfigGlossary CLI 端的术语表本体配置。
+// 自举相关的配置分别放在 Profile（内联）和 Execution（独立）中。
+type CLIConfigGlossary struct {
+	Enabled bool   `yaml:"enabled"`
+	Path    string `yaml:"path"`
+	Save    bool   `yaml:"save"`
+}
+
 // CLIConfig 是 CLI 端的完整配置结构。
 // 与旧 Config 结构的区别：
 //   - Backends / PromptTemplates / TranslationProfiles 以 map 存储，execution.rounds 按名称引用
@@ -33,11 +41,11 @@ type CLIConfig struct {
 	Execution           CLIConfigExecution                     `yaml:"execution"`
 
 	// Glossary 全局术语表配置，所有轮次共享。
-	Glossary          GlossaryConfig `yaml:"glossary"`
-	TranslationMemory TMConfig       `yaml:"translation_memory"`
-	Plugins           PluginsConfig  `yaml:"plugins"`
-	Output            OutputConfig   `yaml:"output"`
-	Log               LogConfig      `yaml:"log"`
+	Glossary          CLIConfigGlossary `yaml:"glossary"`
+	TranslationMemory TMConfig          `yaml:"translation_memory"`
+	Plugins           PluginsConfig     `yaml:"plugins"`
+	Output            OutputConfig      `yaml:"output"`
+	Log               LogConfig         `yaml:"log"`
 }
 
 // CLIConfigBackend 后端配置。
@@ -64,13 +72,15 @@ type CLIConfigTranslationProfile struct {
 	Protect     ProtectConfig     `yaml:"protect"`
 	Postprocess PostprocessConfig `yaml:"postprocess"`
 	Repair      RepairConfig      `yaml:"repair"`
+	Bootstrap   BootstrapConfig   `yaml:"bootstrap"`
 
 	File string `yaml:"file"` // 外部文件引用（与内联字段二选一）
 }
 
 // CLIConfigExecution 执行计划配置。
 type CLIConfigExecution struct {
-	Rounds []CLIConfigRound `yaml:"rounds"`
+	Bootstrap StandaloneBootstrapConfig `yaml:"bootstrap"`
+	Rounds    []CLIConfigRound          `yaml:"rounds"`
 }
 
 // CLIConfigRound 单轮执行配置。
@@ -207,9 +217,14 @@ func migrateFromLegacy(legacy *Config) *CLIConfig {
 				Protect:     legacy.Pipeline.Protect,
 				Postprocess: legacy.Pipeline.Postprocess,
 				Repair:      legacy.Pipeline.Translate.Repair,
+				Bootstrap:   legacy.Glossary.Bootstrap,
 			},
 		},
-		Glossary:          legacy.Glossary,
+		Glossary: CLIConfigGlossary{
+			Enabled: legacy.Glossary.Enabled,
+			Path:    legacy.Glossary.Path,
+			Save:    legacy.Glossary.Save,
+		},
 		TranslationMemory: legacy.TranslationMemory,
 		Plugins:           legacy.Plugins,
 		Output:            legacy.Output,
@@ -232,6 +247,15 @@ func migrateFromLegacy(legacy *Config) *CLIConfig {
 		backendName = legacy.Backends[0].Name
 	}
 	cliCfg.Execution = CLIConfigExecution{
+		Bootstrap: StandaloneBootstrapConfig{
+			Enabled:          legacy.Glossary.Standalone.Enabled,
+			Template:         legacy.Glossary.Standalone.Template,
+			TemplateContent:  legacy.Glossary.Standalone.TemplateContent,
+			BatchSize:        legacy.Glossary.Standalone.BatchSize,
+			Concurrency:      legacy.Glossary.Standalone.Concurrency,
+			MaxTermsPerBatch: legacy.Glossary.Standalone.MaxTermsPerBatch,
+			MinSourceLen:     legacy.Glossary.Standalone.MinSourceLen,
+		},
 		Rounds: []CLIConfigRound{{
 			Name:            "主翻译",
 			Backend:         backendName,
@@ -488,9 +512,21 @@ func defaultCLIConfig() *CLIConfig {
 					PlaceholderNormalize: true,
 					PromptUpgrade:        true,
 				},
+				Bootstrap: BootstrapConfig{
+					MaxTermsPerBatch:       20,
+					MinSourceLen:           2,
+					InlineConflictStrategy: InlineConflictRewriteLocal,
+				},
 			},
 		},
 		Execution: CLIConfigExecution{
+			Bootstrap: StandaloneBootstrapConfig{
+				Enabled:          false,
+				BatchSize:        20,
+				Concurrency:      2,
+				MaxTermsPerBatch: 20,
+				MinSourceLen:     2,
+			},
 			Rounds: []CLIConfigRound{{
 				Name:            "主翻译",
 				Backend:         "openai-default",
@@ -503,16 +539,10 @@ func defaultCLIConfig() *CLIConfig {
 				Retry:           RetryConfig{MaxAttempts: 3, BackoffMs: 2000, Jitter: true},
 			}},
 		},
-		Glossary: GlossaryConfig{
+		Glossary: CLIConfigGlossary{
 			Enabled: false,
 			Path:    "./glossary.csv",
-			Bootstrap: BootstrapConfig{
-				Mode:                   BootstrapModeOff,
-				Save:                   true,
-				MaxTermsPerBatch:       20,
-				MinSourceLen:           2,
-				InlineConflictStrategy: InlineConflictRewriteLocal,
-			},
+			Save:    true,
 		},
 		TranslationMemory: TMConfig{Enabled: false, Driver: "sqlite", DSN: "./.linguaflow/tm.db"},
 		Plugins:           PluginsConfig{Enabled: false},

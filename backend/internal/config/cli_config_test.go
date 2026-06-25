@@ -84,6 +84,19 @@ func TestLoadCLIConfig_Default(t *testing.T) {
 	if r.Retry.Jitter != true {
 		t.Error("expected retry.jitter = true")
 	}
+
+	// ── 验证 Glossary 为 CLIConfigGlossary 类型 ──
+	if cfg.Glossary.Path != "./glossary.csv" {
+		t.Errorf("glossary.path = %q, want %q", cfg.Glossary.Path, "./glossary.csv")
+	}
+	if !cfg.Glossary.Save {
+		t.Error("expected glossary.save = true in default config")
+	}
+
+	// ── 验证 Execution.Bootstrap 默认配置 ──
+	if cfg.Execution.Bootstrap.Enabled {
+		t.Error("expected execution.bootstrap.enabled = false in default config")
+	}
 }
 
 // TestDefaultCLIConfig_Fallback 验证 defaultCLIConfig() 回退路径的基本完整性。
@@ -94,6 +107,38 @@ func TestDefaultCLIConfig_Fallback(t *testing.T) {
 	}
 	if _, ok := cfg.Backends["openai-default"]; !ok {
 		t.Error("expected fallback backend \"openai-default\"")
+	}
+
+	// ── 验证 Glossary 为 CLIConfigGlossary 类型 ──
+	if !cfg.Glossary.Save {
+		t.Error("expected glossary.save = true in default config")
+	}
+	if cfg.Glossary.Path != "./glossary.csv" {
+		t.Errorf("glossary.path = %q, want %q", cfg.Glossary.Path, "./glossary.csv")
+	}
+
+	// ── 验证 TranslationProfiles 默认 Bootstrap 配置 ──
+	defProf, ok := cfg.TranslationProfiles["default"]
+	if !ok {
+		t.Fatal("expected profile \"default\" in fallback config")
+	}
+	if defProf.Bootstrap.MaxTermsPerBatch != 20 {
+		t.Errorf("profile bootstrap.max_terms_per_batch = %d, want 20", defProf.Bootstrap.MaxTermsPerBatch)
+	}
+	if defProf.Bootstrap.InlineConflictStrategy != InlineConflictRewriteLocal {
+		t.Errorf("profile bootstrap.inline_conflict_strategy = %q, want %q",
+			defProf.Bootstrap.InlineConflictStrategy, InlineConflictRewriteLocal)
+	}
+
+	// ── 验证 Execution.Bootstrap 默认配置 ──
+	if cfg.Execution.Bootstrap.Enabled {
+		t.Error("expected execution.bootstrap.enabled = false in default config")
+	}
+	if cfg.Execution.Bootstrap.BatchSize != 20 {
+		t.Errorf("execution.bootstrap.batch_size = %d, want 20", cfg.Execution.Bootstrap.BatchSize)
+	}
+	if cfg.Execution.Bootstrap.Concurrency != 2 {
+		t.Errorf("execution.bootstrap.concurrency = %d, want 2", cfg.Execution.Bootstrap.Concurrency)
 	}
 }
 
@@ -123,7 +168,17 @@ translation_profiles:
       max_chars: 80
     repair:
       enabled: true
+glossary:
+  enabled: true
+  path: ./terms.csv
+  save: true
 execution:
+  bootstrap:
+    enabled: true
+    batch_size: 10
+    concurrency: 4
+    max_terms_per_batch: 15
+    min_source_len: 3
   rounds:
     - name: "首轮"
       backend: gpt4
@@ -168,6 +223,34 @@ execution:
 	}
 	if prof.Split.Strategy != "newline" {
 		t.Errorf("split.strategy = %q, want %q", prof.Split.Strategy, "newline")
+	}
+
+	// ── 验证 Glossary 为 CLIConfigGlossary 类型 ──
+	if !cfg.Glossary.Enabled {
+		t.Error("expected glossary.enabled = true")
+	}
+	if cfg.Glossary.Path != "./terms.csv" {
+		t.Errorf("glossary.path = %q, want %q", cfg.Glossary.Path, "./terms.csv")
+	}
+	if !cfg.Glossary.Save {
+		t.Error("expected glossary.save = true")
+	}
+
+	// ── 验证 Execution.Bootstrap ──
+	if !cfg.Execution.Bootstrap.Enabled {
+		t.Error("expected execution.bootstrap.enabled = true")
+	}
+	if cfg.Execution.Bootstrap.BatchSize != 10 {
+		t.Errorf("execution.bootstrap.batch_size = %d, want 10", cfg.Execution.Bootstrap.BatchSize)
+	}
+	if cfg.Execution.Bootstrap.Concurrency != 4 {
+		t.Errorf("execution.bootstrap.concurrency = %d, want 4", cfg.Execution.Bootstrap.Concurrency)
+	}
+	if cfg.Execution.Bootstrap.MaxTermsPerBatch != 15 {
+		t.Errorf("execution.bootstrap.max_terms_per_batch = %d, want 15", cfg.Execution.Bootstrap.MaxTermsPerBatch)
+	}
+	if cfg.Execution.Bootstrap.MinSourceLen != 3 {
+		t.Errorf("execution.bootstrap.min_source_len = %d, want 3", cfg.Execution.Bootstrap.MinSourceLen)
 	}
 
 	if len(cfg.Execution.Rounds) != 1 {
@@ -311,9 +394,26 @@ glossary:
 		t.Errorf("retry.backoff_ms = %d, want 3000", r.Retry.BackoffMs)
 	}
 
-	// ── 验证 Glossary 全局配置保留 ──
+	// ── 验证 Glossary 全局配置保留（CLIConfigGlossary 类型） ──
+	if cfg.Glossary.Enabled {
+		t.Error("expected glossary.enabled = false")
+	}
 	if cfg.Glossary.Path != "./glossary.csv" {
 		t.Errorf("glossary.path = %q, want %q", cfg.Glossary.Path, "./glossary.csv")
+	}
+
+	// ── 验证 Execution.Bootstrap 从旧 Standalone 迁移（默认零值） ──
+	if cfg.Execution.Bootstrap.Enabled {
+		t.Error("expected execution.bootstrap.enabled = false (legacy had no standalone bootstrap)")
+	}
+
+	// ── 验证 TranslationProfiles.Bootstrap 从旧 Glossary.Bootstrap 迁移（默认零值） ──
+	defProf, ok := cfg.TranslationProfiles["default"]
+	if !ok {
+		t.Fatal("expected profile \"default\"")
+	}
+	if defProf.Bootstrap.MaxTermsPerBatch != 0 {
+		t.Errorf("profile bootstrap.max_terms_per_batch = %d, want 0 (legacy had no bootstrap)", defProf.Bootstrap.MaxTermsPerBatch)
 	}
 }
 
@@ -658,6 +758,21 @@ func TestMigrateFromLegacy(t *testing.T) {
 		Glossary: GlossaryConfig{
 			Enabled: true,
 			Path:    "./terms.csv",
+			Save:    true,
+			Bootstrap: BootstrapConfig{
+				Enabled:                true,
+				MaxTermsPerBatch:       30,
+				MinSourceLen:           5,
+				InlineConflictStrategy: InlineConflictOff,
+			},
+			Standalone: StandaloneBootstrapConfig{
+				Enabled:          true,
+				Template:         "my-bootstrap",
+				BatchSize:        10,
+				Concurrency:      3,
+				MaxTermsPerBatch: 15,
+				MinSourceLen:     4,
+			},
 		},
 		Output: OutputConfig{Mode: "append", PreserveExtension: false},
 		Log:    LogConfig{Level: "debug", Format: "json"},
@@ -722,6 +837,21 @@ func TestMigrateFromLegacy(t *testing.T) {
 		t.Error("expected repair.prompt_upgrade = false")
 	}
 
+	// ── TranslationProfiles.Bootstrap（从 Glossary.Bootstrap 迁移） ──
+	if !prof.Bootstrap.Enabled {
+		t.Error("expected profile bootstrap.enabled = true (migrated from glossary.bootstrap)")
+	}
+	if prof.Bootstrap.MaxTermsPerBatch != 30 {
+		t.Errorf("profile bootstrap.max_terms_per_batch = %d, want 30", prof.Bootstrap.MaxTermsPerBatch)
+	}
+	if prof.Bootstrap.MinSourceLen != 5 {
+		t.Errorf("profile bootstrap.min_source_len = %d, want 5", prof.Bootstrap.MinSourceLen)
+	}
+	if prof.Bootstrap.InlineConflictStrategy != InlineConflictOff {
+		t.Errorf("profile bootstrap.inline_conflict_strategy = %q, want %q",
+			prof.Bootstrap.InlineConflictStrategy, InlineConflictOff)
+	}
+
 	// ── Execution ──
 	if len(cliCfg.Execution.Rounds) != 1 {
 		t.Fatalf("rounds = %d, want 1", len(cliCfg.Execution.Rounds))
@@ -755,12 +885,35 @@ func TestMigrateFromLegacy(t *testing.T) {
 		t.Error("expected retry.jitter = true")
 	}
 
-	// ── 全局共享配置 ──
+	// ── Execution.Bootstrap（从 Glossary.Standalone 迁移，不含 Save） ──
+	if !cliCfg.Execution.Bootstrap.Enabled {
+		t.Error("expected execution.bootstrap.enabled = true (migrated from glossary.standalone)")
+	}
+	if cliCfg.Execution.Bootstrap.Template != "my-bootstrap" {
+		t.Errorf("execution.bootstrap.template = %q, want %q", cliCfg.Execution.Bootstrap.Template, "my-bootstrap")
+	}
+	if cliCfg.Execution.Bootstrap.BatchSize != 10 {
+		t.Errorf("execution.bootstrap.batch_size = %d, want 10", cliCfg.Execution.Bootstrap.BatchSize)
+	}
+	if cliCfg.Execution.Bootstrap.Concurrency != 3 {
+		t.Errorf("execution.bootstrap.concurrency = %d, want 3", cliCfg.Execution.Bootstrap.Concurrency)
+	}
+	if cliCfg.Execution.Bootstrap.MaxTermsPerBatch != 15 {
+		t.Errorf("execution.bootstrap.max_terms_per_batch = %d, want 15", cliCfg.Execution.Bootstrap.MaxTermsPerBatch)
+	}
+	if cliCfg.Execution.Bootstrap.MinSourceLen != 4 {
+		t.Errorf("execution.bootstrap.min_source_len = %d, want 4", cliCfg.Execution.Bootstrap.MinSourceLen)
+	}
+
+	// ── Glossary 全局共享配置（CLIConfigGlossary 类型，只含 Enabled/Path/Save） ──
 	if !cliCfg.Glossary.Enabled {
 		t.Error("expected glossary.enabled = true")
 	}
 	if cliCfg.Glossary.Path != "./terms.csv" {
 		t.Errorf("glossary.path = %q, want %q", cliCfg.Glossary.Path, "./terms.csv")
+	}
+	if !cliCfg.Glossary.Save {
+		t.Error("expected glossary.save = true (migrated from legacy glossary.save)")
 	}
 	if cliCfg.Output.Mode != "append" {
 		t.Errorf("output.mode = %q, want %q", cliCfg.Output.Mode, "append")

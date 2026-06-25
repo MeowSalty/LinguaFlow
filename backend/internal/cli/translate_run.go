@@ -133,18 +133,24 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 		Prompt: config.PromptConfig{
 			SystemTemplateContent: firstPromptContent,
 		},
-		Glossary:          cliCfg.Glossary,
+		Glossary: config.GlossaryConfig{
+			Enabled:    cliCfg.Glossary.Enabled,
+			Path:       cliCfg.Glossary.Path,
+			Save:       cliCfg.Glossary.Save,
+			Bootstrap:  firstProfile.Bootstrap,
+			Standalone: cliCfg.Execution.Bootstrap,
+		},
 		TranslationMemory: cliCfg.TranslationMemory,
 		Plugins:           cliCfg.Plugins,
 		Output:            cliCfg.Output,
 		Log:               cliCfg.Log,
 	}
 
-	// ── 1b. 解析 bootstrap 模板引用 ──
-	if cliCfg.Glossary.Bootstrap.Mode != config.BootstrapModeOff {
-		pt, ok := cliCfg.PromptTemplates[cliCfg.Glossary.Bootstrap.Template]
+	// ── 1b. 解析独立自举模板引用 ──
+	if cliCfg.Execution.Bootstrap.Enabled && cliCfg.Execution.Bootstrap.Template != "" {
+		pt, ok := cliCfg.PromptTemplates[cliCfg.Execution.Bootstrap.Template]
 		if !ok {
-			return nil, fmt.Errorf("prompt_templates %q not found (referenced by glossary.bootstrap.template)", cliCfg.Glossary.Bootstrap.Template)
+			return nil, fmt.Errorf("prompt_templates %q not found (referenced by execution.bootstrap.template)", cliCfg.Execution.Bootstrap.Template)
 		}
 		bootstrapContent := pt.BootstrapContent
 		if bootstrapContent == "" && pt.BootstrapFile != "" {
@@ -155,10 +161,10 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 			bootstrapContent = string(data)
 		}
 		if bootstrapContent == "" {
-			return nil, fmt.Errorf("prompt_templates %q has no bootstrap_content (required when glossary.bootstrap.mode is %q)",
-				cliCfg.Glossary.Bootstrap.Template, cliCfg.Glossary.Bootstrap.Mode)
+			return nil, fmt.Errorf("prompt_templates %q has no bootstrap_content (required when execution.bootstrap.enabled is true)",
+				cliCfg.Execution.Bootstrap.Template)
 		}
-		cfg.Glossary.Bootstrap.TemplateContent = bootstrapContent
+		cfg.Glossary.Standalone.TemplateContent = bootstrapContent
 	}
 
 	// ── 2. 构造每轮配置 ──
