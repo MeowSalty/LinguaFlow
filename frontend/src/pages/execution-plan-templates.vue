@@ -30,6 +30,7 @@ import { useTranslationProfilesStore } from '@/stores/translationProfiles'
 type ExecutionPlanTemplate = ApiSchemas['ExecutionPlanTemplate']
 type ExecutionRoundConfig = ApiSchemas['ExecutionRoundConfig']
 type ExecutionPlanBootstrapConfig = ApiSchemas['ExecutionPlanBootstrapConfig']
+type ExecutionPlanRubyRetryConfig = ApiSchemas['ExecutionPlanRubyRetryConfig']
 type CreateRequest = ApiSchemas['CreateExecutionPlanTemplateRequest']
 type UpdateRequest = ApiSchemas['UpdateExecutionPlanTemplateRequest']
 type Scope = ExecutionPlanTemplate['scope']
@@ -38,6 +39,7 @@ interface FormModel {
   name: string
   description: string
   bootstrap: ExecutionPlanBootstrapConfig
+  ruby_retry: ExecutionPlanRubyRetryConfig
   rounds: ExecutionRoundConfig[]
 }
 
@@ -62,6 +64,11 @@ const DEFAULT_BOOTSTRAP: ExecutionPlanBootstrapConfig = {
   concurrency: 2,
   max_terms_per_batch: 20,
   min_source_len: 2,
+}
+
+const DEFAULT_RUBY_RETRY: ExecutionPlanRubyRetryConfig = {
+  enabled: false,
+  backend_id: 0,
 }
 
 function deepClone<T>(obj: T): T {
@@ -89,6 +96,7 @@ const formModel = reactive<FormModel>({
   name: '',
   description: '',
   bootstrap: deepClone(DEFAULT_BOOTSTRAP),
+  ruby_retry: deepClone(DEFAULT_RUBY_RETRY),
   rounds: [],
 })
 
@@ -143,6 +151,7 @@ const resetForm = (): void => {
   formModel.name = ''
   formModel.description = ''
   formModel.bootstrap = deepClone(DEFAULT_BOOTSTRAP)
+  formModel.ruby_retry = deepClone(DEFAULT_RUBY_RETRY)
   formModel.rounds = [deepClone(DEFAULT_ROUND)]
   editingItem.value = null
 }
@@ -157,6 +166,9 @@ const openEditDrawer = (item: ExecutionPlanTemplate): void => {
   formModel.name = item.name
   formModel.description = item.description ?? ''
   formModel.bootstrap = item.bootstrap ? deepClone(item.bootstrap) : deepClone(DEFAULT_BOOTSTRAP)
+  formModel.ruby_retry = item.ruby_retry
+    ? deepClone(item.ruby_retry)
+    : deepClone(DEFAULT_RUBY_RETRY)
   formModel.rounds = item.rounds?.length ? deepClone(item.rounds) : [deepClone(DEFAULT_ROUND)]
   drawerVisible.value = true
 }
@@ -210,6 +222,10 @@ const buildPayload = (): CreateRequest => {
   // 仅当 bootstrap.enabled 为 true 时才包含 bootstrap 配置
   if (formModel.bootstrap.enabled) {
     payload.bootstrap = deepClone(formModel.bootstrap)
+  }
+  // 仅当 ruby_retry.enabled 为 true 时才包含 ruby_retry 配置
+  if (formModel.ruby_retry.enabled) {
+    payload.ruby_retry = deepClone(formModel.ruby_retry)
   }
   return payload
 }
@@ -563,12 +579,14 @@ onMounted(async () => {
             <ExecutionPlanEditor
               :rounds="formModel.rounds"
               :bootstrap="formModel.bootstrap"
+              :ruby-retry="formModel.ruby_retry"
               :backends="backendOptions"
               :prompt-templates="promptTemplateOptions"
               :translation-profiles="translationProfileOptions"
               :disabled="isSystemScope"
               @update:rounds="formModel.rounds = $event"
               @update:bootstrap="formModel.bootstrap = $event"
+              @update:ruby-retry="formModel.ruby_retry = $event"
             />
           </div>
         </NForm>

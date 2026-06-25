@@ -1686,6 +1686,7 @@ export interface components {
             owner_user_id?: number;
             owner_org_id?: number;
             bootstrap?: components["schemas"]["ExecutionPlanBootstrapConfig"];
+            ruby_retry?: components["schemas"]["ExecutionPlanRubyRetryConfig"];
             rounds: components["schemas"]["ExecutionRoundConfig"][];
             /** Format: date-time */
             created_at?: string;
@@ -1699,12 +1700,14 @@ export interface components {
             name: string;
             description?: string;
             bootstrap?: components["schemas"]["ExecutionPlanBootstrapConfig"];
+            ruby_retry?: components["schemas"]["ExecutionPlanRubyRetryConfig"];
             rounds: components["schemas"]["ExecutionRoundConfig"][];
         };
         UpdateExecutionPlanTemplateRequest: {
             name?: string;
             description?: string;
             bootstrap?: components["schemas"]["ExecutionPlanBootstrapConfig"];
+            ruby_retry?: components["schemas"]["ExecutionPlanRubyRetryConfig"];
             rounds?: components["schemas"]["ExecutionRoundConfig"][];
         };
         IncrementalUpdateChanges: {
@@ -1760,6 +1763,15 @@ export interface components {
              * @default 2
              */
             min_source_len: number;
+        };
+        ExecutionPlanRubyRetryConfig: {
+            /**
+             * @description 是否启用注音对齐重试
+             * @default false
+             */
+            enabled: boolean;
+            /** @description 注音对齐使用的后端 ID；为空或 0 时使用翻译主后端 */
+            backend_id?: number;
         };
         RetryConfig: {
             /** @default 3 */

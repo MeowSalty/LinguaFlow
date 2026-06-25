@@ -1080,6 +1080,12 @@ const messages = {
       maxTermsPerBatch: '每批最大术语数',
       minSourceLen: '术语最短源文长度',
     },
+    rubyRetry: {
+      title: '注音对齐重试（Ruby Retry）',
+      enabled: '启用注音对齐重试',
+      backend: '注音对齐后端',
+      backendPlaceholder: '留空则使用翻译主后端',
+    },
     round: {
       name: '轮次名称',
       namePlaceholder: '留空自动生成 round-{n}',
