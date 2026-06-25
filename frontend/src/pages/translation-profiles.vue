@@ -54,7 +54,7 @@ const CONFIG_DEFAULTS: TranslationProfileConfig = {
   glossary: {
     bootstrap: {
       enabled: false,
-      max_terms_per_batch: 20,
+      max_terms_per_1000_chars: 20,
       min_source_len: 2,
       inline_conflict_strategy: 'off',
     },

@@ -1828,8 +1828,11 @@ export interface components {
              * @default false
              */
             enabled: boolean;
-            /** @description 内联自举每批最多抽取术语数 */
-            max_terms_per_batch: number;
+            /**
+             * Format: double
+             * @description 每 1000 源文字符（rune）最多抽取的术语条数（缩放系数）
+             */
+            max_terms_per_1000_chars: number;
             /** @description 内联自举术语源文最短字符数 */
             min_source_len: number;
             /**

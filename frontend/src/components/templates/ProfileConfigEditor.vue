@@ -37,7 +37,7 @@ const CONFIG_DEFAULTS: TranslationProfileConfig = {
   glossary: {
     bootstrap: {
       enabled: false,
-      max_terms_per_batch: 20,
+      max_terms_per_1000_chars: 20,
       min_source_len: 2,
       inline_conflict_strategy: 'off',
     },
@@ -395,10 +395,10 @@ function onProtectRubyUpdate(field: string, value: unknown): void {
               t('profileConfigEditor.glossary.bootstrapMaxTerms')
             }}</span>
             <NInputNumber
-              v-model:value="configModel.glossary.bootstrap.max_terms_per_batch"
-              :min="1"
+              v-model:value="configModel.glossary.bootstrap.max_terms_per_1000_chars"
+              :min="0"
               :max="100"
-              :step="1"
+              :step="0.1"
               size="tiny"
               :disabled="disabled || !configModel.glossary.bootstrap.enabled"
               class="w-24"

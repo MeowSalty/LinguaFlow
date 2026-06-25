@@ -991,7 +991,7 @@ const messages = {
     glossary: {
       title: '术语表',
       bootstrapEnabled: '启用内联自举',
-      bootstrapMaxTerms: '每批最大术语数',
+      bootstrapMaxTerms: '每千字符最大术语数',
       bootstrapMinSourceLen: '最短源术语长度',
       bootstrapConflictStrategy: '冲突策略',
     },
