@@ -86,6 +86,18 @@ ExecutionPlanBootstrapConfig:
       default: 2
       description: 术语源文最短字符数
 
+ExecutionPlanRubyRetryConfig:
+  type: object
+  required: [enabled]
+  properties:
+    enabled:
+      type: boolean
+      default: false
+      description: 是否启用注音对齐重试
+    backend_id:
+      type: integer
+      description: 注音对齐使用的后端 ID；为空或 0 时使用翻译主后端
+
 ExecutionPlanTemplate:
   type: object
   required: [id, name, scope, rounds]
@@ -104,6 +116,8 @@ ExecutionPlanTemplate:
       type: integer
     bootstrap:
       $ref: '#/ExecutionPlanBootstrapConfig'
+    ruby_retry:
+      $ref: '#/ExecutionPlanRubyRetryConfig'
     rounds:
       type: array
       items:
@@ -135,6 +149,8 @@ CreateExecutionPlanTemplateRequest:
       type: string
     bootstrap:
       $ref: '#/ExecutionPlanBootstrapConfig'
+    ruby_retry:
+      $ref: '#/ExecutionPlanRubyRetryConfig'
     rounds:
       type: array
       items:
@@ -151,6 +167,8 @@ UpdateExecutionPlanTemplateRequest:
       type: string
     bootstrap:
       $ref: '#/ExecutionPlanBootstrapConfig'
+    ruby_retry:
+      $ref: '#/ExecutionPlanRubyRetryConfig'
     rounds:
       type: array
       items:
