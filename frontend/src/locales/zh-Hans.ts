@@ -929,6 +929,7 @@ const messages = {
       repair: '修复',
       postprocess: '后处理',
       glossary: '术语表',
+      context: '上下文',
     },
     form: {
       name: '配置名称',
@@ -996,6 +997,14 @@ const messages = {
       bootstrapMaxTerms: '每千字符最大术语数',
       bootstrapMinSourceLen: '最短源术语长度',
       bootstrapConflictStrategy: '冲突策略',
+    },
+    context: {
+      title: '上下文窗口',
+      enabled: '启用上下文窗口',
+      before: '前文段落数',
+      after: '后文段落数',
+      maxChars: '段落字符上限',
+      maxCharsHint: '0 表示不限制',
     },
   },
   executionPlanTemplates: {

@@ -42,6 +42,7 @@ const CONFIG_DEFAULTS: TranslationProfileConfig = {
       inline_conflict_strategy: 'off',
     },
   },
+  context: { enabled: true, before: 1, after: 1, max_chars: 0 },
 }
 
 // ─── 工具函数 ────────────────────────────────────────────────
@@ -68,6 +69,7 @@ function mergeConfig(source?: Partial<TranslationProfileConfig>): TranslationPro
     glossary: {
       bootstrap: { ...CONFIG_DEFAULTS.glossary.bootstrap, ...source.glossary?.bootstrap },
     },
+    context: { ...CONFIG_DEFAULTS.context, ...source.context },
   }
 }
 
@@ -429,6 +431,68 @@ function onProtectRubyUpdate(field: string, value: unknown): void {
               :disabled="disabled || !configModel.glossary.bootstrap.enabled"
             />
           </div>
+        </div>
+      </div>
+    </NCard>
+
+    <!-- 上下文窗口 -->
+    <NCard size="small" :bordered="true">
+      <template #header>
+        <span class="text-sm font-semibold">📖 {{ t('profileConfigEditor.context.title') }}</span>
+      </template>
+      <div class="flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <span class="text-sm">{{ t('profileConfigEditor.context.enabled') }}</span>
+          <NSwitch v-model:value="configModel.context.enabled" size="small" :disabled="disabled" />
+        </div>
+        <div :class="{ 'opacity-50 pointer-events-none': !configModel.context.enabled }">
+          <NGrid :cols="3" :x-gap="12" :y-gap="10">
+            <NGi>
+              <div class="mb-1 text-xs text-lf-text-subtle">
+                {{ t('profileConfigEditor.context.before') }}
+              </div>
+              <NInputNumber
+                v-model:value="configModel.context.before"
+                :min="0"
+                :max="10"
+                :step="1"
+                size="small"
+                :disabled="disabled || !configModel.context.enabled"
+                class="w-full"
+              />
+            </NGi>
+            <NGi>
+              <div class="mb-1 text-xs text-lf-text-subtle">
+                {{ t('profileConfigEditor.context.after') }}
+              </div>
+              <NInputNumber
+                v-model:value="configModel.context.after"
+                :min="0"
+                :max="10"
+                :step="1"
+                size="small"
+                :disabled="disabled || !configModel.context.enabled"
+                class="w-full"
+              />
+            </NGi>
+            <NGi>
+              <div class="mb-1 text-xs text-lf-text-subtle">
+                {{ t('profileConfigEditor.context.maxChars') }}
+              </div>
+              <NInputNumber
+                v-model:value="configModel.context.max_chars"
+                :min="0"
+                :max="10000"
+                :step="100"
+                size="small"
+                :disabled="disabled || !configModel.context.enabled"
+                class="w-full"
+              />
+              <div class="mt-1 text-xs text-lf-text-subtle">
+                {{ t('profileConfigEditor.context.maxCharsHint') }}
+              </div>
+            </NGi>
+          </NGrid>
         </div>
       </div>
     </NCard>

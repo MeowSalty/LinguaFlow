@@ -1856,12 +1856,35 @@ export interface components {
         ProfileGlossaryConfig: {
             bootstrap: components["schemas"]["ProfileBootstrapConfig"];
         };
+        ProfileContextConfig: {
+            /**
+             * @description 是否启用上下文窗口
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * @description 上下文取前 N 段
+             * @default 1
+             */
+            before: number;
+            /**
+             * @description 上下文取后 N 段
+             * @default 1
+             */
+            after: number;
+            /**
+             * @description 每个上下文段落的字符数上限，0 表示不限制
+             * @default 0
+             */
+            max_chars: number;
+        };
         TranslationProfileConfig: {
             split: components["schemas"]["ProfileSplitConfig"];
             protect: components["schemas"]["ProfileProtectConfig"];
             postprocess: components["schemas"]["ProfilePostprocessConfig"];
             repair: components["schemas"]["ProfileRepairConfig"];
             glossary: components["schemas"]["ProfileGlossaryConfig"];
+            context: components["schemas"]["ProfileContextConfig"];
         };
     };
     responses: {

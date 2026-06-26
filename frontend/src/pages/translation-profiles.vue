@@ -59,6 +59,7 @@ const CONFIG_DEFAULTS: TranslationProfileConfig = {
       inline_conflict_strategy: 'off',
     },
   },
+  context: { enabled: true, before: 1, after: 1, max_chars: 0 },
 }
 
 function deepClone<T>(obj: T): T {
@@ -134,6 +135,7 @@ function extractConfig(profile: TranslationProfile): TranslationProfileConfig {
     glossary: {
       bootstrap: { ...CONFIG_DEFAULTS.glossary.bootstrap, ...src.glossary?.bootstrap },
     },
+    context: { ...CONFIG_DEFAULTS.context, ...src.context },
   }
 }
 
@@ -411,6 +413,9 @@ onMounted(() => {
             </NTag>
             <NTag v-if="item.config?.glossary?.bootstrap?.enabled" size="small" :bordered="false">
               {{ t('translationProfiles.feature.glossary') }}
+            </NTag>
+            <NTag v-if="item.config?.context?.enabled" size="small" :bordered="false">
+              {{ t('translationProfiles.feature.context') }}
             </NTag>
           </div>
 
