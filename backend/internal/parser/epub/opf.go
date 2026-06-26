@@ -27,9 +27,10 @@ type opfPackage struct {
 		Title string `xml:"http://purl.org/dc/elements/1.1/ title"`
 	} `xml:"metadata"`
 	Manifest []struct {
-		ID        string `xml:"id,attr"`
-		Href      string `xml:"href,attr"`
-		MediaType string `xml:"media-type,attr"`
+		ID         string `xml:"id,attr"`
+		Href       string `xml:"href,attr"`
+		MediaType  string `xml:"media-type,attr"`
+		Properties string `xml:"properties,attr"`
 	} `xml:"manifest>item"`
 	Spine []struct {
 		IDRef  string `xml:"idref,attr"`
@@ -39,10 +40,11 @@ type opfPackage struct {
 
 // SpineItem 表示 spine 中的一个条目，包含 manifest 信息。
 type SpineItem struct {
-	Href      string // XHTML 文件在 ZIP 内的相对路径
-	MediaType string // MIME 类型
-	ID        string // manifest 中的 id
-	Linear    bool   // 是否为 linear（默认 true）
+	Href       string // XHTML 文件在 ZIP 内的相对路径
+	MediaType  string // MIME 类型
+	ID         string // manifest 中的 id
+	Linear     bool   // 是否为 linear（默认 true）
+	Properties string // manifest 中的 properties 属性
 }
 
 // findOPFPath 从 container.xml 定位 OPF 文件路径。
@@ -89,14 +91,16 @@ func parseSpine(zr *zip.Reader, opfPath string) ([]SpineItem, error) {
 
 	// 构建 id → manifest item 映射
 	manifest := make(map[string]struct {
-		Href      string
-		MediaType string
+		Href       string
+		MediaType  string
+		Properties string
 	}, len(pkg.Manifest))
 	for _, item := range pkg.Manifest {
 		manifest[item.ID] = struct {
-			Href      string
-			MediaType string
-		}{Href: item.Href, MediaType: item.MediaType}
+			Href       string
+			MediaType  string
+			Properties string
+		}{Href: item.Href, MediaType: item.MediaType, Properties: item.Properties}
 	}
 
 	// 按 spine 顺序组装
@@ -117,10 +121,11 @@ func parseSpine(zr *zip.Reader, opfPath string) ([]SpineItem, error) {
 			linear = false
 		}
 		spine = append(spine, SpineItem{
-			Href:      href,
-			MediaType: m.MediaType,
-			ID:        ref.IDRef,
-			Linear:    linear,
+			Href:       href,
+			MediaType:  m.MediaType,
+			ID:         ref.IDRef,
+			Linear:     linear,
+			Properties: m.Properties,
 		})
 	}
 	return spine, nil
@@ -333,4 +338,86 @@ func collectNavPoints(navPoints []ncxNavPoint, ncxDir string, titles map[string]
 func isTOCFile(filename string) bool {
 	base := strings.ToLower(path.Base(filename))
 	return strings.Contains(base, "toc")
+}
+
+// NavItem 表示 OPF manifest 中的导航文件条目。
+type NavItem struct {
+	Href       string // XHTML 文件在 ZIP 内的相对路径
+	ID         string // manifest 中的 id
+	Properties string // manifest 中的 properties 属性
+}
+
+// findNavFiles 从 OPF manifest 中查找 EPUB3 导航文件。
+//
+// 查找策略：
+//  1. properties 属性包含 "nav" 的条目（EPUB3 标准方式）
+//  2. 文件名包含 "navigation-documents" 或 "nav" 且为 XHTML 类型的条目
+func findNavFiles(zr *zip.Reader, opfPath string) []NavItem {
+	f, err := openZipFile(zr, opfPath)
+	if err != nil {
+		return nil
+	}
+	defer f.Close()
+
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return nil
+	}
+
+	var pkg opfPackage
+	if err := xml.Unmarshal(data, &pkg); err != nil {
+		return nil
+	}
+
+	opfDir := path.Dir(opfPath)
+	var navItems []NavItem
+	seen := make(map[string]bool)
+
+	for _, item := range pkg.Manifest {
+		if !isXHTML(item.MediaType) {
+			continue
+		}
+
+		href := path.Clean(path.Join(opfDir, item.Href))
+
+		// 策略 1: properties 包含 "nav"
+		if hasNavProperty(item.Properties) {
+			if !seen[href] {
+				navItems = append(navItems, NavItem{
+					Href:       href,
+					ID:         item.ID,
+					Properties: item.Properties,
+				})
+				seen[href] = true
+				slog.Debug("[epub:findNavFiles] found by properties", "href", href, "id", item.ID)
+			}
+			continue
+		}
+
+		// 策略 2: 文件名匹配
+		base := strings.ToLower(path.Base(item.Href))
+		if strings.Contains(base, "navigation-documents") || base == "nav.xhtml" || base == "nav.htm" {
+			if !seen[href] {
+				navItems = append(navItems, NavItem{
+					Href:       href,
+					ID:         item.ID,
+					Properties: item.Properties,
+				})
+				seen[href] = true
+				slog.Debug("[epub:findNavFiles] found by filename", "href", href, "id", item.ID)
+			}
+		}
+	}
+
+	return navItems
+}
+
+// hasNavProperty 检查 properties 字符串中是否包含 "nav"。
+func hasNavProperty(properties string) bool {
+	for _, p := range strings.Fields(properties) {
+		if strings.TrimSpace(p) == "nav" {
+			return true
+		}
+	}
+	return false
 }

@@ -95,6 +95,13 @@ func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error)
 	// 先收集 XHTML TOC 标题（从目录文件中的 <a> 链接提取）
 	xhtmlTOCTitles := make(map[string]string)
 	var segments []pipeline.Segment
+
+	// 构建 spine 文件集合，用于后续判断 nav 文件是否已在 spine 中
+	spineFileSet := make(map[string]bool)
+	for _, item := range spine {
+		spineFileSet[path.Clean(item.Href)] = true
+	}
+
 	for _, item := range spine {
 		if !isXHTML(item.MediaType) {
 			slog.Debug("[epub:parse] skip non-XHTML", "id", item.ID, "href", item.Href, "mediaType", item.MediaType)
@@ -107,8 +114,8 @@ func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error)
 			continue // 跳过无法读取的文件
 		}
 
-		// 如果是 TOC 文件，提取其中的章节标题映射
-		if isTOCFile(item.Href) {
+		// 如果是 TOC 文件或 nav 文件，提取其中的章节标题映射
+		if isTOCFile(item.Href) || isNavFile(item.Href, xhtmlData) {
 			titles := extractXHTMLTOCTitles(xhtmlData, item.Href)
 			for k, v := range titles {
 				if _, exists := xhtmlTOCTitles[k]; !exists {
@@ -146,6 +153,53 @@ func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error)
 		}
 
 		segments = append(segments, fileSegments...)
+	}
+
+	// 8. 处理不在 spine 中的 EPUB3 导航文件（如 navigation-documents.xhtml）
+	navFiles := findNavFiles(zipReader, opfPath)
+	for _, nav := range navFiles {
+		navHref := path.Clean(nav.Href)
+		if spineFileSet[navHref] {
+			// 已在 spine 中处理过，提取 TOC 标题
+			slog.Debug("[epub:parse] nav file already in spine, skipping duplicate processing", "href", navHref)
+			continue
+		}
+
+		xhtmlData, err := readZipFile(zipReader, nav.Href)
+		if err != nil {
+			slog.Debug("[epub:parse] readNavFile failed", "href", nav.Href, "error", err)
+			continue
+		}
+
+		// 提取导航文件中的章节标题映射
+		titles := extractXHTMLTOCTitles(xhtmlData, nav.Href)
+		for k, v := range titles {
+			if _, exists := xhtmlTOCTitles[k]; !exists {
+				xhtmlTOCTitles[k] = v
+			}
+		}
+		slog.Debug("[epub:parse] nav file toc titles loaded", "href", nav.Href, "newTitles", len(titles), "totalTitles", len(xhtmlTOCTitles))
+
+		// 提取导航文件中的可翻译 segments
+		fileSegments, err := extractSegmentsFromXHTML(xhtmlData, nav.Href)
+		if err != nil {
+			slog.Debug("[epub:parse] extractNavSegments failed", "href", nav.Href, "error", err)
+			continue
+		}
+
+		if len(fileSegments) > 0 {
+			chapterTitle := resolveChapterTitle(nav.Href, xhtmlData, xhtmlTOCTitles, ncxTitles, metadata.Title)
+			for i := range fileSegments {
+				if fileSegments[i].Meta == nil {
+					fileSegments[i].Meta = map[string]any{}
+				}
+				fileSegments[i].Meta["epub_title"] = metadata.Title
+				fileSegments[i].Meta["epub_chapter_title"] = chapterTitle
+				fileSegments[i].Meta["epub_id"] = nav.ID
+			}
+			segments = append(segments, fileSegments...)
+			slog.Debug("[epub:parse] nav file segments extracted", "href", nav.Href, "segments", len(fileSegments))
+		}
 	}
 	slog.Debug("[epub:parse] total segments", "count", len(segments))
 
@@ -189,6 +243,13 @@ func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Rea
 	}
 	spFiles := spineFileSet(spine)
 
+	// 查找 nav 文件集合（用于处理不在 spine 中的导航文件）
+	navFiles := findNavFiles(zipReader, opfPath)
+	navFileSet := make(map[string]bool, len(navFiles))
+	for _, nav := range navFiles {
+		navFileSet[path.Clean(nav.Href)] = true
+	}
+
 	// 4. 创建输出 ZIP
 	zipWriter := zip.NewWriter(w)
 	defer zipWriter.Close()
@@ -217,11 +278,12 @@ func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Rea
 
 		filePath := path.Clean(file.Name)
 		inSpine := spFiles[filePath]
+		inNav := navFileSet[filePath]
 		hasSegments := segmentsByFile[filePath] != nil
-		if inSpine {
-			slog.Debug("[epub:render] spine file", "path", filePath, "inSpine", inSpine, "hasSegments", hasSegments)
+		if inSpine || inNav {
+			slog.Debug("[epub:render] file check", "path", filePath, "inSpine", inSpine, "inNav", inNav, "hasSegments", hasSegments)
 		}
-		if spFiles[filePath] && segmentsByFile[filePath] != nil {
+		if (spFiles[filePath] || navFileSet[filePath]) && segmentsByFile[filePath] != nil {
 			// XHTML 章节 → 解析 DOM → 替换译文 → 序列化
 			translated, err := renderXHTML(file, segmentsByFile[filePath])
 			if err != nil {
@@ -238,8 +300,8 @@ func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Rea
 			}
 		} else {
 			// 非章节文件 → 原样复制
-			if inSpine && !hasSegments {
-				slog.Debug("[epub:render] spine file has no segments", "path", filePath, "segmentsByFileKeys", mapStringKeys(segmentsByFile))
+			if (inSpine || inNav) && !hasSegments {
+				slog.Debug("[epub:render] file has no segments", "path", filePath, "segmentsByFileKeys", mapStringKeys(segmentsByFile))
 			}
 			if err := copyZipEntry(zipWriter, file); err != nil {
 				return fmt.Errorf("epub: copy %s: %w", file.Name, err)

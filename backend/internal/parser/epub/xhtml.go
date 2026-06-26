@@ -343,6 +343,41 @@ func isBlockElement(tag string) bool {
 	return blockElements[tag]
 }
 
+// isNavFile 检测文件是否为 EPUB3 导航文件。
+//
+// 检查策略：
+//  1. 文件名包含 "navigation-documents" 或为 "nav.xhtml"/"nav.htm"
+//  2. 内容中包含 <nav epub:type="toc"> 元素
+func isNavFile(href string, xhtmlData []byte) bool {
+	base := strings.ToLower(path.Base(href))
+	if strings.Contains(base, "navigation-documents") || base == "nav.xhtml" || base == "nav.htm" {
+		return true
+	}
+	// 检查内容中是否包含 <nav epub:type="toc">
+	return containsTocNav(xhtmlData)
+}
+
+// containsTocNav 检查 XHTML 数据中是否包含 <nav epub:type="toc"> 元素。
+func containsTocNav(data []byte) bool {
+	decoder := xml.NewDecoder(strings.NewReader(string(data)))
+	decoder.Strict = false
+	decoder.AutoClose = xml.HTMLAutoClose
+	decoder.Entity = xml.HTMLEntity
+
+	for {
+		tok, err := decoder.Token()
+		if err != nil {
+			break
+		}
+		if el, ok := tok.(xml.StartElement); ok {
+			if el.Name.Local == "nav" && getEpubType(el) == "toc" {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // shouldSkipTag 判断标签是否应被跳过。
 func shouldSkipTag(tag string) bool {
 	return skipTags[tag]
@@ -435,7 +470,7 @@ func extractXHTMLTOCTitles(data []byte, tocHref string) map[string]string {
 // resolveChapterTitle 按优先级解析章节标题。
 //
 // 提取优先级（从高到低）：
-//  1. 目录文件（TOC）→ 使用固定名称
+//  1. 目录文件（TOC 或 nav）→ 使用固定名称
 //  2. XHTML TOC 文件中的标题（最可靠，从 <a> 链接提取）
 //  3. NCX 目录中的标题
 //  4. XHTML <head> 中的 <title> 标签
@@ -445,6 +480,12 @@ func resolveChapterTitle(href string, xhtmlData []byte, xhtmlTOCTitles, ncxTitle
 	// 优先级 1: 目录文件使用固定名称
 	if isTOCFile(href) {
 		slog.Debug("[epub:resolveChapterTitle] TOC file detected", "href", href)
+		return "Contents"
+	}
+
+	// 优先级 1b: EPUB3 导航文件使用固定名称
+	if isNavFile(href, xhtmlData) {
+		slog.Debug("[epub:resolveChapterTitle] nav file detected", "href", href)
 		return "Contents"
 	}
 
