@@ -77,12 +77,21 @@ func (e *Engine) Translate(ctx context.Context, doc *pipeline.Document, opts ...
 		return pipeline.TranslateResultFromDocument(doc), nil
 	}
 
-	batches := buildBatches(pending, batchSize)
+	batches := pipeline.BuildContextAwareBatches(pending, batchSize, pc.Context.Before, pc.Context.Enabled)
 	e.logger.Info("batch processing",
 		"pending", len(pending),
 		"batches", len(batches),
 		"batch_size", batchSize,
-		"concurrency", concurrency)
+		"concurrency", concurrency,
+		"context_enabled", pc.Context.Enabled,
+		"context_before", pc.Context.Before,
+		"context_after", pc.Context.After)
+
+	// 构建 pending 集合用于快速查找
+	pendingSet := make(map[int]struct{}, len(pending))
+	for _, idx := range pending {
+		pendingSet[idx] = struct{}{}
+	}
 
 	// 5. Run batches concurrently
 	var mu sync.Mutex
@@ -92,17 +101,30 @@ func (e *Engine) Translate(ctx context.Context, doc *pipeline.Document, opts ...
 	err := pipeline.RunConcurrent(ctx, len(batches), concurrency, func(ctx context.Context, bidx int) error {
 		idxs := batches[bidx]
 
+		// 计算上下文范围
+		ctxWindow := max(pc.Context.Before, pc.Context.After)
+		if !pc.Context.Enabled {
+			ctxWindow = 0
+		}
+		firstIdx, lastIdx := idxs[0], idxs[len(idxs)-1]
+		expandFrom := max(firstIdx-ctxWindow, 0)
+		expandTo := min(lastIdx+ctxWindow, len(doc.Segments)-1)
+
 		// 深拷贝 Vars 避免并发写入同一个 map
 		varsCopy := make(map[string]any, len(doc.Vars))
 		for k, v := range doc.Vars {
 			varsCopy[k] = v
 		}
 
-		// 深拷贝段落，独立拷贝 Protected/Meta map 避免竞态
-		batchSegs := make([]pipeline.Segment, len(idxs))
-		for i, idx := range idxs {
+		// 深拷贝展开范围内的段落，设置 Translate 标记
+		expandedIdxs := make([]int, 0, expandTo-expandFrom+1)
+		for i := expandFrom; i <= expandTo; i++ {
+			expandedIdxs = append(expandedIdxs, i)
+		}
+		batchSegs := make([]pipeline.Segment, len(expandedIdxs))
+		for i, idx := range expandedIdxs {
 			orig := doc.Segments[idx]
-			seg := orig // 值拷贝基本字段
+			seg := orig
 			if orig.Protected != nil {
 				seg.Protected = make(map[string]string, len(orig.Protected))
 				for k, v := range orig.Protected {
@@ -115,12 +137,14 @@ func (e *Engine) Translate(ctx context.Context, doc *pipeline.Document, opts ...
 					seg.Meta[k] = v
 				}
 			}
+			// 设置 Translate 标记：pending 段落为 true，上下文段落为 false
+			if _, isPending := pendingSet[idx]; isPending {
+				seg.Translate = true
+			} else {
+				seg.Translate = false
+			}
 			batchSegs[i] = seg
 		}
-
-		// 预注入批边界上下文（从原始 doc 提取相邻段落）
-		firstIdx, lastIdx := idxs[0], idxs[len(idxs)-1]
-		prevCtx, nextCtx := pipeline.BuildContextRange(doc, firstIdx, lastIdx)
 
 		batchDoc := &pipeline.Document{
 			Segments:   batchSegs,
@@ -128,13 +152,6 @@ func (e *Engine) Translate(ctx context.Context, doc *pipeline.Document, opts ...
 			TargetLang: doc.TargetLang,
 			Format:     doc.Format,
 			Vars:       varsCopy,
-		}
-		// 将上下文注入 Vars 供 prompt 渲染使用
-		if prevCtx != "" {
-			batchDoc.Vars["_batch_prev_context"] = prevCtx
-		}
-		if nextCtx != "" {
-			batchDoc.Vars["_batch_next_context"] = nextCtx
 		}
 
 		// 5a. Protect
@@ -176,21 +193,24 @@ func (e *Engine) Translate(ctx context.Context, doc *pipeline.Document, opts ...
 			}
 		}
 
-		// 5e. 统计本批失败段数并拷贝结果回原始 doc
+		// 5e. 统计本批失败段数并拷贝结果回原始 doc（仅拷贝 pending 段落，跳过上下文段落）
 		localFailed := 0
-		for i, idx := range idxs {
-			doc.Segments[idx].Target = batchDoc.Segments[i].Target
-			doc.Segments[idx].OriginalSource = batchDoc.Segments[i].OriginalSource
+		for i, origIdx := range expandedIdxs {
+			if _, isPending := pendingSet[origIdx]; !isPending {
+				continue
+			}
+			doc.Segments[origIdx].Target = batchDoc.Segments[i].Target
+			doc.Segments[origIdx].OriginalSource = batchDoc.Segments[i].OriginalSource
 			if batchDoc.Segments[i].Target == "" {
 				localFailed++
 			}
 			// 合并 Meta 变更（如 ruby_output）
 			if batchDoc.Segments[i].Meta != nil {
-				if doc.Segments[idx].Meta == nil {
-					doc.Segments[idx].Meta = make(map[string]any)
+				if doc.Segments[origIdx].Meta == nil {
+					doc.Segments[origIdx].Meta = make(map[string]any)
 				}
 				for k, v := range batchDoc.Segments[i].Meta {
-					doc.Segments[idx].Meta[k] = v
+					doc.Segments[origIdx].Meta[k] = v
 				}
 			}
 		}
@@ -199,22 +219,22 @@ func (e *Engine) Translate(ctx context.Context, doc *pipeline.Document, opts ...
 		totalFailed += localFailed
 		mu.Unlock()
 
-		// 5f. Build BatchResult and call handler
-		translated := make([]pipeline.TranslatedSegment, len(idxs))
-		for i, idx := range idxs {
+		// 5f. Build BatchResult and call handler（仅包含 pending 段落）
+		translated := make([]pipeline.TranslatedSegment, 0, len(idxs))
+		for _, idx := range idxs {
 			seg := doc.Segments[idx]
 			source := seg.OriginalSource
 			if source == "" {
 				source = seg.Source
 			}
-			translated[i] = pipeline.TranslatedSegment{
+			translated = append(translated, pipeline.TranslatedSegment{
 				Index:      idx,
 				ID:         seg.ID,
 				SourceText: source,
 				TargetText: seg.Target,
 				Failed:     seg.Target == "",
 				Meta:       seg.Meta,
-			}
+			})
 		}
 		batchResult := pipeline.BatchResult{
 			Segments:   translated,
@@ -333,20 +353,6 @@ func isSegmentEmpty(seg *pipeline.Segment) bool {
 		}
 	}
 	return true
-}
-
-// buildBatches splits pending indices into batches of the given size.
-func buildBatches(pending []int, batchSize int) [][]int {
-	if len(pending) == 0 {
-		return nil
-	}
-	batchSize = max(batchSize, 1)
-	var batches [][]int
-	for i := 0; i < len(pending); i += batchSize {
-		end := min(i+batchSize, len(pending))
-		batches = append(batches, pending[i:end])
-	}
-	return batches
 }
 
 // extractRubyOutput extracts ruby_output from segment Meta.

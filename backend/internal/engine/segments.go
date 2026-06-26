@@ -86,6 +86,7 @@ func (e *Engine) BuildTranslateStage() (*pipeline.Pipeline, backend.RateLimiter)
 		InlineConflictStrategy: e.cfg.Glossary.Bootstrap.InlineConflictStrategy,
 		Repair:                 repairOpts,
 		RubyOutputFormat:       pc.Protect.Ruby.OutputFormat,
+		Context:                pc.Context,
 	}
 	return pipeline.New(e.logger, translateStage), limiter
 }

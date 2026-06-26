@@ -271,13 +271,13 @@ func TestShrinkNext(t *testing.T) {
 }
 
 func TestBuildContinuousPendingBatches(t *testing.T) {
-	got := buildContinuousPendingBatches([]int{0, 1, 2, 5, 6, 10}, 4)
+	got := BuildContinuousPendingBatches([]int{0, 1, 2, 5, 6, 10}, 4)
 	want := [][]int{{0, 1, 2}, {5, 6}, {10}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("batches=%v want %v", got, want)
 	}
 
-	got = buildContinuousPendingBatches([]int{0, 1, 2, 3, 8, 9, 12}, 2)
+	got = BuildContinuousPendingBatches([]int{0, 1, 2, 3, 8, 9, 12}, 2)
 	want = [][]int{{0, 1}, {2, 3}, {8, 9}, {12}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("batches=%v want %v", got, want)
@@ -431,7 +431,10 @@ func (r *countingReporter) Close() error           { return nil }
 // testSystemTmpl 是测试用的最小系统模板。
 const testSystemTmpl = `你是 LinguaFlow，一个专业的翻译引擎。
 将用户的文本从 {{.SourceLang}} 翻译为 {{.TargetLang}}。
-协议：你的回复必须是 {"translations":{"<id>":"<翻译>", ...}}，仅输出 JSON。`
+协议：
+- segments 中每个条目包含 "source" 和 "translate"。
+- 你的回复必须是一个 JSON 对象：{"translations":{"<id>":"<翻译>", ...}}，仅输出 JSON。
+- 仅翻译 translate=true 的段落。`
 
 func newTestRenderer(t *testing.T) *prompt.Renderer {
 	t.Helper()
@@ -448,8 +451,9 @@ func newTestDoc(n int) *Document {
 	segs := make([]Segment, n)
 	for i := 0; i < n; i++ {
 		segs[i] = Segment{
-			ID:     "seg-" + itoa(i),
-			Source: "source-" + itoa(i),
+			ID:        "seg-" + itoa(i),
+			Source:    "source-" + itoa(i),
+			Translate: true,
 		}
 	}
 	return &Document{

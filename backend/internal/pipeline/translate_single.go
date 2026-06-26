@@ -28,15 +28,12 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *Document, i
 	}
 
 	glos, tmHints := s.lookupHints(ctx, doc, []int{idx}, logger)
-	prev, next := BuildContext(doc, idx)
 
 	rubyAnns := extractRubyAnnotationsFromDoc(doc, []int{idx})
 	data := prompt.Data{
 		SourceLang:        doc.SourceLang,
 		TargetLang:        doc.TargetLang,
 		Source:            seg.Source,
-		PrevContext:       prev,
-		NextContext:       next,
 		Glossary:          glos,
 		TMHints:           tmHints,
 		Vars:              doc.Vars,

@@ -43,25 +43,23 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 	glos, tmHints := s.lookupHints(ctx, doc, idxs, logger)
 
 	inputs := make([]prompt.SegmentInput, len(idxs))
-	wantIDs := make([]string, len(idxs))
-	batchSources := make([]string, len(idxs))
+	var wantIDs []string
+	batchSources := make([]string, 0, len(idxs))
 	for k, idx := range idxs {
 		id := strconv.Itoa(k + 1)
-		inputs[k] = prompt.SegmentInput{ID: id, Source: doc.Segments[idx].Source}
-		wantIDs[k] = id
-		batchSources[k] = doc.Segments[idx].Source
+		seg := doc.Segments[idx]
+		inputs[k] = prompt.SegmentInput{ID: id, Source: seg.Source, Translate: seg.Translate}
+		if seg.Translate {
+			wantIDs = append(wantIDs, id)
+			batchSources = append(batchSources, seg.Source)
+		}
 	}
-
-	minIdx, maxIdx := idxs[0], idxs[len(idxs)-1]
-	prev, next := BuildContextRange(doc, minIdx, maxIdx)
 
 	rubyAnns := extractRubyAnnotationsFromDoc(doc, idxs)
 	data := prompt.Data{
 		SourceLang:        doc.SourceLang,
 		TargetLang:        doc.TargetLang,
 		Segments:          inputs,
-		PrevContext:       prev,
-		NextContext:       next,
 		Glossary:          glos,
 		TMHints:           tmHints,
 		Vars:              doc.Vars,
@@ -179,20 +177,26 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 	s.absorbInlineGlossary(ctx, glosEntries, trans, doc.TargetLang, logger)
 
 	// 写回并对每段做占位符校验；缺失的段用 translateSingleInRound 补救。
-	// Partial 路径下 trans 可能不包含全部 ID——缺失的 ID 收集后单跑。
+	// 仅处理 Translate=true 的段落，跳过上下文段落。
 	rep := s.reporter()
 	var unresolved []int
 	var missingIdxs []int
-	for k, idx := range idxs {
+	wantIDIdx := 0
+	for _, idx := range idxs {
 		seg := &doc.Segments[idx]
-		text, ok := trans[wantIDs[k]]
+		if !seg.Translate {
+			// 上下文段落：跳过翻译，不上报进度
+			continue
+		}
+		id := wantIDs[wantIDIdx]
+		wantIDIdx++
+		text, ok := trans[id]
 		if !ok {
 			missingIdxs = append(missingIdxs, idx)
 			continue
 		}
 		// 分发 ruby_output 到各段
 		if rubyOutputMap != nil {
-			id := wantIDs[k]
 			if ro, rok := rubyOutputMap[id]; rok && len(ro) > 0 {
 				if seg.Meta == nil {
 					seg.Meta = make(map[string]any)

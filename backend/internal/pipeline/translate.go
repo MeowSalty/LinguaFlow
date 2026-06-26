@@ -12,6 +12,7 @@ import (
 	"unicode"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
@@ -90,6 +91,9 @@ type Translate struct {
 	//   - "inline_markers"：LLM 在译文中插入 ⟦ruby:base/text⟧ 标记
 	//   - ""（空）：不启用注音处理
 	RubyOutputFormat string
+
+	// Context 控制翻译上下文窗口。
+	Context config.ContextConfig
 }
 
 func (*Translate) Name() string { return "translate" }
@@ -115,6 +119,7 @@ func (s *Translate) Run(ctx context.Context, doc *Document) error {
 	}
 
 	// 先把跳过段（Skip / 空白 / 仅含占位符）直接落 Target，并收集需要翻译的 idx 列表。
+	// Translate=false 的段落（上下文段落）也加入 pending，由 processBatchInRound 处理。
 	var pending []int
 	for i := range doc.Segments {
 		seg := &doc.Segments[i]
@@ -153,7 +158,7 @@ func (s *Translate) runRounds(ctx context.Context, doc *Document, pending []int,
 		if len(remaining) == 0 {
 			break
 		}
-		batches := buildContinuousPendingBatches(remaining, round.BatchSize)
+		batches := BuildContinuousPendingBatches(remaining, round.BatchSize)
 		logger.Info("translate round start",
 			"round", ridx+1,
 			"name", round.Name,
@@ -207,7 +212,10 @@ func (s *Translate) runRounds(ctx context.Context, doc *Document, pending []int,
 	return len(remaining), nil
 }
 
-func buildContinuousPendingBatches(pending []int, target int) [][]int {
+// BuildContinuousPendingBatches 将 pending 段索引按连续性分组，
+// 每组内再按 target 大小切批。分散段落会被拆到不同 batch，
+// 避免上下文断裂。
+func BuildContinuousPendingBatches(pending []int, target int) [][]int {
 	if len(pending) == 0 {
 		return nil
 	}

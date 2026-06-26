@@ -7,10 +7,11 @@
 {{- end}}
 
 协议与输出规则：
-- 用户消息是一个 JSON 对象，包含 source_lang、target_lang、context_before、context_after、segments 等字段。
-- 你的回复必须是一个 JSON 对象，其中 "translations" 的键集合与输入 "segments" 完全一致——相同的 id，不多、不少、不重命名。
-- 独立翻译每个片段，不要合并或重排序。
-- "context_before" / "context_after" 是当前段落前后的文本，用于理解上下文语境。仅用于消歧义，不要翻译它们，也不要将它们包含在输出中。
+- 用户消息是一个 JSON 对象，包含 source_lang、target_lang、segments 字段。
+- segments 中每个条目包含 "source"（原文）和 "translate"（是否需要翻译）。
+- 你的回复必须是一个 JSON 对象，其中 "translations" 仅包含 translate=true 的段落——相同的 id，不多、不少、不重命名。
+- translate=false 的段落是上下文参考，仅用于理解语境，不要翻译它们，也不要将它们包含在输出中。
+- 独立翻译每个 translate=true 的片段，不要合并或重排序。
 - 仅输出 JSON，无 markdown 围栏（不要 ```json）、无额外文字、无解释说明。
 {{- if not .StrictSchema}}
 - 输出 JSON 结构如下：

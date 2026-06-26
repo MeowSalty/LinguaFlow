@@ -53,6 +53,7 @@ func BuildDocumentFromSegments(
 			OriginalSource: seg.SourceText,
 			Meta:           seg.Meta,
 			Target:         seg.TargetText,
+			Translate:      true,
 		}
 	}
 	return doc

@@ -11,6 +11,7 @@ type Segment struct {
 	Protected      map[string]string // 占位符 → 原片段
 	Meta           map[string]any    // parser 注入的格式信息（块类型、行号、缩进等）
 	Skip           bool              // 增量翻译标记：true 时 translate stage 跳过
+	Translate      bool              // 上下文标记：true=需要翻译，false=仅作上下文参考
 }
 
 // Document 是 parser 解析后的中间表示。stages 在其上原地修改。

@@ -13,6 +13,22 @@ type SegmentResult struct {
 	Failed     bool // true 表示该段在所有轮次中均未成功翻译
 }
 
+// TranslatedSegment 描述单个段落的翻译结果（含 Meta）。
+type TranslatedSegment struct {
+	Index      int
+	ID         string
+	SourceText string
+	TargetText string
+	Failed     bool
+	Meta       map[string]any
+}
+
+// BatchResult 描述一批翻译的结果。
+type BatchResult struct {
+	Segments   []TranslatedSegment
+	BatchIndex int
+}
+
 // TranslateResult 描述一次翻译任务的总体结果。
 type TranslateResult struct {
 	SegmentCount    int
