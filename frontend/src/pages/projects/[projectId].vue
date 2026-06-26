@@ -571,6 +571,7 @@ onMounted(() => {
         <NTabPane name="jobs" :tab="`${t('workspace.tabs.jobs')} (${workspace.jobs.length})`">
           <JobPanel
             :project-id="projectId"
+            :detail-drawer-visible="jobMgmt.jobDetailDrawerVisible.value"
             @detail="(job) => jobMgmt.openJobDetail(job)"
             @cancel="(job) => jobMgmt.cancelJob(job)"
             @retry="(job) => jobMgmt.retryJob(job)"

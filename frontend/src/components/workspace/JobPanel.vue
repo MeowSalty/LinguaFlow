@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, toRef } from 'vue'
+import { computed, ref, toRef } from 'vue'
 import { NAlert, NButton, NDataTable, NEmpty, NIcon, NSelect, NSwitch } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
@@ -15,6 +15,7 @@ const workspace = useProjectWorkspaceStore()
 
 const props = defineProps<{
   projectId: number | null
+  detailDrawerVisible?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -32,7 +33,8 @@ const { jobColumns, jobStatusOptions } = useJobColumns({
 // ── 自适应轮询：面板挂载时自动轮询运行中的任务 ──
 const projectIdRef = toRef(props, 'projectId')
 const autoRefreshEnabled = ref(true)
-const { isPolling } = useJobPolling({ projectId: projectIdRef, enabled: autoRefreshEnabled })
+const pollingEnabled = computed(() => autoRefreshEnabled.value && !props.detailDrawerVisible)
+const { isPolling } = useJobPolling({ projectId: projectIdRef, enabled: pollingEnabled })
 </script>
 
 <template>
@@ -56,11 +58,21 @@ const { isPolling } = useJobPolling({ projectId: projectIdRef, enabled: autoRefr
           <div class="flex items-center gap-2">
             <NSwitch v-model:value="autoRefreshEnabled" size="small" />
             <span class="whitespace-nowrap text-xs text-lf-text-muted">
-              {{ t('workspace.job.autoRefresh') }}
+              {{
+                autoRefreshEnabled && isPolling
+                  ? t('workspace.job.polling')
+                  : autoRefreshEnabled
+                    ? t('workspace.job.waitingJobs')
+                    : t('workspace.job.autoRefresh')
+              }}
             </span>
             <span
               v-if="autoRefreshEnabled && isPolling"
               class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-green-500"
+            />
+            <span
+              v-else-if="autoRefreshEnabled"
+              class="inline-block h-1.5 w-1.5 rounded-full bg-gray-400"
             />
           </div>
           <NButton

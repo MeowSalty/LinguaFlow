@@ -487,6 +487,7 @@ const messages = {
     job: {
       empty: '暂无翻译任务。',
       polling: '自动刷新中',
+      waitingJobs: '等待任务',
       autoRefresh: '自动刷新',
       legacyPlan: '旧版任务',
       createTitle: '创建翻译任务',
