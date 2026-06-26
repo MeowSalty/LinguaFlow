@@ -1,4 +1,4 @@
-package stages
+package pipeline
 
 import (
 	"context"
@@ -10,7 +10,6 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 )
 
@@ -65,9 +64,9 @@ func discardLogger() *slog.Logger {
 }
 
 func TestBootstrap_AddsExtractedTermsToGlossary(t *testing.T) {
-	doc := &pipeline.Document{
+	doc := &Document{
 		SourceLang: "en", TargetLang: "zh",
-		Segments: []pipeline.Segment{
+		Segments: []Segment{
 			{OriginalSource: "Call the Gemini API to translate text."},
 		},
 	}
@@ -98,9 +97,9 @@ func TestBootstrap_AddsExtractedTermsToGlossary(t *testing.T) {
 }
 
 func TestBootstrap_FiltersTooShortTerms(t *testing.T) {
-	doc := &pipeline.Document{
+	doc := &Document{
 		SourceLang: "en", TargetLang: "zh",
-		Segments: []pipeline.Segment{{OriginalSource: "x"}},
+		Segments: []Segment{{OriginalSource: "x"}},
 	}
 	fb := &fakeBackend{
 		name: "fake",
@@ -130,9 +129,9 @@ func TestBootstrap_FiltersTooShortTerms(t *testing.T) {
 }
 
 func TestBootstrap_BatchFailureDoesNotAbortStage(t *testing.T) {
-	doc := &pipeline.Document{
+	doc := &Document{
 		SourceLang: "en", TargetLang: "zh",
-		Segments: []pipeline.Segment{
+		Segments: []Segment{
 			{OriginalSource: "first batch text"},
 			{OriginalSource: "second batch text"},
 		},
@@ -168,9 +167,9 @@ func TestBootstrap_BatchFailureDoesNotAbortStage(t *testing.T) {
 }
 
 func TestBootstrap_NoSegments(t *testing.T) {
-	doc := &pipeline.Document{
+	doc := &Document{
 		SourceLang: "en", TargetLang: "zh",
-		Segments: []pipeline.Segment{{Skip: true, Source: "skipped"}, {Source: "   "}},
+		Segments: []Segment{{Skip: true, Source: "skipped"}, {Source: "   "}},
 	}
 	fb := &fakeBackend{name: "fake"}
 	g := glossary.NewMemory()

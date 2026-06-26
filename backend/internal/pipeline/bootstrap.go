@@ -1,4 +1,4 @@
-package stages
+package pipeline
 
 import (
 	"context"
@@ -9,7 +9,6 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
@@ -44,7 +43,7 @@ func (s *Bootstrap) reporter() progress.Reporter {
 	return s.Reporter
 }
 
-func (s *Bootstrap) Run(ctx context.Context, doc *pipeline.Document) error {
+func (s *Bootstrap) Run(ctx context.Context, doc *Document) error {
 	logger := s.Logger
 	if logger == nil {
 		logger = slog.Default()
@@ -106,7 +105,7 @@ func (s *Bootstrap) Run(ctx context.Context, doc *pipeline.Document) error {
 		totalFailed int
 	)
 
-	err := runConcurrent(ctx, len(batches), s.Concurrency, func(ctx context.Context, bidx int) error {
+	err := RunConcurrent(ctx, len(batches), s.Concurrency, func(ctx context.Context, bidx int) error {
 		added, berr := s.processBatch(ctx, batches[bidx], doc, logger)
 		mu.Lock()
 		if berr != nil {
@@ -134,7 +133,7 @@ func (s *Bootstrap) Run(ctx context.Context, doc *pipeline.Document) error {
 
 // processBatch 处理一个批次：lookup existing → 渲染 → 调 LLM → 解析 → 过滤 → Add。
 // 返回 (added, error)；error 仅用于诊断，调用方不据此终止 stage。
-func (s *Bootstrap) processBatch(ctx context.Context, texts []string, doc *pipeline.Document, logger *slog.Logger) (int, error) {
+func (s *Bootstrap) processBatch(ctx context.Context, texts []string, doc *Document, logger *slog.Logger) (int, error) {
 	if s.Limiter != nil {
 		if err := s.Limiter.Wait(ctx); err != nil {
 			return 0, err
@@ -220,7 +219,7 @@ func (s *Bootstrap) processBatch(ctx context.Context, texts []string, doc *pipel
 
 // collectExisting 把所有 texts 上的 Lookup 命中合并去重，作为 existing 提示给 LLM。
 // 加这一步是为了避免 LLM 反复抽取已经在表里的术语，浪费 token。
-func (s *Bootstrap) collectExisting(ctx context.Context, texts []string, doc *pipeline.Document, logger *slog.Logger) []string {
+func (s *Bootstrap) collectExisting(ctx context.Context, texts []string, doc *Document, logger *slog.Logger) []string {
 	if s.Glossary == nil {
 		return nil
 	}

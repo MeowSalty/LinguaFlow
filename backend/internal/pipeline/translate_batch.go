@@ -1,4 +1,4 @@
-package stages
+package pipeline
 
 import (
 	"context"
@@ -10,7 +10,6 @@ import (
 	"sync"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
@@ -19,7 +18,7 @@ import (
 // processBatchInRound 处理一批 idx（len(idxs) <= round.BatchSize）。len==1 或 BatchSize<=1 时走单段路径；
 // 否则尝试批量发送，失败时按 round.FallbackShrink 缩小子批并发递归，直到收敛到单段。
 // 返回 unresolved 的段索引列表；非 nil error 表示 stage 级别终止。
-func (s *Translate) processBatchInRound(ctx context.Context, doc *pipeline.Document, idxs []int, round Round, logger *slog.Logger) ([]int, error) {
+func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs []int, round Round, logger *slog.Logger) ([]int, error) {
 	renderer := s.resolveRoundRenderer(round)
 	repairOpts := s.resolveRoundRepair(round)
 
@@ -54,7 +53,7 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *pipeline.Docum
 	}
 
 	minIdx, maxIdx := idxs[0], idxs[len(idxs)-1]
-	prev, next := prompt.BuildContextRange(doc, minIdx, maxIdx)
+	prev, next := BuildContextRange(doc, minIdx, maxIdx)
 
 	rubyAnns := extractRubyAnnotationsFromDoc(doc, idxs)
 	data := prompt.Data{
@@ -248,7 +247,7 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *pipeline.Docum
 // shrinkOrFallback 根据 round.FallbackShrink 决定：
 //   - 缩小到 >=2 的子批并发递归（每个子批又可能继续缩小）
 //   - 否则坍缩到顺序单段（调用 translateSingleInRound）
-func (s *Translate) shrinkOrFallback(ctx context.Context, doc *pipeline.Document, idxs []int, round Round, lastErr error, logger *slog.Logger) ([]int, error) {
+func (s *Translate) shrinkOrFallback(ctx context.Context, doc *Document, idxs []int, round Round, lastErr error, logger *slog.Logger) ([]int, error) {
 	if isFatalBackendError(lastErr) {
 		logger.Warn("all backends failed with fatal error, segments will be marked as unresolved",
 			"batch_size", len(idxs), "err", lastErr)
@@ -281,7 +280,7 @@ func (s *Translate) shrinkOrFallback(ctx context.Context, doc *pipeline.Document
 		mu         sync.Mutex
 		unresolved []int
 	)
-	if err := runConcurrent(ctx, len(sub), round.Concurrency, func(ctx context.Context, bidx int) error {
+	if err := RunConcurrent(ctx, len(sub), round.Concurrency, func(ctx context.Context, bidx int) error {
 		subUnresolved, err := s.processBatchInRound(ctx, doc, sub[bidx], round, logger)
 		if err != nil {
 			return err

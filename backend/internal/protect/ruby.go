@@ -5,7 +5,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/model"
 )
 
 // RubyProtector 保护 HTML ruby 注音标签，将注音元数据提取到 seg.Meta 中。
@@ -45,7 +45,7 @@ type rubyMatch struct {
 	end   int // 在源文本中的字节偏移结束
 }
 
-func (p *RubyProtector) Protect(seg *pipeline.Segment) error {
+func (p *RubyProtector) Protect(seg *model.Segment) error {
 	// 1. 提取所有 ruby 元素的元数据（含位置信息）
 	matches := extractRubyMatches(seg.Source)
 
@@ -66,7 +66,7 @@ func (p *RubyProtector) Protect(seg *pipeline.Segment) error {
 	return nil
 }
 
-func (p *RubyProtector) Unprotect(seg *pipeline.Segment) error {
+func (p *RubyProtector) Unprotect(seg *model.Segment) error {
 	// 不再需要还原占位符（Protect 阶段未使用占位符）
 	// 注音还原委托给 RubyRestorer，在 unprotect stage 之后执行
 	return nil

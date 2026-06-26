@@ -4,16 +4,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"strconv"
-	"strings"
-	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline/stages"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
@@ -25,7 +20,7 @@ type Engine struct {
 	cfg                 *config.Config
 	logger              *slog.Logger
 	reporter            progress.Reporter
-	rounds              []stages.Round                    // 替代 selector
+	rounds              []pipeline.Round                  // 替代 selector
 	bootstrapBackends   []backend.Backend                 // 自举后端
 	rubyRetryBackends   []backend.Backend                 // 注音对齐重试后端
 	standaloneBootstrap *config.StandaloneBootstrapConfig // 独立自举配置
@@ -33,19 +28,6 @@ type Engine struct {
 	bootstrapRenderer   *prompt.BootstrapRenderer
 	glossary            glossary.Glossary
 	tm                  tm.TranslationMemory
-}
-
-type SegmentResult struct {
-	Index      int
-	SourceText string
-	TargetText string
-	Failed     bool // true 表示该段在所有轮次中均未成功翻译
-}
-
-type TranslateResult struct {
-	SegmentCount    int
-	Segments        []SegmentResult
-	UnresolvedCount int // 所有轮次结束后仍未解决（被原文填充）的段数量
 }
 
 // NewWithOptions 按 Options 构造 Engine。rounds 必须非空，每轮 backends 必须非空。
@@ -139,126 +121,6 @@ func (e *Engine) Close() error {
 		}
 	}
 	return firstErr
-}
-
-// Translate 执行一次翻译任务。
-func (e *Engine) Translate(ctx context.Context, job TranslateJob) error {
-	_, err := e.TranslateWithResult(ctx, job)
-	return err
-}
-
-func (e *Engine) TranslateWithResult(ctx context.Context, job TranslateJob) (TranslateResult, error) {
-	start := time.Now()
-	var result TranslateResult
-
-	// 1. 通过 FormatHint 检测格式
-	hint := job.Source.FormatHint()
-	p, err := parser.DetectByExt(hint)
-	if err != nil {
-		return result, err
-	}
-
-	// 2. 通过 DocumentSource.Open 获取 reader
-	reader, err := job.Source.Open(ctx)
-	if err != nil {
-		return result, fmt.Errorf("engine: open source: %w", err)
-	}
-	defer func() { _ = reader.Close() }()
-
-	doc, parseErr := p.Parse(ctx, reader)
-	if parseErr != nil {
-		return result, fmt.Errorf("engine: parse: %w", parseErr)
-	}
-	result.SegmentCount = len(doc.Segments)
-	selectedSegments := selectedSegmentIndexSet(job.SegmentIndexes)
-	if len(selectedSegments) > 0 {
-		applySegmentSelection(doc, selectedSegments)
-	}
-
-	// 语言：CLI flag 优先，再用 config 默认
-	doc.SourceLang = firstNonEmpty(job.SourceLang, e.cfg.SourceLang)
-	doc.TargetLang = firstNonEmpty(job.TargetLang, e.cfg.TargetLang)
-	if doc.Vars == nil {
-		doc.Vars = map[string]any{}
-	}
-	for k, v := range e.cfg.Prompt.Vars {
-		if _, exists := doc.Vars[k]; !exists {
-			doc.Vars[k] = v
-		}
-	}
-
-	e.logger.Info("parsed document",
-		"format", doc.Format,
-		"segments", len(doc.Segments),
-		"source_lang", doc.SourceLang,
-		"target_lang", doc.TargetLang)
-
-	pipe, limiter := e.buildPipeline(pipelineOptions{})
-	defer limiter.Close()
-	e.logger.Info("pipeline start", "stages", stageNames(pipe.Stages()))
-	if err := pipe.Run(ctx, doc); err != nil {
-		return result, err
-	}
-	// 从文档变量中读取未解决段数量（由 translate stage 注入）。
-	if v, ok := doc.Vars["_translate_unresolved_count"]; ok {
-		if n, ok := v.(int); ok {
-			result.UnresolvedCount = n
-		}
-	}
-	// 从文档变量中读取失败段索引集合（由 translate stage 注入）。
-	failedSet := make(map[int]struct{})
-	if v, ok := doc.Vars["_translate_failed_indices"]; ok {
-		if s, ok := v.(string); ok && s != "" {
-			for _, idxStr := range strings.Split(s, ",") {
-				if idx, err := strconv.Atoi(strings.TrimSpace(idxStr)); err == nil {
-					failedSet[idx] = struct{}{}
-				}
-			}
-		}
-	}
-	if len(selectedSegments) > 0 {
-		restoreUnselectedTargets(doc, selectedSegments, job.ExistingTargets)
-	}
-	result.Segments = make([]SegmentResult, 0, len(doc.Segments))
-	for i, seg := range doc.Segments {
-		source := seg.OriginalSource
-		if source == "" {
-			source = seg.Source
-		}
-		_, isFailed := failedSet[i]
-		result.Segments = append(result.Segments, SegmentResult{
-			Index:      i,
-			SourceText: source,
-			TargetText: seg.Target,
-			Failed:     isFailed,
-		})
-	}
-
-	// 3. 重新打开原始文件用于 Render（Parse 已消耗了 reader）
-	original, err := job.Source.Open(ctx)
-	if err != nil {
-		return result, fmt.Errorf("engine: reopen source: %w", err)
-	}
-	defer func() { _ = original.Close() }()
-
-	// 4. 通过 DocumentSink.Create 获取 writer
-	writer, err := job.Sink.Create(ctx)
-	if err != nil {
-		return result, fmt.Errorf("engine: create sink: %w", err)
-	}
-	defer func() { _ = writer.Close() }()
-
-	if err := p.Render(ctx, doc, original, writer); err != nil {
-		return result, fmt.Errorf("engine: render: %w", err)
-	}
-
-	// 自举完成后按配置回写术语表。失败仅 warn——译文已写出。
-	e.maybeSaveGlossary(ctx)
-
-	e.logger.Info("output written",
-		"segments", len(doc.Segments),
-		"duration", time.Since(start).Round(time.Millisecond))
-	return result, nil
 }
 
 // maybeSaveGlossary 在 bootstrap.save=true 且 glossary 实现 Saver 时回写到磁盘。

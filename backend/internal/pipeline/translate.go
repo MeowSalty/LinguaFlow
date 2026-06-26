@@ -1,4 +1,4 @@
-package stages
+package pipeline
 
 import (
 	"context"
@@ -13,7 +13,6 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
@@ -71,9 +70,9 @@ type Translate struct {
 	Reporter progress.Reporter
 
 	// Inline 模式：翻译时同时让 LLM 抽术语。
-	InlineBootstrap           bool
-	MaxTermsPer1000Chars      float64 // 每 1000 字符的术语缩放系数；<=0 默认 3.0
-	MinBootstrapSourceLen     int     // 抽出的术语短于此值则丢弃；<=0 默认 2
+	InlineBootstrap       bool
+	MaxTermsPer1000Chars  float64 // 每 1000 字符的术语缩放系数；<=0 默认 3.0
+	MinBootstrapSourceLen int     // 抽出的术语短于此值则丢弃；<=0 默认 2
 	// InlineConflictStrategy 控制并发下后到 worker 提交同 source 不同 target 时的处理：
 	//   - config.InlineConflictRewriteLocal（默认）：把本批译文里的冲突 target 字面值
 	//     替换为权威表中已有版本，CJK 直替、拉丁系按词边界、歧义仅 Warn 不动。
@@ -103,7 +102,7 @@ func (s *Translate) reporter() progress.Reporter {
 	return s.Reporter
 }
 
-func (s *Translate) Run(ctx context.Context, doc *pipeline.Document) error {
+func (s *Translate) Run(ctx context.Context, doc *Document) error {
 	logger := s.Logger
 	if logger == nil {
 		logger = slog.Default()
@@ -142,7 +141,7 @@ func (s *Translate) Run(ctx context.Context, doc *pipeline.Document) error {
 	return nil
 }
 
-func (s *Translate) runRounds(ctx context.Context, doc *pipeline.Document, pending []int, logger *slog.Logger) (int, error) {
+func (s *Translate) runRounds(ctx context.Context, doc *Document, pending []int, logger *slog.Logger) (int, error) {
 	remaining := append([]int(nil), pending...)
 	rep := s.reporter()
 
@@ -167,7 +166,7 @@ func (s *Translate) runRounds(ctx context.Context, doc *pipeline.Document, pendi
 			mu          sync.Mutex
 			nextPending []int
 		)
-		if err := runConcurrent(ctx, len(batches), round.Concurrency, func(ctx context.Context, bidx int) error {
+		if err := RunConcurrent(ctx, len(batches), round.Concurrency, func(ctx context.Context, bidx int) error {
 			unresolved, err := s.processBatchInRound(ctx, doc, batches[bidx], round, logger)
 			if err != nil {
 				return err
@@ -294,7 +293,7 @@ func headSnippet(s string, n int) string {
 // isDecorativeSeparator 检查段落是否仅包含装饰性/分隔符字符
 // （非字母、非数字符号），没有实际的文本内容。
 // 常见示例："◇ ◇ ◇ ◇"、"* * *"、"— — —"、"★ ★ ★"
-func isDecorativeSeparator(seg *pipeline.Segment) bool {
+func isDecorativeSeparator(seg *Segment) bool {
 	text := strings.TrimSpace(seg.Source)
 	if text == "" {
 		return false // already handled by empty check
@@ -318,7 +317,7 @@ func isDecorativeSeparator(seg *pipeline.Segment) bool {
 
 // isPlaceholderOnly 检查段落是否仅包含占位符标记，
 // 没有实际可翻译的文本内容。
-func isPlaceholderOnly(seg *pipeline.Segment) bool {
+func isPlaceholderOnly(seg *Segment) bool {
 	if len(seg.Protected) == 0 {
 		return false
 	}
@@ -331,7 +330,7 @@ func isPlaceholderOnly(seg *pipeline.Segment) bool {
 
 // extractRubyAnnotationsFromDoc 从 Document 中提取指定段的注音信息。
 // 返回 map[segmentID]annotations，供 prompt.Data 使用。
-func extractRubyAnnotationsFromDoc(doc *pipeline.Document, idxs []int) map[string][]prompt.RubyAnnotation {
+func extractRubyAnnotationsFromDoc(doc *Document, idxs []int) map[string][]prompt.RubyAnnotation {
 	result := make(map[string][]prompt.RubyAnnotation)
 	for _, idx := range idxs {
 		seg := doc.Segments[idx]

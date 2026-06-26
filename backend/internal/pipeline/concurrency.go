@@ -1,13 +1,13 @@
-package stages
+package pipeline
 
 import (
 	"context"
 	"sync"
 )
 
-// runConcurrent 并发处理 n 项任务，最多 concurrency 个 worker 同时运行。
+// RunConcurrent 并发处理 n 项任务，最多 concurrency 个 worker 同时运行。
 // 任一 worker 返回非 nil 错误：保留第一个错误，其余 worker 收到 ctx 取消信号。
-func runConcurrent(parent context.Context, n, concurrency int, fn func(ctx context.Context, idx int) error) error {
+func RunConcurrent(parent context.Context, n, concurrency int, fn func(ctx context.Context, idx int) error) error {
 	if n == 0 {
 		return nil
 	}

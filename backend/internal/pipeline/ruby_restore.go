@@ -1,4 +1,4 @@
-package stages
+package pipeline
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"regexp"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 )
 
@@ -34,14 +33,14 @@ func NewRubyRestore(restorer *protect.RubyRestorer, logger *slog.Logger, backend
 
 func (*RubyRestore) Name() string { return "ruby_restore" }
 
-func (s *RubyRestore) Run(ctx context.Context, doc *pipeline.Document) error {
+func (s *RubyRestore) Run(ctx context.Context, doc *Document) error {
 	logger := s.Logger
 	if logger == nil {
 		logger = slog.Default()
 	}
 
 	// 第一轮：用已有的 ruby_output 还原（含双源匹配回退）
-	var failedSegs []*pipeline.Segment
+	var failedSegs []*Segment
 	for i := range doc.Segments {
 		seg := &doc.Segments[i]
 		rubyOutput := extractRubyOutputFromSeg(seg)
@@ -74,7 +73,7 @@ func (s *RubyRestore) Run(ctx context.Context, doc *pipeline.Document) error {
 
 // retryFailedSegments 对注音还原失败的段落执行 LLM 注音对齐重试。
 // 返回 (尝试数, 成功数)。
-func (s *RubyRestore) retryFailedSegments(ctx context.Context, failedSegs []*pipeline.Segment, logger *slog.Logger) (int, int) {
+func (s *RubyRestore) retryFailedSegments(ctx context.Context, failedSegs []*Segment, logger *slog.Logger) (int, int) {
 	retried := 0
 	recovered := 0
 
@@ -158,7 +157,7 @@ func (s *RubyRestore) callBackend(ctx context.Context, b backend.Backend, req ba
 }
 
 // extractRubyOutputFromSeg 从 Segment.Meta 中提取 ruby_output。
-func extractRubyOutputFromSeg(seg *pipeline.Segment) []protect.RubyOutputEntry {
+func extractRubyOutputFromSeg(seg *Segment) []protect.RubyOutputEntry {
 	raw, ok := seg.Meta["ruby_output"]
 	if !ok {
 		return nil
@@ -171,7 +170,7 @@ func extractRubyOutputFromSeg(seg *pipeline.Segment) []protect.RubyOutputEntry {
 }
 
 // extractRubyAnnotationsFromSeg 从 Segment.Meta 中提取 ruby_annotations。
-func extractRubyAnnotationsFromSeg(seg *pipeline.Segment) []protect.RubyAnnotation {
+func extractRubyAnnotationsFromSeg(seg *Segment) []protect.RubyAnnotation {
 	raw, ok := seg.Meta["ruby_annotations"]
 	if !ok {
 		return nil
@@ -187,7 +186,7 @@ func extractRubyAnnotationsFromSeg(seg *pipeline.Segment) []protect.RubyAnnotati
 var rubyTagRe = regexp.MustCompile(`<ruby>(.*?)<rt>(.*?)</rt>(.*?)</ruby>`)
 
 // buildAlignmentPrompt 构建注音对齐的 system/user 消息和 JSON Schema。
-func buildAlignmentPrompt(seg *pipeline.Segment, originals []protect.RubyAnnotation) (string, string, map[string]any) {
+func buildAlignmentPrompt(seg *Segment, originals []protect.RubyAnnotation) (string, string, map[string]any) {
 	sys := `你是注音对齐工具。给定原文、译文和注音元数据，确定每个注音条目在译文中对应的文本。
 
 规则：

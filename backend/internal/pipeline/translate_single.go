@@ -1,4 +1,4 @@
-package stages
+package pipeline
 
 import (
 	"context"
@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
@@ -16,7 +15,7 @@ import (
 // translateSingleInRound 翻译单段（走 JSON 协议，含 S5 占位符补救）。
 // 成功时上报进度并返回 (true, nil)；所有后端均失败时返回 (false, nil)，由调用方 defer 到下一轮。
 // 返回非 nil error 表示 stage 级别终止（如 limiter 错误）。
-func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Document, idx int, round Round, logger *slog.Logger) (bool, error) {
+func (s *Translate) translateSingleInRound(ctx context.Context, doc *Document, idx int, round Round, logger *slog.Logger) (bool, error) {
 	renderer := s.resolveRoundRenderer(round)
 	repairOpts := s.resolveRoundRepair(round)
 
@@ -29,7 +28,7 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *pipeline.Do
 	}
 
 	glos, tmHints := s.lookupHints(ctx, doc, []int{idx}, logger)
-	prev, next := prompt.BuildContext(doc, idx)
+	prev, next := BuildContext(doc, idx)
 
 	rubyAnns := extractRubyAnnotationsFromDoc(doc, []int{idx})
 	data := prompt.Data{

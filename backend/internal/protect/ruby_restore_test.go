@@ -3,7 +3,7 @@ package protect
 import (
 	"testing"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/model"
 )
 
 // T6: ruby_output 模式 — 文本匹配还原。
@@ -56,9 +56,9 @@ func TestRubyRestorer_RubyOutput_BasicRestore(t *testing.T) {
 		},
 	}
 
-		for _, tc := range cases {
+	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			seg := &pipeline.Segment{Target: tc.target}
+			seg := &model.Segment{Target: tc.target}
 			if err := restorer.Restore(seg, tc.output, nil); err != nil {
 				t.Fatalf("Restore(%q): %v", tc.target, err)
 			}
@@ -108,7 +108,7 @@ func TestRubyRestorer_InlineMarkers_BasicRestore(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			seg := &pipeline.Segment{Target: tc.target}
+			seg := &model.Segment{Target: tc.target}
 			// inline_markers 模式不使用 rubyOutput 参数
 			if err := restorer.Restore(seg, nil, nil); err != nil {
 				t.Fatalf("Restore(%q): %v", tc.target, err)
@@ -148,7 +148,7 @@ func TestRubyRestorer_RubyOutput_BaseNotFound(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			seg := &pipeline.Segment{Target: tc.target}
+			seg := &model.Segment{Target: tc.target}
 			err := restorer.Restore(seg, tc.output, nil)
 			// 不应返回错误
 			if err != nil {
@@ -167,7 +167,7 @@ func TestRubyRestorer_RubyOutput_PartialMatch(t *testing.T) {
 	restorer := NewRubyRestorer("ruby_output")
 
 	// 译文中只包含部分基底文本
-	seg := &pipeline.Segment{
+	seg := &model.Segment{
 		Target: "呪を唱える", // 包含 "呪"，不包含 "微笑"
 	}
 	output := []RubyOutputEntry{
@@ -190,7 +190,7 @@ func TestRubyRestorer_RubyOutput_PartialMatch(t *testing.T) {
 func TestRubyRestorer_RubyOutput_DuplicateBase(t *testing.T) {
 	restorer := NewRubyRestorer("ruby_output")
 
-	seg := &pipeline.Segment{
+	seg := &model.Segment{
 		Target: "呪と呪",
 	}
 	output := []RubyOutputEntry{
@@ -278,7 +278,7 @@ func TestRubyRestorer_RubyOutput_FallbackToOriginalBase(t *testing.T) {
 			name:   "multiple entries with mixed fallback",
 			target: "创造した白焉で唱える",
 			output: []RubyOutputEntry{
-				{Base: "创", Text: "つく"},       // LLM base 匹配
+				{Base: "创", Text: "つく"},      // LLM base 匹配
 				{Base: "白色焉", Text: "びゃくえん"}, // LLM base 不匹配，回退
 			},
 			originals: []RubyAnnotation{
@@ -291,7 +291,7 @@ func TestRubyRestorer_RubyOutput_FallbackToOriginalBase(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			seg := &pipeline.Segment{Target: tc.target}
+			seg := &model.Segment{Target: tc.target}
 			if err := restorer.Restore(seg, tc.output, tc.originals); err != nil {
 				t.Fatalf("Restore(%q): %v", tc.target, err)
 			}

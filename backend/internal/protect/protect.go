@@ -8,7 +8,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/model"
 )
 
 // mergeAdjacentPlaceholderRE 匹配一个占位符后跟一个或多个（可选空白 + 占位符）的序列。
@@ -22,8 +22,8 @@ var singlePlaceholderRE = regexp.MustCompile(`__LF_\d{6}__`)
 // Protector 把不应翻译的片段替换为占位符，并在翻译后还原。
 type Protector interface {
 	Name() string
-	Protect(seg *pipeline.Segment) error
-	Unprotect(seg *pipeline.Segment) error
+	Protect(seg *model.Segment) error
+	Unprotect(seg *model.Segment) error
 }
 
 // placeholderFmt 形如 __LF_000001__。固定 6 位数字、总长 14，
@@ -31,7 +31,7 @@ type Protector interface {
 const placeholderFmt = "__LF_%06d__"
 
 // nextKey 在 seg.Protected 中分配下一个未使用的占位符 key。
-func nextKey(seg *pipeline.Segment) string {
+func nextKey(seg *model.Segment) string {
 	if seg.Protected == nil {
 		seg.Protected = make(map[string]string)
 	}
@@ -54,7 +54,7 @@ func Compose(ps ...Protector) Protector { return &composed{ps: ps} }
 
 func (c *composed) Name() string { return "composed" }
 
-func (c *composed) Protect(seg *pipeline.Segment) error {
+func (c *composed) Protect(seg *model.Segment) error {
 	for _, p := range c.ps {
 		if err := p.Protect(seg); err != nil {
 			return fmt.Errorf("%s.protect: %w", p.Name(), err)
@@ -66,7 +66,7 @@ func (c *composed) Protect(seg *pipeline.Segment) error {
 	return nil
 }
 
-func (c *composed) Unprotect(seg *pipeline.Segment) error {
+func (c *composed) Unprotect(seg *model.Segment) error {
 	seg.Target = restoreAll(seg.Target, seg.Protected)
 	return nil
 }
@@ -84,7 +84,7 @@ func (c *composed) Unprotect(seg *pipeline.Segment) error {
 //	__LF_NNNNNN__じゅ__LF_MMMMMM__
 //
 // 其中每个合并占位符的值是原始占位符值的拼接。
-func mergeAdjacentPlaceholders(seg *pipeline.Segment) {
+func mergeAdjacentPlaceholders(seg *model.Segment) {
 	if len(seg.Protected) == 0 {
 		return
 	}
@@ -147,7 +147,7 @@ func restoreAll(text string, protected map[string]string) string {
 
 // MissingPlaceholders 返回 seg.Protected 中未出现在 seg.Target 里的占位符 key。
 // 用于 translate 阶段在 LLM 返回后做完整性校验。结果按 key 升序排序，便于日志稳定输出。
-func MissingPlaceholders(seg *pipeline.Segment) []string {
+func MissingPlaceholders(seg *model.Segment) []string {
 	if len(seg.Protected) == 0 {
 		return nil
 	}
@@ -164,7 +164,7 @@ func MissingPlaceholders(seg *pipeline.Segment) []string {
 // FromRules 按规则名（"code"/"link"/"placeholder"/"xml"）构造 Protector。
 // 未知规则名会被忽略。
 //
-// 注意：不再处理 "ruby"，RubyProtector 由 buildPipeline 根据 ruby.enabled
+// 注意：不再处理 "ruby"，RubyProtector 由 BuildPreStages/BuildPostStages 根据 ruby.enabled
 // 单独控制，在其他 Protector 之前运行（先剥离 ruby 标签，再处理剩余 XML）。
 func FromRules(rules []string) Protector {
 	var ps []Protector

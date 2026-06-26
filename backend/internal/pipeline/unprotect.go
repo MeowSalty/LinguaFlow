@@ -1,9 +1,8 @@
-package stages
+package pipeline
 
 import (
 	"context"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 )
 
@@ -16,7 +15,7 @@ func NewUnprotect(p protect.Protector) *Unprotect { return &Unprotect{Protector:
 
 func (*Unprotect) Name() string { return "unprotect" }
 
-func (s *Unprotect) Run(_ context.Context, doc *pipeline.Document) error {
+func (s *Unprotect) Run(_ context.Context, doc *Document) error {
 	for i := range doc.Segments {
 		if err := s.Protector.Unprotect(&doc.Segments[i]); err != nil {
 			return err

@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/model"
 )
 
 // roundTrip：protect 后再把含占位符的字符串直接搬到 target，unprotect 应得回原文。
 func roundTrip(t *testing.T, p Protector, original string) {
 	t.Helper()
-	seg := &pipeline.Segment{Source: original}
+	seg := &model.Segment{Source: original}
 	if err := p.Protect(seg); err != nil {
 		t.Fatalf("protect: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestLinkProtector_RoundTrip(t *testing.T) {
 }
 
 func TestLinkProtector_PreservesVisibleText(t *testing.T) {
-	seg := &pipeline.Segment{Source: "see [docs](https://example.com)"}
+	seg := &model.Segment{Source: "see [docs](https://example.com)"}
 	if err := (&LinkProtector{}).Protect(seg); err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestFromRules(t *testing.T) {
 // S1: 占位符之间存在前缀关系时，restoreAll 应按 key 长度倒序，
 // 不会先替短 key 而吞掉长 key。
 func TestRestoreAll_OrdersByLengthDesc(t *testing.T) {
-	seg := &pipeline.Segment{
+	seg := &model.Segment{
 		Protected: map[string]string{
 			"__LF_000001__":  "SHORT",
 			"__LF_000001__X": "LONG",
@@ -118,7 +118,7 @@ func TestRestoreAll_OrdersByLengthDesc(t *testing.T) {
 // S2: 当回填后的原文里 *恰好* 含有另一个占位符字面时，
 // composed.Unprotect 只回填一次，不会把字面再次替换。
 func TestCompose_NoDoubleRestore(t *testing.T) {
-	seg := &pipeline.Segment{
+	seg := &model.Segment{
 		Protected: map[string]string{
 			"__LF_000001__": "the literal __LF_000002__ should remain",
 			"__LF_000002__": "WRONG",
@@ -137,7 +137,7 @@ func TestCompose_NoDoubleRestore(t *testing.T) {
 
 // S5: 完整性校验在 target 中缺失占位符时应报告。
 func TestMissingPlaceholders(t *testing.T) {
-	seg := &pipeline.Segment{
+	seg := &model.Segment{
 		Protected: map[string]string{
 			"__LF_000001__": "A",
 			"__LF_000002__": "B",
@@ -219,7 +219,7 @@ func TestMergeAdjacentPlaceholders(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			seg := &pipeline.Segment{
+			seg := &model.Segment{
 				Source:    tc.source,
 				Protected: make(map[string]string),
 			}
@@ -249,7 +249,7 @@ func TestCompose_AdjacentPlaceholders_RoundTrip(t *testing.T) {
 
 // S8: 含相邻占位符的 unprotect 应正确还原（中间有文本内容）。
 func TestCompose_Unprotect_AdjacentPlaceholders(t *testing.T) {
-	seg := &pipeline.Segment{
+	seg := &model.Segment{
 		Protected: map[string]string{
 			"__LF_000001__": `<span class="x">`,
 			"__LF_000002__": "</span>",
@@ -289,7 +289,7 @@ func TestRubyProtector_ProtectAndRestore(t *testing.T) {
 		{`<ruby>椎名<rt>しいな</rt></ruby>`, `椎名`, `<ruby>椎名<rt>しいな</rt></ruby>`},
 	}
 	for _, tc := range cases {
-		seg := &pipeline.Segment{Source: tc.input}
+		seg := &model.Segment{Source: tc.input}
 		if err := (&RubyProtector{}).Protect(seg); err != nil {
 			t.Fatalf("protect(%q): %v", tc.input, err)
 		}
@@ -321,7 +321,7 @@ func TestRubyProtector_ProtectAndRestore(t *testing.T) {
 
 // S10: RubyProtector 保护后 ruby 标签应被剥离，基底文本保留，注音存入 Meta。
 func TestRubyProtector_ProtectsContent(t *testing.T) {
-	seg := &pipeline.Segment{Source: `<ruby>呪<rt>じゅ</rt></ruby>`}
+	seg := &model.Segment{Source: `<ruby>呪<rt>じゅ</rt></ruby>`}
 	if err := (&RubyProtector{}).Protect(seg); err != nil {
 		t.Fatal(err)
 	}
@@ -359,7 +359,7 @@ func TestRubyProtector_ProtectsContent(t *testing.T) {
 
 // S11: RubyProtector + XMLProtector 组合保护后，LLM 看不到注音内容。
 func TestCompose_RubyAndXML_HidesContent(t *testing.T) {
-	seg := &pipeline.Segment{Source: `<ruby>呪<rt>じゅ</rt></ruby>`}
+	seg := &model.Segment{Source: `<ruby>呪<rt>じゅ</rt></ruby>`}
 	p := Compose(&RubyProtector{}, &XMLProtector{})
 	if err := p.Protect(seg); err != nil {
 		t.Fatal(err)
@@ -374,11 +374,11 @@ func TestCompose_RubyAndXML_HidesContent(t *testing.T) {
 	}
 }
 
-// S12: FromRules 不再处理 "ruby"，RubyProtector 由 buildPipeline 单独处理。
+// S12: FromRules 不再处理 "ruby"，RubyProtector 由 BuildPreStages/BuildPostStages 单独处理。
 func TestFromRules_NoRuby(t *testing.T) {
 	p := FromRules([]string{"code", "link", "placeholder", "ruby", "xml"})
 	source := `<ruby>呪<rt>じゅ</rt></ruby>`
-	seg := &pipeline.Segment{Source: source}
+	seg := &model.Segment{Source: source}
 	if err := p.Protect(seg); err != nil {
 		t.Fatal(err)
 	}
@@ -398,7 +398,7 @@ func TestRubyProtector_NoRtTags(t *testing.T) {
 		`<p>no ruby here</p>`,
 	}
 	for _, c := range cases {
-		seg := &pipeline.Segment{Source: c}
+		seg := &model.Segment{Source: c}
 		if err := (&RubyProtector{}).Protect(seg); err != nil {
 			t.Fatal(err)
 		}
@@ -410,7 +410,7 @@ func TestRubyProtector_NoRtTags(t *testing.T) {
 
 // S15: mergeAdjacentPlaceholders 合并后的值应正确拼接。
 func TestMergeAdjacentPlaceholders_MergedValue(t *testing.T) {
-	seg := &pipeline.Segment{
+	seg := &model.Segment{
 		Source: "__LF_000001____LF_000002__",
 		Protected: map[string]string{
 			"__LF_000001__": "<ruby>",
@@ -443,7 +443,7 @@ func TestMergeAdjacentPlaceholders_RoundTrip(t *testing.T) {
 	}
 	p := Compose(&RubyProtector{}, &XMLProtector{})
 	for _, tc := range cases {
-		seg := &pipeline.Segment{Source: tc.input}
+		seg := &model.Segment{Source: tc.input}
 		if err := p.Protect(seg); err != nil {
 			t.Fatalf("protect(%q): %v", tc.input, err)
 		}

@@ -1,4 +1,4 @@
-package stages
+package pipeline
 
 import (
 	"context"
@@ -6,13 +6,12 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 )
 
 // lookupHints 为 idxs 中每段查 glossary / TM 并合并去重。
 // glossary 以 source+target 为键；TM 同样以 source+target 去重，保留最高分。
-func (s *Translate) lookupHints(ctx context.Context, doc *pipeline.Document, idxs []int, logger *slog.Logger) ([]prompt.GlossaryEntry, []prompt.TMHint) {
+func (s *Translate) lookupHints(ctx context.Context, doc *Document, idxs []int, logger *slog.Logger) ([]prompt.GlossaryEntry, []prompt.TMHint) {
 	var (
 		glosOrder []string
 		glosMap   = map[string]prompt.GlossaryEntry{}
@@ -61,7 +60,7 @@ func (s *Translate) lookupHints(ctx context.Context, doc *pipeline.Document, idx
 	return glos, hints
 }
 
-func (s *Translate) addTM(ctx context.Context, doc *pipeline.Document, seg *pipeline.Segment, logger *slog.Logger) {
+func (s *Translate) addTM(ctx context.Context, doc *Document, seg *Segment, logger *slog.Logger) {
 	if s.TM == nil {
 		return
 	}

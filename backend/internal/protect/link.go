@@ -3,7 +3,7 @@ package protect
 import (
 	"regexp"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/model"
 )
 
 // LinkProtector 保护 Markdown 链接的 URL/图片部分，但保留可见文本以便翻译。
@@ -22,7 +22,7 @@ var (
 	refLinkRe  = regexp.MustCompile(`(\[[^\]]+\])\[([^\]]+)\]`)
 )
 
-func (p *LinkProtector) Protect(seg *pipeline.Segment) error {
+func (p *LinkProtector) Protect(seg *model.Segment) error {
 	s := seg.Source
 	// inline link / image：仅保护 URL 部分
 	s = mdLinkRe.ReplaceAllStringFunc(s, func(match string) string {
@@ -52,7 +52,7 @@ func (p *LinkProtector) Protect(seg *pipeline.Segment) error {
 	return nil
 }
 
-func (p *LinkProtector) Unprotect(seg *pipeline.Segment) error {
+func (p *LinkProtector) Unprotect(seg *model.Segment) error {
 	seg.Target = restoreAll(seg.Target, seg.Protected)
 	return nil
 }

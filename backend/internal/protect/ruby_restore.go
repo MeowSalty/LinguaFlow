@@ -6,7 +6,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/model"
 )
 
 // RubyRestorer 负责将 LLM 输出的注音信息还原为 <ruby> 标签。
@@ -23,7 +23,7 @@ func NewRubyRestorer(outputFormat string) *RubyRestorer {
 // Restore 根据输出模式还原注音标签。
 // originalAnnotations 为 Protect 阶段提取的原始注音，用于 ruby_output 模式的双源匹配回退；
 // inline_markers 模式忽略此参数。可传 nil。
-func (r *RubyRestorer) Restore(seg *pipeline.Segment, rubyOutput []RubyOutputEntry, originalAnnotations []RubyAnnotation) error {
+func (r *RubyRestorer) Restore(seg *model.Segment, rubyOutput []RubyOutputEntry, originalAnnotations []RubyAnnotation) error {
 	switch r.OutputFormat {
 	case "inline_markers":
 		return r.restoreInlineMarkers(seg)
@@ -55,7 +55,7 @@ type insertInfo struct {
 //  1. 按 rubyOutput 的顺序，为每个条目在译文中查找第一个未被分配的基底文本出现位置
 //  2. 若 LLM 返回的 base 未匹配，回退到原始 annotations 中对应位置的 base 再试一次
 //  3. 从右到左应用替换，避免索引偏移
-func (r *RubyRestorer) restoreRubyOutput(seg *pipeline.Segment, rubyOutput []RubyOutputEntry, originalAnnotations []RubyAnnotation) error {
+func (r *RubyRestorer) restoreRubyOutput(seg *model.Segment, rubyOutput []RubyOutputEntry, originalAnnotations []RubyAnnotation) error {
 	if len(rubyOutput) == 0 {
 		return nil
 	}
@@ -133,7 +133,7 @@ var inlineMarkerRe = regexp.MustCompile(`⟦ruby:([^/⟧]+)/([^⟧]+)⟧`)
 // restoreInlineMarkers 通过正则替换将内联标记还原为 <ruby> 标签。
 //
 // ⟦ruby:base/text⟧ → <ruby>base<rt>text</rt></ruby>
-func (r *RubyRestorer) restoreInlineMarkers(seg *pipeline.Segment) error {
+func (r *RubyRestorer) restoreInlineMarkers(seg *model.Segment) error {
 	seg.Target = inlineMarkerRe.ReplaceAllStringFunc(seg.Target, func(match string) string {
 		m := inlineMarkerRe.FindStringSubmatch(match)
 		if len(m) < 3 {

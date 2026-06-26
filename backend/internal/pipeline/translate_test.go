@@ -1,4 +1,4 @@
-package stages
+package pipeline
 
 import (
 	"context"
@@ -13,7 +13,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 )
@@ -299,11 +298,11 @@ func TestAbsorbInlineGlossary_RewritesConflictInBatch(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 	s := &Translate{
-		Glossary:                  g,
-		InlineBootstrap:           true,
-		MinBootstrapSourceLen:     2,
+		Glossary:               g,
+		InlineBootstrap:        true,
+		MinBootstrapSourceLen:  2,
 		MaxTermsPer1000Chars:   3.0,
-		InlineConflictStrategy:    config.InlineConflictRewriteLocal,
+		InlineConflictStrategy: config.InlineConflictRewriteLocal,
 	}
 	// Worker B 的本批响应：translations 用了 "并发池"；glossary 项也提议 thread pool→并发池。
 	entries := []prompt.BootstrapEntry{
@@ -335,11 +334,11 @@ func TestAbsorbInlineGlossary_StrategyOffKeepsConflict(t *testing.T) {
 	g := glossary.NewMemory()
 	_, _ = g.Add(context.Background(), glossary.Entry{Source: "thread pool", Target: "线程池"})
 	s := &Translate{
-		Glossary:                  g,
-		InlineBootstrap:           true,
-		MinBootstrapSourceLen:     2,
+		Glossary:               g,
+		InlineBootstrap:        true,
+		MinBootstrapSourceLen:  2,
 		MaxTermsPer1000Chars:   3.0,
-		InlineConflictStrategy:    config.InlineConflictOff,
+		InlineConflictStrategy: config.InlineConflictOff,
 	}
 	entries := []prompt.BootstrapEntry{
 		{Source: "thread pool", Target: "并发池"},
@@ -355,11 +354,11 @@ func TestAbsorbInlineGlossary_StrategyOffKeepsConflict(t *testing.T) {
 func TestAbsorbInlineGlossary_NoConflictNoChange(t *testing.T) {
 	g := glossary.NewMemory()
 	s := &Translate{
-		Glossary:                  g,
-		InlineBootstrap:           true,
-		MinBootstrapSourceLen:     2,
+		Glossary:               g,
+		InlineBootstrap:        true,
+		MinBootstrapSourceLen:  2,
 		MaxTermsPer1000Chars:   3.0,
-		InlineConflictStrategy:    config.InlineConflictRewriteLocal,
+		InlineConflictStrategy: config.InlineConflictRewriteLocal,
 	}
 	entries := []prompt.BootstrapEntry{
 		{Source: "thread pool", Target: "线程池"},
@@ -376,11 +375,11 @@ func TestAbsorbInlineGlossary_SameTargetIsNoop(t *testing.T) {
 	g := glossary.NewMemory()
 	_, _ = g.Add(context.Background(), glossary.Entry{Source: "thread pool", Target: "线程池"})
 	s := &Translate{
-		Glossary:                  g,
-		InlineBootstrap:           true,
-		MinBootstrapSourceLen:     2,
+		Glossary:               g,
+		InlineBootstrap:        true,
+		MinBootstrapSourceLen:  2,
 		MaxTermsPer1000Chars:   3.0,
-		InlineConflictStrategy:    config.InlineConflictRewriteLocal,
+		InlineConflictStrategy: config.InlineConflictRewriteLocal,
 	}
 	entries := []prompt.BootstrapEntry{
 		{Source: "thread pool", Target: "线程池"}, // 与已有完全相同
@@ -397,11 +396,11 @@ func TestAbsorbInlineGlossary_ProposedTargetMissingInTranslations(t *testing.T) 
 	g := glossary.NewMemory()
 	_, _ = g.Add(context.Background(), glossary.Entry{Source: "thread pool", Target: "线程池"})
 	s := &Translate{
-		Glossary:                  g,
-		InlineBootstrap:           true,
-		MinBootstrapSourceLen:     2,
+		Glossary:               g,
+		InlineBootstrap:        true,
+		MinBootstrapSourceLen:  2,
 		MaxTermsPer1000Chars:   3.0,
-		InlineConflictStrategy:    config.InlineConflictRewriteLocal,
+		InlineConflictStrategy: config.InlineConflictRewriteLocal,
 	}
 	entries := []prompt.BootstrapEntry{
 		{Source: "thread pool", Target: "并发池"},
@@ -445,15 +444,15 @@ func newTestRenderer(t *testing.T) *prompt.Renderer {
 	return r
 }
 
-func newTestDoc(n int) *pipeline.Document {
-	segs := make([]pipeline.Segment, n)
+func newTestDoc(n int) *Document {
+	segs := make([]Segment, n)
 	for i := 0; i < n; i++ {
-		segs[i] = pipeline.Segment{
+		segs[i] = Segment{
 			ID:     "seg-" + itoa(i),
 			Source: "source-" + itoa(i),
 		}
 	}
-	return &pipeline.Document{
+	return &Document{
 		Segments:   segs,
 		SourceLang: "en",
 		TargetLang: "zh",
@@ -764,12 +763,12 @@ func TestTranslatePlan_ExhaustedRoundsKeepSource(t *testing.T) {
 func TestIsPlaceholderOnly(t *testing.T) {
 	tests := []struct {
 		name string
-		seg  pipeline.Segment
+		seg  Segment
 		want bool
 	}{
 		{
 			name: "single placeholder only",
-			seg: pipeline.Segment{
+			seg: Segment{
 				Source:    "__LF_000001__",
 				Protected: map[string]string{"__LF_000001__": "<br/>"},
 			},
@@ -777,7 +776,7 @@ func TestIsPlaceholderOnly(t *testing.T) {
 		},
 		{
 			name: "multiple placeholders with whitespace",
-			seg: pipeline.Segment{
+			seg: Segment{
 				Source: "__LF_000001__ \n __LF_000002__",
 				Protected: map[string]string{
 					"__LF_000001__": "<br/>",
@@ -788,7 +787,7 @@ func TestIsPlaceholderOnly(t *testing.T) {
 		},
 		{
 			name: "empty source",
-			seg: pipeline.Segment{
+			seg: Segment{
 				Source:    "",
 				Protected: map[string]string{"__LF_000001__": "<br/>"},
 			},
@@ -796,7 +795,7 @@ func TestIsPlaceholderOnly(t *testing.T) {
 		},
 		{
 			name: "whitespace-only source with placeholder in protected",
-			seg: pipeline.Segment{
+			seg: Segment{
 				Source:    "   ",
 				Protected: map[string]string{"__LF_000001__": "<br/>"},
 			},
@@ -804,7 +803,7 @@ func TestIsPlaceholderOnly(t *testing.T) {
 		},
 		{
 			name: "placeholder mixed with text",
-			seg: pipeline.Segment{
+			seg: Segment{
 				Source:    "Hello __LF_000001__",
 				Protected: map[string]string{"__LF_000001__": "<br/>"},
 			},
@@ -812,7 +811,7 @@ func TestIsPlaceholderOnly(t *testing.T) {
 		},
 		{
 			name: "plain text without placeholders",
-			seg: pipeline.Segment{
+			seg: Segment{
 				Source:    "Hello World",
 				Protected: map[string]string{},
 			},
@@ -820,7 +819,7 @@ func TestIsPlaceholderOnly(t *testing.T) {
 		},
 		{
 			name: "nil protected map",
-			seg: pipeline.Segment{
+			seg: Segment{
 				Source: "__LF_000001__",
 			},
 			want: false,
@@ -839,72 +838,72 @@ func TestIsPlaceholderOnly(t *testing.T) {
 func TestIsDecorativeSeparator(t *testing.T) {
 	tests := []struct {
 		name string
-		seg  pipeline.Segment
+		seg  Segment
 		want bool
 	}{
 		{
 			name: "decorative diamond separators",
-			seg:  pipeline.Segment{Source: "◇ ◇ ◇ ◇"},
+			seg:  Segment{Source: "◇ ◇ ◇ ◇"},
 			want: true,
 		},
 		{
 			name: "decorative asterisk separators",
-			seg:  pipeline.Segment{Source: "* * *"},
+			seg:  Segment{Source: "* * *"},
 			want: true,
 		},
 		{
 			name: "decorative em-dash separators",
-			seg:  pipeline.Segment{Source: "— — —"},
+			seg:  Segment{Source: "— — —"},
 			want: true,
 		},
 		{
 			name: "decorative star separators",
-			seg:  pipeline.Segment{Source: "★ ★ ★"},
+			seg:  Segment{Source: "★ ★ ★"},
 			want: true,
 		},
 		{
 			name: "decorative circle separators",
-			seg:  pipeline.Segment{Source: "● ● ●"},
+			seg:  Segment{Source: "● ● ●"},
 			want: true,
 		},
 		{
 			name: "decorative tilde separators",
-			seg:  pipeline.Segment{Source: "~ ~ ~"},
+			seg:  Segment{Source: "~ ~ ~"},
 			want: true,
 		},
 		{
 			name: "decorative reference mark separators",
-			seg:  pipeline.Segment{Source: "※ ※ ※"},
+			seg:  Segment{Source: "※ ※ ※"},
 			want: true,
 		},
 		{
 			name: "plain text not separator",
-			seg:  pipeline.Segment{Source: "Hello"},
+			seg:  Segment{Source: "Hello"},
 			want: false,
 		},
 		{
 			name: "japanese text not separator",
-			seg:  pipeline.Segment{Source: "名前の呼び方と。"},
+			seg:  Segment{Source: "名前の呼び方と。"},
 			want: false,
 		},
 		{
 			name: "chapter with digit not separator",
-			seg:  pipeline.Segment{Source: "第1章"},
+			seg:  Segment{Source: "第1章"},
 			want: false,
 		},
 		{
 			name: "empty string not separator",
-			seg:  pipeline.Segment{Source: ""},
+			seg:  Segment{Source: ""},
 			want: false,
 		},
 		{
 			name: "whitespace only not separator",
-			seg:  pipeline.Segment{Source: "   "},
+			seg:  Segment{Source: "   "},
 			want: false,
 		},
 		{
 			name: "mixed text and symbols not separator",
-			seg:  pipeline.Segment{Source: "Hello ◇ ◇"},
+			seg:  Segment{Source: "Hello ◇ ◇"},
 			want: false,
 		},
 	}
