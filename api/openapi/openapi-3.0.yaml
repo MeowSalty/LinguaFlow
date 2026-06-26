@@ -3420,6 +3420,33 @@ components:
       properties:
         bootstrap:
           $ref: '#/components/schemas/ProfileBootstrapConfig'
+    ProfileContextConfig:
+      type: object
+      required:
+        - enabled
+        - before
+        - after
+        - max_chars
+      properties:
+        enabled:
+          type: boolean
+          default: true
+          description: 是否启用上下文窗口
+        before:
+          type: integer
+          minimum: 0
+          default: 1
+          description: 上下文取前 N 段
+        after:
+          type: integer
+          minimum: 0
+          default: 1
+          description: 上下文取后 N 段
+        max_chars:
+          type: integer
+          minimum: 0
+          default: 0
+          description: 每个上下文段落的字符数上限，0 表示不限制
     TranslationProfileConfig:
       type: object
       required:
@@ -3428,6 +3455,7 @@ components:
         - postprocess
         - repair
         - glossary
+        - context
       properties:
         split:
           $ref: '#/components/schemas/ProfileSplitConfig'
@@ -3439,3 +3467,5 @@ components:
           $ref: '#/components/schemas/ProfileRepairConfig'
         glossary:
           $ref: '#/components/schemas/ProfileGlossaryConfig'
+        context:
+          $ref: '#/components/schemas/ProfileContextConfig'
