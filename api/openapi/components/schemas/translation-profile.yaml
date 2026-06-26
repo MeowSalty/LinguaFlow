@@ -99,9 +99,33 @@ ProfileGlossaryConfig:
     bootstrap:
       $ref: '#/ProfileBootstrapConfig'
 
+ProfileContextConfig:
+  type: object
+  required: [enabled, before, after, max_chars]
+  properties:
+    enabled:
+      type: boolean
+      default: true
+      description: 是否启用上下文窗口
+    before:
+      type: integer
+      minimum: 0
+      default: 1
+      description: 上下文取前 N 段
+    after:
+      type: integer
+      minimum: 0
+      default: 1
+      description: 上下文取后 N 段
+    max_chars:
+      type: integer
+      minimum: 0
+      default: 0
+      description: 每个上下文段落的字符数上限，0 表示不限制
+
 TranslationProfileConfig:
   type: object
-  required: [split, protect, postprocess, repair, glossary]
+  required: [split, protect, postprocess, repair, glossary, context]
   properties:
     split:
       $ref: '#/ProfileSplitConfig'
@@ -113,6 +137,8 @@ TranslationProfileConfig:
       $ref: '#/ProfileRepairConfig'
     glossary:
       $ref: '#/ProfileGlossaryConfig'
+    context:
+      $ref: '#/ProfileContextConfig'
 
 TranslationProfile:
   type: object
