@@ -175,6 +175,7 @@ type StrategySnapshot struct {
 	Postprocess schema.ProfilePostprocessConfig `json:"postprocess"`
 	Repair      schema.ProfileRepairConfig      `json:"repair"`
 	Glossary    schema.ProfileGlossaryConfig    `json:"glossary"`
+	Context     schema.ProfileContextConfig     `json:"context"`
 }
 
 // --- CRUD 方法 ---
@@ -479,6 +480,7 @@ func (s *TranslationJobService) snapshotProfile(ctx context.Context, profileID i
 	if err != nil {
 		return nil, err
 	}
+	tp.Config.NormalizeContext()
 	id := tp.ID
 	return &StrategySnapshot{
 		ProfileID:   &id,
@@ -488,6 +490,7 @@ func (s *TranslationJobService) snapshotProfile(ctx context.Context, profileID i
 		Postprocess: tp.Config.Postprocess,
 		Repair:      tp.Config.Repair,
 		Glossary:    tp.Config.Glossary,
+		Context:     tp.Config.Context,
 	}, nil
 }
 
@@ -606,6 +609,18 @@ func (s *TranslationJobService) MarkJobResourceFailed(ctx context.Context, jobRe
 	if err := s.client.JobResource.UpdateOneID(jobResourceID).
 		SetStatus(JobResourceStatusFailed).
 		SetErrorMessage(message).
+		Exec(ctx); err != nil {
+		if ent.IsNotFound(err) {
+			return ErrJobResourceNotFound
+		}
+		return err
+	}
+	return nil
+}
+
+func (s *TranslationJobService) MarkJobResourceCancelled(ctx context.Context, jobResourceID int) error {
+	if err := s.client.JobResource.UpdateOneID(jobResourceID).
+		SetStatus(JobResourceStatusCancelled).
 		Exec(ctx); err != nil {
 		if ent.IsNotFound(err) {
 			return ErrJobResourceNotFound

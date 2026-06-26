@@ -47,6 +47,7 @@ type PipelineConfig struct {
 	Protect     ProtectConfig     `yaml:"protect"`
 	Translate   TranslateConfig   `yaml:"translate"`
 	Postprocess PostprocessConfig `yaml:"postprocess"`
+	Context     ContextConfig     `yaml:"context"`
 }
 
 type SplitConfig struct {
@@ -107,6 +108,24 @@ type RepairConfig struct {
 type PostprocessConfig struct {
 	Enabled    bool `yaml:"enabled"`
 	TrimSpaces bool `yaml:"trim_spaces"`
+}
+
+// ContextConfig 控制翻译上下文窗口。
+type ContextConfig struct {
+	Enabled  bool `yaml:"enabled"`   // 是否启用上下文，默认 true
+	Before   int  `yaml:"before"`    // 上下文取前 N 段，默认 1
+	After    int  `yaml:"after"`     // 上下文取后 N 段，默认 1
+	MaxChars int  `yaml:"max_chars"` // 每个上下文段落的字符数上限，0=不限制
+}
+
+// DefaultContextConfig 返回默认的上下文配置。
+func DefaultContextConfig() ContextConfig {
+	return ContextConfig{
+		Enabled:  true,
+		Before:   1,
+		After:    1,
+		MaxChars: 0,
+	}
 }
 
 type PromptConfig struct {
@@ -280,6 +299,7 @@ func Default() *Config {
 				},
 			},
 			Postprocess: PostprocessConfig{Enabled: true, TrimSpaces: true},
+			Context:     DefaultContextConfig(),
 		},
 		Prompt: PromptConfig{
 			Vars: map[string]any{"style": "concise, technical", "audience": "developers"},

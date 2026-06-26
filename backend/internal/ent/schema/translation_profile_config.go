@@ -10,6 +10,7 @@ type TranslationProfileConfigData struct {
 	Postprocess ProfilePostprocessConfig `json:"postprocess" yaml:"postprocess"`
 	Repair      ProfileRepairConfig      `json:"repair"      yaml:"repair"`
 	Glossary    ProfileGlossaryConfig    `json:"glossary"    yaml:"glossary"`
+	Context     ProfileContextConfig     `json:"context"     yaml:"context"`
 }
 
 // ProfileSplitConfig 分割策略配置。
@@ -62,6 +63,14 @@ type ProfileBootstrapConfig struct {
 	InlineConflictStrategy string  `json:"inline_conflict_strategy" yaml:"inline_conflict_strategy"`
 }
 
+// ProfileContextConfig 上下文窗口配置。
+type ProfileContextConfig struct {
+	Enabled  bool `json:"enabled"   yaml:"enabled"`
+	Before   int  `json:"before"    yaml:"before"`
+	After    int  `json:"after"     yaml:"after"`
+	MaxChars int  `json:"max_chars" yaml:"max_chars"`
+}
+
 // DefaultProfileConfig 返回默认的翻译配置。
 func DefaultProfileConfig() TranslationProfileConfigData {
 	return TranslationProfileConfigData{
@@ -96,5 +105,26 @@ func DefaultProfileConfig() TranslationProfileConfigData {
 				InlineConflictStrategy: "rewrite-local",
 			},
 		},
+		Context: ProfileContextConfig{
+			Enabled:  true,
+			Before:   1,
+			After:    1,
+			MaxChars: 0,
+		},
+	}
+}
+
+// NormalizeContext 填充 Context 字段的默认值。
+// 用于处理从数据库反序列化时缺少 context 字段的旧记录。
+func (c *TranslationProfileConfigData) NormalizeContext() {
+	if c.Context.Before < 1 {
+		c.Context.Before = 1
+	}
+	if c.Context.After < 1 {
+		c.Context.After = 1
+	}
+	// 零值 Enabled=false 且 Before/After 均为默认值时，视为未设置，回退到默认启用
+	if !c.Context.Enabled && c.Context.MaxChars == 0 {
+		c.Context.Enabled = true
 	}
 }

@@ -3,6 +3,7 @@ package worker
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strconv"
@@ -15,6 +16,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
@@ -152,7 +154,7 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	}
 
 	// 4. 构建 Document（从 DB 数据直接构建，不读文件）
-	doc := engine.BuildDocumentFromSegments(inputs,
+	doc := pipeline.BuildDocumentFromSegments(inputs,
 		snapshot.SourceLang, snapshot.TargetLang, res.Format)
 
 	// 从快照构建策略配置（用于运行时资源初始化）
@@ -179,8 +181,7 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	}
 	defer func() { _ = eng.Close() }()
 
-	// 5. 纯翻译（无解析、无渲染、无文件 I/O）
-	// 将 DB 主键 ID 转换为 doc.Segments 的 0-based 数组索引。
+	// 5. 构建索引映射
 	dbIDToIndex := make(map[int]int, len(allRows))
 	for i, row := range allRows {
 		dbIDToIndex[row.ID] = i
@@ -192,64 +193,102 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		}
 	}
 
-	result, err := eng.TranslateSegments(ctx, engine.TranslateSegmentsInput{
-		Document:       doc,
-		SegmentIndexes: segmentIndexes,
-	})
-	if err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, fmt.Errorf("translate segments: %w", err))
-		return nil
-	}
-
-	// 6. 先写回 DB，将成功翻译的段落持久化（updateTranslatedSegments 会跳过 Failed 和空译文段落）。
-	//    必须在 unresolved 检查之前执行，确保部分成功时已翻译的段落不会丢失。
-	selectedIDsByIndex := make(map[int]int, len(selectedRows))
+	docIndexToDBID := make(map[int]int, len(selectedRows))
 	for _, row := range selectedRows {
-		selectedIDsByIndex[row.SegmentIndex] = row.ID
+		if idx, ok := dbIDToIndex[row.ID]; ok {
+			docIndexToDBID[idx] = row.ID
+		}
 	}
-	if err := r.updateTranslatedSegments(ctx, selectedIDsByIndex, result.Segments, autoApprove); err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
+
+	// 6. 使用新的统一 Translate API，通过 BatchHandler 实现每批持久化
+	var mu sync.Mutex
+	completedCount := 0
+
+	batchHandler := func(_ context.Context, batchResult pipeline.BatchResult) error {
+		status := service.SegmentStatusTranslated
+		if autoApprove {
+			status = service.SegmentStatusApproved
+		}
+		localCompleted := 0
+		for _, ts := range batchResult.Segments {
+			if ts.TargetText == "" {
+				continue
+			}
+			dbID, ok := docIndexToDBID[ts.Index]
+			if !ok {
+				continue
+			}
+			update := r.client.Segment.UpdateOneID(dbID).
+				SetSourceText(firstNonEmpty(ts.SourceText, " ")).
+				SetTargetText(ts.TargetText).
+				SetStatus(status)
+			if autoApprove {
+				update.ClearReviewComment()
+			}
+			if err := update.Exec(ctx); err != nil {
+				r.logger.Warn("persist segment failed", "segment_id", dbID, "err", err)
+				continue
+			}
+			localCompleted++
+		}
+		mu.Lock()
+		completedCount += localCompleted
+		mu.Unlock()
 		return nil
 	}
 
-	// 7. 写入成功后，再检查是否有未解决段落
+	result, translateErr := eng.Translate(ctx, doc,
+		engine.WithSegmentFilter(segmentIndexes),
+		engine.WithBatchHandler(batchHandler),
+	)
+
+	if translateErr != nil {
+		if errors.Is(translateErr, context.Canceled) && completedCount > 0 {
+			r.logger.Warn("translation cancelled, preserving partial progress",
+				"resource_id", item.ID, "completed", completedCount, "total", len(selectedRows))
+			_ = r.recordUsage(ctx, exec, completedCount)
+			_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(completedCount).Exec(ctx)
+			_ = r.jobs.MarkJobResourceCancelled(ctx, item.ID)
+			return nil
+		}
+		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, fmt.Errorf("translate: %w", translateErr))
+		return nil
+	}
+
+	// 7. 处理结果
 	if result.UnresolvedCount > 0 {
-		actualCompleted := len(selectedRows) - result.UnresolvedCount
 		r.logger.Warn("translation partially failed: some segments could not be resolved",
 			"resource_id", item.ID,
 			"unresolved_count", result.UnresolvedCount,
 			"total_segments", len(selectedRows),
-			"completed_count", actualCompleted,
+			"completed_count", completedCount,
 		)
-		// 记录成功部分的用量
-		_ = r.recordUsage(ctx, exec, actualCompleted)
-		// 记录已完成的段落数（MarkJobResourceFailed 不会设置此字段）
-		_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(actualCompleted).Exec(ctx)
+		_ = r.recordUsage(ctx, exec, completedCount)
+		_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(completedCount).Exec(ctx)
 		err := fmt.Errorf("%d/%d segments failed to translate (completed: %d): LLM could not preserve all protected placeholders after retries",
-			result.UnresolvedCount, len(selectedRows), actualCompleted)
+			result.UnresolvedCount, len(selectedRows), completedCount)
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
 	}
 
 	// 8. 全部成功：记录用量并标记完成
-	if err := r.recordUsage(ctx, exec, len(selectedRows)); err != nil {
+	if err := r.recordUsage(ctx, exec, completedCount); err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
 	}
 
-	// 9. 标记完成（OutputPath 为空，不再依赖预生成文件）
-	return r.jobs.MarkJobResourceCompleted(ctx, item.ID, "", len(selectedRows))
+	return r.jobs.MarkJobResourceCompleted(ctx, item.ID, "", completedCount)
 }
 
 // buildSegmentInputs 将 DB segments 转换为 SegmentInput 切片。
-func buildSegmentInputs(rows []*ent.Segment) []engine.SegmentInput {
-	inputs := make([]engine.SegmentInput, len(rows))
+func buildSegmentInputs(rows []*ent.Segment) []pipeline.SegmentInput {
+	inputs := make([]pipeline.SegmentInput, len(rows))
 	for i, row := range rows {
 		var meta map[string]any
 		if row.Meta != nil {
 			_ = json.Unmarshal([]byte(*row.Meta), &meta)
 		}
-		inputs[i] = engine.SegmentInput{
+		inputs[i] = pipeline.SegmentInput{
 			ID:         strconv.Itoa(row.SegmentIndex),
 			SourceText: row.SourceText,
 			Meta:       meta,
@@ -370,6 +409,12 @@ func buildStrategyConfig(snapshot *service.JobExecutionSnapshot) *config.Config 
 				InlineConflictStrategy: s.Glossary.Bootstrap.InlineConflictStrategy,
 			},
 		}
+		cfg.Pipeline.Context = config.ContextConfig{
+			Enabled:  s.Context.Enabled,
+			Before:   s.Context.Before,
+			After:    s.Context.After,
+			MaxChars: s.Context.MaxChars,
+		}
 
 		// 独立自举配置从 snapshot.Bootstrap 读取
 		if snapshot.Bootstrap != nil {
@@ -430,40 +475,6 @@ func (r *TranslationRunner) loadSegments(ctx context.Context, resourceID int, se
 		selectedRows = append(selectedRows, row)
 	}
 	return selectedRows, allRows, nil
-}
-
-// updateTranslatedSegments 将翻译结果更新回数据库中的对应片段。
-// 当 autoApprove 为 true 时，直接将状态设为 approved 跳过审核。
-func (r *TranslationRunner) updateTranslatedSegments(ctx context.Context, selectedIDsByIndex map[int]int, segments []engine.SegmentResult, autoApprove bool) error {
-	status := service.SegmentStatusTranslated
-	if autoApprove {
-		status = service.SegmentStatusApproved
-	}
-	for _, item := range segments {
-		if item.Failed {
-			continue
-		}
-		if item.TargetText == "" {
-			r.logger.Warn("skipping segment with empty target text",
-				"segment_index", item.Index)
-			continue
-		}
-		segmentID, ok := selectedIDsByIndex[item.Index]
-		if !ok {
-			continue
-		}
-		update := r.client.Segment.UpdateOneID(segmentID).
-			SetSourceText(firstNonEmpty(item.SourceText, " ")).
-			SetTargetText(item.TargetText).
-			SetStatus(status)
-		if autoApprove {
-			update.ClearReviewComment()
-		}
-		if err := update.Exec(ctx); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // recordUsage 记录翻译用量到数据库。

@@ -73,6 +73,7 @@ type CLIConfigTranslationProfile struct {
 	Postprocess PostprocessConfig `yaml:"postprocess"`
 	Repair      RepairConfig      `yaml:"repair"`
 	Bootstrap   BootstrapConfig   `yaml:"bootstrap"`
+	Context     ContextConfig     `yaml:"context"`
 
 	File string `yaml:"file"` // 外部文件引用（与内联字段二选一）
 }

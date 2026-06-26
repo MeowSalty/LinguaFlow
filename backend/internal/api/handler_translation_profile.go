@@ -92,6 +92,12 @@ func profileConfigToResponse(c *schema.TranslationProfileConfigData) Translation
 				InlineConflictStrategy: ProfileBootstrapConfigInlineConflictStrategy(c.Glossary.Bootstrap.InlineConflictStrategy),
 			},
 		},
+		Context: ProfileContextConfig{
+			Enabled:  c.Context.Enabled,
+			Before:   c.Context.Before,
+			After:    c.Context.After,
+			MaxChars: c.Context.MaxChars,
+		},
 	}
 }
 
@@ -148,6 +154,12 @@ func parseProfileConfig(c *TranslationProfileConfig) *schema.TranslationProfileC
 				MinSourceLen:           c.Glossary.Bootstrap.MinSourceLen,
 				InlineConflictStrategy: string(c.Glossary.Bootstrap.InlineConflictStrategy),
 			},
+		},
+		Context: schema.ProfileContextConfig{
+			Enabled:  c.Context.Enabled,
+			Before:   c.Context.Before,
+			After:    c.Context.After,
+			MaxChars: c.Context.MaxChars,
 		},
 	}
 }

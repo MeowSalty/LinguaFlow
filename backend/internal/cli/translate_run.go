@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strings"
@@ -11,6 +12,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 )
 
@@ -73,13 +75,11 @@ func runTranslate(cmd *cobra.Command, rt *appCtx, opts translateOptions) error {
 	for _, ignored := range report.Ignored {
 		rt.logger.Info("ignored unsupported file", "path", ignored.Path, "reason", ignored.Reason)
 	}
-	for _, job := range jobs {
-		rt.logger.Info("translation queued")
-		job.SourceLang = opts.from
-		job.TargetLang = opts.to
-		if err := eng.Translate(cmd.Context(), job); err != nil {
+	for _, fj := range jobs {
+		rt.logger.Info("translation queued", "input", fj.InputPath, "output", fj.OutputPath)
+		if err := translateSingleFile(cmd.Context(), eng, fj, opts.from, opts.to); err != nil {
 			failed = append(failed, fmt.Sprintf("%v", err))
-			rt.logger.Error("translation failed", "err", err)
+			rt.logger.Error("translation failed", "input", fj.InputPath, "err", err)
 			continue
 		}
 	}
@@ -264,4 +264,59 @@ func resolvePromptContent(cliCfg *config.CLIConfig, name string) string {
 		return pt.Content
 	}
 	return ""
+}
+
+// translateSingleFile 使用新的统一 Engine.Translate() API 翻译单个文件。
+// 流程：解析文件 → 构建 Document → eng.Translate() → 渲染输出。
+func translateSingleFile(ctx context.Context, eng *engine.Engine, fj FileJob, sourceLang, targetLang string) error {
+	// 1. 检测格式
+	p, err := parser.DetectByExt(fj.InputPath)
+	if err != nil {
+		return err
+	}
+
+	// 2. 解析文件
+	reader, err := os.Open(fj.InputPath)
+	if err != nil {
+		return fmt.Errorf("cli: open source: %w", err)
+	}
+	doc, parseErr := p.Parse(ctx, reader)
+	reader.Close()
+	if parseErr != nil {
+		return fmt.Errorf("cli: parse: %w", parseErr)
+	}
+
+	// 3. 应用语言覆盖
+	if sourceLang != "" {
+		doc.SourceLang = sourceLang
+	}
+	if targetLang != "" {
+		doc.TargetLang = targetLang
+	}
+
+	// 4. 翻译（使用新的统一 API）
+	if _, err := eng.Translate(ctx, doc); err != nil {
+		return fmt.Errorf("cli: translate: %w", err)
+	}
+
+	// 5. 重新打开原始文件用于渲染
+	original, err := os.Open(fj.InputPath)
+	if err != nil {
+		return fmt.Errorf("cli: reopen source: %w", err)
+	}
+	defer func() { _ = original.Close() }()
+
+	// 6. 创建输出 writer
+	writer, err := createAtomicWriter(fj.OutputPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = writer.Close() }()
+
+	// 7. 渲染
+	if err := p.Render(ctx, doc, original, writer); err != nil {
+		return fmt.Errorf("cli: render: %w", err)
+	}
+
+	return nil
 }
