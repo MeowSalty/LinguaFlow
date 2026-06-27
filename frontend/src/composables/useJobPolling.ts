@@ -200,9 +200,7 @@ export function useJobPolling({
   // ── 监听 selectedJob 变化：控制详情/事件轮询 ──
   watch(hasActiveSelectedJob, (active) => {
     if (active) {
-      pollDetail()
-      pollEvents()
-      if (isPolling.value) startDetailTimer()
+      startDetailTimer()
     } else {
       clearDetailTimer()
     }
