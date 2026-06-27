@@ -9,7 +9,7 @@ import {
   useMessage,
   type UploadCustomRequestOptions,
 } from 'naive-ui'
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
@@ -65,18 +65,6 @@ const isEmpty = computed(
 
 /** 当前目录中已选中的资源 ID 集合（用于快速查找） */
 const selectedIdSet = computed(() => new Set(workspace.selectedResourceIds))
-
-// ── 生命周期 ──
-
-watch(
-  () => props.projectId,
-  (id) => {
-    if (id) {
-      void workspace.loadResourceTree(id)
-    }
-  },
-  { immediate: true },
-)
 
 // ── 导航 ──
 
