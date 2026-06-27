@@ -1,6 +1,6 @@
 Resource:
   type: object
-  required: [id, path, name, directory, format, total_segments, created_at, updated_at]
+  required: [id, path, name, directory, format, total_segments, translated_segments, approved_segments, created_at, updated_at]
   properties:
     id:
       type: integer
@@ -17,6 +17,12 @@ Resource:
       type: string
     total_segments:
       type: integer
+    translated_segments:
+      type: integer
+      description: 已翻译段落数（含 translated、edited、approved）
+    approved_segments:
+      type: integer
+      description: 已审核通过段落数
     created_at:
       type: string
       format: date-time
@@ -232,7 +238,7 @@ ResourcePrecheckBatchResponse:
 
 ResourceSegmentGroup:
   type: object
-  required: [group_key, group_title, segment_count, translated_count]
+  required: [group_key, group_title, segment_count, translated_count, approved_count]
   properties:
     group_key:
       type: string
@@ -246,6 +252,9 @@ ResourceSegmentGroup:
     translated_count:
       type: integer
       description: 已翻译的 segment 数量
+    approved_count:
+      type: integer
+      description: 已审核通过的 segment 数量
 
 ResourceSegmentGroupListResponse:
   type: object
