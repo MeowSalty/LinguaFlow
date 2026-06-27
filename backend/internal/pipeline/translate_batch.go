@@ -8,6 +8,7 @@ import (
 	"math"
 	"strconv"
 	"sync"
+	"sync/atomic"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
@@ -104,6 +105,9 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 		}
 		res = parseBatchResponseLenient(resp.Text, wantIDs, repairOpts)
 
+		atomic.AddInt64(&doc.InputTokens, resp.Usage.PromptTokens)
+		atomic.AddInt64(&doc.OutputTokens, resp.Usage.CompletionTokens)
+
 		if res.ParseErr != nil && repairOpts.PromptUpgrade {
 			reminder := repair.BuildRetryReminder(nil, res.ParseErr, headSnippet(resp.Text, 200))
 			req2 := req
@@ -115,6 +119,8 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 						"backend", b.Name(), "repaired", res2.Repaired)
 					resp = resp2
 					res = res2
+					atomic.AddInt64(&doc.InputTokens, resp2.Usage.PromptTokens)
+					atomic.AddInt64(&doc.OutputTokens, resp2.Usage.CompletionTokens)
 				}
 			}
 		}

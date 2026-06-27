@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
@@ -212,6 +213,8 @@ func (s *Bootstrap) processBatch(ctx context.Context, texts []string, doc *Docum
 			"skipped", len(res.Skipped),
 			"prompt_tokens", resp.Usage.PromptTokens,
 			"completion_tokens", resp.Usage.CompletionTokens)
+		atomic.AddInt64(&doc.InputTokens, resp.Usage.PromptTokens)
+		atomic.AddInt64(&doc.OutputTokens, resp.Usage.CompletionTokens)
 		return added, nil
 	}
 	return 0, lastErr

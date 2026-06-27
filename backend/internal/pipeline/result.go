@@ -33,7 +33,9 @@ type BatchResult struct {
 type TranslateResult struct {
 	SegmentCount    int
 	Segments        []SegmentResult
-	UnresolvedCount int // 所有轮次结束后仍未解决（被原文填充）的段数量
+	UnresolvedCount int   // 所有轮次结束后仍未解决（被原文填充）的段数量
+	InputTokens     int64 // LLM 调用消耗的 input token 总数
+	OutputTokens    int64 // LLM 调用消耗的 output token 总数
 }
 
 // TranslateResultFromDocument 从已完成翻译的 Document 中提取结果。

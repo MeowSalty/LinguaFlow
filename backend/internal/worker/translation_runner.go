@@ -246,7 +246,7 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		if errors.Is(translateErr, context.Canceled) && completedCount > 0 {
 			r.logger.Warn("translation cancelled, preserving partial progress",
 				"resource_id", item.ID, "completed", completedCount, "total", len(selectedRows))
-			_ = r.recordUsage(ctx, exec, completedCount)
+			_ = r.recordUsage(ctx, exec, completedCount, result.InputTokens, result.OutputTokens)
 			_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(completedCount).Exec(ctx)
 			_ = r.jobs.MarkJobResourceCancelled(ctx, item.ID)
 			return nil
@@ -263,7 +263,7 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 			"total_segments", len(selectedRows),
 			"completed_count", completedCount,
 		)
-		_ = r.recordUsage(ctx, exec, completedCount)
+		_ = r.recordUsage(ctx, exec, completedCount, result.InputTokens, result.OutputTokens)
 		_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(completedCount).Exec(ctx)
 		err := fmt.Errorf("%d/%d segments failed to translate (completed: %d): LLM could not preserve all protected placeholders after retries",
 			result.UnresolvedCount, len(selectedRows), completedCount)
@@ -272,7 +272,7 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	}
 
 	// 8. 全部成功：记录用量并标记完成
-	if err := r.recordUsage(ctx, exec, completedCount); err != nil {
+	if err := r.recordUsage(ctx, exec, completedCount, result.InputTokens, result.OutputTokens); err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
 		return nil
 	}
@@ -478,12 +478,14 @@ func (r *TranslationRunner) loadSegments(ctx context.Context, resourceID int, se
 }
 
 // recordUsage 记录翻译用量到数据库。
-func (r *TranslationRunner) recordUsage(ctx context.Context, exec *service.TranslationJobExecution, segmentCount int) error {
+func (r *TranslationRunner) recordUsage(ctx context.Context, exec *service.TranslationJobExecution, segmentCount int, inputTokens, outputTokens int64) error {
 	usage := r.client.UsageRecord.Create().
 		SetProjectID(exec.Project.ID).
 		SetSource("translation_job").
 		SetSegmentCount(segmentCount).
 		SetAPICalls(segmentCount).
+		SetInputTokens(clampInt64ToInt(inputTokens)).
+		SetOutputTokens(clampInt64ToInt(outputTokens)).
 		SetNote(fmt.Sprintf("translation_job:%d", exec.Job.ID))
 	if exec.ActorUserID > 0 {
 		usage.SetUserID(exec.ActorUserID)
@@ -492,4 +494,15 @@ func (r *TranslationRunner) recordUsage(ctx context.Context, exec *service.Trans
 		usage.SetOrganizationID(*exec.Project.OwnerOrgID)
 	}
 	return usage.Exec(ctx)
+}
+
+// clampInt64ToInt 将 int64 安全地转换为 int，超过 math.MaxInt32 时截断。
+func clampInt64ToInt(v int64) int {
+	if v > int64(^uint32(0)>>1) {
+		return int(^uint32(0) >> 1)
+	}
+	if v < 0 {
+		return 0
+	}
+	return int(v)
 }

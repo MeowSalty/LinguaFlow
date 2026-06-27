@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync/atomic"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
@@ -99,6 +100,8 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *Document, i
 		"prompt_tokens", resp.Usage.PromptTokens,
 		"completion_tokens", resp.Usage.CompletionTokens,
 		"inline_glossary", len(glosEntries))
+	atomic.AddInt64(&doc.InputTokens, resp.Usage.PromptTokens)
+	atomic.AddInt64(&doc.OutputTokens, resp.Usage.CompletionTokens)
 	// 存储 ruby_output 到 seg.Meta
 	if rubyOutput != nil {
 		if ro, ok := rubyOutput[prompt.SingleID]; ok && len(ro) > 0 {
@@ -156,6 +159,8 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *Document, i
 			seg.Target = ""
 			return false, nil
 		}
+		atomic.AddInt64(&doc.InputTokens, resp2.Usage.PromptTokens)
+		atomic.AddInt64(&doc.OutputTokens, resp2.Usage.CompletionTokens)
 		trans2, glos2, rubyOutput2, perr2 := parseBatchResponse(resp2.Text, wantIDs)
 		if perr2 != nil {
 			if result2 := parseBatchResponseLenient(resp2.Text, wantIDs, repairOpts); !result2.Fatal && len(result2.Missing) == 0 {

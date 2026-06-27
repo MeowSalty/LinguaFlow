@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -97,6 +98,8 @@ func (e *Engine) Translate(ctx context.Context, doc *pipeline.Document, opts ...
 	var mu sync.Mutex
 	var batchResults []pipeline.BatchResult
 	var totalFailed int
+	var totalInputTokens int64
+	var totalOutputTokens int64
 
 	err := pipeline.RunConcurrent(ctx, len(batches), concurrency, func(ctx context.Context, bidx int) error {
 		idxs := batches[bidx]
@@ -217,6 +220,8 @@ func (e *Engine) Translate(ctx context.Context, doc *pipeline.Document, opts ...
 
 		mu.Lock()
 		totalFailed += localFailed
+		totalInputTokens += atomic.LoadInt64(&batchDoc.InputTokens)
+		totalOutputTokens += atomic.LoadInt64(&batchDoc.OutputTokens)
 		mu.Unlock()
 
 		// 5f. Build BatchResult and call handler（仅包含 pending 段落）
@@ -263,6 +268,8 @@ func (e *Engine) Translate(ctx context.Context, doc *pipeline.Document, opts ...
 
 	// 从实际段落状态计算结果（不依赖 Vars 中的不确定值）
 	result := buildTranslateResult(doc, totalFailed)
+	result.InputTokens = atomic.LoadInt64(&doc.InputTokens) + totalInputTokens
+	result.OutputTokens = atomic.LoadInt64(&doc.OutputTokens) + totalOutputTokens
 
 	e.logger.Info("translate done",
 		"segments", len(doc.Segments),
