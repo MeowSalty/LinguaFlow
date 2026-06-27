@@ -528,6 +528,14 @@ onMounted(() => {
       {{ workspace.projectError }}
     </NAlert>
 
+    <NAlert v-if="workspace.resourceTreeError" type="error" :bordered="false">
+      {{ workspace.resourceTreeError }}
+    </NAlert>
+
+    <NAlert v-if="workspace.segmentsError" type="error" :bordered="false">
+      {{ workspace.segmentsError }}
+    </NAlert>
+
     <!-- 统计指标栏 -->
     <WorkspaceMetricsBar
       :total-resources="workspace.resources.length"

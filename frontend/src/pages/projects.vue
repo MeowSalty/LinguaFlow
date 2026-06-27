@@ -244,6 +244,12 @@ const handleCardDropdownSelect = (project: Project, key: string | number): void 
   }
 }
 
+watch(isProjectListRoute, (isList) => {
+  if (isList) {
+    projects.loadProjects()
+  }
+})
+
 onMounted(() => {
   if (!isProjectListRoute.value) {
     return

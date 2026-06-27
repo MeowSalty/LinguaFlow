@@ -230,7 +230,7 @@ const getScopeTagType = (scope: Scope): 'default' | 'info' | 'success' => {
 }
 
 const formatDate = (dateStr: string | undefined): string => {
-  if (!dateStr) return t('translationProfiles.card.noDescription')
+  if (!dateStr) return '—'
   return new Date(dateStr).toLocaleDateString()
 }
 
