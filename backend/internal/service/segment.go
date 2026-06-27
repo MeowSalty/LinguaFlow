@@ -196,6 +196,7 @@ type ResourceSegmentGroup struct {
 	GroupTitle      string `json:"group_title"`
 	SegmentCount    int    `json:"segment_count"`
 	TranslatedCount int    `json:"translated_count"`
+	ApprovedCount   int    `json:"approved_count"`
 }
 
 type segmentGroupEntry struct {
@@ -204,6 +205,7 @@ type segmentGroupEntry struct {
 	minIndex   int
 	count      int
 	translated int
+	approved   int
 }
 
 // ListResourceSegmentGroups 按 meta["epub_file"] 将 segments 归为章节组，返回每组的统计信息。
@@ -268,6 +270,9 @@ func (s *SegmentService) ListResourceSegmentGroups(ctx context.Context, actorUse
 		if translatedStatuses[row.Status] {
 			g.translated++
 		}
+		if row.Status == SegmentStatusApproved {
+			g.approved++
+		}
 	}
 
 	// 按 minIndex 排序，保持 spine 顺序
@@ -283,6 +288,7 @@ func (s *SegmentService) ListResourceSegmentGroups(ctx context.Context, actorUse
 			GroupTitle:      g.groupTitle,
 			SegmentCount:    g.count,
 			TranslatedCount: g.translated,
+			ApprovedCount:   g.approved,
 		})
 	}
 

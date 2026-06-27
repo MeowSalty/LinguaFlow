@@ -284,8 +284,8 @@ func (s *ResourceService) uploadSingleResource(ctx context.Context, projectID in
 	}, nil
 }
 
-// ListResources 列出项目中的资源文件。
-func (s *ResourceService) ListResources(ctx context.Context, actorUserID, projectID int, opts ResourceListOptions) ([]*ent.Resource, error) {
+// ListResources 列出项目中的资源文件，附带翻译进度。
+func (s *ResourceService) ListResources(ctx context.Context, actorUserID, projectID int, opts ResourceListOptions) ([]ResourceWithProgress, error) {
 	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, false); err != nil {
 		return nil, err
 	}
@@ -306,11 +306,30 @@ func (s *ResourceService) ListResources(ctx context.Context, actorUserID, projec
 		q = q.Limit(opts.Limit)
 	}
 
-	return q.All(ctx)
+	resources, err := q.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	progress, err := s.listResourceProgress(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+
+	result := make([]ResourceWithProgress, 0, len(resources))
+	for _, r := range resources {
+		p := progress[r.ID]
+		result = append(result, ResourceWithProgress{
+			Resource:           r,
+			TranslatedSegments: p[0],
+			ApprovedSegments:   p[1],
+		})
+	}
+	return result, nil
 }
 
-// GetResource 获取单个资源详情。
-func (s *ResourceService) GetResource(ctx context.Context, actorUserID, projectID, resourceID int) (*ent.Resource, error) {
+// GetResource 获取单个资源详情，附带翻译进度。
+func (s *ResourceService) GetResource(ctx context.Context, actorUserID, projectID, resourceID int) (*ResourceWithProgress, error) {
 	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, false); err != nil {
 		return nil, err
 	}
@@ -324,7 +343,17 @@ func (s *ResourceService) GetResource(ctx context.Context, actorUserID, projectI
 		}
 		return nil, err
 	}
-	return res, nil
+
+	translated, approved, err := s.listSingleResourceProgress(ctx, resourceID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ResourceWithProgress{
+		Resource:           res,
+		TranslatedSegments: translated,
+		ApprovedSegments:   approved,
+	}, nil
 }
 
 // DeleteResource 删除资源文件及其存储。
@@ -572,6 +601,107 @@ type ResourceListOptions struct {
 	Format string
 	Search string
 	Limit  int
+}
+
+// ResourceWithProgress 带翻译进度的资源。
+type ResourceWithProgress struct {
+	Resource           *ent.Resource
+	TranslatedSegments int
+	ApprovedSegments   int
+}
+
+// listResourceProgress 查询指定项目下所有资源的段落翻译进度。
+// 返回 map[resource_id]{translated, approved}。
+func (s *ResourceService) listResourceProgress(ctx context.Context, projectID int) (map[int][2]int, error) {
+	rows, err := s.client.Segment.Query().
+		Where(segment.HasResourceWith(resource.ProjectID(projectID))).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("query segment progress: %w", err)
+	}
+
+	progress := make(map[int][2]int)
+	for _, row := range rows {
+		if row.ResourceID == nil {
+			continue
+		}
+		entry := progress[*row.ResourceID]
+		if row.Status == SegmentStatusTranslated || row.Status == SegmentStatusEdited || row.Status == SegmentStatusApproved {
+			entry[0]++ // translated
+		}
+		if row.Status == SegmentStatusApproved {
+			entry[1]++ // approved
+		}
+		progress[*row.ResourceID] = entry
+	}
+	return progress, nil
+}
+
+// listSingleResourceProgress 查询单个资源的段落翻译进度。
+func (s *ResourceService) listSingleResourceProgress(ctx context.Context, resourceID int) (translated, approved int, err error) {
+	rows, err := s.client.Segment.Query().
+		Where(segment.ResourceIDEQ(resourceID)).
+		All(ctx)
+	if err != nil {
+		return 0, 0, fmt.Errorf("query single resource progress: %w", err)
+	}
+	for _, row := range rows {
+		if row.Status == SegmentStatusTranslated || row.Status == SegmentStatusEdited || row.Status == SegmentStatusApproved {
+			translated++
+		}
+		if row.Status == SegmentStatusApproved {
+			approved++
+		}
+	}
+	return translated, approved, nil
+}
+
+// ResourceProgress 资源翻译进度。
+type ResourceProgress struct {
+	Translated int
+	Approved   int
+}
+
+// GetResourceProgress 获取单个资源的翻译进度。
+func (s *ResourceService) GetResourceProgress(ctx context.Context, projectID, resourceID int) (*ResourceProgress, error) {
+	translated, approved, err := s.listSingleResourceProgress(ctx, resourceID)
+	if err != nil {
+		return nil, err
+	}
+	return &ResourceProgress{Translated: translated, Approved: approved}, nil
+}
+
+// ListResourcesProgress 批量查询多个资源的翻译进度。
+func (s *ResourceService) ListResourcesProgress(ctx context.Context, resourceIDs []int) (map[int]*ResourceProgress, error) {
+	if len(resourceIDs) == 0 {
+		return nil, nil
+	}
+	rows, err := s.client.Segment.Query().
+		Where(segment.ResourceIDIn(resourceIDs...)).
+		All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("query resources progress: %w", err)
+	}
+	raw := make(map[int][2]int)
+	for _, row := range rows {
+		if row.ResourceID == nil {
+			continue
+		}
+		entry := raw[*row.ResourceID]
+		if row.Status == SegmentStatusTranslated || row.Status == SegmentStatusEdited || row.Status == SegmentStatusApproved {
+			entry[0]++
+		}
+		if row.Status == SegmentStatusApproved {
+			entry[1]++
+		}
+		raw[*row.ResourceID] = entry
+	}
+	result := make(map[int]*ResourceProgress, len(resourceIDs))
+	for _, id := range resourceIDs {
+		p := raw[id]
+		result[id] = &ResourceProgress{Translated: p[0], Approved: p[1]}
+	}
+	return result, nil
 }
 
 func sanitizeFilename(name string) string {

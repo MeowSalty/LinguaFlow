@@ -282,7 +282,7 @@ func toTranslationJobResourceResponse(row *ent.JobResource) translationJobResour
 	}
 	if row.Edges.Resource != nil {
 		resp.ResourceID = row.Edges.Resource.ID
-		resourceResp := toResourceResponse(row.Edges.Resource)
+		resourceResp := toResourceResponse(row.Edges.Resource, 0, 0)
 		resp.Resource = &resourceResp
 	}
 	return resp
