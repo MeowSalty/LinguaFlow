@@ -333,7 +333,7 @@ func Default() *Config {
 			AutoMigrate:     true,
 			JWTSecret:       "dev-insecure-secret-change-me",
 			JWTIssuer:       "linguaflow",
-			JWTExpiry:       time.Hour,
+			JWTExpiry:       15 * time.Minute,
 			RefreshExpiry:   30 * 24 * time.Hour,
 			ShutdownTimeout: 10 * time.Second,
 			CORS: CORSConfig{
@@ -447,7 +447,7 @@ func (c *Config) Validate() error {
 		c.Server.JWTIssuer = "linguaflow"
 	}
 	if c.Server.JWTExpiry <= 0 {
-		c.Server.JWTExpiry = time.Hour
+		c.Server.JWTExpiry = 15 * time.Minute
 	}
 	if c.Server.RefreshExpiry <= 0 {
 		c.Server.RefreshExpiry = 30 * 24 * time.Hour
