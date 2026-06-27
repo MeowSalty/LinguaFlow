@@ -130,23 +130,26 @@ const onSelectLocale = (key: string | number): void => {
       <nav class="flex items-center gap-6 text-sm" :aria-label="t('nav.main')">
         <RouterLink
           to="/"
-          class="text-lf-text-muted no-underline transition-colors hover:text-brand-500"
+          class="flex items-center gap-1.5 text-lf-text-muted no-underline transition-colors hover:text-brand-500"
           active-class="!text-brand-500 font-semibold"
         >
+          <IconifyIcon icon="carbon:dashboard" class="text-base" />
           {{ t('nav.dashboard') }}
         </RouterLink>
         <RouterLink
           to="/projects"
-          class="text-lf-text-muted no-underline transition-colors hover:text-brand-500"
+          class="flex items-center gap-1.5 text-lf-text-muted no-underline transition-colors hover:text-brand-500"
           active-class="!text-brand-500 font-semibold"
         >
+          <IconifyIcon icon="carbon:folder" class="text-base" />
           {{ t('nav.projects') }}
         </RouterLink>
         <RouterLink
           to="/backends"
-          class="text-lf-text-muted no-underline transition-colors hover:text-brand-500"
+          class="flex items-center gap-1.5 text-lf-text-muted no-underline transition-colors hover:text-brand-500"
           active-class="!text-brand-500 font-semibold"
         >
+          <IconifyIcon icon="carbon:server-proxy" class="text-base" />
           {{ t('nav.backends') }}
         </RouterLink>
         <NDropdown
@@ -157,17 +160,19 @@ const onSelectLocale = (key: string | number): void => {
         >
           <RouterLink
             to="/prompt-templates"
-            class="text-lf-text-muted no-underline transition-colors hover:text-brand-500"
+            class="flex items-center gap-1.5 text-lf-text-muted no-underline transition-colors hover:text-brand-500"
             :class="{ '!text-brand-500 font-semibold': isTemplateRoute }"
           >
+            <IconifyIcon icon="carbon:settings" class="text-base" />
             {{ t('nav.translationConfig') }}
           </RouterLink>
         </NDropdown>
         <RouterLink
           to="/about"
-          class="text-lf-text-muted no-underline transition-colors hover:text-brand-500"
+          class="flex items-center gap-1.5 text-lf-text-muted no-underline transition-colors hover:text-brand-500"
           active-class="!text-brand-500 font-semibold"
         >
+          <IconifyIcon icon="carbon:information" class="text-base" />
           {{ t('nav.about') }}
         </RouterLink>
       </nav>

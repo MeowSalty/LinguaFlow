@@ -10,7 +10,7 @@ const messages = {
     dashboard: '工作台',
     projects: '项目',
     backends: 'AI 后端',
-    translationConfig: '翻译配置',
+    translationConfig: '模板与配置',
     promptTemplates: '提示词模板',
     translationProfiles: '翻译配置',
     executionPlanTemplates: '执行计划',
