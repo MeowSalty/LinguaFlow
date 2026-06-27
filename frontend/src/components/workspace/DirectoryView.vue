@@ -6,7 +6,7 @@ import { useI18n } from 'vue-i18n'
 import type { ApiSchemas } from '@/api/client'
 import DirectoryItem from '@/components/workspace/DirectoryItem.vue'
 import ResourceItem from '@/components/workspace/ResourceItem.vue'
-import { useProjectWorkspaceStore, type DirectoryChild } from '@/stores/projectWorkspace'
+import type { DirectoryChild } from '@/stores/projectWorkspace'
 
 type Resource = ApiSchemas['Resource']
 
@@ -51,7 +51,6 @@ const emit = defineEmits<{
 }>()
 
 const { t } = useI18n()
-const workspace = useProjectWorkspaceStore()
 
 // ── 资源多选 ──
 
@@ -120,7 +119,6 @@ const isCurrentDirIndeterminate = computed(
       :downloading="downloadingKeys.includes(`resource:${item.resource!.id}`)"
       :downloading-translated="downloadingKeys.includes(`resource:${item.resource!.id}:translated`)"
       :deleting="deletingResourceIds.includes(item.resource!.id)"
-      :progress="workspace.getResourceProgress(item.resource!.id)"
       :selected="selectedIdSet.has(item.resource!.id)"
       @open="(r) => emit('openEpubDirectory', r)"
       @open-segments="(r) => emit('openSegments', r)"

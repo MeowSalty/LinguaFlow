@@ -533,7 +533,8 @@ onMounted(() => {
       :total-resources="workspace.resources.length"
       :ready-resources="workspace.readyResourceCount"
       :total-segments="workspace.totalSegmentCount"
-      :translated-segments="workspace.translatedSegmentCount"
+      :translated-segments="workspace.totalTranslatedSegments"
+      :approved-segments="workspace.totalApprovedSegments"
       :running-jobs="workspace.runningJobCount"
     />
 

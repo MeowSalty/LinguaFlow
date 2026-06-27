@@ -91,24 +91,6 @@ export const useSegmentStore = defineStore('segment', () => {
     segmentProgressCache.value = new Map(segmentProgressCache.value).set(resourceId, counts)
   }
 
-  /** 获取指定资源的翻译进度百分比（未加载段落的资源返回 0） */
-  const getResourceProgress = (resourceId: number): number => {
-    const progress = segmentProgressCache.value.get(resourceId)
-    if (!progress || progress.total === 0) return 0
-    return Math.round(
-      ((progress.translated + progress.edited + progress.approved) / progress.total) * 100,
-    )
-  }
-
-  /** 已加载段落中已翻译/已编辑/已审核的总数（前端聚合） */
-  const translatedSegmentCount = computed(() => {
-    let sum = 0
-    for (const progress of segmentProgressCache.value.values()) {
-      sum += progress.translated + progress.edited + progress.approved
-    }
-    return sum
-  })
-
   // ── EPUB 计算属性 ──
 
   /** 当前资源是否为 EPUB（基于 groups 数据判断） */
@@ -156,35 +138,6 @@ export const useSegmentStore = defineStore('segment', () => {
       segmentsError.value = getErrorMessage(error, t('api.errors.fetchSegmentsFailed'))
     } finally {
       loadingSegments.value = false
-    }
-  }
-
-  /** 为指定资源 ID 列表预加载段落数据以填充进度缓存（后台静默执行） */
-  const preloadDirectoryProgress = async (
-    projectId: number,
-    resourceIds: number[],
-  ): Promise<void> => {
-    const CONCURRENT = 3
-
-    const loadResourceSegments = async (resourceId: number): Promise<void> => {
-      let cursor: string | undefined
-      const collected: Segment[] = []
-
-      do {
-        const response = await fetchResourceSegments(projectId, resourceId, {
-          cursor,
-          limit: 100,
-        })
-        collected.push(...response.items)
-        cursor = response.next_cursor ?? undefined
-      } while (cursor)
-
-      updateSegmentProgressCache(resourceId, collected)
-    }
-
-    for (let i = 0; i < resourceIds.length; i += CONCURRENT) {
-      const batch = resourceIds.slice(i, i + CONCURRENT)
-      await Promise.allSettled(batch.map((id) => loadResourceSegments(id)))
     }
   }
 
@@ -318,11 +271,8 @@ export const useSegmentStore = defineStore('segment', () => {
     segmentSearch,
     segmentStatusFilter,
     segmentProgressCache,
-    translatedSegmentCount,
     updateSegmentProgressCache,
-    getResourceProgress,
     loadSegments,
-    preloadDirectoryProgress,
     updateSegment,
     resetSegments,
     reset,

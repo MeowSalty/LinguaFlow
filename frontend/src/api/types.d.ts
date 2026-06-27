@@ -1205,6 +1205,10 @@ export interface components {
             directory: string;
             format: string;
             total_segments: number;
+            /** @description 已翻译段落数（含 translated、edited、approved） */
+            translated_segments: number;
+            /** @description 已审核通过段落数 */
+            approved_segments: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -1315,6 +1319,8 @@ export interface components {
             segment_count: number;
             /** @description 已翻译的 segment 数量 */
             translated_count: number;
+            /** @description 已审核通过的 segment 数量 */
+            approved_count: number;
         };
         ResourceSegmentGroupListResponse: {
             items: components["schemas"]["ResourceSegmentGroup"][];

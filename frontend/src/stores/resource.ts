@@ -302,6 +302,12 @@ export const useResourceStore = defineStore('resource', () => {
   const totalSegmentCount = computed(() =>
     resources.value.reduce((total, resource) => total + resource.total_segments, 0),
   )
+  const totalTranslatedSegments = computed(() =>
+    resources.value.reduce((total, resource) => total + resource.translated_segments, 0),
+  )
+  const totalApprovedSegments = computed(() =>
+    resources.value.reduce((total, resource) => total + resource.approved_segments, 0),
+  )
   const hasActiveUploads = computed(() =>
     uploadTasks.value.some((task) =>
       ['prechecking', 'uploading', 'processing'].includes(task.stage),
@@ -827,6 +833,8 @@ export const useResourceStore = defineStore('resource', () => {
     availableFormats,
     readyResourceCount,
     totalSegmentCount,
+    totalTranslatedSegments,
+    totalApprovedSegments,
     // EPUB 虚拟目录
     epubDirectoryResourceId,
     epubDirectoryResourceName,

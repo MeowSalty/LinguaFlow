@@ -22,8 +22,6 @@ const props = defineProps<{
   downloading?: boolean
   downloadingTranslated?: boolean
   deleting?: boolean
-  /** 翻译进度百分比（0-100） */
-  progress?: number
   /** 是否处于选中状态 */
   selected?: boolean
 }>()
@@ -156,6 +154,16 @@ const confirmDelete = (): void => {
 /** EPUB 资源可点击进入虚拟目录 */
 const isEpub = computed(() => props.resource.format === 'epub')
 
+const translatedPercent = computed(() => {
+  if (props.resource.total_segments === 0) return 0
+  return Math.round((props.resource.translated_segments / props.resource.total_segments) * 100)
+})
+
+const approvedPercent = computed(() => {
+  if (props.resource.total_segments === 0) return 0
+  return Math.round((props.resource.approved_segments / props.resource.total_segments) * 100)
+})
+
 const handleRowClick = (): void => {
   if (isEpub.value) {
     emit('open', props.resource)
@@ -193,10 +201,14 @@ const handleDropdownSelect = (key: string) => {
     ]"
     @click="handleRowClick"
   >
-    <!-- 进度背景层 -->
+    <!-- 进度背景层：双重重叠进度条 -->
+    <div
+      class="pointer-events-none absolute inset-y-0 left-0 bg-blue-500/10 transition-all duration-500"
+      :style="{ width: `${translatedPercent}%` }"
+    />
     <div
       class="pointer-events-none absolute inset-y-0 left-0 bg-emerald-500/10 transition-all duration-500"
-      :style="{ width: `${props.progress ?? 0}%` }"
+      :style="{ width: `${approvedPercent}%` }"
     />
     <div class="flex min-h-14 items-center gap-3">
       <NCheckbox
@@ -262,9 +274,8 @@ const handleDropdownSelect = (key: string) => {
             >
               {{ props.resource.format || '-' }}
             </span>
-            <span v-if="props.progress !== undefined" class="text-[10px] text-emerald-500/80">
-              {{ props.progress }}%
-            </span>
+            <span class="shrink-0 text-xs text-blue-500/80"> {{ translatedPercent }}% </span>
+            <span class="shrink-0 text-xs text-emerald-500/80"> {{ approvedPercent }}% </span>
           </div>
         </div>
 
