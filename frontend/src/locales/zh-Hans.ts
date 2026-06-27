@@ -288,7 +288,6 @@ const messages = {
     },
     stats: {
       resources: '资源文件',
-      readyResources: '可翻译资源',
       segments: '段落总数',
       runningJobs: '运行中任务',
       progress: '已翻译',

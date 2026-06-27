@@ -63,7 +63,6 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     deletingResourceIds,
     downloadingKeys,
     availableFormats,
-    readyResourceCount,
     totalSegmentCount,
     totalTranslatedSegments,
     totalApprovedSegments,
@@ -308,7 +307,6 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     epubDirectoryBreadcrumbSuffix,
     // 计算属性
     availableFormats,
-    readyResourceCount,
     totalSegmentCount,
     totalTranslatedSegments,
     totalApprovedSegments,

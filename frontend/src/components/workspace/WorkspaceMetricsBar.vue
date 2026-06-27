@@ -4,7 +4,6 @@ import { useI18n } from 'vue-i18n'
 
 const props = defineProps<{
   totalResources: number
-  readyResources: number
   totalSegments: number
   translatedSegments: number
   approvedSegments: number
@@ -32,14 +31,6 @@ const approvedPercent = computed(() => {
     <div class="flex items-baseline gap-1.5">
       <span class="text-lg font-semibold text-lf-text-strong">{{ totalResources }}</span>
       <span class="text-xs text-lf-text-muted">{{ t('workspace.stats.resources') }}</span>
-    </div>
-
-    <span class="h-4 w-px bg-lf-border-soft" />
-
-    <!-- 就绪资源 -->
-    <div class="flex items-baseline gap-1.5">
-      <span class="text-lg font-semibold text-lf-text-strong">{{ readyResources }}</span>
-      <span class="text-xs text-lf-text-muted">{{ t('workspace.stats.readyResources') }}</span>
     </div>
 
     <span class="h-4 w-px bg-lf-border-soft" />

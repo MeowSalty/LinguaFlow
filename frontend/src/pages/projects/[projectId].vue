@@ -539,7 +539,6 @@ onMounted(() => {
     <!-- 统计指标栏 -->
     <WorkspaceMetricsBar
       :total-resources="workspace.resources.length"
-      :ready-resources="workspace.readyResourceCount"
       :total-segments="workspace.totalSegmentCount"
       :translated-segments="workspace.totalTranslatedSegments"
       :approved-segments="workspace.totalApprovedSegments"
@@ -549,10 +548,7 @@ onMounted(() => {
     <!-- 标签页 -->
     <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
       <NTabs v-model:value="activeTab" animated>
-        <NTabPane
-          name="resources"
-          :tab="`${t('workspace.tabs.resources')} (${workspace.resources.length})`"
-        >
+        <NTabPane name="resources" :tab="t('workspace.tabs.resources')">
           <div class="pt-3">
             <ResourceExplorer
               v-if="projectId"
@@ -565,10 +561,7 @@ onMounted(() => {
           </div>
         </NTabPane>
 
-        <NTabPane
-          name="segments"
-          :tab="`${t('workspace.tabs.segments')} (${workspace.totalSegmentCount})`"
-        >
+        <NTabPane name="segments" :tab="t('workspace.tabs.segments')">
           <SegmentPanel
             ref="segmentPanelRef"
             :project-id="projectId"
@@ -577,7 +570,7 @@ onMounted(() => {
           />
         </NTabPane>
 
-        <NTabPane name="jobs" :tab="`${t('workspace.tabs.jobs')} (${workspace.jobs.length})`">
+        <NTabPane name="jobs" :tab="t('workspace.tabs.jobs')">
           <JobPanel
             :project-id="projectId"
             :detail-drawer-visible="jobMgmt.jobDetailDrawerVisible.value"
@@ -587,7 +580,7 @@ onMounted(() => {
           />
         </NTabPane>
 
-        <NTabPane name="glossary" :tab="`${t('workspace.tabs.glossary')} (${glossary.entryCount})`">
+        <NTabPane name="glossary" :tab="t('workspace.tabs.glossary')">
           <GlossaryPanel :project-id="projectId" />
         </NTabPane>
       </NTabs>
