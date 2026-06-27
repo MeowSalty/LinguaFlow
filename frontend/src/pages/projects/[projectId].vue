@@ -378,35 +378,7 @@ watch(activeTab, (tab) => {
   void loadTabData(tab)
 })
 
-// ── 5.1 任务进度轮询 ──
-const hasRunningJobs = computed(() =>
-  workspace.jobs.some((j) => j.status === 'pending' || j.status === 'running'),
-)
-
-const pollingTimer = ref<ReturnType<typeof setInterval> | null>(null)
-
-watch(
-  hasRunningJobs,
-  (running) => {
-    if (running && !pollingTimer.value) {
-      pollingTimer.value = setInterval(() => {
-        if (projectId.value) {
-          void workspace.loadJobs(projectId.value)
-        }
-      }, 5000)
-    } else if (!running && pollingTimer.value) {
-      clearInterval(pollingTimer.value)
-      pollingTimer.value = null
-    }
-  },
-  { immediate: true },
-)
-
 onBeforeUnmount(() => {
-  if (pollingTimer.value) {
-    clearInterval(pollingTimer.value)
-    pollingTimer.value = null
-  }
   workspace.reset()
   glossary.reset()
 })
