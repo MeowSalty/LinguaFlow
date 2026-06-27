@@ -279,18 +279,55 @@ func unmarshalGeneric(body string) (map[string]any, error) {
 	return raw, nil
 }
 
-func toStringMap(v any) (map[string]string, error) {
-	m, ok := v.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("expected object, got %T", v)
-	}
-	out := make(map[string]string, len(m))
-	for k, val := range m {
-		s, ok := val.(string)
-		if !ok {
-			return nil, fmt.Errorf("value for key %q is not string (got %T)", k, val)
+// firstStringKey 按优先级尝试从 m 中取 keys 的 string 值，返回第一个命中的。
+// 全部未命中返回空串。
+func firstStringKey(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if s, ok := m[k].(string); ok && s != "" {
+			return s
 		}
-		out[k] = s
 	}
-	return out, nil
+	return ""
+}
+
+func toStringMap(v any) (map[string]string, error) {
+	switch tv := v.(type) {
+	case map[string]any:
+		out := make(map[string]string, len(tv))
+		for k, val := range tv {
+			switch sv := val.(type) {
+			case string:
+				out[k] = sv
+			case map[string]any:
+				if s := firstStringKey(sv, "target", "translation", "text", "source"); s != "" {
+					out[k] = s
+				} else {
+					return nil, fmt.Errorf("value for key %q is object but no translatable string field found", k)
+				}
+			default:
+				return nil, fmt.Errorf("value for key %q is not string (got %T)", k, val)
+			}
+		}
+		return out, nil
+	case []any:
+		out := make(map[string]string, len(tv))
+		for i, item := range tv {
+			obj, ok := item.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("translations array item %d is not object (got %T)", i, item)
+			}
+			id, _ := obj["id"].(string)
+			if id == "" {
+				return nil, fmt.Errorf("translations array item %d missing string \"id\"", i)
+			}
+			if s := firstStringKey(obj, "target", "translation", "text", "source"); s != "" {
+				out[id] = s
+			} else {
+				return nil, fmt.Errorf("translations array item %d (id=%q) has no translatable string field", i, id)
+			}
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("expected object or array, got %T", v)
+	}
 }

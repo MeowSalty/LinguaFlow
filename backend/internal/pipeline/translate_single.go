@@ -76,6 +76,12 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *Document, i
 		var perr error
 		trans, glosEntries, rubyOutput, perr = parseBatchResponse(resp.Text, wantIDs)
 		if perr != nil {
+			if result := parseBatchResponseLenient(resp.Text, wantIDs, repairOpts); !result.Fatal && len(result.Missing) == 0 {
+				trans, glosEntries, rubyOutput = result.Trans, result.Glos, result.RubyOutput
+				perr = nil
+			}
+		}
+		if perr != nil {
 			logger.Warn("single response parse failed, trying next backend",
 				"seg", seg.ID, "backend", b.Name(), "err", perr,
 				"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200))
@@ -151,6 +157,12 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *Document, i
 			return false, nil
 		}
 		trans2, glos2, rubyOutput2, perr2 := parseBatchResponse(resp2.Text, wantIDs)
+		if perr2 != nil {
+			if result2 := parseBatchResponseLenient(resp2.Text, wantIDs, repairOpts); !result2.Fatal && len(result2.Missing) == 0 {
+				trans2, glos2, rubyOutput2 = result2.Trans, result2.Glos, result2.RubyOutput
+				perr2 = nil
+			}
+		}
 		if perr2 != nil {
 			logger.Warn("placeholder retry response parse failed, defer to next round",
 				"seg", seg.ID, "backend", picked.Name(), "err", perr2)
