@@ -3,7 +3,7 @@ import createClient, { type Client, type ClientOptions, type Middleware } from '
 import { t } from '@/i18n'
 
 import type { components, paths } from './types'
-import { getDefaultTokenStorage } from './token-storage'
+import { getDefaultTokenStorage, getRefreshToken, setAuthSession } from './token-storage'
 import { buildRequestFailureError } from './utils'
 
 export type ApiPaths = paths
@@ -54,6 +54,36 @@ export const setUnauthorizedHandler = (handler: UnauthorizedHandler | null): voi
   _onUnauthorized = handler
 }
 
+let _refreshPromise: Promise<string | null> | null = null
+
+const tryRefreshToken = async (): Promise<string | null> => {
+  const refreshToken = getRefreshToken()
+  if (!refreshToken) return null
+
+  try {
+    const { data } = await _client.POST('/auth/refresh', {
+      body: { refresh_token: refreshToken },
+    })
+
+    if (data) {
+      setAuthSession(data)
+      return data.access_token
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
+const refreshTokenOnce = (): Promise<string | null> => {
+  if (!_refreshPromise) {
+    _refreshPromise = tryRefreshToken().finally(() => {
+      _refreshPromise = null
+    })
+  }
+  return _refreshPromise
+}
+
 export const createAuthMiddleware = (
   readAccessToken = resolveAccessTokenReader(getDefaultTokenStorage()),
 ): Middleware => ({
@@ -73,8 +103,19 @@ export const createAuthMiddleware = (
 
     return new Request(request, { headers })
   },
-  onResponse({ response, schemaPath }) {
+  async onResponse({ response, request, schemaPath }) {
     if (response.status === 401 && !AUTH_TOKEN_SKIP_PATHS.has(schemaPath)) {
+      try {
+        const newToken = await refreshTokenOnce()
+        if (newToken) {
+          const headers = new Headers(request.headers)
+          headers.set('Authorization', `Bearer ${newToken}`)
+          return fetch(new Request(request, { headers }))
+        }
+      } catch {
+        // refresh failed
+      }
+
       _onUnauthorized?.()
     }
 
