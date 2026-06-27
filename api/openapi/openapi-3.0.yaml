@@ -2034,6 +2034,8 @@ components:
         - directory
         - format
         - total_segments
+        - translated_segments
+        - approved_segments
         - created_at
         - updated_at
       properties:
@@ -2052,6 +2054,12 @@ components:
           type: string
         total_segments:
           type: integer
+        translated_segments:
+          type: integer
+          description: 已翻译段落数（含 translated、edited、approved）
+        approved_segments:
+          type: integer
+          description: 已审核通过段落数
         created_at:
           type: string
           format: date-time
@@ -2268,6 +2276,7 @@ components:
         - group_title
         - segment_count
         - translated_count
+        - approved_count
       properties:
         group_key:
           type: string
@@ -2281,6 +2290,9 @@ components:
         translated_count:
           type: integer
           description: 已翻译的 segment 数量
+        approved_count:
+          type: integer
+          description: 已审核通过的 segment 数量
     ResourceSegmentGroupListResponse:
       type: object
       required:
