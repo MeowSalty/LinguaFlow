@@ -324,6 +324,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/orgs/{orgId}/projects": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        /** 列出组织项目 */
+        get: operations["ListOrgProjects"];
+        put?: never;
+        /** 创建组织项目 */
+        post: operations["CreateOrgProject"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/resources": {
         parameters: {
             query?: never;
@@ -597,6 +617,31 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/resources/{resourceId}/segments/groups": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        /**
+         * 列出资源段落分组（按章节）
+         * @description 按 meta.epub_file 将 segments 归为章节组，返回每组的统计信息。
+         *     适用于 EPUB 等多章节资源的分组展示。
+         *     非 EPUB 资源会返回一个包含所有 segments 的单一组。
+         */
+        get: operations["ListResourceSegmentGroups"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/glossary": {
         parameters: {
             query?: never;
@@ -676,6 +721,107 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/glossary/{entryId}/sync-impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                entryId: components["parameters"]["EntryId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 分析术语修改对已翻译内容的影响
+         * @description 当用户修改术语条目的 target 时，调用此 API 分析受影响的段落数量和分布。
+         *     仅在 target 发生变更时有意义。
+         *     支持 resource_ids 参数限定分析范围。
+         *     采用两阶段匹配：先检查 source_text 包含术语 source，再检查 target_text 包含 old_target。
+         */
+        post: operations["AnalyzeGlossarySyncImpact"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/glossary/{entryId}/sync-execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                entryId: components["parameters"]["EntryId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 提交术语同步更新异步任务
+         * @description 提交异步同步更新任务，将受影响段落中的旧译文替换为新译文。
+         *     返回任务 ID 和状态轮询端点，前端通过 GET /sync-tasks/{taskId} 查询进度。
+         *     替换后的段落状态将被设置为 edited，需要人工复核。
+         */
+        post: operations["ExecuteGlossarySyncUpdate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/sync-tasks/{taskId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /** @description 同步任务 ID */
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        /**
+         * 查询术语同步任务状态
+         * @description 查询同步更新任务的执行进度和结果。
+         *     前端应以 500ms 间隔轮询此端点，任务完成后停止轮询。
+         */
+        get: operations["GetGlossarySyncTaskStatus"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/sync-tasks/{taskId}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /** @description 同步任务 ID */
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 取消术语同步任务
+         * @description 取消正在执行或等待执行的同步任务。
+         *     pending 状态的任务直接取消；running 状态的任务在完成当前批次后停止。
+         */
+        post: operations["CancelGlossarySyncTask"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/translation-jobs": {
         parameters: {
             query?: never;
@@ -707,6 +853,25 @@ export interface paths {
         };
         /** 获取翻译任务详情 */
         get: operations["GetTranslationJob"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/translation-jobs/{translationJobId}/events": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                translationJobId: components["parameters"]["TranslationJobId"];
+            };
+            cookie?: never;
+        };
+        /** 获取翻译任务事件列表 */
+        get: operations["ListTranslationJobEvents"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1141,11 +1306,30 @@ export interface components {
         ResourcePrecheckBatchResponse: {
             items: components["schemas"]["ResourcePrecheckFileResult"][];
         };
+        ResourceSegmentGroup: {
+            /** @description 分组键（如 epub_file 路径） */
+            group_key: string;
+            /** @description 分组标题（如章节标题） */
+            group_title: string;
+            /** @description 该组的 segment 总数 */
+            segment_count: number;
+            /** @description 已翻译的 segment 数量 */
+            translated_count: number;
+        };
+        ResourceSegmentGroupListResponse: {
+            items: components["schemas"]["ResourceSegmentGroup"][];
+        };
         CreateTranslationJobRequest: {
             /** @description 执行计划模板 ID */
             execution_plan_id: number;
             resource_ids?: number[];
             segment_ids?: number[];
+            /**
+             * @description 按章节分组键选择 segments（仅适用于 EPUB 等多章节资源）。
+             *     传入 meta.epub_file 值（如 ["OEBPS/chapter1.xhtml"]），后端自动解析为对应的 segment_ids。
+             *     与 segment_ids 互斥，优先级：segment_group_keys > segment_ids > resource_ids。
+             */
+            segment_group_keys?: string[];
             /**
              * @description 翻译完成后是否自动审批通过所有段落
              * @default false
@@ -1170,6 +1354,17 @@ export interface components {
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+            /** @description 当前执行阶段名称 */
+            current_stage?: string;
+            /** @description 当前阶段的总段落数 */
+            stage_total?: number;
+            /** @description 当前阶段已完成的段落数 */
+            stage_completed?: number;
+            /**
+             * Format: date-time
+             * @description 资源开始执行的时间
+             */
+            started_at?: string;
         };
         TranslationJob: {
             id: number;
@@ -1193,10 +1388,37 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
             job_resources?: components["schemas"]["TranslationJobResource"][];
+            /**
+             * Format: date-time
+             * @description 任务开始执行的时间
+             */
+            started_at?: string;
+            /** @description 当前活跃的执行阶段名称（聚合自 JobResource） */
+            current_stage?: string;
+            /**
+             * Format: float
+             * @description 整体进度百分比（0-100），由后端计算
+             */
+            progress_percentage?: number;
+            /** @description 在队列中的位置（1-based），null 表示不在队列中 */
+            queue_position?: number | null;
+            /** @description 当前队列中的任务总数 */
+            queue_size?: number | null;
         };
         TranslationJobListResponse: {
             items: components["schemas"]["TranslationJob"][];
             next_cursor?: string;
+        };
+        JobEvent: {
+            id: number;
+            job_id: number;
+            /** @enum {string} */
+            level: "info" | "warn" | "error";
+            stage?: string;
+            message: string;
+            metadata?: Record<string, never>;
+            /** Format: date-time */
+            created_at: string;
         };
         Activity: {
             id: number;
@@ -1252,8 +1474,6 @@ export interface components {
         Project: {
             id: number;
             name: string;
-            /** @enum {string} */
-            resource_scope: "project" | "organization";
             owner_user_id?: number;
             owner_org_id?: number;
             config?: {
@@ -1262,6 +1482,11 @@ export interface components {
             default_translation_config?: {
                 [key: string]: unknown;
             };
+            /**
+             * @description 翻译过程中是否启用术语表
+             * @default false
+             */
+            glossary_enabled: boolean;
             source_lang: string;
             target_lang: string;
             /** Format: date-time */
@@ -1274,28 +1499,30 @@ export interface components {
         };
         CreateProjectRequest: {
             name: string;
-            owner_org_id?: number;
-            /** @enum {string} */
-            resource_scope?: "project" | "organization";
             config?: {
                 [key: string]: unknown;
             };
             default_translation_config?: {
                 [key: string]: unknown;
             };
+            /**
+             * @description 翻译过程中是否启用术语表
+             * @default false
+             */
+            glossary_enabled: boolean;
             source_lang?: string;
             target_lang?: string;
         };
         UpdateProjectRequest: {
             name?: string;
-            /** @enum {string} */
-            resource_scope?: "project" | "organization";
             config?: {
                 [key: string]: unknown;
             };
             default_translation_config?: {
                 [key: string]: unknown;
             };
+            /** @description 翻译过程中是否启用术语表 */
+            glossary_enabled?: boolean;
             source_lang?: string;
             target_lang?: string;
         };
@@ -1326,6 +1553,10 @@ export interface components {
             case_sensitive?: boolean;
             notes?: string;
         };
+        UpdateGlossaryEntryResponse: components["schemas"]["GlossaryEntry"] & {
+            /** @description target 字段是否发生变更 */
+            target_changed?: boolean;
+        };
         GlossaryImportResult: {
             added: number;
             skipped?: {
@@ -1334,6 +1565,58 @@ export interface components {
                 reason?: string;
             }[];
         };
+        GlossarySyncImpactRequest: {
+            /** @description 修改前的旧 target 值 */
+            old_target: string;
+            /** @description 修改后的新 target 值 */
+            new_target?: string;
+            /** @description 限定影响分析的资源范围（可选，为空则分析所有资源） */
+            resource_ids?: number[];
+        };
+        GlossarySyncImpactResponse: {
+            old_target: string;
+            new_target: string;
+            total_affected: number;
+            resources: components["schemas"]["GlossarySyncImpactResource"][];
+        };
+        GlossarySyncExecuteRequest: {
+            old_target: string;
+            new_target: string;
+            /** @description 限定同步的资源范围 */
+            resource_ids?: number[];
+        };
+        GlossarySyncExecuteResponse: {
+            /** @description 异步任务唯一标识 */
+            task_id: string;
+            /** @enum {string} */
+            status: "pending" | "running" | "completed" | "failed" | "cancelled";
+            /** @description 任务状态轮询端点 */
+            status_url: string;
+        };
+        GlossarySyncTaskStatusResponse: {
+            task_id: string;
+            /** @enum {string} */
+            status: "pending" | "running" | "completed" | "failed" | "cancelled";
+            /** @description 已处理的段落数 */
+            processed: number;
+            /** @description 待处理的段落总数 */
+            total: number;
+            /** @description 任务完成后的结果摘要（仅 status=completed 时存在） */
+            result?: {
+                total_updated?: number;
+                total_skipped?: number;
+                resources?: components["schemas"]["GlossarySyncExecuteResourceResult"][];
+            };
+            /** @description 错误信息（仅 status=failed 时存在） */
+            error?: string;
+            /** Format: date-time */
+            cancelled_at?: string;
+        };
+        GlossarySyncTaskCancelResponse: {
+            task_id: string;
+            /** @enum {string} */
+            status: "cancelled";
+        };
         PromptTemplate: {
             id: number;
             name: string;
@@ -1341,8 +1624,10 @@ export interface components {
             scope: components["schemas"]["PromptTemplateScope"];
             owner_user_id?: number;
             owner_org_id?: number;
-            /** @description 提示词内容。 */
+            /** @description 翻译提示词内容。 */
             system_prompt_content?: string;
+            /** @description Bootstrap 术语抽取提示词内容。启用 glossary.bootstrap 时必填。 */
+            bootstrap_prompt_content?: string;
             /** Format: date-time */
             created_at?: string;
             /** Format: date-time */
@@ -1354,14 +1639,18 @@ export interface components {
         CreatePromptTemplateRequest: {
             name: string;
             description?: string;
-            /** @description 提示词内容。 */
+            /** @description 翻译提示词内容。 */
             system_prompt_content?: string;
+            /** @description Bootstrap 术语抽取提示词内容。 */
+            bootstrap_prompt_content?: string;
         };
         UpdatePromptTemplateRequest: {
             name?: string;
             description?: string;
-            /** @description 提示词内容。 */
+            /** @description 翻译提示词内容。 */
             system_prompt_content?: string;
+            /** @description Bootstrap 术语抽取提示词内容。 */
+            bootstrap_prompt_content?: string;
         };
         TranslationProfile: {
             id: number;
@@ -1396,6 +1685,8 @@ export interface components {
             scope: components["schemas"]["ExecutionPlanTemplateScope"];
             owner_user_id?: number;
             owner_org_id?: number;
+            bootstrap?: components["schemas"]["ExecutionPlanBootstrapConfig"];
+            ruby_retry?: components["schemas"]["ExecutionPlanRubyRetryConfig"];
             rounds: components["schemas"]["ExecutionRoundConfig"][];
             /** Format: date-time */
             created_at?: string;
@@ -1408,11 +1699,15 @@ export interface components {
         CreateExecutionPlanTemplateRequest: {
             name: string;
             description?: string;
+            bootstrap?: components["schemas"]["ExecutionPlanBootstrapConfig"];
+            ruby_retry?: components["schemas"]["ExecutionPlanRubyRetryConfig"];
             rounds: components["schemas"]["ExecutionRoundConfig"][];
         };
         UpdateExecutionPlanTemplateRequest: {
             name?: string;
             description?: string;
+            bootstrap?: components["schemas"]["ExecutionPlanBootstrapConfig"];
+            ruby_retry?: components["schemas"]["ExecutionPlanRubyRetryConfig"];
             rounds?: components["schemas"]["ExecutionRoundConfig"][];
         };
         IncrementalUpdateChanges: {
@@ -1425,8 +1720,59 @@ export interface components {
             /** @description 删除的段落数 */
             deleted: number;
         };
+        GlossarySyncImpactResource: {
+            resource_id: number;
+            resource_path: string;
+            affected_count: number;
+        };
+        GlossarySyncExecuteResourceResult: {
+            resource_id: number;
+            resource_path: string;
+            updated_count: number;
+            skipped_count: number;
+        };
         /** @enum {string} */
         ExecutionPlanTemplateScope: "user" | "org" | "system";
+        ExecutionPlanBootstrapConfig: {
+            /**
+             * @description 是否启用独立自举
+             * @default false
+             */
+            enabled: boolean;
+            /** @description 自举使用的后端 ID */
+            backend_id: number;
+            /** @description 自举使用的提示词模板 ID（仅用其 bootstrap_prompt_content） */
+            prompt_template_id: number;
+            /**
+             * @description 每批发送给 LLM 的源文段数
+             * @default 20
+             */
+            batch_size: number;
+            /**
+             * @description 自举并发数
+             * @default 2
+             */
+            concurrency: number;
+            /**
+             * @description 每批最多抽取的术语数
+             * @default 20
+             */
+            max_terms_per_batch: number;
+            /**
+             * @description 术语源文最短字符数
+             * @default 2
+             */
+            min_source_len: number;
+        };
+        ExecutionPlanRubyRetryConfig: {
+            /**
+             * @description 是否启用注音对齐重试
+             * @default false
+             */
+            enabled: boolean;
+            /** @description 注音对齐使用的后端 ID；为空或 0 时使用翻译主后端 */
+            backend_id?: number;
+        };
         RetryConfig: {
             /** @default 3 */
             max_attempts: number;
@@ -1461,9 +1807,18 @@ export interface components {
             strategy: string;
             max_chars: number;
         };
+        ProfileRubyConfig: {
+            enabled: boolean;
+            /**
+             * @default ruby_output
+             * @enum {string}
+             */
+            output_format: "ruby_output" | "inline_markers";
+        };
         ProfileProtectConfig: {
             enabled: boolean;
-            rules?: string[];
+            rules?: ("code" | "link" | "placeholder" | "xml")[];
+            ruby?: components["schemas"]["ProfileRubyConfig"];
         };
         ProfilePostprocessConfig: {
             enabled: boolean;
@@ -1480,17 +1835,48 @@ export interface components {
             prompt_upgrade: boolean;
         };
         ProfileBootstrapConfig: {
-            /** @enum {string} */
-            mode: "off" | "pre" | "inline";
-            save: boolean;
-            max_terms_per_batch: number;
+            /**
+             * @description 是否启用内联自举
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * Format: double
+             * @description 每 1000 源文字符（rune）最多抽取的术语条数（缩放系数）
+             */
+            max_terms_per_1000_chars: number;
+            /** @description 内联自举术语源文最短字符数 */
             min_source_len: number;
-            /** @enum {string} */
+            /**
+             * @description 并发术语冲突处理策略
+             * @enum {string}
+             */
             inline_conflict_strategy: "off" | "rewrite-local";
         };
         ProfileGlossaryConfig: {
-            enabled: boolean;
             bootstrap: components["schemas"]["ProfileBootstrapConfig"];
+        };
+        ProfileContextConfig: {
+            /**
+             * @description 是否启用上下文窗口
+             * @default true
+             */
+            enabled: boolean;
+            /**
+             * @description 上下文取前 N 段
+             * @default 1
+             */
+            before: number;
+            /**
+             * @description 上下文取后 N 段
+             * @default 1
+             */
+            after: number;
+            /**
+             * @description 每个上下文段落的字符数上限，0 表示不限制
+             * @default 0
+             */
+            max_chars: number;
         };
         TranslationProfileConfig: {
             split: components["schemas"]["ProfileSplitConfig"];
@@ -1498,6 +1884,7 @@ export interface components {
             postprocess: components["schemas"]["ProfilePostprocessConfig"];
             repair: components["schemas"]["ProfileRepairConfig"];
             glossary: components["schemas"]["ProfileGlossaryConfig"];
+            context: components["schemas"]["ProfileContextConfig"];
         };
     };
     responses: {
@@ -2227,6 +2614,56 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    ListOrgProjects: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 项目列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateOrgProject: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                orgId: components["parameters"]["OrgId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateProjectRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["Project"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     ListProjectResources: {
         parameters: {
             query?: {
@@ -2500,6 +2937,8 @@ export interface operations {
             query?: {
                 status?: "pending" | "translated" | "edited" | "approved" | "rejected";
                 search?: string;
+                /** @description 按分组键过滤 segments（如 epub_file 路径），仅返回属于指定分组的 segments */
+                group_key?: string;
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };
@@ -2658,6 +3097,30 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    ListResourceSegmentGroups: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                resourceId: components["parameters"]["ResourceId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 段落分组列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResourceSegmentGroupListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     ListGlossaryEntries: {
         parameters: {
             query?: never;
@@ -2730,7 +3193,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["GlossaryEntry"];
+                    "application/json": components["schemas"]["UpdateGlossaryEntryResponse"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -2811,6 +3274,126 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    AnalyzeGlossarySyncImpact: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                entryId: components["parameters"]["EntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GlossarySyncImpactRequest"];
+            };
+        };
+        responses: {
+            /** @description 影响分析结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlossarySyncImpactResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ExecuteGlossarySyncUpdate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                entryId: components["parameters"]["EntryId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GlossarySyncExecuteRequest"];
+            };
+        };
+        responses: {
+            /** @description 任务已提交 */
+            202: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlossarySyncExecuteResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetGlossarySyncTaskStatus: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /** @description 同步任务 ID */
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 任务状态 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlossarySyncTaskStatusResponse"];
+                };
+            };
+            /** @description 任务不存在 */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CancelGlossarySyncTask: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+                /** @description 同步任务 ID */
+                taskId: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 任务已取消 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlossarySyncTaskCancelResponse"];
+                };
+            };
+            /** @description 任务已完成或已失败，无法取消 */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     ListTranslationJobs: {
         parameters: {
             query?: {
@@ -2884,6 +3467,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TranslationJob"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListTranslationJobEvents: {
+        parameters: {
+            query?: {
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                translationJobId: components["parameters"]["TranslationJobId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 事件列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JobEvent"][];
                 };
             };
             default: components["responses"]["Problem"];

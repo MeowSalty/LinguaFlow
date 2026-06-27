@@ -10,6 +10,7 @@ import {
   getJobProgress,
   getJobStatusLabel,
   getJobTriggerLabel,
+  getStageLabel,
   statusTagType,
 } from '@/composables/useWorkspaceUtils'
 
@@ -67,14 +68,57 @@ export function useJobColumns(actions: JobColumnActions) {
     {
       title: t('workspace.job.columns.progress'),
       key: 'progress',
-      minWidth: 180,
-      render: (row) =>
-        h(NProgress, {
-          type: 'line',
-          percentage: getJobProgress(row),
-          indicatorPlacement: 'inside',
-          processing: row.status === 'pending' || row.status === 'running',
-        }),
+      width: 220,
+      render: (row) => {
+        const percent =
+          row.progress_percentage != null
+            ? Math.round(row.progress_percentage)
+            : getJobProgress(row)
+
+        const stageText = row.current_stage ? getStageLabel(row.current_stage) : null
+
+        return h('div', { class: 'flex items-center gap-2 w-full' }, [
+          // 阶段标签（如有）
+          stageText
+            ? h(
+                NTag,
+                {
+                  size: 'tiny',
+                  bordered: false,
+                  type: 'info',
+                  round: true,
+                  style: { flexShrink: 0 },
+                },
+                { default: () => stageText },
+              )
+            : null,
+          // 进度条（flex-1 占据剩余空间，但整体列宽已固定为 220）
+          h(NProgress, {
+            type: 'line',
+            percentage: percent,
+            showIndicator: false,
+            height: 6,
+            borderRadius: 3,
+            processing: row.status === 'running',
+            status:
+              row.status === 'completed'
+                ? 'success'
+                : row.status === 'failed'
+                  ? 'error'
+                  : 'default',
+            style: { flex: 1, minWidth: 0 },
+          }),
+          // 百分比数字
+          h(
+            'span',
+            {
+              class: 'text-xs font-medium tabular-nums text-lf-text-muted',
+              style: { flexShrink: 0, width: '36px', textAlign: 'right' },
+            },
+            { default: () => `${percent}%` },
+          ),
+        ])
+      },
     },
     {
       title: t('workspace.job.columns.resources'),

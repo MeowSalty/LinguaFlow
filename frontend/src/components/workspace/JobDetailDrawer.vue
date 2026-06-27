@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { h, watch } from 'vue'
 import {
   NAlert,
   NButton,
@@ -8,9 +9,9 @@ import {
   NDrawer,
   NDrawerContent,
   NEmpty,
-  NProgress,
   NSpin,
   NTag,
+  NText,
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
@@ -18,17 +19,21 @@ import { type ApiSchemas } from '@/api/client'
 import {
   formatDate,
   formatConfigValue,
-  getJobProgress,
   getJobStatusLabel,
   getJobTriggerLabel,
-  statusTagType,
+  getStageLabel,
 } from '@/composables/useWorkspaceUtils'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
+import { useTranslationJobStore } from '@/stores/translationJob'
+
+import JobEventTimeline from './JobEventTimeline.vue'
+import JobProgressCard from './JobProgressCard.vue'
 
 type TranslationJob = ApiSchemas['TranslationJob']
 
 const { t } = useI18n()
 const workspace = useProjectWorkspaceStore()
+const jobStore = useTranslationJobStore()
 
 defineProps<{
   show: boolean
@@ -37,6 +42,24 @@ defineProps<{
 const emit = defineEmits<{
   'update:show': [value: boolean]
 }>()
+
+const handleRefreshEvents = (): void => {
+  if (workspace.selectedJob) {
+    void jobStore.loadEvents(workspace.selectedJob.id)
+  }
+}
+
+// ── 选中任务变化时自动加载事件（非终态才加载）──
+watch(
+  () => jobStore.selectedJob?.id,
+  (newId) => {
+    const job = jobStore.selectedJob
+    if (newId != null && job && ['pending', 'running'].includes(job.status)) {
+      void jobStore.loadEvents(newId)
+    }
+  },
+  { immediate: true },
+)
 </script>
 
 <template>
@@ -56,46 +79,8 @@ const emit = defineEmits<{
     >
       <NSpin :show="workspace.loadingJobDetail">
         <div v-if="workspace.selectedJob" class="space-y-5">
-          <div class="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <div class="rounded-lg bg-lf-surface-muted p-4">
-              <div class="text-xs text-lf-text-muted">
-                {{ t('workspace.job.columns.status') }}
-              </div>
-              <NTag class="mt-2" size="small" :type="statusTagType(workspace.selectedJob.status)">
-                {{ getJobStatusLabel(workspace.selectedJob.status) }}
-              </NTag>
-            </div>
-            <div class="rounded-lg bg-lf-surface-muted p-4">
-              <div class="text-xs text-lf-text-muted">
-                {{ t('workspace.job.columns.resources') }}
-              </div>
-              <div class="mt-2 text-lg font-semibold text-lf-text-strong">
-                {{ workspace.selectedJob.completed_resources }}/{{
-                  workspace.selectedJob.resource_count
-                }}
-              </div>
-            </div>
-            <div class="rounded-lg bg-lf-surface-muted p-4">
-              <div class="text-xs text-lf-text-muted">
-                {{ t('workspace.job.columns.segments') }}
-              </div>
-              <div class="mt-2 text-lg font-semibold text-lf-text-strong">
-                {{ workspace.selectedJob.completed_segments }}/{{
-                  workspace.selectedJob.total_segments
-                }}
-              </div>
-            </div>
-          </div>
-
-          <NProgress
-            type="line"
-            :percentage="getJobProgress(workspace.selectedJob)"
-            indicator-placement="inside"
-            :processing="
-              workspace.selectedJob.status === 'pending' ||
-              workspace.selectedJob.status === 'running'
-            "
-          />
+          <!-- 增强 2：JobProgressCard 替换原有统计卡片 + 进度条 -->
+          <JobProgressCard :job="workspace.selectedJob" />
 
           <NAlert v-if="workspace.jobDetailError" type="error" :bordered="false">
             {{ workspace.jobDetailError }}
@@ -104,14 +89,23 @@ const emit = defineEmits<{
             {{ workspace.selectedJob.error_message }}
           </NAlert>
 
-          <NDescriptions bordered :column="1" size="small">
+          <NDescriptions bordered label-placement="left" :column="2" size="small">
             <NDescriptionsItem :label="t('workspace.job.columns.trigger')">
               {{ getJobTriggerLabel(workspace.selectedJob.trigger_type) }}
+            </NDescriptionsItem>
+            <NDescriptionsItem
+              v-if="workspace.selectedJob.started_at"
+              :label="t('workspace.job.columns.startedAt')"
+            >
+              {{ formatDate(workspace.selectedJob.started_at) }}
             </NDescriptionsItem>
             <NDescriptionsItem :label="t('workspace.common.createdAt')">
               {{ formatDate(workspace.selectedJob.created_at) }}
             </NDescriptionsItem>
-            <NDescriptionsItem :label="t('workspace.common.updatedAt')">
+            <NDescriptionsItem
+              v-if="workspace.selectedJob.updated_at"
+              :label="t('workspace.common.updatedAt')"
+            >
               {{ formatDate(workspace.selectedJob.updated_at) }}
             </NDescriptionsItem>
             <NDescriptionsItem :label="t('workspace.job.form.sourceLang')">
@@ -120,13 +114,9 @@ const emit = defineEmits<{
             <NDescriptionsItem :label="t('workspace.job.form.targetLang')">
               {{ formatConfigValue(workspace.selectedJob.translation_config?.target_lang) }}
             </NDescriptionsItem>
-            <NDescriptionsItem :label="t('workspace.job.form.backendOrder')">
-              <pre class="m-0 whitespace-pre-wrap text-xs leading-5">{{
-                formatConfigValue(workspace.selectedJob.translation_config?.backend_order)
-              }}</pre>
-            </NDescriptionsItem>
           </NDescriptions>
 
+          <!-- 增强 4：资源明细表格（含阶段列） -->
           <div>
             <div class="mb-3 text-sm font-medium text-lf-text-strong">
               {{ t('workspace.job.resourcesTitle') }}
@@ -137,24 +127,56 @@ const emit = defineEmits<{
                 {
                   title: t('workspace.resource.columns.name'),
                   key: 'name',
+                  minWidth: 200,
+                  ellipsis: { tooltip: true },
                   render: (row: ApiSchemas['TranslationJobResource']) =>
                     row.resource?.name || `#${row.resource_id}`,
                 },
                 {
                   title: t('workspace.job.columns.status'),
                   key: 'status',
+                  width: 80,
                   render: (row: ApiSchemas['TranslationJobResource']) =>
                     getJobStatusLabel(row.status as TranslationJob['status']),
                 },
                 {
+                  title: t('workspace.job.columns.stage'),
+                  key: 'stage',
+                  width: 120,
+                  render: (row: ApiSchemas['TranslationJobResource']) => {
+                    if (!row.current_stage) return h(NText, { depth: 3 }, { default: () => '-' })
+                    const label = getStageLabel(row.current_stage)
+                    if (row.stage_total) {
+                      return h('div', { class: 'flex flex-col gap-0.5' }, [
+                        h(
+                          NTag,
+                          { size: 'tiny', bordered: false, type: 'info' },
+                          { default: () => label },
+                        ),
+                        h(
+                          'span',
+                          { class: 'text-xs text-lf-text-muted tabular-nums' },
+                          {
+                            default: () => `${row.stage_completed ?? 0}/${row.stage_total}`,
+                          },
+                        ),
+                      ])
+                    }
+                    return label
+                  },
+                },
+                {
                   title: t('workspace.job.columns.segments'),
                   key: 'segments',
+                  width: 70,
                   render: (row: ApiSchemas['TranslationJobResource']) =>
                     `${row.completed_segments}/${row.segment_count}`,
                 },
                 {
                   title: t('workspace.job.columns.error'),
                   key: 'error_message',
+                  minWidth: 120,
+                  ellipsis: { tooltip: true },
                   render: (row: ApiSchemas['TranslationJobResource']) => row.error_message || '-',
                 },
               ]"
@@ -162,6 +184,16 @@ const emit = defineEmits<{
               :scroll-x="720"
             />
           </div>
+
+          <!-- 增强 5：事件时间线（仅 running/pending 时展示） -->
+          <JobEventTimeline
+            v-if="
+              workspace.selectedJob && ['pending', 'running'].includes(workspace.selectedJob.status)
+            "
+            :events="jobStore.events"
+            :loading="jobStore.loadingEvents"
+            @refresh="handleRefreshEvents"
+          />
         </div>
         <NEmpty v-else :description="t('workspace.job.detailEmpty')" />
       </NSpin>

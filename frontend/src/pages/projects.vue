@@ -12,14 +12,13 @@ import { type ApiSchemas } from '@/api/client'
 import { useProjectsStore } from '@/stores/projects'
 
 type Project = ApiSchemas['Project']
-type ResourceScope = Project['resource_scope']
 
 interface ProjectFormModel {
   name: string
   source_lang: string
   target_lang: string
-  resource_scope: ResourceScope
-  owner_org_id: number | null
+  owner_type: 'personal' | 'organization'
+  glossary_enabled: boolean
 }
 
 const route = useRoute()
@@ -35,8 +34,8 @@ const formModel = reactive<ProjectFormModel>({
   name: '',
   source_lang: 'auto',
   target_lang: 'zh-Hans',
-  resource_scope: 'project',
-  owner_org_id: null,
+  owner_type: 'personal',
+  glossary_enabled: false,
 })
 
 const targetLanguageOptions = computed<SelectOption[]>(() => [
@@ -56,26 +55,7 @@ const sourceLanguageOptions = computed<SelectOption[]>(() => [
   ...targetLanguageOptions.value,
 ])
 
-const scopeOptions = computed<SelectOption[]>(() => [
-  { label: t('projects.scopes.project'), value: 'project' },
-  { label: t('projects.scopes.organization'), value: 'organization' },
-])
-
-const filterScopeOptions = computed<SelectOption[]>(() => [
-  { label: t('projects.filters.allScopes'), value: 'all' },
-  ...scopeOptions.value,
-])
-
-const organizationOptions = computed<SelectOption[]>(() =>
-  projects.organizations.map((organization) => ({
-    label: organization.display_name?.trim() || organization.name,
-    value: organization.id,
-  })),
-)
-
-const hasActiveFilters = computed(
-  () => projects.searchQuery.trim().length > 0 || projects.scopeFilter !== 'all',
-)
+const hasActiveFilters = computed(() => projects.searchQuery.trim().length > 0)
 
 const isEditMode = computed(() => Boolean(editingProject.value))
 const drawerTitle = computed(() =>
@@ -112,46 +92,30 @@ const rules = computed<FormRules>(() => ({
       trigger: ['change', 'blur'],
     },
   ],
-  owner_org_id: [
-    {
-      validator: () =>
-        formModel.resource_scope !== 'organization' || Boolean(formModel.owner_org_id),
-      message: t('projects.validation.organizationRequired'),
-      trigger: ['change', 'blur'],
-    },
-  ],
 }))
 
 const resetForm = (): void => {
   formModel.name = ''
   formModel.source_lang = 'auto'
   formModel.target_lang = 'en-US'
-  formModel.resource_scope = 'project'
-  formModel.owner_org_id = null
+  formModel.owner_type = 'personal'
+  formModel.glossary_enabled = false
 }
 
-const ensureOrganizationsLoaded = async (): Promise<void> => {
-  if (projects.organizations.length === 0 && !projects.organizationsLoading) {
-    await projects.loadOrganizations()
-  }
-}
-
-const openCreateDrawer = async (): Promise<void> => {
+const openCreateDrawer = (): void => {
   editingProject.value = null
   resetForm()
   drawerVisible.value = true
-  await ensureOrganizationsLoaded()
 }
 
-const openEditDrawer = async (project: Project): Promise<void> => {
+const openEditDrawer = (project: Project): void => {
   editingProject.value = project
   formModel.name = project.name
   formModel.source_lang = project.source_lang || 'auto'
   formModel.target_lang = project.target_lang || 'en-US'
-  formModel.resource_scope = project.resource_scope
-  formModel.owner_org_id = project.owner_org_id ?? null
+  formModel.owner_type = 'personal'
+  formModel.glossary_enabled = project.glossary_enabled ?? false
   drawerVisible.value = true
-  await ensureOrganizationsLoaded()
 }
 
 const closeCreateDrawer = (): void => {
@@ -174,28 +138,35 @@ const formatDate = (value?: string): string => {
   }).format(new Date(value))
 }
 
-const getOrganizationName = (orgId?: number): string => {
-  const organization = projects.organizations.find((item) => item.id === orgId)
-  return (
-    organization?.display_name?.trim() ||
-    organization?.name ||
-    t('projects.card.unknownOrganization')
-  )
+const formatRelativeTime = (dateStr: string | null): string => {
+  if (!dateStr) return '暂无更新'
+
+  const now = Date.now()
+  const date = new Date(dateStr).getTime()
+  const diffMs = now - date
+
+  if (diffMs < 0) return '刚刚'
+
+  const diffSeconds = Math.floor(diffMs / 1000)
+  const diffMinutes = Math.floor(diffSeconds / 60)
+  const diffHours = Math.floor(diffMinutes / 60)
+  const diffDays = Math.floor(diffHours / 24)
+
+  if (diffSeconds < 60) return '刚刚'
+  if (diffMinutes < 60) return `${diffMinutes} 分钟前`
+  if (diffHours < 24) return `${diffHours} 小时前`
+  if (diffDays < 7) return `${diffDays} 天前`
+
+  return formatDate(dateStr)
 }
 
 const buildProjectPayload = (): ApiSchemas['CreateProjectRequest'] => {
-  const payload: ApiSchemas['CreateProjectRequest'] = {
+  return {
     name: formModel.name.trim(),
     source_lang: formModel.source_lang.trim(),
     target_lang: formModel.target_lang.trim(),
-    resource_scope: formModel.resource_scope,
+    glossary_enabled: formModel.glossary_enabled,
   }
-
-  if (formModel.resource_scope === 'organization' && formModel.owner_org_id) {
-    payload.owner_org_id = formModel.owner_org_id
-  }
-
-  return payload
 }
 
 const submitProject = async (): Promise<void> => {
@@ -208,7 +179,7 @@ const submitProject = async (): Promise<void> => {
         name: payload.name,
         source_lang: payload.source_lang,
         target_lang: payload.target_lang,
-        resource_scope: payload.resource_scope,
+        glossary_enabled: payload.glossary_enabled,
       })
       message.success(t('projects.messages.updateSuccess'))
     } else {
@@ -227,34 +198,11 @@ const submitProject = async (): Promise<void> => {
   }
 }
 
-const moreActionOptions = computed<DropdownOption[]>(() => [
-  { label: t('projects.actions.jobs'), key: 'jobs' },
-  { label: t('projects.actions.glossary'), key: 'glossary' },
-  { label: t('projects.actions.backends'), key: 'backends' },
-])
-
 const openProjectWorkspace = (project: Project, tab?: string): void => {
   void router.push({
     path: `/projects/${project.id}`,
     query: tab ? { tab } : undefined,
   })
-}
-
-const selectMoreAction = (project: Project, key: string | number): void => {
-  if (key === 'jobs') {
-    openProjectWorkspace(project, 'jobs')
-    return
-  }
-
-  if (key === 'glossary') {
-    openProjectWorkspace(project, 'glossary')
-    return
-  }
-
-  const featureKeyMap: Record<string, string> = {
-    backends: 'projects.features.backends',
-  }
-  showPlaceholder(featureKeyMap[String(key)] ?? 'projects.features.details')
 }
 
 const deleteSelectedProject = async (project: Project): Promise<void> => {
@@ -267,18 +215,34 @@ const deleteSelectedProject = async (project: Project): Promise<void> => {
   }
 }
 
-const showPlaceholder = (featureKey: string): void => {
-  message.info(t('projects.messages.featureComingSoon', { feature: t(featureKey) }))
-}
+const cardDropdownOptions: DropdownOption[] = [
+  { label: '查看详情', key: 'details' },
+  { label: '编辑', key: 'edit' },
+  { label: '任务', key: 'jobs' },
+  { label: '术语表', key: 'glossary' },
+  { type: 'divider', key: 'd1' },
+  { label: '删除', key: 'delete', props: { style: 'color: #e53e3e' } },
+]
 
-watch(
-  () => formModel.resource_scope,
-  (scope) => {
-    if (scope === 'project') {
-      formModel.owner_org_id = null
-    }
-  },
-)
+const handleCardDropdownSelect = (project: Project, key: string | number): void => {
+  switch (key) {
+    case 'details':
+      openProjectWorkspace(project)
+      break
+    case 'edit':
+      void openEditDrawer(project)
+      break
+    case 'jobs':
+      openProjectWorkspace(project, 'jobs')
+      break
+    case 'glossary':
+      openProjectWorkspace(project, 'glossary')
+      break
+    case 'delete':
+      void deleteSelectedProject(project)
+      break
+  }
+}
 
 onMounted(() => {
   if (!isProjectListRoute.value) {
@@ -324,29 +288,13 @@ onMounted(() => {
       </div>
     </NCard>
 
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
       <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
         <div class="text-xs font-medium text-lf-text-muted">
           {{ t('projects.stats.total') }}
         </div>
         <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
           {{ projects.projectCount }}
-        </div>
-      </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('projects.stats.personal') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ projects.personalProjectCount }}
-        </div>
-      </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('projects.stats.organization') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ projects.organizationProjectCount }}
         </div>
       </NCard>
       <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
@@ -367,16 +315,9 @@ onMounted(() => {
           class="lg:max-w-sm"
           :placeholder="t('projects.filters.searchPlaceholder')"
         />
-        <div class="flex flex-wrap gap-3">
-          <NSelect
-            v-model:value="projects.scopeFilter"
-            class="w-44"
-            :options="filterScopeOptions"
-          />
-          <NButton v-if="hasActiveFilters" quaternary @click="projects.resetFilters">
-            {{ t('projects.filters.reset') }}
-          </NButton>
-        </div>
+        <NButton v-if="hasActiveFilters" quaternary @click="projects.resetFilters">
+          {{ t('projects.filters.reset') }}
+        </NButton>
       </div>
     </NCard>
 
@@ -406,122 +347,52 @@ onMounted(() => {
     </NEmpty>
 
     <div v-else class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <NCard
+      <div
         v-for="project in projects.filteredItems"
         :key="project.id"
-        hoverable
-        :bordered="false"
-        class="group shadow-sm shadow-lf-shadow transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-lf-shadow-strong"
+        class="group relative cursor-pointer overflow-hidden rounded-2xl border border-lf-border-soft bg-lf-surface p-5 shadow-sm shadow-lf-shadow transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-lf-shadow-strong"
+        @click="openProjectWorkspace(project)"
       >
-        <div class="flex h-full flex-col gap-5">
-          <div class="flex items-start justify-between gap-4">
-            <div class="min-w-0">
-              <h2 class="truncate text-lg font-semibold text-lf-text-strong">
-                {{ project.name }}
-              </h2>
-              <p class="mt-1 text-xs text-lf-text-subtle">
-                {{ t('projects.card.projectId', { id: project.id }) }}
-              </p>
-            </div>
-            <NTag
-              round
-              size="small"
-              :type="project.resource_scope === 'organization' ? 'info' : 'success'"
+        <div class="flex h-full flex-col gap-3">
+          <!-- 标题行：项目名称 -->
+          <div class="flex items-start justify-between gap-3">
+            <h2
+              class="min-w-0 flex-1 truncate text-base font-semibold text-lf-text-strong"
+              :title="`Project #${project.id}`"
             >
-              {{ t(`projects.scopes.${project.resource_scope}`) }}
-            </NTag>
+              {{ project.name }}
+            </h2>
           </div>
 
-          <div class="rounded-2xl bg-lf-surface-muted p-4">
-            <div class="flex items-center justify-between gap-3">
-              <div class="min-w-0">
-                <div class="text-xs text-lf-text-subtle">
-                  {{ t('projects.card.source') }}
-                </div>
-                <div class="mt-1 truncate text-base font-semibold text-lf-text">
-                  {{ project.source_lang || '-' }}
-                </div>
-              </div>
-              <div
-                class="rounded-full bg-lf-surface-elevated px-3 py-1 text-sm text-brand-500 shadow-sm shadow-lf-shadow"
-              >
-                →
-              </div>
-              <div class="min-w-0 text-right">
-                <div class="text-xs text-lf-text-subtle">
-                  {{ t('projects.card.target') }}
-                </div>
-                <div class="mt-1 truncate text-base font-semibold text-lf-text">
-                  {{ project.target_lang || '-' }}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <div class="mt-auto space-y-2 text-xs text-lf-text-muted">
-            <div
-              v-if="project.resource_scope === 'organization'"
-              class="flex justify-between gap-3"
-            >
-              <span>{{ t('projects.card.organization') }}</span>
-              <span class="truncate font-medium text-lf-text">
-                {{ getOrganizationName(project.owner_org_id) }}
-              </span>
-            </div>
-            <div class="flex justify-between gap-3">
-              <span>{{ t('projects.card.updatedAt') }}</span>
-              <span class="font-medium text-lf-text">
-                {{ formatDate(project.updated_at ?? project.created_at) }}
-              </span>
-            </div>
-          </div>
-
-          <div class="border-t border-lf-border-soft pt-4">
-            <div class="flex items-center justify-between gap-3">
-              <NButton
-                text
-                type="primary"
-                class="font-medium"
-                @click="openProjectWorkspace(project)"
-              >
-                {{ t('projects.actions.details') }}
-              </NButton>
-              <div class="flex items-center gap-1.5">
-                <NButton quaternary size="small" @click="openEditDrawer(project)">
-                  {{ t('projects.actions.edit') }}
-                </NButton>
-                <NDropdown
-                  trigger="click"
-                  :options="moreActionOptions"
-                  placement="bottom-end"
-                  @select="(key: string | number) => selectMoreAction(project, key)"
-                >
-                  <NButton quaternary size="small">
-                    {{ t('projects.actions.more') }}
-                  </NButton>
-                </NDropdown>
-                <NPopconfirm
-                  :positive-text="t('projects.actions.confirmDelete')"
-                  :negative-text="t('projects.actions.cancel')"
-                  @positive-click="deleteSelectedProject(project)"
-                >
-                  <template #trigger>
-                    <NButton
-                      quaternary
-                      size="small"
-                      type="error"
-                      :loading="projects.isDeletingProject(project.id)"
-                    >
-                      {{ t('projects.actions.delete') }}
-                    </NButton>
-                  </template>
-                  {{ t('projects.delete.confirm', { name: project.name }) }}
-                </NPopconfirm>
-              </div>
-            </div>
-          </div>
+          <!-- 第二行：语言方向 + 更新时间 -->
+          <p class="text-xs text-lf-text-muted">
+            {{ project.source_lang || 'auto' }} → {{ project.target_lang }}
+            <span class="mx-1.5">·</span>
+            {{ formatRelativeTime(project.updated_at ?? project.created_at ?? null) }}
+          </p>
         </div>
-      </NCard>
+
+        <!-- 悬显更多菜单 -->
+        <div
+          class="absolute right-3 top-3 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+          @click.stop
+        >
+          <NDropdown
+            trigger="click"
+            :options="cardDropdownOptions"
+            placement="bottom-end"
+            @select="(key: string | number) => handleCardDropdownSelect(project, key)"
+          >
+            <NButton quaternary circle size="small">
+              <template #icon>
+                <NIcon size="16">
+                  <IconCarbonOverflowMenuHorizontal />
+                </NIcon>
+              </template>
+            </NButton>
+          </NDropdown>
+        </div>
+      </div>
     </div>
 
     <NDrawer v-model:show="drawerVisible" :width="480" placement="right">
@@ -529,10 +400,6 @@ onMounted(() => {
         <div class="mb-6 rounded-2xl bg-lf-surface-muted p-4 text-sm leading-6 text-lf-text-muted">
           {{ drawerDescription }}
         </div>
-
-        <NAlert v-if="projects.organizationsError" type="warning" :bordered="false" class="mb-4">
-          {{ projects.organizationsError }}
-        </NAlert>
 
         <NForm ref="formRef" :model="formModel" :rules="rules" label-placement="top">
           <NFormItem path="name" :label="t('projects.form.name')">
@@ -542,6 +409,10 @@ onMounted(() => {
               maxlength="80"
               show-count
             />
+          </NFormItem>
+
+          <NFormItem path="glossary_enabled" :label="t('projects.form.glossaryEnabled')">
+            <NSwitch v-model:value="formModel.glossary_enabled" />
           </NFormItem>
 
           <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -565,32 +436,18 @@ onMounted(() => {
             </NFormItem>
           </div>
 
-          <NFormItem path="resource_scope" :label="t('projects.form.scope')">
-            <NRadioGroup v-model:value="formModel.resource_scope">
-              <NSpace>
-                <NRadioButton value="project">
-                  {{ t('projects.scopes.project') }}
-                </NRadioButton>
-                <NRadioButton value="organization">
-                  {{ t('projects.scopes.organization') }}
-                </NRadioButton>
-              </NSpace>
+          <NFormItem :label="t('projects.form.ownerType')">
+            <NRadioGroup v-model:value="formModel.owner_type">
+              <NRadio value="personal">
+                {{ t('projects.form.personal') }}
+              </NRadio>
+              <NRadio value="organization" disabled>
+                {{ t('projects.form.orgOwner') }}
+                <NText depth="3" style="margin-left: 4px; font-size: 12px">
+                  ({{ t('projects.form.comingSoon') }})
+                </NText>
+              </NRadio>
             </NRadioGroup>
-          </NFormItem>
-
-          <NFormItem
-            v-if="formModel.resource_scope === 'organization'"
-            path="owner_org_id"
-            :label="t('projects.form.organization')"
-          >
-            <NSelect
-              v-model:value="formModel.owner_org_id"
-              filterable
-              clearable
-              :loading="projects.organizationsLoading"
-              :options="organizationOptions"
-              :placeholder="t('projects.form.organizationPlaceholder')"
-            />
           </NFormItem>
         </NForm>
 

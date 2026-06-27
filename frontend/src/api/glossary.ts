@@ -7,6 +7,13 @@ import { buildRequestFailureError } from './utils'
 type GlossaryEntry = ApiSchemas['GlossaryEntry']
 type CreateGlossaryEntryRequest = ApiSchemas['CreateGlossaryEntryRequest']
 type UpdateGlossaryEntryRequest = ApiSchemas['UpdateGlossaryEntryRequest']
+type UpdateGlossaryEntryResponse = ApiSchemas['UpdateGlossaryEntryResponse']
+type SyncImpactRequest = ApiSchemas['GlossarySyncImpactRequest']
+type SyncImpactResponse = ApiSchemas['GlossarySyncImpactResponse']
+type SyncExecuteRequest = ApiSchemas['GlossarySyncExecuteRequest']
+type SyncExecuteResponse = ApiSchemas['GlossarySyncExecuteResponse']
+type SyncTaskStatusResponse = ApiSchemas['GlossarySyncTaskStatusResponse']
+type SyncTaskCancelResponse = ApiSchemas['GlossarySyncTaskCancelResponse']
 
 export const fetchGlossaryEntries = async (
   projectId: number,
@@ -45,7 +52,7 @@ export const updateGlossaryEntry = async (
   entryId: number,
   payload: UpdateGlossaryEntryRequest,
   client: ApiClient = apiClient,
-): Promise<GlossaryEntry> => {
+): Promise<UpdateGlossaryEntryResponse> => {
   const { data, error, response } = await client.PUT('/projects/{projectId}/glossary/{entryId}', {
     params: { path: { projectId, entryId } },
     body: payload,
@@ -108,4 +115,98 @@ export const exportGlossaryCSV = async (
   }
 
   return data as unknown as Blob
+}
+
+/**
+ * 分析术语译文变更对已翻译段落的影响。
+ * @param projectId - 项目 ID
+ * @param entryId - 术语条目 ID
+ * @param payload - 包含 old_target、可选 new_target 和 resource_ids
+ * @returns 影响分析结果（受影响段落数、资源分布）
+ */
+export const analyzeGlossarySyncImpact = async (
+  projectId: number,
+  entryId: number,
+  payload: SyncImpactRequest,
+  client: ApiClient = apiClient,
+): Promise<SyncImpactResponse> => {
+  const { data, error, response } = await client.POST(
+    '/projects/{projectId}/glossary/{entryId}/sync-impact',
+    {
+      params: { path: { projectId, entryId } },
+      body: payload,
+    },
+  )
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.glossarySyncImpactFailed'), error, response)
+  }
+
+  return data
+}
+
+/**
+ * 提交异步同步任务。
+ * @returns 包含 task_id 和 status_url 的响应（HTTP 202）
+ */
+export const executeGlossarySync = async (
+  projectId: number,
+  entryId: number,
+  payload: SyncExecuteRequest,
+  client: ApiClient = apiClient,
+): Promise<SyncExecuteResponse> => {
+  const { data, error, response } = await client.POST(
+    '/projects/{projectId}/glossary/{entryId}/sync-execute',
+    {
+      params: { path: { projectId, entryId } },
+      body: payload,
+    },
+  )
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.glossarySyncExecuteFailed'), error, response)
+  }
+
+  return data
+}
+
+/**
+ * 查询同步任务的当前状态和进度。
+ */
+export const getGlossarySyncTaskStatus = async (
+  projectId: number,
+  taskId: string,
+  client: ApiClient = apiClient,
+): Promise<SyncTaskStatusResponse> => {
+  const { data, error, response } = await client.GET('/projects/{projectId}/sync-tasks/{taskId}', {
+    params: { path: { projectId, taskId } },
+  })
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.glossarySyncStatusFailed'), error, response)
+  }
+
+  return data
+}
+
+/**
+ * 取消正在执行的同步任务。
+ */
+export const cancelGlossarySyncTask = async (
+  projectId: number,
+  taskId: string,
+  client: ApiClient = apiClient,
+): Promise<SyncTaskCancelResponse> => {
+  const { data, error, response } = await client.POST(
+    '/projects/{projectId}/sync-tasks/{taskId}/cancel',
+    {
+      params: { path: { projectId, taskId } },
+    },
+  )
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.glossarySyncCancelFailed'), error, response)
+  }
+
+  return data
 }

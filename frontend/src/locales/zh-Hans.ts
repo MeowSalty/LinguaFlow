@@ -252,6 +252,11 @@ const messages = {
       scope: '资源范围',
       organization: '所属组织',
       organizationPlaceholder: '选择组织',
+      ownerType: '项目归属',
+      personal: '个人',
+      orgOwner: '组织',
+      comingSoon: '还没做',
+      glossaryEnabled: '启用术语表',
     },
     validation: {
       nameRequired: '请输入项目名称',
@@ -447,6 +452,8 @@ const messages = {
     },
     segment: {
       resourcePlaceholder: '选择资源文件',
+      chapterAll: '全部章节',
+      chapterPlaceholder: '选择章节...',
       searchPlaceholder: '搜索原文或译文',
       noResource: '请先选择一个资源文件查看段落。',
       empty: '当前资源没有符合条件的段落。',
@@ -479,6 +486,9 @@ const messages = {
     },
     job: {
       empty: '暂无翻译任务。',
+      polling: '自动刷新中',
+      waitingJobs: '等待任务',
+      autoRefresh: '自动刷新',
       legacyPlan: '旧版任务',
       createTitle: '创建翻译任务',
       detailTitle: '任务 #{id}',
@@ -490,6 +500,7 @@ const messages = {
       executionPlanLabel: '{name}（{rounds} 轮）',
       contentSummaryTitle: '翻译内容摘要',
       contentSummaryResources: '{count} 个资源文件',
+      contentSummaryChapters: '{count} 个章节',
       contentSummarySegments: '{count} 个待翻译段落',
       planPreviewTitle: '执行计划详情',
       planPreviewRounds: '共 {count} 个轮次',
@@ -505,6 +516,8 @@ const messages = {
         segments: '段落',
         trigger: '触发方式',
         error: '错误信息',
+        stage: '阶段',
+        startedAt: '开始时间',
       },
       actions: {
         create: '创建任务',
@@ -520,10 +533,43 @@ const messages = {
         autoApproveHint: '开启后，翻译任务完成时将自动审批通过所有段落',
         sourceLang: '源语言',
         targetLang: '目标语言',
-        backendOrder: '后端顺序',
       },
       validation: {
         executionPlanRequired: '请选择执行计划模板',
+      },
+      // 阶段名称
+      stage: {
+        bootstrap: '术语提取',
+        translate: '翻译',
+        review: '审校',
+        finalize: '收尾',
+      },
+      // 进度文案
+      progress: {
+        waiting: '等待中...',
+        startingSoon: '即将开始',
+        queued: '排队中，前面有 {ahead} 个任务',
+        running: '{stage}{completed}/{total} 段落',
+        completed: '翻译完成',
+        failed: '翻译失败',
+        cancelled: '已取消',
+      },
+      // ETA 文案
+      eta: {
+        lessThanOneMin: '不到 1 分钟',
+        minutes: '约 {count} 分钟',
+        hours: '约 {count} 小时',
+        hoursMinutes: '约 {hours} 小时 {minutes} 分钟',
+      },
+      // 速度文案
+      speed: {
+        verySlow: '速度较慢',
+        perMinute: '{count} 段落/分钟',
+      },
+      // 事件日志
+      events: {
+        title: '事件日志',
+        empty: '暂无事件记录',
       },
       detail: {
         executionPlan: '执行计划',
@@ -554,6 +600,22 @@ const messages = {
       updated: '已修改',
       unchanged: '未变化',
       deleted: '已删除',
+    },
+    epub: {
+      chapters: '章节',
+      chapterCount: '{count} 个章节',
+      translatedProgress: '{translated}/{total} 已翻译',
+      translateChapter: '翻译本章',
+      approveChapter: '审批本章',
+      backToChapterList: '返回章节列表',
+      backToResources: '返回资源列表',
+      chapterList: '章节列表',
+      showHtml: '显示 HTML',
+      hideHtml: '隐藏 HTML',
+      noChapters: '暂无章节信息',
+      loadingChapters: '加载章节中...',
+      pendingSegments: '{count} 条待翻译',
+      translateAll: '翻译全部',
     },
     glossary: {
       actions: {
@@ -600,6 +662,61 @@ const messages = {
         importSuccess: '术语表导入成功',
         importFailed: '术语表导入失败',
         exportFailed: '术语表导出失败',
+      },
+      sync: {
+        // 对话框标题
+        titleImpact: '术语同步更新',
+        titleExecuting: '术语同步更新 — 执行中',
+        titleCompleted: '术语同步更新 — 已完成',
+        titleCancelled: '术语同步更新 — 已取消',
+        titleError: '术语同步更新 — 失败',
+
+        // 步骤指示器
+        stepImpact: '影响分析',
+        stepExecute: '同步执行',
+        stepResult: '结果摘要',
+
+        // 步骤 1: 影响分析
+        targetChanged: '术语译文已更新，以下是新旧译文对比：',
+        targetChangedWithSource: "术语 '{source}' 的译文已更新，以下是新旧译文对比：",
+        noImpact: '当前已翻译段落中未发现需要同步的内容。',
+        impactSummary: '发现 {count} 个已翻译段落包含旧译文，分布在 {resourceCount} 个资源文件中。',
+        impactLoadFailed: '影响分析加载失败，请重试。',
+        resourcePath: '资源文件',
+        affectedCount: '受影响段落',
+        skip: '跳过',
+        syncSelected: '限定范围同步 ({count})',
+        syncAll: '全部同步',
+        retry: '重试',
+
+        // 步骤 2: 执行进度
+        pending: '等待执行...',
+        executingWithSource: "正在同步术语 '{source}' 的译文...",
+        progress: '已处理 {processed} / {total} 段落',
+        cancel: '取消同步',
+
+        // 步骤 3: 结果摘要
+        completed: '术语译文同步完成。',
+        updated: '已更新',
+        skipped: '已跳过',
+        updatedCount: '已更新',
+        skippedCount: '已跳过',
+        reviewHint: '已更新的段落状态已设为「待审核」，请在段落列表中检查并确认。',
+
+        // 取消状态
+        cancelled: '术语译文同步已取消。',
+        processed: '已处理',
+        unprocessed: '未处理',
+        cancelledHint: '已更新的段落已保留在数据库中，未处理的段落仍保留旧译文。',
+
+        // 错误状态
+        unknownError: '同步过程中发生未知错误。',
+        networkError: '网络连接异常，轮询已停止。请检查网络后重试。',
+        taskFailed: '同步任务执行失败。',
+        executeFailed: '同步任务提交失败。',
+
+        // Store 方法错误
+        impactFailed: '影响分析请求失败。',
       },
     },
     messages: {
@@ -736,6 +853,7 @@ const messages = {
       createdAt: '创建时间',
       noDescription: '暂无描述',
       noPromptContent: '暂无提示词内容',
+      noBootstrapPromptContent: '暂无 Bootstrap 提示词内容',
     },
     form: {
       name: '模板名称',
@@ -743,6 +861,8 @@ const messages = {
       description: '模板描述',
       descriptionPlaceholder: '简要说明模板的用途和适用场景',
       systemPromptContent: '系统提示词',
+      bootstrapPromptContent: 'Bootstrap 术语抽取提示词',
+      bootstrapPromptContentPlaceholder: '输入 Bootstrap 术语抽取提示词内容',
       contentPlaceholder: '输入提示词内容',
       insertBuiltinVar: '插入变量：',
     },
@@ -809,6 +929,7 @@ const messages = {
       repair: '修复',
       postprocess: '后处理',
       glossary: '术语表',
+      context: '上下文',
     },
     form: {
       name: '配置名称',
@@ -848,6 +969,12 @@ const messages = {
       title: '内容保护',
       enabled: '启用保护',
       rules: '保护规则',
+      ruby: {
+        title: 'Ruby 注释保护',
+        outputFormat: '输出格式',
+      },
+      rubyOutputFormatRubyOutput: 'Ruby 输出',
+      rubyOutputFormatInlineMarkers: '内联标记',
     },
     postprocess: {
       title: '后处理',
@@ -866,12 +993,18 @@ const messages = {
     },
     glossary: {
       title: '术语表',
-      enabled: '启用术语表',
-      bootstrapMode: '自举模式',
-      bootstrapSave: '保存提取结果',
-      bootstrapMaxTerms: '每批最大术语数',
+      bootstrapEnabled: '启用内联自举',
+      bootstrapMaxTerms: '每千字符最大术语数',
       bootstrapMinSourceLen: '最短源术语长度',
       bootstrapConflictStrategy: '冲突策略',
+    },
+    context: {
+      title: '上下文窗口',
+      enabled: '启用上下文窗口',
+      before: '前文段落数',
+      after: '后文段落数',
+      maxChars: '段落字符上限',
+      maxCharsHint: '0 表示不限制',
     },
   },
   executionPlanTemplates: {
@@ -946,6 +1079,24 @@ const messages = {
     },
   },
   executionPlanEditor: {
+    bootstrap: {
+      title: '自举配置（Bootstrap）',
+      enabled: '启用独立自举',
+      backend: '自举后端',
+      backendPlaceholder: '选择自举后端',
+      promptTemplate: '自举提示词模板',
+      promptTemplatePlaceholder: '选择提示词模板（仅用其 bootstrap 提示词）',
+      batchSize: '每批源文段数',
+      concurrency: '自举并发数',
+      maxTermsPerBatch: '每批最大术语数',
+      minSourceLen: '术语最短源文长度',
+    },
+    rubyRetry: {
+      title: '注音对齐重试（Ruby Retry）',
+      enabled: '启用注音对齐重试',
+      backend: '注音对齐后端',
+      backendPlaceholder: '留空则使用翻译主后端',
+    },
     round: {
       name: '轮次名称',
       namePlaceholder: '留空自动生成 round-{n}',
@@ -1042,6 +1193,12 @@ const messages = {
       createExecutionPlanTemplateFailed: '创建执行计划模板失败',
       updateExecutionPlanTemplateFailed: '更新执行计划模板失败',
       deleteExecutionPlanTemplateFailed: '删除执行计划模板失败',
+      fetchSegmentGroupsFailed: '获取章节分组失败',
+      glossarySyncImpactFailed: '术语同步影响分析失败',
+      glossarySyncExecuteFailed: '术语同步任务提交失败',
+      glossarySyncStatusFailed: '术语同步任务状态查询失败',
+      glossarySyncCancelFailed: '术语同步任务取消失败',
+      fetchJobEventsFailed: '获取任务事件失败',
     },
   },
 } as const

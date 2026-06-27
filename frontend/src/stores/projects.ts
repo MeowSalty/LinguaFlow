@@ -5,19 +5,14 @@ import {
   type ApiSchemas,
   createProject as createProjectRequest,
   deleteProject as deleteProjectRequest,
-  fetchOrganizations,
   fetchProjects,
   updateProject as updateProjectRequest,
 } from '@/api/client'
 import { t } from '@/i18n'
 
 type Project = ApiSchemas['Project']
-type Organization = ApiSchemas['Organization']
 type CreateProjectPayload = ApiSchemas['CreateProjectRequest']
 type UpdateProjectPayload = ApiSchemas['UpdateProjectRequest']
-type ResourceScope = Project['resource_scope']
-
-type ScopeFilter = ResourceScope | 'all'
 
 const getProjectTime = (project: Project): number => {
   const timestamp = project.updated_at ?? project.created_at
@@ -35,22 +30,18 @@ const includesNormalized = (source: string | undefined, query: string): boolean 
 
 export const useProjectsStore = defineStore('projects', () => {
   const items = ref<Project[]>([])
-  const organizations = ref<Organization[]>([])
 
   const loading = ref(false)
-  const organizationsLoading = ref(false)
   const creating = ref(false)
   const updating = ref(false)
   const deletingProjectIds = ref<number[]>([])
 
   const error = ref<string | null>(null)
-  const organizationsError = ref<string | null>(null)
   const createError = ref<string | null>(null)
   const updateError = ref<string | null>(null)
   const deleteError = ref<string | null>(null)
 
   const searchQuery = ref('')
-  const scopeFilter = ref<ScopeFilter>('all')
 
   const sortedItems = computed(() =>
     [...items.value].sort((left, right) => getProjectTime(right) - getProjectTime(left)),
@@ -60,25 +51,17 @@ export const useProjectsStore = defineStore('projects', () => {
     const query = searchQuery.value.trim().toLowerCase()
 
     return sortedItems.value.filter((project) => {
-      const matchesScope =
-        scopeFilter.value === 'all' || project.resource_scope === scopeFilter.value
       const matchesQuery =
         query.length === 0 ||
         includesNormalized(project.name, query) ||
         includesNormalized(project.source_lang, query) ||
         includesNormalized(project.target_lang, query)
 
-      return matchesScope && matchesQuery
+      return matchesQuery
     })
   })
 
   const projectCount = computed(() => items.value.length)
-  const personalProjectCount = computed(
-    () => items.value.filter((project) => project.resource_scope === 'project').length,
-  )
-  const organizationProjectCount = computed(
-    () => items.value.filter((project) => project.resource_scope === 'organization').length,
-  )
   const languagePairCount = computed(
     () =>
       new Set(
@@ -98,21 +81,6 @@ export const useProjectsStore = defineStore('projects', () => {
         loadError instanceof Error ? loadError.message : t('api.errors.loadProjectsFailed')
     } finally {
       loading.value = false
-    }
-  }
-
-  const loadOrganizations = async (): Promise<void> => {
-    organizationsLoading.value = true
-    organizationsError.value = null
-
-    try {
-      const response = await fetchOrganizations()
-      organizations.value = response.items
-    } catch (loadError) {
-      organizationsError.value =
-        loadError instanceof Error ? loadError.message : t('api.errors.loadOrganizationsFailed')
-    } finally {
-      organizationsLoading.value = false
     }
   }
 
@@ -174,32 +142,24 @@ export const useProjectsStore = defineStore('projects', () => {
 
   const resetFilters = (): void => {
     searchQuery.value = ''
-    scopeFilter.value = 'all'
   }
 
   return {
     items,
-    organizations,
     loading,
-    organizationsLoading,
     creating,
     updating,
     deletingProjectIds,
     error,
-    organizationsError,
     createError,
     updateError,
     deleteError,
     searchQuery,
-    scopeFilter,
     sortedItems,
     filteredItems,
     projectCount,
-    personalProjectCount,
-    organizationProjectCount,
     languagePairCount,
     loadProjects,
-    loadOrganizations,
     createProject,
     updateProject,
     deleteProject,

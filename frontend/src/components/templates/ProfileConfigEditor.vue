@@ -19,7 +19,11 @@ type TranslationProfileConfig = ApiSchemas['TranslationProfileConfig']
 
 const CONFIG_DEFAULTS: TranslationProfileConfig = {
   split: { enabled: true, strategy: 'paragraph', max_chars: 1200 },
-  protect: { enabled: true, rules: ['code', 'link', 'placeholder', 'xml'] },
+  protect: {
+    enabled: true,
+    rules: ['code', 'link', 'placeholder', 'xml'],
+    ruby: { enabled: false, output_format: 'ruby_output' },
+  },
   postprocess: { enabled: true, trim_spaces: true },
   repair: {
     enabled: true,
@@ -31,15 +35,14 @@ const CONFIG_DEFAULTS: TranslationProfileConfig = {
     prompt_upgrade: true,
   },
   glossary: {
-    enabled: false,
     bootstrap: {
-      mode: 'off',
-      save: false,
-      max_terms_per_batch: 20,
+      enabled: false,
+      max_terms_per_1000_chars: 20,
       min_source_len: 2,
       inline_conflict_strategy: 'off',
     },
   },
+  context: { enabled: true, before: 1, after: 1, max_chars: 0 },
 }
 
 // ─── 工具函数 ────────────────────────────────────────────────
@@ -56,13 +59,17 @@ function mergeConfig(source?: Partial<TranslationProfileConfig>): TranslationPro
       ...CONFIG_DEFAULTS.protect,
       ...source.protect,
       rules: source.protect?.rules ?? CONFIG_DEFAULTS.protect.rules,
+      ruby: {
+        ...CONFIG_DEFAULTS.protect.ruby,
+        ...source.protect?.ruby,
+      } as NonNullable<TranslationProfileConfig['protect']['ruby']>,
     },
     postprocess: { ...CONFIG_DEFAULTS.postprocess, ...source.postprocess },
     repair: { ...CONFIG_DEFAULTS.repair, ...source.repair },
     glossary: {
-      enabled: source.glossary?.enabled ?? CONFIG_DEFAULTS.glossary.enabled,
       bootstrap: { ...CONFIG_DEFAULTS.glossary.bootstrap, ...source.glossary?.bootstrap },
     },
+    context: { ...CONFIG_DEFAULTS.context, ...source.context },
   }
 }
 
@@ -121,18 +128,38 @@ const protectRuleOptions = computed(() => [
   { label: 'xml', value: 'xml' },
 ])
 
-const bootstrapModeOptions = computed(() => [
-  { label: 'off', value: 'off' },
-  { label: 'pre', value: 'pre' },
-  { label: 'inline', value: 'inline' },
-])
-
 const inlineConflictStrategyOptions = computed(() => [
   { label: 'off', value: 'off' },
   { label: 'rewrite-local', value: 'rewrite-local' },
 ])
 
 const splitStrategyOptions = computed(() => [{ label: 'paragraph', value: 'paragraph' }])
+
+const rubyOutputFormatOptions = computed(() => [
+  { label: 'Ruby 输出', value: 'ruby_output' },
+  { label: '内联标记', value: 'inline_markers' },
+])
+
+function onProtectRubyUpdate(field: 'enabled', value: boolean): void
+function onProtectRubyUpdate(field: 'output_format', value: 'ruby_output' | 'inline_markers'): void
+function onProtectRubyUpdate(field: string, value: unknown): void {
+  if (!configModel.value.protect) {
+    configModel.value.protect = {
+      enabled: false,
+      rules: [],
+      ruby: { enabled: false, output_format: 'ruby_output' },
+    }
+  }
+  if (!configModel.value.protect.ruby) {
+    configModel.value.protect.ruby = { enabled: false, output_format: 'ruby_output' }
+  }
+  const ruby = configModel.value.protect.ruby
+  if (field === 'enabled') {
+    ruby.enabled = value as boolean
+  } else if (field === 'output_format') {
+    ruby.output_format = value as 'ruby_output' | 'inline_markers'
+  }
+}
 </script>
 
 <template>
@@ -204,6 +231,33 @@ const splitStrategyOptions = computed(() => [{ label: 'paragraph', value: 'parag
           </div>
         </NCheckboxGroup>
       </div>
+      <!-- Ruby 注释保护 -->
+      <NGrid :cols="2" :x-gap="16" class="mt-4">
+        <NGi>
+          <div class="flex items-center gap-2">
+            <NSwitch
+              :value="configModel.protect?.ruby?.enabled ?? false"
+              :disabled="disabled || !configModel.protect?.enabled"
+              @update:value="(val: boolean) => onProtectRubyUpdate('enabled', val)"
+            />
+            <span class="text-sm">{{ t('profileConfigEditor.protect.ruby.title') }}</span>
+          </div>
+        </NGi>
+        <NGi>
+          <NSelect
+            :value="configModel.protect?.ruby?.output_format ?? 'ruby_output'"
+            :options="rubyOutputFormatOptions"
+            :disabled="
+              disabled ||
+              !configModel.protect?.enabled ||
+              !(configModel.protect?.ruby?.enabled ?? false)
+            "
+            @update:value="
+              (val: 'ruby_output' | 'inline_markers') => onProtectRubyUpdate('output_format', val)
+            "
+          />
+        </NGi>
+      </NGrid>
     </NCard>
 
     <!-- 后处理 -->
@@ -330,42 +384,25 @@ const splitStrategyOptions = computed(() => [{ label: 'paragraph', value: 'parag
       </template>
       <div class="flex flex-col gap-3">
         <div class="flex items-center justify-between">
-          <span class="text-sm">{{ t('profileConfigEditor.glossary.enabled') }}</span>
-          <NSwitch v-model:value="configModel.glossary.enabled" size="small" :disabled="disabled" />
-        </div>
-        <div :class="{ 'opacity-50 pointer-events-none': !configModel.glossary.enabled }">
-          <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('profileConfigEditor.glossary.bootstrapMode') }}
-          </div>
-          <NSelect
-            v-model:value="configModel.glossary.bootstrap.mode"
-            :options="bootstrapModeOptions"
+          <span class="text-sm">{{ t('profileConfigEditor.glossary.bootstrapEnabled') }}</span>
+          <NSwitch
+            v-model:value="configModel.glossary.bootstrap.enabled"
             size="small"
-            :disabled="disabled || !configModel.glossary.enabled"
+            :disabled="disabled"
           />
         </div>
-        <div v-if="configModel.glossary.bootstrap.mode !== 'off'" class="flex flex-col gap-2 ml-4">
-          <div class="flex items-center justify-between">
-            <span class="text-xs text-lf-text-subtle">{{
-              t('profileConfigEditor.glossary.bootstrapSave')
-            }}</span>
-            <NSwitch
-              v-model:value="configModel.glossary.bootstrap.save"
-              size="small"
-              :disabled="disabled || !configModel.glossary.enabled"
-            />
-          </div>
+        <div :class="{ 'opacity-50 pointer-events-none': !configModel.glossary.bootstrap.enabled }">
           <div class="flex items-center gap-2">
             <span class="text-xs text-lf-text-subtle">{{
               t('profileConfigEditor.glossary.bootstrapMaxTerms')
             }}</span>
             <NInputNumber
-              v-model:value="configModel.glossary.bootstrap.max_terms_per_batch"
-              :min="1"
+              v-model:value="configModel.glossary.bootstrap.max_terms_per_1000_chars"
+              :min="0"
               :max="100"
-              :step="1"
+              :step="0.1"
               size="tiny"
-              :disabled="disabled || !configModel.glossary.enabled"
+              :disabled="disabled || !configModel.glossary.bootstrap.enabled"
               class="w-24"
             />
           </div>
@@ -379,7 +416,7 @@ const splitStrategyOptions = computed(() => [{ label: 'paragraph', value: 'parag
               :max="100"
               :step="1"
               size="tiny"
-              :disabled="disabled || !configModel.glossary.enabled"
+              :disabled="disabled || !configModel.glossary.bootstrap.enabled"
               class="w-24"
             />
           </div>
@@ -391,9 +428,71 @@ const splitStrategyOptions = computed(() => [{ label: 'paragraph', value: 'parag
               v-model:value="configModel.glossary.bootstrap.inline_conflict_strategy"
               :options="inlineConflictStrategyOptions"
               size="small"
-              :disabled="disabled || !configModel.glossary.enabled"
+              :disabled="disabled || !configModel.glossary.bootstrap.enabled"
             />
           </div>
+        </div>
+      </div>
+    </NCard>
+
+    <!-- 上下文窗口 -->
+    <NCard size="small" :bordered="true">
+      <template #header>
+        <span class="text-sm font-semibold">📖 {{ t('profileConfigEditor.context.title') }}</span>
+      </template>
+      <div class="flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <span class="text-sm">{{ t('profileConfigEditor.context.enabled') }}</span>
+          <NSwitch v-model:value="configModel.context.enabled" size="small" :disabled="disabled" />
+        </div>
+        <div :class="{ 'opacity-50 pointer-events-none': !configModel.context.enabled }">
+          <NGrid :cols="3" :x-gap="12" :y-gap="10">
+            <NGi>
+              <div class="mb-1 text-xs text-lf-text-subtle">
+                {{ t('profileConfigEditor.context.before') }}
+              </div>
+              <NInputNumber
+                v-model:value="configModel.context.before"
+                :min="0"
+                :max="10"
+                :step="1"
+                size="small"
+                :disabled="disabled || !configModel.context.enabled"
+                class="w-full"
+              />
+            </NGi>
+            <NGi>
+              <div class="mb-1 text-xs text-lf-text-subtle">
+                {{ t('profileConfigEditor.context.after') }}
+              </div>
+              <NInputNumber
+                v-model:value="configModel.context.after"
+                :min="0"
+                :max="10"
+                :step="1"
+                size="small"
+                :disabled="disabled || !configModel.context.enabled"
+                class="w-full"
+              />
+            </NGi>
+            <NGi>
+              <div class="mb-1 text-xs text-lf-text-subtle">
+                {{ t('profileConfigEditor.context.maxChars') }}
+              </div>
+              <NInputNumber
+                v-model:value="configModel.context.max_chars"
+                :min="0"
+                :max="10000"
+                :step="100"
+                size="small"
+                :disabled="disabled || !configModel.context.enabled"
+                class="w-full"
+              />
+              <div class="mt-1 text-xs text-lf-text-subtle">
+                {{ t('profileConfigEditor.context.maxCharsHint') }}
+              </div>
+            </NGi>
+          </NGrid>
         </div>
       </div>
     </NCard>

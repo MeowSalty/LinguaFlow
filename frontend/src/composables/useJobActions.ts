@@ -30,6 +30,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
   const jobTargetMode = ref<JobTargetMode>('resources')
   const jobTargetResourceIds = ref<number[]>([])
   const jobTargetSegmentIds = ref<number[]>([])
+  const jobTargetGroupKeys = ref<string[]>([])
 
   const jobForm = reactive<JobFormModel>({
     execution_plan_id: null,
@@ -84,6 +85,26 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobDrawerVisible.value = true
   }
 
+  /** 使用指定的资源 ID 列表打开任务创建抽屉（用于 EPUB 章节翻译等场景） */
+  const openResourceJobDrawerWithIds = (resourceIds: number[], groupKeys?: string[]): void => {
+    if (resourceIds.length === 0) {
+      message.warning(t('workspace.messages.selectReadyResource'))
+      return
+    }
+
+    jobTargetMode.value = 'resources'
+    jobTargetResourceIds.value = [...resourceIds]
+    jobTargetSegmentIds.value = []
+    jobTargetGroupKeys.value = groupKeys ? [...groupKeys] : []
+    console.debug('[useJobActions] openResourceJobDrawerWithIds:', {
+      resourceIds: [...resourceIds],
+      groupKeys: groupKeys ? [...groupKeys] : [],
+      jobTargetGroupKeys: [...jobTargetGroupKeys.value],
+    })
+    jobForm.execution_plan_id = null
+    jobDrawerVisible.value = true
+  }
+
   const openSegmentJobDrawer = (segment?: Segment): void => {
     if (!workspace.activeResourceId) {
       message.warning(t('workspace.messages.selectResourceFirst'))
@@ -119,6 +140,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobDrawerVisible.value = false
     jobTargetResourceIds.value = []
     jobTargetSegmentIds.value = []
+    jobTargetGroupKeys.value = []
     jobForm.execution_plan_id = null
     jobForm.auto_approve = false
   }
@@ -134,9 +156,22 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
       auto_approve: jobForm.auto_approve,
     }
 
+    if (jobTargetGroupKeys.value.length > 0) {
+      payload.segment_group_keys = jobTargetGroupKeys.value
+    }
+
     if (jobTargetMode.value === 'segments') {
       payload.segment_ids = jobTargetSegmentIds.value
     }
+
+    console.debug('[useJobActions] submitJob payload:', {
+      targetMode: jobTargetMode.value,
+      resourceIds: [...jobTargetResourceIds.value],
+      groupKeys: [...jobTargetGroupKeys.value],
+      segmentIds: [...jobTargetSegmentIds.value],
+      payloadGroupKeys: payload.segment_group_keys ? [...payload.segment_group_keys] : undefined,
+      payloadSegmentIds: payload.segment_ids ? [...payload.segment_ids] : undefined,
+    })
 
     try {
       await workspace.createJob(projectId.value, payload)
@@ -191,6 +226,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobTargetMode,
     jobTargetResourceIds,
     jobTargetSegmentIds,
+    jobTargetGroupKeys,
     jobForm,
     // 计算属性
     executionPlanOptions,
@@ -201,6 +237,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     canCreateSegmentJob,
     // 方法
     openResourceJobDrawer,
+    openResourceJobDrawerWithIds,
     openSegmentJobDrawer,
     openSegmentJobDrawerWithIds,
     closeJobDrawer,

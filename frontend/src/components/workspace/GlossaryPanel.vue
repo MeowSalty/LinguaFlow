@@ -1,35 +1,32 @@
 <script setup lang="ts">
-import { toRef } from 'vue'
+import { inject } from 'vue'
 import { NAlert, NButton, NDataTable, NEmpty, NIcon, NInput } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
-import { useGlossaryManagement } from '@/composables/useGlossaryManagement'
+import { GlossaryMgmtKey } from '@/composables/useGlossaryManagement'
 import { useGlossaryStore } from '@/stores/glossary'
 
 const { t } = useI18n()
 const glossary = useGlossaryStore()
 
-const props = defineProps<{
+defineProps<{
   projectId: number | null
 }>()
 
-const emit = defineEmits<{
-  create: []
-  import: []
-}>()
-
-const projectIdRef = toRef(props, 'projectId')
-const { glossaryColumns, openCreateGlossaryDrawer, handleGlossaryExport } =
-  useGlossaryManagement(projectIdRef)
+// 从父组件注入术语表管理实例（消除重复实例）
+const glossaryMgmt = inject(GlossaryMgmtKey)!
 
 const handleCreate = (): void => {
-  openCreateGlossaryDrawer()
-  emit('create')
+  glossaryMgmt.openCreateGlossaryDrawer()
 }
 
 const handleExport = (): void => {
-  void handleGlossaryExport()
+  void glossaryMgmt.handleGlossaryExport()
+}
+
+const handleImport = (): void => {
+  glossaryMgmt.glossaryImportVisible.value = true
 }
 </script>
 
@@ -52,7 +49,7 @@ const handleExport = (): void => {
           :placeholder="t('workspace.segment.searchPlaceholder')"
         />
         <div class="flex gap-2">
-          <NButton secondary :loading="glossary.importing" @click="emit('import')">
+          <NButton secondary :loading="glossary.importing" @click="handleImport">
             <template #icon>
               <NIcon><IconCarbonUpload /></NIcon>
             </template>
@@ -83,7 +80,7 @@ const handleExport = (): void => {
     </NAlert>
 
     <NDataTable
-      :columns="glossaryColumns"
+      :columns="glossaryMgmt.glossaryColumns.value"
       :data="glossary.filteredItems"
       :loading="glossary.loading"
       :row-key="(row: ApiSchemas['GlossaryEntry']) => row.id"

@@ -1,6 +1,24 @@
 <script setup lang="ts">
-import { NAlert, NButton, NCard, NIcon, NTabPane, NTabs } from 'naive-ui'
-import { ref, computed, watch, onMounted, onBeforeUnmount } from 'vue'
+import {
+  NAlert,
+  NButton,
+  NCard,
+  NDrawer,
+  NDrawerContent,
+  NForm,
+  NFormItem,
+  NIcon,
+  NInput,
+  NSelect,
+  NSwitch,
+  NTabPane,
+  NTabs,
+  useMessage,
+  type FormInst,
+  type FormRules,
+  type SelectOption,
+} from 'naive-ui'
+import { ref, computed, reactive, watch, onMounted, onBeforeUnmount, provide } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
@@ -12,18 +30,20 @@ import WorkspaceMetricsBar from '@/components/workspace/WorkspaceMetricsBar.vue'
 import GlossaryPanel from '@/components/workspace/GlossaryPanel.vue'
 import GlossaryDrawer from '@/components/workspace/GlossaryDrawer.vue'
 import GlossaryImportModal from '@/components/workspace/GlossaryImportModal.vue'
+import GlossarySyncDialog from '@/components/workspace/GlossarySyncDialog.vue'
 import SegmentPanel from '@/components/workspace/SegmentPanel.vue'
 import JobPanel from '@/components/workspace/JobPanel.vue'
 import JobCreateDrawer from '@/components/workspace/JobCreateDrawer.vue'
 import JobDetailDrawer from '@/components/workspace/JobDetailDrawer.vue'
 import ConflictDialog from '@/components/workspace/ConflictDialog.vue'
 import IncrementalResultModal from '@/components/workspace/IncrementalResultModal.vue'
-import { useGlossaryManagement } from '@/composables/useGlossaryManagement'
+import { useGlossaryManagement, GlossaryMgmtKey } from '@/composables/useGlossaryManagement'
 import { useJobActions } from '@/composables/useJobActions'
 import { useConflictHandling } from '@/composables/useConflictHandling'
 import { formatDate } from '@/composables/useWorkspaceUtils'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import { useGlossaryStore } from '@/stores/glossary'
+import { useProjectsStore } from '@/stores/projects'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 
 type Resource = ApiSchemas['Resource']
@@ -33,12 +53,127 @@ type WorkspaceTab = 'resources' | 'segments' | 'jobs' | 'glossary'
 const route = useRoute()
 const router = useRouter()
 const { t } = useI18n()
+const message = useMessage()
 const workspace = useProjectWorkspaceStore()
 const glossary = useGlossaryStore()
 const executionPlanTemplatesStore = useExecutionPlanTemplatesStore()
+const projectsStore = useProjectsStore()
 
 const activeTab = ref<WorkspaceTab>('resources')
 const segmentPanelRef = ref<InstanceType<typeof SegmentPanel> | null>(null)
+
+// ── 标签页懒加载 ──
+const loadedTabs = new Set<string>()
+
+const loadTabData = async (tab: WorkspaceTab): Promise<void> => {
+  if (loadedTabs.has(tab) || !projectId.value) return
+
+  switch (tab) {
+    case 'resources':
+      // 资源数据已通过 syncResourcesFromTree 加载
+      break
+    case 'segments':
+      // 段落数据在用户选择资源时按需加载
+      break
+    case 'jobs':
+      await workspace.loadJobs(projectId.value)
+      break
+    case 'glossary':
+      await glossary.loadEntries(projectId.value)
+      break
+  }
+
+  loadedTabs.add(tab)
+}
+
+// ── 编辑项目抽屉 ──
+const editDrawerVisible = ref(false)
+const editFormRef = ref<FormInst | null>(null)
+const editSubmitting = ref(false)
+
+const editFormModel = reactive({
+  name: '',
+  source_lang: 'auto',
+  target_lang: 'en-US',
+  glossary_enabled: false,
+})
+
+const targetLanguageOptions = computed<SelectOption[]>(() => [
+  { label: t('projects.languages.zhHans'), value: 'zh-Hans' },
+  { label: t('projects.languages.zhHant'), value: 'zh-Hant' },
+  { label: t('projects.languages.enUS'), value: 'en-US' },
+  { label: t('projects.languages.enGB'), value: 'en-GB' },
+  { label: t('projects.languages.ja'), value: 'ja' },
+  { label: t('projects.languages.ko'), value: 'ko' },
+  { label: t('projects.languages.fr'), value: 'fr' },
+  { label: t('projects.languages.de'), value: 'de' },
+  { label: t('projects.languages.es'), value: 'es' },
+])
+
+const sourceLanguageOptions = computed<SelectOption[]>(() => [
+  { label: t('projects.languages.auto'), value: 'auto' },
+  ...targetLanguageOptions.value,
+])
+
+const editFormRules = computed<FormRules>(() => ({
+  name: [
+    {
+      required: true,
+      message: t('projects.validation.nameRequired'),
+      trigger: ['input', 'blur'],
+    },
+  ],
+  source_lang: [
+    {
+      required: true,
+      message: t('projects.validation.sourceLangRequired'),
+      trigger: ['change', 'blur'],
+    },
+  ],
+  target_lang: [
+    {
+      required: true,
+      message: t('projects.validation.targetLangRequired'),
+      trigger: ['change', 'blur'],
+    },
+  ],
+}))
+
+const openEditDrawer = (): void => {
+  if (!workspace.project) return
+  editFormModel.name = workspace.project.name
+  editFormModel.source_lang = workspace.project.source_lang || 'auto'
+  editFormModel.target_lang = workspace.project.target_lang || 'en-US'
+  editFormModel.glossary_enabled = workspace.project.glossary_enabled ?? false
+  editDrawerVisible.value = true
+}
+
+const closeEditDrawer = (): void => {
+  editDrawerVisible.value = false
+}
+
+const submitEditProject = async (): Promise<void> => {
+  await editFormRef.value?.validate()
+  if (!projectId.value) return
+
+  editSubmitting.value = true
+  try {
+    const updated = await projectsStore.updateProject(projectId.value, {
+      name: editFormModel.name.trim(),
+      source_lang: editFormModel.source_lang.trim(),
+      target_lang: editFormModel.target_lang.trim(),
+      glossary_enabled: editFormModel.glossary_enabled,
+    })
+    workspace.project = updated
+    message.success(t('projects.messages.updateSuccess'))
+    closeEditDrawer()
+  } catch (err) {
+    console.error(err)
+    message.error(projectsStore.updateError || t('projects.messages.updateFailed'))
+  } finally {
+    editSubmitting.value = false
+  }
+}
 
 // ── projectId ──
 const projectId = computed(() => {
@@ -50,6 +185,7 @@ const projectId = computed(() => {
 
 // ── Composables ──
 const glossaryMgmt = useGlossaryManagement(projectId)
+provide(GlossaryMgmtKey, glossaryMgmt)
 
 const switchToJobsTab = async (): Promise<void> => {
   activeTab.value = 'jobs'
@@ -57,13 +193,35 @@ const switchToJobsTab = async (): Promise<void> => {
 
 const jobMgmt = useJobActions(projectId, switchToJobsTab)
 
+// ── 执行计划模板按需加载 ──
+watch(
+  () => jobMgmt.jobDrawerVisible.value,
+  async (visible) => {
+    if (visible && executionPlanTemplatesStore.items.length === 0) {
+      await executionPlanTemplatesStore.loadTemplates()
+    }
+  },
+)
+
 // ── 翻译内容段落数量（用于 JobCreateDrawer 摘要）──
 const drawerSegmentCount = computed(() => {
   if (jobMgmt.jobTargetMode.value === 'segments') {
     return jobMgmt.jobTargetSegmentIds.value.length
   }
-  // 资源模式：使用已选资源的总段落数
-  return workspace.selectedResources.reduce((sum, r) => sum + (r.total_segments ?? 0), 0)
+
+  // EPUB 章节翻译模式：从 epubDirectoryChapters 按 groupKey 筛选段落数
+  if (jobMgmt.jobTargetGroupKeys.value.length > 0) {
+    const selectedKeys = new Set(jobMgmt.jobTargetGroupKeys.value)
+    return workspace.epubDirectoryChapters
+      .filter((ch) => selectedKeys.has(ch.group_key))
+      .reduce((sum, ch) => sum + ch.segment_count, 0)
+  }
+
+  // 普通资源模式：使用任务目标资源 ID 列表查找总段落数
+  const targetIdSet = new Set(jobMgmt.jobTargetResourceIds.value)
+  return workspace.resources
+    .filter((r) => targetIdSet.has(r.id))
+    .reduce((sum, r) => sum + (r.total_segments ?? 0), 0)
 })
 
 const reloadSegments = async (): Promise<void> => {
@@ -71,6 +229,12 @@ const reloadSegments = async (): Promise<void> => {
     return
   }
   await workspace.loadSegments(projectId.value, workspace.activeResourceId)
+}
+
+const handleGlossarySynced = async (): Promise<void> => {
+  if (projectId.value && workspace.activeResourceId) {
+    await workspace.loadSegments(projectId.value, workspace.activeResourceId)
+  }
 }
 
 const conflictMgmt = useConflictHandling()
@@ -84,18 +248,61 @@ const reloadWorkspace = async (): Promise<void> => {
   await Promise.all([
     workspace.loadProject(projectId.value),
     workspace.loadResourceTree(projectId.value),
-    workspace.loadResources(projectId.value),
-    workspace.loadJobs(projectId.value),
-    glossary.loadEntries(projectId.value),
   ])
   workspace.syncResourcesFromTree()
+
+  // 重新加载当前标签页数据
+  loadedTabs.clear()
+  await loadTabData(activeTab.value)
 }
 
 // ── ResourceExplorer 事件处理 ──
 const handleExplorerOpenSegments = (resource: Resource): void => {
   workspace.setActiveResource(resource.id)
+
+  // EPUB 资源：进入 EPUB 虚拟目录（章节列表模式）
+  if (resource.format === 'epub') {
+    void workspace.enterEpub(projectId.value!, { id: resource.id, name: resource.name })
+    return
+  }
+
+  // 非 EPUB 资源：跳转到段落编辑
+  void workspace.loadSegments(projectId.value!, resource.id)
   activeTab.value = 'segments'
-  void reloadSegments()
+}
+
+/** 处理 EPUB 章节点击：进入章节段落编辑视图 */
+const handleOpenEpubSegments = (resourceId: number, groupKey: string): void => {
+  const groupTitle =
+    workspace.epubDirectoryChapters.find((g) => g.group_key === groupKey)?.group_title ?? groupKey
+  workspace.enterChapter(groupKey, groupTitle)
+  void workspace.loadSegments(projectId.value!, resourceId, false, groupKey)
+  activeTab.value = 'segments'
+}
+
+/** EPUB 章节选中数量 */
+const epubSelectedChapterCount = computed(() => workspace.epubSelectedGroupKeys.size)
+
+/** 翻译选中的 EPUB 章节：使用 EPUB 资源 ID 打开任务创建抽屉 */
+const handleTranslateEpubChapters = (): void => {
+  const epubResourceId = workspace.epubDirectoryResourceId
+  if (!epubResourceId) return
+  const groupKeys = [...workspace.epubSelectedGroupKeys]
+  console.debug('[projectId] handleTranslateEpubChapters:', {
+    epubResourceId,
+    groupKeys,
+    setBeforeClear: [...workspace.epubSelectedGroupKeys],
+  })
+  jobMgmt.openResourceJobDrawerWithIds([epubResourceId], groupKeys)
+  workspace.epubSelectedGroupKeys = new Set()
+  console.debug('[projectId] after clear:', {
+    setAfterClear: [...workspace.epubSelectedGroupKeys],
+  })
+}
+
+/** 清除 EPUB 章节选中 */
+const handleClearEpubChapterSelection = (): void => {
+  workspace.epubSelectedGroupKeys = new Set()
 }
 
 // ── 段落选择操作 ──
@@ -135,17 +342,30 @@ watch(
 
 watch(
   () => [workspace.segmentSearch, workspace.segmentStatusFilter, workspace.activeResourceId],
-  () => {
-    if (projectId.value && workspace.activeResourceId) {
-      void workspace.loadSegments(projectId.value, workspace.activeResourceId)
+  (newVal, oldVal) => {
+    if (!projectId.value || !workspace.activeResourceId) return
+
+    const resourceIdChanged = newVal[2] !== oldVal?.[2]
+
+    // EPUB 资源切换时加载章节数据
+    if (resourceIdChanged && workspace.isEpubResource) {
+      void workspace.loadEpubData(projectId.value, workspace.activeResourceId)
     }
+
+    // 加载段落数据（EPUB "全部章节"视图加载全部段落，章节视图加载对应章节段落）
+    void workspace.loadSegments(
+      projectId.value,
+      workspace.activeResourceId,
+      false,
+      workspace.epubActiveGroupKey ?? undefined,
+    )
   },
 )
 
 watch(
   () => workspace.jobStatusFilter,
   () => {
-    if (projectId.value) {
+    if (projectId.value && loadedTabs.has('jobs')) {
       void workspace.loadJobs(projectId.value)
     }
   },
@@ -155,6 +375,7 @@ watch(activeTab, (tab) => {
   if (route.query.tab !== tab) {
     void router.replace({ query: { ...route.query, tab } })
   }
+  void loadTabData(tab)
 })
 
 // ── 5.1 任务进度轮询 ──
@@ -207,7 +428,22 @@ watch(
       ) {
         // 任务完成或取消，刷新段落
         if (projectId.value && workspace.activeResourceId) {
-          void workspace.loadSegments(projectId.value, workspace.activeResourceId)
+          if (workspace.isEpubResource) {
+            // 刷新章节分组进度
+            void workspace.refreshChapterGroups(projectId.value, workspace.activeResourceId)
+            // 如果在章节内容视图中，重新加载当前章节
+            if (workspace.epubActiveGroupKey) {
+              void workspace.loadSegments(
+                projectId.value,
+                workspace.activeResourceId,
+                false,
+                workspace.epubActiveGroupKey,
+              )
+            }
+          } else {
+            // 非 EPUB 资源：正常刷新 segments
+            void workspace.loadSegments(projectId.value, workspace.activeResourceId)
+          }
         }
         break
       }
@@ -218,26 +454,43 @@ watch(
 onMounted(() => {
   workspace.reset()
   glossary.reset()
+  loadedTabs.clear()
   void reloadWorkspace()
-  void executionPlanTemplatesStore.loadTemplates()
 })
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="space-y-5">
+    <!-- 项目头部 -->
     <NCard :bordered="false" class="overflow-hidden shadow-sm shadow-lf-shadow">
-      <div class="flex flex-wrap items-center justify-between gap-3">
+      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
           <NButton quaternary size="small" @click="router.push('/projects')">
             <template #icon>
               <NIcon><IconCarbonArrowLeft /></NIcon>
             </template>
           </NButton>
-          <h1 class="truncate text-lg font-semibold tracking-tight text-lf-text-strong">
+
+          <h1 class="truncate text-xl font-bold tracking-tight text-lf-text-strong">
             {{ workspace.project?.name || t('workspace.loadingProject') }}
           </h1>
-          <span class="inline-block h-4 w-px bg-lf-border-soft" />
-          <span class="inline-flex items-center gap-1.5 text-sm text-lf-text-muted">
+
+          <!-- 编辑按钮 -->
+          <NButton
+            v-if="workspace.project"
+            quaternary
+            circle
+            size="tiny"
+            :title="t('projects.actions.edit')"
+            @click="openEditDrawer"
+          >
+            <template #icon>
+              <NIcon size="14"><IconCarbonEdit /></NIcon>
+            </template>
+          </NButton>
+
+          <span class="hidden h-4 w-px bg-lf-border-soft sm:inline-block" />
+          <span class="hidden items-center gap-1.5 text-sm text-lf-text-muted sm:inline-flex">
             <IconCarbonLanguage class="h-3.5 w-3.5 text-lf-text-subtle" />
             {{ workspace.project?.source_lang || '-' }} →
             {{ workspace.project?.target_lang || '-' }}
@@ -252,9 +505,11 @@ onMounted(() => {
             }}
           </span>
         </div>
-        <div class="flex shrink-0 flex-wrap gap-3">
+
+        <div class="flex shrink-0 items-center gap-2">
           <NButton
             secondary
+            size="small"
             :loading="
               workspace.loadingProject || workspace.loadingResourceTree || workspace.loadingJobs
             "
@@ -273,6 +528,7 @@ onMounted(() => {
       {{ workspace.projectError }}
     </NAlert>
 
+    <!-- 统计指标栏 -->
     <WorkspaceMetricsBar
       :total-resources="workspace.resources.length"
       :ready-resources="workspace.readyResourceCount"
@@ -281,6 +537,7 @@ onMounted(() => {
       :running-jobs="workspace.runningJobCount"
     />
 
+    <!-- 标签页 -->
     <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
       <NTabs v-model:value="activeTab" animated>
         <NTabPane
@@ -292,6 +549,7 @@ onMounted(() => {
               v-if="projectId"
               :project-id="projectId"
               @open-segments="handleExplorerOpenSegments"
+              @open-epub-segments="handleOpenEpubSegments"
               @conflict="conflictMgmt.handleExplorerConflict"
               @incremental-result="conflictMgmt.handleExplorerIncrementalResult"
             />
@@ -313,6 +571,7 @@ onMounted(() => {
         <NTabPane name="jobs" :tab="`${t('workspace.tabs.jobs')} (${workspace.jobs.length})`">
           <JobPanel
             :project-id="projectId"
+            :detail-drawer-visible="jobMgmt.jobDetailDrawerVisible.value"
             @detail="(job) => jobMgmt.openJobDetail(job)"
             @cancel="(job) => jobMgmt.cancelJob(job)"
             @retry="(job) => jobMgmt.retryJob(job)"
@@ -320,11 +579,7 @@ onMounted(() => {
         </NTabPane>
 
         <NTabPane name="glossary" :tab="`${t('workspace.tabs.glossary')} (${glossary.entryCount})`">
-          <GlossaryPanel
-            :project-id="projectId"
-            @create="glossaryMgmt.openCreateGlossaryDrawer()"
-            @import="glossaryMgmt.glossaryImportVisible.value = true"
-          />
+          <GlossaryPanel :project-id="projectId" />
         </NTabPane>
       </NTabs>
     </NCard>
@@ -336,6 +591,7 @@ onMounted(() => {
       :target-mode="jobMgmt.jobTargetMode.value"
       :target-resource-ids="jobMgmt.jobTargetResourceIds.value"
       :target-segment-ids="jobMgmt.jobTargetSegmentIds.value"
+      :target-group-keys="jobMgmt.jobTargetGroupKeys.value"
       :execution-plan-id="jobMgmt.jobForm.execution_plan_id"
       :auto-approve="jobMgmt.jobForm.auto_approve"
       :form-rules="jobMgmt.jobFormRules.value"
@@ -400,6 +656,14 @@ onMounted(() => {
       @import="(file) => glossaryMgmt.handleGlossaryImport(file)"
     />
 
+    <!-- 术语表同步对话框 -->
+    <GlossarySyncDialog
+      v-model:show="glossaryMgmt.syncDialogVisible.value"
+      :project-id="projectId!"
+      @close="glossaryMgmt.closeSyncDialog"
+      @synced="handleGlossarySynced"
+    />
+
     <!-- 上传面板 -->
     <UploadPanel
       v-show="workspace.uploadTasks.length > 0"
@@ -407,13 +671,22 @@ onMounted(() => {
       @refresh="() => workspace.loadResourceTree(projectId!)"
     />
 
-    <!-- 浮动操作岛 - 资源选择 -->
+    <!-- 浮动操作岛 - 资源选择（非 EPUB 目录时显示） -->
     <SelectionActionBar
-      v-show="activeTab === 'resources'"
+      v-show="activeTab === 'resources' && !workspace.isInEpubDirectory"
       :count="jobMgmt.selectedResourceIds.value.length"
       :can-translate="jobMgmt.canCreateResourceJob.value"
       @translate="jobMgmt.openResourceJobDrawer()"
       @clear="jobMgmt.clearResourceSelection()"
+    />
+
+    <!-- 浮动操作岛 - EPUB 章节选择 -->
+    <SelectionActionBar
+      v-show="activeTab === 'resources' && workspace.isInEpubDirectory"
+      :count="epubSelectedChapterCount"
+      :can-translate="epubSelectedChapterCount > 0"
+      @translate="handleTranslateEpubChapters"
+      @clear="handleClearEpubChapterSelection"
     />
 
     <!-- 浮动操作岛 - 段落选择 -->
@@ -428,5 +701,66 @@ onMounted(() => {
       @approve="handleBatchReview('approve')"
       @reject="handleBatchReview('reject')"
     />
+
+    <!-- 编辑项目抽屉 -->
+    <NDrawer v-model:show="editDrawerVisible" :width="420" placement="right">
+      <NDrawerContent :title="t('projects.edit.title')" closable>
+        <div class="mb-4 rounded-lg bg-lf-surface-muted p-3 text-sm leading-6 text-lf-text-muted">
+          {{ t('projects.edit.description') }}
+        </div>
+
+        <NForm
+          ref="editFormRef"
+          :model="editFormModel"
+          :rules="editFormRules"
+          label-placement="top"
+        >
+          <NFormItem path="name" :label="t('projects.form.name')">
+            <NInput
+              v-model:value="editFormModel.name"
+              :placeholder="t('projects.form.namePlaceholder')"
+              maxlength="80"
+              show-count
+            />
+          </NFormItem>
+
+          <NFormItem path="glossary_enabled" :label="t('projects.form.glossaryEnabled')">
+            <NSwitch v-model:value="editFormModel.glossary_enabled" />
+          </NFormItem>
+
+          <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <NFormItem path="source_lang" :label="t('projects.form.sourceLang')">
+              <NSelect
+                v-model:value="editFormModel.source_lang"
+                filterable
+                tag
+                :options="sourceLanguageOptions"
+                :placeholder="t('projects.form.languagePlaceholder')"
+              />
+            </NFormItem>
+            <NFormItem path="target_lang" :label="t('projects.form.targetLang')">
+              <NSelect
+                v-model:value="editFormModel.target_lang"
+                filterable
+                tag
+                :options="targetLanguageOptions"
+                :placeholder="t('projects.form.languagePlaceholder')"
+              />
+            </NFormItem>
+          </div>
+        </NForm>
+
+        <template #footer>
+          <div class="flex justify-end gap-3">
+            <NButton :disabled="editSubmitting" @click="closeEditDrawer">
+              {{ t('projects.actions.cancel') }}
+            </NButton>
+            <NButton type="primary" :loading="editSubmitting" @click="submitEditProject">
+              {{ t('projects.actions.submitUpdate') }}
+            </NButton>
+          </div>
+        </template>
+      </NDrawerContent>
+    </NDrawer>
   </div>
 </template>

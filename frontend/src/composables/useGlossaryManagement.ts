@@ -1,4 +1,4 @@
-import { computed, h, reactive, ref, type Ref } from 'vue'
+import { computed, h, reactive, ref, type InjectionKey, type Ref } from 'vue'
 import type { DataTableColumns, FormInst, FormRules } from 'naive-ui'
 import { NButton, NSpace, NTag, NText, useMessage } from 'naive-ui'
 
@@ -15,6 +15,12 @@ export interface GlossaryFormModel {
   case_sensitive: boolean
   notes: string
 }
+
+/** useGlossaryManagement 的返回类型 */
+export type GlossaryManagement = ReturnType<typeof useGlossaryManagement>
+
+/** 术语表管理的 InjectionKey，用于 provide/inject 类型安全共享 */
+export const GlossaryMgmtKey: InjectionKey<GlossaryManagement> = Symbol('glossaryMgmt')
 
 export function useGlossaryManagement(projectId: Ref<number | null>) {
   const message = useMessage()
@@ -174,13 +180,32 @@ export function useGlossaryManagement(projectId: Ref<number | null>) {
 
     try {
       if (editingGlossaryEntry.value) {
-        await glossary.updateEntry(projectId.value, editingGlossaryEntry.value.id, {
-          source: glossaryForm.source.trim(),
-          target: glossaryForm.target.trim(),
-          case_sensitive: glossaryForm.case_sensitive,
-          notes: glossaryForm.notes.trim() || undefined,
-        })
-        message.success(t('workspace.glossary.messages.updateSuccess'))
+        // 保存编辑条目信息到局部变量，避免 closeGlossaryDrawer() 后引用丢失
+        const entryId = editingGlossaryEntry.value.id
+        const oldTarget = editingGlossaryEntry.value.target
+        const source = glossaryForm.source.trim()
+        const newTarget = glossaryForm.target.trim()
+
+        const response = await glossary.updateEntry(
+          projectId.value,
+          editingGlossaryEntry.value.id,
+          {
+            source,
+            target: newTarget,
+            case_sensitive: glossaryForm.case_sensitive,
+            notes: glossaryForm.notes.trim() || undefined,
+          },
+        )
+
+        // 使用后端返回的 target_changed 字段判断是否需要同步
+        if (response.target_changed) {
+          // 关闭编辑抽屉，打开同步对话框
+          closeGlossaryDrawer()
+          await glossary.openSyncDialog(projectId.value, entryId, source, oldTarget, newTarget)
+        } else {
+          message.success(t('workspace.glossary.messages.updateSuccess'))
+          closeGlossaryDrawer()
+        }
       } else {
         await glossary.createEntry(projectId.value, {
           source: glossaryForm.source.trim(),
@@ -190,8 +215,6 @@ export function useGlossaryManagement(projectId: Ref<number | null>) {
         })
         message.success(t('workspace.glossary.messages.createSuccess'))
       }
-
-      closeGlossaryDrawer()
     } catch (error) {
       console.error(error)
       message.error(
@@ -249,6 +272,14 @@ export function useGlossaryManagement(projectId: Ref<number | null>) {
     }
   }
 
+  // 使用 computed 包装 store 的 syncDialogVisible，保持响应性与双向绑定
+  const syncDialogVisible = computed({
+    get: () => glossary.syncDialogVisible,
+    set: (val: boolean) => {
+      glossary.syncDialogVisible = val
+    },
+  })
+
   return {
     // 状态
     glossaryDrawerVisible,
@@ -268,5 +299,8 @@ export function useGlossaryManagement(projectId: Ref<number | null>) {
     deleteGlossaryEntry,
     handleGlossaryImport,
     handleGlossaryExport,
+    // 同步相关（代理 store 状态与方法）
+    syncDialogVisible,
+    closeSyncDialog: glossary.closeSyncDialog,
   }
 }

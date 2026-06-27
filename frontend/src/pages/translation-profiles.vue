@@ -52,15 +52,14 @@ const CONFIG_DEFAULTS: TranslationProfileConfig = {
     prompt_upgrade: true,
   },
   glossary: {
-    enabled: false,
     bootstrap: {
-      mode: 'off',
-      save: false,
-      max_terms_per_batch: 20,
+      enabled: false,
+      max_terms_per_1000_chars: 20,
       min_source_len: 2,
       inline_conflict_strategy: 'off',
     },
   },
+  context: { enabled: true, before: 1, after: 1, max_chars: 0 },
 }
 
 function deepClone<T>(obj: T): T {
@@ -134,9 +133,9 @@ function extractConfig(profile: TranslationProfile): TranslationProfileConfig {
     postprocess: { ...CONFIG_DEFAULTS.postprocess, ...src.postprocess },
     repair: { ...CONFIG_DEFAULTS.repair, ...src.repair },
     glossary: {
-      enabled: src.glossary?.enabled ?? CONFIG_DEFAULTS.glossary.enabled,
       bootstrap: { ...CONFIG_DEFAULTS.glossary.bootstrap, ...src.glossary?.bootstrap },
     },
+    context: { ...CONFIG_DEFAULTS.context, ...src.context },
   }
 }
 
@@ -412,8 +411,11 @@ onMounted(() => {
             <NTag v-if="item.config?.postprocess?.enabled" size="small" :bordered="false">
               {{ t('translationProfiles.feature.postprocess') }}
             </NTag>
-            <NTag v-if="item.config?.glossary?.enabled" size="small" :bordered="false">
+            <NTag v-if="item.config?.glossary?.bootstrap?.enabled" size="small" :bordered="false">
               {{ t('translationProfiles.feature.glossary') }}
+            </NTag>
+            <NTag v-if="item.config?.context?.enabled" size="small" :bordered="false">
+              {{ t('translationProfiles.feature.context') }}
             </NTag>
           </div>
 

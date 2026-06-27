@@ -30,6 +30,7 @@ defineProps<{
   targetMode: JobTargetMode
   targetResourceIds: number[]
   targetSegmentIds: number[]
+  targetGroupKeys: string[]
   executionPlanId: number | null
   autoApprove: boolean
   formRules: FormRules
@@ -56,7 +57,10 @@ const emit = defineEmits<{
           {{ t('workspace.job.contentSummaryTitle') }}
         </template>
         <div class="space-y-1 text-sm">
-          <div v-if="targetMode === 'resources'">
+          <div v-if="targetMode === 'resources' && targetGroupKeys.length > 0">
+            {{ t('workspace.job.contentSummaryChapters', { count: targetGroupKeys.length }) }}
+          </div>
+          <div v-else-if="targetMode === 'resources'">
             {{ t('workspace.job.contentSummaryResources', { count: targetResourceIds.length }) }}
           </div>
           <div v-else>

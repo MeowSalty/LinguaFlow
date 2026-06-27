@@ -8,6 +8,8 @@ import type { BreadcrumbItem } from '@/stores/projectWorkspace'
 const props = defineProps<{
   items: BreadcrumbItem[]
   projectName: string
+  /** 当前是否处于 EPUB 虚拟目录中（最后一项为 EPUB 名称，应禁用点击） */
+  epubDirectoryActive?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -105,6 +107,10 @@ const scheduleMeasure = (): void => {
   })
 }
 
+/** 判断指定 originalIndex 的项是否为 EPUB 虚拟目录末尾项（应禁用点击） */
+const isEpubSuffixItem = (originalIndex: number): boolean =>
+  props.epubDirectoryActive === true && originalIndex === props.items.length - 1
+
 const navigateTo = (path: string): void => {
   emit('navigate', path)
 }
@@ -172,16 +178,19 @@ onBeforeUnmount(() => {
           <NBreadcrumbItem
             v-for="crumb in visibleItems"
             :key="crumb.path"
-            :clickable="crumb.originalIndex < props.items.length - 1"
-            @click="navigateTo(crumb.path)"
+            :clickable="
+              crumb.originalIndex < props.items.length - 1 && !isEpubSuffixItem(crumb.originalIndex)
+            "
+            @click="!isEpubSuffixItem(crumb.originalIndex) && navigateTo(crumb.path)"
           >
             <span
               class="inline-block max-w-[20rem] truncate align-bottom"
-              :class="
+              :class="[
                 crumb.originalIndex === props.items.length - 1
                   ? 'font-semibold text-lf-text-strong'
-                  : 'text-lf-text-muted hover:text-lf-text-strong'
-              "
+                  : 'text-lf-text-muted hover:text-lf-text-strong',
+                isEpubSuffixItem(crumb.originalIndex) && 'pointer-events-none opacity-70',
+              ]"
               :title="crumb.label"
             >
               {{ crumb.label }}
@@ -192,16 +201,19 @@ onBeforeUnmount(() => {
           <NBreadcrumbItem
             v-for="crumb in visibleItems"
             :key="crumb.path"
-            :clickable="crumb.originalIndex < props.items.length - 1"
-            @click="navigateTo(crumb.path)"
+            :clickable="
+              crumb.originalIndex < props.items.length - 1 && !isEpubSuffixItem(crumb.originalIndex)
+            "
+            @click="!isEpubSuffixItem(crumb.originalIndex) && navigateTo(crumb.path)"
           >
             <span
               class="inline-block max-w-[20rem] truncate align-bottom"
-              :class="
+              :class="[
                 crumb.originalIndex === props.items.length - 1
                   ? 'font-semibold text-lf-text-strong'
-                  : 'text-lf-text-muted hover:text-lf-text-strong'
-              "
+                  : 'text-lf-text-muted hover:text-lf-text-strong',
+                isEpubSuffixItem(crumb.originalIndex) && 'pointer-events-none opacity-70',
+              ]"
               :title="crumb.label"
             >
               {{ crumb.label }}
