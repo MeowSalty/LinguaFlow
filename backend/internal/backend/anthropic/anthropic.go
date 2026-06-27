@@ -68,12 +68,6 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 		return nil, fmt.Errorf("anthropic: unknown response_format %q", rf)
 	}
 
-	if b.timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, b.timeout)
-		defer cancel()
-	}
-
 	sysText := req.System
 	if rf == respFmtJSONObject {
 		// Anthropic 无 json_object 原生支持，用 system 指令模拟
@@ -111,7 +105,11 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 		}
 	}
 
-	msg, err := b.client.Messages.New(ctx, params)
+	callOpts := []option.RequestOption{}
+	if b.timeout > 0 {
+		callOpts = append(callOpts, option.WithRequestTimeout(b.timeout))
+	}
+	msg, err := b.client.Messages.New(ctx, params, callOpts...)
 	if err != nil {
 		return nil, wrapAnthropicError(err)
 	}

@@ -29,6 +29,7 @@ type Server struct {
 	backendSvc            *service.BackendService
 	projectSvc            *service.ProjectService
 	glossarySvc           *service.GlossaryService
+	glossarySyncSvc       *service.GlossarySyncService
 	promptTemplateSvc     *service.PromptTemplateService
 	translationProfileSvc *service.TranslationProfileService
 	translationJobSvc     *service.TranslationJobService
@@ -41,6 +42,8 @@ type Server struct {
 	jobStore              *filestore.LocalStore
 	translationJobQueue   *worker.Queue
 	translationJobRunner  *worker.TranslationRunner
+	syncTaskQueue         *worker.Queue
+	syncTaskRunner        *worker.SyncTaskRunner
 	httpServer            *http.Server
 	executionPlanHandler  *HandlerExecutionPlan
 	ready                 atomic.Bool
@@ -76,6 +79,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 	s.segmentSvc = service.NewSegmentService(client, s.projectSvc)
 	s.statsSvc = service.NewStatsService(client, s.projectSvc)
 	s.auditSvc = service.NewAuditService(client, s.userService, s.projectSvc)
+	s.glossarySyncSvc = service.NewGlossarySyncService(client, s.glossarySvc, s.projectSvc, s.auditSvc, logger)
 	s.resourceSvc = service.NewResourceService(client, s.projectSvc, jobStore)
 	queueSize := cfg.Pipeline.Translate.Concurrency * 8
 	if queueSize < 16 {
@@ -83,6 +87,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 	}
 	s.translationJobQueue = worker.NewQueue(queueSize)
 	s.translationJobRunner = worker.NewTranslationRunner(cfg, logger, client, s.translationJobSvc, jobStore, s.translationJobQueue)
+	s.syncTaskQueue = worker.NewQueue(100)
+	s.syncTaskRunner = worker.NewSyncTaskRunner(cfg, logger, client, s.glossarySyncSvc, s.syncTaskQueue)
 	s.httpServer = &http.Server{
 		Addr:              cfg.Server.Address(),
 		Handler:           s.newRouter(),
@@ -104,6 +110,40 @@ func (s *Server) Run(ctx context.Context) error {
 			}
 		}()
 	}
+
+	// 恢复并启动同步任务执行器
+	if s.syncTaskRunner != nil {
+		if err := s.syncTaskRunner.Recover(ctx); err != nil {
+			s.logger.Warn("failed to recover sync tasks", "error", err)
+		}
+		go func() {
+			if err := s.syncTaskRunner.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+				s.logger.Error("sync task runner stopped with error", "err", err)
+			}
+		}()
+	}
+
+	// 启动时执行一次过期任务清理
+	if err := s.glossarySyncSvc.CleanupExpiredTasks(ctx); err != nil {
+		s.logger.Warn("failed to cleanup expired sync tasks on startup", "error", err)
+	}
+
+	// 启动过期任务清理定时器（每小时执行一次）
+	go func() {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				if err := s.glossarySyncSvc.CleanupExpiredTasks(ctx); err != nil {
+					s.logger.Warn("failed to cleanup expired sync tasks", "error", err)
+				}
+			}
+		}
+	}()
+
 	s.ready.Store(true)
 
 	go func() {

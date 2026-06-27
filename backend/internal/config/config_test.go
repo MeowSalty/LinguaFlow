@@ -104,3 +104,42 @@ func TestValidate_UniqueBackendNames(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Standalone Bootstrap 模板必填校验
+// ---------------------------------------------------------------------------
+
+func TestValidate_StandaloneBootstrapTemplateRequired(t *testing.T) {
+	cfg := Default()
+	cfg.Glossary.Standalone.Enabled = true
+	cfg.Glossary.Standalone.TemplateContent = "" // 缺少模板内容
+	err := cfg.Validate()
+	if err == nil {
+		t.Fatal("expected error for missing standalone bootstrap template content")
+	}
+	if !strings.Contains(err.Error(), "glossary.standalone.template_content is required") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestValidate_StandaloneBootstrapNotRequired_WhenDisabled(t *testing.T) {
+	cfg := Default()
+	cfg.Glossary.Standalone.Enabled = false
+	cfg.Glossary.Standalone.TemplateContent = "" // 禁用时不要求模板
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("unexpected error when standalone is disabled: %v", err)
+	}
+}
+
+func TestValidate_StandaloneBootstrapTemplateProvided(t *testing.T) {
+	cfg := Default()
+	cfg.Glossary.Standalone.Enabled = true
+	cfg.Glossary.Standalone.TemplateContent = "bootstrap prompt content"
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("unexpected error when template is provided: %v", err)
+	}
+	// 校验 Glossary 被自动开启
+	if !cfg.Glossary.Enabled {
+		t.Error("expected glossary.enabled to be auto-set to true when standalone bootstrap is enabled")
+	}
+}

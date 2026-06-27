@@ -30,12 +30,12 @@ type Project struct {
 	OwnerUserID *int `json:"owner_user_id,omitempty"`
 	// OwnerOrgID holds the value of the "owner_org_id" field.
 	OwnerOrgID *int `json:"owner_org_id,omitempty"`
-	// ResourceScope holds the value of the "resource_scope" field.
-	ResourceScope string `json:"resource_scope,omitempty"`
 	// Config holds the value of the "config" field.
 	Config map[string]interface{} `json:"config,omitempty"`
 	// 默认翻译配置，创建翻译任务时作为任务配置基底
 	DefaultTranslationConfig map[string]interface{} `json:"default_translation_config,omitempty"`
+	// 翻译过程中是否启用术语表
+	GlossaryEnabled bool `json:"glossary_enabled,omitempty"`
 	// SourceLang holds the value of the "source_lang" field.
 	SourceLang string `json:"source_lang,omitempty"`
 	// TargetLang holds the value of the "target_lang" field.
@@ -64,9 +64,11 @@ type ProjectEdges struct {
 	UsageRecords []*UsageRecord `json:"usage_records,omitempty"`
 	// Resources holds the value of the resources edge.
 	Resources []*Resource `json:"resources,omitempty"`
+	// SyncTasks holds the value of the sync_tasks edge.
+	SyncTasks []*SyncTask `json:"sync_tasks,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [8]bool
+	loadedTypes [9]bool
 }
 
 // OwnerUserOrErr returns the OwnerUser value or an error if the edge
@@ -145,6 +147,15 @@ func (e ProjectEdges) ResourcesOrErr() ([]*Resource, error) {
 	return nil, &NotLoadedError{edge: "resources"}
 }
 
+// SyncTasksOrErr returns the SyncTasks value or an error if the edge
+// was not loaded in eager-loading.
+func (e ProjectEdges) SyncTasksOrErr() ([]*SyncTask, error) {
+	if e.loadedTypes[8] {
+		return e.SyncTasks, nil
+	}
+	return nil, &NotLoadedError{edge: "sync_tasks"}
+}
+
 // scanValues returns the types for scanning values from sql.Rows.
 func (*Project) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
@@ -152,9 +163,11 @@ func (*Project) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case project.FieldConfig, project.FieldDefaultTranslationConfig:
 			values[i] = new([]byte)
+		case project.FieldGlossaryEnabled:
+			values[i] = new(sql.NullBool)
 		case project.FieldID, project.FieldOwnerUserID, project.FieldOwnerOrgID:
 			values[i] = new(sql.NullInt64)
-		case project.FieldName, project.FieldResourceScope, project.FieldSourceLang, project.FieldTargetLang:
+		case project.FieldName, project.FieldSourceLang, project.FieldTargetLang:
 			values[i] = new(sql.NullString)
 		case project.FieldCreatedAt, project.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -211,12 +224,6 @@ func (_m *Project) assignValues(columns []string, values []any) error {
 				_m.OwnerOrgID = new(int)
 				*_m.OwnerOrgID = int(value.Int64)
 			}
-		case project.FieldResourceScope:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field resource_scope", values[i])
-			} else if value.Valid {
-				_m.ResourceScope = value.String
-			}
 		case project.FieldConfig:
 			if value, ok := values[i].(*[]byte); !ok {
 				return fmt.Errorf("unexpected type %T for field config", values[i])
@@ -232,6 +239,12 @@ func (_m *Project) assignValues(columns []string, values []any) error {
 				if err := json.Unmarshal(*value, &_m.DefaultTranslationConfig); err != nil {
 					return fmt.Errorf("unmarshal field default_translation_config: %w", err)
 				}
+			}
+		case project.FieldGlossaryEnabled:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field glossary_enabled", values[i])
+			} else if value.Valid {
+				_m.GlossaryEnabled = value.Bool
 			}
 		case project.FieldSourceLang:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -298,6 +311,11 @@ func (_m *Project) QueryResources() *ResourceQuery {
 	return NewProjectClient(_m.config).QueryResources(_m)
 }
 
+// QuerySyncTasks queries the "sync_tasks" edge of the Project entity.
+func (_m *Project) QuerySyncTasks() *SyncTaskQuery {
+	return NewProjectClient(_m.config).QuerySyncTasks(_m)
+}
+
 // Update returns a builder for updating this Project.
 // Note that you need to call Project.Unwrap() before calling this method if this Project
 // was returned from a transaction, and the transaction was committed or rolled back.
@@ -340,14 +358,14 @@ func (_m *Project) String() string {
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
-	builder.WriteString("resource_scope=")
-	builder.WriteString(_m.ResourceScope)
-	builder.WriteString(", ")
 	builder.WriteString("config=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Config))
 	builder.WriteString(", ")
 	builder.WriteString("default_translation_config=")
 	builder.WriteString(fmt.Sprintf("%v", _m.DefaultTranslationConfig))
+	builder.WriteString(", ")
+	builder.WriteString("glossary_enabled=")
+	builder.WriteString(fmt.Sprintf("%v", _m.GlossaryEnabled))
 	builder.WriteString(", ")
 	builder.WriteString("source_lang=")
 	builder.WriteString(_m.SourceLang)

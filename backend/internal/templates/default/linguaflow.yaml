@@ -50,6 +50,8 @@ prompt_templates:
   通用提示词:
     # 引用 prompts/ 目录下的提示词模板文件（Go template 格式）
     file: prompts/default.tmpl
+    # 引用 prompts/ 目录下的 bootstrap 模板文件（Go template 格式）
+    bootstrap_file: prompts/bootstrap_system.tmpl
 
 # ─────────────────────────────────────────────────────────────
 # 翻译策略配置
@@ -66,6 +68,13 @@ translation_profiles:
 # ─────────────────────────────────────────────────────────────
 # rounds 定义翻译执行轮次，按顺序执行。
 execution:
+  bootstrap:
+    enabled: false
+    template: 通用提示词
+    batch_size: 20
+    concurrency: 2
+    max_terms_per_batch: 20
+    min_source_len: 2
   rounds:
     - name: 主翻译
       # 引用 backends 中定义的后端名称
@@ -95,24 +104,9 @@ execution:
 # 术语表配置
 # ─────────────────────────────────────────────────────────────
 glossary:
-  # 是否启用术语表
   enabled: false
-  # 术语表文件路径（CSV 格式：source,target,notes）
   path: ./glossary.csv
-  # 术语自举：用 LLM 自动从源文本中抽取领域术语
-  bootstrap:
-    # 模式：off=关闭，pre=翻译前独立扫描整篇文档，inline=翻译时顺带抽取
-    mode: "off"
-    # 翻译结束后是否将增量术语回写到 glossary 文件
-    save: true
-    # 每批最大抽取术语数
-    max_terms_per_batch: 20
-    # 术语最小源文本长度（小于此值的不抽取）
-    min_source_len: 2
-    # inline 模式下并发术语冲突策略：
-    #   rewrite-local = 后到 worker 重写本批译文中的冲突术语
-    #   off = 不处理，沿用先到版本
-    inline_conflict_strategy: "rewrite-local"
+  save: true
 
 # ─────────────────────────────────────────────────────────────
 # 翻译记忆库配置

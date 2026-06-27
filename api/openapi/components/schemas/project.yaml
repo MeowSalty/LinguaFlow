@@ -1,14 +1,11 @@
 Project:
   type: object
-  required: [id, name, resource_scope, source_lang, target_lang]
+  required: [id, name, source_lang, target_lang, glossary_enabled]
   properties:
     id:
       type: integer
     name:
       type: string
-    resource_scope:
-      type: string
-      enum: [project, organization]
     owner_user_id:
       type: integer
     owner_org_id:
@@ -19,6 +16,10 @@ Project:
     default_translation_config:
       type: object
       additionalProperties: true
+    glossary_enabled:
+      type: boolean
+      default: false
+      description: 翻译过程中是否启用术语表
     source_lang:
       type: string
     target_lang:
@@ -45,17 +46,16 @@ CreateProjectRequest:
   properties:
     name:
       type: string
-    owner_org_id:
-      type: integer
-    resource_scope:
-      type: string
-      enum: [project, organization]
     config:
       type: object
       additionalProperties: true
     default_translation_config:
       type: object
       additionalProperties: true
+    glossary_enabled:
+      type: boolean
+      default: false
+      description: 翻译过程中是否启用术语表
     source_lang:
       type: string
     target_lang:
@@ -67,15 +67,15 @@ UpdateProjectRequest:
   properties:
     name:
       type: string
-    resource_scope:
-      type: string
-      enum: [project, organization]
     config:
       type: object
       additionalProperties: true
     default_translation_config:
       type: object
       additionalProperties: true
+    glossary_enabled:
+      type: boolean
+      description: 翻译过程中是否启用术语表
     source_lang:
       type: string
     target_lang:

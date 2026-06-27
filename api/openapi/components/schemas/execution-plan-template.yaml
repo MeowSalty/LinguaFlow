@@ -51,6 +51,53 @@ ExecutionPlanTemplateScope:
   type: string
   enum: [user, org, system]
 
+ExecutionPlanBootstrapConfig:
+  type: object
+  required: [enabled, backend_id, prompt_template_id, batch_size, concurrency]
+  properties:
+    enabled:
+      type: boolean
+      default: false
+      description: 是否启用独立自举
+    backend_id:
+      type: integer
+      description: 自举使用的后端 ID
+    prompt_template_id:
+      type: integer
+      description: 自举使用的提示词模板 ID（仅用其 bootstrap_prompt_content）
+    batch_size:
+      type: integer
+      minimum: 1
+      default: 20
+      description: 每批发送给 LLM 的源文段数
+    concurrency:
+      type: integer
+      minimum: 1
+      default: 2
+      description: 自举并发数
+    max_terms_per_batch:
+      type: integer
+      minimum: 1
+      default: 20
+      description: 每批最多抽取的术语数
+    min_source_len:
+      type: integer
+      minimum: 1
+      default: 2
+      description: 术语源文最短字符数
+
+ExecutionPlanRubyRetryConfig:
+  type: object
+  required: [enabled]
+  properties:
+    enabled:
+      type: boolean
+      default: false
+      description: 是否启用注音对齐重试
+    backend_id:
+      type: integer
+      description: 注音对齐使用的后端 ID；为空或 0 时使用翻译主后端
+
 ExecutionPlanTemplate:
   type: object
   required: [id, name, scope, rounds]
@@ -67,6 +114,10 @@ ExecutionPlanTemplate:
       type: integer
     owner_org_id:
       type: integer
+    bootstrap:
+      $ref: '#/ExecutionPlanBootstrapConfig'
+    ruby_retry:
+      $ref: '#/ExecutionPlanRubyRetryConfig'
     rounds:
       type: array
       items:
@@ -96,6 +147,10 @@ CreateExecutionPlanTemplateRequest:
       type: string
     description:
       type: string
+    bootstrap:
+      $ref: '#/ExecutionPlanBootstrapConfig'
+    ruby_retry:
+      $ref: '#/ExecutionPlanRubyRetryConfig'
     rounds:
       type: array
       items:
@@ -110,6 +165,10 @@ UpdateExecutionPlanTemplateRequest:
       type: string
     description:
       type: string
+    bootstrap:
+      $ref: '#/ExecutionPlanBootstrapConfig'
+    ruby_retry:
+      $ref: '#/ExecutionPlanRubyRetryConfig'
     rounds:
       type: array
       items:

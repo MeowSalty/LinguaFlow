@@ -11,20 +11,20 @@ import (
 )
 
 type createProjectRequest struct {
-	Name                     string         `json:"name"`
-	OwnerOrgID               *int           `json:"owner_org_id"`
-	ResourceScope            string         `json:"resource_scope"`
+	Name string `json:"name"`
+	// OwnerOrgID 已移除 — 组织项目通过专用路由创建
 	Config                   map[string]any `json:"config"`
 	DefaultTranslationConfig map[string]any `json:"default_translation_config"`
+	GlossaryEnabled          *bool          `json:"glossary_enabled"`
 	SourceLang               string         `json:"source_lang"`
 	TargetLang               string         `json:"target_lang"`
 }
 
 type updateProjectRequest struct {
 	Name                     string         `json:"name"`
-	ResourceScope            string         `json:"resource_scope"`
 	Config                   map[string]any `json:"config"`
 	DefaultTranslationConfig map[string]any `json:"default_translation_config"`
+	GlossaryEnabled          *bool          `json:"glossary_enabled"`
 	SourceLang               string         `json:"source_lang"`
 	TargetLang               string         `json:"target_lang"`
 }
@@ -32,11 +32,11 @@ type updateProjectRequest struct {
 type projectResponse struct {
 	ID                       int            `json:"id"`
 	Name                     string         `json:"name"`
-	ResourceScope            string         `json:"resource_scope"`
 	OwnerUserID              *int           `json:"owner_user_id,omitempty"`
 	OwnerOrgID               *int           `json:"owner_org_id,omitempty"`
 	Config                   map[string]any `json:"config,omitempty"`
 	DefaultTranslationConfig map[string]any `json:"default_translation_config,omitempty"`
+	GlossaryEnabled          bool           `json:"glossary_enabled"`
 	SourceLang               string         `json:"source_lang"`
 	TargetLang               string         `json:"target_lang"`
 }
@@ -45,11 +45,11 @@ func toProjectResponse(p *ent.Project) projectResponse {
 	return projectResponse{
 		ID:                       p.ID,
 		Name:                     p.Name,
-		ResourceScope:            p.ResourceScope,
 		OwnerUserID:              p.OwnerUserID,
 		OwnerOrgID:               p.OwnerOrgID,
 		Config:                   p.Config,
 		DefaultTranslationConfig: p.DefaultTranslationConfig,
+		GlossaryEnabled:          p.GlossaryEnabled,
 		SourceLang:               p.SourceLang,
 		TargetLang:               p.TargetLang,
 	}
@@ -75,10 +75,9 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 	}
 	p, err := s.projectSvc.CreateProject(r.Context(), authUser.User.ID, service.CreateProjectInput{
 		Name:                     req.Name,
-		OwnerOrgID:               req.OwnerOrgID,
-		ResourceScope:            req.ResourceScope,
 		Config:                   req.Config,
 		DefaultTranslationConfig: req.DefaultTranslationConfig,
+		GlossaryEnabled:          req.GlossaryEnabled,
 		SourceLang:               req.SourceLang,
 		TargetLang:               req.TargetLang,
 	})
@@ -87,6 +86,63 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, toProjectResponse(p))
+}
+
+func (s *Server) handleCreateOrgProject(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+	orgID, ok := parseIntParam(w, chi.URLParam(r, "orgId"), "orgId")
+	if !ok {
+		return
+	}
+	// handler 层负责验证组织管理员权限
+	if _, err := s.userService.RequireMembership(r.Context(), authUser.User.ID, orgID, service.OrgRoleAdmin); err != nil {
+		writeProjectServiceError(w, err)
+		return
+	}
+	var req createProjectRequest
+	if !decodeJSON(w, r, &req) {
+		return
+	}
+	p, err := s.projectSvc.CreateOrgProject(r.Context(), authUser.User.ID, orgID, service.CreateProjectInput{
+		Name:                     req.Name,
+		Config:                   req.Config,
+		DefaultTranslationConfig: req.DefaultTranslationConfig,
+		GlossaryEnabled:          req.GlossaryEnabled,
+		SourceLang:               req.SourceLang,
+		TargetLang:               req.TargetLang,
+	})
+	if err != nil {
+		writeProjectServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, toProjectResponse(p))
+}
+
+func (s *Server) handleListOrgProjects(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+	orgID, ok := parseIntParam(w, chi.URLParam(r, "orgId"), "orgId")
+	if !ok {
+		return
+	}
+	// handler 层负责验证组织成员权限
+	if _, err := s.userService.RequireMembership(r.Context(), authUser.User.ID, orgID, service.OrgRoleMember); err != nil {
+		writeProjectServiceError(w, err)
+		return
+	}
+	projects, err := s.projectSvc.ListOrgProjects(r.Context(), authUser.User.ID, orgID)
+	if err != nil {
+		writeProjectServiceError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toProjectListResponse(projects))
 }
 
 func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
@@ -137,9 +193,9 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 	}
 	p, err := s.projectSvc.UpdateProject(r.Context(), authUser.User.ID, projectID, service.UpdateProjectInput{
 		Name:                     req.Name,
-		ResourceScope:            req.ResourceScope,
 		Config:                   req.Config,
 		DefaultTranslationConfig: req.DefaultTranslationConfig,
+		GlossaryEnabled:          req.GlossaryEnabled,
 		SourceLang:               req.SourceLang,
 		TargetLang:               req.TargetLang,
 	})

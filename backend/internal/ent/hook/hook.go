@@ -57,6 +57,18 @@ func (f GlossaryEntryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Valu
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GlossaryEntryMutation", m)
 }
 
+// The JobEventFunc type is an adapter to allow the use of ordinary
+// function as JobEvent mutator.
+type JobEventFunc func(context.Context, *ent.JobEventMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f JobEventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.JobEventMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.JobEventMutation", m)
+}
+
 // The JobResourceFunc type is an adapter to allow the use of ordinary
 // function as JobResource mutator.
 type JobResourceFunc func(context.Context, *ent.JobResourceMutation) (ent.Value, error)
@@ -151,6 +163,18 @@ func (f SegmentFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SegmentMutation", m)
+}
+
+// The SyncTaskFunc type is an adapter to allow the use of ordinary
+// function as SyncTask mutator.
+type SyncTaskFunc func(context.Context, *ent.SyncTaskMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SyncTaskFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SyncTaskMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SyncTaskMutation", m)
 }
 
 // The TMEntryFunc type is an adapter to allow the use of ordinary

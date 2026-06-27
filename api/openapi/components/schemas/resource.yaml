@@ -229,3 +229,29 @@ ResourcePrecheckBatchResponse:
       type: array
       items:
         $ref: '#/ResourcePrecheckFileResult'
+
+ResourceSegmentGroup:
+  type: object
+  required: [group_key, group_title, segment_count, translated_count]
+  properties:
+    group_key:
+      type: string
+      description: 分组键（如 epub_file 路径）
+    group_title:
+      type: string
+      description: 分组标题（如章节标题）
+    segment_count:
+      type: integer
+      description: 该组的 segment 总数
+    translated_count:
+      type: integer
+      description: 已翻译的 segment 数量
+
+ResourceSegmentGroupListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/ResourceSegmentGroup'

@@ -24,12 +24,12 @@ const (
 	FieldOwnerUserID = "owner_user_id"
 	// FieldOwnerOrgID holds the string denoting the owner_org_id field in the database.
 	FieldOwnerOrgID = "owner_org_id"
-	// FieldResourceScope holds the string denoting the resource_scope field in the database.
-	FieldResourceScope = "resource_scope"
 	// FieldConfig holds the string denoting the config field in the database.
 	FieldConfig = "config"
 	// FieldDefaultTranslationConfig holds the string denoting the default_translation_config field in the database.
 	FieldDefaultTranslationConfig = "default_translation_config"
+	// FieldGlossaryEnabled holds the string denoting the glossary_enabled field in the database.
+	FieldGlossaryEnabled = "glossary_enabled"
 	// FieldSourceLang holds the string denoting the source_lang field in the database.
 	FieldSourceLang = "source_lang"
 	// FieldTargetLang holds the string denoting the target_lang field in the database.
@@ -50,6 +50,8 @@ const (
 	EdgeUsageRecords = "usage_records"
 	// EdgeResources holds the string denoting the resources edge name in mutations.
 	EdgeResources = "resources"
+	// EdgeSyncTasks holds the string denoting the sync_tasks edge name in mutations.
+	EdgeSyncTasks = "sync_tasks"
 	// Table holds the table name of the project in the database.
 	Table = "projects"
 	// OwnerUserTable is the table that holds the owner_user relation/edge.
@@ -108,6 +110,13 @@ const (
 	ResourcesInverseTable = "resources"
 	// ResourcesColumn is the table column denoting the resources relation/edge.
 	ResourcesColumn = "project_id"
+	// SyncTasksTable is the table that holds the sync_tasks relation/edge.
+	SyncTasksTable = "sync_tasks"
+	// SyncTasksInverseTable is the table name for the SyncTask entity.
+	// It exists in this package in order to avoid circular dependency with the "synctask" package.
+	SyncTasksInverseTable = "sync_tasks"
+	// SyncTasksColumn is the table column denoting the sync_tasks relation/edge.
+	SyncTasksColumn = "project_id"
 )
 
 // Columns holds all SQL columns for project fields.
@@ -118,9 +127,9 @@ var Columns = []string{
 	FieldName,
 	FieldOwnerUserID,
 	FieldOwnerOrgID,
-	FieldResourceScope,
 	FieldConfig,
 	FieldDefaultTranslationConfig,
+	FieldGlossaryEnabled,
 	FieldSourceLang,
 	FieldTargetLang,
 }
@@ -148,12 +157,12 @@ var (
 	OwnerUserIDValidator func(int) error
 	// OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
 	OwnerOrgIDValidator func(int) error
-	// DefaultResourceScope holds the default value on creation for the "resource_scope" field.
-	DefaultResourceScope string
 	// DefaultConfig holds the default value on creation for the "config" field.
 	DefaultConfig func() map[string]interface{}
 	// DefaultDefaultTranslationConfig holds the default value on creation for the "default_translation_config" field.
 	DefaultDefaultTranslationConfig func() map[string]interface{}
+	// DefaultGlossaryEnabled holds the default value on creation for the "glossary_enabled" field.
+	DefaultGlossaryEnabled bool
 	// DefaultSourceLang holds the default value on creation for the "source_lang" field.
 	DefaultSourceLang string
 	// DefaultTargetLang holds the default value on creation for the "target_lang" field.
@@ -193,9 +202,9 @@ func ByOwnerOrgID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldOwnerOrgID, opts...).ToFunc()
 }
 
-// ByResourceScope orders the results by the resource_scope field.
-func ByResourceScope(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldResourceScope, opts...).ToFunc()
+// ByGlossaryEnabled orders the results by the glossary_enabled field.
+func ByGlossaryEnabled(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldGlossaryEnabled, opts...).ToFunc()
 }
 
 // BySourceLang orders the results by the source_lang field.
@@ -305,6 +314,20 @@ func ByResources(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newResourcesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// BySyncTasksCount orders the results by sync_tasks count.
+func BySyncTasksCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newSyncTasksStep(), opts...)
+	}
+}
+
+// BySyncTasks orders the results by sync_tasks terms.
+func BySyncTasks(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newSyncTasksStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newOwnerUserStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -359,5 +382,12 @@ func newResourcesStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(ResourcesInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, ResourcesTable, ResourcesColumn),
+	)
+}
+func newSyncTasksStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(SyncTasksInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, SyncTasksTable, SyncTasksColumn),
 	)
 }

@@ -41,6 +41,15 @@ func EmbeddedPromptTemplate() string {
 	return strings.TrimRight(string(data), "\n")
 }
 
+// EmbeddedBootstrapTemplate 返回嵌入的 bootstrap 术语抽取提示词模板内容。
+func EmbeddedBootstrapTemplate() string {
+	data, err := fs.ReadFile(builtinFS, "default/prompts/bootstrap_system.tmpl")
+	if err != nil {
+		panic(fmt.Sprintf("embedded prompts/bootstrap_system.tmpl not found: %v", err))
+	}
+	return strings.TrimRight(string(data), "\n")
+}
+
 // EmbeddedProfileConfig 返回嵌入的默认翻译策略配置字节。
 func EmbeddedProfileConfig() []byte {
 	data, err := fs.ReadFile(builtinFS, "default/profiles/default.yaml")
@@ -97,11 +106,12 @@ var builtinPromptTemplate *ent.PromptTemplate
 func init() {
 	meta := parseBuiltinConfig()
 	builtinPromptTemplate = &ent.PromptTemplate{
-		ID:                  BuiltinPromptTemplateID,
-		Name:                meta.PromptTemplate.Name,
-		Description:         meta.PromptTemplate.Description,
-		Scope:               "system",
-		SystemPromptContent: EmbeddedPromptTemplate(),
+		ID:                     BuiltinPromptTemplateID,
+		Name:                   meta.PromptTemplate.Name,
+		Description:            meta.PromptTemplate.Description,
+		Scope:                  "system",
+		SystemPromptContent:    EmbeddedPromptTemplate(),
+		BootstrapPromptContent: EmbeddedBootstrapTemplate(),
 	}
 }
 

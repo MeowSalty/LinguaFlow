@@ -132,6 +132,20 @@ func (_u *PromptTemplateUpdate) SetNillableSystemPromptContent(v *string) *Promp
 	return _u
 }
 
+// SetBootstrapPromptContent sets the "bootstrap_prompt_content" field.
+func (_u *PromptTemplateUpdate) SetBootstrapPromptContent(v string) *PromptTemplateUpdate {
+	_u.mutation.SetBootstrapPromptContent(v)
+	return _u
+}
+
+// SetNillableBootstrapPromptContent sets the "bootstrap_prompt_content" field if the given value is not nil.
+func (_u *PromptTemplateUpdate) SetNillableBootstrapPromptContent(v *string) *PromptTemplateUpdate {
+	if v != nil {
+		_u.SetBootstrapPromptContent(*v)
+	}
+	return _u
+}
+
 // SetOwnerUser sets the "owner_user" edge to the User entity.
 func (_u *PromptTemplateUpdate) SetOwnerUser(v *User) *PromptTemplateUpdate {
 	return _u.SetOwnerUserID(v.ID)
@@ -241,6 +255,9 @@ func (_u *PromptTemplateUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if value, ok := _u.mutation.SystemPromptContent(); ok {
 		_spec.SetField(prompttemplate.FieldSystemPromptContent, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.BootstrapPromptContent(); ok {
+		_spec.SetField(prompttemplate.FieldBootstrapPromptContent, field.TypeString, value)
 	}
 	if _u.mutation.OwnerUserCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -422,6 +439,20 @@ func (_u *PromptTemplateUpdateOne) SetNillableSystemPromptContent(v *string) *Pr
 	return _u
 }
 
+// SetBootstrapPromptContent sets the "bootstrap_prompt_content" field.
+func (_u *PromptTemplateUpdateOne) SetBootstrapPromptContent(v string) *PromptTemplateUpdateOne {
+	_u.mutation.SetBootstrapPromptContent(v)
+	return _u
+}
+
+// SetNillableBootstrapPromptContent sets the "bootstrap_prompt_content" field if the given value is not nil.
+func (_u *PromptTemplateUpdateOne) SetNillableBootstrapPromptContent(v *string) *PromptTemplateUpdateOne {
+	if v != nil {
+		_u.SetBootstrapPromptContent(*v)
+	}
+	return _u
+}
+
 // SetOwnerUser sets the "owner_user" edge to the User entity.
 func (_u *PromptTemplateUpdateOne) SetOwnerUser(v *User) *PromptTemplateUpdateOne {
 	return _u.SetOwnerUserID(v.ID)
@@ -561,6 +592,9 @@ func (_u *PromptTemplateUpdateOne) sqlSave(ctx context.Context) (_node *PromptTe
 	}
 	if value, ok := _u.mutation.SystemPromptContent(); ok {
 		_spec.SetField(prompttemplate.FieldSystemPromptContent, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.BootstrapPromptContent(); ok {
+		_spec.SetField(prompttemplate.FieldBootstrapPromptContent, field.TypeString, value)
 	}
 	if _u.mutation.OwnerUserCleared() {
 		edge := &sqlgraph.EdgeSpec{

@@ -32,10 +32,6 @@ const (
 	EdgeMemberships = "memberships"
 	// EdgeBackends holds the string denoting the backends edge name in mutations.
 	EdgeBackends = "backends"
-	// EdgeGlossaryEntries holds the string denoting the glossary_entries edge name in mutations.
-	EdgeGlossaryEntries = "glossary_entries"
-	// EdgeTmEntries holds the string denoting the tm_entries edge name in mutations.
-	EdgeTmEntries = "tm_entries"
 	// EdgeActivityLogs holds the string denoting the activity_logs edge name in mutations.
 	EdgeActivityLogs = "activity_logs"
 	// EdgeUsageRecords holds the string denoting the usage_records edge name in mutations.
@@ -69,20 +65,6 @@ const (
 	BackendsInverseTable = "backends"
 	// BackendsColumn is the table column denoting the backends relation/edge.
 	BackendsColumn = "owner_org_id"
-	// GlossaryEntriesTable is the table that holds the glossary_entries relation/edge.
-	GlossaryEntriesTable = "glossary_entries"
-	// GlossaryEntriesInverseTable is the table name for the GlossaryEntry entity.
-	// It exists in this package in order to avoid circular dependency with the "glossaryentry" package.
-	GlossaryEntriesInverseTable = "glossary_entries"
-	// GlossaryEntriesColumn is the table column denoting the glossary_entries relation/edge.
-	GlossaryEntriesColumn = "organization_id"
-	// TmEntriesTable is the table that holds the tm_entries relation/edge.
-	TmEntriesTable = "tm_entries"
-	// TmEntriesInverseTable is the table name for the TMEntry entity.
-	// It exists in this package in order to avoid circular dependency with the "tmentry" package.
-	TmEntriesInverseTable = "tm_entries"
-	// TmEntriesColumn is the table column denoting the tm_entries relation/edge.
-	TmEntriesColumn = "organization_id"
 	// ActivityLogsTable is the table that holds the activity_logs relation/edge.
 	ActivityLogsTable = "activity_logs"
 	// ActivityLogsInverseTable is the table name for the ActivityLog entity.
@@ -234,34 +216,6 @@ func ByBackends(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
-// ByGlossaryEntriesCount orders the results by glossary_entries count.
-func ByGlossaryEntriesCount(opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newGlossaryEntriesStep(), opts...)
-	}
-}
-
-// ByGlossaryEntries orders the results by glossary_entries terms.
-func ByGlossaryEntries(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newGlossaryEntriesStep(), append([]sql.OrderTerm{term}, terms...)...)
-	}
-}
-
-// ByTmEntriesCount orders the results by tm_entries count.
-func ByTmEntriesCount(opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newTmEntriesStep(), opts...)
-	}
-}
-
-// ByTmEntries orders the results by tm_entries terms.
-func ByTmEntries(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newTmEntriesStep(), append([]sql.OrderTerm{term}, terms...)...)
-	}
-}
-
 // ByActivityLogsCount orders the results by activity_logs count.
 func ByActivityLogsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -350,20 +304,6 @@ func newBackendsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(BackendsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, BackendsTable, BackendsColumn),
-	)
-}
-func newGlossaryEntriesStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(GlossaryEntriesInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, GlossaryEntriesTable, GlossaryEntriesColumn),
-	)
-}
-func newTmEntriesStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(TmEntriesInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, TmEntriesTable, TmEntriesColumn),
 	)
 }
 func newActivityLogsStep() *sqlgraph.Step {

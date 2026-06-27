@@ -11,6 +11,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
@@ -217,6 +218,26 @@ func (_u *TranslationJobUpdate) ClearErrorMessage() *TranslationJobUpdate {
 	return _u
 }
 
+// SetStartedAt sets the "started_at" field.
+func (_u *TranslationJobUpdate) SetStartedAt(v time.Time) *TranslationJobUpdate {
+	_u.mutation.SetStartedAt(v)
+	return _u
+}
+
+// SetNillableStartedAt sets the "started_at" field if the given value is not nil.
+func (_u *TranslationJobUpdate) SetNillableStartedAt(v *time.Time) *TranslationJobUpdate {
+	if v != nil {
+		_u.SetStartedAt(*v)
+	}
+	return _u
+}
+
+// ClearStartedAt clears the value of the "started_at" field.
+func (_u *TranslationJobUpdate) ClearStartedAt() *TranslationJobUpdate {
+	_u.mutation.ClearStartedAt()
+	return _u
+}
+
 // SetProjectID sets the "project" edge to the Project entity by ID.
 func (_u *TranslationJobUpdate) SetProjectID(id int) *TranslationJobUpdate {
 	_u.mutation.SetProjectID(id)
@@ -262,6 +283,21 @@ func (_u *TranslationJobUpdate) AddJobResources(v ...*JobResource) *TranslationJ
 	return _u.AddJobResourceIDs(ids...)
 }
 
+// AddJobEventIDs adds the "job_events" edge to the JobEvent entity by IDs.
+func (_u *TranslationJobUpdate) AddJobEventIDs(ids ...int) *TranslationJobUpdate {
+	_u.mutation.AddJobEventIDs(ids...)
+	return _u
+}
+
+// AddJobEvents adds the "job_events" edges to the JobEvent entity.
+func (_u *TranslationJobUpdate) AddJobEvents(v ...*JobEvent) *TranslationJobUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddJobEventIDs(ids...)
+}
+
 // Mutation returns the TranslationJobMutation object of the builder.
 func (_u *TranslationJobUpdate) Mutation() *TranslationJobMutation {
 	return _u.mutation
@@ -298,6 +334,27 @@ func (_u *TranslationJobUpdate) RemoveJobResources(v ...*JobResource) *Translati
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveJobResourceIDs(ids...)
+}
+
+// ClearJobEvents clears all "job_events" edges to the JobEvent entity.
+func (_u *TranslationJobUpdate) ClearJobEvents() *TranslationJobUpdate {
+	_u.mutation.ClearJobEvents()
+	return _u
+}
+
+// RemoveJobEventIDs removes the "job_events" edge to JobEvent entities by IDs.
+func (_u *TranslationJobUpdate) RemoveJobEventIDs(ids ...int) *TranslationJobUpdate {
+	_u.mutation.RemoveJobEventIDs(ids...)
+	return _u
+}
+
+// RemoveJobEvents removes "job_events" edges to JobEvent entities.
+func (_u *TranslationJobUpdate) RemoveJobEvents(v ...*JobEvent) *TranslationJobUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveJobEventIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -440,6 +497,12 @@ func (_u *TranslationJobUpdate) sqlSave(ctx context.Context) (_node int, err err
 	if _u.mutation.ErrorMessageCleared() {
 		_spec.ClearField(translationjob.FieldErrorMessage, field.TypeString)
 	}
+	if value, ok := _u.mutation.StartedAt(); ok {
+		_spec.SetField(translationjob.FieldStartedAt, field.TypeTime, value)
+	}
+	if _u.mutation.StartedAtCleared() {
+		_spec.ClearField(translationjob.FieldStartedAt, field.TypeTime)
+	}
 	if _u.mutation.ProjectCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
@@ -536,6 +599,51 @@ func (_u *TranslationJobUpdate) sqlSave(ctx context.Context) (_node int, err err
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.JobEventsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   translationjob.JobEventsTable,
+			Columns: []string{translationjob.JobEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobevent.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedJobEventsIDs(); len(nodes) > 0 && !_u.mutation.JobEventsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   translationjob.JobEventsTable,
+			Columns: []string{translationjob.JobEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobevent.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.JobEventsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   translationjob.JobEventsTable,
+			Columns: []string{translationjob.JobEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobevent.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -749,6 +857,26 @@ func (_u *TranslationJobUpdateOne) ClearErrorMessage() *TranslationJobUpdateOne 
 	return _u
 }
 
+// SetStartedAt sets the "started_at" field.
+func (_u *TranslationJobUpdateOne) SetStartedAt(v time.Time) *TranslationJobUpdateOne {
+	_u.mutation.SetStartedAt(v)
+	return _u
+}
+
+// SetNillableStartedAt sets the "started_at" field if the given value is not nil.
+func (_u *TranslationJobUpdateOne) SetNillableStartedAt(v *time.Time) *TranslationJobUpdateOne {
+	if v != nil {
+		_u.SetStartedAt(*v)
+	}
+	return _u
+}
+
+// ClearStartedAt clears the value of the "started_at" field.
+func (_u *TranslationJobUpdateOne) ClearStartedAt() *TranslationJobUpdateOne {
+	_u.mutation.ClearStartedAt()
+	return _u
+}
+
 // SetProjectID sets the "project" edge to the Project entity by ID.
 func (_u *TranslationJobUpdateOne) SetProjectID(id int) *TranslationJobUpdateOne {
 	_u.mutation.SetProjectID(id)
@@ -794,6 +922,21 @@ func (_u *TranslationJobUpdateOne) AddJobResources(v ...*JobResource) *Translati
 	return _u.AddJobResourceIDs(ids...)
 }
 
+// AddJobEventIDs adds the "job_events" edge to the JobEvent entity by IDs.
+func (_u *TranslationJobUpdateOne) AddJobEventIDs(ids ...int) *TranslationJobUpdateOne {
+	_u.mutation.AddJobEventIDs(ids...)
+	return _u
+}
+
+// AddJobEvents adds the "job_events" edges to the JobEvent entity.
+func (_u *TranslationJobUpdateOne) AddJobEvents(v ...*JobEvent) *TranslationJobUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddJobEventIDs(ids...)
+}
+
 // Mutation returns the TranslationJobMutation object of the builder.
 func (_u *TranslationJobUpdateOne) Mutation() *TranslationJobMutation {
 	return _u.mutation
@@ -830,6 +973,27 @@ func (_u *TranslationJobUpdateOne) RemoveJobResources(v ...*JobResource) *Transl
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveJobResourceIDs(ids...)
+}
+
+// ClearJobEvents clears all "job_events" edges to the JobEvent entity.
+func (_u *TranslationJobUpdateOne) ClearJobEvents() *TranslationJobUpdateOne {
+	_u.mutation.ClearJobEvents()
+	return _u
+}
+
+// RemoveJobEventIDs removes the "job_events" edge to JobEvent entities by IDs.
+func (_u *TranslationJobUpdateOne) RemoveJobEventIDs(ids ...int) *TranslationJobUpdateOne {
+	_u.mutation.RemoveJobEventIDs(ids...)
+	return _u
+}
+
+// RemoveJobEvents removes "job_events" edges to JobEvent entities.
+func (_u *TranslationJobUpdateOne) RemoveJobEvents(v ...*JobEvent) *TranslationJobUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveJobEventIDs(ids...)
 }
 
 // Where appends a list predicates to the TranslationJobUpdate builder.
@@ -1002,6 +1166,12 @@ func (_u *TranslationJobUpdateOne) sqlSave(ctx context.Context) (_node *Translat
 	if _u.mutation.ErrorMessageCleared() {
 		_spec.ClearField(translationjob.FieldErrorMessage, field.TypeString)
 	}
+	if value, ok := _u.mutation.StartedAt(); ok {
+		_spec.SetField(translationjob.FieldStartedAt, field.TypeTime, value)
+	}
+	if _u.mutation.StartedAtCleared() {
+		_spec.ClearField(translationjob.FieldStartedAt, field.TypeTime)
+	}
 	if _u.mutation.ProjectCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
@@ -1098,6 +1268,51 @@ func (_u *TranslationJobUpdateOne) sqlSave(ctx context.Context) (_node *Translat
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.JobEventsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   translationjob.JobEventsTable,
+			Columns: []string{translationjob.JobEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobevent.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedJobEventsIDs(); len(nodes) > 0 && !_u.mutation.JobEventsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   translationjob.JobEventsTable,
+			Columns: []string{translationjob.JobEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobevent.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.JobEventsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   translationjob.JobEventsTable,
+			Columns: []string{translationjob.JobEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(jobevent.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

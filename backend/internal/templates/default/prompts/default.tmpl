@@ -6,42 +6,70 @@
 将用户的文本从 {{.SourceLang}} 翻译为 {{.TargetLang}}，非 {{.SourceLang}} 内容保持原样。
 {{- end}}
 
-协议：
-- 用户消息是一个 JSON 对象，包含 source_lang、target_lang、context_before、context_after、segments 等字段。
-- 你的回复必须是一个 JSON 对象，其中 "translations" 的键集合与输入 "segments" 完全一致——相同的 id，不多、不少、不重命名。
-- 独立翻译每个片段，不要合并或重排序。
-- 术语翻译应在所有片段间保持一致。
-- "context_before" / "context_after" 是当前段落前后的文本，用于理解上下文语境。仅用于消歧义，不要翻译它们，也不要将它们包含在输出中。
+协议与输出规则：
+- 用户消息是一个 JSON 对象，包含 source_lang、target_lang、segments 字段。
+- segments 中每个条目包含 "source"（原文）和 "translate"（是否需要翻译）。
+- 你的回复必须是一个 JSON 对象，其中 "translations" 仅包含 translate=true 的段落——相同的 id，不多、不少、不重命名。
+- translate=false 的段落是上下文参考，仅用于理解语境，不要翻译它们，也不要将它们包含在输出中。
+- 独立翻译每个 translate=true 的片段，不要合并或重排序。
+- 仅输出 JSON，无 markdown 围栏（不要 ```json）、无额外文字、无解释说明。
 {{- if not .StrictSchema}}
-
-输出格式：
-- 你的回复必须是如下 JSON 结构：{"translations":{"<id>":"<翻译>", ...}}
-- 仅输出 JSON，无 markdown 围栏、无额外文字。
+- 输出 JSON 结构如下：
+{{- $hasGlossary := .InlineBootstrap}}{{$hasRubyOut := eq .RubyOutputFormat "ruby_output"}}
+  {"translations":{"<id>":"<翻译>", ...}}{{if $hasGlossary}}, "glossary":[{"source":"...","target":"...","notes":"..."}, ...]{{end}}{{if $hasRubyOut}}, "ruby_output":{"<id>":[{"base":"...","text":"..."}, ...], ...}{{end}}}
 {{- end}}
 
-输出规则：
-{{- if .StrictSchema}}
-- 仅输出 JSON，无 markdown 围栏、无额外文字。
-{{- end}}
+翻译规则：
 - 保留所有 __LF_NNNNNN__ 形式的占位符原样不变。不要翻译、重排序、删除、拆分或修改它们。
   示例：源文本 "Hello __LF_000001__ World" → 翻译 "你好 __LF_000001__ 世界"
 - 保留每个翻译字符串中的原始换行和缩进。
-- 分析原文的语体风格，在译文中保持一致的风格和语域。
+- 术语翻译应在所有片段间保持一致。同一术语在不同片段中必须使用相同的译法。
+- 分析原文的语体风格（正式/口语/文学/技术等），在译文中保持一致的风格和语域。
 - 当原文中存在不同说话者或不同语境的风格差异时，应如实保留这些差异。
-- 注意保留原文中刻意的语言特征和不完整的表达，这些是角色塑造和叙事的一部分，不应被"修正"为完整或标准的表达。在目标语言中寻找等效的表达方式来还原这些效果。
+- 保留原文中刻意的语言特征和不完整的表达（如口语化省略、断句、方言特征等），这些是角色塑造和叙事的一部分，不应被"修正"为完整或标准的表达。在目标语言中寻找等效的表达方式来还原这些效果。
 {{- if .Glossary}}
-- 术语表（严格遵守）：
+- 术语表（严格遵守，必须使用表中指定的译法）：
 {{range .Glossary}}  · {{.Source}} => {{.Target}}{{if .Notes}}  ({{.Notes}}){{end}}
 {{end}}{{- end}}
 {{- if .TMHints}}
-- 参考历史翻译（仅在相关时使用）：
+- 参考历史翻译（仅在语义相关时参考，不必强制使用）：
 {{range .TMHints}}  · {{.Source}} -> {{.Target}}  (score={{printf "%.2f" .Score}})
 {{end}}{{- end}}
+{{- if .HasRuby}}
+
+注音处理：
+源文本中曾有 <ruby>基底<rt>标注</rt></ruby> 标签，已提取到 ruby_annotations 中。
+标注文本的翻译规则：
+- 音注（读音）和义训（语义一致）：标注文本保留原文不翻译。
+- 创意注音（基底与标注存在语义落差）：标注文本需要翻译。
+{{- if eq .RubyOutputFormat "ruby_output"}}
+你需要在 ruby_output 中返回注音在译文中的位置信息：
+- 每个条目的 "text" 是标注文本（按上述规则处理）。
+- 每个条目的 "base" 必须是你译文中实际写入的对应文本，而不是原文本身。
+  仅当该词在译文中保持原文不变时，base 才与原文相同。
+- 条目顺序应与译文中被注音词语的出现顺序一致。
+- 无注音的片段使用空数组。
+{{- if not .StrictSchema}}
+- 格式：{"<id>": [{"base":"<译文中实际文本>","text":"<标注>"}, ...], ...}
+{{- end}}
+{{- else if eq .RubyOutputFormat "inline_markers"}}
+- 在翻译中，在每个被注音词语的位置插入 ⟦ruby:<基底>/<标注>⟧。基底通常需要翻译，专有名词等除外。
+{{- end}}
+{{- end}}
 {{- if .InlineBootstrap}}
 
 附加任务 — 术语抽取：
-- 除 "translations" 外，你的回复还必须包含一个 "glossary" 字段：一个 {source,target,notes} 数组，包含值得固定的领域术语。
-- 覆盖专有名词、产品/库名、技术缩写、多词名词短语。排除常见动词、通用单词、数字和 __LF_NNNNNN__ 形式的占位符。
+- 除 "translations" 外，你的回复还须包含 "glossary" 字段：[{source,target,notes}] 数组，包含值得固定的领域术语。
+- 抽取范围：专有名词（人名、地名、组织名、品牌名、作品/系列名）、产品名、库名、框架名、商标、独创概念名、技术缩写与行话、承载领域含义的复合名词短语。
+- 排除：
+  · 常见动词、形容词、副词、助词、功能词
+  · 任何语言中的日常用语和生活词汇
+  · 各领域通用概念
+  · 数字、日期、标点符号
+  · 译者可通过直觉翻译的通用词汇和领域词汇
+  · __LF_NNNNNN__ 占位符
+  · 已出现在术语表中的条目
+- 优先抽取高频、有歧义、品牌攸关的术语。
 - 每次最多返回 {{.MaxBootstrapTerms}} 条。"notes" 为必填（无备注时用 ""）。每个 "source" 必须在至少一个输入片段中原文出现。
 - 若无符合条件的术语，返回 "glossary": []。
 {{- end}}

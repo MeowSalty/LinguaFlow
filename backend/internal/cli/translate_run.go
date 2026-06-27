@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -10,6 +12,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 )
 
@@ -72,13 +75,11 @@ func runTranslate(cmd *cobra.Command, rt *appCtx, opts translateOptions) error {
 	for _, ignored := range report.Ignored {
 		rt.logger.Info("ignored unsupported file", "path", ignored.Path, "reason", ignored.Reason)
 	}
-	for _, job := range jobs {
-		rt.logger.Info("translation queued")
-		job.SourceLang = opts.from
-		job.TargetLang = opts.to
-		if err := eng.Translate(cmd.Context(), job); err != nil {
+	for _, fj := range jobs {
+		rt.logger.Info("translation queued", "input", fj.InputPath, "output", fj.OutputPath)
+		if err := translateSingleFile(cmd.Context(), eng, fj, opts.from, opts.to); err != nil {
 			failed = append(failed, fmt.Sprintf("%v", err))
-			rt.logger.Error("translation failed", "err", err)
+			rt.logger.Error("translation failed", "input", fj.InputPath, "err", err)
 			continue
 		}
 	}
@@ -106,8 +107,11 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 	firstRound := cliCfg.Execution.Rounds[0]
 	firstProfile := resolveProfile(cliCfg, firstRound.Profile)
 
-	// 全局 Prompt 配置：使用第一轮的提示词模板作为回退
+	// 全局 Prompt 配置：翻译模板必填，不再回退到内置默认值
 	firstPromptContent := resolvePromptContent(cliCfg, firstRound.Prompt)
+	if firstPromptContent == "" {
+		return nil, fmt.Errorf("prompt_templates %q has no content (translation prompt is required)", firstRound.Prompt)
+	}
 
 	cfg := &config.Config{
 		Version:    cliCfg.Version,
@@ -129,11 +133,38 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 		Prompt: config.PromptConfig{
 			SystemTemplateContent: firstPromptContent,
 		},
-		Glossary:          cliCfg.Glossary,
+		Glossary: config.GlossaryConfig{
+			Enabled:    cliCfg.Glossary.Enabled,
+			Path:       cliCfg.Glossary.Path,
+			Save:       cliCfg.Glossary.Save,
+			Bootstrap:  firstProfile.Bootstrap,
+			Standalone: cliCfg.Execution.Bootstrap,
+		},
 		TranslationMemory: cliCfg.TranslationMemory,
 		Plugins:           cliCfg.Plugins,
 		Output:            cliCfg.Output,
 		Log:               cliCfg.Log,
+	}
+
+	// ── 1b. 解析独立自举模板引用 ──
+	if cliCfg.Execution.Bootstrap.Enabled && cliCfg.Execution.Bootstrap.Template != "" {
+		pt, ok := cliCfg.PromptTemplates[cliCfg.Execution.Bootstrap.Template]
+		if !ok {
+			return nil, fmt.Errorf("prompt_templates %q not found (referenced by execution.bootstrap.template)", cliCfg.Execution.Bootstrap.Template)
+		}
+		bootstrapContent := pt.BootstrapContent
+		if bootstrapContent == "" && pt.BootstrapFile != "" {
+			data, err := os.ReadFile(pt.BootstrapFile)
+			if err != nil {
+				return nil, fmt.Errorf("read bootstrap file %q: %w", pt.BootstrapFile, err)
+			}
+			bootstrapContent = string(data)
+		}
+		if bootstrapContent == "" {
+			return nil, fmt.Errorf("prompt_templates %q has no bootstrap_content (required when execution.bootstrap.enabled is true)",
+				cliCfg.Execution.Bootstrap.Template)
+		}
+		cfg.Glossary.Standalone.TemplateContent = bootstrapContent
 	}
 
 	// ── 2. 构造每轮配置 ──
@@ -190,9 +221,30 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 		})
 	}
 
+	// 解析注音对齐重试后端
+	var rubyRetryBackends []backend.Backend
+	if retryName := cfg.Pipeline.Protect.Ruby.RetryBackend; retryName != "" {
+		bCfg, ok := cliCfg.Backends[retryName]
+		if !ok {
+			return nil, fmt.Errorf("ruby retry backend %q not found in backends", retryName)
+		}
+		b, bErr := engine.BuildBackends([]config.BackendConfig{{
+			Name:            retryName,
+			Type:            bCfg.Type,
+			Enabled:         bCfg.Enabled,
+			RateLimitPerSec: bCfg.RateLimitPerSec,
+			Options:         bCfg.Options,
+		}})
+		if bErr != nil {
+			return nil, fmt.Errorf("build ruby retry backend %q: %w", retryName, bErr)
+		}
+		rubyRetryBackends = b
+	}
+
 	return &engine.Options{
-		Config: cfg,
-		Rounds: rounds,
+		Config:            cfg,
+		Rounds:            rounds,
+		RubyRetryBackends: rubyRetryBackends,
 	}, nil
 }
 
@@ -212,4 +264,59 @@ func resolvePromptContent(cliCfg *config.CLIConfig, name string) string {
 		return pt.Content
 	}
 	return ""
+}
+
+// translateSingleFile 使用新的统一 Engine.Translate() API 翻译单个文件。
+// 流程：解析文件 → 构建 Document → eng.Translate() → 渲染输出。
+func translateSingleFile(ctx context.Context, eng *engine.Engine, fj FileJob, sourceLang, targetLang string) error {
+	// 1. 检测格式
+	p, err := parser.DetectByExt(fj.InputPath)
+	if err != nil {
+		return err
+	}
+
+	// 2. 解析文件
+	reader, err := os.Open(fj.InputPath)
+	if err != nil {
+		return fmt.Errorf("cli: open source: %w", err)
+	}
+	doc, parseErr := p.Parse(ctx, reader)
+	reader.Close()
+	if parseErr != nil {
+		return fmt.Errorf("cli: parse: %w", parseErr)
+	}
+
+	// 3. 应用语言覆盖
+	if sourceLang != "" {
+		doc.SourceLang = sourceLang
+	}
+	if targetLang != "" {
+		doc.TargetLang = targetLang
+	}
+
+	// 4. 翻译（使用新的统一 API）
+	if _, err := eng.Translate(ctx, doc); err != nil {
+		return fmt.Errorf("cli: translate: %w", err)
+	}
+
+	// 5. 重新打开原始文件用于渲染
+	original, err := os.Open(fj.InputPath)
+	if err != nil {
+		return fmt.Errorf("cli: reopen source: %w", err)
+	}
+	defer func() { _ = original.Close() }()
+
+	// 6. 创建输出 writer
+	writer, err := createAtomicWriter(fj.OutputPath)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = writer.Close() }()
+
+	// 7. 渲染
+	if err := p.Render(ctx, doc, original, writer); err != nil {
+		return fmt.Errorf("cli: render: %w", err)
+	}
+
+	return nil
 }

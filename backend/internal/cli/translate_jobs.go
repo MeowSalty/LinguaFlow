@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
 )
 
@@ -27,7 +26,7 @@ type inputEntry struct {
 	rel  string
 }
 
-func buildTranslateJobs(inputs []string, output string) ([]engine.TranslateJob, batchPlan, error) {
+func buildTranslateJobs(inputs []string, output string) ([]FileJob, batchPlan, error) {
 	entries, report, err := collectInputEntries(inputs)
 	if err != nil {
 		return nil, batchPlan{}, err
@@ -41,7 +40,7 @@ func buildTranslateJobs(inputs []string, output string) ([]engine.TranslateJob, 
 		if stat, err := os.Stat(output); err == nil && stat.IsDir() {
 			return nil, report, fmt.Errorf("单文件输入时 --output/-o 必须是输出文件路径，当前为目录: %s", output)
 		}
-		return []engine.TranslateJob{engine.FileJob(entries[0].path, output)}, report, nil
+		return []FileJob{{InputPath: entries[0].path, OutputPath: output}}, report, nil
 	}
 
 	if err := os.MkdirAll(output, 0o755); err != nil {
@@ -55,10 +54,10 @@ func buildTranslateJobs(inputs []string, output string) ([]engine.TranslateJob, 
 		return nil, report, fmt.Errorf("多文件或目录输入时 --output/-o 必须是输出目录: %s", output)
 	}
 
-	jobs := make([]engine.TranslateJob, 0, len(entries))
+	jobs := make([]FileJob, 0, len(entries))
 	for _, entry := range entries {
 		rel := entry.outputRelativePath()
-		jobs = append(jobs, engine.FileJob(entry.path, filepath.Join(output, rel)))
+		jobs = append(jobs, FileJob{InputPath: entry.path, OutputPath: filepath.Join(output, rel)})
 	}
 	return jobs, report, nil
 }

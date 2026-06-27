@@ -64,12 +64,6 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 		return nil, fmt.Errorf("google: unknown response_format %q", rf)
 	}
 
-	if b.timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, b.timeout)
-		defer cancel()
-	}
-
 	sysText := req.System
 	if rf == respFmtJSONObject {
 		// Gemini json_object 模式不带 schema，用 system 指令模拟纯 JSON 输出
@@ -167,12 +161,19 @@ func factory(opts map[string]any) (backend.Backend, error) {
 		return nil, fmt.Errorf("google: invalid response_format %q (want json_schema|json_object|none)", rf)
 	}
 
+	t, err := backend.DurationOpt(opts, "timeout", 60*time.Second)
+	if err != nil {
+		return nil, err
+	}
 	cc := &genai.ClientConfig{
 		APIKey:  apiKey,
 		Backend: genai.BackendGeminiAPI,
 	}
+	if t > 0 {
+		cc.HTTPOptions.Timeout = &t
+	}
 	if u := backend.StringOpt(opts, "base_url", ""); u != "" {
-		cc.HTTPOptions = genai.HTTPOptions{BaseURL: u}
+		cc.HTTPOptions.BaseURL = u
 	}
 	client, err := genai.NewClient(context.Background(), cc)
 	if err != nil {
@@ -183,12 +184,8 @@ func factory(opts map[string]any) (backend.Backend, error) {
 		client:         client,
 		model:          backend.StringOpt(opts, "model", defaultModel),
 		maxTokens:      backend.Int64Opt(opts, "max_tokens", defaultMaxTokens),
+		timeout:        t,
 		responseFormat: rf,
-	}
-	if t, err := backend.DurationOpt(opts, "timeout", 60*time.Second); err == nil {
-		b.timeout = t
-	} else {
-		return nil, err
 	}
 	return b, nil
 }

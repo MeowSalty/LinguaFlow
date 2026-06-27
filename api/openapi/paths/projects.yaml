@@ -82,3 +82,40 @@ projectById:
       default:
         $ref: '../base.yaml#/components/responses/Problem'
 
+orgProjects:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/OrgId'
+  post:
+    operationId: CreateOrgProject
+    summary: 创建组织项目
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/project.yaml#/CreateProjectRequest'
+    responses:
+      '201':
+        description: 创建成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/project.yaml#/Project'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  get:
+    operationId: ListOrgProjects
+    summary: 列出组织项目
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 项目列表
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/project.yaml#/ProjectListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

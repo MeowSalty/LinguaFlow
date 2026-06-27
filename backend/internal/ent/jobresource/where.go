@@ -90,6 +90,26 @@ func ErrorMessage(v string) predicate.JobResource {
 	return predicate.JobResource(sql.FieldEQ(FieldErrorMessage, v))
 }
 
+// CurrentStage applies equality check predicate on the "current_stage" field. It's identical to CurrentStageEQ.
+func CurrentStage(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldEQ(FieldCurrentStage, v))
+}
+
+// StageTotal applies equality check predicate on the "stage_total" field. It's identical to StageTotalEQ.
+func StageTotal(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldEQ(FieldStageTotal, v))
+}
+
+// StageCompleted applies equality check predicate on the "stage_completed" field. It's identical to StageCompletedEQ.
+func StageCompleted(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldEQ(FieldStageCompleted, v))
+}
+
+// StartedAt applies equality check predicate on the "started_at" field. It's identical to StartedAtEQ.
+func StartedAt(v time.Time) predicate.JobResource {
+	return predicate.JobResource(sql.FieldEQ(FieldStartedAt, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.JobResource {
 	return predicate.JobResource(sql.FieldEQ(FieldCreatedAt, v))
@@ -463,6 +483,211 @@ func ErrorMessageEqualFold(v string) predicate.JobResource {
 // ErrorMessageContainsFold applies the ContainsFold predicate on the "error_message" field.
 func ErrorMessageContainsFold(v string) predicate.JobResource {
 	return predicate.JobResource(sql.FieldContainsFold(FieldErrorMessage, v))
+}
+
+// CurrentStageEQ applies the EQ predicate on the "current_stage" field.
+func CurrentStageEQ(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldEQ(FieldCurrentStage, v))
+}
+
+// CurrentStageNEQ applies the NEQ predicate on the "current_stage" field.
+func CurrentStageNEQ(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldNEQ(FieldCurrentStage, v))
+}
+
+// CurrentStageIn applies the In predicate on the "current_stage" field.
+func CurrentStageIn(vs ...string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldIn(FieldCurrentStage, vs...))
+}
+
+// CurrentStageNotIn applies the NotIn predicate on the "current_stage" field.
+func CurrentStageNotIn(vs ...string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldNotIn(FieldCurrentStage, vs...))
+}
+
+// CurrentStageGT applies the GT predicate on the "current_stage" field.
+func CurrentStageGT(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldGT(FieldCurrentStage, v))
+}
+
+// CurrentStageGTE applies the GTE predicate on the "current_stage" field.
+func CurrentStageGTE(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldGTE(FieldCurrentStage, v))
+}
+
+// CurrentStageLT applies the LT predicate on the "current_stage" field.
+func CurrentStageLT(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldLT(FieldCurrentStage, v))
+}
+
+// CurrentStageLTE applies the LTE predicate on the "current_stage" field.
+func CurrentStageLTE(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldLTE(FieldCurrentStage, v))
+}
+
+// CurrentStageContains applies the Contains predicate on the "current_stage" field.
+func CurrentStageContains(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldContains(FieldCurrentStage, v))
+}
+
+// CurrentStageHasPrefix applies the HasPrefix predicate on the "current_stage" field.
+func CurrentStageHasPrefix(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldHasPrefix(FieldCurrentStage, v))
+}
+
+// CurrentStageHasSuffix applies the HasSuffix predicate on the "current_stage" field.
+func CurrentStageHasSuffix(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldHasSuffix(FieldCurrentStage, v))
+}
+
+// CurrentStageIsNil applies the IsNil predicate on the "current_stage" field.
+func CurrentStageIsNil() predicate.JobResource {
+	return predicate.JobResource(sql.FieldIsNull(FieldCurrentStage))
+}
+
+// CurrentStageNotNil applies the NotNil predicate on the "current_stage" field.
+func CurrentStageNotNil() predicate.JobResource {
+	return predicate.JobResource(sql.FieldNotNull(FieldCurrentStage))
+}
+
+// CurrentStageEqualFold applies the EqualFold predicate on the "current_stage" field.
+func CurrentStageEqualFold(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldEqualFold(FieldCurrentStage, v))
+}
+
+// CurrentStageContainsFold applies the ContainsFold predicate on the "current_stage" field.
+func CurrentStageContainsFold(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldContainsFold(FieldCurrentStage, v))
+}
+
+// StageTotalEQ applies the EQ predicate on the "stage_total" field.
+func StageTotalEQ(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldEQ(FieldStageTotal, v))
+}
+
+// StageTotalNEQ applies the NEQ predicate on the "stage_total" field.
+func StageTotalNEQ(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldNEQ(FieldStageTotal, v))
+}
+
+// StageTotalIn applies the In predicate on the "stage_total" field.
+func StageTotalIn(vs ...int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldIn(FieldStageTotal, vs...))
+}
+
+// StageTotalNotIn applies the NotIn predicate on the "stage_total" field.
+func StageTotalNotIn(vs ...int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldNotIn(FieldStageTotal, vs...))
+}
+
+// StageTotalGT applies the GT predicate on the "stage_total" field.
+func StageTotalGT(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldGT(FieldStageTotal, v))
+}
+
+// StageTotalGTE applies the GTE predicate on the "stage_total" field.
+func StageTotalGTE(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldGTE(FieldStageTotal, v))
+}
+
+// StageTotalLT applies the LT predicate on the "stage_total" field.
+func StageTotalLT(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldLT(FieldStageTotal, v))
+}
+
+// StageTotalLTE applies the LTE predicate on the "stage_total" field.
+func StageTotalLTE(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldLTE(FieldStageTotal, v))
+}
+
+// StageCompletedEQ applies the EQ predicate on the "stage_completed" field.
+func StageCompletedEQ(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldEQ(FieldStageCompleted, v))
+}
+
+// StageCompletedNEQ applies the NEQ predicate on the "stage_completed" field.
+func StageCompletedNEQ(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldNEQ(FieldStageCompleted, v))
+}
+
+// StageCompletedIn applies the In predicate on the "stage_completed" field.
+func StageCompletedIn(vs ...int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldIn(FieldStageCompleted, vs...))
+}
+
+// StageCompletedNotIn applies the NotIn predicate on the "stage_completed" field.
+func StageCompletedNotIn(vs ...int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldNotIn(FieldStageCompleted, vs...))
+}
+
+// StageCompletedGT applies the GT predicate on the "stage_completed" field.
+func StageCompletedGT(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldGT(FieldStageCompleted, v))
+}
+
+// StageCompletedGTE applies the GTE predicate on the "stage_completed" field.
+func StageCompletedGTE(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldGTE(FieldStageCompleted, v))
+}
+
+// StageCompletedLT applies the LT predicate on the "stage_completed" field.
+func StageCompletedLT(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldLT(FieldStageCompleted, v))
+}
+
+// StageCompletedLTE applies the LTE predicate on the "stage_completed" field.
+func StageCompletedLTE(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldLTE(FieldStageCompleted, v))
+}
+
+// StartedAtEQ applies the EQ predicate on the "started_at" field.
+func StartedAtEQ(v time.Time) predicate.JobResource {
+	return predicate.JobResource(sql.FieldEQ(FieldStartedAt, v))
+}
+
+// StartedAtNEQ applies the NEQ predicate on the "started_at" field.
+func StartedAtNEQ(v time.Time) predicate.JobResource {
+	return predicate.JobResource(sql.FieldNEQ(FieldStartedAt, v))
+}
+
+// StartedAtIn applies the In predicate on the "started_at" field.
+func StartedAtIn(vs ...time.Time) predicate.JobResource {
+	return predicate.JobResource(sql.FieldIn(FieldStartedAt, vs...))
+}
+
+// StartedAtNotIn applies the NotIn predicate on the "started_at" field.
+func StartedAtNotIn(vs ...time.Time) predicate.JobResource {
+	return predicate.JobResource(sql.FieldNotIn(FieldStartedAt, vs...))
+}
+
+// StartedAtGT applies the GT predicate on the "started_at" field.
+func StartedAtGT(v time.Time) predicate.JobResource {
+	return predicate.JobResource(sql.FieldGT(FieldStartedAt, v))
+}
+
+// StartedAtGTE applies the GTE predicate on the "started_at" field.
+func StartedAtGTE(v time.Time) predicate.JobResource {
+	return predicate.JobResource(sql.FieldGTE(FieldStartedAt, v))
+}
+
+// StartedAtLT applies the LT predicate on the "started_at" field.
+func StartedAtLT(v time.Time) predicate.JobResource {
+	return predicate.JobResource(sql.FieldLT(FieldStartedAt, v))
+}
+
+// StartedAtLTE applies the LTE predicate on the "started_at" field.
+func StartedAtLTE(v time.Time) predicate.JobResource {
+	return predicate.JobResource(sql.FieldLTE(FieldStartedAt, v))
+}
+
+// StartedAtIsNil applies the IsNil predicate on the "started_at" field.
+func StartedAtIsNil() predicate.JobResource {
+	return predicate.JobResource(sql.FieldIsNull(FieldStartedAt))
+}
+
+// StartedAtNotNil applies the NotNil predicate on the "started_at" field.
+func StartedAtNotNil() predicate.JobResource {
+	return predicate.JobResource(sql.FieldNotNull(FieldStartedAt))
 }
 
 // HasJob applies the HasEdge predicate on the "job" edge.

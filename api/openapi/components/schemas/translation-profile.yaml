@@ -14,6 +14,17 @@ ProfileSplitConfig:
       type: integer
       minimum: 1
 
+ProfileRubyConfig:
+  type: object
+  required: [enabled]
+  properties:
+    enabled:
+      type: boolean
+    output_format:
+      type: string
+      enum: [ruby_output, inline_markers]
+      default: ruby_output
+
 ProfileProtectConfig:
   type: object
   required: [enabled]
@@ -24,6 +35,9 @@ ProfileProtectConfig:
       type: array
       items:
         type: string
+        enum: [code, link, placeholder, xml]
+    ruby:
+      $ref: '#/ProfileRubyConfig'
 
 ProfilePostprocessConfig:
   type: object
@@ -58,35 +72,60 @@ ProfileRepairConfig:
 
 ProfileBootstrapConfig:
   type: object
-  required: [mode, save, max_terms_per_batch, min_source_len, inline_conflict_strategy]
-  properties:
-    mode:
-      type: string
-      enum: [off, pre, inline]
-    save:
-      type: boolean
-    max_terms_per_batch:
-      type: integer
-      minimum: 1
-    min_source_len:
-      type: integer
-      minimum: 1
-    inline_conflict_strategy:
-      type: string
-      enum: [off, rewrite-local]
-
-ProfileGlossaryConfig:
-  type: object
-  required: [enabled, bootstrap]
+  required: [enabled, max_terms_per_1000_chars, min_source_len, inline_conflict_strategy]
   properties:
     enabled:
       type: boolean
+      default: false
+      description: 是否启用内联自举
+    max_terms_per_1000_chars:
+      type: number
+      format: double
+      minimum: 0
+      description: 每 1000 源文字符（rune）最多抽取的术语条数（缩放系数）
+    min_source_len:
+      type: integer
+      minimum: 1
+      description: 内联自举术语源文最短字符数
+    inline_conflict_strategy:
+      type: string
+      enum: [off, rewrite-local]
+      description: 并发术语冲突处理策略
+
+ProfileGlossaryConfig:
+  type: object
+  required: [bootstrap]
+  properties:
     bootstrap:
       $ref: '#/ProfileBootstrapConfig'
 
+ProfileContextConfig:
+  type: object
+  required: [enabled, before, after, max_chars]
+  properties:
+    enabled:
+      type: boolean
+      default: true
+      description: 是否启用上下文窗口
+    before:
+      type: integer
+      minimum: 0
+      default: 1
+      description: 上下文取前 N 段
+    after:
+      type: integer
+      minimum: 0
+      default: 1
+      description: 上下文取后 N 段
+    max_chars:
+      type: integer
+      minimum: 0
+      default: 0
+      description: 每个上下文段落的字符数上限，0 表示不限制
+
 TranslationProfileConfig:
   type: object
-  required: [split, protect, postprocess, repair, glossary]
+  required: [split, protect, postprocess, repair, glossary, context]
   properties:
     split:
       $ref: '#/ProfileSplitConfig'
@@ -98,6 +137,8 @@ TranslationProfileConfig:
       $ref: '#/ProfileRepairConfig'
     glossary:
       $ref: '#/ProfileGlossaryConfig'
+    context:
+      $ref: '#/ProfileContextConfig'
 
 TranslationProfile:
   type: object

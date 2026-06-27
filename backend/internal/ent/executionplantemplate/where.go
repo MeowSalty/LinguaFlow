@@ -425,6 +425,26 @@ func OwnerOrgIDNotNil() predicate.ExecutionPlanTemplate {
 	return predicate.ExecutionPlanTemplate(sql.FieldNotNull(FieldOwnerOrgID))
 }
 
+// BootstrapIsNil applies the IsNil predicate on the "bootstrap" field.
+func BootstrapIsNil() predicate.ExecutionPlanTemplate {
+	return predicate.ExecutionPlanTemplate(sql.FieldIsNull(FieldBootstrap))
+}
+
+// BootstrapNotNil applies the NotNil predicate on the "bootstrap" field.
+func BootstrapNotNil() predicate.ExecutionPlanTemplate {
+	return predicate.ExecutionPlanTemplate(sql.FieldNotNull(FieldBootstrap))
+}
+
+// RubyRetryIsNil applies the IsNil predicate on the "ruby_retry" field.
+func RubyRetryIsNil() predicate.ExecutionPlanTemplate {
+	return predicate.ExecutionPlanTemplate(sql.FieldIsNull(FieldRubyRetry))
+}
+
+// RubyRetryNotNil applies the NotNil predicate on the "ruby_retry" field.
+func RubyRetryNotNil() predicate.ExecutionPlanTemplate {
+	return predicate.ExecutionPlanTemplate(sql.FieldNotNull(FieldRubyRetry))
+}
+
 // HasOwnerUser applies the HasEdge predicate on the "owner_user" edge.
 func HasOwnerUser() predicate.ExecutionPlanTemplate {
 	return predicate.ExecutionPlanTemplate(func(s *sql.Selector) {

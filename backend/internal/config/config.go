@@ -47,6 +47,7 @@ type PipelineConfig struct {
 	Protect     ProtectConfig     `yaml:"protect"`
 	Translate   TranslateConfig   `yaml:"translate"`
 	Postprocess PostprocessConfig `yaml:"postprocess"`
+	Context     ContextConfig     `yaml:"context"`
 }
 
 type SplitConfig struct {
@@ -56,9 +57,23 @@ type SplitConfig struct {
 }
 
 type ProtectConfig struct {
-	Enabled bool     `yaml:"enabled"`
-	Rules   []string `yaml:"rules"`
+	Enabled bool       `yaml:"enabled"`
+	Rules   []string   `yaml:"rules"`
+	Ruby    RubyConfig `yaml:"ruby"`
 }
+
+// RubyConfig 控制 Ruby 注音保护的行为。
+type RubyConfig struct {
+	Enabled      bool   `yaml:"enabled"`
+	OutputFormat string `yaml:"output_format"` // "ruby_output" (默认) | "inline_markers"
+	RetryBackend string `yaml:"retry_backend"` // 注音对齐重试后端名称；空时使用翻译主后端
+}
+
+// Ruby 输出格式常量。
+const (
+	RubyOutputInlineMarkers = "inline_markers"
+	RubyOutputDefault       = "ruby_output"
+)
 
 type TranslateConfig struct {
 	Concurrency     int          `yaml:"concurrency"`
@@ -95,6 +110,24 @@ type PostprocessConfig struct {
 	TrimSpaces bool `yaml:"trim_spaces"`
 }
 
+// ContextConfig 控制翻译上下文窗口。
+type ContextConfig struct {
+	Enabled  bool `yaml:"enabled"`   // 是否启用上下文，默认 true
+	Before   int  `yaml:"before"`    // 上下文取前 N 段，默认 1
+	After    int  `yaml:"after"`     // 上下文取后 N 段，默认 1
+	MaxChars int  `yaml:"max_chars"` // 每个上下文段落的字符数上限，0=不限制
+}
+
+// DefaultContextConfig 返回默认的上下文配置。
+func DefaultContextConfig() ContextConfig {
+	return ContextConfig{
+		Enabled:  true,
+		Before:   1,
+		After:    1,
+		MaxChars: 0,
+	}
+}
+
 type PromptConfig struct {
 	SystemTemplate        string         `yaml:"system_template"`
 	SystemTemplateContent string         `yaml:"system_template_content"` // 新增：内联内容，优先级高于 SystemTemplate
@@ -103,36 +136,41 @@ type PromptConfig struct {
 }
 
 type GlossaryConfig struct {
-	Enabled   bool            `yaml:"enabled"`
-	Path      string          `yaml:"path"`
-	Bootstrap BootstrapConfig `yaml:"bootstrap"`
+	Enabled    bool                      `yaml:"enabled"`
+	Path       string                    `yaml:"path"`
+	Save       bool                      `yaml:"save"`
+	Bootstrap  BootstrapConfig           `yaml:"bootstrap"`  // inline 配置
+	Standalone StandaloneBootstrapConfig `yaml:"standalone"` // 独立自举配置
 }
 
-// BootstrapConfig 控制术语自举：用 LLM 抽取并翻译领域术语，写入运行时 Glossary。
+// BootstrapConfig 控制内联自举（inline）：翻译的 LLM 调用顺带返回术语。
 //
-// Mode 选择策略：
-//   - off：关闭自举（默认）。
-//   - pre：translate 之前独立扫一遍文档，整篇翻译都能用上抽到的术语；多一次 LLM 调用。
-//   - inline：translate 的 LLM 调用顺带返回术语；只对后续 batch 生效，省一次扫描。
-//
-// 任一非 off 模式都隐含要求 Glossary.Enabled=true，Validate 会自动设上。
-// Save 控制结束后是否把增量回写到 Glossary.Path；off 模式下没有 dirty 自然不会写。
-//
-// InlineConflictStrategy 仅 inline 模式下生效，控制并发 worker 给同一 source 提交不同
+// InlineConflictStrategy 控制并发 worker 给同一 source 提交不同
 // target 时的处理方式：First-Wins 保证全局术语表里只保留先到的版本，但后到 worker 的
 // 译文已经用了被丢弃的版本，会导致文档内同一术语翻译不一致。
 //   - rewrite-local（默认）：后到 worker 把本批译文里自己用的 target 字面值替换为
 //     权威表中的版本；CJK 直接替换，拉丁系按词边界，歧义场景仅 Warn 不动。
 //   - off：完全不处理，沿用旧行为（First-Wins + 不一致译文）。
 type BootstrapConfig struct {
-	Mode                   string `yaml:"mode"`
-	Save                   bool   `yaml:"save"`
-	MaxTermsPerBatch       int    `yaml:"max_terms_per_batch"`
-	MinSourceLen           int    `yaml:"min_source_len"`
-	InlineConflictStrategy string `yaml:"inline_conflict_strategy"`
+	Enabled                bool    `yaml:"enabled"`
+	MaxTermsPer1000Chars   float64 `yaml:"max_terms_per_1000_chars"`
+	MinSourceLen           int     `yaml:"min_source_len"`
+	InlineConflictStrategy string  `yaml:"inline_conflict_strategy"`
 }
 
-// Bootstrap 模式常量。
+// StandaloneBootstrapConfig 控制独立自举（pre）：translate 之前独立扫一遍文档，
+// 整篇翻译都能用上抽到的术语；多一次 LLM 调用。
+type StandaloneBootstrapConfig struct {
+	Enabled          bool   `yaml:"enabled"`
+	Template         string `yaml:"template"` // 引用 prompt_templates 中的 key（CLI 用）
+	TemplateContent  string `yaml:"-"`        // 运行时解析后的 bootstrap 模板内容（不序列化）
+	BatchSize        int    `yaml:"batch_size"`
+	Concurrency      int    `yaml:"concurrency"`
+	MaxTermsPerBatch int    `yaml:"max_terms_per_batch"`
+	MinSourceLen     int    `yaml:"min_source_len"`
+}
+
+// Bootstrap 模式常量（保留用于向后兼容）。
 const (
 	BootstrapModeOff    = "off"
 	BootstrapModePre    = "pre"
@@ -238,8 +276,12 @@ func Default() *Config {
 			},
 		}},
 		Pipeline: PipelineConfig{
-			Split:   SplitConfig{Enabled: true, Strategy: "paragraph", MaxChars: 1200},
-			Protect: ProtectConfig{Enabled: true, Rules: []string{"code", "link", "placeholder", "xml"}},
+			Split: SplitConfig{Enabled: true, Strategy: "paragraph", MaxChars: 1200},
+			Protect: ProtectConfig{
+				Enabled: true,
+				Rules:   []string{"code", "link", "placeholder", "xml"},
+				Ruby:    RubyConfig{Enabled: false, OutputFormat: RubyOutputDefault},
+			},
 			Translate: TranslateConfig{
 				Concurrency:     4,
 				BatchSize:       1,
@@ -257,6 +299,7 @@ func Default() *Config {
 				},
 			},
 			Postprocess: PostprocessConfig{Enabled: true, TrimSpaces: true},
+			Context:     DefaultContextConfig(),
 		},
 		Prompt: PromptConfig{
 			Vars: map[string]any{"style": "concise, technical", "audience": "developers"},
@@ -264,12 +307,18 @@ func Default() *Config {
 		Glossary: GlossaryConfig{
 			Enabled: false,
 			Path:    "./glossary.csv",
+			Save:    true,
 			Bootstrap: BootstrapConfig{
-				Mode:                   BootstrapModeOff,
-				Save:                   true,
-				MaxTermsPerBatch:       20,
+				MaxTermsPer1000Chars:   3.0,
 				MinSourceLen:           2,
 				InlineConflictStrategy: InlineConflictRewriteLocal,
+			},
+			Standalone: StandaloneBootstrapConfig{
+				Enabled:          false,
+				BatchSize:        20,
+				Concurrency:      2,
+				MaxTermsPerBatch: 20,
+				MinSourceLen:     2,
 			},
 		},
 		TranslationMemory: TMConfig{Enabled: false, Driver: "sqlite", DSN: "./.linguaflow/tm.db"},
@@ -337,24 +386,22 @@ func (c *Config) Validate() error {
 	if c.Pipeline.Split.MaxChars < 1 {
 		c.Pipeline.Split.MaxChars = 1200
 	}
+	switch c.Pipeline.Protect.Ruby.OutputFormat {
+	case "":
+		c.Pipeline.Protect.Ruby.OutputFormat = RubyOutputDefault
+	case RubyOutputDefault, RubyOutputInlineMarkers:
+		// ok
+	default:
+		return fmt.Errorf("pipeline.protect.ruby.output_format must be one of %s|%s, got %q",
+			RubyOutputDefault, RubyOutputInlineMarkers, c.Pipeline.Protect.Ruby.OutputFormat)
+	}
 	c.Pipeline.Translate.Repair.Normalize()
-	if c.Glossary.Bootstrap.MaxTermsPerBatch < 1 {
-		c.Glossary.Bootstrap.MaxTermsPerBatch = 20
+	// Inline bootstrap 校验
+	if c.Glossary.Bootstrap.MaxTermsPer1000Chars <= 0 {
+		c.Glossary.Bootstrap.MaxTermsPer1000Chars = 3.0
 	}
 	if c.Glossary.Bootstrap.MinSourceLen < 1 {
 		c.Glossary.Bootstrap.MinSourceLen = 2
-	}
-	switch c.Glossary.Bootstrap.Mode {
-	case "":
-		c.Glossary.Bootstrap.Mode = BootstrapModeOff
-	case BootstrapModeOff, BootstrapModePre, BootstrapModeInline:
-		// ok
-	default:
-		return fmt.Errorf("glossary.bootstrap.mode must be one of off|pre|inline, got %q", c.Glossary.Bootstrap.Mode)
-	}
-	if c.Glossary.Bootstrap.Mode != BootstrapModeOff {
-		// 自举要落到 Glossary，强制开启。
-		c.Glossary.Enabled = true
 	}
 	switch c.Glossary.Bootstrap.InlineConflictStrategy {
 	case "":
@@ -364,6 +411,25 @@ func (c *Config) Validate() error {
 	default:
 		return fmt.Errorf("glossary.bootstrap.inline_conflict_strategy must be one of off|rewrite-local, got %q",
 			c.Glossary.Bootstrap.InlineConflictStrategy)
+	}
+	// Standalone bootstrap 校验
+	if c.Glossary.Standalone.Enabled {
+		c.Glossary.Enabled = true
+		if c.Glossary.Standalone.TemplateContent == "" {
+			return fmt.Errorf("glossary.standalone.template_content is required when enabled is true")
+		}
+	}
+	if c.Glossary.Standalone.BatchSize < 1 {
+		c.Glossary.Standalone.BatchSize = 20
+	}
+	if c.Glossary.Standalone.Concurrency < 1 {
+		c.Glossary.Standalone.Concurrency = 2
+	}
+	if c.Glossary.Standalone.MaxTermsPerBatch < 1 {
+		c.Glossary.Standalone.MaxTermsPerBatch = 20
+	}
+	if c.Glossary.Standalone.MinSourceLen < 1 {
+		c.Glossary.Standalone.MinSourceLen = 2
 	}
 	if c.Server.Host == "" {
 		c.Server.Host = "0.0.0.0"

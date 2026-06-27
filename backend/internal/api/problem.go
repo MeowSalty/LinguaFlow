@@ -62,7 +62,6 @@ func writeProjectServiceError(w http.ResponseWriter, err error) {
 		writeProblem(w, http.StatusNotFound, "not_found", "项目不存在")
 	case errors.Is(err, service.ErrInvalidInput),
 		errors.Is(err, service.ErrProjectOwnerConflict),
-		errors.Is(err, service.ErrResourceScopeInvalid),
 		errors.Is(err, service.ErrBackendSourceInvalid),
 		errors.Is(err, service.ErrBackendNameAmbiguous):
 		writeProblem(w, http.StatusBadRequest, "invalid_input", err.Error())

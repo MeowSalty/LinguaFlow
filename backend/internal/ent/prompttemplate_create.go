@@ -126,6 +126,20 @@ func (_c *PromptTemplateCreate) SetNillableSystemPromptContent(v *string) *Promp
 	return _c
 }
 
+// SetBootstrapPromptContent sets the "bootstrap_prompt_content" field.
+func (_c *PromptTemplateCreate) SetBootstrapPromptContent(v string) *PromptTemplateCreate {
+	_c.mutation.SetBootstrapPromptContent(v)
+	return _c
+}
+
+// SetNillableBootstrapPromptContent sets the "bootstrap_prompt_content" field if the given value is not nil.
+func (_c *PromptTemplateCreate) SetNillableBootstrapPromptContent(v *string) *PromptTemplateCreate {
+	if v != nil {
+		_c.SetBootstrapPromptContent(*v)
+	}
+	return _c
+}
+
 // SetOwnerUser sets the "owner_user" edge to the User entity.
 func (_c *PromptTemplateCreate) SetOwnerUser(v *User) *PromptTemplateCreate {
 	return _c.SetOwnerUserID(v.ID)
@@ -191,6 +205,10 @@ func (_c *PromptTemplateCreate) defaults() {
 		v := prompttemplate.DefaultSystemPromptContent
 		_c.mutation.SetSystemPromptContent(v)
 	}
+	if _, ok := _c.mutation.BootstrapPromptContent(); !ok {
+		v := prompttemplate.DefaultBootstrapPromptContent
+		_c.mutation.SetBootstrapPromptContent(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -227,6 +245,9 @@ func (_c *PromptTemplateCreate) check() error {
 	}
 	if _, ok := _c.mutation.SystemPromptContent(); !ok {
 		return &ValidationError{Name: "system_prompt_content", err: errors.New(`ent: missing required field "PromptTemplate.system_prompt_content"`)}
+	}
+	if _, ok := _c.mutation.BootstrapPromptContent(); !ok {
+		return &ValidationError{Name: "bootstrap_prompt_content", err: errors.New(`ent: missing required field "PromptTemplate.bootstrap_prompt_content"`)}
 	}
 	return nil
 }
@@ -277,6 +298,10 @@ func (_c *PromptTemplateCreate) createSpec() (*PromptTemplate, *sqlgraph.CreateS
 	if value, ok := _c.mutation.SystemPromptContent(); ok {
 		_spec.SetField(prompttemplate.FieldSystemPromptContent, field.TypeString, value)
 		_node.SystemPromptContent = value
+	}
+	if value, ok := _c.mutation.BootstrapPromptContent(); ok {
+		_spec.SetField(prompttemplate.FieldBootstrapPromptContent, field.TypeString, value)
+		_node.BootstrapPromptContent = value
 	}
 	if nodes := _c.mutation.OwnerUserIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

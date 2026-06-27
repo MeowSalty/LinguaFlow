@@ -30,6 +30,14 @@ const (
 	FieldOutputPath = "output_path"
 	// FieldErrorMessage holds the string denoting the error_message field in the database.
 	FieldErrorMessage = "error_message"
+	// FieldCurrentStage holds the string denoting the current_stage field in the database.
+	FieldCurrentStage = "current_stage"
+	// FieldStageTotal holds the string denoting the stage_total field in the database.
+	FieldStageTotal = "stage_total"
+	// FieldStageCompleted holds the string denoting the stage_completed field in the database.
+	FieldStageCompleted = "stage_completed"
+	// FieldStartedAt holds the string denoting the started_at field in the database.
+	FieldStartedAt = "started_at"
 	// EdgeJob holds the string denoting the job edge name in mutations.
 	EdgeJob = "job"
 	// EdgeResource holds the string denoting the resource edge name in mutations.
@@ -63,6 +71,10 @@ var Columns = []string{
 	FieldCompletedSegments,
 	FieldOutputPath,
 	FieldErrorMessage,
+	FieldCurrentStage,
+	FieldStageTotal,
+	FieldStageCompleted,
+	FieldStartedAt,
 }
 
 // ForeignKeys holds the SQL foreign-keys that are owned by the "job_resources"
@@ -106,6 +118,16 @@ var (
 	DefaultCompletedSegments int
 	// CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.
 	CompletedSegmentsValidator func(int) error
+	// DefaultCurrentStage holds the default value on creation for the "current_stage" field.
+	DefaultCurrentStage string
+	// DefaultStageTotal holds the default value on creation for the "stage_total" field.
+	DefaultStageTotal int
+	// StageTotalValidator is a validator for the "stage_total" field. It is called by the builders before save.
+	StageTotalValidator func(int) error
+	// DefaultStageCompleted holds the default value on creation for the "stage_completed" field.
+	DefaultStageCompleted int
+	// StageCompletedValidator is a validator for the "stage_completed" field. It is called by the builders before save.
+	StageCompletedValidator func(int) error
 )
 
 // OrderOption defines the ordering options for the JobResource queries.
@@ -149,6 +171,26 @@ func ByOutputPath(opts ...sql.OrderTermOption) OrderOption {
 // ByErrorMessage orders the results by the error_message field.
 func ByErrorMessage(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldErrorMessage, opts...).ToFunc()
+}
+
+// ByCurrentStage orders the results by the current_stage field.
+func ByCurrentStage(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCurrentStage, opts...).ToFunc()
+}
+
+// ByStageTotal orders the results by the stage_total field.
+func ByStageTotal(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStageTotal, opts...).ToFunc()
+}
+
+// ByStageCompleted orders the results by the stage_completed field.
+func ByStageCompleted(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStageCompleted, opts...).ToFunc()
+}
+
+// ByStartedAt orders the results by the started_at field.
+func ByStartedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStartedAt, opts...).ToFunc()
 }
 
 // ByJobField orders the results by job field.

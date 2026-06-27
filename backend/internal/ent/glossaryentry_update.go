@@ -12,9 +12,9 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 )
 
 // GlossaryEntryUpdate is the builder for updating GlossaryEntry entities.
@@ -33,20 +33,6 @@ func (_u *GlossaryEntryUpdate) Where(ps ...predicate.GlossaryEntry) *GlossaryEnt
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *GlossaryEntryUpdate) SetUpdatedAt(v time.Time) *GlossaryEntryUpdate {
 	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// SetScopeKey sets the "scope_key" field.
-func (_u *GlossaryEntryUpdate) SetScopeKey(v string) *GlossaryEntryUpdate {
-	_u.mutation.SetScopeKey(v)
-	return _u
-}
-
-// SetNillableScopeKey sets the "scope_key" field if the given value is not nil.
-func (_u *GlossaryEntryUpdate) SetNillableScopeKey(v *string) *GlossaryEntryUpdate {
-	if v != nil {
-		_u.SetScopeKey(*v)
-	}
 	return _u
 }
 
@@ -140,40 +126,24 @@ func (_u *GlossaryEntryUpdate) SetNillableProjectID(v *int) *GlossaryEntryUpdate
 	return _u
 }
 
-// ClearProjectID clears the value of the "project_id" field.
-func (_u *GlossaryEntryUpdate) ClearProjectID() *GlossaryEntryUpdate {
-	_u.mutation.ClearProjectID()
-	return _u
-}
-
-// SetOrganizationID sets the "organization_id" field.
-func (_u *GlossaryEntryUpdate) SetOrganizationID(v int) *GlossaryEntryUpdate {
-	_u.mutation.SetOrganizationID(v)
-	return _u
-}
-
-// SetNillableOrganizationID sets the "organization_id" field if the given value is not nil.
-func (_u *GlossaryEntryUpdate) SetNillableOrganizationID(v *int) *GlossaryEntryUpdate {
-	if v != nil {
-		_u.SetOrganizationID(*v)
-	}
-	return _u
-}
-
-// ClearOrganizationID clears the value of the "organization_id" field.
-func (_u *GlossaryEntryUpdate) ClearOrganizationID() *GlossaryEntryUpdate {
-	_u.mutation.ClearOrganizationID()
-	return _u
-}
-
 // SetProject sets the "project" edge to the Project entity.
 func (_u *GlossaryEntryUpdate) SetProject(v *Project) *GlossaryEntryUpdate {
 	return _u.SetProjectID(v.ID)
 }
 
-// SetOrganization sets the "organization" edge to the Organization entity.
-func (_u *GlossaryEntryUpdate) SetOrganization(v *Organization) *GlossaryEntryUpdate {
-	return _u.SetOrganizationID(v.ID)
+// AddSyncTaskIDs adds the "sync_tasks" edge to the SyncTask entity by IDs.
+func (_u *GlossaryEntryUpdate) AddSyncTaskIDs(ids ...int) *GlossaryEntryUpdate {
+	_u.mutation.AddSyncTaskIDs(ids...)
+	return _u
+}
+
+// AddSyncTasks adds the "sync_tasks" edges to the SyncTask entity.
+func (_u *GlossaryEntryUpdate) AddSyncTasks(v ...*SyncTask) *GlossaryEntryUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddSyncTaskIDs(ids...)
 }
 
 // Mutation returns the GlossaryEntryMutation object of the builder.
@@ -187,10 +157,25 @@ func (_u *GlossaryEntryUpdate) ClearProject() *GlossaryEntryUpdate {
 	return _u
 }
 
-// ClearOrganization clears the "organization" edge to the Organization entity.
-func (_u *GlossaryEntryUpdate) ClearOrganization() *GlossaryEntryUpdate {
-	_u.mutation.ClearOrganization()
+// ClearSyncTasks clears all "sync_tasks" edges to the SyncTask entity.
+func (_u *GlossaryEntryUpdate) ClearSyncTasks() *GlossaryEntryUpdate {
+	_u.mutation.ClearSyncTasks()
 	return _u
+}
+
+// RemoveSyncTaskIDs removes the "sync_tasks" edge to SyncTask entities by IDs.
+func (_u *GlossaryEntryUpdate) RemoveSyncTaskIDs(ids ...int) *GlossaryEntryUpdate {
+	_u.mutation.RemoveSyncTaskIDs(ids...)
+	return _u
+}
+
+// RemoveSyncTasks removes "sync_tasks" edges to SyncTask entities.
+func (_u *GlossaryEntryUpdate) RemoveSyncTasks(v ...*SyncTask) *GlossaryEntryUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveSyncTaskIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -231,11 +216,6 @@ func (_u *GlossaryEntryUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *GlossaryEntryUpdate) check() error {
-	if v, ok := _u.mutation.ScopeKey(); ok {
-		if err := glossaryentry.ScopeKeyValidator(v); err != nil {
-			return &ValidationError{Name: "scope_key", err: fmt.Errorf(`ent: validator failed for field "GlossaryEntry.scope_key": %w`, err)}
-		}
-	}
 	if v, ok := _u.mutation.SourceKey(); ok {
 		if err := glossaryentry.SourceKeyValidator(v); err != nil {
 			return &ValidationError{Name: "source_key", err: fmt.Errorf(`ent: validator failed for field "GlossaryEntry.source_key": %w`, err)}
@@ -256,10 +236,8 @@ func (_u *GlossaryEntryUpdate) check() error {
 			return &ValidationError{Name: "project_id", err: fmt.Errorf(`ent: validator failed for field "GlossaryEntry.project_id": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.OrganizationID(); ok {
-		if err := glossaryentry.OrganizationIDValidator(v); err != nil {
-			return &ValidationError{Name: "organization_id", err: fmt.Errorf(`ent: validator failed for field "GlossaryEntry.organization_id": %w`, err)}
-		}
+	if _u.mutation.ProjectCleared() && len(_u.mutation.ProjectIDs()) > 0 {
+		return errors.New(`ent: clearing a required unique edge "GlossaryEntry.project"`)
 	}
 	return nil
 }
@@ -278,9 +256,6 @@ func (_u *GlossaryEntryUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(glossaryentry.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if value, ok := _u.mutation.ScopeKey(); ok {
-		_spec.SetField(glossaryentry.FieldScopeKey, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.SourceKey(); ok {
 		_spec.SetField(glossaryentry.FieldSourceKey, field.TypeString, value)
@@ -329,28 +304,44 @@ func (_u *GlossaryEntryUpdate) sqlSave(ctx context.Context) (_node int, err erro
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if _u.mutation.OrganizationCleared() {
+	if _u.mutation.SyncTasksCleared() {
 		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   glossaryentry.OrganizationTable,
-			Columns: []string{glossaryentry.OrganizationColumn},
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   glossaryentry.SyncTasksTable,
+			Columns: []string{glossaryentry.SyncTasksColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.OrganizationIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.RemovedSyncTasksIDs(); len(nodes) > 0 && !_u.mutation.SyncTasksCleared() {
 		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   glossaryentry.OrganizationTable,
-			Columns: []string{glossaryentry.OrganizationColumn},
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   glossaryentry.SyncTasksTable,
+			Columns: []string{glossaryentry.SyncTasksColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.SyncTasksIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   glossaryentry.SyncTasksTable,
+			Columns: []string{glossaryentry.SyncTasksColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -381,20 +372,6 @@ type GlossaryEntryUpdateOne struct {
 // SetUpdatedAt sets the "updated_at" field.
 func (_u *GlossaryEntryUpdateOne) SetUpdatedAt(v time.Time) *GlossaryEntryUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
-	return _u
-}
-
-// SetScopeKey sets the "scope_key" field.
-func (_u *GlossaryEntryUpdateOne) SetScopeKey(v string) *GlossaryEntryUpdateOne {
-	_u.mutation.SetScopeKey(v)
-	return _u
-}
-
-// SetNillableScopeKey sets the "scope_key" field if the given value is not nil.
-func (_u *GlossaryEntryUpdateOne) SetNillableScopeKey(v *string) *GlossaryEntryUpdateOne {
-	if v != nil {
-		_u.SetScopeKey(*v)
-	}
 	return _u
 }
 
@@ -488,40 +465,24 @@ func (_u *GlossaryEntryUpdateOne) SetNillableProjectID(v *int) *GlossaryEntryUpd
 	return _u
 }
 
-// ClearProjectID clears the value of the "project_id" field.
-func (_u *GlossaryEntryUpdateOne) ClearProjectID() *GlossaryEntryUpdateOne {
-	_u.mutation.ClearProjectID()
-	return _u
-}
-
-// SetOrganizationID sets the "organization_id" field.
-func (_u *GlossaryEntryUpdateOne) SetOrganizationID(v int) *GlossaryEntryUpdateOne {
-	_u.mutation.SetOrganizationID(v)
-	return _u
-}
-
-// SetNillableOrganizationID sets the "organization_id" field if the given value is not nil.
-func (_u *GlossaryEntryUpdateOne) SetNillableOrganizationID(v *int) *GlossaryEntryUpdateOne {
-	if v != nil {
-		_u.SetOrganizationID(*v)
-	}
-	return _u
-}
-
-// ClearOrganizationID clears the value of the "organization_id" field.
-func (_u *GlossaryEntryUpdateOne) ClearOrganizationID() *GlossaryEntryUpdateOne {
-	_u.mutation.ClearOrganizationID()
-	return _u
-}
-
 // SetProject sets the "project" edge to the Project entity.
 func (_u *GlossaryEntryUpdateOne) SetProject(v *Project) *GlossaryEntryUpdateOne {
 	return _u.SetProjectID(v.ID)
 }
 
-// SetOrganization sets the "organization" edge to the Organization entity.
-func (_u *GlossaryEntryUpdateOne) SetOrganization(v *Organization) *GlossaryEntryUpdateOne {
-	return _u.SetOrganizationID(v.ID)
+// AddSyncTaskIDs adds the "sync_tasks" edge to the SyncTask entity by IDs.
+func (_u *GlossaryEntryUpdateOne) AddSyncTaskIDs(ids ...int) *GlossaryEntryUpdateOne {
+	_u.mutation.AddSyncTaskIDs(ids...)
+	return _u
+}
+
+// AddSyncTasks adds the "sync_tasks" edges to the SyncTask entity.
+func (_u *GlossaryEntryUpdateOne) AddSyncTasks(v ...*SyncTask) *GlossaryEntryUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddSyncTaskIDs(ids...)
 }
 
 // Mutation returns the GlossaryEntryMutation object of the builder.
@@ -535,10 +496,25 @@ func (_u *GlossaryEntryUpdateOne) ClearProject() *GlossaryEntryUpdateOne {
 	return _u
 }
 
-// ClearOrganization clears the "organization" edge to the Organization entity.
-func (_u *GlossaryEntryUpdateOne) ClearOrganization() *GlossaryEntryUpdateOne {
-	_u.mutation.ClearOrganization()
+// ClearSyncTasks clears all "sync_tasks" edges to the SyncTask entity.
+func (_u *GlossaryEntryUpdateOne) ClearSyncTasks() *GlossaryEntryUpdateOne {
+	_u.mutation.ClearSyncTasks()
 	return _u
+}
+
+// RemoveSyncTaskIDs removes the "sync_tasks" edge to SyncTask entities by IDs.
+func (_u *GlossaryEntryUpdateOne) RemoveSyncTaskIDs(ids ...int) *GlossaryEntryUpdateOne {
+	_u.mutation.RemoveSyncTaskIDs(ids...)
+	return _u
+}
+
+// RemoveSyncTasks removes "sync_tasks" edges to SyncTask entities.
+func (_u *GlossaryEntryUpdateOne) RemoveSyncTasks(v ...*SyncTask) *GlossaryEntryUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveSyncTaskIDs(ids...)
 }
 
 // Where appends a list predicates to the GlossaryEntryUpdate builder.
@@ -592,11 +568,6 @@ func (_u *GlossaryEntryUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *GlossaryEntryUpdateOne) check() error {
-	if v, ok := _u.mutation.ScopeKey(); ok {
-		if err := glossaryentry.ScopeKeyValidator(v); err != nil {
-			return &ValidationError{Name: "scope_key", err: fmt.Errorf(`ent: validator failed for field "GlossaryEntry.scope_key": %w`, err)}
-		}
-	}
 	if v, ok := _u.mutation.SourceKey(); ok {
 		if err := glossaryentry.SourceKeyValidator(v); err != nil {
 			return &ValidationError{Name: "source_key", err: fmt.Errorf(`ent: validator failed for field "GlossaryEntry.source_key": %w`, err)}
@@ -617,10 +588,8 @@ func (_u *GlossaryEntryUpdateOne) check() error {
 			return &ValidationError{Name: "project_id", err: fmt.Errorf(`ent: validator failed for field "GlossaryEntry.project_id": %w`, err)}
 		}
 	}
-	if v, ok := _u.mutation.OrganizationID(); ok {
-		if err := glossaryentry.OrganizationIDValidator(v); err != nil {
-			return &ValidationError{Name: "organization_id", err: fmt.Errorf(`ent: validator failed for field "GlossaryEntry.organization_id": %w`, err)}
-		}
+	if _u.mutation.ProjectCleared() && len(_u.mutation.ProjectIDs()) > 0 {
+		return errors.New(`ent: clearing a required unique edge "GlossaryEntry.project"`)
 	}
 	return nil
 }
@@ -656,9 +625,6 @@ func (_u *GlossaryEntryUpdateOne) sqlSave(ctx context.Context) (_node *GlossaryE
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
 		_spec.SetField(glossaryentry.FieldUpdatedAt, field.TypeTime, value)
-	}
-	if value, ok := _u.mutation.ScopeKey(); ok {
-		_spec.SetField(glossaryentry.FieldScopeKey, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.SourceKey(); ok {
 		_spec.SetField(glossaryentry.FieldSourceKey, field.TypeString, value)
@@ -707,28 +673,44 @@ func (_u *GlossaryEntryUpdateOne) sqlSave(ctx context.Context) (_node *GlossaryE
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if _u.mutation.OrganizationCleared() {
+	if _u.mutation.SyncTasksCleared() {
 		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   glossaryentry.OrganizationTable,
-			Columns: []string{glossaryentry.OrganizationColumn},
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   glossaryentry.SyncTasksTable,
+			Columns: []string{glossaryentry.SyncTasksColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.OrganizationIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.RemovedSyncTasksIDs(); len(nodes) > 0 && !_u.mutation.SyncTasksCleared() {
 		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   glossaryentry.OrganizationTable,
-			Columns: []string{glossaryentry.OrganizationColumn},
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   glossaryentry.SyncTasksTable,
+			Columns: []string{glossaryentry.SyncTasksColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.SyncTasksIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   glossaryentry.SyncTasksTable,
+			Columns: []string{glossaryentry.SyncTasksColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

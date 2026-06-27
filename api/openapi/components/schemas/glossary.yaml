@@ -57,6 +57,15 @@ UpdateGlossaryEntryRequest:
       type: string
   additionalProperties: false
 
+UpdateGlossaryEntryResponse:
+  allOf:
+    - $ref: '#/GlossaryEntry'
+    - type: object
+      properties:
+        target_changed:
+          type: boolean
+          description: target 字段是否发生变更
+
 GlossaryImportResult:
   type: object
   required: [added]
@@ -74,3 +83,132 @@ GlossaryImportResult:
             type: string
           reason:
             type: string
+
+GlossarySyncImpactRequest:
+  type: object
+  required: [old_target]
+  properties:
+    old_target:
+      type: string
+      description: 修改前的旧 target 值
+    new_target:
+      type: string
+      description: 修改后的新 target 值
+    resource_ids:
+      type: array
+      items:
+        type: integer
+      description: 限定影响分析的资源范围（可选，为空则分析所有资源）
+  additionalProperties: false
+
+GlossarySyncImpactResource:
+  type: object
+  required: [resource_id, resource_path, affected_count]
+  properties:
+    resource_id:
+      type: integer
+    resource_path:
+      type: string
+    affected_count:
+      type: integer
+
+GlossarySyncImpactResponse:
+  type: object
+  required: [old_target, new_target, total_affected, resources]
+  properties:
+    old_target:
+      type: string
+    new_target:
+      type: string
+    total_affected:
+      type: integer
+    resources:
+      type: array
+      items:
+        $ref: '#/GlossarySyncImpactResource'
+
+GlossarySyncExecuteRequest:
+  type: object
+  required: [old_target, new_target]
+  properties:
+    old_target:
+      type: string
+    new_target:
+      type: string
+    resource_ids:
+      type: array
+      items:
+        type: integer
+      description: 限定同步的资源范围
+  additionalProperties: false
+
+GlossarySyncExecuteResponse:
+  type: object
+  required: [task_id, status, status_url]
+  properties:
+    task_id:
+      type: string
+      description: 异步任务唯一标识
+    status:
+      type: string
+      enum: [pending, running, completed, failed, cancelled]
+    status_url:
+      type: string
+      description: 任务状态轮询端点
+
+GlossarySyncTaskStatusResponse:
+  type: object
+  required: [task_id, status, processed, total]
+  properties:
+    task_id:
+      type: string
+    status:
+      type: string
+      enum: [pending, running, completed, failed, cancelled]
+    processed:
+      type: integer
+      description: 已处理的段落数
+    total:
+      type: integer
+      description: 待处理的段落总数
+    result:
+      type: object
+      description: 任务完成后的结果摘要（仅 status=completed 时存在）
+      properties:
+        total_updated:
+          type: integer
+        total_skipped:
+          type: integer
+        resources:
+          type: array
+          items:
+            $ref: '#/GlossarySyncExecuteResourceResult'
+    error:
+      type: string
+      description: 错误信息（仅 status=failed 时存在）
+    cancelled_at:
+      type: string
+      format: date-time
+
+GlossarySyncTaskCancelResponse:
+  type: object
+  required: [task_id, status]
+  properties:
+    task_id:
+      type: string
+    status:
+      type: string
+      enum: [cancelled]
+
+GlossarySyncExecuteResourceResult:
+  type: object
+  required: [resource_id, resource_path, updated_count, skipped_count]
+  properties:
+    resource_id:
+      type: integer
+    resource_path:
+      type: string
+    updated_count:
+      type: integer
+    skipped_count:
+      type: integer

@@ -13,6 +13,7 @@ import (
 var (
 	ErrPromptTemplateNotFound     = errors.New("prompt template not found")
 	ErrPromptTemplateScopeInvalid = errors.New("prompt template scope invalid")
+	ErrPromptTemplateInUse        = errors.New("prompt template is referenced by execution plan(s)")
 )
 
 // PromptTemplateService 提供提示词模板的 CRUD 操作。
@@ -27,19 +28,21 @@ func NewPromptTemplateService(client *ent.Client) *PromptTemplateService {
 
 // CreatePromptTemplateInput 创建提示词模板的输入参数。
 type CreatePromptTemplateInput struct {
-	Name                string
-	Description         string
-	Scope               string // user / org
-	OwnerUserID         *int
-	OwnerOrgID          *int
-	SystemPromptContent string
+	Name                   string
+	Description            string
+	Scope                  string // user / org
+	OwnerUserID            *int
+	OwnerOrgID             *int
+	SystemPromptContent    string
+	BootstrapPromptContent string
 }
 
 // UpdatePromptTemplateInput 更新提示词模板的输入参数。
 type UpdatePromptTemplateInput struct {
-	Name                *string
-	Description         *string
-	SystemPromptContent *string
+	Name                   *string
+	Description            *string
+	SystemPromptContent    *string
+	BootstrapPromptContent *string
 }
 
 // ListByUser 列出指定用户的所有提示词模板（包含内置模板）。
@@ -104,7 +107,8 @@ func (s *PromptTemplateService) Create(ctx context.Context, input CreatePromptTe
 		SetName(input.Name).
 		SetDescription(input.Description).
 		SetScope(input.Scope).
-		SetSystemPromptContent(input.SystemPromptContent)
+		SetSystemPromptContent(input.SystemPromptContent).
+		SetBootstrapPromptContent(input.BootstrapPromptContent)
 
 	if input.OwnerUserID != nil {
 		create.SetOwnerUserID(*input.OwnerUserID)
@@ -144,6 +148,9 @@ func (s *PromptTemplateService) Update(ctx context.Context, id int, input Update
 	if input.SystemPromptContent != nil {
 		update.SetSystemPromptContent(*input.SystemPromptContent)
 	}
+	if input.BootstrapPromptContent != nil {
+		update.SetBootstrapPromptContent(*input.BootstrapPromptContent)
+	}
 
 	updated, err := update.Save(ctx)
 	if err != nil {
@@ -164,5 +171,20 @@ func (s *PromptTemplateService) Delete(ctx context.Context, id int) error {
 	if pt.Scope == "system" {
 		return ErrPromptTemplateNotFound // 系统模板不可删除
 	}
+
+	// 检查是否有执行计划模板引用了该提示词模板
+	plans, err := s.client.ExecutionPlanTemplate.Query().All(ctx)
+	if err != nil {
+		return fmt.Errorf("check execution plan references: %w", err)
+	}
+	for _, plan := range plans {
+		for _, round := range plan.Rounds {
+			if round.PromptTemplateID == id {
+				return fmt.Errorf("%w: %q is referenced by execution plan %q",
+					ErrPromptTemplateInUse, pt.Name, plan.Name)
+			}
+		}
+	}
+
 	return s.client.PromptTemplate.DeleteOneID(id).Exec(ctx)
 }

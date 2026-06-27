@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
@@ -29,6 +30,7 @@ type TranslationJobQuery struct {
 	withProject      *ProjectQuery
 	withCreatedBy    *UserQuery
 	withJobResources *JobResourceQuery
+	withJobEvents    *JobEventQuery
 	withFKs          bool
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
@@ -125,6 +127,28 @@ func (_q *TranslationJobQuery) QueryJobResources() *JobResourceQuery {
 			sqlgraph.From(translationjob.Table, translationjob.FieldID, selector),
 			sqlgraph.To(jobresource.Table, jobresource.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, translationjob.JobResourcesTable, translationjob.JobResourcesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryJobEvents chains the current query on the "job_events" edge.
+func (_q *TranslationJobQuery) QueryJobEvents() *JobEventQuery {
+	query := (&JobEventClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(translationjob.Table, translationjob.FieldID, selector),
+			sqlgraph.To(jobevent.Table, jobevent.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, translationjob.JobEventsTable, translationjob.JobEventsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -327,6 +351,7 @@ func (_q *TranslationJobQuery) Clone() *TranslationJobQuery {
 		withProject:      _q.withProject.Clone(),
 		withCreatedBy:    _q.withCreatedBy.Clone(),
 		withJobResources: _q.withJobResources.Clone(),
+		withJobEvents:    _q.withJobEvents.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -363,6 +388,17 @@ func (_q *TranslationJobQuery) WithJobResources(opts ...func(*JobResourceQuery))
 		opt(query)
 	}
 	_q.withJobResources = query
+	return _q
+}
+
+// WithJobEvents tells the query-builder to eager-load the nodes that are connected to
+// the "job_events" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *TranslationJobQuery) WithJobEvents(opts ...func(*JobEventQuery)) *TranslationJobQuery {
+	query := (&JobEventClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withJobEvents = query
 	return _q
 }
 
@@ -445,10 +481,11 @@ func (_q *TranslationJobQuery) sqlAll(ctx context.Context, hooks ...queryHook) (
 		nodes       = []*TranslationJob{}
 		withFKs     = _q.withFKs
 		_spec       = _q.querySpec()
-		loadedTypes = [3]bool{
+		loadedTypes = [4]bool{
 			_q.withProject != nil,
 			_q.withCreatedBy != nil,
 			_q.withJobResources != nil,
+			_q.withJobEvents != nil,
 		}
 	)
 	if _q.withProject != nil || _q.withCreatedBy != nil {
@@ -491,6 +528,13 @@ func (_q *TranslationJobQuery) sqlAll(ctx context.Context, hooks ...queryHook) (
 		if err := _q.loadJobResources(ctx, query, nodes,
 			func(n *TranslationJob) { n.Edges.JobResources = []*JobResource{} },
 			func(n *TranslationJob, e *JobResource) { n.Edges.JobResources = append(n.Edges.JobResources, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withJobEvents; query != nil {
+		if err := _q.loadJobEvents(ctx, query, nodes,
+			func(n *TranslationJob) { n.Edges.JobEvents = []*JobEvent{} },
+			func(n *TranslationJob, e *JobEvent) { n.Edges.JobEvents = append(n.Edges.JobEvents, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -587,6 +631,37 @@ func (_q *TranslationJobQuery) loadJobResources(ctx context.Context, query *JobR
 		node, ok := nodeids[*fk]
 		if !ok {
 			return fmt.Errorf(`unexpected referenced foreign-key "translation_job_job_resources" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *TranslationJobQuery) loadJobEvents(ctx context.Context, query *JobEventQuery, nodes []*TranslationJob, init func(*TranslationJob), assign func(*TranslationJob, *JobEvent)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*TranslationJob)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	query.withFKs = true
+	query.Where(predicate.JobEvent(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(translationjob.JobEventsColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.translation_job_job_events
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "translation_job_job_events" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "translation_job_job_events" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}

@@ -37,6 +37,8 @@ func (TranslationJob) Fields() []ent.Field {
 			Comment("已完成段落数"),
 		field.String("error_message").Optional().Nillable().
 			Comment("任务级错误信息"),
+		field.Time("started_at").Optional().Nillable().
+			Comment("任务开始执行的时间，MarkJobRunning 时写入"),
 	}
 }
 
@@ -50,5 +52,6 @@ func (TranslationJob) Edges() []ent.Edge {
 			Ref("created_translation_jobs").
 			Unique(),
 		edge.To("job_resources", JobResource.Type),
+		edge.To("job_events", JobEvent.Type),
 	}
 }

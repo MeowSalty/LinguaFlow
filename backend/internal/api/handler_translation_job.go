@@ -12,10 +12,17 @@ import (
 )
 
 type createTranslationJobRequest struct {
-	ExecutionPlanID int   `json:"execution_plan_id"`
-	ResourceIDs     []int `json:"resource_ids"`
-	SegmentIDs      []int `json:"segment_ids"`
-	AutoApprove     bool  `json:"auto_approve"`
+	ExecutionPlanID  int      `json:"execution_plan_id"`
+	ResourceIDs      []int    `json:"resource_ids"`
+	SegmentIDs       []int    `json:"segment_ids"`
+	SegmentGroupKeys []string `json:"segment_group_keys"`
+	AutoApprove      bool     `json:"auto_approve"`
+}
+
+// QueueInfo 携带翻译队列的位置信息。
+type QueueInfo struct {
+	Position int
+	Size     int
 }
 
 type translationJobResourceResponse struct {
@@ -28,6 +35,10 @@ type translationJobResourceResponse struct {
 	OutputPath        string            `json:"output_path,omitempty"`
 	ErrorMessage      *string           `json:"error_message,omitempty"`
 	Resource          *resourceResponse `json:"resource,omitempty"`
+	CurrentStage      string            `json:"current_stage,omitempty"`
+	StageTotal        int               `json:"stage_total,omitempty"`
+	StageCompleted    int               `json:"stage_completed,omitempty"`
+	StartedAt         *string           `json:"started_at,omitempty"`
 	CreatedAt         string            `json:"created_at"`
 	UpdatedAt         string            `json:"updated_at"`
 }
@@ -45,9 +56,30 @@ type translationJobResponse struct {
 	TotalSegments      int                              `json:"total_segments"`
 	CompletedSegments  int                              `json:"completed_segments"`
 	ErrorMessage       *string                          `json:"error_message,omitempty"`
+	StartedAt          *string                          `json:"started_at,omitempty"`
+	CurrentStage       string                           `json:"current_stage,omitempty"`
+	ProgressPercentage float64                          `json:"progress_percentage,omitempty"`
+	QueuePosition      *int                             `json:"queue_position,omitempty"`
+	QueueSize          *int                             `json:"queue_size,omitempty"`
 	CreatedAt          string                           `json:"created_at"`
 	UpdatedAt          string                           `json:"updated_at"`
 	JobResources       []translationJobResourceResponse `json:"job_resources,omitempty"`
+}
+
+// queueInfoForJob returns queue position info for a job, or nil if queue is
+// unavailable or the job is not currently queued.
+func (s *Server) queueInfoForJob(jobID int) *QueueInfo {
+	if s.translationJobQueue == nil {
+		return nil
+	}
+	info := s.translationJobQueue.Position(jobID)
+	if info.Position < 0 {
+		return nil
+	}
+	return &QueueInfo{
+		Position: info.Position,
+		Size:     info.Size,
+	}
 }
 
 func (s *Server) handleCreateTranslationJob(w http.ResponseWriter, r *http.Request) {
@@ -67,10 +99,11 @@ func (s *Server) handleCreateTranslationJob(w http.ResponseWriter, r *http.Reque
 		}
 	}
 	created, err := s.translationJobSvc.CreateManualJob(r.Context(), authUser.User.ID, projectID, service.CreateTranslationJobInput{
-		ResourceIDs:     req.ResourceIDs,
-		SegmentIDs:      req.SegmentIDs,
-		ExecutionPlanID: req.ExecutionPlanID,
-		AutoApprove:     req.AutoApprove,
+		ResourceIDs:      req.ResourceIDs,
+		SegmentIDs:       req.SegmentIDs,
+		SegmentGroupKeys: req.SegmentGroupKeys,
+		ExecutionPlanID:  req.ExecutionPlanID,
+		AutoApprove:      req.AutoApprove,
 	})
 	if err != nil {
 		writeTranslationJobServiceError(w, err)
@@ -83,7 +116,7 @@ func (s *Server) handleCreateTranslationJob(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	}
-	writeJSON(w, http.StatusAccepted, toTranslationJobResponse(created))
+	writeJSON(w, http.StatusAccepted, toTranslationJobResponse(created, s.queueInfoForJob(created.ID)))
 }
 
 func (s *Server) handleListTranslationJobs(w http.ResponseWriter, r *http.Request) {
@@ -112,7 +145,7 @@ func (s *Server) handleListTranslationJobs(w http.ResponseWriter, r *http.Reques
 	}
 	items := make([]translationJobResponse, 0, len(jobs))
 	for _, job := range jobs {
-		items = append(items, toTranslationJobResponse(job))
+		items = append(items, toTranslationJobResponse(job, s.queueInfoForJob(job.ID)))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
@@ -132,7 +165,7 @@ func (s *Server) handleGetTranslationJob(w http.ResponseWriter, r *http.Request)
 		writeTranslationJobServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toTranslationJobResponse(job))
+	writeJSON(w, http.StatusOK, toTranslationJobResponse(job, s.queueInfoForJob(jobID)))
 }
 
 func (s *Server) handleCancelTranslationJob(w http.ResponseWriter, r *http.Request) {
@@ -150,8 +183,12 @@ func (s *Server) handleCancelTranslationJob(w http.ResponseWriter, r *http.Reque
 		writeTranslationJobServiceError(w, err)
 		return
 	}
+	// 通知正在运行的 worker 立即停止
+	if s.translationJobRunner != nil {
+		s.translationJobRunner.CancelRunningJob(jobID)
+	}
 	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "translation_job.cancel", ResourceType: "translation_job", ResourceID: job.ID, Message: "取消翻译任务"})
-	writeJSON(w, http.StatusOK, toTranslationJobResponse(job))
+	writeJSON(w, http.StatusOK, toTranslationJobResponse(job, s.queueInfoForJob(job.ID)))
 }
 
 func (s *Server) handleRetryTranslationJob(w http.ResponseWriter, r *http.Request) {
@@ -176,10 +213,10 @@ func (s *Server) handleRetryTranslationJob(w http.ResponseWriter, r *http.Reques
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, toTranslationJobResponse(job))
+	writeJSON(w, http.StatusOK, toTranslationJobResponse(job, s.queueInfoForJob(job.ID)))
 }
 
-func toTranslationJobResponse(row *ent.TranslationJob) translationJobResponse {
+func toTranslationJobResponse(row *ent.TranslationJob, queueInfo *QueueInfo) translationJobResponse {
 	resp := translationJobResponse{
 		ID:                 row.ID,
 		Status:             row.Status,
@@ -192,18 +229,38 @@ func toTranslationJobResponse(row *ent.TranslationJob) translationJobResponse {
 		TotalSegments:      row.TotalSegments,
 		CompletedSegments:  row.CompletedSegments,
 		ErrorMessage:       row.ErrorMessage,
+		StartedAt:          timePtrToString(row.StartedAt),
 		CreatedAt:          row.CreatedAt.Format(timeRFC3339),
 		UpdatedAt:          row.UpdatedAt.Format(timeRFC3339),
 	}
+
+	// 计算进度百分比
+	if row.TotalSegments > 0 {
+		resp.ProgressPercentage = float64(row.CompletedSegments) / float64(row.TotalSegments) * 100
+	}
+
 	if row.Edges.Project != nil {
 		resp.ProjectID = row.Edges.Project.ID
 	}
+
+	// 聚合当前阶段（取第一个 running 资源的 stage）
 	if len(row.Edges.JobResources) > 0 {
 		resp.JobResources = make([]translationJobResourceResponse, 0, len(row.Edges.JobResources))
 		for _, item := range row.Edges.JobResources {
-			resp.JobResources = append(resp.JobResources, toTranslationJobResourceResponse(item))
+			rr := toTranslationJobResourceResponse(item)
+			resp.JobResources = append(resp.JobResources, rr)
+			if item.Status == "running" && item.CurrentStage != "" && resp.CurrentStage == "" {
+				resp.CurrentStage = item.CurrentStage
+			}
 		}
 	}
+
+	// 队列信息
+	if queueInfo != nil {
+		resp.QueuePosition = &queueInfo.Position
+		resp.QueueSize = &queueInfo.Size
+	}
+
 	return resp
 }
 
@@ -216,6 +273,10 @@ func toTranslationJobResourceResponse(row *ent.JobResource) translationJobResour
 		CompletedSegments: row.CompletedSegments,
 		OutputPath:        row.OutputPath,
 		ErrorMessage:      row.ErrorMessage,
+		CurrentStage:      row.CurrentStage,
+		StageTotal:        row.StageTotal,
+		StageCompleted:    row.StageCompleted,
+		StartedAt:         timePtrToString(row.StartedAt),
 		CreatedAt:         row.CreatedAt.Format(timeRFC3339),
 		UpdatedAt:         row.UpdatedAt.Format(timeRFC3339),
 	}
@@ -242,4 +303,54 @@ func writeTranslationJobServiceError(w http.ResponseWriter, err error) {
 	default:
 		writeProjectServiceError(w, err)
 	}
+}
+
+func (s *Server) handleListTranslationJobEvents(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+	jobID, ok := parseIntParam(w, chi.URLParam(r, "translationJobId"), "translationJobId")
+	if !ok {
+		return
+	}
+	// 从 query 参数解析 limit，默认 50，最大 200
+	limit := 50
+	if v := r.URL.Query().Get("limit"); v != "" {
+		if parsed, ok := parseIntParam(w, v, "limit"); ok {
+			limit = parsed
+		} else {
+			return
+		}
+	}
+	if limit < 1 {
+		limit = 1
+	}
+	if limit > 200 {
+		limit = 200
+	}
+
+	events, err := s.translationJobSvc.ListJobEvents(r.Context(), authUser.User.ID, jobID, limit)
+	if err != nil {
+		writeTranslationJobServiceError(w, err)
+		return
+	}
+
+	items := make([]JobEvent, 0, len(events))
+	for _, e := range events {
+		item := JobEvent{
+			Id:        e.ID,
+			JobId:     jobID,
+			Level:     JobEventLevel(e.Level),
+			Message:   e.Message,
+			Metadata:  &e.Metadata,
+			CreatedAt: e.CreatedAt,
+		}
+		if e.Stage != "" {
+			item.Stage = &e.Stage
+		}
+		items = append(items, item)
+	}
+	writeJSON(w, http.StatusOK, items)
 }

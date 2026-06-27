@@ -15,6 +15,14 @@ CreateTranslationJobRequest:
       items:
         type: integer
         minimum: 1
+    segment_group_keys:
+      type: array
+      items:
+        type: string
+      description: |
+        按章节分组键选择 segments（仅适用于 EPUB 等多章节资源）。
+        传入 meta.epub_file 值（如 ["OEBPS/chapter1.xhtml"]），后端自动解析为对应的 segment_ids。
+        与 segment_ids 互斥，优先级：segment_group_keys > segment_ids > resource_ids。
     auto_approve:
       type: boolean
       default: false
@@ -55,6 +63,19 @@ TranslationJobResource:
     updated_at:
       type: string
       format: date-time
+    current_stage:
+      type: string
+      description: 当前执行阶段名称
+    stage_total:
+      type: integer
+      description: 当前阶段的总段落数
+    stage_completed:
+      type: integer
+      description: 当前阶段已完成的段落数
+    started_at:
+      type: string
+      format: date-time
+      description: 资源开始执行的时间
 
 TranslationJob:
   type: object
@@ -97,6 +118,27 @@ TranslationJob:
       type: array
       items:
         $ref: '#/TranslationJobResource'
+    started_at:
+      type: string
+      format: date-time
+      description: 任务开始执行的时间
+    current_stage:
+      type: string
+      description: 当前活跃的执行阶段名称（聚合自 JobResource）
+    progress_percentage:
+      type: number
+      format: float
+      minimum: 0
+      maximum: 100
+      description: 整体进度百分比（0-100），由后端计算
+    queue_position:
+      type: integer
+      nullable: true
+      description: 在队列中的位置（1-based），null 表示不在队列中
+    queue_size:
+      type: integer
+      nullable: true
+      description: 当前队列中的任务总数
 
 TranslationJobListResponse:
   type: object
@@ -108,3 +150,24 @@ TranslationJobListResponse:
         $ref: '#/TranslationJob'
     next_cursor:
       type: string
+
+JobEvent:
+  type: object
+  required: [id, job_id, level, message, created_at]
+  properties:
+    id:
+      type: integer
+    job_id:
+      type: integer
+    level:
+      type: string
+      enum: [info, warn, error]
+    stage:
+      type: string
+    message:
+      type: string
+    metadata:
+      type: object
+    created_at:
+      type: string
+      format: date-time

@@ -15,6 +15,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
@@ -90,20 +91,6 @@ func (_c *ProjectCreate) SetNillableOwnerOrgID(v *int) *ProjectCreate {
 	return _c
 }
 
-// SetResourceScope sets the "resource_scope" field.
-func (_c *ProjectCreate) SetResourceScope(v string) *ProjectCreate {
-	_c.mutation.SetResourceScope(v)
-	return _c
-}
-
-// SetNillableResourceScope sets the "resource_scope" field if the given value is not nil.
-func (_c *ProjectCreate) SetNillableResourceScope(v *string) *ProjectCreate {
-	if v != nil {
-		_c.SetResourceScope(*v)
-	}
-	return _c
-}
-
 // SetConfig sets the "config" field.
 func (_c *ProjectCreate) SetConfig(v map[string]interface{}) *ProjectCreate {
 	_c.mutation.SetConfig(v)
@@ -113,6 +100,20 @@ func (_c *ProjectCreate) SetConfig(v map[string]interface{}) *ProjectCreate {
 // SetDefaultTranslationConfig sets the "default_translation_config" field.
 func (_c *ProjectCreate) SetDefaultTranslationConfig(v map[string]interface{}) *ProjectCreate {
 	_c.mutation.SetDefaultTranslationConfig(v)
+	return _c
+}
+
+// SetGlossaryEnabled sets the "glossary_enabled" field.
+func (_c *ProjectCreate) SetGlossaryEnabled(v bool) *ProjectCreate {
+	_c.mutation.SetGlossaryEnabled(v)
+	return _c
+}
+
+// SetNillableGlossaryEnabled sets the "glossary_enabled" field if the given value is not nil.
+func (_c *ProjectCreate) SetNillableGlossaryEnabled(v *bool) *ProjectCreate {
+	if v != nil {
+		_c.SetGlossaryEnabled(*v)
+	}
 	return _c
 }
 
@@ -244,6 +245,21 @@ func (_c *ProjectCreate) AddResources(v ...*Resource) *ProjectCreate {
 	return _c.AddResourceIDs(ids...)
 }
 
+// AddSyncTaskIDs adds the "sync_tasks" edge to the SyncTask entity by IDs.
+func (_c *ProjectCreate) AddSyncTaskIDs(ids ...int) *ProjectCreate {
+	_c.mutation.AddSyncTaskIDs(ids...)
+	return _c
+}
+
+// AddSyncTasks adds the "sync_tasks" edges to the SyncTask entity.
+func (_c *ProjectCreate) AddSyncTasks(v ...*SyncTask) *ProjectCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddSyncTaskIDs(ids...)
+}
+
 // Mutation returns the ProjectMutation object of the builder.
 func (_c *ProjectCreate) Mutation() *ProjectMutation {
 	return _c.mutation
@@ -287,10 +303,6 @@ func (_c *ProjectCreate) defaults() {
 		v := project.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
-	if _, ok := _c.mutation.ResourceScope(); !ok {
-		v := project.DefaultResourceScope
-		_c.mutation.SetResourceScope(v)
-	}
 	if _, ok := _c.mutation.Config(); !ok {
 		v := project.DefaultConfig()
 		_c.mutation.SetConfig(v)
@@ -298,6 +310,10 @@ func (_c *ProjectCreate) defaults() {
 	if _, ok := _c.mutation.DefaultTranslationConfig(); !ok {
 		v := project.DefaultDefaultTranslationConfig()
 		_c.mutation.SetDefaultTranslationConfig(v)
+	}
+	if _, ok := _c.mutation.GlossaryEnabled(); !ok {
+		v := project.DefaultGlossaryEnabled
+		_c.mutation.SetGlossaryEnabled(v)
 	}
 	if _, ok := _c.mutation.SourceLang(); !ok {
 		v := project.DefaultSourceLang
@@ -335,14 +351,14 @@ func (_c *ProjectCreate) check() error {
 			return &ValidationError{Name: "owner_org_id", err: fmt.Errorf(`ent: validator failed for field "Project.owner_org_id": %w`, err)}
 		}
 	}
-	if _, ok := _c.mutation.ResourceScope(); !ok {
-		return &ValidationError{Name: "resource_scope", err: errors.New(`ent: missing required field "Project.resource_scope"`)}
-	}
 	if _, ok := _c.mutation.Config(); !ok {
 		return &ValidationError{Name: "config", err: errors.New(`ent: missing required field "Project.config"`)}
 	}
 	if _, ok := _c.mutation.DefaultTranslationConfig(); !ok {
 		return &ValidationError{Name: "default_translation_config", err: errors.New(`ent: missing required field "Project.default_translation_config"`)}
+	}
+	if _, ok := _c.mutation.GlossaryEnabled(); !ok {
+		return &ValidationError{Name: "glossary_enabled", err: errors.New(`ent: missing required field "Project.glossary_enabled"`)}
 	}
 	if _, ok := _c.mutation.SourceLang(); !ok {
 		return &ValidationError{Name: "source_lang", err: errors.New(`ent: missing required field "Project.source_lang"`)}
@@ -388,10 +404,6 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 		_spec.SetField(project.FieldName, field.TypeString, value)
 		_node.Name = value
 	}
-	if value, ok := _c.mutation.ResourceScope(); ok {
-		_spec.SetField(project.FieldResourceScope, field.TypeString, value)
-		_node.ResourceScope = value
-	}
 	if value, ok := _c.mutation.Config(); ok {
 		_spec.SetField(project.FieldConfig, field.TypeJSON, value)
 		_node.Config = value
@@ -399,6 +411,10 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.DefaultTranslationConfig(); ok {
 		_spec.SetField(project.FieldDefaultTranslationConfig, field.TypeJSON, value)
 		_node.DefaultTranslationConfig = value
+	}
+	if value, ok := _c.mutation.GlossaryEnabled(); ok {
+		_spec.SetField(project.FieldGlossaryEnabled, field.TypeBool, value)
+		_node.GlossaryEnabled = value
 	}
 	if value, ok := _c.mutation.SourceLang(); ok {
 		_spec.SetField(project.FieldSourceLang, field.TypeString, value)
@@ -531,6 +547,22 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(resource.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.SyncTasksIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.SyncTasksTable,
+			Columns: []string{project.SyncTasksColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

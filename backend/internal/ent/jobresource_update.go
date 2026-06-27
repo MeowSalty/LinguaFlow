@@ -145,6 +145,88 @@ func (_u *JobResourceUpdate) ClearErrorMessage() *JobResourceUpdate {
 	return _u
 }
 
+// SetCurrentStage sets the "current_stage" field.
+func (_u *JobResourceUpdate) SetCurrentStage(v string) *JobResourceUpdate {
+	_u.mutation.SetCurrentStage(v)
+	return _u
+}
+
+// SetNillableCurrentStage sets the "current_stage" field if the given value is not nil.
+func (_u *JobResourceUpdate) SetNillableCurrentStage(v *string) *JobResourceUpdate {
+	if v != nil {
+		_u.SetCurrentStage(*v)
+	}
+	return _u
+}
+
+// ClearCurrentStage clears the value of the "current_stage" field.
+func (_u *JobResourceUpdate) ClearCurrentStage() *JobResourceUpdate {
+	_u.mutation.ClearCurrentStage()
+	return _u
+}
+
+// SetStageTotal sets the "stage_total" field.
+func (_u *JobResourceUpdate) SetStageTotal(v int) *JobResourceUpdate {
+	_u.mutation.ResetStageTotal()
+	_u.mutation.SetStageTotal(v)
+	return _u
+}
+
+// SetNillableStageTotal sets the "stage_total" field if the given value is not nil.
+func (_u *JobResourceUpdate) SetNillableStageTotal(v *int) *JobResourceUpdate {
+	if v != nil {
+		_u.SetStageTotal(*v)
+	}
+	return _u
+}
+
+// AddStageTotal adds value to the "stage_total" field.
+func (_u *JobResourceUpdate) AddStageTotal(v int) *JobResourceUpdate {
+	_u.mutation.AddStageTotal(v)
+	return _u
+}
+
+// SetStageCompleted sets the "stage_completed" field.
+func (_u *JobResourceUpdate) SetStageCompleted(v int) *JobResourceUpdate {
+	_u.mutation.ResetStageCompleted()
+	_u.mutation.SetStageCompleted(v)
+	return _u
+}
+
+// SetNillableStageCompleted sets the "stage_completed" field if the given value is not nil.
+func (_u *JobResourceUpdate) SetNillableStageCompleted(v *int) *JobResourceUpdate {
+	if v != nil {
+		_u.SetStageCompleted(*v)
+	}
+	return _u
+}
+
+// AddStageCompleted adds value to the "stage_completed" field.
+func (_u *JobResourceUpdate) AddStageCompleted(v int) *JobResourceUpdate {
+	_u.mutation.AddStageCompleted(v)
+	return _u
+}
+
+// SetStartedAt sets the "started_at" field.
+func (_u *JobResourceUpdate) SetStartedAt(v time.Time) *JobResourceUpdate {
+	_u.mutation.SetStartedAt(v)
+	return _u
+}
+
+// SetNillableStartedAt sets the "started_at" field if the given value is not nil.
+func (_u *JobResourceUpdate) SetNillableStartedAt(v *time.Time) *JobResourceUpdate {
+	if v != nil {
+		_u.SetStartedAt(*v)
+	}
+	return _u
+}
+
+// ClearStartedAt clears the value of the "started_at" field.
+func (_u *JobResourceUpdate) ClearStartedAt() *JobResourceUpdate {
+	_u.mutation.ClearStartedAt()
+	return _u
+}
+
 // SetJobID sets the "job" edge to the TranslationJob entity by ID.
 func (_u *JobResourceUpdate) SetJobID(id int) *JobResourceUpdate {
 	_u.mutation.SetJobID(id)
@@ -232,6 +314,16 @@ func (_u *JobResourceUpdate) check() error {
 			return &ValidationError{Name: "completed_segments", err: fmt.Errorf(`ent: validator failed for field "JobResource.completed_segments": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.StageTotal(); ok {
+		if err := jobresource.StageTotalValidator(v); err != nil {
+			return &ValidationError{Name: "stage_total", err: fmt.Errorf(`ent: validator failed for field "JobResource.stage_total": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.StageCompleted(); ok {
+		if err := jobresource.StageCompletedValidator(v); err != nil {
+			return &ValidationError{Name: "stage_completed", err: fmt.Errorf(`ent: validator failed for field "JobResource.stage_completed": %w`, err)}
+		}
+	}
 	if _u.mutation.JobCleared() && len(_u.mutation.JobIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "JobResource.job"`)
 	}
@@ -290,6 +382,30 @@ func (_u *JobResourceUpdate) sqlSave(ctx context.Context) (_node int, err error)
 	}
 	if _u.mutation.ErrorMessageCleared() {
 		_spec.ClearField(jobresource.FieldErrorMessage, field.TypeString)
+	}
+	if value, ok := _u.mutation.CurrentStage(); ok {
+		_spec.SetField(jobresource.FieldCurrentStage, field.TypeString, value)
+	}
+	if _u.mutation.CurrentStageCleared() {
+		_spec.ClearField(jobresource.FieldCurrentStage, field.TypeString)
+	}
+	if value, ok := _u.mutation.StageTotal(); ok {
+		_spec.SetField(jobresource.FieldStageTotal, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedStageTotal(); ok {
+		_spec.AddField(jobresource.FieldStageTotal, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.StageCompleted(); ok {
+		_spec.SetField(jobresource.FieldStageCompleted, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedStageCompleted(); ok {
+		_spec.AddField(jobresource.FieldStageCompleted, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.StartedAt(); ok {
+		_spec.SetField(jobresource.FieldStartedAt, field.TypeTime, value)
+	}
+	if _u.mutation.StartedAtCleared() {
+		_spec.ClearField(jobresource.FieldStartedAt, field.TypeTime)
 	}
 	if _u.mutation.JobCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -483,6 +599,88 @@ func (_u *JobResourceUpdateOne) ClearErrorMessage() *JobResourceUpdateOne {
 	return _u
 }
 
+// SetCurrentStage sets the "current_stage" field.
+func (_u *JobResourceUpdateOne) SetCurrentStage(v string) *JobResourceUpdateOne {
+	_u.mutation.SetCurrentStage(v)
+	return _u
+}
+
+// SetNillableCurrentStage sets the "current_stage" field if the given value is not nil.
+func (_u *JobResourceUpdateOne) SetNillableCurrentStage(v *string) *JobResourceUpdateOne {
+	if v != nil {
+		_u.SetCurrentStage(*v)
+	}
+	return _u
+}
+
+// ClearCurrentStage clears the value of the "current_stage" field.
+func (_u *JobResourceUpdateOne) ClearCurrentStage() *JobResourceUpdateOne {
+	_u.mutation.ClearCurrentStage()
+	return _u
+}
+
+// SetStageTotal sets the "stage_total" field.
+func (_u *JobResourceUpdateOne) SetStageTotal(v int) *JobResourceUpdateOne {
+	_u.mutation.ResetStageTotal()
+	_u.mutation.SetStageTotal(v)
+	return _u
+}
+
+// SetNillableStageTotal sets the "stage_total" field if the given value is not nil.
+func (_u *JobResourceUpdateOne) SetNillableStageTotal(v *int) *JobResourceUpdateOne {
+	if v != nil {
+		_u.SetStageTotal(*v)
+	}
+	return _u
+}
+
+// AddStageTotal adds value to the "stage_total" field.
+func (_u *JobResourceUpdateOne) AddStageTotal(v int) *JobResourceUpdateOne {
+	_u.mutation.AddStageTotal(v)
+	return _u
+}
+
+// SetStageCompleted sets the "stage_completed" field.
+func (_u *JobResourceUpdateOne) SetStageCompleted(v int) *JobResourceUpdateOne {
+	_u.mutation.ResetStageCompleted()
+	_u.mutation.SetStageCompleted(v)
+	return _u
+}
+
+// SetNillableStageCompleted sets the "stage_completed" field if the given value is not nil.
+func (_u *JobResourceUpdateOne) SetNillableStageCompleted(v *int) *JobResourceUpdateOne {
+	if v != nil {
+		_u.SetStageCompleted(*v)
+	}
+	return _u
+}
+
+// AddStageCompleted adds value to the "stage_completed" field.
+func (_u *JobResourceUpdateOne) AddStageCompleted(v int) *JobResourceUpdateOne {
+	_u.mutation.AddStageCompleted(v)
+	return _u
+}
+
+// SetStartedAt sets the "started_at" field.
+func (_u *JobResourceUpdateOne) SetStartedAt(v time.Time) *JobResourceUpdateOne {
+	_u.mutation.SetStartedAt(v)
+	return _u
+}
+
+// SetNillableStartedAt sets the "started_at" field if the given value is not nil.
+func (_u *JobResourceUpdateOne) SetNillableStartedAt(v *time.Time) *JobResourceUpdateOne {
+	if v != nil {
+		_u.SetStartedAt(*v)
+	}
+	return _u
+}
+
+// ClearStartedAt clears the value of the "started_at" field.
+func (_u *JobResourceUpdateOne) ClearStartedAt() *JobResourceUpdateOne {
+	_u.mutation.ClearStartedAt()
+	return _u
+}
+
 // SetJobID sets the "job" edge to the TranslationJob entity by ID.
 func (_u *JobResourceUpdateOne) SetJobID(id int) *JobResourceUpdateOne {
 	_u.mutation.SetJobID(id)
@@ -583,6 +781,16 @@ func (_u *JobResourceUpdateOne) check() error {
 			return &ValidationError{Name: "completed_segments", err: fmt.Errorf(`ent: validator failed for field "JobResource.completed_segments": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.StageTotal(); ok {
+		if err := jobresource.StageTotalValidator(v); err != nil {
+			return &ValidationError{Name: "stage_total", err: fmt.Errorf(`ent: validator failed for field "JobResource.stage_total": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.StageCompleted(); ok {
+		if err := jobresource.StageCompletedValidator(v); err != nil {
+			return &ValidationError{Name: "stage_completed", err: fmt.Errorf(`ent: validator failed for field "JobResource.stage_completed": %w`, err)}
+		}
+	}
 	if _u.mutation.JobCleared() && len(_u.mutation.JobIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "JobResource.job"`)
 	}
@@ -658,6 +866,30 @@ func (_u *JobResourceUpdateOne) sqlSave(ctx context.Context) (_node *JobResource
 	}
 	if _u.mutation.ErrorMessageCleared() {
 		_spec.ClearField(jobresource.FieldErrorMessage, field.TypeString)
+	}
+	if value, ok := _u.mutation.CurrentStage(); ok {
+		_spec.SetField(jobresource.FieldCurrentStage, field.TypeString, value)
+	}
+	if _u.mutation.CurrentStageCleared() {
+		_spec.ClearField(jobresource.FieldCurrentStage, field.TypeString)
+	}
+	if value, ok := _u.mutation.StageTotal(); ok {
+		_spec.SetField(jobresource.FieldStageTotal, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedStageTotal(); ok {
+		_spec.AddField(jobresource.FieldStageTotal, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.StageCompleted(); ok {
+		_spec.SetField(jobresource.FieldStageCompleted, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedStageCompleted(); ok {
+		_spec.AddField(jobresource.FieldStageCompleted, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.StartedAt(); ok {
+		_spec.SetField(jobresource.FieldStartedAt, field.TypeTime, value)
+	}
+	if _u.mutation.StartedAtCleared() {
+		_spec.ClearField(jobresource.FieldStartedAt, field.TypeTime)
 	}
 	if _u.mutation.JobCleared() {
 		edge := &sqlgraph.EdgeSpec{

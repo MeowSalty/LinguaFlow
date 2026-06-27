@@ -84,6 +84,19 @@ func TestLoadCLIConfig_Default(t *testing.T) {
 	if r.Retry.Jitter != true {
 		t.Error("expected retry.jitter = true")
 	}
+
+	// ── 验证 Glossary 为 CLIConfigGlossary 类型 ──
+	if cfg.Glossary.Path != "./glossary.csv" {
+		t.Errorf("glossary.path = %q, want %q", cfg.Glossary.Path, "./glossary.csv")
+	}
+	if !cfg.Glossary.Save {
+		t.Error("expected glossary.save = true in default config")
+	}
+
+	// ── 验证 Execution.Bootstrap 默认配置 ──
+	if cfg.Execution.Bootstrap.Enabled {
+		t.Error("expected execution.bootstrap.enabled = false in default config")
+	}
 }
 
 // TestDefaultCLIConfig_Fallback 验证 defaultCLIConfig() 回退路径的基本完整性。
@@ -94,6 +107,38 @@ func TestDefaultCLIConfig_Fallback(t *testing.T) {
 	}
 	if _, ok := cfg.Backends["openai-default"]; !ok {
 		t.Error("expected fallback backend \"openai-default\"")
+	}
+
+	// ── 验证 Glossary 为 CLIConfigGlossary 类型 ──
+	if !cfg.Glossary.Save {
+		t.Error("expected glossary.save = true in default config")
+	}
+	if cfg.Glossary.Path != "./glossary.csv" {
+		t.Errorf("glossary.path = %q, want %q", cfg.Glossary.Path, "./glossary.csv")
+	}
+
+	// ── 验证 TranslationProfiles 默认 Bootstrap 配置 ──
+	defProf, ok := cfg.TranslationProfiles["default"]
+	if !ok {
+		t.Fatal("expected profile \"default\" in fallback config")
+	}
+	if defProf.Bootstrap.MaxTermsPer1000Chars != 3.0 {
+		t.Errorf("profile bootstrap.max_terms_per_1000_chars = %v, want 3.0", defProf.Bootstrap.MaxTermsPer1000Chars)
+	}
+	if defProf.Bootstrap.InlineConflictStrategy != InlineConflictRewriteLocal {
+		t.Errorf("profile bootstrap.inline_conflict_strategy = %q, want %q",
+			defProf.Bootstrap.InlineConflictStrategy, InlineConflictRewriteLocal)
+	}
+
+	// ── 验证 Execution.Bootstrap 默认配置 ──
+	if cfg.Execution.Bootstrap.Enabled {
+		t.Error("expected execution.bootstrap.enabled = false in default config")
+	}
+	if cfg.Execution.Bootstrap.BatchSize != 20 {
+		t.Errorf("execution.bootstrap.batch_size = %d, want 20", cfg.Execution.Bootstrap.BatchSize)
+	}
+	if cfg.Execution.Bootstrap.Concurrency != 2 {
+		t.Errorf("execution.bootstrap.concurrency = %d, want 2", cfg.Execution.Bootstrap.Concurrency)
 	}
 }
 
@@ -123,7 +168,17 @@ translation_profiles:
       max_chars: 80
     repair:
       enabled: true
+glossary:
+  enabled: true
+  path: ./terms.csv
+  save: true
 execution:
+  bootstrap:
+    enabled: true
+    batch_size: 10
+    concurrency: 4
+    max_terms_per_batch: 15
+    min_source_len: 3
   rounds:
     - name: "首轮"
       backend: gpt4
@@ -168,6 +223,34 @@ execution:
 	}
 	if prof.Split.Strategy != "newline" {
 		t.Errorf("split.strategy = %q, want %q", prof.Split.Strategy, "newline")
+	}
+
+	// ── 验证 Glossary 为 CLIConfigGlossary 类型 ──
+	if !cfg.Glossary.Enabled {
+		t.Error("expected glossary.enabled = true")
+	}
+	if cfg.Glossary.Path != "./terms.csv" {
+		t.Errorf("glossary.path = %q, want %q", cfg.Glossary.Path, "./terms.csv")
+	}
+	if !cfg.Glossary.Save {
+		t.Error("expected glossary.save = true")
+	}
+
+	// ── 验证 Execution.Bootstrap ──
+	if !cfg.Execution.Bootstrap.Enabled {
+		t.Error("expected execution.bootstrap.enabled = true")
+	}
+	if cfg.Execution.Bootstrap.BatchSize != 10 {
+		t.Errorf("execution.bootstrap.batch_size = %d, want 10", cfg.Execution.Bootstrap.BatchSize)
+	}
+	if cfg.Execution.Bootstrap.Concurrency != 4 {
+		t.Errorf("execution.bootstrap.concurrency = %d, want 4", cfg.Execution.Bootstrap.Concurrency)
+	}
+	if cfg.Execution.Bootstrap.MaxTermsPerBatch != 15 {
+		t.Errorf("execution.bootstrap.max_terms_per_batch = %d, want 15", cfg.Execution.Bootstrap.MaxTermsPerBatch)
+	}
+	if cfg.Execution.Bootstrap.MinSourceLen != 3 {
+		t.Errorf("execution.bootstrap.min_source_len = %d, want 3", cfg.Execution.Bootstrap.MinSourceLen)
 	}
 
 	if len(cfg.Execution.Rounds) != 1 {
@@ -311,9 +394,26 @@ glossary:
 		t.Errorf("retry.backoff_ms = %d, want 3000", r.Retry.BackoffMs)
 	}
 
-	// ── 验证 Glossary 全局配置保留 ──
+	// ── 验证 Glossary 全局配置保留（CLIConfigGlossary 类型） ──
+	if cfg.Glossary.Enabled {
+		t.Error("expected glossary.enabled = false")
+	}
 	if cfg.Glossary.Path != "./glossary.csv" {
 		t.Errorf("glossary.path = %q, want %q", cfg.Glossary.Path, "./glossary.csv")
+	}
+
+	// ── 验证 Execution.Bootstrap 从旧 Standalone 迁移（默认零值） ──
+	if cfg.Execution.Bootstrap.Enabled {
+		t.Error("expected execution.bootstrap.enabled = false (legacy had no standalone bootstrap)")
+	}
+
+	// ── 验证 TranslationProfiles.Bootstrap 从旧 Glossary.Bootstrap 迁移（默认零值） ──
+	defProf, ok := cfg.TranslationProfiles["default"]
+	if !ok {
+		t.Fatal("expected profile \"default\"")
+	}
+	if defProf.Bootstrap.MaxTermsPer1000Chars != 0 {
+		t.Errorf("profile bootstrap.max_terms_per_1000_chars = %v, want 0 (legacy had no bootstrap)", defProf.Bootstrap.MaxTermsPer1000Chars)
 	}
 }
 
@@ -421,6 +521,194 @@ func TestResolveExternalReferences_ValidFile(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
+// Test: Bootstrap 模板字段解析
+// ---------------------------------------------------------------------------
+
+// TestLoadCLIConfig_BootstrapContentInline 验证 bootstrap_content 内联字段正确解析。
+func TestLoadCLIConfig_BootstrapContentInline(t *testing.T) {
+	yamlContent := `
+version: 1
+source_lang: en
+target_lang: zh
+backends:
+  gpt4:
+    type: openai
+    enabled: true
+    options:
+      model: gpt-4o
+prompt_templates:
+  tech:
+    content: "You are a technical translator."
+    bootstrap_content: "Extract domain terms from the text."
+translation_profiles:
+  default:
+    split:
+      enabled: true
+      strategy: paragraph
+      max_chars: 1200
+execution:
+  rounds:
+    - name: "首轮"
+      backend: gpt4
+      prompt: tech
+      profile: default
+`
+	path := writeTempFile(t, "bootstrap-inline.yaml", yamlContent)
+
+	cfg, err := LoadCLIConfig(path)
+	if err != nil {
+		t.Fatalf("LoadCLIConfig error: %v", err)
+	}
+
+	pt, ok := cfg.PromptTemplates["tech"]
+	if !ok {
+		t.Fatal("expected prompt_template \"tech\"")
+	}
+	if pt.Content != "You are a technical translator." {
+		t.Errorf("content = %q", pt.Content)
+	}
+	if pt.BootstrapContent != "Extract domain terms from the text." {
+		t.Errorf("bootstrap_content = %q, want %q", pt.BootstrapContent, "Extract domain terms from the text.")
+	}
+}
+
+// TestResolveExternalReferences_BootstrapFile 验证 bootstrap_file 外部引用正确解析。
+func TestResolveExternalReferences_BootstrapFile(t *testing.T) {
+	dir := t.TempDir()
+	bootstrapFile := filepath.Join(dir, "bootstrap.txt")
+	if err := os.WriteFile(bootstrapFile, []byte("Bootstrap 提示词内容"), 0o644); err != nil {
+		t.Fatalf("write bootstrap file: %v", err)
+	}
+
+	cfg := &CLIConfig{
+		PromptTemplates: map[string]CLIConfigPromptTemplate{
+			"tech": {
+				Content:       "翻译提示词",
+				BootstrapFile: "bootstrap.txt",
+			},
+		},
+		TranslationProfiles: map[string]CLIConfigTranslationProfile{},
+	}
+
+	err := resolveExternalReferences(cfg, dir)
+	if err != nil {
+		t.Fatalf("resolveExternalReferences error: %v", err)
+	}
+
+	pt := cfg.PromptTemplates["tech"]
+	if pt.BootstrapContent != "Bootstrap 提示词内容" {
+		t.Errorf("bootstrap_content = %q, want %q", pt.BootstrapContent, "Bootstrap 提示词内容")
+	}
+	if pt.BootstrapFile != "" {
+		t.Errorf("bootstrap_file should be cleared after resolution, got %q", pt.BootstrapFile)
+	}
+	// Content 不受影响
+	if pt.Content != "翻译提示词" {
+		t.Errorf("content = %q, want %q", pt.Content, "翻译提示词")
+	}
+}
+
+// TestResolveExternalReferences_BootstrapPathTraversal 验证 bootstrap_file 的路径安全。
+func TestResolveExternalReferences_BootstrapPathTraversal(t *testing.T) {
+	configDir := t.TempDir()
+
+	cfg := &CLIConfig{
+		PromptTemplates: map[string]CLIConfigPromptTemplate{
+			"evil": {
+				BootstrapFile: "../../../etc/passwd",
+			},
+		},
+		TranslationProfiles: map[string]CLIConfigTranslationProfile{},
+	}
+
+	err := resolveExternalReferences(cfg, configDir)
+	if err == nil {
+		t.Fatal("expected error for bootstrap_file path traversal, got nil")
+	}
+	if !strings.Contains(err.Error(), "禁止") && !strings.Contains(err.Error(), "遍历") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+// TestResolveExternalReferences_BootstrapAbsolutePath 验证 bootstrap_file 禁止绝对路径。
+func TestResolveExternalReferences_BootstrapAbsolutePath(t *testing.T) {
+	configDir := t.TempDir()
+
+	absPath, err := filepath.Abs(filepath.Join(configDir, "..", "outside.yaml"))
+	if err != nil {
+		t.Fatalf("filepath.Abs: %v", err)
+	}
+
+	cfg := &CLIConfig{
+		PromptTemplates: map[string]CLIConfigPromptTemplate{
+			"evil": {
+				BootstrapFile: absPath,
+			},
+		},
+		TranslationProfiles: map[string]CLIConfigTranslationProfile{},
+	}
+
+	err = resolveExternalReferences(cfg, configDir)
+	if err == nil {
+		t.Fatal("expected error for bootstrap_file absolute path, got nil")
+	}
+	if !strings.Contains(err.Error(), "绝对路径") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+// TestLoadCLIConfig_Default_BootstrapContent 验证默认配置从嵌入模板解析 bootstrap 模板。
+func TestLoadCLIConfig_Default_BootstrapContent(t *testing.T) {
+	cfg, err := LoadCLIConfig("")
+	if err != nil {
+		t.Fatalf("LoadCLIConfig(\"\") error: %v", err)
+	}
+
+	pt, ok := cfg.PromptTemplates["通用提示词"]
+	if !ok {
+		t.Fatal("expected prompt_template \"通用提示词\" in PromptTemplates map")
+	}
+	// 内置模板应从嵌入 FS 解析 bootstrap_file 为 bootstrap_content
+	if pt.BootstrapContent == "" {
+		t.Error("bootstrap_content should be resolved from embedded file, got empty")
+	}
+	if pt.BootstrapFile != "" {
+		t.Errorf("bootstrap_file should be cleared after resolution, got %q", pt.BootstrapFile)
+	}
+}
+
+// TestLoadCLIConfig_BootstrapContentPriority 验证 bootstrap_content 优先于 bootstrap_file。
+func TestLoadCLIConfig_BootstrapContentPriority(t *testing.T) {
+	dir := t.TempDir()
+	bootstrapFile := filepath.Join(dir, "bootstrap.txt")
+	if err := os.WriteFile(bootstrapFile, []byte("来自文件的 bootstrap"), 0o644); err != nil {
+		t.Fatalf("write bootstrap file: %v", err)
+	}
+
+	cfg := &CLIConfig{
+		PromptTemplates: map[string]CLIConfigPromptTemplate{
+			"tech": {
+				Content:          "翻译提示词",
+				BootstrapContent: "来自内联的 bootstrap",
+				BootstrapFile:    "bootstrap.txt",
+			},
+		},
+		TranslationProfiles: map[string]CLIConfigTranslationProfile{},
+	}
+
+	err := resolveExternalReferences(cfg, dir)
+	if err != nil {
+		t.Fatalf("resolveExternalReferences error: %v", err)
+	}
+
+	pt := cfg.PromptTemplates["tech"]
+	// bootstrap_content 已有值时，不应被 bootstrap_file 覆盖
+	if pt.BootstrapContent != "来自内联的 bootstrap" {
+		t.Errorf("bootstrap_content = %q, want %q (inline should take priority)", pt.BootstrapContent, "来自内联的 bootstrap")
+	}
+}
+
+// ---------------------------------------------------------------------------
 // Test 5: migrateFromLegacy 完整性
 // ---------------------------------------------------------------------------
 
@@ -470,6 +758,21 @@ func TestMigrateFromLegacy(t *testing.T) {
 		Glossary: GlossaryConfig{
 			Enabled: true,
 			Path:    "./terms.csv",
+			Save:    true,
+			Bootstrap: BootstrapConfig{
+				Enabled:                true,
+				MaxTermsPer1000Chars:   3.0,
+				MinSourceLen:           5,
+				InlineConflictStrategy: InlineConflictOff,
+			},
+			Standalone: StandaloneBootstrapConfig{
+				Enabled:          true,
+				Template:         "my-bootstrap",
+				BatchSize:        10,
+				Concurrency:      3,
+				MaxTermsPerBatch: 15,
+				MinSourceLen:     4,
+			},
 		},
 		Output: OutputConfig{Mode: "append", PreserveExtension: false},
 		Log:    LogConfig{Level: "debug", Format: "json"},
@@ -534,6 +837,21 @@ func TestMigrateFromLegacy(t *testing.T) {
 		t.Error("expected repair.prompt_upgrade = false")
 	}
 
+	// ── TranslationProfiles.Bootstrap（从 Glossary.Bootstrap 迁移） ──
+	if !prof.Bootstrap.Enabled {
+		t.Error("expected profile bootstrap.enabled = true (migrated from glossary.bootstrap)")
+	}
+	if prof.Bootstrap.MaxTermsPer1000Chars != 3.0 {
+		t.Errorf("profile bootstrap.max_terms_per_1000_chars = %v, want 3.0", prof.Bootstrap.MaxTermsPer1000Chars)
+	}
+	if prof.Bootstrap.MinSourceLen != 5 {
+		t.Errorf("profile bootstrap.min_source_len = %d, want 5", prof.Bootstrap.MinSourceLen)
+	}
+	if prof.Bootstrap.InlineConflictStrategy != InlineConflictOff {
+		t.Errorf("profile bootstrap.inline_conflict_strategy = %q, want %q",
+			prof.Bootstrap.InlineConflictStrategy, InlineConflictOff)
+	}
+
 	// ── Execution ──
 	if len(cliCfg.Execution.Rounds) != 1 {
 		t.Fatalf("rounds = %d, want 1", len(cliCfg.Execution.Rounds))
@@ -567,12 +885,35 @@ func TestMigrateFromLegacy(t *testing.T) {
 		t.Error("expected retry.jitter = true")
 	}
 
-	// ── 全局共享配置 ──
+	// ── Execution.Bootstrap（从 Glossary.Standalone 迁移，不含 Save） ──
+	if !cliCfg.Execution.Bootstrap.Enabled {
+		t.Error("expected execution.bootstrap.enabled = true (migrated from glossary.standalone)")
+	}
+	if cliCfg.Execution.Bootstrap.Template != "my-bootstrap" {
+		t.Errorf("execution.bootstrap.template = %q, want %q", cliCfg.Execution.Bootstrap.Template, "my-bootstrap")
+	}
+	if cliCfg.Execution.Bootstrap.BatchSize != 10 {
+		t.Errorf("execution.bootstrap.batch_size = %d, want 10", cliCfg.Execution.Bootstrap.BatchSize)
+	}
+	if cliCfg.Execution.Bootstrap.Concurrency != 3 {
+		t.Errorf("execution.bootstrap.concurrency = %d, want 3", cliCfg.Execution.Bootstrap.Concurrency)
+	}
+	if cliCfg.Execution.Bootstrap.MaxTermsPerBatch != 15 {
+		t.Errorf("execution.bootstrap.max_terms_per_batch = %d, want 15", cliCfg.Execution.Bootstrap.MaxTermsPerBatch)
+	}
+	if cliCfg.Execution.Bootstrap.MinSourceLen != 4 {
+		t.Errorf("execution.bootstrap.min_source_len = %d, want 4", cliCfg.Execution.Bootstrap.MinSourceLen)
+	}
+
+	// ── Glossary 全局共享配置（CLIConfigGlossary 类型，只含 Enabled/Path/Save） ──
 	if !cliCfg.Glossary.Enabled {
 		t.Error("expected glossary.enabled = true")
 	}
 	if cliCfg.Glossary.Path != "./terms.csv" {
 		t.Errorf("glossary.path = %q, want %q", cliCfg.Glossary.Path, "./terms.csv")
+	}
+	if !cliCfg.Glossary.Save {
+		t.Error("expected glossary.save = true (migrated from legacy glossary.save)")
 	}
 	if cliCfg.Output.Mode != "append" {
 		t.Errorf("output.mode = %q, want %q", cliCfg.Output.Mode, "append")

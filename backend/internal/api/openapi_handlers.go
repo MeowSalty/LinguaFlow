@@ -98,6 +98,14 @@ func (s *Server) UpdateOrgBackend(w http.ResponseWriter, r *http.Request, _ OrgI
 	s.requireAuth(http.HandlerFunc(s.handleUpdateOrgBackend)).ServeHTTP(w, r)
 }
 
+func (s *Server) ListOrgProjects(w http.ResponseWriter, r *http.Request, _ OrgId) {
+	s.requireAuth(http.HandlerFunc(s.handleListOrgProjects)).ServeHTTP(w, r)
+}
+
+func (s *Server) CreateOrgProject(w http.ResponseWriter, r *http.Request, _ OrgId) {
+	s.requireAuth(http.HandlerFunc(s.handleCreateOrgProject)).ServeHTTP(w, r)
+}
+
 func (s *Server) ListProjects(w http.ResponseWriter, r *http.Request) {
 	s.requireAuth(http.HandlerFunc(s.handleListProjects)).ServeHTTP(w, r)
 }
@@ -140,6 +148,30 @@ func (s *Server) DeleteGlossaryEntry(w http.ResponseWriter, r *http.Request, _ P
 
 func (s *Server) UpdateGlossaryEntry(w http.ResponseWriter, r *http.Request, _ ProjectId, _ EntryId) {
 	s.requireAuth(http.HandlerFunc(s.handleUpdateGlossaryEntry)).ServeHTTP(w, r)
+}
+
+func (s *Server) AnalyzeGlossarySyncImpact(w http.ResponseWriter, r *http.Request, projectId ProjectId, entryId EntryId) {
+	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.handleAnalyzeGlossarySyncImpact(w, r, projectId, entryId)
+	})).ServeHTTP(w, r)
+}
+
+func (s *Server) ExecuteGlossarySyncUpdate(w http.ResponseWriter, r *http.Request, projectId ProjectId, entryId EntryId) {
+	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.handleExecuteGlossarySyncUpdate(w, r, projectId, entryId)
+	})).ServeHTTP(w, r)
+}
+
+func (s *Server) GetGlossarySyncTaskStatus(w http.ResponseWriter, r *http.Request, projectId ProjectId, taskId string) {
+	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.handleGetGlossarySyncTaskStatus(w, r, projectId, taskId)
+	})).ServeHTTP(w, r)
+}
+
+func (s *Server) CancelGlossarySyncTask(w http.ResponseWriter, r *http.Request, projectId ProjectId, taskId string) {
+	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.handleCancelGlossarySyncTask(w, r, projectId, taskId)
+	})).ServeHTTP(w, r)
 }
 
 func (s *Server) ListProjectResources(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ListProjectResourcesParams) {
@@ -206,6 +238,10 @@ func (s *Server) RetryTranslationJob(w http.ResponseWriter, r *http.Request, _ T
 	s.requireAuth(http.HandlerFunc(s.handleRetryTranslationJob)).ServeHTTP(w, r)
 }
 
+func (s *Server) ListTranslationJobEvents(w http.ResponseWriter, r *http.Request, _ TranslationJobId, _ ListTranslationJobEventsParams) {
+	s.requireAuth(http.HandlerFunc(s.handleListTranslationJobEvents)).ServeHTTP(w, r)
+}
+
 func (s *Server) DownloadTranslatedResourceFile(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
 	s.requireAuth(http.HandlerFunc(s.handleDownloadTranslatedResourceFile)).ServeHTTP(w, r)
 }
@@ -232,6 +268,10 @@ func (s *Server) ApproveAllResourceSegments(w http.ResponseWriter, r *http.Reque
 
 func (s *Server) RetranslateRejectedSegments(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
 	s.requireAuth(http.HandlerFunc(s.handleRetranslateRejected)).ServeHTTP(w, r)
+}
+
+func (s *Server) ListResourceSegmentGroups(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
+	s.requireAuth(http.HandlerFunc(s.handleListResourceSegmentGroups)).ServeHTTP(w, r)
 }
 
 // ---- 提示词模板适配器 ----

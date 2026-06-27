@@ -57,7 +57,7 @@ glossaryEntryById:
         content:
           application/json:
             schema:
-              $ref: '../components/schemas/glossary.yaml#/GlossaryEntry'
+              $ref: '../components/schemas/glossary.yaml#/UpdateGlossaryEntryResponse'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
   delete:
@@ -116,5 +116,122 @@ glossaryExport:
             schema:
               type: string
               format: binary
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+glossarySyncImpact:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+    - $ref: '../base.yaml#/components/parameters/EntryId'
+  post:
+    operationId: AnalyzeGlossarySyncImpact
+    summary: 分析术语修改对已翻译内容的影响
+    description: |
+      当用户修改术语条目的 target 时，调用此 API 分析受影响的段落数量和分布。
+      仅在 target 发生变更时有意义。
+      支持 resource_ids 参数限定分析范围。
+      采用两阶段匹配：先检查 source_text 包含术语 source，再检查 target_text 包含 old_target。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/glossary.yaml#/GlossarySyncImpactRequest'
+    responses:
+      '200':
+        description: 影响分析结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/glossary.yaml#/GlossarySyncImpactResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+glossarySyncExecute:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+    - $ref: '../base.yaml#/components/parameters/EntryId'
+  post:
+    operationId: ExecuteGlossarySyncUpdate
+    summary: 提交术语同步更新异步任务
+    description: |
+      提交异步同步更新任务，将受影响段落中的旧译文替换为新译文。
+      返回任务 ID 和状态轮询端点，前端通过 GET /sync-tasks/{taskId} 查询进度。
+      替换后的段落状态将被设置为 edited，需要人工复核。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/glossary.yaml#/GlossarySyncExecuteRequest'
+    responses:
+      '202':
+        description: 任务已提交
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/glossary.yaml#/GlossarySyncExecuteResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+glossarySyncTaskStatus:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+    - name: taskId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 同步任务 ID
+  get:
+    operationId: GetGlossarySyncTaskStatus
+    summary: 查询术语同步任务状态
+    description: |
+      查询同步更新任务的执行进度和结果。
+      前端应以 500ms 间隔轮询此端点，任务完成后停止轮询。
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 任务状态
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/glossary.yaml#/GlossarySyncTaskStatusResponse'
+      '404':
+        description: 任务不存在
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+glossarySyncTaskCancel:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+    - name: taskId
+      in: path
+      required: true
+      schema:
+        type: string
+      description: 同步任务 ID
+  post:
+    operationId: CancelGlossarySyncTask
+    summary: 取消术语同步任务
+    description: |
+      取消正在执行或等待执行的同步任务。
+      pending 状态的任务直接取消；running 状态的任务在完成当前批次后停止。
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 任务已取消
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/glossary.yaml#/GlossarySyncTaskCancelResponse'
+      '409':
+        description: 任务已完成或已失败，无法取消
       default:
         $ref: '../base.yaml#/components/responses/Problem'

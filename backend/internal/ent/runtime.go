@@ -9,6 +9,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -18,6 +19,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
@@ -145,34 +147,53 @@ func init() {
 	glossaryentry.DefaultUpdatedAt = glossaryentryDescUpdatedAt.Default.(func() time.Time)
 	// glossaryentry.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
 	glossaryentry.UpdateDefaultUpdatedAt = glossaryentryDescUpdatedAt.UpdateDefault.(func() time.Time)
-	// glossaryentryDescScopeKey is the schema descriptor for scope_key field.
-	glossaryentryDescScopeKey := glossaryentryFields[0].Descriptor()
-	// glossaryentry.ScopeKeyValidator is a validator for the "scope_key" field. It is called by the builders before save.
-	glossaryentry.ScopeKeyValidator = glossaryentryDescScopeKey.Validators[0].(func(string) error)
 	// glossaryentryDescSourceKey is the schema descriptor for source_key field.
-	glossaryentryDescSourceKey := glossaryentryFields[1].Descriptor()
+	glossaryentryDescSourceKey := glossaryentryFields[0].Descriptor()
 	// glossaryentry.SourceKeyValidator is a validator for the "source_key" field. It is called by the builders before save.
 	glossaryentry.SourceKeyValidator = glossaryentryDescSourceKey.Validators[0].(func(string) error)
 	// glossaryentryDescSource is the schema descriptor for source field.
-	glossaryentryDescSource := glossaryentryFields[2].Descriptor()
+	glossaryentryDescSource := glossaryentryFields[1].Descriptor()
 	// glossaryentry.SourceValidator is a validator for the "source" field. It is called by the builders before save.
 	glossaryentry.SourceValidator = glossaryentryDescSource.Validators[0].(func(string) error)
 	// glossaryentryDescTarget is the schema descriptor for target field.
-	glossaryentryDescTarget := glossaryentryFields[3].Descriptor()
+	glossaryentryDescTarget := glossaryentryFields[2].Descriptor()
 	// glossaryentry.TargetValidator is a validator for the "target" field. It is called by the builders before save.
 	glossaryentry.TargetValidator = glossaryentryDescTarget.Validators[0].(func(string) error)
 	// glossaryentryDescCaseSensitive is the schema descriptor for case_sensitive field.
-	glossaryentryDescCaseSensitive := glossaryentryFields[4].Descriptor()
+	glossaryentryDescCaseSensitive := glossaryentryFields[3].Descriptor()
 	// glossaryentry.DefaultCaseSensitive holds the default value on creation for the case_sensitive field.
 	glossaryentry.DefaultCaseSensitive = glossaryentryDescCaseSensitive.Default.(bool)
 	// glossaryentryDescProjectID is the schema descriptor for project_id field.
-	glossaryentryDescProjectID := glossaryentryFields[6].Descriptor()
+	glossaryentryDescProjectID := glossaryentryFields[5].Descriptor()
 	// glossaryentry.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
 	glossaryentry.ProjectIDValidator = glossaryentryDescProjectID.Validators[0].(func(int) error)
-	// glossaryentryDescOrganizationID is the schema descriptor for organization_id field.
-	glossaryentryDescOrganizationID := glossaryentryFields[7].Descriptor()
-	// glossaryentry.OrganizationIDValidator is a validator for the "organization_id" field. It is called by the builders before save.
-	glossaryentry.OrganizationIDValidator = glossaryentryDescOrganizationID.Validators[0].(func(int) error)
+	jobeventMixin := schema.JobEvent{}.Mixin()
+	jobeventMixinFields0 := jobeventMixin[0].Fields()
+	_ = jobeventMixinFields0
+	jobeventFields := schema.JobEvent{}.Fields()
+	_ = jobeventFields
+	// jobeventDescCreatedAt is the schema descriptor for created_at field.
+	jobeventDescCreatedAt := jobeventMixinFields0[0].Descriptor()
+	// jobevent.DefaultCreatedAt holds the default value on creation for the created_at field.
+	jobevent.DefaultCreatedAt = jobeventDescCreatedAt.Default.(func() time.Time)
+	// jobeventDescUpdatedAt is the schema descriptor for updated_at field.
+	jobeventDescUpdatedAt := jobeventMixinFields0[1].Descriptor()
+	// jobevent.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	jobevent.DefaultUpdatedAt = jobeventDescUpdatedAt.Default.(func() time.Time)
+	// jobevent.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	jobevent.UpdateDefaultUpdatedAt = jobeventDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// jobeventDescLevel is the schema descriptor for level field.
+	jobeventDescLevel := jobeventFields[0].Descriptor()
+	// jobevent.DefaultLevel holds the default value on creation for the level field.
+	jobevent.DefaultLevel = jobeventDescLevel.Default.(string)
+	// jobeventDescStage is the schema descriptor for stage field.
+	jobeventDescStage := jobeventFields[1].Descriptor()
+	// jobevent.DefaultStage holds the default value on creation for the stage field.
+	jobevent.DefaultStage = jobeventDescStage.Default.(string)
+	// jobeventDescMessage is the schema descriptor for message field.
+	jobeventDescMessage := jobeventFields[2].Descriptor()
+	// jobevent.MessageValidator is a validator for the "message" field. It is called by the builders before save.
+	jobevent.MessageValidator = jobeventDescMessage.Validators[0].(func(string) error)
 	jobresourceMixin := schema.JobResource{}.Mixin()
 	jobresourceMixinFields0 := jobresourceMixin[0].Fields()
 	_ = jobresourceMixinFields0
@@ -208,6 +229,22 @@ func init() {
 	jobresource.DefaultCompletedSegments = jobresourceDescCompletedSegments.Default.(int)
 	// jobresource.CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.
 	jobresource.CompletedSegmentsValidator = jobresourceDescCompletedSegments.Validators[0].(func(int) error)
+	// jobresourceDescCurrentStage is the schema descriptor for current_stage field.
+	jobresourceDescCurrentStage := jobresourceFields[6].Descriptor()
+	// jobresource.DefaultCurrentStage holds the default value on creation for the current_stage field.
+	jobresource.DefaultCurrentStage = jobresourceDescCurrentStage.Default.(string)
+	// jobresourceDescStageTotal is the schema descriptor for stage_total field.
+	jobresourceDescStageTotal := jobresourceFields[7].Descriptor()
+	// jobresource.DefaultStageTotal holds the default value on creation for the stage_total field.
+	jobresource.DefaultStageTotal = jobresourceDescStageTotal.Default.(int)
+	// jobresource.StageTotalValidator is a validator for the "stage_total" field. It is called by the builders before save.
+	jobresource.StageTotalValidator = jobresourceDescStageTotal.Validators[0].(func(int) error)
+	// jobresourceDescStageCompleted is the schema descriptor for stage_completed field.
+	jobresourceDescStageCompleted := jobresourceFields[8].Descriptor()
+	// jobresource.DefaultStageCompleted holds the default value on creation for the stage_completed field.
+	jobresource.DefaultStageCompleted = jobresourceDescStageCompleted.Default.(int)
+	// jobresource.StageCompletedValidator is a validator for the "stage_completed" field. It is called by the builders before save.
+	jobresource.StageCompletedValidator = jobresourceDescStageCompleted.Validators[0].(func(int) error)
 	orgmembershipMixin := schema.OrgMembership{}.Mixin()
 	orgmembershipMixinFields0 := orgmembershipMixin[0].Fields()
 	_ = orgmembershipMixinFields0
@@ -277,18 +314,18 @@ func init() {
 	projectDescOwnerOrgID := projectFields[2].Descriptor()
 	// project.OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
 	project.OwnerOrgIDValidator = projectDescOwnerOrgID.Validators[0].(func(int) error)
-	// projectDescResourceScope is the schema descriptor for resource_scope field.
-	projectDescResourceScope := projectFields[3].Descriptor()
-	// project.DefaultResourceScope holds the default value on creation for the resource_scope field.
-	project.DefaultResourceScope = projectDescResourceScope.Default.(string)
 	// projectDescConfig is the schema descriptor for config field.
-	projectDescConfig := projectFields[4].Descriptor()
+	projectDescConfig := projectFields[3].Descriptor()
 	// project.DefaultConfig holds the default value on creation for the config field.
 	project.DefaultConfig = projectDescConfig.Default.(func() map[string]interface{})
 	// projectDescDefaultTranslationConfig is the schema descriptor for default_translation_config field.
-	projectDescDefaultTranslationConfig := projectFields[5].Descriptor()
+	projectDescDefaultTranslationConfig := projectFields[4].Descriptor()
 	// project.DefaultDefaultTranslationConfig holds the default value on creation for the default_translation_config field.
 	project.DefaultDefaultTranslationConfig = projectDescDefaultTranslationConfig.Default.(func() map[string]interface{})
+	// projectDescGlossaryEnabled is the schema descriptor for glossary_enabled field.
+	projectDescGlossaryEnabled := projectFields[5].Descriptor()
+	// project.DefaultGlossaryEnabled holds the default value on creation for the glossary_enabled field.
+	project.DefaultGlossaryEnabled = projectDescGlossaryEnabled.Default.(bool)
 	// projectDescSourceLang is the schema descriptor for source_lang field.
 	projectDescSourceLang := projectFields[6].Descriptor()
 	// project.DefaultSourceLang holds the default value on creation for the source_lang field.
@@ -336,6 +373,10 @@ func init() {
 	prompttemplateDescSystemPromptContent := prompttemplateFields[5].Descriptor()
 	// prompttemplate.DefaultSystemPromptContent holds the default value on creation for the system_prompt_content field.
 	prompttemplate.DefaultSystemPromptContent = prompttemplateDescSystemPromptContent.Default.(string)
+	// prompttemplateDescBootstrapPromptContent is the schema descriptor for bootstrap_prompt_content field.
+	prompttemplateDescBootstrapPromptContent := prompttemplateFields[6].Descriptor()
+	// prompttemplate.DefaultBootstrapPromptContent holds the default value on creation for the bootstrap_prompt_content field.
+	prompttemplate.DefaultBootstrapPromptContent = prompttemplateDescBootstrapPromptContent.Default.(string)
 	refreshtokenMixin := schema.RefreshToken{}.Mixin()
 	refreshtokenMixinFields0 := refreshtokenMixin[0].Fields()
 	_ = refreshtokenMixinFields0
@@ -419,6 +460,57 @@ func init() {
 	segmentDescResourceID := segmentFields[5].Descriptor()
 	// segment.ResourceIDValidator is a validator for the "resource_id" field. It is called by the builders before save.
 	segment.ResourceIDValidator = segmentDescResourceID.Validators[0].(func(int) error)
+	synctaskMixin := schema.SyncTask{}.Mixin()
+	synctaskMixinFields0 := synctaskMixin[0].Fields()
+	_ = synctaskMixinFields0
+	synctaskFields := schema.SyncTask{}.Fields()
+	_ = synctaskFields
+	// synctaskDescCreatedAt is the schema descriptor for created_at field.
+	synctaskDescCreatedAt := synctaskMixinFields0[0].Descriptor()
+	// synctask.DefaultCreatedAt holds the default value on creation for the created_at field.
+	synctask.DefaultCreatedAt = synctaskDescCreatedAt.Default.(func() time.Time)
+	// synctaskDescUpdatedAt is the schema descriptor for updated_at field.
+	synctaskDescUpdatedAt := synctaskMixinFields0[1].Descriptor()
+	// synctask.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	synctask.DefaultUpdatedAt = synctaskDescUpdatedAt.Default.(func() time.Time)
+	// synctask.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	synctask.UpdateDefaultUpdatedAt = synctaskDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// synctaskDescProjectID is the schema descriptor for project_id field.
+	synctaskDescProjectID := synctaskFields[0].Descriptor()
+	// synctask.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
+	synctask.ProjectIDValidator = synctaskDescProjectID.Validators[0].(func(int) error)
+	// synctaskDescEntryID is the schema descriptor for entry_id field.
+	synctaskDescEntryID := synctaskFields[1].Descriptor()
+	// synctask.EntryIDValidator is a validator for the "entry_id" field. It is called by the builders before save.
+	synctask.EntryIDValidator = synctaskDescEntryID.Validators[0].(func(int) error)
+	// synctaskDescActorUserID is the schema descriptor for actor_user_id field.
+	synctaskDescActorUserID := synctaskFields[2].Descriptor()
+	// synctask.ActorUserIDValidator is a validator for the "actor_user_id" field. It is called by the builders before save.
+	synctask.ActorUserIDValidator = synctaskDescActorUserID.Validators[0].(func(int) error)
+	// synctaskDescOldTarget is the schema descriptor for old_target field.
+	synctaskDescOldTarget := synctaskFields[3].Descriptor()
+	// synctask.OldTargetValidator is a validator for the "old_target" field. It is called by the builders before save.
+	synctask.OldTargetValidator = synctaskDescOldTarget.Validators[0].(func(string) error)
+	// synctaskDescNewTarget is the schema descriptor for new_target field.
+	synctaskDescNewTarget := synctaskFields[4].Descriptor()
+	// synctask.NewTargetValidator is a validator for the "new_target" field. It is called by the builders before save.
+	synctask.NewTargetValidator = synctaskDescNewTarget.Validators[0].(func(string) error)
+	// synctaskDescTotalSegments is the schema descriptor for total_segments field.
+	synctaskDescTotalSegments := synctaskFields[5].Descriptor()
+	// synctask.TotalSegmentsValidator is a validator for the "total_segments" field. It is called by the builders before save.
+	synctask.TotalSegmentsValidator = synctaskDescTotalSegments.Validators[0].(func(int) error)
+	// synctaskDescProcessedSegments is the schema descriptor for processed_segments field.
+	synctaskDescProcessedSegments := synctaskFields[6].Descriptor()
+	// synctask.DefaultProcessedSegments holds the default value on creation for the processed_segments field.
+	synctask.DefaultProcessedSegments = synctaskDescProcessedSegments.Default.(int)
+	// synctask.ProcessedSegmentsValidator is a validator for the "processed_segments" field. It is called by the builders before save.
+	synctask.ProcessedSegmentsValidator = synctaskDescProcessedSegments.Validators[0].(func(int) error)
+	// synctaskDescStatus is the schema descriptor for status field.
+	synctaskDescStatus := synctaskFields[7].Descriptor()
+	// synctask.DefaultStatus holds the default value on creation for the status field.
+	synctask.DefaultStatus = synctaskDescStatus.Default.(string)
+	// synctask.StatusValidator is a validator for the "status" field. It is called by the builders before save.
+	synctask.StatusValidator = synctaskDescStatus.Validators[0].(func(string) error)
 	tmentryMixin := schema.TMEntry{}.Mixin()
 	tmentryMixinFields0 := tmentryMixin[0].Fields()
 	_ = tmentryMixinFields0
@@ -468,10 +560,6 @@ func init() {
 	tmentryDescProjectID := tmentryFields[7].Descriptor()
 	// tmentry.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
 	tmentry.ProjectIDValidator = tmentryDescProjectID.Validators[0].(func(int) error)
-	// tmentryDescOrganizationID is the schema descriptor for organization_id field.
-	tmentryDescOrganizationID := tmentryFields[8].Descriptor()
-	// tmentry.OrganizationIDValidator is a validator for the "organization_id" field. It is called by the builders before save.
-	tmentry.OrganizationIDValidator = tmentryDescOrganizationID.Validators[0].(func(int) error)
 	translationjobMixin := schema.TranslationJob{}.Mixin()
 	translationjobMixinFields0 := translationjobMixin[0].Fields()
 	_ = translationjobMixinFields0

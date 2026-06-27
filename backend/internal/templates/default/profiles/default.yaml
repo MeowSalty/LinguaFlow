@@ -9,9 +9,13 @@ split:
   max_chars: 1200
 
 # ── 内容保护 ──
+# rules 控制普通 protector（占位符机制），ruby 由独立的 ruby 子配置控制。
 protect:
   enabled: true
   rules: [code, link, placeholder, xml]
+  ruby:
+    enabled: true
+    output_format: "ruby_output"  # 可选 "inline_markers"
 
 # ── 后处理 ──
 postprocess:
@@ -35,3 +39,17 @@ repair:
   placeholder_normalize: true
   # 解析失败或占位符仍缺失时附加反例 reminder 重试一次
   prompt_upgrade: true
+
+# ── 术语自举 ──
+bootstrap:
+  enabled: false
+  max_terms_per_1000_chars: 3.0
+  min_source_len: 2
+  inline_conflict_strategy: "rewrite-local"
+
+# ── 上下文窗口 ──
+context:
+  enabled: true
+  before: 1
+  after: 1
+  max_chars: 0

@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 )
 
 // Options 控制各层修复算子的启用。零值（所有 bool=false）等于"不修复"——
@@ -28,12 +29,13 @@ type Options struct {
 //   - Fatal=false 且 Missing 非空：partial。调用方据 Options.PartialThreshold 决定
 //     仅对缺失 ID 单独重试，还是因缺失率过高放弃。
 type Result struct {
-	Trans    map[string]string
-	Glos     []prompt.BootstrapEntry
-	Missing  []string // wantIDs 中未出现在 Trans 里的子集
-	Repaired []string // 修复算子链，便于日志诊断
-	Fatal    bool
-	ParseErr error
+	Trans      map[string]string
+	Glos       []prompt.BootstrapEntry
+	RubyOutput map[string][]protect.RubyOutputEntry // segment ID → ruby 输出条目
+	Missing    []string                             // wantIDs 中未出现在 Trans 里的子集
+	Repaired   []string                             // 修复算子链，便于日志诊断
+	Fatal      bool
+	ParseErr   error
 }
 
 // TryRepair 尝试解析 LLM 响应 text 为 envelope {"translations":{...}, "glossary":[...]}。
@@ -135,6 +137,13 @@ func finalizeResult(raw map[string]any, wantIDs []string, repaired []string, opt
 		}
 	}
 
+	var rubyOutput map[string][]protect.RubyOutputEntry
+	if rubyRaw, ok := raw["ruby_output"]; ok {
+		if b, mErr := json.Marshal(rubyRaw); mErr == nil {
+			_ = json.Unmarshal(b, &rubyOutput)
+		}
+	}
+
 	var missing []string
 	for _, id := range wantIDs {
 		if _, ok := trans[id]; !ok {
@@ -143,10 +152,11 @@ func finalizeResult(raw map[string]any, wantIDs []string, repaired []string, opt
 	}
 
 	return Result{
-		Trans:    trans,
-		Glos:     glos,
-		Missing:  missing,
-		Repaired: repaired,
+		Trans:      trans,
+		Glos:       glos,
+		RubyOutput: rubyOutput,
+		Missing:    missing,
+		Repaired:   repaired,
 	}
 }
 
@@ -269,18 +279,55 @@ func unmarshalGeneric(body string) (map[string]any, error) {
 	return raw, nil
 }
 
-func toStringMap(v any) (map[string]string, error) {
-	m, ok := v.(map[string]any)
-	if !ok {
-		return nil, fmt.Errorf("expected object, got %T", v)
-	}
-	out := make(map[string]string, len(m))
-	for k, val := range m {
-		s, ok := val.(string)
-		if !ok {
-			return nil, fmt.Errorf("value for key %q is not string (got %T)", k, val)
+// firstStringKey 按优先级尝试从 m 中取 keys 的 string 值，返回第一个命中的。
+// 全部未命中返回空串。
+func firstStringKey(m map[string]any, keys ...string) string {
+	for _, k := range keys {
+		if s, ok := m[k].(string); ok && s != "" {
+			return s
 		}
-		out[k] = s
 	}
-	return out, nil
+	return ""
+}
+
+func toStringMap(v any) (map[string]string, error) {
+	switch tv := v.(type) {
+	case map[string]any:
+		out := make(map[string]string, len(tv))
+		for k, val := range tv {
+			switch sv := val.(type) {
+			case string:
+				out[k] = sv
+			case map[string]any:
+				if s := firstStringKey(sv, "target", "translation", "text", "source"); s != "" {
+					out[k] = s
+				} else {
+					return nil, fmt.Errorf("value for key %q is object but no translatable string field found", k)
+				}
+			default:
+				return nil, fmt.Errorf("value for key %q is not string (got %T)", k, val)
+			}
+		}
+		return out, nil
+	case []any:
+		out := make(map[string]string, len(tv))
+		for i, item := range tv {
+			obj, ok := item.(map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("translations array item %d is not object (got %T)", i, item)
+			}
+			id, _ := obj["id"].(string)
+			if id == "" {
+				return nil, fmt.Errorf("translations array item %d missing string \"id\"", i)
+			}
+			if s := firstStringKey(obj, "target", "translation", "text", "source"); s != "" {
+				out[id] = s
+			} else {
+				return nil, fmt.Errorf("translations array item %d (id=%q) has no translatable string field", i, id)
+			}
+		}
+		return out, nil
+	default:
+		return nil, fmt.Errorf("expected object or array, got %T", v)
+	}
 }

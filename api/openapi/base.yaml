@@ -39,6 +39,8 @@ paths:
     $ref: './paths/projects.yaml#/projects'
   /projects/{projectId}:
     $ref: './paths/projects.yaml#/projectById'
+  /orgs/{orgId}/projects:
+    $ref: './paths/projects.yaml#/orgProjects'
   /projects/{projectId}/resources:
     $ref: './paths/resources.yaml#/projectResources'
   /projects/{projectId}/resources/precheck:
@@ -63,6 +65,8 @@ paths:
     $ref: './paths/resources.yaml#/projectResourceSegmentsApproveAll'
   /projects/{projectId}/resources/{resourceId}/retranslate-rejected:
     $ref: './paths/resources.yaml#/projectResourceRetranslateRejected'
+  /projects/{projectId}/resources/{resourceId}/segments/groups:
+    $ref: './paths/resources.yaml#/projectResourceSegmentGroups'
   /projects/{projectId}/glossary:
     $ref: './paths/glossary.yaml#/projectGlossary'
   /projects/{projectId}/glossary/{entryId}:
@@ -71,14 +75,24 @@ paths:
     $ref: './paths/glossary.yaml#/glossaryImport'
   /projects/{projectId}/glossary/export:
     $ref: './paths/glossary.yaml#/glossaryExport'
+  /projects/{projectId}/glossary/{entryId}/sync-impact:
+    $ref: './paths/glossary.yaml#/glossarySyncImpact'
+  /projects/{projectId}/glossary/{entryId}/sync-execute:
+    $ref: './paths/glossary.yaml#/glossarySyncExecute'
+  /projects/{projectId}/sync-tasks/{taskId}:
+    $ref: './paths/glossary.yaml#/glossarySyncTaskStatus'
+  /projects/{projectId}/sync-tasks/{taskId}/cancel:
+    $ref: './paths/glossary.yaml#/glossarySyncTaskCancel'
   /projects/{projectId}/translation-jobs:
     $ref: './paths/translation-jobs.yaml#/projectTranslationJobs'
   /translation-jobs/{translationJobId}:
-    $ref: './paths/translation-jobs.yaml#/translationJobById'
+   $ref: './paths/translation-jobs.yaml#/translationJobById'
+  /translation-jobs/{translationJobId}/events:
+   $ref: './paths/translation-jobs.yaml#/translationJobEvents'
   /translation-jobs/{translationJobId}/cancel:
-    $ref: './paths/translation-jobs.yaml#/translationJobCancel'
+   $ref: './paths/translation-jobs.yaml#/translationJobCancel'
   /translation-jobs/{translationJobId}/retry:
-    $ref: './paths/translation-jobs.yaml#/translationJobRetry'
+   $ref: './paths/translation-jobs.yaml#/translationJobRetry'
   /execution-plan-templates:
     $ref: './paths/execution-plan-templates.yaml#/executionPlanTemplates'
   /execution-plan-templates/{executionPlanTemplateId}:
@@ -204,6 +218,10 @@ components:
       $ref: './components/schemas/resource.yaml#/ResourcePrecheckFileResult'
     ResourcePrecheckBatchResponse:
       $ref: './components/schemas/resource.yaml#/ResourcePrecheckBatchResponse'
+    ResourceSegmentGroup:
+      $ref: './components/schemas/resource.yaml#/ResourceSegmentGroup'
+    ResourceSegmentGroupListResponse:
+      $ref: './components/schemas/resource.yaml#/ResourceSegmentGroupListResponse'
     CreateTranslationJobRequest:
       $ref: './components/schemas/translation-job.yaml#/CreateTranslationJobRequest'
     TranslationJobResource:
@@ -212,6 +230,8 @@ components:
       $ref: './components/schemas/translation-job.yaml#/TranslationJob'
     TranslationJobListResponse:
       $ref: './components/schemas/translation-job.yaml#/TranslationJobListResponse'
+    JobEvent:
+      $ref: './components/schemas/translation-job.yaml#/JobEvent'
     Activity:
       $ref: './components/schemas/job.yaml#/Activity'
     ActivityListResponse:
@@ -240,8 +260,22 @@ components:
       $ref: './components/schemas/glossary.yaml#/CreateGlossaryEntryRequest'
     UpdateGlossaryEntryRequest:
       $ref: './components/schemas/glossary.yaml#/UpdateGlossaryEntryRequest'
+    UpdateGlossaryEntryResponse:
+      $ref: './components/schemas/glossary.yaml#/UpdateGlossaryEntryResponse'
     GlossaryImportResult:
       $ref: './components/schemas/glossary.yaml#/GlossaryImportResult'
+    GlossarySyncImpactRequest:
+      $ref: './components/schemas/glossary.yaml#/GlossarySyncImpactRequest'
+    GlossarySyncImpactResponse:
+      $ref: './components/schemas/glossary.yaml#/GlossarySyncImpactResponse'
+    GlossarySyncExecuteRequest:
+      $ref: './components/schemas/glossary.yaml#/GlossarySyncExecuteRequest'
+    GlossarySyncExecuteResponse:
+      $ref: './components/schemas/glossary.yaml#/GlossarySyncExecuteResponse'
+    GlossarySyncTaskStatusResponse:
+      $ref: './components/schemas/glossary.yaml#/GlossarySyncTaskStatusResponse'
+    GlossarySyncTaskCancelResponse:
+      $ref: './components/schemas/glossary.yaml#/GlossarySyncTaskCancelResponse'
     PromptTemplate:
       $ref: './components/schemas/prompt-template.yaml#/PromptTemplate'
     PromptTemplateListResponse:

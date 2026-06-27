@@ -509,6 +509,43 @@ paths:
           description: 删除成功
         default:
           $ref: '#/components/responses/Problem'
+  /orgs/{orgId}/projects:
+    parameters:
+      - $ref: '#/components/parameters/OrgId'
+    post:
+      operationId: CreateOrgProject
+      summary: 创建组织项目
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: ListOrgProjects
+      summary: 列出组织项目
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 项目列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
   /projects/{projectId}/resources:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -792,6 +829,12 @@ paths:
           required: false
           schema:
             type: string
+        - name: group_key
+          in: query
+          required: false
+          schema:
+            type: string
+          description: 按分组键过滤 segments（如 epub_file 路径），仅返回属于指定分组的 segments
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
       responses:
@@ -913,6 +956,28 @@ paths:
                 $ref: '#/components/schemas/RetranslateResponse'
         default:
           $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/segments/groups:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      operationId: ListResourceSegmentGroups
+      summary: 列出资源段落分组（按章节）
+      description: |
+        按 meta.epub_file 将 segments 归为章节组，返回每组的统计信息。
+        适用于 EPUB 等多章节资源的分组展示。
+        非 EPUB 资源会返回一个包含所有 segments 的单一组。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 段落分组列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceSegmentGroupListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
   /projects/{projectId}/glossary:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -971,7 +1036,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/GlossaryEntry'
+                $ref: '#/components/schemas/UpdateGlossaryEntryResponse'
         default:
           $ref: '#/components/responses/Problem'
     delete:
@@ -1029,6 +1094,119 @@ paths:
               schema:
                 type: string
                 format: binary
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/glossary/{entryId}/sync-impact:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/EntryId'
+    post:
+      operationId: AnalyzeGlossarySyncImpact
+      summary: 分析术语修改对已翻译内容的影响
+      description: |
+        当用户修改术语条目的 target 时，调用此 API 分析受影响的段落数量和分布。
+        仅在 target 发生变更时有意义。
+        支持 resource_ids 参数限定分析范围。
+        采用两阶段匹配：先检查 source_text 包含术语 source，再检查 target_text 包含 old_target。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GlossarySyncImpactRequest'
+      responses:
+        '200':
+          description: 影响分析结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossarySyncImpactResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/glossary/{entryId}/sync-execute:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/EntryId'
+    post:
+      operationId: ExecuteGlossarySyncUpdate
+      summary: 提交术语同步更新异步任务
+      description: |
+        提交异步同步更新任务，将受影响段落中的旧译文替换为新译文。
+        返回任务 ID 和状态轮询端点，前端通过 GET /sync-tasks/{taskId} 查询进度。
+        替换后的段落状态将被设置为 edited，需要人工复核。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GlossarySyncExecuteRequest'
+      responses:
+        '202':
+          description: 任务已提交
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossarySyncExecuteResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/sync-tasks/{taskId}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 同步任务 ID
+    get:
+      operationId: GetGlossarySyncTaskStatus
+      summary: 查询术语同步任务状态
+      description: |
+        查询同步更新任务的执行进度和结果。
+        前端应以 500ms 间隔轮询此端点，任务完成后停止轮询。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 任务状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossarySyncTaskStatusResponse'
+        '404':
+          description: 任务不存在
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/sync-tasks/{taskId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 同步任务 ID
+    post:
+      operationId: CancelGlossarySyncTask
+      summary: 取消术语同步任务
+      description: |
+        取消正在执行或等待执行的同步任务。
+        pending 状态的任务直接取消；running 状态的任务在完成当前批次后停止。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 任务已取消
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossarySyncTaskCancelResponse'
+        '409':
+          description: 任务已完成或已失败，无法取消
         default:
           $ref: '#/components/responses/Problem'
   /projects/{projectId}/translation-jobs:
@@ -1107,6 +1285,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TranslationJob'
+        default:
+          $ref: '#/components/responses/Problem'
+  /translation-jobs/{translationJobId}/events:
+    parameters:
+      - $ref: '#/components/parameters/TranslationJobId'
+    get:
+      operationId: ListTranslationJobEvents
+      summary: 获取翻译任务事件列表
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            default: 50
+            maximum: 200
+      responses:
+        '200':
+          description: 事件列表
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/JobEvent'
         default:
           $ref: '#/components/responses/Problem'
   /translation-jobs/{translationJobId}/cancel:
@@ -2056,6 +2261,35 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ResourcePrecheckFileResult'
+    ResourceSegmentGroup:
+      type: object
+      required:
+        - group_key
+        - group_title
+        - segment_count
+        - translated_count
+      properties:
+        group_key:
+          type: string
+          description: 分组键（如 epub_file 路径）
+        group_title:
+          type: string
+          description: 分组标题（如章节标题）
+        segment_count:
+          type: integer
+          description: 该组的 segment 总数
+        translated_count:
+          type: integer
+          description: 已翻译的 segment 数量
+    ResourceSegmentGroupListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceSegmentGroup'
     CreateTranslationJobRequest:
       type: object
       required:
@@ -2074,6 +2308,14 @@ components:
           items:
             type: integer
             minimum: 1
+        segment_group_keys:
+          type: array
+          items:
+            type: string
+          description: |
+            按章节分组键选择 segments（仅适用于 EPUB 等多章节资源）。
+            传入 meta.epub_file 值（如 ["OEBPS/chapter1.xhtml"]），后端自动解析为对应的 segment_ids。
+            与 segment_ids 互斥，优先级：segment_group_keys > segment_ids > resource_ids。
         auto_approve:
           type: boolean
           default: false
@@ -2125,6 +2367,19 @@ components:
         updated_at:
           type: string
           format: date-time
+        current_stage:
+          type: string
+          description: 当前执行阶段名称
+        stage_total:
+          type: integer
+          description: 当前阶段的总段落数
+        stage_completed:
+          type: integer
+          description: 当前阶段已完成的段落数
+        started_at:
+          type: string
+          format: date-time
+          description: 资源开始执行的时间
     TranslationJob:
       type: object
       required:
@@ -2187,6 +2442,27 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/TranslationJobResource'
+        started_at:
+          type: string
+          format: date-time
+          description: 任务开始执行的时间
+        current_stage:
+          type: string
+          description: 当前活跃的执行阶段名称（聚合自 JobResource）
+        progress_percentage:
+          type: number
+          format: float
+          minimum: 0
+          maximum: 100
+          description: 整体进度百分比（0-100），由后端计算
+        queue_position:
+          type: integer
+          nullable: true
+          description: 在队列中的位置（1-based），null 表示不在队列中
+        queue_size:
+          type: integer
+          nullable: true
+          description: 当前队列中的任务总数
     TranslationJobListResponse:
       type: object
       required:
@@ -2198,6 +2474,34 @@ components:
             $ref: '#/components/schemas/TranslationJob'
         next_cursor:
           type: string
+    JobEvent:
+      type: object
+      required:
+        - id
+        - job_id
+        - level
+        - message
+        - created_at
+      properties:
+        id:
+          type: integer
+        job_id:
+          type: integer
+        level:
+          type: string
+          enum:
+            - info
+            - warn
+            - error
+        stage:
+          type: string
+        message:
+          type: string
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
     Activity:
       type: object
       required:
@@ -2319,19 +2623,14 @@ components:
       required:
         - id
         - name
-        - resource_scope
         - source_lang
         - target_lang
+        - glossary_enabled
       properties:
         id:
           type: integer
         name:
           type: string
-        resource_scope:
-          type: string
-          enum:
-            - project
-            - organization
         owner_user_id:
           type: integer
         owner_org_id:
@@ -2342,6 +2641,10 @@ components:
         default_translation_config:
           type: object
           additionalProperties: true
+        glossary_enabled:
+          type: boolean
+          default: false
+          description: 翻译过程中是否启用术语表
         source_lang:
           type: string
         target_lang:
@@ -2368,19 +2671,16 @@ components:
       properties:
         name:
           type: string
-        owner_org_id:
-          type: integer
-        resource_scope:
-          type: string
-          enum:
-            - project
-            - organization
         config:
           type: object
           additionalProperties: true
         default_translation_config:
           type: object
           additionalProperties: true
+        glossary_enabled:
+          type: boolean
+          default: false
+          description: 翻译过程中是否启用术语表
         source_lang:
           type: string
         target_lang:
@@ -2391,17 +2691,15 @@ components:
       properties:
         name:
           type: string
-        resource_scope:
-          type: string
-          enum:
-            - project
-            - organization
         config:
           type: object
           additionalProperties: true
         default_translation_config:
           type: object
           additionalProperties: true
+        glossary_enabled:
+          type: boolean
+          description: 翻译过程中是否启用术语表
         source_lang:
           type: string
         target_lang:
@@ -2471,6 +2769,14 @@ components:
         notes:
           type: string
       additionalProperties: false
+    UpdateGlossaryEntryResponse:
+      allOf:
+        - $ref: '#/components/schemas/GlossaryEntry'
+        - type: object
+          properties:
+            target_changed:
+              type: boolean
+              description: target 字段是否发生变更
     GlossaryImportResult:
       type: object
       required:
@@ -2489,6 +2795,132 @@ components:
                 type: string
               reason:
                 type: string
+    GlossarySyncImpactRequest:
+      type: object
+      required:
+        - old_target
+      properties:
+        old_target:
+          type: string
+          description: 修改前的旧 target 值
+        new_target:
+          type: string
+          description: 修改后的新 target 值
+        resource_ids:
+          type: array
+          items:
+            type: integer
+          description: 限定影响分析的资源范围（可选，为空则分析所有资源）
+      additionalProperties: false
+    GlossarySyncImpactResponse:
+      type: object
+      required:
+        - old_target
+        - new_target
+        - total_affected
+        - resources
+      properties:
+        old_target:
+          type: string
+        new_target:
+          type: string
+        total_affected:
+          type: integer
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/GlossarySyncImpactResource'
+    GlossarySyncExecuteRequest:
+      type: object
+      required:
+        - old_target
+        - new_target
+      properties:
+        old_target:
+          type: string
+        new_target:
+          type: string
+        resource_ids:
+          type: array
+          items:
+            type: integer
+          description: 限定同步的资源范围
+      additionalProperties: false
+    GlossarySyncExecuteResponse:
+      type: object
+      required:
+        - task_id
+        - status
+        - status_url
+      properties:
+        task_id:
+          type: string
+          description: 异步任务唯一标识
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
+            - cancelled
+        status_url:
+          type: string
+          description: 任务状态轮询端点
+    GlossarySyncTaskStatusResponse:
+      type: object
+      required:
+        - task_id
+        - status
+        - processed
+        - total
+      properties:
+        task_id:
+          type: string
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
+            - cancelled
+        processed:
+          type: integer
+          description: 已处理的段落数
+        total:
+          type: integer
+          description: 待处理的段落总数
+        result:
+          type: object
+          description: 任务完成后的结果摘要（仅 status=completed 时存在）
+          properties:
+            total_updated:
+              type: integer
+            total_skipped:
+              type: integer
+            resources:
+              type: array
+              items:
+                $ref: '#/components/schemas/GlossarySyncExecuteResourceResult'
+        error:
+          type: string
+          description: 错误信息（仅 status=failed 时存在）
+        cancelled_at:
+          type: string
+          format: date-time
+    GlossarySyncTaskCancelResponse:
+      type: object
+      required:
+        - task_id
+        - status
+      properties:
+        task_id:
+          type: string
+        status:
+          type: string
+          enum:
+            - cancelled
     PromptTemplate:
       type: object
       required:
@@ -2511,7 +2943,10 @@ components:
           type: integer
         system_prompt_content:
           type: string
-          description: 提示词内容。
+          description: 翻译提示词内容。
+        bootstrap_prompt_content:
+          type: string
+          description: Bootstrap 术语抽取提示词内容。启用 glossary.bootstrap 时必填。
         created_at:
           type: string
           format: date-time
@@ -2538,7 +2973,10 @@ components:
           type: string
         system_prompt_content:
           type: string
-          description: 提示词内容。
+          description: 翻译提示词内容。
+        bootstrap_prompt_content:
+          type: string
+          description: Bootstrap 术语抽取提示词内容。
       additionalProperties: false
     UpdatePromptTemplateRequest:
       type: object
@@ -2549,7 +2987,10 @@ components:
           type: string
         system_prompt_content:
           type: string
-          description: 提示词内容。
+          description: 翻译提示词内容。
+        bootstrap_prompt_content:
+          type: string
+          description: Bootstrap 术语抽取提示词内容。
       additionalProperties: false
     TranslationProfile:
       type: object
@@ -2631,6 +3072,10 @@ components:
           type: integer
         owner_org_id:
           type: integer
+        bootstrap:
+          $ref: '#/components/schemas/ExecutionPlanBootstrapConfig'
+        ruby_retry:
+          $ref: '#/components/schemas/ExecutionPlanRubyRetryConfig'
         rounds:
           type: array
           items:
@@ -2661,6 +3106,10 @@ components:
           type: string
         description:
           type: string
+        bootstrap:
+          $ref: '#/components/schemas/ExecutionPlanBootstrapConfig'
+        ruby_retry:
+          $ref: '#/components/schemas/ExecutionPlanRubyRetryConfig'
         rounds:
           type: array
           items:
@@ -2674,6 +3123,10 @@ components:
           type: string
         description:
           type: string
+        bootstrap:
+          $ref: '#/components/schemas/ExecutionPlanBootstrapConfig'
+        ruby_retry:
+          $ref: '#/components/schemas/ExecutionPlanRubyRetryConfig'
         rounds:
           type: array
           items:
@@ -2700,12 +3153,92 @@ components:
         deleted:
           type: integer
           description: 删除的段落数
+    GlossarySyncImpactResource:
+      type: object
+      required:
+        - resource_id
+        - resource_path
+        - affected_count
+      properties:
+        resource_id:
+          type: integer
+        resource_path:
+          type: string
+        affected_count:
+          type: integer
+    GlossarySyncExecuteResourceResult:
+      type: object
+      required:
+        - resource_id
+        - resource_path
+        - updated_count
+        - skipped_count
+      properties:
+        resource_id:
+          type: integer
+        resource_path:
+          type: string
+        updated_count:
+          type: integer
+        skipped_count:
+          type: integer
     ExecutionPlanTemplateScope:
       type: string
       enum:
         - user
         - org
         - system
+    ExecutionPlanBootstrapConfig:
+      type: object
+      required:
+        - enabled
+        - backend_id
+        - prompt_template_id
+        - batch_size
+        - concurrency
+      properties:
+        enabled:
+          type: boolean
+          default: false
+          description: 是否启用独立自举
+        backend_id:
+          type: integer
+          description: 自举使用的后端 ID
+        prompt_template_id:
+          type: integer
+          description: 自举使用的提示词模板 ID（仅用其 bootstrap_prompt_content）
+        batch_size:
+          type: integer
+          minimum: 1
+          default: 20
+          description: 每批发送给 LLM 的源文段数
+        concurrency:
+          type: integer
+          minimum: 1
+          default: 2
+          description: 自举并发数
+        max_terms_per_batch:
+          type: integer
+          minimum: 1
+          default: 20
+          description: 每批最多抽取的术语数
+        min_source_len:
+          type: integer
+          minimum: 1
+          default: 2
+          description: 术语源文最短字符数
+    ExecutionPlanRubyRetryConfig:
+      type: object
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+          default: false
+          description: 是否启用注音对齐重试
+        backend_id:
+          type: integer
+          description: 注音对齐使用的后端 ID；为空或 0 时使用翻译主后端
     RetryConfig:
       type: object
       properties:
@@ -2784,6 +3317,19 @@ components:
         max_chars:
           type: integer
           minimum: 1
+    ProfileRubyConfig:
+      type: object
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+        output_format:
+          type: string
+          enum:
+            - ruby_output
+            - inline_markers
+          default: ruby_output
     ProfileProtectConfig:
       type: object
       required:
@@ -2795,6 +3341,13 @@ components:
           type: array
           items:
             type: string
+            enum:
+              - code
+              - link
+              - placeholder
+              - xml
+        ruby:
+          $ref: '#/components/schemas/ProfileRubyConfig'
     ProfilePostprocessConfig:
       type: object
       required:
@@ -2836,41 +3389,64 @@ components:
     ProfileBootstrapConfig:
       type: object
       required:
-        - mode
-        - save
-        - max_terms_per_batch
+        - enabled
+        - max_terms_per_1000_chars
         - min_source_len
         - inline_conflict_strategy
       properties:
-        mode:
-          type: string
-          enum:
-            - 'off'
-            - pre
-            - inline
-        save:
+        enabled:
           type: boolean
-        max_terms_per_batch:
-          type: integer
-          minimum: 1
+          default: false
+          description: 是否启用内联自举
+        max_terms_per_1000_chars:
+          type: number
+          format: double
+          minimum: 0
+          description: 每 1000 源文字符（rune）最多抽取的术语条数（缩放系数）
         min_source_len:
           type: integer
           minimum: 1
+          description: 内联自举术语源文最短字符数
         inline_conflict_strategy:
           type: string
           enum:
             - 'off'
             - rewrite-local
+          description: 并发术语冲突处理策略
     ProfileGlossaryConfig:
       type: object
       required:
-        - enabled
         - bootstrap
+      properties:
+        bootstrap:
+          $ref: '#/components/schemas/ProfileBootstrapConfig'
+    ProfileContextConfig:
+      type: object
+      required:
+        - enabled
+        - before
+        - after
+        - max_chars
       properties:
         enabled:
           type: boolean
-        bootstrap:
-          $ref: '#/components/schemas/ProfileBootstrapConfig'
+          default: true
+          description: 是否启用上下文窗口
+        before:
+          type: integer
+          minimum: 0
+          default: 1
+          description: 上下文取前 N 段
+        after:
+          type: integer
+          minimum: 0
+          default: 1
+          description: 上下文取后 N 段
+        max_chars:
+          type: integer
+          minimum: 0
+          default: 0
+          description: 每个上下文段落的字符数上限，0 表示不限制
     TranslationProfileConfig:
       type: object
       required:
@@ -2879,6 +3455,7 @@ components:
         - postprocess
         - repair
         - glossary
+        - context
       properties:
         split:
           $ref: '#/components/schemas/ProfileSplitConfig'
@@ -2890,3 +3467,5 @@ components:
           $ref: '#/components/schemas/ProfileRepairConfig'
         glossary:
           $ref: '#/components/schemas/ProfileGlossaryConfig'
+        context:
+          $ref: '#/components/schemas/ProfileContextConfig'

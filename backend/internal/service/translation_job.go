@@ -5,10 +5,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -57,10 +60,11 @@ type TranslationJobService struct {
 
 // CreateTranslationJobInput 创建翻译任务的输入参数。
 type CreateTranslationJobInput struct {
-	ResourceIDs     []int
-	SegmentIDs      []int
-	ExecutionPlanID int
-	AutoApprove     bool
+	ResourceIDs      []int
+	SegmentIDs       []int
+	SegmentGroupKeys []string
+	ExecutionPlanID  int
+	AutoApprove      bool
 }
 
 // TranslationJobListOptions 任务列表查询选项。
@@ -104,12 +108,32 @@ type TranslationJobExecution struct {
 
 // JobExecutionSnapshot 任务执行快照，创建时生成，不可变。
 type JobExecutionSnapshot struct {
-	ExecutionPlanID   int                `json:"execution_plan_id"`
-	ExecutionPlanName string             `json:"execution_plan_name"`
-	Rounds            []JobRoundSnapshot `json:"rounds"`
-	SourceLang        string             `json:"source_lang"`
-	TargetLang        string             `json:"target_lang"`
-	AutoApprove       bool               `json:"auto_approve,omitempty"`
+	ExecutionPlanID   int                             `json:"execution_plan_id"`
+	ExecutionPlanName string                          `json:"execution_plan_name"`
+	Rounds            []JobRoundSnapshot              `json:"rounds"`
+	SourceLang        string                          `json:"source_lang"`
+	TargetLang        string                          `json:"target_lang"`
+	GlossaryEnabled   bool                            `json:"glossary_enabled"`
+	AutoApprove       bool                            `json:"auto_approve,omitempty"`
+	Bootstrap         *ExecutionPlanBootstrapSnapshot `json:"bootstrap,omitempty"`
+	RubyRetry         *ExecutionPlanRubyRetrySnapshot `json:"ruby_retry,omitempty"`
+}
+
+// ExecutionPlanBootstrapSnapshot 独立自举快照。
+type ExecutionPlanBootstrapSnapshot struct {
+	Enabled          bool            `json:"enabled"`
+	Backend          BackendSnapshot `json:"backend"`
+	TemplateContent  string          `json:"template_content"`
+	BatchSize        int             `json:"batch_size"`
+	Concurrency      int             `json:"concurrency"`
+	MaxTermsPerBatch int             `json:"max_terms_per_batch"`
+	MinSourceLen     int             `json:"min_source_len"`
+}
+
+// ExecutionPlanRubyRetrySnapshot 注音对齐重试快照。
+type ExecutionPlanRubyRetrySnapshot struct {
+	Enabled bool            `json:"enabled"`
+	Backend BackendSnapshot `json:"backend"`
 }
 
 // JobRoundSnapshot 单轮的完整执行快照。
@@ -136,9 +160,10 @@ type BackendSnapshot struct {
 
 // PromptSnapshot 提示词模板快照。
 type PromptSnapshot struct {
-	TemplateID   *int   `json:"template_id,omitempty"`
-	TemplateName string `json:"template_name"`
-	Content      string `json:"content"`
+	TemplateID       *int   `json:"template_id,omitempty"`
+	TemplateName     string `json:"template_name"`
+	Content          string `json:"content"`
+	BootstrapContent string `json:"bootstrap_content,omitempty"`
 }
 
 // StrategySnapshot 策略模板快照。
@@ -150,6 +175,7 @@ type StrategySnapshot struct {
 	Postprocess schema.ProfilePostprocessConfig `json:"postprocess"`
 	Repair      schema.ProfileRepairConfig      `json:"repair"`
 	Glossary    schema.ProfileGlossaryConfig    `json:"glossary"`
+	Context     schema.ProfileContextConfig     `json:"context"`
 }
 
 // --- CRUD 方法 ---
@@ -177,6 +203,7 @@ func (s *TranslationJobService) CreateManualJob(ctx context.Context, actorUserID
 	// 4. 填充通用配置
 	snapshot.SourceLang = projectRow.SourceLang
 	snapshot.TargetLang = projectRow.TargetLang
+	snapshot.GlossaryEnabled = projectRow.GlossaryEnabled
 	snapshot.AutoApprove = input.AutoApprove
 
 	snapshotBytes, err := json.Marshal(snapshot)
@@ -293,6 +320,13 @@ func (s *TranslationJobService) validateAndSnapshot(
 			return nil, fmt.Errorf("rounds[%d] snapshot profile: %w", i, err)
 		}
 
+		// 校验翻译模板必填
+		if promptSnap.Content == "" {
+			return nil, fmt.Errorf("rounds[%d] prompt_template %q has no system_prompt_content (translation prompt is required)", i, promptSnap.TemplateName)
+		}
+
+		// 内联自举不再需要独立的 bootstrap 模板（inline 是翻译 prompt 的一部分）
+
 		snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
 			Name:            round.Name,
 			Backend:         *backendSnap,
@@ -304,6 +338,62 @@ func (s *TranslationJobService) validateAndSnapshot(
 			RateLimitPerSec: round.RateLimitPerSec,
 			Retry:           round.Retry,
 		})
+	}
+
+	// 独立自举快照
+	if plan.Bootstrap.Enabled {
+		bs := &plan.Bootstrap
+
+		// 校验自举后端可访问性
+		if err := s.validateBackendAccess(ctx, projectRow, bs.BackendID); err != nil {
+			return nil, fmt.Errorf("bootstrap backend: %w", err)
+		}
+
+		// 快照自举后端
+		bootstrapBackendSnap, err := s.snapshotBackend(ctx, bs.BackendID)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap snapshot backend: %w", err)
+		}
+
+		// 快照自举提示词模板（仅用其 bootstrap_prompt_content）
+		bootstrapPromptSnap, err := s.snapshotPromptTemplate(ctx, bs.PromptTemplateID)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap snapshot prompt: %w", err)
+		}
+
+		if bootstrapPromptSnap.BootstrapContent == "" {
+			return nil, fmt.Errorf("bootstrap prompt_template %q has no bootstrap_prompt_content", bootstrapPromptSnap.TemplateName)
+		}
+
+		snapshot.GlossaryEnabled = true
+		snapshot.Bootstrap = &ExecutionPlanBootstrapSnapshot{
+			Enabled:          true,
+			Backend:          *bootstrapBackendSnap,
+			TemplateContent:  bootstrapPromptSnap.BootstrapContent,
+			BatchSize:        bs.BatchSize,
+			Concurrency:      bs.Concurrency,
+			MaxTermsPerBatch: bs.MaxTermsPerBatch,
+			MinSourceLen:     bs.MinSourceLen,
+		}
+	}
+
+	// 注音对齐重试快照
+	if plan.RubyRetry.Enabled && plan.RubyRetry.BackendID > 0 {
+		rr := &plan.RubyRetry
+
+		if err := s.validateBackendAccess(ctx, projectRow, rr.BackendID); err != nil {
+			return nil, fmt.Errorf("ruby retry backend: %w", err)
+		}
+
+		rrBackendSnap, err := s.snapshotBackend(ctx, rr.BackendID)
+		if err != nil {
+			return nil, fmt.Errorf("ruby retry snapshot backend: %w", err)
+		}
+
+		snapshot.RubyRetry = &ExecutionPlanRubyRetrySnapshot{
+			Enabled: true,
+			Backend: *rrBackendSnap,
+		}
 	}
 
 	return snapshot, nil
@@ -377,9 +467,10 @@ func (s *TranslationJobService) snapshotPromptTemplate(ctx context.Context, temp
 	}
 	id := pt.ID
 	return &PromptSnapshot{
-		TemplateID:   &id,
-		TemplateName: pt.Name,
-		Content:      pt.SystemPromptContent,
+		TemplateID:       &id,
+		TemplateName:     pt.Name,
+		Content:          pt.SystemPromptContent,
+		BootstrapContent: pt.BootstrapPromptContent,
 	}, nil
 }
 
@@ -389,6 +480,7 @@ func (s *TranslationJobService) snapshotProfile(ctx context.Context, profileID i
 	if err != nil {
 		return nil, err
 	}
+	tp.Config.NormalizeContext()
 	id := tp.ID
 	return &StrategySnapshot{
 		ProfileID:   &id,
@@ -398,6 +490,7 @@ func (s *TranslationJobService) snapshotProfile(ctx context.Context, profileID i
 		Postprocess: tp.Config.Postprocess,
 		Repair:      tp.Config.Repair,
 		Glossary:    tp.Config.Glossary,
+		Context:     tp.Config.Context,
 	}, nil
 }
 
@@ -464,6 +557,22 @@ func (s *TranslationJobService) MarkJobRunning(ctx context.Context, jobID int) e
 	return s.client.TranslationJob.UpdateOneID(jobID).SetStatus(TranslationJobStatusRunning).Exec(ctx)
 }
 
+// MarkJobStarted 记录任务开始时间。
+func (s *TranslationJobService) MarkJobStarted(ctx context.Context, jobID int) error {
+	now := time.Now()
+	return s.client.TranslationJob.UpdateOneID(jobID).
+		SetStartedAt(now).
+		Exec(ctx)
+}
+
+// MarkJobResourceStarted 记录资源开始时间。
+func (s *TranslationJobService) MarkJobResourceStarted(ctx context.Context, jobResourceID int) error {
+	now := time.Now()
+	return s.client.JobResource.UpdateOneID(jobResourceID).
+		SetStartedAt(now).
+		Exec(ctx)
+}
+
 func (s *TranslationJobService) MarkJobResourceRunning(ctx context.Context, jobResourceID int) error {
 	if err := s.client.JobResource.UpdateOneID(jobResourceID).
 		SetStatus(JobResourceStatusRunning).
@@ -500,6 +609,18 @@ func (s *TranslationJobService) MarkJobResourceFailed(ctx context.Context, jobRe
 	if err := s.client.JobResource.UpdateOneID(jobResourceID).
 		SetStatus(JobResourceStatusFailed).
 		SetErrorMessage(message).
+		Exec(ctx); err != nil {
+		if ent.IsNotFound(err) {
+			return ErrJobResourceNotFound
+		}
+		return err
+	}
+	return nil
+}
+
+func (s *TranslationJobService) MarkJobResourceCancelled(ctx context.Context, jobResourceID int) error {
+	if err := s.client.JobResource.UpdateOneID(jobResourceID).
+		SetStatus(JobResourceStatusCancelled).
 		Exec(ctx); err != nil {
 		if ent.IsNotFound(err) {
 			return ErrJobResourceNotFound
@@ -569,8 +690,16 @@ func (s *TranslationJobService) ReconcileJob(ctx context.Context, jobID int) err
 	}
 	var pendingCount, runningCount, completed, failed, cancelled, completedSegments int
 	var firstFailure *string
+	// [DEBUG] 诊断：记录每个资源的状态
 	for _, item := range current.Edges.JobResources {
 		completedSegments += item.CompletedSegments
+		slog.Info("[DEBUG] ReconcileJob resource status",
+			"job_id", jobID,
+			"resource_id", item.ID,
+			"status", item.Status,
+			"segment_count", item.SegmentCount,
+			"completed_segments", item.CompletedSegments,
+		)
 		switch item.Status {
 		case JobResourceStatusPending:
 			pendingCount++
@@ -588,7 +717,26 @@ func (s *TranslationJobService) ReconcileJob(ctx context.Context, jobID int) err
 			}
 		}
 	}
+	// [DEBUG] 诊断：记录汇总信息
+	total := len(current.Edges.JobResources)
+	slog.Info("[DEBUG] ReconcileJob summary",
+		"job_id", jobID,
+		"total_resources", total,
+		"pending", pendingCount,
+		"running", runningCount,
+		"completed", completed,
+		"failed", failed,
+		"cancelled", cancelled,
+		"completed_segments", completedSegments,
+	)
 	status := deriveTranslationJobStatus(len(current.Edges.JobResources), pendingCount, runningCount, completed, failed, cancelled)
+	// [DEBUG] 诊断：记录最终决定的作业状态
+	slog.Info("[DEBUG] ReconcileJob derived status",
+		"job_id", jobID,
+		"derived_status", status,
+		"completed_resources", completed,
+		"total_resources", len(current.Edges.JobResources),
+	)
 	update := s.client.TranslationJob.UpdateOneID(jobID).
 		SetStatus(status).
 		SetResourceCount(len(current.Edges.JobResources)).
@@ -681,7 +829,43 @@ func (s *TranslationJobService) GetJob(ctx context.Context, actorUserID, jobID i
 	return row, nil
 }
 
+// ListJobEvents 查询翻译任务事件列表。
+func (s *TranslationJobService) ListJobEvents(ctx context.Context, actorUserID, jobID int, limit int) ([]*ent.JobEvent, error) {
+	// 验证任务存在且有权限访问
+	job, err := s.client.TranslationJob.Query().
+		Where(translationjob.IDEQ(jobID)).
+		WithProject().
+		Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, ErrTranslationJobNotFound
+		}
+		return nil, err
+	}
+	projectRow, err := job.Edges.ProjectOrErr()
+	if err != nil {
+		return nil, err
+	}
+	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectRow.ID, false); err != nil {
+		return nil, err
+	}
+
+	// 查询事件列表，按 created_at 倒序
+	events, err := s.client.JobEvent.Query().
+		Where(jobevent.HasJobWith(translationjob.IDEQ(jobID))).
+		Order(ent.Desc(jobevent.FieldCreatedAt)).
+		Limit(limit).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return events, nil
+}
+
 func (s *TranslationJobService) resolveJobSelection(ctx context.Context, projectID int, input CreateTranslationJobInput) (map[int][]int, error) {
+	if len(input.SegmentGroupKeys) > 0 {
+		return s.resolveGroupKeySelection(ctx, projectID, input.SegmentGroupKeys, input.ResourceIDs)
+	}
 	if len(input.SegmentIDs) > 0 {
 		return s.resolveSegmentSelection(ctx, projectID, input.SegmentIDs)
 	}
@@ -705,6 +889,67 @@ func (s *TranslationJobService) resolveSegmentSelection(ctx context.Context, pro
 		}
 		selection[*row.ResourceID] = append(selection[*row.ResourceID], row.ID)
 	}
+	return selection, nil
+}
+
+func (s *TranslationJobService) resolveGroupKeySelection(ctx context.Context, projectID int, groupKeys []string, resourceIDs []int) (map[int][]int, error) {
+	uniqueKeys := make(map[string]struct{}, len(groupKeys))
+	for _, key := range groupKeys {
+		k := strings.TrimSpace(key)
+		if k != "" {
+			uniqueKeys[k] = struct{}{}
+		}
+	}
+	if len(uniqueKeys) == 0 {
+		return nil, fmt.Errorf("segment_group_keys 不能为空")
+	}
+
+	// 查询该项目下指定资源的 segments（带 meta 字段）
+	segQuery := s.client.Segment.Query().
+		Where(segment.HasResourceWith(resource.ProjectIDEQ(projectID)))
+	if len(resourceIDs) > 0 {
+		segQuery = segQuery.Where(segment.HasResourceWith(resource.IDIn(uniqueInts(resourceIDs)...)))
+	}
+	rows, err := segQuery.All(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("查询 segments 失败: %w", err)
+	}
+
+	selection := make(map[int][]int)
+	matchedCount := 0
+	for _, row := range rows {
+		if row.Meta == nil || row.ResourceID == nil {
+			continue
+		}
+		var meta map[string]any
+		if err := json.Unmarshal([]byte(*row.Meta), &meta); err != nil {
+			continue
+		}
+		epubFile, ok := meta["epub_file"].(string)
+		if !ok {
+			continue
+		}
+		if _, matched := uniqueKeys[epubFile]; matched {
+			selection[*row.ResourceID] = append(selection[*row.ResourceID], row.ID)
+			matchedCount++
+			slog.Debug("[resolveGroupKeySelection] resource matched",
+				"resource_id", *row.ResourceID,
+				"segment_count", len(selection[*row.ResourceID]),
+				"segment_ids", selection[*row.ResourceID])
+		}
+	}
+
+	slog.Debug("[resolveGroupKeySelection] diagnostic",
+		"project_id", projectID,
+		"group_keys", groupKeys,
+		"total_segments_in_project", len(rows),
+		"matched_segments", matchedCount,
+		"matched_resources", len(selection))
+
+	if matchedCount == 0 {
+		return nil, fmt.Errorf("未找到匹配指定章节的 segments")
+	}
+
 	return selection, nil
 }
 

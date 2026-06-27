@@ -13,12 +13,12 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 )
 
@@ -927,8 +927,8 @@ func normalizeMeta(meta map[string]any) map[string]any {
 }
 
 // BuildSegmentInputsWithTarget 将 DB segments 转换为引擎输入，包含 Target 文本。
-func BuildSegmentInputsWithTarget(rows []*ent.Segment) []engine.SegmentInput {
-	inputs := make([]engine.SegmentInput, len(rows))
+func BuildSegmentInputsWithTarget(rows []*ent.Segment) []pipeline.SegmentInput {
+	inputs := make([]pipeline.SegmentInput, len(rows))
 	for i, row := range rows {
 		var meta map[string]any
 		if row.Meta != nil {
@@ -939,7 +939,7 @@ func BuildSegmentInputsWithTarget(rows []*ent.Segment) []engine.SegmentInput {
 		if row.TargetText != nil {
 			target = *row.TargetText
 		}
-		inputs[i] = engine.SegmentInput{
+		inputs[i] = pipeline.SegmentInput{
 			ID:         strconv.Itoa(row.SegmentIndex),
 			SourceText: row.SourceText,
 			Meta:       meta,
@@ -1002,7 +1002,7 @@ func (s *ResourceService) RenderTranslatedResource(
 
 	// 4. 构建 Document 并填充 Target
 	inputs := BuildSegmentInputsWithTarget(segments)
-	doc := engine.BuildDocumentFromSegments(inputs, sourceLang, targetLang, res.Format)
+	doc := pipeline.BuildDocumentFromSegments(inputs, sourceLang, targetLang, res.Format)
 
 	// 5. 解析格式并渲染
 	p, err := parser.Resolve(res.Format)

@@ -96,12 +96,86 @@ func toExecutionPlanTemplateResponse(t *ent.ExecutionPlanTemplate) ExecutionPlan
 	if !t.UpdatedAt.IsZero() {
 		resp.UpdatedAt = &t.UpdatedAt
 	}
+	// 独立自举配置
+	if t.Bootstrap.Enabled {
+		bs := toBootstrapConfigAPI(t.Bootstrap)
+		resp.Bootstrap = &bs
+	}
+	// 注音对齐重试配置
+	if t.RubyRetry.Enabled {
+		rr := toRubyRetryConfigAPI(t.RubyRetry)
+		resp.RubyRetry = &rr
+	}
 	rounds := make([]ExecutionRoundConfig, 0, len(t.Rounds))
 	for _, rc := range t.Rounds {
 		rounds = append(rounds, toExecutionRoundConfigAPI(rc))
 	}
 	resp.Rounds = rounds
 	return resp
+}
+
+// toBootstrapConfigAPI 将 schema 层的独立自举配置转换为 API 响应类型。
+func toBootstrapConfigAPI(bs schema.ExecutionPlanBootstrapConfig) ExecutionPlanBootstrapConfig {
+	result := ExecutionPlanBootstrapConfig{
+		Enabled:          bs.Enabled,
+		BackendId:        bs.BackendID,
+		PromptTemplateId: bs.PromptTemplateID,
+		BatchSize:        bs.BatchSize,
+		Concurrency:      bs.Concurrency,
+	}
+	if bs.MaxTermsPerBatch > 0 {
+		result.MaxTermsPerBatch = &bs.MaxTermsPerBatch
+	}
+	if bs.MinSourceLen > 0 {
+		result.MinSourceLen = &bs.MinSourceLen
+	}
+	return result
+}
+
+// parseBootstrapConfig 将 API 请求中的独立自举配置转换为 schema 层。
+func parseBootstrapConfig(api *ExecutionPlanBootstrapConfig) schema.ExecutionPlanBootstrapConfig {
+	if api == nil {
+		return schema.ExecutionPlanBootstrapConfig{}
+	}
+	result := schema.ExecutionPlanBootstrapConfig{
+		Enabled:          api.Enabled,
+		BackendID:        api.BackendId,
+		PromptTemplateID: api.PromptTemplateId,
+		BatchSize:        api.BatchSize,
+		Concurrency:      api.Concurrency,
+	}
+	if api.MaxTermsPerBatch != nil {
+		result.MaxTermsPerBatch = *api.MaxTermsPerBatch
+	}
+	if api.MinSourceLen != nil {
+		result.MinSourceLen = *api.MinSourceLen
+	}
+	return result
+}
+
+// toRubyRetryConfigAPI 将 schema 层的注音对齐重试配置转换为 API 响应类型。
+func toRubyRetryConfigAPI(rr schema.ExecutionPlanRubyRetryConfig) ExecutionPlanRubyRetryConfig {
+	result := ExecutionPlanRubyRetryConfig{
+		Enabled: rr.Enabled,
+	}
+	if rr.BackendID > 0 {
+		result.BackendId = &rr.BackendID
+	}
+	return result
+}
+
+// parseRubyRetryConfig 将 API 请求中的注音对齐重试配置转换为 schema 层。
+func parseRubyRetryConfig(api *ExecutionPlanRubyRetryConfig) schema.ExecutionPlanRubyRetryConfig {
+	if api == nil {
+		return schema.ExecutionPlanRubyRetryConfig{}
+	}
+	result := schema.ExecutionPlanRubyRetryConfig{
+		Enabled: api.Enabled,
+	}
+	if api.BackendId != nil {
+		result.BackendID = *api.BackendId
+	}
+	return result
 }
 
 // toExecutionPlanRoundsAPI 将 API 请求中的轮次配置转换为 schema 层。
@@ -171,6 +245,8 @@ func (h *HandlerExecutionPlan) handleCreate(w http.ResponseWriter, r *http.Reque
 		Name:        req.Name,
 		Scope:       "user",
 		OwnerUserID: &userID,
+		Bootstrap:   parseBootstrapConfig(req.Bootstrap),
+		RubyRetry:   parseRubyRetryConfig(req.RubyRetry),
 		Rounds:      toExecutionPlanRoundsAPI(req.Rounds),
 	}
 	if req.Description != nil {
@@ -205,6 +281,14 @@ func (h *HandlerExecutionPlan) handleUpdate(w http.ResponseWriter, r *http.Reque
 	input := service.UpdateExecutionPlanTemplateInput{
 		Name:        req.Name,
 		Description: req.Description,
+	}
+	if req.Bootstrap != nil {
+		bs := parseBootstrapConfig(req.Bootstrap)
+		input.Bootstrap = &bs
+	}
+	if req.RubyRetry != nil {
+		rr := parseRubyRetryConfig(req.RubyRetry)
+		input.RubyRetry = &rr
 	}
 	if req.Rounds != nil {
 		rounds := toExecutionPlanRoundsAPI(*req.Rounds)

@@ -8,7 +8,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline/stages"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
@@ -26,6 +26,10 @@ type Options struct {
 	// BootstrapBackends 是术语自举阶段使用的后端列表。
 	// 为空时回退到 Rounds[0].Backends。
 	BootstrapBackends []backend.Backend
+
+	// RubyRetryBackends 是注音对齐重试使用的后端列表。
+	// 为空时回退到 Rounds[0].Backends。
+	RubyRetryBackends []backend.Backend
 
 	// Config 是策略配置（分割、保护、提示词、术语表等）。
 	// 不包含 backends、backend_mode、backend_order 字段。
@@ -107,9 +111,9 @@ func resolveShrink(val, global float64) float64 {
 	return global
 }
 
-// buildStagesRounds 将 engine.Round 转换为 stages.Round。
+// buildStagesRounds 将 engine.Round 转换为 pipeline.Round。
 // 用全局默认值填充零值字段。
-func buildStagesRounds(in []Round, cfg *config.Config) []stages.Round {
+func buildStagesRounds(in []Round, cfg *config.Config) []pipeline.Round {
 	if len(in) == 0 {
 		return nil
 	}
@@ -118,7 +122,7 @@ func buildStagesRounds(in []Round, cfg *config.Config) []stages.Round {
 		Backoff:     time.Duration(cfg.Pipeline.Translate.Retry.BackoffMs) * time.Millisecond,
 		Jitter:      cfg.Pipeline.Translate.Retry.Jitter,
 	}
-	out := make([]stages.Round, 0, len(in))
+	out := make([]pipeline.Round, 0, len(in))
 	for i, r := range in {
 		// Retry 零值回退到全局
 		retry := r.Retry
@@ -135,7 +139,7 @@ func buildStagesRounds(in []Round, cfg *config.Config) []stages.Round {
 			roundRepair = &opts
 		}
 
-		out = append(out, stages.Round{
+		out = append(out, pipeline.Round{
 			Name:            resolveName(r.Name, i),
 			Backends:        r.Backends,
 			BatchSize:       resolveDefault(r.BatchSize, cfg.Pipeline.Translate.BatchSize, 1),

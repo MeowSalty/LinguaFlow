@@ -50,8 +50,12 @@ func entTranslationProfileToResponse(t *ent.TranslationProfile) TranslationProfi
 
 // profileConfigToResponse 将 schema 配置转换为 API 响应。
 func profileConfigToResponse(c *schema.TranslationProfileConfigData) TranslationProfileConfig {
-	rules := make([]string, len(c.Protect.Rules))
-	copy(rules, c.Protect.Rules)
+	rules := make([]ProfileProtectConfigRules, len(c.Protect.Rules))
+	for i, r := range c.Protect.Rules {
+		rules[i] = ProfileProtectConfigRules(r)
+	}
+
+	outputFormat := ProfileRubyConfigOutputFormat(c.Protect.Ruby.OutputFormat)
 
 	return TranslationProfileConfig{
 		Split: ProfileSplitConfig{
@@ -62,6 +66,10 @@ func profileConfigToResponse(c *schema.TranslationProfileConfigData) Translation
 		Protect: ProfileProtectConfig{
 			Enabled: c.Protect.Enabled,
 			Rules:   &rules,
+			Ruby: &ProfileRubyConfig{
+				Enabled:      c.Protect.Ruby.Enabled,
+				OutputFormat: &outputFormat,
+			},
 		},
 		Postprocess: ProfilePostprocessConfig{
 			Enabled:    c.Postprocess.Enabled,
@@ -77,14 +85,18 @@ func profileConfigToResponse(c *schema.TranslationProfileConfigData) Translation
 			PromptUpgrade:        c.Repair.PromptUpgrade,
 		},
 		Glossary: ProfileGlossaryConfig{
-			Enabled: c.Glossary.Enabled,
 			Bootstrap: ProfileBootstrapConfig{
-				Mode:                   ProfileBootstrapConfigMode(c.Glossary.Bootstrap.Mode),
-				Save:                   c.Glossary.Bootstrap.Save,
-				MaxTermsPerBatch:       c.Glossary.Bootstrap.MaxTermsPerBatch,
+				Enabled:                c.Glossary.Bootstrap.Enabled,
+				MaxTermsPer1000Chars:   c.Glossary.Bootstrap.MaxTermsPer1000Chars,
 				MinSourceLen:           c.Glossary.Bootstrap.MinSourceLen,
 				InlineConflictStrategy: ProfileBootstrapConfigInlineConflictStrategy(c.Glossary.Bootstrap.InlineConflictStrategy),
 			},
+		},
+		Context: ProfileContextConfig{
+			Enabled:  c.Context.Enabled,
+			Before:   c.Context.Before,
+			After:    c.Context.After,
+			MaxChars: c.Context.MaxChars,
 		},
 	}
 }
@@ -98,7 +110,17 @@ func parseProfileConfig(c *TranslationProfileConfig) *schema.TranslationProfileC
 	var rules []string
 	if c.Protect.Rules != nil {
 		rules = make([]string, len(*c.Protect.Rules))
-		copy(rules, *c.Protect.Rules)
+		for i, r := range *c.Protect.Rules {
+			rules[i] = string(r)
+		}
+	}
+
+	ruby := schema.ProfileRubyConfig{}
+	if c.Protect.Ruby != nil {
+		ruby.Enabled = c.Protect.Ruby.Enabled
+		if c.Protect.Ruby.OutputFormat != nil {
+			ruby.OutputFormat = string(*c.Protect.Ruby.OutputFormat)
+		}
 	}
 
 	return &schema.TranslationProfileConfigData{
@@ -110,6 +132,7 @@ func parseProfileConfig(c *TranslationProfileConfig) *schema.TranslationProfileC
 		Protect: schema.ProfileProtectConfig{
 			Enabled: c.Protect.Enabled,
 			Rules:   rules,
+			Ruby:    ruby,
 		},
 		Postprocess: schema.ProfilePostprocessConfig{
 			Enabled:    c.Postprocess.Enabled,
@@ -125,14 +148,18 @@ func parseProfileConfig(c *TranslationProfileConfig) *schema.TranslationProfileC
 			PromptUpgrade:        c.Repair.PromptUpgrade,
 		},
 		Glossary: schema.ProfileGlossaryConfig{
-			Enabled: c.Glossary.Enabled,
 			Bootstrap: schema.ProfileBootstrapConfig{
-				Mode:                   string(c.Glossary.Bootstrap.Mode),
-				Save:                   c.Glossary.Bootstrap.Save,
-				MaxTermsPerBatch:       c.Glossary.Bootstrap.MaxTermsPerBatch,
+				Enabled:                c.Glossary.Bootstrap.Enabled,
+				MaxTermsPer1000Chars:   c.Glossary.Bootstrap.MaxTermsPer1000Chars,
 				MinSourceLen:           c.Glossary.Bootstrap.MinSourceLen,
 				InlineConflictStrategy: string(c.Glossary.Bootstrap.InlineConflictStrategy),
 			},
+		},
+		Context: schema.ProfileContextConfig{
+			Enabled:  c.Context.Enabled,
+			Before:   c.Context.Before,
+			After:    c.Context.After,
+			MaxChars: c.Context.MaxChars,
 		},
 	}
 }

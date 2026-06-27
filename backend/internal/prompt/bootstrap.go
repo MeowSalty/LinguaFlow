@@ -2,16 +2,12 @@ package prompt
 
 import (
 	"bytes"
-	_ "embed"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"text/template"
 )
-
-//go:embed templates/bootstrap_system.tmpl
-var defaultBootstrapTmpl string
 
 // BootstrapData 是 bootstrap stage 渲染时的数据模型。
 type BootstrapData struct {
@@ -27,9 +23,13 @@ type BootstrapRenderer struct {
 	system *template.Template
 }
 
-// NewBootstrapRenderer 加载内嵌模板。本次不支持自定义模板路径，避免膨胀配置面。
-func NewBootstrapRenderer() (*BootstrapRenderer, error) {
-	t, err := template.New("bootstrap_system").Parse(defaultBootstrapTmpl)
+// NewBootstrapRenderer 按传入的模板内容创建 BootstrapRenderer。
+// 调用方负责注入模板内容（通常来自 templates.EmbeddedBootstrapTemplate）。
+func NewBootstrapRenderer(systemContent string) (*BootstrapRenderer, error) {
+	if systemContent == "" {
+		return nil, fmt.Errorf("prompt: bootstrap system template content is empty")
+	}
+	t, err := template.New("bootstrap_system").Parse(systemContent)
 	if err != nil {
 		return nil, fmt.Errorf("prompt: parse bootstrap template: %w", err)
 	}

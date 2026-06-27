@@ -4,6 +4,7 @@ package ent
 
 import (
 	"context"
+	"database/sql/driver"
 	"fmt"
 	"math"
 
@@ -12,20 +13,20 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 )
 
 // GlossaryEntryQuery is the builder for querying GlossaryEntry entities.
 type GlossaryEntryQuery struct {
 	config
-	ctx              *QueryContext
-	order            []glossaryentry.OrderOption
-	inters           []Interceptor
-	predicates       []predicate.GlossaryEntry
-	withProject      *ProjectQuery
-	withOrganization *OrganizationQuery
+	ctx           *QueryContext
+	order         []glossaryentry.OrderOption
+	inters        []Interceptor
+	predicates    []predicate.GlossaryEntry
+	withProject   *ProjectQuery
+	withSyncTasks *SyncTaskQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -84,9 +85,9 @@ func (_q *GlossaryEntryQuery) QueryProject() *ProjectQuery {
 	return query
 }
 
-// QueryOrganization chains the current query on the "organization" edge.
-func (_q *GlossaryEntryQuery) QueryOrganization() *OrganizationQuery {
-	query := (&OrganizationClient{config: _q.config}).Query()
+// QuerySyncTasks chains the current query on the "sync_tasks" edge.
+func (_q *GlossaryEntryQuery) QuerySyncTasks() *SyncTaskQuery {
+	query := (&SyncTaskClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
 			return nil, err
@@ -97,8 +98,8 @@ func (_q *GlossaryEntryQuery) QueryOrganization() *OrganizationQuery {
 		}
 		step := sqlgraph.NewStep(
 			sqlgraph.From(glossaryentry.Table, glossaryentry.FieldID, selector),
-			sqlgraph.To(organization.Table, organization.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, glossaryentry.OrganizationTable, glossaryentry.OrganizationColumn),
+			sqlgraph.To(synctask.Table, synctask.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, glossaryentry.SyncTasksTable, glossaryentry.SyncTasksColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -293,13 +294,13 @@ func (_q *GlossaryEntryQuery) Clone() *GlossaryEntryQuery {
 		return nil
 	}
 	return &GlossaryEntryQuery{
-		config:           _q.config,
-		ctx:              _q.ctx.Clone(),
-		order:            append([]glossaryentry.OrderOption{}, _q.order...),
-		inters:           append([]Interceptor{}, _q.inters...),
-		predicates:       append([]predicate.GlossaryEntry{}, _q.predicates...),
-		withProject:      _q.withProject.Clone(),
-		withOrganization: _q.withOrganization.Clone(),
+		config:        _q.config,
+		ctx:           _q.ctx.Clone(),
+		order:         append([]glossaryentry.OrderOption{}, _q.order...),
+		inters:        append([]Interceptor{}, _q.inters...),
+		predicates:    append([]predicate.GlossaryEntry{}, _q.predicates...),
+		withProject:   _q.withProject.Clone(),
+		withSyncTasks: _q.withSyncTasks.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -317,14 +318,14 @@ func (_q *GlossaryEntryQuery) WithProject(opts ...func(*ProjectQuery)) *Glossary
 	return _q
 }
 
-// WithOrganization tells the query-builder to eager-load the nodes that are connected to
-// the "organization" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *GlossaryEntryQuery) WithOrganization(opts ...func(*OrganizationQuery)) *GlossaryEntryQuery {
-	query := (&OrganizationClient{config: _q.config}).Query()
+// WithSyncTasks tells the query-builder to eager-load the nodes that are connected to
+// the "sync_tasks" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *GlossaryEntryQuery) WithSyncTasks(opts ...func(*SyncTaskQuery)) *GlossaryEntryQuery {
+	query := (&SyncTaskClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
-	_q.withOrganization = query
+	_q.withSyncTasks = query
 	return _q
 }
 
@@ -408,7 +409,7 @@ func (_q *GlossaryEntryQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([
 		_spec       = _q.querySpec()
 		loadedTypes = [2]bool{
 			_q.withProject != nil,
-			_q.withOrganization != nil,
+			_q.withSyncTasks != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -435,9 +436,10 @@ func (_q *GlossaryEntryQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([
 			return nil, err
 		}
 	}
-	if query := _q.withOrganization; query != nil {
-		if err := _q.loadOrganization(ctx, query, nodes, nil,
-			func(n *GlossaryEntry, e *Organization) { n.Edges.Organization = e }); err != nil {
+	if query := _q.withSyncTasks; query != nil {
+		if err := _q.loadSyncTasks(ctx, query, nodes,
+			func(n *GlossaryEntry) { n.Edges.SyncTasks = []*SyncTask{} },
+			func(n *GlossaryEntry, e *SyncTask) { n.Edges.SyncTasks = append(n.Edges.SyncTasks, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -448,10 +450,7 @@ func (_q *GlossaryEntryQuery) loadProject(ctx context.Context, query *ProjectQue
 	ids := make([]int, 0, len(nodes))
 	nodeids := make(map[int][]*GlossaryEntry)
 	for i := range nodes {
-		if nodes[i].ProjectID == nil {
-			continue
-		}
-		fk := *nodes[i].ProjectID
+		fk := nodes[i].ProjectID
 		if _, ok := nodeids[fk]; !ok {
 			ids = append(ids, fk)
 		}
@@ -476,35 +475,33 @@ func (_q *GlossaryEntryQuery) loadProject(ctx context.Context, query *ProjectQue
 	}
 	return nil
 }
-func (_q *GlossaryEntryQuery) loadOrganization(ctx context.Context, query *OrganizationQuery, nodes []*GlossaryEntry, init func(*GlossaryEntry), assign func(*GlossaryEntry, *Organization)) error {
-	ids := make([]int, 0, len(nodes))
-	nodeids := make(map[int][]*GlossaryEntry)
+func (_q *GlossaryEntryQuery) loadSyncTasks(ctx context.Context, query *SyncTaskQuery, nodes []*GlossaryEntry, init func(*GlossaryEntry), assign func(*GlossaryEntry, *SyncTask)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*GlossaryEntry)
 	for i := range nodes {
-		if nodes[i].OrganizationID == nil {
-			continue
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
 		}
-		fk := *nodes[i].OrganizationID
-		if _, ok := nodeids[fk]; !ok {
-			ids = append(ids, fk)
-		}
-		nodeids[fk] = append(nodeids[fk], nodes[i])
 	}
-	if len(ids) == 0 {
-		return nil
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(synctask.FieldEntryID)
 	}
-	query.Where(organization.IDIn(ids...))
+	query.Where(predicate.SyncTask(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(glossaryentry.SyncTasksColumn), fks...))
+	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
 		return err
 	}
 	for _, n := range neighbors {
-		nodes, ok := nodeids[n.ID]
+		fk := n.EntryID
+		node, ok := nodeids[fk]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "organization_id" returned %v`, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "entry_id" returned %v for node %v`, fk, n.ID)
 		}
-		for i := range nodes {
-			assign(nodes[i], n)
-		}
+		assign(node, n)
 	}
 	return nil
 }
@@ -536,9 +533,6 @@ func (_q *GlossaryEntryQuery) querySpec() *sqlgraph.QuerySpec {
 		}
 		if _q.withProject != nil {
 			_spec.Node.AddColumnOnce(glossaryentry.FieldProjectID)
-		}
-		if _q.withOrganization != nil {
-			_spec.Node.AddColumnOnce(glossaryentry.FieldOrganizationID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {

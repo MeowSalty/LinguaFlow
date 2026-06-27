@@ -6,8 +6,13 @@ import (
 	"testing"
 )
 
+// defaultTestBootstrapTmpl 是测试用的最小 bootstrap 模板。
+const defaultTestBootstrapTmpl = `You are LinguaFlow, a glossary-bootstrap assistant.
+Task: extract domain-specific terms from {{.SourceLang}} to {{.TargetLang}}.
+Return AT MOST {{.MaxTerms}} entries. Reply as JSON: {"glossary":[...]}.`
+
 func TestBootstrapRenderer_RendersTaskAndTexts(t *testing.T) {
-	r, err := NewBootstrapRenderer()
+	r, err := NewBootstrapRenderer(defaultTestBootstrapTmpl)
 	if err != nil {
 		t.Fatalf("renderer: %v", err)
 	}

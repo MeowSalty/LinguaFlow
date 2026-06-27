@@ -18,6 +18,9 @@ type ExecutionPlanTemplate func(*sql.Selector)
 // GlossaryEntry is the predicate function for glossaryentry builders.
 type GlossaryEntry func(*sql.Selector)
 
+// JobEvent is the predicate function for jobevent builders.
+type JobEvent func(*sql.Selector)
+
 // JobResource is the predicate function for jobresource builders.
 type JobResource func(*sql.Selector)
 
@@ -41,6 +44,9 @@ type Resource func(*sql.Selector)
 
 // Segment is the predicate function for segment builders.
 type Segment func(*sql.Selector)
+
+// SyncTask is the predicate function for synctask builders.
+type SyncTask func(*sql.Selector)
 
 // TMEntry is the predicate function for tmentry builders.
 type TMEntry func(*sql.Selector)

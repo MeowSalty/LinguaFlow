@@ -152,3 +152,91 @@ func TestSafeReplace_LatinEdgePunctuation(t *testing.T) {
 		t.Error("replaced should be true")
 	}
 }
+
+func TestCaseInsensitiveReplace(t *testing.T) {
+	tests := []struct {
+		name     string
+		s        string
+		old      string
+		new      string
+		want     string
+		wantRepl bool
+	}{
+		{
+			name:     "basic replacement",
+			s:        "Hello World",
+			old:      "hello",
+			new:      "Hi",
+			want:     "Hi World",
+			wantRepl: true,
+		},
+		{
+			name:     "no match",
+			s:        "Hello World",
+			old:      "xyz",
+			new:      "Hi",
+			want:     "Hello World",
+			wantRepl: false,
+		},
+		{
+			name:     "empty old string",
+			s:        "Hello World",
+			old:      "",
+			new:      "Hi",
+			want:     "Hello World",
+			wantRepl: false,
+		},
+		{
+			name:     "multiple matches",
+			s:        "AI is AI good",
+			old:      "ai",
+			new:      "AI tech",
+			want:     "AI tech is AI tech good",
+			wantRepl: true,
+		},
+		{
+			name:     "mixed case match",
+			s:        "This is a TeSt",
+			old:      "test",
+			new:      "example",
+			want:     "This is a example",
+			wantRepl: true,
+		},
+		{
+			name:     "exact case already matches",
+			s:        "Hello World",
+			old:      "Hello",
+			new:      "Hi",
+			want:     "Hi World",
+			wantRepl: true,
+		},
+		{
+			name:     "CJK text unaffected by ToLower",
+			s:        "人工智能正在改变世界",
+			old:      "人工智能",
+			new:      "AI",
+			want:     "AI正在改变世界",
+			wantRepl: true,
+		},
+		{
+			name:     "no case-insensitive match",
+			s:        "Hello for it",
+			old:      "ai",
+			new:      "AI",
+			want:     "Hello for it",
+			wantRepl: false, // "ai" does not appear as a substring in "Hello for it"
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, replaced := CaseInsensitiveReplace(tt.s, tt.old, tt.new)
+			if got != tt.want {
+				t.Errorf("CaseInsensitiveReplace(%q, %q, %q) = %q, want %q", tt.s, tt.old, tt.new, got, tt.want)
+			}
+			if replaced != tt.wantRepl {
+				t.Errorf("CaseInsensitiveReplace(%q, %q, %q) replaced = %v, want %v", tt.s, tt.old, tt.new, replaced, tt.wantRepl)
+			}
+		})
+	}
+}
