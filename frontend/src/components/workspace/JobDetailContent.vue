@@ -4,6 +4,7 @@ import { NAlert, NDataTable, NDescriptions, NDescriptionsItem, NTag, NText } fro
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
+import type { SSEEvent } from '@/composables/useJobSSE'
 import {
   formatDate,
   formatConfigValue,
@@ -23,12 +24,12 @@ defineProps<{
   job: TranslationJob
   externalError?: string | null
   projectName?: string
-  events?: ApiSchemas['JobEvent'][]
-  loadingEvents?: boolean
+  events?: SSEEvent[]
+  sseConnected?: boolean
 }>()
 
 const emit = defineEmits<{
-  refreshEvents: []
+  clearEvents: []
 }>()
 </script>
 
@@ -138,8 +139,8 @@ const emit = defineEmits<{
     <JobEventTimeline
       v-if="events && ['pending', 'running'].includes(job.status)"
       :events="events"
-      :loading="loadingEvents"
-      @refresh="emit('refreshEvents')"
+      :connected="sseConnected"
+      @clear="emit('clearEvents')"
     />
   </div>
 </template>

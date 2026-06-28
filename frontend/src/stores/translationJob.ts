@@ -5,11 +5,11 @@ import {
   type ApiSchemas,
   cancelTranslationJob as cancelTranslationJobRequest,
   createTranslationJob as createTranslationJobRequest,
-  fetchJobEvents,
   fetchTranslationJob,
   fetchTranslationJobs,
   retryTranslationJob as retryTranslationJobRequest,
 } from '@/api/client'
+import type { SSEEvent } from '@/composables/useJobSSE'
 import { t } from '@/i18n'
 import { getJobProgress } from '@/composables/useWorkspaceUtils'
 
@@ -40,10 +40,10 @@ export const useTranslationJobStore = defineStore('translationJob', () => {
   const retryingJobIds = ref<number[]>([])
   const actionError = ref<string | null>(null)
 
-  // ── 事件状态 ──
-  const events = ref<ApiSchemas['JobEvent'][]>([])
-  const loadingEvents = ref(false)
-  const eventsError = ref<string | null>(null)
+  // ── 事件状态（由 SSE composable 管理连接，此状态用于共享） ──
+  const sseEvents = ref<SSEEvent[]>([])
+  const sseConnected = ref(false)
+  const sseError = ref<string | null>(null)
 
   // ── 轮询状态 ──
   const activePollingJobIds = ref<Set<number>>(new Set())
@@ -138,22 +138,22 @@ export const useTranslationJobStore = defineStore('translationJob', () => {
     }
   }
 
-  // ── 加载事件 ──
-  const loadEvents = async (translationJobId: number, limit = 50): Promise<void> => {
-    loadingEvents.value = true
-    eventsError.value = null
-    try {
-      events.value = await fetchJobEvents(translationJobId, { limit })
-    } catch (error) {
-      eventsError.value = getErrorMessage(error, t('api.errors.fetchJobEventsFailed'))
-    } finally {
-      loadingEvents.value = false
-    }
+  // ── SSE 状态更新（由 useJobSSE composable 调用） ──
+  const setSSEEvents = (newEvents: SSEEvent[]): void => {
+    sseEvents.value = newEvents
   }
 
-  const clearEvents = (): void => {
-    events.value = []
-    eventsError.value = null
+  const setSSEConnected = (connected: boolean): void => {
+    sseConnected.value = connected
+  }
+
+  const setSSEError = (err: string | null): void => {
+    sseError.value = err
+  }
+
+  const clearSSEEvents = (): void => {
+    sseEvents.value = []
+    sseError.value = null
   }
 
   // ── 轮询控制 ──
@@ -186,8 +186,9 @@ export const useTranslationJobStore = defineStore('translationJob', () => {
     jobDetailError.value = null
     jobStatusFilter.value = 'all'
     actionError.value = null
-    events.value = []
-    eventsError.value = null
+    sseEvents.value = []
+    sseConnected.value = false
+    sseError.value = null
     activePollingJobIds.value = new Set()
   }
 
@@ -204,11 +205,13 @@ export const useTranslationJobStore = defineStore('translationJob', () => {
     retryingJobIds,
     actionError,
     jobStatusFilter,
-    events,
-    loadingEvents,
-    eventsError,
-    loadEvents,
-    clearEvents,
+    sseEvents,
+    sseConnected,
+    sseError,
+    setSSEEvents,
+    setSSEConnected,
+    setSSEError,
+    clearSSEEvents,
     startPolling,
     stopPolling,
     isPolling,

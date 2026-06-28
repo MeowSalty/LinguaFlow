@@ -75,28 +75,6 @@ export const cancelTranslationJob = async (
   return data
 }
 
-export const fetchJobEvents = async (
-  translationJobId: number,
-  params?: { limit?: number },
-  client: ApiClient = apiClient,
-): Promise<ApiSchemas['JobEvent'][]> => {
-  const { data, error, response } = await client.GET(
-    '/translation-jobs/{translationJobId}/events',
-    {
-      params: {
-        path: { translationJobId },
-        query: { limit: params?.limit ?? 50 },
-      },
-    },
-  )
-
-  if (!data) {
-    throw buildRequestFailureError(t('api.errors.fetchJobEventsFailed'), error, response)
-  }
-
-  return data
-}
-
 export const retryTranslationJob = async (
   translationJobId: number,
   client: ApiClient = apiClient,

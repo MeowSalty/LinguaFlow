@@ -1,9 +1,9 @@
 import { type ApiSchemas, type DownloadFileResult } from '@/api/client'
+import type { SSEEvent } from '@/composables/useJobSSE'
 import { t } from '@/i18n'
 
 type TranslationJob = ApiSchemas['TranslationJob']
 type TranslationJobResource = ApiSchemas['TranslationJobResource']
-type JobEvent = ApiSchemas['JobEvent']
 
 /**
  * 格式化日期为中文格式 (yyyy/MM/dd HH:mm)
@@ -216,11 +216,11 @@ export const getResourceStageProgress = (resource: TranslationJobResource): stri
 // ── 事件工具 ──
 
 /** 事件级别对应的 naive-ui 类型 */
-export const eventLevelType = (level: JobEvent['level']): 'info' | 'warning' | 'error' => {
+export const eventLevelType = (level: SSEEvent['level']): 'info' | 'warning' | 'error' => {
   switch (level) {
     case 'info':
       return 'info'
-    case 'warn':
+    case 'warning':
       return 'warning'
     case 'error':
       return 'error'

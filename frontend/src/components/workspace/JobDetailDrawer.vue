@@ -1,18 +1,17 @@
 <script setup lang="ts">
-import { watch } from 'vue'
+import { computed, watch } from 'vue'
 import { NButton, NDrawer, NDrawerContent, NEmpty, NSpin } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
+import { useJobSSE } from '@/composables/useJobSSE'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
-import { useTranslationJobStore } from '@/stores/translationJob'
 
 import JobDetailContent from './JobDetailContent.vue'
 
 const { t } = useI18n()
 const workspace = useProjectWorkspaceStore()
-const jobStore = useTranslationJobStore()
 
-defineProps<{
+const props = defineProps<{
   show: boolean
 }>()
 
@@ -20,22 +19,28 @@ const emit = defineEmits<{
   'update:show': [value: boolean]
 }>()
 
-const handleRefreshEvents = (): void => {
-  if (workspace.selectedJob) {
-    void jobStore.loadEvents(workspace.selectedJob.id)
-  }
-}
+const selectedJobId = computed(() => workspace.selectedJob?.id ?? null)
+
+const { events, connected, connect, disconnect, clearEvents } = useJobSSE(selectedJobId)
 
 watch(
-  () => jobStore.selectedJob?.id,
-  (newId) => {
-    const job = jobStore.selectedJob
-    if (newId != null && job && ['pending', 'running'].includes(job.status)) {
-      void jobStore.loadEvents(newId)
+  () => props.show,
+  (visible) => {
+    if (visible && selectedJobId.value != null) {
+      connect()
+    } else {
+      disconnect()
+      clearEvents()
     }
   },
-  { immediate: true },
 )
+
+watch(selectedJobId, (newId) => {
+  if (props.show && newId != null) {
+    clearEvents()
+    connect()
+  }
+})
 </script>
 
 <template>
@@ -58,9 +63,9 @@ watch(
           v-if="workspace.selectedJob"
           :job="workspace.selectedJob"
           :external-error="workspace.jobDetailError"
-          :events="jobStore.events"
-          :loading-events="jobStore.loadingEvents"
-          @refresh-events="handleRefreshEvents"
+          :events="events"
+          :sse-connected="connected"
+          @clear-events="clearEvents"
         />
         <NEmpty v-else :description="t('workspace.job.detailEmpty')" />
       </NSpin>

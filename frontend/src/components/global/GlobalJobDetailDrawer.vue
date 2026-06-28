@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import { NButton, NDrawer, NDrawerContent, NEmpty, NSpin } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
+import { useJobSSE } from '@/composables/useJobSSE'
 import { useGlobalJobTrackerStore } from '@/stores/globalJobTracker'
 
 import JobDetailContent from '@/components/workspace/JobDetailContent.vue'
@@ -20,6 +21,26 @@ const show = computed({
 
 const job = computed(() => tracker.detailJob)
 
+const drawerJobId = computed(() => tracker.drawerJobId)
+
+const { events, connected, connect, disconnect, clearEvents } = useJobSSE(drawerJobId)
+
+watch(show, (visible) => {
+  if (visible && drawerJobId.value != null) {
+    connect()
+  } else {
+    disconnect()
+    clearEvents()
+  }
+})
+
+watch(drawerJobId, (newId) => {
+  if (newId != null && show.value) {
+    clearEvents()
+    connect()
+  }
+})
+
 const projectName = computed(() => {
   if (!job.value) return undefined
   return tracker.trackedJobs.find((j) => j.id === job.value!.id)?.project_name
@@ -34,10 +55,6 @@ const handleGoToProject = (): void => {
     void router.push({ path: `/projects/${job.value.project_id}`, query: { tab: 'jobs' } })
     tracker.closeDetail()
   }
-}
-
-const handleRefreshEvents = (): void => {
-  void tracker.refreshDetail()
 }
 </script>
 
@@ -61,9 +78,9 @@ const handleRefreshEvents = (): void => {
           v-if="job"
           :job="job"
           :project-name="projectName || `#${job.project_id}`"
-          :events="tracker.detailEvents"
-          :loading-events="tracker.loadingEvents"
-          @refresh-events="handleRefreshEvents"
+          :events="events"
+          :sse-connected="connected"
+          @clear-events="clearEvents"
         />
         <NEmpty v-else :description="t('globalJobTracker.noTrackedJobs')" />
       </NSpin>

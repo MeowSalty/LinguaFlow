@@ -1,19 +1,19 @@
 <script setup lang="ts">
-import { NButton, NEmpty, NSpin, NTimeline, NTimelineItem } from 'naive-ui'
+import { NButton, NEmpty, NTimeline, NTimelineItem } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
-import type { ApiSchemas } from '@/api/client'
+import type { SSEEvent } from '@/composables/useJobSSE'
 import { eventLevelType, getStageLabel } from '@/composables/useWorkspaceUtils'
 
 const { t } = useI18n()
 
 defineProps<{
-  events: ApiSchemas['JobEvent'][]
-  loading?: boolean
+  events: SSEEvent[]
+  connected?: boolean
 }>()
 
 const emit = defineEmits<{
-  refresh: []
+  clear: []
 }>()
 
 const formatEventTime = (value: string): string => {
@@ -31,27 +31,37 @@ const formatEventTime = (value: string): string => {
       <h4 class="text-sm font-medium text-lf-text-strong">
         {{ t('workspace.job.events.title') }}
       </h4>
-      <NButton quaternary size="tiny" :loading="loading" @click="emit('refresh')">
-        {{ t('workspace.actions.refresh') }}
-      </NButton>
+      <div class="flex items-center gap-2">
+        <span
+          v-if="connected"
+          class="inline-block h-1.5 w-1.5 rounded-full bg-green-500"
+          :title="t('workspace.job.events.connected')"
+        />
+        <span
+          v-else
+          class="inline-block h-1.5 w-1.5 rounded-full bg-gray-400"
+          :title="t('workspace.job.events.disconnected')"
+        />
+        <NButton quaternary size="tiny" @click="emit('clear')">
+          {{ t('workspace.actions.clear') }}
+        </NButton>
+      </div>
     </div>
 
-    <NSpin :show="loading" size="small">
-      <div v-if="events.length === 0" class="py-6 text-center">
-        <NEmpty size="small" :description="t('workspace.job.events.empty')" />
-      </div>
+    <div v-if="events.length === 0" class="py-6 text-center">
+      <NEmpty size="small" :description="t('workspace.job.events.empty')" />
+    </div>
 
-      <NTimeline v-else :icon-size="16">
-        <NTimelineItem
-          v-for="event in events"
-          :key="event.id"
-          :type="eventLevelType(event.level)"
-          :title="event.message"
-          :content="event.stage ? getStageLabel(event.stage) : undefined"
-          :time="formatEventTime(event.created_at)"
-          :line-type="event.id === events[events.length - 1]?.id ? 'dashed' : 'default'"
-        />
-      </NTimeline>
-    </NSpin>
+    <NTimeline v-else :icon-size="16">
+      <NTimelineItem
+        v-for="(event, index) in events"
+        :key="`${event.created_at}-${index}`"
+        :type="eventLevelType(event.level)"
+        :title="event.message"
+        :content="event.stage ? getStageLabel(event.stage) : undefined"
+        :time="formatEventTime(event.created_at)"
+        :line-type="index === events.length - 1 ? 'dashed' : 'default'"
+      />
+    </NTimeline>
   </div>
 </template>

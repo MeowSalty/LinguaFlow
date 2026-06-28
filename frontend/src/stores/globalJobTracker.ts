@@ -1,10 +1,9 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch, onScopeDispose } from 'vue'
 
-import { type ApiSchemas, fetchTranslationJob, fetchJobEvents } from '@/api/client'
+import { type ApiSchemas, fetchTranslationJob } from '@/api/client'
 
 type TranslationJob = ApiSchemas['TranslationJob']
-type JobEvent = ApiSchemas['JobEvent']
 
 export interface TrackedJob extends TranslationJob {
   project_name?: string
@@ -26,9 +25,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
 
   // ── 详情抽屉独立状态 ──
   const detailJob = ref<TranslationJob | null>(null)
-  const detailEvents = ref<JobEvent[]>([])
   const loadingDetail = ref(false)
-  const loadingEvents = ref(false)
 
   // ── Getters ──
   const activeJobs = computed(() =>
@@ -149,9 +146,6 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     const job = trackedJobs.value.find((j) => j.id === jobId)
     if (job) {
       detailJob.value = job
-      if (!TERMINAL_STATUSES.has(job.status)) {
-        void loadDetailEvents(jobId)
-      }
     }
     // Always fetch latest detail
     void loadDetailJob(jobId)
@@ -160,7 +154,6 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
   const closeDetail = (): void => {
     drawerJobId.value = null
     detailJob.value = null
-    detailEvents.value = []
   }
 
   // ── 详情抽屉数据加载 ──
@@ -182,20 +175,9 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     }
   }
 
-  const loadDetailEvents = async (jobId: number): Promise<void> => {
-    loadingEvents.value = true
-    try {
-      detailEvents.value = await fetchJobEvents(jobId, { limit: 50 })
-    } catch {
-      // ignore
-    } finally {
-      loadingEvents.value = false
-    }
-  }
-
   const refreshDetail = async (): Promise<void> => {
     if (!drawerJobId.value) return
-    await Promise.all([loadDetailJob(drawerJobId.value), loadDetailEvents(drawerJobId.value)])
+    await loadDetailJob(drawerJobId.value)
   }
 
   // ── 轮询 ──
@@ -270,7 +252,6 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
         return
       }
       void loadDetailJob(drawerJobId.value)
-      void loadDetailEvents(drawerJobId.value)
     }, 10_000)
   }
 
@@ -305,7 +286,6 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     // Refresh detail if open
     if (drawerJobId.value) {
       void loadDetailJob(drawerJobId.value)
-      void loadDetailEvents(drawerJobId.value)
     }
 
     // Restart polling if needed
@@ -358,9 +338,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     trackedJobs,
     drawerJobId,
     detailJob,
-    detailEvents,
     loadingDetail,
-    loadingEvents,
     initialized,
     // Getters
     activeJobs,

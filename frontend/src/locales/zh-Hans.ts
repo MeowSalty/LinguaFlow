@@ -274,6 +274,7 @@ const messages = {
     updatedAt: '更新于 {time}',
     actions: {
       refresh: '刷新',
+      clear: '清空',
     },
     tabs: {
       resources: '资源文件',
@@ -564,6 +565,8 @@ const messages = {
       events: {
         title: '事件日志',
         empty: '暂无事件记录',
+        connected: 'SSE 已连接',
+        disconnected: 'SSE 未连接',
       },
       detail: {
         executionPlan: '执行计划',
@@ -1218,7 +1221,6 @@ const messages = {
       glossarySyncExecuteFailed: '术语同步任务提交失败',
       glossarySyncStatusFailed: '术语同步任务状态查询失败',
       glossarySyncCancelFailed: '术语同步任务取消失败',
-      fetchJobEventsFailed: '获取任务事件失败',
     },
   },
 } as const
