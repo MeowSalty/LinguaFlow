@@ -33,7 +33,7 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *Document, i
 
 	glos, tmHints := s.lookupHints(ctx, doc, []int{idx}, logger)
 
-	rubyAnns := extractRubyAnnotationsFromDoc(doc, []int{idx})
+	rubyAnns := extractRubyAnnotationsFromDoc(doc, []int{idx}, nil)
 	data := prompt.Data{
 		SourceLang:        doc.SourceLang,
 		TargetLang:        doc.TargetLang,

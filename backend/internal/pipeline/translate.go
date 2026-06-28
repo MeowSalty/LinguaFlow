@@ -331,8 +331,9 @@ func isPlaceholderOnly(seg *Segment) bool {
 }
 
 // extractRubyAnnotationsFromDoc 从 Document 中提取指定段的注音信息。
-// 返回 map[segmentID]annotations，供 prompt.Data 使用。
-func extractRubyAnnotationsFromDoc(doc *Document, idxs []int) map[string][]prompt.RubyAnnotation {
+// idMap 为 idx → 批内 ID 的映射；为 nil 时使用 seg.ID。
+// 返回 map[批内ID]annotations，供 prompt.Data 使用。
+func extractRubyAnnotationsFromDoc(doc *Document, idxs []int, idMap map[int]string) map[string][]prompt.RubyAnnotation {
 	result := make(map[string][]prompt.RubyAnnotation)
 	for _, idx := range idxs {
 		seg := doc.Segments[idx]
@@ -349,7 +350,13 @@ func extractRubyAnnotationsFromDoc(doc *Document, idxs []int) map[string][]promp
 			converted[i] = prompt.RubyAnnotation{Base: a.Base, Text: a.Text}
 		}
 		if len(converted) > 0 {
-			result[seg.ID] = converted
+			key := seg.ID
+			if idMap != nil {
+				if mapped, ok := idMap[idx]; ok {
+					key = mapped
+				}
+			}
+			result[key] = converted
 		}
 	}
 	return result

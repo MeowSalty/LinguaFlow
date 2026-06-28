@@ -48,10 +48,12 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 	glos, tmHints := s.lookupHints(ctx, doc, idxs, logger)
 
 	inputs := make([]prompt.SegmentInput, len(idxs))
+	idMap := make(map[int]string, len(idxs))
 	var wantIDs []string
 	batchSources := make([]string, 0, len(idxs))
 	for k, idx := range idxs {
 		id := strconv.Itoa(k + 1)
+		idMap[idx] = id
 		seg := doc.Segments[idx]
 		inputs[k] = prompt.SegmentInput{ID: id, Source: seg.Source, Translate: seg.Translate}
 		if seg.Translate {
@@ -60,7 +62,7 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 		}
 	}
 
-	rubyAnns := extractRubyAnnotationsFromDoc(doc, idxs)
+	rubyAnns := extractRubyAnnotationsFromDoc(doc, idxs, idMap)
 	data := prompt.Data{
 		SourceLang:        doc.SourceLang,
 		TargetLang:        doc.TargetLang,
