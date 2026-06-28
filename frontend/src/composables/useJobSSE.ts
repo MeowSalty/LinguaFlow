@@ -12,6 +12,23 @@ export interface SSEEvent {
   created_at: string
 }
 
+export interface BatchEventMetadata {
+  batch_index: number
+  segment_count: number
+  backend_name: string
+  duration_ms: number
+  input_tokens: number
+  output_tokens: number
+  sent_content: string
+  received_content: string
+  used_glossary: Array<{ source: string; target: string }>
+  added_glossary: Array<{ source: string; target: string }>
+  error_type: string
+  error_message: string
+  tried_backends: string[]
+  shrink_attempted: boolean
+}
+
 const KNOWN_EVENT_TYPES = [
   'stage_start',
   'stage_done',

@@ -25,6 +25,7 @@ defineProps<{
   externalError?: string | null
   projectName?: string
   events?: SSEEvent[]
+  syntheticEvents?: SSEEvent[]
   sseConnected?: boolean
 }>()
 
@@ -137,8 +138,9 @@ const emit = defineEmits<{
     </div>
 
     <JobEventTimeline
-      v-if="events && ['pending', 'running'].includes(job.status)"
+      v-if="events"
       :events="events"
+      :synthetic-events="syntheticEvents"
       :connected="sseConnected"
       @clear="emit('clearEvents')"
     />

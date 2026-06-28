@@ -213,6 +213,27 @@ export const getResourceStageProgress = (resource: TranslationJobResource): stri
   return `${label} ${resource.stage_completed ?? 0}/${resource.stage_total}`
 }
 
+// ── 批次事件工具 ──
+
+/** 格式化耗时（ms → 人类可读） */
+export const formatDuration = (ms: number): string => {
+  if (ms < 1000) return `${ms}ms`
+  const seconds = ms / 1000
+  if (seconds < 60) return `${seconds.toFixed(1)}s`
+  const minutes = seconds / 60
+  return `${minutes.toFixed(1)}min`
+}
+
+/** 格式化 Token 数（如 1.2k） */
+export const formatTokens = (count: number): string => {
+  if (count < 1000) return String(count)
+  return `${(count / 1000).toFixed(1)}k`
+}
+
+/** 判断是否为批次事件 */
+export const isBatchEvent = (type: string): boolean =>
+  type === 'batch_complete' || type === 'batch_error'
+
 // ── 事件工具 ──
 
 /** 事件级别对应的 naive-ui 类型 */
