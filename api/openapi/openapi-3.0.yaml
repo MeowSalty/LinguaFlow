@@ -3342,6 +3342,19 @@ components:
             - ruby_output
             - inline_markers
           default: ruby_output
+        preserve_kinds:
+          type: array
+          items:
+            type: string
+            enum:
+              - phonetic
+              - semantic
+              - creative
+          default:
+            - phonetic
+            - semantic
+            - creative
+          description: 保留的注音分类列表
     ProfileProtectConfig:
       type: object
       required:
