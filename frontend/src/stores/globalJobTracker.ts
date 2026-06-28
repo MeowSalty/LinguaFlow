@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch, onScopeDispose } from 'vue'
 
 import { type ApiSchemas, fetchTranslationJob } from '@/api/client'
+import { clearCache as clearSSECache } from '@/composables/useSSEEventCache'
 
 type TranslationJob = ApiSchemas['TranslationJob']
 
@@ -133,11 +134,16 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     if (drawerJobId.value === jobId) {
       drawerJobId.value = null
     }
+    clearSSECache(jobId)
     persistIds()
   }
 
   const clearCompleted = (): void => {
+    const removed = trackedJobs.value.filter((j) => TERMINAL_STATUSES.has(j.status))
     trackedJobs.value = trackedJobs.value.filter((j) => !TERMINAL_STATUSES.has(j.status))
+    for (const job of removed) {
+      clearSSECache(job.id)
+    }
     persistIds()
   }
 

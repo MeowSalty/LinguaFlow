@@ -4,6 +4,7 @@ import { NDrawer, NDrawerContent, NEmpty, NSpin } from 'naive-ui'
 
 import type { ApiSchemas } from '@/api/client'
 import { useJobSSE } from '@/composables/useJobSSE'
+import { useSSEEventCache } from '@/composables/useSSEEventCache'
 import { buildSyntheticEvents, type SyntheticEvent } from '@/composables/useSyntheticEvents'
 
 import JobDetailContent from './JobDetailContent.vue'
@@ -28,6 +29,8 @@ const jobId = computed(() => props.job?.id ?? null)
 
 const { events, connected, connect, disconnect, clearEvents } = useJobSSE(jobId)
 
+const { cachedEvents, restoreCache, handleDrawerClose } = useSSEEventCache(jobId, events)
+
 const syntheticEvents = ref<SyntheticEvent[]>([])
 
 const refreshSyntheticEvents = (): void => {
@@ -36,13 +39,21 @@ const refreshSyntheticEvents = (): void => {
   }
 }
 
+const clearEventsAndCache = (): void => {
+  const id = jobId.value
+  if (id != null) handleDrawerClose()
+  clearEvents()
+}
+
 watch(
   () => props.show,
   (visible) => {
     if (visible && jobId.value != null) {
+      restoreCache()
       connect()
       refreshSyntheticEvents()
     } else {
+      handleDrawerClose()
       disconnect()
       clearEvents()
       syntheticEvents.value = []
@@ -61,7 +72,9 @@ watch(
 
 watch(jobId, (newId, oldId) => {
   if (props.show && newId != null && newId !== oldId) {
+    handleDrawerClose()
     clearEvents()
+    restoreCache()
     connect()
     refreshSyntheticEvents()
   }
@@ -76,13 +89,7 @@ watch(jobId, (newId, oldId) => {
     @update:show="(value: boolean) => emit('update:show', value)"
   >
     <NDrawerContent
-      :title="
-        job && titlePrefix
-          ? `${titlePrefix} #${job.id}`
-          : job
-            ? `#${job.id}`
-            : ''
-      "
+      :title="job && titlePrefix ? `${titlePrefix} #${job.id}` : job ? `#${job.id}` : ''"
       closable
     >
       <NSpin :show="loading && !job">
@@ -91,10 +98,10 @@ watch(jobId, (newId, oldId) => {
           :job="job"
           :external-error="error"
           :project-name="projectName"
-          :events="events"
+          :events="cachedEvents"
           :synthetic-events="syntheticEvents"
           :sse-connected="connected"
-          @clear-events="clearEvents"
+          @clear-events="clearEventsAndCache"
         />
         <NEmpty v-else :description="emptyDescription" />
       </NSpin>
