@@ -150,24 +150,3 @@ TranslationJobListResponse:
         $ref: '#/TranslationJob'
     next_cursor:
       type: string
-
-JobEvent:
-  type: object
-  required: [id, job_id, level, message, created_at]
-  properties:
-    id:
-      type: integer
-    job_id:
-      type: integer
-    level:
-      type: string
-      enum: [info, warn, error]
-    stage:
-      type: string
-    message:
-      type: string
-    metadata:
-      type: object
-    created_at:
-      type: string
-      format: date-time

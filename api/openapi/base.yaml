@@ -87,8 +87,6 @@ paths:
     $ref: './paths/translation-jobs.yaml#/projectTranslationJobs'
   /translation-jobs/{translationJobId}:
    $ref: './paths/translation-jobs.yaml#/translationJobById'
-  /translation-jobs/{translationJobId}/events:
-   $ref: './paths/translation-jobs.yaml#/translationJobEvents'
   /translation-jobs/{translationJobId}/cancel:
    $ref: './paths/translation-jobs.yaml#/translationJobCancel'
   /translation-jobs/{translationJobId}/retry:
@@ -230,8 +228,6 @@ components:
       $ref: './components/schemas/translation-job.yaml#/TranslationJob'
     TranslationJobListResponse:
       $ref: './components/schemas/translation-job.yaml#/TranslationJobListResponse'
-    JobEvent:
-      $ref: './components/schemas/translation-job.yaml#/JobEvent'
     Activity:
       $ref: './components/schemas/job.yaml#/Activity'
     ActivityListResponse:
