@@ -114,11 +114,6 @@ const messages = {
     },
   },
   dashboard: {
-    greeting: {
-      named: '欢迎回来，{name}',
-      anonymous: '欢迎使用 LinguaFlow',
-    },
-    intro: '这是 LinguaFlow 的工作台首页，查看您的翻译任务统计和最近活动。',
     stats: {
       apiCalls: 'API 调用',
       inputTokens: '输入 Token',

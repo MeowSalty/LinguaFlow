@@ -1,21 +1,14 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 
-import { useAuthStore } from '@/stores/auth'
 import { useStatsStore } from '@/stores/stats'
 import StatsCard from '@/components/dashboard/StatsCard.vue'
 import ActivityFeed from '@/components/dashboard/ActivityFeed.vue'
 import JobStatusOverview from '@/components/dashboard/JobStatusOverview.vue'
 
 const router = useRouter()
-const auth = useAuthStore()
 const stats = useStatsStore()
 const { t } = useI18n()
-
-const greeting = computed(() => {
-  const name = auth.user?.display_name?.trim() || auth.user?.username
-  return name ? t('dashboard.greeting.named', { name }) : t('dashboard.greeting.anonymous')
-})
 
 // 页面加载时获取数据
 onMounted(() => {
@@ -25,18 +18,6 @@ onMounted(() => {
 
 <template>
   <div class="space-y-6">
-    <!-- 欢迎区域 -->
-    <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-      <div class="flex flex-col gap-2">
-        <h1 class="text-2xl font-semibold tracking-tight text-lf-text-strong">
-          {{ greeting }}
-        </h1>
-        <p class="text-sm text-lf-text-muted">
-          {{ t('dashboard.intro') }}
-        </p>
-      </div>
-    </NCard>
-
     <!-- 统计卡片区域 -->
     <div class="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
       <StatsCard
