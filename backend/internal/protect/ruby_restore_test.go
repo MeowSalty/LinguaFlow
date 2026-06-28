@@ -301,3 +301,20 @@ func TestRubyRestorer_RubyOutput_FallbackToOriginalBase(t *testing.T) {
 		})
 	}
 }
+
+// T11: Kind 字段不影响还原逻辑 — RubyRestorer 不关心 kind，仅用 base/text 匹配。
+func TestRubyRestorer_RubyOutput_WithKindField(t *testing.T) {
+	restorer := NewRubyRestorer("ruby_output")
+
+	seg := &model.Segment{Target: "呪を唱える"}
+	output := []RubyOutputEntry{
+		{Base: "呪", Text: "じゅ", Kind: "phonetic"},
+	}
+	if err := restorer.Restore(seg, output, nil); err != nil {
+		t.Fatalf("Restore: %v", err)
+	}
+	want := `<ruby>呪<rt>じゅ</rt></ruby>を唱える`
+	if seg.Target != want {
+		t.Errorf("with kind field:\n  want: %q\n  got:  %q", want, seg.Target)
+	}
+}

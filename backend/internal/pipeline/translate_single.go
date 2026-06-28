@@ -111,13 +111,48 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *Document, i
 			seg.Meta["ruby_output"] = ro
 		}
 	}
-	// 当段有注音数据但 LLM 未返回 ruby_output 时记录警告
-	if s.RubyOutputFormat != "" {
-		_, hasAnnots := seg.Meta["ruby_annotations"]
-		_, hasOutput := seg.Meta["ruby_output"]
-		if hasAnnots && !hasOutput {
-			logger.Warn("LLM response missing ruby_output for segment with annotations",
-				"seg", seg.ID, "backend", picked.Name())
+	// ruby_output 条目数不足时，用 reminder 重试补全
+	if s.RubyOutputFormat == "ruby_output" {
+		anns, hasAnnots := seg.Meta["ruby_annotations"].([]protect.RubyAnnotation)
+		existing, hasOutput := seg.Meta["ruby_output"].([]protect.RubyOutputEntry)
+		if hasAnnots && len(anns) > 0 && (!hasOutput || len(existing) < len(anns)) {
+			existingCount := 0
+			if hasOutput {
+				existingCount = len(existing)
+			}
+			logger.Warn("ruby_output entries missing, retrying with reminder",
+				"seg", seg.ID, "annotations", len(anns), "output", existingCount)
+			rubyReminder := fmt.Sprintf(
+				"\n\nIMPORTANT: your previous response included only %d ruby_output entries, but there are %d annotations. "+
+					"Return ALL %d entries in ruby_output, each with base, text, and kind fields. Do not omit any.",
+				existingCount, len(anns), len(anns))
+			reqRuby := req
+			reqRuby.System = req.System + rubyReminder
+			respRuby, errRuby := s.callOnce(ctx, picked, reqRuby, round.Retry)
+			if errRuby != nil {
+				logger.Warn("ruby_output reminder retry failed",
+					"seg", seg.ID, "backend", picked.Name(), "err", errRuby)
+			} else {
+				atomic.AddInt64(&doc.InputTokens, respRuby.Usage.PromptTokens)
+				atomic.AddInt64(&doc.OutputTokens, respRuby.Usage.CompletionTokens)
+				_, _, rubyOutputRetry, perrRuby := parseBatchResponse(respRuby.Text, wantIDs)
+				if perrRuby != nil {
+					if result := parseBatchResponseLenient(respRuby.Text, wantIDs, repairOpts); !result.Fatal && len(result.Missing) == 0 {
+						rubyOutputRetry = result.RubyOutput
+						perrRuby = nil
+					}
+				}
+				if perrRuby == nil && rubyOutputRetry != nil {
+					if ro, ok := rubyOutputRetry[prompt.SingleID]; ok && len(ro) > existingCount {
+						if seg.Meta == nil {
+							seg.Meta = make(map[string]any)
+						}
+						seg.Meta["ruby_output"] = ro
+						logger.Info("ruby_output recovered by reminder retry",
+							"seg", seg.ID, "before", existingCount, "after", len(ro))
+					}
+				}
+			}
 		}
 	}
 
@@ -182,14 +217,6 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *Document, i
 					seg.Meta = make(map[string]any)
 				}
 				seg.Meta["ruby_output"] = ro
-			}
-		}
-		if s.RubyOutputFormat != "" {
-			_, hasAnnots := seg.Meta["ruby_annotations"]
-			_, hasOutput := seg.Meta["ruby_output"]
-			if hasAnnots && !hasOutput {
-				logger.Warn("LLM response missing ruby_output after placeholder retry",
-					"seg", seg.ID, "backend", picked.Name())
 			}
 		}
 		target2 := trans2[prompt.SingleID]

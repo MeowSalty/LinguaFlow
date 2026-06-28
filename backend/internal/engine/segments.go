@@ -86,6 +86,7 @@ func (e *Engine) BuildTranslateStage() (*pipeline.Pipeline, backend.RateLimiter)
 		InlineConflictStrategy: e.cfg.Glossary.Bootstrap.InlineConflictStrategy,
 		Repair:                 repairOpts,
 		RubyOutputFormat:       pc.Protect.Ruby.OutputFormat,
+		PreserveKinds:          pc.Protect.Ruby.PreserveKinds,
 		Context:                pc.Context,
 	}
 	return pipeline.New(e.logger, translateStage), limiter
@@ -107,7 +108,7 @@ func (e *Engine) BuildPostStages() *pipeline.Pipeline {
 	}
 	if pc.Protect.Ruby.Enabled {
 		restorer := protect.NewRubyRestorer(pc.Protect.Ruby.OutputFormat)
-		s = append(s, pipeline.NewRubyRestore(restorer, e.logger, e.rubyRetryBackends, retry, pc.Protect.Ruby.OutputFormat))
+		s = append(s, pipeline.NewRubyRestore(restorer, e.logger, e.rubyRetryBackends, retry, pc.Protect.Ruby.OutputFormat, pc.Protect.Ruby.PreserveKinds))
 	}
 	return pipeline.New(e.logger, s...)
 }

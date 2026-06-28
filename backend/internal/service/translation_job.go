@@ -481,6 +481,7 @@ func (s *TranslationJobService) snapshotProfile(ctx context.Context, profileID i
 		return nil, err
 	}
 	tp.Config.NormalizeContext()
+	tp.Config.NormalizePreserveKinds()
 	id := tp.ID
 	return &StrategySnapshot{
 		ProfileID:   &id,

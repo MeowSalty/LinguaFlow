@@ -64,9 +64,10 @@ type ProtectConfig struct {
 
 // RubyConfig 控制 Ruby 注音保护的行为。
 type RubyConfig struct {
-	Enabled      bool   `yaml:"enabled"`
-	OutputFormat string `yaml:"output_format"` // "ruby_output" (默认) | "inline_markers"
-	RetryBackend string `yaml:"retry_backend"` // 注音对齐重试后端名称；空时使用翻译主后端
+	Enabled       bool     `yaml:"enabled"`
+	OutputFormat  string   `yaml:"output_format"`  // "ruby_output" (默认) | "inline_markers"
+	RetryBackend  string   `yaml:"retry_backend"`  // 注音对齐重试后端名称；空时使用翻译主后端
+	PreserveKinds []string `yaml:"preserve_kinds"` // 保留的注音 kind 列表：phonetic/semantic/creative
 }
 
 // Ruby 输出格式常量。
@@ -394,6 +395,12 @@ func (c *Config) Validate() error {
 	default:
 		return fmt.Errorf("pipeline.protect.ruby.output_format must be one of %s|%s, got %q",
 			RubyOutputDefault, RubyOutputInlineMarkers, c.Pipeline.Protect.Ruby.OutputFormat)
+	}
+	validRubyKinds := map[string]bool{"phonetic": true, "semantic": true, "creative": true}
+	for _, k := range c.Pipeline.Protect.Ruby.PreserveKinds {
+		if !validRubyKinds[k] {
+			return fmt.Errorf("pipeline.protect.ruby.preserve_kinds: invalid kind %q (must be one of phonetic, semantic, creative)", k)
+		}
 	}
 	c.Pipeline.Translate.Repair.Normalize()
 	// Inline bootstrap 校验

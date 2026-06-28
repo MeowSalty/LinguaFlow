@@ -38,7 +38,11 @@ func (r *RubyRestorer) Restore(seg *model.Segment, rubyOutput []RubyOutputEntry,
 type RubyOutputEntry struct {
 	Base string `json:"base"`
 	Text string `json:"text"`
+	Kind string `json:"kind"` // "phonetic" | "semantic" | "creative"
 }
+
+// ValidRubyKinds 是所有合法的注音 kind 值。
+var ValidRubyKinds = []string{"phonetic", "semantic", "creative"}
 
 // insertInfo 记录一次注音插入的位置和内容。
 type insertInfo struct {

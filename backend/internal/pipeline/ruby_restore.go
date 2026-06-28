@@ -18,16 +18,18 @@ type RubyRestore struct {
 	Backends         []backend.Backend
 	Retry            backend.RetryPolicy
 	RubyOutputFormat string
+	PreserveKinds    []string
 }
 
 // NewRubyRestore 创建 RubyRestore stage 实例。
-func NewRubyRestore(restorer *protect.RubyRestorer, logger *slog.Logger, backends []backend.Backend, retry backend.RetryPolicy, rubyOutputFormat string) *RubyRestore {
+func NewRubyRestore(restorer *protect.RubyRestorer, logger *slog.Logger, backends []backend.Backend, retry backend.RetryPolicy, rubyOutputFormat string, preserveKinds []string) *RubyRestore {
 	return &RubyRestore{
 		Restorer:         restorer,
 		Logger:           logger,
 		Backends:         backends,
 		Retry:            retry,
 		RubyOutputFormat: rubyOutputFormat,
+		PreserveKinds:    preserveKinds,
 	}
 }
 
@@ -38,42 +40,50 @@ func (s *RubyRestore) Run(ctx context.Context, doc *Document) error {
 	if logger == nil {
 		logger = slog.Default()
 	}
+	keepSet := kindSet(s.PreserveKinds)
 
-	// 第一轮：用已有的 ruby_output 还原（含双源匹配回退）
 	var failedSegs []*Segment
 	for i := range doc.Segments {
 		seg := &doc.Segments[i]
 		rubyOutput := extractRubyOutputFromSeg(seg)
+		originals := extractRubyAnnotationsFromSeg(seg)
+
 		if len(rubyOutput) > 0 {
-			originals := extractRubyAnnotationsFromSeg(seg)
+			filtered := filterByKinds(rubyOutput, keepSet)
+			if len(filtered) == 0 {
+				continue
+			}
 			before := seg.Target
-			if err := s.Restorer.Restore(seg, rubyOutput, originals); err != nil {
-				logger.Warn("ruby restore failed, keeping translated text as-is",
-					"seg", seg.ID, "err", err)
+			if err := s.Restorer.Restore(seg, filtered, originals); err != nil {
+				logger.Warn("ruby restore failed", "seg", seg.ID, "err", err)
 				failedSegs = append(failedSegs, seg)
 			} else if seg.Target == before {
-				logger.Warn("ruby restore: no base text matched in translation, annotations lost",
-					"seg", seg.ID, "entries", len(rubyOutput))
+				logger.Warn("ruby restore: no base matched", "seg", seg.ID)
 				failedSegs = append(failedSegs, seg)
 			}
+			continue
+		}
+
+		if len(originals) > 0 {
+			logger.Warn("no ruby_output but has annotations",
+				"seg", seg.ID, "annotations", len(originals))
+			failedSegs = append(failedSegs, seg)
 		}
 	}
 
-	// 第二轮：对失败段使用 LLM 注音对齐重试
 	if len(failedSegs) > 0 && s.RubyOutputFormat == "ruby_output" && len(s.Backends) > 0 {
-		retried, recovered := s.retryFailedSegments(ctx, failedSegs, logger)
+		retried, recovered := s.retryFailedSegments(ctx, failedSegs, keepSet, logger)
 		if retried > 0 {
 			logger.Info("ruby alignment retry completed",
 				"retried", retried, "recovered", recovered)
 		}
 	}
-
 	return nil
 }
 
 // retryFailedSegments 对注音还原失败的段落执行 LLM 注音对齐重试。
 // 返回 (尝试数, 成功数)。
-func (s *RubyRestore) retryFailedSegments(ctx context.Context, failedSegs []*Segment, logger *slog.Logger) (int, int) {
+func (s *RubyRestore) retryFailedSegments(ctx context.Context, failedSegs []*Segment, keepSet map[string]bool, logger *slog.Logger) (int, int) {
 	retried := 0
 	recovered := 0
 
@@ -127,9 +137,16 @@ func (s *RubyRestore) retryFailedSegments(ctx context.Context, failedSegs []*Seg
 		}
 		seg.Meta["ruby_output"] = newOutput
 
+		// 按 preserve_kinds 过滤
+		filtered := filterByKinds(newOutput, keepSet)
+		if len(filtered) == 0 {
+			logger.Info("alignment output filtered out by preserve_kinds", "seg", seg.ID)
+			continue
+		}
+
 		// 第二轮还原
 		before := seg.Target
-		if err := s.Restorer.Restore(seg, newOutput, originals); err != nil {
+		if err := s.Restorer.Restore(seg, filtered, originals); err != nil {
 			logger.Warn("ruby restore after alignment retry failed",
 				"seg", seg.ID, "err", err)
 		} else if seg.Target == before {
@@ -191,7 +208,11 @@ func buildAlignmentPrompt(seg *Segment, originals []protect.RubyAnnotation) (str
 
 规则：
 - "base" 必须是译文中实际出现的文本（不是原文基底），专有名词等未翻译的词除外。
-- "text" 保留原文读音（不翻译）。
+- "text" 是标注文本：phonetic/semantic 保留原文（不翻译），creative 需要翻译。
+- "kind" 是注音分类：
+  · phonetic（音注）：纯读音标注。
+  · semantic（义训）：语义解释标注，基底与标注语意一致或相近。
+  · creative（创意注音）：基底与标注存在语义落差。
 - 条目顺序与输入 annotations 顺序一致。
 - 仅输出 JSON，无额外文字。`
 
@@ -205,6 +226,7 @@ func buildAlignmentPrompt(seg *Segment, originals []protect.RubyAnnotation) (str
 	type annIn struct {
 		Base string `json:"base"`
 		Text string `json:"text"`
+		Kind string `json:"kind"`
 	}
 	anns := make([]annIn, len(originals))
 	for i, a := range originals {
@@ -232,8 +254,12 @@ func buildAlignmentPrompt(seg *Segment, originals []protect.RubyAnnotation) (str
 					"properties": map[string]any{
 						"base": map[string]any{"type": "string"},
 						"text": map[string]any{"type": "string"},
+						"kind": map[string]any{
+							"type": "string",
+							"enum": []string{"phonetic", "semantic", "creative"},
+						},
 					},
-					"required":             []string{"base", "text"},
+					"required":             []string{"base", "text", "kind"},
 					"additionalProperties": false,
 				},
 			},
@@ -266,4 +292,30 @@ func parseAlignmentResponse(text string) []protect.RubyOutputEntry {
 		return nil
 	}
 	return resp.RubyOutput
+}
+
+// kindSet 将 kind 列表转为 set，用于快速查找。
+// nil（旧记录/未设置）时返回默认全集，保证向后兼容；
+// 空非 nil 切片（用户显式传 []）返回空集，允许用户选择不保留任何注音。
+func kindSet(kinds []string) map[string]bool {
+	if kinds == nil {
+		return map[string]bool{"phonetic": true, "semantic": true, "creative": true}
+	}
+	s := make(map[string]bool, len(kinds))
+	for _, k := range kinds {
+		s[k] = true
+	}
+	return s
+}
+
+// filterByKinds 按 preserve_kinds 过滤注音条目。
+// Kind 为空字符串的条目视为未分类，保留不过滤（向后兼容旧数据）。
+func filterByKinds(output []protect.RubyOutputEntry, keep map[string]bool) []protect.RubyOutputEntry {
+	var result []protect.RubyOutputEntry
+	for _, entry := range output {
+		if entry.Kind == "" || keep[entry.Kind] {
+			result = append(result, entry)
+		}
+	}
+	return result
 }

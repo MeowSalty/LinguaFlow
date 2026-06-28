@@ -204,8 +204,24 @@ func TestTranslationsSchema_WithRuby(t *testing.T) {
 		}
 		item := arr["items"].(map[string]any)
 		itemReq, _ := item["required"].([]string)
-		if !reflect.DeepEqual(itemReq, []string{"base", "text"}) {
+		if !reflect.DeepEqual(itemReq, []string{"base", "text", "kind"}) {
 			t.Errorf("item required mismatch: %#v", itemReq)
+		}
+		// 验证 kind 属性存在且值正确
+		itemProps := item["properties"].(map[string]any)
+		kindProp, ok := itemProps["kind"].(map[string]any)
+		if !ok {
+			t.Fatalf("kind property missing from ruby_output item: %#v", itemProps)
+		}
+		if kindProp["type"] != "string" {
+			t.Errorf("kind type should be string, got %v", kindProp["type"])
+		}
+		kindEnum, ok := kindProp["enum"].([]string)
+		if !ok {
+			t.Fatalf("kind enum should be []string, got %T", kindProp["enum"])
+		}
+		if !reflect.DeepEqual(kindEnum, []string{"phonetic", "semantic", "creative"}) {
+			t.Errorf("kind enum mismatch: %#v", kindEnum)
 		}
 	}
 }

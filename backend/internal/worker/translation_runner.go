@@ -384,8 +384,9 @@ func buildStrategyConfig(snapshot *service.JobExecutionSnapshot) *config.Config 
 			Enabled: s.Protect.Enabled,
 			Rules:   s.Protect.Rules,
 			Ruby: config.RubyConfig{
-				Enabled:      s.Protect.Ruby.Enabled,
-				OutputFormat: s.Protect.Ruby.OutputFormat,
+				Enabled:       s.Protect.Ruby.Enabled,
+				OutputFormat:  s.Protect.Ruby.OutputFormat,
+				PreserveKinds: s.Protect.Ruby.PreserveKinds,
 			},
 		}
 		cfg.Pipeline.Postprocess = config.PostprocessConfig{

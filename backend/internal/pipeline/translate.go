@@ -92,6 +92,9 @@ type Translate struct {
 	//   - ""（空）：不启用注音处理
 	RubyOutputFormat string
 
+	// PreserveKinds 用户保留的注音 kind 列表。
+	PreserveKinds []string
+
 	// Context 控制翻译上下文窗口。
 	Context config.ContextConfig
 }
