@@ -1287,33 +1287,6 @@ paths:
                 $ref: '#/components/schemas/TranslationJob'
         default:
           $ref: '#/components/responses/Problem'
-  /translation-jobs/{translationJobId}/events:
-    parameters:
-      - $ref: '#/components/parameters/TranslationJobId'
-    get:
-      operationId: ListTranslationJobEvents
-      summary: 获取翻译任务事件列表
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            default: 50
-            maximum: 200
-      responses:
-        '200':
-          description: 事件列表
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/JobEvent'
-        default:
-          $ref: '#/components/responses/Problem'
   /translation-jobs/{translationJobId}/cancel:
     parameters:
       - $ref: '#/components/parameters/TranslationJobId'
@@ -2486,34 +2459,6 @@ components:
             $ref: '#/components/schemas/TranslationJob'
         next_cursor:
           type: string
-    JobEvent:
-      type: object
-      required:
-        - id
-        - job_id
-        - level
-        - message
-        - created_at
-      properties:
-        id:
-          type: integer
-        job_id:
-          type: integer
-        level:
-          type: string
-          enum:
-            - info
-            - warn
-            - error
-        stage:
-          type: string
-        message:
-          type: string
-        metadata:
-          type: object
-        created_at:
-          type: string
-          format: date-time
     Activity:
       type: object
       required:
