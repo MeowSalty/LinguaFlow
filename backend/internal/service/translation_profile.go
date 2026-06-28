@@ -56,7 +56,11 @@ func (s *TranslationProfileService) ListByUser(ctx context.Context, userID int) 
 	if err != nil {
 		return nil, fmt.Errorf("list translation profiles: %w", err)
 	}
-	return append(templates.BuiltinTranslationProfiles(), dbProfiles...), nil
+	profiles := append(templates.BuiltinTranslationProfiles(), dbProfiles...)
+	for _, p := range profiles {
+		p.Config.NormalizePreserveKinds()
+	}
+	return profiles, nil
 }
 
 // ListByOrg 列出指定组织的所有翻译配置（包含内置策略）。
@@ -71,7 +75,11 @@ func (s *TranslationProfileService) ListByOrg(ctx context.Context, orgID int) ([
 	if err != nil {
 		return nil, fmt.Errorf("list translation profiles: %w", err)
 	}
-	return append(templates.BuiltinTranslationProfiles(), dbProfiles...), nil
+	profiles := append(templates.BuiltinTranslationProfiles(), dbProfiles...)
+	for _, p := range profiles {
+		p.Config.NormalizePreserveKinds()
+	}
+	return profiles, nil
 }
 
 // GetByID 根据 ID 获取翻译配置（支持内置策略）。
@@ -81,6 +89,7 @@ func (s *TranslationProfileService) GetByID(ctx context.Context, id int) (*ent.T
 		if tp == nil {
 			return nil, ErrTranslationProfileNotFound
 		}
+		tp.Config.NormalizePreserveKinds()
 		return tp, nil
 	}
 	tp, err := s.client.TranslationProfile.Get(ctx, id)
@@ -90,6 +99,7 @@ func (s *TranslationProfileService) GetByID(ctx context.Context, id int) (*ent.T
 		}
 		return nil, fmt.Errorf("query translation profile: %w", err)
 	}
+	tp.Config.NormalizePreserveKinds()
 	return tp, nil
 }
 
@@ -190,6 +200,12 @@ func validateProfileConfig(cfg *schema.TranslationProfileConfigData) error {
 	if cfg.Split.Enabled {
 		if cfg.Split.MaxChars < 1 {
 			return fmt.Errorf("%w: split.max_chars must be >= 1 when split is enabled", ErrTranslationProfileConfigInvalid)
+		}
+	}
+	validRubyKinds := map[string]bool{"phonetic": true, "semantic": true, "creative": true}
+	for _, k := range cfg.Protect.Ruby.PreserveKinds {
+		if !validRubyKinds[k] {
+			return fmt.Errorf("%w: protect.ruby.preserve_kinds contains invalid kind %q (must be one of phonetic, semantic, creative)", ErrTranslationProfileConfigInvalid, k)
 		}
 	}
 	return nil
