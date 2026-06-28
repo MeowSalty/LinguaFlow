@@ -130,10 +130,6 @@ func (s *Translate) Run(ctx context.Context, doc *Document) error {
 		pending = append(pending, i)
 	}
 
-	rep := s.reporter()
-	rep.StageStart("translate", len(pending))
-	defer rep.StageDone()
-
 	unresolvedCount, err := s.runRounds(ctx, doc, pending, logger)
 	if err != nil {
 		return err

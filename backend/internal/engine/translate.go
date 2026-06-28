@@ -95,6 +95,10 @@ func (e *Engine) Translate(ctx context.Context, doc *pipeline.Document, opts ...
 	}
 
 	// 5. Run batches concurrently
+	rep := e.reporter
+	rep.StageStart("translate", len(pending))
+	defer rep.StageDone()
+
 	var mu sync.Mutex
 	var batchResults []pipeline.BatchResult
 	var totalFailed int
@@ -250,7 +254,17 @@ func (e *Engine) Translate(ctx context.Context, doc *pipeline.Document, opts ...
 		batchResults = append(batchResults, batchResult)
 		mu.Unlock()
 
-		// 5g. Call BatchHandler
+		// 5g. Report progress: one SegmentDone per successfully translated segment.
+		// Progress is reported before BatchHandler because segments are already translated
+		// regardless of whether the handler succeeds.
+		for _, seg := range batchResult.Segments {
+			if !seg.Failed {
+				rep.SegmentDone()
+			}
+		}
+		rep.BatchComplete()
+
+		// 5h. Call BatchHandler
 		if cfg.batchHandler != nil {
 			if err := cfg.batchHandler(ctx, batchResult); err != nil {
 				return fmt.Errorf("batch handler batch %d: %w", bidx, err)
