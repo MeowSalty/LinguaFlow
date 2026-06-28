@@ -18,7 +18,9 @@ defineProps<{
       <table class="w-full text-xs">
         <thead>
           <tr class="border-b border-lf-border-soft text-lf-text-muted">
-            <th class="py-1 pr-2 text-left font-medium">{{ t('workspace.glossary.columns.source') }}</th>
+            <th class="py-1 pr-2 text-left font-medium">
+              {{ t('workspace.glossary.columns.source') }}
+            </th>
             <th class="py-1 text-left font-medium">{{ t('workspace.glossary.columns.target') }}</th>
           </tr>
         </thead>
@@ -42,7 +44,9 @@ defineProps<{
       <table class="w-full text-xs">
         <thead>
           <tr class="border-b border-lf-border-soft text-lf-text-muted">
-            <th class="py-1 pr-2 text-left font-medium">{{ t('workspace.glossary.columns.source') }}</th>
+            <th class="py-1 pr-2 text-left font-medium">
+              {{ t('workspace.glossary.columns.source') }}
+            </th>
             <th class="py-1 text-left font-medium">{{ t('workspace.glossary.columns.target') }}</th>
           </tr>
         </thead>

@@ -63,9 +63,11 @@ const toggleExpand = (): void => {
 <template>
   <div
     class="rounded-lg border p-3"
-    :class="isError
-      ? 'border-l-2 border-l-red-500 bg-lf-danger-soft/40'
-      : 'border-l-2 border-lf-brand-500 bg-lf-brand-soft/40'"
+    :class="
+      isError
+        ? 'border-l-2 border-l-red-500 bg-lf-danger-soft/40'
+        : 'border-l-2 border-lf-brand-500 bg-lf-brand-soft/40'
+    "
   >
     <!-- Summary row -->
     <div class="flex items-center gap-2 text-sm">
@@ -86,10 +88,7 @@ const toggleExpand = (): void => {
     </div>
 
     <!-- Error info -->
-    <div
-      v-if="isError && meta"
-      class="mt-1.5 space-y-1 text-xs text-lf-text-muted"
-    >
+    <div v-if="isError && meta" class="mt-1.5 space-y-1 text-xs text-lf-text-muted">
       <div v-if="meta.error_type">
         <span class="text-lf-text-strong">{{ t('workspace.job.events.batch.errorType') }}:</span>
         {{ meta.error_type }}
@@ -99,7 +98,9 @@ const toggleExpand = (): void => {
         {{ meta.error_message }}
       </div>
       <div v-if="meta.tried_backends?.length">
-        <span class="text-lf-text-strong">{{ t('workspace.job.events.batch.triedBackends') }}:</span>
+        <span class="text-lf-text-strong"
+          >{{ t('workspace.job.events.batch.triedBackends') }}:</span
+        >
         {{ meta.tried_backends.join(', ') }}
       </div>
       <div v-if="meta.shrink_attempted">
@@ -110,13 +111,10 @@ const toggleExpand = (): void => {
     </div>
 
     <!-- Expand toggle -->
-    <NButton
-      quaternary
-      size="tiny"
-      class="mt-2"
-      @click="toggleExpand"
-    >
-      {{ expanded ? t('workspace.job.events.batch.collapse') : t('workspace.job.events.batch.expand') }}
+    <NButton quaternary size="tiny" class="mt-2" @click="toggleExpand">
+      {{
+        expanded ? t('workspace.job.events.batch.collapse') : t('workspace.job.events.batch.expand')
+      }}
     </NButton>
 
     <!-- Expanded details -->

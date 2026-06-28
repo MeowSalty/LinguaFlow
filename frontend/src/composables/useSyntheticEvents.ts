@@ -30,17 +30,43 @@ export function buildSyntheticEvents(job: TranslationJob): SyntheticEvent[] {
   })
 
   if (job.started_at) {
-    events.push(makeEvent('job_started', 'info', t('workspace.job.events.synthetic.jobStarted'), job.started_at))
+    events.push(
+      makeEvent(
+        'job_started',
+        'info',
+        t('workspace.job.events.synthetic.jobStarted'),
+        job.started_at,
+      ),
+    )
   }
 
   if (job.status === 'completed' && job.updated_at) {
-    events.push(makeEvent('job_completed', 'info', t('workspace.job.events.synthetic.jobCompleted'), job.updated_at))
+    events.push(
+      makeEvent(
+        'job_completed',
+        'info',
+        t('workspace.job.events.synthetic.jobCompleted'),
+        job.updated_at,
+      ),
+    )
   } else if (job.status === 'failed' && job.updated_at) {
     events.push(
-      makeEvent('job_failed', 'error', job.error_message || t('workspace.job.events.synthetic.jobFailed'), job.updated_at),
+      makeEvent(
+        'job_failed',
+        'error',
+        job.error_message || t('workspace.job.events.synthetic.jobFailed'),
+        job.updated_at,
+      ),
     )
   } else if (job.status === 'cancelled' && job.updated_at) {
-    events.push(makeEvent('job_cancelled', 'warning', t('workspace.job.events.synthetic.jobCancelled'), job.updated_at))
+    events.push(
+      makeEvent(
+        'job_cancelled',
+        'warning',
+        t('workspace.job.events.synthetic.jobCancelled'),
+        job.updated_at,
+      ),
+    )
   }
 
   const resources: TranslationJobResource[] = job.job_resources ?? []
@@ -84,7 +110,8 @@ export function buildSyntheticEvents(job: TranslationJob): SyntheticEvent[] {
         makeEvent(
           'resource_failed',
           'error',
-          resource.error_message || t('workspace.job.events.synthetic.resourceFailed', { name: resourceLabel }),
+          resource.error_message ||
+            t('workspace.job.events.synthetic.resourceFailed', { name: resourceLabel }),
           resource.updated_at,
         ),
       )

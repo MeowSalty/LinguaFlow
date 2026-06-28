@@ -48,7 +48,10 @@ const checkScrollPosition = (): void => {
   scrollTicking = true
   requestAnimationFrame(() => {
     const el = scrollContainer.value
-    if (!el) { scrollTicking = false; return }
+    if (!el) {
+      scrollTicking = false
+      return
+    }
     isNearBottom.value = el.scrollTop + el.clientHeight >= el.scrollHeight - 50
     if (isNearBottom.value) {
       hasNewEvents.value = false
@@ -110,11 +113,7 @@ onMounted(() => {
     </div>
 
     <div class="relative min-h-[200px]">
-      <div
-        ref="scrollContainer"
-        class="max-h-[400px] overflow-auto"
-        @scroll="checkScrollPosition"
-      >
+      <div ref="scrollContainer" class="max-h-[400px] overflow-auto" @scroll="checkScrollPosition">
         <div v-if="allEvents.length === 0" class="py-6 text-center">
           <NEmpty size="small" :description="t('workspace.job.events.empty')" />
         </div>
