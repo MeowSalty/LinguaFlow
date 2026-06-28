@@ -78,13 +78,13 @@ func (s *AuditService) ListActivity(ctx context.Context, actorUserID, afterID, l
 		},
 	}
 	if afterID > 0 {
-		predicates = append(predicates, func(q *ent.ActivityLogQuery) { q.Where(activitylog.IDGT(afterID)) })
+		predicates = append(predicates, func(q *ent.ActivityLogQuery) { q.Where(activitylog.IDLT(afterID)) })
 	}
 	query := s.client.ActivityLog.Query()
 	for _, apply := range predicates {
 		apply(query)
 	}
-	rows, err := query.Order(ent.Asc(activitylog.FieldID)).Limit(limit + 1).WithActor().WithOrganization().WithProject().All(ctx)
+	rows, err := query.Order(ent.Desc(activitylog.FieldID)).Limit(limit + 1).WithActor().WithOrganization().WithProject().All(ctx)
 	if err != nil {
 		return nil, err
 	}
