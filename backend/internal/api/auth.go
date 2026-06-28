@@ -53,3 +53,29 @@ func bearerToken(header string) string {
 	}
 	return strings.TrimSpace(strings.TrimPrefix(header, prefix))
 }
+
+// resolveAuthUser extracts the authenticated user from the request.
+// Supports both Authorization header and access_token query parameter
+// (for SSE EventSource which cannot set custom headers).
+func (s *Server) resolveAuthUser(r *http.Request) (authenticatedUser, bool) {
+	// Try existing context first (from requireAuth middleware)
+	if user, ok := authUserFromContext(r.Context()); ok {
+		return user, true
+	}
+
+	// Try Authorization header
+	rawToken := bearerToken(r.Header.Get("Authorization"))
+	if rawToken == "" {
+		// Fall back to query parameter
+		rawToken = r.URL.Query().Get("access_token")
+	}
+	if rawToken == "" {
+		return authenticatedUser{}, false
+	}
+
+	account, claims, err := s.authService.ResolveUserFromAccessToken(r.Context(), rawToken)
+	if err != nil {
+		return authenticatedUser{}, false
+	}
+	return authenticatedUser{User: account, Claims: claims}, true
+}

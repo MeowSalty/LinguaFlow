@@ -6,9 +6,11 @@ import (
 	"log/slog"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 )
@@ -19,6 +21,7 @@ import (
 func (s *Translate) translateSingleInRound(ctx context.Context, doc *Document, idx int, round Round, logger *slog.Logger) (bool, error) {
 	renderer := s.resolveRoundRenderer(round)
 	repairOpts := s.resolveRoundRepair(round)
+	batchStart := time.Now()
 
 	seg := &doc.Segments[idx]
 
@@ -61,8 +64,11 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *Document, i
 		glosEntries []prompt.BootstrapEntry
 		rubyOutput  map[string][]protect.RubyOutputEntry
 		picked      backend.Backend
+		tried       []string
+		lastErr     error
 	)
 	for _, b := range round.Backends {
+		tried = append(tried, b.Name())
 		resp, err = s.callOnce(ctx, b, req, round.Retry)
 		if err != nil {
 			if isFatalBackendError(err) {
@@ -72,6 +78,7 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *Document, i
 				logger.Warn("translate failed, trying next backend",
 					"seg", seg.ID, "backend", b.Name(), "err", err)
 			}
+			lastErr = err
 			continue
 		}
 		var perr error
@@ -86,12 +93,16 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *Document, i
 			logger.Warn("single response parse failed, trying next backend",
 				"seg", seg.ID, "backend", b.Name(), "err", perr,
 				"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200))
+			lastErr = perr
 			continue
 		}
 		picked = b
 		break
 	}
 	if picked == nil {
+		durationMs := time.Since(batchStart).Milliseconds()
+		s.emitSingleBatchEvent(idx, seg.ID, "", usr, glos, nil, backend.Usage{},
+			"failed", durationMs, tried, s.classifySingleError(lastErr), lastErr, logger)
 		seg.Target = ""
 		return false, nil
 	}
@@ -102,6 +113,10 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *Document, i
 		"inline_glossary", len(glosEntries))
 	atomic.AddInt64(&doc.InputTokens, resp.Usage.PromptTokens)
 	atomic.AddInt64(&doc.OutputTokens, resp.Usage.CompletionTokens)
+
+	durationMs := time.Since(batchStart).Milliseconds()
+	s.emitSingleBatchEvent(idx, seg.ID, picked.Name(), usr, glos, resp, resp.Usage,
+		"success", durationMs, tried, "", nil, logger)
 	// 存储 ruby_output 到 seg.Meta
 	if rubyOutput != nil {
 		if ro, ok := rubyOutput[prompt.SingleID]; ok && len(ro) > 0 {
@@ -231,6 +246,10 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *Document, i
 		if still := protect.MissingPlaceholders(seg); len(still) > 0 {
 			logger.Warn("placeholders still missing after retry, defer to next round",
 				"seg", seg.ID, "backend", picked.Name(), "missing", still)
+			durationMs := time.Since(batchStart).Milliseconds()
+			s.emitSingleBatchEvent(idx, seg.ID, picked.Name(), usr, glos, resp, resp.Usage,
+				"failed", durationMs, tried, "placeholder_error",
+				fmt.Errorf("placeholders still missing: %v", still), logger)
 			seg.Target = ""
 			return false, nil
 		}
@@ -239,4 +258,78 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *Document, i
 	s.addTM(ctx, doc, seg, logger)
 	s.reporter().SegmentDone()
 	return true, nil
+}
+
+// emitSingleBatchEvent emits a BatchEvent for single-segment translation.
+func (s *Translate) emitSingleBatchEvent(
+	idx int,
+	segID string,
+	backendName string,
+	sentContent string,
+	usedGlossary []prompt.GlossaryEntry,
+	resp *backend.Response,
+	usage backend.Usage,
+	status string,
+	durationMs int64,
+	triedBackends []string,
+	errorType string,
+	err error,
+	logger *slog.Logger,
+) {
+	rep := s.Reporter
+	if rep == nil {
+		return
+	}
+	obs, ok := rep.(progress.BatchObserver)
+	if !ok {
+		return
+	}
+
+	rawRespText := ""
+	if resp != nil {
+		rawRespText = resp.Text
+	}
+	var addedGlossary []prompt.BootstrapEntry
+	if resp != nil {
+		// For single segment, parse the response to get glossary entries.
+		_, glosEntries, _, _ := parseBatchResponse(resp.Text, []string{prompt.SingleID})
+		addedGlossary = glosEntries
+	}
+
+	errorMsg := ""
+	if err != nil {
+		errorMsg = err.Error()
+	}
+
+	evt := progress.BatchEvent{
+		Stage:           "translate",
+		BatchIndex:      idx,
+		SegmentIDs:      []string{segID},
+		SegmentCount:    1,
+		BackendName:     backendName,
+		Status:          status,
+		DurationMs:      durationMs,
+		InputTokens:     usage.PromptTokens,
+		OutputTokens:    usage.CompletionTokens,
+		SentContent:     sentContent,
+		ReceivedContent: rawRespText,
+		UsedGlossary:    usedGlossary,
+		AddedGlossary:   addedGlossary,
+		ErrorType:       errorType,
+		ErrorMessage:    errorMsg,
+		TriedBackends:   triedBackends,
+	}
+
+	obs.OnBatchEvent(evt)
+}
+
+// classifySingleError determines the error type for a failed single-segment translation.
+func (s *Translate) classifySingleError(err error) string {
+	if err == nil {
+		return "backend_error"
+	}
+	if _, ok := err.(backend.HTTPStatusError); ok {
+		return "backend_error"
+	}
+	return "parse_error"
 }

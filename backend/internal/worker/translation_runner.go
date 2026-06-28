@@ -15,6 +15,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
@@ -26,7 +27,8 @@ import (
 // TranslationRunner 翻译任务的执行器，通过嵌入 BaseRunner 复用公共逻辑。
 type TranslationRunner struct {
 	*BaseRunner
-	jobs *service.TranslationJobService
+	jobs       *service.TranslationJobService
+	eventBroker *event.Broker
 
 	// per-job 取消注册表：jobID → cancel 函数
 	mu         sync.Mutex
@@ -41,10 +43,12 @@ func NewTranslationRunner(
 	jobs *service.TranslationJobService,
 	store *filestore.LocalStore,
 	queue *Queue,
+	eventBroker *event.Broker,
 ) *TranslationRunner {
 	r := &TranslationRunner{
-		jobs:       jobs,
-		activeJobs: make(map[int]context.CancelFunc),
+		jobs:        jobs,
+		eventBroker: eventBroker,
+		activeJobs:  make(map[int]context.CancelFunc),
 	}
 	r.BaseRunner = newBaseRunner(cfg, logger, client, store, queue, jobs, r.processJob, "translation worker")
 	return r
@@ -112,7 +116,7 @@ func (r *TranslationRunner) processJob(ctx context.Context, jobID int) error {
 func (r *TranslationRunner) processJobResource(ctx context.Context, exec *service.TranslationJobExecution, item *ent.JobResource) error {
 	job := exec.Job
 
-	if err := r.jobs.MarkJobResourceRunning(ctx, item.ID); err != nil {
+	if err := r.jobs.MarkJobResourceRunning(ctx, job.ID, item.ID); err != nil {
 		return err
 	}
 	// 写入资源开始时间
@@ -124,23 +128,24 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		JobID:         exec.Job.ID,
 		JobResourceID: item.ID,
 		Logger:        r.logger,
+		Broker:        r.eventBroker,
 	})
 	defer reporter.Close()
 
 	res, err := item.Edges.ResourceOrErr()
 	if err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
 
 	// 1. 从 DB 加载 segments（含 meta 字段）
 	selectedRows, allRows, err := r.loadSegments(ctx, res.ID, item.SegmentIds)
 	if err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
 	if len(selectedRows) == 0 {
-		return r.jobs.MarkJobResourceCompleted(ctx, item.ID, "", 0)
+		return r.jobs.MarkJobResourceCompleted(ctx, job.ID, item.ID, "", 0)
 	}
 
 	// 2. 构建 SegmentInput（反序列化 meta）
@@ -149,7 +154,7 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	// 3. 获取语言配置（从 job snapshot）
 	snapshot, err := r.jobs.GetTranslationSnapshot(ctx, job.ID)
 	if err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, fmt.Errorf("get translation snapshot: %w", err))
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, fmt.Errorf("get translation snapshot: %w", err))
 		return nil
 	}
 
@@ -163,12 +168,12 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	autoApprove := snapshot.AutoApprove
 	runtimeGlossary, err := r.buildRuntimeGlossary(exec.Project, cfg)
 	if err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
 	memory, err := r.buildRuntimeTM(exec.Project, cfg)
 	if err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
 
@@ -176,7 +181,7 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	resources := engine.RuntimeResources{Glossary: runtimeGlossary, TM: memory}
 	eng, err := r.buildEngineFromSnapshot(ctx, snapshot, resources, reporter)
 	if err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
 	defer func() { _ = eng.Close() }()
@@ -248,10 +253,10 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 				"resource_id", item.ID, "completed", completedCount, "total", len(selectedRows))
 			_ = r.recordUsage(ctx, exec, completedCount, result.InputTokens, result.OutputTokens)
 			_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(completedCount).Exec(ctx)
-			_ = r.jobs.MarkJobResourceCancelled(ctx, item.ID)
+			_ = r.jobs.MarkJobResourceCancelled(ctx, job.ID, item.ID)
 			return nil
 		}
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, fmt.Errorf("translate: %w", translateErr))
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, fmt.Errorf("translate: %w", translateErr))
 		return nil
 	}
 
@@ -267,17 +272,17 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(completedCount).Exec(ctx)
 		err := fmt.Errorf("%d/%d segments failed to translate (completed: %d): LLM could not preserve all protected placeholders after retries",
 			result.UnresolvedCount, len(selectedRows), completedCount)
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
 
 	// 8. 全部成功：记录用量并标记完成
 	if err := r.recordUsage(ctx, exec, completedCount, result.InputTokens, result.OutputTokens); err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
 
-	return r.jobs.MarkJobResourceCompleted(ctx, item.ID, "", completedCount)
+	return r.jobs.MarkJobResourceCompleted(ctx, job.ID, item.ID, "", completedCount)
 }
 
 // buildSegmentInputs 将 DB segments 转换为 SegmentInput 切片。

@@ -57,18 +57,6 @@ func (f GlossaryEntryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Valu
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GlossaryEntryMutation", m)
 }
 
-// The JobEventFunc type is an adapter to allow the use of ordinary
-// function as JobEvent mutator.
-type JobEventFunc func(context.Context, *ent.JobEventMutation) (ent.Value, error)
-
-// Mutate calls f(ctx, m).
-func (f JobEventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	if mv, ok := m.(*ent.JobEventMutation); ok {
-		return f(ctx, mv)
-	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.JobEventMutation", m)
-}
-
 // The JobResourceFunc type is an adapter to allow the use of ordinary
 // function as JobResource mutator.
 type JobResourceFunc func(context.Context, *ent.JobResourceMutation) (ent.Value, error)

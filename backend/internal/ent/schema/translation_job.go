@@ -52,6 +52,5 @@ func (TranslationJob) Edges() []ent.Edge {
 			Ref("created_translation_jobs").
 			Unique(),
 		edge.To("job_resources", JobResource.Type),
-		edge.To("job_events", JobEvent.Type),
 	}
 }

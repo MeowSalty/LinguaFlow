@@ -166,31 +166,6 @@ var (
 			},
 		},
 	}
-	// JobEventsColumns holds the columns for the "job_events" table.
-	JobEventsColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "created_at", Type: field.TypeTime},
-		{Name: "updated_at", Type: field.TypeTime},
-		{Name: "level", Type: field.TypeString, Default: "info"},
-		{Name: "stage", Type: field.TypeString, Nullable: true, Default: ""},
-		{Name: "message", Type: field.TypeString},
-		{Name: "metadata", Type: field.TypeJSON, Nullable: true},
-		{Name: "translation_job_job_events", Type: field.TypeInt},
-	}
-	// JobEventsTable holds the schema information for the "job_events" table.
-	JobEventsTable = &schema.Table{
-		Name:       "job_events",
-		Columns:    JobEventsColumns,
-		PrimaryKey: []*schema.Column{JobEventsColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{
-			{
-				Symbol:     "job_events_translation_jobs_job_events",
-				Columns:    []*schema.Column{JobEventsColumns[7]},
-				RefColumns: []*schema.Column{TranslationJobsColumns[0]},
-				OnDelete:   schema.NoAction,
-			},
-		},
-	}
 	// JobResourcesColumns holds the columns for the "job_resources" table.
 	JobResourcesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -666,7 +641,6 @@ var (
 		BackendsTable,
 		ExecutionPlanTemplatesTable,
 		GlossaryEntriesTable,
-		JobEventsTable,
 		JobResourcesTable,
 		OrgMembershipsTable,
 		OrganizationsTable,
@@ -693,7 +667,6 @@ func init() {
 	ExecutionPlanTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	ExecutionPlanTemplatesTable.ForeignKeys[1].RefTable = UsersTable
 	GlossaryEntriesTable.ForeignKeys[0].RefTable = ProjectsTable
-	JobEventsTable.ForeignKeys[0].RefTable = TranslationJobsTable
 	JobResourcesTable.ForeignKeys[0].RefTable = ResourcesTable
 	JobResourcesTable.ForeignKeys[1].RefTable = TranslationJobsTable
 	OrgMembershipsTable.ForeignKeys[0].RefTable = OrganizationsTable

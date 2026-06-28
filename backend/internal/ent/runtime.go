@@ -9,7 +9,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -167,33 +166,6 @@ func init() {
 	glossaryentryDescProjectID := glossaryentryFields[5].Descriptor()
 	// glossaryentry.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
 	glossaryentry.ProjectIDValidator = glossaryentryDescProjectID.Validators[0].(func(int) error)
-	jobeventMixin := schema.JobEvent{}.Mixin()
-	jobeventMixinFields0 := jobeventMixin[0].Fields()
-	_ = jobeventMixinFields0
-	jobeventFields := schema.JobEvent{}.Fields()
-	_ = jobeventFields
-	// jobeventDescCreatedAt is the schema descriptor for created_at field.
-	jobeventDescCreatedAt := jobeventMixinFields0[0].Descriptor()
-	// jobevent.DefaultCreatedAt holds the default value on creation for the created_at field.
-	jobevent.DefaultCreatedAt = jobeventDescCreatedAt.Default.(func() time.Time)
-	// jobeventDescUpdatedAt is the schema descriptor for updated_at field.
-	jobeventDescUpdatedAt := jobeventMixinFields0[1].Descriptor()
-	// jobevent.DefaultUpdatedAt holds the default value on creation for the updated_at field.
-	jobevent.DefaultUpdatedAt = jobeventDescUpdatedAt.Default.(func() time.Time)
-	// jobevent.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
-	jobevent.UpdateDefaultUpdatedAt = jobeventDescUpdatedAt.UpdateDefault.(func() time.Time)
-	// jobeventDescLevel is the schema descriptor for level field.
-	jobeventDescLevel := jobeventFields[0].Descriptor()
-	// jobevent.DefaultLevel holds the default value on creation for the level field.
-	jobevent.DefaultLevel = jobeventDescLevel.Default.(string)
-	// jobeventDescStage is the schema descriptor for stage field.
-	jobeventDescStage := jobeventFields[1].Descriptor()
-	// jobevent.DefaultStage holds the default value on creation for the stage field.
-	jobevent.DefaultStage = jobeventDescStage.Default.(string)
-	// jobeventDescMessage is the schema descriptor for message field.
-	jobeventDescMessage := jobeventFields[2].Descriptor()
-	// jobevent.MessageValidator is a validator for the "message" field. It is called by the builders before save.
-	jobevent.MessageValidator = jobeventDescMessage.Validators[0].(func(string) error)
 	jobresourceMixin := schema.JobResource{}.Mixin()
 	jobresourceMixinFields0 := jobresourceMixin[0].Fields()
 	_ = jobresourceMixinFields0

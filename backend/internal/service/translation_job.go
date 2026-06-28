@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -21,6 +20,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 )
 
@@ -56,6 +56,7 @@ type TranslationJobService struct {
 	promptTemplates *PromptTemplateService
 	profiles        *TranslationProfileService
 	store           *filestore.LocalStore
+	broker          *event.Broker
 }
 
 // CreateTranslationJobInput 创建翻译任务的输入参数。
@@ -84,6 +85,7 @@ func NewTranslationJobService(
 	promptTemplates *PromptTemplateService,
 	profiles *TranslationProfileService,
 	store *filestore.LocalStore,
+	broker *event.Broker,
 ) *TranslationJobService {
 	return &TranslationJobService{
 		client:          client,
@@ -93,6 +95,7 @@ func NewTranslationJobService(
 		promptTemplates: promptTemplates,
 		profiles:        profiles,
 		store:           store,
+		broker:          broker,
 	}
 }
 
@@ -555,7 +558,26 @@ func (s *TranslationJobService) LoadJobExecution(ctx context.Context, jobID int)
 }
 
 func (s *TranslationJobService) MarkJobRunning(ctx context.Context, jobID int) error {
-	return s.client.TranslationJob.UpdateOneID(jobID).SetStatus(TranslationJobStatusRunning).Exec(ctx)
+	if err := s.client.TranslationJob.UpdateOneID(jobID).SetStatus(TranslationJobStatusRunning).Exec(ctx); err != nil {
+		return err
+	}
+	s.publishEvent(jobID, "job_started", "info", "", "任务开始执行")
+	return nil
+}
+
+// publishEvent publishes a lifecycle event to the Broker. No-op if broker is nil.
+func (s *TranslationJobService) publishEvent(jobID int, eventType, level, stage, message string) {
+	if s.broker == nil {
+		return
+	}
+	s.broker.Publish(jobID, event.Event{
+		Type:      eventType,
+		JobID:     jobID,
+		Level:     level,
+		Stage:     stage,
+		Message:   message,
+		CreatedAt: time.Now(),
+	})
 }
 
 // MarkJobStarted 记录任务开始时间。
@@ -574,7 +596,7 @@ func (s *TranslationJobService) MarkJobResourceStarted(ctx context.Context, jobR
 		Exec(ctx)
 }
 
-func (s *TranslationJobService) MarkJobResourceRunning(ctx context.Context, jobResourceID int) error {
+func (s *TranslationJobService) MarkJobResourceRunning(ctx context.Context, jobID, jobResourceID int) error {
 	if err := s.client.JobResource.UpdateOneID(jobResourceID).
 		SetStatus(JobResourceStatusRunning).
 		ClearErrorMessage().
@@ -584,10 +606,11 @@ func (s *TranslationJobService) MarkJobResourceRunning(ctx context.Context, jobR
 		}
 		return err
 	}
+	s.publishEvent(jobID, "resource_started", "info", "", "开始翻译资源")
 	return nil
 }
 
-func (s *TranslationJobService) MarkJobResourceCompleted(ctx context.Context, jobResourceID int, outputPath string, completedSegments int) error {
+func (s *TranslationJobService) MarkJobResourceCompleted(ctx context.Context, jobID, jobResourceID int, outputPath string, completedSegments int) error {
 	if err := s.client.JobResource.UpdateOneID(jobResourceID).
 		SetStatus(JobResourceStatusCompleted).
 		SetOutputPath(strings.TrimSpace(outputPath)).
@@ -599,10 +622,11 @@ func (s *TranslationJobService) MarkJobResourceCompleted(ctx context.Context, jo
 		}
 		return err
 	}
+	s.publishEvent(jobID, "resource_completed", "info", "", fmt.Sprintf("资源翻译完成 (%d 段)", completedSegments))
 	return nil
 }
 
-func (s *TranslationJobService) MarkJobResourceFailed(ctx context.Context, jobResourceID int, failure error) error {
+func (s *TranslationJobService) MarkJobResourceFailed(ctx context.Context, jobID, jobResourceID int, failure error) error {
 	message := "job resource failed"
 	if failure != nil {
 		message = failure.Error()
@@ -616,10 +640,11 @@ func (s *TranslationJobService) MarkJobResourceFailed(ctx context.Context, jobRe
 		}
 		return err
 	}
+	s.publishEvent(jobID, "resource_failed", "error", "", fmt.Sprintf("资源翻译失败: %s", message))
 	return nil
 }
 
-func (s *TranslationJobService) MarkJobResourceCancelled(ctx context.Context, jobResourceID int) error {
+func (s *TranslationJobService) MarkJobResourceCancelled(ctx context.Context, jobID, jobResourceID int) error {
 	if err := s.client.JobResource.UpdateOneID(jobResourceID).
 		SetStatus(JobResourceStatusCancelled).
 		Exec(ctx); err != nil {
@@ -628,6 +653,7 @@ func (s *TranslationJobService) MarkJobResourceCancelled(ctx context.Context, jo
 		}
 		return err
 	}
+	s.publishEvent(jobID, "resource_cancelled", "info", "", "资源翻译取消")
 	return nil
 }
 
@@ -650,6 +676,7 @@ func (s *TranslationJobService) CancelJob(ctx context.Context, actorUserID, jobI
 		}
 		return nil, err
 	}
+	s.publishEvent(jobID, "job_cancelled", "info", "", "任务已取消")
 	return s.GetJob(ctx, actorUserID, current.ID)
 }
 
@@ -755,6 +782,21 @@ func (s *TranslationJobService) ReconcileJob(ctx context.Context, jobID int) err
 		}
 		return err
 	}
+
+	// Publish lifecycle events based on derived status.
+	switch status {
+	case TranslationJobStatusCompleted:
+		s.publishEvent(jobID, "job_completed", "info", "", "任务完成")
+	case TranslationJobStatusFailed:
+		errMsg := "任务失败"
+		if firstFailure != nil {
+			errMsg = *firstFailure
+		}
+		s.publishEvent(jobID, "job_failed", "error", "", errMsg)
+	case TranslationJobStatusCancelled:
+		s.publishEvent(jobID, "job_cancelled", "info", "", "任务已取消")
+	}
+
 	return nil
 }
 
@@ -828,39 +870,6 @@ func (s *TranslationJobService) GetJob(ctx context.Context, actorUserID, jobID i
 		return nil, err
 	}
 	return row, nil
-}
-
-// ListJobEvents 查询翻译任务事件列表。
-func (s *TranslationJobService) ListJobEvents(ctx context.Context, actorUserID, jobID int, limit int) ([]*ent.JobEvent, error) {
-	// 验证任务存在且有权限访问
-	job, err := s.client.TranslationJob.Query().
-		Where(translationjob.IDEQ(jobID)).
-		WithProject().
-		Only(ctx)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return nil, ErrTranslationJobNotFound
-		}
-		return nil, err
-	}
-	projectRow, err := job.Edges.ProjectOrErr()
-	if err != nil {
-		return nil, err
-	}
-	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectRow.ID, false); err != nil {
-		return nil, err
-	}
-
-	// 查询事件列表，按 created_at 倒序
-	events, err := s.client.JobEvent.Query().
-		Where(jobevent.HasJobWith(translationjob.IDEQ(jobID))).
-		Order(ent.Desc(jobevent.FieldCreatedAt)).
-		Limit(limit).
-		All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return events, nil
 }
 
 func (s *TranslationJobService) resolveJobSelection(ctx context.Context, projectID int, input CreateTranslationJobInput) (map[int][]int, error) {

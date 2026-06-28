@@ -172,7 +172,7 @@ func (s *Translate) runRounds(ctx context.Context, doc *Document, pending []int,
 			nextPending []int
 		)
 		if err := RunConcurrent(ctx, len(batches), round.Concurrency, func(ctx context.Context, bidx int) error {
-			unresolved, err := s.processBatchInRound(ctx, doc, batches[bidx], round, logger)
+			unresolved, err := s.processBatchInRound(ctx, doc, batches[bidx], round, bidx, logger)
 			if err != nil {
 				return err
 			}

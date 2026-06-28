@@ -15,7 +15,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -47,7 +46,6 @@ const (
 	TypeBackend               = "Backend"
 	TypeExecutionPlanTemplate = "ExecutionPlanTemplate"
 	TypeGlossaryEntry         = "GlossaryEntry"
-	TypeJobEvent              = "JobEvent"
 	TypeJobResource           = "JobResource"
 	TypeOrgMembership         = "OrgMembership"
 	TypeOrganization          = "Organization"
@@ -3701,710 +3699,6 @@ func (m *GlossaryEntryMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown GlossaryEntry edge %s", name)
-}
-
-// JobEventMutation represents an operation that mutates the JobEvent nodes in the graph.
-type JobEventMutation struct {
-	config
-	op            Op
-	typ           string
-	id            *int
-	created_at    *time.Time
-	updated_at    *time.Time
-	level         *string
-	stage         *string
-	message       *string
-	metadata      *map[string]interface{}
-	clearedFields map[string]struct{}
-	job           *int
-	clearedjob    bool
-	done          bool
-	oldValue      func(context.Context) (*JobEvent, error)
-	predicates    []predicate.JobEvent
-}
-
-var _ ent.Mutation = (*JobEventMutation)(nil)
-
-// jobeventOption allows management of the mutation configuration using functional options.
-type jobeventOption func(*JobEventMutation)
-
-// newJobEventMutation creates new mutation for the JobEvent entity.
-func newJobEventMutation(c config, op Op, opts ...jobeventOption) *JobEventMutation {
-	m := &JobEventMutation{
-		config:        c,
-		op:            op,
-		typ:           TypeJobEvent,
-		clearedFields: make(map[string]struct{}),
-	}
-	for _, opt := range opts {
-		opt(m)
-	}
-	return m
-}
-
-// withJobEventID sets the ID field of the mutation.
-func withJobEventID(id int) jobeventOption {
-	return func(m *JobEventMutation) {
-		var (
-			err   error
-			once  sync.Once
-			value *JobEvent
-		)
-		m.oldValue = func(ctx context.Context) (*JobEvent, error) {
-			once.Do(func() {
-				if m.done {
-					err = errors.New("querying old values post mutation is not allowed")
-				} else {
-					value, err = m.Client().JobEvent.Get(ctx, id)
-				}
-			})
-			return value, err
-		}
-		m.id = &id
-	}
-}
-
-// withJobEvent sets the old JobEvent of the mutation.
-func withJobEvent(node *JobEvent) jobeventOption {
-	return func(m *JobEventMutation) {
-		m.oldValue = func(context.Context) (*JobEvent, error) {
-			return node, nil
-		}
-		m.id = &node.ID
-	}
-}
-
-// Client returns a new `ent.Client` from the mutation. If the mutation was
-// executed in a transaction (ent.Tx), a transactional client is returned.
-func (m JobEventMutation) Client() *Client {
-	client := &Client{config: m.config}
-	client.init()
-	return client
-}
-
-// Tx returns an `ent.Tx` for mutations that were executed in transactions;
-// it returns an error otherwise.
-func (m JobEventMutation) Tx() (*Tx, error) {
-	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
-	}
-	tx := &Tx{config: m.config}
-	tx.init()
-	return tx, nil
-}
-
-// ID returns the ID value in the mutation. Note that the ID is only available
-// if it was provided to the builder or after it was returned from the database.
-func (m *JobEventMutation) ID() (id int, exists bool) {
-	if m.id == nil {
-		return
-	}
-	return *m.id, true
-}
-
-// IDs queries the database and returns the entity ids that match the mutation's predicate.
-// That means, if the mutation is applied within a transaction with an isolation level such
-// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
-// or updated by the mutation.
-func (m *JobEventMutation) IDs(ctx context.Context) ([]int, error) {
-	switch {
-	case m.op.Is(OpUpdateOne | OpDeleteOne):
-		id, exists := m.ID()
-		if exists {
-			return []int{id}, nil
-		}
-		fallthrough
-	case m.op.Is(OpUpdate | OpDelete):
-		return m.Client().JobEvent.Query().Where(m.predicates...).IDs(ctx)
-	default:
-		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
-	}
-}
-
-// SetCreatedAt sets the "created_at" field.
-func (m *JobEventMutation) SetCreatedAt(t time.Time) {
-	m.created_at = &t
-}
-
-// CreatedAt returns the value of the "created_at" field in the mutation.
-func (m *JobEventMutation) CreatedAt() (r time.Time, exists bool) {
-	v := m.created_at
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldCreatedAt returns the old "created_at" field's value of the JobEvent entity.
-// If the JobEvent object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *JobEventMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
-	}
-	return oldValue.CreatedAt, nil
-}
-
-// ResetCreatedAt resets all changes to the "created_at" field.
-func (m *JobEventMutation) ResetCreatedAt() {
-	m.created_at = nil
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (m *JobEventMutation) SetUpdatedAt(t time.Time) {
-	m.updated_at = &t
-}
-
-// UpdatedAt returns the value of the "updated_at" field in the mutation.
-func (m *JobEventMutation) UpdatedAt() (r time.Time, exists bool) {
-	v := m.updated_at
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldUpdatedAt returns the old "updated_at" field's value of the JobEvent entity.
-// If the JobEvent object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *JobEventMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
-	}
-	return oldValue.UpdatedAt, nil
-}
-
-// ResetUpdatedAt resets all changes to the "updated_at" field.
-func (m *JobEventMutation) ResetUpdatedAt() {
-	m.updated_at = nil
-}
-
-// SetLevel sets the "level" field.
-func (m *JobEventMutation) SetLevel(s string) {
-	m.level = &s
-}
-
-// Level returns the value of the "level" field in the mutation.
-func (m *JobEventMutation) Level() (r string, exists bool) {
-	v := m.level
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldLevel returns the old "level" field's value of the JobEvent entity.
-// If the JobEvent object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *JobEventMutation) OldLevel(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldLevel is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldLevel requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldLevel: %w", err)
-	}
-	return oldValue.Level, nil
-}
-
-// ResetLevel resets all changes to the "level" field.
-func (m *JobEventMutation) ResetLevel() {
-	m.level = nil
-}
-
-// SetStage sets the "stage" field.
-func (m *JobEventMutation) SetStage(s string) {
-	m.stage = &s
-}
-
-// Stage returns the value of the "stage" field in the mutation.
-func (m *JobEventMutation) Stage() (r string, exists bool) {
-	v := m.stage
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldStage returns the old "stage" field's value of the JobEvent entity.
-// If the JobEvent object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *JobEventMutation) OldStage(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldStage is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldStage requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldStage: %w", err)
-	}
-	return oldValue.Stage, nil
-}
-
-// ClearStage clears the value of the "stage" field.
-func (m *JobEventMutation) ClearStage() {
-	m.stage = nil
-	m.clearedFields[jobevent.FieldStage] = struct{}{}
-}
-
-// StageCleared returns if the "stage" field was cleared in this mutation.
-func (m *JobEventMutation) StageCleared() bool {
-	_, ok := m.clearedFields[jobevent.FieldStage]
-	return ok
-}
-
-// ResetStage resets all changes to the "stage" field.
-func (m *JobEventMutation) ResetStage() {
-	m.stage = nil
-	delete(m.clearedFields, jobevent.FieldStage)
-}
-
-// SetMessage sets the "message" field.
-func (m *JobEventMutation) SetMessage(s string) {
-	m.message = &s
-}
-
-// Message returns the value of the "message" field in the mutation.
-func (m *JobEventMutation) Message() (r string, exists bool) {
-	v := m.message
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldMessage returns the old "message" field's value of the JobEvent entity.
-// If the JobEvent object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *JobEventMutation) OldMessage(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldMessage is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldMessage requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldMessage: %w", err)
-	}
-	return oldValue.Message, nil
-}
-
-// ResetMessage resets all changes to the "message" field.
-func (m *JobEventMutation) ResetMessage() {
-	m.message = nil
-}
-
-// SetMetadata sets the "metadata" field.
-func (m *JobEventMutation) SetMetadata(value map[string]interface{}) {
-	m.metadata = &value
-}
-
-// Metadata returns the value of the "metadata" field in the mutation.
-func (m *JobEventMutation) Metadata() (r map[string]interface{}, exists bool) {
-	v := m.metadata
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldMetadata returns the old "metadata" field's value of the JobEvent entity.
-// If the JobEvent object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *JobEventMutation) OldMetadata(ctx context.Context) (v map[string]interface{}, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldMetadata is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldMetadata requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldMetadata: %w", err)
-	}
-	return oldValue.Metadata, nil
-}
-
-// ClearMetadata clears the value of the "metadata" field.
-func (m *JobEventMutation) ClearMetadata() {
-	m.metadata = nil
-	m.clearedFields[jobevent.FieldMetadata] = struct{}{}
-}
-
-// MetadataCleared returns if the "metadata" field was cleared in this mutation.
-func (m *JobEventMutation) MetadataCleared() bool {
-	_, ok := m.clearedFields[jobevent.FieldMetadata]
-	return ok
-}
-
-// ResetMetadata resets all changes to the "metadata" field.
-func (m *JobEventMutation) ResetMetadata() {
-	m.metadata = nil
-	delete(m.clearedFields, jobevent.FieldMetadata)
-}
-
-// SetJobID sets the "job" edge to the TranslationJob entity by id.
-func (m *JobEventMutation) SetJobID(id int) {
-	m.job = &id
-}
-
-// ClearJob clears the "job" edge to the TranslationJob entity.
-func (m *JobEventMutation) ClearJob() {
-	m.clearedjob = true
-}
-
-// JobCleared reports if the "job" edge to the TranslationJob entity was cleared.
-func (m *JobEventMutation) JobCleared() bool {
-	return m.clearedjob
-}
-
-// JobID returns the "job" edge ID in the mutation.
-func (m *JobEventMutation) JobID() (id int, exists bool) {
-	if m.job != nil {
-		return *m.job, true
-	}
-	return
-}
-
-// JobIDs returns the "job" edge IDs in the mutation.
-// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
-// JobID instead. It exists only for internal usage by the builders.
-func (m *JobEventMutation) JobIDs() (ids []int) {
-	if id := m.job; id != nil {
-		ids = append(ids, *id)
-	}
-	return
-}
-
-// ResetJob resets all changes to the "job" edge.
-func (m *JobEventMutation) ResetJob() {
-	m.job = nil
-	m.clearedjob = false
-}
-
-// Where appends a list predicates to the JobEventMutation builder.
-func (m *JobEventMutation) Where(ps ...predicate.JobEvent) {
-	m.predicates = append(m.predicates, ps...)
-}
-
-// WhereP appends storage-level predicates to the JobEventMutation builder. Using this method,
-// users can use type-assertion to append predicates that do not depend on any generated package.
-func (m *JobEventMutation) WhereP(ps ...func(*sql.Selector)) {
-	p := make([]predicate.JobEvent, len(ps))
-	for i := range ps {
-		p[i] = ps[i]
-	}
-	m.Where(p...)
-}
-
-// Op returns the operation name.
-func (m *JobEventMutation) Op() Op {
-	return m.op
-}
-
-// SetOp allows setting the mutation operation.
-func (m *JobEventMutation) SetOp(op Op) {
-	m.op = op
-}
-
-// Type returns the node type of this mutation (JobEvent).
-func (m *JobEventMutation) Type() string {
-	return m.typ
-}
-
-// Fields returns all fields that were changed during this mutation. Note that in
-// order to get all numeric fields that were incremented/decremented, call
-// AddedFields().
-func (m *JobEventMutation) Fields() []string {
-	fields := make([]string, 0, 6)
-	if m.created_at != nil {
-		fields = append(fields, jobevent.FieldCreatedAt)
-	}
-	if m.updated_at != nil {
-		fields = append(fields, jobevent.FieldUpdatedAt)
-	}
-	if m.level != nil {
-		fields = append(fields, jobevent.FieldLevel)
-	}
-	if m.stage != nil {
-		fields = append(fields, jobevent.FieldStage)
-	}
-	if m.message != nil {
-		fields = append(fields, jobevent.FieldMessage)
-	}
-	if m.metadata != nil {
-		fields = append(fields, jobevent.FieldMetadata)
-	}
-	return fields
-}
-
-// Field returns the value of a field with the given name. The second boolean
-// return value indicates that this field was not set, or was not defined in the
-// schema.
-func (m *JobEventMutation) Field(name string) (ent.Value, bool) {
-	switch name {
-	case jobevent.FieldCreatedAt:
-		return m.CreatedAt()
-	case jobevent.FieldUpdatedAt:
-		return m.UpdatedAt()
-	case jobevent.FieldLevel:
-		return m.Level()
-	case jobevent.FieldStage:
-		return m.Stage()
-	case jobevent.FieldMessage:
-		return m.Message()
-	case jobevent.FieldMetadata:
-		return m.Metadata()
-	}
-	return nil, false
-}
-
-// OldField returns the old value of the field from the database. An error is
-// returned if the mutation operation is not UpdateOne, or the query to the
-// database failed.
-func (m *JobEventMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
-	switch name {
-	case jobevent.FieldCreatedAt:
-		return m.OldCreatedAt(ctx)
-	case jobevent.FieldUpdatedAt:
-		return m.OldUpdatedAt(ctx)
-	case jobevent.FieldLevel:
-		return m.OldLevel(ctx)
-	case jobevent.FieldStage:
-		return m.OldStage(ctx)
-	case jobevent.FieldMessage:
-		return m.OldMessage(ctx)
-	case jobevent.FieldMetadata:
-		return m.OldMetadata(ctx)
-	}
-	return nil, fmt.Errorf("unknown JobEvent field %s", name)
-}
-
-// SetField sets the value of a field with the given name. It returns an error if
-// the field is not defined in the schema, or if the type mismatched the field
-// type.
-func (m *JobEventMutation) SetField(name string, value ent.Value) error {
-	switch name {
-	case jobevent.FieldCreatedAt:
-		v, ok := value.(time.Time)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetCreatedAt(v)
-		return nil
-	case jobevent.FieldUpdatedAt:
-		v, ok := value.(time.Time)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetUpdatedAt(v)
-		return nil
-	case jobevent.FieldLevel:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetLevel(v)
-		return nil
-	case jobevent.FieldStage:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetStage(v)
-		return nil
-	case jobevent.FieldMessage:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetMessage(v)
-		return nil
-	case jobevent.FieldMetadata:
-		v, ok := value.(map[string]interface{})
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetMetadata(v)
-		return nil
-	}
-	return fmt.Errorf("unknown JobEvent field %s", name)
-}
-
-// AddedFields returns all numeric fields that were incremented/decremented during
-// this mutation.
-func (m *JobEventMutation) AddedFields() []string {
-	return nil
-}
-
-// AddedField returns the numeric value that was incremented/decremented on a field
-// with the given name. The second boolean return value indicates that this field
-// was not set, or was not defined in the schema.
-func (m *JobEventMutation) AddedField(name string) (ent.Value, bool) {
-	return nil, false
-}
-
-// AddField adds the value to the field with the given name. It returns an error if
-// the field is not defined in the schema, or if the type mismatched the field
-// type.
-func (m *JobEventMutation) AddField(name string, value ent.Value) error {
-	switch name {
-	}
-	return fmt.Errorf("unknown JobEvent numeric field %s", name)
-}
-
-// ClearedFields returns all nullable fields that were cleared during this
-// mutation.
-func (m *JobEventMutation) ClearedFields() []string {
-	var fields []string
-	if m.FieldCleared(jobevent.FieldStage) {
-		fields = append(fields, jobevent.FieldStage)
-	}
-	if m.FieldCleared(jobevent.FieldMetadata) {
-		fields = append(fields, jobevent.FieldMetadata)
-	}
-	return fields
-}
-
-// FieldCleared returns a boolean indicating if a field with the given name was
-// cleared in this mutation.
-func (m *JobEventMutation) FieldCleared(name string) bool {
-	_, ok := m.clearedFields[name]
-	return ok
-}
-
-// ClearField clears the value of the field with the given name. It returns an
-// error if the field is not defined in the schema.
-func (m *JobEventMutation) ClearField(name string) error {
-	switch name {
-	case jobevent.FieldStage:
-		m.ClearStage()
-		return nil
-	case jobevent.FieldMetadata:
-		m.ClearMetadata()
-		return nil
-	}
-	return fmt.Errorf("unknown JobEvent nullable field %s", name)
-}
-
-// ResetField resets all changes in the mutation for the field with the given name.
-// It returns an error if the field is not defined in the schema.
-func (m *JobEventMutation) ResetField(name string) error {
-	switch name {
-	case jobevent.FieldCreatedAt:
-		m.ResetCreatedAt()
-		return nil
-	case jobevent.FieldUpdatedAt:
-		m.ResetUpdatedAt()
-		return nil
-	case jobevent.FieldLevel:
-		m.ResetLevel()
-		return nil
-	case jobevent.FieldStage:
-		m.ResetStage()
-		return nil
-	case jobevent.FieldMessage:
-		m.ResetMessage()
-		return nil
-	case jobevent.FieldMetadata:
-		m.ResetMetadata()
-		return nil
-	}
-	return fmt.Errorf("unknown JobEvent field %s", name)
-}
-
-// AddedEdges returns all edge names that were set/added in this mutation.
-func (m *JobEventMutation) AddedEdges() []string {
-	edges := make([]string, 0, 1)
-	if m.job != nil {
-		edges = append(edges, jobevent.EdgeJob)
-	}
-	return edges
-}
-
-// AddedIDs returns all IDs (to other nodes) that were added for the given edge
-// name in this mutation.
-func (m *JobEventMutation) AddedIDs(name string) []ent.Value {
-	switch name {
-	case jobevent.EdgeJob:
-		if id := m.job; id != nil {
-			return []ent.Value{*id}
-		}
-	}
-	return nil
-}
-
-// RemovedEdges returns all edge names that were removed in this mutation.
-func (m *JobEventMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 1)
-	return edges
-}
-
-// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
-// the given name in this mutation.
-func (m *JobEventMutation) RemovedIDs(name string) []ent.Value {
-	return nil
-}
-
-// ClearedEdges returns all edge names that were cleared in this mutation.
-func (m *JobEventMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 1)
-	if m.clearedjob {
-		edges = append(edges, jobevent.EdgeJob)
-	}
-	return edges
-}
-
-// EdgeCleared returns a boolean which indicates if the edge with the given name
-// was cleared in this mutation.
-func (m *JobEventMutation) EdgeCleared(name string) bool {
-	switch name {
-	case jobevent.EdgeJob:
-		return m.clearedjob
-	}
-	return false
-}
-
-// ClearEdge clears the value of the edge with the given name. It returns an error
-// if that edge is not defined in the schema.
-func (m *JobEventMutation) ClearEdge(name string) error {
-	switch name {
-	case jobevent.EdgeJob:
-		m.ClearJob()
-		return nil
-	}
-	return fmt.Errorf("unknown JobEvent unique edge %s", name)
-}
-
-// ResetEdge resets all changes to the edge with the given name in this mutation.
-// It returns an error if the edge is not defined in the schema.
-func (m *JobEventMutation) ResetEdge(name string) error {
-	switch name {
-	case jobevent.EdgeJob:
-		m.ResetJob()
-		return nil
-	}
-	return fmt.Errorf("unknown JobEvent edge %s", name)
 }
 
 // JobResourceMutation represents an operation that mutates the JobResource nodes in the graph.
@@ -14869,9 +14163,6 @@ type TranslationJobMutation struct {
 	job_resources          map[int]struct{}
 	removedjob_resources   map[int]struct{}
 	clearedjob_resources   bool
-	job_events             map[int]struct{}
-	removedjob_events      map[int]struct{}
-	clearedjob_events      bool
 	done                   bool
 	oldValue               func(context.Context) (*TranslationJob, error)
 	predicates             []predicate.TranslationJob
@@ -15721,60 +15012,6 @@ func (m *TranslationJobMutation) ResetJobResources() {
 	m.removedjob_resources = nil
 }
 
-// AddJobEventIDs adds the "job_events" edge to the JobEvent entity by ids.
-func (m *TranslationJobMutation) AddJobEventIDs(ids ...int) {
-	if m.job_events == nil {
-		m.job_events = make(map[int]struct{})
-	}
-	for i := range ids {
-		m.job_events[ids[i]] = struct{}{}
-	}
-}
-
-// ClearJobEvents clears the "job_events" edge to the JobEvent entity.
-func (m *TranslationJobMutation) ClearJobEvents() {
-	m.clearedjob_events = true
-}
-
-// JobEventsCleared reports if the "job_events" edge to the JobEvent entity was cleared.
-func (m *TranslationJobMutation) JobEventsCleared() bool {
-	return m.clearedjob_events
-}
-
-// RemoveJobEventIDs removes the "job_events" edge to the JobEvent entity by IDs.
-func (m *TranslationJobMutation) RemoveJobEventIDs(ids ...int) {
-	if m.removedjob_events == nil {
-		m.removedjob_events = make(map[int]struct{})
-	}
-	for i := range ids {
-		delete(m.job_events, ids[i])
-		m.removedjob_events[ids[i]] = struct{}{}
-	}
-}
-
-// RemovedJobEvents returns the removed IDs of the "job_events" edge to the JobEvent entity.
-func (m *TranslationJobMutation) RemovedJobEventsIDs() (ids []int) {
-	for id := range m.removedjob_events {
-		ids = append(ids, id)
-	}
-	return
-}
-
-// JobEventsIDs returns the "job_events" edge IDs in the mutation.
-func (m *TranslationJobMutation) JobEventsIDs() (ids []int) {
-	for id := range m.job_events {
-		ids = append(ids, id)
-	}
-	return
-}
-
-// ResetJobEvents resets all changes to the "job_events" edge.
-func (m *TranslationJobMutation) ResetJobEvents() {
-	m.job_events = nil
-	m.clearedjob_events = false
-	m.removedjob_events = nil
-}
-
 // Where appends a list predicates to the TranslationJobMutation builder.
 func (m *TranslationJobMutation) Where(ps ...predicate.TranslationJob) {
 	m.predicates = append(m.predicates, ps...)
@@ -16202,7 +15439,7 @@ func (m *TranslationJobMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *TranslationJobMutation) AddedEdges() []string {
-	edges := make([]string, 0, 4)
+	edges := make([]string, 0, 3)
 	if m.project != nil {
 		edges = append(edges, translationjob.EdgeProject)
 	}
@@ -16211,9 +15448,6 @@ func (m *TranslationJobMutation) AddedEdges() []string {
 	}
 	if m.job_resources != nil {
 		edges = append(edges, translationjob.EdgeJobResources)
-	}
-	if m.job_events != nil {
-		edges = append(edges, translationjob.EdgeJobEvents)
 	}
 	return edges
 }
@@ -16236,24 +15470,15 @@ func (m *TranslationJobMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
-	case translationjob.EdgeJobEvents:
-		ids := make([]ent.Value, 0, len(m.job_events))
-		for id := range m.job_events {
-			ids = append(ids, id)
-		}
-		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *TranslationJobMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 4)
+	edges := make([]string, 0, 3)
 	if m.removedjob_resources != nil {
 		edges = append(edges, translationjob.EdgeJobResources)
-	}
-	if m.removedjob_events != nil {
-		edges = append(edges, translationjob.EdgeJobEvents)
 	}
 	return edges
 }
@@ -16268,19 +15493,13 @@ func (m *TranslationJobMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
-	case translationjob.EdgeJobEvents:
-		ids := make([]ent.Value, 0, len(m.removedjob_events))
-		for id := range m.removedjob_events {
-			ids = append(ids, id)
-		}
-		return ids
 	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *TranslationJobMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 4)
+	edges := make([]string, 0, 3)
 	if m.clearedproject {
 		edges = append(edges, translationjob.EdgeProject)
 	}
@@ -16289,9 +15508,6 @@ func (m *TranslationJobMutation) ClearedEdges() []string {
 	}
 	if m.clearedjob_resources {
 		edges = append(edges, translationjob.EdgeJobResources)
-	}
-	if m.clearedjob_events {
-		edges = append(edges, translationjob.EdgeJobEvents)
 	}
 	return edges
 }
@@ -16306,8 +15522,6 @@ func (m *TranslationJobMutation) EdgeCleared(name string) bool {
 		return m.clearedcreated_by
 	case translationjob.EdgeJobResources:
 		return m.clearedjob_resources
-	case translationjob.EdgeJobEvents:
-		return m.clearedjob_events
 	}
 	return false
 }
@@ -16338,9 +15552,6 @@ func (m *TranslationJobMutation) ResetEdge(name string) error {
 		return nil
 	case translationjob.EdgeJobResources:
 		m.ResetJobResources()
-		return nil
-	case translationjob.EdgeJobEvents:
-		m.ResetJobEvents()
 		return nil
 	}
 	return fmt.Errorf("unknown TranslationJob edge %s", name)

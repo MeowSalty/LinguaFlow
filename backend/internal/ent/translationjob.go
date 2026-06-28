@@ -62,11 +62,9 @@ type TranslationJobEdges struct {
 	CreatedBy *User `json:"created_by,omitempty"`
 	// JobResources holds the value of the job_resources edge.
 	JobResources []*JobResource `json:"job_resources,omitempty"`
-	// JobEvents holds the value of the job_events edge.
-	JobEvents []*JobEvent `json:"job_events,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [4]bool
+	loadedTypes [3]bool
 }
 
 // ProjectOrErr returns the Project value or an error if the edge
@@ -98,15 +96,6 @@ func (e TranslationJobEdges) JobResourcesOrErr() ([]*JobResource, error) {
 		return e.JobResources, nil
 	}
 	return nil, &NotLoadedError{edge: "job_resources"}
-}
-
-// JobEventsOrErr returns the JobEvents value or an error if the edge
-// was not loaded in eager-loading.
-func (e TranslationJobEdges) JobEventsOrErr() ([]*JobEvent, error) {
-	if e.loadedTypes[3] {
-		return e.JobEvents, nil
-	}
-	return nil, &NotLoadedError{edge: "job_events"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -269,11 +258,6 @@ func (_m *TranslationJob) QueryCreatedBy() *UserQuery {
 // QueryJobResources queries the "job_resources" edge of the TranslationJob entity.
 func (_m *TranslationJob) QueryJobResources() *JobResourceQuery {
 	return NewTranslationJobClient(_m.config).QueryJobResources(_m)
-}
-
-// QueryJobEvents queries the "job_events" edge of the TranslationJob entity.
-func (_m *TranslationJob) QueryJobEvents() *JobEventQuery {
-	return NewTranslationJobClient(_m.config).QueryJobEvents(_m)
 }
 
 // Update returns a builder for updating this TranslationJob.

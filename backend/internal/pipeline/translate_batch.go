@@ -9,17 +9,21 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 )
 
 // processBatchInRound 处理一批 idx（len(idxs) <= round.BatchSize）。len==1 或 BatchSize<=1 时走单段路径；
 // 否则尝试批量发送，失败时按 round.FallbackShrink 缩小子批并发递归，直到收敛到单段。
+// batchIndex 是本批在当前轮次中的序号（0-based），用于事件上报。
 // 返回 unresolved 的段索引列表；非 nil error 表示 stage 级别终止。
-func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs []int, round Round, logger *slog.Logger) ([]int, error) {
+func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs []int, round Round, batchIndex int, logger *slog.Logger) ([]int, error) {
+	batchStart := time.Now()
 	renderer := s.resolveRoundRenderer(round)
 	repairOpts := s.resolveRoundRepair(round)
 
@@ -89,8 +93,10 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 		bestRes     repair.Result // 跟踪最佳部分结果（最多翻译数）
 		bestResp    *backend.Response
 		bestBackend backend.Backend
+		tried       []string // 本次尝试过的所有后端名
 	)
 	for _, b := range round.Backends {
+		tried = append(tried, b.Name())
 		resp, err = s.callOnce(ctx, b, req, round.Retry)
 		if err != nil {
 			if isFatalBackendError(err) {
@@ -171,7 +177,15 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 			"missing", len(res.Missing))
 	}
 
+	// Capture raw response text BEFORE absorbInlineGlossary modifies it in-place.
+	rawRespText := resp.Text
+	durationMs := time.Since(batchStart).Milliseconds()
+
 	trans, glosEntries, rubyOutputMap := res.Trans, res.Glos, res.RubyOutput
+
+	// Determine batch status and emit event.
+	s.emitBatchEvent(batchIndex, idxs, wantIDs, picked.Name(), res, rawRespText, usr,
+		glos, resp.Usage, durationMs, tried, logger)
 
 	logger.Debug("batch translated",
 		"backend", picked.Name(), "batch_size", len(idxs),
@@ -283,7 +297,7 @@ func (s *Translate) shrinkOrFallback(ctx context.Context, doc *Document, idxs []
 		unresolved []int
 	)
 	if err := RunConcurrent(ctx, len(sub), round.Concurrency, func(ctx context.Context, bidx int) error {
-		subUnresolved, err := s.processBatchInRound(ctx, doc, sub[bidx], round, logger)
+		subUnresolved, err := s.processBatchInRound(ctx, doc, sub[bidx], round, bidx, logger)
 		if err != nil {
 			return err
 		}
@@ -327,4 +341,70 @@ func isFatalBackendError(err error) bool {
 		return code == 401 || code == 403
 	}
 	return false
+}
+
+// emitBatchEvent constructs a BatchEvent and delivers it via the Reporter's
+// BatchObserver interface (if implemented). Called after the backend loop ends
+// and before absorbInlineGlossary.
+func (s *Translate) emitBatchEvent(
+	batchIndex int,
+	idxs []int,
+	wantIDs []string,
+	backendName string,
+	res repair.Result,
+	rawRespText string,
+	sentContent string,
+	usedGlossary []prompt.GlossaryEntry,
+	usage backend.Usage,
+	durationMs int64,
+	triedBackends []string,
+	logger *slog.Logger,
+) {
+	rep := s.Reporter
+	if rep == nil {
+		return
+	}
+	obs, ok := rep.(progress.BatchObserver)
+	if !ok {
+		return
+	}
+
+	// Build segment IDs list.
+	segIDs := make([]string, len(idxs))
+	for i, idx := range idxs {
+		segIDs[i] = strconv.Itoa(idx)
+	}
+
+	// Determine status.
+	status := "success"
+	errorType := ""
+	errorMsg := ""
+	if len(res.Missing) > 0 {
+		status = "partial"
+	}
+	if res.ParseErr != nil {
+		errorType = "parse_error"
+		errorMsg = res.ParseErr.Error()
+	}
+
+	evt := progress.BatchEvent{
+		Stage:           "translate",
+		BatchIndex:      batchIndex,
+		SegmentIDs:      segIDs,
+		SegmentCount:    len(idxs),
+		BackendName:     backendName,
+		Status:          status,
+		DurationMs:      durationMs,
+		InputTokens:     usage.PromptTokens,
+		OutputTokens:    usage.CompletionTokens,
+		SentContent:     sentContent,
+		ReceivedContent: rawRespText,
+		UsedGlossary:    usedGlossary,
+		AddedGlossary:   res.Glos,
+		ErrorType:       errorType,
+		ErrorMessage:    errorMsg,
+		TriedBackends:   triedBackends,
+	}
+
+	obs.OnBatchEvent(evt)
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/worker"
@@ -46,6 +47,7 @@ type Server struct {
 	syncTaskRunner        *worker.SyncTaskRunner
 	httpServer            *http.Server
 	executionPlanHandler  *HandlerExecutionPlan
+	eventBroker           *event.Broker
 	ready                 atomic.Bool
 }
 
@@ -60,6 +62,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 		db:          db,
 		entClient:   client,
 		authService: service.NewAuthService(client, service.AuthConfigFromServer(cfg.Server)),
+		eventBroker: event.NewBroker(),
 	}
 	s.userService = service.NewUserService(client, s.authService)
 	s.backendSvc = service.NewBackendService(client, s.userService)
@@ -73,7 +76,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 		return nil, err
 	}
 	s.jobStore = jobStore
-	s.translationJobSvc = service.NewTranslationJobService(client, s.projectSvc, s.executionPlanSvc, s.backendSvc, s.promptTemplateSvc, s.translationProfileSvc, jobStore)
+	s.translationJobSvc = service.NewTranslationJobService(client, s.projectSvc, s.executionPlanSvc, s.backendSvc, s.promptTemplateSvc, s.translationProfileSvc, jobStore, s.eventBroker)
 	s.executionPlanHandler = NewHandlerExecutionPlan(s.executionPlanSvc)
 	s.reviewSvc = service.NewReviewService(client, s.projectSvc)
 	s.segmentSvc = service.NewSegmentService(client, s.projectSvc)
@@ -86,7 +89,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 		queueSize = 16
 	}
 	s.translationJobQueue = worker.NewQueue(queueSize)
-	s.translationJobRunner = worker.NewTranslationRunner(cfg, logger, client, s.translationJobSvc, jobStore, s.translationJobQueue)
+	s.translationJobRunner = worker.NewTranslationRunner(cfg, logger, client, s.translationJobSvc, jobStore, s.translationJobQueue, s.eventBroker)
 	s.syncTaskQueue = worker.NewQueue(100)
 	s.syncTaskRunner = worker.NewSyncTaskRunner(cfg, logger, client, s.glossarySyncSvc, s.syncTaskQueue)
 	s.httpServer = &http.Server{
