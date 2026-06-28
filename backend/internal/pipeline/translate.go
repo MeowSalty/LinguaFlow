@@ -144,7 +144,6 @@ func (s *Translate) Run(ctx context.Context, doc *Document) error {
 
 func (s *Translate) runRounds(ctx context.Context, doc *Document, pending []int, logger *slog.Logger) (int, error) {
 	remaining := append([]int(nil), pending...)
-	rep := s.reporter()
 
 	for ridx, round := range s.Rounds {
 		// 检查 context 是否已取消
@@ -197,7 +196,6 @@ func (s *Translate) runRounds(ctx context.Context, doc *Document, pending []int,
 		failedIndices := make([]string, 0, len(remaining))
 		for _, idx := range remaining {
 			failedIndices = append(failedIndices, strconv.Itoa(idx))
-			rep.SegmentDone()
 		}
 		if doc.Vars == nil {
 			doc.Vars = map[string]any{}
