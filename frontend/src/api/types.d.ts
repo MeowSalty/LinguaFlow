@@ -1820,6 +1820,15 @@ export interface components {
              * @enum {string}
              */
             output_format: "ruby_output" | "inline_markers";
+            /**
+             * @description 保留的注音分类列表
+             * @default [
+             *       "phonetic",
+             *       "semantic",
+             *       "creative"
+             *     ]
+             */
+            preserve_kinds: ("phonetic" | "semantic" | "creative")[];
         };
         ProfileProtectConfig: {
             enabled: boolean;
