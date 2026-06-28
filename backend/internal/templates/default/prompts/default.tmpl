@@ -48,7 +48,7 @@
 - phonetic 和 semantic：标注文本保留原文不翻译。
 - creative：标注文本需要翻译。
 {{- if eq .RubyOutputFormat "ruby_output"}}
-你需要在 ruby_output 中返回所有注音条目（不得省略任何一条），每条包含 kind 字段：
+你需要在顶层字段 "ruby_output"（与 "translations" 同级）中返回所有注音条目（不得省略任何一条），每条包含 kind 字段：
 - 每个条目的 "base" 必须是你译文中实际写入的对应文本，而不是原文本身。
 - 每个条目的 "text" 是标注文本（按上述规则处理）。
 - 每个条目的 "kind" 是分类（phonetic/semantic/creative）。

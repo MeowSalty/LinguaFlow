@@ -436,3 +436,29 @@ func contains(ss []string, s string) bool {
 	}
 	return false
 }
+
+func TestTryRepair_NestedRubyOutput(t *testing.T) {
+	in := `{"translations":{"1":{"translation":"『才没有那回事啦』","ruby_output":[]},"2":{"translation":"包裹着她身体的体温也渐渐离去。","ruby_output":[{"base":"身体","text":"からだ","kind":"phonetic"}]}}}`
+	r := TryRepair(in, []string{"1", "2"}, allOpts)
+	if r.Fatal {
+		t.Fatalf("unexpected fatal: %v (repaired=%v)", r.ParseErr, r.Repaired)
+	}
+	if r.Trans["1"] != "『才没有那回事啦』" {
+		t.Errorf("wrong trans[1]: %q", r.Trans["1"])
+	}
+	if r.Trans["2"] != "包裹着她身体的体温也渐渐离去。" {
+		t.Errorf("wrong trans[2]: %q", r.Trans["2"])
+	}
+	if len(r.RubyOutput) != 1 {
+		t.Fatalf("expected 1 segment with ruby, got %d", len(r.RubyOutput))
+	}
+	if len(r.RubyOutput["2"]) != 1 {
+		t.Fatalf("expected 1 ruby entry for segment 2, got %d", len(r.RubyOutput["2"]))
+	}
+	if r.RubyOutput["2"][0].Base != "身体" || r.RubyOutput["2"][0].Text != "からだ" || r.RubyOutput["2"][0].Kind != "phonetic" {
+		t.Errorf("wrong ruby entry: %+v", r.RubyOutput["2"][0])
+	}
+	if !contains(r.Repaired, "schema.ruby-nested-extract") {
+		t.Errorf("expected schema.ruby-nested-extract in repairs, got %v", r.Repaired)
+	}
+}
