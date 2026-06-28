@@ -154,7 +154,10 @@ const rubyPreserveKindsOptions = computed(() => [
 
 function onProtectRubyUpdate(field: 'enabled', value: boolean): void
 function onProtectRubyUpdate(field: 'output_format', value: 'ruby_output' | 'inline_markers'): void
-function onProtectRubyUpdate(field: 'preserve_kinds', value: ('phonetic' | 'semantic' | 'creative')[]): void
+function onProtectRubyUpdate(
+  field: 'preserve_kinds',
+  value: ('phonetic' | 'semantic' | 'creative')[],
+): void
 function onProtectRubyUpdate(field: string, value: unknown): void {
   if (!configModel.value.protect) {
     configModel.value.protect = {

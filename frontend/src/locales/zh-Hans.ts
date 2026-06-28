@@ -1129,6 +1129,28 @@ const messages = {
     sourcePrefix: '当前页面来自',
     sourceSuffix: '，自动映射为路径',
   },
+  globalJobTracker: {
+    title: '任务追踪',
+    activeCount: '{count} 个活跃任务',
+    noTrackedJobs: '暂无追踪任务',
+    clearCompleted: '清除已完成',
+    dismiss: '移除',
+    viewDetail: '查看详情',
+    goToProject: '前往项目',
+    close: '关闭',
+    progress: '进度',
+    segments: '{completed}/{total} 段落',
+    project: '所属项目',
+    detailTitle: '任务详情 #{id}',
+    detailFallbackTitle: '任务详情',
+    status: {
+      pending: '等待中',
+      running: '运行中',
+      completed: '已完成',
+      failed: '失败',
+      cancelled: '已取消',
+    },
+  },
   api: {
     errors: {
       requestNotSent: '请求未送达，请检查网络或服务器地址',

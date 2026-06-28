@@ -229,5 +229,8 @@ const onSelectLocale = (key: string | number): void => {
         <slot />
       </div>
     </main>
+
+    <GlobalJobTrackerWidget />
+    <GlobalJobDetailDrawer />
   </div>
 </template>

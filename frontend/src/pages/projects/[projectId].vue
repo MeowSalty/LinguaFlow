@@ -188,7 +188,7 @@ const glossaryMgmt = useGlossaryManagement(projectId)
 provide(GlossaryMgmtKey, glossaryMgmt)
 
 const switchToJobsTab = async (): Promise<void> => {
-  activeTab.value = 'jobs'
+  // 任务已通过全局追踪器自动追踪，用户可留在当前页面继续工作
 }
 
 const jobMgmt = useJobActions(projectId, switchToJobsTab)
