@@ -149,6 +149,7 @@ func (e *Engine) Translate(ctx context.Context, doc *pipeline.Document, opts ...
 				seg.Translate = true
 			} else {
 				seg.Translate = false
+				seg.Skip = false // 上下文段落需要进入 prompt，不能被 Skip 拦截
 			}
 			batchSegs[i] = seg
 		}
