@@ -854,9 +854,7 @@ func (s *TranslationJobService) ListJobs(ctx context.Context, actorUserID, proje
 	if triggerType := strings.TrimSpace(opts.TriggerType); triggerType != "" {
 		q = q.Where(translationjob.TriggerTypeEQ(triggerType))
 	}
-	return q.Order(ent.Asc(translationjob.FieldID)).Limit(opts.Limit).WithJobResources(func(q *ent.JobResourceQuery) {
-		q.WithResource().Order(ent.Asc(jobresource.FieldID))
-	}).All(ctx)
+	return q.Order(ent.Asc(translationjob.FieldID)).Limit(opts.Limit).All(ctx)
 }
 
 func (s *TranslationJobService) GetJob(ctx context.Context, actorUserID, jobID int) (*ent.TranslationJob, error) {

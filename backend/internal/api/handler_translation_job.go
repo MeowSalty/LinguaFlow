@@ -58,7 +58,6 @@ type translationJobResponse struct {
 	ErrorMessage       *string                          `json:"error_message,omitempty"`
 	StartedAt          *string                          `json:"started_at,omitempty"`
 	CurrentStage       string                           `json:"current_stage,omitempty"`
-	ProgressPercentage float64                          `json:"progress_percentage,omitempty"`
 	QueuePosition      *int                             `json:"queue_position,omitempty"`
 	QueueSize          *int                             `json:"queue_size,omitempty"`
 	CreatedAt          string                           `json:"created_at"`
@@ -238,8 +237,7 @@ func toTranslationJobResponse(row *ent.TranslationJob, queueInfo *QueueInfo) tra
 		resp.ProjectID = row.Edges.Project.ID
 	}
 
-	// 聚合当前阶段（取第一个 running 资源的 stage）和进度分母
-	var progressDenominator int
+	// 聚合当前阶段（取第一个 running 资源的 stage）
 	if len(row.Edges.JobResources) > 0 {
 		resp.JobResources = make([]translationJobResourceResponse, 0, len(row.Edges.JobResources))
 		for _, item := range row.Edges.JobResources {
@@ -248,19 +246,7 @@ func toTranslationJobResponse(row *ent.TranslationJob, queueInfo *QueueInfo) tra
 			if item.Status == "running" && item.CurrentStage != "" && resp.CurrentStage == "" {
 				resp.CurrentStage = item.CurrentStage
 			}
-			if item.StageTotal > 0 {
-				progressDenominator += item.StageTotal
-			} else {
-				progressDenominator += item.SegmentCount
-			}
 		}
-	}
-
-	// 计算进度百分比：优先用各资源的 stage_total 之和作为分母
-	if progressDenominator > 0 {
-		resp.ProgressPercentage = float64(row.CompletedSegments) / float64(progressDenominator) * 100
-	} else if row.TotalSegments > 0 {
-		resp.ProgressPercentage = float64(row.CompletedSegments) / float64(row.TotalSegments) * 100
 	}
 
 	// 队列信息
