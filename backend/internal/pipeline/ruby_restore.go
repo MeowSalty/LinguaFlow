@@ -5,8 +5,10 @@ import (
 	"encoding/json"
 	"log/slog"
 	"regexp"
+	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 )
 
@@ -19,6 +21,7 @@ func restoreSegmentRuby(
 	backends []backend.Backend,
 	retryPolicy backend.RetryPolicy,
 	logger *slog.Logger,
+	reporter progress.Reporter,
 ) {
 	rubyOutput := extractRubyOutputFromSeg(seg)
 	originals := extractRubyAnnotationsFromSeg(seg)
@@ -38,13 +41,13 @@ func restoreSegmentRuby(
 		}
 		// 还原失败，尝试 LLM 对齐重试
 		if len(backends) > 0 && ctx.Err() == nil {
-			retryAlignSegment(ctx, seg, originals, restorer, keepSet, backends, retryPolicy, logger)
+			retryAlignSegment(ctx, seg, originals, restorer, keepSet, backends, retryPolicy, logger, reporter)
 		}
 		return
 	}
 
 	if len(originals) > 0 && len(backends) > 0 && ctx.Err() == nil {
-		retryAlignSegment(ctx, seg, originals, restorer, keepSet, backends, retryPolicy, logger)
+		retryAlignSegment(ctx, seg, originals, restorer, keepSet, backends, retryPolicy, logger, reporter)
 	}
 }
 
@@ -58,6 +61,7 @@ func retryAlignSegment(
 	backends []backend.Backend,
 	retryPolicy backend.RetryPolicy,
 	logger *slog.Logger,
+	reporter progress.Reporter,
 ) {
 	if len(originals) == 0 {
 		return
@@ -70,9 +74,12 @@ func retryAlignSegment(
 		JSONSchema: schema,
 	}
 
+	start := time.Now()
 	var resp *backend.Response
 	var callErr error
+	var triedBackends []string
 	for _, b := range backends {
+		triedBackends = append(triedBackends, b.Name())
 		resp, callErr = callRubyBackend(ctx, b, req, retryPolicy)
 		if callErr == nil {
 			break
@@ -80,40 +87,60 @@ func retryAlignSegment(
 		logger.Warn("ruby alignment call failed, trying next backend",
 			"seg", seg.ID, "backend", b.Name(), "err", callErr)
 	}
+	durationMs := time.Since(start).Milliseconds()
+
+	status := "failed"
+	errorType := "backend_error"
+	errorMsg := ""
+	receivedContent := ""
+
 	if callErr != nil {
+		errorMsg = callErr.Error()
 		logger.Warn("ruby alignment retry exhausted all backends",
 			"seg", seg.ID, "err", callErr)
-		return
-	}
-
-	newOutput := parseAlignmentResponse(resp.Text)
-	if len(newOutput) == 0 {
-		logger.Warn("ruby alignment: empty output", "seg", seg.ID, "resp_head", headSnippet(resp.Text, 200))
-		return
-	}
-
-	if seg.Meta == nil {
-		seg.Meta = make(map[string]any)
-	}
-	seg.Meta["ruby_output"] = newOutput
-
-	filtered := filterByKinds(newOutput, keepSet)
-	if len(filtered) == 0 {
-		logger.Info("alignment output filtered out by preserve_kinds", "seg", seg.ID)
-		return
-	}
-
-	before := seg.Target
-	if err := restorer.Restore(seg, filtered, originals); err != nil {
-		logger.Warn("ruby restore after alignment retry failed",
-			"seg", seg.ID, "err", err)
-	} else if seg.Target == before {
-		logger.Warn("ruby restore after alignment retry: still no match",
-			"seg", seg.ID)
 	} else {
-		logger.Info("ruby restore succeeded after alignment retry",
-			"seg", seg.ID)
+		receivedContent = resp.Text
+		newOutput := parseAlignmentResponse(resp.Text)
+		if len(newOutput) == 0 {
+			status = "partial"
+			errorType = "empty_output"
+			logger.Warn("ruby alignment: empty output", "seg", seg.ID, "resp_head", headSnippet(resp.Text, 200))
+		} else {
+			if seg.Meta == nil {
+				seg.Meta = make(map[string]any)
+			}
+			seg.Meta["ruby_output"] = newOutput
+
+			filtered := filterByKinds(newOutput, keepSet)
+			if len(filtered) == 0 {
+				status = "partial"
+				errorType = "filtered_out"
+				logger.Info("alignment output filtered out by preserve_kinds", "seg", seg.ID)
+			} else {
+				before := seg.Target
+				if err := restorer.Restore(seg, filtered, originals); err != nil {
+					status = "partial"
+					errorType = "restore_error"
+					errorMsg = err.Error()
+					logger.Warn("ruby restore after alignment retry failed",
+						"seg", seg.ID, "err", err)
+				} else if seg.Target == before {
+					status = "partial"
+					errorType = "no_match"
+					logger.Warn("ruby restore after alignment retry: still no match",
+						"seg", seg.ID)
+				} else {
+					status = "success"
+					errorType = ""
+					logger.Info("ruby restore succeeded after alignment retry",
+						"seg", seg.ID)
+				}
+			}
+		}
 	}
+
+	emitRubyAlignmentEvent(reporter, seg, triedBackends, resp, status, errorType,
+		errorMsg, durationMs, user, receivedContent)
 }
 
 // callRubyBackend 调用后端并重试。
@@ -125,6 +152,53 @@ func callRubyBackend(ctx context.Context, b backend.Backend, req backend.Request
 		return rerr
 	})
 	return resp, err
+}
+
+// emitRubyAlignmentEvent 发送注音对齐 SSE 事件。
+func emitRubyAlignmentEvent(
+	reporter progress.Reporter,
+	seg *Segment,
+	triedBackends []string,
+	resp *backend.Response,
+	status, errorType, errorMsg string,
+	durationMs int64,
+	sentContent, receivedContent string,
+) {
+	if reporter == nil {
+		return
+	}
+	obs, ok := reporter.(progress.BatchObserver)
+	if !ok {
+		return
+	}
+
+	var inputTokens, outputTokens int64
+	var backendName string
+	if resp != nil {
+		inputTokens = resp.Usage.PromptTokens
+		outputTokens = resp.Usage.CompletionTokens
+	}
+	if len(triedBackends) > 0 {
+		backendName = triedBackends[len(triedBackends)-1]
+	}
+
+	evt := progress.BatchEvent{
+		Stage:           "ruby_alignment",
+		BatchIndex:      0,
+		SegmentIDs:      []string{seg.ID},
+		SegmentCount:    1,
+		BackendName:     backendName,
+		Status:          status,
+		DurationMs:      durationMs,
+		InputTokens:     inputTokens,
+		OutputTokens:    outputTokens,
+		SentContent:     sentContent,
+		ReceivedContent: receivedContent,
+		ErrorType:       errorType,
+		ErrorMessage:    errorMsg,
+		TriedBackends:   triedBackends,
+	}
+	obs.OnBatchEvent(evt)
 }
 
 // extractRubyOutputFromSeg 从 Segment.Meta 中提取 ruby_output。

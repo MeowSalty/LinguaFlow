@@ -225,7 +225,7 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 			}
 		}
 		if s.Restorer != nil {
-			restoreSegmentRuby(ctx, seg, s.Restorer, keepSet, s.RubyRetryBackends, s.Retry, logger)
+			restoreSegmentRuby(ctx, seg, s.Restorer, keepSet, s.RubyRetryBackends, s.Retry, logger, s.Reporter)
 		}
 		s.addTM(ctx, doc, seg, logger)
 		rep.SegmentDone()
