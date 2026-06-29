@@ -91,6 +91,12 @@ type Translate struct {
 	//   - ""（空）：不启用注音处理
 	RubyOutputFormat string
 
+	// PreserveKinds 控制保留哪些类型的注音（phonetic/semantic/creative）。
+	// nil 时保留全部（向后兼容）；空切片表示不保留任何注音。
+	PreserveKinds []string
+	// RubyRetryBackends 注音对齐重试后端列表；为空时不重试。
+	RubyRetryBackends []backend.Backend
+
 	// Context 控制翻译上下文窗口。
 	Context config.ContextConfig
 

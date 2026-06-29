@@ -10,162 +10,116 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 )
 
-// RubyRestore 在 Unprotect 之后执行，将 LLM 输出的注音还原为 <ruby> 标签。
-// 当首轮还原失败时，可选择使用 LLM 注音对齐进行重试。
-type RubyRestore struct {
-	Restorer         *protect.RubyRestorer
-	Logger           *slog.Logger
-	Backends         []backend.Backend
-	Retry            backend.RetryPolicy
-	RubyOutputFormat string
-	PreserveKinds    []string
+// restoreSegmentRuby 对单个段落执行注音还原：过滤 → 还原 → 失败则 LLM 对齐重试。
+func restoreSegmentRuby(
+	ctx context.Context,
+	seg *Segment,
+	restorer *protect.RubyRestorer,
+	keepSet map[string]bool,
+	backends []backend.Backend,
+	retryPolicy backend.RetryPolicy,
+	logger *slog.Logger,
+) {
+	rubyOutput := extractRubyOutputFromSeg(seg)
+	originals := extractRubyAnnotationsFromSeg(seg)
+
+	if len(rubyOutput) > 0 {
+		filtered := filterByKinds(rubyOutput, keepSet)
+		if len(filtered) == 0 {
+			return
+		}
+		before := seg.Target
+		if err := restorer.Restore(seg, filtered, originals); err != nil {
+			logger.Warn("ruby restore failed, will retry alignment", "seg", seg.ID, "err", err)
+		} else if seg.Target == before {
+			logger.Warn("ruby restore: no base matched", "seg", seg.ID)
+		} else {
+			return
+		}
+		// 还原失败，尝试 LLM 对齐重试
+		if len(backends) > 0 && ctx.Err() == nil {
+			retryAlignSegment(ctx, seg, originals, restorer, keepSet, backends, retryPolicy, logger)
+		}
+		return
+	}
+
+	if len(originals) > 0 && len(backends) > 0 && ctx.Err() == nil {
+		retryAlignSegment(ctx, seg, originals, restorer, keepSet, backends, retryPolicy, logger)
+	}
 }
 
-// NewRubyRestore 创建 RubyRestore stage 实例。
-func NewRubyRestore(restorer *protect.RubyRestorer, logger *slog.Logger, backends []backend.Backend, retry backend.RetryPolicy, rubyOutputFormat string, preserveKinds []string) *RubyRestore {
-	return &RubyRestore{
-		Restorer:         restorer,
-		Logger:           logger,
-		Backends:         backends,
-		Retry:            retry,
-		RubyOutputFormat: rubyOutputFormat,
-		PreserveKinds:    preserveKinds,
-	}
-}
-
-func (*RubyRestore) Name() string { return "ruby_restore" }
-
-func (s *RubyRestore) Run(ctx context.Context, doc *Document) error {
-	logger := s.Logger
-	if logger == nil {
-		logger = slog.Default()
-	}
-	keepSet := kindSet(s.PreserveKinds)
-
-	var failedSegs []*Segment
-	for i := range doc.Segments {
-		seg := &doc.Segments[i]
-		rubyOutput := extractRubyOutputFromSeg(seg)
-		originals := extractRubyAnnotationsFromSeg(seg)
-
-		if len(rubyOutput) > 0 {
-			filtered := filterByKinds(rubyOutput, keepSet)
-			if len(filtered) == 0 {
-				continue
-			}
-			before := seg.Target
-			if err := s.Restorer.Restore(seg, filtered, originals); err != nil {
-				logger.Warn("ruby restore failed", "seg", seg.ID, "err", err)
-				failedSegs = append(failedSegs, seg)
-			} else if seg.Target == before {
-				logger.Warn("ruby restore: no base matched", "seg", seg.ID)
-				failedSegs = append(failedSegs, seg)
-			}
-			continue
-		}
-
-		if len(originals) > 0 {
-			logger.Warn("no ruby_output but has annotations",
-				"seg", seg.ID, "annotations", len(originals))
-			failedSegs = append(failedSegs, seg)
-		}
+// retryAlignSegment 对单个段落执行 LLM 注音对齐重试：LLM 分类 → 过滤 → 还原。
+func retryAlignSegment(
+	ctx context.Context,
+	seg *Segment,
+	originals []protect.RubyAnnotation,
+	restorer *protect.RubyRestorer,
+	keepSet map[string]bool,
+	backends []backend.Backend,
+	retryPolicy backend.RetryPolicy,
+	logger *slog.Logger,
+) {
+	if len(originals) == 0 {
+		return
 	}
 
-	if len(failedSegs) > 0 && s.RubyOutputFormat == "ruby_output" && len(s.Backends) > 0 {
-		retried, recovered := s.retryFailedSegments(ctx, failedSegs, keepSet, logger)
-		if retried > 0 {
-			logger.Info("ruby alignment retry completed",
-				"retried", retried, "recovered", recovered)
-		}
+	sys, user, schema := buildAlignmentPrompt(seg, originals)
+	req := backend.Request{
+		System:     sys,
+		User:       user,
+		JSONSchema: schema,
 	}
-	return nil
-}
 
-// retryFailedSegments 对注音还原失败的段落执行 LLM 注音对齐重试。
-// 返回 (尝试数, 成功数)。
-func (s *RubyRestore) retryFailedSegments(ctx context.Context, failedSegs []*Segment, keepSet map[string]bool, logger *slog.Logger) (int, int) {
-	retried := 0
-	recovered := 0
-
-	for _, seg := range failedSegs {
-		if ctx.Err() != nil {
+	var resp *backend.Response
+	var callErr error
+	for _, b := range backends {
+		resp, callErr = callRubyBackend(ctx, b, req, retryPolicy)
+		if callErr == nil {
 			break
 		}
-
-		originals := extractRubyAnnotationsFromSeg(seg)
-		if len(originals) == 0 {
-			continue
-		}
-
-		retried++
-
-		// 构建注音对齐 prompt
-		sys, user, schema := buildAlignmentPrompt(seg, originals)
-		req := backend.Request{
-			System:     sys,
-			User:       user,
-			JSONSchema: schema,
-		}
-
-		// 依次尝试各后端
-		var resp *backend.Response
-		var callErr error
-		for _, b := range s.Backends {
-			resp, callErr = s.callBackend(ctx, b, req)
-			if callErr == nil {
-				break
-			}
-			logger.Warn("ruby alignment call failed, trying next backend",
-				"seg", seg.ID, "backend", b.Name(), "err", callErr)
-		}
-		if callErr != nil {
-			logger.Warn("ruby alignment retry exhausted all backends",
-				"seg", seg.ID, "err", callErr)
-			continue
-		}
-
-		// 解析响应
-		newOutput := parseAlignmentResponse(resp.Text)
-		if len(newOutput) == 0 {
-			logger.Warn("ruby alignment: empty output", "seg", seg.ID)
-			continue
-		}
-
-		// 更新 seg.Meta 中的 ruby_output
-		if seg.Meta == nil {
-			seg.Meta = make(map[string]any)
-		}
-		seg.Meta["ruby_output"] = newOutput
-
-		// 按 preserve_kinds 过滤
-		filtered := filterByKinds(newOutput, keepSet)
-		if len(filtered) == 0 {
-			logger.Info("alignment output filtered out by preserve_kinds", "seg", seg.ID)
-			continue
-		}
-
-		// 第二轮还原
-		before := seg.Target
-		if err := s.Restorer.Restore(seg, filtered, originals); err != nil {
-			logger.Warn("ruby restore after alignment retry failed",
-				"seg", seg.ID, "err", err)
-		} else if seg.Target == before {
-			logger.Warn("ruby restore after alignment retry: still no match",
-				"seg", seg.ID)
-		} else {
-			logger.Info("ruby restore succeeded after alignment retry",
-				"seg", seg.ID)
-			recovered++
-		}
+		logger.Warn("ruby alignment call failed, trying next backend",
+			"seg", seg.ID, "backend", b.Name(), "err", callErr)
+	}
+	if callErr != nil {
+		logger.Warn("ruby alignment retry exhausted all backends",
+			"seg", seg.ID, "err", callErr)
+		return
 	}
 
-	return retried, recovered
+	newOutput := parseAlignmentResponse(resp.Text)
+	if len(newOutput) == 0 {
+		logger.Warn("ruby alignment: empty output", "seg", seg.ID, "resp_head", headSnippet(resp.Text, 200))
+		return
+	}
+
+	if seg.Meta == nil {
+		seg.Meta = make(map[string]any)
+	}
+	seg.Meta["ruby_output"] = newOutput
+
+	filtered := filterByKinds(newOutput, keepSet)
+	if len(filtered) == 0 {
+		logger.Info("alignment output filtered out by preserve_kinds", "seg", seg.ID)
+		return
+	}
+
+	before := seg.Target
+	if err := restorer.Restore(seg, filtered, originals); err != nil {
+		logger.Warn("ruby restore after alignment retry failed",
+			"seg", seg.ID, "err", err)
+	} else if seg.Target == before {
+		logger.Warn("ruby restore after alignment retry: still no match",
+			"seg", seg.ID)
+	} else {
+		logger.Info("ruby restore succeeded after alignment retry",
+			"seg", seg.ID)
+	}
 }
 
-// callBackend 调用后端并重试。
-func (s *RubyRestore) callBackend(ctx context.Context, b backend.Backend, req backend.Request) (*backend.Response, error) {
+// callRubyBackend 调用后端并重试。
+func callRubyBackend(ctx context.Context, b backend.Backend, req backend.Request, retryPolicy backend.RetryPolicy) (*backend.Response, error) {
 	var resp *backend.Response
-	err := backend.WithRetry(ctx, s.Retry, func() error {
+	err := backend.WithRetry(ctx, retryPolicy, func() error {
 		var rerr error
 		resp, rerr = b.Translate(ctx, req)
 		return rerr

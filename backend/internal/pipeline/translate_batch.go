@@ -173,6 +173,7 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 	rep := s.reporter()
 	var unresolved []int
 	var missingIdxs []int
+	keepSet := kindSet(s.PreserveKinds)
 	wantIDIdx := 0
 	for _, idx := range idxs {
 		seg := &doc.Segments[idx]
@@ -224,11 +225,7 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 			}
 		}
 		if s.Restorer != nil {
-			rubyOutput := extractRubyOutputFromSeg(seg)
-			if len(rubyOutput) > 0 {
-				originals := extractRubyAnnotationsFromSeg(seg)
-				_ = s.Restorer.Restore(seg, rubyOutput, originals)
-			}
+			restoreSegmentRuby(ctx, seg, s.Restorer, keepSet, s.RubyRetryBackends, s.Retry, logger)
 		}
 		s.addTM(ctx, doc, seg, logger)
 		rep.SegmentDone()

@@ -68,9 +68,6 @@ func NewWithOptions(opts Options) (*Engine, error) {
 		bootstrapBackends = []backend.Backend{opts.Rounds[0].Backend}
 	}
 	rubyRetryBackends := opts.RubyRetryBackends
-	if len(rubyRetryBackends) == 0 {
-		rubyRetryBackends = []backend.Backend{opts.Rounds[0].Backend}
-	}
 	e := &Engine{
 		cfg:                 opts.Config,
 		logger:              opts.Logger,

@@ -44,6 +44,8 @@ func (e *Engine) BuildTranslateStage(protector protect.Protector, restorer *prot
 		InlineConflictStrategy: e.cfg.Glossary.Bootstrap.InlineConflictStrategy,
 		Repair:                 repairOpts,
 		RubyOutputFormat:       pc.Protect.Ruby.OutputFormat,
+		PreserveKinds:          pc.Protect.Ruby.PreserveKinds,
+		RubyRetryBackends:      e.rubyRetryBackends,
 		Context:                pc.Context,
 		Protector:              protector,
 		Restorer:               restorer,
