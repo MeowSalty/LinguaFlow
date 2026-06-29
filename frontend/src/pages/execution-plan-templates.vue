@@ -52,7 +52,6 @@ const DEFAULT_ROUND: ExecutionRoundConfig = {
   batch_size: 10,
   concurrency: 3,
   fallback_shrink: 0,
-  rate_limit_per_sec: 0,
   retry: { max_attempts: 3, backoff_ms: 2000, jitter: true },
 }
 
@@ -212,7 +211,6 @@ const buildPayload = (): CreateRequest => {
       batch_size: round.batch_size,
       concurrency: round.concurrency,
       fallback_shrink: round.fallback_shrink ?? 0,
-      rate_limit_per_sec: round.rate_limit_per_sec ?? 0,
       ...(round.retry ? { retry: round.retry } : {}),
     })),
   }

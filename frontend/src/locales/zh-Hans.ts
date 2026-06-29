@@ -834,6 +834,9 @@ const messages = {
       timeout: '超时时间（秒）',
       responseFormat: '响应格式',
       enablePromptCache: '启用 Prompt Cache',
+      rateLimitPerMinute: '每分钟请求限制',
+      rateLimitPerMinutePlaceholder: '0 表示不限速',
+      rateLimitPerMinuteHint: '限制每分钟发送到此后端的最大请求数，0 表示不限速',
     },
     validation: {
       nameRequired: '请输入后端名称',
@@ -1145,7 +1148,6 @@ const messages = {
       batchSize: '批次大小',
       concurrency: '并发数',
       fallbackShrink: '缩放因子',
-      rateLimitPerSec: '限速/秒',
       advancedConfig: '高级配置',
       retryMaxAttempts: '最大重试次数',
       retryBackoffMs: '退避毫秒数',

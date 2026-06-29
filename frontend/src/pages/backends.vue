@@ -41,6 +41,7 @@ interface BackendFormModel {
   timeout: number
   response_format: string
   enable_prompt_cache: boolean
+  rate_limit_per_minute: number
 }
 
 const backends = useBackendsStore()
@@ -63,6 +64,7 @@ const formModel = reactive<BackendFormModel>({
   timeout: 60,
   response_format: 'json_schema',
   enable_prompt_cache: true,
+  rate_limit_per_minute: 0,
 })
 
 const typeOptions = computed<SelectOption[]>(() => [
@@ -133,6 +135,7 @@ const resetForm = (): void => {
   formModel.timeout = 60
   formModel.response_format = 'json_schema'
   formModel.enable_prompt_cache = true
+  formModel.rate_limit_per_minute = 0
   editingBackend.value = null
 }
 
@@ -156,6 +159,7 @@ const openEditDrawer = (backend: Backend): void => {
     typeof opts.response_format === 'string' ? opts.response_format : 'json_schema'
   formModel.enable_prompt_cache =
     typeof opts.enable_prompt_cache === 'boolean' ? opts.enable_prompt_cache : true
+  formModel.rate_limit_per_minute = backend.rate_limit_per_minute ?? 0
   drawerVisible.value = true
 }
 
@@ -205,6 +209,7 @@ const onSubmit = async (): Promise<void> => {
     name: formModel.name.trim(),
     type: formModel.type,
     options: buildOptions(),
+    rate_limit_per_minute: formModel.rate_limit_per_minute,
   }
 
   try {
@@ -576,6 +581,20 @@ onMounted(() => {
             path="enable_prompt_cache"
           >
             <NSwitch v-model:value="formModel.enable_prompt_cache" />
+          </NFormItem>
+
+          <NFormItem :label="t('backends.form.rateLimitPerMinute')" path="rate_limit_per_minute">
+            <NInputNumber
+              v-model:value="formModel.rate_limit_per_minute"
+              :min="0"
+              :placeholder="t('backends.form.rateLimitPerMinutePlaceholder')"
+              class="w-full"
+            />
+            <template #feedback>
+              <span class="text-xs text-lf-text-muted">
+                {{ t('backends.form.rateLimitPerMinuteHint') }}
+              </span>
+            </template>
           </NFormItem>
         </NForm>
 

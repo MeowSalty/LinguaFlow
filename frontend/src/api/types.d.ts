@@ -861,25 +861,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/translation-jobs/{translationJobId}/events": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                translationJobId: components["parameters"]["TranslationJobId"];
-            };
-            cookie?: never;
-        };
-        /** 获取翻译任务事件列表 */
-        get: operations["ListTranslationJobEvents"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/translation-jobs/{translationJobId}/cancel": {
         parameters: {
             query?: never;
@@ -1415,17 +1396,6 @@ export interface components {
             items: components["schemas"]["TranslationJob"][];
             next_cursor?: string;
         };
-        JobEvent: {
-            id: number;
-            job_id: number;
-            /** @enum {string} */
-            level: "info" | "warn" | "error";
-            stage?: string;
-            message: string;
-            metadata?: Record<string, never>;
-            /** Format: date-time */
-            created_at: string;
-        };
         Activity: {
             id: number;
             action: string;
@@ -1455,6 +1425,11 @@ export interface components {
             options?: {
                 [key: string]: unknown;
             };
+            /**
+             * @description 每分钟请求限制；0 表示不限速
+             * @default 0
+             */
+            rate_limit_per_minute: number;
             owner_user_id?: number;
             owner_org_id?: number;
         };
@@ -1468,6 +1443,11 @@ export interface components {
             options?: {
                 [key: string]: unknown;
             };
+            /**
+             * @description 每分钟请求限制；0 表示不限速
+             * @default 0
+             */
+            rate_limit_per_minute: number;
         };
         UpdateBackendRequest: {
             name: string;
@@ -1476,6 +1456,11 @@ export interface components {
             options?: {
                 [key: string]: unknown;
             };
+            /**
+             * @description 每分钟请求限制；0 表示不限速
+             * @default 0
+             */
+            rate_limit_per_minute: number;
         };
         Project: {
             id: number;
@@ -1800,8 +1785,6 @@ export interface components {
             concurrency: number;
             /** @default 0 */
             fallback_shrink: number;
-            /** @default 0 */
-            rate_limit_per_sec: number;
             retry?: components["schemas"]["RetryConfig"];
         };
         /** @enum {string} */
@@ -3482,31 +3465,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TranslationJob"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    ListTranslationJobEvents: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: never;
-            path: {
-                translationJobId: components["parameters"]["TranslationJobId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 事件列表 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["JobEvent"][];
                 };
             };
             default: components["responses"]["Problem"];

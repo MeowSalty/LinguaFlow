@@ -35,7 +35,6 @@ const DEFAULT_ROUND: RoundModel = {
   batch_size: 10,
   concurrency: 3,
   fallback_shrink: 0,
-  rate_limit_per_sec: 0,
   retry: { ...DEFAULT_RETRY },
 }
 
@@ -71,7 +70,6 @@ function mergeRound(source?: Partial<ExecutionRoundConfig>): RoundModel {
     batch_size: source.batch_size ?? DEFAULT_ROUND.batch_size,
     concurrency: source.concurrency ?? DEFAULT_ROUND.concurrency,
     fallback_shrink: source.fallback_shrink ?? DEFAULT_ROUND.fallback_shrink,
-    rate_limit_per_sec: source.rate_limit_per_sec ?? DEFAULT_ROUND.rate_limit_per_sec,
     retry: {
       max_attempts: source.retry?.max_attempts ?? DEFAULT_RETRY.max_attempts,
       backoff_ms: source.retry?.backoff_ms ?? DEFAULT_RETRY.backoff_ms,
@@ -516,19 +514,7 @@ const emitUpdate = (): void => {
       <!-- 高级配置（可折叠） -->
       <NCollapse class="mt-3">
         <NCollapseItem :title="t('executionPlanEditor.round.advancedConfig')">
-          <NGrid :cols="3" :x-gap="12" :y-gap="10">
-            <NGi>
-              <div class="mb-1 text-xs text-lf-text-subtle">
-                {{ t('executionPlanEditor.round.rateLimitPerSec') }}
-              </div>
-              <NInputNumber
-                v-model:value="round.rate_limit_per_sec"
-                :min="0"
-                size="small"
-                :disabled="disabled"
-                class="w-full"
-              />
-            </NGi>
+          <NGrid :cols="2" :x-gap="12" :y-gap="10">
             <NGi>
               <div class="mb-1 text-xs text-lf-text-subtle">
                 {{ t('executionPlanEditor.round.retryMaxAttempts') }}
