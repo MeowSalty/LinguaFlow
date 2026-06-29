@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
@@ -64,8 +65,9 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 		authService: service.NewAuthService(client, service.AuthConfigFromServer(cfg.Server)),
 		eventBroker: event.NewBroker(),
 	}
+	limiterPool := backend.NewLimiterPool()
 	s.userService = service.NewUserService(client, s.authService)
-	s.backendSvc = service.NewBackendService(client, s.userService)
+	s.backendSvc = service.NewBackendService(client, s.userService, limiterPool)
 	s.projectSvc = service.NewProjectService(client, s.userService)
 	s.executionPlanSvc = service.NewExecutionPlanService(client, s.userService)
 	s.glossarySvc = service.NewGlossaryService(client, s.projectSvc)
@@ -89,7 +91,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 		queueSize = 16
 	}
 	s.translationJobQueue = worker.NewQueue(queueSize)
-	s.translationJobRunner = worker.NewTranslationRunner(cfg, logger, client, s.translationJobSvc, jobStore, s.translationJobQueue, s.eventBroker)
+	s.translationJobRunner = worker.NewTranslationRunner(cfg, logger, client, s.translationJobSvc, jobStore, s.translationJobQueue, s.eventBroker, limiterPool)
 	s.syncTaskQueue = worker.NewQueue(100)
 	s.syncTaskRunner = worker.NewSyncTaskRunner(cfg, logger, client, s.glossarySyncSvc, s.syncTaskQueue)
 	s.httpServer = &http.Server{

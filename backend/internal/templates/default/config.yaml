@@ -56,7 +56,6 @@ execution_plan:
       batch_size: 1
       concurrency: 4
       fallback_shrink: 0.5
-      rate_limit_per_sec: 5
       retry:
         max_attempts: 3
         backoff_ms: 2000

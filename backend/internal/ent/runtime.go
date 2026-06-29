@@ -96,6 +96,10 @@ func init() {
 	backendDescOptions := backendFields[5].Descriptor()
 	// backend.DefaultOptions holds the default value on creation for the options field.
 	backend.DefaultOptions = backendDescOptions.Default.(func() map[string]interface{})
+	// backendDescRateLimitPerMinute is the schema descriptor for rate_limit_per_minute field.
+	backendDescRateLimitPerMinute := backendFields[6].Descriptor()
+	// backend.DefaultRateLimitPerMinute holds the default value on creation for the rate_limit_per_minute field.
+	backend.DefaultRateLimitPerMinute = backendDescRateLimitPerMinute.Default.(int)
 	executionplantemplateMixin := schema.ExecutionPlanTemplate{}.Mixin()
 	executionplantemplateMixinFields0 := executionplantemplateMixin[0].Fields()
 	_ = executionplantemplateMixinFields0

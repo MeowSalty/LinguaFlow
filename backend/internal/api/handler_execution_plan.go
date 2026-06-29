@@ -52,10 +52,6 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 		fs := float32(rc.FallbackShrink)
 		apiRC.FallbackShrink = &fs
 	}
-	if rc.RateLimitPerSec > 0 {
-		rl := rc.RateLimitPerSec
-		apiRC.RateLimitPerSec = &rl
-	}
 	retry := toRetryConfigAPI(rc.Retry)
 	apiRC.Retry = &retry
 	return apiRC
@@ -194,9 +190,6 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 		}
 		if ar.FallbackShrink != nil {
 			rc.FallbackShrink = float64(*ar.FallbackShrink)
-		}
-		if ar.RateLimitPerSec != nil {
-			rc.RateLimitPerSec = *ar.RateLimitPerSec
 		}
 		if ar.Retry != nil {
 			if ar.Retry.MaxAttempts != nil {

@@ -5,8 +5,9 @@ import (
 	"errors"
 	"strings"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	entbackend "github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
@@ -31,14 +32,16 @@ var (
 )
 
 type BackendService struct {
-	client *ent.Client
-	users  *UserService
+	client      *ent.Client
+	users       *UserService
+	limiterPool *backend.LimiterPool
 }
 
 type BackendInput struct {
-	Name    string
-	Type    string
-	Options map[string]any
+	Name               string
+	Type               string
+	Options            map[string]any
+	RateLimitPerMinute int
 }
 
 type CreateBackendInput struct {
@@ -49,17 +52,18 @@ type CreateBackendInput struct {
 }
 
 type BackendRecord struct {
-	ID          int
-	Scope       string
-	Name        string
-	Type        string
-	Options     map[string]any
-	OwnerUserID *int
-	OwnerOrgID  *int
+	ID                 int
+	Scope              string
+	Name               string
+	Type               string
+	Options            map[string]any
+	RateLimitPerMinute int
+	OwnerUserID        *int
+	OwnerOrgID         *int
 }
 
-func NewBackendService(client *ent.Client, users *UserService) *BackendService {
-	return &BackendService{client: client, users: users}
+func NewBackendService(client *ent.Client, users *UserService, limiterPool *backend.LimiterPool) *BackendService {
+	return &BackendService{client: client, users: users, limiterPool: limiterPool}
 }
 
 // Create 创建后端。
@@ -74,8 +78,9 @@ func (s *BackendService) Create(ctx context.Context, input CreateBackendInput) (
 	}
 	create := s.client.Backend.Create().
 		SetName(normalized.Name).
-		SetBackendType(backend.BackendType(normalized.Type)).
+		SetBackendType(entbackend.BackendType(normalized.Type)).
 		SetOptions(cloneMap(normalized.Options)).
+		SetRateLimitPerMinute(normalized.RateLimitPerMinute).
 		SetScope(input.Scope)
 
 	switch input.Scope {
@@ -109,19 +114,19 @@ func (s *BackendService) List(ctx context.Context, scope string, ownerID int) ([
 	switch scope {
 	case ScopeUser:
 		query = query.Where(
-			backend.ScopeEQ(ScopeUser),
-			backend.OwnerUserIDEQ(ownerID),
+			entbackend.ScopeEQ(ScopeUser),
+			entbackend.OwnerUserIDEQ(ownerID),
 		)
 	case ScopeOrg:
 		query = query.Where(
-			backend.ScopeEQ(ScopeOrg),
-			backend.OwnerOrgIDEQ(ownerID),
+			entbackend.ScopeEQ(ScopeOrg),
+			entbackend.OwnerOrgIDEQ(ownerID),
 		)
 	default:
 		return nil, ErrBackendSourceInvalid
 	}
 	rows, err := query.
-		Order(ent.Asc(backend.FieldID)).
+		Order(ent.Asc(entbackend.FieldID)).
 		All(ctx)
 	if err != nil {
 		return nil, err
@@ -185,8 +190,9 @@ func (s *BackendService) Update(ctx context.Context, actorUserID, backendID int,
 	}
 	updated, err := s.client.Backend.UpdateOneID(backendID).
 		SetName(normalized.Name).
-		SetBackendType(backend.BackendType(normalized.Type)).
+		SetBackendType(entbackend.BackendType(normalized.Type)).
 		SetOptions(cloneMap(normalized.Options)).
+		SetRateLimitPerMinute(normalized.RateLimitPerMinute).
 		Save(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -196,6 +202,9 @@ func (s *BackendService) Update(ctx context.Context, actorUserID, backendID int,
 			return nil, ErrBackendExists
 		}
 		return nil, err
+	}
+	if s.limiterPool != nil {
+		s.limiterPool.Refresh(backendID, updated.RateLimitPerMinute)
 	}
 	return backendRecord(updated), nil
 }
@@ -212,6 +221,9 @@ func (s *BackendService) Delete(ctx context.Context, actorUserID, backendID int)
 		}
 		return err
 	}
+	if s.limiterPool != nil {
+		s.limiterPool.Remove(backendID)
+	}
 	return nil
 }
 
@@ -224,28 +236,28 @@ func (s *BackendService) resolveAccessibleBackends(ctx context.Context, project 
 			Where(organization.HasMembershipsWith(orgmembership.HasUserWith(user.IDEQ(*project.OwnerUserID)))).
 			IDs(ctx)
 
-		userPred := backend.And(
-			backend.ScopeEQ(ScopeUser),
-			backend.OwnerUserIDEQ(*project.OwnerUserID),
+		userPred := entbackend.And(
+			entbackend.ScopeEQ(ScopeUser),
+			entbackend.OwnerUserIDEQ(*project.OwnerUserID),
 		)
 
 		var rows []*ent.Backend
 		var err error
 		if len(orgIDs) > 0 {
 			rows, err = s.client.Backend.Query().
-				Where(backend.Or(
+				Where(entbackend.Or(
 					userPred,
-					backend.And(
-						backend.ScopeEQ(ScopeOrg),
-						backend.OwnerOrgIDIn(orgIDs...),
+					entbackend.And(
+						entbackend.ScopeEQ(ScopeOrg),
+						entbackend.OwnerOrgIDIn(orgIDs...),
 					),
 				)).
-				Order(ent.Asc(backend.FieldID)).
+				Order(ent.Asc(entbackend.FieldID)).
 				All(ctx)
 		} else {
 			rows, err = s.client.Backend.Query().
 				Where(userPred).
-				Order(ent.Asc(backend.FieldID)).
+				Order(ent.Asc(entbackend.FieldID)).
 				All(ctx)
 		}
 		if err != nil {
@@ -262,10 +274,10 @@ func (s *BackendService) resolveAccessibleBackends(ctx context.Context, project 
 		// 组织项目：仅可访问该组织的后端
 		rows, err := s.client.Backend.Query().
 			Where(
-				backend.ScopeEQ(ScopeOrg),
-				backend.OwnerOrgIDEQ(*project.OwnerOrgID),
+				entbackend.ScopeEQ(ScopeOrg),
+				entbackend.OwnerOrgIDEQ(*project.OwnerOrgID),
 			).
-			Order(ent.Asc(backend.FieldID)).
+			Order(ent.Asc(entbackend.FieldID)).
 			All(ctx)
 		if err != nil {
 			return nil, err
@@ -283,13 +295,14 @@ func (s *BackendService) resolveAccessibleBackends(ctx context.Context, project 
 // backendRecord 统一转换函数（替代原 userBackendRecord / orgBackendRecord）。
 func backendRecord(row *ent.Backend) *BackendRecord {
 	return &BackendRecord{
-		ID:          row.ID,
-		Scope:       row.Scope,
-		Name:        row.Name,
-		Type:        string(row.BackendType),
-		Options:     cloneMap(row.Options),
-		OwnerUserID: row.OwnerUserID,
-		OwnerOrgID:  row.OwnerOrgID,
+		ID:                 row.ID,
+		Scope:              row.Scope,
+		Name:               row.Name,
+		Type:               string(row.BackendType),
+		Options:            cloneMap(row.Options),
+		RateLimitPerMinute: row.RateLimitPerMinute,
+		OwnerUserID:        row.OwnerUserID,
+		OwnerOrgID:         row.OwnerOrgID,
 	}
 }
 
@@ -302,10 +315,14 @@ func normalizeBackendInput(input BackendInput) (BackendInput, error) {
 	if !isAllowedBackendType(typ) {
 		return BackendInput{}, ErrBackendTypeInvalid
 	}
+	if input.RateLimitPerMinute < 0 {
+		input.RateLimitPerMinute = 0
+	}
 	return BackendInput{
-		Name:    name,
-		Type:    typ,
-		Options: cloneMap(input.Options),
+		Name:               name,
+		Type:               typ,
+		Options:            cloneMap(input.Options),
+		RateLimitPerMinute: input.RateLimitPerMinute,
 	}, nil
 }
 

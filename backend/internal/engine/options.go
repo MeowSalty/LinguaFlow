@@ -63,9 +63,6 @@ type Round struct {
 	// FallbackShrink 本轮的批失败收缩系数。(0,1) 启用递归缩小；0 表示直接降到单段。
 	FallbackShrink float64
 
-	// RateLimitPerSec 本轮的限速。<=0 时回退到全局默认；全局也为 0 时限速。
-	RateLimitPerSec int
-
 	// Retry 本轮的重试策略。零值回退到全局默认。
 	Retry backend.RetryPolicy
 
@@ -140,15 +137,14 @@ func buildStagesRounds(in []Round, cfg *config.Config) []pipeline.Round {
 		}
 
 		out = append(out, pipeline.Round{
-			Name:            resolveName(r.Name, i),
-			Backends:        r.Backends,
-			BatchSize:       resolveDefault(r.BatchSize, cfg.Pipeline.Translate.BatchSize, 1),
-			Concurrency:     resolveDefault(r.Concurrency, cfg.Pipeline.Translate.Concurrency, 1),
-			FallbackShrink:  resolveShrink(r.FallbackShrink, cfg.Pipeline.Translate.FallbackShrink),
-			RateLimitPerSec: resolveDefault(r.RateLimitPerSec, cfg.Pipeline.Translate.RateLimitPerSec, 0),
-			Retry:           retry,
-			Renderer:        r.Renderer,
-			Repair:          roundRepair,
+			Name:           resolveName(r.Name, i),
+			Backends:       r.Backends,
+			BatchSize:      resolveDefault(r.BatchSize, cfg.Pipeline.Translate.BatchSize, 1),
+			Concurrency:    resolveDefault(r.Concurrency, cfg.Pipeline.Translate.Concurrency, 1),
+			FallbackShrink: resolveShrink(r.FallbackShrink, cfg.Pipeline.Translate.FallbackShrink),
+			Retry:          retry,
+			Renderer:       r.Renderer,
+			Repair:         roundRepair,
 		})
 	}
 	return out

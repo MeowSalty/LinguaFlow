@@ -23,13 +23,12 @@ import (
 
 // Round 描述一轮翻译的执行配置（纯数据，无后端名称引用）。
 type Round struct {
-	Name            string
-	Backends        []backend.Backend
-	BatchSize       int
-	Concurrency     int
-	FallbackShrink  float64
-	RateLimitPerSec int
-	Retry           backend.RetryPolicy
+	Name           string
+	Backends       []backend.Backend
+	BatchSize      int
+	Concurrency    int
+	FallbackShrink float64
+	Retry          backend.RetryPolicy
 
 	// Renderer 本轮使用的提示词渲染器。
 	// nil 时回退到 Translate 级别的 Renderer。
@@ -59,7 +58,6 @@ type Translate struct {
 	Renderer *prompt.Renderer
 	Glossary glossary.Glossary
 	TM       tm.TranslationMemory
-	Limiter  backend.RateLimiter
 	Retry    backend.RetryPolicy
 
 	// 以下字段保留供外部直接构造时使用，stage 内部使用 Round 级别字段。

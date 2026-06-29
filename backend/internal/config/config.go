@@ -35,11 +35,11 @@ type Config struct {
 }
 
 type BackendConfig struct {
-	Name            string         `yaml:"name"`
-	Type            string         `yaml:"type"`
-	Enabled         bool           `yaml:"enabled"`
-	RateLimitPerSec int            `yaml:"rate_limit_per_sec"` // 按后端独立限流；0 表示使用全局限流器
-	Options         map[string]any `yaml:"options"`
+	Name               string         `yaml:"name"`
+	Type               string         `yaml:"type"`
+	Enabled            bool           `yaml:"enabled"`
+	RateLimitPerMinute int            `yaml:"rate_limit_per_minute"` // 按后端独立限流（每分钟）；0 表示不限速
+	Options            map[string]any `yaml:"options"`
 }
 
 type PipelineConfig struct {
@@ -77,12 +77,11 @@ const (
 )
 
 type TranslateConfig struct {
-	Concurrency     int          `yaml:"concurrency"`
-	BatchSize       int          `yaml:"batch_size"`      // 一次合并发送的段数；<=1 表示禁用批量
-	FallbackShrink  float64      `yaml:"fallback_shrink"` // 整批失败时下一级 batch = floor(cur*shrink)；0 = 直接降到单段；必须 <1
-	RateLimitPerSec int          `yaml:"rate_limit_per_sec"`
-	Retry           RetryConfig  `yaml:"retry"`
-	Repair          RepairConfig `yaml:"repair"`
+	Concurrency    int          `yaml:"concurrency"`
+	BatchSize      int          `yaml:"batch_size"`      // 一次合并发送的段数；<=1 表示禁用批量
+	FallbackShrink float64      `yaml:"fallback_shrink"` // 整批失败时下一级 batch = floor(cur*shrink)；0 = 直接降到单段；必须 <1
+	Retry          RetryConfig  `yaml:"retry"`
+	Repair         RepairConfig `yaml:"repair"`
 }
 
 type RetryConfig struct {
@@ -284,11 +283,10 @@ func Default() *Config {
 				Ruby:    RubyConfig{Enabled: false, OutputFormat: RubyOutputDefault},
 			},
 			Translate: TranslateConfig{
-				Concurrency:     4,
-				BatchSize:       1,
-				FallbackShrink:  0.5,
-				RateLimitPerSec: 5,
-				Retry:           RetryConfig{MaxAttempts: 3, BackoffMs: 2000},
+				Concurrency:    4,
+				BatchSize:      1,
+				FallbackShrink: 0.5,
+				Retry:          RetryConfig{MaxAttempts: 3, BackoffMs: 2000},
 				Repair: RepairConfig{
 					Enabled:              true,
 					JSONStructural:       true,

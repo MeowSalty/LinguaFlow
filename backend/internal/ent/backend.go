@@ -36,6 +36,8 @@ type Backend struct {
 	BackendType backend.BackendType `json:"backend_type,omitempty"`
 	// Options holds the value of the "options" field.
 	Options map[string]interface{} `json:"options,omitempty"`
+	// 每分钟请求限制；0 表示不限速
+	RateLimitPerMinute int `json:"rate_limit_per_minute,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the BackendQuery when eager-loading is set.
 	Edges        BackendEdges `json:"edges"`
@@ -82,7 +84,7 @@ func (*Backend) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case backend.FieldOptions:
 			values[i] = new([]byte)
-		case backend.FieldID, backend.FieldOwnerUserID, backend.FieldOwnerOrgID:
+		case backend.FieldID, backend.FieldOwnerUserID, backend.FieldOwnerOrgID, backend.FieldRateLimitPerMinute:
 			values[i] = new(sql.NullInt64)
 		case backend.FieldName, backend.FieldScope, backend.FieldBackendType:
 			values[i] = new(sql.NullString)
@@ -161,6 +163,12 @@ func (_m *Backend) assignValues(columns []string, values []any) error {
 					return fmt.Errorf("unmarshal field options: %w", err)
 				}
 			}
+		case backend.FieldRateLimitPerMinute:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field rate_limit_per_minute", values[i])
+			} else if value.Valid {
+				_m.RateLimitPerMinute = int(value.Int64)
+			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -234,6 +242,9 @@ func (_m *Backend) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("options=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Options))
+	builder.WriteString(", ")
+	builder.WriteString("rate_limit_per_minute=")
+	builder.WriteString(fmt.Sprintf("%v", _m.RateLimitPerMinute))
 	builder.WriteByte(')')
 	return builder.String()
 }

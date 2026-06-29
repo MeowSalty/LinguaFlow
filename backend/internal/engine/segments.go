@@ -20,10 +20,8 @@ func (e *Engine) buildProtector() protect.Protector {
 }
 
 // BuildTranslateStage 构建纯翻译管道（仅 Translate 阶段）。
-// 返回管道和 limiter；调用方必须 defer limiter.Close()。
-func (e *Engine) BuildTranslateStage() (*pipeline.Pipeline, backend.RateLimiter) {
+func (e *Engine) BuildTranslateStage() *pipeline.Pipeline {
 	pc := e.cfg.Pipeline
-	limiter := backend.NewRateLimiter(pc.Translate.RateLimitPerSec)
 	retry := backend.RetryPolicy{
 		MaxAttempts: pc.Translate.Retry.MaxAttempts,
 		Backoff:     time.Duration(pc.Translate.Retry.BackoffMs) * time.Millisecond,
@@ -37,7 +35,6 @@ func (e *Engine) BuildTranslateStage() (*pipeline.Pipeline, backend.RateLimiter)
 		Renderer:               e.renderer,
 		Glossary:               e.glossary,
 		TM:                     e.tm,
-		Limiter:                limiter,
 		Retry:                  retry,
 		Logger:                 e.logger,
 		Reporter:               e.reporter,
@@ -49,7 +46,7 @@ func (e *Engine) BuildTranslateStage() (*pipeline.Pipeline, backend.RateLimiter)
 		RubyOutputFormat:       pc.Protect.Ruby.OutputFormat,
 		Context:                pc.Context,
 	}
-	return pipeline.New(e.logger, translateStage), limiter
+	return pipeline.New(e.logger, translateStage)
 }
 
 // PrepareDocument 设置语言、Vars、段落选择等公共配置。

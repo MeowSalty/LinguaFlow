@@ -27,8 +27,9 @@ import (
 // TranslationRunner 翻译任务的执行器，通过嵌入 BaseRunner 复用公共逻辑。
 type TranslationRunner struct {
 	*BaseRunner
-	jobs       *service.TranslationJobService
+	jobs        *service.TranslationJobService
 	eventBroker *event.Broker
+	limiterPool *backend.LimiterPool
 
 	// per-job 取消注册表：jobID → cancel 函数
 	mu         sync.Mutex
@@ -44,10 +45,12 @@ func NewTranslationRunner(
 	store *filestore.LocalStore,
 	queue *Queue,
 	eventBroker *event.Broker,
+	limiterPool *backend.LimiterPool,
 ) *TranslationRunner {
 	r := &TranslationRunner{
 		jobs:        jobs,
 		eventBroker: eventBroker,
+		limiterPool: limiterPool,
 		activeJobs:  make(map[int]context.CancelFunc),
 	}
 	r.BaseRunner = newBaseRunner(cfg, logger, client, store, queue, jobs, r.processJob, "translation worker")
@@ -324,13 +327,18 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 			return nil, fmt.Errorf("round %q build backend: %w", rs.Name, err)
 		}
 
+		// 使用共享 limiter pool 包装后端
+		if r.limiterPool != nil && rs.Backend.RateLimitPerMinute > 0 {
+			limiter := r.limiterPool.Get(rs.Backend.ID, rs.Backend.RateLimitPerMinute)
+			b = backend.NewRateLimitedBackend(b, limiter)
+		}
+
 		rounds = append(rounds, engine.Round{
-			Backends:        []backend.Backend{b},
-			Name:            rs.Name,
-			BatchSize:       rs.BatchSize,
-			Concurrency:     rs.Concurrency,
-			FallbackShrink:  rs.FallbackShrink,
-			RateLimitPerSec: rs.RateLimitPerSec,
+			Backends:       []backend.Backend{b},
+			Name:           rs.Name,
+			BatchSize:      rs.BatchSize,
+			Concurrency:    rs.Concurrency,
+			FallbackShrink: rs.FallbackShrink,
 			Retry: backend.RetryPolicy{
 				MaxAttempts: rs.Retry.MaxAttempts,
 				Backoff:     time.Duration(rs.Retry.BackoffMs) * time.Millisecond,
@@ -355,11 +363,36 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 		if err != nil {
 			return nil, fmt.Errorf("ruby retry backend: %w", err)
 		}
+		if r.limiterPool != nil && snapshot.RubyRetry.Backend.RateLimitPerMinute > 0 {
+			limiter := r.limiterPool.Get(snapshot.RubyRetry.Backend.ID, snapshot.RubyRetry.Backend.RateLimitPerMinute)
+			rrBackend = backend.NewRateLimitedBackend(rrBackend, limiter)
+		}
 		rubyRetryBackends = []backend.Backend{rrBackend}
+	}
+
+	// 构建独立自举后端
+	var bootstrapBackends []backend.Backend
+	if snapshot.Bootstrap != nil && snapshot.Bootstrap.Enabled {
+		bsCfg := config.BackendConfig{
+			Name:    snapshot.Bootstrap.Backend.Name,
+			Type:    snapshot.Bootstrap.Backend.Type,
+			Enabled: true,
+			Options: snapshot.Bootstrap.Backend.Options,
+		}
+		bsBackend, err := backend.Build(bsCfg)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap backend: %w", err)
+		}
+		if r.limiterPool != nil && snapshot.Bootstrap.Backend.RateLimitPerMinute > 0 {
+			limiter := r.limiterPool.Get(snapshot.Bootstrap.Backend.ID, snapshot.Bootstrap.Backend.RateLimitPerMinute)
+			bsBackend = backend.NewRateLimitedBackend(bsBackend, limiter)
+		}
+		bootstrapBackends = []backend.Backend{bsBackend}
 	}
 
 	return engine.NewWithOptions(engine.Options{
 		Rounds:            rounds,
+		BootstrapBackends: bootstrapBackends,
 		RubyRetryBackends: rubyRetryBackends,
 		Config:            cfg,
 		Logger:            r.logger,

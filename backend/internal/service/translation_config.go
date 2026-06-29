@@ -58,7 +58,6 @@ func normalizeTranslationOverride(in map[string]any) map[string]any {
 		"concurrency",
 		"batch_size",
 		"fallback_shrink",
-		"rate_limit_per_sec",
 		"retry",
 		"repair",
 	}

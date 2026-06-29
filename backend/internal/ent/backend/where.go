@@ -85,6 +85,11 @@ func OwnerOrgID(v int) predicate.Backend {
 	return predicate.Backend(sql.FieldEQ(FieldOwnerOrgID, v))
 }
 
+// RateLimitPerMinute applies equality check predicate on the "rate_limit_per_minute" field. It's identical to RateLimitPerMinuteEQ.
+func RateLimitPerMinute(v int) predicate.Backend {
+	return predicate.Backend(sql.FieldEQ(FieldRateLimitPerMinute, v))
+}
+
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.Backend {
 	return predicate.Backend(sql.FieldEQ(FieldCreatedAt, v))
@@ -373,6 +378,46 @@ func BackendTypeIn(vs ...BackendType) predicate.Backend {
 // BackendTypeNotIn applies the NotIn predicate on the "backend_type" field.
 func BackendTypeNotIn(vs ...BackendType) predicate.Backend {
 	return predicate.Backend(sql.FieldNotIn(FieldBackendType, vs...))
+}
+
+// RateLimitPerMinuteEQ applies the EQ predicate on the "rate_limit_per_minute" field.
+func RateLimitPerMinuteEQ(v int) predicate.Backend {
+	return predicate.Backend(sql.FieldEQ(FieldRateLimitPerMinute, v))
+}
+
+// RateLimitPerMinuteNEQ applies the NEQ predicate on the "rate_limit_per_minute" field.
+func RateLimitPerMinuteNEQ(v int) predicate.Backend {
+	return predicate.Backend(sql.FieldNEQ(FieldRateLimitPerMinute, v))
+}
+
+// RateLimitPerMinuteIn applies the In predicate on the "rate_limit_per_minute" field.
+func RateLimitPerMinuteIn(vs ...int) predicate.Backend {
+	return predicate.Backend(sql.FieldIn(FieldRateLimitPerMinute, vs...))
+}
+
+// RateLimitPerMinuteNotIn applies the NotIn predicate on the "rate_limit_per_minute" field.
+func RateLimitPerMinuteNotIn(vs ...int) predicate.Backend {
+	return predicate.Backend(sql.FieldNotIn(FieldRateLimitPerMinute, vs...))
+}
+
+// RateLimitPerMinuteGT applies the GT predicate on the "rate_limit_per_minute" field.
+func RateLimitPerMinuteGT(v int) predicate.Backend {
+	return predicate.Backend(sql.FieldGT(FieldRateLimitPerMinute, v))
+}
+
+// RateLimitPerMinuteGTE applies the GTE predicate on the "rate_limit_per_minute" field.
+func RateLimitPerMinuteGTE(v int) predicate.Backend {
+	return predicate.Backend(sql.FieldGTE(FieldRateLimitPerMinute, v))
+}
+
+// RateLimitPerMinuteLT applies the LT predicate on the "rate_limit_per_minute" field.
+func RateLimitPerMinuteLT(v int) predicate.Backend {
+	return predicate.Backend(sql.FieldLT(FieldRateLimitPerMinute, v))
+}
+
+// RateLimitPerMinuteLTE applies the LTE predicate on the "rate_limit_per_minute" field.
+func RateLimitPerMinuteLTE(v int) predicate.Backend {
+	return predicate.Backend(sql.FieldLTE(FieldRateLimitPerMinute, v))
 }
 
 // HasOwnerUser applies the HasEdge predicate on the "owner_user" edge.

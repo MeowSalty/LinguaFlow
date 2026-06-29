@@ -141,24 +141,24 @@ type ExecutionPlanRubyRetrySnapshot struct {
 
 // JobRoundSnapshot 单轮的完整执行快照。
 type JobRoundSnapshot struct {
-	Name            string             `json:"name"`
-	Backend         BackendSnapshot    `json:"backend"`
-	Prompt          PromptSnapshot     `json:"prompt"`
-	Strategy        StrategySnapshot   `json:"strategy"`
-	BatchSize       int                `json:"batch_size"`
-	Concurrency     int                `json:"concurrency"`
-	FallbackShrink  float64            `json:"fallback_shrink"`
-	RateLimitPerSec int                `json:"rate_limit_per_sec"`
-	Retry           schema.RetryConfig `json:"retry"`
+	Name           string             `json:"name"`
+	Backend        BackendSnapshot    `json:"backend"`
+	Prompt         PromptSnapshot     `json:"prompt"`
+	Strategy       StrategySnapshot   `json:"strategy"`
+	BatchSize      int                `json:"batch_size"`
+	Concurrency    int                `json:"concurrency"`
+	FallbackShrink float64            `json:"fallback_shrink"`
+	Retry          schema.RetryConfig `json:"retry"`
 }
 
 // BackendSnapshot 后端配置快照。
 type BackendSnapshot struct {
-	ID      int            `json:"id"`
-	Scope   string         `json:"scope"`
-	Name    string         `json:"name"`
-	Type    string         `json:"type"`
-	Options map[string]any `json:"options"`
+	ID                 int            `json:"id"`
+	Scope              string         `json:"scope"`
+	Name               string         `json:"name"`
+	Type               string         `json:"type"`
+	Options            map[string]any `json:"options"`
+	RateLimitPerMinute int            `json:"rate_limit_per_minute"`
 }
 
 // PromptSnapshot 提示词模板快照。
@@ -331,15 +331,14 @@ func (s *TranslationJobService) validateAndSnapshot(
 		// 内联自举不再需要独立的 bootstrap 模板（inline 是翻译 prompt 的一部分）
 
 		snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
-			Name:            round.Name,
-			Backend:         *backendSnap,
-			Prompt:          *promptSnap,
-			Strategy:        *strategySnap,
-			BatchSize:       round.BatchSize,
-			Concurrency:     round.Concurrency,
-			FallbackShrink:  round.FallbackShrink,
-			RateLimitPerSec: round.RateLimitPerSec,
-			Retry:           round.Retry,
+			Name:           round.Name,
+			Backend:        *backendSnap,
+			Prompt:         *promptSnap,
+			Strategy:       *strategySnap,
+			BatchSize:      round.BatchSize,
+			Concurrency:    round.Concurrency,
+			FallbackShrink: round.FallbackShrink,
+			Retry:          round.Retry,
 		})
 	}
 
@@ -454,11 +453,12 @@ func (s *TranslationJobService) snapshotBackend(ctx context.Context, backendID i
 		return nil, err
 	}
 	return &BackendSnapshot{
-		ID:      b.ID,
-		Scope:   b.Scope,
-		Name:    b.Name,
-		Type:    string(b.BackendType),
-		Options: cloneMap(b.Options),
+		ID:                 b.ID,
+		Scope:              b.Scope,
+		Name:               b.Name,
+		Type:               string(b.BackendType),
+		Options:            cloneMap(b.Options),
+		RateLimitPerMinute: b.RateLimitPerMinute,
 	}, nil
 }
 

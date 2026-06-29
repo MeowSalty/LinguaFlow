@@ -25,12 +25,6 @@ func (s *Translate) translateSingleInRound(ctx context.Context, doc *Document, i
 
 	seg := &doc.Segments[idx]
 
-	if s.Limiter != nil {
-		if err := s.Limiter.Wait(ctx); err != nil {
-			return false, err
-		}
-	}
-
 	glos, tmHints := s.lookupHints(ctx, doc, []int{idx}, logger)
 
 	rubyAnns := extractRubyAnnotationsFromDoc(doc, []int{idx}, nil)

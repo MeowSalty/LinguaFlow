@@ -22,8 +22,8 @@ backends:
     type: openai
     # 是否启用该后端
     enabled: true
-    # 后端级限流（每秒请求数）；0 表示使用轮次级或全局限流
-    rate_limit_per_sec: 0
+    # 后端级限流（每分钟请求数）；0 表示不限速
+    rate_limit_per_minute: 0
     options:
       # API 密钥，支持 ${ENV_VAR} 环境变量展开
       api_key: ${OPENAI_API_KEY}
@@ -89,8 +89,6 @@ execution:
       concurrency: 4
       # 整批失败时的缩放因子（0-1）；0 表示直接降到单段重试
       fallback_shrink: 0.5
-      # 每秒请求数限流（覆盖后端级限流）；0 表示不限流
-      rate_limit_per_sec: 5
       # 重试配置
       retry:
         # 最大重试次数

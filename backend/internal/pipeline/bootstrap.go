@@ -22,7 +22,6 @@ type Bootstrap struct {
 	Backends         []backend.Backend
 	Renderer         *prompt.BootstrapRenderer
 	Glossary         glossary.Glossary
-	Limiter          backend.RateLimiter
 	Retry            backend.RetryPolicy
 	Concurrency      int
 	BatchSize        int
@@ -135,12 +134,6 @@ func (s *Bootstrap) Run(ctx context.Context, doc *Document) error {
 // processBatch 处理一个批次：lookup existing → 渲染 → 调 LLM → 解析 → 过滤 → Add。
 // 返回 (added, error)；error 仅用于诊断，调用方不据此终止 stage。
 func (s *Bootstrap) processBatch(ctx context.Context, texts []string, doc *Document, logger *slog.Logger) (int, error) {
-	if s.Limiter != nil {
-		if err := s.Limiter.Wait(ctx); err != nil {
-			return 0, err
-		}
-	}
-
 	existing := s.collectExisting(ctx, texts, doc, logger)
 
 	sys, usr, err := s.Renderer.Render(prompt.BootstrapData{

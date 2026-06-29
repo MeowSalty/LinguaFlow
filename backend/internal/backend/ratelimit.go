@@ -168,6 +168,24 @@ func NewRateLimiter(ratePerSec int) RateLimiter {
 	return r
 }
 
+// NewRateLimiterPerMinute 创建每分钟 ratePerMinute 个令牌的限流器。
+// ratePerMinute <= 0 时返回 nopLimiter（不限流）。
+func NewRateLimiterPerMinute(ratePerMinute int) RateLimiter {
+	if ratePerMinute <= 0 {
+		return nopLimiter{}
+	}
+	r := &tokenBucket{
+		interval: time.Minute / time.Duration(ratePerMinute),
+		tokens:   make(chan struct{}, ratePerMinute),
+		done:     make(chan struct{}),
+	}
+	for i := 0; i < ratePerMinute; i++ {
+		r.tokens <- struct{}{}
+	}
+	go r.refill()
+	return r
+}
+
 type tokenBucket struct {
 	interval  time.Duration
 	tokens    chan struct{}
@@ -220,11 +238,14 @@ type RateLimitedBackend struct {
 }
 
 // NewRateLimitedBackend 创建一个带独立限流器的 Backend 包装。
-// ratePerSec <= 0 时限流器为 nop（不限流）。
-func NewRateLimitedBackend(inner Backend, ratePerSec int) *RateLimitedBackend {
+// limiter 为 nil 时限流器为 nop（不限流）。
+func NewRateLimitedBackend(inner Backend, limiter RateLimiter) *RateLimitedBackend {
+	if limiter == nil {
+		limiter = nopLimiter{}
+	}
 	return &RateLimitedBackend{
 		inner:   inner,
-		limiter: NewRateLimiter(ratePerSec),
+		limiter: limiter,
 	}
 }
 
@@ -238,6 +259,5 @@ func (b *RateLimitedBackend) Translate(ctx context.Context, req Request) (*Respo
 }
 
 func (b *RateLimitedBackend) Close() error {
-	b.limiter.Close()
 	return b.inner.Close()
 }

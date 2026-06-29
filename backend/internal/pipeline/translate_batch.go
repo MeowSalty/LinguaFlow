@@ -39,12 +39,6 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 		return nil, nil
 	}
 
-	if s.Limiter != nil {
-		if err := s.Limiter.Wait(ctx); err != nil {
-			return nil, err
-		}
-	}
-
 	glos, tmHints := s.lookupHints(ctx, doc, idxs, logger)
 
 	inputs := make([]prompt.SegmentInput, len(idxs))

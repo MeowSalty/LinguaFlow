@@ -31,6 +31,8 @@ const (
 	FieldBackendType = "backend_type"
 	// FieldOptions holds the string denoting the options field in the database.
 	FieldOptions = "options"
+	// FieldRateLimitPerMinute holds the string denoting the rate_limit_per_minute field in the database.
+	FieldRateLimitPerMinute = "rate_limit_per_minute"
 	// EdgeOwnerUser holds the string denoting the owner_user edge name in mutations.
 	EdgeOwnerUser = "owner_user"
 	// EdgeOwnerOrg holds the string denoting the owner_org edge name in mutations.
@@ -64,6 +66,7 @@ var Columns = []string{
 	FieldOwnerOrgID,
 	FieldBackendType,
 	FieldOptions,
+	FieldRateLimitPerMinute,
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -93,6 +96,8 @@ var (
 	OwnerOrgIDValidator func(int) error
 	// DefaultOptions holds the default value on creation for the "options" field.
 	DefaultOptions func() map[string]interface{}
+	// DefaultRateLimitPerMinute holds the default value on creation for the "rate_limit_per_minute" field.
+	DefaultRateLimitPerMinute int
 )
 
 // BackendType defines the type for the "backend_type" enum field.
@@ -160,6 +165,11 @@ func ByOwnerOrgID(opts ...sql.OrderTermOption) OrderOption {
 // ByBackendType orders the results by the backend_type field.
 func ByBackendType(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldBackendType, opts...).ToFunc()
+}
+
+// ByRateLimitPerMinute orders the results by the rate_limit_per_minute field.
+func ByRateLimitPerMinute(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldRateLimitPerMinute, opts...).ToFunc()
 }
 
 // ByOwnerUserField orders the results by owner_user field.

@@ -978,23 +978,25 @@ func (m *ActivityLogMutation) ResetEdge(name string) error {
 // BackendMutation represents an operation that mutates the Backend nodes in the graph.
 type BackendMutation struct {
 	config
-	op                Op
-	typ               string
-	id                *int
-	created_at        *time.Time
-	updated_at        *time.Time
-	name              *string
-	scope             *string
-	backend_type      *backend.BackendType
-	options           *map[string]interface{}
-	clearedFields     map[string]struct{}
-	owner_user        *int
-	clearedowner_user bool
-	owner_org         *int
-	clearedowner_org  bool
-	done              bool
-	oldValue          func(context.Context) (*Backend, error)
-	predicates        []predicate.Backend
+	op                       Op
+	typ                      string
+	id                       *int
+	created_at               *time.Time
+	updated_at               *time.Time
+	name                     *string
+	scope                    *string
+	backend_type             *backend.BackendType
+	options                  *map[string]interface{}
+	rate_limit_per_minute    *int
+	addrate_limit_per_minute *int
+	clearedFields            map[string]struct{}
+	owner_user               *int
+	clearedowner_user        bool
+	owner_org                *int
+	clearedowner_org         bool
+	done                     bool
+	oldValue                 func(context.Context) (*Backend, error)
+	predicates               []predicate.Backend
 }
 
 var _ ent.Mutation = (*BackendMutation)(nil)
@@ -1409,6 +1411,62 @@ func (m *BackendMutation) ResetOptions() {
 	m.options = nil
 }
 
+// SetRateLimitPerMinute sets the "rate_limit_per_minute" field.
+func (m *BackendMutation) SetRateLimitPerMinute(i int) {
+	m.rate_limit_per_minute = &i
+	m.addrate_limit_per_minute = nil
+}
+
+// RateLimitPerMinute returns the value of the "rate_limit_per_minute" field in the mutation.
+func (m *BackendMutation) RateLimitPerMinute() (r int, exists bool) {
+	v := m.rate_limit_per_minute
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldRateLimitPerMinute returns the old "rate_limit_per_minute" field's value of the Backend entity.
+// If the Backend object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BackendMutation) OldRateLimitPerMinute(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldRateLimitPerMinute is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldRateLimitPerMinute requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldRateLimitPerMinute: %w", err)
+	}
+	return oldValue.RateLimitPerMinute, nil
+}
+
+// AddRateLimitPerMinute adds i to the "rate_limit_per_minute" field.
+func (m *BackendMutation) AddRateLimitPerMinute(i int) {
+	if m.addrate_limit_per_minute != nil {
+		*m.addrate_limit_per_minute += i
+	} else {
+		m.addrate_limit_per_minute = &i
+	}
+}
+
+// AddedRateLimitPerMinute returns the value that was added to the "rate_limit_per_minute" field in this mutation.
+func (m *BackendMutation) AddedRateLimitPerMinute() (r int, exists bool) {
+	v := m.addrate_limit_per_minute
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetRateLimitPerMinute resets all changes to the "rate_limit_per_minute" field.
+func (m *BackendMutation) ResetRateLimitPerMinute() {
+	m.rate_limit_per_minute = nil
+	m.addrate_limit_per_minute = nil
+}
+
 // ClearOwnerUser clears the "owner_user" edge to the User entity.
 func (m *BackendMutation) ClearOwnerUser() {
 	m.clearedowner_user = true
@@ -1497,7 +1555,7 @@ func (m *BackendMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *BackendMutation) Fields() []string {
-	fields := make([]string, 0, 8)
+	fields := make([]string, 0, 9)
 	if m.created_at != nil {
 		fields = append(fields, backend.FieldCreatedAt)
 	}
@@ -1521,6 +1579,9 @@ func (m *BackendMutation) Fields() []string {
 	}
 	if m.options != nil {
 		fields = append(fields, backend.FieldOptions)
+	}
+	if m.rate_limit_per_minute != nil {
+		fields = append(fields, backend.FieldRateLimitPerMinute)
 	}
 	return fields
 }
@@ -1546,6 +1607,8 @@ func (m *BackendMutation) Field(name string) (ent.Value, bool) {
 		return m.BackendType()
 	case backend.FieldOptions:
 		return m.Options()
+	case backend.FieldRateLimitPerMinute:
+		return m.RateLimitPerMinute()
 	}
 	return nil, false
 }
@@ -1571,6 +1634,8 @@ func (m *BackendMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldBackendType(ctx)
 	case backend.FieldOptions:
 		return m.OldOptions(ctx)
+	case backend.FieldRateLimitPerMinute:
+		return m.OldRateLimitPerMinute(ctx)
 	}
 	return nil, fmt.Errorf("unknown Backend field %s", name)
 }
@@ -1636,6 +1701,13 @@ func (m *BackendMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetOptions(v)
 		return nil
+	case backend.FieldRateLimitPerMinute:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetRateLimitPerMinute(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Backend field %s", name)
 }
@@ -1644,6 +1716,9 @@ func (m *BackendMutation) SetField(name string, value ent.Value) error {
 // this mutation.
 func (m *BackendMutation) AddedFields() []string {
 	var fields []string
+	if m.addrate_limit_per_minute != nil {
+		fields = append(fields, backend.FieldRateLimitPerMinute)
+	}
 	return fields
 }
 
@@ -1652,6 +1727,8 @@ func (m *BackendMutation) AddedFields() []string {
 // was not set, or was not defined in the schema.
 func (m *BackendMutation) AddedField(name string) (ent.Value, bool) {
 	switch name {
+	case backend.FieldRateLimitPerMinute:
+		return m.AddedRateLimitPerMinute()
 	}
 	return nil, false
 }
@@ -1661,6 +1738,13 @@ func (m *BackendMutation) AddedField(name string) (ent.Value, bool) {
 // type.
 func (m *BackendMutation) AddField(name string, value ent.Value) error {
 	switch name {
+	case backend.FieldRateLimitPerMinute:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddRateLimitPerMinute(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Backend numeric field %s", name)
 }
@@ -1726,6 +1810,9 @@ func (m *BackendMutation) ResetField(name string) error {
 		return nil
 	case backend.FieldOptions:
 		m.ResetOptions()
+		return nil
+	case backend.FieldRateLimitPerMinute:
+		m.ResetRateLimitPerMinute()
 		return nil
 	}
 	return fmt.Errorf("unknown Backend field %s", name)

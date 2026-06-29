@@ -15,7 +15,6 @@ type ExecutionRoundConfig struct {
 	BatchSize        int         `json:"batch_size"         yaml:"batch_size"`
 	Concurrency      int         `json:"concurrency"        yaml:"concurrency"`
 	FallbackShrink   float64     `json:"fallback_shrink"    yaml:"fallback_shrink"`
-	RateLimitPerSec  int         `json:"rate_limit_per_sec" yaml:"rate_limit_per_sec"`
 	Retry            RetryConfig `json:"retry"              yaml:"retry"`
 }
 

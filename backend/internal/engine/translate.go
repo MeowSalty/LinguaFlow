@@ -52,8 +52,7 @@ func (e *Engine) Translate(ctx context.Context, doc *pipeline.Document, opts ...
 	// 3. Build batch-level processing components
 	pc := e.cfg.Pipeline
 	protector := e.buildProtector()
-	translatePipe, translateLimiter := e.BuildTranslateStage()
-	defer translateLimiter.Close()
+	translatePipe := e.BuildTranslateStage()
 
 	var restorer *protect.RubyRestorer
 	if pc.Protect.Ruby.Enabled {
@@ -321,7 +320,6 @@ func buildTranslateResult(doc *pipeline.Document, totalFailed int) pipeline.Tran
 // buildBootstrapStage constructs the Bootstrap stage.
 func (e *Engine) buildBootstrapStage() *pipeline.Bootstrap {
 	pc := e.cfg.Pipeline
-	limiter := backend.NewRateLimiter(pc.Translate.RateLimitPerSec)
 	retry := backend.RetryPolicy{
 		MaxAttempts: pc.Translate.Retry.MaxAttempts,
 		Backoff:     time.Duration(pc.Translate.Retry.BackoffMs) * time.Millisecond,
@@ -332,7 +330,6 @@ func (e *Engine) buildBootstrapStage() *pipeline.Bootstrap {
 		Backends:         e.bootstrapBackends,
 		Renderer:         e.bootstrapRenderer,
 		Glossary:         e.glossary,
-		Limiter:          limiter,
 		Retry:            retry,
 		Concurrency:      e.standaloneBootstrap.Concurrency,
 		BatchSize:        e.standaloneBootstrap.BatchSize,

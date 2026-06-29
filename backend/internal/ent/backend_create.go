@@ -110,6 +110,20 @@ func (_c *BackendCreate) SetOptions(v map[string]interface{}) *BackendCreate {
 	return _c
 }
 
+// SetRateLimitPerMinute sets the "rate_limit_per_minute" field.
+func (_c *BackendCreate) SetRateLimitPerMinute(v int) *BackendCreate {
+	_c.mutation.SetRateLimitPerMinute(v)
+	return _c
+}
+
+// SetNillableRateLimitPerMinute sets the "rate_limit_per_minute" field if the given value is not nil.
+func (_c *BackendCreate) SetNillableRateLimitPerMinute(v *int) *BackendCreate {
+	if v != nil {
+		_c.SetRateLimitPerMinute(*v)
+	}
+	return _c
+}
+
 // SetOwnerUser sets the "owner_user" edge to the User entity.
 func (_c *BackendCreate) SetOwnerUser(v *User) *BackendCreate {
 	return _c.SetOwnerUserID(v.ID)
@@ -171,6 +185,10 @@ func (_c *BackendCreate) defaults() {
 		v := backend.DefaultOptions()
 		_c.mutation.SetOptions(v)
 	}
+	if _, ok := _c.mutation.RateLimitPerMinute(); !ok {
+		v := backend.DefaultRateLimitPerMinute
+		_c.mutation.SetRateLimitPerMinute(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -212,6 +230,9 @@ func (_c *BackendCreate) check() error {
 	}
 	if _, ok := _c.mutation.Options(); !ok {
 		return &ValidationError{Name: "options", err: errors.New(`ent: missing required field "Backend.options"`)}
+	}
+	if _, ok := _c.mutation.RateLimitPerMinute(); !ok {
+		return &ValidationError{Name: "rate_limit_per_minute", err: errors.New(`ent: missing required field "Backend.rate_limit_per_minute"`)}
 	}
 	return nil
 }
@@ -262,6 +283,10 @@ func (_c *BackendCreate) createSpec() (*Backend, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Options(); ok {
 		_spec.SetField(backend.FieldOptions, field.TypeJSON, value)
 		_node.Options = value
+	}
+	if value, ok := _c.mutation.RateLimitPerMinute(); ok {
+		_spec.SetField(backend.FieldRateLimitPerMinute, field.TypeInt, value)
+		_node.RateLimitPerMinute = value
 	}
 	if nodes := _c.mutation.OwnerUserIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
