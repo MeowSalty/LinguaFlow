@@ -776,6 +776,18 @@ func (s *TranslationJobService) ReconcileJob(ctx context.Context, jobID int) err
 	} else {
 		update.ClearErrorMessage()
 	}
+	// 所有资源结束后，用各资源的 stage_total 之和修正 total_segments。
+	// stage_total 是 pipeline 运行时确定的实际翻译量（排除了空白段、装饰分隔符等），
+	// 而创建时的 total_segments 统计的是所有选中的 segment IDs（含被跳过的）。
+	if pendingCount == 0 && runningCount == 0 {
+		actualTotal := 0
+		for _, item := range current.Edges.JobResources {
+			actualTotal += item.StageTotal
+		}
+		if actualTotal > 0 {
+			update.SetTotalSegments(actualTotal)
+		}
+	}
 	if err := update.Exec(ctx); err != nil {
 		if ent.IsNotFound(err) {
 			return ErrTranslationJobNotFound
