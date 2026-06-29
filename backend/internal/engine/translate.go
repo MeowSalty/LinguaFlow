@@ -51,12 +51,13 @@ func (e *Engine) Translate(ctx context.Context, doc *pipeline.Document, opts ...
 	// 3. Build processing components
 	pc := e.cfg.Pipeline
 	protector := e.buildProtector()
-	translatePipe := e.BuildTranslateStage()
 
 	var restorer *protect.RubyRestorer
 	if pc.Protect.Ruby.Enabled {
 		restorer = protect.NewRubyRestorer(pc.Protect.Ruby.OutputFormat)
 	}
+
+	translatePipe := e.BuildTranslateStage(protector, restorer)
 
 	// 4. Protect 全文
 	if pc.Protect.Enabled {
@@ -80,28 +81,7 @@ func (e *Engine) Translate(ctx context.Context, doc *pipeline.Document, opts ...
 		return pipeline.TranslateResult{}, err
 	}
 
-	// 7. Unprotect 全文
-	if pc.Protect.Enabled {
-		for i := range doc.Segments {
-			if err := protector.Unprotect(&doc.Segments[i]); err != nil {
-				return pipeline.TranslateResult{}, fmt.Errorf("unprotect segment %d: %w", i, err)
-			}
-		}
-	}
-
-	// 8. RubyRestore
-	if restorer != nil {
-		for i := range doc.Segments {
-			seg := &doc.Segments[i]
-			rubyOutput := extractRubyOutput(seg)
-			if len(rubyOutput) > 0 {
-				originals := extractRubyAnnotations(seg)
-				_ = restorer.Restore(seg, rubyOutput, originals)
-			}
-		}
-	}
-
-	// 9. Save glossary if needed
+	// 7. Save glossary if needed
 	e.maybeSaveGlossary(ctx)
 
 	// 10. 构建结果
@@ -165,36 +145,4 @@ func (e *Engine) buildBootstrapStage() *pipeline.Bootstrap {
 		Reporter:         e.reporter,
 		Repair:           repairOpts,
 	}
-}
-
-// extractRubyOutput extracts ruby_output from segment Meta.
-func extractRubyOutput(seg *pipeline.Segment) []protect.RubyOutputEntry {
-	if seg.Meta == nil {
-		return nil
-	}
-	raw, ok := seg.Meta["ruby_output"]
-	if !ok {
-		return nil
-	}
-	entries, ok := raw.([]protect.RubyOutputEntry)
-	if !ok {
-		return nil
-	}
-	return entries
-}
-
-// extractRubyAnnotations extracts ruby_annotations from segment Meta.
-func extractRubyAnnotations(seg *pipeline.Segment) []protect.RubyAnnotation {
-	if seg.Meta == nil {
-		return nil
-	}
-	raw, ok := seg.Meta["ruby_annotations"]
-	if !ok {
-		return nil
-	}
-	annots, ok := raw.([]protect.RubyAnnotation)
-	if !ok {
-		return nil
-	}
-	return annots
 }

@@ -13,8 +13,8 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 )
@@ -22,8 +22,9 @@ import (
 // processBatchInRound 处理一批 idx（len(idxs) <= round.BatchSize）。
 // 尝试批量发送，失败时按 round.FallbackShrink 缩小子批并发递归，直到收敛到单段。
 // batchIndex 是本批在当前轮次中的序号（0-based），用于事件上报。
+// contextSet 包含本批中作为上下文参考（不需要翻译）的段落索引。
 // 返回 unresolved 的段索引列表；非 nil error 表示 stage 级别终止。
-func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs []int, round Round, batchIndex int, logger *slog.Logger) ([]int, error) {
+func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs []int, round Round, batchIndex int, logger *slog.Logger, contextSet map[int]struct{}) ([]int, error) {
 	batchStart := time.Now()
 	renderer := s.resolveRoundRenderer(round)
 	repairOpts := s.resolveRoundRepair(round)
@@ -39,11 +40,12 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 		idMap[idx] = id
 		seg := doc.Segments[idx]
 		source := seg.Source
-		if !seg.Translate && seg.OriginalSource != "" {
+		isCtx := isContext(contextSet, idx)
+		if isCtx && seg.OriginalSource != "" {
 			source = seg.OriginalSource
 		}
-		inputs[k] = prompt.SegmentInput{ID: id, Source: source, Translate: seg.Translate}
-		if seg.Translate {
+		inputs[k] = prompt.SegmentInput{ID: id, Source: source, Translate: !isCtx}
+		if !isCtx {
 			wantIDs = append(wantIDs, id)
 			batchSources = append(batchSources, seg.Source)
 		}
@@ -94,9 +96,9 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 		lastErr = err
 		logger.Warn("backend failed for batch, shrinking or falling back", "batch_size", len(idxs), "err", lastErr)
 		if len(idxs) <= 1 {
-			return filterPendingIdxs(doc, idxs), nil
+			return filterPendingIdxs(idxs, contextSet), nil
 		}
-		return s.shrinkOrFallback(ctx, doc, filterPendingIdxs(doc, idxs), round, lastErr, logger)
+		return s.shrinkOrFallback(ctx, doc, filterPendingIdxs(idxs, contextSet), round, lastErr, logger)
 	}
 
 	res = parseBatchResponseLenient(resp.Text, wantIDs, repairOpts)
@@ -125,9 +127,9 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 			"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200),
 			"repaired", res.Repaired)
 		if len(idxs) <= 1 {
-			return filterPendingIdxs(doc, idxs), nil
+			return filterPendingIdxs(idxs, contextSet), nil
 		}
-		return s.shrinkOrFallback(ctx, doc, filterPendingIdxs(doc, idxs), round, res.ParseErr, logger)
+		return s.shrinkOrFallback(ctx, doc, filterPendingIdxs(idxs, contextSet), round, res.ParseErr, logger)
 	}
 
 	missingRatio := 0.0
@@ -174,7 +176,7 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 	wantIDIdx := 0
 	for _, idx := range idxs {
 		seg := &doc.Segments[idx]
-		if !seg.Translate {
+		if isContext(contextSet, idx) {
 			// 上下文段落：跳过翻译，不上报进度
 			continue
 		}
@@ -206,18 +208,36 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 		if missing := protect.MissingPlaceholders(seg); len(missing) > 0 {
 			logger.Warn("batch segment placeholders missing, single-retry",
 				"seg", seg.ID, "missing", missing)
-			subUnresolved, err := s.processBatchInRound(ctx, doc, []int{idx}, round, batchIndex, logger)
+			retryExpanded := expandBatchWithContext(doc, []int{idx}, len(doc.Segments), s.contextWindow())
+			retryBatchSet := map[int]struct{}{idx: {}}
+			retryCtxSet := buildContextSet(retryExpanded, retryBatchSet)
+			subUnresolved, err := s.processBatchInRound(ctx, doc, retryExpanded, round, batchIndex, logger, retryCtxSet)
 			if err != nil {
 				return nil, err
 			}
 			unresolved = append(unresolved, subUnresolved...)
 			continue
 		}
+		if s.Protector != nil {
+			if err := s.Protector.Unprotect(seg); err != nil {
+				logger.Warn("unprotect failed", "seg", seg.ID, "err", err)
+			}
+		}
+		if s.Restorer != nil {
+			rubyOutput := extractRubyOutputFromSeg(seg)
+			if len(rubyOutput) > 0 {
+				originals := extractRubyAnnotationsFromSeg(seg)
+				_ = s.Restorer.Restore(seg, rubyOutput, originals)
+			}
+		}
 		s.addTM(ctx, doc, seg, logger)
 		rep.SegmentDone()
 	}
 	for _, idx := range missingIdxs {
-		subUnresolved, err := s.processBatchInRound(ctx, doc, []int{idx}, round, batchIndex, logger)
+		retryExpanded := expandBatchWithContext(doc, []int{idx}, len(doc.Segments), s.contextWindow())
+		retryBatchSet := map[int]struct{}{idx: {}}
+		retryCtxSet := buildContextSet(retryExpanded, retryBatchSet)
+		subUnresolved, err := s.processBatchInRound(ctx, doc, retryExpanded, round, batchIndex, logger, retryCtxSet)
 		if err != nil {
 			return nil, err
 		}
@@ -236,11 +256,15 @@ func (s *Translate) shrinkOrFallback(ctx context.Context, doc *Document, idxs []
 		return idxs, nil
 	}
 	nextSize := shrinkNext(len(idxs), round.FallbackShrink)
+	ctxWin := s.contextWindow()
 	if nextSize < 2 {
 		// 坍缩到顺序单段：复用 processBatchInRound 处理每个段落
 		var unresolved []int
 		for _, idx := range idxs {
-			subUnresolved, err := s.processBatchInRound(ctx, doc, []int{idx}, round, 0, logger)
+			retryExpanded := expandBatchWithContext(doc, []int{idx}, len(doc.Segments), ctxWin)
+			retryBatchSet := map[int]struct{}{idx: {}}
+			retryCtxSet := buildContextSet(retryExpanded, retryBatchSet)
+			subUnresolved, err := s.processBatchInRound(ctx, doc, retryExpanded, round, 0, logger, retryCtxSet)
 			if err != nil {
 				return nil, err
 			}
@@ -261,7 +285,14 @@ func (s *Translate) shrinkOrFallback(ctx context.Context, doc *Document, idxs []
 		unresolved []int
 	)
 	if err := RunConcurrent(ctx, len(sub), round.Concurrency, func(ctx context.Context, bidx int) error {
-		subUnresolved, err := s.processBatchInRound(ctx, doc, sub[bidx], round, bidx, logger)
+		subBatch := sub[bidx]
+		subExpanded := expandBatchWithContext(doc, subBatch, len(doc.Segments), ctxWin)
+		subBatchSet := make(map[int]struct{}, len(subBatch))
+		for _, idx := range subBatch {
+			subBatchSet[idx] = struct{}{}
+		}
+		subCtxSet := buildContextSet(subExpanded, subBatchSet)
+		subUnresolved, err := s.processBatchInRound(ctx, doc, subExpanded, round, bidx, logger, subCtxSet)
 		if err != nil {
 			return err
 		}
@@ -296,6 +327,24 @@ func shrinkNext(cur int, shrink float64) int {
 	return next
 }
 
+// isContext 检查 idx 是否在 contextSet 中（即作为上下文参考、不需要翻译）。
+// contextSet 为 nil 或空时返回 false（所有段落都需要翻译）。
+func isContext(contextSet map[int]struct{}, idx int) bool {
+	if len(contextSet) == 0 {
+		return false
+	}
+	_, ok := contextSet[idx]
+	return ok
+}
+
+// contextWindow 从配置计算上下文窗口大小。
+func (s *Translate) contextWindow() int {
+	if !s.Context.Enabled {
+		return 0
+	}
+	return max(s.Context.Before, s.Context.After)
+}
+
 // isFatalBackendError 判断是否为不可恢复的致命错误（如 401、403 认证失败）。
 // 遇到此类错误时当前 backend 被视为不可用，段将推迟到后续轮次处理。
 func isFatalBackendError(err error) bool {
@@ -307,12 +356,15 @@ func isFatalBackendError(err error) bool {
 	return false
 }
 
-// filterPendingIdxs 过滤出 Translate=true 的段落索引。
+// filterPendingIdxs 过滤出需要翻译的段落索引（排除上下文段落）。
 // 用于 shrinkOrFallback 调用前，避免上下文段落被错误翻译。
-func filterPendingIdxs(doc *Document, idxs []int) []int {
+func filterPendingIdxs(idxs []int, contextSet map[int]struct{}) []int {
+	if len(contextSet) == 0 {
+		return idxs
+	}
 	var pending []int
 	for _, idx := range idxs {
-		if doc.Segments[idx].Translate {
+		if !isContext(contextSet, idx) {
 			pending = append(pending, idx)
 		}
 	}

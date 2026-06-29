@@ -20,7 +20,7 @@ func (e *Engine) buildProtector() protect.Protector {
 }
 
 // BuildTranslateStage 构建纯翻译管道（仅 Translate 阶段）。
-func (e *Engine) BuildTranslateStage() *pipeline.Pipeline {
+func (e *Engine) BuildTranslateStage(protector protect.Protector, restorer *protect.RubyRestorer) *pipeline.Pipeline {
 	pc := e.cfg.Pipeline
 	retry := backend.RetryPolicy{
 		MaxAttempts: pc.Translate.Retry.MaxAttempts,
@@ -45,6 +45,8 @@ func (e *Engine) BuildTranslateStage() *pipeline.Pipeline {
 		Repair:                 repairOpts,
 		RubyOutputFormat:       pc.Protect.Ruby.OutputFormat,
 		Context:                pc.Context,
+		Protector:              protector,
+		Restorer:               restorer,
 	}
 	return pipeline.New(e.logger, translateStage)
 }

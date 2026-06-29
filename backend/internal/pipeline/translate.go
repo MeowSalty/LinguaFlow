@@ -97,6 +97,11 @@ type Translate struct {
 	// BatchHandler 每批翻译完成后的回调。由 Engine 注入，Pipeline 调用。
 	// 回调可能被并发调用（多个批同时完成时），实现必须并发安全。
 	BatchHandler func(ctx context.Context, result BatchResult) error
+
+	// Protector 用于翻译后立即还原占位符。
+	Protector protect.Protector
+	// Restorer 用于翻译后立即还原 ruby 注音。
+	Restorer *protect.RubyRestorer
 }
 
 func (*Translate) Name() string { return "translate" }
@@ -186,17 +191,17 @@ func (s *Translate) Run(ctx context.Context, doc *Document) error {
 
 			// 4. 扩展上下文：为每个批次添加前后文段落
 			expandedIdxs := expandBatchWithContext(doc, idxs, len(doc.Segments), ctxWindow)
-			markContextSegments(doc, expandedIdxs, batchSet)
+			contextSet := buildContextSet(expandedIdxs, batchSet)
 
 			// 5. 处理批次
-			unresolved, err := s.processBatchInRound(ctx, doc, expandedIdxs, round, bidx, logger)
+			unresolved, err := s.processBatchInRound(ctx, doc, expandedIdxs, round, bidx, logger, contextSet)
 			if err != nil {
 				return err
 			}
 
 			// 6. 回调 batchHandler
 			if s.BatchHandler != nil {
-				batchResult := buildBatchResult(doc, expandedIdxs, bidx)
+				batchResult := buildBatchResult(doc, expandedIdxs, bidx, contextSet)
 				if herr := s.BatchHandler(ctx, batchResult); herr != nil {
 					return fmt.Errorf("batch handler: %w", herr)
 				}
@@ -297,24 +302,24 @@ func expandBatchWithContext(doc *Document, idxs []int, totalSegments, ctxWindow 
 	return expanded
 }
 
-// markContextSegments 标记上下文段落：Translate=false。
-// batchSet 是当前批次自身的段落索引集合（不含上下文扩展）。
-// expandedIdxs 中不属于 batchSet 的段落全部标记为 Translate=false，
-// 包括其他批次的 pending 段落（由其他批次负责翻译）。
-func markContextSegments(doc *Document, expandedIdxs []int, batchSet map[int]struct{}) {
+// buildContextSet 构建上下文段落集合：expandedIdxs 中不属于 batchSet 的段落。
+// 返回的 map 仅包含上下文段落索引；batchSet 中的段落不包含在内。
+func buildContextSet(expandedIdxs []int, batchSet map[int]struct{}) map[int]struct{} {
+	ctxSet := make(map[int]struct{})
 	for _, idx := range expandedIdxs {
 		if _, inBatch := batchSet[idx]; !inBatch {
-			doc.Segments[idx].Translate = false
+			ctxSet[idx] = struct{}{}
 		}
 	}
+	return ctxSet
 }
 
 // buildBatchResult 构建批次结果（供 batchHandler 使用）。
-func buildBatchResult(doc *Document, idxs []int, batchIndex int) BatchResult {
+func buildBatchResult(doc *Document, idxs []int, batchIndex int, contextSet map[int]struct{}) BatchResult {
 	translated := make([]TranslatedSegment, 0, len(idxs))
 	for _, idx := range idxs {
 		seg := doc.Segments[idx]
-		if !seg.Translate {
+		if isContext(contextSet, idx) {
 			continue // 上下文段落不包含在结果中
 		}
 		source := seg.OriginalSource
