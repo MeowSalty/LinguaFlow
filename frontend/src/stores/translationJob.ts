@@ -146,12 +146,11 @@ export const useTranslationJobStore = defineStore('translationJob', () => {
   const isPolling = (jobId: number): boolean => activePollingJobIds.value.has(jobId)
 
   // ── Getters ──
-  /** 获取 selectedJob 的进度百分比（优先使用后端计算值） */
+  /** 获取 selectedJob 的进度百分比 */
   const selectedJobProgress = computed<number>(() => {
     const job = selectedJob.value
     if (!job) return 0
-    if (job.progress_percentage != null) return Math.round(job.progress_percentage)
-    return getJobProgress(job) // 回退到前端计算
+    return getJobProgress(job)
   })
 
   const reset = (): void => {

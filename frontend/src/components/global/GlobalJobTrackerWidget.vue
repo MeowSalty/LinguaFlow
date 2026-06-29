@@ -46,7 +46,6 @@ const isTerminal = (status: TranslationJob['status']): boolean =>
   ['completed', 'failed', 'cancelled'].includes(status)
 
 const progressPercent = (job: TranslationJob): number => {
-  if (job.progress_percentage != null) return Math.round(job.progress_percentage)
   if (job.status === 'completed') return 100
   if (job.status === 'failed' || job.status === 'cancelled') return 0
   if (job.total_segments > 0) return Math.round((job.completed_segments / job.total_segments) * 100)

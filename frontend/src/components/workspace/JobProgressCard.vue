@@ -19,8 +19,6 @@ const props = defineProps<{
 }>()
 
 const progressPercent = computed(() => {
-  if (props.job.progress_percentage != null) return Math.round(props.job.progress_percentage)
-  // 回退：根据状态返回简单值
   if (props.job.status === 'completed') return 100
   if (props.job.status === 'failed' || props.job.status === 'cancelled') return 0
   if (props.job.total_segments > 0) {

@@ -1382,11 +1382,6 @@ export interface components {
             started_at?: string;
             /** @description 当前活跃的执行阶段名称（聚合自 JobResource） */
             current_stage?: string;
-            /**
-             * Format: float
-             * @description 整体进度百分比（0-100），由后端计算
-             */
-            progress_percentage?: number;
             /** @description 在队列中的位置（1-based），null 表示不在队列中 */
             queue_position?: number | null;
             /** @description 当前队列中的任务总数 */
