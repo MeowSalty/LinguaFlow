@@ -24,11 +24,11 @@ type Options struct {
 	Rounds []Round
 
 	// BootstrapBackends 是术语自举阶段使用的后端列表。
-	// 为空时回退到 Rounds[0].Backends。
+	// 为空时回退到 Rounds[0].Backend。
 	BootstrapBackends []backend.Backend
 
 	// RubyRetryBackends 是注音对齐重试使用的后端列表。
-	// 为空时回退到 Rounds[0].Backends。
+	// 为空时回退到 Rounds[0].Backend。
 	RubyRetryBackends []backend.Backend
 
 	// Config 是策略配置（分割、保护、提示词、术语表等）。
@@ -47,9 +47,9 @@ type Options struct {
 
 // Round 描述一轮翻译的执行配置。
 type Round struct {
-	// Backends 本轮使用的后端列表，按优先级排序。
-	// 必须非空。
-	Backends []backend.Backend
+	// Backend 本轮使用的后端。
+	// 必须非 nil。
+	Backend backend.Backend
 
 	// Name 轮次名称，用于日志。空值自动生成 "round-N"。
 	Name string
@@ -138,7 +138,7 @@ func buildStagesRounds(in []Round, cfg *config.Config) []pipeline.Round {
 
 		out = append(out, pipeline.Round{
 			Name:           resolveName(r.Name, i),
-			Backends:       r.Backends,
+			Backend:        r.Backend,
 			BatchSize:      resolveDefault(r.BatchSize, cfg.Pipeline.Translate.BatchSize, 1),
 			Concurrency:    resolveDefault(r.Concurrency, cfg.Pipeline.Translate.Concurrency, 1),
 			FallbackShrink: resolveShrink(r.FallbackShrink, cfg.Pipeline.Translate.FallbackShrink),

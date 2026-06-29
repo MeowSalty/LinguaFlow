@@ -213,7 +213,7 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 
 		rounds = append(rounds, engine.Round{
 			Name:           r.Name,
-			Backends:       backends,
+			Backend:        backends[0],
 			BatchSize:      r.BatchSize,
 			Concurrency:    r.Concurrency,
 			FallbackShrink: r.FallbackShrink,

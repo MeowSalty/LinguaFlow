@@ -37,3 +37,13 @@ func (p *Pipeline) Run(ctx context.Context, doc *Document) error {
 
 // Stages 暴露已注册的 stage 列表，用于日志或诊断。
 func (p *Pipeline) Stages() []Stage { return p.stages }
+
+// SetBatchHandler 将回调注入 Pipeline 中的 Translate stage。
+// 由 Engine 在调用 Pipeline.Run 前设置，Pipeline 内部的 Translate.Run 调用该回调。
+func (p *Pipeline) SetBatchHandler(fn func(ctx context.Context, result BatchResult) error) {
+	for _, s := range p.stages {
+		if t, ok := s.(*Translate); ok {
+			t.BatchHandler = fn
+		}
+	}
+}

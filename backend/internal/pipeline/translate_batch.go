@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"math"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -18,26 +19,14 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 )
 
-// processBatchInRound 处理一批 idx（len(idxs) <= round.BatchSize）。len==1 或 BatchSize<=1 时走单段路径；
-// 否则尝试批量发送，失败时按 round.FallbackShrink 缩小子批并发递归，直到收敛到单段。
+// processBatchInRound 处理一批 idx（len(idxs) <= round.BatchSize）。
+// 尝试批量发送，失败时按 round.FallbackShrink 缩小子批并发递归，直到收敛到单段。
 // batchIndex 是本批在当前轮次中的序号（0-based），用于事件上报。
 // 返回 unresolved 的段索引列表；非 nil error 表示 stage 级别终止。
 func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs []int, round Round, batchIndex int, logger *slog.Logger) ([]int, error) {
 	batchStart := time.Now()
 	renderer := s.resolveRoundRenderer(round)
 	repairOpts := s.resolveRoundRepair(round)
-
-	bs := max(round.BatchSize, 1)
-	if len(idxs) == 1 || bs <= 1 {
-		ok, err := s.translateSingleInRound(ctx, doc, idxs[0], round, logger)
-		if err != nil {
-			return nil, err
-		}
-		if !ok {
-			return append([]int(nil), idxs...), nil
-		}
-		return nil, nil
-	}
 
 	glos, tmHints := s.lookupHints(ctx, doc, idxs, logger)
 
@@ -49,7 +38,11 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 		id := strconv.Itoa(k + 1)
 		idMap[idx] = id
 		seg := doc.Segments[idx]
-		inputs[k] = prompt.SegmentInput{ID: id, Source: seg.Source, Translate: seg.Translate}
+		source := seg.Source
+		if !seg.Translate && seg.OriginalSource != "" {
+			source = seg.OriginalSource
+		}
+		inputs[k] = prompt.SegmentInput{ID: id, Source: source, Translate: seg.Translate}
 		if seg.Translate {
 			wantIDs = append(wantIDs, id)
 			batchSources = append(batchSources, seg.Source)
@@ -82,91 +75,72 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 	}
 
 	var (
-		resp        *backend.Response
-		res         repair.Result
-		picked      backend.Backend
-		lastErr     error
-		bestRes     repair.Result // 跟踪最佳部分结果（最多翻译数）
-		bestResp    *backend.Response
-		bestBackend backend.Backend
-		tried       []string // 本次尝试过的所有后端名
+		resp    *backend.Response
+		res     repair.Result
+		picked  backend.Backend
+		lastErr error
+		tried   []string // 本次尝试过的所有后端名
 	)
-	for _, b := range round.Backends {
-		tried = append(tried, b.Name())
-		resp, err = s.callOnce(ctx, b, req, round.Retry)
-		if err != nil {
-			if isFatalBackendError(err) {
-				logger.Error("backend returned fatal error",
-					"backend", b.Name(), "batch_size", len(idxs), "err", err)
-			} else {
-				logger.Warn("batch translate failed, trying next backend",
-					"backend", b.Name(), "batch_size", len(idxs), "err", err)
-			}
-			lastErr = err
-			continue
-		}
-		res = parseBatchResponseLenient(resp.Text, wantIDs, repairOpts)
-
-		atomic.AddInt64(&doc.InputTokens, resp.Usage.PromptTokens)
-		atomic.AddInt64(&doc.OutputTokens, resp.Usage.CompletionTokens)
-
-		if res.ParseErr != nil && repairOpts.PromptUpgrade {
-			reminder := repair.BuildRetryReminder(nil, res.ParseErr, headSnippet(resp.Text, 200))
-			req2 := req
-			req2.System = req.System + reminder
-			if resp2, err2 := s.callOnce(ctx, b, req2, round.Retry); err2 == nil {
-				res2 := parseBatchResponseLenient(resp2.Text, wantIDs, repairOpts)
-				if res2.ParseErr == nil {
-					logger.Info("batch response recovered by prompt upgrade",
-						"backend", b.Name(), "repaired", res2.Repaired)
-					resp = resp2
-					res = res2
-					atomic.AddInt64(&doc.InputTokens, resp2.Usage.PromptTokens)
-					atomic.AddInt64(&doc.OutputTokens, resp2.Usage.CompletionTokens)
-				}
-			}
-		}
-		if res.ParseErr != nil {
-			logger.Warn("batch response parse failed, trying next backend",
-				"backend", b.Name(), "batch_size", len(idxs), "err", res.ParseErr,
-				"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200),
-				"repaired", res.Repaired)
-			lastErr = res.ParseErr
-			continue
-		}
-		missingRatio := 0.0
-		if len(wantIDs) > 0 {
-			missingRatio = float64(len(res.Missing)) / float64(len(wantIDs))
-		}
-		// 跟踪最佳部分结果（翻译数最多）
-		if len(res.Trans) > len(bestRes.Trans) {
-			bestRes = res
-			bestResp = resp
-			bestBackend = b
-		}
-		if len(res.Missing) > 0 && (!repairOpts.Partial || missingRatio >= repairOpts.PartialThreshold) {
-			logger.Warn("partial recovery exceeded threshold, trying next backend",
-				"backend", b.Name(), "missing", len(res.Missing), "total", len(wantIDs),
-				"threshold", s.Repair.PartialThreshold, "partial_enabled", s.Repair.Partial)
-			lastErr = fmt.Errorf("partial recovery exceeded threshold")
-			continue
-		}
-		picked = b
-		break
-	}
-	if picked == nil {
-		// 如果有最佳部分结果，使用它；缺失的段标记为 unresolved。
-		if bestBackend != nil {
-			picked = bestBackend
-			res = bestRes
-			resp = bestResp
+	tried = append(tried, round.Backend.Name())
+	resp, err = s.callOnce(ctx, round.Backend, req, round.Retry)
+	if err != nil {
+		if isFatalBackendError(err) {
+			logger.Error("backend returned fatal error",
+				"backend", round.Backend.Name(), "batch_size", len(idxs), "err", err)
 		} else {
-			if lastErr != nil {
-				logger.Warn("all backends failed for batch, shrinking or falling back", "batch_size", len(idxs), "err", lastErr)
+			logger.Warn("batch translate failed",
+				"backend", round.Backend.Name(), "batch_size", len(idxs), "err", err)
+		}
+		lastErr = err
+		logger.Warn("backend failed for batch, shrinking or falling back", "batch_size", len(idxs), "err", lastErr)
+		if len(idxs) <= 1 {
+			return filterPendingIdxs(doc, idxs), nil
+		}
+		return s.shrinkOrFallback(ctx, doc, filterPendingIdxs(doc, idxs), round, lastErr, logger)
+	}
+
+	res = parseBatchResponseLenient(resp.Text, wantIDs, repairOpts)
+	atomic.AddInt64(&doc.InputTokens, resp.Usage.PromptTokens)
+	atomic.AddInt64(&doc.OutputTokens, resp.Usage.CompletionTokens)
+
+	if res.ParseErr != nil && repairOpts.PromptUpgrade {
+		reminder := repair.BuildRetryReminder(nil, res.ParseErr, headSnippet(resp.Text, 200))
+		req2 := req
+		req2.System = req.System + reminder
+		if resp2, err2 := s.callOnce(ctx, round.Backend, req2, round.Retry); err2 == nil {
+			res2 := parseBatchResponseLenient(resp2.Text, wantIDs, repairOpts)
+			if res2.ParseErr == nil {
+				logger.Info("batch response recovered by prompt upgrade",
+					"backend", round.Backend.Name(), "repaired", res2.Repaired)
+				resp = resp2
+				res = res2
+				atomic.AddInt64(&doc.InputTokens, resp2.Usage.PromptTokens)
+				atomic.AddInt64(&doc.OutputTokens, resp2.Usage.CompletionTokens)
 			}
-			return s.shrinkOrFallback(ctx, doc, idxs, round, lastErr, logger)
 		}
 	}
+	if res.ParseErr != nil {
+		logger.Warn("batch response parse failed, shrinking or falling back",
+			"backend", round.Backend.Name(), "batch_size", len(idxs), "err", res.ParseErr,
+			"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200),
+			"repaired", res.Repaired)
+		if len(idxs) <= 1 {
+			return filterPendingIdxs(doc, idxs), nil
+		}
+		return s.shrinkOrFallback(ctx, doc, filterPendingIdxs(doc, idxs), round, res.ParseErr, logger)
+	}
+
+	missingRatio := 0.0
+	if len(wantIDs) > 0 {
+		missingRatio = float64(len(res.Missing)) / float64(len(wantIDs))
+	}
+	if len(res.Missing) > 0 && (!repairOpts.Partial || missingRatio >= repairOpts.PartialThreshold) {
+		logger.Warn("partial recovery exceeded threshold, using best partial result",
+			"backend", round.Backend.Name(), "missing", len(res.Missing), "total", len(wantIDs),
+			"threshold", s.Repair.PartialThreshold, "partial_enabled", s.Repair.Partial)
+		// 最佳部分结果已在 res 中（单后端无需比较），缺失段通过 processBatchInRound 补救
+	}
+	picked = round.Backend
 
 	if len(res.Repaired) > 0 {
 		logger.Info("batch response repaired", "backend", picked.Name(), "ops", res.Repaired,
@@ -192,7 +166,7 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 
 	s.absorbInlineGlossary(ctx, glosEntries, trans, doc.TargetLang, logger)
 
-	// 写回并对每段做占位符校验；缺失的段用 translateSingleInRound 补救。
+	// 写回并对每段做占位符校验；缺失的段用 processBatchInRound 补救。
 	// 仅处理 Translate=true 的段落，跳过上下文段落。
 	rep := s.reporter()
 	var unresolved []int
@@ -207,7 +181,7 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 		id := wantIDs[wantIDIdx]
 		wantIDIdx++
 		text, ok := trans[id]
-		if !ok {
+		if !ok || strings.TrimSpace(text) == "" {
 			missingIdxs = append(missingIdxs, idx)
 			continue
 		}
@@ -232,33 +206,29 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 		if missing := protect.MissingPlaceholders(seg); len(missing) > 0 {
 			logger.Warn("batch segment placeholders missing, single-retry",
 				"seg", seg.ID, "missing", missing)
-			ok, err := s.translateSingleInRound(ctx, doc, idx, round, logger)
+			subUnresolved, err := s.processBatchInRound(ctx, doc, []int{idx}, round, batchIndex, logger)
 			if err != nil {
 				return nil, err
 			}
-			if !ok {
-				unresolved = append(unresolved, idx)
-			}
+			unresolved = append(unresolved, subUnresolved...)
 			continue
 		}
 		s.addTM(ctx, doc, seg, logger)
 		rep.SegmentDone()
 	}
 	for _, idx := range missingIdxs {
-		ok, err := s.translateSingleInRound(ctx, doc, idx, round, logger)
+		subUnresolved, err := s.processBatchInRound(ctx, doc, []int{idx}, round, batchIndex, logger)
 		if err != nil {
 			return nil, err
 		}
-		if !ok {
-			unresolved = append(unresolved, idx)
-		}
+		unresolved = append(unresolved, subUnresolved...)
 	}
 	return unresolved, nil
 }
 
 // shrinkOrFallback 根据 round.FallbackShrink 决定：
 //   - 缩小到 >=2 的子批并发递归（每个子批又可能继续缩小）
-//   - 否则坍缩到顺序单段（调用 translateSingleInRound）
+//   - 否则坍缩到顺序单段（调用 processBatchInRound 处理每个段落）
 func (s *Translate) shrinkOrFallback(ctx context.Context, doc *Document, idxs []int, round Round, lastErr error, logger *slog.Logger) ([]int, error) {
 	if isFatalBackendError(lastErr) {
 		logger.Warn("all backends failed with fatal error, segments will be marked as unresolved",
@@ -267,16 +237,14 @@ func (s *Translate) shrinkOrFallback(ctx context.Context, doc *Document, idxs []
 	}
 	nextSize := shrinkNext(len(idxs), round.FallbackShrink)
 	if nextSize < 2 {
-		// 坍缩到顺序单段
+		// 坍缩到顺序单段：复用 processBatchInRound 处理每个段落
 		var unresolved []int
 		for _, idx := range idxs {
-			ok, err := s.translateSingleInRound(ctx, doc, idx, round, logger)
+			subUnresolved, err := s.processBatchInRound(ctx, doc, []int{idx}, round, 0, logger)
 			if err != nil {
 				return nil, err
 			}
-			if !ok {
-				unresolved = append(unresolved, idx)
-			}
+			unresolved = append(unresolved, subUnresolved...)
 		}
 		return unresolved, nil
 	}
@@ -337,6 +305,18 @@ func isFatalBackendError(err error) bool {
 		return code == 401 || code == 403
 	}
 	return false
+}
+
+// filterPendingIdxs 过滤出 Translate=true 的段落索引。
+// 用于 shrinkOrFallback 调用前，避免上下文段落被错误翻译。
+func filterPendingIdxs(doc *Document, idxs []int) []int {
+	var pending []int
+	for _, idx := range idxs {
+		if doc.Segments[idx].Translate {
+			pending = append(pending, idx)
+		}
+	}
+	return pending
 }
 
 // emitBatchEvent constructs a BatchEvent and delivers it via the Reporter's

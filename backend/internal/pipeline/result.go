@@ -38,47 +38,9 @@ type TranslateResult struct {
 	OutputTokens    int64 // LLM 调用消耗的 output token 总数
 }
 
-// TranslateResultFromDocument 从已完成翻译的 Document 中提取结果。
-// 在翻译完成后调用。
-func TranslateResultFromDocument(doc *Document) TranslateResult {
-	var result TranslateResult
-	if doc == nil {
-		return result
-	}
-	result.SegmentCount = len(doc.Segments)
-	if v, ok := doc.Vars["_translate_unresolved_count"]; ok {
-		if n, ok := v.(int); ok {
-			result.UnresolvedCount = n
-		}
-	}
-	result.Segments = buildSegmentResults(doc.Segments, doc.Vars)
-	return result
-}
-
-// buildSegmentResults 从 segments 构建结果列表。
-// vars 用于解析失败索引集合（_translate_failed_indices）。
-func buildSegmentResults(segments []Segment, vars map[string]any) []SegmentResult {
-	failedSet := parseFailedIndices(vars)
-
-	results := make([]SegmentResult, 0, len(segments))
-	for i, seg := range segments {
-		source := seg.OriginalSource
-		if source == "" {
-			source = seg.Source
-		}
-		_, isFailed := failedSet[i]
-		results = append(results, SegmentResult{
-			Index:      i,
-			SourceText: source,
-			TargetText: seg.Target,
-			Failed:     isFailed,
-		})
-	}
-	return results
-}
-
-// parseFailedIndices 从 doc.Vars 解析失败索引。
-func parseFailedIndices(vars map[string]any) map[int]struct{} {
+// ParseFailedIndices 从 doc.Vars 解析失败索引集合。
+// 读取 _translate_failed_indices 键（逗号分隔的索引字符串）。
+func ParseFailedIndices(vars map[string]any) map[int]struct{} {
 	failedSet := make(map[int]struct{})
 	if vars == nil {
 		return failedSet

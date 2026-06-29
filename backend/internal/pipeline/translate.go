@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"math"
 	"sort"
@@ -24,7 +25,7 @@ import (
 // Round 描述一轮翻译的执行配置（纯数据，无后端名称引用）。
 type Round struct {
 	Name           string
-	Backends       []backend.Backend
+	Backend        backend.Backend
 	BatchSize      int
 	Concurrency    int
 	FallbackShrink float64
@@ -92,6 +93,10 @@ type Translate struct {
 
 	// Context 控制翻译上下文窗口。
 	Context config.ContextConfig
+
+	// BatchHandler 每批翻译完成后的回调。由 Engine 注入，Pipeline 调用。
+	// 回调可能被并发调用（多个批同时完成时），实现必须并发安全。
+	BatchHandler func(ctx context.Context, result BatchResult) error
 }
 
 func (*Translate) Name() string { return "translate" }
@@ -116,80 +121,105 @@ func (s *Translate) Run(ctx context.Context, doc *Document) error {
 		return errors.New("translate: no rounds provided")
 	}
 
-	// 先把跳过段（Skip / 空白 / 仅含占位符）直接落 Target，并收集需要翻译的 idx 列表。
-	// Translate=false 的段落（上下文段落）也加入 pending，由 processBatchInRound 处理。
+	// 1. 收集 pending（Translate=true 的段落）
+	// 上下文段落（Translate=false）不在这里收集，由后续分批逻辑扩展
 	var pending []int
 	for i := range doc.Segments {
 		seg := &doc.Segments[i]
-		if seg.Skip || strings.TrimSpace(seg.Source) == "" || isPlaceholderOnly(seg) || isDecorativeSeparator(seg) {
+		if seg.Skip {
+			seg.Target = seg.Source
+			continue
+		}
+		if !seg.Translate {
+			continue
+		}
+		if strings.TrimSpace(seg.Source) == "" || isPlaceholderOnly(seg) || isDecorativeSeparator(seg) {
 			seg.Target = seg.Source
 			continue
 		}
 		pending = append(pending, i)
 	}
 
-	unresolvedCount, err := s.runRounds(ctx, doc, pending, logger)
-	if err != nil {
-		return err
+	if len(pending) == 0 {
+		return nil
 	}
-	// 将未解决段数量注入到文档变量，供上层引擎读取。
-	if doc.Vars == nil {
-		doc.Vars = map[string]any{}
-	}
-	doc.Vars["_translate_unresolved_count"] = unresolvedCount
-	return nil
-}
 
-func (s *Translate) runRounds(ctx context.Context, doc *Document, pending []int, logger *slog.Logger) (int, error) {
+	// 上报进度：总数为待翻译段落数量
+	rep := s.reporter()
+	rep.StageStart("translate", len(pending))
+	defer rep.StageDone()
+
+	// 2. 多轮处理
 	remaining := append([]int(nil), pending...)
-
 	for ridx, round := range s.Rounds {
-		// 检查 context 是否已取消
 		if ctx.Err() != nil {
-			return 0, ctx.Err()
+			return ctx.Err()
 		}
 		if len(remaining) == 0 {
 			break
 		}
-		batches := BuildContinuousPendingBatches(remaining, round.BatchSize)
+
+		// 3. 上下文感知分批
+		ctxWindow := max(s.Context.Before, s.Context.After)
+		if !s.Context.Enabled {
+			ctxWindow = 0
+		}
+		batches := BuildContextAwareBatches(remaining, round.BatchSize, ctxWindow, s.Context.Enabled)
 		logger.Info("translate round start",
-			"round", ridx+1,
-			"name", round.Name,
-			"pending", len(remaining),
-			"batches", len(batches),
-			"batch_size", round.BatchSize,
-			"concurrency", round.Concurrency)
+			"round", ridx+1, "name", round.Name,
+			"pending", len(remaining), "batches", len(batches),
+			"batch_size", round.BatchSize, "concurrency", round.Concurrency,
+			"context_enabled", s.Context.Enabled, "context_window", ctxWindow)
 
 		var (
 			mu          sync.Mutex
 			nextPending []int
 		)
 		if err := RunConcurrent(ctx, len(batches), round.Concurrency, func(ctx context.Context, bidx int) error {
-			unresolved, err := s.processBatchInRound(ctx, doc, batches[bidx], round, bidx, logger)
+			idxs := batches[bidx]
+
+			// 构建当前批次自身的索引集合
+			batchSet := make(map[int]struct{}, len(idxs))
+			for _, idx := range idxs {
+				batchSet[idx] = struct{}{}
+			}
+
+			// 4. 扩展上下文：为每个批次添加前后文段落
+			expandedIdxs := expandBatchWithContext(doc, idxs, len(doc.Segments), ctxWindow)
+			markContextSegments(doc, expandedIdxs, batchSet)
+
+			// 5. 处理批次
+			unresolved, err := s.processBatchInRound(ctx, doc, expandedIdxs, round, bidx, logger)
 			if err != nil {
 				return err
 			}
-			if len(unresolved) == 0 {
-				return nil
+
+			// 6. 回调 batchHandler
+			if s.BatchHandler != nil {
+				batchResult := buildBatchResult(doc, expandedIdxs, bidx)
+				if herr := s.BatchHandler(ctx, batchResult); herr != nil {
+					return fmt.Errorf("batch handler: %w", herr)
+				}
 			}
-			mu.Lock()
-			nextPending = append(nextPending, unresolved...)
-			mu.Unlock()
+
+			if len(unresolved) > 0 {
+				mu.Lock()
+				nextPending = append(nextPending, unresolved...)
+				mu.Unlock()
+			}
 			return nil
 		}); err != nil {
-			return 0, err
+			return err
 		}
 
 		sort.Ints(nextPending)
 		logger.Info("translate round done",
-			"round", ridx+1,
-			"name", round.Name,
+			"round", ridx+1, "name", round.Name,
 			"resolved", len(remaining)-len(nextPending),
 			"pending_next", len(nextPending))
 		remaining = nextPending
 	}
 
-	// 不再为失败段填充原文；记录失败段索引供上层使用。
 	if len(remaining) > 0 {
 		failedIndices := make([]string, 0, len(remaining))
 		for _, idx := range remaining {
@@ -199,9 +229,9 @@ func (s *Translate) runRounds(ctx context.Context, doc *Document, pending []int,
 			doc.Vars = map[string]any{}
 		}
 		doc.Vars["_translate_failed_indices"] = strings.Join(failedIndices, ",")
-		logger.Warn("translate plan exhausted, keeping unresolved segments as-is", "count", len(remaining))
+		logger.Warn("translate plan exhausted", "count", len(remaining))
 	}
-	return len(remaining), nil
+	return nil
 }
 
 // BuildContinuousPendingBatches 将 pending 段索引按连续性分组，
@@ -241,6 +271,66 @@ func BuildContinuousPendingBatches(pending []int, target int) [][]int {
 	})
 	batches = append(batches, leftovers...)
 	return batches
+}
+
+// expandBatchWithContext 为批次扩展上下文段落。
+// 返回扩展后的索引列表（包含上下文段落）。
+// 跳过 Skip=true、纯占位符、装饰性分隔符、空内容的段落。
+func expandBatchWithContext(doc *Document, idxs []int, totalSegments, ctxWindow int) []int {
+	if ctxWindow <= 0 || len(idxs) == 0 {
+		return idxs
+	}
+	firstIdx, lastIdx := idxs[0], idxs[len(idxs)-1]
+	expandFrom := max(firstIdx-ctxWindow, 0)
+	expandTo := min(lastIdx+ctxWindow, totalSegments-1)
+	expanded := make([]int, 0, expandTo-expandFrom+1)
+	for i := expandFrom; i <= expandTo; i++ {
+		seg := &doc.Segments[i]
+		if seg.Skip {
+			continue
+		}
+		if isPlaceholderOnly(seg) || isDecorativeSeparator(seg) || strings.TrimSpace(seg.Source) == "" {
+			continue
+		}
+		expanded = append(expanded, i)
+	}
+	return expanded
+}
+
+// markContextSegments 标记上下文段落：Translate=false。
+// batchSet 是当前批次自身的段落索引集合（不含上下文扩展）。
+// expandedIdxs 中不属于 batchSet 的段落全部标记为 Translate=false，
+// 包括其他批次的 pending 段落（由其他批次负责翻译）。
+func markContextSegments(doc *Document, expandedIdxs []int, batchSet map[int]struct{}) {
+	for _, idx := range expandedIdxs {
+		if _, inBatch := batchSet[idx]; !inBatch {
+			doc.Segments[idx].Translate = false
+		}
+	}
+}
+
+// buildBatchResult 构建批次结果（供 batchHandler 使用）。
+func buildBatchResult(doc *Document, idxs []int, batchIndex int) BatchResult {
+	translated := make([]TranslatedSegment, 0, len(idxs))
+	for _, idx := range idxs {
+		seg := doc.Segments[idx]
+		if !seg.Translate {
+			continue // 上下文段落不包含在结果中
+		}
+		source := seg.OriginalSource
+		if source == "" {
+			source = seg.Source
+		}
+		translated = append(translated, TranslatedSegment{
+			Index:      idx,
+			ID:         seg.ID,
+			SourceText: source,
+			TargetText: seg.Target,
+			Failed:     seg.Target == "",
+			Meta:       seg.Meta,
+		})
+	}
+	return BatchResult{Segments: translated, BatchIndex: batchIndex}
 }
 
 // resolveRoundRenderer 返回轮次级 Renderer，nil 时回退到共享默认。

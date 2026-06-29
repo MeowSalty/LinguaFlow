@@ -334,7 +334,7 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 		}
 
 		rounds = append(rounds, engine.Round{
-			Backends:       []backend.Backend{b},
+			Backend:        b,
 			Name:           rs.Name,
 			BatchSize:      rs.BatchSize,
 			Concurrency:    rs.Concurrency,

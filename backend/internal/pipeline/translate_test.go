@@ -516,7 +516,7 @@ func defaultRepairOpts() repair.Options {
 func defaultTestRound(fb backend.Backend, batchSize, concurrency int) []Round {
 	return []Round{{
 		Name:        "default",
-		Backends:    []backend.Backend{fb},
+		Backend:     fb,
 		BatchSize:   batchSize,
 		Concurrency: concurrency,
 	}}
@@ -533,8 +533,8 @@ func TestProcessBatch_PartialRecovery_BelowThreshold(t *testing.T) {
 		responses: []string{
 			// 第 1 次（batch）：缺 "4"
 			`{"translations":{"1":"a","2":"b","3":"c"}}`,
-			// 第 2 次（translateSingleInRound for seg 3）：用 SingleID "0"
-			`{"translations":{"0":"d"}}`,
+			// 第 2 次（processBatchInRound for seg 3）：单段用 ID "1"
+			`{"translations":{"1":"d"}}`,
 		},
 	}
 	s := &Translate{
@@ -555,7 +555,7 @@ func TestProcessBatch_PartialRecovery_BelowThreshold(t *testing.T) {
 	if got := int(fb.idx.Load()); got != 2 {
 		t.Errorf("backend calls: %d want 2 (1 batch + 1 single)", got)
 	}
-	// 4 段都应该恰好被 SegmentDone 一次：成功 3 段在 batch path、缺失 1 段在 translateSingleInRound 内。
+	// 4 段都应该恰好被 SegmentDone 一次
 	if got := atomic.LoadInt32(&rep.segmentDones); got != 4 {
 		t.Errorf("SegmentDone calls=%d want 4 (no double-count, no missing)", got)
 	}
@@ -572,16 +572,16 @@ func TestProcessBatch_PartialRecovery_AboveThresholdShrinks(t *testing.T) {
 		name: "fake",
 		responses: []string{
 			// 第 1 次 batch：仅返回 1 个 → 缺失率 0.75 > 0.5 阈值
-			// 使用最佳部分结果，缺失 3 段走 translateSingleInRound
+			// 使用最佳部分结果，缺失 3 段走 processBatchInRound 单段补救
 			`{"translations":{"1":"a"}}`,
-			// 后续 3 次 single 补救缺失段
-			`{"translations":{"0":"x1"}}`,
-			`{"translations":{"0":"x2"}}`,
-			`{"translations":{"0":"x3"}}`,
+			// 后续 3 次单段补救（ID 为 "1"）
+			`{"translations":{"1":"x1"}}`,
+			`{"translations":{"1":"x2"}}`,
+			`{"translations":{"1":"x3"}}`,
 		},
 	}
 	s := &Translate{
-		Rounds:   []Round{{Name: "default", Backends: []backend.Backend{fb}, BatchSize: 4, Concurrency: 1, FallbackShrink: 0}},
+		Rounds:   []Round{{Name: "default", Backend: fb, BatchSize: 4, Concurrency: 1, FallbackShrink: 0}},
 		Renderer: newTestRenderer(t),
 		Logger:   quietLogger(),
 		Reporter: rep,
@@ -616,7 +616,7 @@ func TestProcessBatch_PlaceholderNormalizeAvoidsRetry(t *testing.T) {
 		name: "fake",
 		responses: []string{
 			// LLM 返回小写占位符，应被 normalize 救回
-			`{"translations":{"0":"你好 __lf_000001__"}}`,
+			`{"translations":{"1":"你好 __lf_000001__"}}`,
 		},
 	}
 	s := &Translate{
@@ -678,14 +678,14 @@ func TestProcessBatch_PromptUpgradeDisabledFallsBack(t *testing.T) {
 		name: "fake",
 		responses: []string{
 			"not json",
-			`{"translations":{"0":"x0"}}`,
-			`{"translations":{"0":"x1"}}`,
+			`{"translations":{"1":"x0"}}`,
+			`{"translations":{"1":"x1"}}`,
 		},
 	}
 	opts := defaultRepairOpts()
 	opts.PromptUpgrade = false
 	s := &Translate{
-		Rounds:   []Round{{Name: "default", Backends: []backend.Backend{fb}, BatchSize: 2, Concurrency: 1, FallbackShrink: 0}},
+		Rounds:   []Round{{Name: "default", Backend: fb, BatchSize: 2, Concurrency: 1, FallbackShrink: 0}},
 		Renderer: newTestRenderer(t),
 		Logger:   quietLogger(),
 		Reporter: rep,
@@ -710,13 +710,13 @@ func TestTranslatePlan_UsesLongestContinuousRunsAndNextRoundFallback(t *testing.
 		responses: []string{
 			`{"translations":{"1":"a0","2":"a1","3":"a2"}}`,
 			`{"translations":{"1":"b4","2":"b5"}}`,
-			`{"translations":{"0":"c6"}}`,
+			`{"translations":{"1":"c6"}}`,
 		},
 	}
 	s := &Translate{
 		Rounds: []Round{
-			{Name: "bulk", Backends: []backend.Backend{fb}, BatchSize: 3, Concurrency: 1},
-			{Name: "single", Backends: []backend.Backend{fb}, BatchSize: 1, Concurrency: 1},
+			{Name: "bulk", Backend: fb, BatchSize: 3, Concurrency: 1},
+			{Name: "single", Backend: fb, BatchSize: 1, Concurrency: 1},
 		},
 		Renderer: newTestRenderer(t),
 		Logger:   quietLogger(),
@@ -756,7 +756,7 @@ func TestTranslatePlan_ExhaustedRoundsKeepSource(t *testing.T) {
 	}
 	s := &Translate{
 		Rounds: []Round{
-			{Name: "only", Backends: []backend.Backend{fb}, BatchSize: 2, Concurrency: 1},
+			{Name: "only", Backend: fb, BatchSize: 2, Concurrency: 1},
 		},
 		Renderer: newTestRenderer(t),
 		Logger:   quietLogger(),
