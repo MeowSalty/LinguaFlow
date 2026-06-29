@@ -60,8 +60,6 @@ export function useSSEEventCache(
   }
 
   const handleDrawerClose = (): void => {
-    const id = jobId.value
-    if (id != null) clearCache(id)
     skipNext = true
     cachedEvents.value = []
   }

@@ -582,7 +582,7 @@ const messages = {
         batch: {
           summary: '批次 #{index}',
           segments: '{count} 段落',
-          tokens: '{input}→{output} tokens',
+          tokens: '{input}↑ {output}↓ tokens',
           glossaryUsed: '{count} 使用',
           glossaryAdded: '{count} 新增',
           expand: '详情',

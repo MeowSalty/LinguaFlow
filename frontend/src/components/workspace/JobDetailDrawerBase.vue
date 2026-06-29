@@ -59,6 +59,7 @@ watch(
       syntheticEvents.value = []
     }
   },
+  { immediate: true },
 )
 
 watch(

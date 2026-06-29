@@ -3,8 +3,13 @@ import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { NButton, NEmpty, NTimeline, NTimelineItem } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
-import type { SSEEvent } from '@/composables/useJobSSE'
-import { eventLevelType, getStageLabel, isBatchEvent } from '@/composables/useWorkspaceUtils'
+import type { BatchEventMetadata, SSEEvent } from '@/composables/useJobSSE'
+import {
+  eventLevelType,
+  formatDuration,
+  getStageLabel,
+  isBatchEvent,
+} from '@/composables/useWorkspaceUtils'
 
 import BatchEventCard from './BatchEventCard.vue'
 
@@ -37,9 +42,54 @@ const makeKey = (event: SSEEvent, index: number, prefix: string): string => {
   return `${prefix}-${event.type}-${event.created_at}-${index}`
 }
 
-const allEvents = computed(() => {
+const getBatchSummary = (event: SSEEvent): string => {
+  const meta = event.metadata as unknown as BatchEventMetadata | undefined
+  if (!meta) return event.message
+  const parts: string[] = [
+    t('workspace.job.events.batch.summary', { index: meta.batch_index }),
+    t('workspace.job.events.batch.segments', { count: meta.segment_count }),
+  ]
+  if (meta.duration_ms) parts.push(formatDuration(meta.duration_ms))
+  return parts.join(' · ')
+}
+
+const JOB_EVENT_TYPES = new Set(['job_started', 'job_completed', 'job_failed', 'job_cancelled'])
+
+const RESOURCE_EVENT_TYPES = new Set([
+  'resource_started',
+  'resource_completed',
+  'resource_failed',
+  'resource_cancelled',
+])
+
+const filteredSyntheticEvents = computed(() => {
   const synthetic = props.syntheticEvents ?? []
-  return [...synthetic, ...props.events]
+  const live = props.events
+
+  const liveJobTypes = new Set<string>()
+  const liveResourceTypes = new Set<string>()
+
+  for (const event of live) {
+    if (JOB_EVENT_TYPES.has(event.type)) {
+      liveJobTypes.add(event.type)
+    } else if (RESOURCE_EVENT_TYPES.has(event.type)) {
+      liveResourceTypes.add(event.type)
+    }
+  }
+
+  return synthetic.filter((event) => {
+    if (JOB_EVENT_TYPES.has(event.type)) {
+      return !liveJobTypes.has(event.type)
+    }
+    if (RESOURCE_EVENT_TYPES.has(event.type)) {
+      return !liveResourceTypes.has(event.type)
+    }
+    return true
+  })
+})
+
+const allEvents = computed(() => {
+  return [...filteredSyntheticEvents.value, ...props.events]
 })
 
 let scrollTicking = false
@@ -112,24 +162,24 @@ onMounted(() => {
       </div>
     </div>
 
-    <div class="relative min-h-[200px]">
-      <div ref="scrollContainer" class="max-h-[400px] overflow-auto" @scroll="checkScrollPosition">
+    <div class="relative min-h-50">
+      <div ref="scrollContainer" class="max-h-100 overflow-auto" @scroll="checkScrollPosition">
         <div v-if="allEvents.length === 0" class="py-6 text-center">
           <NEmpty size="small" :description="t('workspace.job.events.empty')" />
         </div>
 
         <NTimeline v-else :icon-size="16">
           <!-- Synthetic events: dashed line + muted text -->
-          <template v-if="syntheticEvents && syntheticEvents.length > 0">
+          <template v-if="filteredSyntheticEvents.length > 0">
             <NTimelineItem
-              v-for="(event, index) in syntheticEvents"
+              v-for="(event, index) in filteredSyntheticEvents"
               :key="makeKey(event, index, 'syn')"
               line-type="dashed"
               type="default"
               :title="event.message"
               :content="event.stage ? getStageLabel(event.stage) : undefined"
               :time="formatEventTime(event.created_at)"
-              class="[&_.n-timeline-item-content]:text-lf-text-muted [&_.n-timeline-item-content]:text-lf-text-subtle"
+              class="[&_.n-timeline-item-content]:text-lf-text-muted"
             />
           </template>
 
@@ -143,12 +193,15 @@ onMounted(() => {
               :content="event.stage ? getStageLabel(event.stage) : undefined"
               :time="formatEventTime(event.created_at)"
             />
-            <div v-else class="mb-3">
-              <div class="mb-1 text-[10px] text-lf-text-muted">
-                {{ formatEventTime(event.created_at) }}
-              </div>
+            <NTimelineItem
+              v-else
+              line-type="default"
+              :type="event.type === 'batch_error' ? 'error' : 'success'"
+              :title="getBatchSummary(event)"
+              :time="formatEventTime(event.created_at)"
+            >
               <BatchEventCard :event="event" />
-            </div>
+            </NTimelineItem>
           </template>
         </NTimeline>
       </div>
@@ -162,7 +215,7 @@ onMounted(() => {
       >
         <button
           v-if="hasNewEvents && !isNearBottom"
-          class="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-lf-brand-500 px-4 py-1.5 text-xs font-medium text-white shadow-lg hover:bg-lf-brand-600"
+          class="absolute bottom-4 left-1/2 -translate-x-1/2 rounded-full bg-brand-500 px-4 py-1.5 text-xs font-medium text-white shadow-lg hover:bg-brand-600"
           @click="scrollToBottom"
         >
           {{ t('workspace.job.events.newEvents', { count: events.length - prevEventsLength + 1 }) }}
