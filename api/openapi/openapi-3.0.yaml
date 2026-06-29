@@ -2526,6 +2526,11 @@ components:
         options:
           type: object
           additionalProperties: true
+        rate_limit_per_minute:
+          type: integer
+          minimum: 0
+          default: 0
+          description: 每分钟请求限制；0 表示不限速
         owner_user_id:
           type: integer
         owner_org_id:
@@ -2556,6 +2561,11 @@ components:
         options:
           type: object
           additionalProperties: true
+        rate_limit_per_minute:
+          type: integer
+          minimum: 0
+          default: 0
+          description: 每分钟请求限制；0 表示不限速
       additionalProperties: false
     UpdateBackendRequest:
       type: object
@@ -2574,6 +2584,11 @@ components:
         options:
           type: object
           additionalProperties: true
+        rate_limit_per_minute:
+          type: integer
+          minimum: 0
+          default: 0
+          description: 每分钟请求限制；0 表示不限速
       additionalProperties: false
     Project:
       type: object
@@ -3241,10 +3256,6 @@ components:
           type: number
           minimum: 0
           maximum: 1
-          default: 0
-        rate_limit_per_sec:
-          type: integer
-          minimum: 0
           default: 0
         retry:
           $ref: '#/components/schemas/RetryConfig'
