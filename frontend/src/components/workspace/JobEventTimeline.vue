@@ -45,12 +45,21 @@ const makeKey = (event: SSEEvent, index: number, prefix: string): string => {
 const getBatchSummary = (event: SSEEvent): string => {
   const meta = event.metadata as unknown as BatchEventMetadata | undefined
   if (!meta) return event.message
-  const parts: string[] = [
+  const parts: string[] = []
+  if (event.stage) parts.push(getStageLabel(event.stage))
+  parts.push(
     t('workspace.job.events.batch.summary', { index: meta.batch_index }),
     t('workspace.job.events.batch.segments', { count: meta.segment_count }),
-  ]
+  )
   if (meta.duration_ms) parts.push(formatDuration(meta.duration_ms))
   return parts.join(' · ')
+}
+
+const getBatchTimelineType = (event: SSEEvent): 'success' | 'warning' | 'error' => {
+  if (event.type === 'batch_error') return 'error'
+  const meta = event.metadata as BatchEventMetadata | undefined
+  if (meta?.status === 'partial') return 'warning'
+  return 'success'
 }
 
 const JOB_EVENT_TYPES = new Set(['job_started', 'job_completed', 'job_failed', 'job_cancelled'])
@@ -196,7 +205,7 @@ onMounted(() => {
             <NTimelineItem
               v-else
               line-type="default"
-              :type="event.type === 'batch_error' ? 'error' : 'success'"
+              :type="getBatchTimelineType(event)"
               :title="getBatchSummary(event)"
               :time="formatEventTime(event.created_at)"
             >

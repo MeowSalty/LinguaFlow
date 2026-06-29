@@ -538,6 +538,7 @@ const messages = {
         translate: '翻译',
         review: '审校',
         finalize: '收尾',
+        ruby_alignment: '注音对齐',
       },
       // 进度文案
       progress: {

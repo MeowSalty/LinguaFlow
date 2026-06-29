@@ -14,6 +14,7 @@ export interface BatchEventMetadata {
   batch_index: number
   segment_count: number
   backend_name: string
+  status: 'success' | 'partial' | 'failed'
   duration_ms: number
   input_tokens: number
   output_tokens: number
