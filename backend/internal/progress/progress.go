@@ -40,23 +40,23 @@ func (Nop) Close() error           { return nil }
 
 // BatchEvent describes the result of a single batch translation attempt.
 type BatchEvent struct {
-	Stage           string                    `json:"stage"`
-	BatchIndex      int                       `json:"batch_index"`
-	SegmentIDs      []string                  `json:"segment_ids"`
-	SegmentCount    int                       `json:"segment_count"`
-	BackendName     string                    `json:"backend_name"`
-	Status          string                    `json:"status"` // "success" | "partial" | "failed"
-	DurationMs      int64                     `json:"duration_ms"`
-	InputTokens     int64                     `json:"input_tokens"`
-	OutputTokens    int64                     `json:"output_tokens"`
-	SentContent     string                    `json:"sent_content"`
-	ReceivedContent string                    `json:"received_content"`
-	UsedGlossary    []prompt.GlossaryEntry    `json:"used_glossary,omitempty"`
-	AddedGlossary   []prompt.BootstrapEntry   `json:"added_glossary,omitempty"`
-	ErrorType       string                    `json:"error_type,omitempty"` // "backend_error" | "parse_error" | "placeholder_error" | ""
-	ErrorMessage    string                    `json:"error_message,omitempty"`
-	TriedBackends   []string                  `json:"tried_backends,omitempty"`
-	ShrinkAttempted bool                      `json:"shrink_attempted,omitempty"`
+	Stage           string                  `json:"stage"`
+	BatchIndex      int                     `json:"batch_index"`
+	SegmentIDs      []string                `json:"segment_ids"`
+	SegmentCount    int                     `json:"segment_count"`
+	BackendName     string                  `json:"backend_name"`
+	Status          string                  `json:"status"` // "success" | "partial" | "failed"
+	DurationMs      int64                   `json:"duration_ms"`
+	InputTokens     int64                   `json:"input_tokens"`
+	OutputTokens    int64                   `json:"output_tokens"`
+	SentContent     string                  `json:"sent_content"`
+	ReceivedContent string                  `json:"received_content"`
+	UsedGlossary    []prompt.GlossaryEntry  `json:"used_glossary,omitempty"`
+	AddedGlossary   []prompt.BootstrapEntry `json:"added_glossary,omitempty"`
+	ErrorType       string                  `json:"error_type,omitempty"` // "backend_error" | "parse_error" | "placeholder_error" | ""
+	ErrorMessage    string                  `json:"error_message,omitempty"`
+	TriedBackends   []string                `json:"tried_backends,omitempty"`
+	ShrinkAttempted bool                    `json:"shrink_attempted,omitempty"`
 }
 
 // BatchObserver is an optional interface that a Reporter may implement
