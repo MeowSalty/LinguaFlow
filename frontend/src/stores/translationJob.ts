@@ -9,7 +9,6 @@ import {
   fetchTranslationJobs,
   retryTranslationJob as retryTranslationJobRequest,
 } from '@/api/client'
-import type { SSEEvent } from '@/composables/useJobSSE'
 import { t } from '@/i18n'
 import { getJobProgress } from '@/composables/useWorkspaceUtils'
 
@@ -39,11 +38,6 @@ export const useTranslationJobStore = defineStore('translationJob', () => {
   const cancellingJobIds = ref<number[]>([])
   const retryingJobIds = ref<number[]>([])
   const actionError = ref<string | null>(null)
-
-  // ── 事件状态（由 SSE composable 管理连接，此状态用于共享） ──
-  const sseEvents = ref<SSEEvent[]>([])
-  const sseConnected = ref(false)
-  const sseError = ref<string | null>(null)
 
   // ── 轮询状态 ──
   const activePollingJobIds = ref<Set<number>>(new Set())
@@ -138,24 +132,6 @@ export const useTranslationJobStore = defineStore('translationJob', () => {
     }
   }
 
-  // ── SSE 状态更新（由 useJobSSE composable 调用） ──
-  const setSSEEvents = (newEvents: SSEEvent[]): void => {
-    sseEvents.value = newEvents
-  }
-
-  const setSSEConnected = (connected: boolean): void => {
-    sseConnected.value = connected
-  }
-
-  const setSSEError = (err: string | null): void => {
-    sseError.value = err
-  }
-
-  const clearSSEEvents = (): void => {
-    sseEvents.value = []
-    sseError.value = null
-  }
-
   // ── 轮询控制 ──
   const startPolling = (jobId: number): void => {
     activePollingJobIds.value = new Set([...activePollingJobIds.value, jobId])
@@ -186,9 +162,6 @@ export const useTranslationJobStore = defineStore('translationJob', () => {
     jobDetailError.value = null
     jobStatusFilter.value = 'all'
     actionError.value = null
-    sseEvents.value = []
-    sseConnected.value = false
-    sseError.value = null
     activePollingJobIds.value = new Set()
   }
 
@@ -205,13 +178,6 @@ export const useTranslationJobStore = defineStore('translationJob', () => {
     retryingJobIds,
     actionError,
     jobStatusFilter,
-    sseEvents,
-    sseConnected,
-    sseError,
-    setSSEEvents,
-    setSSEConnected,
-    setSSEError,
-    clearSSEEvents,
     startPolling,
     stopPolling,
     isPolling,

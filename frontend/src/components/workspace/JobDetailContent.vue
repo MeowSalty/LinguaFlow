@@ -4,7 +4,7 @@ import { NAlert, NDataTable, NDescriptions, NDescriptionsItem, NTag, NText } fro
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
-import type { SSEEvent } from '@/composables/useJobSSE'
+import type { SSEEvent } from '@/composables/sseShared'
 import {
   formatDate,
   formatConfigValue,

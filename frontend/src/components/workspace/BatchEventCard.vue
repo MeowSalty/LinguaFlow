@@ -3,7 +3,7 @@ import { computed, ref } from 'vue'
 import { NButton, NIcon, NTag } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
-import type { BatchEventMetadata, SSEEvent } from '@/composables/useJobSSE'
+import type { BatchEventMetadata, SSEEvent } from '@/composables/sseShared'
 import { formatTokens } from '@/composables/useWorkspaceUtils'
 
 import BatchContentViewer from './BatchContentViewer.vue'

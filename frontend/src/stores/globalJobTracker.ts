@@ -2,7 +2,14 @@ import { defineStore } from 'pinia'
 import { computed, ref, watch, onScopeDispose } from 'vue'
 
 import { type ApiSchemas, fetchTranslationJob } from '@/api/client'
-import { clearCache as clearSSECache } from '@/composables/useSSEEventCache'
+import {
+  type SSEEvent,
+  KNOWN_EVENT_TYPES,
+  resolveStreamUrl,
+  readCachedSSEEvents,
+  persistSSEEvents,
+  clearSSECacheFromStorage,
+} from '@/composables/sseShared'
 
 type TranslationJob = ApiSchemas['TranslationJob']
 
@@ -16,6 +23,7 @@ const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled'])
 
 const RUNNING_POLL_INTERVAL = 3_000
 const PENDING_POLL_INTERVAL = 8_000
+const MAX_SSE_CONNECTIONS = 5
 
 export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
   // ── 状态 ──
@@ -27,6 +35,11 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
   // ── 详情抽屉独立状态 ──
   const detailJob = ref<TranslationJob | null>(null)
   const loadingDetail = ref(false)
+
+  // ── SSE 后台连接管理 ──
+  const eventBuffers = ref<Map<number, SSEEvent[]>>(new Map())
+  const connectionStatus = ref<Map<number, boolean>>(new Map())
+  const eventSources = new Map<number, EventSource>()
 
   // ── Getters ──
   const activeJobs = computed(() =>
@@ -76,6 +89,85 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     }
   }
 
+  // ── SSE 后台连接管理 ──
+
+  const connectJobSSE = (jobId: number): void => {
+    if (eventSources.has(jobId)) return
+
+    const url = resolveStreamUrl(jobId)
+    if (!url) return
+
+    const es = new EventSource(url)
+
+    es.onopen = () => {
+      connectionStatus.value = new Map([...connectionStatus.value, [jobId, true]])
+    }
+
+    const handleEvent = (e: MessageEvent): void => {
+      try {
+        const data = JSON.parse(e.data) as SSEEvent
+        const current = eventBuffers.value.get(jobId) ?? []
+        const updated = [...current, data]
+        const next = new Map(eventBuffers.value)
+        next.set(jobId, updated)
+        eventBuffers.value = next
+        persistSSEEvents(jobId, updated)
+      } catch {
+        // ignore malformed events
+      }
+    }
+
+    for (const eventType of KNOWN_EVENT_TYPES) {
+      es.addEventListener(eventType, handleEvent)
+    }
+
+    es.onerror = () => {
+      connectionStatus.value = new Map([...connectionStatus.value, [jobId, false]])
+      if (es.readyState === EventSource.CLOSED) {
+        eventSources.delete(jobId)
+      }
+    }
+
+    eventSources.set(jobId, es)
+    enforceConnectionLimit()
+  }
+
+  const disconnectJobSSE = (jobId: number): void => {
+    const es = eventSources.get(jobId)
+    if (es) {
+      es.close()
+      eventSources.delete(jobId)
+    }
+    const next = new Map(connectionStatus.value)
+    next.delete(jobId)
+    connectionStatus.value = next
+  }
+
+  const enforceConnectionLimit = (): void => {
+    if (eventSources.size <= MAX_SSE_CONNECTIONS) return
+
+    const activeWithSSE = trackedJobs.value
+      .filter((j) => !TERMINAL_STATUSES.has(j.status) && eventSources.has(j.id))
+      .sort((a, b) => {
+        if (a.status === 'running' && b.status !== 'running') return -1
+        if (b.status === 'running' && a.status !== 'running') return 1
+        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+      })
+
+    while (eventSources.size > MAX_SSE_CONNECTIONS) {
+      const lowest = activeWithSSE.pop()
+      if (lowest) disconnectJobSSE(lowest.id)
+      else break
+    }
+  }
+
+  const clearJobEvents = (jobId: number): void => {
+    const next = new Map(eventBuffers.value)
+    next.delete(jobId)
+    eventBuffers.value = next
+    clearSSECacheFromStorage(jobId)
+  }
+
   // ── 单个任务刷新 ──
   const refreshJob = async (jobId: number): Promise<void> => {
     if (loadingJobIds.value.has(jobId)) return
@@ -87,6 +179,9 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
       if (idx !== -1) {
         const existing = trackedJobs.value[idx]!
         trackedJobs.value[idx] = { ...job, project_name: existing.project_name }
+        if (TERMINAL_STATUSES.has(job.status)) {
+          disconnectJobSSE(jobId)
+        }
       }
     } catch {
       // task may have been deleted server-side — remove from tracking
@@ -127,6 +222,10 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     const tracked: TrackedJob = { ...job, project_name: projectName }
     trackedJobs.value = [tracked, ...trackedJobs.value]
     persistIds()
+
+    if (!TERMINAL_STATUSES.has(job.status)) {
+      connectJobSSE(job.id)
+    }
   }
 
   const untrackJob = (jobId: number): void => {
@@ -134,7 +233,8 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     if (drawerJobId.value === jobId) {
       drawerJobId.value = null
     }
-    clearSSECache(jobId)
+    disconnectJobSSE(jobId)
+    clearJobEvents(jobId)
     persistIds()
   }
 
@@ -142,7 +242,8 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     const removed = trackedJobs.value.filter((j) => TERMINAL_STATUSES.has(j.status))
     trackedJobs.value = trackedJobs.value.filter((j) => !TERMINAL_STATUSES.has(j.status))
     for (const job of removed) {
-      clearSSECache(job.id)
+      disconnectJobSSE(job.id)
+      clearJobEvents(job.id)
     }
     persistIds()
   }
@@ -320,6 +421,19 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     trackedJobs.value = jobs
     persistIds()
 
+    // Restore cached SSE events and reconnect for active jobs
+    for (const job of jobs) {
+      const cached = readCachedSSEEvents(job.id)
+      if (cached.length > 0) {
+        const next = new Map(eventBuffers.value)
+        next.set(job.id, cached)
+        eventBuffers.value = next
+      }
+      if (!TERMINAL_STATUSES.has(job.status)) {
+        connectJobSSE(job.id)
+      }
+    }
+
     if (hasActiveJobs.value) {
       startPolling()
     }
@@ -334,6 +448,10 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
   onScopeDispose(() => {
     clearPollTimer()
     clearDetailPollTimer()
+    for (const [, es] of eventSources) {
+      es.close()
+    }
+    eventSources.clear()
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', handleVisibility)
     }
@@ -346,6 +464,8 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     detailJob,
     loadingDetail,
     initialized,
+    eventBuffers,
+    connectionStatus,
     // Getters
     activeJobs,
     hasActiveJobs,
@@ -361,5 +481,8 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     closeDetail,
     refreshDetail,
     initialize,
+    getJobEvents: (jobId: number): SSEEvent[] => eventBuffers.value.get(jobId) ?? [],
+    isJobSSEConnected: (jobId: number): boolean => connectionStatus.value.get(jobId) ?? false,
+    clearJobEvents,
   }
 })

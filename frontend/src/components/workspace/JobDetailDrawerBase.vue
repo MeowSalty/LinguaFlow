@@ -3,8 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { NDrawer, NDrawerContent, NEmpty, NSpin } from 'naive-ui'
 
 import type { ApiSchemas } from '@/api/client'
-import { useJobSSE } from '@/composables/useJobSSE'
-import { useSSEEventCache } from '@/composables/useSSEEventCache'
+import { useGlobalJobTrackerStore } from '@/stores/globalJobTracker'
 import { buildSyntheticEvents, type SyntheticEvent } from '@/composables/useSyntheticEvents'
 
 import JobDetailContent from './JobDetailContent.vue'
@@ -25,11 +24,19 @@ const emit = defineEmits<{
   'update:show': [value: boolean]
 }>()
 
+const tracker = useGlobalJobTrackerStore()
+
 const jobId = computed(() => props.job?.id ?? null)
 
-const { events, connected, connect, disconnect, clearEvents } = useJobSSE(jobId)
+const events = computed(() => {
+  const id = jobId.value
+  return id != null ? tracker.getJobEvents(id) : []
+})
 
-const { cachedEvents, restoreCache, handleDrawerClose } = useSSEEventCache(jobId, events)
+const connected = computed(() => {
+  const id = jobId.value
+  return id != null ? tracker.isJobSSEConnected(id) : false
+})
 
 const syntheticEvents = ref<SyntheticEvent[]>([])
 
@@ -41,21 +48,15 @@ const refreshSyntheticEvents = (): void => {
 
 const clearEventsAndCache = (): void => {
   const id = jobId.value
-  if (id != null) handleDrawerClose()
-  clearEvents()
+  if (id != null) tracker.clearJobEvents(id)
 }
 
 watch(
   () => props.show,
   (visible) => {
     if (visible && jobId.value != null) {
-      restoreCache()
-      connect()
       refreshSyntheticEvents()
     } else {
-      handleDrawerClose()
-      disconnect()
-      clearEvents()
       syntheticEvents.value = []
     }
   },
@@ -73,10 +74,6 @@ watch(
 
 watch(jobId, (newId, oldId) => {
   if (props.show && newId != null && newId !== oldId) {
-    handleDrawerClose()
-    clearEvents()
-    restoreCache()
-    connect()
     refreshSyntheticEvents()
   }
 })
@@ -99,7 +96,7 @@ watch(jobId, (newId, oldId) => {
           :job="job"
           :external-error="error"
           :project-name="projectName"
-          :events="cachedEvents"
+          :events="events"
           :synthetic-events="syntheticEvents"
           :sse-connected="connected"
           @clear-events="clearEventsAndCache"

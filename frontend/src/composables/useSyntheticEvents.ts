@@ -1,5 +1,5 @@
 import type { ApiSchemas } from '@/api/client'
-import type { SSEEvent } from '@/composables/useJobSSE'
+import type { SSEEvent } from '@/composables/sseShared'
 import { t } from '@/i18n'
 
 type TranslationJob = ApiSchemas['TranslationJob']
