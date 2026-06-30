@@ -189,13 +189,12 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 			missingIdxs = append(missingIdxs, idx)
 			continue
 		}
-		// 分发 ruby_output 到各段
+		// 分发 ruby_output 到各段（仅当源文本含有注音时）
 		if rubyOutputMap != nil {
 			if ro, rok := rubyOutputMap[id]; rok && len(ro) > 0 {
-				if seg.Meta == nil {
-					seg.Meta = make(map[string]any)
+				if _, hasAnns := seg.Meta["ruby_annotations"]; hasAnns {
+					seg.Meta["ruby_output"] = ro
 				}
-				seg.Meta["ruby_output"] = ro
 			}
 		}
 		// L3 占位符归一化：仅 normalize seg.Protected 中已知 key 的变体。
