@@ -25,8 +25,7 @@ type TranslatedSegment struct {
 
 // BatchResult 描述一批翻译的结果。
 type BatchResult struct {
-	Segments   []TranslatedSegment
-	BatchIndex int
+	Segments []TranslatedSegment
 }
 
 // TranslateResult 描述一次翻译任务的总体结果。

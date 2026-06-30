@@ -41,7 +41,6 @@ func (Nop) Close() error           { return nil }
 // BatchEvent describes the result of a single batch translation attempt.
 type BatchEvent struct {
 	Stage           string                  `json:"stage"`
-	BatchIndex      int                     `json:"batch_index"`
 	SegmentIDs      []string                `json:"segment_ids"`
 	SegmentCount    int                     `json:"segment_count"`
 	BackendName     string                  `json:"backend_name"`

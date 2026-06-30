@@ -21,10 +21,9 @@ import (
 
 // processBatchInRound 处理一批 idx（len(idxs) <= round.BatchSize）。
 // 尝试批量发送，失败时按 round.FallbackShrink 缩小子批并发递归，直到收敛到单段。
-// batchIndex 是本批在当前轮次中的序号（0-based），用于事件上报。
 // contextSet 包含本批中作为上下文参考（不需要翻译）的段落索引。
 // 返回 unresolved 的段索引列表；非 nil error 表示 stage 级别终止。
-func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs []int, round Round, batchIndex int, logger *slog.Logger, contextSet map[int]struct{}) ([]int, error) {
+func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs []int, round Round, logger *slog.Logger, contextSet map[int]struct{}) ([]int, error) {
 	batchStart := time.Now()
 	renderer := s.resolveRoundRenderer(round)
 	repairOpts := s.resolveRoundRepair(round)
@@ -158,7 +157,7 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 	trans, glosEntries, rubyOutputMap := res.Trans, res.Glos, res.RubyOutput
 
 	// Determine batch status and emit event.
-	s.emitBatchEvent(batchIndex, idxs, wantIDs, picked.Name(), res, rawRespText, usr,
+	s.emitBatchEvent(idxs, wantIDs, picked.Name(), res, rawRespText, usr,
 		glos, resp.Usage, durationMs, tried, logger)
 
 	logger.Debug("batch translated",
@@ -218,7 +217,7 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 			retryExpanded := expandBatchWithContext(doc, []int{idx}, len(doc.Segments), s.contextWindow())
 			retryBatchSet := map[int]struct{}{idx: {}}
 			retryCtxSet := buildContextSet(retryExpanded, retryBatchSet)
-			subUnresolved, err := s.processBatchInRound(ctx, doc, retryExpanded, round, batchIndex, logger, retryCtxSet)
+			subUnresolved, err := s.processBatchInRound(ctx, doc, retryExpanded, round, logger, retryCtxSet)
 			if err != nil {
 				return nil, err
 			}
@@ -244,7 +243,7 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 		retryExpanded := expandBatchWithContext(doc, []int{idx}, len(doc.Segments), s.contextWindow())
 		retryBatchSet := map[int]struct{}{idx: {}}
 		retryCtxSet := buildContextSet(retryExpanded, retryBatchSet)
-		subUnresolved, err := s.processBatchInRound(ctx, doc, retryExpanded, round, batchIndex, logger, retryCtxSet)
+		subUnresolved, err := s.processBatchInRound(ctx, doc, retryExpanded, round, logger, retryCtxSet)
 		if err != nil {
 			return nil, err
 		}
@@ -279,7 +278,7 @@ func (s *Translate) shrinkOrFallback(ctx context.Context, doc *Document, idxs []
 			retryExpanded := expandBatchWithContext(doc, []int{idx}, len(doc.Segments), ctxWin)
 			retryBatchSet := map[int]struct{}{idx: {}}
 			retryCtxSet := buildContextSet(retryExpanded, retryBatchSet)
-			subUnresolved, err := s.processBatchInRound(ctx, doc, retryExpanded, round, 0, logger, retryCtxSet)
+			subUnresolved, err := s.processBatchInRound(ctx, doc, retryExpanded, round, logger, retryCtxSet)
 			if err != nil {
 				return nil, err
 			}
@@ -308,7 +307,7 @@ func (s *Translate) shrinkOrFallback(ctx context.Context, doc *Document, idxs []
 			subBatchSet[idx] = struct{}{}
 		}
 		subCtxSet := buildContextSet(subExpanded, subBatchSet)
-		subUnresolved, err := s.processBatchInRound(ctx, doc, subExpanded, round, bidx, logger, subCtxSet)
+		subUnresolved, err := s.processBatchInRound(ctx, doc, subExpanded, round, logger, subCtxSet)
 		if err != nil {
 			return err
 		}
@@ -408,7 +407,6 @@ func filterPendingIdxs(idxs []int, contextSet map[int]struct{}) []int {
 // BatchObserver interface (if implemented). Called after the backend loop ends
 // and before absorbInlineGlossary.
 func (s *Translate) emitBatchEvent(
-	batchIndex int,
 	idxs []int,
 	wantIDs []string,
 	backendName string,
@@ -450,7 +448,6 @@ func (s *Translate) emitBatchEvent(
 
 	evt := progress.BatchEvent{
 		Stage:           "translate",
-		BatchIndex:      batchIndex,
 		SegmentIDs:      segIDs,
 		SegmentCount:    len(idxs),
 		BackendName:     backendName,

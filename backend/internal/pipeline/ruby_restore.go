@@ -184,7 +184,6 @@ func emitRubyAlignmentEvent(
 
 	evt := progress.BatchEvent{
 		Stage:           "ruby_alignment",
-		BatchIndex:      0,
 		SegmentIDs:      []string{seg.ID},
 		SegmentCount:    1,
 		BackendName:     backendName,

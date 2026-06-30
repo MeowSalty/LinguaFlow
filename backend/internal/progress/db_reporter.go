@@ -260,7 +260,6 @@ func (r *DBReporter) OnBatchEvent(batchEvent BatchEvent) {
 		evtType = "batch_error"
 	}
 	metadata := map[string]any{
-		"batch_index":      batchEvent.BatchIndex,
 		"segment_ids":      batchEvent.SegmentIDs,
 		"segment_count":    batchEvent.SegmentCount,
 		"backend_name":     batchEvent.BackendName,
@@ -290,7 +289,7 @@ func (r *DBReporter) OnBatchEvent(batchEvent BatchEvent) {
 		JobID:     r.jobID,
 		Level:     "info",
 		Stage:     batchEvent.Stage,
-		Message:   fmt.Sprintf("batch %d: %s", batchEvent.BatchIndex, batchEvent.Status),
+		Message:   fmt.Sprintf("batch (%d segs): %s", batchEvent.SegmentCount, batchEvent.Status),
 		Metadata:  metadata,
 		CreatedAt: time.Now(),
 	})

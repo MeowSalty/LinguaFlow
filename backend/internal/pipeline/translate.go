@@ -209,14 +209,14 @@ func (s *Translate) Run(ctx context.Context, doc *Document) error {
 			contextSet := buildContextSet(expandedIdxs, batchSet)
 
 			// 5. 处理批次
-			unresolved, err := s.processBatchInRound(ctx, doc, expandedIdxs, round, bidx, logger, contextSet)
+			unresolved, err := s.processBatchInRound(ctx, doc, expandedIdxs, round, logger, contextSet)
 			if err != nil {
 				return err
 			}
 
 			// 6. 回调 batchHandler
 			if s.BatchHandler != nil {
-				batchResult := buildBatchResult(doc, expandedIdxs, bidx, contextSet)
+				batchResult := buildBatchResult(doc, expandedIdxs, contextSet)
 				if herr := s.BatchHandler(ctx, batchResult); herr != nil {
 					return fmt.Errorf("batch handler: %w", herr)
 				}
@@ -291,7 +291,7 @@ func buildContextSet(expandedIdxs []int, batchSet map[int]struct{}) map[int]stru
 }
 
 // buildBatchResult 构建批次结果（供 batchHandler 使用）。
-func buildBatchResult(doc *Document, idxs []int, batchIndex int, contextSet map[int]struct{}) BatchResult {
+func buildBatchResult(doc *Document, idxs []int, contextSet map[int]struct{}) BatchResult {
 	translated := make([]TranslatedSegment, 0, len(idxs))
 	for _, idx := range idxs {
 		seg := doc.Segments[idx]
@@ -311,7 +311,7 @@ func buildBatchResult(doc *Document, idxs []int, batchIndex int, contextSet map[
 			Meta:       seg.Meta,
 		})
 	}
-	return BatchResult{Segments: translated, BatchIndex: batchIndex}
+	return BatchResult{Segments: translated}
 }
 
 // resolveRoundRenderer 返回轮次级 Renderer，nil 时回退到共享默认。
