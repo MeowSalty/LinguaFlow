@@ -24,6 +24,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/mode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取运行模式
+         * @description 返回当前服务的运行模式（local 单用户本地模式 / server 多租户服务端模式），供前端决定是否跳过登录页。无需鉴权。
+         */
+        get: operations["GetMode"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/register": {
         parameters: {
             query?: never;
@@ -1069,6 +1089,10 @@ export interface components {
             /** @example linguaflow */
             service?: string;
         };
+        ModeResponse: {
+            /** @enum {string} */
+            mode: "local" | "server";
+        };
         User: {
             id: number;
             username: string;
@@ -1367,7 +1391,10 @@ export interface components {
             resource_count: number;
             completed_resources: number;
             failed_resources: number;
+            /** @description 总段落数（创建时为选中的 segment 数，ReconcileJob 修正为实际翻译量） */
             total_segments: number;
+            /** @description 实际需要翻译的段落数（ReconcileJob 从各资源的 stage_total 聚合，执行中动态更新） */
+            stage_total?: number;
             completed_segments: number;
             error_message?: string;
             /** Format: date-time */
@@ -1931,6 +1958,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetMode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前模式 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModeResponse"];
                 };
             };
             default: components["responses"]["Problem"];

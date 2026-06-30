@@ -17,13 +17,21 @@ const messages = {
     about: '关于',
   },
   layout: {
+    localModeBadge: '本地模式',
     userMenu: {
       switchService: '切换服务器',
+      connectRemoteService: '连接远程服务',
       logout: '退出登录',
     },
     messages: {
       logoutSuccess: '已退出登录',
       logoutFailed: '退出登录失败，请重试',
+    },
+  },
+  appBootstrap: {
+    errors: {
+      localUserFailed: '无法获取本地用户信息，请确认本地服务已启动',
+      modeUnreachable: '无法获取服务器运行模式',
     },
   },
   locale: {
@@ -49,6 +57,7 @@ const messages = {
     messages: {
       connected: '已连接到 {name}',
       connectFailed: '连接失败，请检查服务器地址',
+      corsOrUnreachable: '无法连接本机服务：请检查地址与端口，或配置开发代理以避免跨域限制',
     },
     hints: {
       prefix: '留空或填写',
@@ -1196,6 +1205,7 @@ const messages = {
       requestNotSent: '请求未送达，请检查网络或服务器地址',
       serverReturned: '服务器返回 {status}',
       pingFailed: '连接服务器失败',
+      fetchModeFailed: '获取运行模式失败',
       loginFailed: '登录失败',
       registerFailed: '注册失败',
       refreshSessionFailed: '刷新会话失败',

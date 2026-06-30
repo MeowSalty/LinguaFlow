@@ -11,7 +11,31 @@ export const installRouterGuards = (router: Router): void => {
     const service = useServiceStore()
     const auth = useAuthStore()
 
+    if (!service.isAppReady) {
+      return false
+    }
+
     const isPublic = to.meta.public === true || PUBLIC_PATHS.has(to.path)
+    const forceService = to.query.force === '1'
+
+    if (service.isLocal) {
+      if (AUTH_ENTRY_PATHS.has(to.path)) {
+        const redirect = typeof to.query.redirect === 'string' ? to.query.redirect : null
+        return redirect ? { path: redirect } : { path: '/' }
+      }
+
+      if (to.path === '/service' && !forceService) {
+        const redirect = typeof to.query.redirect === 'string' ? to.query.redirect : null
+        return redirect ? { path: redirect } : { path: '/' }
+      }
+
+      if (!auth.user && !isPublic) {
+        const redirect = typeof to.query.redirect === 'string' ? to.query.redirect : null
+        return redirect ? { path: redirect } : { path: '/' }
+      }
+
+      return undefined
+    }
 
     if (!service.hasSelected && to.path !== '/service') {
       return {

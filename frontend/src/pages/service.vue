@@ -3,6 +3,7 @@ import { useI18n } from 'vue-i18n'
 import { useMessage, type FormInst, type FormRules } from 'naive-ui'
 
 import BlankLayout from '@/layouts/BlankLayout.vue'
+import { useAuthStore } from '@/stores/auth'
 import { useServiceStore } from '@/stores/service'
 
 definePage({
@@ -15,6 +16,7 @@ definePage({
 const router = useRouter()
 const route = useRoute()
 const service = useServiceStore()
+const auth = useAuthStore()
 const message = useMessage()
 const { t } = useI18n()
 
@@ -55,6 +57,19 @@ interface ApiProblem {
   detail?: string
 }
 
+const isLikelyLocalLoopbackUrl = (url: string): boolean => {
+  const trimmed = url.trim()
+  if (!trimmed || trimmed.startsWith('/')) {
+    return false
+  }
+  try {
+    const parsed = new URL(trimmed)
+    return parsed.hostname === '127.0.0.1' || parsed.hostname === 'localhost'
+  } catch {
+    return false
+  }
+}
+
 const extractErrorMessage = (error: unknown, fallback: string): string => {
   if (error instanceof Error && error.message) {
     return error.message
@@ -75,13 +90,21 @@ const onSubmit = async () => {
 
   submitting.value = true
   try {
-    await service.connect(formValue.baseUrl)
+    const { mode } = await service.connect(formValue.baseUrl)
+    await auth.bootstrapForMode(mode)
     message.success(t('service.messages.connected', { name: service.displayName }))
     const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : null
-    await router.push(redirect ?? '/login')
+    if (mode === 'local') {
+      await router.push(redirect ?? '/')
+    } else {
+      await router.push(redirect ?? '/login')
+    }
   } catch (error) {
     console.error(error)
-    message.error(extractErrorMessage(error, t('service.messages.connectFailed')))
+    const fallback = isLikelyLocalLoopbackUrl(formValue.baseUrl)
+      ? t('service.messages.corsOrUnreachable')
+      : t('service.messages.connectFailed')
+    message.error(extractErrorMessage(error, fallback))
   } finally {
     submitting.value = false
   }

@@ -29,22 +29,36 @@ const initial = computed(() => {
   return name ? name.charAt(0).toUpperCase() : '?'
 })
 
-const userOptions = computed<DropdownOption[]>(() => [
-  {
-    key: 'username-info',
-    type: 'render',
-    render: () =>
-      h('div', { class: 'px-3 py-2 min-w-[180px]' }, [
-        h('div', { class: 'text-sm font-medium text-lf-text-strong' }, displayName.value),
-        auth.user?.email
-          ? h('div', { class: 'text-xs text-lf-text-muted mt-0.5' }, auth.user.email)
-          : null,
-      ]),
-  },
-  { type: 'divider', key: 'divider-1' },
-  { label: t('layout.userMenu.switchService'), key: 'switch-service' },
-  { label: t('layout.userMenu.logout'), key: 'logout' },
-])
+const userOptions = computed<DropdownOption[]>(() => {
+  const items: DropdownOption[] = [
+    {
+      key: 'username-info',
+      type: 'render',
+      render: () =>
+        h('div', { class: 'px-3 py-2 min-w-[180px]' }, [
+          h('div', { class: 'text-sm font-medium text-lf-text-strong' }, displayName.value),
+          auth.user?.email
+            ? h('div', { class: 'text-xs text-lf-text-muted mt-0.5' }, auth.user.email)
+            : null,
+        ]),
+    },
+    { type: 'divider', key: 'divider-1' },
+  ]
+
+  if (service.isLocal) {
+    items.push({
+      label: t('layout.userMenu.connectRemoteService'),
+      key: 'switch-service',
+    })
+  } else {
+    items.push(
+      { label: t('layout.userMenu.switchService'), key: 'switch-service' },
+      { label: t('layout.userMenu.logout'), key: 'logout' },
+    )
+  }
+
+  return items
+})
 
 const localeOptions = computed<DropdownOption[]>(() =>
   locale.availableLocales.map((item) => ({
@@ -77,7 +91,8 @@ const onSelectUserAction = async (key: string | number) => {
       message.error(t('layout.messages.logoutFailed'))
     }
   } else if (key === 'switch-service') {
-    await router.push({ path: '/service' })
+    const query = service.isLocal ? { force: '1' } : {}
+    await router.push({ path: '/service', query })
   }
 }
 
@@ -201,6 +216,9 @@ const onSelectLocale = (key: string | number): void => {
             </template>
           </NButton>
         </NDropdown>
+        <NTag v-if="service.isLocal" size="small" type="success" :bordered="false">
+          {{ t('layout.localModeBadge') }}
+        </NTag>
         <span class="hidden text-xs text-lf-text-subtle sm:inline" :title="service.baseUrl">
           {{ service.displayName }}
         </span>

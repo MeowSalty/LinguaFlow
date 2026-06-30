@@ -20,7 +20,13 @@ export interface ApiClientOptions extends Omit<ClientOptions, 'baseUrl'> {
 }
 
 const DEFAULT_API_BASE_URL = '/api/v1'
-const AUTH_TOKEN_SKIP_PATHS = new Set(['/ping', '/auth/register', '/auth/login', '/auth/refresh'])
+const AUTH_TOKEN_SKIP_PATHS = new Set([
+  '/ping',
+  '/mode',
+  '/auth/register',
+  '/auth/login',
+  '/auth/refresh',
+])
 
 const resolveApiBaseUrl = (baseUrl?: string): string => {
   const normalizedBaseUrl = baseUrl?.trim()
@@ -186,3 +192,4 @@ export * from './glossary'
 export * from './prompt-templates'
 export * from './translation-profiles'
 export * from './execution-plan-templates'
+export * from './system'
