@@ -132,7 +132,8 @@ const emit = defineEmits<{
               {{
                 t('workspace.job.planPreviewRoundItem', {
                   index: index + 1,
-                  batchSize: round.batch_size,
+                  batchSize: round.batch_size ?? 0,
+                  maxWordsPerBatch: round.max_words_per_batch ?? 0,
                   concurrency: round.concurrency,
                 })
               }}

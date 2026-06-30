@@ -1776,7 +1776,10 @@ export interface components {
             prompt_template_id: number;
             /** @description 策略模板 ID（TranslationProfile 单表全局唯一） */
             profile_id: number;
-            batch_size: number;
+            /** @description 段落数上限；0=不限制，与 max_words_per_batch 至少填一项 */
+            batch_size?: number;
+            /** @description 字词数上限；0=不限制，与 batch_size 至少填一项 */
+            max_words_per_batch?: number;
             concurrency: number;
             /** @default 0 */
             fallback_shrink: number;

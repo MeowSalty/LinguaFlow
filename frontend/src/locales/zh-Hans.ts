@@ -499,7 +499,8 @@ const messages = {
       contentSummarySegments: '{count} 个待翻译段落',
       planPreviewTitle: '执行计划详情',
       planPreviewRounds: '共 {count} 个轮次',
-      planPreviewRoundItem: '轮次 {index}：批次 {batchSize}，并发 {concurrency}',
+      planPreviewRoundItem:
+        '轮次 {index}：段落 {batchSize} / 字词 {maxWordsPerBatch}，并发 {concurrency}',
       confirmSummary:
         '将使用「{planName}」为 {resourceCount} 个资源（{segmentCount} 个段落）创建翻译任务。',
       columns: {
@@ -1099,6 +1100,7 @@ const messages = {
       roundPromptRequired: '轮次 {n}：请选择提示词模板',
       roundProfileRequired: '轮次 {n}：请选择翻译配置',
       roundBatchSizeRequired: '轮次 {n}：请设置批次大小',
+      roundBatchConfigRequired: '轮次 {n}：批次大小和每批字词数至少填一项',
       roundConcurrencyRequired: '轮次 {n}：请设置并发数',
     },
     messages: {
@@ -1147,6 +1149,9 @@ const messages = {
       translationProfile: '翻译配置',
       profilePlaceholder: '选择翻译配置',
       batchSize: '批次大小',
+      batchSizeHint: '每批处理的段落数上限，0 表示不限制',
+      maxWordsPerBatch: '每批字词数',
+      maxWordsPerBatchHint: '每批处理的字词数上限，0 表示不限制',
       concurrency: '并发数',
       fallbackShrink: '缩放因子',
       advancedConfig: '高级配置',

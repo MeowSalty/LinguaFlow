@@ -33,6 +33,7 @@ const DEFAULT_ROUND: RoundModel = {
   prompt_template_id: 0,
   profile_id: 0,
   batch_size: 10,
+  max_words_per_batch: 0,
   concurrency: 3,
   fallback_shrink: 0,
   retry: { ...DEFAULT_RETRY },
@@ -68,6 +69,7 @@ function mergeRound(source?: Partial<ExecutionRoundConfig>): RoundModel {
     prompt_template_id: source.prompt_template_id ?? DEFAULT_ROUND.prompt_template_id,
     profile_id: source.profile_id ?? DEFAULT_ROUND.profile_id,
     batch_size: source.batch_size ?? DEFAULT_ROUND.batch_size,
+    max_words_per_batch: source.max_words_per_batch ?? DEFAULT_ROUND.max_words_per_batch,
     concurrency: source.concurrency ?? DEFAULT_ROUND.concurrency,
     fallback_shrink: source.fallback_shrink ?? DEFAULT_ROUND.fallback_shrink,
     retry: {
@@ -470,16 +472,34 @@ const emitUpdate = (): void => {
         <div>
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.batchSize') }}
-            <span class="text-red-400">*</span>
           </div>
           <NInputNumber
             v-model:value="round.batch_size"
-            :min="1"
+            :min="0"
             :max="10000"
             size="small"
             :disabled="disabled"
             class="w-full"
           />
+          <div class="mt-1 text-[11px] text-lf-text-subtle">
+            {{ t('executionPlanEditor.round.batchSizeHint') }}
+          </div>
+        </div>
+        <div>
+          <div class="mb-1 text-xs text-lf-text-subtle">
+            {{ t('executionPlanEditor.round.maxWordsPerBatch') }}
+          </div>
+          <NInputNumber
+            v-model:value="round.max_words_per_batch"
+            :min="0"
+            :max="100000"
+            size="small"
+            :disabled="disabled"
+            class="w-full"
+          />
+          <div class="mt-1 text-[11px] text-lf-text-subtle">
+            {{ t('executionPlanEditor.round.maxWordsPerBatchHint') }}
+          </div>
         </div>
         <div>
           <div class="mb-1 text-xs text-lf-text-subtle">
@@ -495,6 +515,8 @@ const emitUpdate = (): void => {
             class="w-full"
           />
         </div>
+      </div>
+      <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
         <div>
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.fallbackShrink') }}
