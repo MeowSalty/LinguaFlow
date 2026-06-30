@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { h } from 'vue'
-import { NAlert, NDataTable, NDescriptions, NDescriptionsItem, NTag, NText } from 'naive-ui'
+import { NAlert, NDataTable, NTag, NText } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
@@ -11,6 +11,7 @@ import {
   getJobStatusLabel,
   getJobTriggerLabel,
   getStageLabel,
+  statusTagType,
 } from '@/composables/useWorkspaceUtils'
 
 import JobEventTimeline from './JobEventTimeline.vue'
@@ -35,7 +36,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="space-y-5">
+  <div class="space-y-3">
     <JobProgressCard :job="job" />
 
     <NAlert v-if="externalError" type="error" :bordered="false">
@@ -45,35 +46,58 @@ const emit = defineEmits<{
       {{ job.error_message }}
     </NAlert>
 
-    <NDescriptions bordered label-placement="left" :column="2" size="small">
-      <NDescriptionsItem v-if="projectName" :label="t('globalJobTracker.project')">
-        {{ projectName }}
-      </NDescriptionsItem>
-      <NDescriptionsItem :label="t('workspace.job.columns.trigger')">
-        {{ getJobTriggerLabel(job.trigger_type) }}
-      </NDescriptionsItem>
-      <NDescriptionsItem v-if="job.started_at" :label="t('workspace.job.columns.startedAt')">
-        {{ formatDate(job.started_at) }}
-      </NDescriptionsItem>
-      <NDescriptionsItem :label="t('workspace.common.createdAt')">
-        {{ formatDate(job.created_at) }}
-      </NDescriptionsItem>
-      <NDescriptionsItem v-if="job.updated_at" :label="t('workspace.common.updatedAt')">
-        {{ formatDate(job.updated_at) }}
-      </NDescriptionsItem>
-      <NDescriptionsItem :label="t('workspace.job.form.sourceLang')">
-        {{ formatConfigValue(job.translation_config?.source_lang) }}
-      </NDescriptionsItem>
-      <NDescriptionsItem :label="t('workspace.job.form.targetLang')">
-        {{ formatConfigValue(job.translation_config?.target_lang) }}
-      </NDescriptionsItem>
-    </NDescriptions>
+    <!-- KV Grid 详情 -->
+    <div
+      class="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-x-8 gap-y-1 rounded-lg border border-lf-border-soft bg-lf-surface-muted/40 p-3"
+    >
+      <div v-if="projectName">
+        <div class="text-xs text-lf-text-muted">{{ t('globalJobTracker.project') }}</div>
+        <div class="text-sm font-medium">{{ projectName }}</div>
+      </div>
+      <div>
+        <div class="text-xs text-lf-text-muted">{{ t('workspace.job.columns.trigger') }}</div>
+        <div class="text-sm font-medium">{{ getJobTriggerLabel(job.trigger_type) }}</div>
+      </div>
+      <div v-if="job.started_at">
+        <div class="text-xs text-lf-text-muted">{{ t('workspace.job.columns.startedAt') }}</div>
+        <div class="text-sm font-medium font-mono tabular-nums">
+          {{ formatDate(job.started_at) }}
+        </div>
+      </div>
+      <div>
+        <div class="text-xs text-lf-text-muted">{{ t('workspace.common.createdAt') }}</div>
+        <div class="text-sm font-medium font-mono tabular-nums">
+          {{ formatDate(job.created_at) }}
+        </div>
+      </div>
+      <div v-if="job.updated_at">
+        <div class="text-xs text-lf-text-muted">{{ t('workspace.common.updatedAt') }}</div>
+        <div class="text-sm font-medium font-mono tabular-nums">
+          {{ formatDate(job.updated_at) }}
+        </div>
+      </div>
+      <div>
+        <div class="text-xs text-lf-text-muted">{{ t('workspace.job.form.sourceLang') }}</div>
+        <div class="text-sm font-medium">
+          {{ formatConfigValue(job.translation_config?.source_lang) }}
+        </div>
+      </div>
+      <div>
+        <div class="text-xs text-lf-text-muted">{{ t('workspace.job.form.targetLang') }}</div>
+        <div class="text-sm font-medium">
+          {{ formatConfigValue(job.translation_config?.target_lang) }}
+        </div>
+      </div>
+    </div>
 
     <div>
-      <div class="mb-3 text-sm font-medium text-lf-text-strong">
+      <div
+        class="mb-2 border-l-2 border-brand-500 pl-2 text-xs font-semibold uppercase tracking-wider text-lf-text-muted"
+      >
         {{ t('workspace.job.resourcesTitle') }}
       </div>
       <NDataTable
+        class="rounded-lg overflow-hidden"
         :data="job.job_resources ?? []"
         :columns="[
           {
@@ -89,7 +113,16 @@ const emit = defineEmits<{
             key: 'status',
             width: 80,
             render: (row: ApiSchemas['TranslationJobResource']) =>
-              getJobStatusLabel(row.status as TranslationJob['status']),
+              h(
+                NTag,
+                {
+                  size: 'tiny',
+                  round: true,
+                  type: statusTagType(row.status as TranslationJob['status']),
+                  bordered: false,
+                },
+                { default: () => getJobStatusLabel(row.status as TranslationJob['status']) },
+              ),
           },
           {
             title: t('workspace.job.columns.stage'),
@@ -99,15 +132,15 @@ const emit = defineEmits<{
               if (!row.current_stage) return h(NText, { depth: 3 }, { default: () => '-' })
               const label = getStageLabel(row.current_stage)
               if (row.stage_total) {
-                return h('div', { class: 'flex flex-col gap-0.5' }, [
+                return h('div', { class: 'flex items-center gap-1.5' }, [
                   h(
                     NTag,
-                    { size: 'tiny', bordered: false, type: 'info' },
+                    { size: 'tiny', round: true, bordered: false, type: 'info' },
                     { default: () => label },
                   ),
                   h(
                     'span',
-                    { class: 'text-xs text-lf-text-muted tabular-nums' },
+                    { class: 'text-xs text-lf-text-muted font-mono tabular-nums' },
                     {
                       default: () => `${row.stage_completed ?? 0}/${row.stage_total}`,
                     },
@@ -120,9 +153,13 @@ const emit = defineEmits<{
           {
             title: t('workspace.job.columns.segments'),
             key: 'segments',
-            width: 70,
+            width: 90,
             render: (row: ApiSchemas['TranslationJobResource']) =>
-              `${row.completed_segments}/${row.segment_count}`,
+              h(
+                'span',
+                { class: 'font-mono tabular-nums whitespace-nowrap' },
+                { default: () => `${row.completed_segments}/${row.segment_count}` },
+              ),
           },
           {
             title: t('workspace.job.columns.error'),

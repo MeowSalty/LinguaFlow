@@ -110,6 +110,7 @@ const checkScrollPosition = (): void => {
     }
     isNearBottom.value = el.scrollTop + el.clientHeight >= el.scrollHeight - 50
     if (isNearBottom.value) {
+      prevEventsLength.value = props.events.length
       hasNewEvents.value = false
     }
     scrollTicking = false
@@ -119,6 +120,7 @@ const checkScrollPosition = (): void => {
 const scrollToBottom = (): void => {
   const el = scrollContainer.value
   if (!el) return
+  prevEventsLength.value = props.events.length
   el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
   hasNewEvents.value = false
 }
@@ -128,6 +130,7 @@ watch(
   (newLen) => {
     if (newLen > prevEventsLength.value) {
       if (isNearBottom.value) {
+        prevEventsLength.value = newLen
         nextTick(() => {
           scrollToBottom()
         })
@@ -135,7 +138,6 @@ watch(
         hasNewEvents.value = true
       }
     }
-    prevEventsLength.value = newLen
   },
 )
 
@@ -146,22 +148,28 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-3">
+  <div class="space-y-2">
     <div class="flex items-center justify-between">
-      <h4 class="text-sm font-medium text-lf-text-strong">
+      <h4
+        class="border-l-2 border-brand-500 pl-2 text-xs font-semibold uppercase tracking-wider text-lf-text-muted"
+      >
         {{ t('workspace.job.events.title') }}
       </h4>
       <div class="flex items-center gap-2">
         <span
           v-if="connected"
-          class="inline-block h-1.5 w-1.5 rounded-full bg-green-500"
-          :title="t('workspace.job.events.connected')"
-        />
+          class="inline-flex items-center gap-1 rounded-full bg-green-500/10 px-1.5 py-0.5 text-[10px] text-green-500"
+        >
+          <span class="inline-block h-1.5 w-1.5 rounded-full bg-green-500" />
+          实时
+        </span>
         <span
           v-else
-          class="inline-block h-1.5 w-1.5 rounded-full bg-gray-400"
-          :title="t('workspace.job.events.disconnected')"
-        />
+          class="inline-flex items-center gap-1 rounded-full bg-gray-400/10 px-1.5 py-0.5 text-[10px] text-lf-text-muted"
+        >
+          <span class="inline-block h-1.5 w-1.5 rounded-full bg-gray-400" />
+          离线
+        </span>
         <NButton quaternary size="tiny" @click="emit('clear')">
           {{ t('workspace.actions.clear') }}
         </NButton>
@@ -169,7 +177,11 @@ onMounted(() => {
     </div>
 
     <div class="relative min-h-50">
-      <div ref="scrollContainer" class="max-h-100 overflow-auto" @scroll="checkScrollPosition">
+      <div
+        ref="scrollContainer"
+        class="max-h-[60vh] overflow-auto rounded-lg border border-lf-border-soft bg-lf-surface/40 p-3"
+        @scroll="checkScrollPosition"
+      >
         <div v-if="allEvents.length === 0" class="py-6 text-center">
           <NEmpty size="small" :description="t('workspace.job.events.empty')" />
         </div>
@@ -185,7 +197,7 @@ onMounted(() => {
               :title="event.message"
               :content="event.stage ? getStageLabel(event.stage) : undefined"
               :time="formatEventTime(event.created_at)"
-              class="[&_.n-timeline-item-content]:text-lf-text-muted"
+              class="[&_.n-timeline-item-time]:font-mono [&_.n-timeline-item-time]:tabular-nums [&_.n-timeline-item-time]:text-xs [&_.n-timeline-item-content]:text-lf-text-muted"
             />
           </template>
 
@@ -198,6 +210,7 @@ onMounted(() => {
               :title="event.message"
               :content="event.stage ? getStageLabel(event.stage) : undefined"
               :time="formatEventTime(event.created_at)"
+              class="[&_.n-timeline-item-time]:font-mono [&_.n-timeline-item-time]:tabular-nums [&_.n-timeline-item-time]:text-xs"
             />
             <NTimelineItem
               v-else
@@ -205,6 +218,7 @@ onMounted(() => {
               :type="getBatchTimelineType(event)"
               :title="getBatchSummary(event)"
               :time="formatEventTime(event.created_at)"
+              class="[&_.n-timeline-item-time]:font-mono [&_.n-timeline-item-time]:tabular-nums [&_.n-timeline-item-time]:text-xs"
             >
               <BatchEventCard :event="event" />
             </NTimelineItem>

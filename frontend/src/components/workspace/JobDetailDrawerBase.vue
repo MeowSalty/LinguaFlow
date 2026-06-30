@@ -89,6 +89,7 @@ watch(jobId, (newId, oldId) => {
     <NDrawerContent
       :title="job && titlePrefix ? `${titlePrefix} #${job.id}` : job ? `#${job.id}` : ''"
       closable
+      :header-style="{ borderBottom: '1px solid var(--lf-border-soft)' }"
     >
       <NSpin :show="loading && !job">
         <JobDetailContent
