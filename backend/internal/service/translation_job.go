@@ -141,14 +141,15 @@ type ExecutionPlanRubyRetrySnapshot struct {
 
 // JobRoundSnapshot 单轮的完整执行快照。
 type JobRoundSnapshot struct {
-	Name           string             `json:"name"`
-	Backend        BackendSnapshot    `json:"backend"`
-	Prompt         PromptSnapshot     `json:"prompt"`
-	Strategy       StrategySnapshot   `json:"strategy"`
-	BatchSize      int                `json:"batch_size"`
-	Concurrency    int                `json:"concurrency"`
-	FallbackShrink float64            `json:"fallback_shrink"`
-	Retry          schema.RetryConfig `json:"retry"`
+	Name             string             `json:"name"`
+	Backend          BackendSnapshot    `json:"backend"`
+	Prompt           PromptSnapshot     `json:"prompt"`
+	Strategy         StrategySnapshot   `json:"strategy"`
+	BatchSize        int                `json:"batch_size"`
+	MaxWordsPerBatch int                `json:"max_words_per_batch"`
+	Concurrency      int                `json:"concurrency"`
+	FallbackShrink   float64            `json:"fallback_shrink"`
+	Retry            schema.RetryConfig `json:"retry"`
 }
 
 // BackendSnapshot 后端配置快照。
@@ -331,14 +332,15 @@ func (s *TranslationJobService) validateAndSnapshot(
 		// 内联自举不再需要独立的 bootstrap 模板（inline 是翻译 prompt 的一部分）
 
 		snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
-			Name:           round.Name,
-			Backend:        *backendSnap,
-			Prompt:         *promptSnap,
-			Strategy:       *strategySnap,
-			BatchSize:      round.BatchSize,
-			Concurrency:    round.Concurrency,
-			FallbackShrink: round.FallbackShrink,
-			Retry:          round.Retry,
+			Name:             round.Name,
+			Backend:          *backendSnap,
+			Prompt:           *promptSnap,
+			Strategy:         *strategySnap,
+			BatchSize:        round.BatchSize,
+			MaxWordsPerBatch: round.MaxWordsPerBatch,
+			Concurrency:      round.Concurrency,
+			FallbackShrink:   round.FallbackShrink,
+			Retry:            round.Retry,
 		})
 	}
 

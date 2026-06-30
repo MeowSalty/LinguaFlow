@@ -252,9 +252,13 @@ func (s *Translate) shrinkOrFallback(ctx context.Context, doc *Document, idxs []
 			"batch_size", len(idxs), "err", lastErr)
 		return idxs, nil
 	}
-	nextSize := shrinkNext(len(idxs), round.FallbackShrink)
+	curConstraint := BatchConstraint{
+		MaxSegments: len(idxs),
+		MaxWords:    round.MaxWordsPerBatch,
+	}
+	nextConstraint := shrinkConstraint(curConstraint, round.FallbackShrink)
 	ctxWin := s.contextWindow()
-	if nextSize < 2 {
+	if nextConstraint.MaxSegments < 2 {
 		// 坍缩到顺序单段：复用 processBatchInRound 处理每个段落
 		var unresolved []int
 		for _, idx := range idxs {
@@ -270,6 +274,7 @@ func (s *Translate) shrinkOrFallback(ctx context.Context, doc *Document, idxs []
 		return unresolved, nil
 	}
 	var sub [][]int
+	nextSize := nextConstraint.MaxSegments
 	for i := 0; i < len(idxs); i += nextSize {
 		end := min(i+nextSize, len(idxs))
 		sub = append(sub, idxs[i:end])
@@ -303,6 +308,23 @@ func (s *Translate) shrinkOrFallback(ctx context.Context, doc *Document, idxs []
 		return nil, err
 	}
 	return unresolved, nil
+}
+
+// shrinkConstraint 计算下一级约束。
+// MaxSegments 使用 shrinkNext 收敛到单段；
+// MaxWords 按相同比例缩放，未启用（<=0）则保持 0。
+func shrinkConstraint(cur BatchConstraint, shrink float64) BatchConstraint {
+	next := BatchConstraint{
+		MaxSegments: shrinkNext(cur.MaxSegments, shrink),
+		MaxWords:    0,
+	}
+	if cur.MaxWords > 0 && shrink > 0 && shrink < 1 {
+		next.MaxWords = int(math.Floor(float64(cur.MaxWords) * shrink))
+		if next.MaxWords < 1 {
+			next.MaxWords = 0
+		}
+	}
+	return next
 }
 
 // shrinkNext 计算下一级 batch 大小。

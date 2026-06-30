@@ -122,11 +122,12 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 			Protect:     firstProfile.Protect,
 			Postprocess: firstProfile.Postprocess,
 			Translate: config.TranslateConfig{
-				BatchSize:      firstRound.BatchSize,
-				Concurrency:    firstRound.Concurrency,
-				FallbackShrink: firstRound.FallbackShrink,
-				Retry:          firstRound.Retry,
-				Repair:         firstProfile.Repair,
+				BatchSize:        firstRound.BatchSize,
+				MaxWordsPerBatch: firstRound.MaxWordsPerBatch,
+				Concurrency:      firstRound.Concurrency,
+				FallbackShrink:   firstRound.FallbackShrink,
+				Retry:            firstRound.Retry,
+				Repair:           firstProfile.Repair,
 			},
 		},
 		Prompt: config.PromptConfig{
@@ -212,11 +213,12 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 		}
 
 		rounds = append(rounds, engine.Round{
-			Name:           r.Name,
-			Backend:        backends[0],
-			BatchSize:      r.BatchSize,
-			Concurrency:    r.Concurrency,
-			FallbackShrink: r.FallbackShrink,
+			Name:             r.Name,
+			Backend:          backends[0],
+			BatchSize:        r.BatchSize,
+			MaxWordsPerBatch: r.MaxWordsPerBatch,
+			Concurrency:      r.Concurrency,
+			FallbackShrink:   r.FallbackShrink,
 			Retry: backend.RetryPolicy{
 				MaxAttempts: r.Retry.MaxAttempts,
 				Backoff:     time.Duration(r.Retry.BackoffMs) * time.Millisecond,

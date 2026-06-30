@@ -246,6 +246,107 @@ func TestJSONObjectSlice_FindsNested(t *testing.T) {
 	}
 }
 
+func TestCountWords(t *testing.T) {
+	cases := []struct {
+		name string
+		text string
+		want int
+	}{
+		{"empty", "", 0},
+		{"cjk_two_chars", "你好", 2},
+		{"latin_one_word", "hello", 1},
+		{"latin_two_words", "hello world", 2},
+		{"mixed_cjk_latin", "你好world", 3},
+		{"mixed_full", "Hello, 你好世界!", 6},
+		{"numbers_and_cjk", "123 你好", 3},
+		{"whitespace_only", "   ", 0},
+		{"cjk_hiragana", "あいう", 3},
+		{"cjk_katakana", "アイウ", 3},
+		{"cjk_hangul", "한글", 2},
+		{"punctuation_only", ".,;!", 1},
+		{"mixed_spaces", " a  b  c ", 3},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := CountWords(tc.text)
+			if got != tc.want {
+				t.Errorf("CountWords(%q) = %d, want %d", tc.text, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestCalcMaxBootstrapTerms_UsesCountWords(t *testing.T) {
+	s := &Translate{MaxTermsPer1000Chars: 3.0}
+	// CJK: 4 字 → 4 words → ceil(4/1000*3) = 1
+	got := s.calcMaxBootstrapTerms([]string{"你好世界"})
+	if got != 1 {
+		t.Errorf("CJK 4 chars: got %d want 1", got)
+	}
+	// Latin: "hello world" = 2 words → ceil(2/1000*3) = 1
+	got = s.calcMaxBootstrapTerms([]string{"hello world"})
+	if got != 1 {
+		t.Errorf("Latin 2 words: got %d want 1", got)
+	}
+	// Large: 500 CJK chars → 500 words → ceil(500/1000*3) = 2
+	big := ""
+	for i := 0; i < 500; i++ {
+		big += "字"
+	}
+	got = s.calcMaxBootstrapTerms([]string{big})
+	if got != 2 {
+		t.Errorf("500 CJK chars: got %d want 2", got)
+	}
+}
+
+func TestShrinkConstraint(t *testing.T) {
+	cases := []struct {
+		name   string
+		cur    BatchConstraint
+		shrink float64
+		want   BatchConstraint
+	}{
+		{
+			name:   "segments_only",
+			cur:    BatchConstraint{MaxSegments: 10, MaxWords: 0},
+			shrink: 0.5,
+			want:   BatchConstraint{MaxSegments: 5, MaxWords: 0},
+		},
+		{
+			name:   "dual_constraint",
+			cur:    BatchConstraint{MaxSegments: 10, MaxWords: 500},
+			shrink: 0.5,
+			want:   BatchConstraint{MaxSegments: 5, MaxWords: 250},
+		},
+		{
+			name:   "words_round_down",
+			cur:    BatchConstraint{MaxSegments: 10, MaxWords: 3},
+			shrink: 0.5,
+			want:   BatchConstraint{MaxSegments: 5, MaxWords: 1},
+		},
+		{
+			name:   "words_to_zero",
+			cur:    BatchConstraint{MaxSegments: 10, MaxWords: 1},
+			shrink: 0.5,
+			want:   BatchConstraint{MaxSegments: 5, MaxWords: 0},
+		},
+		{
+			name:   "shrink_zero",
+			cur:    BatchConstraint{MaxSegments: 10, MaxWords: 500},
+			shrink: 0,
+			want:   BatchConstraint{MaxSegments: 0, MaxWords: 0},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := shrinkConstraint(tc.cur, tc.shrink)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Errorf("shrinkConstraint(%v, %v) = %v, want %v", tc.cur, tc.shrink, got, tc.want)
+			}
+		})
+	}
+}
+
 func TestShrinkNext(t *testing.T) {
 	cases := []struct {
 		name   string
@@ -287,13 +388,14 @@ func TestShrinkNext(t *testing.T) {
 }
 
 func TestBuildContinuousPendingBatches(t *testing.T) {
-	got := BuildContinuousPendingBatches([]int{0, 1, 2, 5, 6, 10}, 4)
+	doc := testDoc(13)
+	got := BuildContinuousPendingBatches(doc, []int{0, 1, 2, 5, 6, 10}, segConstraint(4))
 	want := [][]int{{0, 1, 2}, {5, 6}, {10}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("batches=%v want %v", got, want)
 	}
 
-	got = BuildContinuousPendingBatches([]int{0, 1, 2, 3, 8, 9, 12}, 2)
+	got = BuildContinuousPendingBatches(doc, []int{0, 1, 2, 3, 8, 9, 12}, segConstraint(2))
 	want = [][]int{{0, 1}, {2, 3}, {8, 9}, {12}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("batches=%v want %v", got, want)

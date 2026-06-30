@@ -77,11 +77,12 @@ const (
 )
 
 type TranslateConfig struct {
-	Concurrency    int          `yaml:"concurrency"`
-	BatchSize      int          `yaml:"batch_size"`      // 一次合并发送的段数；<=1 表示禁用批量
-	FallbackShrink float64      `yaml:"fallback_shrink"` // 整批失败时下一级 batch = floor(cur*shrink)；0 = 直接降到单段；必须 <1
-	Retry          RetryConfig  `yaml:"retry"`
-	Repair         RepairConfig `yaml:"repair"`
+	Concurrency      int          `yaml:"concurrency"`
+	BatchSize        int          `yaml:"batch_size"`          // 一次合并发送的段数；<=1 表示禁用批量
+	MaxWordsPerBatch int          `yaml:"max_words_per_batch"` // 每批字词数上限；0=不限制
+	FallbackShrink   float64      `yaml:"fallback_shrink"`     // 整批失败时下一级 batch = floor(cur*shrink)；0 = 直接降到单段；必须 <1
+	Retry            RetryConfig  `yaml:"retry"`
+	Repair           RepairConfig `yaml:"repair"`
 }
 
 type RetryConfig struct {
@@ -373,6 +374,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Pipeline.Translate.Concurrency < 1 {
 		c.Pipeline.Translate.Concurrency = 1
+	}
+	if c.Pipeline.Translate.BatchSize <= 0 && c.Pipeline.Translate.MaxWordsPerBatch <= 0 {
+		c.Pipeline.Translate.BatchSize = 1
 	}
 	if c.Pipeline.Translate.Retry.BackoffMs < 1000 {
 		c.Pipeline.Translate.Retry.BackoffMs = 1000

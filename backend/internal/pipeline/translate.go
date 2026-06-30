@@ -24,12 +24,13 @@ import (
 
 // Round 描述一轮翻译的执行配置（纯数据，无后端名称引用）。
 type Round struct {
-	Name           string
-	Backend        backend.Backend
-	BatchSize      int
-	Concurrency    int
-	FallbackShrink float64
-	Retry          backend.RetryPolicy
+	Name             string
+	Backend          backend.Backend
+	BatchSize        int
+	MaxWordsPerBatch int
+	Concurrency      int
+	FallbackShrink   float64
+	Retry            backend.RetryPolicy
 
 	// Renderer 本轮使用的提示词渲染器。
 	// nil 时回退到 Translate 级别的 Renderer。
@@ -175,11 +176,19 @@ func (s *Translate) Run(ctx context.Context, doc *Document) error {
 		if !s.Context.Enabled {
 			ctxWindow = 0
 		}
-		batches := BuildContextAwareBatches(remaining, round.BatchSize, ctxWindow, s.Context.Enabled)
+		constraint := BatchConstraint{
+			MaxSegments: round.BatchSize,
+			MaxWords:    round.MaxWordsPerBatch,
+		}
+		if constraint.MaxSegments <= 0 && constraint.MaxWords <= 0 {
+			constraint.MaxSegments = 1
+		}
+		batches := BuildContextAwareBatches(doc, remaining, constraint, ctxWindow, s.Context.Enabled)
 		logger.Info("translate round start",
 			"round", ridx+1, "name", round.Name,
 			"pending", len(remaining), "batches", len(batches),
-			"batch_size", round.BatchSize, "concurrency", round.Concurrency,
+			"batch_size", round.BatchSize, "max_words_per_batch", round.MaxWordsPerBatch,
+			"concurrency", round.Concurrency,
 			"context_enabled", s.Context.Enabled, "context_window", ctxWindow)
 
 		var (
@@ -243,45 +252,6 @@ func (s *Translate) Run(ctx context.Context, doc *Document) error {
 		logger.Warn("translate plan exhausted", "count", len(remaining))
 	}
 	return nil
-}
-
-// BuildContinuousPendingBatches 将 pending 段索引按连续性分组，
-// 每组内再按 target 大小切批。分散段落会被拆到不同 batch，
-// 避免上下文断裂。
-func BuildContinuousPendingBatches(pending []int, target int) [][]int {
-	if len(pending) == 0 {
-		return nil
-	}
-	target = max(target, 1)
-	runs := make([][]int, 0)
-	start := 0
-	for i := 1; i <= len(pending); i++ {
-		if i == len(pending) || pending[i] != pending[i-1]+1 {
-			run := append([]int(nil), pending[start:i]...)
-			runs = append(runs, run)
-			start = i
-		}
-	}
-
-	batches := make([][]int, 0, len(pending))
-	leftovers := make([][]int, 0, len(runs))
-	for _, run := range runs {
-		for len(run) >= target {
-			batches = append(batches, append([]int(nil), run[:target]...))
-			run = run[target:]
-		}
-		if len(run) > 0 {
-			leftovers = append(leftovers, append([]int(nil), run...))
-		}
-	}
-	sort.SliceStable(leftovers, func(i, j int) bool {
-		if len(leftovers[i]) == len(leftovers[j]) {
-			return leftovers[i][0] < leftovers[j][0]
-		}
-		return len(leftovers[i]) > len(leftovers[j])
-	})
-	batches = append(batches, leftovers...)
-	return batches
 }
 
 // expandBatchWithContext 为批次扩展上下文段落。
@@ -370,17 +340,47 @@ func (s *Translate) callOnce(ctx context.Context, b backend.Backend, req backend
 	return resp, err
 }
 
+// CountWords 统计混合脚本文本的"字词数"。
+// - CJK 字符（Han/Hiragana/Katakana/Hangul）：每个算 1
+// - 非 CJK、非空白字符序列：每个连续序列算 1
+// - 空白：跳过
+func CountWords(text string) int {
+	count := 0
+	inWord := false
+	for _, r := range text {
+		if isCJK(r) {
+			count++
+			inWord = false
+		} else if unicode.IsSpace(r) {
+			inWord = false
+		} else {
+			if !inWord {
+				count++
+				inWord = true
+			}
+		}
+	}
+	return count
+}
+
+func isCJK(r rune) bool {
+	return unicode.Is(unicode.Han, r) ||
+		unicode.Is(unicode.Hiragana, r) ||
+		unicode.Is(unicode.Katakana, r) ||
+		unicode.Is(unicode.Hangul, r)
+}
+
 // calcMaxBootstrapTerms 根据系数和本批实际字符数计算 inline 术语上限。
 func (s *Translate) calcMaxBootstrapTerms(segments []string) int {
 	coeff := s.MaxTermsPer1000Chars
 	if coeff <= 0 {
 		coeff = 3.0
 	}
-	totalRunes := 0
+	totalWords := 0
 	for _, seg := range segments {
-		totalRunes += len([]rune(seg))
+		totalWords += CountWords(seg)
 	}
-	maxTerms := int(math.Ceil(float64(totalRunes) / 1000.0 * coeff))
+	maxTerms := int(math.Ceil(float64(totalWords) / 1000.0 * coeff))
 	return max(maxTerms, 1)
 }
 

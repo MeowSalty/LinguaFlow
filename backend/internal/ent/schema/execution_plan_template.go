@@ -13,6 +13,7 @@ type ExecutionRoundConfig struct {
 	PromptTemplateID int         `json:"prompt_template_id" yaml:"prompt_template_id"`
 	ProfileID        int         `json:"profile_id"         yaml:"profile_id"`
 	BatchSize        int         `json:"batch_size"         yaml:"batch_size"`
+	MaxWordsPerBatch int         `json:"max_words_per_batch" yaml:"max_words_per_batch"`
 	Concurrency      int         `json:"concurrency"        yaml:"concurrency"`
 	FallbackShrink   float64     `json:"fallback_shrink"    yaml:"fallback_shrink"`
 	Retry            RetryConfig `json:"retry"              yaml:"retry"`

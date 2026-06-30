@@ -86,14 +86,15 @@ type CLIConfigExecution struct {
 
 // CLIConfigRound 单轮执行配置。
 type CLIConfigRound struct {
-	Name           string      `yaml:"name"`
-	Backend        string      `yaml:"backend"` // 引用 backends key
-	Prompt         string      `yaml:"prompt"`  // 引用 prompt_templates key
-	Profile        string      `yaml:"profile"` // 引用 translation_profiles key
-	BatchSize      int         `yaml:"batch_size"`
-	Concurrency    int         `yaml:"concurrency"`
-	FallbackShrink float64     `yaml:"fallback_shrink"`
-	Retry          RetryConfig `yaml:"retry"`
+	Name             string      `yaml:"name"`
+	Backend          string      `yaml:"backend"` // 引用 backends key
+	Prompt           string      `yaml:"prompt"`  // 引用 prompt_templates key
+	Profile          string      `yaml:"profile"` // 引用 translation_profiles key
+	BatchSize        int         `yaml:"batch_size"`
+	MaxWordsPerBatch int         `yaml:"max_words_per_batch"`
+	Concurrency      int         `yaml:"concurrency"`
+	FallbackShrink   float64     `yaml:"fallback_shrink"`
+	Retry            RetryConfig `yaml:"retry"`
 }
 
 // ---------------------------------------------------------------------------

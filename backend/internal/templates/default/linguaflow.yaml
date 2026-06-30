@@ -83,8 +83,11 @@ execution:
       prompt: 通用提示词
       # 引用 translation_profiles 中定义的策略名称
       profile: 通用策略
-      # 一次合并发送的段数；1 表示逐段翻译，>1 为批量模式
+      # 一次合并发送的段数；1 表示逐段翻译，>1 为批量模式；0 表示不限段落数（需配合 max_words_per_batch）
       batch_size: 1
+      # 每批字词数上限；0 表示不限制（仅使用 batch_size 约束）
+      # CJK 每字算 1，拉丁文按空格分词每词算 1
+      # max_words_per_batch: 500
       # 并发翻译数
       concurrency: 4
       # 整批失败时的缩放因子（0-1）；0 表示直接降到单段重试

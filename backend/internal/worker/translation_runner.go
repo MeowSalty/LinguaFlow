@@ -334,11 +334,12 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 		}
 
 		rounds = append(rounds, engine.Round{
-			Backend:        b,
-			Name:           rs.Name,
-			BatchSize:      rs.BatchSize,
-			Concurrency:    rs.Concurrency,
-			FallbackShrink: rs.FallbackShrink,
+			Backend:          b,
+			Name:             rs.Name,
+			BatchSize:        rs.BatchSize,
+			MaxWordsPerBatch: rs.MaxWordsPerBatch,
+			Concurrency:      rs.Concurrency,
+			FallbackShrink:   rs.FallbackShrink,
 			Retry: backend.RetryPolicy{
 				MaxAttempts: rs.Retry.MaxAttempts,
 				Backoff:     time.Duration(rs.Retry.BackoffMs) * time.Millisecond,

@@ -57,6 +57,9 @@ type Round struct {
 	// BatchSize 本轮的批大小。<=0 时回退到全局默认。
 	BatchSize int
 
+	// MaxWordsPerBatch 本轮的每批字词数上限。0=不限制。
+	MaxWordsPerBatch int
+
 	// Concurrency 本轮的并发数。<=0 时回退到全局默认。
 	Concurrency int
 
@@ -137,14 +140,15 @@ func buildStagesRounds(in []Round, cfg *config.Config) []pipeline.Round {
 		}
 
 		out = append(out, pipeline.Round{
-			Name:           resolveName(r.Name, i),
-			Backend:        r.Backend,
-			BatchSize:      resolveDefault(r.BatchSize, cfg.Pipeline.Translate.BatchSize, 1),
-			Concurrency:    resolveDefault(r.Concurrency, cfg.Pipeline.Translate.Concurrency, 1),
-			FallbackShrink: resolveShrink(r.FallbackShrink, cfg.Pipeline.Translate.FallbackShrink),
-			Retry:          retry,
-			Renderer:       r.Renderer,
-			Repair:         roundRepair,
+			Name:             resolveName(r.Name, i),
+			Backend:          r.Backend,
+			BatchSize:        resolveDefault(r.BatchSize, cfg.Pipeline.Translate.BatchSize, 1),
+			MaxWordsPerBatch: r.MaxWordsPerBatch,
+			Concurrency:      resolveDefault(r.Concurrency, cfg.Pipeline.Translate.Concurrency, 1),
+			FallbackShrink:   resolveShrink(r.FallbackShrink, cfg.Pipeline.Translate.FallbackShrink),
+			Retry:            retry,
+			Renderer:         r.Renderer,
+			Repair:           roundRepair,
 		})
 	}
 	return out
