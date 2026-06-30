@@ -3,8 +3,6 @@ import { useI18n } from 'vue-i18n'
 
 import { useStatsStore } from '@/stores/stats'
 import StatsCard from '@/components/dashboard/StatsCard.vue'
-import ActivityFeed from '@/components/dashboard/ActivityFeed.vue'
-import JobStatusOverview from '@/components/dashboard/JobStatusOverview.vue'
 
 const router = useRouter()
 const stats = useStatsStore()
@@ -46,15 +44,6 @@ onMounted(() => {
       />
     </div>
 
-    <!-- 主要内容区域 -->
-    <div class="grid grid-cols-1 gap-6 lg:grid-cols-5">
-      <div class="lg:col-span-3">
-        <ActivityFeed />
-      </div>
-      <div class="lg:col-span-2">
-        <JobStatusOverview />
-      </div>
-    </div>
 
     <!-- 快速操作区域 -->
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
