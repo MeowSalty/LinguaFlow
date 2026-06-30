@@ -59,11 +59,15 @@ func TestRubyRestorer_RubyOutput_BasicRestore(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			seg := &model.Segment{Target: tc.target}
-			if err := restorer.Restore(seg, tc.output, nil); err != nil {
+			result, err := restorer.Restore(seg, tc.output, nil)
+			if err != nil {
 				t.Fatalf("Restore(%q): %v", tc.target, err)
 			}
 			if seg.Target != tc.wantTarget {
 				t.Errorf("Restore(%q):\n  want: %q\n  got:  %q", tc.target, tc.wantTarget, seg.Target)
+			}
+			if result.Total > 0 && !result.IsFull() {
+				t.Errorf("Restore(%q): expected full match, got matched=%d total=%d", tc.target, result.Matched, result.Total)
 			}
 		})
 	}
@@ -110,11 +114,15 @@ func TestRubyRestorer_InlineMarkers_BasicRestore(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			seg := &model.Segment{Target: tc.target}
 			// inline_markers 模式不使用 rubyOutput 参数
-			if err := restorer.Restore(seg, nil, nil); err != nil {
+			result, err := restorer.Restore(seg, nil, nil)
+			if err != nil {
 				t.Fatalf("Restore(%q): %v", tc.target, err)
 			}
 			if seg.Target != tc.wantTarget {
 				t.Errorf("Restore(%q):\n  want: %q\n  got:  %q", tc.target, tc.wantTarget, seg.Target)
+			}
+			if tc.wantTarget != tc.target && !result.IsFull() {
+				t.Errorf("Restore(%q): expected full match, got matched=%d total=%d", tc.target, result.Matched, result.Total)
 			}
 		})
 	}
@@ -149,7 +157,7 @@ func TestRubyRestorer_RubyOutput_BaseNotFound(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			seg := &model.Segment{Target: tc.target}
-			err := restorer.Restore(seg, tc.output, nil)
+			result, err := restorer.Restore(seg, tc.output, nil)
 			// 不应返回错误
 			if err != nil {
 				t.Fatalf("Restore(%q): unexpected error: %v", tc.target, err)
@@ -158,11 +166,15 @@ func TestRubyRestorer_RubyOutput_BaseNotFound(t *testing.T) {
 			if seg.Target != tc.target {
 				t.Errorf("Restore(%q): target should be unchanged, got %q", tc.target, seg.Target)
 			}
+			// 应报告 0 匹配
+			if result.Matched != 0 {
+				t.Errorf("Restore(%q): expected 0 matched, got %d", tc.target, result.Matched)
+			}
 		})
 	}
 }
 
-// T9: 部分匹配 → 仅还原匹配的部分，未匹配的静默跳过。
+// T9: 部分匹配 → 返回部分匹配结果，调用方可据此决定是否重试。
 func TestRubyRestorer_RubyOutput_PartialMatch(t *testing.T) {
 	restorer := NewRubyRestorer("ruby_output")
 
@@ -175,7 +187,8 @@ func TestRubyRestorer_RubyOutput_PartialMatch(t *testing.T) {
 		{Base: "微笑", Text: "ほほえ"},
 	}
 
-	if err := restorer.Restore(seg, output, nil); err != nil {
+	result, err := restorer.Restore(seg, output, nil)
+	if err != nil {
 		t.Fatalf("Restore: %v", err)
 	}
 
@@ -183,6 +196,17 @@ func TestRubyRestorer_RubyOutput_PartialMatch(t *testing.T) {
 	want := `<ruby>呪<rt>じゅ</rt></ruby>を唱える`
 	if seg.Target != want {
 		t.Errorf("partial match:\n  want: %q\n  got:  %q", want, seg.Target)
+	}
+
+	// 应报告部分匹配：2 条中只匹配了 1 条
+	if result.Matched != 1 {
+		t.Errorf("partial match: expected matched=1, got %d", result.Matched)
+	}
+	if result.Total != 2 {
+		t.Errorf("partial match: expected total=2, got %d", result.Total)
+	}
+	if result.IsFull() {
+		t.Error("partial match: IsFull() should be false")
 	}
 }
 
@@ -198,7 +222,8 @@ func TestRubyRestorer_RubyOutput_DuplicateBase(t *testing.T) {
 		{Base: "呪", Text: "のろ"},
 	}
 
-	if err := restorer.Restore(seg, output, nil); err != nil {
+	result, err := restorer.Restore(seg, output, nil)
+	if err != nil {
 		t.Fatalf("Restore: %v", err)
 	}
 
@@ -206,6 +231,9 @@ func TestRubyRestorer_RubyOutput_DuplicateBase(t *testing.T) {
 	want := `<ruby>呪<rt>じゅ</rt></ruby>と<ruby>呪<rt>のろ</rt></ruby>`
 	if seg.Target != want {
 		t.Errorf("duplicate base:\n  want: %q\n  got:  %q", want, seg.Target)
+	}
+	if !result.IsFull() {
+		t.Errorf("duplicate base: expected full match, got matched=%d total=%d", result.Matched, result.Total)
 	}
 }
 
@@ -292,12 +320,14 @@ func TestRubyRestorer_RubyOutput_FallbackToOriginalBase(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			seg := &model.Segment{Target: tc.target}
-			if err := restorer.Restore(seg, tc.output, tc.originals); err != nil {
+			result, err := restorer.Restore(seg, tc.output, tc.originals)
+			if err != nil {
 				t.Fatalf("Restore(%q): %v", tc.target, err)
 			}
 			if seg.Target != tc.wantTarget {
 				t.Errorf("Restore(%q):\n  want: %q\n  got:  %q", tc.target, tc.wantTarget, seg.Target)
 			}
+			_ = result
 		})
 	}
 }
@@ -310,11 +340,15 @@ func TestRubyRestorer_RubyOutput_WithKindField(t *testing.T) {
 	output := []RubyOutputEntry{
 		{Base: "呪", Text: "じゅ", Kind: "phonetic"},
 	}
-	if err := restorer.Restore(seg, output, nil); err != nil {
+	result, err := restorer.Restore(seg, output, nil)
+	if err != nil {
 		t.Fatalf("Restore: %v", err)
 	}
 	want := `<ruby>呪<rt>じゅ</rt></ruby>を唱える`
 	if seg.Target != want {
 		t.Errorf("with kind field:\n  want: %q\n  got:  %q", want, seg.Target)
+	}
+	if !result.IsFull() {
+		t.Errorf("with kind field: expected full match, got matched=%d total=%d", result.Matched, result.Total)
 	}
 }

@@ -32,14 +32,20 @@ func restoreSegmentRuby(
 			return
 		}
 		before := seg.Target
-		if err := restorer.Restore(seg, filtered, originals); err != nil {
+		result, err := restorer.Restore(seg, filtered, originals)
+		if err != nil {
 			logger.Warn("ruby restore failed, will retry alignment", "seg", seg.ID, "err", err)
-		} else if seg.Target == before {
+		} else if result.IsFull() {
+			return
+		} else if result.Matched == 0 {
 			logger.Warn("ruby restore: no base matched", "seg", seg.ID)
 		} else {
-			return
+			// 部分匹配：回退已修改的 Target，走 LLM 对齐重试
+			logger.Warn("ruby restore: partial match, will retry alignment",
+				"seg", seg.ID, "matched", result.Matched, "total", result.Total)
+			seg.Target = before
 		}
-		// 还原失败，尝试 LLM 对齐重试
+		// 还原失败或部分匹配，尝试 LLM 对齐重试
 		if len(backends) > 0 && ctx.Err() == nil {
 			retryAlignSegment(ctx, seg, originals, restorer, keepSet, backends, retryPolicy, logger, reporter)
 		}
@@ -118,17 +124,24 @@ func retryAlignSegment(
 				logger.Info("alignment output filtered out by preserve_kinds", "seg", seg.ID)
 			} else {
 				before := seg.Target
-				if err := restorer.Restore(seg, filtered, originals); err != nil {
+				result, err := restorer.Restore(seg, filtered, originals)
+				if err != nil {
 					status = "partial"
 					errorType = "restore_error"
 					errorMsg = err.Error()
 					logger.Warn("ruby restore after alignment retry failed",
 						"seg", seg.ID, "err", err)
-				} else if seg.Target == before {
+				} else if result.Matched == 0 {
 					status = "partial"
 					errorType = "no_match"
 					logger.Warn("ruby restore after alignment retry: still no match",
 						"seg", seg.ID)
+				} else if !result.IsFull() {
+					status = "partial"
+					errorType = "partial_match"
+					seg.Target = before
+					logger.Warn("ruby restore after alignment retry: partial match",
+						"seg", seg.ID, "matched", result.Matched, "total", result.Total)
 				} else {
 					status = "success"
 					errorType = ""
