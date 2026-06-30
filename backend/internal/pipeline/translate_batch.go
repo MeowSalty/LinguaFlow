@@ -94,11 +94,12 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 				"backend", round.Backend.Name(), "batch_size", len(idxs), "err", err)
 		}
 		lastErr = err
-		logger.Warn("backend failed for batch, shrinking or falling back", "batch_size", len(idxs), "err", lastErr)
-		if len(idxs) <= 1 {
-			return filterPendingIdxs(idxs, contextSet), nil
+		pendingIdxs := filterPendingIdxs(idxs, contextSet)
+		logger.Warn("backend failed for batch, shrinking or falling back", "batch_size", len(pendingIdxs), "err", lastErr)
+		if len(pendingIdxs) <= 1 {
+			return pendingIdxs, nil
 		}
-		return s.shrinkOrFallback(ctx, doc, filterPendingIdxs(idxs, contextSet), round, lastErr, logger)
+		return s.shrinkOrFallback(ctx, doc, pendingIdxs, round, lastErr, logger)
 	}
 
 	res = parseBatchResponseLenient(resp.Text, wantIDs, repairOpts)
@@ -122,14 +123,15 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 		}
 	}
 	if res.ParseErr != nil {
+		pendingIdxs := filterPendingIdxs(idxs, contextSet)
 		logger.Warn("batch response parse failed, shrinking or falling back",
-			"backend", round.Backend.Name(), "batch_size", len(idxs), "err", res.ParseErr,
+			"backend", round.Backend.Name(), "batch_size", len(pendingIdxs), "err", res.ParseErr,
 			"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200),
 			"repaired", res.Repaired)
-		if len(idxs) <= 1 {
-			return filterPendingIdxs(idxs, contextSet), nil
+		if len(pendingIdxs) <= 1 {
+			return pendingIdxs, nil
 		}
-		return s.shrinkOrFallback(ctx, doc, filterPendingIdxs(idxs, contextSet), round, res.ParseErr, logger)
+		return s.shrinkOrFallback(ctx, doc, pendingIdxs, round, res.ParseErr, logger)
 	}
 
 	missingRatio := 0.0
@@ -209,6 +211,10 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 		if missing := protect.MissingPlaceholders(seg); len(missing) > 0 {
 			logger.Warn("batch segment placeholders missing, single-retry",
 				"seg", seg.ID, "missing", missing)
+			if ctx.Err() != nil {
+				unresolved = append(unresolved, idx)
+				continue
+			}
 			retryExpanded := expandBatchWithContext(doc, []int{idx}, len(doc.Segments), s.contextWindow())
 			retryBatchSet := map[int]struct{}{idx: {}}
 			retryCtxSet := buildContextSet(retryExpanded, retryBatchSet)
@@ -231,6 +237,10 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 		rep.SegmentDone()
 	}
 	for _, idx := range missingIdxs {
+		if ctx.Err() != nil {
+			unresolved = append(unresolved, idx)
+			continue
+		}
 		retryExpanded := expandBatchWithContext(doc, []int{idx}, len(doc.Segments), s.contextWindow())
 		retryBatchSet := map[int]struct{}{idx: {}}
 		retryCtxSet := buildContextSet(retryExpanded, retryBatchSet)
@@ -247,6 +257,10 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 //   - 缩小到 >=2 的子批并发递归（每个子批又可能继续缩小）
 //   - 否则坍缩到顺序单段（调用 processBatchInRound 处理每个段落）
 func (s *Translate) shrinkOrFallback(ctx context.Context, doc *Document, idxs []int, round Round, lastErr error, logger *slog.Logger) ([]int, error) {
+	if ctx.Err() != nil {
+		logger.Warn("context canceled, skipping shrink/fallback", "batch_size", len(idxs))
+		return idxs, nil
+	}
 	if isFatalBackendError(lastErr) {
 		logger.Warn("all backends failed with fatal error, segments will be marked as unresolved",
 			"batch_size", len(idxs), "err", lastErr)

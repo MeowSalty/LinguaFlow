@@ -1,4 +1,4 @@
-package worker
+﻿package worker
 
 import (
 	"context"
@@ -87,6 +87,11 @@ func (r *TranslationRunner) processJob(ctx context.Context, jobID int) error {
 	exec, err := r.jobs.LoadJobExecution(jobCtx, jobID)
 	if err != nil {
 		return err
+	}
+	// 二次校验：任务可能在入队后、执行前被取消
+	if exec.Job.Status == service.TranslationJobStatusCancelled {
+		r.logger.Info("job already cancelled, skipping", "job_id", jobID)
+		return nil
 	}
 	pending := make([]*ent.JobResource, 0, len(exec.JobResources))
 	for _, item := range exec.JobResources {
