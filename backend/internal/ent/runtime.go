@@ -591,8 +591,14 @@ func init() {
 	translationjob.DefaultTotalSegments = translationjobDescTotalSegments.Default.(int)
 	// translationjob.TotalSegmentsValidator is a validator for the "total_segments" field. It is called by the builders before save.
 	translationjob.TotalSegmentsValidator = translationjobDescTotalSegments.Validators[0].(func(int) error)
+	// translationjobDescStageTotal is the schema descriptor for stage_total field.
+	translationjobDescStageTotal := translationjobFields[8].Descriptor()
+	// translationjob.DefaultStageTotal holds the default value on creation for the stage_total field.
+	translationjob.DefaultStageTotal = translationjobDescStageTotal.Default.(int)
+	// translationjob.StageTotalValidator is a validator for the "stage_total" field. It is called by the builders before save.
+	translationjob.StageTotalValidator = translationjobDescStageTotal.Validators[0].(func(int) error)
 	// translationjobDescCompletedSegments is the schema descriptor for completed_segments field.
-	translationjobDescCompletedSegments := translationjobFields[8].Descriptor()
+	translationjobDescCompletedSegments := translationjobFields[9].Descriptor()
 	// translationjob.DefaultCompletedSegments holds the default value on creation for the completed_segments field.
 	translationjob.DefaultCompletedSegments = translationjobDescCompletedSegments.Default.(int)
 	// translationjob.CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.

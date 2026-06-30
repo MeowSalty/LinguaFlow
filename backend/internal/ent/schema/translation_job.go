@@ -32,7 +32,9 @@ func (TranslationJob) Fields() []ent.Field {
 		field.Int("failed_resources").Default(0).NonNegative().
 			Comment("失败的资源数"),
 		field.Int("total_segments").Default(0).NonNegative().
-			Comment("总段落数"),
+			Comment("总段落数（创建时为选中的 segment 数，ReconcileJob 修正为实际翻译量）"),
+		field.Int("stage_total").Default(0).NonNegative().
+			Comment("实际需要翻译的段落数（ReconcileJob 从各资源的 stage_total 聚合）"),
 		field.Int("completed_segments").Default(0).NonNegative().
 			Comment("已完成段落数"),
 		field.String("error_message").Optional().Nillable().

@@ -147,6 +147,20 @@ func (_c *TranslationJobCreate) SetNillableTotalSegments(v *int) *TranslationJob
 	return _c
 }
 
+// SetStageTotal sets the "stage_total" field.
+func (_c *TranslationJobCreate) SetStageTotal(v int) *TranslationJobCreate {
+	_c.mutation.SetStageTotal(v)
+	return _c
+}
+
+// SetNillableStageTotal sets the "stage_total" field if the given value is not nil.
+func (_c *TranslationJobCreate) SetNillableStageTotal(v *int) *TranslationJobCreate {
+	if v != nil {
+		_c.SetStageTotal(*v)
+	}
+	return _c
+}
+
 // SetCompletedSegments sets the "completed_segments" field.
 func (_c *TranslationJobCreate) SetCompletedSegments(v int) *TranslationJobCreate {
 	_c.mutation.SetCompletedSegments(v)
@@ -305,6 +319,10 @@ func (_c *TranslationJobCreate) defaults() {
 		v := translationjob.DefaultTotalSegments
 		_c.mutation.SetTotalSegments(v)
 	}
+	if _, ok := _c.mutation.StageTotal(); !ok {
+		v := translationjob.DefaultStageTotal
+		_c.mutation.SetStageTotal(v)
+	}
 	if _, ok := _c.mutation.CompletedSegments(); !ok {
 		v := translationjob.DefaultCompletedSegments
 		_c.mutation.SetCompletedSegments(v)
@@ -366,6 +384,14 @@ func (_c *TranslationJobCreate) check() error {
 	if v, ok := _c.mutation.TotalSegments(); ok {
 		if err := translationjob.TotalSegmentsValidator(v); err != nil {
 			return &ValidationError{Name: "total_segments", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.total_segments": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.StageTotal(); !ok {
+		return &ValidationError{Name: "stage_total", err: errors.New(`ent: missing required field "TranslationJob.stage_total"`)}
+	}
+	if v, ok := _c.mutation.StageTotal(); ok {
+		if err := translationjob.StageTotalValidator(v); err != nil {
+			return &ValidationError{Name: "stage_total", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.stage_total": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.CompletedSegments(); !ok {
@@ -444,6 +470,10 @@ func (_c *TranslationJobCreate) createSpec() (*TranslationJob, *sqlgraph.CreateS
 	if value, ok := _c.mutation.TotalSegments(); ok {
 		_spec.SetField(translationjob.FieldTotalSegments, field.TypeInt, value)
 		_node.TotalSegments = value
+	}
+	if value, ok := _c.mutation.StageTotal(); ok {
+		_spec.SetField(translationjob.FieldStageTotal, field.TypeInt, value)
+		_node.StageTotal = value
 	}
 	if value, ok := _c.mutation.CompletedSegments(); ok {
 		_spec.SetField(translationjob.FieldCompletedSegments, field.TypeInt, value)

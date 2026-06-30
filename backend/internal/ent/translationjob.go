@@ -38,8 +38,10 @@ type TranslationJob struct {
 	CompletedResources int `json:"completed_resources,omitempty"`
 	// 失败的资源数
 	FailedResources int `json:"failed_resources,omitempty"`
-	// 总段落数
+	// 总段落数（创建时为选中的 segment 数，ReconcileJob 修正为实际翻译量）
 	TotalSegments int `json:"total_segments,omitempty"`
+	// 实际需要翻译的段落数（ReconcileJob 从各资源的 stage_total 聚合）
+	StageTotal int `json:"stage_total,omitempty"`
 	// 已完成段落数
 	CompletedSegments int `json:"completed_segments,omitempty"`
 	// 任务级错误信息
@@ -105,7 +107,7 @@ func (*TranslationJob) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case translationjob.FieldTranslationConfig:
 			values[i] = new([]byte)
-		case translationjob.FieldID, translationjob.FieldExecutionPlanID, translationjob.FieldResourceCount, translationjob.FieldCompletedResources, translationjob.FieldFailedResources, translationjob.FieldTotalSegments, translationjob.FieldCompletedSegments:
+		case translationjob.FieldID, translationjob.FieldExecutionPlanID, translationjob.FieldResourceCount, translationjob.FieldCompletedResources, translationjob.FieldFailedResources, translationjob.FieldTotalSegments, translationjob.FieldStageTotal, translationjob.FieldCompletedSegments:
 			values[i] = new(sql.NullInt64)
 		case translationjob.FieldStatus, translationjob.FieldTriggerType, translationjob.FieldErrorMessage:
 			values[i] = new(sql.NullString)
@@ -197,6 +199,12 @@ func (_m *TranslationJob) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field total_segments", values[i])
 			} else if value.Valid {
 				_m.TotalSegments = int(value.Int64)
+			}
+		case translationjob.FieldStageTotal:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field stage_total", values[i])
+			} else if value.Valid {
+				_m.StageTotal = int(value.Int64)
 			}
 		case translationjob.FieldCompletedSegments:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -312,6 +320,9 @@ func (_m *TranslationJob) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("total_segments=")
 	builder.WriteString(fmt.Sprintf("%v", _m.TotalSegments))
+	builder.WriteString(", ")
+	builder.WriteString("stage_total=")
+	builder.WriteString(fmt.Sprintf("%v", _m.StageTotal))
 	builder.WriteString(", ")
 	builder.WriteString("completed_segments=")
 	builder.WriteString(fmt.Sprintf("%v", _m.CompletedSegments))

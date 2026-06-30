@@ -100,6 +100,11 @@ func TotalSegments(v int) predicate.TranslationJob {
 	return predicate.TranslationJob(sql.FieldEQ(FieldTotalSegments, v))
 }
 
+// StageTotal applies equality check predicate on the "stage_total" field. It's identical to StageTotalEQ.
+func StageTotal(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldEQ(FieldStageTotal, v))
+}
+
 // CompletedSegments applies equality check predicate on the "completed_segments" field. It's identical to CompletedSegmentsEQ.
 func CompletedSegments(v int) predicate.TranslationJob {
 	return predicate.TranslationJob(sql.FieldEQ(FieldCompletedSegments, v))
@@ -523,6 +528,46 @@ func TotalSegmentsLT(v int) predicate.TranslationJob {
 // TotalSegmentsLTE applies the LTE predicate on the "total_segments" field.
 func TotalSegmentsLTE(v int) predicate.TranslationJob {
 	return predicate.TranslationJob(sql.FieldLTE(FieldTotalSegments, v))
+}
+
+// StageTotalEQ applies the EQ predicate on the "stage_total" field.
+func StageTotalEQ(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldEQ(FieldStageTotal, v))
+}
+
+// StageTotalNEQ applies the NEQ predicate on the "stage_total" field.
+func StageTotalNEQ(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldNEQ(FieldStageTotal, v))
+}
+
+// StageTotalIn applies the In predicate on the "stage_total" field.
+func StageTotalIn(vs ...int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldIn(FieldStageTotal, vs...))
+}
+
+// StageTotalNotIn applies the NotIn predicate on the "stage_total" field.
+func StageTotalNotIn(vs ...int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldNotIn(FieldStageTotal, vs...))
+}
+
+// StageTotalGT applies the GT predicate on the "stage_total" field.
+func StageTotalGT(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldGT(FieldStageTotal, v))
+}
+
+// StageTotalGTE applies the GTE predicate on the "stage_total" field.
+func StageTotalGTE(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldGTE(FieldStageTotal, v))
+}
+
+// StageTotalLT applies the LT predicate on the "stage_total" field.
+func StageTotalLT(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldLT(FieldStageTotal, v))
+}
+
+// StageTotalLTE applies the LTE predicate on the "stage_total" field.
+func StageTotalLTE(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldLTE(FieldStageTotal, v))
 }
 
 // CompletedSegmentsEQ applies the EQ predicate on the "completed_segments" field.

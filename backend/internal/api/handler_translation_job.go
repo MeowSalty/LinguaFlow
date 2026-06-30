@@ -54,6 +54,7 @@ type translationJobResponse struct {
 	CompletedResources int                              `json:"completed_resources"`
 	FailedResources    int                              `json:"failed_resources"`
 	TotalSegments      int                              `json:"total_segments"`
+	StageTotal         int                              `json:"stage_total"`
 	CompletedSegments  int                              `json:"completed_segments"`
 	ErrorMessage       *string                          `json:"error_message,omitempty"`
 	StartedAt          *string                          `json:"started_at,omitempty"`
@@ -226,6 +227,7 @@ func toTranslationJobResponse(row *ent.TranslationJob, queueInfo *QueueInfo) tra
 		CompletedResources: row.CompletedResources,
 		FailedResources:    row.FailedResources,
 		TotalSegments:      row.TotalSegments,
+		StageTotal:         row.StageTotal,
 		CompletedSegments:  row.CompletedSegments,
 		ErrorMessage:       row.ErrorMessage,
 		StartedAt:          timePtrToString(row.StartedAt),

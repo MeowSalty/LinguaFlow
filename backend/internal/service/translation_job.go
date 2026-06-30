@@ -767,28 +767,31 @@ func (s *TranslationJobService) ReconcileJob(ctx context.Context, jobID int) err
 		"completed_resources", completed,
 		"total_resources", len(current.Edges.JobResources),
 	)
+	// 动态计算 stage_total：已完成资源取 stage_total（精确值），未完成资源取 segment_count（近似值）
+	stageTotal := 0
+	for _, item := range current.Edges.JobResources {
+		if item.StageTotal > 0 {
+			stageTotal += item.StageTotal
+		} else {
+			stageTotal += item.SegmentCount
+		}
+	}
+
 	update := s.client.TranslationJob.UpdateOneID(jobID).
 		SetStatus(status).
 		SetResourceCount(len(current.Edges.JobResources)).
 		SetCompletedResources(completed).
 		SetFailedResources(failed).
-		SetCompletedSegments(completedSegments)
+		SetCompletedSegments(completedSegments).
+		SetStageTotal(stageTotal)
 	if firstFailure != nil && status == TranslationJobStatusFailed {
 		update.SetErrorMessage(*firstFailure)
 	} else {
 		update.ClearErrorMessage()
 	}
-	// 所有资源结束后，用各资源的 stage_total 之和修正 total_segments。
-	// stage_total 是 pipeline 运行时确定的实际翻译量（排除了空白段、装饰分隔符等），
-	// 而创建时的 total_segments 统计的是所有选中的 segment IDs（含被跳过的）。
-	if pendingCount == 0 && runningCount == 0 {
-		actualTotal := 0
-		for _, item := range current.Edges.JobResources {
-			actualTotal += item.StageTotal
-		}
-		if actualTotal > 0 {
-			update.SetTotalSegments(actualTotal)
-		}
+	// 所有资源结束后，用 stage_total 修正 total_segments，保持一致
+	if pendingCount == 0 && runningCount == 0 && stageTotal > 0 {
+		update.SetTotalSegments(stageTotal)
 	}
 	if err := update.Exec(ctx); err != nil {
 		if ent.IsNotFound(err) {

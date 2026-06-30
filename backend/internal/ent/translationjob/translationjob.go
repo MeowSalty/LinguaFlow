@@ -34,6 +34,8 @@ const (
 	FieldFailedResources = "failed_resources"
 	// FieldTotalSegments holds the string denoting the total_segments field in the database.
 	FieldTotalSegments = "total_segments"
+	// FieldStageTotal holds the string denoting the stage_total field in the database.
+	FieldStageTotal = "stage_total"
 	// FieldCompletedSegments holds the string denoting the completed_segments field in the database.
 	FieldCompletedSegments = "completed_segments"
 	// FieldErrorMessage holds the string denoting the error_message field in the database.
@@ -84,6 +86,7 @@ var Columns = []string{
 	FieldCompletedResources,
 	FieldFailedResources,
 	FieldTotalSegments,
+	FieldStageTotal,
 	FieldCompletedSegments,
 	FieldErrorMessage,
 	FieldStartedAt,
@@ -142,6 +145,10 @@ var (
 	DefaultTotalSegments int
 	// TotalSegmentsValidator is a validator for the "total_segments" field. It is called by the builders before save.
 	TotalSegmentsValidator func(int) error
+	// DefaultStageTotal holds the default value on creation for the "stage_total" field.
+	DefaultStageTotal int
+	// StageTotalValidator is a validator for the "stage_total" field. It is called by the builders before save.
+	StageTotalValidator func(int) error
 	// DefaultCompletedSegments holds the default value on creation for the "completed_segments" field.
 	DefaultCompletedSegments int
 	// CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.
@@ -199,6 +206,11 @@ func ByFailedResources(opts ...sql.OrderTermOption) OrderOption {
 // ByTotalSegments orders the results by the total_segments field.
 func ByTotalSegments(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTotalSegments, opts...).ToFunc()
+}
+
+// ByStageTotal orders the results by the stage_total field.
+func ByStageTotal(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStageTotal, opts...).ToFunc()
 }
 
 // ByCompletedSegments orders the results by the completed_segments field.

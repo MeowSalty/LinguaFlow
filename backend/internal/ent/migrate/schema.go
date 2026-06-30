@@ -519,6 +519,7 @@ var (
 		{Name: "completed_resources", Type: field.TypeInt, Default: 0},
 		{Name: "failed_resources", Type: field.TypeInt, Default: 0},
 		{Name: "total_segments", Type: field.TypeInt, Default: 0},
+		{Name: "stage_total", Type: field.TypeInt, Default: 0},
 		{Name: "completed_segments", Type: field.TypeInt, Default: 0},
 		{Name: "error_message", Type: field.TypeString, Nullable: true},
 		{Name: "started_at", Type: field.TypeTime, Nullable: true},
@@ -533,13 +534,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "translation_jobs_projects_translation_jobs",
-				Columns:    []*schema.Column{TranslationJobsColumns[14]},
+				Columns:    []*schema.Column{TranslationJobsColumns[15]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "translation_jobs_users_created_translation_jobs",
-				Columns:    []*schema.Column{TranslationJobsColumns[15]},
+				Columns:    []*schema.Column{TranslationJobsColumns[16]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},

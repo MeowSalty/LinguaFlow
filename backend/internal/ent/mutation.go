@@ -14238,6 +14238,8 @@ type TranslationJobMutation struct {
 	addfailed_resources    *int
 	total_segments         *int
 	addtotal_segments      *int
+	stage_total            *int
+	addstage_total         *int
 	completed_segments     *int
 	addcompleted_segments  *int
 	error_message          *string
@@ -14813,6 +14815,62 @@ func (m *TranslationJobMutation) ResetTotalSegments() {
 	m.addtotal_segments = nil
 }
 
+// SetStageTotal sets the "stage_total" field.
+func (m *TranslationJobMutation) SetStageTotal(i int) {
+	m.stage_total = &i
+	m.addstage_total = nil
+}
+
+// StageTotal returns the value of the "stage_total" field in the mutation.
+func (m *TranslationJobMutation) StageTotal() (r int, exists bool) {
+	v := m.stage_total
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStageTotal returns the old "stage_total" field's value of the TranslationJob entity.
+// If the TranslationJob object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TranslationJobMutation) OldStageTotal(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStageTotal is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStageTotal requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStageTotal: %w", err)
+	}
+	return oldValue.StageTotal, nil
+}
+
+// AddStageTotal adds i to the "stage_total" field.
+func (m *TranslationJobMutation) AddStageTotal(i int) {
+	if m.addstage_total != nil {
+		*m.addstage_total += i
+	} else {
+		m.addstage_total = &i
+	}
+}
+
+// AddedStageTotal returns the value that was added to the "stage_total" field in this mutation.
+func (m *TranslationJobMutation) AddedStageTotal() (r int, exists bool) {
+	v := m.addstage_total
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetStageTotal resets all changes to the "stage_total" field.
+func (m *TranslationJobMutation) ResetStageTotal() {
+	m.stage_total = nil
+	m.addstage_total = nil
+}
+
 // SetCompletedSegments sets the "completed_segments" field.
 func (m *TranslationJobMutation) SetCompletedSegments(i int) {
 	m.completed_segments = &i
@@ -15133,7 +15191,7 @@ func (m *TranslationJobMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *TranslationJobMutation) Fields() []string {
-	fields := make([]string, 0, 13)
+	fields := make([]string, 0, 14)
 	if m.created_at != nil {
 		fields = append(fields, translationjob.FieldCreatedAt)
 	}
@@ -15163,6 +15221,9 @@ func (m *TranslationJobMutation) Fields() []string {
 	}
 	if m.total_segments != nil {
 		fields = append(fields, translationjob.FieldTotalSegments)
+	}
+	if m.stage_total != nil {
+		fields = append(fields, translationjob.FieldStageTotal)
 	}
 	if m.completed_segments != nil {
 		fields = append(fields, translationjob.FieldCompletedSegments)
@@ -15201,6 +15262,8 @@ func (m *TranslationJobMutation) Field(name string) (ent.Value, bool) {
 		return m.FailedResources()
 	case translationjob.FieldTotalSegments:
 		return m.TotalSegments()
+	case translationjob.FieldStageTotal:
+		return m.StageTotal()
 	case translationjob.FieldCompletedSegments:
 		return m.CompletedSegments()
 	case translationjob.FieldErrorMessage:
@@ -15236,6 +15299,8 @@ func (m *TranslationJobMutation) OldField(ctx context.Context, name string) (ent
 		return m.OldFailedResources(ctx)
 	case translationjob.FieldTotalSegments:
 		return m.OldTotalSegments(ctx)
+	case translationjob.FieldStageTotal:
+		return m.OldStageTotal(ctx)
 	case translationjob.FieldCompletedSegments:
 		return m.OldCompletedSegments(ctx)
 	case translationjob.FieldErrorMessage:
@@ -15321,6 +15386,13 @@ func (m *TranslationJobMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetTotalSegments(v)
 		return nil
+	case translationjob.FieldStageTotal:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStageTotal(v)
+		return nil
 	case translationjob.FieldCompletedSegments:
 		v, ok := value.(int)
 		if !ok {
@@ -15365,6 +15437,9 @@ func (m *TranslationJobMutation) AddedFields() []string {
 	if m.addtotal_segments != nil {
 		fields = append(fields, translationjob.FieldTotalSegments)
 	}
+	if m.addstage_total != nil {
+		fields = append(fields, translationjob.FieldStageTotal)
+	}
 	if m.addcompleted_segments != nil {
 		fields = append(fields, translationjob.FieldCompletedSegments)
 	}
@@ -15386,6 +15461,8 @@ func (m *TranslationJobMutation) AddedField(name string) (ent.Value, bool) {
 		return m.AddedFailedResources()
 	case translationjob.FieldTotalSegments:
 		return m.AddedTotalSegments()
+	case translationjob.FieldStageTotal:
+		return m.AddedStageTotal()
 	case translationjob.FieldCompletedSegments:
 		return m.AddedCompletedSegments()
 	}
@@ -15431,6 +15508,13 @@ func (m *TranslationJobMutation) AddField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.AddTotalSegments(v)
+		return nil
+	case translationjob.FieldStageTotal:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddStageTotal(v)
 		return nil
 	case translationjob.FieldCompletedSegments:
 		v, ok := value.(int)
@@ -15510,6 +15594,9 @@ func (m *TranslationJobMutation) ResetField(name string) error {
 		return nil
 	case translationjob.FieldTotalSegments:
 		m.ResetTotalSegments()
+		return nil
+	case translationjob.FieldStageTotal:
+		m.ResetStageTotal()
 		return nil
 	case translationjob.FieldCompletedSegments:
 		m.ResetCompletedSegments()
