@@ -1,0 +1,128 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  backend:
+    name: Build Backend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: Generate ent code
+        run: go generate ./internal/ent
+
+      - name: Generate OpenAPI code
+        run: go generate ./internal/api
+
+      - name: Build
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+          CGO_ENABLED: 0
+        run: |
+          EXTENSION=""
+          if [ "$GOOS" = "windows" ]; then EXTENSION=".exe"; fi
+          go build -ldflags="-s -w" -o bin/linguaflow-${{ matrix.goos }}-${{ matrix.goarch }}${EXTENSION} ./cmd/linguaflow
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: linguaflow-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: backend/bin/linguaflow-*
+
+  frontend:
+    name: Build Frontend
+    runs-on: ubuntu-latest
+    if: hashFiles('frontend/package.json') != ''
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+          cache-dependency-path: frontend/pnpm-lock.yaml
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate OpenAPI types
+        run: pnpm exec openapi-typescript ../api/openapi/openapi-3.0.yaml -o src/api/types.d.ts
+
+      - name: Type check
+        run: pnpm type-check
+
+      - name: Build
+        run: pnpm build
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist
+
+  release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [backend, frontend]
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release
+          for dir in artifacts/linguaflow-*; do
+            name=$(basename "$dir")
+            file=$(ls "$dir")
+            cp "$dir/$file" "release/$file"
+          done
+          if [ -d "artifacts/frontend-dist" ]; then
+            cd artifacts/frontend-dist && zip -r ../../release/frontend-dist.zip . && cd ../..
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true
