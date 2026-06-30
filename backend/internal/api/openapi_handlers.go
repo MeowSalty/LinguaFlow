@@ -6,6 +6,10 @@ func (s *Server) Ping(w http.ResponseWriter, r *http.Request) {
 	s.handlePing(w, r)
 }
 
+func (s *Server) GetMode(w http.ResponseWriter, r *http.Request) {
+	s.handleMode(w, r)
+}
+
 func (s *Server) RegisterAuth(w http.ResponseWriter, r *http.Request) {
 	s.handleRegister(w, r)
 }

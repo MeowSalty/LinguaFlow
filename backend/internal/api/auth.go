@@ -18,17 +18,12 @@ type authenticatedUser struct {
 
 func (s *Server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		rawToken := bearerToken(r.Header.Get("Authorization"))
-		if rawToken == "" {
+		user, ok := s.resolveAuthUser(r)
+		if !ok {
 			writeProblem(w, http.StatusUnauthorized, "unauthorized", "缺少 Bearer Token")
 			return
 		}
-		account, claims, err := s.authService.ResolveUserFromAccessToken(r.Context(), rawToken)
-		if err != nil {
-			writeServiceError(w, err)
-			return
-		}
-		ctx := context.WithValue(r.Context(), authContextKey{}, authenticatedUser{User: account, Claims: claims})
+		ctx := context.WithValue(r.Context(), authContextKey{}, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
@@ -54,19 +49,22 @@ func bearerToken(header string) string {
 	return strings.TrimSpace(strings.TrimPrefix(header, prefix))
 }
 
-// resolveAuthUser extracts the authenticated user from the request.
-// Supports both Authorization header and access_token query parameter
-// (for SSE EventSource which cannot set custom headers).
+// resolveAuthUser 从请求中提取认证用户。
+// 支持 Authorization 头和 access_token 查询参数（用于无法设置自定义头的 SSE EventSource）。
 func (s *Server) resolveAuthUser(r *http.Request) (authenticatedUser, bool) {
-	// Try existing context first (from requireAuth middleware)
+	if user, ok := s.localAuthUser(); ok {
+		return user, true
+	}
+
+	// 优先从已有 context 中获取（来自 requireAuth 中间件）
 	if user, ok := authUserFromContext(r.Context()); ok {
 		return user, true
 	}
 
-	// Try Authorization header
+	// 尝试 Authorization 头
 	rawToken := bearerToken(r.Header.Get("Authorization"))
 	if rawToken == "" {
-		// Fall back to query parameter
+		// 回退到查询参数
 		rawToken = r.URL.Query().Get("access_token")
 	}
 	if rawToken == "" {

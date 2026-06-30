@@ -225,6 +225,7 @@ type LogConfig struct {
 type ServerConfig struct {
 	Host            string        `yaml:"host"`
 	Port            int           `yaml:"port"`
+	Mode            string        `yaml:"mode"` // "server" (default) | "local"
 	ServiceName     string        `yaml:"service_name"`
 	DataDir         string        `yaml:"data_dir"`
 	AutoMigrate     bool          `yaml:"auto_migrate"`
@@ -234,6 +235,15 @@ type ServerConfig struct {
 	RefreshExpiry   time.Duration `yaml:"refresh_token_expiry"`
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout"`
 	CORS            CORSConfig    `yaml:"cors"`
+}
+
+const (
+	ModeServer = "server"
+	ModeLocal  = "local"
+)
+
+func (c ServerConfig) IsLocal() bool {
+	return c.Mode == ModeLocal
 }
 
 type CORSConfig struct {
@@ -439,6 +449,14 @@ func (c *Config) Validate() error {
 	}
 	if c.Glossary.Standalone.MinSourceLen < 1 {
 		c.Glossary.Standalone.MinSourceLen = 2
+	}
+	switch c.Server.Mode {
+	case "", ModeServer:
+		c.Server.Mode = ModeServer
+	case ModeLocal:
+		// ok
+	default:
+		return fmt.Errorf("server.mode must be one of %s|%s, got %q", ModeServer, ModeLocal, c.Server.Mode)
 	}
 	if c.Server.Host == "" {
 		c.Server.Host = "0.0.0.0"

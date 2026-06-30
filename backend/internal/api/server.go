@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"path/filepath"
 	"sync/atomic"
@@ -26,6 +27,8 @@ type Server struct {
 	logger                *slog.Logger
 	db                    *sql.DB
 	entClient             *ent.Client
+	mode                  string    // "server" | "local"
+	localUser             *ent.User // 本地模式下非 nil
 	authService           *service.AuthService
 	userService           *service.UserService
 	backendSvc            *service.BackendService
@@ -52,7 +55,18 @@ type Server struct {
 	ready                 atomic.Bool
 }
 
-func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.Client) (*Server, error) {
+func (s *Server) isLocal() bool {
+	return s.mode == config.ModeLocal
+}
+
+func (s *Server) localAuthUser() (authenticatedUser, bool) {
+	if s.isLocal() && s.localUser != nil {
+		return authenticatedUser{User: s.localUser}, true
+	}
+	return authenticatedUser{}, false
+}
+
+func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.Client, mode string, localUser *ent.User) (*Server, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -62,6 +76,8 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 		logger:      logger,
 		db:          db,
 		entClient:   client,
+		mode:        mode,
+		localUser:   localUser,
 		authService: service.NewAuthService(client, service.AuthConfigFromServer(cfg.Server)),
 		eventBroker: event.NewBroker(),
 	}
@@ -103,7 +119,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 	return s, nil
 }
 
-func (s *Server) Run(ctx context.Context) error {
+func (s *Server) Run(ctx context.Context, ln net.Listener) error {
 	serveErr := make(chan error, 1)
 	if s.translationJobRunner != nil {
 		if err := s.translationJobRunner.Recover(ctx); err != nil {
@@ -152,8 +168,8 @@ func (s *Server) Run(ctx context.Context) error {
 	s.ready.Store(true)
 
 	go func() {
-		s.logger.Info("http server listening", "addr", s.httpServer.Addr)
-		serveErr <- s.httpServer.ListenAndServe()
+		s.logger.Info("http server listening", "addr", ln.Addr().String())
+		serveErr <- s.httpServer.Serve(ln)
 	}()
 
 	select {

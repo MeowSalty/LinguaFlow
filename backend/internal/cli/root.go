@@ -48,6 +48,7 @@ func newRoot() (*cobra.Command, *appCtx) {
 	root.PersistentFlags().StringVar(&rt.progressMode, "progress", "auto", "进度反馈 auto|bar|log|none")
 
 	root.AddCommand(newServeCmd(rt))
+	root.AddCommand(newLocalCmd(rt))
 	root.AddCommand(newTranslateCmd(rt))
 	root.AddCommand(newInitCmd())
 	root.AddCommand(newVersionCmd())
