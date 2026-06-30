@@ -83,6 +83,7 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 		tried   []string // 本次尝试过的所有后端名
 	)
 	tried = append(tried, round.Backend.Name())
+	callStart := time.Now()
 	resp, err = s.callOnce(ctx, round.Backend, req, round.Retry)
 	if err != nil {
 		if isFatalBackendError(err) {
@@ -94,6 +95,21 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 		}
 		lastErr = err
 		pendingIdxs := filterPendingIdxs(idxs, contextSet)
+		shrink := len(pendingIdxs) > 1
+		s.emitBatchOutcome(progress.BatchEvent{
+			Stage:           "translate",
+			SegmentIDs:      pendingSegmentIDStrings(pendingIdxs),
+			SegmentCount:    len(pendingIdxs),
+			BackendName:     round.Backend.Name(),
+			Status:          "failed",
+			DurationMs:      time.Since(callStart).Milliseconds(),
+			SentContent:     usr,
+			TriedBackends:   tried,
+			ErrorType:       "backend_error",
+			ErrorMessage:    err.Error(),
+			HTTPStatus:      httpStatusFromErr(err),
+			ShrinkAttempted: shrink,
+		})
 		logger.Warn("backend failed for batch, shrinking or falling back", "batch_size", len(pendingIdxs), "err", lastErr)
 		if len(pendingIdxs) <= 1 {
 			return pendingIdxs, nil
@@ -109,7 +125,32 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 		reminder := repair.BuildRetryReminder(nil, res.ParseErr, headSnippet(resp.Text, 200))
 		req2 := req
 		req2.System = req.System + reminder
-		if resp2, err2 := s.callOnce(ctx, round.Backend, req2, round.Retry); err2 == nil {
+		upgradeStart := time.Now()
+		resp2, err2 := s.callOnce(ctx, round.Backend, req2, round.Retry)
+		if err2 != nil {
+			pendingIdxs := filterPendingIdxs(idxs, contextSet)
+			shrink := len(pendingIdxs) > 1
+			s.emitBatchOutcome(progress.BatchEvent{
+				Stage:           "translate",
+				SegmentIDs:      pendingSegmentIDStrings(pendingIdxs),
+				SegmentCount:    len(pendingIdxs),
+				BackendName:     round.Backend.Name(),
+				Status:          "failed",
+				DurationMs:      time.Since(upgradeStart).Milliseconds(),
+				SentContent:     req2.User,
+				TriedBackends:   tried,
+				ErrorType:       "backend_error",
+				ErrorMessage:    err2.Error(),
+				HTTPStatus:      httpStatusFromErr(err2),
+				ShrinkAttempted: shrink,
+			})
+			logger.Warn("prompt upgrade call failed, shrinking or falling back",
+				"backend", round.Backend.Name(), "batch_size", len(pendingIdxs), "err", err2)
+			if len(pendingIdxs) <= 1 {
+				return pendingIdxs, nil
+			}
+			return s.shrinkOrFallback(ctx, doc, pendingIdxs, round, err2, logger)
+		} else {
 			res2 := parseBatchResponseLenient(resp2.Text, wantIDs, repairOpts)
 			if res2.ParseErr == nil {
 				logger.Info("batch response recovered by prompt upgrade",
@@ -118,11 +159,54 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 				res = res2
 				atomic.AddInt64(&doc.InputTokens, resp2.Usage.PromptTokens)
 				atomic.AddInt64(&doc.OutputTokens, resp2.Usage.CompletionTokens)
+			} else {
+				pendingIdxs := filterPendingIdxs(idxs, contextSet)
+				shrink := len(pendingIdxs) > 1
+				s.emitBatchOutcome(progress.BatchEvent{
+					Stage:           "translate",
+					SegmentIDs:      pendingSegmentIDStrings(pendingIdxs),
+					SegmentCount:    len(pendingIdxs),
+					BackendName:     round.Backend.Name(),
+					Status:          "failed",
+					DurationMs:      time.Since(upgradeStart).Milliseconds(),
+					InputTokens:     resp2.Usage.PromptTokens,
+					OutputTokens:    resp2.Usage.CompletionTokens,
+					SentContent:     req2.User,
+					ReceivedContent: resp2.Text,
+					TriedBackends:   tried,
+					ErrorType:       "parse_error",
+					ErrorMessage:    res2.ParseErr.Error(),
+					ShrinkAttempted: shrink,
+				})
+				logger.Warn("prompt upgrade response parse failed, shrinking or falling back",
+					"backend", round.Backend.Name(), "batch_size", len(pendingIdxs), "err", res2.ParseErr,
+					"resp_len", len(resp2.Text), "resp_head", headSnippet(resp2.Text, 200))
+				if len(pendingIdxs) <= 1 {
+					return pendingIdxs, nil
+				}
+				return s.shrinkOrFallback(ctx, doc, pendingIdxs, round, res2.ParseErr, logger)
 			}
 		}
 	}
 	if res.ParseErr != nil {
 		pendingIdxs := filterPendingIdxs(idxs, contextSet)
+		shrink := len(pendingIdxs) > 1
+		s.emitBatchOutcome(progress.BatchEvent{
+			Stage:           "translate",
+			SegmentIDs:      pendingSegmentIDStrings(pendingIdxs),
+			SegmentCount:    len(pendingIdxs),
+			BackendName:     round.Backend.Name(),
+			Status:          "failed",
+			DurationMs:      time.Since(callStart).Milliseconds(),
+			InputTokens:     resp.Usage.PromptTokens,
+			OutputTokens:    resp.Usage.CompletionTokens,
+			SentContent:     usr,
+			ReceivedContent: resp.Text,
+			TriedBackends:   tried,
+			ErrorType:       "parse_error",
+			ErrorMessage:    res.ParseErr.Error(),
+			ShrinkAttempted: shrink,
+		})
 		logger.Warn("batch response parse failed, shrinking or falling back",
 			"backend", round.Backend.Name(), "batch_size", len(pendingIdxs), "err", res.ParseErr,
 			"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200),
@@ -156,8 +240,8 @@ func (s *Translate) processBatchInRound(ctx context.Context, doc *Document, idxs
 
 	trans, glosEntries, rubyOutputMap := res.Trans, res.Glos, res.RubyOutput
 
-	// Determine batch status and emit event.
-	s.emitBatchEvent(idxs, wantIDs, picked.Name(), res, rawRespText, usr,
+	pendingForEvent := filterPendingIdxs(idxs, contextSet)
+	s.emitBatchEvent(pendingForEvent, wantIDs, picked.Name(), res, rawRespText, usr,
 		glos, resp.Usage, durationMs, tried, logger)
 
 	logger.Debug("batch translated",
@@ -402,11 +486,39 @@ func filterPendingIdxs(idxs []int, contextSet map[int]struct{}) []int {
 	return pending
 }
 
+func pendingSegmentIDStrings(pendingIdxs []int) []string {
+	segIDs := make([]string, len(pendingIdxs))
+	for i, idx := range pendingIdxs {
+		segIDs[i] = strconv.Itoa(idx)
+	}
+	return segIDs
+}
+
+func httpStatusFromErr(err error) int {
+	var hsErr backend.HTTPStatusError
+	if errors.As(err, &hsErr) {
+		return hsErr.HTTPStatus()
+	}
+	return 0
+}
+
+func (s *Translate) emitBatchOutcome(evt progress.BatchEvent) {
+	rep := s.Reporter
+	if rep == nil {
+		return
+	}
+	obs, ok := rep.(progress.BatchObserver)
+	if !ok {
+		return
+	}
+	obs.OnBatchEvent(evt)
+}
+
 // emitBatchEvent constructs a BatchEvent and delivers it via the Reporter's
 // BatchObserver interface (if implemented). Called after the backend loop ends
 // and before absorbInlineGlossary.
 func (s *Translate) emitBatchEvent(
-	idxs []int,
+	pendingIdxs []int,
 	wantIDs []string,
 	backendName string,
 	res repair.Result,
@@ -418,22 +530,8 @@ func (s *Translate) emitBatchEvent(
 	triedBackends []string,
 	logger *slog.Logger,
 ) {
-	rep := s.Reporter
-	if rep == nil {
-		return
-	}
-	obs, ok := rep.(progress.BatchObserver)
-	if !ok {
-		return
-	}
+	segIDs := pendingSegmentIDStrings(pendingIdxs)
 
-	// Build segment IDs list.
-	segIDs := make([]string, len(idxs))
-	for i, idx := range idxs {
-		segIDs[i] = strconv.Itoa(idx)
-	}
-
-	// Determine status.
 	status := "success"
 	errorType := ""
 	errorMsg := ""
@@ -445,10 +543,10 @@ func (s *Translate) emitBatchEvent(
 		errorMsg = res.ParseErr.Error()
 	}
 
-	evt := progress.BatchEvent{
+	s.emitBatchOutcome(progress.BatchEvent{
 		Stage:           "translate",
 		SegmentIDs:      segIDs,
-		SegmentCount:    len(idxs),
+		SegmentCount:    len(pendingIdxs),
 		BackendName:     backendName,
 		Status:          status,
 		DurationMs:      durationMs,
@@ -461,7 +559,5 @@ func (s *Translate) emitBatchEvent(
 		ErrorType:       errorType,
 		ErrorMessage:    errorMsg,
 		TriedBackends:   triedBackends,
-	}
-
-	obs.OnBatchEvent(evt)
+	})
 }

@@ -255,10 +255,8 @@ func (r *DBReporter) OnBatchEvent(batchEvent BatchEvent) {
 	if r.broker == nil {
 		return
 	}
-	evtType := "batch_complete"
-	if batchEvent.Status == "failed" {
-		evtType = "batch_error"
-	}
+	sent, sentTrunc, sentLen := TruncateSSEContent(batchEvent.SentContent)
+	recv, recvTrunc, recvLen := TruncateSSEContent(batchEvent.ReceivedContent)
 	metadata := map[string]any{
 		"segment_ids":      batchEvent.SegmentIDs,
 		"segment_count":    batchEvent.SegmentCount,
@@ -267,10 +265,18 @@ func (r *DBReporter) OnBatchEvent(batchEvent BatchEvent) {
 		"duration_ms":      batchEvent.DurationMs,
 		"input_tokens":     batchEvent.InputTokens,
 		"output_tokens":    batchEvent.OutputTokens,
-		"sent_content":     batchEvent.SentContent,
-		"received_content": batchEvent.ReceivedContent,
+		"sent_content":     sent,
+		"received_content": recv,
 		"tried_backends":   batchEvent.TriedBackends,
 		"shrink_attempted": batchEvent.ShrinkAttempted,
+		"sent_length":      sentLen,
+		"received_length":  recvLen,
+	}
+	if sentTrunc {
+		metadata["sent_truncated"] = true
+	}
+	if recvTrunc {
+		metadata["received_truncated"] = true
 	}
 	if len(batchEvent.UsedGlossary) > 0 {
 		metadata["used_glossary"] = batchEvent.UsedGlossary
@@ -284,10 +290,13 @@ func (r *DBReporter) OnBatchEvent(batchEvent BatchEvent) {
 	if batchEvent.ErrorMessage != "" {
 		metadata["error_message"] = batchEvent.ErrorMessage
 	}
+	if batchEvent.HTTPStatus > 0 {
+		metadata["http_status"] = batchEvent.HTTPStatus
+	}
 	r.broker.Publish(r.jobID, event.Event{
-		Type:      evtType,
+		Type:      "batch",
 		JobID:     r.jobID,
-		Level:     "info",
+		Level:     BatchLevelFromStatus(batchEvent.Status),
 		Stage:     batchEvent.Stage,
 		Message:   fmt.Sprintf("batch (%d segs): %s", batchEvent.SegmentCount, batchEvent.Status),
 		Metadata:  metadata,

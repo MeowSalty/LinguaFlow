@@ -3,6 +3,7 @@ package pipeline
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"regexp"
 	"time"
@@ -80,32 +81,31 @@ func retryAlignSegment(
 		JSONSchema: schema,
 	}
 
-	start := time.Now()
 	var resp *backend.Response
 	var callErr error
 	var triedBackends []string
 	for _, b := range backends {
 		triedBackends = append(triedBackends, b.Name())
+		attemptStart := time.Now()
 		resp, callErr = callRubyBackend(ctx, b, req, retryPolicy)
-		if callErr == nil {
-			break
+		attemptMs := time.Since(attemptStart).Milliseconds()
+		if callErr != nil {
+			emitRubyAlignmentBatchEvent(reporter, seg, b.Name(), append([]string(nil), triedBackends...),
+				"failed", "backend_error", callErr.Error(), attemptMs, 0, 0, user, "",
+				rubyHTTPStatusFromErr(callErr))
+			logger.Warn("ruby alignment call failed, trying next backend",
+				"seg", seg.ID, "backend", b.Name(), "err", callErr)
+			resp = nil
+			continue
 		}
-		logger.Warn("ruby alignment call failed, trying next backend",
-			"seg", seg.ID, "backend", b.Name(), "err", callErr)
-	}
-	durationMs := time.Since(start).Milliseconds()
 
-	status := "failed"
-	errorType := "backend_error"
-	errorMsg := ""
-	receivedContent := ""
+		status := "success"
+		errorType := ""
+		errorMsg := ""
+		receivedContent := resp.Text
+		inputTokens := resp.Usage.PromptTokens
+		outputTokens := resp.Usage.CompletionTokens
 
-	if callErr != nil {
-		errorMsg = callErr.Error()
-		logger.Warn("ruby alignment retry exhausted all backends",
-			"seg", seg.ID, "err", callErr)
-	} else {
-		receivedContent = resp.Text
 		newOutput := parseAlignmentResponse(resp.Text)
 		if len(newOutput) == 0 {
 			status = "partial"
@@ -150,10 +150,15 @@ func retryAlignSegment(
 				}
 			}
 		}
-	}
 
-	emitRubyAlignmentEvent(reporter, seg, triedBackends, resp, status, errorType,
-		errorMsg, durationMs, user, receivedContent)
+		emitRubyAlignmentBatchEvent(reporter, seg, b.Name(), append([]string(nil), triedBackends...),
+			status, errorType, errorMsg, attemptMs, inputTokens, outputTokens, user, receivedContent, 0)
+		break
+	}
+	if callErr != nil && len(triedBackends) > 0 {
+		logger.Warn("ruby alignment retry exhausted all backends",
+			"seg", seg.ID, "err", callErr)
+	}
 }
 
 // callRubyBackend 调用后端并重试。
@@ -167,15 +172,24 @@ func callRubyBackend(ctx context.Context, b backend.Backend, req backend.Request
 	return resp, err
 }
 
-// emitRubyAlignmentEvent 发送注音对齐 SSE 事件。
-func emitRubyAlignmentEvent(
+func rubyHTTPStatusFromErr(err error) int {
+	var hsErr backend.HTTPStatusError
+	if errors.As(err, &hsErr) {
+		return hsErr.HTTPStatus()
+	}
+	return 0
+}
+
+func emitRubyAlignmentBatchEvent(
 	reporter progress.Reporter,
 	seg *Segment,
+	backendName string,
 	triedBackends []string,
-	resp *backend.Response,
 	status, errorType, errorMsg string,
 	durationMs int64,
+	inputTokens, outputTokens int64,
 	sentContent, receivedContent string,
+	httpStatus int,
 ) {
 	if reporter == nil {
 		return
@@ -184,17 +198,6 @@ func emitRubyAlignmentEvent(
 	if !ok {
 		return
 	}
-
-	var inputTokens, outputTokens int64
-	var backendName string
-	if resp != nil {
-		inputTokens = resp.Usage.PromptTokens
-		outputTokens = resp.Usage.CompletionTokens
-	}
-	if len(triedBackends) > 0 {
-		backendName = triedBackends[len(triedBackends)-1]
-	}
-
 	evt := progress.BatchEvent{
 		Stage:           "ruby_alignment",
 		SegmentIDs:      []string{seg.ID},
@@ -208,6 +211,7 @@ func emitRubyAlignmentEvent(
 		ReceivedContent: receivedContent,
 		ErrorType:       errorType,
 		ErrorMessage:    errorMsg,
+		HTTPStatus:      httpStatus,
 		TriedBackends:   triedBackends,
 	}
 	obs.OnBatchEvent(evt)

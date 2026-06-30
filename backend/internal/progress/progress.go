@@ -54,6 +54,7 @@ type BatchEvent struct {
 	AddedGlossary   []prompt.BootstrapEntry `json:"added_glossary,omitempty"`
 	ErrorType       string                  `json:"error_type,omitempty"` // "backend_error" | "parse_error" | "placeholder_error" | ""
 	ErrorMessage    string                  `json:"error_message,omitempty"`
+	HTTPStatus      int                     `json:"http_status,omitempty"`
 	TriedBackends   []string                `json:"tried_backends,omitempty"`
 	ShrinkAttempted bool                    `json:"shrink_attempted,omitempty"`
 }
