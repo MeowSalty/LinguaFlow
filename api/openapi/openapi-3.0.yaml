@@ -19,6 +19,20 @@ paths:
                 $ref: '#/components/schemas/HealthResponse'
         default:
           $ref: '#/components/responses/Problem'
+  /mode:
+    get:
+      operationId: GetMode
+      summary: 获取运行模式
+      description: 返回当前服务的运行模式（local 单用户本地模式 / server 多租户服务端模式），供前端决定是否跳过登录页。无需鉴权。
+      responses:
+        '200':
+          description: 当前模式
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModeResponse'
+        default:
+          $ref: '#/components/responses/Problem'
   /auth/register:
     post:
       operationId: RegisterAuth
@@ -1729,6 +1743,19 @@ components:
         service:
           type: string
           example: linguaflow
+    ModeResponse:
+      type: object
+      required:
+        - mode
+      properties:
+        mode:
+          type: string
+          enum:
+            - local
+            - server
+          x-enum-varnames:
+            - ModeLocal
+            - ModeServer
     User:
       type: object
       required:
@@ -2413,6 +2440,10 @@ components:
           type: integer
         total_segments:
           type: integer
+          description: 总段落数（创建时为选中的 segment 数，ReconcileJob 修正为实际翻译量）
+        stage_total:
+          type: integer
+          description: 实际需要翻译的段落数（ReconcileJob 从各资源的 stage_total 聚合，执行中动态更新）
         completed_segments:
           type: integer
         error_message:

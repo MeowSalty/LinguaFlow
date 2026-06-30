@@ -104,6 +104,10 @@ TranslationJob:
       type: integer
     total_segments:
       type: integer
+      description: 总段落数（创建时为选中的 segment 数，ReconcileJob 修正为实际翻译量）
+    stage_total:
+      type: integer
+      description: 实际需要翻译的段落数（ReconcileJob 从各资源的 stage_total 聚合，执行中动态更新）
     completed_segments:
       type: integer
     error_message:

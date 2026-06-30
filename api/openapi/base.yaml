@@ -7,6 +7,8 @@ servers:
 paths:
   /ping:
     $ref: './paths/system.yaml#/ping'
+  /mode:
+    $ref: './paths/system.yaml#/mode'
   /auth/register:
     $ref: './paths/auth.yaml#/register'
   /auth/login:
@@ -146,6 +148,8 @@ components:
       $ref: './components/schemas/common.yaml#/Problem'
     HealthResponse:
       $ref: './components/schemas/common.yaml#/HealthResponse'
+    ModeResponse:
+      $ref: './components/schemas/common.yaml#/ModeResponse'
     User:
       $ref: './components/schemas/user.yaml#/User'
     RegisterRequest:
