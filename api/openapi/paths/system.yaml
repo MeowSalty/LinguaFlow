@@ -12,3 +12,18 @@ ping:
               $ref: '../base.yaml#/components/schemas/HealthResponse'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
+
+mode:
+  get:
+    operationId: GetMode
+    summary: 获取运行模式
+    description: 返回当前服务的运行模式（local 单用户本地模式 / server 多租户服务端模式），供前端决定是否跳过登录页。无需鉴权。
+    responses:
+      '200':
+        description: 当前模式
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/ModeResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

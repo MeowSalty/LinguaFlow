@@ -9,6 +9,17 @@ HealthResponse:
       type: string
       example: linguaflow
 
+ModeResponse:
+  type: object
+  required: [mode]
+  properties:
+    mode:
+      type: string
+      enum: [local, server]
+      x-enum-varnames:
+        - ModeLocal
+        - ModeServer
+
 Problem:
   type: object
   required: [title, status]
