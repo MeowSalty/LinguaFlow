@@ -47,10 +47,7 @@ const getBatchSummary = (event: SSEEvent): string => {
   if (!meta) return event.message
   const parts: string[] = []
   if (event.stage) parts.push(getStageLabel(event.stage))
-  parts.push(
-    t('workspace.job.events.batch.summary', { index: meta.batch_index }),
-    t('workspace.job.events.batch.segments', { count: meta.segment_count }),
-  )
+  parts.push(t('workspace.job.events.batch.segments', { count: meta.segment_count }))
   if (meta.duration_ms) parts.push(formatDuration(meta.duration_ms))
   return parts.join(' · ')
 }

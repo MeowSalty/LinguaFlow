@@ -582,7 +582,6 @@ const messages = {
           stageStart: '进入阶段',
         },
         batch: {
-          summary: '批次 #{index}',
           segments: '{count} 段落',
           tokens: '{input}↑ {output}↓ tokens',
           glossaryUsed: '{count} 使用',

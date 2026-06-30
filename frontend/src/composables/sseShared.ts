@@ -11,7 +11,6 @@ export interface SSEEvent {
 }
 
 export interface BatchEventMetadata {
-  batch_index: number
   segment_count: number
   backend_name: string
   status: 'success' | 'partial' | 'failed'
@@ -54,6 +53,7 @@ export const resolveStreamUrl = (jobId: number): string | null => {
 }
 
 const STORAGE_PREFIX = 'linguaflow:sse:'
+const MAX_CACHED_EVENTS = 1000
 
 export const readCachedSSEEvents = (jobId: number): SSEEvent[] => {
   try {
@@ -67,11 +67,21 @@ export const readCachedSSEEvents = (jobId: number): SSEEvent[] => {
 }
 
 export const persistSSEEvents = (jobId: number, events: SSEEvent[]): void => {
+  const key = `${STORAGE_PREFIX}${jobId}`
+  const trimmed = events.length > MAX_CACHED_EVENTS ? events.slice(-MAX_CACHED_EVENTS) : events
   try {
-    const trimmed = events.length > 200 ? events.slice(-200) : events
-    localStorage.setItem(`${STORAGE_PREFIX}${jobId}`, JSON.stringify(trimmed))
+    localStorage.setItem(key, JSON.stringify(trimmed))
   } catch {
-    // quota exceeded — silently ignore
+    let count = Math.floor(trimmed.length * 0.9)
+    while (count > 0) {
+      try {
+        localStorage.removeItem(key)
+        localStorage.setItem(key, JSON.stringify(events.slice(-count)))
+        return
+      } catch {
+        count = Math.floor(count * 0.9)
+      }
+    }
   }
 }
 
