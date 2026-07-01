@@ -1169,6 +1169,7 @@ const messages = {
       maxWordsPerBatchHint: '每批处理的字词数上限，0 表示不限制',
       concurrency: '并发数',
       fallbackShrink: '缩放因子',
+      fallbackShrinkPlaceholder: '取值范围 0 < x < 1',
       advancedConfig: '高级配置',
       retryMaxAttempts: '最大重试次数',
       retryBackoffMs: '退避毫秒数',

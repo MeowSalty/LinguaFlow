@@ -35,7 +35,7 @@ const DEFAULT_ROUND: RoundModel = {
   batch_size: 10,
   max_words_per_batch: 0,
   concurrency: 3,
-  fallback_shrink: 0,
+  fallback_shrink: undefined,
   retry: { ...DEFAULT_RETRY },
 }
 
@@ -523,9 +523,10 @@ const emitUpdate = (): void => {
           </div>
           <NInputNumber
             v-model:value="round.fallback_shrink"
-            :min="0"
-            :max="1"
+            :min="0.01"
+            :max="0.99"
             :step="0.1"
+            :placeholder="t('executionPlanEditor.round.fallbackShrinkPlaceholder')"
             size="small"
             :disabled="disabled"
             class="w-full"

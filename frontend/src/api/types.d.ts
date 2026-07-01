@@ -1808,8 +1808,7 @@ export interface components {
             /** @description 字词数上限；0=不限制，与 batch_size 至少填一项 */
             max_words_per_batch?: number;
             concurrency: number;
-            /** @default 0 */
-            fallback_shrink: number;
+            fallback_shrink?: number;
             retry?: components["schemas"]["RetryConfig"];
         };
         /** @enum {string} */
