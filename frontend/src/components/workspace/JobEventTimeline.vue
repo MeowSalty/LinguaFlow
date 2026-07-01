@@ -5,6 +5,7 @@ import { useI18n } from 'vue-i18n'
 
 import type { BatchEventMetadata, SSEEvent } from '@/composables/sseShared'
 import {
+  batchStatusTimelineType,
   eventLevelType,
   formatDuration,
   getStageLabel,
@@ -53,10 +54,8 @@ const getBatchSummary = (event: SSEEvent): string => {
 }
 
 const getBatchTimelineType = (event: SSEEvent): 'success' | 'warning' | 'error' => {
-  if (event.type === 'batch_error') return 'error'
   const meta = event.metadata as BatchEventMetadata | undefined
-  if (meta?.status === 'partial') return 'warning'
-  return 'success'
+  return batchStatusTimelineType(meta?.status, event.level)
 }
 
 const JOB_EVENT_TYPES = new Set(['job_started', 'job_completed', 'job_failed', 'job_cancelled'])

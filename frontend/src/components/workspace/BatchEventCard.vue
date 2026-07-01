@@ -33,12 +33,21 @@ const tokenLine = computed(() => {
 
 const glossaryUsedCount = computed(() => meta.value?.used_glossary?.length ?? 0)
 const glossaryAddedCount = computed(() => meta.value?.added_glossary?.length ?? 0)
+const statusTagType = computed(() => {
+  const status = meta.value?.status
+  if (status === 'failed') return 'error'
+  if (status === 'partial') return 'warning'
+  if (status === 'success') return 'success'
+  return 'default'
+})
+
 const hasErrorInfo = computed(
   () =>
     meta.value &&
     (meta.value.error_type ||
       meta.value.error_message ||
-      meta.value.tried_backends?.length ||
+      meta.value.http_status != null ||
+      (meta.value.tried_backends?.length != null && meta.value.tried_backends.length > 1) ||
       meta.value.shrink_attempted),
 )
 
@@ -49,6 +58,12 @@ const toggleExpand = (): void => {
 
 <template>
   <div class="flex flex-wrap items-center gap-1">
+    <NTag v-if="meta?.status" size="tiny" round :bordered="false" :type="statusTagType">
+      {{ t(`workspace.job.events.batch.status.${meta.status}`) }}
+    </NTag>
+    <NTag v-if="meta?.backend_name" size="tiny" round :bordered="false" type="default">
+      {{ meta.backend_name }}
+    </NTag>
     <NTag v-if="tokenLine" size="tiny" round :bordered="false" type="default">
       <span class="font-mono tabular-nums">{{ tokenLine }}</span>
     </NTag>
@@ -72,7 +87,11 @@ const toggleExpand = (): void => {
       <span class="text-lf-text-strong">{{ t('workspace.job.events.batch.errorMessage') }}:</span>
       {{ meta!.error_message }}
     </div>
-    <div v-if="meta!.tried_backends?.length">
+    <div v-if="meta!.http_status != null">
+      <span class="text-lf-text-strong">{{ t('workspace.job.events.batch.httpStatus') }}:</span>
+      {{ meta!.http_status }}
+    </div>
+    <div v-if="meta!.tried_backends?.length && meta!.tried_backends.length > 1">
       <span class="text-lf-text-strong">{{ t('workspace.job.events.batch.triedBackends') }}:</span>
       {{ meta!.tried_backends.join(', ') }}
     </div>
@@ -96,10 +115,14 @@ const toggleExpand = (): void => {
     <BatchContentViewer
       :content="meta.sent_content"
       :label="t('workspace.job.events.batch.sentContent')"
+      :truncated="meta.sent_truncated"
+      :original-length="meta.sent_length"
     />
     <BatchContentViewer
       :content="meta.received_content"
       :label="t('workspace.job.events.batch.receivedContent')"
+      :truncated="meta.received_truncated"
+      :original-length="meta.received_length"
     />
     <GlossaryDiffTable
       :used-glossary="meta.used_glossary ?? []"

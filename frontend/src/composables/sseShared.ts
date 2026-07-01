@@ -1,9 +1,11 @@
 import { getAccessToken, readStoredApiBaseUrl } from '@/api/token-storage'
 
+export type SSELevel = 'info' | 'warn' | 'warning' | 'error'
+
 export interface SSEEvent {
   type: string
   job_id: number
-  level: 'info' | 'warning' | 'error'
+  level: SSELevel
   stage?: string
   message: string
   metadata?: Record<string, unknown>
@@ -11,6 +13,7 @@ export interface SSEEvent {
 }
 
 export interface BatchEventMetadata {
+  segment_ids?: string[]
   segment_count: number
   backend_name: string
   status: 'success' | 'partial' | 'failed'
@@ -19,19 +22,36 @@ export interface BatchEventMetadata {
   output_tokens: number
   sent_content: string
   received_content: string
+  sent_length?: number
+  received_length?: number
+  sent_truncated?: boolean
+  received_truncated?: boolean
   used_glossary: Array<{ source: string; target: string }>
   added_glossary: Array<{ source: string; target: string }>
   error_type: string
   error_message: string
+  http_status?: number
   tried_backends: string[]
   shrink_attempted: boolean
+}
+
+/** Normalize backend `warn` and legacy levels for UI components. */
+export const normalizeSSELevel = (level: string): 'info' | 'warning' | 'error' => {
+  switch (level) {
+    case 'warning':
+    case 'warn':
+      return 'warning'
+    case 'error':
+      return 'error'
+    default:
+      return 'info'
+  }
 }
 
 export const KNOWN_EVENT_TYPES = [
   'stage_start',
   'stage_done',
-  'batch_complete',
-  'batch_error',
+  'batch',
   'resource_started',
   'resource_completed',
   'resource_failed',

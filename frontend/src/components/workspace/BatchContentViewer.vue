@@ -8,6 +8,8 @@ const { t } = useI18n()
 const props = defineProps<{
   content: string
   label: string
+  truncated?: boolean
+  originalLength?: number
 }>()
 
 const formatted = computed(() => {
@@ -65,6 +67,13 @@ function tryParseJson(input: string): { formatted: string; valid: boolean } {
     <div class="flex items-center justify-between">
       <span class="text-xs font-medium text-lf-text-strong">{{ label }}</span>
       <div class="flex items-center gap-1">
+        <NTag v-if="truncated" size="tiny" type="warning">
+          {{
+            t('workspace.job.events.batch.contentTruncated', {
+              length: originalLength ?? content.length,
+            })
+          }}
+        </NTag>
         <NTag v-if="formatted && !formatted.valid" size="tiny" type="warning">
           {{ t('workspace.job.events.batch.malformedJson') }}
         </NTag>

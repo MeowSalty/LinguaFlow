@@ -1,5 +1,6 @@
 import { type ApiSchemas, type DownloadFileResult } from '@/api/client'
-import type { SSEEvent } from '@/composables/sseShared'
+import type { BatchEventMetadata, SSEEvent } from '@/composables/sseShared'
+import { normalizeSSELevel } from '@/composables/sseShared'
 import { t } from '@/i18n'
 
 type TranslationJob = ApiSchemas['TranslationJob']
@@ -231,19 +232,23 @@ export const formatTokens = (count: number): string => {
 }
 
 /** 判断是否为批次事件 */
-export const isBatchEvent = (type: string): boolean =>
-  type === 'batch_complete' || type === 'batch_error'
+export const isBatchEvent = (type: string): boolean => type === 'batch'
+
+export const batchStatusTimelineType = (
+  status: BatchEventMetadata['status'] | undefined,
+  level: SSEEvent['level'],
+): 'success' | 'warning' | 'error' => {
+  if (status === 'failed') return 'error'
+  if (status === 'partial') return 'warning'
+  if (status === 'success') return 'success'
+  const normalized = normalizeSSELevel(level)
+  if (normalized === 'error') return 'error'
+  if (normalized === 'warning') return 'warning'
+  return 'success'
+}
 
 // ── 事件工具 ──
 
 /** 事件级别对应的 naive-ui 类型 */
-export const eventLevelType = (level: SSEEvent['level']): 'info' | 'warning' | 'error' => {
-  switch (level) {
-    case 'info':
-      return 'info'
-    case 'warning':
-      return 'warning'
-    case 'error':
-      return 'error'
-  }
-}
+export const eventLevelType = (level: SSEEvent['level']): 'info' | 'warning' | 'error' =>
+  normalizeSSELevel(level)

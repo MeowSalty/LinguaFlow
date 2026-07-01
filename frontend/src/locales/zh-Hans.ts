@@ -591,6 +591,11 @@ const messages = {
           stageStart: '进入阶段',
         },
         batch: {
+          status: {
+            success: '成功',
+            partial: '部分成功',
+            failed: '失败',
+          },
           segments: '{count} 段落',
           tokens: '{input}↑ {output}↓ tokens',
           glossaryUsed: '{count} 使用',
@@ -607,7 +612,9 @@ const messages = {
           showFormatted: '格式化',
           errorType: '错误类型',
           errorMessage: '错误信息',
+          httpStatus: 'HTTP 状态',
           triedBackends: '尝试后端',
+          contentTruncated: '已截断（原始 {length} 字节）',
           shrinkAttempted: '已尝试缩放',
           noContent: '无内容',
           malformedJson: '内容格式异常，显示原始文本',
