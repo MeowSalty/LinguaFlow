@@ -77,7 +77,7 @@ type Translate struct {
 	// 以下字段保留供外部直接构造时使用，stage 内部使用 Round 级别字段。
 	Concurrency    int
 	BatchSize      int     // <=1 表示禁用批量
-	FallbackShrink float64 // (0,1) 启用递归缩小；0 表示失败后直接降到单段
+	FallbackShrink float64 // (0,1) 启用递归缩小；0 表示回退到全局默认
 
 	Logger   *slog.Logger
 	Reporter progress.Reporter

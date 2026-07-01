@@ -63,7 +63,7 @@ type Round struct {
 	// Concurrency 本轮的并发数。<=0 时回退到全局默认。
 	Concurrency int
 
-	// FallbackShrink 本轮的批失败收缩系数。(0,1) 启用递归缩小；0 表示直接降到单段。
+	// FallbackShrink 本轮的批失败收缩系数。(0,1) 启用递归缩小；0 表示回退到全局默认。
 	FallbackShrink float64
 
 	// Retry 本轮的重试策略。零值回退到全局默认。
@@ -104,6 +104,7 @@ func resolveDefault(val, global, fallback int) int {
 }
 
 // resolveShrink 返回 val（>0 时），否则返回 global。
+// 0 表示未设置，回退到全局默认值。
 func resolveShrink(val, global float64) float64 {
 	if val > 0 {
 		return val

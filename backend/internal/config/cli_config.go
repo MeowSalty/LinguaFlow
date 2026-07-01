@@ -417,7 +417,7 @@ func defaultCLIConfig() *CLIConfig {
 				Profile:        "default",
 				BatchSize:      1,
 				Concurrency:    4,
-				FallbackShrink: 0.5,
+				FallbackShrink: defaultFallbackShrink,
 				Retry:          RetryConfig{MaxAttempts: 3, BackoffMs: 2000, Jitter: true},
 			}},
 		},

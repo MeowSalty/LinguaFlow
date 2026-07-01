@@ -76,11 +76,14 @@ const (
 	RubyOutputDefault       = "ruby_output"
 )
 
+// FallbackShrink 默认值：0 表示未设置，回退到此值。
+const defaultFallbackShrink = 0.5
+
 type TranslateConfig struct {
 	Concurrency      int          `yaml:"concurrency"`
 	BatchSize        int          `yaml:"batch_size"`          // 一次合并发送的段数；<=1 表示禁用批量
 	MaxWordsPerBatch int          `yaml:"max_words_per_batch"` // 每批字词数上限；0=不限制
-	FallbackShrink   float64      `yaml:"fallback_shrink"`     // 整批失败时下一级 batch = floor(cur*shrink)；0 = 直接降到单段；必须 <1
+	FallbackShrink   float64      `yaml:"fallback_shrink"`     // (0,1) 整批失败时下一级 batch = floor(cur*shrink)；0 = 回退默认；>=1 非法
 	Retry            RetryConfig  `yaml:"retry"`
 	Repair           RepairConfig `yaml:"repair"`
 }
@@ -296,7 +299,7 @@ func Default() *Config {
 			Translate: TranslateConfig{
 				Concurrency:    4,
 				BatchSize:      1,
-				FallbackShrink: 0.5,
+				FallbackShrink: defaultFallbackShrink,
 				Retry:          RetryConfig{MaxAttempts: 3, BackoffMs: 2000},
 				Repair: RepairConfig{
 					Enabled:              true,
@@ -395,7 +398,7 @@ func (c *Config) Validate() error {
 		c.Pipeline.Translate.Retry.MaxAttempts = 0
 	}
 	if shrink := c.Pipeline.Translate.FallbackShrink; math.IsNaN(shrink) || math.IsInf(shrink, 0) || shrink < 0 {
-		c.Pipeline.Translate.FallbackShrink = 0
+		c.Pipeline.Translate.FallbackShrink = defaultFallbackShrink
 	} else if shrink >= 1 {
 		return fmt.Errorf("pipeline.translate.fallback_shrink must be < 1, got %v", shrink)
 	}

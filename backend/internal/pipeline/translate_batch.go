@@ -116,6 +116,7 @@ func backoffDuration(attempt int, retry backend.RetryPolicy, lastErr error) time
 const minRateLimitBackoff = 5 * time.Second
 
 // shrinkTo 计算缩批后的大小。
+// 有效范围为 (0, 1)；<=0 / >=1 / NaN / Inf 均为防御性兜底，正常路径下验证层会拦截。
 func shrinkTo(idxs []int, shrink float64) int {
 	if shrink <= 0 || shrink >= 1 || math.IsNaN(shrink) || math.IsInf(shrink, 0) {
 		return 1

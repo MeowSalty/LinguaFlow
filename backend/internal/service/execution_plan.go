@@ -298,8 +298,8 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 		if round.Concurrency < 1 {
 			return fmt.Errorf("%w: rounds[%d].concurrency must be >= 1", ErrExecutionPlanConfigInvalid, i)
 		}
-		if round.FallbackShrink < 0 || round.FallbackShrink > 1 {
-			return fmt.Errorf("%w: rounds[%d].fallback_shrink must be in [0, 1]", ErrExecutionPlanConfigInvalid, i)
+		if round.FallbackShrink < 0 || round.FallbackShrink >= 1 {
+			return fmt.Errorf("%w: rounds[%d].fallback_shrink must be in [0, 1)", ErrExecutionPlanConfigInvalid, i)
 		}
 	}
 	return nil
