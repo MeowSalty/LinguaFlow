@@ -223,6 +223,7 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 			status = service.SegmentStatusApproved
 		}
 		localCompleted := 0
+		failed := 0
 		for _, ts := range batchResult.Segments {
 			if ts.TargetText == "" {
 				continue
@@ -240,6 +241,7 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 			}
 			if err := update.Exec(ctx); err != nil {
 				r.logger.Warn("persist segment failed", "segment_id", dbID, "err", err)
+				failed++
 				continue
 			}
 			localCompleted++
@@ -247,6 +249,10 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		mu.Lock()
 		completedCount += localCompleted
 		mu.Unlock()
+		// 本批全部写入失败 → DB 可能不可用，终止翻译
+		if failed > 0 && localCompleted == 0 {
+			return fmt.Errorf("batch persist failed: all %d segments failed to write to database", failed)
+		}
 		return nil
 	}
 

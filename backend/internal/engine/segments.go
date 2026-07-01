@@ -19,7 +19,8 @@ func (e *Engine) buildProtector() protect.Protector {
 	return protect.Compose(ps...)
 }
 
-// BuildTranslateStage 构建纯翻译管道（仅 Translate 阶段）。
+// BuildTranslateStage 构建翻译管道（Protect + Translate 阶段）。
+// Protect 作为 Pipeline stage 执行；Unprotect/RubyRestore/TM 作为 postSegment hooks。
 func (e *Engine) BuildTranslateStage(protector protect.Protector, restorer *protect.RubyRestorer) *pipeline.Pipeline {
 	pc := e.cfg.Pipeline
 	retry := backend.RetryPolicy{
@@ -47,10 +48,35 @@ func (e *Engine) BuildTranslateStage(protector protect.Protector, restorer *prot
 		PreserveKinds:          pc.Protect.Ruby.PreserveKinds,
 		RubyRetryBackends:      e.rubyRetryBackends,
 		Context:                pc.Context,
-		Protector:              protector,
-		Restorer:               restorer,
 	}
-	return pipeline.New(e.logger, translateStage)
+
+	// 构建 postSegment hooks
+	var hooks []pipeline.PostSegmentHook
+	if pc.Protect.Enabled {
+		hooks = append(hooks, pipeline.UnprotectHook(protector, e.logger))
+	}
+	if pc.Protect.Ruby.Enabled && restorer != nil {
+		hooks = append(hooks, pipeline.RubyRestoreHook(
+			restorer,
+			pc.Protect.Ruby.PreserveKinds,
+			e.rubyRetryBackends,
+			retry,
+			e.reporter,
+			e.logger,
+		))
+	}
+	if e.tm != nil {
+		hooks = append(hooks, pipeline.TMAddHook(e.tm, e.logger))
+	}
+
+	// 构建 stages：Protect → Translate
+	var stages []pipeline.Stage
+	if pc.Protect.Enabled {
+		stages = append(stages, pipeline.NewProtect(protector))
+	}
+	stages = append(stages, translateStage)
+
+	return pipeline.NewWithHooks(e.logger, hooks, stages...)
 }
 
 // PrepareDocument 设置语言、Vars、段落选择等公共配置。

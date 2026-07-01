@@ -3,13 +3,13 @@ package pipeline
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"math"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"unicode"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -42,13 +42,25 @@ type Round struct {
 	Repair *repair.Options
 }
 
+// batchJob 描述一个待处理的批次任务。
+type batchJob struct {
+	idxs    []int
+	attempt int // 已消耗的重试次数
+}
+
+// batchResult 描述一个批次的处理结果。
+type batchResult struct {
+	unresolved []int     // 需要下一轮处理
+	missing    []int     // 需要 round 级重新分批
+	retry      *batchJob // 需要重新入队（缩批或退避后重试）
+}
+
 // Translate 对每个 Segment 调用 Backend。具备：
-//   - worker pool（Concurrency）
-//   - 令牌桶限速（Limiter）
-//   - 指数退避重试（Retry）
+//   - Scheduler 调度（Worker 池 + jobs/results channel）
+//   - 指数退避重试（429/503 退避后重新入队）
+//   - 缩批重试（网络/解析失败时按 FallbackShrink 缩小后重新入队）
 //   - 批量翻译（BatchSize > 1 时把多段拼成一次 LLM 调用）
-//   - 批失败时按 FallbackShrink 系数递归缩小子批并发重试（直到收敛到单段）
-//   - 占位符完整性校验 + 单段补救重试
+//   - 占位符完整性校验
 //   - 单段失败时保留原文 + warn 日志，不阻塞整体
 //   - 段级进度上报（Reporter；nil 时 fallback 为 progress.Nop）
 //
@@ -109,6 +121,11 @@ type Translate struct {
 	Protector protect.Protector
 	// Restorer 用于翻译后立即还原 ruby 注音。
 	Restorer *protect.RubyRestorer
+
+	// postSegment 是 Pipeline 注入的 per-segment 回调。
+	// 每段翻译确认后调用，用于执行 Unprotect/RubyRestore/TM 等后处理。
+	// 由 Pipeline.Run 在 stages 循环前设置。
+	postSegment func(ctx context.Context, doc *Document, seg *Segment) error
 }
 
 func (*Translate) Name() string { return "translate" }
@@ -191,45 +208,25 @@ func (s *Translate) Run(ctx context.Context, doc *Document) error {
 			"concurrency", round.Concurrency,
 			"context_enabled", s.Context.Enabled, "context_window", ctxWindow)
 
-		var (
-			mu          sync.Mutex
-			nextPending []int
-		)
-		if err := RunConcurrent(ctx, len(batches), round.Concurrency, func(ctx context.Context, bidx int) error {
-			idxs := batches[bidx]
+		// 4. Scheduler 执行本轮
+		nextPending, missingSegs, roundErr := s.runRound(ctx, doc, batches, round, logger, ctxWindow)
+		if roundErr != nil {
+			return roundErr
+		}
 
-			// 构建当前批次自身的索引集合
-			batchSet := make(map[int]struct{}, len(idxs))
-			for _, idx := range idxs {
-				batchSet[idx] = struct{}{}
+		// 5. 缺失段重新分批（每 round 一次，不递归）
+		if len(missingSegs) > 0 && ctx.Err() == nil {
+			sort.Ints(missingSegs)
+			logger.Info("retrying missing segments",
+				"round", ridx+1, "missing", len(missingSegs))
+			retryBatches := BuildContextAwareBatches(doc, missingSegs, constraint, ctxWindow, s.Context.Enabled)
+			retryPending, retryMissing, retryErr := s.runRound(ctx, doc, retryBatches, round, logger, ctxWindow)
+			if retryErr != nil {
+				return retryErr
 			}
-
-			// 4. 扩展上下文：为每个批次添加前后文段落
-			expandedIdxs := expandBatchWithContext(doc, idxs, len(doc.Segments), ctxWindow)
-			contextSet := buildContextSet(expandedIdxs, batchSet)
-
-			// 5. 处理批次
-			unresolved, err := s.processBatchInRound(ctx, doc, expandedIdxs, round, logger, contextSet)
-			if err != nil {
-				return err
-			}
-
-			// 6. 回调 batchHandler
-			if s.BatchHandler != nil {
-				batchResult := buildBatchResult(doc, expandedIdxs, contextSet)
-				if herr := s.BatchHandler(ctx, batchResult); herr != nil {
-					return fmt.Errorf("batch handler: %w", herr)
-				}
-			}
-
-			if len(unresolved) > 0 {
-				mu.Lock()
-				nextPending = append(nextPending, unresolved...)
-				mu.Unlock()
-			}
-			return nil
-		}); err != nil {
-			return err
+			nextPending = append(nextPending, retryPending...)
+			// 重试后仍然 missing 的段加入下一轮处理
+			nextPending = append(nextPending, retryMissing...)
 		}
 
 		sort.Ints(nextPending)
@@ -330,14 +327,127 @@ func (s *Translate) resolveRoundRepair(round Round) repair.Options {
 	return s.Repair
 }
 
-func (s *Translate) callOnce(ctx context.Context, b backend.Backend, req backend.Request, retry backend.RetryPolicy) (*backend.Response, error) {
-	var resp *backend.Response
-	err := backend.WithRetry(ctx, retry, func() error {
-		var rerr error
-		resp, rerr = b.Translate(ctx, req)
-		return rerr
-	})
-	return resp, err
+func (s *Translate) callOnce(ctx context.Context, b backend.Backend, req backend.Request) (*backend.Response, error) {
+	return b.Translate(ctx, req)
+}
+
+// runRound 执行一轮翻译的 Scheduler 循环。
+// Worker 池从 jobs channel 取任务，执行单次尝试，将结果发到 results channel。
+// 调度循环根据结果决定重试或收集。
+// 返回 error 表示 BatchHandler 要求终止翻译。
+func (s *Translate) runRound(ctx context.Context, doc *Document, batches [][]int,
+	round Round, logger *slog.Logger, contextWindow int) (nextPending []int, missingSegs []int, err error) {
+
+	totalAttempts := round.Retry.MaxAttempts + 1
+	jobs := make(chan batchJob, round.Concurrency*2)
+	results := make(chan batchResult, round.Concurrency*2)
+
+	// 派生 context，BatchHandler error 时可取消整个 round
+	runCtx, runCancel := context.WithCancel(ctx)
+	defer runCancel()
+	var handlerErr atomic.Value
+
+	// 启动 Worker 池
+	var wg sync.WaitGroup
+	for w := 0; w < round.Concurrency; w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for job := range jobs {
+				// 如果 context 已取消，跳过处理但仍消费 jobs 以避免提交方阻塞
+				if runCtx.Err() != nil {
+					nextPending = append(nextPending, filterPendingIdxs(job.idxs, nil)...)
+					continue
+				}
+
+				// 构建当前批次自身的索引集合
+				batchSet := make(map[int]struct{}, len(job.idxs))
+				for _, idx := range job.idxs {
+					batchSet[idx] = struct{}{}
+				}
+
+				// 扩展上下文
+				expandedIdxs := expandBatchWithContext(doc, job.idxs, len(doc.Segments), contextWindow)
+				contextSet := buildContextSet(expandedIdxs, batchSet)
+
+				result := s.processBatchAttempt(runCtx, doc, job, round, logger, contextSet, expandedIdxs)
+
+				// 回调 batchHandler
+				if s.BatchHandler != nil {
+					handlerBatchResult := buildBatchResult(doc, expandedIdxs, contextSet)
+					if herr := s.BatchHandler(runCtx, handlerBatchResult); herr != nil {
+						logger.Error("batch handler error, terminating round", "err", herr)
+						handlerErr.Store(herr)
+						runCancel()
+						results <- batchResult{unresolved: filterPendingIdxs(job.idxs, contextSet)}
+						continue
+					}
+				}
+
+				results <- result
+			}
+		}()
+	}
+
+	// 提交初始批次（goroutine 中，避免 Scheduler 循环未启动导致死锁）
+	done := make(chan struct{})
+	var submitWg sync.WaitGroup
+	submitWg.Add(1)
+	go func() {
+		defer submitWg.Done()
+		for _, batch := range batches {
+			select {
+			case <-done:
+				return
+			case jobs <- batchJob{idxs: batch, attempt: 0}:
+			}
+		}
+	}()
+
+	// 调度循环
+	active := len(batches)
+	for active > 0 {
+		select {
+		case <-runCtx.Done():
+			// BatchHandler error 或超时/取消：立即停止调度
+			goto cleanup
+		case result := <-results:
+			// 缩批时被丢弃的段落始终收集（无论是否重试）
+			nextPending = append(nextPending, result.unresolved...)
+
+			if result.retry != nil && result.retry.attempt < totalAttempts {
+				// 重新入队，空闲 Worker 可取走
+				select {
+				case <-runCtx.Done():
+					// 无法重试，当作最终失败收集
+					nextPending = append(nextPending, result.retry.idxs...)
+					missingSegs = append(missingSegs, result.missing...)
+					active--
+				case jobs <- *result.retry:
+				}
+			} else {
+				// 完成：收集重试被丢弃的段落和 missing
+				if result.retry != nil {
+					nextPending = append(nextPending, result.retry.idxs...)
+				}
+				missingSegs = append(missingSegs, result.missing...)
+				active--
+			}
+		}
+	}
+
+cleanup:
+	// 1. 通知提交 goroutine 停止
+	close(done)
+	submitWg.Wait()
+	// 2. 关闭 jobs channel，Worker 的 range 循环退出
+	close(jobs)
+	wg.Wait()
+	// 3. 检查 BatchHandler 是否产生了 error
+	if v := handlerErr.Load(); v != nil {
+		return nextPending, missingSegs, v.(error)
+	}
+	return nextPending, missingSegs, nil
 }
 
 // CountWords 统计混合脚本文本的"字词数"。
@@ -431,7 +541,7 @@ func isPlaceholderOnly(seg *Segment) bool {
 
 // extractRubyAnnotationsFromDoc 从 Document 中提取指定段的注音信息。
 // idMap 为 idx → 批内 ID 的映射；为 nil 时使用 seg.ID。
-// 返回 map[批内ID]annotations，供 prompt.Data 使用。
+// 返回 map[批内 ID]annotations，供 prompt.Data 使用。
 func extractRubyAnnotationsFromDoc(doc *Document, idxs []int, idMap map[int]string) map[string][]prompt.RubyAnnotation {
 	result := make(map[string][]prompt.RubyAnnotation)
 	for _, idx := range idxs {

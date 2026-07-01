@@ -13,7 +13,7 @@ import (
 
 // Translate 是 Engine 的统一入口。
 // 调用方负责：Parse（CLI）或 BuildDocumentFromSegments（Worker）构造 *pipeline.Document。
-// Engine 负责：Bootstrap(可选) → Protect 全文 → Pipeline(分批+翻译) → Unprotect 全文 → RubyRestore。
+// Engine 负责：Bootstrap(可选) → Protect 全文 → Pipeline(分批 + 翻译) → Unprotect 全文 → RubyRestore。
 func (e *Engine) Translate(ctx context.Context, doc *pipeline.Document, opts ...TranslateOption) (pipeline.TranslateResult, error) {
 	start := time.Now()
 
@@ -59,20 +59,7 @@ func (e *Engine) Translate(ctx context.Context, doc *pipeline.Document, opts ...
 
 	translatePipe := e.BuildTranslateStage(protector, restorer)
 
-	// 4. Protect 全文
-	if pc.Protect.Enabled {
-		for i := range doc.Segments {
-			seg := &doc.Segments[i]
-			if seg.OriginalSource == "" {
-				seg.OriginalSource = seg.Source
-			}
-			if err := protector.Protect(seg); err != nil {
-				return pipeline.TranslateResult{}, fmt.Errorf("protect segment %d: %w", i, err)
-			}
-		}
-	}
-
-	// 6. 设置 batchHandler 并调用 Pipeline
+	// 4. 设置 batchHandler 并调用 Pipeline
 	if cfg.batchHandler != nil {
 		translatePipe.SetBatchHandler(cfg.batchHandler)
 		defer translatePipe.SetBatchHandler(nil)

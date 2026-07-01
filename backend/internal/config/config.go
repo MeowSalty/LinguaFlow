@@ -86,9 +86,9 @@ type TranslateConfig struct {
 }
 
 type RetryConfig struct {
-	MaxAttempts int  `yaml:"max_attempts"`
-	BackoffMs   int  `yaml:"backoff_ms"` // 毫秒，废弃 time.Duration
-	Jitter      bool `yaml:"jitter"`
+	MaxAttempts int  `yaml:"max_attempts"` // 重试次数；0=不重试，1=重试 1 次，以此类推；负值归 0
+	BackoffMs   int  `yaml:"backoff_ms"`   // 429/503 限流退避基础时间（毫秒）
+	Jitter      bool `yaml:"jitter"`       // 退避时是否添加随机抖动
 }
 
 // RepairConfig 控制 LLM 响应解析失败 / 部分缺失时的"主动修复"行为。
@@ -390,6 +390,9 @@ func (c *Config) Validate() error {
 	}
 	if c.Pipeline.Translate.Retry.BackoffMs < 1000 {
 		c.Pipeline.Translate.Retry.BackoffMs = 1000
+	}
+	if c.Pipeline.Translate.Retry.MaxAttempts < 0 {
+		c.Pipeline.Translate.Retry.MaxAttempts = 0
 	}
 	if shrink := c.Pipeline.Translate.FallbackShrink; math.IsNaN(shrink) || math.IsInf(shrink, 0) || shrink < 0 {
 		c.Pipeline.Translate.FallbackShrink = 0

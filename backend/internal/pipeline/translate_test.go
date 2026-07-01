@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"log/slog"
-	"math"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -299,94 +298,6 @@ func TestCalcMaxBootstrapTerms_UsesCountWords(t *testing.T) {
 	}
 }
 
-func TestShrinkConstraint(t *testing.T) {
-	cases := []struct {
-		name   string
-		cur    BatchConstraint
-		shrink float64
-		want   BatchConstraint
-	}{
-		{
-			name:   "segments_only",
-			cur:    BatchConstraint{MaxSegments: 10, MaxWords: 0},
-			shrink: 0.5,
-			want:   BatchConstraint{MaxSegments: 5, MaxWords: 0},
-		},
-		{
-			name:   "dual_constraint",
-			cur:    BatchConstraint{MaxSegments: 10, MaxWords: 500},
-			shrink: 0.5,
-			want:   BatchConstraint{MaxSegments: 5, MaxWords: 250},
-		},
-		{
-			name:   "words_round_down",
-			cur:    BatchConstraint{MaxSegments: 10, MaxWords: 3},
-			shrink: 0.5,
-			want:   BatchConstraint{MaxSegments: 5, MaxWords: 1},
-		},
-		{
-			name:   "words_to_zero",
-			cur:    BatchConstraint{MaxSegments: 10, MaxWords: 1},
-			shrink: 0.5,
-			want:   BatchConstraint{MaxSegments: 5, MaxWords: 0},
-		},
-		{
-			name:   "shrink_zero",
-			cur:    BatchConstraint{MaxSegments: 10, MaxWords: 500},
-			shrink: 0,
-			want:   BatchConstraint{MaxSegments: 0, MaxWords: 0},
-		},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := shrinkConstraint(tc.cur, tc.shrink)
-			if !reflect.DeepEqual(got, tc.want) {
-				t.Errorf("shrinkConstraint(%v, %v) = %v, want %v", tc.cur, tc.shrink, got, tc.want)
-			}
-		})
-	}
-}
-
-func TestShrinkNext(t *testing.T) {
-	cases := []struct {
-		name   string
-		cur    int
-		shrink float64
-		want   int
-	}{
-		// 禁用：shrink 非法时一律返回 0
-		{"shrink_zero", 40, 0, 0},
-		{"shrink_negative", 40, -0.5, 0},
-		{"shrink_one", 40, 1, 0},
-		{"shrink_gt_one", 40, 1.5, 0},
-		{"shrink_nan", 40, math.NaN(), 0},
-		{"shrink_inf", 40, math.Inf(1), 0},
-
-		// 正常缩小：floor(cur*shrink)
-		{"half_40", 40, 0.5, 20},
-		{"half_31", 31, 0.5, 15},
-		{"third_30", 30, 1.0 / 3.0, 10},
-		{"quarter_40", 40, 0.25, 10},
-
-		// 收敛到 1 的边界：next<1 视作 0 走 single
-		{"cur_2_half", 2, 0.5, 0},
-		{"cur_3_half", 3, 0.5, 0}, // floor(1.5)=1 → 视为 0
-		{"cur_4_half", 4, 0.5, 2},
-
-		// 接近 1 的 shrink：防不收敛，强制 cur-1
-		{"near_one_5", 5, 0.99, 4},
-		{"near_one_10", 10, 0.95, 9},
-	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			got := shrinkNext(tc.cur, tc.shrink)
-			if got != tc.want {
-				t.Errorf("shrinkNext(%d, %v) = %d, want %d", tc.cur, tc.shrink, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestBuildContinuousPendingBatches(t *testing.T) {
 	doc := testDoc(13)
 	got := BuildContinuousPendingBatches(doc, []int{0, 1, 2, 5, 6, 10}, segConstraint(4))
@@ -664,8 +575,7 @@ func TestProcessBatch_PartialRecovery_BelowThreshold(t *testing.T) {
 }
 
 // TestProcessBatch_PartialRecovery_AboveThresholdShrinks 缺失率超阈值时，
-// 使用最佳部分结果（不丢弃已翻译段），缺失段通过 translateSingleInRound 补救。
-// FallbackShrink=0 时直接坍缩到单段。
+// 使用最佳部分结果（不丢弃已翻译段），缺失段通过 round 级 missing 重试补救。
 func TestProcessBatch_PartialRecovery_AboveThresholdShrinks(t *testing.T) {
 	doc := newTestDoc(4)
 	rep := &countingReporter{}
@@ -674,12 +584,9 @@ func TestProcessBatch_PartialRecovery_AboveThresholdShrinks(t *testing.T) {
 		name: "fake",
 		responses: []string{
 			// 第 1 次 batch：仅返回 1 个 → 缺失率 0.75 > 0.5 阈值
-			// 使用最佳部分结果，缺失 3 段走 processBatchInRound 单段补救
 			`{"translations":{"1":"a"}}`,
-			// 后续 3 次单段补救（ID 为 "1"）
-			`{"translations":{"1":"x1"}}`,
-			`{"translations":{"1":"x2"}}`,
-			`{"translations":{"1":"x3"}}`,
+			// round 级 missing 重试：缺失 3 段作为一批重试
+			`{"translations":{"1":"x1","2":"x2","3":"x3"}}`,
 		},
 	}
 	s := &Translate{
@@ -692,9 +599,9 @@ func TestProcessBatch_PartialRecovery_AboveThresholdShrinks(t *testing.T) {
 	if err := s.Run(context.Background(), doc); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	// 预期：1 次 batch + 3 次 single 补救 = 4 次后端调用（最佳部分结果不丢弃）
-	if got := int(fb.idx.Load()); got != 4 {
-		t.Errorf("backend calls: %d want 4 (1 batch + 3 single recovery)", got)
+	// 预期：1 次 batch + 1 次 missing 重试 = 2 次后端调用
+	if got := int(fb.idx.Load()); got != 2 {
+		t.Errorf("backend calls: %d want 2 (1 batch + 1 missing retry batch)", got)
 	}
 	for i, want := range []string{"a", "x1", "x2", "x3"} {
 		if got := doc.Segments[i].Target; got != want {
@@ -772,6 +679,7 @@ func TestProcessBatch_PromptUpgradeRecovers(t *testing.T) {
 }
 
 // TestProcessBatch_PromptUpgradeDisabledFallsBack 升级重试关闭时，fatal JSON 直接进 shrink。
+// 缩批后被丢弃的段落进入 unresolved，后续轮次可补救。
 func TestProcessBatch_PromptUpgradeDisabledFallsBack(t *testing.T) {
 	doc := newTestDoc(2)
 	rep := &countingReporter{}
@@ -787,7 +695,10 @@ func TestProcessBatch_PromptUpgradeDisabledFallsBack(t *testing.T) {
 	opts := defaultRepairOpts()
 	opts.PromptUpgrade = false
 	s := &Translate{
-		Rounds:   []Round{{Name: "default", Backend: fb, BatchSize: 2, Concurrency: 1, FallbackShrink: 0}},
+		Rounds: []Round{
+			{Name: "r1", Backend: fb, BatchSize: 2, Concurrency: 1, FallbackShrink: 0.5, Retry: backend.RetryPolicy{MaxAttempts: 1}},
+			{Name: "r2", Backend: fb, BatchSize: 1, Concurrency: 1},
+		},
 		Renderer: newTestRenderer(t),
 		Logger:   quietLogger(),
 		Reporter: rep,
@@ -796,9 +707,14 @@ func TestProcessBatch_PromptUpgradeDisabledFallsBack(t *testing.T) {
 	if err := s.Run(context.Background(), doc); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	// 预期：1 次 batch + 2 次 single fallback = 3 次调用
+	// 预期：Round 1: 1 batch (parse error, shrink to 1) + 1 retry = 2 调用
+	//       Round 2: 1 single = 1 调用
+	// 总计 3 次调用
 	if got := int(fb.idx.Load()); got != 3 {
-		t.Errorf("backend calls: %d want 3 (1 batch fatal + 2 single fallback)", got)
+		t.Errorf("backend calls: %d want 3", got)
+	}
+	if doc.Segments[0].Target != "x0" || doc.Segments[1].Target != "x1" {
+		t.Errorf("targets: %q, %q", doc.Segments[0].Target, doc.Segments[1].Target)
 	}
 }
 
@@ -853,8 +769,12 @@ func TestTranslatePlan_UsesLongestContinuousRunsAndNextRoundFallback(t *testing.
 func TestTranslatePlan_ExhaustedRoundsKeepSource(t *testing.T) {
 	doc := newTestDoc(2)
 	fb := &fakeBackend{
-		name:      "fake",
-		responses: []string{`{"translations":{"1":"ok"}}`},
+		name: "fake",
+		responses: []string{
+			`{"translations":{"1":"ok"}}`,
+			// Missing segment retry will consume this (empty = parse error)
+			"",
+		},
 	}
 	s := &Translate{
 		Rounds: []Round{
