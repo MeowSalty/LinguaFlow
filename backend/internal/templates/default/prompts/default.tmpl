@@ -39,21 +39,26 @@
 
 注音处理：
 源文本中曾有 <ruby>基底<rt>标注</rt></ruby> 标签，已提取到 ruby_annotations 中。
+每条注音需分类为以下三种之一：
+- phonetic（音注）：纯读音标注，基底与标注是同一词的读法。
+- semantic（义训）：语义解释标注，基底与标注语意一致或相近。
+- creative（创意注音）：基底与标注存在语义落差。
+
 标注文本的翻译规则：
-- 音注（读音）和义训（语义一致）：标注文本保留原文不翻译。
-- 创意注音（基底与标注存在语义落差）：标注文本需要翻译。
+- phonetic 和 semantic：标注文本保留原文不翻译。
+- creative：标注文本需要翻译。
 {{- if eq .RubyOutputFormat "ruby_output"}}
-你需要在 ruby_output 中返回注音在译文中的位置信息：
-- 每个条目的 "text" 是标注文本（按上述规则处理）。
+你需要在顶层字段 "ruby_output"（与 "translations" 同级）中返回所有注音条目（不得省略任何一条），每条包含 kind 字段：
 - 每个条目的 "base" 必须是你译文中实际写入的对应文本，而不是原文本身。
-  仅当该词在译文中保持原文不变时，base 才与原文相同。
-- 条目顺序应与译文中被注音词语的出现顺序一致。
+- 每个条目的 "text" 是标注文本（按上述规则处理）。
+- 每个条目的 "kind" 是分类（phonetic/semantic/creative）。
+- 条目顺序应与 ruby_annotations 的顺序一致。
 - 无注音的片段使用空数组。
 {{- if not .StrictSchema}}
-- 格式：{"<id>": [{"base":"<译文中实际文本>","text":"<标注>"}, ...], ...}
+- 格式：{"<id>": [{"base":"<译文中实际文本>","text":"<标注>","kind":"<kind>"}, ...], ...}
 {{- end}}
 {{- else if eq .RubyOutputFormat "inline_markers"}}
-- 在翻译中，在每个被注音词语的位置插入 ⟦ruby:<基底>/<标注>⟧。基底通常需要翻译，专有名词等除外。
+- 在翻译中，在每个被注音词语的位置插入 ⟦ruby:<基底>/<标注>/<kind>⟧。基底通常需要翻译，专有名词等除外。
 {{- end}}
 {{- end}}
 {{- if .InlineBootstrap}}

@@ -54,11 +54,11 @@ type translationJobResponse struct {
 	CompletedResources int                              `json:"completed_resources"`
 	FailedResources    int                              `json:"failed_resources"`
 	TotalSegments      int                              `json:"total_segments"`
+	StageTotal         int                              `json:"stage_total"`
 	CompletedSegments  int                              `json:"completed_segments"`
 	ErrorMessage       *string                          `json:"error_message,omitempty"`
 	StartedAt          *string                          `json:"started_at,omitempty"`
 	CurrentStage       string                           `json:"current_stage,omitempty"`
-	ProgressPercentage float64                          `json:"progress_percentage,omitempty"`
 	QueuePosition      *int                             `json:"queue_position,omitempty"`
 	QueueSize          *int                             `json:"queue_size,omitempty"`
 	CreatedAt          string                           `json:"created_at"`
@@ -227,16 +227,12 @@ func toTranslationJobResponse(row *ent.TranslationJob, queueInfo *QueueInfo) tra
 		CompletedResources: row.CompletedResources,
 		FailedResources:    row.FailedResources,
 		TotalSegments:      row.TotalSegments,
+		StageTotal:         row.StageTotal,
 		CompletedSegments:  row.CompletedSegments,
 		ErrorMessage:       row.ErrorMessage,
 		StartedAt:          timePtrToString(row.StartedAt),
 		CreatedAt:          row.CreatedAt.Format(timeRFC3339),
 		UpdatedAt:          row.UpdatedAt.Format(timeRFC3339),
-	}
-
-	// 计算进度百分比
-	if row.TotalSegments > 0 {
-		resp.ProgressPercentage = float64(row.CompletedSegments) / float64(row.TotalSegments) * 100
 	}
 
 	if row.Edges.Project != nil {
@@ -282,7 +278,7 @@ func toTranslationJobResourceResponse(row *ent.JobResource) translationJobResour
 	}
 	if row.Edges.Resource != nil {
 		resp.ResourceID = row.Edges.Resource.ID
-		resourceResp := toResourceResponse(row.Edges.Resource)
+		resourceResp := toResourceResponse(row.Edges.Resource, 0, 0)
 		resp.Resource = &resourceResp
 	}
 	return resp
@@ -303,54 +299,4 @@ func writeTranslationJobServiceError(w http.ResponseWriter, err error) {
 	default:
 		writeProjectServiceError(w, err)
 	}
-}
-
-func (s *Server) handleListTranslationJobEvents(w http.ResponseWriter, r *http.Request) {
-	authUser, ok := authUserFromContext(r.Context())
-	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
-		return
-	}
-	jobID, ok := parseIntParam(w, chi.URLParam(r, "translationJobId"), "translationJobId")
-	if !ok {
-		return
-	}
-	// 从 query 参数解析 limit，默认 50，最大 200
-	limit := 50
-	if v := r.URL.Query().Get("limit"); v != "" {
-		if parsed, ok := parseIntParam(w, v, "limit"); ok {
-			limit = parsed
-		} else {
-			return
-		}
-	}
-	if limit < 1 {
-		limit = 1
-	}
-	if limit > 200 {
-		limit = 200
-	}
-
-	events, err := s.translationJobSvc.ListJobEvents(r.Context(), authUser.User.ID, jobID, limit)
-	if err != nil {
-		writeTranslationJobServiceError(w, err)
-		return
-	}
-
-	items := make([]JobEvent, 0, len(events))
-	for _, e := range events {
-		item := JobEvent{
-			Id:        e.ID,
-			JobId:     jobID,
-			Level:     JobEventLevel(e.Level),
-			Message:   e.Message,
-			Metadata:  &e.Metadata,
-			CreatedAt: e.CreatedAt,
-		}
-		if e.Stage != "" {
-			item.Stage = &e.Stage
-		}
-		items = append(items, item)
-	}
-	writeJSON(w, http.StatusOK, items)
 }

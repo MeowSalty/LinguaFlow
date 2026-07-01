@@ -11,20 +11,6 @@ type SegmentInput struct {
 	TargetText string         // 目标文本（下载渲染时使用）
 }
 
-// TranslateSegmentsInput 纯翻译输入，不涉及文件 I/O。
-type TranslateSegmentsInput struct {
-	// Document 已解析的文档，Segments 中至少需填充 Source 字段。
-	// 调用方负责将 DB 数据映射到 Segment。
-	Document *Document
-
-	// SegmentIndexes 非空时仅翻译这些索引对应的段落；
-	// 未选段落保持原样，已有的 Target 不会被覆盖。
-	SegmentIndexes []int
-
-	// ExistingTargets 未选段落的已有译文，用于恢复。
-	ExistingTargets map[int]string
-}
-
 // BuildDocumentFromSegments 从 DB segments 构建 Document。
 // 用于 Web 场景：翻译时从 DB 加载 segments 构建 Document，下载时从 DB + Target 构建 Document。
 //

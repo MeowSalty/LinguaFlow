@@ -6,6 +6,10 @@ func (s *Server) Ping(w http.ResponseWriter, r *http.Request) {
 	s.handlePing(w, r)
 }
 
+func (s *Server) GetMode(w http.ResponseWriter, r *http.Request) {
+	s.handleMode(w, r)
+}
+
 func (s *Server) RegisterAuth(w http.ResponseWriter, r *http.Request) {
 	s.handleRegister(w, r)
 }
@@ -236,10 +240,6 @@ func (s *Server) CancelTranslationJob(w http.ResponseWriter, r *http.Request, _ 
 
 func (s *Server) RetryTranslationJob(w http.ResponseWriter, r *http.Request, _ TranslationJobId) {
 	s.requireAuth(http.HandlerFunc(s.handleRetryTranslationJob)).ServeHTTP(w, r)
-}
-
-func (s *Server) ListTranslationJobEvents(w http.ResponseWriter, r *http.Request, _ TranslationJobId, _ ListTranslationJobEventsParams) {
-	s.requireAuth(http.HandlerFunc(s.handleListTranslationJobEvents)).ServeHTTP(w, r)
 }
 
 func (s *Server) DownloadTranslatedResourceFile(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {

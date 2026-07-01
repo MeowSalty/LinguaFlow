@@ -143,6 +143,12 @@ func finalizeResult(raw map[string]any, wantIDs []string, repaired []string, opt
 			_ = json.Unmarshal(b, &rubyOutput)
 		}
 	}
+	if rubyOutput == nil {
+		if extracted, did := extractNestedRubyOutput(transRaw); did {
+			rubyOutput = extracted
+			repaired = append(repaired, "schema.ruby-nested-extract")
+		}
+	}
 
 	var missing []string
 	for _, id := range wantIDs {
@@ -330,4 +336,46 @@ func toStringMap(v any) (map[string]string, error) {
 	default:
 		return nil, fmt.Errorf("expected object or array, got %T", v)
 	}
+}
+
+// extractNestedRubyOutput 处理 LLM 将 ruby_output 嵌套在 translations 条目中的情况：
+//
+//	{"translations":{"1":{"translation":"...","ruby_output":[...]}, ...}}
+//
+// 提取为顶层 ruby_output map，返回 (提取结果, true)；无需修复时返回 (nil, false)。
+func extractNestedRubyOutput(transRaw any) (map[string][]protect.RubyOutputEntry, bool) {
+	transObj, ok := transRaw.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	extracted := make(map[string][]protect.RubyOutputEntry)
+	for id, val := range transObj {
+		entry, ok := val.(map[string]any)
+		if !ok {
+			continue
+		}
+		rubyRaw, hasRuby := entry["ruby_output"]
+		if !hasRuby {
+			continue
+		}
+		rubyArr, ok := rubyRaw.([]any)
+		if !ok {
+			continue
+		}
+		b, err := json.Marshal(rubyArr)
+		if err != nil {
+			continue
+		}
+		var entries []protect.RubyOutputEntry
+		if err := json.Unmarshal(b, &entries); err != nil {
+			continue
+		}
+		if len(entries) > 0 {
+			extracted[id] = entries
+		}
+	}
+	if len(extracted) == 0 {
+		return nil, false
+	}
+	return extracted, true
 }

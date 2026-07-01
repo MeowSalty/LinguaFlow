@@ -50,10 +50,10 @@ type CLIConfig struct {
 
 // CLIConfigBackend 后端配置。
 type CLIConfigBackend struct {
-	Type            string         `yaml:"type"`
-	Enabled         bool           `yaml:"enabled"`
-	RateLimitPerSec int            `yaml:"rate_limit_per_sec"` // 后端级限流；0 使用全局
-	Options         map[string]any `yaml:"options"`
+	Type               string         `yaml:"type"`
+	Enabled            bool           `yaml:"enabled"`
+	RateLimitPerMinute int            `yaml:"rate_limit_per_minute"` // 后端级限流（每分钟）；0 表示不限速
+	Options            map[string]any `yaml:"options"`
 }
 
 // CLIConfigPromptTemplate 提示词模板配置。
@@ -86,44 +86,23 @@ type CLIConfigExecution struct {
 
 // CLIConfigRound 单轮执行配置。
 type CLIConfigRound struct {
-	Name            string      `yaml:"name"`
-	Backend         string      `yaml:"backend"` // 引用 backends key
-	Prompt          string      `yaml:"prompt"`  // 引用 prompt_templates key
-	Profile         string      `yaml:"profile"` // 引用 translation_profiles key
-	BatchSize       int         `yaml:"batch_size"`
-	Concurrency     int         `yaml:"concurrency"`
-	FallbackShrink  float64     `yaml:"fallback_shrink"`
-	RateLimitPerSec int         `yaml:"rate_limit_per_sec"`
-	Retry           RetryConfig `yaml:"retry"`
-}
-
-// ---------------------------------------------------------------------------
-// 新旧格式检测
-// ---------------------------------------------------------------------------
-
-// probeFormat 通过将 YAML 解析为 map 来检测配置文件是新格式还是旧格式。
-// 返回 (hasExecution, hasPipeline)。
-func probeFormat(data []byte) (hasExecution bool, hasPipeline bool) {
-	var raw map[string]any
-	if err := yaml.Unmarshal(data, &raw); err != nil {
-		return false, false
-	}
-	if _, ok := raw["execution"]; ok {
-		hasExecution = true
-	}
-	if _, ok := raw["pipeline"]; ok {
-		hasPipeline = true
-	}
-	return
+	Name             string      `yaml:"name"`
+	Backend          string      `yaml:"backend"` // 引用 backends key
+	Prompt           string      `yaml:"prompt"`  // 引用 prompt_templates key
+	Profile          string      `yaml:"profile"` // 引用 translation_profiles key
+	BatchSize        int         `yaml:"batch_size"`
+	MaxWordsPerBatch int         `yaml:"max_words_per_batch"`
+	Concurrency      int         `yaml:"concurrency"`
+	FallbackShrink   float64     `yaml:"fallback_shrink"`
+	Retry            RetryConfig `yaml:"retry"`
 }
 
 // ---------------------------------------------------------------------------
 // LoadCLIConfig
 // ---------------------------------------------------------------------------
 
-// LoadCLIConfig 从 path 读取新格式 YAML 配置。
+// LoadCLIConfig 从 path 读取 YAML 配置。
 //   - 若 path 为空，从内置模板生成默认 CLIConfig。
-//   - 若文件为旧格式（有 pipeline 无 execution），自动迁移。
 func LoadCLIConfig(path string) (*CLIConfig, error) {
 	// ── 1. path 为空 → 从内置模板生成 ──
 	if path == "" {
@@ -142,30 +121,10 @@ func LoadCLIConfig(path string) (*CLIConfig, error) {
 	// ── 3. 展开 ${ENV} 占位符 ──
 	expanded := expandEnv(raw)
 
-	// ── 4. 检测新旧格式 ──
-	hasExecution, hasPipeline := probeFormat(expanded)
-
-	var cliCfg *CLIConfig
-
-	if hasExecution {
-		// ── 4a. 新格式：有 execution 字段 ──
-		cliCfg = &CLIConfig{}
-		if err := yaml.Unmarshal(expanded, cliCfg); err != nil {
-			return nil, fmt.Errorf("config: parse %s: %w", path, err)
-		}
-	} else if hasPipeline {
-		// ── 4b. 旧格式：有 pipeline 无 execution → 自动迁移 ──
-		legacy := &Config{}
-		if err := yaml.Unmarshal(expanded, legacy); err != nil {
-			return nil, fmt.Errorf("config: parse legacy %s: %w", path, err)
-		}
-		cliCfg = migrateFromLegacy(legacy)
-	} else {
-		// 既无 execution 也无 pipeline，尝试直接解析为 CLIConfig
-		cliCfg = &CLIConfig{}
-		if err := yaml.Unmarshal(expanded, cliCfg); err != nil {
-			return nil, fmt.Errorf("config: parse %s: %w", path, err)
-		}
+	// ── 4. 解析为 CLIConfig ──
+	cliCfg := &CLIConfig{}
+	if err := yaml.Unmarshal(expanded, cliCfg); err != nil {
+		return nil, fmt.Errorf("config: parse %s: %w", path, err)
 	}
 
 	// ── 5. 初始化 map ──
@@ -194,83 +153,6 @@ func LoadCLIConfig(path string) (*CLIConfig, error) {
 	}
 
 	return cliCfg, nil
-}
-
-// ---------------------------------------------------------------------------
-// migrateFromLegacy — 旧格式 Config → CLIConfig
-// ---------------------------------------------------------------------------
-
-// migrateFromLegacy 将旧 Config 转换为新 CLIConfig。
-func migrateFromLegacy(legacy *Config) *CLIConfig {
-	cliCfg := &CLIConfig{
-		Version:    legacy.Version,
-		SourceLang: legacy.SourceLang,
-		TargetLang: legacy.TargetLang,
-		Backends:   make(map[string]CLIConfigBackend, len(legacy.Backends)),
-		PromptTemplates: map[string]CLIConfigPromptTemplate{
-			"default": {
-				Content: legacy.Prompt.SystemTemplateContent,
-			},
-		},
-		TranslationProfiles: map[string]CLIConfigTranslationProfile{
-			"default": {
-				Split:       legacy.Pipeline.Split,
-				Protect:     legacy.Pipeline.Protect,
-				Postprocess: legacy.Pipeline.Postprocess,
-				Repair:      legacy.Pipeline.Translate.Repair,
-				Bootstrap:   legacy.Glossary.Bootstrap,
-			},
-		},
-		Glossary: CLIConfigGlossary{
-			Enabled: legacy.Glossary.Enabled,
-			Path:    legacy.Glossary.Path,
-			Save:    legacy.Glossary.Save,
-		},
-		TranslationMemory: legacy.TranslationMemory,
-		Plugins:           legacy.Plugins,
-		Output:            legacy.Output,
-		Log:               legacy.Log,
-	}
-
-	// ── Backends: 数组 → map ──
-	for _, b := range legacy.Backends {
-		cliCfg.Backends[b.Name] = CLIConfigBackend{
-			Type:            b.Type,
-			Enabled:         b.Enabled,
-			RateLimitPerSec: b.RateLimitPerSec,
-			Options:         b.Options,
-		}
-	}
-
-	// ── 自动构造单轮 execution ──
-	backendName := ""
-	if len(legacy.Backends) > 0 {
-		backendName = legacy.Backends[0].Name
-	}
-	cliCfg.Execution = CLIConfigExecution{
-		Bootstrap: StandaloneBootstrapConfig{
-			Enabled:          legacy.Glossary.Standalone.Enabled,
-			Template:         legacy.Glossary.Standalone.Template,
-			TemplateContent:  legacy.Glossary.Standalone.TemplateContent,
-			BatchSize:        legacy.Glossary.Standalone.BatchSize,
-			Concurrency:      legacy.Glossary.Standalone.Concurrency,
-			MaxTermsPerBatch: legacy.Glossary.Standalone.MaxTermsPerBatch,
-			MinSourceLen:     legacy.Glossary.Standalone.MinSourceLen,
-		},
-		Rounds: []CLIConfigRound{{
-			Name:            "主翻译",
-			Backend:         backendName,
-			Prompt:          "default",
-			Profile:         "default",
-			BatchSize:       legacy.Pipeline.Translate.BatchSize,
-			Concurrency:     legacy.Pipeline.Translate.Concurrency,
-			FallbackShrink:  legacy.Pipeline.Translate.FallbackShrink,
-			RateLimitPerSec: legacy.Pipeline.Translate.RateLimitPerSec,
-			Retry:           legacy.Pipeline.Translate.Retry,
-		}},
-	}
-
-	return cliCfg
 }
 
 // ---------------------------------------------------------------------------
@@ -529,15 +411,14 @@ func defaultCLIConfig() *CLIConfig {
 				MinSourceLen:     2,
 			},
 			Rounds: []CLIConfigRound{{
-				Name:            "主翻译",
-				Backend:         "openai-default",
-				Prompt:          "default",
-				Profile:         "default",
-				BatchSize:       1,
-				Concurrency:     4,
-				FallbackShrink:  0.5,
-				RateLimitPerSec: 5,
-				Retry:           RetryConfig{MaxAttempts: 3, BackoffMs: 2000, Jitter: true},
+				Name:           "主翻译",
+				Backend:        "openai-default",
+				Prompt:         "default",
+				Profile:        "default",
+				BatchSize:      1,
+				Concurrency:    4,
+				FallbackShrink: defaultFallbackShrink,
+				Retry:          RetryConfig{MaxAttempts: 3, BackoffMs: 2000, Jitter: true},
 			}},
 		},
 		Glossary: CLIConfigGlossary{

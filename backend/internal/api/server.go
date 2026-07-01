@@ -5,13 +5,16 @@ import (
 	"database/sql"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"path/filepath"
 	"sync/atomic"
 	"time"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/worker"
@@ -24,6 +27,8 @@ type Server struct {
 	logger                *slog.Logger
 	db                    *sql.DB
 	entClient             *ent.Client
+	mode                  string    // "server" | "local"
+	localUser             *ent.User // 本地模式下非 nil
 	authService           *service.AuthService
 	userService           *service.UserService
 	backendSvc            *service.BackendService
@@ -46,10 +51,22 @@ type Server struct {
 	syncTaskRunner        *worker.SyncTaskRunner
 	httpServer            *http.Server
 	executionPlanHandler  *HandlerExecutionPlan
+	eventBroker           *event.Broker
 	ready                 atomic.Bool
 }
 
-func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.Client) (*Server, error) {
+func (s *Server) isLocal() bool {
+	return s.mode == config.ModeLocal
+}
+
+func (s *Server) localAuthUser() (authenticatedUser, bool) {
+	if s.isLocal() && s.localUser != nil {
+		return authenticatedUser{User: s.localUser}, true
+	}
+	return authenticatedUser{}, false
+}
+
+func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.Client, mode string, localUser *ent.User) (*Server, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
@@ -59,10 +76,14 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 		logger:      logger,
 		db:          db,
 		entClient:   client,
+		mode:        mode,
+		localUser:   localUser,
 		authService: service.NewAuthService(client, service.AuthConfigFromServer(cfg.Server)),
+		eventBroker: event.NewBroker(),
 	}
+	limiterPool := backend.NewLimiterPool()
 	s.userService = service.NewUserService(client, s.authService)
-	s.backendSvc = service.NewBackendService(client, s.userService)
+	s.backendSvc = service.NewBackendService(client, s.userService, limiterPool)
 	s.projectSvc = service.NewProjectService(client, s.userService)
 	s.executionPlanSvc = service.NewExecutionPlanService(client, s.userService)
 	s.glossarySvc = service.NewGlossaryService(client, s.projectSvc)
@@ -73,7 +94,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 		return nil, err
 	}
 	s.jobStore = jobStore
-	s.translationJobSvc = service.NewTranslationJobService(client, s.projectSvc, s.executionPlanSvc, s.backendSvc, s.promptTemplateSvc, s.translationProfileSvc, jobStore)
+	s.translationJobSvc = service.NewTranslationJobService(client, s.projectSvc, s.executionPlanSvc, s.backendSvc, s.promptTemplateSvc, s.translationProfileSvc, jobStore, s.eventBroker)
 	s.executionPlanHandler = NewHandlerExecutionPlan(s.executionPlanSvc)
 	s.reviewSvc = service.NewReviewService(client, s.projectSvc)
 	s.segmentSvc = service.NewSegmentService(client, s.projectSvc)
@@ -86,7 +107,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 		queueSize = 16
 	}
 	s.translationJobQueue = worker.NewQueue(queueSize)
-	s.translationJobRunner = worker.NewTranslationRunner(cfg, logger, client, s.translationJobSvc, jobStore, s.translationJobQueue)
+	s.translationJobRunner = worker.NewTranslationRunner(cfg, logger, client, s.translationJobSvc, jobStore, s.translationJobQueue, s.eventBroker, limiterPool)
 	s.syncTaskQueue = worker.NewQueue(100)
 	s.syncTaskRunner = worker.NewSyncTaskRunner(cfg, logger, client, s.glossarySyncSvc, s.syncTaskQueue)
 	s.httpServer = &http.Server{
@@ -98,7 +119,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 	return s, nil
 }
 
-func (s *Server) Run(ctx context.Context) error {
+func (s *Server) Run(ctx context.Context, ln net.Listener) error {
 	serveErr := make(chan error, 1)
 	if s.translationJobRunner != nil {
 		if err := s.translationJobRunner.Recover(ctx); err != nil {
@@ -147,8 +168,8 @@ func (s *Server) Run(ctx context.Context) error {
 	s.ready.Store(true)
 
 	go func() {
-		s.logger.Info("http server listening", "addr", s.httpServer.Addr)
-		serveErr <- s.httpServer.ListenAndServe()
+		s.logger.Info("http server listening", "addr", ln.Addr().String())
+		serveErr <- s.httpServer.Serve(ln)
 	}()
 
 	select {

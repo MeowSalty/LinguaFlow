@@ -15,7 +15,7 @@ RetryConfig:
 
 ExecutionRoundConfig:
   type: object
-  required: [backend_id, prompt_template_id, profile_id, batch_size, concurrency]
+  required: [backend_id, prompt_template_id, profile_id, concurrency]
   properties:
     name:
       type: string
@@ -31,19 +31,21 @@ ExecutionRoundConfig:
       description: 策略模板 ID（TranslationProfile 单表全局唯一）
     batch_size:
       type: integer
-      minimum: 1
+      minimum: 0
+      description: 段落数上限；0=不限制，与 max_words_per_batch 至少填一项
+    max_words_per_batch:
+      type: integer
+      minimum: 0
+      description: 字词数上限；0=不限制，与 batch_size 至少填一项
     concurrency:
       type: integer
       minimum: 1
     fallback_shrink:
       type: number
       minimum: 0
+      exclusiveMinimum: true
       maximum: 1
-      default: 0
-    rate_limit_per_sec:
-      type: integer
-      minimum: 0
-      default: 0
+      exclusiveMaximum: true
     retry:
       $ref: '#/RetryConfig'
 

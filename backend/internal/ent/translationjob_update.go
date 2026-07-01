@@ -11,7 +11,6 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
@@ -177,6 +176,27 @@ func (_u *TranslationJobUpdate) AddTotalSegments(v int) *TranslationJobUpdate {
 	return _u
 }
 
+// SetStageTotal sets the "stage_total" field.
+func (_u *TranslationJobUpdate) SetStageTotal(v int) *TranslationJobUpdate {
+	_u.mutation.ResetStageTotal()
+	_u.mutation.SetStageTotal(v)
+	return _u
+}
+
+// SetNillableStageTotal sets the "stage_total" field if the given value is not nil.
+func (_u *TranslationJobUpdate) SetNillableStageTotal(v *int) *TranslationJobUpdate {
+	if v != nil {
+		_u.SetStageTotal(*v)
+	}
+	return _u
+}
+
+// AddStageTotal adds value to the "stage_total" field.
+func (_u *TranslationJobUpdate) AddStageTotal(v int) *TranslationJobUpdate {
+	_u.mutation.AddStageTotal(v)
+	return _u
+}
+
 // SetCompletedSegments sets the "completed_segments" field.
 func (_u *TranslationJobUpdate) SetCompletedSegments(v int) *TranslationJobUpdate {
 	_u.mutation.ResetCompletedSegments()
@@ -283,21 +303,6 @@ func (_u *TranslationJobUpdate) AddJobResources(v ...*JobResource) *TranslationJ
 	return _u.AddJobResourceIDs(ids...)
 }
 
-// AddJobEventIDs adds the "job_events" edge to the JobEvent entity by IDs.
-func (_u *TranslationJobUpdate) AddJobEventIDs(ids ...int) *TranslationJobUpdate {
-	_u.mutation.AddJobEventIDs(ids...)
-	return _u
-}
-
-// AddJobEvents adds the "job_events" edges to the JobEvent entity.
-func (_u *TranslationJobUpdate) AddJobEvents(v ...*JobEvent) *TranslationJobUpdate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.AddJobEventIDs(ids...)
-}
-
 // Mutation returns the TranslationJobMutation object of the builder.
 func (_u *TranslationJobUpdate) Mutation() *TranslationJobMutation {
 	return _u.mutation
@@ -334,27 +339,6 @@ func (_u *TranslationJobUpdate) RemoveJobResources(v ...*JobResource) *Translati
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveJobResourceIDs(ids...)
-}
-
-// ClearJobEvents clears all "job_events" edges to the JobEvent entity.
-func (_u *TranslationJobUpdate) ClearJobEvents() *TranslationJobUpdate {
-	_u.mutation.ClearJobEvents()
-	return _u
-}
-
-// RemoveJobEventIDs removes the "job_events" edge to JobEvent entities by IDs.
-func (_u *TranslationJobUpdate) RemoveJobEventIDs(ids ...int) *TranslationJobUpdate {
-	_u.mutation.RemoveJobEventIDs(ids...)
-	return _u
-}
-
-// RemoveJobEvents removes "job_events" edges to JobEvent entities.
-func (_u *TranslationJobUpdate) RemoveJobEvents(v ...*JobEvent) *TranslationJobUpdate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.RemoveJobEventIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -418,6 +402,11 @@ func (_u *TranslationJobUpdate) check() error {
 	if v, ok := _u.mutation.TotalSegments(); ok {
 		if err := translationjob.TotalSegmentsValidator(v); err != nil {
 			return &ValidationError{Name: "total_segments", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.total_segments": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.StageTotal(); ok {
+		if err := translationjob.StageTotalValidator(v); err != nil {
+			return &ValidationError{Name: "stage_total", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.stage_total": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.CompletedSegments(); ok {
@@ -484,6 +473,12 @@ func (_u *TranslationJobUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if value, ok := _u.mutation.AddedTotalSegments(); ok {
 		_spec.AddField(translationjob.FieldTotalSegments, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.StageTotal(); ok {
+		_spec.SetField(translationjob.FieldStageTotal, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedStageTotal(); ok {
+		_spec.AddField(translationjob.FieldStageTotal, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.CompletedSegments(); ok {
 		_spec.SetField(translationjob.FieldCompletedSegments, field.TypeInt, value)
@@ -599,51 +594,6 @@ func (_u *TranslationJobUpdate) sqlSave(ctx context.Context) (_node int, err err
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
-	if _u.mutation.JobEventsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   translationjob.JobEventsTable,
-			Columns: []string{translationjob.JobEventsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(jobevent.FieldID, field.TypeInt),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.RemovedJobEventsIDs(); len(nodes) > 0 && !_u.mutation.JobEventsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   translationjob.JobEventsTable,
-			Columns: []string{translationjob.JobEventsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(jobevent.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.JobEventsIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   translationjob.JobEventsTable,
-			Columns: []string{translationjob.JobEventsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(jobevent.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -816,6 +766,27 @@ func (_u *TranslationJobUpdateOne) AddTotalSegments(v int) *TranslationJobUpdate
 	return _u
 }
 
+// SetStageTotal sets the "stage_total" field.
+func (_u *TranslationJobUpdateOne) SetStageTotal(v int) *TranslationJobUpdateOne {
+	_u.mutation.ResetStageTotal()
+	_u.mutation.SetStageTotal(v)
+	return _u
+}
+
+// SetNillableStageTotal sets the "stage_total" field if the given value is not nil.
+func (_u *TranslationJobUpdateOne) SetNillableStageTotal(v *int) *TranslationJobUpdateOne {
+	if v != nil {
+		_u.SetStageTotal(*v)
+	}
+	return _u
+}
+
+// AddStageTotal adds value to the "stage_total" field.
+func (_u *TranslationJobUpdateOne) AddStageTotal(v int) *TranslationJobUpdateOne {
+	_u.mutation.AddStageTotal(v)
+	return _u
+}
+
 // SetCompletedSegments sets the "completed_segments" field.
 func (_u *TranslationJobUpdateOne) SetCompletedSegments(v int) *TranslationJobUpdateOne {
 	_u.mutation.ResetCompletedSegments()
@@ -922,21 +893,6 @@ func (_u *TranslationJobUpdateOne) AddJobResources(v ...*JobResource) *Translati
 	return _u.AddJobResourceIDs(ids...)
 }
 
-// AddJobEventIDs adds the "job_events" edge to the JobEvent entity by IDs.
-func (_u *TranslationJobUpdateOne) AddJobEventIDs(ids ...int) *TranslationJobUpdateOne {
-	_u.mutation.AddJobEventIDs(ids...)
-	return _u
-}
-
-// AddJobEvents adds the "job_events" edges to the JobEvent entity.
-func (_u *TranslationJobUpdateOne) AddJobEvents(v ...*JobEvent) *TranslationJobUpdateOne {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.AddJobEventIDs(ids...)
-}
-
 // Mutation returns the TranslationJobMutation object of the builder.
 func (_u *TranslationJobUpdateOne) Mutation() *TranslationJobMutation {
 	return _u.mutation
@@ -973,27 +929,6 @@ func (_u *TranslationJobUpdateOne) RemoveJobResources(v ...*JobResource) *Transl
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveJobResourceIDs(ids...)
-}
-
-// ClearJobEvents clears all "job_events" edges to the JobEvent entity.
-func (_u *TranslationJobUpdateOne) ClearJobEvents() *TranslationJobUpdateOne {
-	_u.mutation.ClearJobEvents()
-	return _u
-}
-
-// RemoveJobEventIDs removes the "job_events" edge to JobEvent entities by IDs.
-func (_u *TranslationJobUpdateOne) RemoveJobEventIDs(ids ...int) *TranslationJobUpdateOne {
-	_u.mutation.RemoveJobEventIDs(ids...)
-	return _u
-}
-
-// RemoveJobEvents removes "job_events" edges to JobEvent entities.
-func (_u *TranslationJobUpdateOne) RemoveJobEvents(v ...*JobEvent) *TranslationJobUpdateOne {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _u.RemoveJobEventIDs(ids...)
 }
 
 // Where appends a list predicates to the TranslationJobUpdate builder.
@@ -1070,6 +1005,11 @@ func (_u *TranslationJobUpdateOne) check() error {
 	if v, ok := _u.mutation.TotalSegments(); ok {
 		if err := translationjob.TotalSegmentsValidator(v); err != nil {
 			return &ValidationError{Name: "total_segments", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.total_segments": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.StageTotal(); ok {
+		if err := translationjob.StageTotalValidator(v); err != nil {
+			return &ValidationError{Name: "stage_total", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.stage_total": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.CompletedSegments(); ok {
@@ -1153,6 +1093,12 @@ func (_u *TranslationJobUpdateOne) sqlSave(ctx context.Context) (_node *Translat
 	}
 	if value, ok := _u.mutation.AddedTotalSegments(); ok {
 		_spec.AddField(translationjob.FieldTotalSegments, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.StageTotal(); ok {
+		_spec.SetField(translationjob.FieldStageTotal, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedStageTotal(); ok {
+		_spec.AddField(translationjob.FieldStageTotal, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.CompletedSegments(); ok {
 		_spec.SetField(translationjob.FieldCompletedSegments, field.TypeInt, value)
@@ -1268,51 +1214,6 @@ func (_u *TranslationJobUpdateOne) sqlSave(ctx context.Context) (_node *Translat
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Add = append(_spec.Edges.Add, edge)
-	}
-	if _u.mutation.JobEventsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   translationjob.JobEventsTable,
-			Columns: []string{translationjob.JobEventsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(jobevent.FieldID, field.TypeInt),
-			},
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.RemovedJobEventsIDs(); len(nodes) > 0 && !_u.mutation.JobEventsCleared() {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   translationjob.JobEventsTable,
-			Columns: []string{translationjob.JobEventsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(jobevent.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
-	}
-	if nodes := _u.mutation.JobEventsIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   translationjob.JobEventsTable,
-			Columns: []string{translationjob.JobEventsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(jobevent.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

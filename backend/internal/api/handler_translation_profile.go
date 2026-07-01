@@ -13,6 +13,24 @@ import (
 
 // ---- 辅助函数 ----
 
+// toAPIPreserveKinds 将 []string 转换为 API 类型 []ProfileRubyConfigPreserveKinds。
+func toAPIPreserveKinds(kinds []string) []ProfileRubyConfigPreserveKinds {
+	result := make([]ProfileRubyConfigPreserveKinds, len(kinds))
+	for i, k := range kinds {
+		result[i] = ProfileRubyConfigPreserveKinds(k)
+	}
+	return result
+}
+
+// fromAPIPreserveKinds 将 API 类型 []ProfileRubyConfigPreserveKinds 转换为 []string。
+func fromAPIPreserveKinds(kinds []ProfileRubyConfigPreserveKinds) []string {
+	result := make([]string, len(kinds))
+	for i, k := range kinds {
+		result[i] = string(k)
+	}
+	return result
+}
+
 // parseTranslationProfileID 从路径参数解析 translationProfileId。
 func parseTranslationProfileID(w http.ResponseWriter, r *http.Request) (int, bool) {
 	raw := chi.URLParam(r, "translationProfileId")
@@ -57,6 +75,15 @@ func profileConfigToResponse(c *schema.TranslationProfileConfigData) Translation
 
 	outputFormat := ProfileRubyConfigOutputFormat(c.Protect.Ruby.OutputFormat)
 
+	rubyConfig := &ProfileRubyConfig{
+		Enabled:      c.Protect.Ruby.Enabled,
+		OutputFormat: &outputFormat,
+	}
+	if c.Protect.Ruby.PreserveKinds != nil {
+		pk := toAPIPreserveKinds(c.Protect.Ruby.PreserveKinds)
+		rubyConfig.PreserveKinds = &pk
+	}
+
 	return TranslationProfileConfig{
 		Split: ProfileSplitConfig{
 			Enabled:  c.Split.Enabled,
@@ -66,10 +93,7 @@ func profileConfigToResponse(c *schema.TranslationProfileConfigData) Translation
 		Protect: ProfileProtectConfig{
 			Enabled: c.Protect.Enabled,
 			Rules:   &rules,
-			Ruby: &ProfileRubyConfig{
-				Enabled:      c.Protect.Ruby.Enabled,
-				OutputFormat: &outputFormat,
-			},
+			Ruby:    rubyConfig,
 		},
 		Postprocess: ProfilePostprocessConfig{
 			Enabled:    c.Postprocess.Enabled,
@@ -121,6 +145,9 @@ func parseProfileConfig(c *TranslationProfileConfig) *schema.TranslationProfileC
 		if c.Protect.Ruby.OutputFormat != nil {
 			ruby.OutputFormat = string(*c.Protect.Ruby.OutputFormat)
 		}
+		if c.Protect.Ruby.PreserveKinds != nil {
+			ruby.PreserveKinds = fromAPIPreserveKinds(*c.Protect.Ruby.PreserveKinds)
+		}
 	}
 
 	return &schema.TranslationProfileConfigData{
@@ -162,6 +189,58 @@ func parseProfileConfig(c *TranslationProfileConfig) *schema.TranslationProfileC
 			MaxChars: c.Context.MaxChars,
 		},
 	}
+}
+
+// mergeProfileConfig 将请求中的部分配置合并到现有配置上。
+// 仅覆盖请求中显式提供的字段，未指定的字段保留现有值。
+func mergeProfileConfig(existing *schema.TranslationProfileConfigData, incoming *TranslationProfileConfig) *schema.TranslationProfileConfigData {
+	merged := *existing
+
+	if incoming.Split.Strategy != "" || incoming.Split.MaxChars > 0 {
+		merged.Split.Enabled = incoming.Split.Enabled
+		merged.Split.Strategy = incoming.Split.Strategy
+		merged.Split.MaxChars = incoming.Split.MaxChars
+	}
+
+	if incoming.Protect.Rules != nil {
+		rules := make([]string, len(*incoming.Protect.Rules))
+		for i, r := range *incoming.Protect.Rules {
+			rules[i] = string(r)
+		}
+		merged.Protect.Rules = rules
+	}
+	if incoming.Protect.Ruby != nil {
+		merged.Protect.Ruby.Enabled = incoming.Protect.Ruby.Enabled
+		if incoming.Protect.Ruby.OutputFormat != nil {
+			merged.Protect.Ruby.OutputFormat = string(*incoming.Protect.Ruby.OutputFormat)
+		}
+		if incoming.Protect.Ruby.PreserveKinds != nil {
+			merged.Protect.Ruby.PreserveKinds = fromAPIPreserveKinds(*incoming.Protect.Ruby.PreserveKinds)
+		}
+	}
+
+	merged.Postprocess.Enabled = incoming.Postprocess.Enabled
+	merged.Postprocess.TrimSpaces = incoming.Postprocess.TrimSpaces
+
+	merged.Repair.Enabled = incoming.Repair.Enabled
+	merged.Repair.JSONStructural = incoming.Repair.JsonStructural
+	merged.Repair.SchemaAliases = incoming.Repair.SchemaAliases
+	merged.Repair.Partial = incoming.Repair.Partial
+	merged.Repair.PartialThreshold = incoming.Repair.PartialThreshold
+	merged.Repair.PlaceholderNormalize = incoming.Repair.PlaceholderNormalize
+	merged.Repair.PromptUpgrade = incoming.Repair.PromptUpgrade
+
+	merged.Glossary.Bootstrap.Enabled = incoming.Glossary.Bootstrap.Enabled
+	merged.Glossary.Bootstrap.MaxTermsPer1000Chars = incoming.Glossary.Bootstrap.MaxTermsPer1000Chars
+	merged.Glossary.Bootstrap.MinSourceLen = incoming.Glossary.Bootstrap.MinSourceLen
+	merged.Glossary.Bootstrap.InlineConflictStrategy = string(incoming.Glossary.Bootstrap.InlineConflictStrategy)
+
+	merged.Context.Enabled = incoming.Context.Enabled
+	merged.Context.Before = incoming.Context.Before
+	merged.Context.After = incoming.Context.After
+	merged.Context.MaxChars = incoming.Context.MaxChars
+
+	return &merged
 }
 
 // ---- Handler 方法 ----
@@ -265,7 +344,17 @@ func (s *Server) handleUpdateTranslationProfile(w http.ResponseWriter, r *http.R
 		Description: req.Description,
 	}
 	if req.Config != nil {
-		input.Config = parseProfileConfig(req.Config)
+		// 获取现有配置，将请求中的字段合并上去，避免未指定字段被零值覆盖。
+		existing, err := s.translationProfileSvc.GetByID(r.Context(), id)
+		if err != nil {
+			if err == service.ErrTranslationProfileNotFound {
+				writeProblem(w, http.StatusNotFound, "not_found", "翻译配置不存在")
+				return
+			}
+			writeProblem(w, http.StatusInternalServerError, "internal_error", "查询翻译配置失败")
+			return
+		}
+		input.Config = mergeProfileConfig(&existing.Config, req.Config)
 	}
 
 	tp, err := s.translationProfileSvc.Update(r.Context(), id, input)

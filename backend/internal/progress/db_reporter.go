@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 )
 
 // segmentUpdate 记录一次 SegmentDone 事件的状态。
@@ -23,6 +24,7 @@ type DBReporter struct {
 	jobID         int
 	jobResourceID int
 	logger        *slog.Logger
+	broker        *event.Broker
 
 	// 阶段状态
 	mu         sync.Mutex
@@ -52,6 +54,7 @@ type DBReporterOptions struct {
 	JobResourceID int
 	Logger        *slog.Logger
 	Ticker        time.Duration // flush 安全网间隔，默认 2s
+	Broker        *event.Broker // 事件 Broker，nil 时跳过事件推送
 }
 
 // NewDBReporter 创建一个新的 DBReporter 实例。
@@ -71,6 +74,7 @@ func NewDBReporter(opts DBReporterOptions) *DBReporter {
 		jobID:         opts.JobID,
 		jobResourceID: opts.JobResourceID,
 		logger:        logger,
+		broker:        opts.Broker,
 		ticker:        time.NewTicker(tickerDur),
 		done:          make(chan struct{}),
 	}
@@ -112,8 +116,8 @@ func (r *DBReporter) StageStart(name string, total int) {
 			"error", err)
 	}
 
-	// 写入事件
-	r.saveEvent("info", name, fmt.Sprintf("阶段开始: %s (%d 段)", name, total))
+	// Publish stage_start event
+	r.publishEvent("stage_start", name, fmt.Sprintf("阶段开始: %s (%d 段)", name, total))
 }
 
 // SegmentDone 记录一个段落完成，仅追加到缓冲区，不直接触发 DB 写入。
@@ -140,8 +144,8 @@ func (r *DBReporter) StageDone() {
 	done := r.stageDone.Load()
 	r.mu.Unlock()
 
-	// 写入事件
-	r.saveEvent("info", stageName, fmt.Sprintf("阶段完成: %s (%d 段)", stageName, done))
+	// Publish stage_done event
+	r.publishEvent("stage_done", stageName, fmt.Sprintf("阶段完成: %s (%d 段)", stageName, done))
 }
 
 // Close 释放资源，停止定时器，做最后一次 flush。
@@ -153,8 +157,8 @@ func (r *DBReporter) Close() error {
 		// 最后一次 flush
 		err = r.flush()
 
-		// 写入最终事件
-		r.saveEvent("info", "", "资源翻译完成")
+		// Publish final event
+		r.publishEvent("stage_done", "", "资源翻译完成")
 	})
 	return err
 }
@@ -231,27 +235,71 @@ func (r *DBReporter) updateJobProgress(ctx context.Context, delta int) error {
 	return err
 }
 
-// saveEvent 写入一条 JobEvent 记录。client 为 nil 时跳过，失败只记录 warn 日志。
-func (r *DBReporter) saveEvent(level, stage, message string) {
-	if r.client == nil {
+// publishEvent publishes a lifecycle event to the Broker. No-op if broker is nil.
+func (r *DBReporter) publishEvent(eventType, stage, message string) {
+	if r.broker == nil {
 		return
 	}
+	r.broker.Publish(r.jobID, event.Event{
+		Type:      eventType,
+		JobID:     r.jobID,
+		Level:     "info",
+		Stage:     stage,
+		Message:   message,
+		CreatedAt: time.Now(),
+	})
+}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	builder := r.client.JobEvent.Create().
-		SetJobID(r.jobID).
-		SetLevel(level).
-		SetMessage(message)
-	if stage != "" {
-		builder = builder.SetStage(stage)
+// OnBatchEvent implements BatchObserver. Publishes batch events to the Broker.
+func (r *DBReporter) OnBatchEvent(batchEvent BatchEvent) {
+	if r.broker == nil {
+		return
 	}
-	if _, err := builder.Save(ctx); err != nil {
-		r.logger.Warn("DBReporter: failed to save job event",
-			"job_id", r.jobID,
-			"level", level,
-			"stage", stage,
-			"error", err)
+	sent, sentTrunc, sentLen := TruncateSSEContent(batchEvent.SentContent)
+	recv, recvTrunc, recvLen := TruncateSSEContent(batchEvent.ReceivedContent)
+	metadata := map[string]any{
+		"segment_ids":      batchEvent.SegmentIDs,
+		"segment_count":    batchEvent.SegmentCount,
+		"backend_name":     batchEvent.BackendName,
+		"status":           batchEvent.Status,
+		"duration_ms":      batchEvent.DurationMs,
+		"input_tokens":     batchEvent.InputTokens,
+		"output_tokens":    batchEvent.OutputTokens,
+		"sent_content":     sent,
+		"received_content": recv,
+		"tried_backends":   batchEvent.TriedBackends,
+		"shrink_attempted": batchEvent.ShrinkAttempted,
+		"sent_length":      sentLen,
+		"received_length":  recvLen,
 	}
+	if sentTrunc {
+		metadata["sent_truncated"] = true
+	}
+	if recvTrunc {
+		metadata["received_truncated"] = true
+	}
+	if len(batchEvent.UsedGlossary) > 0 {
+		metadata["used_glossary"] = batchEvent.UsedGlossary
+	}
+	if len(batchEvent.AddedGlossary) > 0 {
+		metadata["added_glossary"] = batchEvent.AddedGlossary
+	}
+	if batchEvent.ErrorType != "" {
+		metadata["error_type"] = batchEvent.ErrorType
+	}
+	if batchEvent.ErrorMessage != "" {
+		metadata["error_message"] = batchEvent.ErrorMessage
+	}
+	if batchEvent.HTTPStatus > 0 {
+		metadata["http_status"] = batchEvent.HTTPStatus
+	}
+	r.broker.Publish(r.jobID, event.Event{
+		Type:      "batch",
+		JobID:     r.jobID,
+		Level:     BatchLevelFromStatus(batchEvent.Status),
+		Stage:     batchEvent.Stage,
+		Message:   fmt.Sprintf("batch (%d segs): %s", batchEvent.SegmentCount, batchEvent.Status),
+		Metadata:  metadata,
+		CreatedAt: time.Now(),
+	})
 }

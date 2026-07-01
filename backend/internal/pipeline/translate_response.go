@@ -143,8 +143,12 @@ func translationsSchema(wantIDs []string, includeGlossary bool, includeRuby bool
 					"properties": map[string]any{
 						"base": map[string]any{"type": "string"},
 						"text": map[string]any{"type": "string"},
+						"kind": map[string]any{
+							"type": "string",
+							"enum": []string{"phonetic", "semantic", "creative"},
+						},
 					},
-					"required":             []string{"base", "text"},
+					"required":             []string{"base", "text", "kind"},
 					"additionalProperties": false,
 				},
 			}

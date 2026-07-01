@@ -4,7 +4,6 @@ import (
 	"context"
 	"io"
 	"log/slog"
-	"math"
 	"reflect"
 	"strings"
 	"sync/atomic"
@@ -204,8 +203,24 @@ func TestTranslationsSchema_WithRuby(t *testing.T) {
 		}
 		item := arr["items"].(map[string]any)
 		itemReq, _ := item["required"].([]string)
-		if !reflect.DeepEqual(itemReq, []string{"base", "text"}) {
+		if !reflect.DeepEqual(itemReq, []string{"base", "text", "kind"}) {
 			t.Errorf("item required mismatch: %#v", itemReq)
+		}
+		// 验证 kind 属性存在且值正确
+		itemProps := item["properties"].(map[string]any)
+		kindProp, ok := itemProps["kind"].(map[string]any)
+		if !ok {
+			t.Fatalf("kind property missing from ruby_output item: %#v", itemProps)
+		}
+		if kindProp["type"] != "string" {
+			t.Errorf("kind type should be string, got %v", kindProp["type"])
+		}
+		kindEnum, ok := kindProp["enum"].([]string)
+		if !ok {
+			t.Fatalf("kind enum should be []string, got %T", kindProp["enum"])
+		}
+		if !reflect.DeepEqual(kindEnum, []string{"phonetic", "semantic", "creative"}) {
+			t.Errorf("kind enum mismatch: %#v", kindEnum)
 		}
 	}
 }
@@ -230,54 +245,68 @@ func TestJSONObjectSlice_FindsNested(t *testing.T) {
 	}
 }
 
-func TestShrinkNext(t *testing.T) {
+func TestCountWords(t *testing.T) {
 	cases := []struct {
-		name   string
-		cur    int
-		shrink float64
-		want   int
+		name string
+		text string
+		want int
 	}{
-		// 禁用：shrink 非法时一律返回 0
-		{"shrink_zero", 40, 0, 0},
-		{"shrink_negative", 40, -0.5, 0},
-		{"shrink_one", 40, 1, 0},
-		{"shrink_gt_one", 40, 1.5, 0},
-		{"shrink_nan", 40, math.NaN(), 0},
-		{"shrink_inf", 40, math.Inf(1), 0},
-
-		// 正常缩小：floor(cur*shrink)
-		{"half_40", 40, 0.5, 20},
-		{"half_31", 31, 0.5, 15},
-		{"third_30", 30, 1.0 / 3.0, 10},
-		{"quarter_40", 40, 0.25, 10},
-
-		// 收敛到 1 的边界：next<1 视作 0 走 single
-		{"cur_2_half", 2, 0.5, 0},
-		{"cur_3_half", 3, 0.5, 0}, // floor(1.5)=1 → 视为 0
-		{"cur_4_half", 4, 0.5, 2},
-
-		// 接近 1 的 shrink：防不收敛，强制 cur-1
-		{"near_one_5", 5, 0.99, 4},
-		{"near_one_10", 10, 0.95, 9},
+		{"empty", "", 0},
+		{"cjk_two_chars", "你好", 2},
+		{"latin_one_word", "hello", 1},
+		{"latin_two_words", "hello world", 2},
+		{"mixed_cjk_latin", "你好world", 3},
+		{"mixed_full", "Hello, 你好世界!", 6},
+		{"numbers_and_cjk", "123 你好", 3},
+		{"whitespace_only", "   ", 0},
+		{"cjk_hiragana", "あいう", 3},
+		{"cjk_katakana", "アイウ", 3},
+		{"cjk_hangul", "한글", 2},
+		{"punctuation_only", ".,;!", 1},
+		{"mixed_spaces", " a  b  c ", 3},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := shrinkNext(tc.cur, tc.shrink)
+			got := CountWords(tc.text)
 			if got != tc.want {
-				t.Errorf("shrinkNext(%d, %v) = %d, want %d", tc.cur, tc.shrink, got, tc.want)
+				t.Errorf("CountWords(%q) = %d, want %d", tc.text, got, tc.want)
 			}
 		})
 	}
 }
 
+func TestCalcMaxBootstrapTerms_UsesCountWords(t *testing.T) {
+	s := &Translate{MaxTermsPer1000Chars: 3.0}
+	// CJK: 4 字 → 4 words → ceil(4/1000*3) = 1
+	got := s.calcMaxBootstrapTerms([]string{"你好世界"})
+	if got != 1 {
+		t.Errorf("CJK 4 chars: got %d want 1", got)
+	}
+	// Latin: "hello world" = 2 words → ceil(2/1000*3) = 1
+	got = s.calcMaxBootstrapTerms([]string{"hello world"})
+	if got != 1 {
+		t.Errorf("Latin 2 words: got %d want 1", got)
+	}
+	// Large: 500 CJK chars → 500 words → ceil(500/1000*3) = 2
+	big := ""
+	for i := 0; i < 500; i++ {
+		big += "字"
+	}
+	got = s.calcMaxBootstrapTerms([]string{big})
+	if got != 2 {
+		t.Errorf("500 CJK chars: got %d want 2", got)
+	}
+}
+
 func TestBuildContinuousPendingBatches(t *testing.T) {
-	got := BuildContinuousPendingBatches([]int{0, 1, 2, 5, 6, 10}, 4)
+	doc := testDoc(13)
+	got := BuildContinuousPendingBatches(doc, []int{0, 1, 2, 5, 6, 10}, segConstraint(4))
 	want := [][]int{{0, 1, 2}, {5, 6}, {10}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("batches=%v want %v", got, want)
 	}
 
-	got = BuildContinuousPendingBatches([]int{0, 1, 2, 3, 8, 9, 12}, 2)
+	got = BuildContinuousPendingBatches(doc, []int{0, 1, 2, 3, 8, 9, 12}, segConstraint(2))
 	want = [][]int{{0, 1}, {2, 3}, {8, 9}, {12}}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("batches=%v want %v", got, want)
@@ -500,7 +529,7 @@ func defaultRepairOpts() repair.Options {
 func defaultTestRound(fb backend.Backend, batchSize, concurrency int) []Round {
 	return []Round{{
 		Name:        "default",
-		Backends:    []backend.Backend{fb},
+		Backend:     fb,
 		BatchSize:   batchSize,
 		Concurrency: concurrency,
 	}}
@@ -517,8 +546,8 @@ func TestProcessBatch_PartialRecovery_BelowThreshold(t *testing.T) {
 		responses: []string{
 			// 第 1 次（batch）：缺 "4"
 			`{"translations":{"1":"a","2":"b","3":"c"}}`,
-			// 第 2 次（translateSingleInRound for seg 3）：用 SingleID "0"
-			`{"translations":{"0":"d"}}`,
+			// 第 2 次（processBatchInRound for seg 3）：单段用 ID "1"
+			`{"translations":{"1":"d"}}`,
 		},
 	}
 	s := &Translate{
@@ -539,15 +568,14 @@ func TestProcessBatch_PartialRecovery_BelowThreshold(t *testing.T) {
 	if got := int(fb.idx.Load()); got != 2 {
 		t.Errorf("backend calls: %d want 2 (1 batch + 1 single)", got)
 	}
-	// 4 段都应该恰好被 SegmentDone 一次：成功 3 段在 batch path、缺失 1 段在 translateSingleInRound 内。
+	// 4 段都应该恰好被 SegmentDone 一次
 	if got := atomic.LoadInt32(&rep.segmentDones); got != 4 {
 		t.Errorf("SegmentDone calls=%d want 4 (no double-count, no missing)", got)
 	}
 }
 
 // TestProcessBatch_PartialRecovery_AboveThresholdShrinks 缺失率超阈值时，
-// 使用最佳部分结果（不丢弃已翻译段），缺失段通过 translateSingleInRound 补救。
-// FallbackShrink=0 时直接坍缩到单段。
+// 使用最佳部分结果（不丢弃已翻译段），缺失段通过 round 级 missing 重试补救。
 func TestProcessBatch_PartialRecovery_AboveThresholdShrinks(t *testing.T) {
 	doc := newTestDoc(4)
 	rep := &countingReporter{}
@@ -556,16 +584,13 @@ func TestProcessBatch_PartialRecovery_AboveThresholdShrinks(t *testing.T) {
 		name: "fake",
 		responses: []string{
 			// 第 1 次 batch：仅返回 1 个 → 缺失率 0.75 > 0.5 阈值
-			// 使用最佳部分结果，缺失 3 段走 translateSingleInRound
 			`{"translations":{"1":"a"}}`,
-			// 后续 3 次 single 补救缺失段
-			`{"translations":{"0":"x1"}}`,
-			`{"translations":{"0":"x2"}}`,
-			`{"translations":{"0":"x3"}}`,
+			// round 级 missing 重试：缺失 3 段作为一批重试
+			`{"translations":{"1":"x1","2":"x2","3":"x3"}}`,
 		},
 	}
 	s := &Translate{
-		Rounds:   []Round{{Name: "default", Backends: []backend.Backend{fb}, BatchSize: 4, Concurrency: 1, FallbackShrink: 0}},
+		Rounds:   []Round{{Name: "default", Backend: fb, BatchSize: 4, Concurrency: 1, FallbackShrink: 0}},
 		Renderer: newTestRenderer(t),
 		Logger:   quietLogger(),
 		Reporter: rep,
@@ -574,9 +599,9 @@ func TestProcessBatch_PartialRecovery_AboveThresholdShrinks(t *testing.T) {
 	if err := s.Run(context.Background(), doc); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	// 预期：1 次 batch + 3 次 single 补救 = 4 次后端调用（最佳部分结果不丢弃）
-	if got := int(fb.idx.Load()); got != 4 {
-		t.Errorf("backend calls: %d want 4 (1 batch + 3 single recovery)", got)
+	// 预期：1 次 batch + 1 次 missing 重试 = 2 次后端调用
+	if got := int(fb.idx.Load()); got != 2 {
+		t.Errorf("backend calls: %d want 2 (1 batch + 1 missing retry batch)", got)
 	}
 	for i, want := range []string{"a", "x1", "x2", "x3"} {
 		if got := doc.Segments[i].Target; got != want {
@@ -600,7 +625,7 @@ func TestProcessBatch_PlaceholderNormalizeAvoidsRetry(t *testing.T) {
 		name: "fake",
 		responses: []string{
 			// LLM 返回小写占位符，应被 normalize 救回
-			`{"translations":{"0":"你好 __lf_000001__"}}`,
+			`{"translations":{"1":"你好 __lf_000001__"}}`,
 		},
 	}
 	s := &Translate{
@@ -654,6 +679,7 @@ func TestProcessBatch_PromptUpgradeRecovers(t *testing.T) {
 }
 
 // TestProcessBatch_PromptUpgradeDisabledFallsBack 升级重试关闭时，fatal JSON 直接进 shrink。
+// 缩批后被丢弃的段落进入 unresolved，后续轮次可补救。
 func TestProcessBatch_PromptUpgradeDisabledFallsBack(t *testing.T) {
 	doc := newTestDoc(2)
 	rep := &countingReporter{}
@@ -662,14 +688,17 @@ func TestProcessBatch_PromptUpgradeDisabledFallsBack(t *testing.T) {
 		name: "fake",
 		responses: []string{
 			"not json",
-			`{"translations":{"0":"x0"}}`,
-			`{"translations":{"0":"x1"}}`,
+			`{"translations":{"1":"x0"}}`,
+			`{"translations":{"1":"x1"}}`,
 		},
 	}
 	opts := defaultRepairOpts()
 	opts.PromptUpgrade = false
 	s := &Translate{
-		Rounds:   []Round{{Name: "default", Backends: []backend.Backend{fb}, BatchSize: 2, Concurrency: 1, FallbackShrink: 0}},
+		Rounds: []Round{
+			{Name: "r1", Backend: fb, BatchSize: 2, Concurrency: 1, FallbackShrink: 0.5, Retry: backend.RetryPolicy{MaxAttempts: 1}},
+			{Name: "r2", Backend: fb, BatchSize: 1, Concurrency: 1},
+		},
 		Renderer: newTestRenderer(t),
 		Logger:   quietLogger(),
 		Reporter: rep,
@@ -678,9 +707,14 @@ func TestProcessBatch_PromptUpgradeDisabledFallsBack(t *testing.T) {
 	if err := s.Run(context.Background(), doc); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	// 预期：1 次 batch + 2 次 single fallback = 3 次调用
+	// 预期：Round 1: 1 batch (parse error, shrink to 1) + 1 retry = 2 调用
+	//       Round 2: 1 single = 1 调用
+	// 总计 3 次调用
 	if got := int(fb.idx.Load()); got != 3 {
-		t.Errorf("backend calls: %d want 3 (1 batch fatal + 2 single fallback)", got)
+		t.Errorf("backend calls: %d want 3", got)
+	}
+	if doc.Segments[0].Target != "x0" || doc.Segments[1].Target != "x1" {
+		t.Errorf("targets: %q, %q", doc.Segments[0].Target, doc.Segments[1].Target)
 	}
 }
 
@@ -694,13 +728,13 @@ func TestTranslatePlan_UsesLongestContinuousRunsAndNextRoundFallback(t *testing.
 		responses: []string{
 			`{"translations":{"1":"a0","2":"a1","3":"a2"}}`,
 			`{"translations":{"1":"b4","2":"b5"}}`,
-			`{"translations":{"0":"c6"}}`,
+			`{"translations":{"1":"c6"}}`,
 		},
 	}
 	s := &Translate{
 		Rounds: []Round{
-			{Name: "bulk", Backends: []backend.Backend{fb}, BatchSize: 3, Concurrency: 1},
-			{Name: "single", Backends: []backend.Backend{fb}, BatchSize: 1, Concurrency: 1},
+			{Name: "bulk", Backend: fb, BatchSize: 3, Concurrency: 1},
+			{Name: "single", Backend: fb, BatchSize: 1, Concurrency: 1},
 		},
 		Renderer: newTestRenderer(t),
 		Logger:   quietLogger(),
@@ -735,12 +769,16 @@ func TestTranslatePlan_UsesLongestContinuousRunsAndNextRoundFallback(t *testing.
 func TestTranslatePlan_ExhaustedRoundsKeepSource(t *testing.T) {
 	doc := newTestDoc(2)
 	fb := &fakeBackend{
-		name:      "fake",
-		responses: []string{`{"translations":{"1":"ok"}}`},
+		name: "fake",
+		responses: []string{
+			`{"translations":{"1":"ok"}}`,
+			// Missing segment retry will consume this (empty = parse error)
+			"",
+		},
 	}
 	s := &Translate{
 		Rounds: []Round{
-			{Name: "only", Backends: []backend.Backend{fb}, BatchSize: 2, Concurrency: 1},
+			{Name: "only", Backend: fb, BatchSize: 2, Concurrency: 1},
 		},
 		Renderer: newTestRenderer(t),
 		Logger:   quietLogger(),

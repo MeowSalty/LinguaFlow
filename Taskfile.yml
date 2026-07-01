@@ -96,11 +96,35 @@ tasks:
     cmds:
       - go run ./cmd/linguaflow serve
 
+  backend:local:dev:
+    desc: 以本地模式启动后端开发服务器
+    dir: '{{.BACKEND_DIR}}'
+    cmds:
+      - go run ./cmd/linguaflow local
+
   backend:build:
     desc: 构建后端 CLI/服务程序
     dir: '{{.BACKEND_DIR}}'
     cmds:
       - go build -o {{.BACKEND_BINARY}} ./cmd/linguaflow
+
+  backend:local:build:
+    desc: 构建含嵌入前端的本地模式二进制
+    deps:
+      - backend:web:embed
+    dir: '{{.BACKEND_DIR}}'
+    cmds:
+      - go build -o {{.BACKEND_BINARY}} ./cmd/linguaflow
+
+  backend:web:embed:
+    desc: 将前端构建产物嵌入后端
+    deps:
+      - frontend:build
+    cmds:
+      - cmd: rm -rf {{.BACKEND_DIR}}/internal/web/dist && cp -r {{.FRONTEND_DIR}}/dist {{.BACKEND_DIR}}/internal/web/dist
+        platforms: [linux, darwin]
+      - cmd: powershell -Command "if (Test-Path '{{.BACKEND_DIR}}/internal/web/dist') { Remove-Item -Recurse -Force '{{.BACKEND_DIR}}/internal/web/dist' }; Copy-Item -Recurse '{{.FRONTEND_DIR}}/dist' '{{.BACKEND_DIR}}/internal/web/dist'"
+        platforms: [windows]
 
   backend:test:
     desc: 执行后端测试

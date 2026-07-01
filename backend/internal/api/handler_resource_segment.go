@@ -119,6 +119,7 @@ func (s *Server) handleListResourceSegmentGroups(w http.ResponseWriter, r *http.
 			GroupTitle:      g.GroupTitle,
 			SegmentCount:    g.SegmentCount,
 			TranslatedCount: g.TranslatedCount,
+			ApprovedCount:   g.ApprovedCount,
 		})
 	}
 	writeJSON(w, http.StatusOK, ResourceSegmentGroupListResponse{Items: items})

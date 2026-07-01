@@ -104,6 +104,10 @@ TranslationJob:
       type: integer
     total_segments:
       type: integer
+      description: 总段落数（创建时为选中的 segment 数，ReconcileJob 修正为实际翻译量）
+    stage_total:
+      type: integer
+      description: 实际需要翻译的段落数（ReconcileJob 从各资源的 stage_total 聚合，执行中动态更新）
     completed_segments:
       type: integer
     error_message:
@@ -125,12 +129,6 @@ TranslationJob:
     current_stage:
       type: string
       description: 当前活跃的执行阶段名称（聚合自 JobResource）
-    progress_percentage:
-      type: number
-      format: float
-      minimum: 0
-      maximum: 100
-      description: 整体进度百分比（0-100），由后端计算
     queue_position:
       type: integer
       nullable: true
@@ -150,24 +148,3 @@ TranslationJobListResponse:
         $ref: '#/TranslationJob'
     next_cursor:
       type: string
-
-JobEvent:
-  type: object
-  required: [id, job_id, level, message, created_at]
-  properties:
-    id:
-      type: integer
-    job_id:
-      type: integer
-    level:
-      type: string
-      enum: [info, warn, error]
-    stage:
-      type: string
-    message:
-      type: string
-    metadata:
-      type: object
-    created_at:
-      type: string
-      format: date-time

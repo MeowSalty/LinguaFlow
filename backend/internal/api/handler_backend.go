@@ -10,35 +10,39 @@ import (
 )
 
 type createBackendRequest struct {
-	Name    string         `json:"name"`
-	Type    string         `json:"type"`
-	Options map[string]any `json:"options"`
+	Name               string         `json:"name"`
+	Type               string         `json:"type"`
+	Options            map[string]any `json:"options"`
+	RateLimitPerMinute *int           `json:"rate_limit_per_minute"`
 }
 
 type updateBackendRequest struct {
-	Name    string         `json:"name"`
-	Type    string         `json:"type"`
-	Options map[string]any `json:"options"`
+	Name               string         `json:"name"`
+	Type               string         `json:"type"`
+	Options            map[string]any `json:"options"`
+	RateLimitPerMinute *int           `json:"rate_limit_per_minute"`
 }
 
 type backendResponse struct {
-	ID          int            `json:"id"`
-	Scope       string         `json:"scope"`
-	Name        string         `json:"name"`
-	Type        string         `json:"type"`
-	Options     map[string]any `json:"options,omitempty"`
-	OwnerUserID *int           `json:"owner_user_id,omitempty"`
-	OwnerOrgID  *int           `json:"owner_org_id,omitempty"`
+	ID                 int            `json:"id"`
+	Scope              string         `json:"scope"`
+	Name               string         `json:"name"`
+	Type               string         `json:"type"`
+	Options            map[string]any `json:"options,omitempty"`
+	RateLimitPerMinute int            `json:"rate_limit_per_minute"`
+	OwnerUserID        *int           `json:"owner_user_id,omitempty"`
+	OwnerOrgID         *int           `json:"owner_org_id,omitempty"`
 }
 
 func toBackendResponse(record *service.BackendRecord, showOptions bool) backendResponse {
 	resp := backendResponse{
-		ID:          record.ID,
-		Scope:       record.Scope,
-		Name:        record.Name,
-		Type:        record.Type,
-		OwnerUserID: record.OwnerUserID,
-		OwnerOrgID:  record.OwnerOrgID,
+		ID:                 record.ID,
+		Scope:              record.Scope,
+		Name:               record.Name,
+		Type:               record.Type,
+		RateLimitPerMinute: record.RateLimitPerMinute,
+		OwnerUserID:        record.OwnerUserID,
+		OwnerOrgID:         record.OwnerOrgID,
 	}
 	if showOptions && record.Options != nil {
 		resp.Options = record.Options
@@ -65,7 +69,7 @@ func (s *Server) handleCreateUserBackend(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	userID := authUser.User.ID
-	record, err := s.backendSvc.Create(r.Context(), service.CreateBackendInput{
+	input := service.CreateBackendInput{
 		Scope:       service.ScopeUser,
 		OwnerUserID: &userID,
 		BackendInput: service.BackendInput{
@@ -73,7 +77,11 @@ func (s *Server) handleCreateUserBackend(w http.ResponseWriter, r *http.Request)
 			Type:    req.Type,
 			Options: req.Options,
 		},
-	})
+	}
+	if req.RateLimitPerMinute != nil {
+		input.RateLimitPerMinute = *req.RateLimitPerMinute
+	}
+	record, err := s.backendSvc.Create(r.Context(), input)
 	if err != nil {
 		writeBackendServiceError(w, err)
 		return
@@ -109,11 +117,15 @@ func (s *Server) handleUpdateUserBackend(w http.ResponseWriter, r *http.Request)
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	record, err := s.backendSvc.Update(r.Context(), authUser.User.ID, backendID, service.BackendInput{
+	input := service.BackendInput{
 		Name:    req.Name,
 		Type:    req.Type,
 		Options: req.Options,
-	})
+	}
+	if req.RateLimitPerMinute != nil {
+		input.RateLimitPerMinute = *req.RateLimitPerMinute
+	}
+	record, err := s.backendSvc.Update(r.Context(), authUser.User.ID, backendID, input)
 	if err != nil {
 		writeBackendServiceError(w, err)
 		return
@@ -157,7 +169,7 @@ func (s *Server) handleCreateOrgBackend(w http.ResponseWriter, r *http.Request) 
 	if !decodeJSON(w, r, &req) {
 		return
 	}
-	record, err := s.backendSvc.Create(r.Context(), service.CreateBackendInput{
+	input := service.CreateBackendInput{
 		Scope:      service.ScopeOrg,
 		OwnerOrgID: &orgID,
 		BackendInput: service.BackendInput{
@@ -165,7 +177,11 @@ func (s *Server) handleCreateOrgBackend(w http.ResponseWriter, r *http.Request) 
 			Type:    req.Type,
 			Options: req.Options,
 		},
-	})
+	}
+	if req.RateLimitPerMinute != nil {
+		input.RateLimitPerMinute = *req.RateLimitPerMinute
+	}
+	record, err := s.backendSvc.Create(r.Context(), input)
 	if err != nil {
 		writeBackendServiceError(w, err)
 		return
@@ -213,11 +229,15 @@ func (s *Server) handleUpdateOrgBackend(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	// Update 内部通过 requireOwnership 验证 org 管理员权限
-	record, err := s.backendSvc.Update(r.Context(), authUser.User.ID, backendID, service.BackendInput{
+	input := service.BackendInput{
 		Name:    req.Name,
 		Type:    req.Type,
 		Options: req.Options,
-	})
+	}
+	if req.RateLimitPerMinute != nil {
+		input.RateLimitPerMinute = *req.RateLimitPerMinute
+	}
+	record, err := s.backendSvc.Update(r.Context(), authUser.User.ID, backendID, input)
 	if err != nil {
 		writeBackendServiceError(w, err)
 		return

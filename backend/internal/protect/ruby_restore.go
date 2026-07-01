@@ -20,10 +20,21 @@ func NewRubyRestorer(outputFormat string) *RubyRestorer {
 	return &RubyRestorer{OutputFormat: outputFormat}
 }
 
+// RestoreResult 记录注音还原的匹配统计。
+type RestoreResult struct {
+	Matched int // 成功匹配并还原的注音条目数
+	Total   int // 需要还原的注音条目总数（不含空 base 的条目）
+}
+
+// IsFull 返回是否全部匹配成功。
+func (r RestoreResult) IsFull() bool {
+	return r.Total > 0 && r.Matched == r.Total
+}
+
 // Restore 根据输出模式还原注音标签。
 // originalAnnotations 为 Protect 阶段提取的原始注音，用于 ruby_output 模式的双源匹配回退；
 // inline_markers 模式忽略此参数。可传 nil。
-func (r *RubyRestorer) Restore(seg *model.Segment, rubyOutput []RubyOutputEntry, originalAnnotations []RubyAnnotation) error {
+func (r *RubyRestorer) Restore(seg *model.Segment, rubyOutput []RubyOutputEntry, originalAnnotations []RubyAnnotation) (RestoreResult, error) {
 	switch r.OutputFormat {
 	case "inline_markers":
 		return r.restoreInlineMarkers(seg)
@@ -38,7 +49,11 @@ func (r *RubyRestorer) Restore(seg *model.Segment, rubyOutput []RubyOutputEntry,
 type RubyOutputEntry struct {
 	Base string `json:"base"`
 	Text string `json:"text"`
+	Kind string `json:"kind"` // "phonetic" | "semantic" | "creative"
 }
+
+// ValidRubyKinds 是所有合法的注音 kind 值。
+var ValidRubyKinds = []string{"phonetic", "semantic", "creative"}
 
 // insertInfo 记录一次注音插入的位置和内容。
 type insertInfo struct {
@@ -55,9 +70,9 @@ type insertInfo struct {
 //  1. 按 rubyOutput 的顺序，为每个条目在译文中查找第一个未被分配的基底文本出现位置
 //  2. 若 LLM 返回的 base 未匹配，回退到原始 annotations 中对应位置的 base 再试一次
 //  3. 从右到左应用替换，避免索引偏移
-func (r *RubyRestorer) restoreRubyOutput(seg *model.Segment, rubyOutput []RubyOutputEntry, originalAnnotations []RubyAnnotation) error {
+func (r *RubyRestorer) restoreRubyOutput(seg *model.Segment, rubyOutput []RubyOutputEntry, originalAnnotations []RubyAnnotation) (RestoreResult, error) {
 	if len(rubyOutput) == 0 {
-		return nil
+		return RestoreResult{}, nil
 	}
 
 	target := seg.Target
@@ -66,11 +81,13 @@ func (r *RubyRestorer) restoreRubyOutput(seg *model.Segment, rubyOutput []RubyOu
 	assigned := make(map[int]bool)
 
 	var inserts []insertInfo
+	total := 0
 
 	for i, entry := range rubyOutput {
 		if entry.Base == "" {
 			continue
 		}
+		total++
 		// 第一优先：用 LLM 返回的 base（译文中的对应文本）匹配
 		found := r.findAndInsert(target, entry.Base, entry.Text, assigned, &inserts)
 
@@ -84,7 +101,7 @@ func (r *RubyRestorer) restoreRubyOutput(seg *model.Segment, rubyOutput []RubyOu
 	}
 
 	if len(inserts) == 0 {
-		return nil
+		return RestoreResult{Matched: 0, Total: total}, nil
 	}
 
 	// 按位置从右到左排序，避免替换时索引偏移
@@ -99,7 +116,7 @@ func (r *RubyRestorer) restoreRubyOutput(seg *model.Segment, rubyOutput []RubyOu
 	}
 
 	seg.Target = target
-	return nil
+	return RestoreResult{Matched: len(inserts), Total: total}, nil
 }
 
 // findAndInsert 在 target 中查找 base 的第一个未分配出现位置，
@@ -133,7 +150,12 @@ var inlineMarkerRe = regexp.MustCompile(`⟦ruby:([^/⟧]+)/([^⟧]+)⟧`)
 // restoreInlineMarkers 通过正则替换将内联标记还原为 <ruby> 标签。
 //
 // ⟦ruby:base/text⟧ → <ruby>base<rt>text</rt></ruby>
-func (r *RubyRestorer) restoreInlineMarkers(seg *model.Segment) error {
+func (r *RubyRestorer) restoreInlineMarkers(seg *model.Segment) (RestoreResult, error) {
+	matches := inlineMarkerRe.FindAllString(seg.Target, -1)
+	total := len(matches)
+	if total == 0 {
+		return RestoreResult{}, nil
+	}
 	seg.Target = inlineMarkerRe.ReplaceAllStringFunc(seg.Target, func(match string) string {
 		m := inlineMarkerRe.FindStringSubmatch(match)
 		if len(m) < 3 {
@@ -141,5 +163,5 @@ func (r *RubyRestorer) restoreInlineMarkers(seg *model.Segment) error {
 		}
 		return fmt.Sprintf("<ruby>%s<rt>%s</rt></ruby>", m[1], m[2])
 	})
-	return nil
+	return RestoreResult{Matched: total, Total: total}, nil
 }

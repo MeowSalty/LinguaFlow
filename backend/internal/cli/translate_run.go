@@ -122,12 +122,12 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 			Protect:     firstProfile.Protect,
 			Postprocess: firstProfile.Postprocess,
 			Translate: config.TranslateConfig{
-				BatchSize:       firstRound.BatchSize,
-				Concurrency:     firstRound.Concurrency,
-				FallbackShrink:  firstRound.FallbackShrink,
-				RateLimitPerSec: firstRound.RateLimitPerSec,
-				Retry:           firstRound.Retry,
-				Repair:          firstProfile.Repair,
+				BatchSize:        firstRound.BatchSize,
+				MaxWordsPerBatch: firstRound.MaxWordsPerBatch,
+				Concurrency:      firstRound.Concurrency,
+				FallbackShrink:   firstRound.FallbackShrink,
+				Retry:            firstRound.Retry,
+				Repair:           firstProfile.Repair,
 			},
 		},
 		Prompt: config.PromptConfig{
@@ -176,14 +176,22 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 			return nil, fmt.Errorf("backend %q not found in backends", r.Backend)
 		}
 		backends, err := engine.BuildBackends([]config.BackendConfig{{
-			Name:            r.Backend,
-			Type:            bCfg.Type,
-			Enabled:         bCfg.Enabled,
-			RateLimitPerSec: bCfg.RateLimitPerSec,
-			Options:         bCfg.Options,
+			Name:               r.Backend,
+			Type:               bCfg.Type,
+			Enabled:            bCfg.Enabled,
+			RateLimitPerMinute: bCfg.RateLimitPerMinute,
+			Options:            bCfg.Options,
 		}})
 		if err != nil {
 			return nil, fmt.Errorf("build backend %q: %w", r.Backend, err)
+		}
+
+		// CLI 场景：用 per-backend limiter 包装
+		if bCfg.RateLimitPerMinute > 0 {
+			limiter := backend.NewRateLimiterPerMinute(bCfg.RateLimitPerMinute)
+			for i, b := range backends {
+				backends[i] = backend.NewRateLimitedBackend(b, limiter)
+			}
 		}
 
 		// 解析提示词引用，构造轮次级 Renderer
@@ -205,12 +213,12 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 		}
 
 		rounds = append(rounds, engine.Round{
-			Name:            r.Name,
-			Backends:        backends,
-			BatchSize:       r.BatchSize,
-			Concurrency:     r.Concurrency,
-			FallbackShrink:  r.FallbackShrink,
-			RateLimitPerSec: r.RateLimitPerSec,
+			Name:             r.Name,
+			Backend:          backends[0],
+			BatchSize:        r.BatchSize,
+			MaxWordsPerBatch: r.MaxWordsPerBatch,
+			Concurrency:      r.Concurrency,
+			FallbackShrink:   r.FallbackShrink,
 			Retry: backend.RetryPolicy{
 				MaxAttempts: r.Retry.MaxAttempts,
 				Backoff:     time.Duration(r.Retry.BackoffMs) * time.Millisecond,
@@ -229,11 +237,11 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 			return nil, fmt.Errorf("ruby retry backend %q not found in backends", retryName)
 		}
 		b, bErr := engine.BuildBackends([]config.BackendConfig{{
-			Name:            retryName,
-			Type:            bCfg.Type,
-			Enabled:         bCfg.Enabled,
-			RateLimitPerSec: bCfg.RateLimitPerSec,
-			Options:         bCfg.Options,
+			Name:               retryName,
+			Type:               bCfg.Type,
+			Enabled:            bCfg.Enabled,
+			RateLimitPerMinute: bCfg.RateLimitPerMinute,
+			Options:            bCfg.Options,
 		}})
 		if bErr != nil {
 			return nil, fmt.Errorf("build ruby retry backend %q: %w", retryName, bErr)

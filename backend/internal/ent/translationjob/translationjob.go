@@ -34,6 +34,8 @@ const (
 	FieldFailedResources = "failed_resources"
 	// FieldTotalSegments holds the string denoting the total_segments field in the database.
 	FieldTotalSegments = "total_segments"
+	// FieldStageTotal holds the string denoting the stage_total field in the database.
+	FieldStageTotal = "stage_total"
 	// FieldCompletedSegments holds the string denoting the completed_segments field in the database.
 	FieldCompletedSegments = "completed_segments"
 	// FieldErrorMessage holds the string denoting the error_message field in the database.
@@ -46,8 +48,6 @@ const (
 	EdgeCreatedBy = "created_by"
 	// EdgeJobResources holds the string denoting the job_resources edge name in mutations.
 	EdgeJobResources = "job_resources"
-	// EdgeJobEvents holds the string denoting the job_events edge name in mutations.
-	EdgeJobEvents = "job_events"
 	// Table holds the table name of the translationjob in the database.
 	Table = "translation_jobs"
 	// ProjectTable is the table that holds the project relation/edge.
@@ -71,13 +71,6 @@ const (
 	JobResourcesInverseTable = "job_resources"
 	// JobResourcesColumn is the table column denoting the job_resources relation/edge.
 	JobResourcesColumn = "translation_job_job_resources"
-	// JobEventsTable is the table that holds the job_events relation/edge.
-	JobEventsTable = "job_events"
-	// JobEventsInverseTable is the table name for the JobEvent entity.
-	// It exists in this package in order to avoid circular dependency with the "jobevent" package.
-	JobEventsInverseTable = "job_events"
-	// JobEventsColumn is the table column denoting the job_events relation/edge.
-	JobEventsColumn = "translation_job_job_events"
 )
 
 // Columns holds all SQL columns for translationjob fields.
@@ -93,6 +86,7 @@ var Columns = []string{
 	FieldCompletedResources,
 	FieldFailedResources,
 	FieldTotalSegments,
+	FieldStageTotal,
 	FieldCompletedSegments,
 	FieldErrorMessage,
 	FieldStartedAt,
@@ -151,6 +145,10 @@ var (
 	DefaultTotalSegments int
 	// TotalSegmentsValidator is a validator for the "total_segments" field. It is called by the builders before save.
 	TotalSegmentsValidator func(int) error
+	// DefaultStageTotal holds the default value on creation for the "stage_total" field.
+	DefaultStageTotal int
+	// StageTotalValidator is a validator for the "stage_total" field. It is called by the builders before save.
+	StageTotalValidator func(int) error
 	// DefaultCompletedSegments holds the default value on creation for the "completed_segments" field.
 	DefaultCompletedSegments int
 	// CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.
@@ -210,6 +208,11 @@ func ByTotalSegments(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTotalSegments, opts...).ToFunc()
 }
 
+// ByStageTotal orders the results by the stage_total field.
+func ByStageTotal(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStageTotal, opts...).ToFunc()
+}
+
 // ByCompletedSegments orders the results by the completed_segments field.
 func ByCompletedSegments(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCompletedSegments, opts...).ToFunc()
@@ -252,20 +255,6 @@ func ByJobResources(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newJobResourcesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
-
-// ByJobEventsCount orders the results by job_events count.
-func ByJobEventsCount(opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newJobEventsStep(), opts...)
-	}
-}
-
-// ByJobEvents orders the results by job_events terms.
-func ByJobEvents(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newJobEventsStep(), append([]sql.OrderTerm{term}, terms...)...)
-	}
-}
 func newProjectStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -285,12 +274,5 @@ func newJobResourcesStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(JobResourcesInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, JobResourcesTable, JobResourcesColumn),
-	)
-}
-func newJobEventsStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(JobEventsInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, JobEventsTable, JobEventsColumn),
 	)
 }

@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"net/http"
 	"time"
 
@@ -14,8 +15,19 @@ func (s *Server) applyMiddleware(r *chi.Mux) {
 	r.Use(chimiddleware.RealIP)
 	r.Use(s.requestLoggingMiddleware)
 	r.Use(chimiddleware.Recoverer)
+
+	allowedOrigins := s.config.Server.CORS.AllowedOrigins
+	if s.isLocal() {
+		allowedOrigins = []string{
+			"http://127.0.0.1:" + fmt.Sprintf("%d", s.config.Server.Port),
+			"http://localhost:" + fmt.Sprintf("%d", s.config.Server.Port),
+			"http://127.0.0.1",
+			"http://localhost",
+		}
+	}
+
 	r.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   s.config.Server.CORS.AllowedOrigins,
+		AllowedOrigins:   allowedOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
 		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-Request-ID"},
 		ExposedHeaders:   []string{"X-Request-ID"},

@@ -43,8 +43,8 @@ func NewWithOptions(opts Options) (*Engine, error) {
 	}
 	// 校验每轮都有后端
 	for i, r := range opts.Rounds {
-		if len(r.Backends) == 0 {
-			return nil, fmt.Errorf("engine: round %d has no backends", i)
+		if r.Backend == nil {
+			return nil, fmt.Errorf("engine: round %d has no backend", i)
 		}
 	}
 	rend, err := prompt.NewRenderer(opts.Config.Prompt)
@@ -65,12 +65,9 @@ func NewWithOptions(opts Options) (*Engine, error) {
 	rounds := buildStagesRounds(opts.Rounds, opts.Config)
 	bootstrapBackends := opts.BootstrapBackends
 	if len(bootstrapBackends) == 0 {
-		bootstrapBackends = opts.Rounds[0].Backends
+		bootstrapBackends = []backend.Backend{opts.Rounds[0].Backend}
 	}
 	rubyRetryBackends := opts.RubyRetryBackends
-	if len(rubyRetryBackends) == 0 {
-		rubyRetryBackends = opts.Rounds[0].Backends
-	}
 	e := &Engine{
 		cfg:                 opts.Config,
 		logger:              opts.Logger,
@@ -101,14 +98,13 @@ func (e *Engine) Close() error {
 	seen := make(map[backend.Backend]struct{})
 	var firstErr error
 	for _, r := range e.rounds {
-		for _, b := range r.Backends {
-			if _, ok := seen[b]; ok {
-				continue
-			}
-			seen[b] = struct{}{}
-			if err := b.Close(); err != nil && firstErr == nil {
-				firstErr = err
-			}
+		b := r.Backend
+		if _, ok := seen[b]; ok {
+			continue
+		}
+		seen[b] = struct{}{}
+		if err := b.Close(); err != nil && firstErr == nil {
+			firstErr = err
 		}
 	}
 	for _, b := range e.bootstrapBackends {
@@ -181,21 +177,7 @@ func applySegmentSelection(doc *pipeline.Document, selected map[int]struct{}) {
 	}
 	for i := range doc.Segments {
 		if _, ok := selected[i]; !ok {
-			doc.Segments[i].Skip = true
-		}
-	}
-}
-
-func restoreUnselectedTargets(doc *pipeline.Document, selected map[int]struct{}, existing map[int]string) {
-	if doc == nil || len(selected) == 0 {
-		return
-	}
-	for i := range doc.Segments {
-		if _, ok := selected[i]; ok {
-			continue
-		}
-		if target, ok := existing[i]; ok && target != "" {
-			doc.Segments[i].Target = target
+			doc.Segments[i].Translate = false
 		}
 	}
 }

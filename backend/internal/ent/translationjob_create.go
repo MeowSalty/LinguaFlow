@@ -10,7 +10,6 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
@@ -148,6 +147,20 @@ func (_c *TranslationJobCreate) SetNillableTotalSegments(v *int) *TranslationJob
 	return _c
 }
 
+// SetStageTotal sets the "stage_total" field.
+func (_c *TranslationJobCreate) SetStageTotal(v int) *TranslationJobCreate {
+	_c.mutation.SetStageTotal(v)
+	return _c
+}
+
+// SetNillableStageTotal sets the "stage_total" field if the given value is not nil.
+func (_c *TranslationJobCreate) SetNillableStageTotal(v *int) *TranslationJobCreate {
+	if v != nil {
+		_c.SetStageTotal(*v)
+	}
+	return _c
+}
+
 // SetCompletedSegments sets the "completed_segments" field.
 func (_c *TranslationJobCreate) SetCompletedSegments(v int) *TranslationJobCreate {
 	_c.mutation.SetCompletedSegments(v)
@@ -235,21 +248,6 @@ func (_c *TranslationJobCreate) AddJobResources(v ...*JobResource) *TranslationJ
 	return _c.AddJobResourceIDs(ids...)
 }
 
-// AddJobEventIDs adds the "job_events" edge to the JobEvent entity by IDs.
-func (_c *TranslationJobCreate) AddJobEventIDs(ids ...int) *TranslationJobCreate {
-	_c.mutation.AddJobEventIDs(ids...)
-	return _c
-}
-
-// AddJobEvents adds the "job_events" edges to the JobEvent entity.
-func (_c *TranslationJobCreate) AddJobEvents(v ...*JobEvent) *TranslationJobCreate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _c.AddJobEventIDs(ids...)
-}
-
 // Mutation returns the TranslationJobMutation object of the builder.
 func (_c *TranslationJobCreate) Mutation() *TranslationJobMutation {
 	return _c.mutation
@@ -321,6 +319,10 @@ func (_c *TranslationJobCreate) defaults() {
 		v := translationjob.DefaultTotalSegments
 		_c.mutation.SetTotalSegments(v)
 	}
+	if _, ok := _c.mutation.StageTotal(); !ok {
+		v := translationjob.DefaultStageTotal
+		_c.mutation.SetStageTotal(v)
+	}
 	if _, ok := _c.mutation.CompletedSegments(); !ok {
 		v := translationjob.DefaultCompletedSegments
 		_c.mutation.SetCompletedSegments(v)
@@ -382,6 +384,14 @@ func (_c *TranslationJobCreate) check() error {
 	if v, ok := _c.mutation.TotalSegments(); ok {
 		if err := translationjob.TotalSegmentsValidator(v); err != nil {
 			return &ValidationError{Name: "total_segments", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.total_segments": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.StageTotal(); !ok {
+		return &ValidationError{Name: "stage_total", err: errors.New(`ent: missing required field "TranslationJob.stage_total"`)}
+	}
+	if v, ok := _c.mutation.StageTotal(); ok {
+		if err := translationjob.StageTotalValidator(v); err != nil {
+			return &ValidationError{Name: "stage_total", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.stage_total": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.CompletedSegments(); !ok {
@@ -461,6 +471,10 @@ func (_c *TranslationJobCreate) createSpec() (*TranslationJob, *sqlgraph.CreateS
 		_spec.SetField(translationjob.FieldTotalSegments, field.TypeInt, value)
 		_node.TotalSegments = value
 	}
+	if value, ok := _c.mutation.StageTotal(); ok {
+		_spec.SetField(translationjob.FieldStageTotal, field.TypeInt, value)
+		_node.StageTotal = value
+	}
 	if value, ok := _c.mutation.CompletedSegments(); ok {
 		_spec.SetField(translationjob.FieldCompletedSegments, field.TypeInt, value)
 		_node.CompletedSegments = value
@@ -516,22 +530,6 @@ func (_c *TranslationJobCreate) createSpec() (*TranslationJob, *sqlgraph.CreateS
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges = append(_spec.Edges, edge)
-	}
-	if nodes := _c.mutation.JobEventsIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   translationjob.JobEventsTable,
-			Columns: []string{translationjob.JobEventsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(jobevent.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

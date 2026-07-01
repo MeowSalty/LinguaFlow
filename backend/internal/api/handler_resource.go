@@ -20,42 +20,48 @@ import (
 const maxResourceUploadFiles = 50
 
 type resourceResponse struct {
-	ID            int    `json:"id"`
-	Path          string `json:"path"`
-	Name          string `json:"name"`
-	Directory     string `json:"directory"`
-	Format        string `json:"format"`
-	TotalSegments int    `json:"total_segments"`
-	CreatedAt     string `json:"created_at"`
-	UpdatedAt     string `json:"updated_at"`
+	ID                 int    `json:"id"`
+	Path               string `json:"path"`
+	Name               string `json:"name"`
+	Directory          string `json:"directory"`
+	Format             string `json:"format"`
+	TotalSegments      int    `json:"total_segments"`
+	TranslatedSegments int    `json:"translated_segments"`
+	ApprovedSegments   int    `json:"approved_segments"`
+	CreatedAt          string `json:"created_at"`
+	UpdatedAt          string `json:"updated_at"`
 }
 
-func toResourceResponse(r *ent.Resource) resourceResponse {
+func toResourceResponse(r *ent.Resource, translated, approved int) resourceResponse {
 	pathValue := resourceResponsePath(r)
 	return resourceResponse{
-		ID:            r.ID,
-		Path:          pathValue,
-		Name:          resourceResponseName(pathValue),
-		Directory:     resourceResponseDirectory(pathValue),
-		Format:        r.Format,
-		TotalSegments: r.TotalSegments,
-		CreatedAt:     r.CreatedAt.Format(timeRFC3339),
-		UpdatedAt:     r.UpdatedAt.Format(timeRFC3339),
+		ID:                 r.ID,
+		Path:               pathValue,
+		Name:               resourceResponseName(pathValue),
+		Directory:          resourceResponseDirectory(pathValue),
+		Format:             r.Format,
+		TotalSegments:      r.TotalSegments,
+		TranslatedSegments: translated,
+		ApprovedSegments:   approved,
+		CreatedAt:          r.CreatedAt.Format(timeRFC3339),
+		UpdatedAt:          r.UpdatedAt.Format(timeRFC3339),
 	}
 }
 
 // toGeneratedResource 转换 ent.Resource 为 OpenAPI 生成的 Resource 类型。
-func toGeneratedResource(r *ent.Resource) Resource {
+func toGeneratedResource(r *ent.Resource, translated, approved int) Resource {
 	pathValue := resourceResponsePath(r)
 	return Resource{
-		Id:            r.ID,
-		Path:          pathValue,
-		Name:          resourceResponseName(pathValue),
-		Directory:     resourceResponseDirectory(pathValue),
-		Format:        r.Format,
-		TotalSegments: r.TotalSegments,
-		CreatedAt:     r.CreatedAt,
-		UpdatedAt:     r.UpdatedAt,
+		Id:                 r.ID,
+		Path:               pathValue,
+		Name:               resourceResponseName(pathValue),
+		Directory:          resourceResponseDirectory(pathValue),
+		Format:             r.Format,
+		TotalSegments:      r.TotalSegments,
+		TranslatedSegments: translated,
+		ApprovedSegments:   approved,
+		CreatedAt:          r.CreatedAt,
+		UpdatedAt:          r.UpdatedAt,
 	}
 }
 
@@ -79,10 +85,10 @@ func resourceResponseDirectory(resourcePath string) string {
 	return dir
 }
 
-func toResourceListResponse(resources []*ent.Resource) map[string]any {
+func toResourceListResponse(resources []service.ResourceWithProgress) map[string]any {
 	items := make([]resourceResponse, 0, len(resources))
 	for _, r := range resources {
-		items = append(items, toResourceResponse(r))
+		items = append(items, toResourceResponse(r.Resource, r.TranslatedSegments, r.ApprovedSegments))
 	}
 	return map[string]any{"items": items}
 }
@@ -155,6 +161,21 @@ func (s *Server) handleUploadProjectResources(w http.ResponseWriter, r *http.Req
 		return
 	}
 
+	resourceIDs := make([]int, 0)
+	for _, result := range results {
+		switch result.Action {
+		case "created":
+			if result.Resource != nil {
+				resourceIDs = append(resourceIDs, result.Resource.ID)
+			}
+		case "conflict":
+			if result.ExistingResource != nil {
+				resourceIDs = append(resourceIDs, result.ExistingResource.ID)
+			}
+		}
+	}
+	progressMap, _ := s.resourceSvc.ListResourcesProgress(r.Context(), resourceIDs)
+
 	respItems := make([]ResourceUploadFileResult, 0, len(results))
 	for _, result := range results {
 		item := ResourceUploadFileResult{
@@ -164,13 +185,23 @@ func (s *Server) handleUploadProjectResources(w http.ResponseWriter, r *http.Req
 		case "created":
 			item.Action = ResourceUploadFileResultActionCreated
 			if result.Resource != nil {
-				gr := toGeneratedResource(result.Resource)
+				p := progressMap[result.Resource.ID]
+				translated, approved := 0, 0
+				if p != nil {
+					translated, approved = p.Translated, p.Approved
+				}
+				gr := toGeneratedResource(result.Resource, translated, approved)
 				item.Resource = &gr
 			}
 		case "conflict":
 			item.Action = ResourceUploadFileResultActionConflict
 			if result.ExistingResource != nil {
-				gr := toGeneratedResource(result.ExistingResource)
+				p := progressMap[result.ExistingResource.ID]
+				translated, approved := 0, 0
+				if p != nil {
+					translated, approved = p.Translated, p.Approved
+				}
+				gr := toGeneratedResource(result.ExistingResource, translated, approved)
 				item.ExistingResource = &gr
 			}
 		case "failed":
@@ -218,6 +249,14 @@ func (s *Server) handlePrecheckProjectResources(w http.ResponseWriter, r *http.R
 		return
 	}
 
+	resourceIDs := make([]int, 0)
+	for _, result := range results {
+		if result.Action == "conflict" && result.ExistingResource != nil {
+			resourceIDs = append(resourceIDs, result.ExistingResource.ID)
+		}
+	}
+	progressMap, _ := s.resourceSvc.ListResourcesProgress(r.Context(), resourceIDs)
+
 	respItems := make([]ResourcePrecheckFileResult, 0, len(results))
 	for _, result := range results {
 		item := ResourcePrecheckFileResult{
@@ -229,7 +268,12 @@ func (s *Server) handlePrecheckProjectResources(w http.ResponseWriter, r *http.R
 		case "conflict":
 			item.Action = Conflict
 			if result.ExistingResource != nil {
-				gr := toGeneratedResource(result.ExistingResource)
+				p := progressMap[result.ExistingResource.ID]
+				translated, approved := 0, 0
+				if p != nil {
+					translated, approved = p.Translated, p.Approved
+				}
+				gr := toGeneratedResource(result.ExistingResource, translated, approved)
 				item.ExistingResource = &gr
 			}
 		case "duplicate":
@@ -296,10 +340,10 @@ func (s *Server) handleGetProjectResourceTree(w http.ResponseWriter, r *http.Req
 	writeJSON(w, http.StatusOK, map[string]any{"root": buildResourceTreeResponse(resources)})
 }
 
-func buildResourceTreeResponse(resources []*ent.Resource) *resourceTreeNodeResponse {
+func buildResourceTreeResponse(resources []service.ResourceWithProgress) *resourceTreeNodeResponse {
 	root := &resourceTreeNodeResponse{Type: string(ResourceTreeNodeTypeDirectory), Name: "", Path: ""}
 	for _, row := range resources {
-		resourceResp := toResourceResponse(row)
+		resourceResp := toResourceResponse(row.Resource, row.TranslatedSegments, row.ApprovedSegments)
 		parts := strings.Split(resourceResp.Path, "/")
 		current := root
 		for i, part := range parts {
@@ -370,7 +414,7 @@ func (s *Server) handleGetResource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toResourceResponse(res))
+	writeJSON(w, http.StatusOK, toResourceResponse(res.Resource, res.TranslatedSegments, res.ApprovedSegments))
 }
 
 // handleUpdateResource 处理更新资源文件。
@@ -418,7 +462,13 @@ func (s *Server) handleUpdateResource(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	writeJSON(w, http.StatusOK, toResourceResponse(res))
+	progress, err := s.resourceSvc.GetResourceProgress(r.Context(), projectID, resourceID)
+	if err != nil {
+		s.writeResourceServiceError(w, r, err)
+		return
+	}
+
+	writeJSON(w, http.StatusOK, toResourceResponse(res, progress.Translated, progress.Approved))
 }
 
 // handleDeleteResource 处理删除资源文件。
@@ -467,12 +517,12 @@ func (s *Server) handleDownloadResourceFile(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	if res.StoragePath == "" {
+	if res.Resource.StoragePath == "" {
 		writeProblem(w, http.StatusNotFound, "file_not_found", "资源文件不存在")
 		return
 	}
 
-	absolutePath, absErr := s.resourceSvc.Absolute(res.StoragePath)
+	absolutePath, absErr := s.resourceSvc.Absolute(res.Resource.StoragePath)
 	if absErr != nil {
 		writeServiceError(w, absErr)
 		return
@@ -534,8 +584,14 @@ func (s *Server) handleIncrementalUpdateResource(w http.ResponseWriter, r *http.
 		return
 	}
 
+	progress, err := s.resourceSvc.GetResourceProgress(r.Context(), projectID, resourceID)
+	if err != nil {
+		s.writeResourceServiceError(w, r, err)
+		return
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
-		"resource": toResourceResponse(res),
+		"resource": toResourceResponse(res, progress.Translated, progress.Approved),
 		"changes": map[string]int{
 			"added":     stats.Added,
 			"updated":   stats.Updated,
@@ -685,14 +741,14 @@ func (s *Server) handleDownloadTranslatedResourceFile(w http.ResponseWriter, r *
 		return
 	}
 
-	filename := safeZipResourceEntryName(res)
+	filename := safeZipResourceEntryName(res.Resource)
 	w.Header().Set("Content-Type", "application/octet-stream")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
 	// 注意：Content-Type 和 Content-Disposition 在渲染前设置。
 	// 如果 Render 已向 w 写入部分数据，后续 header 修改可能无效（headers 已 flush）。
 	// 这与现有 downloadSingleTranslationOutput 的行为一致。
 
-	if err := s.resourceSvc.RenderTranslatedResource(r.Context(), authUser.User.ID, res, w); err != nil {
+	if err := s.resourceSvc.RenderTranslatedResource(r.Context(), authUser.User.ID, res.Resource, w); err != nil {
 		w.Header().Del("Content-Disposition")
 		w.Header().Del("Content-Type")
 		switch {

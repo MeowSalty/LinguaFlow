@@ -12,6 +12,9 @@ import (
 // lookupHints 为 idxs 中每段查 glossary / TM 并合并去重。
 // glossary 以 source+target 为键；TM 同样以 source+target 去重，保留最高分。
 func (s *Translate) lookupHints(ctx context.Context, doc *Document, idxs []int, logger *slog.Logger) ([]prompt.GlossaryEntry, []prompt.TMHint) {
+	if ctx.Err() != nil {
+		return nil, nil
+	}
 	var (
 		glosOrder []string
 		glosMap   = map[string]prompt.GlossaryEntry{}

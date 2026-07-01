@@ -124,6 +124,27 @@ func (_u *BackendUpdate) SetOptions(v map[string]interface{}) *BackendUpdate {
 	return _u
 }
 
+// SetRateLimitPerMinute sets the "rate_limit_per_minute" field.
+func (_u *BackendUpdate) SetRateLimitPerMinute(v int) *BackendUpdate {
+	_u.mutation.ResetRateLimitPerMinute()
+	_u.mutation.SetRateLimitPerMinute(v)
+	return _u
+}
+
+// SetNillableRateLimitPerMinute sets the "rate_limit_per_minute" field if the given value is not nil.
+func (_u *BackendUpdate) SetNillableRateLimitPerMinute(v *int) *BackendUpdate {
+	if v != nil {
+		_u.SetRateLimitPerMinute(*v)
+	}
+	return _u
+}
+
+// AddRateLimitPerMinute adds value to the "rate_limit_per_minute" field.
+func (_u *BackendUpdate) AddRateLimitPerMinute(v int) *BackendUpdate {
+	_u.mutation.AddRateLimitPerMinute(v)
+	return _u
+}
+
 // SetOwnerUser sets the "owner_user" edge to the User entity.
 func (_u *BackendUpdate) SetOwnerUser(v *User) *BackendUpdate {
 	return _u.SetOwnerUserID(v.ID)
@@ -238,6 +259,12 @@ func (_u *BackendUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Options(); ok {
 		_spec.SetField(backend.FieldOptions, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.RateLimitPerMinute(); ok {
+		_spec.SetField(backend.FieldRateLimitPerMinute, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedRateLimitPerMinute(); ok {
+		_spec.AddField(backend.FieldRateLimitPerMinute, field.TypeInt, value)
 	}
 	if _u.mutation.OwnerUserCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -411,6 +438,27 @@ func (_u *BackendUpdateOne) SetOptions(v map[string]interface{}) *BackendUpdateO
 	return _u
 }
 
+// SetRateLimitPerMinute sets the "rate_limit_per_minute" field.
+func (_u *BackendUpdateOne) SetRateLimitPerMinute(v int) *BackendUpdateOne {
+	_u.mutation.ResetRateLimitPerMinute()
+	_u.mutation.SetRateLimitPerMinute(v)
+	return _u
+}
+
+// SetNillableRateLimitPerMinute sets the "rate_limit_per_minute" field if the given value is not nil.
+func (_u *BackendUpdateOne) SetNillableRateLimitPerMinute(v *int) *BackendUpdateOne {
+	if v != nil {
+		_u.SetRateLimitPerMinute(*v)
+	}
+	return _u
+}
+
+// AddRateLimitPerMinute adds value to the "rate_limit_per_minute" field.
+func (_u *BackendUpdateOne) AddRateLimitPerMinute(v int) *BackendUpdateOne {
+	_u.mutation.AddRateLimitPerMinute(v)
+	return _u
+}
+
 // SetOwnerUser sets the "owner_user" edge to the User entity.
 func (_u *BackendUpdateOne) SetOwnerUser(v *User) *BackendUpdateOne {
 	return _u.SetOwnerUserID(v.ID)
@@ -555,6 +603,12 @@ func (_u *BackendUpdateOne) sqlSave(ctx context.Context) (_node *Backend, err er
 	}
 	if value, ok := _u.mutation.Options(); ok {
 		_spec.SetField(backend.FieldOptions, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.RateLimitPerMinute(); ok {
+		_spec.SetField(backend.FieldRateLimitPerMinute, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedRateLimitPerMinute(); ok {
+		_spec.AddField(backend.FieldRateLimitPerMinute, field.TypeInt, value)
 	}
 	if _u.mutation.OwnerUserCleared() {
 		edge := &sqlgraph.EdgeSpec{

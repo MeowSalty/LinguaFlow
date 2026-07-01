@@ -7,6 +7,8 @@ servers:
 paths:
   /ping:
     $ref: './paths/system.yaml#/ping'
+  /mode:
+    $ref: './paths/system.yaml#/mode'
   /auth/register:
     $ref: './paths/auth.yaml#/register'
   /auth/login:
@@ -87,8 +89,6 @@ paths:
     $ref: './paths/translation-jobs.yaml#/projectTranslationJobs'
   /translation-jobs/{translationJobId}:
    $ref: './paths/translation-jobs.yaml#/translationJobById'
-  /translation-jobs/{translationJobId}/events:
-   $ref: './paths/translation-jobs.yaml#/translationJobEvents'
   /translation-jobs/{translationJobId}/cancel:
    $ref: './paths/translation-jobs.yaml#/translationJobCancel'
   /translation-jobs/{translationJobId}/retry:
@@ -148,6 +148,8 @@ components:
       $ref: './components/schemas/common.yaml#/Problem'
     HealthResponse:
       $ref: './components/schemas/common.yaml#/HealthResponse'
+    ModeResponse:
+      $ref: './components/schemas/common.yaml#/ModeResponse'
     User:
       $ref: './components/schemas/user.yaml#/User'
     RegisterRequest:
@@ -230,8 +232,6 @@ components:
       $ref: './components/schemas/translation-job.yaml#/TranslationJob'
     TranslationJobListResponse:
       $ref: './components/schemas/translation-job.yaml#/TranslationJobListResponse'
-    JobEvent:
-      $ref: './components/schemas/translation-job.yaml#/JobEvent'
     Activity:
       $ref: './components/schemas/job.yaml#/Activity'
     ActivityListResponse:

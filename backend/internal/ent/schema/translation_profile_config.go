@@ -29,8 +29,9 @@ type ProfileProtectConfig struct {
 
 // ProfileRubyConfig Ruby 注音保护配置。
 type ProfileRubyConfig struct {
-	Enabled      bool   `json:"enabled"       yaml:"enabled"`
-	OutputFormat string `json:"output_format" yaml:"output_format"`
+	Enabled       bool     `json:"enabled"       yaml:"enabled"`
+	OutputFormat  string   `json:"output_format" yaml:"output_format"`
+	PreserveKinds []string `json:"preserve_kinds" yaml:"preserve_kinds"`
 }
 
 // ProfilePostprocessConfig 后处理配置。
@@ -82,7 +83,7 @@ func DefaultProfileConfig() TranslationProfileConfigData {
 		Protect: ProfileProtectConfig{
 			Enabled: true,
 			Rules:   []string{"code", "link", "placeholder", "xml"},
-			Ruby:    ProfileRubyConfig{Enabled: false, OutputFormat: "ruby_output"},
+			Ruby:    ProfileRubyConfig{Enabled: false, OutputFormat: "ruby_output", PreserveKinds: []string{"phonetic", "semantic", "creative"}},
 		},
 		Postprocess: ProfilePostprocessConfig{
 			Enabled:    true,
@@ -126,5 +127,15 @@ func (c *TranslationProfileConfigData) NormalizeContext() {
 	// 零值 Enabled=false 且 Before/After 均为默认值时，视为未设置，回退到默认启用
 	if !c.Context.Enabled && c.Context.MaxChars == 0 {
 		c.Context.Enabled = true
+	}
+}
+
+// NormalizePreserveKinds 填充 PreserveKinds 字段的默认值。
+// 用于处理从数据库反序列化时缺少 preserve_kinds 字段的旧记录。
+// nil 表示未设置（旧记录），回退到默认全集；
+// 非 nil 空切片表示用户显式选择不保留任何注音，不做覆盖。
+func (c *TranslationProfileConfigData) NormalizePreserveKinds() {
+	if c.Protect.Ruby.PreserveKinds == nil {
+		c.Protect.Ruby.PreserveKinds = []string{"phonetic", "semantic", "creative"}
 	}
 }

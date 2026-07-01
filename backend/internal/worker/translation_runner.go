@@ -15,6 +15,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
@@ -26,7 +27,9 @@ import (
 // TranslationRunner 翻译任务的执行器，通过嵌入 BaseRunner 复用公共逻辑。
 type TranslationRunner struct {
 	*BaseRunner
-	jobs *service.TranslationJobService
+	jobs        *service.TranslationJobService
+	eventBroker *event.Broker
+	limiterPool *backend.LimiterPool
 
 	// per-job 取消注册表：jobID → cancel 函数
 	mu         sync.Mutex
@@ -41,10 +44,14 @@ func NewTranslationRunner(
 	jobs *service.TranslationJobService,
 	store *filestore.LocalStore,
 	queue *Queue,
+	eventBroker *event.Broker,
+	limiterPool *backend.LimiterPool,
 ) *TranslationRunner {
 	r := &TranslationRunner{
-		jobs:       jobs,
-		activeJobs: make(map[int]context.CancelFunc),
+		jobs:        jobs,
+		eventBroker: eventBroker,
+		limiterPool: limiterPool,
+		activeJobs:  make(map[int]context.CancelFunc),
 	}
 	r.BaseRunner = newBaseRunner(cfg, logger, client, store, queue, jobs, r.processJob, "translation worker")
 	return r
@@ -81,6 +88,11 @@ func (r *TranslationRunner) processJob(ctx context.Context, jobID int) error {
 	if err != nil {
 		return err
 	}
+	// 二次校验：任务可能在入队后、执行前被取消
+	if exec.Job.Status == service.TranslationJobStatusCancelled {
+		r.logger.Info("job already cancelled, skipping", "job_id", jobID)
+		return nil
+	}
 	pending := make([]*ent.JobResource, 0, len(exec.JobResources))
 	for _, item := range exec.JobResources {
 		if item.Status == service.JobResourceStatusPending {
@@ -112,7 +124,7 @@ func (r *TranslationRunner) processJob(ctx context.Context, jobID int) error {
 func (r *TranslationRunner) processJobResource(ctx context.Context, exec *service.TranslationJobExecution, item *ent.JobResource) error {
 	job := exec.Job
 
-	if err := r.jobs.MarkJobResourceRunning(ctx, item.ID); err != nil {
+	if err := r.jobs.MarkJobResourceRunning(ctx, job.ID, item.ID); err != nil {
 		return err
 	}
 	// 写入资源开始时间
@@ -124,23 +136,24 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		JobID:         exec.Job.ID,
 		JobResourceID: item.ID,
 		Logger:        r.logger,
+		Broker:        r.eventBroker,
 	})
 	defer reporter.Close()
 
 	res, err := item.Edges.ResourceOrErr()
 	if err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
 
 	// 1. 从 DB 加载 segments（含 meta 字段）
 	selectedRows, allRows, err := r.loadSegments(ctx, res.ID, item.SegmentIds)
 	if err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
 	if len(selectedRows) == 0 {
-		return r.jobs.MarkJobResourceCompleted(ctx, item.ID, "", 0)
+		return r.jobs.MarkJobResourceCompleted(ctx, job.ID, item.ID, "", 0)
 	}
 
 	// 2. 构建 SegmentInput（反序列化 meta）
@@ -149,7 +162,7 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	// 3. 获取语言配置（从 job snapshot）
 	snapshot, err := r.jobs.GetTranslationSnapshot(ctx, job.ID)
 	if err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, fmt.Errorf("get translation snapshot: %w", err))
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, fmt.Errorf("get translation snapshot: %w", err))
 		return nil
 	}
 
@@ -163,12 +176,12 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	autoApprove := snapshot.AutoApprove
 	runtimeGlossary, err := r.buildRuntimeGlossary(exec.Project, cfg)
 	if err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
 	memory, err := r.buildRuntimeTM(exec.Project, cfg)
 	if err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
 
@@ -176,7 +189,7 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	resources := engine.RuntimeResources{Glossary: runtimeGlossary, TM: memory}
 	eng, err := r.buildEngineFromSnapshot(ctx, snapshot, resources, reporter)
 	if err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
 	defer func() { _ = eng.Close() }()
@@ -210,6 +223,7 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 			status = service.SegmentStatusApproved
 		}
 		localCompleted := 0
+		failed := 0
 		for _, ts := range batchResult.Segments {
 			if ts.TargetText == "" {
 				continue
@@ -227,6 +241,7 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 			}
 			if err := update.Exec(ctx); err != nil {
 				r.logger.Warn("persist segment failed", "segment_id", dbID, "err", err)
+				failed++
 				continue
 			}
 			localCompleted++
@@ -234,6 +249,10 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		mu.Lock()
 		completedCount += localCompleted
 		mu.Unlock()
+		// 本批全部写入失败 → DB 可能不可用，终止翻译
+		if failed > 0 && localCompleted == 0 {
+			return fmt.Errorf("batch persist failed: all %d segments failed to write to database", failed)
+		}
 		return nil
 	}
 
@@ -246,12 +265,12 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		if errors.Is(translateErr, context.Canceled) && completedCount > 0 {
 			r.logger.Warn("translation cancelled, preserving partial progress",
 				"resource_id", item.ID, "completed", completedCount, "total", len(selectedRows))
-			_ = r.recordUsage(ctx, exec, completedCount)
+			_ = r.recordUsage(ctx, exec, completedCount, result.InputTokens, result.OutputTokens)
 			_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(completedCount).Exec(ctx)
-			_ = r.jobs.MarkJobResourceCancelled(ctx, item.ID)
+			_ = r.jobs.MarkJobResourceCancelled(ctx, job.ID, item.ID)
 			return nil
 		}
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, fmt.Errorf("translate: %w", translateErr))
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, fmt.Errorf("translate: %w", translateErr))
 		return nil
 	}
 
@@ -263,21 +282,21 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 			"total_segments", len(selectedRows),
 			"completed_count", completedCount,
 		)
-		_ = r.recordUsage(ctx, exec, completedCount)
+		_ = r.recordUsage(ctx, exec, completedCount, result.InputTokens, result.OutputTokens)
 		_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(completedCount).Exec(ctx)
 		err := fmt.Errorf("%d/%d segments failed to translate (completed: %d): LLM could not preserve all protected placeholders after retries",
 			result.UnresolvedCount, len(selectedRows), completedCount)
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
 
 	// 8. 全部成功：记录用量并标记完成
-	if err := r.recordUsage(ctx, exec, completedCount); err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, item.ID, err)
+	if err := r.recordUsage(ctx, exec, completedCount, result.InputTokens, result.OutputTokens); err != nil {
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
 
-	return r.jobs.MarkJobResourceCompleted(ctx, item.ID, "", completedCount)
+	return r.jobs.MarkJobResourceCompleted(ctx, job.ID, item.ID, "", completedCount)
 }
 
 // buildSegmentInputs 将 DB segments 转换为 SegmentInput 切片。
@@ -319,13 +338,19 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 			return nil, fmt.Errorf("round %q build backend: %w", rs.Name, err)
 		}
 
+		// 使用共享 limiter pool 包装后端
+		if r.limiterPool != nil && rs.Backend.RateLimitPerMinute > 0 {
+			limiter := r.limiterPool.Get(rs.Backend.ID, rs.Backend.RateLimitPerMinute)
+			b = backend.NewRateLimitedBackend(b, limiter)
+		}
+
 		rounds = append(rounds, engine.Round{
-			Backends:        []backend.Backend{b},
-			Name:            rs.Name,
-			BatchSize:       rs.BatchSize,
-			Concurrency:     rs.Concurrency,
-			FallbackShrink:  rs.FallbackShrink,
-			RateLimitPerSec: rs.RateLimitPerSec,
+			Backend:          b,
+			Name:             rs.Name,
+			BatchSize:        rs.BatchSize,
+			MaxWordsPerBatch: rs.MaxWordsPerBatch,
+			Concurrency:      rs.Concurrency,
+			FallbackShrink:   rs.FallbackShrink,
 			Retry: backend.RetryPolicy{
 				MaxAttempts: rs.Retry.MaxAttempts,
 				Backoff:     time.Duration(rs.Retry.BackoffMs) * time.Millisecond,
@@ -350,11 +375,36 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 		if err != nil {
 			return nil, fmt.Errorf("ruby retry backend: %w", err)
 		}
+		if r.limiterPool != nil && snapshot.RubyRetry.Backend.RateLimitPerMinute > 0 {
+			limiter := r.limiterPool.Get(snapshot.RubyRetry.Backend.ID, snapshot.RubyRetry.Backend.RateLimitPerMinute)
+			rrBackend = backend.NewRateLimitedBackend(rrBackend, limiter)
+		}
 		rubyRetryBackends = []backend.Backend{rrBackend}
+	}
+
+	// 构建独立自举后端
+	var bootstrapBackends []backend.Backend
+	if snapshot.Bootstrap != nil && snapshot.Bootstrap.Enabled {
+		bsCfg := config.BackendConfig{
+			Name:    snapshot.Bootstrap.Backend.Name,
+			Type:    snapshot.Bootstrap.Backend.Type,
+			Enabled: true,
+			Options: snapshot.Bootstrap.Backend.Options,
+		}
+		bsBackend, err := backend.Build(bsCfg)
+		if err != nil {
+			return nil, fmt.Errorf("bootstrap backend: %w", err)
+		}
+		if r.limiterPool != nil && snapshot.Bootstrap.Backend.RateLimitPerMinute > 0 {
+			limiter := r.limiterPool.Get(snapshot.Bootstrap.Backend.ID, snapshot.Bootstrap.Backend.RateLimitPerMinute)
+			bsBackend = backend.NewRateLimitedBackend(bsBackend, limiter)
+		}
+		bootstrapBackends = []backend.Backend{bsBackend}
 	}
 
 	return engine.NewWithOptions(engine.Options{
 		Rounds:            rounds,
+		BootstrapBackends: bootstrapBackends,
 		RubyRetryBackends: rubyRetryBackends,
 		Config:            cfg,
 		Logger:            r.logger,
@@ -384,8 +434,9 @@ func buildStrategyConfig(snapshot *service.JobExecutionSnapshot) *config.Config 
 			Enabled: s.Protect.Enabled,
 			Rules:   s.Protect.Rules,
 			Ruby: config.RubyConfig{
-				Enabled:      s.Protect.Ruby.Enabled,
-				OutputFormat: s.Protect.Ruby.OutputFormat,
+				Enabled:       s.Protect.Ruby.Enabled,
+				OutputFormat:  s.Protect.Ruby.OutputFormat,
+				PreserveKinds: s.Protect.Ruby.PreserveKinds,
 			},
 		}
 		cfg.Pipeline.Postprocess = config.PostprocessConfig{
@@ -478,12 +529,14 @@ func (r *TranslationRunner) loadSegments(ctx context.Context, resourceID int, se
 }
 
 // recordUsage 记录翻译用量到数据库。
-func (r *TranslationRunner) recordUsage(ctx context.Context, exec *service.TranslationJobExecution, segmentCount int) error {
+func (r *TranslationRunner) recordUsage(ctx context.Context, exec *service.TranslationJobExecution, segmentCount int, inputTokens, outputTokens int64) error {
 	usage := r.client.UsageRecord.Create().
 		SetProjectID(exec.Project.ID).
 		SetSource("translation_job").
 		SetSegmentCount(segmentCount).
 		SetAPICalls(segmentCount).
+		SetInputTokens(clampInt64ToInt(inputTokens)).
+		SetOutputTokens(clampInt64ToInt(outputTokens)).
 		SetNote(fmt.Sprintf("translation_job:%d", exec.Job.ID))
 	if exec.ActorUserID > 0 {
 		usage.SetUserID(exec.ActorUserID)
@@ -492,4 +545,15 @@ func (r *TranslationRunner) recordUsage(ctx context.Context, exec *service.Trans
 		usage.SetOrganizationID(*exec.Project.OwnerOrgID)
 	}
 	return usage.Exec(ctx)
+}
+
+// clampInt64ToInt 将 int64 安全地转换为 int，超过 math.MaxInt32 时截断。
+func clampInt64ToInt(v int64) int {
+	if v > int64(^uint32(0)>>1) {
+		return int(^uint32(0) >> 1)
+	}
+	if v < 0 {
+		return 0
+	}
+	return int(v)
 }

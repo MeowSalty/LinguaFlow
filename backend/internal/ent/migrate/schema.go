@@ -58,6 +58,7 @@ var (
 		{Name: "scope", Type: field.TypeString, Default: "user"},
 		{Name: "backend_type", Type: field.TypeEnum, Enums: []string{"openai", "anthropic", "google"}},
 		{Name: "options", Type: field.TypeJSON},
+		{Name: "rate_limit_per_minute", Type: field.TypeInt, Default: 0},
 		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
 		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
 	}
@@ -69,13 +70,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "backends_organizations_backends",
-				Columns:    []*schema.Column{BackendsColumns[7]},
+				Columns:    []*schema.Column{BackendsColumns[8]},
 				RefColumns: []*schema.Column{OrganizationsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "backends_users_backends",
-				Columns:    []*schema.Column{BackendsColumns[8]},
+				Columns:    []*schema.Column{BackendsColumns[9]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -84,7 +85,7 @@ var (
 			{
 				Name:    "backend_name_owner_user_id",
 				Unique:  true,
-				Columns: []*schema.Column{BackendsColumns[3], BackendsColumns[8]},
+				Columns: []*schema.Column{BackendsColumns[3], BackendsColumns[9]},
 				Annotation: &entsql.IndexAnnotation{
 					Where: "scope = 'user' AND owner_user_id IS NOT NULL",
 				},
@@ -92,7 +93,7 @@ var (
 			{
 				Name:    "backend_name_owner_org_id",
 				Unique:  true,
-				Columns: []*schema.Column{BackendsColumns[3], BackendsColumns[7]},
+				Columns: []*schema.Column{BackendsColumns[3], BackendsColumns[8]},
 				Annotation: &entsql.IndexAnnotation{
 					Where: "scope = 'org' AND owner_org_id IS NOT NULL",
 				},
@@ -163,31 +164,6 @@ var (
 				Name:    "glossaryentry_project_id_source_key",
 				Unique:  true,
 				Columns: []*schema.Column{GlossaryEntriesColumns[8], GlossaryEntriesColumns[3]},
-			},
-		},
-	}
-	// JobEventsColumns holds the columns for the "job_events" table.
-	JobEventsColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "created_at", Type: field.TypeTime},
-		{Name: "updated_at", Type: field.TypeTime},
-		{Name: "level", Type: field.TypeString, Default: "info"},
-		{Name: "stage", Type: field.TypeString, Nullable: true, Default: ""},
-		{Name: "message", Type: field.TypeString},
-		{Name: "metadata", Type: field.TypeJSON, Nullable: true},
-		{Name: "translation_job_job_events", Type: field.TypeInt},
-	}
-	// JobEventsTable holds the schema information for the "job_events" table.
-	JobEventsTable = &schema.Table{
-		Name:       "job_events",
-		Columns:    JobEventsColumns,
-		PrimaryKey: []*schema.Column{JobEventsColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{
-			{
-				Symbol:     "job_events_translation_jobs_job_events",
-				Columns:    []*schema.Column{JobEventsColumns[7]},
-				RefColumns: []*schema.Column{TranslationJobsColumns[0]},
-				OnDelete:   schema.NoAction,
 			},
 		},
 	}
@@ -543,6 +519,7 @@ var (
 		{Name: "completed_resources", Type: field.TypeInt, Default: 0},
 		{Name: "failed_resources", Type: field.TypeInt, Default: 0},
 		{Name: "total_segments", Type: field.TypeInt, Default: 0},
+		{Name: "stage_total", Type: field.TypeInt, Default: 0},
 		{Name: "completed_segments", Type: field.TypeInt, Default: 0},
 		{Name: "error_message", Type: field.TypeString, Nullable: true},
 		{Name: "started_at", Type: field.TypeTime, Nullable: true},
@@ -557,13 +534,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "translation_jobs_projects_translation_jobs",
-				Columns:    []*schema.Column{TranslationJobsColumns[14]},
+				Columns:    []*schema.Column{TranslationJobsColumns[15]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "translation_jobs_users_created_translation_jobs",
-				Columns:    []*schema.Column{TranslationJobsColumns[15]},
+				Columns:    []*schema.Column{TranslationJobsColumns[16]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -666,7 +643,6 @@ var (
 		BackendsTable,
 		ExecutionPlanTemplatesTable,
 		GlossaryEntriesTable,
-		JobEventsTable,
 		JobResourcesTable,
 		OrgMembershipsTable,
 		OrganizationsTable,
@@ -693,7 +669,6 @@ func init() {
 	ExecutionPlanTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	ExecutionPlanTemplatesTable.ForeignKeys[1].RefTable = UsersTable
 	GlossaryEntriesTable.ForeignKeys[0].RefTable = ProjectsTable
-	JobEventsTable.ForeignKeys[0].RefTable = TranslationJobsTable
 	JobResourcesTable.ForeignKeys[0].RefTable = ResourcesTable
 	JobResourcesTable.ForeignKeys[1].RefTable = TranslationJobsTable
 	OrgMembershipsTable.ForeignKeys[0].RefTable = OrganizationsTable

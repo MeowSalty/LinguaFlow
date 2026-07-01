@@ -16,9 +16,11 @@ type Segment struct {
 
 // Document 是 parser 解析后的中间表示。stages 在其上原地修改。
 type Document struct {
-	Segments   []Segment
-	SourceLang string
-	TargetLang string
-	Format     string         // "markdown" / "srt" ...
-	Vars       map[string]any // 提示词模板可访问的全局变量
+	Segments     []Segment
+	SourceLang   string
+	TargetLang   string
+	Format       string         // "markdown" / "srt" ...
+	Vars         map[string]any // 提示词模板可访问的全局变量
+	InputTokens  int64          // 累加：所有 LLM 调用的 input token 总数（atomic 操作）
+	OutputTokens int64          // 累加：所有 LLM 调用的 output token 总数（atomic 操作）
 }

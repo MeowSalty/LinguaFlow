@@ -19,7 +19,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -49,8 +48,6 @@ type Client struct {
 	ExecutionPlanTemplate *ExecutionPlanTemplateClient
 	// GlossaryEntry is the client for interacting with the GlossaryEntry builders.
 	GlossaryEntry *GlossaryEntryClient
-	// JobEvent is the client for interacting with the JobEvent builders.
-	JobEvent *JobEventClient
 	// JobResource is the client for interacting with the JobResource builders.
 	JobResource *JobResourceClient
 	// OrgMembership is the client for interacting with the OrgMembership builders.
@@ -94,7 +91,6 @@ func (c *Client) init() {
 	c.Backend = NewBackendClient(c.config)
 	c.ExecutionPlanTemplate = NewExecutionPlanTemplateClient(c.config)
 	c.GlossaryEntry = NewGlossaryEntryClient(c.config)
-	c.JobEvent = NewJobEventClient(c.config)
 	c.JobResource = NewJobResourceClient(c.config)
 	c.OrgMembership = NewOrgMembershipClient(c.config)
 	c.Organization = NewOrganizationClient(c.config)
@@ -205,7 +201,6 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		Backend:               NewBackendClient(cfg),
 		ExecutionPlanTemplate: NewExecutionPlanTemplateClient(cfg),
 		GlossaryEntry:         NewGlossaryEntryClient(cfg),
-		JobEvent:              NewJobEventClient(cfg),
 		JobResource:           NewJobResourceClient(cfg),
 		OrgMembership:         NewOrgMembershipClient(cfg),
 		Organization:          NewOrganizationClient(cfg),
@@ -243,7 +238,6 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		Backend:               NewBackendClient(cfg),
 		ExecutionPlanTemplate: NewExecutionPlanTemplateClient(cfg),
 		GlossaryEntry:         NewGlossaryEntryClient(cfg),
-		JobEvent:              NewJobEventClient(cfg),
 		JobResource:           NewJobResourceClient(cfg),
 		OrgMembership:         NewOrgMembershipClient(cfg),
 		Organization:          NewOrganizationClient(cfg),
@@ -287,7 +281,7 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.ActivityLog, c.Backend, c.ExecutionPlanTemplate, c.GlossaryEntry, c.JobEvent,
+		c.ActivityLog, c.Backend, c.ExecutionPlanTemplate, c.GlossaryEntry,
 		c.JobResource, c.OrgMembership, c.Organization, c.Project, c.PromptTemplate,
 		c.RefreshToken, c.Resource, c.Segment, c.SyncTask, c.TMEntry, c.TranslationJob,
 		c.TranslationProfile, c.UsageRecord, c.User,
@@ -300,7 +294,7 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.ActivityLog, c.Backend, c.ExecutionPlanTemplate, c.GlossaryEntry, c.JobEvent,
+		c.ActivityLog, c.Backend, c.ExecutionPlanTemplate, c.GlossaryEntry,
 		c.JobResource, c.OrgMembership, c.Organization, c.Project, c.PromptTemplate,
 		c.RefreshToken, c.Resource, c.Segment, c.SyncTask, c.TMEntry, c.TranslationJob,
 		c.TranslationProfile, c.UsageRecord, c.User,
@@ -320,8 +314,6 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.ExecutionPlanTemplate.mutate(ctx, m)
 	case *GlossaryEntryMutation:
 		return c.GlossaryEntry.mutate(ctx, m)
-	case *JobEventMutation:
-		return c.JobEvent.mutate(ctx, m)
 	case *JobResourceMutation:
 		return c.JobResource.mutate(ctx, m)
 	case *OrgMembershipMutation:
@@ -1028,155 +1020,6 @@ func (c *GlossaryEntryClient) mutate(ctx context.Context, m *GlossaryEntryMutati
 		return (&GlossaryEntryDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown GlossaryEntry mutation op: %q", m.Op())
-	}
-}
-
-// JobEventClient is a client for the JobEvent schema.
-type JobEventClient struct {
-	config
-}
-
-// NewJobEventClient returns a client for the JobEvent from the given config.
-func NewJobEventClient(c config) *JobEventClient {
-	return &JobEventClient{config: c}
-}
-
-// Use adds a list of mutation hooks to the hooks stack.
-// A call to `Use(f, g, h)` equals to `jobevent.Hooks(f(g(h())))`.
-func (c *JobEventClient) Use(hooks ...Hook) {
-	c.hooks.JobEvent = append(c.hooks.JobEvent, hooks...)
-}
-
-// Intercept adds a list of query interceptors to the interceptors stack.
-// A call to `Intercept(f, g, h)` equals to `jobevent.Intercept(f(g(h())))`.
-func (c *JobEventClient) Intercept(interceptors ...Interceptor) {
-	c.inters.JobEvent = append(c.inters.JobEvent, interceptors...)
-}
-
-// Create returns a builder for creating a JobEvent entity.
-func (c *JobEventClient) Create() *JobEventCreate {
-	mutation := newJobEventMutation(c.config, OpCreate)
-	return &JobEventCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// CreateBulk returns a builder for creating a bulk of JobEvent entities.
-func (c *JobEventClient) CreateBulk(builders ...*JobEventCreate) *JobEventCreateBulk {
-	return &JobEventCreateBulk{config: c.config, builders: builders}
-}
-
-// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
-// a builder and applies setFunc on it.
-func (c *JobEventClient) MapCreateBulk(slice any, setFunc func(*JobEventCreate, int)) *JobEventCreateBulk {
-	rv := reflect.ValueOf(slice)
-	if rv.Kind() != reflect.Slice {
-		return &JobEventCreateBulk{err: fmt.Errorf("calling to JobEventClient.MapCreateBulk with wrong type %T, need slice", slice)}
-	}
-	builders := make([]*JobEventCreate, rv.Len())
-	for i := 0; i < rv.Len(); i++ {
-		builders[i] = c.Create()
-		setFunc(builders[i], i)
-	}
-	return &JobEventCreateBulk{config: c.config, builders: builders}
-}
-
-// Update returns an update builder for JobEvent.
-func (c *JobEventClient) Update() *JobEventUpdate {
-	mutation := newJobEventMutation(c.config, OpUpdate)
-	return &JobEventUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOne returns an update builder for the given entity.
-func (c *JobEventClient) UpdateOne(_m *JobEvent) *JobEventUpdateOne {
-	mutation := newJobEventMutation(c.config, OpUpdateOne, withJobEvent(_m))
-	return &JobEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOneID returns an update builder for the given id.
-func (c *JobEventClient) UpdateOneID(id int) *JobEventUpdateOne {
-	mutation := newJobEventMutation(c.config, OpUpdateOne, withJobEventID(id))
-	return &JobEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// Delete returns a delete builder for JobEvent.
-func (c *JobEventClient) Delete() *JobEventDelete {
-	mutation := newJobEventMutation(c.config, OpDelete)
-	return &JobEventDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// DeleteOne returns a builder for deleting the given entity.
-func (c *JobEventClient) DeleteOne(_m *JobEvent) *JobEventDeleteOne {
-	return c.DeleteOneID(_m.ID)
-}
-
-// DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *JobEventClient) DeleteOneID(id int) *JobEventDeleteOne {
-	builder := c.Delete().Where(jobevent.ID(id))
-	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
-	return &JobEventDeleteOne{builder}
-}
-
-// Query returns a query builder for JobEvent.
-func (c *JobEventClient) Query() *JobEventQuery {
-	return &JobEventQuery{
-		config: c.config,
-		ctx:    &QueryContext{Type: TypeJobEvent},
-		inters: c.Interceptors(),
-	}
-}
-
-// Get returns a JobEvent entity by its id.
-func (c *JobEventClient) Get(ctx context.Context, id int) (*JobEvent, error) {
-	return c.Query().Where(jobevent.ID(id)).Only(ctx)
-}
-
-// GetX is like Get, but panics if an error occurs.
-func (c *JobEventClient) GetX(ctx context.Context, id int) *JobEvent {
-	obj, err := c.Get(ctx, id)
-	if err != nil {
-		panic(err)
-	}
-	return obj
-}
-
-// QueryJob queries the job edge of a JobEvent.
-func (c *JobEventClient) QueryJob(_m *JobEvent) *TranslationJobQuery {
-	query := (&TranslationJobClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(jobevent.Table, jobevent.FieldID, id),
-			sqlgraph.To(translationjob.Table, translationjob.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, jobevent.JobTable, jobevent.JobColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// Hooks returns the client hooks.
-func (c *JobEventClient) Hooks() []Hook {
-	return c.hooks.JobEvent
-}
-
-// Interceptors returns the client interceptors.
-func (c *JobEventClient) Interceptors() []Interceptor {
-	return c.inters.JobEvent
-}
-
-func (c *JobEventClient) mutate(ctx context.Context, m *JobEventMutation) (Value, error) {
-	switch m.Op() {
-	case OpCreate:
-		return (&JobEventCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdate:
-		return (&JobEventUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdateOne:
-		return (&JobEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpDelete, OpDeleteOne:
-		return (&JobEventDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
-	default:
-		return nil, fmt.Errorf("ent: unknown JobEvent mutation op: %q", m.Op())
 	}
 }
 
@@ -3194,22 +3037,6 @@ func (c *TranslationJobClient) QueryJobResources(_m *TranslationJob) *JobResourc
 	return query
 }
 
-// QueryJobEvents queries the job_events edge of a TranslationJob.
-func (c *TranslationJobClient) QueryJobEvents(_m *TranslationJob) *JobEventQuery {
-	query := (&JobEventClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(translationjob.Table, translationjob.FieldID, id),
-			sqlgraph.To(jobevent.Table, jobevent.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, translationjob.JobEventsTable, translationjob.JobEventsColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
 // Hooks returns the client hooks.
 func (c *TranslationJobClient) Hooks() []Hook {
 	return c.hooks.TranslationJob
@@ -3909,15 +3736,15 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		ActivityLog, Backend, ExecutionPlanTemplate, GlossaryEntry, JobEvent,
-		JobResource, OrgMembership, Organization, Project, PromptTemplate,
-		RefreshToken, Resource, Segment, SyncTask, TMEntry, TranslationJob,
-		TranslationProfile, UsageRecord, User []ent.Hook
+		ActivityLog, Backend, ExecutionPlanTemplate, GlossaryEntry, JobResource,
+		OrgMembership, Organization, Project, PromptTemplate, RefreshToken, Resource,
+		Segment, SyncTask, TMEntry, TranslationJob, TranslationProfile, UsageRecord,
+		User []ent.Hook
 	}
 	inters struct {
-		ActivityLog, Backend, ExecutionPlanTemplate, GlossaryEntry, JobEvent,
-		JobResource, OrgMembership, Organization, Project, PromptTemplate,
-		RefreshToken, Resource, Segment, SyncTask, TMEntry, TranslationJob,
-		TranslationProfile, UsageRecord, User []ent.Interceptor
+		ActivityLog, Backend, ExecutionPlanTemplate, GlossaryEntry, JobResource,
+		OrgMembership, Organization, Project, PromptTemplate, RefreshToken, Resource,
+		Segment, SyncTask, TMEntry, TranslationJob, TranslationProfile, UsageRecord,
+		User []ent.Interceptor
 	}
 )

@@ -39,7 +39,6 @@ func parseExecutionPlanTemplateID(w http.ResponseWriter, r *http.Request) (int, 
 func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundConfig {
 	apiRC := ExecutionRoundConfig{
 		BackendId:        rc.BackendID,
-		BatchSize:        rc.BatchSize,
 		Concurrency:      rc.Concurrency,
 		ProfileId:        rc.ProfileID,
 		PromptTemplateId: rc.PromptTemplateID,
@@ -48,13 +47,17 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 		name := rc.Name
 		apiRC.Name = &name
 	}
+	if rc.BatchSize > 0 {
+		bs := rc.BatchSize
+		apiRC.BatchSize = &bs
+	}
+	if rc.MaxWordsPerBatch > 0 {
+		mwpb := rc.MaxWordsPerBatch
+		apiRC.MaxWordsPerBatch = &mwpb
+	}
 	if rc.FallbackShrink > 0 {
 		fs := float32(rc.FallbackShrink)
 		apiRC.FallbackShrink = &fs
-	}
-	if rc.RateLimitPerSec > 0 {
-		rl := rc.RateLimitPerSec
-		apiRC.RateLimitPerSec = &rl
 	}
 	retry := toRetryConfigAPI(rc.Retry)
 	apiRC.Retry = &retry
@@ -184,7 +187,6 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 	for _, ar := range apiRounds {
 		rc := schema.ExecutionRoundConfig{
 			BackendID:        ar.BackendId,
-			BatchSize:        ar.BatchSize,
 			Concurrency:      ar.Concurrency,
 			ProfileID:        ar.ProfileId,
 			PromptTemplateID: ar.PromptTemplateId,
@@ -192,11 +194,14 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 		if ar.Name != nil {
 			rc.Name = *ar.Name
 		}
+		if ar.BatchSize != nil {
+			rc.BatchSize = *ar.BatchSize
+		}
+		if ar.MaxWordsPerBatch != nil {
+			rc.MaxWordsPerBatch = *ar.MaxWordsPerBatch
+		}
 		if ar.FallbackShrink != nil {
 			rc.FallbackShrink = float64(*ar.FallbackShrink)
-		}
-		if ar.RateLimitPerSec != nil {
-			rc.RateLimitPerSec = *ar.RateLimitPerSec
 		}
 		if ar.Retry != nil {
 			if ar.Retry.MaxAttempts != nil {

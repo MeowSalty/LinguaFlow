@@ -35,11 +35,11 @@ type Config struct {
 }
 
 type BackendConfig struct {
-	Name            string         `yaml:"name"`
-	Type            string         `yaml:"type"`
-	Enabled         bool           `yaml:"enabled"`
-	RateLimitPerSec int            `yaml:"rate_limit_per_sec"` // 按后端独立限流；0 表示使用全局限流器
-	Options         map[string]any `yaml:"options"`
+	Name               string         `yaml:"name"`
+	Type               string         `yaml:"type"`
+	Enabled            bool           `yaml:"enabled"`
+	RateLimitPerMinute int            `yaml:"rate_limit_per_minute"` // 按后端独立限流（每分钟）；0 表示不限速
+	Options            map[string]any `yaml:"options"`
 }
 
 type PipelineConfig struct {
@@ -64,9 +64,10 @@ type ProtectConfig struct {
 
 // RubyConfig 控制 Ruby 注音保护的行为。
 type RubyConfig struct {
-	Enabled      bool   `yaml:"enabled"`
-	OutputFormat string `yaml:"output_format"` // "ruby_output" (默认) | "inline_markers"
-	RetryBackend string `yaml:"retry_backend"` // 注音对齐重试后端名称；空时使用翻译主后端
+	Enabled       bool     `yaml:"enabled"`
+	OutputFormat  string   `yaml:"output_format"`  // "ruby_output" (默认) | "inline_markers"
+	RetryBackend  string   `yaml:"retry_backend"`  // 注音对齐重试后端名称；空时使用翻译主后端
+	PreserveKinds []string `yaml:"preserve_kinds"` // 保留的注音 kind 列表：phonetic/semantic/creative
 }
 
 // Ruby 输出格式常量。
@@ -75,19 +76,22 @@ const (
 	RubyOutputDefault       = "ruby_output"
 )
 
+// FallbackShrink 默认值：0 表示未设置，回退到此值。
+const defaultFallbackShrink = 0.5
+
 type TranslateConfig struct {
-	Concurrency     int          `yaml:"concurrency"`
-	BatchSize       int          `yaml:"batch_size"`      // 一次合并发送的段数；<=1 表示禁用批量
-	FallbackShrink  float64      `yaml:"fallback_shrink"` // 整批失败时下一级 batch = floor(cur*shrink)；0 = 直接降到单段；必须 <1
-	RateLimitPerSec int          `yaml:"rate_limit_per_sec"`
-	Retry           RetryConfig  `yaml:"retry"`
-	Repair          RepairConfig `yaml:"repair"`
+	Concurrency      int          `yaml:"concurrency"`
+	BatchSize        int          `yaml:"batch_size"`          // 一次合并发送的段数；<=1 表示禁用批量
+	MaxWordsPerBatch int          `yaml:"max_words_per_batch"` // 每批字词数上限；0=不限制
+	FallbackShrink   float64      `yaml:"fallback_shrink"`     // (0,1) 整批失败时下一级 batch = floor(cur*shrink)；0 = 回退默认；>=1 非法
+	Retry            RetryConfig  `yaml:"retry"`
+	Repair           RepairConfig `yaml:"repair"`
 }
 
 type RetryConfig struct {
-	MaxAttempts int  `yaml:"max_attempts"`
-	BackoffMs   int  `yaml:"backoff_ms"` // 毫秒，废弃 time.Duration
-	Jitter      bool `yaml:"jitter"`
+	MaxAttempts int  `yaml:"max_attempts"` // 重试次数；0=不重试，1=重试 1 次，以此类推；负值归 0
+	BackoffMs   int  `yaml:"backoff_ms"`   // 429/503 限流退避基础时间（毫秒）
+	Jitter      bool `yaml:"jitter"`       // 退避时是否添加随机抖动
 }
 
 // RepairConfig 控制 LLM 响应解析失败 / 部分缺失时的"主动修复"行为。
@@ -224,6 +228,7 @@ type LogConfig struct {
 type ServerConfig struct {
 	Host            string        `yaml:"host"`
 	Port            int           `yaml:"port"`
+	Mode            string        `yaml:"mode"` // "server" (default) | "local"
 	ServiceName     string        `yaml:"service_name"`
 	DataDir         string        `yaml:"data_dir"`
 	AutoMigrate     bool          `yaml:"auto_migrate"`
@@ -233,6 +238,15 @@ type ServerConfig struct {
 	RefreshExpiry   time.Duration `yaml:"refresh_token_expiry"`
 	ShutdownTimeout time.Duration `yaml:"shutdown_timeout"`
 	CORS            CORSConfig    `yaml:"cors"`
+}
+
+const (
+	ModeServer = "server"
+	ModeLocal  = "local"
+)
+
+func (c ServerConfig) IsLocal() bool {
+	return c.Mode == ModeLocal
 }
 
 type CORSConfig struct {
@@ -283,11 +297,10 @@ func Default() *Config {
 				Ruby:    RubyConfig{Enabled: false, OutputFormat: RubyOutputDefault},
 			},
 			Translate: TranslateConfig{
-				Concurrency:     4,
-				BatchSize:       1,
-				FallbackShrink:  0.5,
-				RateLimitPerSec: 5,
-				Retry:           RetryConfig{MaxAttempts: 3, BackoffMs: 2000},
+				Concurrency:    4,
+				BatchSize:      1,
+				FallbackShrink: defaultFallbackShrink,
+				Retry:          RetryConfig{MaxAttempts: 3, BackoffMs: 2000},
 				Repair: RepairConfig{
 					Enabled:              true,
 					JSONStructural:       true,
@@ -333,7 +346,7 @@ func Default() *Config {
 			AutoMigrate:     true,
 			JWTSecret:       "dev-insecure-secret-change-me",
 			JWTIssuer:       "linguaflow",
-			JWTExpiry:       time.Hour,
+			JWTExpiry:       15 * time.Minute,
 			RefreshExpiry:   30 * 24 * time.Hour,
 			ShutdownTimeout: 10 * time.Second,
 			CORS: CORSConfig{
@@ -375,11 +388,17 @@ func (c *Config) Validate() error {
 	if c.Pipeline.Translate.Concurrency < 1 {
 		c.Pipeline.Translate.Concurrency = 1
 	}
+	if c.Pipeline.Translate.BatchSize <= 0 && c.Pipeline.Translate.MaxWordsPerBatch <= 0 {
+		c.Pipeline.Translate.BatchSize = 1
+	}
 	if c.Pipeline.Translate.Retry.BackoffMs < 1000 {
 		c.Pipeline.Translate.Retry.BackoffMs = 1000
 	}
+	if c.Pipeline.Translate.Retry.MaxAttempts < 0 {
+		c.Pipeline.Translate.Retry.MaxAttempts = 0
+	}
 	if shrink := c.Pipeline.Translate.FallbackShrink; math.IsNaN(shrink) || math.IsInf(shrink, 0) || shrink < 0 {
-		c.Pipeline.Translate.FallbackShrink = 0
+		c.Pipeline.Translate.FallbackShrink = defaultFallbackShrink
 	} else if shrink >= 1 {
 		return fmt.Errorf("pipeline.translate.fallback_shrink must be < 1, got %v", shrink)
 	}
@@ -394,6 +413,12 @@ func (c *Config) Validate() error {
 	default:
 		return fmt.Errorf("pipeline.protect.ruby.output_format must be one of %s|%s, got %q",
 			RubyOutputDefault, RubyOutputInlineMarkers, c.Pipeline.Protect.Ruby.OutputFormat)
+	}
+	validRubyKinds := map[string]bool{"phonetic": true, "semantic": true, "creative": true}
+	for _, k := range c.Pipeline.Protect.Ruby.PreserveKinds {
+		if !validRubyKinds[k] {
+			return fmt.Errorf("pipeline.protect.ruby.preserve_kinds: invalid kind %q (must be one of phonetic, semantic, creative)", k)
+		}
 	}
 	c.Pipeline.Translate.Repair.Normalize()
 	// Inline bootstrap 校验
@@ -431,6 +456,14 @@ func (c *Config) Validate() error {
 	if c.Glossary.Standalone.MinSourceLen < 1 {
 		c.Glossary.Standalone.MinSourceLen = 2
 	}
+	switch c.Server.Mode {
+	case "", ModeServer:
+		c.Server.Mode = ModeServer
+	case ModeLocal:
+		// ok
+	default:
+		return fmt.Errorf("server.mode must be one of %s|%s, got %q", ModeServer, ModeLocal, c.Server.Mode)
+	}
 	if c.Server.Host == "" {
 		c.Server.Host = "0.0.0.0"
 	}
@@ -447,7 +480,7 @@ func (c *Config) Validate() error {
 		c.Server.JWTIssuer = "linguaflow"
 	}
 	if c.Server.JWTExpiry <= 0 {
-		c.Server.JWTExpiry = time.Hour
+		c.Server.JWTExpiry = 15 * time.Minute
 	}
 	if c.Server.RefreshExpiry <= 0 {
 		c.Server.RefreshExpiry = 30 * 24 * time.Hour

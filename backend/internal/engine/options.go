@@ -24,11 +24,11 @@ type Options struct {
 	Rounds []Round
 
 	// BootstrapBackends 是术语自举阶段使用的后端列表。
-	// 为空时回退到 Rounds[0].Backends。
+	// 为空时回退到 Rounds[0].Backend。
 	BootstrapBackends []backend.Backend
 
 	// RubyRetryBackends 是注音对齐重试使用的后端列表。
-	// 为空时回退到 Rounds[0].Backends。
+	// 为空时回退到 Rounds[0].Backend。
 	RubyRetryBackends []backend.Backend
 
 	// Config 是策略配置（分割、保护、提示词、术语表等）。
@@ -47,9 +47,9 @@ type Options struct {
 
 // Round 描述一轮翻译的执行配置。
 type Round struct {
-	// Backends 本轮使用的后端列表，按优先级排序。
-	// 必须非空。
-	Backends []backend.Backend
+	// Backend 本轮使用的后端。
+	// 必须非 nil。
+	Backend backend.Backend
 
 	// Name 轮次名称，用于日志。空值自动生成 "round-N"。
 	Name string
@@ -57,14 +57,14 @@ type Round struct {
 	// BatchSize 本轮的批大小。<=0 时回退到全局默认。
 	BatchSize int
 
+	// MaxWordsPerBatch 本轮的每批字词数上限。0=不限制。
+	MaxWordsPerBatch int
+
 	// Concurrency 本轮的并发数。<=0 时回退到全局默认。
 	Concurrency int
 
-	// FallbackShrink 本轮的批失败收缩系数。(0,1) 启用递归缩小；0 表示直接降到单段。
+	// FallbackShrink 本轮的批失败收缩系数。(0,1) 启用递归缩小；0 表示回退到全局默认。
 	FallbackShrink float64
-
-	// RateLimitPerSec 本轮的限速。<=0 时回退到全局默认；全局也为 0 时限速。
-	RateLimitPerSec int
 
 	// Retry 本轮的重试策略。零值回退到全局默认。
 	Retry backend.RetryPolicy
@@ -104,6 +104,7 @@ func resolveDefault(val, global, fallback int) int {
 }
 
 // resolveShrink 返回 val（>0 时），否则返回 global。
+// 0 表示未设置，回退到全局默认值。
 func resolveShrink(val, global float64) float64 {
 	if val > 0 {
 		return val
@@ -140,15 +141,15 @@ func buildStagesRounds(in []Round, cfg *config.Config) []pipeline.Round {
 		}
 
 		out = append(out, pipeline.Round{
-			Name:            resolveName(r.Name, i),
-			Backends:        r.Backends,
-			BatchSize:       resolveDefault(r.BatchSize, cfg.Pipeline.Translate.BatchSize, 1),
-			Concurrency:     resolveDefault(r.Concurrency, cfg.Pipeline.Translate.Concurrency, 1),
-			FallbackShrink:  resolveShrink(r.FallbackShrink, cfg.Pipeline.Translate.FallbackShrink),
-			RateLimitPerSec: resolveDefault(r.RateLimitPerSec, cfg.Pipeline.Translate.RateLimitPerSec, 0),
-			Retry:           retry,
-			Renderer:        r.Renderer,
-			Repair:          roundRepair,
+			Name:             resolveName(r.Name, i),
+			Backend:          r.Backend,
+			BatchSize:        resolveDefault(r.BatchSize, cfg.Pipeline.Translate.BatchSize, 1),
+			MaxWordsPerBatch: r.MaxWordsPerBatch,
+			Concurrency:      resolveDefault(r.Concurrency, cfg.Pipeline.Translate.Concurrency, 1),
+			FallbackShrink:   resolveShrink(r.FallbackShrink, cfg.Pipeline.Translate.FallbackShrink),
+			Retry:            retry,
+			Renderer:         r.Renderer,
+			Repair:           roundRepair,
 		})
 	}
 	return out

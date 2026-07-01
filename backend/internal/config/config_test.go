@@ -37,8 +37,8 @@ func TestValidateServerConfig_Defaults(t *testing.T) {
 	if cfg.Server.JWTIssuer != "linguaflow" {
 		t.Fatalf("jwt_issuer=%q want linguaflow", cfg.Server.JWTIssuer)
 	}
-	if cfg.Server.JWTExpiry != time.Hour {
-		t.Fatalf("jwt_expiry=%v want 1h", cfg.Server.JWTExpiry)
+	if cfg.Server.JWTExpiry != 15*time.Minute {
+		t.Fatalf("jwt_expiry=%v want 15m", cfg.Server.JWTExpiry)
 	}
 	if cfg.Server.RefreshExpiry != 30*24*time.Hour {
 		t.Fatalf("refresh_token_expiry=%v want 720h", cfg.Server.RefreshExpiry)

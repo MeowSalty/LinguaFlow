@@ -286,14 +286,20 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 		if round.ProfileID < 0 && !templates.IsBuiltinID(round.ProfileID) {
 			return fmt.Errorf("%w: rounds[%d].profile_id %d is not a valid builtin template", ErrExecutionPlanConfigInvalid, i, round.ProfileID)
 		}
-		if round.BatchSize < 1 {
-			return fmt.Errorf("%w: rounds[%d].batch_size must be >= 1", ErrExecutionPlanConfigInvalid, i)
+		if round.BatchSize < 0 {
+			return fmt.Errorf("%w: rounds[%d].batch_size must be >= 0", ErrExecutionPlanConfigInvalid, i)
+		}
+		if round.MaxWordsPerBatch < 0 {
+			return fmt.Errorf("%w: rounds[%d].max_words_per_batch must be >= 0", ErrExecutionPlanConfigInvalid, i)
+		}
+		if round.BatchSize <= 0 && round.MaxWordsPerBatch <= 0 {
+			return fmt.Errorf("%w: rounds[%d].batch_size and max_words_per_batch cannot both be 0", ErrExecutionPlanConfigInvalid, i)
 		}
 		if round.Concurrency < 1 {
 			return fmt.Errorf("%w: rounds[%d].concurrency must be >= 1", ErrExecutionPlanConfigInvalid, i)
 		}
-		if round.FallbackShrink < 0 || round.FallbackShrink > 1 {
-			return fmt.Errorf("%w: rounds[%d].fallback_shrink must be in [0, 1]", ErrExecutionPlanConfigInvalid, i)
+		if round.FallbackShrink < 0 || round.FallbackShrink >= 1 {
+			return fmt.Errorf("%w: rounds[%d].fallback_shrink must be in [0, 1)", ErrExecutionPlanConfigInvalid, i)
 		}
 	}
 	return nil

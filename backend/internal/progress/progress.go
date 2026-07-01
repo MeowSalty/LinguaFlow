@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/schollz/progressbar/v3"
 )
 
@@ -36,6 +37,33 @@ func (Nop) SegmentDone()           {}
 func (Nop) BatchComplete()         {}
 func (Nop) StageDone()             {}
 func (Nop) Close() error           { return nil }
+
+// BatchEvent describes the result of a single batch translation attempt.
+type BatchEvent struct {
+	Stage           string                  `json:"stage"`
+	SegmentIDs      []string                `json:"segment_ids"`
+	SegmentCount    int                     `json:"segment_count"`
+	BackendName     string                  `json:"backend_name"`
+	Status          string                  `json:"status"` // "success" | "partial" | "failed"
+	DurationMs      int64                   `json:"duration_ms"`
+	InputTokens     int64                   `json:"input_tokens"`
+	OutputTokens    int64                   `json:"output_tokens"`
+	SentContent     string                  `json:"sent_content"`
+	ReceivedContent string                  `json:"received_content"`
+	UsedGlossary    []prompt.GlossaryEntry  `json:"used_glossary,omitempty"`
+	AddedGlossary   []prompt.BootstrapEntry `json:"added_glossary,omitempty"`
+	ErrorType       string                  `json:"error_type,omitempty"` // "backend_error" | "parse_error" | "placeholder_error" | ""
+	ErrorMessage    string                  `json:"error_message,omitempty"`
+	HTTPStatus      int                     `json:"http_status,omitempty"`
+	TriedBackends   []string                `json:"tried_backends,omitempty"`
+	ShrinkAttempted bool                    `json:"shrink_attempted,omitempty"`
+}
+
+// BatchObserver is an optional interface that a Reporter may implement
+// to receive batch-level events from the translation pipeline.
+type BatchObserver interface {
+	OnBatchEvent(event BatchEvent)
+}
 
 // defaultRefreshEvery 是 refreshLoop 周期重绘的默认间隔。
 // 选 250ms：> progressbar 内部 80ms throttle，且足够让 elapsed time 看起来连续。

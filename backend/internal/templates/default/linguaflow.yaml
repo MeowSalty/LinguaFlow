@@ -22,8 +22,8 @@ backends:
     type: openai
     # 是否启用该后端
     enabled: true
-    # 后端级限流（每秒请求数）；0 表示使用轮次级或全局限流
-    rate_limit_per_sec: 0
+    # 后端级限流（每分钟请求数）；0 表示不限速
+    rate_limit_per_minute: 0
     options:
       # API 密钥，支持 ${ENV_VAR} 环境变量展开
       api_key: ${OPENAI_API_KEY}
@@ -83,14 +83,15 @@ execution:
       prompt: 通用提示词
       # 引用 translation_profiles 中定义的策略名称
       profile: 通用策略
-      # 一次合并发送的段数；1 表示逐段翻译，>1 为批量模式
+      # 一次合并发送的段数；1 表示逐段翻译，>1 为批量模式；0 表示不限段落数（需配合 max_words_per_batch）
       batch_size: 1
+      # 每批字词数上限；0 表示不限制（仅使用 batch_size 约束）
+      # CJK 每字算 1，拉丁文按空格分词每词算 1
+      # max_words_per_batch: 500
       # 并发翻译数
       concurrency: 4
       # 整批失败时的缩放因子（0-1）；0 表示直接降到单段重试
       fallback_shrink: 0.5
-      # 每秒请求数限流（覆盖后端级限流）；0 表示不限流
-      rate_limit_per_sec: 5
       # 重试配置
       retry:
         # 最大重试次数

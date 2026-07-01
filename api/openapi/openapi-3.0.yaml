@@ -19,6 +19,20 @@ paths:
                 $ref: '#/components/schemas/HealthResponse'
         default:
           $ref: '#/components/responses/Problem'
+  /mode:
+    get:
+      operationId: GetMode
+      summary: 获取运行模式
+      description: 返回当前服务的运行模式（local 单用户本地模式 / server 多租户服务端模式），供前端决定是否跳过登录页。无需鉴权。
+      responses:
+        '200':
+          description: 当前模式
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModeResponse'
+        default:
+          $ref: '#/components/responses/Problem'
   /auth/register:
     post:
       operationId: RegisterAuth
@@ -1287,33 +1301,6 @@ paths:
                 $ref: '#/components/schemas/TranslationJob'
         default:
           $ref: '#/components/responses/Problem'
-  /translation-jobs/{translationJobId}/events:
-    parameters:
-      - $ref: '#/components/parameters/TranslationJobId'
-    get:
-      operationId: ListTranslationJobEvents
-      summary: 获取翻译任务事件列表
-      security:
-        - bearerAuth: []
-      parameters:
-        - name: limit
-          in: query
-          required: false
-          schema:
-            type: integer
-            default: 50
-            maximum: 200
-      responses:
-        '200':
-          description: 事件列表
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/JobEvent'
-        default:
-          $ref: '#/components/responses/Problem'
   /translation-jobs/{translationJobId}/cancel:
     parameters:
       - $ref: '#/components/parameters/TranslationJobId'
@@ -1756,6 +1743,19 @@ components:
         service:
           type: string
           example: linguaflow
+    ModeResponse:
+      type: object
+      required:
+        - mode
+      properties:
+        mode:
+          type: string
+          enum:
+            - local
+            - server
+          x-enum-varnames:
+            - ModeLocal
+            - ModeServer
     User:
       type: object
       required:
@@ -2034,6 +2034,8 @@ components:
         - directory
         - format
         - total_segments
+        - translated_segments
+        - approved_segments
         - created_at
         - updated_at
       properties:
@@ -2052,6 +2054,12 @@ components:
           type: string
         total_segments:
           type: integer
+        translated_segments:
+          type: integer
+          description: 已翻译段落数（含 translated、edited、approved）
+        approved_segments:
+          type: integer
+          description: 已审核通过段落数
         created_at:
           type: string
           format: date-time
@@ -2268,6 +2276,7 @@ components:
         - group_title
         - segment_count
         - translated_count
+        - approved_count
       properties:
         group_key:
           type: string
@@ -2281,6 +2290,9 @@ components:
         translated_count:
           type: integer
           description: 已翻译的 segment 数量
+        approved_count:
+          type: integer
+          description: 已审核通过的 segment 数量
     ResourceSegmentGroupListResponse:
       type: object
       required:
@@ -2428,6 +2440,10 @@ components:
           type: integer
         total_segments:
           type: integer
+          description: 总段落数（创建时为选中的 segment 数，ReconcileJob 修正为实际翻译量）
+        stage_total:
+          type: integer
+          description: 实际需要翻译的段落数（ReconcileJob 从各资源的 stage_total 聚合，执行中动态更新）
         completed_segments:
           type: integer
         error_message:
@@ -2449,12 +2465,6 @@ components:
         current_stage:
           type: string
           description: 当前活跃的执行阶段名称（聚合自 JobResource）
-        progress_percentage:
-          type: number
-          format: float
-          minimum: 0
-          maximum: 100
-          description: 整体进度百分比（0-100），由后端计算
         queue_position:
           type: integer
           nullable: true
@@ -2474,34 +2484,6 @@ components:
             $ref: '#/components/schemas/TranslationJob'
         next_cursor:
           type: string
-    JobEvent:
-      type: object
-      required:
-        - id
-        - job_id
-        - level
-        - message
-        - created_at
-      properties:
-        id:
-          type: integer
-        job_id:
-          type: integer
-        level:
-          type: string
-          enum:
-            - info
-            - warn
-            - error
-        stage:
-          type: string
-        message:
-          type: string
-        metadata:
-          type: object
-        created_at:
-          type: string
-          format: date-time
     Activity:
       type: object
       required:
@@ -2569,6 +2551,11 @@ components:
         options:
           type: object
           additionalProperties: true
+        rate_limit_per_minute:
+          type: integer
+          minimum: 0
+          default: 0
+          description: 每分钟请求限制；0 表示不限速
         owner_user_id:
           type: integer
         owner_org_id:
@@ -2599,6 +2586,11 @@ components:
         options:
           type: object
           additionalProperties: true
+        rate_limit_per_minute:
+          type: integer
+          minimum: 0
+          default: 0
+          description: 每分钟请求限制；0 表示不限速
       additionalProperties: false
     UpdateBackendRequest:
       type: object
@@ -2617,6 +2609,11 @@ components:
         options:
           type: object
           additionalProperties: true
+        rate_limit_per_minute:
+          type: integer
+          minimum: 0
+          default: 0
+          description: 每分钟请求限制；0 表示不限速
       additionalProperties: false
     Project:
       type: object
@@ -3259,7 +3256,6 @@ components:
         - backend_id
         - prompt_template_id
         - profile_id
-        - batch_size
         - concurrency
       properties:
         name:
@@ -3276,19 +3272,21 @@ components:
           description: 策略模板 ID（TranslationProfile 单表全局唯一）
         batch_size:
           type: integer
-          minimum: 1
+          minimum: 0
+          description: 段落数上限；0=不限制，与 max_words_per_batch 至少填一项
+        max_words_per_batch:
+          type: integer
+          minimum: 0
+          description: 字词数上限；0=不限制，与 batch_size 至少填一项
         concurrency:
           type: integer
           minimum: 1
         fallback_shrink:
           type: number
           minimum: 0
+          exclusiveMinimum: true
           maximum: 1
-          default: 0
-        rate_limit_per_sec:
-          type: integer
-          minimum: 0
-          default: 0
+          exclusiveMaximum: true
         retry:
           $ref: '#/components/schemas/RetryConfig'
     PromptTemplateScope:
@@ -3330,6 +3328,19 @@ components:
             - ruby_output
             - inline_markers
           default: ruby_output
+        preserve_kinds:
+          type: array
+          items:
+            type: string
+            enum:
+              - phonetic
+              - semantic
+              - creative
+          default:
+            - phonetic
+            - semantic
+            - creative
+          description: 保留的注音分类列表
     ProfileProtectConfig:
       type: object
       required:

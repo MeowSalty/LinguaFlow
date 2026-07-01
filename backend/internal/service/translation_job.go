@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -21,6 +20,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 )
 
@@ -56,6 +56,7 @@ type TranslationJobService struct {
 	promptTemplates *PromptTemplateService
 	profiles        *TranslationProfileService
 	store           *filestore.LocalStore
+	broker          *event.Broker
 }
 
 // CreateTranslationJobInput 创建翻译任务的输入参数。
@@ -84,6 +85,7 @@ func NewTranslationJobService(
 	promptTemplates *PromptTemplateService,
 	profiles *TranslationProfileService,
 	store *filestore.LocalStore,
+	broker *event.Broker,
 ) *TranslationJobService {
 	return &TranslationJobService{
 		client:          client,
@@ -93,6 +95,7 @@ func NewTranslationJobService(
 		promptTemplates: promptTemplates,
 		profiles:        profiles,
 		store:           store,
+		broker:          broker,
 	}
 }
 
@@ -138,24 +141,25 @@ type ExecutionPlanRubyRetrySnapshot struct {
 
 // JobRoundSnapshot 单轮的完整执行快照。
 type JobRoundSnapshot struct {
-	Name            string             `json:"name"`
-	Backend         BackendSnapshot    `json:"backend"`
-	Prompt          PromptSnapshot     `json:"prompt"`
-	Strategy        StrategySnapshot   `json:"strategy"`
-	BatchSize       int                `json:"batch_size"`
-	Concurrency     int                `json:"concurrency"`
-	FallbackShrink  float64            `json:"fallback_shrink"`
-	RateLimitPerSec int                `json:"rate_limit_per_sec"`
-	Retry           schema.RetryConfig `json:"retry"`
+	Name             string             `json:"name"`
+	Backend          BackendSnapshot    `json:"backend"`
+	Prompt           PromptSnapshot     `json:"prompt"`
+	Strategy         StrategySnapshot   `json:"strategy"`
+	BatchSize        int                `json:"batch_size"`
+	MaxWordsPerBatch int                `json:"max_words_per_batch"`
+	Concurrency      int                `json:"concurrency"`
+	FallbackShrink   float64            `json:"fallback_shrink"`
+	Retry            schema.RetryConfig `json:"retry"`
 }
 
 // BackendSnapshot 后端配置快照。
 type BackendSnapshot struct {
-	ID      int            `json:"id"`
-	Scope   string         `json:"scope"`
-	Name    string         `json:"name"`
-	Type    string         `json:"type"`
-	Options map[string]any `json:"options"`
+	ID                 int            `json:"id"`
+	Scope              string         `json:"scope"`
+	Name               string         `json:"name"`
+	Type               string         `json:"type"`
+	Options            map[string]any `json:"options"`
+	RateLimitPerMinute int            `json:"rate_limit_per_minute"`
 }
 
 // PromptSnapshot 提示词模板快照。
@@ -328,15 +332,15 @@ func (s *TranslationJobService) validateAndSnapshot(
 		// 内联自举不再需要独立的 bootstrap 模板（inline 是翻译 prompt 的一部分）
 
 		snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
-			Name:            round.Name,
-			Backend:         *backendSnap,
-			Prompt:          *promptSnap,
-			Strategy:        *strategySnap,
-			BatchSize:       round.BatchSize,
-			Concurrency:     round.Concurrency,
-			FallbackShrink:  round.FallbackShrink,
-			RateLimitPerSec: round.RateLimitPerSec,
-			Retry:           round.Retry,
+			Name:             round.Name,
+			Backend:          *backendSnap,
+			Prompt:           *promptSnap,
+			Strategy:         *strategySnap,
+			BatchSize:        round.BatchSize,
+			MaxWordsPerBatch: round.MaxWordsPerBatch,
+			Concurrency:      round.Concurrency,
+			FallbackShrink:   round.FallbackShrink,
+			Retry:            round.Retry,
 		})
 	}
 
@@ -451,11 +455,12 @@ func (s *TranslationJobService) snapshotBackend(ctx context.Context, backendID i
 		return nil, err
 	}
 	return &BackendSnapshot{
-		ID:      b.ID,
-		Scope:   b.Scope,
-		Name:    b.Name,
-		Type:    string(b.BackendType),
-		Options: cloneMap(b.Options),
+		ID:                 b.ID,
+		Scope:              b.Scope,
+		Name:               b.Name,
+		Type:               string(b.BackendType),
+		Options:            cloneMap(b.Options),
+		RateLimitPerMinute: b.RateLimitPerMinute,
 	}, nil
 }
 
@@ -481,6 +486,7 @@ func (s *TranslationJobService) snapshotProfile(ctx context.Context, profileID i
 		return nil, err
 	}
 	tp.Config.NormalizeContext()
+	tp.Config.NormalizePreserveKinds()
 	id := tp.ID
 	return &StrategySnapshot{
 		ProfileID:   &id,
@@ -554,7 +560,26 @@ func (s *TranslationJobService) LoadJobExecution(ctx context.Context, jobID int)
 }
 
 func (s *TranslationJobService) MarkJobRunning(ctx context.Context, jobID int) error {
-	return s.client.TranslationJob.UpdateOneID(jobID).SetStatus(TranslationJobStatusRunning).Exec(ctx)
+	if err := s.client.TranslationJob.UpdateOneID(jobID).SetStatus(TranslationJobStatusRunning).Exec(ctx); err != nil {
+		return err
+	}
+	s.publishEvent(jobID, "job_started", "info", "", "任务开始执行")
+	return nil
+}
+
+// publishEvent publishes a lifecycle event to the Broker. No-op if broker is nil.
+func (s *TranslationJobService) publishEvent(jobID int, eventType, level, stage, message string) {
+	if s.broker == nil {
+		return
+	}
+	s.broker.Publish(jobID, event.Event{
+		Type:      eventType,
+		JobID:     jobID,
+		Level:     level,
+		Stage:     stage,
+		Message:   message,
+		CreatedAt: time.Now(),
+	})
 }
 
 // MarkJobStarted 记录任务开始时间。
@@ -573,7 +598,7 @@ func (s *TranslationJobService) MarkJobResourceStarted(ctx context.Context, jobR
 		Exec(ctx)
 }
 
-func (s *TranslationJobService) MarkJobResourceRunning(ctx context.Context, jobResourceID int) error {
+func (s *TranslationJobService) MarkJobResourceRunning(ctx context.Context, jobID, jobResourceID int) error {
 	if err := s.client.JobResource.UpdateOneID(jobResourceID).
 		SetStatus(JobResourceStatusRunning).
 		ClearErrorMessage().
@@ -583,10 +608,11 @@ func (s *TranslationJobService) MarkJobResourceRunning(ctx context.Context, jobR
 		}
 		return err
 	}
+	s.publishEvent(jobID, "resource_started", "info", "", "开始翻译资源")
 	return nil
 }
 
-func (s *TranslationJobService) MarkJobResourceCompleted(ctx context.Context, jobResourceID int, outputPath string, completedSegments int) error {
+func (s *TranslationJobService) MarkJobResourceCompleted(ctx context.Context, jobID, jobResourceID int, outputPath string, completedSegments int) error {
 	if err := s.client.JobResource.UpdateOneID(jobResourceID).
 		SetStatus(JobResourceStatusCompleted).
 		SetOutputPath(strings.TrimSpace(outputPath)).
@@ -598,10 +624,11 @@ func (s *TranslationJobService) MarkJobResourceCompleted(ctx context.Context, jo
 		}
 		return err
 	}
+	s.publishEvent(jobID, "resource_completed", "info", "", fmt.Sprintf("资源翻译完成 (%d 段)", completedSegments))
 	return nil
 }
 
-func (s *TranslationJobService) MarkJobResourceFailed(ctx context.Context, jobResourceID int, failure error) error {
+func (s *TranslationJobService) MarkJobResourceFailed(ctx context.Context, jobID, jobResourceID int, failure error) error {
 	message := "job resource failed"
 	if failure != nil {
 		message = failure.Error()
@@ -615,10 +642,11 @@ func (s *TranslationJobService) MarkJobResourceFailed(ctx context.Context, jobRe
 		}
 		return err
 	}
+	s.publishEvent(jobID, "resource_failed", "error", "", fmt.Sprintf("资源翻译失败: %s", message))
 	return nil
 }
 
-func (s *TranslationJobService) MarkJobResourceCancelled(ctx context.Context, jobResourceID int) error {
+func (s *TranslationJobService) MarkJobResourceCancelled(ctx context.Context, jobID, jobResourceID int) error {
 	if err := s.client.JobResource.UpdateOneID(jobResourceID).
 		SetStatus(JobResourceStatusCancelled).
 		Exec(ctx); err != nil {
@@ -627,6 +655,7 @@ func (s *TranslationJobService) MarkJobResourceCancelled(ctx context.Context, jo
 		}
 		return err
 	}
+	s.publishEvent(jobID, "resource_cancelled", "info", "", "资源翻译取消")
 	return nil
 }
 
@@ -649,6 +678,7 @@ func (s *TranslationJobService) CancelJob(ctx context.Context, actorUserID, jobI
 		}
 		return nil, err
 	}
+	s.publishEvent(jobID, "job_cancelled", "info", "", "任务已取消")
 	return s.GetJob(ctx, actorUserID, current.ID)
 }
 
@@ -737,16 +767,31 @@ func (s *TranslationJobService) ReconcileJob(ctx context.Context, jobID int) err
 		"completed_resources", completed,
 		"total_resources", len(current.Edges.JobResources),
 	)
+	// 动态计算 stage_total：已完成资源取 stage_total（精确值），未完成资源取 segment_count（近似值）
+	stageTotal := 0
+	for _, item := range current.Edges.JobResources {
+		if item.StageTotal > 0 {
+			stageTotal += item.StageTotal
+		} else {
+			stageTotal += item.SegmentCount
+		}
+	}
+
 	update := s.client.TranslationJob.UpdateOneID(jobID).
 		SetStatus(status).
 		SetResourceCount(len(current.Edges.JobResources)).
 		SetCompletedResources(completed).
 		SetFailedResources(failed).
-		SetCompletedSegments(completedSegments)
+		SetCompletedSegments(completedSegments).
+		SetStageTotal(stageTotal)
 	if firstFailure != nil && status == TranslationJobStatusFailed {
 		update.SetErrorMessage(*firstFailure)
 	} else {
 		update.ClearErrorMessage()
+	}
+	// 所有资源结束后，用 stage_total 修正 total_segments，保持一致
+	if pendingCount == 0 && runningCount == 0 && stageTotal > 0 {
+		update.SetTotalSegments(stageTotal)
 	}
 	if err := update.Exec(ctx); err != nil {
 		if ent.IsNotFound(err) {
@@ -754,6 +799,21 @@ func (s *TranslationJobService) ReconcileJob(ctx context.Context, jobID int) err
 		}
 		return err
 	}
+
+	// Publish lifecycle events based on derived status.
+	switch status {
+	case TranslationJobStatusCompleted:
+		s.publishEvent(jobID, "job_completed", "info", "", "任务完成")
+	case TranslationJobStatusFailed:
+		errMsg := "任务失败"
+		if firstFailure != nil {
+			errMsg = *firstFailure
+		}
+		s.publishEvent(jobID, "job_failed", "error", "", errMsg)
+	case TranslationJobStatusCancelled:
+		s.publishEvent(jobID, "job_cancelled", "info", "", "任务已取消")
+	}
+
 	return nil
 }
 
@@ -799,9 +859,7 @@ func (s *TranslationJobService) ListJobs(ctx context.Context, actorUserID, proje
 	if triggerType := strings.TrimSpace(opts.TriggerType); triggerType != "" {
 		q = q.Where(translationjob.TriggerTypeEQ(triggerType))
 	}
-	return q.Order(ent.Asc(translationjob.FieldID)).Limit(opts.Limit).WithJobResources(func(q *ent.JobResourceQuery) {
-		q.WithResource().Order(ent.Asc(jobresource.FieldID))
-	}).All(ctx)
+	return q.Order(ent.Asc(translationjob.FieldID)).Limit(opts.Limit).All(ctx)
 }
 
 func (s *TranslationJobService) GetJob(ctx context.Context, actorUserID, jobID int) (*ent.TranslationJob, error) {
@@ -827,39 +885,6 @@ func (s *TranslationJobService) GetJob(ctx context.Context, actorUserID, jobID i
 		return nil, err
 	}
 	return row, nil
-}
-
-// ListJobEvents 查询翻译任务事件列表。
-func (s *TranslationJobService) ListJobEvents(ctx context.Context, actorUserID, jobID int, limit int) ([]*ent.JobEvent, error) {
-	// 验证任务存在且有权限访问
-	job, err := s.client.TranslationJob.Query().
-		Where(translationjob.IDEQ(jobID)).
-		WithProject().
-		Only(ctx)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return nil, ErrTranslationJobNotFound
-		}
-		return nil, err
-	}
-	projectRow, err := job.Edges.ProjectOrErr()
-	if err != nil {
-		return nil, err
-	}
-	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectRow.ID, false); err != nil {
-		return nil, err
-	}
-
-	// 查询事件列表，按 created_at 倒序
-	events, err := s.client.JobEvent.Query().
-		Where(jobevent.HasJobWith(translationjob.IDEQ(jobID))).
-		Order(ent.Desc(jobevent.FieldCreatedAt)).
-		Limit(limit).
-		All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return events, nil
 }
 
 func (s *TranslationJobService) resolveJobSelection(ctx context.Context, projectID int, input CreateTranslationJobInput) (map[int][]int, error) {

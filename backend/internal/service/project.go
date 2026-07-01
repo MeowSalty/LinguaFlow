@@ -8,7 +8,6 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -221,17 +220,7 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 		}
 	}
 
-	// Step 2: 删除 JobEvent（依赖 TranslationJob，NoAction）
-	if len(tjIDs) > 0 {
-		_, err = tx.JobEvent.Delete().
-			Where(jobevent.HasJobWith(translationjob.IDIn(tjIDs...))).
-			Exec(ctx)
-		if err != nil {
-			return nil, fmt.Errorf("delete job events: %w", err)
-		}
-	}
-
-	// Step 3: 删除 TranslationJob
+	// Step 2: 删除 TranslationJob
 	if len(tjIDs) > 0 {
 		_, err = tx.TranslationJob.Delete().
 			Where(translationjob.IDIn(tjIDs...)).
@@ -241,7 +230,7 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 		}
 	}
 
-	// Step 4: 删除 Segment（依赖 Resource）
+	// Step 3: 删除 Segment（依赖 Resource）
 	if len(resIDs) > 0 {
 		_, err = tx.Segment.Delete().
 			Where(segment.ResourceIDIn(resIDs...)).
