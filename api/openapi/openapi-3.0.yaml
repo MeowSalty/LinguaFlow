@@ -3284,8 +3284,9 @@ components:
         fallback_shrink:
           type: number
           minimum: 0
+          exclusiveMinimum: true
           maximum: 1
-          default: 0
+          exclusiveMaximum: true
         retry:
           $ref: '#/components/schemas/RetryConfig'
     PromptTemplateScope:
