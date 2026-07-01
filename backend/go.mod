@@ -9,6 +9,7 @@ require (
 	github.com/go-chi/chi/v5 v5.2.3
 	github.com/go-chi/cors v1.2.2
 	github.com/golang-jwt/jwt/v5 v5.2.2
+	github.com/inconshreveable/mousetrap v1.1.0
 	github.com/oapi-codegen/runtime v1.4.0
 	github.com/openai/openai-go/v3 v3.30.0
 	github.com/schollz/progressbar/v3 v3.19.0
@@ -41,7 +42,6 @@ require (
 	github.com/googleapis/enterprise-certificate-proxy v0.3.4 // indirect
 	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/hashicorp/hcl/v2 v2.18.1 // indirect
-	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
