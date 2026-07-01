@@ -298,9 +298,14 @@ export const useResourceStore = defineStore('resource', () => {
   const availableFormats = computed<string[]>(() =>
     [...new Set(resources.value.map((resource) => resource.format).filter(Boolean))].sort(),
   )
-  const readyResourceCount = computed(() => resources.value.length)
   const totalSegmentCount = computed(() =>
     resources.value.reduce((total, resource) => total + resource.total_segments, 0),
+  )
+  const totalTranslatedSegments = computed(() =>
+    resources.value.reduce((total, resource) => total + resource.translated_segments, 0),
+  )
+  const totalApprovedSegments = computed(() =>
+    resources.value.reduce((total, resource) => total + resource.approved_segments, 0),
   )
   const hasActiveUploads = computed(() =>
     uploadTasks.value.some((task) =>
@@ -825,8 +830,9 @@ export const useResourceStore = defineStore('resource', () => {
     actionError,
     // 计算属性
     availableFormats,
-    readyResourceCount,
     totalSegmentCount,
+    totalTranslatedSegments,
+    totalApprovedSegments,
     // EPUB 虚拟目录
     epubDirectoryResourceId,
     epubDirectoryResourceName,

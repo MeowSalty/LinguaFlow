@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { darkTheme, dateZhCN, zhCN, type GlobalThemeOverrides } from 'naive-ui'
 
+import BootstrapNoticeHost from '@/components/BootstrapNoticeHost.vue'
 import AppLayout from '@/layouts/AppLayout.vue'
 import { useLocaleStore } from '@/stores/locale'
 import { useThemeStore } from '@/stores/theme'
@@ -46,6 +47,7 @@ const naiveDateLocale = computed(() => {
     :theme-overrides="themeOverrides"
   >
     <NMessageProvider>
+      <BootstrapNoticeHost />
       <NDialogProvider>
         <RouterView v-slot="{ Component }">
           <component :is="Component" v-if="isBlank" />

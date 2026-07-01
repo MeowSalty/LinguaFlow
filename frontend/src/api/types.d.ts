@@ -24,6 +24,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/mode": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * 获取运行模式
+         * @description 返回当前服务的运行模式（local 单用户本地模式 / server 多租户服务端模式），供前端决定是否跳过登录页。无需鉴权。
+         */
+        get: operations["GetMode"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/auth/register": {
         parameters: {
             query?: never;
@@ -861,25 +881,6 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/translation-jobs/{translationJobId}/events": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                translationJobId: components["parameters"]["TranslationJobId"];
-            };
-            cookie?: never;
-        };
-        /** 获取翻译任务事件列表 */
-        get: operations["ListTranslationJobEvents"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
     "/translation-jobs/{translationJobId}/cancel": {
         parameters: {
             query?: never;
@@ -1088,6 +1089,10 @@ export interface components {
             /** @example linguaflow */
             service?: string;
         };
+        ModeResponse: {
+            /** @enum {string} */
+            mode: "local" | "server";
+        };
         User: {
             id: number;
             username: string;
@@ -1205,6 +1210,10 @@ export interface components {
             directory: string;
             format: string;
             total_segments: number;
+            /** @description 已翻译段落数（含 translated、edited、approved） */
+            translated_segments: number;
+            /** @description 已审核通过段落数 */
+            approved_segments: number;
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
@@ -1315,6 +1324,8 @@ export interface components {
             segment_count: number;
             /** @description 已翻译的 segment 数量 */
             translated_count: number;
+            /** @description 已审核通过的 segment 数量 */
+            approved_count: number;
         };
         ResourceSegmentGroupListResponse: {
             items: components["schemas"]["ResourceSegmentGroup"][];
@@ -1380,7 +1391,10 @@ export interface components {
             resource_count: number;
             completed_resources: number;
             failed_resources: number;
+            /** @description 总段落数（创建时为选中的 segment 数，ReconcileJob 修正为实际翻译量） */
             total_segments: number;
+            /** @description 实际需要翻译的段落数（ReconcileJob 从各资源的 stage_total 聚合，执行中动态更新） */
+            stage_total?: number;
             completed_segments: number;
             error_message?: string;
             /** Format: date-time */
@@ -1395,11 +1409,6 @@ export interface components {
             started_at?: string;
             /** @description 当前活跃的执行阶段名称（聚合自 JobResource） */
             current_stage?: string;
-            /**
-             * Format: float
-             * @description 整体进度百分比（0-100），由后端计算
-             */
-            progress_percentage?: number;
             /** @description 在队列中的位置（1-based），null 表示不在队列中 */
             queue_position?: number | null;
             /** @description 当前队列中的任务总数 */
@@ -1408,17 +1417,6 @@ export interface components {
         TranslationJobListResponse: {
             items: components["schemas"]["TranslationJob"][];
             next_cursor?: string;
-        };
-        JobEvent: {
-            id: number;
-            job_id: number;
-            /** @enum {string} */
-            level: "info" | "warn" | "error";
-            stage?: string;
-            message: string;
-            metadata?: Record<string, never>;
-            /** Format: date-time */
-            created_at: string;
         };
         Activity: {
             id: number;
@@ -1449,6 +1447,11 @@ export interface components {
             options?: {
                 [key: string]: unknown;
             };
+            /**
+             * @description 每分钟请求限制；0 表示不限速
+             * @default 0
+             */
+            rate_limit_per_minute: number;
             owner_user_id?: number;
             owner_org_id?: number;
         };
@@ -1462,6 +1465,11 @@ export interface components {
             options?: {
                 [key: string]: unknown;
             };
+            /**
+             * @description 每分钟请求限制；0 表示不限速
+             * @default 0
+             */
+            rate_limit_per_minute: number;
         };
         UpdateBackendRequest: {
             name: string;
@@ -1470,6 +1478,11 @@ export interface components {
             options?: {
                 [key: string]: unknown;
             };
+            /**
+             * @description 每分钟请求限制；0 表示不限速
+             * @default 0
+             */
+            rate_limit_per_minute: number;
         };
         Project: {
             id: number;
@@ -1790,12 +1803,12 @@ export interface components {
             prompt_template_id: number;
             /** @description 策略模板 ID（TranslationProfile 单表全局唯一） */
             profile_id: number;
-            batch_size: number;
+            /** @description 段落数上限；0=不限制，与 max_words_per_batch 至少填一项 */
+            batch_size?: number;
+            /** @description 字词数上限；0=不限制，与 batch_size 至少填一项 */
+            max_words_per_batch?: number;
             concurrency: number;
-            /** @default 0 */
-            fallback_shrink: number;
-            /** @default 0 */
-            rate_limit_per_sec: number;
+            fallback_shrink?: number;
             retry?: components["schemas"]["RetryConfig"];
         };
         /** @enum {string} */
@@ -1814,6 +1827,15 @@ export interface components {
              * @enum {string}
              */
             output_format: "ruby_output" | "inline_markers";
+            /**
+             * @description 保留的注音分类列表
+             * @default [
+             *       "phonetic",
+             *       "semantic",
+             *       "creative"
+             *     ]
+             */
+            preserve_kinds: ("phonetic" | "semantic" | "creative")[];
         };
         ProfileProtectConfig: {
             enabled: boolean;
@@ -1935,6 +1957,27 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HealthResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetMode: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 当前模式 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ModeResponse"];
                 };
             };
             default: components["responses"]["Problem"];
@@ -3467,31 +3510,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TranslationJob"];
-                };
-            };
-            default: components["responses"]["Problem"];
-        };
-    };
-    ListTranslationJobEvents: {
-        parameters: {
-            query?: {
-                limit?: number;
-            };
-            header?: never;
-            path: {
-                translationJobId: components["parameters"]["TranslationJobId"];
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description 事件列表 */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["JobEvent"][];
                 };
             };
             default: components["responses"]["Problem"];

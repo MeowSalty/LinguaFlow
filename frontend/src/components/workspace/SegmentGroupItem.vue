@@ -8,6 +8,7 @@ interface SegmentGroup {
   group_title: string
   segment_count: number
   translated_count: number
+  approved_count: number
 }
 
 const props = defineProps<{
@@ -26,16 +27,25 @@ const progressPercent = computed(() => {
   if (props.group.segment_count === 0) return 0
   return Math.round((props.group.translated_count / props.group.segment_count) * 100)
 })
+
+const approvedPercent = computed(() => {
+  if (props.group.segment_count === 0) return 0
+  return Math.round((props.group.approved_count / props.group.segment_count) * 100)
+})
 </script>
 
 <template>
   <div
     class="group relative overflow-hidden rounded-lg border border-transparent bg-lf-surface/80 px-4 py-2.5 transition-all hover:border-lf-border-soft hover:bg-lf-surface-elevated hover:shadow-sm hover:shadow-lf-shadow"
   >
-    <!-- 进度背景层 -->
+    <!-- 进度背景层：双重重叠进度条 -->
+    <div
+      class="pointer-events-none absolute inset-y-0 left-0 bg-blue-500/10 transition-all duration-500"
+      :style="{ width: `${progressPercent}%` }"
+    />
     <div
       class="pointer-events-none absolute inset-y-0 left-0 bg-emerald-500/10 transition-all duration-500"
-      :style="{ width: `${progressPercent}%` }"
+      :style="{ width: `${approvedPercent}%` }"
     />
     <div class="flex min-h-14 items-center gap-3">
       <NCheckbox
@@ -84,7 +94,8 @@ const progressPercent = computed(() => {
               </template>
               <span class="block max-w-sm break-all">{{ group.group_key }}</span>
             </NTooltip>
-            <span class="text-[10px] text-emerald-500/80"> {{ progressPercent }}% </span>
+            <span class="text-[10px] text-blue-500/80"> {{ progressPercent }}%</span>
+            <span class="text-[10px] text-emerald-500/80"> {{ approvedPercent }}%</span>
           </div>
         </div>
 

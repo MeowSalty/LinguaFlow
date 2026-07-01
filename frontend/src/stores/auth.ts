@@ -13,6 +13,8 @@ import {
   registerAndLogin,
   setUnauthorizedHandler,
 } from '@/api/client'
+import type { ServiceMode } from '@/stores/service'
+import { useServiceStore } from '@/stores/service'
 
 type User = ApiSchemas['User']
 type LoginPayload = ApiSchemas['LoginRequest']
@@ -24,7 +26,13 @@ export const useAuthStore = defineStore('auth', () => {
   const refreshToken = ref<string | null>(null)
   const isReady = ref<boolean>(false)
 
-  const isAuthenticated = computed(() => Boolean(accessToken.value))
+  const isAuthenticated = computed(() => {
+    const service = useServiceStore()
+    if (service.isLocal) {
+      return Boolean(user.value)
+    }
+    return Boolean(accessToken.value)
+  })
 
   const applySession = (session: AuthSession): void => {
     user.value = session.user
@@ -60,6 +68,12 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const logout = async (): Promise<void> => {
+    const service = useServiceStore()
+    if (service.isLocal) {
+      clearSessionState()
+      return
+    }
+
     try {
       await logoutApi()
     } finally {
@@ -72,7 +86,14 @@ export const useAuthStore = defineStore('auth', () => {
     clearSessionState()
   }
 
-  const bootstrap = async (): Promise<void> => {
+  const handleUnauthorizedLocal = (): void => {
+    clearAuthTokens()
+    user.value = null
+    accessToken.value = null
+    refreshToken.value = null
+  }
+
+  const bootstrapServer = async (): Promise<void> => {
     setUnauthorizedHandler(handleUnauthorized)
 
     const storedAccess = getAccessToken()
@@ -96,6 +117,30 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
+  const bootstrapForMode = async (mode: ServiceMode): Promise<void> => {
+    if (mode === 'local') {
+      setUnauthorizedHandler(handleUnauthorizedLocal)
+      clearAuthTokens()
+      clearSessionState()
+
+      try {
+        const fresh = await fetchCurrentUserApi()
+        user.value = fresh
+      } catch {
+        user.value = null
+      } finally {
+        isReady.value = true
+      }
+      return
+    }
+
+    await bootstrapServer()
+  }
+
+  const bootstrap = async (): Promise<void> => {
+    await bootstrapServer()
+  }
+
   return {
     user,
     accessToken,
@@ -107,5 +152,6 @@ export const useAuthStore = defineStore('auth', () => {
     logout,
     fetchCurrentUser,
     bootstrap,
+    bootstrapForMode,
   }
 })

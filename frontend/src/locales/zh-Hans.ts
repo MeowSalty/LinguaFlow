@@ -10,20 +10,28 @@ const messages = {
     dashboard: '工作台',
     projects: '项目',
     backends: 'AI 后端',
-    translationConfig: '翻译配置',
+    translationConfig: '模板与配置',
     promptTemplates: '提示词模板',
     translationProfiles: '翻译配置',
     executionPlanTemplates: '执行计划',
     about: '关于',
   },
   layout: {
+    localModeBadge: '本地模式',
     userMenu: {
       switchService: '切换服务器',
+      connectRemoteService: '连接远程服务',
       logout: '退出登录',
     },
     messages: {
       logoutSuccess: '已退出登录',
       logoutFailed: '退出登录失败，请重试',
+    },
+  },
+  appBootstrap: {
+    errors: {
+      localUserFailed: '无法获取本地用户信息，请确认本地服务已启动',
+      modeUnreachable: '无法获取服务器运行模式',
     },
   },
   locale: {
@@ -49,6 +57,7 @@ const messages = {
     messages: {
       connected: '已连接到 {name}',
       connectFailed: '连接失败，请检查服务器地址',
+      corsOrUnreachable: '无法连接本机服务：请检查地址与端口，或配置开发代理以避免跨域限制',
     },
     hints: {
       prefix: '留空或填写',
@@ -114,11 +123,6 @@ const messages = {
     },
   },
   dashboard: {
-    greeting: {
-      named: '欢迎回来，{name}',
-      anonymous: '欢迎使用 LinguaFlow',
-    },
-    intro: '这是 LinguaFlow 的工作台首页，查看您的翻译任务统计和最近活动。',
     stats: {
       apiCalls: 'API 调用',
       inputTokens: '输入 Token',
@@ -279,6 +283,7 @@ const messages = {
     updatedAt: '更新于 {time}',
     actions: {
       refresh: '刷新',
+      clear: '清空',
     },
     tabs: {
       resources: '资源文件',
@@ -288,7 +293,6 @@ const messages = {
     },
     stats: {
       resources: '资源文件',
-      readyResources: '可翻译资源',
       segments: '段落总数',
       runningJobs: '运行中任务',
       progress: '已翻译',
@@ -504,7 +508,8 @@ const messages = {
       contentSummarySegments: '{count} 个待翻译段落',
       planPreviewTitle: '执行计划详情',
       planPreviewRounds: '共 {count} 个轮次',
-      planPreviewRoundItem: '轮次 {index}：批次 {batchSize}，并发 {concurrency}',
+      planPreviewRoundItem:
+        '轮次 {index}：段落 {batchSize} / 字词 {maxWordsPerBatch}，并发 {concurrency}',
       confirmSummary:
         '将使用「{planName}」为 {resourceCount} 个资源（{segmentCount} 个段落）创建翻译任务。',
       columns: {
@@ -543,6 +548,7 @@ const messages = {
         translate: '翻译',
         review: '审校',
         finalize: '收尾',
+        ruby_alignment: '注音对齐',
       },
       // 进度文案
       progress: {
@@ -570,6 +576,49 @@ const messages = {
       events: {
         title: '事件日志',
         empty: '暂无事件记录',
+        connected: 'SSE 已连接',
+        disconnected: 'SSE 未连接',
+        newEvents: '新事件 ({count})',
+        synthetic: {
+          jobStarted: '任务开始执行',
+          jobCompleted: '任务已完成',
+          jobFailed: '任务执行失败',
+          jobCancelled: '任务已取消',
+          resourceStarted: '开始翻译资源 {name}',
+          resourceCompleted: '资源 {name} 翻译完成',
+          resourceFailed: '资源 {name} 翻译失败',
+          resourceCancelled: '资源 {name} 已取消',
+          stageStart: '进入阶段',
+        },
+        batch: {
+          status: {
+            success: '成功',
+            partial: '部分成功',
+            failed: '失败',
+          },
+          segments: '{count} 段落',
+          tokens: '{input}↑ {output}↓ tokens',
+          glossaryUsed: '{count} 使用',
+          glossaryAdded: '{count} 新增',
+          expand: '详情',
+          collapse: '收起',
+          sentContent: '发送内容',
+          receivedContent: '接收内容',
+          usedGlossary: '使用术语',
+          addedGlossary: '新增术语',
+          copy: '复制',
+          copySuccess: '已复制',
+          showRaw: '原始',
+          showFormatted: '格式化',
+          errorType: '错误类型',
+          errorMessage: '错误信息',
+          httpStatus: 'HTTP 状态',
+          triedBackends: '尝试后端',
+          contentTruncated: '已截断（原始 {length} 字节）',
+          shrinkAttempted: '已尝试缩放',
+          noContent: '无内容',
+          malformedJson: '内容格式异常，显示原始文本',
+        },
       },
       detail: {
         executionPlan: '执行计划',
@@ -802,6 +851,9 @@ const messages = {
       timeout: '超时时间（秒）',
       responseFormat: '响应格式',
       enablePromptCache: '启用 Prompt Cache',
+      rateLimitPerMinute: '每分钟请求限制',
+      rateLimitPerMinutePlaceholder: '0 表示不限速',
+      rateLimitPerMinuteHint: '限制每分钟发送到此后端的最大请求数，0 表示不限速',
     },
     validation: {
       nameRequired: '请输入后端名称',
@@ -972,6 +1024,10 @@ const messages = {
       ruby: {
         title: 'Ruby 注释保护',
         outputFormat: '输出格式',
+        preserveKinds: '保留注音分类',
+        preserveKindsPhonetic: '音注',
+        preserveKindsSemantic: '义训',
+        preserveKindsCreative: '创意',
       },
       rubyOutputFormatRubyOutput: 'Ruby 输出',
       rubyOutputFormatInlineMarkers: '内联标记',
@@ -1059,6 +1115,7 @@ const messages = {
       roundPromptRequired: '轮次 {n}：请选择提示词模板',
       roundProfileRequired: '轮次 {n}：请选择翻译配置',
       roundBatchSizeRequired: '轮次 {n}：请设置批次大小',
+      roundBatchConfigRequired: '轮次 {n}：批次大小和每批字词数至少填一项',
       roundConcurrencyRequired: '轮次 {n}：请设置并发数',
     },
     messages: {
@@ -1107,9 +1164,12 @@ const messages = {
       translationProfile: '翻译配置',
       profilePlaceholder: '选择翻译配置',
       batchSize: '批次大小',
+      batchSizeHint: '每批处理的段落数上限，0 表示不限制',
+      maxWordsPerBatch: '每批字词数',
+      maxWordsPerBatchHint: '每批处理的字词数上限，0 表示不限制',
       concurrency: '并发数',
       fallbackShrink: '缩放因子',
-      rateLimitPerSec: '限速/秒',
+      fallbackShrinkPlaceholder: '取值范围 0 < x < 1',
       advancedConfig: '高级配置',
       retryMaxAttempts: '最大重试次数',
       retryBackoffMs: '退避毫秒数',
@@ -1126,11 +1186,34 @@ const messages = {
     sourcePrefix: '当前页面来自',
     sourceSuffix: '，自动映射为路径',
   },
+  globalJobTracker: {
+    title: '任务追踪',
+    activeCount: '{count} 个活跃任务',
+    noTrackedJobs: '暂无追踪任务',
+    clearCompleted: '清除已完成',
+    dismiss: '移除',
+    viewDetail: '查看详情',
+    goToProject: '前往项目',
+    close: '关闭',
+    progress: '进度',
+    segments: '{completed}/{total} 段落',
+    project: '所属项目',
+    detailTitle: '任务详情 #{id}',
+    detailFallbackTitle: '任务详情',
+    status: {
+      pending: '等待中',
+      running: '运行中',
+      completed: '已完成',
+      failed: '失败',
+      cancelled: '已取消',
+    },
+  },
   api: {
     errors: {
       requestNotSent: '请求未送达，请检查网络或服务器地址',
       serverReturned: '服务器返回 {status}',
       pingFailed: '连接服务器失败',
+      fetchModeFailed: '获取运行模式失败',
       loginFailed: '登录失败',
       registerFailed: '注册失败',
       refreshSessionFailed: '刷新会话失败',
@@ -1198,7 +1281,6 @@ const messages = {
       glossarySyncExecuteFailed: '术语同步任务提交失败',
       glossarySyncStatusFailed: '术语同步任务状态查询失败',
       glossarySyncCancelFailed: '术语同步任务取消失败',
-      fetchJobEventsFailed: '获取任务事件失败',
     },
   },
 } as const

@@ -114,18 +114,12 @@ export function useJobPolling({
     }, interval)
   }
 
-  // ── 详情/事件轮询 ──
+  // ── 详情轮询 ──
 
   const pollDetail = (): void => {
     const selected = jobStore.selectedJob
     if (!selected || TERMINAL_STATUSES.has(selected.status)) return
     void jobStore.loadJobDetail(selected.id)
-  }
-
-  const pollEvents = (): void => {
-    const selected = jobStore.selectedJob
-    if (!selected || TERMINAL_STATUSES.has(selected.status)) return
-    void jobStore.loadEvents(selected.id)
   }
 
   const clearDetailTimer = (): void => {
@@ -139,7 +133,6 @@ export function useJobPolling({
     if (detailTimer || !hasActiveSelectedJob.value) return
     detailTimer = setInterval(() => {
       pollDetail()
-      pollEvents()
       if (!hasActiveSelectedJob.value) {
         clearDetailTimer()
       }
@@ -171,7 +164,6 @@ export function useJobPolling({
       if (enabled.value) pollList()
       if (hasActiveSelectedJob.value) {
         pollDetail()
-        pollEvents()
       }
       start()
     }
@@ -213,7 +205,6 @@ export function useJobPolling({
       if (enabled.value) pollList()
       if (hasActiveSelectedJob.value) {
         pollDetail()
-        pollEvents()
       }
       start()
     }

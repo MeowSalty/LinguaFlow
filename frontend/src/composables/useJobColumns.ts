@@ -70,10 +70,7 @@ export function useJobColumns(actions: JobColumnActions) {
       key: 'progress',
       width: 220,
       render: (row) => {
-        const percent =
-          row.progress_percentage != null
-            ? Math.round(row.progress_percentage)
-            : getJobProgress(row)
+        const percent = getJobProgress(row)
 
         const stageText = row.current_stage ? getStageLabel(row.current_stage) : null
 

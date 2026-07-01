@@ -4,6 +4,7 @@ import { useMessage } from 'naive-ui'
 
 import { type ApiSchemas } from '@/api/client'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
+import { useGlobalJobTrackerStore } from '@/stores/globalJobTracker'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 import { t } from '@/i18n'
 
@@ -174,9 +175,13 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     })
 
     try {
-      await workspace.createJob(projectId.value, payload)
+      const job = await workspace.createJob(projectId.value, payload)
       message.success(t('workspace.messages.jobCreated'))
       closeJobDrawer()
+
+      const globalTracker = useGlobalJobTrackerStore()
+      globalTracker.trackJob(job, workspace.project?.name)
+
       if (onJobCreated) {
         await onJobCreated()
       }

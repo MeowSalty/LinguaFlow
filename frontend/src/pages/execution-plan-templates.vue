@@ -50,9 +50,9 @@ const DEFAULT_ROUND: ExecutionRoundConfig = {
   prompt_template_id: 0,
   profile_id: 0,
   batch_size: 10,
+  max_words_per_batch: 0,
   concurrency: 3,
-  fallback_shrink: 0,
-  rate_limit_per_sec: 0,
+  fallback_shrink: undefined,
   retry: { max_attempts: 3, backoff_ms: 2000, jitter: true },
 }
 
@@ -189,8 +189,10 @@ const validateRounds = (): boolean => {
       message.error(t('executionPlanTemplates.validation.roundProfileRequired', { n: i + 1 }))
       return false
     }
-    if (!round.batch_size || round.batch_size < 1) {
-      message.error(t('executionPlanTemplates.validation.roundBatchSizeRequired', { n: i + 1 }))
+    const hasBatchSize = round.batch_size && round.batch_size > 0
+    const hasMaxWords = round.max_words_per_batch && round.max_words_per_batch > 0
+    if (!hasBatchSize && !hasMaxWords) {
+      message.error(t('executionPlanTemplates.validation.roundBatchConfigRequired', { n: i + 1 }))
       return false
     }
     if (!round.concurrency || round.concurrency < 1) {
@@ -210,9 +212,9 @@ const buildPayload = (): CreateRequest => {
       prompt_template_id: round.prompt_template_id,
       profile_id: round.profile_id,
       batch_size: round.batch_size,
+      max_words_per_batch: round.max_words_per_batch,
       concurrency: round.concurrency,
-      fallback_shrink: round.fallback_shrink ?? 0,
-      rate_limit_per_sec: round.rate_limit_per_sec ?? 0,
+      fallback_shrink: round.fallback_shrink ?? undefined,
       ...(round.retry ? { retry: round.retry } : {}),
     })),
   }
@@ -292,7 +294,7 @@ const getScopeTagType = (scope: Scope): 'default' | 'info' | 'success' => {
 }
 
 const formatDate = (dateStr: string | undefined): string => {
-  if (!dateStr) return t('executionPlanTemplates.card.noDescription')
+  if (!dateStr) return '—'
   return new Date(dateStr).toLocaleDateString()
 }
 

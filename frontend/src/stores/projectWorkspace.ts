@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { computed, watch } from 'vue'
+import { computed } from 'vue'
 import { storeToRefs } from 'pinia'
 
 import { useProjectStore } from './project'
@@ -63,8 +63,9 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     deletingResourceIds,
     downloadingKeys,
     availableFormats,
-    readyResourceCount,
     totalSegmentCount,
+    totalTranslatedSegments,
+    totalApprovedSegments,
     // EPUB 虚拟目录
     epubDirectoryResourceId,
     epubDirectoryResourceName,
@@ -84,7 +85,6 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     segmentSearch,
     segmentStatusFilter,
     segmentProgressCache,
-    translatedSegmentCount,
     // EPUB 章节导航状态
     segmentGroups,
     loadingSegmentGroups,
@@ -114,12 +114,6 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
 
   // ── 跨域计算属性 ──
 
-  /** 项目级翻译进度百分比 */
-  const translationProgress = computed(() => {
-    if (totalSegmentCount.value === 0) return 0
-    return Math.round((translatedSegmentCount.value / totalSegmentCount.value) * 100)
-  })
-
   const runningJobCount = computed(
     () => jobs.value.filter((job) => job.status === 'pending' || job.status === 'running').length,
   )
@@ -135,16 +129,6 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
    * 避免 resetEpubState() 清空 segmentGroups 后误判为非 EPUB。
    */
   const isEpubResource = computed(() => activeResource.value?.format === 'epub')
-
-  // ── 监听目录变化，自动预加载当前目录下资源的段落进度 ──
-  watch(currentPath, () => {
-    if (projectStore._currentProjectId) {
-      const resourceIds = currentDirectoryResources.value
-        .filter((r) => r.total_segments > 0)
-        .map((r) => r.id)
-      void segmentStore.preloadDirectoryProgress(projectStore._currentProjectId, resourceIds)
-    }
-  })
 
   // ── 直接委托的项目方法 ──
   const { loadProject } = projectStore
@@ -181,7 +165,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   } = resourceStore
 
   // ── 直接委托的段落方法 ──
-  const { loadSegments, updateSegment, getResourceProgress } = segmentStore
+  const { loadSegments, updateSegment } = segmentStore
 
   // ── 直接委托的 EPUB 方法 ──
   const {
@@ -228,14 +212,6 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   /** 删除资源并清空关联段落 */
   const deleteResource = async (projectId: number, resourceId: number): Promise<void> => {
     return resourceStore.deleteResource(projectId, resourceId, segmentStore.resetSegments)
-  }
-
-  /** 为当前目录下的资源预加载段落进度（协调资源与段落 Store） */
-  const preloadDirectoryProgress = async (projectId: number): Promise<void> => {
-    const resourceIds = currentDirectoryResources.value
-      .filter((r) => r.total_segments > 0)
-      .map((r) => r.id)
-    return segmentStore.preloadDirectoryProgress(projectId, resourceIds)
   }
 
   /**
@@ -312,9 +288,6 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     jobStatusFilter,
     // 段落进度缓存
     segmentProgressCache,
-    getResourceProgress,
-    translatedSegmentCount,
-    translationProgress,
     // EPUB 章节导航
     segmentGroups,
     loadingSegmentGroups,
@@ -334,8 +307,9 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     epubDirectoryBreadcrumbSuffix,
     // 计算属性
     availableFormats,
-    readyResourceCount,
     totalSegmentCount,
+    totalTranslatedSegments,
+    totalApprovedSegments,
     runningJobCount,
     // Actions
     loadProject,
@@ -371,7 +345,6 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     downloadResource,
     downloadTranslatedResource,
     setActiveResource,
-    preloadDirectoryProgress,
     // EPUB
     loadSegmentGroups,
     loadEpubData,

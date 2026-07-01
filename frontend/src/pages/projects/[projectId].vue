@@ -188,7 +188,7 @@ const glossaryMgmt = useGlossaryManagement(projectId)
 provide(GlossaryMgmtKey, glossaryMgmt)
 
 const switchToJobsTab = async (): Promise<void> => {
-  activeTab.value = 'jobs'
+  // 任务已通过全局追踪器自动追踪，用户可留在当前页面继续工作
 }
 
 const jobMgmt = useJobActions(projectId, switchToJobsTab)
@@ -378,35 +378,7 @@ watch(activeTab, (tab) => {
   void loadTabData(tab)
 })
 
-// ── 5.1 任务进度轮询 ──
-const hasRunningJobs = computed(() =>
-  workspace.jobs.some((j) => j.status === 'pending' || j.status === 'running'),
-)
-
-const pollingTimer = ref<ReturnType<typeof setInterval> | null>(null)
-
-watch(
-  hasRunningJobs,
-  (running) => {
-    if (running && !pollingTimer.value) {
-      pollingTimer.value = setInterval(() => {
-        if (projectId.value) {
-          void workspace.loadJobs(projectId.value)
-        }
-      }, 5000)
-    } else if (!running && pollingTimer.value) {
-      clearInterval(pollingTimer.value)
-      pollingTimer.value = null
-    }
-  },
-  { immediate: true },
-)
-
 onBeforeUnmount(() => {
-  if (pollingTimer.value) {
-    clearInterval(pollingTimer.value)
-    pollingTimer.value = null
-  }
   workspace.reset()
   glossary.reset()
 })
@@ -528,22 +500,27 @@ onMounted(() => {
       {{ workspace.projectError }}
     </NAlert>
 
+    <NAlert v-if="workspace.resourceTreeError" type="error" :bordered="false">
+      {{ workspace.resourceTreeError }}
+    </NAlert>
+
+    <NAlert v-if="workspace.segmentsError" type="error" :bordered="false">
+      {{ workspace.segmentsError }}
+    </NAlert>
+
     <!-- 统计指标栏 -->
     <WorkspaceMetricsBar
       :total-resources="workspace.resources.length"
-      :ready-resources="workspace.readyResourceCount"
       :total-segments="workspace.totalSegmentCount"
-      :translated-segments="workspace.translatedSegmentCount"
+      :translated-segments="workspace.totalTranslatedSegments"
+      :approved-segments="workspace.totalApprovedSegments"
       :running-jobs="workspace.runningJobCount"
     />
 
     <!-- 标签页 -->
     <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
       <NTabs v-model:value="activeTab" animated>
-        <NTabPane
-          name="resources"
-          :tab="`${t('workspace.tabs.resources')} (${workspace.resources.length})`"
-        >
+        <NTabPane name="resources" :tab="t('workspace.tabs.resources')">
           <div class="pt-3">
             <ResourceExplorer
               v-if="projectId"
@@ -556,10 +533,7 @@ onMounted(() => {
           </div>
         </NTabPane>
 
-        <NTabPane
-          name="segments"
-          :tab="`${t('workspace.tabs.segments')} (${workspace.totalSegmentCount})`"
-        >
+        <NTabPane name="segments" :tab="t('workspace.tabs.segments')">
           <SegmentPanel
             ref="segmentPanelRef"
             :project-id="projectId"
@@ -568,7 +542,7 @@ onMounted(() => {
           />
         </NTabPane>
 
-        <NTabPane name="jobs" :tab="`${t('workspace.tabs.jobs')} (${workspace.jobs.length})`">
+        <NTabPane name="jobs" :tab="t('workspace.tabs.jobs')">
           <JobPanel
             :project-id="projectId"
             :detail-drawer-visible="jobMgmt.jobDetailDrawerVisible.value"
@@ -578,7 +552,7 @@ onMounted(() => {
           />
         </NTabPane>
 
-        <NTabPane name="glossary" :tab="`${t('workspace.tabs.glossary')} (${glossary.entryCount})`">
+        <NTabPane name="glossary" :tab="t('workspace.tabs.glossary')">
           <GlossaryPanel :project-id="projectId" />
         </NTabPane>
       </NTabs>

@@ -19,8 +19,6 @@ const props = defineProps<{
 }>()
 
 const progressPercent = computed(() => {
-  if (props.job.progress_percentage != null) return Math.round(props.job.progress_percentage)
-  // 回退：根据状态返回简单值
   if (props.job.status === 'completed') return 100
   if (props.job.status === 'failed' || props.job.status === 'cancelled') return 0
   if (props.job.total_segments > 0) {
@@ -47,79 +45,98 @@ const speedText = computed(() => {
 </script>
 
 <template>
-  <div class="rounded-xl border border-lf-border-soft bg-lf-surface-muted/60 p-5 space-y-4">
-    <!-- 顶部信息行 -->
-    <div class="flex flex-wrap items-center gap-3">
-      <!-- 状态标签 -->
-      <NTag size="small" :type="statusTagType(job.status)">
-        {{ getJobStatusLabel(job.status) }}
-      </NTag>
+  <div
+    class="rounded-xl border border-lf-border-soft bg-gradient-to-br from-lf-surface to-lf-surface-muted p-4 space-y-3"
+    :class="{
+      'border-l-3 border-brand-500': job.status === 'running',
+      'border-l-3 border-green-500': job.status === 'completed',
+      'border-l-3 border-red-500': job.status === 'failed',
+    }"
+  >
+    <!-- 顶部信息行：左侧标签 + 右侧大号百分比 -->
+    <div class="flex items-center justify-between">
+      <div class="flex flex-wrap items-center gap-2">
+        <!-- 状态标签 -->
+        <NTag size="tiny" round :type="statusTagType(job.status)">
+          {{ getJobStatusLabel(job.status) }}
+        </NTag>
 
-      <!-- 阶段信息（running 时显示） -->
-      <NTag
-        v-if="job.status === 'running' && job.current_stage"
-        size="small"
-        :bordered="false"
-        type="info"
-      >
-        <template #icon>
-          <NIcon size="14">
-            <IconCarbonAsync />
-          </NIcon>
-        </template>
-        {{ getStageLabel(job.current_stage) }}
-        {{ job.completed_segments }}/{{ job.total_segments }}
-      </NTag>
+        <!-- 阶段信息（running 时显示） -->
+        <NTag
+          v-if="job.status === 'running' && job.current_stage"
+          size="tiny"
+          round
+          :bordered="false"
+          type="info"
+        >
+          <template #icon>
+            <NIcon size="12">
+              <IconCarbonAsync />
+            </NIcon>
+          </template>
+          {{ getStageLabel(job.current_stage) }}
+          <span class="font-mono tabular-nums"
+            >{{ job.completed_segments }}/{{ job.total_segments }}</span
+          >
+        </NTag>
 
-      <!-- 队列位置（pending 时显示） -->
-      <NTag
-        v-if="job.status === 'pending' && job.queue_position != null"
-        size="small"
-        :bordered="false"
-        type="warning"
-      >
-        <template #icon>
-          <NIcon size="14">
-            <IconCarbonCircleDash />
-          </NIcon>
-        </template>
-        {{ getJobProgressText(job) }}
-      </NTag>
+        <!-- 队列位置（pending 时显示） -->
+        <NTag
+          v-if="job.status === 'pending' && job.queue_position != null"
+          size="tiny"
+          round
+          :bordered="false"
+          type="warning"
+        >
+          <template #icon>
+            <NIcon size="12">
+              <IconCarbonCircleDash />
+            </NIcon>
+          </template>
+          {{ getJobProgressText(job) }}
+        </NTag>
+      </div>
+
+      <!-- 大号进度百分比 -->
+      <span class="text-2xl font-mono font-bold text-brand-500"> {{ progressPercent }}% </span>
     </div>
 
     <!-- 主进度条 -->
-    <div class="space-y-1.5">
-      <div class="flex items-center justify-between text-xs">
-        <span class="text-lf-text-muted">{{ getJobProgressText(job) }}</span>
-        <span class="font-medium text-lf-text-strong">{{ progressPercent }}%</span>
-      </div>
+    <div class="space-y-1">
+      <div class="text-xs text-lf-text-muted">{{ getJobProgressText(job) }}</div>
       <NProgress
         type="line"
         :percentage="progressPercent"
         :show-indicator="false"
-        :height="8"
-        :border-radius="4"
+        :height="6"
+        :border-radius="3"
         :processing="job.status === 'running'"
         :status="progressStatus"
       />
     </div>
 
-    <!-- ETA 与速度行 -->
-    <div
-      v-if="job.status === 'running' && (etaText || speedText)"
-      class="flex flex-wrap items-center gap-3 text-xs text-lf-text-muted"
-    >
-      <div v-if="etaText" class="flex items-center gap-1.5">
-        <NIcon size="14">
+    <!-- ETA 与速度行：网格卡片布局 -->
+    <div v-if="job.status === 'running' && (etaText || speedText)" class="grid grid-cols-2 gap-2">
+      <div
+        v-if="etaText"
+        class="flex items-center gap-1.5 rounded-md bg-lf-surface/60 px-2.5 py-1.5"
+      >
+        <NIcon size="14" class="text-lf-text-muted">
           <IconCarbonTime />
         </NIcon>
-        <span>{{ etaText }}</span>
+        <div class="flex flex-col">
+          <span class="text-[10px] text-lf-text-muted">ETA</span>
+          <span class="font-mono tabular-nums text-sm text-lf-text-strong">{{ etaText }}</span>
+        </div>
       </div>
-      <div v-if="speedText" class="flex items-center gap-1.5">
-        <!-- <NIcon size="14">
-          <IconCarbonSpeedometer />
-        </NIcon> -->
-        <span>{{ speedText }}</span>
+      <div
+        v-if="speedText"
+        class="flex items-center gap-1.5 rounded-md bg-lf-surface/60 px-2.5 py-1.5"
+      >
+        <div class="flex flex-col">
+          <span class="text-[10px] text-lf-text-muted">速度</span>
+          <span class="font-mono tabular-nums text-sm text-lf-text-strong">{{ speedText }}</span>
+        </div>
       </div>
     </div>
   </div>

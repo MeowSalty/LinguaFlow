@@ -1,9 +1,10 @@
 import { type ApiSchemas, type DownloadFileResult } from '@/api/client'
+import type { BatchEventMetadata, SSEEvent } from '@/composables/sseShared'
+import { normalizeSSELevel } from '@/composables/sseShared'
 import { t } from '@/i18n'
 
 type TranslationJob = ApiSchemas['TranslationJob']
 type TranslationJobResource = ApiSchemas['TranslationJobResource']
-type JobEvent = ApiSchemas['JobEvent']
 
 /**
  * 格式化日期为中文格式 (yyyy/MM/dd HH:mm)
@@ -213,16 +214,41 @@ export const getResourceStageProgress = (resource: TranslationJobResource): stri
   return `${label} ${resource.stage_completed ?? 0}/${resource.stage_total}`
 }
 
+// ── 批次事件工具 ──
+
+/** 格式化耗时（ms → 人类可读） */
+export const formatDuration = (ms: number): string => {
+  if (ms < 1000) return `${ms}ms`
+  const seconds = ms / 1000
+  if (seconds < 60) return `${seconds.toFixed(1)}s`
+  const minutes = seconds / 60
+  return `${minutes.toFixed(1)}min`
+}
+
+/** 格式化 Token 数（如 1.2k） */
+export const formatTokens = (count: number): string => {
+  if (count < 1000) return String(count)
+  return `${(count / 1000).toFixed(1)}k`
+}
+
+/** 判断是否为批次事件 */
+export const isBatchEvent = (type: string): boolean => type === 'batch'
+
+export const batchStatusTimelineType = (
+  status: BatchEventMetadata['status'] | undefined,
+  level: SSEEvent['level'],
+): 'success' | 'warning' | 'error' => {
+  if (status === 'failed') return 'error'
+  if (status === 'partial') return 'warning'
+  if (status === 'success') return 'success'
+  const normalized = normalizeSSELevel(level)
+  if (normalized === 'error') return 'error'
+  if (normalized === 'warning') return 'warning'
+  return 'success'
+}
+
 // ── 事件工具 ──
 
 /** 事件级别对应的 naive-ui 类型 */
-export const eventLevelType = (level: JobEvent['level']): 'info' | 'warning' | 'error' => {
-  switch (level) {
-    case 'info':
-      return 'info'
-    case 'warn':
-      return 'warning'
-    case 'error':
-      return 'error'
-  }
-}
+export const eventLevelType = (level: SSEEvent['level']): 'info' | 'warning' | 'error' =>
+  normalizeSSELevel(level)
