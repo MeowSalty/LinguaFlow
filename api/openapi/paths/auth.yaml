@@ -2,6 +2,7 @@ register:
   post:
     operationId: RegisterAuth
     summary: 注册用户并签发会话
+    security: []
     requestBody:
       required: true
       content:
@@ -22,6 +23,7 @@ login:
   post:
     operationId: LoginAuth
     summary: 用户登录
+    security: []
     requestBody:
       required: true
       content:
@@ -42,6 +44,7 @@ refresh:
   post:
     operationId: RefreshAuth
     summary: 刷新访问令牌
+    security: []
     requestBody:
       required: true
       content:
