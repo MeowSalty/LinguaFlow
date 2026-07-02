@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main, backend]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
