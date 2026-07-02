@@ -106,7 +106,10 @@ tasks:
     desc: 构建后端 CLI/服务程序
     dir: '{{.BACKEND_DIR}}'
     cmds:
-      - go build -o {{.BACKEND_BINARY}} ./cmd/linguaflow
+      - cmd: go build -o {{.BACKEND_BINARY}}.exe ./cmd/linguaflow
+        platforms: [windows]
+      - cmd: go build -o {{.BACKEND_BINARY}} ./cmd/linguaflow
+        platforms: [linux, darwin]
 
   backend:local:build:
     desc: 构建含嵌入前端的本地模式二进制
@@ -114,7 +117,10 @@ tasks:
       - backend:web:embed
     dir: '{{.BACKEND_DIR}}'
     cmds:
-      - go build -o {{.BACKEND_BINARY}} ./cmd/linguaflow
+      - cmd: go build -o {{.BACKEND_BINARY}}.exe ./cmd/linguaflow
+        platforms: [windows]
+      - cmd: go build -o {{.BACKEND_BINARY}} ./cmd/linguaflow
+        platforms: [linux, darwin]
 
   backend:web:embed:
     desc: 将前端构建产物嵌入后端

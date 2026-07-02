@@ -144,17 +144,6 @@ Segment:
       type: string
       format: date-time
 
-SegmentListResponse:
-  type: object
-  required: [items]
-  properties:
-    items:
-      type: array
-      items:
-        $ref: '#/Segment'
-    next_cursor:
-      type: string
-
 SegmentEditRequest:
   type: object
   required: [target_text]

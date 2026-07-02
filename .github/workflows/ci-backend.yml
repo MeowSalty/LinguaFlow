@@ -1,0 +1,126 @@
+name: 后端 CI
+
+on:
+  push:
+    branches: [main, backend]
+  pull_request:
+    branches: [main, backend]
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: 代码检查与格式化
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: 检查 Go 代码格式
+        run: |
+          unformatted=$(gofmt -l .)
+          if [ -n "$unformatted" ]; then
+            echo "以下文件未正确格式化："
+            echo "$unformatted"
+            exit 1
+          fi
+        working-directory: backend
+
+      - name: 运行 go vet 静态检查
+        run: go vet ./...
+        working-directory: backend
+
+  test:
+    name: 自动化测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: 运行测试（含竞态检测）
+        run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
+        working-directory: backend
+
+      - name: 上传覆盖率报告
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: backend/coverage.out
+
+  build:
+    name: 构建验证
+    runs-on: ubuntu-latest
+    needs: [lint, test]
+    strategy:
+      matrix:
+        goos: [linux, darwin, windows]
+        goarch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: 构建二进制文件
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          ext=""
+          if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
+          go build -o bin/linguaflow${ext} ./cmd/linguaflow
+        working-directory: backend
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: linguaflow-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: backend/bin/
+
+  security:
+    name: 依赖安全扫描
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: 安装 govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: 运行漏洞扫描
+        run: govulncheck ./...
+        working-directory: backend
+
+  openapi:
+    name: OpenAPI 规范验证
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 安装 Redocly CLI
+        run: npm install -g @redocly/cli
+
+      - name: 合并 OpenAPI 规范
+        run: redocly bundle api/openapi/base.yaml -o api/openapi/openapi-3.0.yaml
+
+      - name: 验证 OpenAPI 规范
+        run: redocly lint api/openapi/openapi-3.0.yaml

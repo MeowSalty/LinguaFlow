@@ -2,6 +2,7 @@ ping:
   get:
     operationId: Ping
     summary: 无鉴权连通测试
+    security: []
     description: 用于前端在登录前快速判断后端 HTTP 服务是否可达；不检查数据库或第三方依赖。
     responses:
       '200':
@@ -17,6 +18,7 @@ mode:
   get:
     operationId: GetMode
     summary: 获取运行模式
+    security: []
     description: 返回当前服务的运行模式（local 单用户本地模式 / server 多租户服务端模式），供前端决定是否跳过登录页。无需鉴权。
     responses:
       '200':
