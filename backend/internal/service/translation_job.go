@@ -66,6 +66,7 @@ type CreateTranslationJobInput struct {
 	SegmentGroupKeys []string
 	ExecutionPlanID  int
 	AutoApprove      bool
+	OverwriteMode    string
 }
 
 // TranslationJobListOptions 任务列表查询选项。
@@ -118,6 +119,7 @@ type JobExecutionSnapshot struct {
 	TargetLang        string                          `json:"target_lang"`
 	GlossaryEnabled   bool                            `json:"glossary_enabled"`
 	AutoApprove       bool                            `json:"auto_approve,omitempty"`
+	OverwriteMode     string                          `json:"overwrite_mode,omitempty"`
 	Bootstrap         *ExecutionPlanBootstrapSnapshot `json:"bootstrap,omitempty"`
 	RubyRetry         *ExecutionPlanRubyRetrySnapshot `json:"ruby_retry,omitempty"`
 }
@@ -204,19 +206,28 @@ func (s *TranslationJobService) CreateManualJob(ctx context.Context, actorUserID
 		return nil, err
 	}
 
-	// 4. 填充通用配置
+	// 4. 标准化 overwrite_mode
+	overwriteMode := strings.TrimSpace(input.OverwriteMode)
+	switch overwriteMode {
+	case "skip_translated", "overwrite_unapproved", "overwrite_all":
+	default:
+		overwriteMode = "skip_translated"
+	}
+
+	// 5. 填充通用配置
 	snapshot.SourceLang = projectRow.SourceLang
 	snapshot.TargetLang = projectRow.TargetLang
 	snapshot.GlossaryEnabled = projectRow.GlossaryEnabled
 	snapshot.AutoApprove = input.AutoApprove
+	snapshot.OverwriteMode = overwriteMode
 
 	snapshotBytes, err := json.Marshal(snapshot)
 	if err != nil {
 		return nil, fmt.Errorf("marshal snapshot: %w", err)
 	}
 
-	// 5. 解析任务选择
-	selection, err := s.resolveJobSelection(ctx, projectID, input)
+	// 6. 解析任务选择
+	selection, err := s.resolveJobSelection(ctx, projectID, input, overwriteMode)
 	if err != nil {
 		return nil, err
 	}
@@ -232,7 +243,7 @@ func (s *TranslationJobService) CreateManualJob(ctx context.Context, actorUserID
 	}
 	sort.Ints(resourceIDs)
 
-	// 6. 事务创建任务
+	// 7. 事务创建任务
 	tx, err := s.client.Tx(ctx)
 	if err != nil {
 		return nil, err
@@ -887,14 +898,30 @@ func (s *TranslationJobService) GetJob(ctx context.Context, actorUserID, jobID i
 	return row, nil
 }
 
-func (s *TranslationJobService) resolveJobSelection(ctx context.Context, projectID int, input CreateTranslationJobInput) (map[int][]int, error) {
+func statusFilterForOverwriteMode(mode string) []segment.Status {
+	switch mode {
+	case "overwrite_all":
+		return nil
+	case "overwrite_unapproved":
+		return []segment.Status{
+			SegmentStatusPending,
+			SegmentStatusRejected,
+			SegmentStatusTranslated,
+			SegmentStatusEdited,
+		}
+	default: // "skip_translated"
+		return []segment.Status{SegmentStatusPending, SegmentStatusRejected}
+	}
+}
+
+func (s *TranslationJobService) resolveJobSelection(ctx context.Context, projectID int, input CreateTranslationJobInput, overwriteMode string) (map[int][]int, error) {
 	if len(input.SegmentGroupKeys) > 0 {
-		return s.resolveGroupKeySelection(ctx, projectID, input.SegmentGroupKeys, input.ResourceIDs)
+		return s.resolveGroupKeySelection(ctx, projectID, input.SegmentGroupKeys, input.ResourceIDs, overwriteMode)
 	}
 	if len(input.SegmentIDs) > 0 {
 		return s.resolveSegmentSelection(ctx, projectID, input.SegmentIDs)
 	}
-	return s.resolveResourceSelection(ctx, projectID, input.ResourceIDs)
+	return s.resolveResourceSelection(ctx, projectID, input.ResourceIDs, overwriteMode)
 }
 
 func (s *TranslationJobService) resolveSegmentSelection(ctx context.Context, projectID int, segmentIDs []int) (map[int][]int, error) {
@@ -917,7 +944,7 @@ func (s *TranslationJobService) resolveSegmentSelection(ctx context.Context, pro
 	return selection, nil
 }
 
-func (s *TranslationJobService) resolveGroupKeySelection(ctx context.Context, projectID int, groupKeys []string, resourceIDs []int) (map[int][]int, error) {
+func (s *TranslationJobService) resolveGroupKeySelection(ctx context.Context, projectID int, groupKeys []string, resourceIDs []int, overwriteMode string) (map[int][]int, error) {
 	uniqueKeys := make(map[string]struct{}, len(groupKeys))
 	for _, key := range groupKeys {
 		k := strings.TrimSpace(key)
@@ -929,11 +956,16 @@ func (s *TranslationJobService) resolveGroupKeySelection(ctx context.Context, pr
 		return nil, fmt.Errorf("segment_group_keys 不能为空")
 	}
 
+	statusFilter := statusFilterForOverwriteMode(overwriteMode)
+
 	// 查询该项目下指定资源的 segments（带 meta 字段）
 	segQuery := s.client.Segment.Query().
 		Where(segment.HasResourceWith(resource.ProjectIDEQ(projectID)))
 	if len(resourceIDs) > 0 {
 		segQuery = segQuery.Where(segment.HasResourceWith(resource.IDIn(uniqueInts(resourceIDs)...)))
+	}
+	if len(statusFilter) > 0 {
+		segQuery = segQuery.Where(segment.StatusIn(statusFilter...))
 	}
 	rows, err := segQuery.All(ctx)
 	if err != nil {
@@ -978,7 +1010,7 @@ func (s *TranslationJobService) resolveGroupKeySelection(ctx context.Context, pr
 	return selection, nil
 }
 
-func (s *TranslationJobService) resolveResourceSelection(ctx context.Context, projectID int, resourceIDs []int) (map[int][]int, error) {
+func (s *TranslationJobService) resolveResourceSelection(ctx context.Context, projectID int, resourceIDs []int, overwriteMode string) (map[int][]int, error) {
 	resourceQuery := s.client.Resource.Query().Where(resource.ProjectIDEQ(projectID))
 	if len(resourceIDs) > 0 {
 		ids := uniqueInts(resourceIDs)
@@ -995,10 +1027,15 @@ func (s *TranslationJobService) resolveResourceSelection(ctx context.Context, pr
 	if err != nil {
 		return nil, err
 	}
+	statusFilter := statusFilterForOverwriteMode(overwriteMode)
 	selection := make(map[int][]int)
 	for _, res := range resources {
-		segments, err := s.client.Segment.Query().
-			Where(segment.ResourceIDEQ(res.ID), segment.StatusIn(SegmentStatusPending, SegmentStatusRejected)).
+		segQuery := s.client.Segment.Query().
+			Where(segment.ResourceIDEQ(res.ID))
+		if len(statusFilter) > 0 {
+			segQuery = segQuery.Where(segment.StatusIn(statusFilter...))
+		}
+		segments, err := segQuery.
 			Order(ent.Asc(segment.FieldID)).
 			All(ctx)
 		if err != nil {

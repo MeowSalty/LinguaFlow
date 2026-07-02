@@ -17,6 +17,7 @@ type createTranslationJobRequest struct {
 	SegmentIDs       []int    `json:"segment_ids"`
 	SegmentGroupKeys []string `json:"segment_group_keys"`
 	AutoApprove      bool     `json:"auto_approve"`
+	OverwriteMode    string   `json:"overwrite_mode"`
 }
 
 // QueueInfo 携带翻译队列的位置信息。
@@ -104,6 +105,7 @@ func (s *Server) handleCreateTranslationJob(w http.ResponseWriter, r *http.Reque
 		SegmentGroupKeys: req.SegmentGroupKeys,
 		ExecutionPlanID:  req.ExecutionPlanID,
 		AutoApprove:      req.AutoApprove,
+		OverwriteMode:    req.OverwriteMode,
 	})
 	if err != nil {
 		writeTranslationJobServiceError(w, err)
