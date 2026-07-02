@@ -1187,10 +1187,6 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
-        SegmentListResponse: {
-            items: components["schemas"]["Segment"][];
-            next_cursor?: string;
-        };
         UsageStats: {
             api_calls: number;
             input_tokens: number;
@@ -1280,9 +1276,6 @@ export interface components {
             resource: components["schemas"]["Resource"];
             changes: components["schemas"]["IncrementalUpdateChanges"];
         };
-        ResourceConflictResponse: {
-            existing_resource: components["schemas"]["Resource"];
-        };
         ResourceUploadFileResult: {
             /** @description 资源项目内规范化相对路径 */
             path: string;
@@ -1346,6 +1339,16 @@ export interface components {
              * @default false
              */
             auto_approve: boolean;
+            /**
+             * @description 段落覆盖策略。
+             *     - skip_translated: 跳过已有翻译的段落（仅翻译 pending/rejected）
+             *     - overwrite_unapproved: 覆盖所有非 approved 的段落（包括已翻译、已编辑和已拒绝的）
+             *     - overwrite_all: 覆盖所有段落，包括已审核通过的
+             *     对 segment_ids 选择方式无效（用户已精确指定段落）。
+             * @default skip_translated
+             * @enum {string}
+             */
+            overwrite_mode: "skip_translated" | "overwrite_unapproved" | "overwrite_all";
             translation_config?: {
                 [key: string]: unknown;
             };

@@ -512,6 +512,11 @@ const messages = {
         '轮次 {index}：段落 {batchSize} / 字词 {maxWordsPerBatch}，并发 {concurrency}',
       confirmSummary:
         '将使用「{planName}」为 {resourceCount} 个资源（{segmentCount} 个段落）创建翻译任务。',
+      overwriteMode: {
+        skipTranslated: '跳过已有翻译（仅翻译待翻译和已拒绝的段落）',
+        overwriteUnapproved: '覆盖未审核（覆盖所有非已审核的段落）',
+        overwriteAll: '覆盖所有（包括已审核通过的段落）',
+      },
       columns: {
         id: '任务',
         status: '状态',
@@ -538,6 +543,8 @@ const messages = {
         autoApproveHint: '开启后，翻译任务完成时将自动审批通过所有段落',
         sourceLang: '源语言',
         targetLang: '目标语言',
+        overwriteMode: '段落覆盖策略',
+        overwriteModeHint: '选择如何处理已有翻译的段落',
       },
       validation: {
         executionPlanRequired: '请选择执行计划模板',

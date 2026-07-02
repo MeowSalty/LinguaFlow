@@ -8,7 +8,10 @@ import {
   NDrawerContent,
   NForm,
   NFormItem,
+  NRadio,
+  NRadioGroup,
   NSelect,
+  NSpace,
   NSwitch,
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
@@ -19,6 +22,8 @@ import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import type { JobTargetMode } from '@/composables/useJobActions'
 
 type ExecutionPlanTemplate = ApiSchemas['ExecutionPlanTemplate']
+type CreateTranslationJobRequest = ApiSchemas['CreateTranslationJobRequest']
+type OverwriteMode = CreateTranslationJobRequest['overwrite_mode']
 
 const { t } = useI18n()
 const executionPlanTemplatesStore = useExecutionPlanTemplatesStore()
@@ -33,6 +38,7 @@ defineProps<{
   targetGroupKeys: string[]
   executionPlanId: number | null
   autoApprove: boolean
+  overwriteMode: OverwriteMode
   formRules: FormRules
   executionPlanOptions: Array<{ label: string; value: number }>
   submitting: boolean
@@ -43,9 +49,16 @@ defineProps<{
 const emit = defineEmits<{
   'update:executionPlanId': [value: number | null]
   'update:autoApprove': [value: boolean]
+  'update:overwriteMode': [value: OverwriteMode]
   submit: []
   close: []
 }>()
+
+const overwriteModeOptions = [
+  { value: 'skip_translated', labelKey: 'workspace.job.overwriteMode.skipTranslated' },
+  { value: 'overwrite_unapproved', labelKey: 'workspace.job.overwriteMode.overwriteUnapproved' },
+  { value: 'overwrite_all', labelKey: 'workspace.job.overwriteMode.overwriteAll' },
+]
 </script>
 
 <template>
@@ -98,6 +111,22 @@ const emit = defineEmits<{
               {{ t('workspace.job.form.autoApproveHint') }}
             </span>
           </div>
+        </NFormItem>
+        <NFormItem :label="t('workspace.job.form.overwriteMode')" path="overwrite_mode">
+          <NRadioGroup
+            :value="overwriteMode"
+            @update:value="(val: OverwriteMode) => emit('update:overwriteMode', val)"
+          >
+            <NSpace vertical>
+              <NRadio
+                v-for="option in overwriteModeOptions"
+                :key="option.value"
+                :value="option.value"
+              >
+                {{ t(option.labelKey) }}
+              </NRadio>
+            </NSpace>
+          </NRadioGroup>
         </NFormItem>
       </NForm>
 
