@@ -167,7 +167,7 @@ task backend:local:build
 ./bin/linguaflow local
 ```
 
-服务默认监听 http://localhost:18080，如果端口被占用会自动递增。
+服务默认监听 `http://localhost:18080`，如果端口被占用会自动递增。
 
 ### 首次使用
 
