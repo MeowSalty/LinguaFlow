@@ -52,6 +52,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/changelog': RouteRecordInfo<
+      '/changelog',
+      '/changelog',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/execution-plan-templates': RouteRecordInfo<
       '/execution-plan-templates',
       '/execution-plan-templates',
@@ -136,6 +143,12 @@ declare module 'vue-router/auto-routes' {
     'src/pages/backends.vue': {
       routes:
         | '/backends'
+      views:
+        | never
+    }
+    'src/pages/changelog.vue': {
+      routes:
+        | '/changelog'
       views:
         | never
     }
