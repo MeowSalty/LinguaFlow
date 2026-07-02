@@ -1,0 +1,199 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+  packages: write
+
+jobs:
+  test:
+    name: 发布前测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - name: 运行测试
+        run: go test -race ./...
+        working-directory: backend
+
+  build:
+    name: 构建发布二进制
+    needs: test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: arm64
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 安装 pnpm
+        run: npm install -g pnpm
+
+      - name: 安装前端依赖
+        run: pnpm install
+        working-directory: frontend
+
+      - name: 构建前端
+        run: pnpm build
+        working-directory: frontend
+
+      - name: 嵌入前端到后端
+        run: |
+          rm -rf backend/internal/web/dist
+          cp -r frontend/dist backend/internal/web/dist
+
+      - name: 构建二进制文件
+        env:
+          GOOS: ${{ matrix.goos }}
+          GOARCH: ${{ matrix.goarch }}
+        run: |
+          ext=""
+          if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
+          binary_name="linguaflow-${{ matrix.goos }}-${{ matrix.goarch }}${ext}"
+          go build -ldflags="-s -w" -o "bin/${binary_name}" ./cmd/linguaflow
+          sha256sum "bin/${binary_name}" > "bin/${binary_name}.sha256"
+        working-directory: backend
+
+      - name: 上传构建产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: linguaflow-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: |
+            backend/bin/linguaflow-*
+            backend/bin/*.sha256
+
+  release:
+    name: 创建发布
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 下载所有构建产物
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: 准备发布文件
+        run: |
+          mkdir -p release
+          find artifacts -type f \( -name "linguaflow-*" -o -name "*.sha256" \) -exec cp {} release/ \;
+
+      - name: 生成更新日志
+        id: changelog
+        run: |
+          PREV_TAG=$(git tag --sort=-creatordate | head -2 | tail -1)
+          if [ -z "$PREV_TAG" ]; then
+            CHANGES=$(git log --oneline --no-merges)
+          else
+            CHANGES=$(git log --oneline --no-merges ${PREV_TAG}..HEAD)
+          fi
+          echo "changes<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: 创建 GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: |
+            ## 更新内容
+            ${{ steps.changelog.outputs.changes }}
+          files: release/*
+          generate_release_notes: true
+
+  docker:
+    name: 构建并推送 Docker 镜像
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: backend/go.mod
+          cache-dependency-path: backend/go.sum
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 安装 pnpm
+        run: npm install -g pnpm
+
+      - name: 安装前端依赖
+        run: pnpm install
+        working-directory: frontend
+
+      - name: 构建前端
+        run: pnpm build
+        working-directory: frontend
+
+      - name: 嵌入前端到后端
+        run: |
+          rm -rf backend/internal/web/dist
+          cp -r frontend/dist backend/internal/web/dist
+
+      - name: 设置 QEMU（多平台构建支持）
+        uses: docker/setup-qemu-action@v3
+
+      - name: 设置 Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: 登录 GitHub 容器仓库
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: 提取镜像元数据
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha
+
+      - name: 构建并推送镜像
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

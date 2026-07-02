@@ -1,0 +1,14 @@
+# 忽略前端目录
+frontend/
+
+# 忽略 Git 和 CI 配置
+.git/
+.github/
+
+# 忽略文档文件
+*.md
+
+# 忽略 Docker 相关文件（避免递归构建）
+Dockerfile
+docker-compose.yml
+.dockerignore
