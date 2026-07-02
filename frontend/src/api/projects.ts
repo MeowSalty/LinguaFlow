@@ -20,7 +20,7 @@ export interface UploadProgressCallbacks {
 export interface ResourceConflictError extends Error {
   readonly isResourceConflict: true
   readonly status: 409
-  readonly conflictData: ApiSchemas['ResourceConflictResponse']
+  readonly conflictData: ApiSchemas['Problem']
 }
 
 export const isResourceConflictError = (error: unknown): error is ResourceConflictError =>
@@ -242,9 +242,7 @@ export const uploadProjectResourcesWithProgress = async (
         }
       } else if (xhr.status === 409) {
         try {
-          const conflictData = JSON.parse(
-            xhr.responseText,
-          ) as ApiSchemas['ResourceConflictResponse']
+          const conflictData = JSON.parse(xhr.responseText) as ApiSchemas['Problem']
           const conflictError = new Error(
             t('api.errors.uploadResourceConflict'),
           ) as ResourceConflictError
