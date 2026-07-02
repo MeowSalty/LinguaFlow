@@ -27,6 +27,16 @@ CreateTranslationJobRequest:
       type: boolean
       default: false
       description: 翻译完成后是否自动审批通过所有段落
+    overwrite_mode:
+      type: string
+      enum: [skip_translated, overwrite_unapproved, overwrite_all]
+      default: skip_translated
+      description: |
+        段落覆盖策略。
+        - skip_translated: 跳过已有翻译的段落（仅翻译 pending/rejected）
+        - overwrite_unapproved: 覆盖所有非 approved 的段落（包括已翻译、已编辑和已拒绝的）
+        - overwrite_all: 覆盖所有段落，包括已审核通过的
+        对 segment_ids 选择方式无效（用户已精确指定段落）。
     translation_config:
       type: object
       additionalProperties: true
