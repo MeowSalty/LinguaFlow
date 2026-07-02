@@ -14,6 +14,7 @@ const messages = {
     promptTemplates: '提示词模板',
     translationProfiles: '翻译配置',
     executionPlanTemplates: '执行计划',
+    changelog: '更新日志',
     about: '关于',
   },
   layout: {
@@ -1195,7 +1196,8 @@ const messages = {
     featureProject: '项目管理',
     featureProjectDesc: '以项目为单位组织翻译工作，支持数十种语言互译，项目级别术语表管理。',
     featureTranslation: '智能翻译',
-    featureTranslationDesc: '集成 OpenAI、Anthropic、Google Gemini，自动检测源语言，上下文感知，特殊内容自动保护。',
+    featureTranslationDesc:
+      '集成 OpenAI、Anthropic、Google Gemini，自动检测源语言，上下文感知，特殊内容自动保护。',
     featureBatch: '批量处理',
     featureBatchDesc: '拖拽上传文件或文件夹，增量更新保留已有译文，并发翻译，实时进度追踪。',
     featureEpub: 'EPUB 电子书',
@@ -1213,8 +1215,17 @@ const messages = {
     techApi: 'API',
     license: '许可证',
     licenseDesc: '本项目采用双许可模式：开源使用遵循 AGPL v3 协议，商业许可即将推出。',
-    licenseAgpl: '开源用户：修改后的代码需开源。商业用户：如需闭源使用或私有部署，请等待商业许可上线。',
-
+    licenseAgpl:
+      '开源用户：修改后的代码需开源。商业用户：如需闭源使用或私有部署，请等待商业许可上线。',
+  },
+  changelog: {
+    title: '更新日志',
+    description: '查看 LinguaFlow 的版本更新记录，了解新功能、改进和修复。',
+    fetchError: '获取更新日志失败',
+    retry: '重试',
+    empty: '暂无更新记录',
+    viewOnGithub: '在 GitHub 查看',
+    noDescription: '该版本暂无详细说明。',
   },
   globalJobTracker: {
     title: '任务追踪',

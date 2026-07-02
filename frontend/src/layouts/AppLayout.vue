@@ -183,6 +183,14 @@ const onSelectLocale = (key: string | number): void => {
           </RouterLink>
         </NDropdown>
         <RouterLink
+          to="/changelog"
+          class="flex items-center gap-1.5 text-lf-text-muted no-underline transition-colors hover:text-brand-500"
+          active-class="!text-brand-500 font-semibold"
+        >
+          <IconifyIcon icon="carbon:catalog" class="text-base" />
+          {{ t('nav.changelog') }}
+        </RouterLink>
+        <RouterLink
           to="/about"
           class="flex items-center gap-1.5 text-lf-text-muted no-underline transition-colors hover:text-brand-500"
           active-class="!text-brand-500 font-semibold"
