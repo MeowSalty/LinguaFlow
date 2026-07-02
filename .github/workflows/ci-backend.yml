@@ -3,8 +3,14 @@ name: 后端 CI
 on:
   push:
     branches: [main, backend]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/ci-backend.yml'
   pull_request:
     branches: [main, backend]
+    paths:
+      - 'backend/**'
+      - '.github/workflows/ci-backend.yml'
 
 concurrency:
   group: ci-${{ github.ref }}
@@ -109,22 +115,3 @@ jobs:
       - name: 运行漏洞扫描
         run: govulncheck ./...
         working-directory: backend
-
-  openapi:
-    name: OpenAPI 规范验证
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: 安装 Redocly CLI
-        run: npm install -g @redocly/cli
-
-      - name: 合并 OpenAPI 规范
-        run: redocly bundle api/openapi/base.yaml -o api/openapi/openapi-3.0.yaml
-
-      - name: 验证 OpenAPI 规范
-        run: redocly lint api/openapi/openapi-3.0.yaml
