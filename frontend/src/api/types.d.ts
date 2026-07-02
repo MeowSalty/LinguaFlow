@@ -1187,10 +1187,6 @@ export interface components {
             /** Format: date-time */
             updated_at: string;
         };
-        SegmentListResponse: {
-            items: components["schemas"]["Segment"][];
-            next_cursor?: string;
-        };
         UsageStats: {
             api_calls: number;
             input_tokens: number;
@@ -1279,9 +1275,6 @@ export interface components {
         IncrementalUpdateResponse: {
             resource: components["schemas"]["Resource"];
             changes: components["schemas"]["IncrementalUpdateChanges"];
-        };
-        ResourceConflictResponse: {
-            existing_resource: components["schemas"]["Resource"];
         };
         ResourceUploadFileResult: {
             /** @description 资源项目内规范化相对路径 */
