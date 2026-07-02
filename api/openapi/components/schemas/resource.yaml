@@ -205,13 +205,6 @@ IncrementalUpdateResponse:
     changes:
       $ref: '#/IncrementalUpdateChanges'
 
-ResourceConflictResponse:
-  type: object
-  required: [existing_resource]
-  properties:
-    existing_resource:
-      $ref: '#/Resource'
-
 ResourcePrecheckFileResult:
   type: object
   required: [path, action]

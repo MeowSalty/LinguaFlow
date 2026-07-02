@@ -182,8 +182,6 @@ components:
       $ref: './components/schemas/organization.yaml#/UpdateOrganizationMemberRequest'
     Segment:
       $ref: './components/schemas/job.yaml#/Segment'
-    SegmentListResponse:
-      $ref: './components/schemas/job.yaml#/SegmentListResponse'
     UsageStats:
       $ref: './components/schemas/job.yaml#/UsageStats'
     Resource:
@@ -210,8 +208,6 @@ components:
       $ref: './components/schemas/resource.yaml#/RetranslateResponse'
     IncrementalUpdateResponse:
       $ref: './components/schemas/resource.yaml#/IncrementalUpdateResponse'
-    ResourceConflictResponse:
-      $ref: './components/schemas/resource.yaml#/ResourceConflictResponse'
     ResourceUploadFileResult:
       $ref: './components/schemas/resource.yaml#/ResourceUploadFileResult'
     ResourceUploadBatchResponse:

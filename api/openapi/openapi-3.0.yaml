@@ -1994,17 +1994,6 @@ components:
         updated_at:
           type: string
           format: date-time
-    SegmentListResponse:
-      type: object
-      required:
-        - items
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/Segment'
-        next_cursor:
-          type: string
     UsageStats:
       type: object
       required:
@@ -2205,13 +2194,6 @@ components:
           $ref: '#/components/schemas/Resource'
         changes:
           $ref: '#/components/schemas/IncrementalUpdateChanges'
-    ResourceConflictResponse:
-      type: object
-      required:
-        - existing_resource
-      properties:
-        existing_resource:
-          $ref: '#/components/schemas/Resource'
     ResourceUploadFileResult:
       type: object
       required:
