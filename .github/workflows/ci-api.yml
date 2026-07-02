@@ -1,0 +1,60 @@
+name: API CI
+
+on:
+  push:
+    branches: [main, frontend, backend]
+    paths:
+      - 'api/**'
+      - '.github/workflows/ci-api.yml'
+  pull_request:
+    branches: [main, frontend, backend]
+    paths:
+      - 'api/**'
+      - '.github/workflows/ci-api.yml'
+
+concurrency:
+  group: ci-api-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: OpenAPI 规范验证
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 安装 Redocly CLI
+        run: npm install -g @redocly/cli
+
+      - name: 合并 OpenAPI 规范
+        run: redocly bundle api/openapi/base.yaml -o api/openapi/openapi-3.0.yaml
+
+      - name: 验证 OpenAPI 规范
+        run: redocly lint api/openapi/openapi-3.0.yaml
+
+      - name: 安装 pnpm
+        run: npm install -g pnpm
+
+      - name: 安装前端依赖
+        run: pnpm install
+        working-directory: frontend
+
+      - name: 验证 TypeScript 类型生成
+        run: pnpm exec openapi-typescript ../api/openapi/openapi-3.0.yaml -o src/api/types.d.ts
+        working-directory: frontend
+
+      - name: 安装 Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: 验证后端 OpenAPI 代码生成
+        run: go generate ./internal/api
+        working-directory: backend
