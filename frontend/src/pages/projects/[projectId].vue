@@ -568,6 +568,7 @@ onMounted(() => {
       :target-group-keys="jobMgmt.jobTargetGroupKeys.value"
       :execution-plan-id="jobMgmt.jobForm.execution_plan_id"
       :auto-approve="jobMgmt.jobForm.auto_approve"
+      :overwrite-mode="jobMgmt.jobForm.overwrite_mode"
       :form-rules="jobMgmt.jobFormRules.value"
       :execution-plan-options="jobMgmt.executionPlanOptions.value"
       :submitting="workspace.creatingJob"
@@ -575,6 +576,7 @@ onMounted(() => {
       :selected-plan-template="jobMgmt.selectedPlanTemplate.value"
       @update:execution-plan-id="(val) => (jobMgmt.jobForm.execution_plan_id = val)"
       @update:auto-approve="(val) => (jobMgmt.jobForm.auto_approve = val)"
+      @update:overwrite-mode="(val) => (jobMgmt.jobForm.overwrite_mode = val)"
       @submit="jobMgmt.submitJob()"
       @close="jobMgmt.closeJobDrawer()"
     />

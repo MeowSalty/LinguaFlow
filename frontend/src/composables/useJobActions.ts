@@ -11,12 +11,14 @@ import { t } from '@/i18n'
 type Segment = ApiSchemas['Segment']
 type TranslationJob = ApiSchemas['TranslationJob']
 type CreateTranslationJobPayload = ApiSchemas['CreateTranslationJobRequest']
+type OverwriteMode = CreateTranslationJobPayload['overwrite_mode']
 
 export type JobTargetMode = 'resources' | 'segments'
 
 export interface JobFormModel {
   execution_plan_id: number | null
   auto_approve: boolean
+  overwrite_mode: OverwriteMode
 }
 
 export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () => Promise<void>) {
@@ -36,6 +38,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
   const jobForm = reactive<JobFormModel>({
     execution_plan_id: null,
     auto_approve: false,
+    overwrite_mode: 'skip_translated',
   })
 
   // ── 计算属性 ──
@@ -144,6 +147,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobTargetGroupKeys.value = []
     jobForm.execution_plan_id = null
     jobForm.auto_approve = false
+    jobForm.overwrite_mode = 'skip_translated'
   }
 
   const submitJob = async (): Promise<void> => {
@@ -155,6 +159,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
       execution_plan_id: jobForm.execution_plan_id,
       resource_ids: jobTargetResourceIds.value,
       auto_approve: jobForm.auto_approve,
+      overwrite_mode: jobForm.overwrite_mode,
     }
 
     if (jobTargetGroupKeys.value.length > 0) {
