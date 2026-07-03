@@ -40,6 +40,10 @@ type Round struct {
 	// nil 时回退到 Translate 级别的 Repair。
 	// 使用指针以区分"未设置"（nil）和"显式设为零值"（&repair.Options{}）。
 	Repair *repair.Options
+
+	// ResponseMode 控制本轮的响应格式模式。
+	// 空值等同 "json"（向后兼容）；"text" 启用纯文本协议。
+	ResponseMode string
 }
 
 // batchJob 描述一个待处理的批次任务。

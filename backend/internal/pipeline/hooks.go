@@ -36,8 +36,10 @@ func RubyRestoreHook(
 	keep := kindSet(keepKinds)
 	return func(ctx context.Context, _ *Document, seg *Segment) error {
 		if restorer == nil {
+			logger.Info("RubyRestoreHook: restorer is nil, skipping")
 			return nil
 		}
+		logger.Info("RubyRestoreHook: processing segment", "seg", seg.ID, "target_head", headSnippet(seg.Target, 80))
 		restoreSegmentRuby(ctx, seg, restorer, keep, retryBackends, retryPolicy, logger, reporter)
 		return nil
 	}

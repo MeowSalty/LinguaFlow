@@ -75,6 +75,10 @@ type Round struct {
 	// Repair 本轮的修复策略配置。nil 时回退到 Options.Config 的 Repair 配置。
 	// 使用指针以区分"未设置"（nil）和"显式设为零值"。
 	Repair *config.RepairConfig
+
+	// ResponseMode 控制本轮的响应格式模式。
+	// 空值等同 "json"（向后兼容）；"text" 启用纯文本协议。
+	ResponseMode string
 }
 
 // RuntimeResources 封装可选的运行时资源。
@@ -150,6 +154,7 @@ func buildStagesRounds(in []Round, cfg *config.Config) []pipeline.Round {
 			Retry:            retry,
 			Renderer:         r.Renderer,
 			Repair:           roundRepair,
+			ResponseMode:     r.ResponseMode,
 		})
 	}
 	return out

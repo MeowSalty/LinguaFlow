@@ -1,9 +1,11 @@
 package engine
 
 import (
+	"log/slog"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 )
@@ -21,7 +23,8 @@ func (e *Engine) buildProtector() protect.Protector {
 
 // BuildTranslateStage 构建翻译管道（Protect + Translate 阶段）。
 // Protect 作为 Pipeline stage 执行；Unprotect/RubyRestore/TM 作为 postSegment hooks。
-func (e *Engine) BuildTranslateStage(protector protect.Protector, restorer *protect.RubyRestorer) *pipeline.Pipeline {
+// rubyOutputFormat 应通过 resolveRubyOutputFormat() 预先解析。
+func (e *Engine) BuildTranslateStage(protector protect.Protector, restorer *protect.RubyRestorer, rubyOutputFormat string) *pipeline.Pipeline {
 	pc := e.cfg.Pipeline
 	retry := backend.RetryPolicy{
 		MaxAttempts: pc.Translate.Retry.MaxAttempts,
@@ -44,7 +47,7 @@ func (e *Engine) BuildTranslateStage(protector protect.Protector, restorer *prot
 		MinBootstrapSourceLen:  e.cfg.Glossary.Bootstrap.MinSourceLen,
 		InlineConflictStrategy: e.cfg.Glossary.Bootstrap.InlineConflictStrategy,
 		Repair:                 repairOpts,
-		RubyOutputFormat:       pc.Protect.Ruby.OutputFormat,
+		RubyOutputFormat:       rubyOutputFormat,
 		PreserveKinds:          pc.Protect.Ruby.PreserveKinds,
 		RubyRetryBackends:      e.rubyRetryBackends,
 		Context:                pc.Context,
@@ -98,4 +101,27 @@ func (e *Engine) PrepareDocument(doc *pipeline.Document, segmentIndexes []int) {
 			doc.Vars[k] = v
 		}
 	}
+}
+
+// hasTextModeRound 检查是否有任何 round 使用 text 响应模式。
+func hasTextModeRound(rounds []pipeline.Round) bool {
+	for _, r := range rounds {
+		if r.ResponseMode == "text" {
+			return true
+		}
+	}
+	return false
+}
+
+// resolveRubyOutputFormat 根据配置和 text 模式自动选择 ruby 输出格式。
+// text 模式下强制使用 inline_markers（因 JSON ruby_output 无法在纯文本协议中表达）。
+func (e *Engine) resolveRubyOutputFormat() string {
+	format := e.cfg.Pipeline.Protect.Ruby.OutputFormat
+	if hasTextModeRound(e.rounds) && format == config.RubyOutputDefault {
+		e.logger.Info("text mode detected, overriding ruby output_format to inline_markers",
+			slog.String("from", config.RubyOutputDefault),
+			slog.String("to", config.RubyOutputInlineMarkers))
+		format = config.RubyOutputInlineMarkers
+	}
+	return format
 }

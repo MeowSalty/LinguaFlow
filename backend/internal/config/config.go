@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"log"
 	"math"
 	"net"
 	"path/filepath"
@@ -76,6 +77,10 @@ const (
 	RubyOutputDefault       = "ruby_output"
 )
 
+// ResponseFormatText 是纯文本响应模式的取值。
+// 与 json_schema / json_object / none 对齐，由各 backend factory 独立校验。
+const ResponseFormatText = "text"
+
 // FallbackShrink 默认值：0 表示未设置，回退到此值。
 const defaultFallbackShrink = 0.5
 
@@ -135,7 +140,7 @@ func DefaultContextConfig() ContextConfig {
 type PromptConfig struct {
 	SystemTemplate        string         `yaml:"system_template"`
 	SystemTemplateContent string         `yaml:"system_template_content"` // 新增：内联内容，优先级高于 SystemTemplate
-	UserTemplate          string         `yaml:"user_template"`
+	UserTemplate          string         `yaml:"user_template"`           // Deprecated: 保留兼容，不再使用
 	Vars                  map[string]any `yaml:"vars"`
 }
 
@@ -414,6 +419,12 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("pipeline.protect.ruby.output_format must be one of %s|%s, got %q",
 			RubyOutputDefault, RubyOutputInlineMarkers, c.Pipeline.Protect.Ruby.OutputFormat)
 	}
+	// 当后端使用 text 模式且 ruby 输出格式为 ruby_output 时警告：
+	// 引擎会自动切换为 inline_markers，但用户应知晓此行为。
+	if c.Pipeline.Protect.Ruby.OutputFormat == RubyOutputDefault && c.hasTextModeBackend() {
+		log.Printf("WARN: text response mode is incompatible with ruby.output_format=%q; engine will auto-override to %q",
+			RubyOutputDefault, RubyOutputInlineMarkers)
+	}
 	validRubyKinds := map[string]bool{"phonetic": true, "semantic": true, "creative": true}
 	for _, k := range c.Pipeline.Protect.Ruby.PreserveKinds {
 		if !validRubyKinds[k] {
@@ -492,4 +503,14 @@ func (c *Config) Validate() error {
 		c.Server.CORS.AllowedOrigins = []string{"*"}
 	}
 	return nil
+}
+
+// hasTextModeBackend 检查是否有任何后端配置了 response_format: text。
+func (c *Config) hasTextModeBackend() bool {
+	for _, b := range c.Backends {
+		if rf, ok := b.Options["response_format"].(string); ok && rf == ResponseFormatText {
+			return true
+		}
+	}
+	return false
 }

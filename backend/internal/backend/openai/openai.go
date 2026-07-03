@@ -21,6 +21,7 @@ const TypeName = "openai"
 const (
 	respFmtJSONSchema = "json_schema"
 	respFmtJSONObject = "json_object"
+	respFmtText       = "text"
 	respFmtNone       = "none"
 )
 
@@ -84,7 +85,7 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 		params.ResponseFormat = openaigo.ChatCompletionNewParamsResponseFormatUnion{
 			OfJSONObject: &shared.ResponseFormatJSONObjectParam{},
 		}
-	case respFmtNone, "":
+	case respFmtText, respFmtNone, "":
 		// 不设置 ResponseFormat，让网关用默认。
 	default:
 		return nil, fmt.Errorf("openai: unknown response_format %q", rf)
@@ -140,9 +141,9 @@ func factory(opts map[string]any) (backend.Backend, error) {
 	}
 	rf := backend.StringOpt(opts, "response_format", respFmtJSONSchema)
 	switch rf {
-	case respFmtJSONSchema, respFmtJSONObject, respFmtNone:
+	case respFmtJSONSchema, respFmtJSONObject, respFmtText, respFmtNone:
 	default:
-		return nil, fmt.Errorf("openai: invalid response_format %q (want json_schema|json_object|none)", rf)
+		return nil, fmt.Errorf("openai: invalid response_format %q (want json_schema|json_object|text|none)", rf)
 	}
 	b := &Backend{
 		client:         openaigo.NewClient(clientOpts...),

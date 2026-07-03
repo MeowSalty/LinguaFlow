@@ -32,12 +32,13 @@ func (r RestoreResult) IsFull() bool {
 }
 
 // Restore 根据输出模式还原注音标签。
+// rubyOutput 为过滤后的注音条目（由调用方负责提取和过滤）。
 // originalAnnotations 为 Protect 阶段提取的原始注音，用于 ruby_output 模式的双源匹配回退；
 // inline_markers 模式忽略此参数。可传 nil。
 func (r *RubyRestorer) Restore(seg *model.Segment, rubyOutput []RubyOutputEntry, originalAnnotations []RubyAnnotation) (RestoreResult, error) {
 	switch r.OutputFormat {
 	case "inline_markers":
-		return r.restoreInlineMarkers(seg)
+		return r.restoreInlineMarkers(seg, rubyOutput)
 	case "ruby_output":
 		fallthrough
 	default:
@@ -144,24 +145,69 @@ func (r *RubyRestorer) findAndInsert(target, base, text string, assigned map[int
 	return false
 }
 
-// inlineMarkerRe 匹配 ⟦ruby:base/text⟧ 格式的内联标记。
-var inlineMarkerRe = regexp.MustCompile(`⟦ruby:([^/⟧]+)/([^⟧]+)⟧`)
+// inlineMarkerRe 匹配 ⟦ruby:base/text⟧ 或 ⟦ruby:base/text/kind⟧ 格式的内联标记。
+var inlineMarkerRe = regexp.MustCompile(`⟦ruby:([^/⟧]+)/([^/⟧]+)(?:/([^⟧]+))?⟧`)
+
+// ParseInlineMarkers 从译文中提取所有内联标记，转换为 []RubyOutputEntry。
+func ParseInlineMarkers(text string) []RubyOutputEntry {
+	matches := inlineMarkerRe.FindAllStringSubmatch(text, -1)
+	if len(matches) == 0 {
+		return nil
+	}
+	entries := make([]RubyOutputEntry, 0, len(matches))
+	for _, m := range matches {
+		if len(m) < 3 {
+			continue
+		}
+		e := RubyOutputEntry{Base: m[1], Text: m[2]}
+		if len(m) > 3 {
+			e.Kind = m[3]
+		}
+		entries = append(entries, e)
+	}
+	return entries
+}
 
 // restoreInlineMarkers 通过正则替换将内联标记还原为 <ruby> 标签。
-//
-// ⟦ruby:base/text⟧ → <ruby>base<rt>text</rt></ruby>
-func (r *RubyRestorer) restoreInlineMarkers(seg *model.Segment) (RestoreResult, error) {
-	matches := inlineMarkerRe.FindAllString(seg.Target, -1)
-	total := len(matches)
-	if total == 0 {
+// rubyOutput 为过滤后的条目；还原匹配的标记，移除不匹配的标记。
+func (r *RubyRestorer) restoreInlineMarkers(seg *model.Segment, rubyOutput []RubyOutputEntry) (RestoreResult, error) {
+	// 先统计所有标记数
+	allMatches := inlineMarkerRe.FindAllString(seg.Target, -1)
+	if len(allMatches) == 0 {
 		return RestoreResult{}, nil
 	}
+	if len(rubyOutput) == 0 {
+		// 全部过滤掉，移除标记但保留基底
+		seg.Target = inlineMarkerRe.ReplaceAllStringFunc(seg.Target, func(match string) string {
+			m := inlineMarkerRe.FindStringSubmatch(match)
+			if len(m) >= 3 {
+				return m[1] // 保留基底
+			}
+			return match
+		})
+		return RestoreResult{Matched: 0, Total: len(allMatches)}, nil
+	}
+	// 构建匹配集合：base+text → 存在
+	type pair struct{ base, text string }
+	matchSet := make(map[pair]bool, len(rubyOutput))
+	for _, e := range rubyOutput {
+		if e.Base != "" {
+			matchSet[pair{e.Base, e.Text}] = true
+		}
+	}
+	total := len(allMatches)
+	matched := 0
 	seg.Target = inlineMarkerRe.ReplaceAllStringFunc(seg.Target, func(match string) string {
 		m := inlineMarkerRe.FindStringSubmatch(match)
 		if len(m) < 3 {
 			return match
 		}
-		return fmt.Sprintf("<ruby>%s<rt>%s</rt></ruby>", m[1], m[2])
+		base, text := m[1], m[2]
+		if matchSet[pair{base, text}] {
+			matched++
+			return fmt.Sprintf("<ruby>%s<rt>%s</rt></ruby>", base, text)
+		}
+		return base // 不在保留集合中，移除标记但保留基底
 	})
-	return RestoreResult{Matched: total, Total: total}, nil
+	return RestoreResult{Matched: matched, Total: total}, nil
 }

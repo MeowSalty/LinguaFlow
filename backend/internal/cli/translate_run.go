@@ -224,8 +224,9 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 				Backoff:     time.Duration(r.Retry.BackoffMs) * time.Millisecond,
 				Jitter:      r.Retry.Jitter,
 			},
-			Renderer: renderer,
-			Repair:   roundRepair,
+			Renderer:     renderer,
+			Repair:       roundRepair,
+			ResponseMode: responseModeFromOptions(bCfg.Options),
 		})
 	}
 
@@ -327,4 +328,13 @@ func translateSingleFile(ctx context.Context, eng *engine.Engine, fj FileJob, so
 	}
 
 	return nil
+}
+
+// responseModeFromOptions 从后端 Options map 中读取 response_format 值。
+// 用于设置 engine.Round.ResponseMode，使 pipeline 能区分 json/text 模式。
+func responseModeFromOptions(opts map[string]any) string {
+	if v, ok := opts["response_format"].(string); ok {
+		return v
+	}
+	return ""
 }

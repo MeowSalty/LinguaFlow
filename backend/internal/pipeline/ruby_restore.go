@@ -13,7 +13,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 )
 
-// restoreSegmentRuby 对单个段落执行注音还原：过滤 → 还原 → 失败则 LLM 对齐重试。
+// restoreSegmentRuby 对单个段落执行注音还原：提取 → 过滤 → 还原 → 失败则 LLM 对齐重试。
 func restoreSegmentRuby(
 	ctx context.Context,
 	seg *Segment,
@@ -24,38 +24,57 @@ func restoreSegmentRuby(
 	logger *slog.Logger,
 	reporter progress.Reporter,
 ) {
-	rubyOutput := extractRubyOutputFromSeg(seg)
-	originals := extractRubyAnnotationsFromSeg(seg)
-
-	if len(rubyOutput) > 0 {
-		filtered := filterByKinds(rubyOutput, keepSet)
-		if len(filtered) == 0 {
-			return
-		}
-		before := seg.Target
-		result, err := restorer.Restore(seg, filtered, originals)
-		if err != nil {
-			logger.Warn("ruby restore failed, will retry alignment", "seg", seg.ID, "err", err)
-		} else if result.IsFull() {
-			return
-		} else if result.Matched == 0 {
-			logger.Warn("ruby restore: no base matched", "seg", seg.ID)
-		} else {
-			// 部分匹配：回退已修改的 Target，走 LLM 对齐重试
-			logger.Warn("ruby restore: partial match, will retry alignment",
-				"seg", seg.ID, "matched", result.Matched, "total", result.Total)
-			seg.Target = before
-		}
-		// 还原失败或部分匹配，尝试 LLM 对齐重试
-		if len(backends) > 0 && ctx.Err() == nil {
-			retryAlignSegment(ctx, seg, originals, restorer, keepSet, backends, retryPolicy, logger, reporter)
-		}
+	rubyOutput := extractRubyOutput(seg)
+	logger.Info("restoreSegmentRuby: extractRubyOutput",
+		"seg", seg.ID,
+		"output_len", len(rubyOutput),
+		"target_head", headSnippet(seg.Target, 100),
+	)
+	if len(rubyOutput) == 0 {
 		return
 	}
 
-	if len(originals) > 0 && len(backends) > 0 && ctx.Err() == nil {
+	filtered := filterByKinds(rubyOutput, keepSet)
+	logger.Info("restoreSegmentRuby: filterByKinds",
+		"seg", seg.ID,
+		"filtered_len", len(filtered),
+	)
+
+	// 全部被过滤，清理内联标记后直接返回
+	if len(filtered) == 0 {
+		restorer.Restore(seg, nil, nil)
+		return
+	}
+
+	originals := extractRubyAnnotationsFromSeg(seg)
+	before := seg.Target
+	result, err := restorer.Restore(seg, filtered, originals)
+	if err != nil {
+		logger.Warn("ruby restore failed, will retry alignment", "seg", seg.ID, "err", err)
+	} else if result.IsFull() {
+		return
+	} else if result.Matched == 0 {
+		logger.Warn("ruby restore: no base matched", "seg", seg.ID)
+	} else {
+		logger.Warn("ruby restore: partial match, will retry alignment",
+			"seg", seg.ID, "matched", result.Matched, "total", result.Total)
+		seg.Target = before
+	}
+
+	if len(backends) > 0 && ctx.Err() == nil {
 		retryAlignSegment(ctx, seg, originals, restorer, keepSet, backends, retryPolicy, logger, reporter)
 	}
+}
+
+// extractRubyOutput 从段落中提取注音条目（统一入口）。
+// 优先从 seg.Meta["ruby_output"] 提取（JSON 模式）；
+// 否则从译文中的内联标记提取（text 模式 inline_markers）。
+func extractRubyOutput(seg *Segment) []protect.RubyOutputEntry {
+	if entries := extractRubyOutputFromSeg(seg); len(entries) > 0 {
+		return entries
+	}
+	parsed := protect.ParseInlineMarkers(seg.Target)
+	return parsed
 }
 
 // retryAlignSegment 对单个段落执行 LLM 注音对齐重试：LLM 分类 → 过滤 → 还原。

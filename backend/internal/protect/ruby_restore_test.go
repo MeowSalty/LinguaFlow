@@ -108,13 +108,18 @@ func TestRubyRestorer_InlineMarkers_BasicRestore(t *testing.T) {
 			target:     `────⟦ruby:椎名/しいな⟧です`,
 			wantTarget: `────<ruby>椎名<rt>しいな</rt></ruby>です`,
 		},
+		{
+			name:       "marker with kind suffix",
+			target:     `⟦ruby:瓦砾/がれき/phonetic⟧上说道`,
+			wantTarget: `<ruby>瓦砾<rt>がれき</rt></ruby>上说道`,
+		},
 	}
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			seg := &model.Segment{Target: tc.target}
-			// inline_markers 模式不使用 rubyOutput 参数
-			result, err := restorer.Restore(seg, nil, nil)
+			entries := ParseInlineMarkers(tc.target)
+			result, err := restorer.Restore(seg, entries, nil)
 			if err != nil {
 				t.Fatalf("Restore(%q): %v", tc.target, err)
 			}
@@ -123,6 +128,64 @@ func TestRubyRestorer_InlineMarkers_BasicRestore(t *testing.T) {
 			}
 			if tc.wantTarget != tc.target && !result.IsFull() {
 				t.Errorf("Restore(%q): expected full match, got matched=%d total=%d", tc.target, result.Matched, result.Total)
+			}
+		})
+	}
+}
+
+// T7b: inline_markers 模式 — preserve_kinds 过滤。
+func TestRubyRestorer_InlineMarkers_PreserveKinds(t *testing.T) {
+	restorer := NewRubyRestorer("inline_markers")
+	keepSet := map[string]bool{"creative": true}
+
+	filterByKinds := func(output []RubyOutputEntry, keep map[string]bool) []RubyOutputEntry {
+		var result []RubyOutputEntry
+		for _, entry := range output {
+			if entry.Kind == "" || keep[entry.Kind] {
+				result = append(result, entry)
+			}
+		}
+		return result
+	}
+
+	cases := []struct {
+		name       string
+		target     string
+		wantTarget string
+	}{
+		{
+			name:       "phonetic filtered out",
+			target:     `⟦ruby:瓦砾/がれき/phonetic⟧上说道`,
+			wantTarget: `瓦砾上说道`,
+		},
+		{
+			name:       "creative preserved",
+			target:     `⟦ruby:瓦砾/がれき/creative⟧上说道`,
+			wantTarget: `<ruby>瓦砾<rt>がれき</rt></ruby>上说道`,
+		},
+		{
+			name:       "mixed kinds",
+			target:     `⟦ruby:瓦砾/がれき/phonetic⟧と⟦ruby:微笑/ほほえ/creative⟧む`,
+			wantTarget: `瓦砾と<ruby>微笑<rt>ほほえ</rt></ruby>む`,
+		},
+		{
+			name:       "no kind suffix preserved",
+			target:     `⟦ruby:瓦砾/がれき⟧上说道`,
+			wantTarget: `<ruby>瓦砾<rt>がれき</rt></ruby>上说道`,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			seg := &model.Segment{Target: tc.target}
+			entries := ParseInlineMarkers(tc.target)
+			filtered := filterByKinds(entries, keepSet)
+			_, err := restorer.Restore(seg, filtered, nil)
+			if err != nil {
+				t.Fatalf("Restore(%q): %v", tc.target, err)
+			}
+			if seg.Target != tc.wantTarget {
+				t.Errorf("Restore(%q):\n  want: %q\n  got:  %q", tc.target, tc.wantTarget, seg.Target)
 			}
 		})
 	}

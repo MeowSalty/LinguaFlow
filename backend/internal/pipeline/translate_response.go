@@ -167,3 +167,9 @@ func translationsSchema(wantIDs []string, includeGlossary bool, includeRuby bool
 		"additionalProperties": false,
 	}
 }
+
+// parseBatchResponseLenientText 是 text 模式的宽容解析版本。
+// 委托 repair.TryRepairText 做结构清理 + 部分成功处理。
+func parseBatchResponseLenientText(text string, wantIDs []string, opt repair.Options) repair.Result {
+	return repair.TryRepairText(text, wantIDs, opt)
+}

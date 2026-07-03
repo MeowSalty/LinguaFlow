@@ -1,13 +1,19 @@
 // Package prompt 提供基于 text/template 的 system 提示词渲染，
-// 以及 JSON 形式的 user 消息构造。
+// 以及 JSON / text 形式的 user 消息构造。
 //
-// 协议：user message 是 JSON envelope
+// JSON 协议：user message 是 JSON envelope
 //
 //	{"source_lang":"...","target_lang":"...",
 //	 "segments":{"<id>":{"source":"...","translate":true/false}, ...}}
 //
-// 模型回复要求是 {"translations":{"<id>":"<text>", ...}}，由 translate stage 解析。
-// 仅 translate=true 的段落需要翻译并出现在 translations 中。
+// Text 协议：user message 是纯文本编号格式
+//
+//	[1] 需要翻译的段落
+//	[*] 上下文参考段落
+//
+// 模型回复要求：
+//   - JSON: {"translations":{"<id>":"<text>", ...}}
+//   - Text: [编号] 翻译文本
 package prompt
 
 import (
@@ -15,6 +21,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"text/template"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
@@ -22,6 +29,10 @@ import (
 
 // SingleID 是单段模式下 envelope 内唯一段的 id。translate stage 用它回写。
 const SingleID = "0"
+
+// TextRubyInputMode 控制 text 模式下注音输入格式。
+// "inline"：⟦ruby:base/text⟧ 内联到原文；"section"：[ruby] 独立段落。
+const TextRubyInputMode = "inline"
 
 // RubyAnnotation 用于在提示词中展示 Ruby 标注信息。
 type RubyAnnotation struct {
@@ -72,6 +83,7 @@ type Data struct {
 	InlineBootstrap   bool // 是否在 system prompt 中追加 inline 抽取指令（mode=inline 时由 translate stage 设为 true）
 	MaxBootstrapTerms int  // inline 模式每批返回上限；仅在 InlineBootstrap=true 时有效
 	StrictSchema      bool // 当后端使用 json_schema 强制输出时为 true；模板据此精简协议描述以节省 token
+	TextMode          bool // 纯文本模式：user message 使用纯文本编号格式而非 JSON envelope
 
 	RubyAnnotations  map[string][]RubyAnnotation // segment ID → 标注列表
 	RubyOutputFormat string                      // "ruby_output" | "inline_markers"
@@ -87,19 +99,23 @@ func (d Data) HasRuby() bool {
 	return false
 }
 
-// Renderer 持有已编译的 system 模板。user 由 Render 直接 JSON 序列化生成，无模板。
+// Renderer 持有已编译的 system 模板。
+// user 消息由 Render 根据 TextMode 标志直接构建，无需模板。
 type Renderer struct {
 	system *template.Template
+}
+
+// templateFuncs 是模板函数映射。
+var templateFuncs = template.FuncMap{
+	"mul": func(a float32, b int) float64 {
+		return float64(a) * float64(b)
+	},
 }
 
 // NewRenderer 按配置创建 Renderer。
 // 优先级：SystemTemplateContent（内联内容）> SystemTemplate（文件路径）。
 // 缺少配置时直接报错，不再使用内置默认值。
-// UserTemplate 字段保留以兼容旧 yaml，但当前协议下不再使用，非空时构造会失败提醒。
 func NewRenderer(cfg config.PromptConfig) (*Renderer, error) {
-	if cfg.UserTemplate != "" {
-		return nil, fmt.Errorf("prompt: user_template is no longer supported (user message is built as JSON); remove it from config")
-	}
 	if cfg.SystemTemplateContent == "" && cfg.SystemTemplate == "" {
 		return nil, fmt.Errorf("prompt: system_template_content and system_template are both empty; configure a prompt template in your config file")
 	}
@@ -111,14 +127,15 @@ func NewRenderer(cfg config.PromptConfig) (*Renderer, error) {
 		}
 		sys = string(b)
 	}
-	systemT, err := template.New("system").Parse(sys)
+	systemT, err := template.New("system").Funcs(templateFuncs).Parse(sys)
 	if err != nil {
 		return nil, fmt.Errorf("prompt: parse system template: %w", err)
 	}
+
 	return &Renderer{system: systemT}, nil
 }
 
-// userEnvelope 是 user message 的 JSON 结构。
+// userEnvelope 是 JSON 模式 user message 的结构。
 type userEnvelope struct {
 	SourceLang      string                      `json:"source_lang,omitempty"`
 	TargetLang      string                      `json:"target_lang,omitempty"`
@@ -126,23 +143,34 @@ type userEnvelope struct {
 	RubyAnnotations map[string][]RubyAnnotation `json:"ruby_annotations,omitempty"`
 }
 
-// Render 返回 (system, user, err)。user 永远是合法 JSON。
+// Render 返回 (system, user, err)。TextMode 时 user 为纯文本编号格式，否则为 JSON。
 func (r *Renderer) Render(d Data) (string, string, error) {
 	segs := d.Segments
 	if len(segs) == 0 {
 		segs = []SegmentInput{{ID: SingleID, Source: d.Source, Translate: true}}
 	}
+
+	var sysBuf bytes.Buffer
+	if err := r.system.Execute(&sysBuf, d); err != nil {
+		return "", "", fmt.Errorf("prompt: execute system: %w", err)
+	}
+
+	sys := sysBuf.String()
+	if d.TextMode {
+		return sys, buildTextUser(segs, d.RubyAnnotations), nil
+	}
+
+	return sys, buildJSONUser(d, segs), nil
+}
+
+// buildJSONUser 构建 JSON 模式的 user message。
+func buildJSONUser(d Data, segs []SegmentInput) string {
 	segMap := make(map[string]SegmentDetail, len(segs))
 	for _, s := range segs {
 		segMap[s.ID] = SegmentDetail{
 			Source:    s.Source,
 			Translate: s.Translate,
 		}
-	}
-
-	var sysBuf bytes.Buffer
-	if err := r.system.Execute(&sysBuf, d); err != nil {
-		return "", "", fmt.Errorf("prompt: execute system: %w", err)
 	}
 
 	env := userEnvelope{
@@ -153,7 +181,87 @@ func (r *Renderer) Render(d Data) (string, string, error) {
 	}
 	userBytes, err := json.Marshal(env)
 	if err != nil {
-		return "", "", fmt.Errorf("prompt: marshal user envelope: %w", err)
+		// marshal 纯数据结构不应失败，防御性处理
+		return "{}"
 	}
-	return sysBuf.String(), string(userBytes), nil
+	return string(userBytes)
+}
+
+// buildTextUser 构建 text 模式的 user message。
+// 格式固定，与 parseBatchResponseLenientText 解析逻辑对应：
+//   - 需要翻译的段落：[编号] 原文
+//   - 上下文参考段落：[*] 原文
+//   - TextRubyInputMode="inline"：注音以 ⟦ruby:base/text⟧ 内联到原文
+//   - TextRubyInputMode="section"：注音以 [ruby] 独立段落追加
+func buildTextUser(segs []SegmentInput, rubyAnnotations map[string][]RubyAnnotation) string {
+	var sb strings.Builder
+	for i, s := range segs {
+		if i > 0 {
+			sb.WriteByte('\n')
+		}
+		if s.Translate {
+			sb.WriteString("[")
+			sb.WriteString(s.ID)
+			sb.WriteString("] ")
+			if TextRubyInputMode == "inline" && len(rubyAnnotations) > 0 {
+				sb.WriteString(inlineRubyInSource(s.Source, rubyAnnotations[s.ID]))
+			} else {
+				sb.WriteString(s.Source)
+			}
+		} else {
+			sb.WriteString("[*] ")
+			sb.WriteString(s.Source)
+		}
+	}
+
+	if TextRubyInputMode != "inline" && len(rubyAnnotations) > 0 {
+		sb.WriteString("\n[ruby]")
+		for _, s := range segs {
+			if !s.Translate {
+				continue
+			}
+			anns, ok := rubyAnnotations[s.ID]
+			if !ok || len(anns) == 0 {
+				continue
+			}
+			sb.WriteString("\n")
+			sb.WriteString(s.ID)
+			sb.WriteString(": ")
+			for j, a := range anns {
+				if j > 0 {
+					sb.WriteString(", ")
+				}
+				sb.WriteString(a.Base)
+				sb.WriteString("/")
+				sb.WriteString(a.Text)
+			}
+		}
+	}
+
+	return sb.String()
+}
+
+// inlineRubyInSource 将注音以 ⟦ruby:base/text⟧ 格式内联到源文本中。
+// 按注音顺序从左到右匹配基底文本，替换为标记。
+func inlineRubyInSource(source string, anns []RubyAnnotation) string {
+	if len(anns) == 0 {
+		return source
+	}
+	var sb strings.Builder
+	pos := 0
+	for _, a := range anns {
+		idx := strings.Index(source[pos:], a.Base)
+		if idx == -1 {
+			continue
+		}
+		sb.WriteString(source[pos : pos+idx])
+		sb.WriteString("⟦ruby:")
+		sb.WriteString(a.Base)
+		sb.WriteString("/")
+		sb.WriteString(a.Text)
+		sb.WriteString("⟧")
+		pos += idx + len(a.Base)
+	}
+	sb.WriteString(source[pos:])
+	return sb.String()
 }

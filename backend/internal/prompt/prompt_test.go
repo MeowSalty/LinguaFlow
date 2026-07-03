@@ -125,9 +125,214 @@ func TestRenderer_SingleMode(t *testing.T) {
 	}
 }
 
-func TestRenderer_RejectsUserTemplate(t *testing.T) {
-	_, err := NewRenderer(config.PromptConfig{UserTemplate: "anything.tmpl"})
-	if err == nil {
-		t.Fatal("expected error when user_template is set")
+func TestRenderer_TextMode(t *testing.T) {
+	r, err := NewRenderer(config.PromptConfig{
+		SystemTemplateContent: `你是 LinguaFlow，一个专业的翻译引擎。
+将用户的文本从 {{.SourceLang}} 翻译为 {{.TargetLang}}。
+{{- if .TextMode}}
+
+输出格式要求：
+- 每个需要翻译的段落输出一行，格式为 [编号] 翻译文本
+- 编号必须与原文中的编号完全一致
+{{- else}}
+
+协议与输出规则：
+- 用户消息是一个 JSON 对象。
+{{- end}}`,
+	})
+	if err != nil {
+		t.Fatalf("renderer: %v", err)
+	}
+	data := Data{
+		SourceLang: "en", TargetLang: "zh",
+		TextMode: true,
+		Segments: []SegmentInput{
+			{ID: "1", Source: "hello", Translate: true},
+			{ID: "2", Source: "world", Translate: true},
+		},
+	}
+	sys, usr, err := r.Render(data)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if !strings.Contains(sys, "输出格式要求") {
+		t.Errorf("system prompt missing text mode format instructions:\n%s", sys)
+	}
+	if strings.Contains(sys, "JSON") {
+		t.Errorf("system prompt should not contain JSON instructions in text mode:\n%s", sys)
+	}
+	if !strings.Contains(usr, "[1] hello") {
+		t.Errorf("user message missing segment 1:\n%s", usr)
+	}
+	if !strings.Contains(usr, "[2] world") {
+		t.Errorf("user message missing segment 2:\n%s", usr)
+	}
+	// user 消息不应包含指令性文字
+	if strings.Contains(usr, "翻译") {
+		t.Errorf("user message should not contain instructions:\n%s", usr)
+	}
+}
+
+func TestRenderer_TextModeWithContext(t *testing.T) {
+	r, err := NewRenderer(config.PromptConfig{
+		SystemTemplateContent: `{{- if .TextMode}}text mode{{- else}}json mode{{- end}}`,
+	})
+	if err != nil {
+		t.Fatalf("renderer: %v", err)
+	}
+	data := Data{
+		SourceLang: "en", TargetLang: "zh",
+		TextMode: true,
+		Segments: []SegmentInput{
+			{ID: "0", Source: "context before", Translate: false},
+			{ID: "1", Source: "hello", Translate: true},
+			{ID: "2", Source: "world", Translate: true},
+			{ID: "3", Source: "context after", Translate: false},
+		},
+	}
+	sys, usr, err := r.Render(data)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if !strings.Contains(sys, "text mode") {
+		t.Errorf("system prompt should indicate text mode:\n%s", sys)
+	}
+	if !strings.Contains(usr, "[*] context before") {
+		t.Errorf("user message missing context segment:\n%s", usr)
+	}
+	if !strings.Contains(usr, "[1] hello") {
+		t.Errorf("user message missing segment 1:\n%s", usr)
+	}
+	if !strings.Contains(usr, "[2] world") {
+		t.Errorf("user message missing segment 2:\n%s", usr)
+	}
+	if !strings.Contains(usr, "[*] context after") {
+		t.Errorf("user message missing context segment:\n%s", usr)
+	}
+}
+
+func TestRenderer_TextModeUserFormat(t *testing.T) {
+	r, err := NewRenderer(config.PromptConfig{
+		SystemTemplateContent: defaultTestSystemTmpl,
+	})
+	if err != nil {
+		t.Fatalf("renderer: %v", err)
+	}
+	data := Data{
+		SourceLang: "ja", TargetLang: "zh-Hans",
+		TextMode: true,
+		Segments: []SegmentInput{
+			{ID: "1", Source: "本電子書籍を示すサムネイルなどのイメージ画像は、再ダウンロード時に予告なく変更される場合があります。", Translate: true},
+			{ID: "2", Source: "本電子書籍は縦書きでレイアウトされています。", Translate: true},
+			{ID: "*", Source: "CONTENTS", Translate: false},
+		},
+	}
+	_, usr, err := r.Render(data)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	expected := "[1] 本電子書籍を示すサムネイルなどのイメージ画像は、再ダウンロード時に予告なく変更される場合があります。\n[2] 本電子書籍は縦書きでレイアウトされています。\n[*] CONTENTS"
+	if usr != expected {
+		t.Errorf("user message format mismatch:\ngot:\n%s\nwant:\n%s", usr, expected)
+	}
+}
+
+func TestRenderer_TextModeWithRuby(t *testing.T) {
+	r, err := NewRenderer(config.PromptConfig{
+		SystemTemplateContent: defaultTestSystemTmpl,
+	})
+	if err != nil {
+		t.Fatalf("renderer: %v", err)
+	}
+	data := Data{
+		SourceLang: "ja", TargetLang: "zh-Hans",
+		TextMode: true,
+		Segments: []SegmentInput{
+			{ID: "1", Source: "椎名は静かに微笑んだ。", Translate: true},
+			{ID: "2", Source: "少年が呪を唱えた。", Translate: true},
+			{ID: "*", Source: "CONTEXT", Translate: false},
+		},
+		RubyAnnotations: map[string][]RubyAnnotation{
+			"1": {{Base: "椎名", Text: "しいな"}, {Base: "微笑", Text: "ほほえ"}},
+			"2": {{Base: "呪", Text: "じゅ"}},
+		},
+	}
+	_, usr, err := r.Render(data)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if !strings.Contains(usr, "[1] ⟦ruby:椎名/しいな⟧は静かに⟦ruby:微笑/ほほえ⟧んだ。") {
+		t.Errorf("user message missing inline ruby for segment 1:\n%s", usr)
+	}
+	if !strings.Contains(usr, "[2] 少年が⟦ruby:呪/じゅ⟧を唱えた。") {
+		t.Errorf("user message missing inline ruby for segment 2:\n%s", usr)
+	}
+	if !strings.Contains(usr, "[*] CONTEXT") {
+		t.Errorf("user message missing context segment:\n%s", usr)
+	}
+	if strings.Contains(usr, "[ruby]") {
+		t.Errorf("user message should not contain [ruby] section in inline mode:\n%s", usr)
+	}
+}
+
+func TestRenderer_TextModeWithEmptyRuby(t *testing.T) {
+	r, err := NewRenderer(config.PromptConfig{
+		SystemTemplateContent: defaultTestSystemTmpl,
+	})
+	if err != nil {
+		t.Fatalf("renderer: %v", err)
+	}
+	data := Data{
+		SourceLang: "ja", TargetLang: "zh-Hans",
+		TextMode: true,
+		Segments: []SegmentInput{
+			{ID: "1", Source: "hello", Translate: true},
+		},
+		RubyAnnotations: map[string][]RubyAnnotation{},
+	}
+	_, usr, err := r.Render(data)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if strings.Contains(usr, "[ruby]") {
+		t.Errorf("user message should not contain [ruby] section when annotations are empty:\n%s", usr)
+	}
+}
+
+func TestRenderer_TextModeWithRubyInline(t *testing.T) {
+	r, err := NewRenderer(config.PromptConfig{
+		SystemTemplateContent: defaultTestSystemTmpl,
+	})
+	if err != nil {
+		t.Fatalf("renderer: %v", err)
+	}
+	data := Data{
+		SourceLang: "ja", TargetLang: "zh-Hans",
+		TextMode: true,
+		Segments: []SegmentInput{
+			{ID: "1", Source: "椎名は静かに微笑んだ。", Translate: true},
+			{ID: "2", Source: "少年が呪を唱えた。", Translate: true},
+			{ID: "*", Source: "CONTEXT", Translate: false},
+		},
+		RubyAnnotations: map[string][]RubyAnnotation{
+			"1": {{Base: "椎名", Text: "しいな"}, {Base: "微笑", Text: "ほほえ"}},
+			"2": {{Base: "呪", Text: "じゅ"}},
+		},
+	}
+	_, usr, err := r.Render(data)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if !strings.Contains(usr, "[1] ⟦ruby:椎名/しいな⟧は静かに⟦ruby:微笑/ほほえ⟧んだ。") {
+		t.Errorf("user message missing inline ruby for segment 1:\n%s", usr)
+	}
+	if !strings.Contains(usr, "[2] 少年が⟦ruby:呪/じゅ⟧を唱えた。") {
+		t.Errorf("user message missing inline ruby for segment 2:\n%s", usr)
+	}
+	if !strings.Contains(usr, "[*] CONTEXT") {
+		t.Errorf("user message missing context segment:\n%s", usr)
+	}
+	if strings.Contains(usr, "[ruby]") {
+		t.Errorf("user message should not contain [ruby] section in inline mode:\n%s", usr)
 	}
 }
