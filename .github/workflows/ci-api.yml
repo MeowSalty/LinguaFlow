@@ -2,7 +2,7 @@ name: API CI
 
 on:
   push:
-    branches: [main, frontend, backend]
+    branches: [main]
     paths:
       - 'api/**'
       - '.github/workflows/ci-api.yml'
