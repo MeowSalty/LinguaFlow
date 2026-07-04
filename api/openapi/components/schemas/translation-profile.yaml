@@ -20,10 +20,6 @@ ProfileRubyConfig:
   properties:
     enabled:
       type: boolean
-    output_format:
-      type: string
-      enum: [ruby_output, inline_markers]
-      default: ruby_output
     preserve_kinds:
       type: array
       items:
@@ -43,8 +39,6 @@ ProfileProtectConfig:
       items:
         type: string
         enum: [code, link, placeholder, xml]
-    ruby:
-      $ref: '#/ProfileRubyConfig'
 
 ProfilePostprocessConfig:
   type: object
@@ -138,6 +132,8 @@ TranslationProfileConfig:
       $ref: '#/ProfileSplitConfig'
     protect:
       $ref: '#/ProfileProtectConfig'
+    ruby:
+      $ref: '#/ProfileRubyConfig'
     postprocess:
       $ref: '#/ProfilePostprocessConfig'
     repair:

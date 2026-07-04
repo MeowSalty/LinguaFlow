@@ -3315,32 +3315,6 @@ components:
         max_chars:
           type: integer
           minimum: 1
-    ProfileRubyConfig:
-      type: object
-      required:
-        - enabled
-      properties:
-        enabled:
-          type: boolean
-        output_format:
-          type: string
-          enum:
-            - ruby_output
-            - inline_markers
-          default: ruby_output
-        preserve_kinds:
-          type: array
-          items:
-            type: string
-            enum:
-              - phonetic
-              - semantic
-              - creative
-          default:
-            - phonetic
-            - semantic
-            - creative
-          description: 保留的注音分类列表
     ProfileProtectConfig:
       type: object
       required:
@@ -3357,8 +3331,26 @@ components:
               - link
               - placeholder
               - xml
-        ruby:
-          $ref: '#/components/schemas/ProfileRubyConfig'
+    ProfileRubyConfig:
+      type: object
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+        preserve_kinds:
+          type: array
+          items:
+            type: string
+            enum:
+              - phonetic
+              - semantic
+              - creative
+          default:
+            - phonetic
+            - semantic
+            - creative
+          description: 保留的注音分类列表
     ProfilePostprocessConfig:
       type: object
       required:
@@ -3472,6 +3464,8 @@ components:
           $ref: '#/components/schemas/ProfileSplitConfig'
         protect:
           $ref: '#/components/schemas/ProfileProtectConfig'
+        ruby:
+          $ref: '#/components/schemas/ProfileRubyConfig'
         postprocess:
           $ref: '#/components/schemas/ProfilePostprocessConfig'
         repair:
