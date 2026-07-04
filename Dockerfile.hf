@@ -1,0 +1,5 @@
+FROM ghcr.io/meowsalty/linguaflow:latest
+
+EXPOSE 7860
+
+CMD ["serve", "--port", "7860", "--host", "0.0.0.0"]

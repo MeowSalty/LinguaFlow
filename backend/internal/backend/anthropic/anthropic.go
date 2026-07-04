@@ -21,6 +21,7 @@ const TypeName = "anthropic"
 const (
 	respFmtJSONSchema = "json_schema"
 	respFmtJSONObject = "json_object"
+	respFmtText       = "text"
 	respFmtNone       = "none"
 )
 
@@ -63,7 +64,7 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 		rf = b.responseFormat
 	}
 	switch rf {
-	case respFmtJSONSchema, respFmtJSONObject, respFmtNone, "":
+	case respFmtJSONSchema, respFmtJSONObject, respFmtText, respFmtNone, "":
 	default:
 		return nil, fmt.Errorf("anthropic: unknown response_format %q", rf)
 	}
@@ -229,9 +230,9 @@ func factory(opts map[string]any) (backend.Backend, error) {
 	}
 	rf := backend.StringOpt(opts, "response_format", respFmtJSONSchema)
 	switch rf {
-	case respFmtJSONSchema, respFmtJSONObject, respFmtNone:
+	case respFmtJSONSchema, respFmtJSONObject, respFmtText, respFmtNone:
 	default:
-		return nil, fmt.Errorf("anthropic: invalid response_format %q (want json_schema|json_object|none)", rf)
+		return nil, fmt.Errorf("anthropic: invalid response_format %q (want json_schema|json_object|text|none)", rf)
 	}
 	b := &Backend{
 		client:            sdk.NewClient(clientOpts...),

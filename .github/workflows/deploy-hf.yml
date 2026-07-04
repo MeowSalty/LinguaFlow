@@ -1,0 +1,37 @@
+name: Deploy to Hugging Face
+
+on:
+  workflow_run:
+    workflows: ["Release"]
+    types:
+      - completed
+
+jobs:
+  deploy:
+    name: 部署到 Hugging Face Spaces
+    if: ${{ github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 推送到 Hugging Face Spaces
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+        run: |
+          git config --global user.name "GitHub Action"
+          git config --global user.email "action@github.com"
+          
+          # 使用 Hugging Face 专用的 Dockerfile
+          mv Dockerfile.hf Dockerfile
+          
+          # 更新镜像版本为当前 tag
+          sed -i "s/:latest/:${GITHUB_REF_NAME}/" Dockerfile
+          
+          git add Dockerfile
+          git commit -m "chore: deploy ${GITHUB_REF_NAME}" || true
+          
+          # 添加 Hugging Face 远程仓库
+          git remote add hf https://MeowSalty:${HF_TOKEN}@huggingface.co/spaces/MeowSalty/linguaflow
+          
+          # 推送
+          git push hf main --force

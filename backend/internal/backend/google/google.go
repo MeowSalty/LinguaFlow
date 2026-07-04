@@ -20,6 +20,7 @@ const TypeName = "google"
 const (
 	respFmtJSONSchema = "json_schema"
 	respFmtJSONObject = "json_object"
+	respFmtText       = "text"
 	respFmtNone       = "none"
 )
 
@@ -59,7 +60,7 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 		rf = b.responseFormat
 	}
 	switch rf {
-	case respFmtJSONSchema, respFmtJSONObject, respFmtNone, "":
+	case respFmtJSONSchema, respFmtJSONObject, respFmtText, respFmtNone, "":
 	default:
 		return nil, fmt.Errorf("google: unknown response_format %q", rf)
 	}
@@ -89,7 +90,7 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 		}
 	case respFmtJSONObject:
 		cfg.ResponseMIMEType = "application/json"
-	case respFmtNone, "":
+	case respFmtText, respFmtNone, "":
 		// 不约束，沿用 Gemini 默认 text/plain
 	}
 
@@ -156,9 +157,9 @@ func factory(opts map[string]any) (backend.Backend, error) {
 	}
 	rf := backend.StringOpt(opts, "response_format", respFmtJSONSchema)
 	switch rf {
-	case respFmtJSONSchema, respFmtJSONObject, respFmtNone:
+	case respFmtJSONSchema, respFmtJSONObject, respFmtText, respFmtNone:
 	default:
-		return nil, fmt.Errorf("google: invalid response_format %q (want json_schema|json_object|none)", rf)
+		return nil, fmt.Errorf("google: invalid response_format %q (want json_schema|json_object|text|none)", rf)
 	}
 
 	t, err := backend.DurationOpt(opts, "timeout", 60*time.Second)

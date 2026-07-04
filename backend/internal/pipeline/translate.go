@@ -19,6 +19,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
@@ -40,6 +41,10 @@ type Round struct {
 	// nil 时回退到 Translate 级别的 Repair。
 	// 使用指针以区分"未设置"（nil）和"显式设为零值"（&repair.Options{}）。
 	Repair *repair.Options
+
+	// ResponseMode 控制本轮的响应格式模式。
+	// 空值等同 "json"（向后兼容）；"text" 启用纯文本协议。
+	ResponseMode string
 }
 
 // batchJob 描述一个待处理的批次任务。
@@ -98,11 +103,11 @@ type Translate struct {
 	// 在 fatal / partial 时分别决定 shrink 或仅对缺失段单独重试。
 	Repair repair.Options
 
-	// RubyOutputFormat 控制 LLM 返回注音的方式：
-	//   - "ruby_output"：LLM 在 ruby_output 字段返回结构化注音数据
-	//   - "inline_markers"：LLM 在译文中插入 ⟦ruby:base/text⟧ 标记
+	// RubyMode 控制注音的输入输出格式：
+	//   - "json"：JSON 模式，结构化字段
+	//   - "section"：text 模式，[ruby] 段落
 	//   - ""（空）：不启用注音处理
-	RubyOutputFormat string
+	RubyMode string
 
 	// PreserveKinds 控制保留哪些类型的注音（phonetic/semantic/creative）。
 	// nil 时保留全部（向后兼容）；空切片表示不保留任何注音。
@@ -120,7 +125,7 @@ type Translate struct {
 	// Protector 用于翻译后立即还原占位符。
 	Protector protect.Protector
 	// Restorer 用于翻译后立即还原 ruby 注音。
-	Restorer *protect.RubyRestorer
+	Restorer *ruby.Restorer
 
 	// postSegment 是 Pipeline 注入的 per-segment 回调。
 	// 每段翻译确认后调用，用于执行 Unprotect/RubyRestore/TM 等后处理。
@@ -550,7 +555,7 @@ func extractRubyAnnotationsFromDoc(doc *Document, idxs []int, idMap map[int]stri
 		if !ok {
 			continue
 		}
-		annots, ok := raw.([]protect.RubyAnnotation)
+		annots, ok := raw.([]ruby.Annotation)
 		if !ok {
 			continue
 		}

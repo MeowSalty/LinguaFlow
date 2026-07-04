@@ -73,14 +73,11 @@ func profileConfigToResponse(c *schema.TranslationProfileConfigData) Translation
 		rules[i] = ProfileProtectConfigRules(r)
 	}
 
-	outputFormat := ProfileRubyConfigOutputFormat(c.Protect.Ruby.OutputFormat)
-
 	rubyConfig := &ProfileRubyConfig{
-		Enabled:      c.Protect.Ruby.Enabled,
-		OutputFormat: &outputFormat,
+		Enabled: c.Ruby.Enabled,
 	}
-	if c.Protect.Ruby.PreserveKinds != nil {
-		pk := toAPIPreserveKinds(c.Protect.Ruby.PreserveKinds)
+	if c.Ruby.PreserveKinds != nil {
+		pk := toAPIPreserveKinds(c.Ruby.PreserveKinds)
 		rubyConfig.PreserveKinds = &pk
 	}
 
@@ -93,8 +90,8 @@ func profileConfigToResponse(c *schema.TranslationProfileConfigData) Translation
 		Protect: ProfileProtectConfig{
 			Enabled: c.Protect.Enabled,
 			Rules:   &rules,
-			Ruby:    rubyConfig,
 		},
+		Ruby: rubyConfig,
 		Postprocess: ProfilePostprocessConfig{
 			Enabled:    c.Postprocess.Enabled,
 			TrimSpaces: c.Postprocess.TrimSpaces,
@@ -140,13 +137,10 @@ func parseProfileConfig(c *TranslationProfileConfig) *schema.TranslationProfileC
 	}
 
 	ruby := schema.ProfileRubyConfig{}
-	if c.Protect.Ruby != nil {
-		ruby.Enabled = c.Protect.Ruby.Enabled
-		if c.Protect.Ruby.OutputFormat != nil {
-			ruby.OutputFormat = string(*c.Protect.Ruby.OutputFormat)
-		}
-		if c.Protect.Ruby.PreserveKinds != nil {
-			ruby.PreserveKinds = fromAPIPreserveKinds(*c.Protect.Ruby.PreserveKinds)
+	if c.Ruby != nil {
+		ruby.Enabled = c.Ruby.Enabled
+		if c.Ruby.PreserveKinds != nil {
+			ruby.PreserveKinds = fromAPIPreserveKinds(*c.Ruby.PreserveKinds)
 		}
 	}
 
@@ -159,8 +153,8 @@ func parseProfileConfig(c *TranslationProfileConfig) *schema.TranslationProfileC
 		Protect: schema.ProfileProtectConfig{
 			Enabled: c.Protect.Enabled,
 			Rules:   rules,
-			Ruby:    ruby,
 		},
+		Ruby: ruby,
 		Postprocess: schema.ProfilePostprocessConfig{
 			Enabled:    c.Postprocess.Enabled,
 			TrimSpaces: c.Postprocess.TrimSpaces,
@@ -209,13 +203,10 @@ func mergeProfileConfig(existing *schema.TranslationProfileConfigData, incoming 
 		}
 		merged.Protect.Rules = rules
 	}
-	if incoming.Protect.Ruby != nil {
-		merged.Protect.Ruby.Enabled = incoming.Protect.Ruby.Enabled
-		if incoming.Protect.Ruby.OutputFormat != nil {
-			merged.Protect.Ruby.OutputFormat = string(*incoming.Protect.Ruby.OutputFormat)
-		}
-		if incoming.Protect.Ruby.PreserveKinds != nil {
-			merged.Protect.Ruby.PreserveKinds = fromAPIPreserveKinds(*incoming.Protect.Ruby.PreserveKinds)
+	if incoming.Ruby != nil {
+		merged.Ruby.Enabled = incoming.Ruby.Enabled
+		if incoming.Ruby.PreserveKinds != nil {
+			merged.Ruby.PreserveKinds = fromAPIPreserveKinds(*incoming.Ruby.PreserveKinds)
 		}
 	}
 

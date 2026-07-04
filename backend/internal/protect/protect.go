@@ -164,7 +164,7 @@ func MissingPlaceholders(seg *model.Segment) []string {
 // FromRules 按规则名（"code"/"link"/"placeholder"/"xml"）构造 Protector。
 // 未知规则名会被忽略。
 //
-// 注意：不再处理 "ruby"，RubyProtector 由 BuildPreStages/BuildPostStages 根据 ruby.enabled
+// 注意：不处理 "ruby"，ruby.Extractor 由引擎根据 ruby.enabled
 // 单独控制，在其他 Protector 之前运行（先剥离 ruby 标签，再处理剩余 XML）。
 func FromRules(rules []string) Protector {
 	var ps []Protector

@@ -48,6 +48,7 @@ type PipelineConfig struct {
 	Translate   TranslateConfig   `yaml:"translate"`
 	Postprocess PostprocessConfig `yaml:"postprocess"`
 	Context     ContextConfig     `yaml:"context"`
+	Ruby        RubyConfig        `yaml:"ruby"`
 }
 
 type SplitConfig struct {
@@ -57,24 +58,27 @@ type SplitConfig struct {
 }
 
 type ProtectConfig struct {
-	Enabled bool       `yaml:"enabled"`
-	Rules   []string   `yaml:"rules"`
-	Ruby    RubyConfig `yaml:"ruby"`
+	Enabled bool     `yaml:"enabled"`
+	Rules   []string `yaml:"rules"`
 }
 
 // RubyConfig 控制 Ruby 注音保护的行为。
 type RubyConfig struct {
 	Enabled       bool     `yaml:"enabled"`
-	OutputFormat  string   `yaml:"output_format"`  // "ruby_output" (默认) | "inline_markers"
 	RetryBackend  string   `yaml:"retry_backend"`  // 注音对齐重试后端名称；空时使用翻译主后端
 	PreserveKinds []string `yaml:"preserve_kinds"` // 保留的注音 kind 列表：phonetic/semantic/creative
 }
 
-// Ruby 输出格式常量。
+// RubyMode 常量（引擎内部使用，根据响应模式自动选择）。
 const (
-	RubyOutputInlineMarkers = "inline_markers"
-	RubyOutputDefault       = "ruby_output"
+	RubyModeJSON    = "json"
+	RubyModeInline  = "inline" // TODO: inline 模式尚未激活，待其他功能适配完成后启用
+	RubyModeSection = "section"
 )
+
+// ResponseFormatText 是纯文本响应模式的取值。
+// 与 json_schema / json_object / none 对齐，由各 backend factory 独立校验。
+const ResponseFormatText = "text"
 
 // FallbackShrink 默认值：0 表示未设置，回退到此值。
 const defaultFallbackShrink = 0.5
@@ -135,7 +139,7 @@ func DefaultContextConfig() ContextConfig {
 type PromptConfig struct {
 	SystemTemplate        string         `yaml:"system_template"`
 	SystemTemplateContent string         `yaml:"system_template_content"` // 新增：内联内容，优先级高于 SystemTemplate
-	UserTemplate          string         `yaml:"user_template"`
+	UserTemplate          string         `yaml:"user_template"`           // Deprecated: 保留兼容，不再使用
 	Vars                  map[string]any `yaml:"vars"`
 }
 
@@ -294,8 +298,8 @@ func Default() *Config {
 			Protect: ProtectConfig{
 				Enabled: true,
 				Rules:   []string{"code", "link", "placeholder", "xml"},
-				Ruby:    RubyConfig{Enabled: false, OutputFormat: RubyOutputDefault},
 			},
+			Ruby: RubyConfig{Enabled: false},
 			Translate: TranslateConfig{
 				Concurrency:    4,
 				BatchSize:      1,
@@ -405,19 +409,10 @@ func (c *Config) Validate() error {
 	if c.Pipeline.Split.MaxChars < 1 {
 		c.Pipeline.Split.MaxChars = 1200
 	}
-	switch c.Pipeline.Protect.Ruby.OutputFormat {
-	case "":
-		c.Pipeline.Protect.Ruby.OutputFormat = RubyOutputDefault
-	case RubyOutputDefault, RubyOutputInlineMarkers:
-		// ok
-	default:
-		return fmt.Errorf("pipeline.protect.ruby.output_format must be one of %s|%s, got %q",
-			RubyOutputDefault, RubyOutputInlineMarkers, c.Pipeline.Protect.Ruby.OutputFormat)
-	}
 	validRubyKinds := map[string]bool{"phonetic": true, "semantic": true, "creative": true}
-	for _, k := range c.Pipeline.Protect.Ruby.PreserveKinds {
+	for _, k := range c.Pipeline.Ruby.PreserveKinds {
 		if !validRubyKinds[k] {
-			return fmt.Errorf("pipeline.protect.ruby.preserve_kinds: invalid kind %q (must be one of phonetic, semantic, creative)", k)
+			return fmt.Errorf("pipeline.ruby.preserve_kinds: invalid kind %q (must be one of phonetic, semantic, creative)", k)
 		}
 	}
 	c.Pipeline.Translate.Repair.Normalize()

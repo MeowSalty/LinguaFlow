@@ -356,6 +356,7 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 				Backoff:     time.Duration(rs.Retry.BackoffMs) * time.Millisecond,
 				Jitter:      rs.Retry.Jitter,
 			},
+			ResponseMode: responseModeFromBackendOptions(rs.Backend.Options),
 		})
 	}
 
@@ -433,11 +434,10 @@ func buildStrategyConfig(snapshot *service.JobExecutionSnapshot) *config.Config 
 		cfg.Pipeline.Protect = config.ProtectConfig{
 			Enabled: s.Protect.Enabled,
 			Rules:   s.Protect.Rules,
-			Ruby: config.RubyConfig{
-				Enabled:       s.Protect.Ruby.Enabled,
-				OutputFormat:  s.Protect.Ruby.OutputFormat,
-				PreserveKinds: s.Protect.Ruby.PreserveKinds,
-			},
+		}
+		cfg.Pipeline.Ruby = config.RubyConfig{
+			Enabled:       s.Ruby.Enabled,
+			PreserveKinds: s.Ruby.PreserveKinds,
 		}
 		cfg.Pipeline.Postprocess = config.PostprocessConfig{
 			Enabled:    s.Postprocess.Enabled,
@@ -556,4 +556,13 @@ func clampInt64ToInt(v int64) int {
 		return 0
 	}
 	return int(v)
+}
+
+// responseModeFromBackendOptions 从后端 Options map 中读取 response_format 值。
+// 用于设置 engine.Round.ResponseMode，使 pipeline 能区分 json/text 模式。
+func responseModeFromBackendOptions(opts map[string]any) string {
+	if v, ok := opts["response_format"].(string); ok {
+		return v
+	}
+	return ""
 }

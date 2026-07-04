@@ -17,6 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
 // buildRequest 构建翻译请求的 prompt 和 backend.Request。
@@ -29,6 +30,7 @@ func (s *Translate) buildRequest(
 	logger *slog.Logger,
 ) (string, string, backend.Request, []string, map[int]string, []prompt.GlossaryEntry, error) {
 	renderer := s.resolveRoundRenderer(round)
+	isTextMode := round.ResponseMode == "text"
 
 	glos, tmHints := s.lookupHints(ctx, doc, idxs, logger)
 
@@ -36,15 +38,27 @@ func (s *Translate) buildRequest(
 	idMap := make(map[int]string, len(idxs))
 	var wantIDs []string
 	batchSources := make([]string, 0, len(idxs))
+	transIdx := 0
 	for k, idx := range idxs {
-		id := strconv.Itoa(k + 1)
-		idMap[idx] = id
 		seg := doc.Segments[idx]
 		source := seg.Source
 		isCtx := isContext(contextSet, idx)
 		if isCtx && seg.OriginalSource != "" {
 			source = seg.OriginalSource
 		}
+
+		var id string
+		if isTextMode {
+			if isCtx {
+				id = "*"
+			} else {
+				transIdx++
+				id = strconv.Itoa(transIdx)
+			}
+		} else {
+			id = strconv.Itoa(k + 1)
+		}
+		idMap[idx] = id
 		inputs[k] = prompt.SegmentInput{ID: id, Source: source, Translate: !isCtx}
 		if !isCtx {
 			wantIDs = append(wantIDs, id)
@@ -62,9 +76,10 @@ func (s *Translate) buildRequest(
 		Vars:              doc.Vars,
 		InlineBootstrap:   s.InlineBootstrap,
 		MaxBootstrapTerms: s.calcMaxBootstrapTerms(batchSources),
-		StrictSchema:      true,
+		StrictSchema:      !isTextMode,
+		TextMode:          isTextMode,
 		RubyAnnotations:   rubyAnns,
-		RubyOutputFormat:  s.RubyOutputFormat,
+		RubyMode:          s.RubyMode,
 	}
 	sys, usr, err := renderer.Render(data)
 	if err != nil {
@@ -72,9 +87,13 @@ func (s *Translate) buildRequest(
 	}
 
 	req := backend.Request{
-		System:     sys,
-		User:       usr,
-		JSONSchema: translationsSchema(wantIDs, s.InlineBootstrap, s.RubyOutputFormat != ""),
+		System: sys,
+		User:   usr,
+	}
+	if !isTextMode {
+		req.JSONSchema = translationsSchema(wantIDs, s.InlineBootstrap, s.RubyMode != "")
+	} else {
+		req.ResponseFormat = "none"
 	}
 
 	return sys, usr, req, wantIDs, idMap, glos, nil
@@ -148,6 +167,8 @@ func (s *Translate) tryPromptUpgrade(
 		return resp, res, false
 	}
 
+	isTextMode := round.ResponseMode == "text"
+
 	reminder := repair.BuildRetryReminder(nil, res.ParseErr, headSnippet(resp.Text, 200))
 	req2 := req
 	req2.System = req.System + reminder
@@ -157,7 +178,12 @@ func (s *Translate) tryPromptUpgrade(
 		return resp, res, false
 	}
 
-	res2 := parseBatchResponseLenient(resp2.Text, wantIDs, repairOpts)
+	var res2 repair.Result
+	if isTextMode {
+		res2 = parseBatchResponseLenientText(resp2.Text, wantIDs, repairOpts)
+	} else {
+		res2 = parseBatchResponseLenient(resp2.Text, wantIDs, repairOpts)
+	}
 	if res2.ParseErr != nil {
 		return resp, res, false
 	}
@@ -280,7 +306,13 @@ func (s *Translate) processBatchAttempt(
 	atomic.AddInt64(&doc.InputTokens, resp.Usage.PromptTokens)
 	atomic.AddInt64(&doc.OutputTokens, resp.Usage.CompletionTokens)
 
-	res := parseBatchResponseLenient(resp.Text, wantIDs, repairOpts)
+	isTextMode := round.ResponseMode == "text"
+	var res repair.Result
+	if isTextMode {
+		res = parseBatchResponseLenientText(resp.Text, wantIDs, repairOpts)
+	} else {
+		res = parseBatchResponseLenient(resp.Text, wantIDs, repairOpts)
+	}
 
 	if res.ParseErr != nil {
 		// 尝试 PromptUpgrade
@@ -368,7 +400,7 @@ func (s *Translate) processTranslatedSegments(
 	idxs []int,
 	wantIDs []string,
 	trans map[string]string,
-	rubyOutputMap map[string][]protect.RubyOutputEntry,
+	rubyOutputMap map[string][]ruby.OutputEntry,
 	contextSet map[int]struct{},
 	repairOpts repair.Options,
 	round Round,
