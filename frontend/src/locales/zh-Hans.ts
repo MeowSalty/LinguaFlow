@@ -854,6 +854,8 @@ const messages = {
       model: '模型',
       modelPlaceholder: '留空使用默认模型',
       temperature: 'Temperature',
+      topP: 'Top P',
+      useApiDefault: '使用 API 默认值',
       maxTokens: 'Max Tokens',
       maxTokensPlaceholder: '0 表示不限制',
       timeout: '超时时间（秒）',
