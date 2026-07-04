@@ -17,6 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
 // buildRequest 构建翻译请求的 prompt 和 backend.Request。
@@ -399,7 +400,7 @@ func (s *Translate) processTranslatedSegments(
 	idxs []int,
 	wantIDs []string,
 	trans map[string]string,
-	rubyOutputMap map[string][]protect.RubyOutputEntry,
+	rubyOutputMap map[string][]ruby.OutputEntry,
 	contextSet map[int]struct{},
 	repairOpts repair.Options,
 	round Round,

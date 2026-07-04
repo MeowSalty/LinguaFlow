@@ -19,6 +19,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
@@ -124,7 +125,7 @@ type Translate struct {
 	// Protector 用于翻译后立即还原占位符。
 	Protector protect.Protector
 	// Restorer 用于翻译后立即还原 ruby 注音。
-	Restorer *protect.RubyRestorer
+	Restorer *ruby.Restorer
 
 	// postSegment 是 Pipeline 注入的 per-segment 回调。
 	// 每段翻译确认后调用，用于执行 Unprotect/RubyRestore/TM 等后处理。
@@ -554,7 +555,7 @@ func extractRubyAnnotationsFromDoc(doc *Document, idxs []int, idMap map[int]stri
 		if !ok {
 			continue
 		}
-		annots, ok := raw.([]protect.RubyAnnotation)
+		annots, ok := raw.([]ruby.Annotation)
 		if !ok {
 			continue
 		}

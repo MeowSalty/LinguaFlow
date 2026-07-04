@@ -1,4 +1,8 @@
-package protect
+// Package ruby 提供 HTML ruby 注音标签的提取与还原功能。
+//
+// Ruby 标签用于在汉字上方显示注音（如假名 furigana），例如 <ruby>呪<rt>じゅ</rt></ruby>。
+// 提取阶段将注音元数据从源文本中剥离并存入 seg.Meta；还原阶段将注音重新插入译文。
+package ruby
 
 import (
 	"regexp"
@@ -8,21 +12,18 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/model"
 )
 
-// RubyProtector 保护 HTML ruby 注音标签，将注音元数据提取到 seg.Meta 中。
+// Extractor 提取 HTML ruby 注音标签的元数据，将注音信息存入 seg.Meta。
 //
-// 日语 EPUB 中 <ruby> 标签用于在汉字上方显示假名注音（furigana），
-// 例如 <ruby>呪<rt>じゅ</rt></ruby>。
-//
-// Protect 阶段的行为：
+// 提取阶段的行为：
 //  1. 提取所有 <ruby> 元素的基底文本和注音
 //  2. 合并相邻的 per-kanji ruby 为词级注音
 //  3. 剥离 ruby 标签，只保留基底文本
 //  4. 将注音元数据存入 seg.Meta["ruby_annotations"]
 //
-// Unprotect 阶段为空操作，注音还原委托给 RubyRestorer。
-type RubyProtector struct{}
+// 还原阶段为空操作，注音还原委托给 Restorer。
+type Extractor struct{}
 
-func (RubyProtector) Name() string { return "ruby" }
+func (Extractor) Name() string { return "ruby" }
 
 // rubyElementRe 匹配 <ruby>BASE<rt>READING</rt>TRAILING</ruby>
 // 其中 BASE 可能包含 <rp> 等辅助标签，READING 是注音文本，
@@ -32,20 +33,20 @@ var rubyElementRe = regexp.MustCompile(`<ruby>(.*?)<rt>(.*?)</rt>(.*?)</ruby>`)
 // htmlTagRe 匹配 HTML/XML 标签，用于从基底文本中清理辅助标签。
 var htmlTagRe = regexp.MustCompile(`<[^>]*>`)
 
-// RubyAnnotation 是 protect 包内部的注音条目。
-type RubyAnnotation struct {
+// Annotation 是注音条目。
+type Annotation struct {
 	Base string // 基底文本（可能跨多个 ruby 元素合并）
 	Text string // 标注文本（合并后的完整文本）
 }
 
 // rubyMatch 跟踪 ruby 元素在源文本中的位置和内容。
 type rubyMatch struct {
-	RubyAnnotation
+	Annotation
 	start int // 在源文本中的字节偏移
 	end   int // 在源文本中的字节偏移结束
 }
 
-func (p *RubyProtector) Protect(seg *model.Segment) error {
+func (p *Extractor) Protect(seg *model.Segment) error {
 	// 1. 提取所有 ruby 元素的元数据（含位置信息）
 	matches := extractRubyMatches(seg.Source)
 
@@ -66,9 +67,9 @@ func (p *RubyProtector) Protect(seg *model.Segment) error {
 	return nil
 }
 
-func (p *RubyProtector) Unprotect(seg *model.Segment) error {
+func (p *Extractor) Unprotect(seg *model.Segment) error {
 	// 不再需要还原占位符（Protect 阶段未使用占位符）
-	// 注音还原委托给 RubyRestorer，在 unprotect stage 之后执行
+	// 注音还原委托给 Restorer，在 unprotect stage 之后执行
 	return nil
 }
 
@@ -91,7 +92,7 @@ func extractRubyMatches(source string) []rubyMatch {
 		base = htmlTagRe.ReplaceAllString(base, "")
 
 		matches = append(matches, rubyMatch{
-			RubyAnnotation: RubyAnnotation{
+			Annotation: Annotation{
 				Base: base,
 				Text: text,
 			},
@@ -113,17 +114,17 @@ func extractRubyMatches(source string) []rubyMatch {
 //   - 基底包含多个字符（如 <ruby>項垂<rt>うなだ</rt></ruby>）
 //   - 两个 ruby 之间有文本分隔
 //   - 两个 ruby 之间有空白/标点
-func mergeAdjacentRuby(matches []rubyMatch) []RubyAnnotation {
+func mergeAdjacentRuby(matches []rubyMatch) []Annotation {
 	if len(matches) == 0 {
 		return nil
 	}
 
-	var result []RubyAnnotation
+	var result []Annotation
 	i := 0
 	for i < len(matches) {
 		if isPerKanji(matches[i].Base) {
 			// 尝试向后合并相邻的 per-kanji ruby
-			merged := matches[i].RubyAnnotation
+			merged := matches[i].Annotation
 			j := i + 1
 			for j < len(matches) {
 				// 检查是否紧邻（无分隔字符）
@@ -142,7 +143,7 @@ func mergeAdjacentRuby(matches []rubyMatch) []RubyAnnotation {
 			result = append(result, merged)
 			i = j
 		} else {
-			result = append(result, matches[i].RubyAnnotation)
+			result = append(result, matches[i].Annotation)
 			i++
 		}
 	}

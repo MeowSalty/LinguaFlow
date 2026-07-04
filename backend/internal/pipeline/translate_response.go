@@ -7,8 +7,8 @@ import (
 	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
 // parseBatchResponse 解析 {"translations":{"<id>":"<text>", ...}} 并校验 wantIDs 完整。
@@ -19,7 +19,7 @@ import (
 //
 // 这是严格语义：缺一 ID 即 err、多一 ID 即 err；调用方包括 translateSingle 的 S5
 // 占位符补救路径仍依赖该行为。批量主路径走 parseBatchResponseLenient（允许 partial）。
-func parseBatchResponse(text string, wantIDs []string) (map[string]string, []prompt.BootstrapEntry, map[string][]protect.RubyOutputEntry, error) {
+func parseBatchResponse(text string, wantIDs []string) (map[string]string, []prompt.BootstrapEntry, map[string][]ruby.OutputEntry, error) {
 	body := jsonObjectSlice(text)
 	if body == "" {
 		return nil, nil, nil, fmt.Errorf("no JSON object found in response")
@@ -27,7 +27,7 @@ func parseBatchResponse(text string, wantIDs []string) (map[string]string, []pro
 	var env struct {
 		Translations map[string]string                    `json:"translations"`
 		Glossary     []prompt.BootstrapEntry              `json:"glossary"`
-		RubyOutput   map[string][]protect.RubyOutputEntry `json:"ruby_output"`
+		RubyOutput   map[string][]ruby.OutputEntry `json:"ruby_output"`
 	}
 	if err := json.Unmarshal([]byte(body), &env); err != nil {
 		return nil, nil, nil, fmt.Errorf("unmarshal translations: %w", err)

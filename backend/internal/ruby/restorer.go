@@ -1,4 +1,4 @@
-package protect
+package ruby
 
 import (
 	"fmt"
@@ -9,13 +9,13 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/model"
 )
 
-// RubyRestorer 负责将 LLM 输出的注音信息还原为 <ruby> 标签。
+// Restorer 负责将 LLM 输出的注音信息还原为 <ruby> 标签。
 // 它不是 Protector 接口的实现，而是作为 unprotect 之后的额外 stage。
-type RubyRestorer struct{}
+type Restorer struct{}
 
-// NewRubyRestorer 创建 RubyRestorer 实例。
-func NewRubyRestorer() *RubyRestorer {
-	return &RubyRestorer{}
+// NewRestorer 创建 Restorer 实例。
+func NewRestorer() *Restorer {
+	return &Restorer{}
 }
 
 // RestoreResult 记录注音还原的匹配统计。
@@ -33,22 +33,22 @@ func (r RestoreResult) IsFull() bool {
 // rubyOutput 为过滤后的注音条目（由调用方负责提取和过滤）。
 // originalAnnotations 为 Protect 阶段提取的原始注音，用于双源匹配回退。可传 nil。
 // 自动检测译文中的 inline markers：有则走正则替换，无则走文本匹配。
-func (r *RubyRestorer) Restore(seg *model.Segment, rubyOutput []RubyOutputEntry, originalAnnotations []RubyAnnotation) (RestoreResult, error) {
+func (r *Restorer) Restore(seg *model.Segment, rubyOutput []OutputEntry, originalAnnotations []Annotation) (RestoreResult, error) {
 	if strings.Contains(seg.Target, "⟦ruby:") {
 		return r.restoreInlineMarkers(seg, rubyOutput)
 	}
 	return r.restoreRubyOutput(seg, rubyOutput, originalAnnotations)
 }
 
-// RubyOutputEntry 是 LLM 返回的单条标注输出。
-type RubyOutputEntry struct {
+// OutputEntry 是 LLM 返回的单条标注输出。
+type OutputEntry struct {
 	Base string `json:"base"`
 	Text string `json:"text"`
 	Kind string `json:"kind"` // "phonetic" | "semantic" | "creative"
 }
 
-// ValidRubyKinds 是所有合法的注音 kind 值。
-var ValidRubyKinds = []string{"phonetic", "semantic", "creative"}
+// ValidKinds 是所有合法的注音 kind 值。
+var ValidKinds = []string{"phonetic", "semantic", "creative"}
 
 // insertInfo 记录一次注音插入的位置和内容。
 type insertInfo struct {
@@ -65,7 +65,7 @@ type insertInfo struct {
 //  1. 按 rubyOutput 的顺序，为每个条目在译文中查找第一个未被分配的基底文本出现位置
 //  2. 若 LLM 返回的 base 未匹配，回退到原始 annotations 中对应位置的 base 再试一次
 //  3. 从右到左应用替换，避免索引偏移
-func (r *RubyRestorer) restoreRubyOutput(seg *model.Segment, rubyOutput []RubyOutputEntry, originalAnnotations []RubyAnnotation) (RestoreResult, error) {
+func (r *Restorer) restoreRubyOutput(seg *model.Segment, rubyOutput []OutputEntry, originalAnnotations []Annotation) (RestoreResult, error) {
 	if len(rubyOutput) == 0 {
 		return RestoreResult{}, nil
 	}
@@ -116,7 +116,7 @@ func (r *RubyRestorer) restoreRubyOutput(seg *model.Segment, rubyOutput []RubyOu
 
 // findAndInsert 在 target 中查找 base 的第一个未分配出现位置，
 // 找到后记录到 inserts 并标记 assigned，返回 true；未找到返回 false。
-func (r *RubyRestorer) findAndInsert(target, base, text string, assigned map[int]bool, inserts *[]insertInfo) bool {
+func (r *Restorer) findAndInsert(target, base, text string, assigned map[int]bool, inserts *[]insertInfo) bool {
 	searchFrom := 0
 	for {
 		idx := strings.Index(target[searchFrom:], base)
@@ -146,18 +146,18 @@ var inlineMarkerRe = regexp.MustCompile(`⟦ruby:([^/⟧]+)/([^/⟧]+)(?:/([^⟧
 // content 部分再通过 parseSectionContent 从右解析 "base | text | kind"。
 var sectionRubyLineRe = regexp.MustCompile(`^(\d+):\s*(.+)`)
 
-// ParseInlineMarkers 从译文中提取所有内联标记，转换为 []RubyOutputEntry。
-func ParseInlineMarkers(text string) []RubyOutputEntry {
+// ParseInlineMarkers 从译文中提取所有内联标记，转换为 []OutputEntry。
+func ParseInlineMarkers(text string) []OutputEntry {
 	matches := inlineMarkerRe.FindAllStringSubmatch(text, -1)
 	if len(matches) == 0 {
 		return nil
 	}
-	entries := make([]RubyOutputEntry, 0, len(matches))
+	entries := make([]OutputEntry, 0, len(matches))
 	for _, m := range matches {
 		if len(m) < 3 {
 			continue
 		}
-		e := RubyOutputEntry{Base: m[1], Text: m[2]}
+		e := OutputEntry{Base: m[1], Text: m[2]}
 		if len(m) > 3 {
 			e.Kind = m[3]
 		}
@@ -190,9 +190,9 @@ func parseSectionContent(content string) (base, text, kind string, ok bool) {
 // ParseSectionRubyOutput 解析 section 模式的 [ruby] 段落。
 // 输入为 [ruby] 之后的所有行（不含 [ruby] 标题行本身）。
 // 格式：每行一条 "编号: base | text | kind"。
-// 返回 segment ID → []RubyOutputEntry 的映射。
-func ParseSectionRubyOutput(lines []string) map[string][]RubyOutputEntry {
-	result := make(map[string][]RubyOutputEntry)
+// 返回 segment ID → []OutputEntry 的映射。
+func ParseSectionRubyOutput(lines []string) map[string][]OutputEntry {
+	result := make(map[string][]OutputEntry)
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -207,7 +207,7 @@ func ParseSectionRubyOutput(lines []string) map[string][]RubyOutputEntry {
 		if !ok {
 			continue
 		}
-		entry := RubyOutputEntry{
+		entry := OutputEntry{
 			Base: base,
 			Text: text,
 			Kind: kind,
@@ -219,7 +219,7 @@ func ParseSectionRubyOutput(lines []string) map[string][]RubyOutputEntry {
 
 // restoreInlineMarkers 通过正则替换将内联标记还原为 <ruby> 标签。
 // rubyOutput 为过滤后的条目；还原匹配的标记，移除不匹配的标记。
-func (r *RubyRestorer) restoreInlineMarkers(seg *model.Segment, rubyOutput []RubyOutputEntry) (RestoreResult, error) {
+func (r *Restorer) restoreInlineMarkers(seg *model.Segment, rubyOutput []OutputEntry) (RestoreResult, error) {
 	// 先统计所有标记数
 	allMatches := inlineMarkerRe.FindAllString(seg.Target, -1)
 	if len(allMatches) == 0 {

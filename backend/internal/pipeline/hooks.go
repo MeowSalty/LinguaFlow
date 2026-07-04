@@ -7,6 +7,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
@@ -26,7 +27,7 @@ func UnprotectHook(protector protect.Protector, logger *slog.Logger) PostSegment
 // RubyRestoreHook 返回一个 PostSegmentHook，还原 ruby 注音。
 // keepSet 为 nil 时保留全部 kind。
 func RubyRestoreHook(
-	restorer *protect.RubyRestorer,
+	restorer *ruby.Restorer,
 	keepKinds []string,
 	retryBackends []backend.Backend,
 	retryPolicy backend.RetryPolicy,

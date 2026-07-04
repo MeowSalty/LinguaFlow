@@ -8,7 +8,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
 // Translate 是 Engine 的统一入口。
@@ -52,9 +52,9 @@ func (e *Engine) Translate(ctx context.Context, doc *pipeline.Document, opts ...
 	pc := e.cfg.Pipeline
 	protector := e.buildProtector()
 
-	var restorer *protect.RubyRestorer
-	if pc.Protect.Ruby.Enabled {
-		restorer = protect.NewRubyRestorer()
+	var restorer *ruby.Restorer
+	if pc.Ruby.Enabled {
+		restorer = ruby.NewRestorer()
 	}
 
 	translatePipe := e.BuildTranslateStage(protector, restorer)

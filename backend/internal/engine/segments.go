@@ -7,14 +7,15 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
 // buildProtector 根据配置构建 protector 组合。
 func (e *Engine) buildProtector() protect.Protector {
 	pc := e.cfg.Pipeline
 	var ps []protect.Protector
-	if pc.Protect.Ruby.Enabled {
-		ps = append(ps, &protect.RubyProtector{})
+	if pc.Ruby.Enabled {
+		ps = append(ps, &ruby.Extractor{})
 	}
 	ps = append(ps, protect.FromRules(pc.Protect.Rules))
 	return protect.Compose(ps...)
@@ -22,7 +23,7 @@ func (e *Engine) buildProtector() protect.Protector {
 
 // BuildTranslateStage 构建翻译管道（Protect + Translate 阶段）。
 // Protect 作为 Pipeline stage 执行；Unprotect/RubyRestore/TM 作为 postSegment hooks。
-func (e *Engine) BuildTranslateStage(protector protect.Protector, restorer *protect.RubyRestorer) *pipeline.Pipeline {
+func (e *Engine) BuildTranslateStage(protector protect.Protector, restorer *ruby.Restorer) *pipeline.Pipeline {
 	pc := e.cfg.Pipeline
 	retry := backend.RetryPolicy{
 		MaxAttempts: pc.Translate.Retry.MaxAttempts,
@@ -46,7 +47,7 @@ func (e *Engine) BuildTranslateStage(protector protect.Protector, restorer *prot
 		InlineConflictStrategy: e.cfg.Glossary.Bootstrap.InlineConflictStrategy,
 		Repair:                 repairOpts,
 		RubyMode:               resolveRubyMode(e.rounds),
-		PreserveKinds:          pc.Protect.Ruby.PreserveKinds,
+		PreserveKinds:          pc.Ruby.PreserveKinds,
 		RubyRetryBackends:      e.rubyRetryBackends,
 		Context:                pc.Context,
 	}
@@ -56,10 +57,10 @@ func (e *Engine) BuildTranslateStage(protector protect.Protector, restorer *prot
 	if pc.Protect.Enabled {
 		hooks = append(hooks, pipeline.UnprotectHook(protector, e.logger))
 	}
-	if pc.Protect.Ruby.Enabled && restorer != nil {
+	if pc.Ruby.Enabled && restorer != nil {
 		hooks = append(hooks, pipeline.RubyRestoreHook(
 			restorer,
-			pc.Protect.Ruby.PreserveKinds,
+			pc.Ruby.PreserveKinds,
 			e.rubyRetryBackends,
 			retry,
 			e.reporter,

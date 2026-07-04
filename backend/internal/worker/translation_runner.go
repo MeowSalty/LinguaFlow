@@ -434,10 +434,10 @@ func buildStrategyConfig(snapshot *service.JobExecutionSnapshot) *config.Config 
 		cfg.Pipeline.Protect = config.ProtectConfig{
 			Enabled: s.Protect.Enabled,
 			Rules:   s.Protect.Rules,
-			Ruby: config.RubyConfig{
-				Enabled:       s.Protect.Ruby.Enabled,
-				PreserveKinds: s.Protect.Ruby.PreserveKinds,
-			},
+		}
+		cfg.Pipeline.Ruby = config.RubyConfig{
+			Enabled:       s.Ruby.Enabled,
+			PreserveKinds: s.Ruby.PreserveKinds,
 		}
 		cfg.Pipeline.Postprocess = config.PostprocessConfig{
 			Enabled:    s.Postprocess.Enabled,

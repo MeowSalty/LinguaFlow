@@ -12,14 +12,14 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
 // restoreSegmentRuby 对单个段落执行注音还原：提取 → 过滤 → 还原 → 失败则 LLM 对齐重试。
 func restoreSegmentRuby(
 	ctx context.Context,
 	seg *Segment,
-	restorer *protect.RubyRestorer,
+	restorer *ruby.Restorer,
 	keepSet map[string]bool,
 	backends []backend.Backend,
 	retryPolicy backend.RetryPolicy,
@@ -72,11 +72,11 @@ func restoreSegmentRuby(
 // extractRubyOutput 从段落中提取注音条目（统一入口）。
 // 优先从 seg.Meta["ruby_output"] 提取（JSON 模式）；
 // 否则从译文中的内联标记提取（text 模式 inline_markers）。
-func extractRubyOutput(seg *Segment) []protect.RubyOutputEntry {
+func extractRubyOutput(seg *Segment) []ruby.OutputEntry {
 	if entries := extractRubyOutputFromSeg(seg); len(entries) > 0 {
 		return entries
 	}
-	parsed := protect.ParseInlineMarkers(seg.Target)
+	parsed := ruby.ParseInlineMarkers(seg.Target)
 	return parsed
 }
 
@@ -84,8 +84,8 @@ func extractRubyOutput(seg *Segment) []protect.RubyOutputEntry {
 func retryAlignSegment(
 	ctx context.Context,
 	seg *Segment,
-	originals []protect.RubyAnnotation,
-	restorer *protect.RubyRestorer,
+	originals []ruby.Annotation,
+	restorer *ruby.Restorer,
 	keepSet map[string]bool,
 	backends []backend.Backend,
 	retryPolicy backend.RetryPolicy,
@@ -253,12 +253,12 @@ func emitRubyAlignmentBatchEvent(
 }
 
 // extractRubyOutputFromSeg 从 Segment.Meta 中提取 ruby_output。
-func extractRubyOutputFromSeg(seg *Segment) []protect.RubyOutputEntry {
+func extractRubyOutputFromSeg(seg *Segment) []ruby.OutputEntry {
 	raw, ok := seg.Meta["ruby_output"]
 	if !ok {
 		return nil
 	}
-	entries, ok := raw.([]protect.RubyOutputEntry)
+	entries, ok := raw.([]ruby.OutputEntry)
 	if !ok {
 		return nil
 	}
@@ -266,12 +266,12 @@ func extractRubyOutputFromSeg(seg *Segment) []protect.RubyOutputEntry {
 }
 
 // extractRubyAnnotationsFromSeg 从 Segment.Meta 中提取 ruby_annotations。
-func extractRubyAnnotationsFromSeg(seg *Segment) []protect.RubyAnnotation {
+func extractRubyAnnotationsFromSeg(seg *Segment) []ruby.Annotation {
 	raw, ok := seg.Meta["ruby_annotations"]
 	if !ok {
 		return nil
 	}
-	annots, ok := raw.([]protect.RubyAnnotation)
+	annots, ok := raw.([]ruby.Annotation)
 	if !ok {
 		return nil
 	}
@@ -282,7 +282,7 @@ func extractRubyAnnotationsFromSeg(seg *Segment) []protect.RubyAnnotation {
 var rubyTagRe = regexp.MustCompile(`<ruby>(.*?)<rt>(.*?)</rt>(.*?)</ruby>`)
 
 // buildAlignmentPrompt 构建注音对齐的 system/user 消息和 JSON Schema。
-func buildAlignmentPrompt(seg *Segment, originals []protect.RubyAnnotation) (string, string, map[string]any) {
+func buildAlignmentPrompt(seg *Segment, originals []ruby.Annotation) (string, string, map[string]any) {
 	sys := `你是注音对齐工具。给定原文、译文和注音元数据，确定每个注音条目在译文中对应的文本。
 
 规则：
@@ -360,7 +360,7 @@ func stripRubyTagsForAlignment(s string) string {
 
 // buildAlignmentPromptText 构建 text 模式的注音对齐提示词。
 // 用户消息为纯文本格式，LLM 输出每行一条 "base | text | kind"。
-func buildAlignmentPromptText(seg *Segment, originals []protect.RubyAnnotation) (string, string) {
+func buildAlignmentPromptText(seg *Segment, originals []ruby.Annotation) (string, string) {
 	sys := `你是注音对齐工具。给定原文、译文和注音元数据，确定每个注音条目在译文中对应的文本。
 
 规则：
@@ -403,9 +403,9 @@ var alignmentTextLineRe = regexp.MustCompile(`^(.+?)\s*\|\s*(.+?)\s*\|\s*(\w+)$`
 
 // parseAlignmentResponseText 解析 text 模式的对齐响应。
 // 每行格式：base | text | kind
-func parseAlignmentResponseText(text string, expectedCount int) []protect.RubyOutputEntry {
+func parseAlignmentResponseText(text string, expectedCount int) []ruby.OutputEntry {
 	lines := strings.Split(strings.TrimSpace(text), "\n")
-	entries := make([]protect.RubyOutputEntry, 0, expectedCount)
+	entries := make([]ruby.OutputEntry, 0, expectedCount)
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
 		if line == "" {
@@ -415,7 +415,7 @@ func parseAlignmentResponseText(text string, expectedCount int) []protect.RubyOu
 		if m == nil {
 			continue
 		}
-		entry := protect.RubyOutputEntry{
+		entry := ruby.OutputEntry{
 			Base: strings.TrimSpace(m[1]),
 			Text: strings.TrimSpace(m[2]),
 			Kind: strings.TrimSpace(m[3]),
@@ -428,13 +428,13 @@ func parseAlignmentResponseText(text string, expectedCount int) []protect.RubyOu
 }
 
 // parseAlignmentResponse 从 LLM 响应中解析 ruby_output。
-func parseAlignmentResponse(text string) []protect.RubyOutputEntry {
+func parseAlignmentResponse(text string) []ruby.OutputEntry {
 	body := jsonObjectSlice(text)
 	if body == "" {
 		return nil
 	}
 	var resp struct {
-		RubyOutput []protect.RubyOutputEntry `json:"ruby_output"`
+		RubyOutput []ruby.OutputEntry `json:"ruby_output"`
 	}
 	if err := json.Unmarshal([]byte(body), &resp); err != nil {
 		return nil
@@ -458,8 +458,8 @@ func kindSet(kinds []string) map[string]bool {
 
 // filterByKinds 按 preserve_kinds 过滤注音条目。
 // Kind 为空字符串的条目视为未分类，保留不过滤（向后兼容旧数据）。
-func filterByKinds(output []protect.RubyOutputEntry, keep map[string]bool) []protect.RubyOutputEntry {
-	var result []protect.RubyOutputEntry
+func filterByKinds(output []ruby.OutputEntry, keep map[string]bool) []ruby.OutputEntry {
+	var result []ruby.OutputEntry
 	for _, entry := range output {
 		if entry.Kind == "" || keep[entry.Kind] {
 			result = append(result, entry)

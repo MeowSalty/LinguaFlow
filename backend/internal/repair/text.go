@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
 // textLineRe 匹配 [N] 开头的翻译行，捕获编号和内容。
@@ -80,10 +80,10 @@ func TryRepairText(text string, wantIDs []string, opt Options) Result {
 
 // parseTextResponse 解析纯文本格式响应。
 // 支持 [glossary] 和 [ruby] 段落。
-func parseTextResponse(text string, wantIDs []string) (map[string]string, []prompt.BootstrapEntry, map[string][]protect.RubyOutputEntry, error) {
+func parseTextResponse(text string, wantIDs []string) (map[string]string, []prompt.BootstrapEntry, map[string][]ruby.OutputEntry, error) {
 	trans := make(map[string]string)
 	var glos []prompt.BootstrapEntry
-	var rubyOutput map[string][]protect.RubyOutputEntry
+	var rubyOutput map[string][]ruby.OutputEntry
 
 	lines := strings.Split(text, "\n")
 	var lastID string
@@ -141,13 +141,13 @@ func parseTextResponse(text string, wantIDs []string) (map[string]string, []prom
 	}
 
 	if len(rubyLines) > 0 {
-		rubyOutput = protect.ParseSectionRubyOutput(rubyLines)
+		rubyOutput = ruby.ParseSectionRubyOutput(rubyLines)
 	} else {
 		// 无 [ruby] 段落时，尝试从译文中提取 inline markers
 		for id, text := range trans {
-			if entries := protect.ParseInlineMarkers(text); len(entries) > 0 {
+			if entries := ruby.ParseInlineMarkers(text); len(entries) > 0 {
 				if rubyOutput == nil {
-					rubyOutput = make(map[string][]protect.RubyOutputEntry)
+					rubyOutput = make(map[string][]ruby.OutputEntry)
 				}
 				rubyOutput[id] = entries
 			}

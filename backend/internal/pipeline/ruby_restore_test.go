@@ -3,7 +3,7 @@ package pipeline
 import (
 	"testing"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
 func TestKindSet(t *testing.T) {
@@ -53,7 +53,7 @@ func TestFilterByKinds(t *testing.T) {
 	creativeOnly := map[string]bool{"creative": true}
 	emptySet := map[string]bool{}
 
-	output := []protect.RubyOutputEntry{
+	output := []ruby.OutputEntry{
 		{Base: "呪", Text: "じゅ", Kind: "phonetic"},
 		{Base: "地球", Text: "世界", Kind: "semantic"},
 		{Base: "白焉", Text: "びゃくえん", Kind: "creative"},
@@ -61,7 +61,7 @@ func TestFilterByKinds(t *testing.T) {
 
 	cases := []struct {
 		name      string
-		output    []protect.RubyOutputEntry
+		output    []ruby.OutputEntry
 		keep      map[string]bool
 		wantLen   int
 		wantKinds []string
@@ -94,7 +94,7 @@ func TestFilterByKinds(t *testing.T) {
 		},
 		{
 			name: "no matching kinds",
-			output: []protect.RubyOutputEntry{
+			output: []ruby.OutputEntry{
 				{Base: "呪", Text: "じゅ", Kind: "phonetic"},
 			},
 			keep:    creativeOnly,
@@ -102,7 +102,7 @@ func TestFilterByKinds(t *testing.T) {
 		},
 		{
 			name: "empty kind is wildcard (preserved)",
-			output: []protect.RubyOutputEntry{
+			output: []ruby.OutputEntry{
 				{Base: "呪", Text: "じゅ", Kind: ""},
 			},
 			keep:      creativeOnly,
@@ -111,7 +111,7 @@ func TestFilterByKinds(t *testing.T) {
 		},
 		{
 			name: "user opts out: kindSet([]) filters all typed entries",
-			output: []protect.RubyOutputEntry{
+			output: []ruby.OutputEntry{
 				{Base: "呪", Text: "じゅ", Kind: "phonetic"},
 				{Base: "白焉", Text: "びゃくえん", Kind: "creative"},
 			},

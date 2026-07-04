@@ -232,7 +232,7 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 
 	// 解析注音对齐重试后端
 	var rubyRetryBackends []backend.Backend
-	if retryName := cfg.Pipeline.Protect.Ruby.RetryBackend; retryName != "" {
+	if retryName := cfg.Pipeline.Ruby.RetryBackend; retryName != "" {
 		bCfg, ok := cliCfg.Backends[retryName]
 		if !ok {
 			return nil, fmt.Errorf("ruby retry backend %q not found in backends", retryName)

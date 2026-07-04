@@ -9,13 +9,16 @@ split:
   max_chars: 1200
 
 # ── 内容保护 ──
-# rules 控制普通 protector（占位符机制），ruby 由独立的 ruby 子配置控制。
+# rules 控制普通 protector（占位符机制）。
 protect:
   enabled: true
   rules: [code, link, placeholder, xml]
-  ruby:
-    enabled: true
-    preserve_kinds: [creative]
+
+# ── Ruby 注音 ──
+# 控制 HTML ruby 注音标签的提取与还原。
+ruby:
+  enabled: true
+  preserve_kinds: [creative]
 
 # ── 后处理 ──
 postprocess:

@@ -182,6 +182,7 @@ type StrategySnapshot struct {
 	Repair      schema.ProfileRepairConfig      `json:"repair"`
 	Glossary    schema.ProfileGlossaryConfig    `json:"glossary"`
 	Context     schema.ProfileContextConfig     `json:"context"`
+	Ruby        schema.ProfileRubyConfig        `json:"ruby"`
 }
 
 // --- CRUD 方法 ---
@@ -508,6 +509,7 @@ func (s *TranslationJobService) snapshotProfile(ctx context.Context, profileID i
 		Repair:      tp.Config.Repair,
 		Glossary:    tp.Config.Glossary,
 		Context:     tp.Config.Context,
+		Ruby:        tp.Config.Ruby,
 	}, nil
 }
 

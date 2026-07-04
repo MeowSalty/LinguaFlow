@@ -203,9 +203,9 @@ func validateProfileConfig(cfg *schema.TranslationProfileConfigData) error {
 		}
 	}
 	validRubyKinds := map[string]bool{"phonetic": true, "semantic": true, "creative": true}
-	for _, k := range cfg.Protect.Ruby.PreserveKinds {
+	for _, k := range cfg.Ruby.PreserveKinds {
 		if !validRubyKinds[k] {
-			return fmt.Errorf("%w: protect.ruby.preserve_kinds contains invalid kind %q (must be one of phonetic, semantic, creative)", ErrTranslationProfileConfigInvalid, k)
+			return fmt.Errorf("%w: ruby.preserve_kinds contains invalid kind %q (must be one of phonetic, semantic, creative)", ErrTranslationProfileConfigInvalid, k)
 		}
 	}
 	return nil

@@ -48,6 +48,7 @@ type PipelineConfig struct {
 	Translate   TranslateConfig   `yaml:"translate"`
 	Postprocess PostprocessConfig `yaml:"postprocess"`
 	Context     ContextConfig     `yaml:"context"`
+	Ruby        RubyConfig        `yaml:"ruby"`
 }
 
 type SplitConfig struct {
@@ -57,9 +58,8 @@ type SplitConfig struct {
 }
 
 type ProtectConfig struct {
-	Enabled bool       `yaml:"enabled"`
-	Rules   []string   `yaml:"rules"`
-	Ruby    RubyConfig `yaml:"ruby"`
+	Enabled bool     `yaml:"enabled"`
+	Rules   []string `yaml:"rules"`
 }
 
 // RubyConfig 控制 Ruby 注音保护的行为。
@@ -298,8 +298,8 @@ func Default() *Config {
 			Protect: ProtectConfig{
 				Enabled: true,
 				Rules:   []string{"code", "link", "placeholder", "xml"},
-				Ruby:    RubyConfig{Enabled: false},
 			},
+			Ruby: RubyConfig{Enabled: false},
 			Translate: TranslateConfig{
 				Concurrency:    4,
 				BatchSize:      1,
@@ -410,9 +410,9 @@ func (c *Config) Validate() error {
 		c.Pipeline.Split.MaxChars = 1200
 	}
 	validRubyKinds := map[string]bool{"phonetic": true, "semantic": true, "creative": true}
-	for _, k := range c.Pipeline.Protect.Ruby.PreserveKinds {
+	for _, k := range c.Pipeline.Ruby.PreserveKinds {
 		if !validRubyKinds[k] {
-			return fmt.Errorf("pipeline.protect.ruby.preserve_kinds: invalid kind %q (must be one of phonetic, semantic, creative)", k)
+			return fmt.Errorf("pipeline.ruby.preserve_kinds: invalid kind %q (must be one of phonetic, semantic, creative)", k)
 		}
 	}
 	c.Pipeline.Translate.Repair.Normalize()

@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
 // Options 控制各层修复算子的启用。零值（所有 bool=false）等于"不修复"——
@@ -31,7 +31,7 @@ type Options struct {
 type Result struct {
 	Trans      map[string]string
 	Glos       []prompt.BootstrapEntry
-	RubyOutput map[string][]protect.RubyOutputEntry // segment ID → ruby 输出条目
+	RubyOutput map[string][]ruby.OutputEntry // segment ID → ruby 输出条目
 	Missing    []string                             // wantIDs 中未出现在 Trans 里的子集
 	Repaired   []string                             // 修复算子链，便于日志诊断
 	Fatal      bool
@@ -137,7 +137,7 @@ func finalizeResult(raw map[string]any, wantIDs []string, repaired []string, opt
 		}
 	}
 
-	var rubyOutput map[string][]protect.RubyOutputEntry
+	var rubyOutput map[string][]ruby.OutputEntry
 	if rubyRaw, ok := raw["ruby_output"]; ok {
 		if b, mErr := json.Marshal(rubyRaw); mErr == nil {
 			_ = json.Unmarshal(b, &rubyOutput)
@@ -343,12 +343,12 @@ func toStringMap(v any) (map[string]string, error) {
 //	{"translations":{"1":{"translation":"...","ruby_output":[...]}, ...}}
 //
 // 提取为顶层 ruby_output map，返回 (提取结果, true)；无需修复时返回 (nil, false)。
-func extractNestedRubyOutput(transRaw any) (map[string][]protect.RubyOutputEntry, bool) {
+func extractNestedRubyOutput(transRaw any) (map[string][]ruby.OutputEntry, bool) {
 	transObj, ok := transRaw.(map[string]any)
 	if !ok {
 		return nil, false
 	}
-	extracted := make(map[string][]protect.RubyOutputEntry)
+	extracted := make(map[string][]ruby.OutputEntry)
 	for id, val := range transObj {
 		entry, ok := val.(map[string]any)
 		if !ok {
@@ -366,7 +366,7 @@ func extractNestedRubyOutput(transRaw any) (map[string][]protect.RubyOutputEntry
 		if err != nil {
 			continue
 		}
-		var entries []protect.RubyOutputEntry
+		var entries []ruby.OutputEntry
 		if err := json.Unmarshal(b, &entries); err != nil {
 			continue
 		}

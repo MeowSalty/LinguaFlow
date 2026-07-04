@@ -11,6 +11,7 @@ type TranslationProfileConfigData struct {
 	Repair      ProfileRepairConfig      `json:"repair"      yaml:"repair"`
 	Glossary    ProfileGlossaryConfig    `json:"glossary"    yaml:"glossary"`
 	Context     ProfileContextConfig     `json:"context"     yaml:"context"`
+	Ruby        ProfileRubyConfig        `json:"ruby"        yaml:"ruby"`
 }
 
 // ProfileSplitConfig 分割策略配置。
@@ -22,9 +23,8 @@ type ProfileSplitConfig struct {
 
 // ProfileProtectConfig 保护规则配置。
 type ProfileProtectConfig struct {
-	Enabled bool              `json:"enabled" yaml:"enabled"`
-	Rules   []string          `json:"rules"   yaml:"rules"`
-	Ruby    ProfileRubyConfig `json:"ruby"    yaml:"ruby"`
+	Enabled bool     `json:"enabled" yaml:"enabled"`
+	Rules   []string `json:"rules"   yaml:"rules"`
 }
 
 // ProfileRubyConfig Ruby 注音保护配置。
@@ -82,8 +82,8 @@ func DefaultProfileConfig() TranslationProfileConfigData {
 		Protect: ProfileProtectConfig{
 			Enabled: true,
 			Rules:   []string{"code", "link", "placeholder", "xml"},
-			Ruby:    ProfileRubyConfig{Enabled: false, PreserveKinds: []string{"phonetic", "semantic", "creative"}},
 		},
+		Ruby: ProfileRubyConfig{Enabled: false, PreserveKinds: []string{"phonetic", "semantic", "creative"}},
 		Postprocess: ProfilePostprocessConfig{
 			Enabled:    true,
 			TrimSpaces: true,
@@ -134,7 +134,7 @@ func (c *TranslationProfileConfigData) NormalizeContext() {
 // nil 表示未设置（旧记录），回退到默认全集；
 // 非 nil 空切片表示用户显式选择不保留任何注音，不做覆盖。
 func (c *TranslationProfileConfigData) NormalizePreserveKinds() {
-	if c.Protect.Ruby.PreserveKinds == nil {
-		c.Protect.Ruby.PreserveKinds = []string{"phonetic", "semantic", "creative"}
+	if c.Ruby.PreserveKinds == nil {
+		c.Ruby.PreserveKinds = []string{"phonetic", "semantic", "creative"}
 	}
 }
