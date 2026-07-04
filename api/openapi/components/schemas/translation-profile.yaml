@@ -39,8 +39,6 @@ ProfileProtectConfig:
       items:
         type: string
         enum: [code, link, placeholder, xml]
-    ruby:
-      $ref: '#/ProfileRubyConfig'
 
 ProfilePostprocessConfig:
   type: object
@@ -134,6 +132,8 @@ TranslationProfileConfig:
       $ref: '#/ProfileSplitConfig'
     protect:
       $ref: '#/ProfileProtectConfig'
+    ruby:
+      $ref: '#/ProfileRubyConfig'
     postprocess:
       $ref: '#/ProfilePostprocessConfig'
     repair:
