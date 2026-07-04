@@ -22,10 +22,10 @@ const CONFIG_DEFAULTS: TranslationProfileConfig = {
   protect: {
     enabled: true,
     rules: ['code', 'link', 'placeholder', 'xml'],
-    ruby: {
-      enabled: false,
-      preserve_kinds: ['phonetic', 'semantic', 'creative'],
-    },
+  },
+  ruby: {
+    enabled: false,
+    preserve_kinds: ['phonetic', 'semantic', 'creative'],
   },
   postprocess: { enabled: true, trim_spaces: true },
   repair: {
@@ -62,12 +62,10 @@ function mergeConfig(source?: Partial<TranslationProfileConfig>): TranslationPro
       ...CONFIG_DEFAULTS.protect,
       ...source.protect,
       rules: source.protect?.rules ?? CONFIG_DEFAULTS.protect.rules,
-      ruby: {
-        ...CONFIG_DEFAULTS.protect.ruby,
-        ...source.protect?.ruby,
-        preserve_kinds:
-          source.protect?.ruby?.preserve_kinds ?? CONFIG_DEFAULTS.protect.ruby!.preserve_kinds,
-      } as NonNullable<TranslationProfileConfig['protect']['ruby']>,
+    },
+    ruby: {
+      enabled: source.ruby?.enabled ?? CONFIG_DEFAULTS.ruby!.enabled,
+      preserve_kinds: source.ruby?.preserve_kinds ?? CONFIG_DEFAULTS.ruby!.preserve_kinds,
     },
     postprocess: { ...CONFIG_DEFAULTS.postprocess, ...source.postprocess },
     repair: { ...CONFIG_DEFAULTS.repair, ...source.repair },
@@ -141,34 +139,24 @@ const inlineConflictStrategyOptions = computed(() => [
 const splitStrategyOptions = computed(() => [{ label: 'paragraph', value: 'paragraph' }])
 
 const rubyPreserveKindsOptions = computed(() => [
-  { label: t('profileConfigEditor.protect.ruby.preserveKindsPhonetic'), value: 'phonetic' },
-  { label: t('profileConfigEditor.protect.ruby.preserveKindsSemantic'), value: 'semantic' },
-  { label: t('profileConfigEditor.protect.ruby.preserveKindsCreative'), value: 'creative' },
+  { label: t('profileConfigEditor.ruby.preserveKindsPhonetic'), value: 'phonetic' },
+  { label: t('profileConfigEditor.ruby.preserveKindsSemantic'), value: 'semantic' },
+  { label: t('profileConfigEditor.ruby.preserveKindsCreative'), value: 'creative' },
 ])
 
-function onProtectRubyUpdate(field: 'enabled', value: boolean): void
-function onProtectRubyUpdate(
+function onRubyUpdate(field: 'enabled', value: boolean): void
+function onRubyUpdate(
   field: 'preserve_kinds',
   value: ('phonetic' | 'semantic' | 'creative')[],
 ): void
-function onProtectRubyUpdate(field: string, value: unknown): void {
-  if (!configModel.value.protect) {
-    configModel.value.protect = {
-      enabled: false,
-      rules: [],
-      ruby: {
-        enabled: false,
-        preserve_kinds: ['phonetic', 'semantic', 'creative'],
-      },
-    }
-  }
-  if (!configModel.value.protect.ruby) {
-    configModel.value.protect.ruby = {
+function onRubyUpdate(field: string, value: unknown): void {
+  if (!configModel.value.ruby) {
+    configModel.value.ruby = {
       enabled: false,
       preserve_kinds: ['phonetic', 'semantic', 'creative'],
     }
   }
-  const ruby = configModel.value.protect.ruby
+  const ruby = configModel.value.ruby
   if (field === 'enabled') {
     ruby.enabled = value as boolean
   } else if (field === 'preserve_kinds') {
@@ -246,48 +234,48 @@ function onProtectRubyUpdate(field: string, value: unknown): void {
           </div>
         </NCheckboxGroup>
       </div>
-      <!-- Ruby 注释保护 -->
-      <div class="mt-4">
-        <div class="flex items-center gap-2">
+    </NCard>
+
+    <!-- Ruby 注音 -->
+    <NCard size="small" :bordered="true">
+      <template #header>
+        <span class="text-sm font-semibold">🔤 {{ t('profileConfigEditor.ruby.title') }}</span>
+      </template>
+      <div class="flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <span class="text-sm">{{ t('profileConfigEditor.ruby.enabled') }}</span>
           <NSwitch
-            :value="configModel.protect?.ruby?.enabled ?? false"
-            :disabled="disabled || !configModel.protect?.enabled"
-            @update:value="(val: boolean) => onProtectRubyUpdate('enabled', val)"
+            :value="configModel.ruby?.enabled ?? false"
+            :disabled="disabled"
+            @update:value="(val: boolean) => onRubyUpdate('enabled', val)"
           />
-          <span class="text-sm">{{ t('profileConfigEditor.protect.ruby.title') }}</span>
         </div>
-      </div>
-      <div
-        class="mt-3"
-        :class="{
-          'opacity-50 pointer-events-none':
-            !configModel.protect?.enabled || !(configModel.protect?.ruby?.enabled ?? false),
-        }"
-      >
-        <div class="mb-1 text-xs text-lf-text-subtle">
-          {{ t('profileConfigEditor.protect.ruby.preserveKinds') }}
-        </div>
-        <NCheckboxGroup
-          :value="configModel.protect?.ruby?.preserve_kinds ?? ['phonetic', 'semantic', 'creative']"
-          :disabled="
-            disabled ||
-            !configModel.protect?.enabled ||
-            !(configModel.protect?.ruby?.enabled ?? false)
-          "
-          @update:value="
-            (val: (string | number)[]) =>
-              onProtectRubyUpdate('preserve_kinds', val as ('phonetic' | 'semantic' | 'creative')[])
-          "
+        <div
+          :class="{
+            'opacity-50 pointer-events-none': !(configModel.ruby?.enabled ?? false),
+          }"
         >
-          <div class="flex flex-wrap gap-3">
-            <NCheckbox
-              v-for="opt in rubyPreserveKindsOptions"
-              :key="opt.value"
-              :value="opt.value"
-              :label="opt.label"
-            />
+          <div class="mb-1 text-xs text-lf-text-subtle">
+            {{ t('profileConfigEditor.ruby.preserveKinds') }}
           </div>
-        </NCheckboxGroup>
+          <NCheckboxGroup
+            :value="configModel.ruby?.preserve_kinds ?? ['phonetic', 'semantic', 'creative']"
+            :disabled="disabled || !(configModel.ruby?.enabled ?? false)"
+            @update:value="
+              (val: (string | number)[]) =>
+                onRubyUpdate('preserve_kinds', val as ('phonetic' | 'semantic' | 'creative')[])
+            "
+          >
+            <div class="flex flex-wrap gap-3">
+              <NCheckbox
+                v-for="opt in rubyPreserveKindsOptions"
+                :key="opt.value"
+                :value="opt.value"
+                :label="opt.label"
+              />
+            </div>
+          </NCheckboxGroup>
+        </div>
       </div>
     </NCard>
 

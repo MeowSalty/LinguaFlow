@@ -1838,7 +1838,6 @@ export interface components {
         ProfileProtectConfig: {
             enabled: boolean;
             rules?: ("code" | "link" | "placeholder" | "xml")[];
-            ruby?: components["schemas"]["ProfileRubyConfig"];
         };
         ProfilePostprocessConfig: {
             enabled: boolean;
@@ -1901,6 +1900,7 @@ export interface components {
         TranslationProfileConfig: {
             split: components["schemas"]["ProfileSplitConfig"];
             protect: components["schemas"]["ProfileProtectConfig"];
+            ruby?: components["schemas"]["ProfileRubyConfig"];
             postprocess: components["schemas"]["ProfilePostprocessConfig"];
             repair: components["schemas"]["ProfileRepairConfig"];
             glossary: components["schemas"]["ProfileGlossaryConfig"];

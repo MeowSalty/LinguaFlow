@@ -41,6 +41,10 @@ interface FormModel {
 const CONFIG_DEFAULTS: TranslationProfileConfig = {
   split: { enabled: true, strategy: 'paragraph', max_chars: 1200 },
   protect: { enabled: true, rules: ['code', 'link', 'placeholder', 'xml'] },
+  ruby: {
+    enabled: false,
+    preserve_kinds: ['phonetic', 'semantic', 'creative'],
+  },
   postprocess: { enabled: true, trim_spaces: true },
   repair: {
     enabled: true,
@@ -129,6 +133,10 @@ function extractConfig(profile: TranslationProfile): TranslationProfileConfig {
       ...CONFIG_DEFAULTS.protect,
       ...src.protect,
       rules: src.protect?.rules ?? CONFIG_DEFAULTS.protect.rules,
+    },
+    ruby: {
+      enabled: src.ruby?.enabled ?? CONFIG_DEFAULTS.ruby!.enabled,
+      preserve_kinds: src.ruby?.preserve_kinds ?? CONFIG_DEFAULTS.ruby!.preserve_kinds,
     },
     postprocess: { ...CONFIG_DEFAULTS.postprocess, ...src.postprocess },
     repair: { ...CONFIG_DEFAULTS.repair, ...src.repair },

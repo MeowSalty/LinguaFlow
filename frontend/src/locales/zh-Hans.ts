@@ -1029,13 +1029,14 @@ const messages = {
       title: '内容保护',
       enabled: '启用保护',
       rules: '保护规则',
-      ruby: {
-        title: 'Ruby 注释保护',
-        preserveKinds: '保留注音分类',
-        preserveKindsPhonetic: '音注',
-        preserveKindsSemantic: '义训',
-        preserveKindsCreative: '创意',
-      },
+    },
+    ruby: {
+      title: '注音处理',
+      enabled: '启用处理',
+      preserveKinds: '保留注音分类',
+      preserveKindsPhonetic: '音注',
+      preserveKindsSemantic: '义训',
+      preserveKindsCreative: '创意',
     },
     postprocess: {
       title: '后处理',
