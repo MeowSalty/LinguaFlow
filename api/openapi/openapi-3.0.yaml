@@ -3322,12 +3322,6 @@ components:
       properties:
         enabled:
           type: boolean
-        output_format:
-          type: string
-          enum:
-            - ruby_output
-            - inline_markers
-          default: ruby_output
         preserve_kinds:
           type: array
           items:
