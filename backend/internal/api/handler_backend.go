@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -12,15 +13,27 @@ import (
 type createBackendRequest struct {
 	Name               string         `json:"name"`
 	Type               string         `json:"type"`
-	Options            map[string]any `json:"options"`
+	Options            BackendOptions `json:"options"`
 	RateLimitPerMinute *int           `json:"rate_limit_per_minute"`
 }
 
 type updateBackendRequest struct {
 	Name               string         `json:"name"`
 	Type               string         `json:"type"`
-	Options            map[string]any `json:"options"`
+	Options            BackendOptions `json:"options"`
 	RateLimitPerMinute *int           `json:"rate_limit_per_minute"`
+}
+
+// backendOptionsToMap 将 BackendOptions 转换为 service 层需要的 map[string]any 格式。
+func backendOptionsToMap(opts BackendOptions) (map[string]any, error) {
+	if len(opts.union) == 0 {
+		return nil, nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal(opts.union, &m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 type backendResponse struct {
@@ -68,6 +81,11 @@ func (s *Server) handleCreateUserBackend(w http.ResponseWriter, r *http.Request)
 	if !decodeJSON(w, r, &req) {
 		return
 	}
+	optionsMap, err := backendOptionsToMap(req.Options)
+	if err != nil {
+		writeProblem(w, http.StatusBadRequest, "invalid_input", "options 格式无效")
+		return
+	}
 	userID := authUser.User.ID
 	input := service.CreateBackendInput{
 		Scope:       service.ScopeUser,
@@ -75,7 +93,7 @@ func (s *Server) handleCreateUserBackend(w http.ResponseWriter, r *http.Request)
 		BackendInput: service.BackendInput{
 			Name:    req.Name,
 			Type:    req.Type,
-			Options: req.Options,
+			Options: optionsMap,
 		},
 	}
 	if req.RateLimitPerMinute != nil {
@@ -117,10 +135,15 @@ func (s *Server) handleUpdateUserBackend(w http.ResponseWriter, r *http.Request)
 	if !decodeJSON(w, r, &req) {
 		return
 	}
+	optionsMap, err := backendOptionsToMap(req.Options)
+	if err != nil {
+		writeProblem(w, http.StatusBadRequest, "invalid_input", "options 格式无效")
+		return
+	}
 	input := service.BackendInput{
 		Name:    req.Name,
 		Type:    req.Type,
-		Options: req.Options,
+		Options: optionsMap,
 	}
 	if req.RateLimitPerMinute != nil {
 		input.RateLimitPerMinute = *req.RateLimitPerMinute
@@ -169,13 +192,18 @@ func (s *Server) handleCreateOrgBackend(w http.ResponseWriter, r *http.Request) 
 	if !decodeJSON(w, r, &req) {
 		return
 	}
+	optionsMap, err := backendOptionsToMap(req.Options)
+	if err != nil {
+		writeProblem(w, http.StatusBadRequest, "invalid_input", "options 格式无效")
+		return
+	}
 	input := service.CreateBackendInput{
 		Scope:      service.ScopeOrg,
 		OwnerOrgID: &orgID,
 		BackendInput: service.BackendInput{
 			Name:    req.Name,
 			Type:    req.Type,
-			Options: req.Options,
+			Options: optionsMap,
 		},
 	}
 	if req.RateLimitPerMinute != nil {
@@ -228,11 +256,16 @@ func (s *Server) handleUpdateOrgBackend(w http.ResponseWriter, r *http.Request) 
 	if !decodeJSON(w, r, &req) {
 		return
 	}
+	optionsMap, err := backendOptionsToMap(req.Options)
+	if err != nil {
+		writeProblem(w, http.StatusBadRequest, "invalid_input", "options 格式无效")
+		return
+	}
 	// Update 内部通过 requireOwnership 验证 org 管理员权限
 	input := service.BackendInput{
 		Name:    req.Name,
 		Type:    req.Type,
-		Options: req.Options,
+		Options: optionsMap,
 	}
 	if req.RateLimitPerMinute != nil {
 		input.RateLimitPerMinute = *req.RateLimitPerMinute

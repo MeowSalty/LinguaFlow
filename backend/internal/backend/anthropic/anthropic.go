@@ -40,6 +40,8 @@ type Backend struct {
 	timeout           time.Duration
 	responseFormat    string
 	enablePromptCache bool
+	temperature       *float64
+	topP              *float64
 }
 
 func (b *Backend) Name() string {
@@ -90,6 +92,13 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 	}
 	if req.Temperature != nil {
 		params.Temperature = sdk.Float(*req.Temperature)
+	} else if b.temperature != nil {
+		params.Temperature = sdk.Float(*b.temperature)
+	}
+	if req.TopP != nil {
+		params.TopP = sdk.Float(*req.TopP)
+	} else if b.topP != nil {
+		params.TopP = sdk.Float(*b.topP)
 	}
 
 	useToolPath := rf == respFmtJSONSchema && req.JSONSchema != nil
@@ -241,10 +250,14 @@ func factory(opts map[string]any) (backend.Backend, error) {
 		responseFormat:    rf,
 		enablePromptCache: backend.BoolOpt(opts, "enable_prompt_cache", true),
 	}
-	if t, err := backend.DurationOpt(opts, "timeout", 60*time.Second); err == nil {
-		b.timeout = t
-	} else {
-		return nil, err
+	if t := backend.Int64Opt(opts, "timeout", 60); t > 0 {
+		b.timeout = time.Duration(t) * time.Second
+	}
+	if v, ok := opts["temperature"].(float64); ok {
+		b.temperature = &v
+	}
+	if v, ok := opts["top_p"].(float64); ok {
+		b.topP = &v
 	}
 	return b, nil
 }

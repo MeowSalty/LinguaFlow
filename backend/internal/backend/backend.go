@@ -17,8 +17,11 @@ type Request struct {
 	// Temperature 控制采样温度。nil 表示未设置，回退到后端默认值；
 	// 指向 0 表示确定性输出（greedy decoding）；其他合法范围取决于具体后端。
 	Temperature *float64
-	MaxTokens   int64
-	Meta        map[string]any // 透传给具体后端（如 stop 序列）
+	// TopP 核采样参数。nil 表示未设置，回退到后端默认值；
+	// 1.0 表示不限制；0.9 表示仅考虑累积概率前90%的token。
+	TopP      *float64
+	MaxTokens int64
+	Meta      map[string]any // 透传给具体后端（如 stop 序列）
 
 	// ResponseFormat 控制本次请求的响应格式约束。空表示沿用 backend 默认。
 	// 合法值（由具体 backend 解释）："json_schema" | "json_object" | "none"。
