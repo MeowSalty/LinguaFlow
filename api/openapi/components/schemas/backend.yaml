@@ -1,3 +1,188 @@
+ResponseFormat:
+  type: string
+  enum: [json_schema, json_object, text, none]
+  default: json_schema
+  description: |
+    响应格式：
+    - json_schema: 强制结构化 JSON 输出（推荐）
+    - json_object: 自由 JSON 对象
+    - text: 纯文本
+    - none: 不约束格式
+
+OpenAIBackendOptions:
+  type: object
+  required: [api_key, type]
+  description: OpenAI 兼容后端选项。支持 OpenAI 官方 API 及 Azure OpenAI、Ollama、LM Studio 等兼容服务。
+  properties:
+    type:
+      type: string
+    api_key:
+      type: string
+      description: AI 服务 API 密钥
+    base_url:
+      type: string
+      description: |
+        自定义API端点URL。留空使用默认值。
+        可用于指向 Azure OpenAI / Ollama / LM Studio / 自定义网关等兼容服务。
+    model:
+      type: string
+      default: "gpt-4o-mini"
+      description: 模型名称。默认 gpt-4o-mini。
+    max_tokens:
+      type: integer
+      minimum: 0
+      default: 0
+      description: 最大生成 token 数。0 表示不限制。
+    timeout:
+      type: integer
+      minimum: 0
+      default: 60
+      description: 请求超时时间（秒）。0 表示不限制。
+    response_format:
+      $ref: '#/ResponseFormat'
+    temperature:
+      type: number
+      format: double
+      minimum: 0
+      maximum: 2
+      description: |
+        采样温度，控制输出的随机性。
+        - 不设置: 使用 API 默认值（通常为 1.0）
+        - 0: 确定性输出（greedy decoding）
+        - 0.1-0.3: 翻译任务推荐范围
+        - 0.7-1.0: 创意写作
+    top_p:
+      type: number
+      format: double
+      minimum: 0
+      maximum: 1
+      description: |
+        核采样参数，控制采样多样性。
+        - 不设置: 使用 API 默认值（通常为 1.0）
+        - 1.0: 不限制
+        - 0.9: 仅考虑累积概率前 90% 的 token
+
+AnthropicBackendOptions:
+  type: object
+  required: [api_key, type]
+  description: Anthropic Claude 后端选项。
+  properties:
+    type:
+      type: string
+    api_key:
+      type: string
+      description: AI 服务 API 密钥
+    base_url:
+      type: string
+      description: |
+        自定义API端点URL。留空使用默认值。
+    model:
+      type: string
+      default: "claude-sonnet-4-5"
+      description: 模型名称。默认 claude-sonnet-4-5。
+    max_tokens:
+      type: integer
+      minimum: 1
+      default: 8192
+      description: 最大生成 token 数。Anthropic 必填，默认 8192。
+    timeout:
+      type: integer
+      minimum: 0
+      default: 60
+      description: 请求超时时间（秒）。0 表示不限制。
+    response_format:
+      $ref: '#/ResponseFormat'
+    temperature:
+      type: number
+      format: double
+      minimum: 0
+      maximum: 1
+      description: |
+        采样温度，控制输出的随机性。
+        - 不设置: 使用 API 默认值（通常为 1.0）
+        - 0: 确定性输出
+        - 0.1-0.3: 翻译任务推荐范围
+        - Anthropic范围限制为0-1
+    top_p:
+      type: number
+      format: double
+      minimum: 0
+      maximum: 1
+      description: |
+        核采样参数，控制采样多样性。
+        - 不设置: 使用 API 默认值（通常为 1.0）
+        - 1.0: 不限制
+    enable_prompt_cache:
+      type: boolean
+      default: true
+      description: |
+        启用提示缓存（Prompt Caching）。
+        启用后，system prompt会被标记为ephemeral缓存断点，
+        可显著降低重复翻译任务的token消耗和延迟。
+
+GoogleBackendOptions:
+  type: object
+  required: [api_key, type]
+  description: Google Gemini 后端选项。
+  properties:
+    type:
+      type: string
+    api_key:
+      type: string
+      description: AI 服务 API 密钥
+    base_url:
+      type: string
+      description: |
+        自定义API端点URL。留空使用默认值。
+    model:
+      type: string
+      default: "gemini-2.5-flash"
+      description: 模型名称。默认 gemini-2.5-flash。
+    max_tokens:
+      type: integer
+      minimum: 1
+      default: 8192
+      description: 最大生成 token 数。默认 8192。
+    timeout:
+      type: integer
+      minimum: 0
+      default: 60
+      description: 请求超时时间（秒）。0 表示不限制。
+    response_format:
+      $ref: '#/ResponseFormat'
+    temperature:
+      type: number
+      format: double
+      minimum: 0
+      maximum: 2
+      description: |
+        采样温度，控制输出的随机性。
+        - 不设置: 使用 API 默认值（通常为 1.0）
+        - 0: 确定性输出
+        - 0.1-0.3: 翻译任务推荐范围
+        - Google Gemini范围限制为0-2
+    top_p:
+      type: number
+      format: double
+      minimum: 0
+      maximum: 1
+      description: |
+        核采样参数，控制采样多样性。
+        - 不设置: 使用 API 默认值（通常为 1.0）
+        - 1.0: 不限制
+
+BackendOptions:
+  oneOf:
+    - $ref: '#/OpenAIBackendOptions'
+    - $ref: '#/AnthropicBackendOptions'
+    - $ref: '#/GoogleBackendOptions'
+  discriminator:
+    propertyName: type
+    mapping:
+      openai: '#/OpenAIBackendOptions'
+      anthropic: '#/AnthropicBackendOptions'
+      google: '#/GoogleBackendOptions'
+
 Backend:
   type: object
   required: [id, scope, name, type]
@@ -13,8 +198,7 @@ Backend:
       type: string
       enum: [openai, anthropic, google]
     options:
-      type: object
-      additionalProperties: true
+      $ref: '#/BackendOptions'
     rate_limit_per_minute:
       type: integer
       minimum: 0
@@ -36,7 +220,7 @@ BackendListResponse:
 
 CreateBackendRequest:
   type: object
-  required: [name, type]
+  required: [name, type, options]
   properties:
     name:
       type: string
@@ -44,8 +228,7 @@ CreateBackendRequest:
       type: string
       enum: [openai, anthropic, google]
     options:
-      type: object
-      additionalProperties: true
+      $ref: '#/BackendOptions'
     rate_limit_per_minute:
       type: integer
       minimum: 0
@@ -63,8 +246,7 @@ UpdateBackendRequest:
       type: string
       enum: [openai, anthropic, google]
     options:
-      type: object
-      additionalProperties: true
+      $ref: '#/BackendOptions'
     rate_limit_per_minute:
       type: integer
       minimum: 0
