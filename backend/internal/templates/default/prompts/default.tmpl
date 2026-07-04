@@ -15,8 +15,10 @@
 - 独立翻译每个需要翻译的片段，不要合并或重排序。
 - 仅输出翻译结果，不要添加解释、代码围栏或其他内容。
 - 注意：行首的 [编号] 是段落标记，原文中可能出现的 [数字] 是内容的一部分，不要混淆。
-{{- if eq .RubyOutputFormat "inline_markers"}}
+{{- if eq .RubyMode "inline"}}
 - 需要注音的词使用 ⟦ruby:基底/标注/类型⟧ 格式插入，类型为 phonetic/semantic/creative 之一。
+{{- else if eq .RubyMode "section"}}
+- 在翻译结果后另起一行输出 [ruby]，然后每行一条注音：编号: 基底 | 标注 | 类型。类型为 phonetic/semantic/creative 之一。
 {{- end}}
 {{- if .InlineBootstrap}}
 - 如果发现值得固定的术语，在翻译结果后另起一行输出 [glossary]，然后每行一条：术语原文 | 译文 | 备注（无备注可省略）。
@@ -30,7 +32,7 @@
 - 仅输出 JSON，无 markdown 围栏（不要 ```json）、无额外文字、无解释说明。
 {{- if not .StrictSchema}}
 - 输出 JSON 结构如下：
-{{- $hasGlossary := .InlineBootstrap}}{{$hasRubyOut := eq .RubyOutputFormat "ruby_output"}}
+{{- $hasGlossary := .InlineBootstrap}}{{$hasRubyOut := eq .RubyMode "json"}}
   {"translations":{"<id>":"<翻译>", ...}}{{if $hasGlossary}}, "glossary":[{"source":"...","target":"...","notes":"..."}, ...]{{end}}{{if $hasRubyOut}}, "ruby_output":{"<id>":[{"base":"...","text":"..."}, ...], ...}{{end}}}
 {{- end}}
 {{- end}}
@@ -56,7 +58,11 @@
 注音处理：
 源文本中曾有 <ruby>基底<rt>标注</rt></ruby> 标签，已提取注音信息。
 {{- if .TextMode}}
+{{- if eq .RubyMode "section"}}
+注音以 [ruby] 独立段落追加，格式为 编号: 基底/标注, ...。
+{{- else}}
 注音以 ⟦ruby:基底/标注⟧ 格式内联在源文本中。
+{{- end}}
 {{- else}}
 注音信息位于 ruby_annotations 字段中。
 {{- end}}
@@ -69,11 +75,18 @@
 - phonetic 和 semantic：标注文本保留原文不翻译。
 - creative：标注文本需要翻译。
 {{- if .TextMode}}
-{{- if eq .RubyOutputFormat "inline_markers"}}
+{{- if eq .RubyMode "section"}}
+- 在翻译结果后另起一行输出 [ruby]，然后每行一条注音：编号: 基底 | 标注 | 类型。
+- "基底" 必须是你译文中实际写入的对应文本，而不是原文本身。
+- "标注" 是标注文本（按上述规则处理）。
+- "类型" 是分类（phonetic/semantic/creative）。
+- 条目顺序应与源文本中注音的顺序一致。
+- 无注音的片段不需要输出对应条目。
+{{- else if eq .RubyMode "inline"}}
 - 在翻译中，在每个被注音词语的位置插入 ⟦ruby:<基底>/<标注>/<kind>⟧。基底通常需要翻译，专有名词等除外。
 {{- end}}
 {{- else}}
-{{- if eq .RubyOutputFormat "ruby_output"}}
+{{- if eq .RubyMode "json"}}
 你需要在顶层字段 "ruby_output"（与 "translations" 同级）中返回所有注音条目（不得省略任何一条），每条包含 kind 字段：
 - 每个条目的 "base" 必须是你译文中实际写入的对应文本，而不是原文本身。
 - 每个条目的 "text" 是标注文本（按上述规则处理）。
@@ -83,7 +96,7 @@
 {{- if not .StrictSchema}}
 - 格式：{"<id>": [{"base":"<译文中实际文本>","text":"<标注>","kind":"<kind>"}, ...], ...}
 {{- end}}
-{{- else if eq .RubyOutputFormat "inline_markers"}}
+{{- else if eq .RubyMode "inline"}}
 - 在翻译中，在每个被注音词语的位置插入 ⟦ruby:<基底>/<标注>/<kind>⟧。基底通常需要翻译，专有名词等除外。
 {{- end}}
 {{- end}}

@@ -32,6 +32,7 @@ func RubyRestoreHook(
 	retryPolicy backend.RetryPolicy,
 	reporter progress.Reporter,
 	logger *slog.Logger,
+	isTextMode bool,
 ) PostSegmentHook {
 	keep := kindSet(keepKinds)
 	return func(ctx context.Context, _ *Document, seg *Segment) error {
@@ -40,7 +41,7 @@ func RubyRestoreHook(
 			return nil
 		}
 		logger.Info("RubyRestoreHook: processing segment", "seg", seg.ID, "target_head", headSnippet(seg.Target, 80))
-		restoreSegmentRuby(ctx, seg, restorer, keep, retryBackends, retryPolicy, logger, reporter)
+		restoreSegmentRuby(ctx, seg, restorer, keep, retryBackends, retryPolicy, logger, reporter, isTextMode)
 		return nil
 	}
 }

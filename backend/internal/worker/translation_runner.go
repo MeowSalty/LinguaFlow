@@ -436,7 +436,6 @@ func buildStrategyConfig(snapshot *service.JobExecutionSnapshot) *config.Config 
 			Rules:   s.Protect.Rules,
 			Ruby: config.RubyConfig{
 				Enabled:       s.Protect.Ruby.Enabled,
-				OutputFormat:  s.Protect.Ruby.OutputFormat,
 				PreserveKinds: s.Protect.Ruby.PreserveKinds,
 			},
 		}

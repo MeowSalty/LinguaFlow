@@ -9,7 +9,7 @@ import (
 // T6: ruby_output 模式 — 文本匹配还原。
 // 给定译文包含基底文本，RubyRestorer 应在匹配位置插入 <ruby> 标签。
 func TestRubyRestorer_RubyOutput_BasicRestore(t *testing.T) {
-	restorer := NewRubyRestorer("ruby_output")
+	restorer := NewRubyRestorer()
 
 	cases := []struct {
 		name       string
@@ -73,10 +73,10 @@ func TestRubyRestorer_RubyOutput_BasicRestore(t *testing.T) {
 	}
 }
 
-// T7: inline_markers 模式 — 正则还原。
-// 译文中的 ⟦ruby:base/text⟧ 标记应被替换为 <ruby> 标签。
+// T7: inline 模式 — 正则还原（自动检测）。
+// 译文中的 ⟦ruby:base/text/kind⟧ 标记应被替换为 <ruby> 标签。
 func TestRubyRestorer_InlineMarkers_BasicRestore(t *testing.T) {
-	restorer := NewRubyRestorer("inline_markers")
+	restorer := NewRubyRestorer()
 
 	cases := []struct {
 		name       string
@@ -85,12 +85,12 @@ func TestRubyRestorer_InlineMarkers_BasicRestore(t *testing.T) {
 	}{
 		{
 			name:       "single inline marker",
-			target:     `⟦ruby:呪/じゅ⟧を唱える`,
+			target:     `⟦ruby:呪/じゅ/phonetic⟧を唱える`,
 			wantTarget: `<ruby>呪<rt>じゅ</rt></ruby>を唱える`,
 		},
 		{
 			name:       "multiple inline markers",
-			target:     `⟦ruby:呪/じゅ⟧を唱えて⟦ruby:微笑/ほほえ⟧む`,
+			target:     `⟦ruby:呪/じゅ/phonetic⟧を唱えて⟦ruby:微笑/ほほえ/semantic⟧む`,
 			wantTarget: `<ruby>呪<rt>じゅ</rt></ruby>を唱えて<ruby>微笑<rt>ほほえ</rt></ruby>む`,
 		},
 		{
@@ -100,12 +100,12 @@ func TestRubyRestorer_InlineMarkers_BasicRestore(t *testing.T) {
 		},
 		{
 			name:       "marker with word-level base",
-			target:     `⟦ruby:椎名/しいな⟧が来た`,
+			target:     `⟦ruby:椎名/しいな/phonetic⟧が来た`,
 			wantTarget: `<ruby>椎名<rt>しいな</rt></ruby>が来た`,
 		},
 		{
 			name:       "marker in mixed context with XML",
-			target:     `────⟦ruby:椎名/しいな⟧です`,
+			target:     `────⟦ruby:椎名/しいな/phonetic⟧です`,
 			wantTarget: `────<ruby>椎名<rt>しいな</rt></ruby>です`,
 		},
 		{
@@ -133,9 +133,9 @@ func TestRubyRestorer_InlineMarkers_BasicRestore(t *testing.T) {
 	}
 }
 
-// T7b: inline_markers 模式 — preserve_kinds 过滤。
+// T7b: inline 模式 — preserve_kinds 过滤（自动检测）。
 func TestRubyRestorer_InlineMarkers_PreserveKinds(t *testing.T) {
-	restorer := NewRubyRestorer("inline_markers")
+	restorer := NewRubyRestorer()
 	keepSet := map[string]bool{"creative": true}
 
 	filterByKinds := func(output []RubyOutputEntry, keep map[string]bool) []RubyOutputEntry {
@@ -193,7 +193,7 @@ func TestRubyRestorer_InlineMarkers_PreserveKinds(t *testing.T) {
 
 // T8: 译文中找不到基底文本 → 静默跳过，不报错。
 func TestRubyRestorer_RubyOutput_BaseNotFound(t *testing.T) {
-	restorer := NewRubyRestorer("ruby_output")
+	restorer := NewRubyRestorer()
 
 	cases := []struct {
 		name   string
@@ -239,7 +239,7 @@ func TestRubyRestorer_RubyOutput_BaseNotFound(t *testing.T) {
 
 // T9: 部分匹配 → 返回部分匹配结果，调用方可据此决定是否重试。
 func TestRubyRestorer_RubyOutput_PartialMatch(t *testing.T) {
-	restorer := NewRubyRestorer("ruby_output")
+	restorer := NewRubyRestorer()
 
 	// 译文中只包含部分基底文本
 	seg := &model.Segment{
@@ -275,7 +275,7 @@ func TestRubyRestorer_RubyOutput_PartialMatch(t *testing.T) {
 
 // T9b: 重复基底文本 — 同一基底出现多次时应按顺序逐一还原。
 func TestRubyRestorer_RubyOutput_DuplicateBase(t *testing.T) {
-	restorer := NewRubyRestorer("ruby_output")
+	restorer := NewRubyRestorer()
 
 	seg := &model.Segment{
 		Target: "呪と呪",
@@ -302,7 +302,7 @@ func TestRubyRestorer_RubyOutput_DuplicateBase(t *testing.T) {
 
 // T10: 双源匹配回退 — LLM 的 base 匹配失败时，用原始 annotation 的 base 匹配。
 func TestRubyRestorer_RubyOutput_FallbackToOriginalBase(t *testing.T) {
-	restorer := NewRubyRestorer("ruby_output")
+	restorer := NewRubyRestorer()
 
 	cases := []struct {
 		name       string
@@ -397,7 +397,7 @@ func TestRubyRestorer_RubyOutput_FallbackToOriginalBase(t *testing.T) {
 
 // T11: Kind 字段不影响还原逻辑 — RubyRestorer 不关心 kind，仅用 base/text 匹配。
 func TestRubyRestorer_RubyOutput_WithKindField(t *testing.T) {
-	restorer := NewRubyRestorer("ruby_output")
+	restorer := NewRubyRestorer()
 
 	seg := &model.Segment{Target: "呪を唱える"}
 	output := []RubyOutputEntry{
@@ -413,5 +413,95 @@ func TestRubyRestorer_RubyOutput_WithKindField(t *testing.T) {
 	}
 	if !result.IsFull() {
 		t.Errorf("with kind field: expected full match, got matched=%d total=%d", result.Matched, result.Total)
+	}
+}
+
+func TestParseSectionRubyOutput_Basic(t *testing.T) {
+	lines := []string{
+		"1: 椎名 | しいな | phonetic",
+		"1: 微笑 | ほほえ | phonetic",
+		"2: 呪 | じゅ | phonetic",
+	}
+	result := ParseSectionRubyOutput(lines)
+	if len(result) != 2 {
+		t.Fatalf("expected 2 segments, got %d", len(result))
+	}
+	if len(result["1"]) != 2 {
+		t.Fatalf("expected 2 entries for segment 1, got %d", len(result["1"]))
+	}
+	if result["1"][0].Base != "椎名" || result["1"][0].Text != "しいな" || result["1"][0].Kind != "phonetic" {
+		t.Errorf("wrong entry 1[0]: %#v", result["1"][0])
+	}
+	if result["1"][1].Base != "微笑" || result["1"][1].Text != "ほほえ" {
+		t.Errorf("wrong entry 1[1]: %#v", result["1"][1])
+	}
+	if len(result["2"]) != 1 {
+		t.Fatalf("expected 1 entry for segment 2, got %d", len(result["2"]))
+	}
+	if result["2"][0].Base != "呪" || result["2"][0].Kind != "phonetic" {
+		t.Errorf("wrong entry 2[0]: %#v", result["2"][0])
+	}
+}
+
+func TestParseSectionRubyOutput_WithKindVariants(t *testing.T) {
+	lines := []string{
+		"1: 基底 | 标注 | creative",
+		"2: base | text | semantic",
+	}
+	result := ParseSectionRubyOutput(lines)
+	if result["1"][0].Kind != "creative" {
+		t.Errorf("expected creative, got %s", result["1"][0].Kind)
+	}
+	if result["2"][0].Kind != "semantic" {
+		t.Errorf("expected semantic, got %s", result["2"][0].Kind)
+	}
+}
+
+func TestParseSectionRubyOutput_EmptyLines(t *testing.T) {
+	lines := []string{"", "  ", "1: 基底 | 标注 | phonetic"}
+	result := ParseSectionRubyOutput(lines)
+	if len(result) != 1 {
+		t.Fatalf("expected 1 segment, got %d", len(result))
+	}
+}
+
+func TestParseSectionRubyOutput_InvalidLines(t *testing.T) {
+	lines := []string{
+		"invalid line",
+		"1: no_pipe_separator",
+		": missing_id | text | kind",
+	}
+	result := ParseSectionRubyOutput(lines)
+	if len(result) != 0 {
+		t.Errorf("expected empty result for invalid lines, got %#v", result)
+	}
+}
+
+func TestParseSectionRubyOutput_EmptyBase(t *testing.T) {
+	lines := []string{
+		"1:  | 标注 | phonetic",
+	}
+	result := ParseSectionRubyOutput(lines)
+	if len(result) != 0 {
+		t.Errorf("expected empty result for empty base, got %#v", result)
+	}
+}
+
+func TestParseSectionRubyOutput_PipeInField(t *testing.T) {
+	lines := []string{
+		"1: foo | bar | baz | phonetic",
+		"2: 椎名 | しいな | phonetic",
+	}
+	result := ParseSectionRubyOutput(lines)
+	if len(result) != 2 {
+		t.Fatalf("expected 2 segments, got %d", len(result))
+	}
+	e1 := result["1"][0]
+	if e1.Base != "foo | bar" || e1.Text != "baz" || e1.Kind != "phonetic" {
+		t.Errorf("wrong entry for segment 1: base=%q text=%q kind=%q", e1.Base, e1.Text, e1.Kind)
+	}
+	e2 := result["2"][0]
+	if e2.Base != "椎名" || e2.Text != "しいな" || e2.Kind != "phonetic" {
+		t.Errorf("wrong entry for segment 2: base=%q text=%q kind=%q", e2.Base, e2.Text, e2.Kind)
 	}
 }

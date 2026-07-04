@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"log/slog"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -23,8 +22,7 @@ func (e *Engine) buildProtector() protect.Protector {
 
 // BuildTranslateStage 构建翻译管道（Protect + Translate 阶段）。
 // Protect 作为 Pipeline stage 执行；Unprotect/RubyRestore/TM 作为 postSegment hooks。
-// rubyOutputFormat 应通过 resolveRubyOutputFormat() 预先解析。
-func (e *Engine) BuildTranslateStage(protector protect.Protector, restorer *protect.RubyRestorer, rubyOutputFormat string) *pipeline.Pipeline {
+func (e *Engine) BuildTranslateStage(protector protect.Protector, restorer *protect.RubyRestorer) *pipeline.Pipeline {
 	pc := e.cfg.Pipeline
 	retry := backend.RetryPolicy{
 		MaxAttempts: pc.Translate.Retry.MaxAttempts,
@@ -47,7 +45,7 @@ func (e *Engine) BuildTranslateStage(protector protect.Protector, restorer *prot
 		MinBootstrapSourceLen:  e.cfg.Glossary.Bootstrap.MinSourceLen,
 		InlineConflictStrategy: e.cfg.Glossary.Bootstrap.InlineConflictStrategy,
 		Repair:                 repairOpts,
-		RubyOutputFormat:       rubyOutputFormat,
+		RubyMode:               resolveRubyMode(e.rounds),
 		PreserveKinds:          pc.Protect.Ruby.PreserveKinds,
 		RubyRetryBackends:      e.rubyRetryBackends,
 		Context:                pc.Context,
@@ -66,6 +64,7 @@ func (e *Engine) BuildTranslateStage(protector protect.Protector, restorer *prot
 			retry,
 			e.reporter,
 			e.logger,
+			hasTextModeRound(e.rounds),
 		))
 	}
 	if e.tm != nil {
@@ -113,15 +112,12 @@ func hasTextModeRound(rounds []pipeline.Round) bool {
 	return false
 }
 
-// resolveRubyOutputFormat 根据配置和 text 模式自动选择 ruby 输出格式。
-// text 模式下强制使用 inline_markers（因 JSON ruby_output 无法在纯文本协议中表达）。
-func (e *Engine) resolveRubyOutputFormat() string {
-	format := e.cfg.Pipeline.Protect.Ruby.OutputFormat
-	if hasTextModeRound(e.rounds) && format == config.RubyOutputDefault {
-		e.logger.Info("text mode detected, overriding ruby output_format to inline_markers",
-			slog.String("from", config.RubyOutputDefault),
-			slog.String("to", config.RubyOutputInlineMarkers))
-		format = config.RubyOutputInlineMarkers
+// resolveRubyMode 根据响应模式自动选择 ruby 格式。
+//   - text 模式 → "section"（输入输出都用 [ruby] 段落格式）
+//   - JSON 模式 → "json"（输入输出都用 JSON 结构化格式）
+func resolveRubyMode(rounds []pipeline.Round) string {
+	if hasTextModeRound(rounds) {
+		return config.RubyModeSection
 	}
-	return format
+	return config.RubyModeJSON
 }

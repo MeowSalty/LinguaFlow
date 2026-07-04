@@ -6,6 +6,8 @@ import (
 	"errors"
 	"log/slog"
 	"regexp"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -23,6 +25,7 @@ func restoreSegmentRuby(
 	retryPolicy backend.RetryPolicy,
 	logger *slog.Logger,
 	reporter progress.Reporter,
+	isTextMode bool,
 ) {
 	rubyOutput := extractRubyOutput(seg)
 	logger.Info("restoreSegmentRuby: extractRubyOutput",
@@ -62,7 +65,7 @@ func restoreSegmentRuby(
 	}
 
 	if len(backends) > 0 && ctx.Err() == nil {
-		retryAlignSegment(ctx, seg, originals, restorer, keepSet, backends, retryPolicy, logger, reporter)
+		retryAlignSegment(ctx, seg, originals, restorer, keepSet, backends, retryPolicy, logger, reporter, isTextMode)
 	}
 }
 
@@ -88,16 +91,26 @@ func retryAlignSegment(
 	retryPolicy backend.RetryPolicy,
 	logger *slog.Logger,
 	reporter progress.Reporter,
+	isTextMode bool,
 ) {
 	if len(originals) == 0 {
 		return
 	}
 
-	sys, user, schema := buildAlignmentPrompt(seg, originals)
+	var sys, user string
+	var schema map[string]any
+	if isTextMode {
+		sys, user = buildAlignmentPromptText(seg, originals)
+	} else {
+		sys, user, schema = buildAlignmentPrompt(seg, originals)
+	}
 	req := backend.Request{
 		System:     sys,
 		User:       user,
 		JSONSchema: schema,
+	}
+	if isTextMode {
+		req.ResponseFormat = "none"
 	}
 
 	var resp *backend.Response
@@ -126,6 +139,9 @@ func retryAlignSegment(
 		outputTokens := resp.Usage.CompletionTokens
 
 		newOutput := parseAlignmentResponse(resp.Text)
+		if isTextMode && len(newOutput) == 0 {
+			newOutput = parseAlignmentResponseText(resp.Text, len(originals))
+		}
 		if len(newOutput) == 0 {
 			status = "partial"
 			errorType = "empty_output"
@@ -340,6 +356,75 @@ func stripRubyTagsForAlignment(s string) string {
 		m := rubyTagRe.FindStringSubmatch(match)
 		return m[1] + m[3]
 	})
+}
+
+// buildAlignmentPromptText 构建 text 模式的注音对齐提示词。
+// 用户消息为纯文本格式，LLM 输出每行一条 "base | text | kind"。
+func buildAlignmentPromptText(seg *Segment, originals []protect.RubyAnnotation) (string, string) {
+	sys := `你是注音对齐工具。给定原文、译文和注音元数据，确定每个注音条目在译文中对应的文本。
+
+规则：
+- "base" 必须是译文中实际出现的文本（不是原文基底），专有名词等未翻译的词除外。
+- "text" 是标注文本：phonetic/semantic 保留原文（不翻译），creative 需要翻译。
+- "kind" 是注音分类：
+  · phonetic（音注）：纯读音标注。
+  · semantic（义训）：语义解释标注，基底与标注语意一致或相近。
+  · creative（创意注音）：基底与标注存在语义落差。
+- 条目顺序与输入 annotations 顺序一致。
+- 每行输出一条，格式为：base | text | kind
+- 仅输出对齐结果，无额外文字。`
+
+	source := seg.OriginalSource
+	if source == "" {
+		source = seg.Source
+	}
+	source = stripRubyTagsForAlignment(source)
+
+	var sb strings.Builder
+	sb.WriteString("原文：")
+	sb.WriteString(source)
+	sb.WriteString("\n译文：")
+	sb.WriteString(seg.Target)
+	sb.WriteString("\n注音元数据：\n")
+	for i, a := range originals {
+		sb.WriteString(strconv.Itoa(i + 1))
+		sb.WriteString(". ")
+		sb.WriteString(a.Base)
+		sb.WriteString(" / ")
+		sb.WriteString(a.Text)
+		sb.WriteString("\n")
+	}
+
+	return sys, sb.String()
+}
+
+// alignmentTextLineRe 匹配 text 模式对齐响应行：base | text | kind
+var alignmentTextLineRe = regexp.MustCompile(`^(.+?)\s*\|\s*(.+?)\s*\|\s*(\w+)$`)
+
+// parseAlignmentResponseText 解析 text 模式的对齐响应。
+// 每行格式：base | text | kind
+func parseAlignmentResponseText(text string, expectedCount int) []protect.RubyOutputEntry {
+	lines := strings.Split(strings.TrimSpace(text), "\n")
+	entries := make([]protect.RubyOutputEntry, 0, expectedCount)
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		m := alignmentTextLineRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		entry := protect.RubyOutputEntry{
+			Base: strings.TrimSpace(m[1]),
+			Text: strings.TrimSpace(m[2]),
+			Kind: strings.TrimSpace(m[3]),
+		}
+		if entry.Base != "" {
+			entries = append(entries, entry)
+		}
+	}
+	return entries
 }
 
 // parseAlignmentResponse 从 LLM 响应中解析 ruby_output。

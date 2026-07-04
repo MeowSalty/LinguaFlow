@@ -15,7 +15,7 @@ protect:
   rules: [code, link, placeholder, xml]
   ruby:
     enabled: true
-    output_format: "ruby_output"  # 可选 "inline_markers"
+    preserve_kinds: [creative]
 
 # ── 后处理 ──
 postprocess:

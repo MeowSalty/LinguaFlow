@@ -102,11 +102,11 @@ type Translate struct {
 	// 在 fatal / partial 时分别决定 shrink 或仅对缺失段单独重试。
 	Repair repair.Options
 
-	// RubyOutputFormat 控制 LLM 返回注音的方式：
-	//   - "ruby_output"：LLM 在 ruby_output 字段返回结构化注音数据
-	//   - "inline_markers"：LLM 在译文中插入 ⟦ruby:base/text⟧ 标记
+	// RubyMode 控制注音的输入输出格式：
+	//   - "json"：JSON 模式，结构化字段
+	//   - "section"：text 模式，[ruby] 段落
 	//   - ""（空）：不启用注音处理
-	RubyOutputFormat string
+	RubyMode string
 
 	// PreserveKinds 控制保留哪些类型的注音（phonetic/semantic/creative）。
 	// nil 时保留全部（向后兼容）；空切片表示不保留任何注音。

@@ -78,7 +78,7 @@ func (s *Translate) buildRequest(
 		StrictSchema:      !isTextMode,
 		TextMode:          isTextMode,
 		RubyAnnotations:   rubyAnns,
-		RubyOutputFormat:  s.RubyOutputFormat,
+		RubyMode:          s.RubyMode,
 	}
 	sys, usr, err := renderer.Render(data)
 	if err != nil {
@@ -90,7 +90,7 @@ func (s *Translate) buildRequest(
 		User:   usr,
 	}
 	if !isTextMode {
-		req.JSONSchema = translationsSchema(wantIDs, s.InlineBootstrap, s.RubyOutputFormat != "")
+		req.JSONSchema = translationsSchema(wantIDs, s.InlineBootstrap, s.RubyMode != "")
 	} else {
 		req.ResponseFormat = "none"
 	}

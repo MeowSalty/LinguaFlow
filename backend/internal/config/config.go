@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"log"
 	"math"
 	"net"
 	"path/filepath"
@@ -66,15 +65,15 @@ type ProtectConfig struct {
 // RubyConfig 控制 Ruby 注音保护的行为。
 type RubyConfig struct {
 	Enabled       bool     `yaml:"enabled"`
-	OutputFormat  string   `yaml:"output_format"`  // "ruby_output" (默认) | "inline_markers"
 	RetryBackend  string   `yaml:"retry_backend"`  // 注音对齐重试后端名称；空时使用翻译主后端
 	PreserveKinds []string `yaml:"preserve_kinds"` // 保留的注音 kind 列表：phonetic/semantic/creative
 }
 
-// Ruby 输出格式常量。
+// RubyMode 常量（引擎内部使用，根据响应模式自动选择）。
 const (
-	RubyOutputInlineMarkers = "inline_markers"
-	RubyOutputDefault       = "ruby_output"
+	RubyModeJSON    = "json"
+	RubyModeInline  = "inline" // TODO: inline 模式尚未激活，待其他功能适配完成后启用
+	RubyModeSection = "section"
 )
 
 // ResponseFormatText 是纯文本响应模式的取值。
@@ -299,7 +298,7 @@ func Default() *Config {
 			Protect: ProtectConfig{
 				Enabled: true,
 				Rules:   []string{"code", "link", "placeholder", "xml"},
-				Ruby:    RubyConfig{Enabled: false, OutputFormat: RubyOutputDefault},
+				Ruby:    RubyConfig{Enabled: false},
 			},
 			Translate: TranslateConfig{
 				Concurrency:    4,
@@ -410,21 +409,6 @@ func (c *Config) Validate() error {
 	if c.Pipeline.Split.MaxChars < 1 {
 		c.Pipeline.Split.MaxChars = 1200
 	}
-	switch c.Pipeline.Protect.Ruby.OutputFormat {
-	case "":
-		c.Pipeline.Protect.Ruby.OutputFormat = RubyOutputDefault
-	case RubyOutputDefault, RubyOutputInlineMarkers:
-		// ok
-	default:
-		return fmt.Errorf("pipeline.protect.ruby.output_format must be one of %s|%s, got %q",
-			RubyOutputDefault, RubyOutputInlineMarkers, c.Pipeline.Protect.Ruby.OutputFormat)
-	}
-	// 当后端使用 text 模式且 ruby 输出格式为 ruby_output 时警告：
-	// 引擎会自动切换为 inline_markers，但用户应知晓此行为。
-	if c.Pipeline.Protect.Ruby.OutputFormat == RubyOutputDefault && c.hasTextModeBackend() {
-		log.Printf("WARN: text response mode is incompatible with ruby.output_format=%q; engine will auto-override to %q",
-			RubyOutputDefault, RubyOutputInlineMarkers)
-	}
 	validRubyKinds := map[string]bool{"phonetic": true, "semantic": true, "creative": true}
 	for _, k := range c.Pipeline.Protect.Ruby.PreserveKinds {
 		if !validRubyKinds[k] {
@@ -503,14 +487,4 @@ func (c *Config) Validate() error {
 		c.Server.CORS.AllowedOrigins = []string{"*"}
 	}
 	return nil
-}
-
-// hasTextModeBackend 检查是否有任何后端配置了 response_format: text。
-func (c *Config) hasTextModeBackend() bool {
-	for _, b := range c.Backends {
-		if rf, ok := b.Options["response_format"].(string); ok && rf == ResponseFormatText {
-			return true
-		}
-	}
-	return false
 }

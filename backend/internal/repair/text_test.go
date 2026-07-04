@@ -182,3 +182,57 @@ func TestTryRepairText_GlossaryWithTrailingTranslations(t *testing.T) {
 		t.Errorf("wrong glossary: %#v", r.Glos)
 	}
 }
+
+func TestTryRepairText_WithSectionRuby(t *testing.T) {
+	in := "[1] 早上好\n[2] 很高兴认识你\n\n[ruby]\n1: 早上 | 早晨 | phonetic\n2: 高兴 | 愉快 | semantic\n"
+	r := TryRepairText(in, []string{"1", "2"}, textOpts)
+	if r.Fatal {
+		t.Fatalf("unexpected fatal: %v (repaired=%v)", r.ParseErr, r.Repaired)
+	}
+	if r.Trans["1"] != "早上好" || r.Trans["2"] != "很高兴认识你" {
+		t.Errorf("wrong trans: %#v", r.Trans)
+	}
+	if r.RubyOutput == nil {
+		t.Fatal("expected ruby output, got nil")
+	}
+	if len(r.RubyOutput["1"]) != 1 {
+		t.Fatalf("expected 1 ruby entry for segment 1, got %d", len(r.RubyOutput["1"]))
+	}
+	if r.RubyOutput["1"][0].Base != "早上" || r.RubyOutput["1"][0].Text != "早晨" || r.RubyOutput["1"][0].Kind != "phonetic" {
+		t.Errorf("wrong ruby[1]: %#v", r.RubyOutput["1"])
+	}
+	if len(r.RubyOutput["2"]) != 1 {
+		t.Fatalf("expected 1 ruby entry for segment 2, got %d", len(r.RubyOutput["2"]))
+	}
+	if r.RubyOutput["2"][0].Base != "高兴" || r.RubyOutput["2"][0].Kind != "semantic" {
+		t.Errorf("wrong ruby[2]: %#v", r.RubyOutput["2"])
+	}
+}
+
+func TestTryRepairText_WithSectionRubyAndGlossary(t *testing.T) {
+	in := "[1] 你好世界\n[glossary]\nAPI | 接口\n[ruby]\n1: 世界 | 世間 | phonetic\n"
+	r := TryRepairText(in, []string{"1"}, textOpts)
+	if r.Fatal {
+		t.Fatalf("unexpected fatal: %v", r.ParseErr)
+	}
+	if len(r.Glos) != 1 {
+		t.Errorf("expected 1 glossary entry, got %d", len(r.Glos))
+	}
+	if r.RubyOutput == nil || len(r.RubyOutput["1"]) != 1 {
+		t.Fatalf("expected 1 ruby entry, got %#v", r.RubyOutput)
+	}
+	if r.RubyOutput["1"][0].Base != "世界" {
+		t.Errorf("wrong ruby base: %s", r.RubyOutput["1"][0].Base)
+	}
+}
+
+func TestTryRepairText_SectionRubyEmpty(t *testing.T) {
+	in := "[1] 你好\n[ruby]\n"
+	r := TryRepairText(in, []string{"1"}, textOpts)
+	if r.Fatal {
+		t.Fatalf("unexpected fatal: %v", r.ParseErr)
+	}
+	if len(r.RubyOutput) != 0 {
+		t.Errorf("expected empty ruby output, got %#v", r.RubyOutput)
+	}
+}

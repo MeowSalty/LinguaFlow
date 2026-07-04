@@ -274,7 +274,7 @@ func TestCompose_Unprotect_AdjacentPlaceholders(t *testing.T) {
 // S9: RubyProtector Protect 应剥离 ruby 标签并存储注音到 Meta。
 // 注音还原委托给 RubyRestorer（RubyRestore stage），而非 Unprotect。
 func TestRubyProtector_ProtectAndRestore(t *testing.T) {
-	restorer := NewRubyRestorer("ruby_output")
+	restorer := NewRubyRestorer()
 
 	cases := []struct {
 		input    string
@@ -432,7 +432,7 @@ func TestMergeAdjacentPlaceholders_MergedValue(t *testing.T) {
 // S16: RubyProtector + XMLProtector + mergeAdjacentPlaceholders + RubyRestorer 完整 round-trip。
 // 模拟实际 pipeline：Protect → LLM → Unprotect → RubyRestore。
 func TestMergeAdjacentPlaceholders_RoundTrip(t *testing.T) {
-	restorer := NewRubyRestorer("ruby_output")
+	restorer := NewRubyRestorer()
 	cases := []struct {
 		input    string
 		restored string // 还原后期望的 Target（相邻逐字注音会被合并为词级注音）

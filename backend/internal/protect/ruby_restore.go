@@ -11,13 +11,11 @@ import (
 
 // RubyRestorer 负责将 LLM 输出的注音信息还原为 <ruby> 标签。
 // 它不是 Protector 接口的实现，而是作为 unprotect 之后的额外 stage。
-type RubyRestorer struct {
-	OutputFormat string // "ruby_output" | "inline_markers"
-}
+type RubyRestorer struct{}
 
 // NewRubyRestorer 创建 RubyRestorer 实例。
-func NewRubyRestorer(outputFormat string) *RubyRestorer {
-	return &RubyRestorer{OutputFormat: outputFormat}
+func NewRubyRestorer() *RubyRestorer {
+	return &RubyRestorer{}
 }
 
 // RestoreResult 记录注音还原的匹配统计。
@@ -33,17 +31,13 @@ func (r RestoreResult) IsFull() bool {
 
 // Restore 根据输出模式还原注音标签。
 // rubyOutput 为过滤后的注音条目（由调用方负责提取和过滤）。
-// originalAnnotations 为 Protect 阶段提取的原始注音，用于 ruby_output 模式的双源匹配回退；
-// inline_markers 模式忽略此参数。可传 nil。
+// originalAnnotations 为 Protect 阶段提取的原始注音，用于双源匹配回退。可传 nil。
+// 自动检测译文中的 inline markers：有则走正则替换，无则走文本匹配。
 func (r *RubyRestorer) Restore(seg *model.Segment, rubyOutput []RubyOutputEntry, originalAnnotations []RubyAnnotation) (RestoreResult, error) {
-	switch r.OutputFormat {
-	case "inline_markers":
+	if strings.Contains(seg.Target, "⟦ruby:") {
 		return r.restoreInlineMarkers(seg, rubyOutput)
-	case "ruby_output":
-		fallthrough
-	default:
-		return r.restoreRubyOutput(seg, rubyOutput, originalAnnotations)
 	}
+	return r.restoreRubyOutput(seg, rubyOutput, originalAnnotations)
 }
 
 // RubyOutputEntry 是 LLM 返回的单条标注输出。
@@ -148,6 +142,10 @@ func (r *RubyRestorer) findAndInsert(target, base, text string, assigned map[int
 // inlineMarkerRe 匹配 ⟦ruby:base/text⟧ 或 ⟦ruby:base/text/kind⟧ 格式的内联标记。
 var inlineMarkerRe = regexp.MustCompile(`⟦ruby:([^/⟧]+)/([^/⟧]+)(?:/([^⟧]+))?⟧`)
 
+// sectionRubyLineRe 匹配 section 模式的 ruby 输出行：编号: content
+// content 部分再通过 parseSectionContent 从右解析 "base | text | kind"。
+var sectionRubyLineRe = regexp.MustCompile(`^(\d+):\s*(.+)`)
+
 // ParseInlineMarkers 从译文中提取所有内联标记，转换为 []RubyOutputEntry。
 func ParseInlineMarkers(text string) []RubyOutputEntry {
 	matches := inlineMarkerRe.FindAllStringSubmatch(text, -1)
@@ -166,6 +164,57 @@ func ParseInlineMarkers(text string) []RubyOutputEntry {
 		entries = append(entries, e)
 	}
 	return entries
+}
+
+// parseSectionContent 从右解析 "base | text | kind" 格式。
+// 使用 LastIndex 从右分割，确保 base 或 text 中包含 | 时仍能正确解析。
+func parseSectionContent(content string) (base, text, kind string, ok bool) {
+	kindIdx := strings.LastIndex(content, "|")
+	if kindIdx < 0 {
+		return "", "", "", false
+	}
+	kind = strings.TrimSpace(content[kindIdx+1:])
+	rest := content[:kindIdx]
+	textIdx := strings.LastIndex(rest, "|")
+	if textIdx < 0 {
+		return "", "", "", false
+	}
+	base = strings.TrimSpace(rest[:textIdx])
+	text = strings.TrimSpace(rest[textIdx+1:])
+	if base == "" {
+		return "", "", "", false
+	}
+	return base, text, kind, true
+}
+
+// ParseSectionRubyOutput 解析 section 模式的 [ruby] 段落。
+// 输入为 [ruby] 之后的所有行（不含 [ruby] 标题行本身）。
+// 格式：每行一条 "编号: base | text | kind"。
+// 返回 segment ID → []RubyOutputEntry 的映射。
+func ParseSectionRubyOutput(lines []string) map[string][]RubyOutputEntry {
+	result := make(map[string][]RubyOutputEntry)
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		m := sectionRubyLineRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		id := m[1]
+		base, text, kind, ok := parseSectionContent(m[2])
+		if !ok {
+			continue
+		}
+		entry := RubyOutputEntry{
+			Base: base,
+			Text: text,
+			Kind: kind,
+		}
+		result[id] = append(result[id], entry)
+	}
+	return result
 }
 
 // restoreInlineMarkers 通过正则替换将内联标记还原为 <ruby> 标签。

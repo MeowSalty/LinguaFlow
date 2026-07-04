@@ -73,11 +73,8 @@ func profileConfigToResponse(c *schema.TranslationProfileConfigData) Translation
 		rules[i] = ProfileProtectConfigRules(r)
 	}
 
-	outputFormat := ProfileRubyConfigOutputFormat(c.Protect.Ruby.OutputFormat)
-
 	rubyConfig := &ProfileRubyConfig{
-		Enabled:      c.Protect.Ruby.Enabled,
-		OutputFormat: &outputFormat,
+		Enabled: c.Protect.Ruby.Enabled,
 	}
 	if c.Protect.Ruby.PreserveKinds != nil {
 		pk := toAPIPreserveKinds(c.Protect.Ruby.PreserveKinds)
@@ -142,9 +139,6 @@ func parseProfileConfig(c *TranslationProfileConfig) *schema.TranslationProfileC
 	ruby := schema.ProfileRubyConfig{}
 	if c.Protect.Ruby != nil {
 		ruby.Enabled = c.Protect.Ruby.Enabled
-		if c.Protect.Ruby.OutputFormat != nil {
-			ruby.OutputFormat = string(*c.Protect.Ruby.OutputFormat)
-		}
 		if c.Protect.Ruby.PreserveKinds != nil {
 			ruby.PreserveKinds = fromAPIPreserveKinds(*c.Protect.Ruby.PreserveKinds)
 		}
@@ -211,9 +205,6 @@ func mergeProfileConfig(existing *schema.TranslationProfileConfigData, incoming 
 	}
 	if incoming.Protect.Ruby != nil {
 		merged.Protect.Ruby.Enabled = incoming.Protect.Ruby.Enabled
-		if incoming.Protect.Ruby.OutputFormat != nil {
-			merged.Protect.Ruby.OutputFormat = string(*incoming.Protect.Ruby.OutputFormat)
-		}
 		if incoming.Protect.Ruby.PreserveKinds != nil {
 			merged.Protect.Ruby.PreserveKinds = fromAPIPreserveKinds(*incoming.Protect.Ruby.PreserveKinds)
 		}

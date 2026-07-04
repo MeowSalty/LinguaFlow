@@ -247,6 +247,7 @@ func TestRenderer_TextModeWithRuby(t *testing.T) {
 	data := Data{
 		SourceLang: "ja", TargetLang: "zh-Hans",
 		TextMode: true,
+		RubyMode: config.RubyModeInline,
 		Segments: []SegmentInput{
 			{ID: "1", Source: "椎名は静かに微笑んだ。", Translate: true},
 			{ID: "2", Source: "少年が呪を唱えた。", Translate: true},
@@ -309,6 +310,7 @@ func TestRenderer_TextModeWithRubyInline(t *testing.T) {
 	data := Data{
 		SourceLang: "ja", TargetLang: "zh-Hans",
 		TextMode: true,
+		RubyMode: config.RubyModeInline,
 		Segments: []SegmentInput{
 			{ID: "1", Source: "椎名は静かに微笑んだ。", Translate: true},
 			{ID: "2", Source: "少年が呪を唱えた。", Translate: true},
@@ -334,5 +336,112 @@ func TestRenderer_TextModeWithRubyInline(t *testing.T) {
 	}
 	if strings.Contains(usr, "[ruby]") {
 		t.Errorf("user message should not contain [ruby] section in inline mode:\n%s", usr)
+	}
+}
+
+func TestRenderer_TextModeWithRubySection(t *testing.T) {
+	r, err := NewRenderer(config.PromptConfig{
+		SystemTemplateContent: defaultTestSystemTmpl,
+	})
+	if err != nil {
+		t.Fatalf("renderer: %v", err)
+	}
+	data := Data{
+		SourceLang: "ja", TargetLang: "zh-Hans",
+		TextMode: true,
+		RubyMode: config.RubyModeSection,
+		Segments: []SegmentInput{
+			{ID: "1", Source: "椎名は静かに微笑んだ。", Translate: true},
+			{ID: "2", Source: "少年が呪を唱えた。", Translate: true},
+			{ID: "*", Source: "CONTEXT", Translate: false},
+		},
+		RubyAnnotations: map[string][]RubyAnnotation{
+			"1": {{Base: "椎名", Text: "しいな"}, {Base: "微笑", Text: "ほほえ"}},
+			"2": {{Base: "呪", Text: "じゅ"}},
+		},
+	}
+	_, usr, err := r.Render(data)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	// section 模式下，原文不应包含 inline ruby 标记
+	if strings.Contains(usr, "⟦ruby:") {
+		t.Errorf("user message should not contain inline ruby markers in section mode:\n%s", usr)
+	}
+	// 原文应保持干净
+	if !strings.Contains(usr, "[1] 椎名は静かに微笑んだ。") {
+		t.Errorf("user message missing clean segment 1:\n%s", usr)
+	}
+	if !strings.Contains(usr, "[2] 少年が呪を唱えた。") {
+		t.Errorf("user message missing clean segment 2:\n%s", usr)
+	}
+	// 应包含 [ruby] 段落
+	if !strings.Contains(usr, "[ruby]") {
+		t.Errorf("user message missing [ruby] section:\n%s", usr)
+	}
+	if !strings.Contains(usr, "1: 椎名/しいな, 微笑/ほほえ") {
+		t.Errorf("user message missing ruby annotations for segment 1:\n%s", usr)
+	}
+	if !strings.Contains(usr, "2: 呪/じゅ") {
+		t.Errorf("user message missing ruby annotations for segment 2:\n%s", usr)
+	}
+	if !strings.Contains(usr, "[*] CONTEXT") {
+		t.Errorf("user message missing context segment:\n%s", usr)
+	}
+}
+
+func TestRenderer_TextModeWithRubySectionEmpty(t *testing.T) {
+	r, err := NewRenderer(config.PromptConfig{
+		SystemTemplateContent: defaultTestSystemTmpl,
+	})
+	if err != nil {
+		t.Fatalf("renderer: %v", err)
+	}
+	data := Data{
+		SourceLang: "ja", TargetLang: "zh-Hans",
+		TextMode: true,
+		RubyMode: config.RubyModeSection,
+		Segments: []SegmentInput{
+			{ID: "1", Source: "hello", Translate: true},
+		},
+		RubyAnnotations: map[string][]RubyAnnotation{},
+	}
+	_, usr, err := r.Render(data)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if strings.Contains(usr, "[ruby]") {
+		t.Errorf("user message should not contain [ruby] section when annotations are empty:\n%s", usr)
+	}
+}
+
+func TestRenderer_TextModeWithRubyDefaultMode(t *testing.T) {
+	r, err := NewRenderer(config.PromptConfig{
+		SystemTemplateContent: defaultTestSystemTmpl,
+	})
+	if err != nil {
+		t.Fatalf("renderer: %v", err)
+	}
+	data := Data{
+		SourceLang: "ja", TargetLang: "zh-Hans",
+		TextMode: true,
+		// RubyMode 为空，应默认为 section（与引擎 resolveRubyMode 的 text 模式默认一致）
+		Segments: []SegmentInput{
+			{ID: "1", Source: "椎名は静かに微笑んだ。", Translate: true},
+		},
+		RubyAnnotations: map[string][]RubyAnnotation{
+			"1": {{Base: "椎名", Text: "しいな"}},
+		},
+	}
+	_, usr, err := r.Render(data)
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	// 默认模式应使用 section 格式
+	if !strings.Contains(usr, "[ruby]") {
+		t.Errorf("default mode should contain [ruby] section:\n%s", usr)
+	}
+	if strings.Contains(usr, "⟦ruby:") {
+		t.Errorf("default mode should not use inline ruby format:\n%s", usr)
 	}
 }

@@ -30,7 +30,6 @@ type ProfileProtectConfig struct {
 // ProfileRubyConfig Ruby 注音保护配置。
 type ProfileRubyConfig struct {
 	Enabled       bool     `json:"enabled"       yaml:"enabled"`
-	OutputFormat  string   `json:"output_format" yaml:"output_format"`
 	PreserveKinds []string `json:"preserve_kinds" yaml:"preserve_kinds"`
 }
 
@@ -83,7 +82,7 @@ func DefaultProfileConfig() TranslationProfileConfigData {
 		Protect: ProfileProtectConfig{
 			Enabled: true,
 			Rules:   []string{"code", "link", "placeholder", "xml"},
-			Ruby:    ProfileRubyConfig{Enabled: false, OutputFormat: "ruby_output", PreserveKinds: []string{"phonetic", "semantic", "creative"}},
+			Ruby:    ProfileRubyConfig{Enabled: false, PreserveKinds: []string{"phonetic", "semantic", "creative"}},
 		},
 		Postprocess: ProfilePostprocessConfig{
 			Enabled:    true,

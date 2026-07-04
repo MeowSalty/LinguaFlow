@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 )
 
 // textLineRe 匹配 [N] 开头的翻译行，捕获编号和内容。
@@ -37,7 +38,7 @@ func TryRepairText(text string, wantIDs []string, opt Options) Result {
 		repaired = append(repaired, "text.strip-code-fence")
 	}
 
-	trans, glos, parseErr := parseTextResponse(text, wantIDs)
+	trans, glos, rubyOutput, parseErr := parseTextResponse(text, wantIDs)
 	if parseErr != nil {
 		// T3 部分成功：即使有解析错误，也检查是否有部分结果
 		if len(trans) > 0 && opt.Partial {
@@ -49,10 +50,11 @@ func TryRepairText(text string, wantIDs []string, opt Options) Result {
 			}
 			if float64(len(missing))/float64(len(wantIDs)) < opt.PartialThreshold {
 				return Result{
-					Trans:    trans,
-					Glos:     glos,
-					Missing:  missing,
-					Repaired: repaired,
+					Trans:      trans,
+					Glos:       glos,
+					RubyOutput: rubyOutput,
+					Missing:    missing,
+					Repaired:   repaired,
 				}
 			}
 		}
@@ -68,21 +70,26 @@ func TryRepairText(text string, wantIDs []string, opt Options) Result {
 	}
 
 	return Result{
-		Trans:    trans,
-		Glos:     glos,
-		Missing:  missing,
-		Repaired: repaired,
+		Trans:      trans,
+		Glos:       glos,
+		RubyOutput: rubyOutput,
+		Missing:    missing,
+		Repaired:   repaired,
 	}
 }
 
 // parseTextResponse 解析纯文本格式响应。
-func parseTextResponse(text string, wantIDs []string) (map[string]string, []prompt.BootstrapEntry, error) {
+// 支持 [glossary] 和 [ruby] 段落。
+func parseTextResponse(text string, wantIDs []string) (map[string]string, []prompt.BootstrapEntry, map[string][]protect.RubyOutputEntry, error) {
 	trans := make(map[string]string)
 	var glos []prompt.BootstrapEntry
+	var rubyOutput map[string][]protect.RubyOutputEntry
 
 	lines := strings.Split(text, "\n")
 	var lastID string
 	inGlossary := false
+	inRuby := false
+	var rubyLines []string
 
 	for _, line := range lines {
 		line = strings.TrimSpace(line)
@@ -92,12 +99,20 @@ func parseTextResponse(text string, wantIDs []string) (map[string]string, []prom
 
 		if strings.EqualFold(line, "[glossary]") {
 			inGlossary = true
+			inRuby = false
 			continue
 		}
 
-		// 检查 [N] 开头的翻译行（即使在 glossary 模式下也优先匹配，避免后续翻译丢失）
+		if strings.EqualFold(line, "[ruby]") {
+			inRuby = true
+			inGlossary = false
+			continue
+		}
+
+		// 检查 [N] 开头的翻译行（即使在 glossary/ruby 模式下也优先匹配，避免后续翻译丢失）
 		if m := textLineRe.FindStringSubmatch(line); m != nil {
 			inGlossary = false
+			inRuby = false
 			lastID = m[1]
 			trans[lastID] = m[2]
 			continue
@@ -111,6 +126,11 @@ func parseTextResponse(text string, wantIDs []string) (map[string]string, []prom
 			continue
 		}
 
+		if inRuby {
+			rubyLines = append(rubyLines, line)
+			continue
+		}
+
 		if strings.HasPrefix(line, "[*]") {
 			continue
 		}
@@ -120,8 +140,22 @@ func parseTextResponse(text string, wantIDs []string) (map[string]string, []prom
 		}
 	}
 
+	if len(rubyLines) > 0 {
+		rubyOutput = protect.ParseSectionRubyOutput(rubyLines)
+	} else {
+		// 无 [ruby] 段落时，尝试从译文中提取 inline markers
+		for id, text := range trans {
+			if entries := protect.ParseInlineMarkers(text); len(entries) > 0 {
+				if rubyOutput == nil {
+					rubyOutput = make(map[string][]protect.RubyOutputEntry)
+				}
+				rubyOutput[id] = entries
+			}
+		}
+	}
+
 	if len(trans) == 0 {
-		return nil, nil, errors.New("no translations found in text response")
+		return nil, nil, nil, errors.New("no translations found in text response")
 	}
 
 	var missing []string
@@ -131,10 +165,10 @@ func parseTextResponse(text string, wantIDs []string) (map[string]string, []prom
 		}
 	}
 	if len(missing) > 0 {
-		return trans, glos, fmt.Errorf("missing translations for IDs: %v", missing)
+		return trans, glos, rubyOutput, fmt.Errorf("missing translations for IDs: %v", missing)
 	}
 
-	return trans, glos, nil
+	return trans, glos, rubyOutput, nil
 }
 
 // parseGlossaryLine 解析 "source | target | notes" 格式的术语行。

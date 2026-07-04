@@ -52,14 +52,12 @@ func (e *Engine) Translate(ctx context.Context, doc *pipeline.Document, opts ...
 	pc := e.cfg.Pipeline
 	protector := e.buildProtector()
 
-	rubyOutputFormat := e.resolveRubyOutputFormat()
-
 	var restorer *protect.RubyRestorer
 	if pc.Protect.Ruby.Enabled {
-		restorer = protect.NewRubyRestorer(rubyOutputFormat)
+		restorer = protect.NewRubyRestorer()
 	}
 
-	translatePipe := e.BuildTranslateStage(protector, restorer, rubyOutputFormat)
+	translatePipe := e.BuildTranslateStage(protector, restorer)
 
 	// 4. 设置 batchHandler 并调用 Pipeline
 	if cfg.batchHandler != nil {

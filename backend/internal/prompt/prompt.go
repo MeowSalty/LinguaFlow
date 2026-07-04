@@ -30,9 +30,7 @@ import (
 // SingleID 是单段模式下 envelope 内唯一段的 id。translate stage 用它回写。
 const SingleID = "0"
 
-// TextRubyInputMode 控制 text 模式下注音输入格式。
-// "inline"：⟦ruby:base/text⟧ 内联到原文；"section"：[ruby] 独立段落。
-const TextRubyInputMode = "inline"
+// RubyMode 的合法取值定义在 config 包中（RubyModeJSON / RubyModeInline / RubyModeSection）。
 
 // RubyAnnotation 用于在提示词中展示 Ruby 标注信息。
 type RubyAnnotation struct {
@@ -85,8 +83,8 @@ type Data struct {
 	StrictSchema      bool // 当后端使用 json_schema 强制输出时为 true；模板据此精简协议描述以节省 token
 	TextMode          bool // 纯文本模式：user message 使用纯文本编号格式而非 JSON envelope
 
-	RubyAnnotations  map[string][]RubyAnnotation // segment ID → 标注列表
-	RubyOutputFormat string                      // "ruby_output" | "inline_markers"
+	RubyAnnotations map[string][]RubyAnnotation // segment ID → 标注列表
+	RubyMode        string                      // "json" | "section" | ""
 }
 
 // HasRuby 判断当前数据中是否存在 Ruby 标注信息。
@@ -157,7 +155,11 @@ func (r *Renderer) Render(d Data) (string, string, error) {
 
 	sys := sysBuf.String()
 	if d.TextMode {
-		return sys, buildTextUser(segs, d.RubyAnnotations), nil
+		mode := d.RubyMode
+		if mode == "" {
+			mode = config.RubyModeSection
+		}
+		return sys, buildTextUser(segs, d.RubyAnnotations, mode), nil
 	}
 
 	return sys, buildJSONUser(d, segs), nil
@@ -191,9 +193,9 @@ func buildJSONUser(d Data, segs []SegmentInput) string {
 // 格式固定，与 parseBatchResponseLenientText 解析逻辑对应：
 //   - 需要翻译的段落：[编号] 原文
 //   - 上下文参考段落：[*] 原文
-//   - TextRubyInputMode="inline"：注音以 ⟦ruby:base/text⟧ 内联到原文
-//   - TextRubyInputMode="section"：注音以 [ruby] 独立段落追加
-func buildTextUser(segs []SegmentInput, rubyAnnotations map[string][]RubyAnnotation) string {
+//   - rubyInputMode="inline"：注音以 ⟦ruby:base/text⟧ 内联到原文
+//   - rubyInputMode="section"：注音以 [ruby] 独立段落追加
+func buildTextUser(segs []SegmentInput, rubyAnnotations map[string][]RubyAnnotation, rubyInputMode string) string {
 	var sb strings.Builder
 	for i, s := range segs {
 		if i > 0 {
@@ -203,7 +205,7 @@ func buildTextUser(segs []SegmentInput, rubyAnnotations map[string][]RubyAnnotat
 			sb.WriteString("[")
 			sb.WriteString(s.ID)
 			sb.WriteString("] ")
-			if TextRubyInputMode == "inline" && len(rubyAnnotations) > 0 {
+			if rubyInputMode == config.RubyModeInline && len(rubyAnnotations) > 0 {
 				sb.WriteString(inlineRubyInSource(s.Source, rubyAnnotations[s.ID]))
 			} else {
 				sb.WriteString(s.Source)
@@ -214,7 +216,7 @@ func buildTextUser(segs []SegmentInput, rubyAnnotations map[string][]RubyAnnotat
 		}
 	}
 
-	if TextRubyInputMode != "inline" && len(rubyAnnotations) > 0 {
+	if rubyInputMode == config.RubyModeSection && len(rubyAnnotations) > 0 {
 		sb.WriteString("\n[ruby]")
 		for _, s := range segs {
 			if !s.Translate {
