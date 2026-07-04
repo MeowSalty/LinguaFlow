@@ -24,7 +24,6 @@ const CONFIG_DEFAULTS: TranslationProfileConfig = {
     rules: ['code', 'link', 'placeholder', 'xml'],
     ruby: {
       enabled: false,
-      output_format: 'ruby_output',
       preserve_kinds: ['phonetic', 'semantic', 'creative'],
     },
   },
@@ -141,11 +140,6 @@ const inlineConflictStrategyOptions = computed(() => [
 
 const splitStrategyOptions = computed(() => [{ label: 'paragraph', value: 'paragraph' }])
 
-const rubyOutputFormatOptions = computed(() => [
-  { label: 'Ruby 输出', value: 'ruby_output' },
-  { label: '内联标记', value: 'inline_markers' },
-])
-
 const rubyPreserveKindsOptions = computed(() => [
   { label: t('profileConfigEditor.protect.ruby.preserveKindsPhonetic'), value: 'phonetic' },
   { label: t('profileConfigEditor.protect.ruby.preserveKindsSemantic'), value: 'semantic' },
@@ -153,7 +147,6 @@ const rubyPreserveKindsOptions = computed(() => [
 ])
 
 function onProtectRubyUpdate(field: 'enabled', value: boolean): void
-function onProtectRubyUpdate(field: 'output_format', value: 'ruby_output' | 'inline_markers'): void
 function onProtectRubyUpdate(
   field: 'preserve_kinds',
   value: ('phonetic' | 'semantic' | 'creative')[],
@@ -165,7 +158,6 @@ function onProtectRubyUpdate(field: string, value: unknown): void {
       rules: [],
       ruby: {
         enabled: false,
-        output_format: 'ruby_output',
         preserve_kinds: ['phonetic', 'semantic', 'creative'],
       },
     }
@@ -173,15 +165,12 @@ function onProtectRubyUpdate(field: string, value: unknown): void {
   if (!configModel.value.protect.ruby) {
     configModel.value.protect.ruby = {
       enabled: false,
-      output_format: 'ruby_output',
       preserve_kinds: ['phonetic', 'semantic', 'creative'],
     }
   }
   const ruby = configModel.value.protect.ruby
   if (field === 'enabled') {
     ruby.enabled = value as boolean
-  } else if (field === 'output_format') {
-    ruby.output_format = value as 'ruby_output' | 'inline_markers'
   } else if (field === 'preserve_kinds') {
     ruby.preserve_kinds = value as ('phonetic' | 'semantic' | 'creative')[]
   }
@@ -258,32 +247,16 @@ function onProtectRubyUpdate(field: string, value: unknown): void {
         </NCheckboxGroup>
       </div>
       <!-- Ruby 注释保护 -->
-      <NGrid :cols="2" :x-gap="16" class="mt-4">
-        <NGi>
-          <div class="flex items-center gap-2">
-            <NSwitch
-              :value="configModel.protect?.ruby?.enabled ?? false"
-              :disabled="disabled || !configModel.protect?.enabled"
-              @update:value="(val: boolean) => onProtectRubyUpdate('enabled', val)"
-            />
-            <span class="text-sm">{{ t('profileConfigEditor.protect.ruby.title') }}</span>
-          </div>
-        </NGi>
-        <NGi>
-          <NSelect
-            :value="configModel.protect?.ruby?.output_format ?? 'ruby_output'"
-            :options="rubyOutputFormatOptions"
-            :disabled="
-              disabled ||
-              !configModel.protect?.enabled ||
-              !(configModel.protect?.ruby?.enabled ?? false)
-            "
-            @update:value="
-              (val: 'ruby_output' | 'inline_markers') => onProtectRubyUpdate('output_format', val)
-            "
+      <div class="mt-4">
+        <div class="flex items-center gap-2">
+          <NSwitch
+            :value="configModel.protect?.ruby?.enabled ?? false"
+            :disabled="disabled || !configModel.protect?.enabled"
+            @update:value="(val: boolean) => onProtectRubyUpdate('enabled', val)"
           />
-        </NGi>
-      </NGrid>
+          <span class="text-sm">{{ t('profileConfigEditor.protect.ruby.title') }}</span>
+        </div>
+      </div>
       <div
         class="mt-3"
         :class="{

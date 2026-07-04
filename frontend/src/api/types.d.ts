@@ -1826,11 +1826,6 @@ export interface components {
         ProfileRubyConfig: {
             enabled: boolean;
             /**
-             * @default ruby_output
-             * @enum {string}
-             */
-            output_format: "ruby_output" | "inline_markers";
-            /**
              * @description 保留的注音分类列表
              * @default [
              *       "phonetic",

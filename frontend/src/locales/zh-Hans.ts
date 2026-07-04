@@ -1031,14 +1031,11 @@ const messages = {
       rules: '保护规则',
       ruby: {
         title: 'Ruby 注释保护',
-        outputFormat: '输出格式',
         preserveKinds: '保留注音分类',
         preserveKindsPhonetic: '音注',
         preserveKindsSemantic: '义训',
         preserveKindsCreative: '创意',
       },
-      rubyOutputFormatRubyOutput: 'Ruby 输出',
-      rubyOutputFormatInlineMarkers: '内联标记',
     },
     postprocess: {
       title: '后处理',
