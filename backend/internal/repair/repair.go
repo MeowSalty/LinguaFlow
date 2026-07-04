@@ -32,8 +32,8 @@ type Result struct {
 	Trans      map[string]string
 	Glos       []prompt.BootstrapEntry
 	RubyOutput map[string][]ruby.OutputEntry // segment ID → ruby 输出条目
-	Missing    []string                             // wantIDs 中未出现在 Trans 里的子集
-	Repaired   []string                             // 修复算子链，便于日志诊断
+	Missing    []string                      // wantIDs 中未出现在 Trans 里的子集
+	Repaired   []string                      // 修复算子链，便于日志诊断
 	Fatal      bool
 	ParseErr   error
 }

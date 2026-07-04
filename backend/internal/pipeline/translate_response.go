@@ -25,8 +25,8 @@ func parseBatchResponse(text string, wantIDs []string) (map[string]string, []pro
 		return nil, nil, nil, fmt.Errorf("no JSON object found in response")
 	}
 	var env struct {
-		Translations map[string]string                    `json:"translations"`
-		Glossary     []prompt.BootstrapEntry              `json:"glossary"`
+		Translations map[string]string             `json:"translations"`
+		Glossary     []prompt.BootstrapEntry       `json:"glossary"`
 		RubyOutput   map[string][]ruby.OutputEntry `json:"ruby_output"`
 	}
 	if err := json.Unmarshal([]byte(body), &env); err != nil {
