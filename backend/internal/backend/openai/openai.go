@@ -32,6 +32,8 @@ type Backend struct {
 	maxTokens      int64
 	timeout        time.Duration
 	responseFormat string // backend 默认的响应格式：json_schema | json_object | none
+	temperature    *float64
+	topP           *float64
 }
 
 // Name 由 BackendConfig.Name 注入；这里使用 type/model 作 fallback。
@@ -61,6 +63,13 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 	}
 	if req.Temperature != nil {
 		params.Temperature = openaigo.Float(*req.Temperature)
+	} else if b.temperature != nil {
+		params.Temperature = openaigo.Float(*b.temperature)
+	}
+	if req.TopP != nil {
+		params.TopP = openaigo.Float(*req.TopP)
+	} else if b.topP != nil {
+		params.TopP = openaigo.Float(*b.topP)
 	}
 	if maxTok > 0 {
 		params.MaxTokens = openaigo.Int(maxTok)
@@ -151,10 +160,14 @@ func factory(opts map[string]any) (backend.Backend, error) {
 		maxTokens:      backend.Int64Opt(opts, "max_tokens", 0),
 		responseFormat: rf,
 	}
-	if t, err := backend.DurationOpt(opts, "timeout", 60*time.Second); err == nil {
-		b.timeout = t
-	} else {
-		return nil, err
+	if t := backend.Int64Opt(opts, "timeout", 60); t > 0 {
+		b.timeout = time.Duration(t) * time.Second
+	}
+	if v, ok := opts["temperature"].(float64); ok {
+		b.temperature = &v
+	}
+	if v, ok := opts["top_p"].(float64); ok {
+		b.topP = &v
 	}
 	return b, nil
 }

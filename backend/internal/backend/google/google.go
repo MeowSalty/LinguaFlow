@@ -36,6 +36,8 @@ type Backend struct {
 	maxTokens      int64
 	timeout        time.Duration
 	responseFormat string
+	temperature    *float64
+	topP           *float64
 }
 
 func (b *Backend) Name() string {
@@ -76,6 +78,13 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 	}
 	if req.Temperature != nil {
 		cfg.Temperature = genai.Ptr(float32(*req.Temperature))
+	} else if b.temperature != nil {
+		cfg.Temperature = genai.Ptr(float32(*b.temperature))
+	}
+	if req.TopP != nil {
+		cfg.TopP = genai.Ptr(float32(*req.TopP))
+	} else if b.topP != nil {
+		cfg.TopP = genai.Ptr(float32(*b.topP))
 	}
 	if maxTok > 0 {
 		cfg.MaxOutputTokens = int32(maxTok)
@@ -162,16 +171,14 @@ func factory(opts map[string]any) (backend.Backend, error) {
 		return nil, fmt.Errorf("google: invalid response_format %q (want json_schema|json_object|text|none)", rf)
 	}
 
-	t, err := backend.DurationOpt(opts, "timeout", 60*time.Second)
-	if err != nil {
-		return nil, err
-	}
+	t := backend.Int64Opt(opts, "timeout", 60)
 	cc := &genai.ClientConfig{
 		APIKey:  apiKey,
 		Backend: genai.BackendGeminiAPI,
 	}
 	if t > 0 {
-		cc.HTTPOptions.Timeout = &t
+		timeout := time.Duration(t) * time.Second
+		cc.HTTPOptions.Timeout = &timeout
 	}
 	if u := backend.StringOpt(opts, "base_url", ""); u != "" {
 		cc.HTTPOptions.BaseURL = u
@@ -185,8 +192,14 @@ func factory(opts map[string]any) (backend.Backend, error) {
 		client:         client,
 		model:          backend.StringOpt(opts, "model", defaultModel),
 		maxTokens:      backend.Int64Opt(opts, "max_tokens", defaultMaxTokens),
-		timeout:        t,
+		timeout:        time.Duration(t) * time.Second,
 		responseFormat: rf,
+	}
+	if v, ok := opts["temperature"].(float64); ok {
+		b.temperature = &v
+	}
+	if v, ok := opts["top_p"].(float64); ok {
+		b.topP = &v
 	}
 	return b, nil
 }
