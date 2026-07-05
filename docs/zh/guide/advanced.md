@@ -23,10 +23,10 @@ LinguaFlow 提供多种高级功能，帮助您优化翻译效果。
 
 ```yaml
 context:
-  enabled: true      # 是否启用上下文窗口，默认 true
-  before: 1          # 取前 N 段作为上下文，默认 1，范围 0-10
-  after: 1           # 取后 N 段作为上下文，默认 1，范围 0-10
-  max_chars: 0       # 每个上下文段落的字符数上限，默认 0（不限制），最大 10000
+  enabled: true # 是否启用上下文窗口，默认 true
+  before: 1 # 取前 N 段作为上下文，默认 1，范围 0-10
+  after: 1 # 取后 N 段作为上下文，默认 1，范围 0-10
+  max_chars: 0 # 每个上下文段落的字符数上限，默认 0（不限制），最大 10000
 ```
 
 ## 内容保护规则
@@ -35,19 +35,19 @@ context:
 
 ### 默认保护规则
 
-| 规则         | 说明                        | 保护内容                                              |
-| ------------ | --------------------------- | ----------------------------------------------------- |
-| `code`       | 代码块                      | 围栏代码块（``` ~~~）和行内代码                       |
-| `link`       | 链接                        | Markdown 链接 URL、自动链接、引用链接                 |
-| `placeholder`| 占位符                      | `{{var}}`、`{var}`、`%s/%d/%v`、`$VAR/${VAR}`         |
-| `xml`        | XML/HTML 标签               | HTML/XML 标签及其属性                                 |
+| 规则          | 说明          | 保护内容                                      |
+| ------------- | ------------- | --------------------------------------------- |
+| `code`        | 代码块        | 围栏代码块（``` ~~~）和行内代码               |
+| `link`        | 链接          | Markdown 链接 URL、自动链接、引用链接         |
+| `placeholder` | 占位符        | `{{var}}`、`{var}`、`%s/%d/%v`、`$VAR/${VAR}` |
+| `xml`         | XML/HTML 标签 | HTML/XML 标签及其属性                         |
 
 ### 配置
 
 ```yaml
 protect:
-  enabled: true                          # 是否启用内容保护，默认 true
-  rules:                                 # 启用的保护规则列表
+  enabled: true # 是否启用内容保护，默认 true
+  rules: # 启用的保护规则列表
     - code
     - link
     - placeholder
@@ -66,13 +66,13 @@ protect:
 
 ### 修复级别
 
-| 级别 | 修复类型              | 说明                                                         |
-| ---- | --------------------- | ------------------------------------------------------------ |
-| L1   | JSON 结构修复         | 去除 BOM/零宽字符、合并对象、补全括号、移除尾逗号、转义控制字符 |
-| L2   | Schema 别名           | 将 `translation`/`result`/`output`/`data.translations` 等变体标准化为 `translations` |
-| L2   | 部分恢复              | 部分段落缺失时返回部分结果而非失败，通过 `partial_threshold` 控制放弃阈值 |
-| L3   | 占位符标准化          | 修复大小写和下划线变体，如 `__lf_000001__` → `__LF_000001__` |
-| L4   | 提示词升级            | 将错误上下文追加到系统提示词中，进行一次重试                 |
+| 级别 | 修复类型      | 说明                                                                                 |
+| ---- | ------------- | ------------------------------------------------------------------------------------ |
+| L1   | JSON 结构修复 | 去除 BOM/零宽字符、合并对象、补全括号、移除尾逗号、转义控制字符                      |
+| L2   | Schema 别名   | 将 `translation`/`result`/`output`/`data.translations` 等变体标准化为 `translations` |
+| L2   | 部分恢复      | 部分段落缺失时返回部分结果而非失败，通过 `partial_threshold` 控制放弃阈值            |
+| L3   | 占位符标准化  | 修复大小写和下划线变体，如 `__lf_000001__` → `__LF_000001__`                         |
+| L4   | 提示词升级    | 将错误上下文追加到系统提示词中，进行一次重试                                         |
 
 ### 文本模式修复
 
@@ -86,13 +86,13 @@ protect:
 
 ```yaml
 repair:
-  enabled: true              # 是否启用响应修复，默认 true
-  json_structural: true      # L1: JSON 结构修复，默认 true
-  schema_aliases: true       # L2: Schema 别名映射，默认 true
-  partial: true              # L2: 部分缺失恢复，默认 true
-  partial_threshold: 0.5     # 缺失率阈值 (0,1]，超过此值则放弃，默认 0.5
+  enabled: true # 是否启用响应修复，默认 true
+  json_structural: true # L1: JSON 结构修复，默认 true
+  schema_aliases: true # L2: Schema 别名映射，默认 true
+  partial: true # L2: 部分缺失恢复，默认 true
+  partial_threshold: 0.5 # 缺失率阈值 (0,1]，超过此值则放弃，默认 0.5
   placeholder_normalize: true # L3: 占位符归一化，默认 true
-  prompt_upgrade: true       # L4: Prompt 升级重试，默认 true
+  prompt_upgrade: true # L4: Prompt 升级重试，默认 true
 ```
 
 ## 批量翻译
@@ -119,10 +119,10 @@ repair:
 在执行计划的每轮中配置：
 
 ```yaml
-batch_size: 10             # 每批段落数上限，默认 10，范围 0-10000
-max_words_per_batch: 0     # 每批字数上限，默认 0（不限制），最大 100000
-concurrency: 3             # 并发 Worker 数，默认 3，范围 1-100
-fallback_shrink: 0.5       # 失败时批次缩小比例，默认 0.5
+batch_size: 10 # 每批段落数上限，默认 10，范围 0-10000
+max_words_per_batch: 0 # 每批字数上限，默认 0（不限制），最大 100000
+concurrency: 3 # 并发 Worker 数，默认 3，范围 1-100
+fallback_shrink: 0.5 # 失败时批次缩小比例，默认 0.5
 ```
 
 ::: tip
@@ -162,34 +162,62 @@ Round 2: 仅翻译 Round 1 失败的段落
    - **仅失败的段落**（占位符校验失败或 LLM 未返回）传递到下一轮
 3. 所有轮次后仍有未翻译的段落，会记录到文档变量 `_translate_failed_indices`
 
-### 启动配置
+### 术语自举（Bootstrap）
 
-启动配置用于在翻译前预处理术语表：
+术语自举功能在翻译前自动从源文档中抽取术语表，供翻译时参考，确保术语翻译一致性。支持两种模式：
+
+**独立自举（Pre 模式）** — 翻译前独立扫描整篇文档抽取术语，所有轮次都能使用。需额外一次 LLM 调用。
+
+**内联自举（Inline 模式）** — 翻译时顺带抽取术语，无需额外 LLM 调用。当多个并发 Worker 对同一术语产生不同译文时，通过冲突策略处理。
+
+#### 独立自举配置
+
+在执行计划中配置：
 
 ```yaml
 bootstrap:
-  enabled: false           # 是否启用，默认 false
-  backend_id: 1            # 使用的 AI 后端 ID
-  prompt_template_id: 1    # 提示词模板 ID
-  batch_size: 20           # 批次大小，默认 20
-  concurrency: 2           # 并发数，默认 2
-  max_terms_per_batch: 20  # 每批最大术语数，默认 20
-  min_source_len: 2        # 最小源文本长度，默认 2
+  enabled: false # 是否启用，默认 false
+  backend_id: 1 # 自举使用的 AI 后端 ID
+  prompt_template_id: 1 # 自举提示词模板 ID（仅用其 bootstrap 提示词）
+  batch_size: 20 # 每批源文段数，默认 20
+  concurrency: 2 # 自举并发数，默认 2
+  max_terms_per_batch: 20 # 每批最大术语数，默认 20
+  min_source_len: 2 # 术语最短源文长度，默认 2
 ```
+
+#### 内联自举配置
+
+在翻译配置中设置：
+
+```yaml
+glossary:
+  bootstrap:
+    enabled: false # 是否启用内联自举，默认 false
+    max_terms_per_1000_chars: 5 # 每千字符最大术语数
+    min_source_len: 2 # 最短源术语长度
+    inline_conflict_strategy: rewrite-local # 冲突策略，默认 rewrite-local
+```
+
+**冲突策略说明：**
+
+| 策略            | 说明                                                                               |
+| --------------- | ---------------------------------------------------------------------------------- |
+| `rewrite-local` | 后到的 Worker 将本批译文中的冲突术语替换为权威表中的版本，保证文档内一致性（默认） |
+| `off`           | 不处理冲突，先到先得，可能导致同一术语在文档内翻译不一致                           |
 
 ### 每轮配置
 
 ```yaml
 rounds:
-  - name: "直译"              # 轮次名称
-    backend_id: 1             # AI 后端 ID
-    prompt_template_id: 1     # 提示词模板 ID
-    profile_id: 1             # 翻译配置 ID
-    batch_size: 10            # 批次大小
-    max_words_per_batch: 0    # 字数上限
-    concurrency: 3            # 并发数
-    fallback_shrink: 0.5      # 失败缩小比例
-    retry:                    # 重试配置
+  - name: "直译" # 轮次名称
+    backend_id: 1 # AI 后端 ID
+    prompt_template_id: 1 # 提示词模板 ID
+    profile_id: 1 # 翻译配置 ID
+    batch_size: 10 # 批次大小
+    max_words_per_batch: 0 # 字数上限
+    concurrency: 3 # 并发数
+    fallback_shrink: 0.5 # 失败缩小比例
+    retry: # 重试配置
       max_attempts: 3
       backoff_ms: 2000
       jitter: true
@@ -225,11 +253,11 @@ rounds:
 
 ### 注音类型
 
-| 类型        | 说明       |
-| ----------- | ---------- |
-| `phonetic`  | 音注（读音） |
-| `semantic`  | 义训（释义） |
-| `creative`  | 创意注音   |
+| 类型       | 说明         |
+| ---------- | ------------ |
+| `phonetic` | 音注（读音） |
+| `semantic` | 义训（释义） |
+| `creative` | 创意注音     |
 
 ### 配置
 
@@ -237,8 +265,8 @@ rounds:
 
 ```yaml
 ruby:
-  enabled: false                              # 是否启用，默认 false
-  preserve_kinds:                             # 保留的注音类型
+  enabled: false # 是否启用，默认 false
+  preserve_kinds: # 保留的注音类型
     - phonetic
     - semantic
     - creative
@@ -248,8 +276,8 @@ ruby:
 
 ```yaml
 ruby_retry:
-  enabled: false           # 是否启用注音对齐重试，默认 false
-  backend_id: 0            # 对齐使用的后端 ID，0 表示使用翻译主后端
+  enabled: false # 是否启用注音对齐重试，默认 false
+  backend_id: 0 # 对齐使用的后端 ID，0 表示使用翻译主后端
 ```
 
 ## 速率限制
@@ -267,7 +295,7 @@ ruby_retry:
 在后端设置中配置：
 
 ```yaml
-rate_limit_per_minute: 60  # 每分钟最大请求数，0 表示不限速
+rate_limit_per_minute: 60 # 每分钟最大请求数，0 表示不限速
 ```
 
 默认值为 `0`（不限速）。
@@ -278,13 +306,13 @@ rate_limit_per_minute: 60  # 每分钟最大请求数，0 表示不限速
 
 ### 重试策略
 
-| 场景             | 策略                                                         |
-| ---------------- | ------------------------------------------------------------ |
-| 429/503 速率限制 | 等待退避时间后重试同一批次，优先使用响应中的 `Retry-After` 头，最小等待 5 秒 |
-| 网络/超时错误    | 缩小批次大小后重试                                           |
-| 解析失败         | 先尝试提示词升级（L4 修复），仍失败则缩小批次               |
-| 认证错误 (401/403) | 不重试，段落延迟到下一轮                                    |
-| 缺失段落         | 在同一轮内重新分批重试一次                                   |
+| 场景               | 策略                                                                         |
+| ------------------ | ---------------------------------------------------------------------------- |
+| 429/503 速率限制   | 等待退避时间后重试同一批次，优先使用响应中的 `Retry-After` 头，最小等待 5 秒 |
+| 网络/超时错误      | 缩小批次大小后重试                                                           |
+| 解析失败           | 先尝试提示词升级（L4 修复），仍失败则缩小批次                                |
+| 认证错误 (401/403) | 不重试，段落延迟到下一轮                                                     |
+| 缺失段落           | 在同一轮内重新分批重试一次                                                   |
 
 ### 退避策略
 
@@ -298,9 +326,9 @@ rate_limit_per_minute: 60  # 每分钟最大请求数，0 表示不限速
 
 ```yaml
 retry:
-  max_attempts: 3      # 最大重试次数，默认 3，范围 0-10
-  backoff_ms: 2000     # 基础退避时间（毫秒），默认 2000，最小 1000
-  jitter: true         # 是否启用随机抖动，默认 true
+  max_attempts: 3 # 最大重试次数，默认 3，范围 0-10
+  backoff_ms: 2000 # 基础退避时间（毫秒），默认 2000，最小 1000
+  jitter: true # 是否启用随机抖动，默认 true
 ```
 
 ## 插件系统
@@ -313,17 +341,17 @@ LinguaFlow 计划支持通过 Lua 脚本扩展功能。
 
 ### 计划支持的钩子
 
-| 钩子               | 说明               |
-| ------------------ | ------------------ |
-| `before_translate` | 翻译前处理段落     |
-| `after_translate`  | 翻译后处理段落     |
+| 钩子               | 说明           |
+| ------------------ | -------------- |
+| `before_translate` | 翻译前处理段落 |
+| `after_translate`  | 翻译后处理段落 |
 
 ### 配置（预览）
 
 ```yaml
 plugins:
-  enabled: false       # 是否启用插件，默认 false
-  scripts: []          # Lua 脚本路径列表
+  enabled: false # 是否启用插件，默认 false
+  scripts: [] # Lua 脚本路径列表
 ```
 
 ## 下一步
