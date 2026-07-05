@@ -1586,6 +1586,197 @@ paths:
           description: 删除成功
         default:
           $ref: '#/components/responses/Problem'
+  /admin/users:
+    get:
+      operationId: AdminListUsers
+      summary: 列出所有用户
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: role
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: active
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 用户列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: AdminCreateUser
+      summary: 创建用户
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCreateUserRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/users/{userId}:
+    get:
+      operationId: AdminGetUser
+      summary: 获取用户详情
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: 用户详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      operationId: AdminUpdateUser
+      summary: 更新用户
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUpdateUserRequest'
+      responses:
+        '200':
+          description: 更新后的用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: AdminDisableUser
+      summary: 停用用户
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: 用户已停用
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/users/{userId}/password:
+    put:
+      operationId: AdminResetUserPassword
+      summary: 重置用户密码
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminResetPasswordRequest'
+      responses:
+        '204':
+          description: 密码已重置
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/stats:
+    get:
+      operationId: AdminGetStats
+      summary: 获取全局统计
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 全局统计
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemStats'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/audit-logs:
+    get:
+      operationId: AdminListAuditLogs
+      summary: 列出审计日志
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 审计日志列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAuditLogListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/settings:
+    get:
+      operationId: AdminGetSettings
+      summary: 获取系统配置
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 系统配置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemSettingsResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      operationId: AdminUpdateSettings
+      summary: 更新系统配置
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSystemSettingsRequest'
+      responses:
+        '200':
+          description: 更新后的系统配置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemSettingsResponse'
+        default:
+          $ref: '#/components/responses/Problem'
   /stats/summary:
     get:
       operationId: GetStatsSummary
@@ -3082,6 +3273,112 @@ components:
         updated_at:
           type: string
           format: date-time
+    AdminUserListResponse:
+      type: object
+      required:
+        - items
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        total:
+          type: integer
+    AdminCreateUserRequest:
+      type: object
+      required:
+        - username
+        - password
+        - email
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          minLength: 8
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        role:
+          type: string
+          enum:
+            - user
+            - admin
+          default: user
+    AdminUpdateUserRequest:
+      type: object
+      properties:
+        display_name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum:
+            - user
+            - admin
+        active:
+          type: boolean
+    AdminResetPasswordRequest:
+      type: object
+      required:
+        - new_password
+      properties:
+        new_password:
+          type: string
+          minLength: 8
+    SystemStats:
+      type: object
+      required:
+        - total_users
+        - active_users
+        - total_projects
+        - total_organizations
+        - total_translation_jobs
+        - total_resources
+      properties:
+        total_users:
+          type: integer
+        active_users:
+          type: integer
+        total_projects:
+          type: integer
+        total_organizations:
+          type: integer
+        total_translation_jobs:
+          type: integer
+        total_resources:
+          type: integer
+    AdminAuditLogListResponse:
+      type: object
+      required:
+        - items
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Activity'
+        total:
+          type: integer
+    SystemSettingsResponse:
+      type: object
+      properties:
+        settings:
+          type: object
+          additionalProperties:
+            type: string
+    UpdateSystemSettingsRequest:
+      type: object
+      properties:
+        settings:
+          type: object
+          additionalProperties:
+            type: string
     ExecutionPlanTemplateListResponse:
       type: object
       required:

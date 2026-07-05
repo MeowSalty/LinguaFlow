@@ -105,6 +105,18 @@ paths:
     $ref: './paths/translation-profiles.yaml#/translationProfiles'
   /translation-profiles/{translationProfileId}:
     $ref: './paths/translation-profiles.yaml#/translationProfileById'
+  /admin/users:
+    $ref: './paths/admin.yaml#/adminUsers'
+  /admin/users/{userId}:
+    $ref: './paths/admin.yaml#/adminUserById'
+  /admin/users/{userId}/password:
+    $ref: './paths/admin.yaml#/adminUserPassword'
+  /admin/stats:
+    $ref: './paths/admin.yaml#/adminStats'
+  /admin/audit-logs:
+    $ref: './paths/admin.yaml#/adminAuditLogs'
+  /admin/settings:
+    $ref: './paths/admin.yaml#/adminSettings'
   /stats/summary:
     $ref: './paths/stats.yaml#/statsSummary'
   /activity:
@@ -290,6 +302,22 @@ components:
       $ref: './components/schemas/translation-profile.yaml#/UpdateTranslationProfileRequest'
     ExecutionPlanTemplate:
       $ref: './components/schemas/execution-plan-template.yaml#/ExecutionPlanTemplate'
+    AdminUserListResponse:
+      $ref: './components/schemas/admin.yaml#/AdminUserListResponse'
+    AdminCreateUserRequest:
+      $ref: './components/schemas/admin.yaml#/AdminCreateUserRequest'
+    AdminUpdateUserRequest:
+      $ref: './components/schemas/admin.yaml#/AdminUpdateUserRequest'
+    AdminResetPasswordRequest:
+      $ref: './components/schemas/admin.yaml#/AdminResetPasswordRequest'
+    SystemStats:
+      $ref: './components/schemas/admin.yaml#/SystemStats'
+    AdminAuditLogListResponse:
+      $ref: './components/schemas/admin.yaml#/AdminAuditLogListResponse'
+    SystemSettingsResponse:
+      $ref: './components/schemas/admin.yaml#/SystemSettingsResponse'
+    UpdateSystemSettingsRequest:
+      $ref: './components/schemas/admin.yaml#/UpdateSystemSettingsRequest'
     ExecutionPlanTemplateListResponse:
       $ref: './components/schemas/execution-plan-template.yaml#/ExecutionPlanTemplateListResponse'
     CreateExecutionPlanTemplateRequest:
