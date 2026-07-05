@@ -4,7 +4,7 @@ const base = process.env.DOCS_BASE || '/'
 
 export default defineConfig({
   title: 'LinguaFlow',
-  description: '多语言翻译平台',
+  description: 'AI 驱动的多语言翻译工作台',
   base,
 
   sitemap: {
@@ -12,11 +12,11 @@ export default defineConfig({
   },
 
   head: [
-    ['link', { rel: 'icon', href: `${base}favicon.ico` }],
+    ['link', { rel: 'icon', type: 'image/svg+xml', href: `${base}logo.svg` }],
   ],
 
   locales: {
-    root: {
+    zh: {
       label: '中文',
       lang: 'zh-CN',
       themeConfig: {
@@ -28,10 +28,30 @@ export default defineConfig({
         sidebar: {
           '/zh/guide/': [
             {
-              text: '指南',
+              text: '入门',
               items: [
                 { text: '快速开始', link: '/zh/guide/getting-started' },
+                { text: '安装部署', link: '/zh/guide/installation' },
+                { text: '使用模式', link: '/zh/guide/modes' },
                 { text: '配置', link: '/zh/guide/configuration' },
+              ],
+            },
+            {
+              text: '使用指南',
+              items: [
+                { text: 'CLI 命令行', link: '/zh/guide/cli' },
+                { text: '项目管理', link: '/zh/guide/projects' },
+                { text: '翻译配置', link: '/zh/guide/translation-config' },
+                { text: '术语表管理', link: '/zh/guide/glossary' },
+                { text: '翻译审校', link: '/zh/guide/review' },
+                { text: '格式支持', link: '/zh/guide/formats' },
+              ],
+            },
+            {
+              text: '进阶',
+              items: [
+                { text: '高级功能', link: '/zh/guide/advanced' },
+                { text: '常见问题', link: '/zh/guide/faq' },
               ],
             },
           ],
@@ -44,13 +64,15 @@ export default defineConfig({
             },
           ],
         },
+        footer: {
+          message: '基于 GNU AGPL v3 许可证发布',
+          copyright: '© 2026-present LinguaFlow',
+        },
       },
     },
     en: {
       label: 'English',
       lang: 'en-US',
-      title: 'LinguaFlow',
-      description: 'Multilingual Translation Platform',
       themeConfig: {
         nav: [
           { text: 'Home', link: '/en/' },
@@ -60,10 +82,30 @@ export default defineConfig({
         sidebar: {
           '/en/guide/': [
             {
-              text: 'Guide',
+              text: 'Getting Started',
               items: [
-                { text: 'Getting Started', link: '/en/guide/getting-started' },
+                { text: 'Quick Start', link: '/en/guide/getting-started' },
+                { text: 'Installation', link: '/en/guide/installation' },
+                { text: 'Modes', link: '/en/guide/modes' },
                 { text: 'Configuration', link: '/en/guide/configuration' },
+              ],
+            },
+            {
+              text: 'User Guide',
+              items: [
+                { text: 'CLI', link: '/en/guide/cli' },
+                { text: 'Project Management', link: '/en/guide/projects' },
+                { text: 'Translation Config', link: '/en/guide/translation-config' },
+                { text: 'Glossary', link: '/en/guide/glossary' },
+                { text: 'Review', link: '/en/guide/review' },
+                { text: 'Formats', link: '/en/guide/formats' },
+              ],
+            },
+            {
+              text: 'Advanced',
+              items: [
+                { text: 'Advanced Features', link: '/en/guide/advanced' },
+                { text: 'FAQ', link: '/en/guide/faq' },
               ],
             },
           ],
@@ -75,6 +117,10 @@ export default defineConfig({
               ],
             },
           ],
+        },
+        footer: {
+          message: 'Released under the GNU AGPL v3 License',
+          copyright: '© 2026-present LinguaFlow',
         },
       },
     },
@@ -93,11 +139,6 @@ export default defineConfig({
 
     editLink: {
       pattern: 'https://github.com/MeowSalty/LinguaFlow/edit/main/docs/:path',
-    },
-
-    footer: {
-      message: '基于 MIT 许可证发布',
-      copyright: '© 2024-present LinguaFlow',
     },
   },
 })
