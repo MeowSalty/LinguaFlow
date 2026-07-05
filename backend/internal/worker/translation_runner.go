@@ -418,6 +418,9 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 func buildStrategyConfig(snapshot *service.JobExecutionSnapshot) *config.Config {
 	cfg := config.Default()
 
+	// 翻译记忆开关从快照读取（全局基础设施级功能，默认关闭）
+	cfg.TranslationMemory.Enabled = snapshot.TMEnabled
+
 	// 提示词配置
 	if len(snapshot.Rounds) > 0 {
 		cfg.Prompt.SystemTemplateContent = snapshot.Rounds[0].Prompt.Content

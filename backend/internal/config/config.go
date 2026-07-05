@@ -245,6 +245,10 @@ type ServerConfig struct {
 	Registration    RegistrationConfig `yaml:"registration"`
 }
 
+// RegistrationConfig 定义用户注册的初始默认值。
+//
+// 仅用于首次启动时初始化数据库中的 system_setting（registration_enabled），
+// 运行时以数据库为准，管理员可通过 API 热修改。修改此值对已初始化的实例无影响。
 type RegistrationConfig struct {
 	Enabled   bool `yaml:"enabled"`
 	AutoAdmin bool `yaml:"auto_admin"`
