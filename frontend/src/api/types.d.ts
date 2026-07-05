@@ -1036,6 +1036,112 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出所有用户 */
+        get: operations["AdminListUsers"];
+        put?: never;
+        /** 创建用户 */
+        post: operations["AdminCreateUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取用户详情 */
+        get: operations["AdminGetUser"];
+        put?: never;
+        post?: never;
+        /** 停用用户 */
+        delete: operations["AdminDisableUser"];
+        options?: never;
+        head?: never;
+        /** 更新用户 */
+        patch: operations["AdminUpdateUser"];
+        trace?: never;
+    };
+    "/admin/users/{userId}/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 重置用户密码 */
+        put: operations["AdminResetUserPassword"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取全局统计 */
+        get: operations["AdminGetStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/audit-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出审计日志 */
+        get: operations["AdminListAuditLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取系统配置 */
+        get: operations["AdminGetSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 更新系统配置 */
+        patch: operations["AdminUpdateSettings"];
+        trace?: never;
+    };
     "/stats/summary": {
         parameters: {
             query?: never;
@@ -1702,6 +1808,55 @@ export interface components {
             created_at?: string;
             /** Format: date-time */
             updated_at?: string;
+        };
+        AdminUserListResponse: {
+            items: components["schemas"]["User"][];
+            total: number;
+        };
+        AdminCreateUserRequest: {
+            username: string;
+            password: string;
+            /** Format: email */
+            email: string;
+            display_name?: string;
+            /**
+             * @default user
+             * @enum {string}
+             */
+            role: "user" | "admin";
+        };
+        AdminUpdateUserRequest: {
+            display_name?: string;
+            /** Format: email */
+            email?: string;
+            /** @enum {string} */
+            role?: "user" | "admin";
+            active?: boolean;
+        };
+        AdminResetPasswordRequest: {
+            new_password: string;
+        };
+        SystemStats: {
+            total_users: number;
+            active_users: number;
+            total_projects: number;
+            total_organizations: number;
+            total_translation_jobs: number;
+            total_resources: number;
+        };
+        AdminAuditLogListResponse: {
+            items: components["schemas"]["Activity"][];
+            total: number;
+        };
+        SystemSettingsResponse: {
+            settings?: {
+                [key: string]: string;
+            };
+        };
+        UpdateSystemSettingsRequest: {
+            settings?: {
+                [key: string]: string;
+            };
         };
         ExecutionPlanTemplateListResponse: {
             items: components["schemas"]["ExecutionPlanTemplate"][];
@@ -4054,6 +4209,245 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AdminListUsers: {
+        parameters: {
+            query?: {
+                search?: string;
+                role?: string;
+                active?: boolean;
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 用户列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUserListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AdminCreateUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCreateUserRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AdminGetUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 用户详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AdminDisableUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 用户已停用 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AdminUpdateUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminUpdateUserRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新后的用户 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AdminResetUserPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminResetPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description 密码已重置 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AdminGetStats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 全局统计 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemStats"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AdminListAuditLogs: {
+        parameters: {
+            query?: {
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 审计日志列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAuditLogListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AdminGetSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 系统配置 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemSettingsResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AdminUpdateSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSystemSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新后的系统配置 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemSettingsResponse"];
+                };
             };
             default: components["responses"]["Problem"];
         };
