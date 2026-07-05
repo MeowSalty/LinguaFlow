@@ -1036,6 +1036,112 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/admin/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出所有用户 */
+        get: operations["AdminListUsers"];
+        put?: never;
+        /** 创建用户 */
+        post: operations["AdminCreateUser"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/users/{userId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取用户详情 */
+        get: operations["AdminGetUser"];
+        put?: never;
+        post?: never;
+        /** 停用用户 */
+        delete: operations["AdminDisableUser"];
+        options?: never;
+        head?: never;
+        /** 更新用户 */
+        patch: operations["AdminUpdateUser"];
+        trace?: never;
+    };
+    "/admin/users/{userId}/password": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** 重置用户密码 */
+        put: operations["AdminResetUserPassword"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取全局统计 */
+        get: operations["AdminGetStats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/audit-logs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出审计日志 */
+        get: operations["AdminListAuditLogs"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 获取系统配置 */
+        get: operations["AdminGetSettings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /** 更新系统配置 */
+        patch: operations["AdminUpdateSettings"];
+        trace?: never;
+    };
     "/stats/summary": {
         parameters: {
             query?: never;
@@ -1447,9 +1553,7 @@ export interface components {
             name: string;
             /** @enum {string} */
             type: "openai" | "anthropic" | "google";
-            options?: {
-                [key: string]: unknown;
-            };
+            options?: components["schemas"]["BackendOptions"];
             /**
              * @description 每分钟请求限制；0 表示不限速
              * @default 0
@@ -1465,9 +1569,7 @@ export interface components {
             name: string;
             /** @enum {string} */
             type: "openai" | "anthropic" | "google";
-            options?: {
-                [key: string]: unknown;
-            };
+            options: components["schemas"]["BackendOptions"];
             /**
              * @description 每分钟请求限制；0 表示不限速
              * @default 0
@@ -1478,9 +1580,7 @@ export interface components {
             name: string;
             /** @enum {string} */
             type: "openai" | "anthropic" | "google";
-            options?: {
-                [key: string]: unknown;
-            };
+            options?: components["schemas"]["BackendOptions"];
             /**
              * @description 每分钟请求限制；0 表示不限速
              * @default 0
@@ -1709,6 +1809,55 @@ export interface components {
             /** Format: date-time */
             updated_at?: string;
         };
+        AdminUserListResponse: {
+            items: components["schemas"]["User"][];
+            total: number;
+        };
+        AdminCreateUserRequest: {
+            username: string;
+            password: string;
+            /** Format: email */
+            email: string;
+            display_name?: string;
+            /**
+             * @default user
+             * @enum {string}
+             */
+            role: "user" | "admin";
+        };
+        AdminUpdateUserRequest: {
+            display_name?: string;
+            /** Format: email */
+            email?: string;
+            /** @enum {string} */
+            role?: "user" | "admin";
+            active?: boolean;
+        };
+        AdminResetPasswordRequest: {
+            new_password: string;
+        };
+        SystemStats: {
+            total_users: number;
+            active_users: number;
+            total_projects: number;
+            total_organizations: number;
+            total_translation_jobs: number;
+            total_resources: number;
+        };
+        AdminAuditLogListResponse: {
+            items: components["schemas"]["Activity"][];
+            total: number;
+        };
+        SystemSettingsResponse: {
+            settings?: {
+                [key: string]: string;
+            };
+        };
+        UpdateSystemSettingsRequest: {
+            settings?: {
+                [key: string]: string;
+            };
+        };
         ExecutionPlanTemplateListResponse: {
             items: components["schemas"]["ExecutionPlanTemplate"][];
         };
@@ -1726,6 +1875,160 @@ export interface components {
             ruby_retry?: components["schemas"]["ExecutionPlanRubyRetryConfig"];
             rounds?: components["schemas"]["ExecutionRoundConfig"][];
         };
+        /**
+         * @description 响应格式：
+         *     - json_schema: 强制结构化 JSON 输出（推荐）
+         *     - json_object: 自由 JSON 对象
+         *     - text: 纯文本
+         *     - none: 不约束格式
+         * @default json_schema
+         * @enum {string}
+         */
+        ResponseFormat: "json_schema" | "json_object" | "text" | "none";
+        /** @description OpenAI 兼容后端选项。支持 OpenAI 官方 API 及 Azure OpenAI、Ollama、LM Studio 等兼容服务。 */
+        OpenAIBackendOptions: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "openai";
+            /** @description AI 服务 API 密钥 */
+            api_key: string;
+            /**
+             * @description 自定义API端点URL。留空使用默认值。
+             *     可用于指向 Azure OpenAI / Ollama / LM Studio / 自定义网关等兼容服务。
+             */
+            base_url?: string;
+            /**
+             * @description 模型名称。默认 gpt-4o-mini。
+             * @default gpt-4o-mini
+             */
+            model: string;
+            /**
+             * @description 最大生成 token 数。0 表示不限制。
+             * @default 0
+             */
+            max_tokens: number;
+            /**
+             * @description 请求超时时间（秒）。0 表示不限制。
+             * @default 60
+             */
+            timeout: number;
+            response_format?: components["schemas"]["ResponseFormat"];
+            /**
+             * Format: double
+             * @description 采样温度，控制输出的随机性。
+             *     - 不设置: 使用 API 默认值（通常为 1.0）
+             *     - 0: 确定性输出（greedy decoding）
+             *     - 0.1-0.3: 翻译任务推荐范围
+             *     - 0.7-1.0: 创意写作
+             */
+            temperature?: number;
+            /**
+             * Format: double
+             * @description 核采样参数，控制采样多样性。
+             *     - 不设置: 使用 API 默认值（通常为 1.0）
+             *     - 1.0: 不限制
+             *     - 0.9: 仅考虑累积概率前 90% 的 token
+             */
+            top_p?: number;
+        };
+        /** @description Anthropic Claude 后端选项。 */
+        AnthropicBackendOptions: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "anthropic";
+            /** @description AI 服务 API 密钥 */
+            api_key: string;
+            /** @description 自定义API端点URL。留空使用默认值。 */
+            base_url?: string;
+            /**
+             * @description 模型名称。默认 claude-sonnet-4-5。
+             * @default claude-sonnet-4-5
+             */
+            model: string;
+            /**
+             * @description 最大生成 token 数。Anthropic 必填，默认 8192。
+             * @default 8192
+             */
+            max_tokens: number;
+            /**
+             * @description 请求超时时间（秒）。0 表示不限制。
+             * @default 60
+             */
+            timeout: number;
+            response_format?: components["schemas"]["ResponseFormat"];
+            /**
+             * Format: double
+             * @description 采样温度，控制输出的随机性。
+             *     - 不设置: 使用 API 默认值（通常为 1.0）
+             *     - 0: 确定性输出
+             *     - 0.1-0.3: 翻译任务推荐范围
+             *     - Anthropic范围限制为0-1
+             */
+            temperature?: number;
+            /**
+             * Format: double
+             * @description 核采样参数，控制采样多样性。
+             *     - 不设置: 使用 API 默认值（通常为 1.0）
+             *     - 1.0: 不限制
+             */
+            top_p?: number;
+            /**
+             * @description 启用提示缓存（Prompt Caching）。
+             *     启用后，system prompt会被标记为ephemeral缓存断点，
+             *     可显著降低重复翻译任务的token消耗和延迟。
+             * @default true
+             */
+            enable_prompt_cache: boolean;
+        };
+        /** @description Google Gemini 后端选项。 */
+        GoogleBackendOptions: {
+            /**
+             * @description discriminator enum property added by openapi-typescript
+             * @enum {string}
+             */
+            type: "google";
+            /** @description AI 服务 API 密钥 */
+            api_key: string;
+            /** @description 自定义API端点URL。留空使用默认值。 */
+            base_url?: string;
+            /**
+             * @description 模型名称。默认 gemini-2.5-flash。
+             * @default gemini-2.5-flash
+             */
+            model: string;
+            /**
+             * @description 最大生成 token 数。默认 8192。
+             * @default 8192
+             */
+            max_tokens: number;
+            /**
+             * @description 请求超时时间（秒）。0 表示不限制。
+             * @default 60
+             */
+            timeout: number;
+            response_format?: components["schemas"]["ResponseFormat"];
+            /**
+             * Format: double
+             * @description 采样温度，控制输出的随机性。
+             *     - 不设置: 使用 API 默认值（通常为 1.0）
+             *     - 0: 确定性输出
+             *     - 0.1-0.3: 翻译任务推荐范围
+             *     - Google Gemini范围限制为0-2
+             */
+            temperature?: number;
+            /**
+             * Format: double
+             * @description 核采样参数，控制采样多样性。
+             *     - 不设置: 使用 API 默认值（通常为 1.0）
+             *     - 1.0: 不限制
+             */
+            top_p?: number;
+        };
+        BackendOptions: components["schemas"]["OpenAIBackendOptions"] | components["schemas"]["AnthropicBackendOptions"] | components["schemas"]["GoogleBackendOptions"];
         IncrementalUpdateChanges: {
             /** @description 新增段落数 */
             added: number;
@@ -1823,6 +2126,10 @@ export interface components {
             strategy: string;
             max_chars: number;
         };
+        ProfileProtectConfig: {
+            enabled: boolean;
+            rules?: ("code" | "link" | "placeholder" | "xml")[];
+        };
         ProfileRubyConfig: {
             enabled: boolean;
             /**
@@ -1834,10 +2141,6 @@ export interface components {
              *     ]
              */
             preserve_kinds: ("phonetic" | "semantic" | "creative")[];
-        };
-        ProfileProtectConfig: {
-            enabled: boolean;
-            rules?: ("code" | "link" | "placeholder" | "xml")[];
         };
         ProfilePostprocessConfig: {
             enabled: boolean;
@@ -3906,6 +4209,245 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AdminListUsers: {
+        parameters: {
+            query?: {
+                search?: string;
+                role?: string;
+                active?: boolean;
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 用户列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminUserListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AdminCreateUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminCreateUserRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AdminGetUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 用户详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AdminDisableUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 用户已停用 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AdminUpdateUser: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminUpdateUserRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新后的用户 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["User"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AdminResetUserPassword: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                userId: components["parameters"]["UserId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminResetPasswordRequest"];
+            };
+        };
+        responses: {
+            /** @description 密码已重置 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AdminGetStats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 全局统计 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemStats"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AdminListAuditLogs: {
+        parameters: {
+            query?: {
+                cursor?: components["parameters"]["Cursor"];
+                limit?: components["parameters"]["Limit"];
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 审计日志列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminAuditLogListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AdminGetSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 系统配置 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemSettingsResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    AdminUpdateSettings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateSystemSettingsRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新后的系统配置 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemSettingsResponse"];
+                };
             };
             default: components["responses"]["Problem"];
         };

@@ -114,11 +114,15 @@ const templateNavOptions = computed<DropdownOption[]>(() => [
   },
 ])
 
+const isAdmin = computed(() => auth.user?.role === 'admin')
+
 const isTemplateRoute = computed(() =>
   ['/prompt-templates', '/translation-profiles', '/execution-plan-templates'].some((r) =>
     route.path.startsWith(r),
   ),
 )
+
+const isAdminRoute = computed(() => route.path.startsWith('/admin'))
 
 const onSelectTemplateNav = (key: string | number): void => {
   router.push(String(key))
@@ -197,6 +201,15 @@ const onSelectLocale = (key: string | number): void => {
         >
           <IconifyIcon icon="carbon:information" class="text-base" />
           {{ t('nav.about') }}
+        </RouterLink>
+        <RouterLink
+          v-if="isAdmin"
+          to="/admin"
+          class="flex items-center gap-1.5 text-lf-text-muted no-underline transition-colors hover:text-brand-500"
+          :class="{ '!text-brand-500 font-semibold': isAdminRoute }"
+        >
+          <IconifyIcon icon="carbon:security" class="text-base" />
+          {{ t('nav.admin') }}
         </RouterLink>
       </nav>
 

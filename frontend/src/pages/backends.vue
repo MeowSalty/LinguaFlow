@@ -29,6 +29,7 @@ import { useBackendsStore } from '@/stores/backends'
 
 type Backend = ApiSchemas['Backend']
 type BackendType = Backend['type']
+type BackendOptions = ApiSchemas['BackendOptions']
 
 interface BackendFormModel {
   name: string
@@ -36,7 +37,11 @@ interface BackendFormModel {
   api_key: string
   base_url: string
   model: string
+  temperatureEnabled: boolean
   temperature: number
+  top_pEnabled: boolean
+  top_p: number
+  maxTokensEnabled: boolean
   max_tokens: number
   timeout: number
   response_format: string
@@ -59,7 +64,11 @@ const formModel = reactive<BackendFormModel>({
   api_key: '',
   base_url: '',
   model: '',
+  temperatureEnabled: false,
   temperature: 0.2,
+  top_pEnabled: false,
+  top_p: 1.0,
+  maxTokensEnabled: false,
   max_tokens: 0,
   timeout: 60,
   response_format: 'json_schema',
@@ -81,6 +90,7 @@ const filterTypeOptions = computed<SelectOption[]>(() => [
 const responseFormatOptions = computed<SelectOption[]>(() => [
   { label: 'json_schema', value: 'json_schema' },
   { label: 'json_object', value: 'json_object' },
+  { label: 'text', value: 'text' },
   { label: 'none', value: 'none' },
 ])
 
@@ -99,6 +109,22 @@ const submitting = computed(() => backends.creating || backends.updating)
 
 const requiresApiKey = computed(() => Boolean(formModel.type))
 const isAnthropic = computed(() => formModel.type === 'anthropic')
+
+const temperatureMax = computed(() => (formModel.type === 'anthropic' ? 1 : 2))
+const maxTokensMin = computed(() => (formModel.type === 'openai' ? 0 : 1))
+const maxTokensDefault = computed(() => (formModel.type === 'openai' ? 0 : 8192))
+
+watch(
+  () => formModel.type,
+  () => {
+    if (formModel.temperature > temperatureMax.value) {
+      formModel.temperature = temperatureMax.value
+    }
+    if (formModel.max_tokens < maxTokensMin.value) {
+      formModel.max_tokens = maxTokensMin.value
+    }
+  },
+)
 
 const rules = computed<FormRules>(() => ({
   name: [
@@ -130,7 +156,11 @@ const resetForm = (): void => {
   formModel.api_key = ''
   formModel.base_url = ''
   formModel.model = ''
+  formModel.temperatureEnabled = false
   formModel.temperature = 0.2
+  formModel.top_pEnabled = false
+  formModel.top_p = 1.0
+  formModel.maxTokensEnabled = false
   formModel.max_tokens = 0
   formModel.timeout = 60
   formModel.response_format = 'json_schema'
@@ -148,24 +178,33 @@ const openEditDrawer = (backend: Backend): void => {
   editingBackend.value = backend
   formModel.name = backend.name
   formModel.type = backend.type
-  const opts = backend.options ?? {}
-  formModel.api_key = typeof opts.api_key === 'string' ? opts.api_key : ''
-  formModel.base_url = typeof opts.base_url === 'string' ? opts.base_url : ''
-  formModel.model = typeof opts.model === 'string' ? opts.model : ''
-  formModel.temperature = typeof opts.temperature === 'number' ? opts.temperature : 0.2
-  formModel.max_tokens = typeof opts.max_tokens === 'number' ? opts.max_tokens : 0
-  formModel.timeout = typeof opts.timeout === 'number' ? opts.timeout : 60
+  const opts = backend.options as Record<string, unknown> | undefined
+  formModel.api_key = typeof opts?.api_key === 'string' ? opts.api_key : ''
+  formModel.base_url = typeof opts?.base_url === 'string' ? opts.base_url : ''
+  formModel.model = typeof opts?.model === 'string' ? opts.model : ''
+  formModel.temperatureEnabled = typeof opts?.temperature === 'number'
+  formModel.temperature =
+    typeof opts?.temperature === 'number' ? Math.min(opts.temperature, temperatureMax.value) : 0.2
+  formModel.top_pEnabled = typeof opts?.top_p === 'number'
+  formModel.top_p = typeof opts?.top_p === 'number' ? opts.top_p : 1.0
+  formModel.maxTokensEnabled = typeof opts?.max_tokens === 'number'
+  formModel.max_tokens =
+    typeof opts?.max_tokens === 'number'
+      ? Math.max(opts.max_tokens, maxTokensMin.value)
+      : maxTokensDefault.value
+  formModel.timeout = typeof opts?.timeout === 'number' ? opts.timeout : 60
   formModel.response_format =
-    typeof opts.response_format === 'string' ? opts.response_format : 'json_schema'
+    typeof opts?.response_format === 'string' ? opts.response_format : 'json_schema'
   formModel.enable_prompt_cache =
-    typeof opts.enable_prompt_cache === 'boolean' ? opts.enable_prompt_cache : true
+    typeof opts?.enable_prompt_cache === 'boolean' ? opts.enable_prompt_cache : true
   formModel.rate_limit_per_minute = backend.rate_limit_per_minute ?? 0
   drawerVisible.value = true
 }
 
-const buildOptions = (): Record<string, unknown> => {
+const buildOptions = (): BackendOptions => {
   const options: Record<string, unknown> = {}
 
+  options.type = formModel.type
   if (formModel.api_key.trim()) {
     options.api_key = formModel.api_key.trim()
   }
@@ -175,10 +214,13 @@ const buildOptions = (): Record<string, unknown> => {
   if (formModel.model.trim()) {
     options.model = formModel.model.trim()
   }
-  if (formModel.temperature !== 0.2) {
+  if (formModel.temperatureEnabled) {
     options.temperature = formModel.temperature
   }
-  if (formModel.max_tokens > 0) {
+  if (formModel.top_pEnabled) {
+    options.top_p = formModel.top_p
+  }
+  if (formModel.maxTokensEnabled) {
     options.max_tokens = formModel.max_tokens
   }
   if (formModel.timeout !== 60) {
@@ -191,7 +233,7 @@ const buildOptions = (): Record<string, unknown> => {
     options.enable_prompt_cache = false
   }
 
-  return options
+  return options as BackendOptions
 }
 
 const onSubmit = async (): Promise<void> => {
@@ -265,8 +307,8 @@ const getBackendTypeTagType = (type: string): 'success' | 'warning' | 'info' | '
 }
 
 const getModelDisplay = (backend: Backend): string => {
-  const opts = backend.options ?? {}
-  if (typeof opts.model === 'string' && opts.model) {
+  const opts = backend.options as Record<string, unknown> | undefined
+  if (typeof opts?.model === 'string' && opts.model) {
     return opts.model
   }
   switch (backend.type) {
@@ -544,27 +586,62 @@ onMounted(() => {
 
           <NFormItem :label="t('backends.form.temperature')" path="temperature">
             <div class="flex w-full items-center gap-3">
-              <NSlider
-                v-model:value="formModel.temperature"
-                :min="0"
-                :max="2"
-                :step="0.1"
-                class="flex-1"
-              />
-              <span class="w-10 text-right font-mono text-sm text-lf-text">
-                {{ formModel.temperature.toFixed(1) }}
+              <NSwitch v-model:value="formModel.temperatureEnabled" />
+              <template v-if="formModel.temperatureEnabled">
+                <NSlider
+                  v-model:value="formModel.temperature"
+                  :min="0"
+                  :max="temperatureMax"
+                  :step="0.1"
+                  class="flex-1"
+                />
+                <span class="w-10 text-right font-mono text-sm text-lf-text">
+                  {{ formModel.temperature.toFixed(1) }}
+                </span>
+              </template>
+              <span v-else class="text-xs text-lf-text-muted">
+                {{ t('backends.form.useApiDefault') }}
+              </span>
+            </div>
+          </NFormItem>
+
+          <NFormItem :label="t('backends.form.topP')" path="top_p">
+            <div class="flex w-full items-center gap-3">
+              <NSwitch v-model:value="formModel.top_pEnabled" />
+              <template v-if="formModel.top_pEnabled">
+                <NSlider
+                  v-model:value="formModel.top_p"
+                  :min="0"
+                  :max="1"
+                  :step="0.05"
+                  class="flex-1"
+                />
+                <span class="w-10 text-right font-mono text-sm text-lf-text">
+                  {{ formModel.top_p.toFixed(2) }}
+                </span>
+              </template>
+              <span v-else class="text-xs text-lf-text-muted">
+                {{ t('backends.form.useApiDefault') }}
               </span>
             </div>
           </NFormItem>
 
           <NFormItem :label="t('backends.form.maxTokens')" path="max_tokens">
-            <NInputNumber
-              v-model:value="formModel.max_tokens"
-              :min="0"
-              :max="1000000"
-              :placeholder="t('backends.form.maxTokensPlaceholder')"
-              class="w-full"
-            />
+            <div class="flex w-full items-center gap-3">
+              <NSwitch v-model:value="formModel.maxTokensEnabled" />
+              <template v-if="formModel.maxTokensEnabled">
+                <NInputNumber
+                  v-model:value="formModel.max_tokens"
+                  :min="maxTokensMin"
+                  :max="1000000"
+                  :placeholder="t('backends.form.maxTokensPlaceholder')"
+                  class="flex-1"
+                />
+              </template>
+              <span v-else class="text-xs text-lf-text-muted">
+                {{ t('backends.form.useApiDefault') }}
+              </span>
+            </div>
           </NFormItem>
 
           <NFormItem :label="t('backends.form.timeout')" path="timeout">
