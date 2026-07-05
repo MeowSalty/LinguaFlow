@@ -471,6 +471,21 @@ var (
 			},
 		},
 	}
+	// SystemSettingsColumns holds the columns for the "system_settings" table.
+	SystemSettingsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "key", Type: field.TypeString, Unique: true},
+		{Name: "value", Type: field.TypeString, Nullable: true, Size: 2147483647},
+		{Name: "description", Type: field.TypeString, Nullable: true},
+	}
+	// SystemSettingsTable holds the schema information for the "system_settings" table.
+	SystemSettingsTable = &schema.Table{
+		Name:       "system_settings",
+		Columns:    SystemSettingsColumns,
+		PrimaryKey: []*schema.Column{SystemSettingsColumns[0]},
+	}
 	// TmEntriesColumns holds the columns for the "tm_entries" table.
 	TmEntriesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -652,6 +667,7 @@ var (
 		ResourcesTable,
 		SegmentsTable,
 		SyncTasksTable,
+		SystemSettingsTable,
 		TmEntriesTable,
 		TranslationJobsTable,
 		TranslationProfilesTable,

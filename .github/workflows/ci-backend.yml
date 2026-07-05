@@ -2,7 +2,7 @@ name: 后端 CI
 
 on:
   push:
-    branches: [main, backend]
+    branches: [main]
     paths:
       - 'backend/**'
       - '.github/workflows/ci-backend.yml'

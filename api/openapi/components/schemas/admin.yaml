@@ -1,0 +1,95 @@
+AdminUserListResponse:
+  type: object
+  required: [items, total]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: './user.yaml#/User'
+    total:
+      type: integer
+
+AdminCreateUserRequest:
+  type: object
+  required: [username, password, email]
+  properties:
+    username:
+      type: string
+    password:
+      type: string
+      minLength: 8
+    email:
+      type: string
+      format: email
+    display_name:
+      type: string
+    role:
+      type: string
+      enum: [user, admin]
+      default: user
+
+AdminUpdateUserRequest:
+  type: object
+  properties:
+    display_name:
+      type: string
+    email:
+      type: string
+      format: email
+    role:
+      type: string
+      enum: [user, admin]
+    active:
+      type: boolean
+
+AdminResetPasswordRequest:
+  type: object
+  required: [new_password]
+  properties:
+    new_password:
+      type: string
+      minLength: 8
+
+SystemStats:
+  type: object
+  required: [total_users, active_users, total_projects, total_organizations, total_translation_jobs, total_resources]
+  properties:
+    total_users:
+      type: integer
+    active_users:
+      type: integer
+    total_projects:
+      type: integer
+    total_organizations:
+      type: integer
+    total_translation_jobs:
+      type: integer
+    total_resources:
+      type: integer
+
+AdminAuditLogListResponse:
+  type: object
+  required: [items, total]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: './job.yaml#/Activity'
+    total:
+      type: integer
+
+SystemSettingsResponse:
+  type: object
+  properties:
+    settings:
+      type: object
+      additionalProperties:
+        type: string
+
+UpdateSystemSettingsRequest:
+  type: object
+  properties:
+    settings:
+      type: object
+      additionalProperties:
+        type: string

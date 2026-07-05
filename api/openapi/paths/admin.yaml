@@ -1,0 +1,196 @@
+adminUsers:
+  get:
+    operationId: AdminListUsers
+    summary: 列出所有用户
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: search
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: role
+        in: query
+        required: false
+        schema:
+          type: string
+      - name: active
+        in: query
+        required: false
+        schema:
+          type: boolean
+      - $ref: '../base.yaml#/components/parameters/Cursor'
+      - $ref: '../base.yaml#/components/parameters/Limit'
+    responses:
+      '200':
+        description: 用户列表
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/AdminUserListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  post:
+    operationId: AdminCreateUser
+    summary: 创建用户
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/AdminCreateUserRequest'
+    responses:
+      '201':
+        description: 创建成功
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/User'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+adminUserById:
+  get:
+    operationId: AdminGetUser
+    summary: 获取用户详情
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: '../base.yaml#/components/parameters/UserId'
+    responses:
+      '200':
+        description: 用户详情
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/User'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  patch:
+    operationId: AdminUpdateUser
+    summary: 更新用户
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: '../base.yaml#/components/parameters/UserId'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/AdminUpdateUserRequest'
+    responses:
+      '200':
+        description: 更新后的用户
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/User'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  delete:
+    operationId: AdminDisableUser
+    summary: 停用用户
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: '../base.yaml#/components/parameters/UserId'
+    responses:
+      '204':
+        description: 用户已停用
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+adminUserPassword:
+  put:
+    operationId: AdminResetUserPassword
+    summary: 重置用户密码
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: '../base.yaml#/components/parameters/UserId'
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/AdminResetPasswordRequest'
+    responses:
+      '204':
+        description: 密码已重置
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+adminStats:
+  get:
+    operationId: AdminGetStats
+    summary: 获取全局统计
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 全局统计
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/SystemStats'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+adminAuditLogs:
+  get:
+    operationId: AdminListAuditLogs
+    summary: 列出审计日志
+    security:
+      - bearerAuth: []
+    parameters:
+      - $ref: '../base.yaml#/components/parameters/Cursor'
+      - $ref: '../base.yaml#/components/parameters/Limit'
+    responses:
+      '200':
+        description: 审计日志列表
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/AdminAuditLogListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+adminSettings:
+  get:
+    operationId: AdminGetSettings
+    summary: 获取系统配置
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 系统配置
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/SystemSettingsResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  patch:
+    operationId: AdminUpdateSettings
+    summary: 更新系统配置
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/UpdateSystemSettingsRequest'
+    responses:
+      '200':
+        description: 更新后的系统配置
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/SystemSettingsResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

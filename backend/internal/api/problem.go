@@ -47,6 +47,8 @@ func writeServiceError(w http.ResponseWriter, err error) {
 		writeProblem(w, http.StatusConflict, "conflict", "用户已存在")
 	case errors.Is(err, service.ErrForbidden):
 		writeProblem(w, http.StatusForbidden, "forbidden", "没有权限执行该操作")
+	case errors.Is(err, service.ErrRegistrationClosed):
+		writeProblem(w, http.StatusForbidden, "forbidden", "注册已关闭")
 	case errors.Is(err, service.ErrProjectNotFound):
 		writeProblem(w, http.StatusNotFound, "not_found", "资源不存在")
 	default:
