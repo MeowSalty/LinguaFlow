@@ -52,10 +52,21 @@ func AuthConfigFromServer(cfg config.ServerConfig) AuthConfig {
 }
 
 type AuthService struct {
-	client *ent.Client
-	cfg    AuthConfig
-	now    func() time.Time
-	rand   io.Reader
+	client       *ent.Client
+	cfg          AuthConfig
+	now          func() time.Time
+	rand         io.Reader
+	registration *RegistrationConfig
+	adminSvc     *AdminService
+}
+
+func (s *AuthService) SetAdminService(adminSvc *AdminService) {
+	s.adminSvc = adminSvc
+}
+
+type RegistrationConfig struct {
+	Enabled   bool
+	AutoAdmin bool
 }
 
 type AccessTokenClaims struct {
@@ -85,16 +96,27 @@ type Session struct {
 	User             *ent.User
 }
 
-func NewAuthService(client *ent.Client, cfg AuthConfig) *AuthService {
+func NewAuthService(client *ent.Client, cfg AuthConfig, registration *RegistrationConfig) *AuthService {
 	return &AuthService{
-		client: client,
-		cfg:    cfg,
-		now:    time.Now,
-		rand:   crand.Reader,
+		client:       client,
+		cfg:          cfg,
+		now:          time.Now,
+		rand:         crand.Reader,
+		registration: registration,
 	}
 }
 
 func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*Session, error) {
+	// Database-first: check registration_enabled from system_settings table.
+	// Falls back to YAML config if admin service is not yet initialized.
+	if s.adminSvc != nil {
+		if !s.adminSvc.IsRegistrationEnabled(ctx) {
+			return nil, ErrRegistrationClosed
+		}
+	} else if s.registration != nil && !s.registration.Enabled {
+		return nil, ErrRegistrationClosed
+	}
+
 	username := normalizeIdentity(input.Username)
 	email := normalizeIdentity(input.Email)
 	if username == "" || email == "" || len(input.Password) < 8 {
@@ -107,12 +129,29 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*Sessi
 	if err != nil {
 		return nil, fmt.Errorf("hash password: %w", err)
 	}
+
+	// Auto-admin: first registered user becomes admin if no admin exists.
+	role := SystemRoleUser
+	if s.adminSvc != nil {
+		if s.adminSvc.ShouldAutoAdmin(ctx) {
+			role = SystemRoleAdmin
+		}
+	} else if s.registration != nil && s.registration.AutoAdmin {
+		adminCount, err := s.client.User.Query().Where(user.RoleEQ(SystemRoleAdmin)).Count(ctx)
+		if err != nil {
+			return nil, err
+		}
+		if adminCount == 0 {
+			role = SystemRoleAdmin
+		}
+	}
+
 	createdUser, err := s.client.User.Create().
 		SetUsername(username).
 		SetPasswordHash(passwordHash).
 		SetEmail(email).
 		SetDisplayName(strings.TrimSpace(input.DisplayName)).
-		SetRole(SystemRoleUser).
+		SetRole(role).
 		SetActive(true).
 		Save(ctx)
 	if err != nil {

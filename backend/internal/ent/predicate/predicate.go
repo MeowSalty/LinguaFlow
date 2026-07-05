@@ -45,6 +45,9 @@ type Segment func(*sql.Selector)
 // SyncTask is the predicate function for synctask builders.
 type SyncTask func(*sql.Selector)
 
+// SystemSetting is the predicate function for systemsetting builders.
+type SystemSetting func(*sql.Selector)
+
 // TMEntry is the predicate function for tmentry builders.
 type TMEntry func(*sql.Selector)
 

@@ -38,6 +38,8 @@ type Tx struct {
 	Segment *SegmentClient
 	// SyncTask is the client for interacting with the SyncTask builders.
 	SyncTask *SyncTaskClient
+	// SystemSetting is the client for interacting with the SystemSetting builders.
+	SystemSetting *SystemSettingClient
 	// TMEntry is the client for interacting with the TMEntry builders.
 	TMEntry *TMEntryClient
 	// TranslationJob is the client for interacting with the TranslationJob builders.
@@ -192,6 +194,7 @@ func (tx *Tx) init() {
 	tx.Resource = NewResourceClient(tx.config)
 	tx.Segment = NewSegmentClient(tx.config)
 	tx.SyncTask = NewSyncTaskClient(tx.config)
+	tx.SystemSetting = NewSystemSettingClient(tx.config)
 	tx.TMEntry = NewTMEntryClient(tx.config)
 	tx.TranslationJob = NewTranslationJobClient(tx.config)
 	tx.TranslationProfile = NewTranslationProfileClient(tx.config)

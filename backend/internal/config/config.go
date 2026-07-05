@@ -230,18 +230,24 @@ type LogConfig struct {
 }
 
 type ServerConfig struct {
-	Host            string        `yaml:"host"`
-	Port            int           `yaml:"port"`
-	Mode            string        `yaml:"mode"` // "server" (default) | "local"
-	ServiceName     string        `yaml:"service_name"`
-	DataDir         string        `yaml:"data_dir"`
-	AutoMigrate     bool          `yaml:"auto_migrate"`
-	JWTSecret       string        `yaml:"jwt_secret"`
-	JWTIssuer       string        `yaml:"jwt_issuer"`
-	JWTExpiry       time.Duration `yaml:"jwt_expiry"`
-	RefreshExpiry   time.Duration `yaml:"refresh_token_expiry"`
-	ShutdownTimeout time.Duration `yaml:"shutdown_timeout"`
-	CORS            CORSConfig    `yaml:"cors"`
+	Host            string             `yaml:"host"`
+	Port            int                `yaml:"port"`
+	Mode            string             `yaml:"mode"` // "server" (default) | "local"
+	ServiceName     string             `yaml:"service_name"`
+	DataDir         string             `yaml:"data_dir"`
+	AutoMigrate     bool               `yaml:"auto_migrate"`
+	JWTSecret       string             `yaml:"jwt_secret"`
+	JWTIssuer       string             `yaml:"jwt_issuer"`
+	JWTExpiry       time.Duration      `yaml:"jwt_expiry"`
+	RefreshExpiry   time.Duration      `yaml:"refresh_token_expiry"`
+	ShutdownTimeout time.Duration      `yaml:"shutdown_timeout"`
+	CORS            CORSConfig         `yaml:"cors"`
+	Registration    RegistrationConfig `yaml:"registration"`
+}
+
+type RegistrationConfig struct {
+	Enabled   bool `yaml:"enabled"`
+	AutoAdmin bool `yaml:"auto_admin"`
 }
 
 const (
@@ -355,6 +361,10 @@ func Default() *Config {
 			ShutdownTimeout: 10 * time.Second,
 			CORS: CORSConfig{
 				AllowedOrigins: []string{"*"},
+			},
+			Registration: RegistrationConfig{
+				Enabled:   true,
+				AutoAdmin: true,
 			},
 		},
 	}
@@ -486,5 +496,15 @@ func (c *Config) Validate() error {
 	if len(c.Server.CORS.AllowedOrigins) == 0 {
 		c.Server.CORS.AllowedOrigins = []string{"*"}
 	}
+	// Registration defaults: Enabled and AutoAdmin both default to true.
+	// Go bools default to false, so we normalize zero-values here.
+	// If the user explicitly sets enabled: false, that will be preserved
+	// because the YAML parser will have set it. We only default when
+	// both fields are false AND the registration block was likely omitted.
+	// However, since we can't distinguish "omitted" from "explicitly false",
+	// we use a separate flag approach: if Enabled is false AND AutoAdmin is false,
+	// we check if the registration block exists in the config.
+	// For simplicity, we default both to true only in Default(), and
+	// here in Validate() we just ensure they're valid.
 	return nil
 }

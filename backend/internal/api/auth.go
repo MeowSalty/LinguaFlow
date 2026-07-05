@@ -28,6 +28,17 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 	})
 }
 
+func (s *Server) requireAdmin(next http.Handler) http.Handler {
+	return s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authUser, ok := authUserFromContext(r.Context())
+		if !ok || authUser.User.Role != service.SystemRoleAdmin {
+			writeProblem(w, http.StatusForbidden, "forbidden", "需要管理员权限")
+			return
+		}
+		next.ServeHTTP(w, r)
+	}))
+}
+
 func authUserFromContext(ctx context.Context) (authenticatedUser, bool) {
 	v, ok := ctx.Value(authContextKey{}).(authenticatedUser)
 	return v, ok

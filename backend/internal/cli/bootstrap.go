@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"strings"
 
 	"entgo.io/ent/dialect"
 	entsql "entgo.io/ent/dialect/sql"
@@ -76,6 +77,12 @@ func bootstrapServer(ctx context.Context, opts BootOptions) (*api.Server, net.Li
 			_ = db.Close()
 			return nil, nil, nil, fmt.Errorf("ensure local user: %w", err)
 		}
+	}
+
+	if err := ensureAdminUser(ctx, client, opts.Logger); err != nil {
+		_ = client.Close()
+		_ = db.Close()
+		return nil, nil, nil, fmt.Errorf("ensure admin user: %w", err)
 	}
 
 	ln, err := net.Listen("tcp", cfg.Server.Address())
@@ -160,4 +167,68 @@ func randomBcryptHash() (string, error) {
 		return "", err
 	}
 	return string(hash), nil
+}
+
+// ensureAdminUser 根据环境变量创建或确保管理员用户。
+// 优先级：LINGUAFLOW_ADMIN_USERNAME 环境变量方案。
+// 用户已存在时不会修改密码，只会确保 role 为 admin。
+func ensureAdminUser(ctx context.Context, client *ent.Client, logger *slog.Logger) error {
+	adminUsername := os.Getenv("LINGUAFLOW_ADMIN_USERNAME")
+	if adminUsername == "" {
+		return nil
+	}
+
+	adminUsername = strings.ToLower(strings.TrimSpace(adminUsername))
+
+	existing, err := client.User.Query().Where(user.UsernameEQ(adminUsername)).Only(ctx)
+	if err == nil {
+		if existing.Role != "admin" {
+			if err := client.User.UpdateOneID(existing.ID).SetRole("admin").Exec(ctx); err != nil {
+				return fmt.Errorf("ensure admin role: %w", err)
+			}
+			logger.Info("upgraded user role to admin", "username", adminUsername)
+		}
+		return nil
+	}
+	if !ent.IsNotFound(err) {
+		return fmt.Errorf("query admin user: %w", err)
+	}
+
+	adminPassword := os.Getenv("LINGUAFLOW_ADMIN_PASSWORD")
+	if adminPassword == "" {
+		logger.Warn("LINGUAFLOW_ADMIN_USERNAME is set but user does not exist and LINGUAFLOW_ADMIN_PASSWORD is not set, skipping admin creation",
+			"username", adminUsername)
+		return nil
+	}
+
+	passwordHash, err := bcrypt.GenerateFromPassword([]byte(adminPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("hash admin password: %w", err)
+	}
+
+	u, err := client.User.Create().
+		SetUsername(adminUsername).
+		SetPasswordHash(string(passwordHash)).
+		SetEmail(adminUsername + "@admin.local").
+		SetRole("admin").
+		SetActive(true).
+		Save(ctx)
+	if err != nil {
+		if ent.IsConstraintError(err) {
+			existing, err2 := client.User.Query().Where(user.UsernameEQ(adminUsername)).Only(ctx)
+			if err2 != nil {
+				return fmt.Errorf("query admin user after constraint error: %w", err2)
+			}
+			if existing.Role != "admin" {
+				if err := client.User.UpdateOneID(existing.ID).SetRole("admin").Exec(ctx); err != nil {
+					return fmt.Errorf("ensure admin role: %w", err)
+				}
+			}
+			return nil
+		}
+		return fmt.Errorf("create admin user: %w", err)
+	}
+
+	logger.Info("created admin user from environment variables", "username", u.Username)
+	return nil
 }

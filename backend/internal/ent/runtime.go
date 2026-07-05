@@ -19,6 +19,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
@@ -487,6 +488,25 @@ func init() {
 	synctask.DefaultStatus = synctaskDescStatus.Default.(string)
 	// synctask.StatusValidator is a validator for the "status" field. It is called by the builders before save.
 	synctask.StatusValidator = synctaskDescStatus.Validators[0].(func(string) error)
+	systemsettingMixin := schema.SystemSetting{}.Mixin()
+	systemsettingMixinFields0 := systemsettingMixin[0].Fields()
+	_ = systemsettingMixinFields0
+	systemsettingFields := schema.SystemSetting{}.Fields()
+	_ = systemsettingFields
+	// systemsettingDescCreatedAt is the schema descriptor for created_at field.
+	systemsettingDescCreatedAt := systemsettingMixinFields0[0].Descriptor()
+	// systemsetting.DefaultCreatedAt holds the default value on creation for the created_at field.
+	systemsetting.DefaultCreatedAt = systemsettingDescCreatedAt.Default.(func() time.Time)
+	// systemsettingDescUpdatedAt is the schema descriptor for updated_at field.
+	systemsettingDescUpdatedAt := systemsettingMixinFields0[1].Descriptor()
+	// systemsetting.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	systemsetting.DefaultUpdatedAt = systemsettingDescUpdatedAt.Default.(func() time.Time)
+	// systemsetting.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	systemsetting.UpdateDefaultUpdatedAt = systemsettingDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// systemsettingDescKey is the schema descriptor for key field.
+	systemsettingDescKey := systemsettingFields[0].Descriptor()
+	// systemsetting.KeyValidator is a validator for the "key" field. It is called by the builders before save.
+	systemsetting.KeyValidator = systemsettingDescKey.Validators[0].(func(string) error)
 	tmentryMixin := schema.TMEntry{}.Mixin()
 	tmentryMixinFields0 := tmentryMixin[0].Fields()
 	_ = tmentryMixinFields0

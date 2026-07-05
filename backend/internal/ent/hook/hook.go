@@ -165,6 +165,18 @@ func (f SyncTaskFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, er
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SyncTaskMutation", m)
 }
 
+// The SystemSettingFunc type is an adapter to allow the use of ordinary
+// function as SystemSetting mutator.
+type SystemSettingFunc func(context.Context, *ent.SystemSettingMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SystemSettingFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SystemSettingMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SystemSettingMutation", m)
+}
+
 // The TMEntryFunc type is an adapter to allow the use of ordinary
 // function as TMEntry mutator.
 type TMEntryFunc func(context.Context, *ent.TMEntryMutation) (ent.Value, error)

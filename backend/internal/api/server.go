@@ -30,6 +30,7 @@ type Server struct {
 	mode                  string    // "server" | "local"
 	localUser             *ent.User // 本地模式下非 nil
 	authService           *service.AuthService
+	adminService          *service.AdminService
 	userService           *service.UserService
 	backendSvc            *service.BackendService
 	projectSvc            *service.ProjectService
@@ -72,17 +73,34 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 	}
 
 	s := &Server{
-		config:      cfg,
-		logger:      logger,
-		db:          db,
-		entClient:   client,
-		mode:        mode,
-		localUser:   localUser,
-		authService: service.NewAuthService(client, service.AuthConfigFromServer(cfg.Server)),
+		config:    cfg,
+		logger:    logger,
+		db:        db,
+		entClient: client,
+		mode:      mode,
+		localUser: localUser,
+		authService: service.NewAuthService(client, service.AuthConfigFromServer(cfg.Server), &service.RegistrationConfig{
+			Enabled:   cfg.Server.Registration.Enabled,
+			AutoAdmin: cfg.Server.Registration.AutoAdmin,
+		}),
 		eventBroker: event.NewBroker(),
 	}
 	limiterPool := backend.NewLimiterPool()
 	s.userService = service.NewUserService(client, s.authService)
+	s.adminService = service.NewAdminService(client)
+	s.authService.SetAdminService(s.adminService)
+
+	// Seed default system settings from YAML config (only writes if table is empty for each key).
+	regEnabled := "true"
+	if !cfg.Server.Registration.Enabled {
+		regEnabled = "false"
+	}
+	if err := s.adminService.InitializeSettings(context.Background(), map[string]string{
+		service.SettingRegistrationEnabled: regEnabled,
+		service.SettingDefaultUserRole:     "user",
+	}); err != nil {
+		logger.Warn("failed to initialize system settings", "error", err)
+	}
 	s.backendSvc = service.NewBackendService(client, s.userService, limiterPool)
 	s.projectSvc = service.NewProjectService(client, s.userService)
 	s.executionPlanSvc = service.NewExecutionPlanService(client, s.userService)

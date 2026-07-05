@@ -374,3 +374,45 @@ func (s *Server) UpdateTranslationProfile(w http.ResponseWriter, r *http.Request
 func (s *Server) DeleteTranslationProfile(w http.ResponseWriter, r *http.Request, _ TranslationProfileId) {
 	s.requireAuth(http.HandlerFunc(s.handleDeleteTranslationProfile)).ServeHTTP(w, r)
 }
+
+// ---- 管理员适配器 ----
+
+func (s *Server) AdminListUsers(w http.ResponseWriter, r *http.Request, _ AdminListUsersParams) {
+	s.requireAdmin(http.HandlerFunc(s.handleAdminListUsers)).ServeHTTP(w, r)
+}
+
+func (s *Server) AdminGetUser(w http.ResponseWriter, r *http.Request, _ UserId) {
+	s.requireAdmin(http.HandlerFunc(s.handleAdminGetUser)).ServeHTTP(w, r)
+}
+
+func (s *Server) AdminCreateUser(w http.ResponseWriter, r *http.Request) {
+	s.requireAdmin(http.HandlerFunc(s.handleAdminCreateUser)).ServeHTTP(w, r)
+}
+
+func (s *Server) AdminUpdateUser(w http.ResponseWriter, r *http.Request, _ UserId) {
+	s.requireAdmin(http.HandlerFunc(s.handleAdminUpdateUser)).ServeHTTP(w, r)
+}
+
+func (s *Server) AdminDisableUser(w http.ResponseWriter, r *http.Request, _ UserId) {
+	s.requireAdmin(http.HandlerFunc(s.handleAdminDisableUser)).ServeHTTP(w, r)
+}
+
+func (s *Server) AdminResetUserPassword(w http.ResponseWriter, r *http.Request, _ UserId) {
+	s.requireAdmin(http.HandlerFunc(s.handleAdminResetPassword)).ServeHTTP(w, r)
+}
+
+func (s *Server) AdminGetStats(w http.ResponseWriter, r *http.Request) {
+	s.requireAdmin(http.HandlerFunc(s.handleAdminGetStats)).ServeHTTP(w, r)
+}
+
+func (s *Server) AdminListAuditLogs(w http.ResponseWriter, r *http.Request, _ AdminListAuditLogsParams) {
+	s.requireAdmin(http.HandlerFunc(s.handleAdminListAuditLogs)).ServeHTTP(w, r)
+}
+
+func (s *Server) AdminGetSettings(w http.ResponseWriter, r *http.Request) {
+	s.requireAdmin(http.HandlerFunc(s.handleAdminGetSettings)).ServeHTTP(w, r)
+}
+
+func (s *Server) AdminUpdateSettings(w http.ResponseWriter, r *http.Request) {
+	s.requireAdmin(http.HandlerFunc(s.handleAdminUpdateSettings)).ServeHTTP(w, r)
+}
