@@ -121,17 +121,15 @@ func (r *TranslationRunner) processJob(ctx context.Context, jobID int) error {
 	return r.jobs.ReconcileJob(jobCtx, jobID)
 }
 
-// processJobResource 处理单个翻译资源：从 DB 加载段落、纯翻译、写回 DB。
+// processJobResource 处理单个翻译资源：从 DB 加载段落、轮次循环翻译、写回 DB。
 func (r *TranslationRunner) processJobResource(ctx context.Context, exec *service.TranslationJobExecution, item *ent.JobResource) error {
 	job := exec.Job
 
 	if err := r.jobs.MarkJobResourceRunning(ctx, job.ID, item.ID); err != nil {
 		return err
 	}
-	// 写入资源开始时间
 	_ = r.jobs.MarkJobResourceStarted(ctx, item.ID)
 
-	// 创建 DBReporter 将翻译进度写入数据库
 	reporter := progress.NewDBReporter(progress.DBReporterOptions{
 		Client:        r.client,
 		JobID:         exec.Job.ID,
@@ -147,33 +145,13 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		return nil
 	}
 
-	// 1. 从 DB 加载 segments（含 meta 字段）
-	selectedRows, allRows, err := r.loadSegments(ctx, res.ID, item.SegmentIds)
-	if err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
-		return nil
-	}
-	if len(selectedRows) == 0 {
-		return r.jobs.MarkJobResourceCompleted(ctx, job.ID, item.ID, "", 0)
-	}
-
-	// 2. 构建 SegmentInput（反序列化 meta）
-	inputs := buildSegmentInputs(allRows)
-
-	// 3. 获取语言配置（从 job snapshot）
 	snapshot, err := r.jobs.GetTranslationSnapshot(ctx, job.ID)
 	if err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, fmt.Errorf("get translation snapshot: %w", err))
 		return nil
 	}
 
-	// 4. 构建 Document（从 DB 数据直接构建，不读文件）
-	doc := pipeline.BuildDocumentFromSegments(inputs,
-		snapshot.SourceLang, snapshot.TargetLang, res.Format)
-
-	// 从快照构建策略配置（用于运行时资源初始化）
 	cfg := buildStrategyConfig(snapshot)
-
 	autoApprove := snapshot.AutoApprove
 	runtimeGlossary, err := r.buildRuntimeGlossary(exec.Project, cfg)
 	if err != nil {
@@ -186,7 +164,6 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		return nil
 	}
 
-	// 从快照构建引擎
 	resources := engine.RuntimeResources{Glossary: runtimeGlossary, TM: memory}
 	eng, err := r.buildEngineFromSnapshot(ctx, snapshot, resources, reporter)
 	if err != nil {
@@ -195,109 +172,152 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	}
 	defer func() { _ = eng.Close() }()
 
-	// 5. 构建索引映射
-	dbIDToIndex := make(map[int]int, len(allRows))
-	for i, row := range allRows {
-		dbIDToIndex[row.ID] = i
-	}
-	segmentIndexes := make([]int, 0, len(item.SegmentIds))
-	for _, dbID := range item.SegmentIds {
-		if idx, ok := dbIDToIndex[dbID]; ok {
-			segmentIndexes = append(segmentIndexes, idx)
-		}
-	}
-
-	docIndexToDBID := make(map[int]int, len(selectedRows))
-	for _, row := range selectedRows {
-		if idx, ok := dbIDToIndex[row.ID]; ok {
-			docIndexToDBID[idx] = row.ID
-		}
-	}
-
-	// 6. 使用新的统一 Translate API，通过 BatchHandler 实现每批持久化
 	var mu sync.Mutex
 	completedCount := 0
+	var lastResult pipeline.TranslateResult
 
-	batchHandler := func(_ context.Context, batchResult pipeline.BatchResult) error {
-		status := service.SegmentStatusTranslated
-		if autoApprove {
-			status = service.SegmentStatusApproved
+	// 轮次循环
+	for roundIdx := range snapshot.Rounds {
+		if ctx.Err() != nil {
+			r.logger.Info("context cancelled, stopping round loop", "job_id", job.ID)
+			break
 		}
-		localCompleted := 0
-		failed := 0
-		for _, ts := range batchResult.Segments {
-			if ts.TargetText == "" {
-				continue
-			}
-			dbID, ok := docIndexToDBID[ts.Index]
-			if !ok {
-				continue
-			}
-			update := r.client.Segment.UpdateOneID(dbID).
-				SetSourceText(firstNonEmpty(ts.SourceText, " ")).
-				SetTargetText(ts.TargetText).
-				SetStatus(status)
-			if autoApprove {
-				update.ClearReviewComment()
-			}
-			if err := update.Exec(ctx); err != nil {
-				r.logger.Warn("persist segment failed", "segment_id", dbID, "err", err)
-				failed++
-				continue
-			}
-			localCompleted++
-		}
-		mu.Lock()
-		completedCount += localCompleted
-		mu.Unlock()
-		// 本批全部写入失败 → DB 可能不可用，终止翻译
-		if failed > 0 && localCompleted == 0 {
-			return fmt.Errorf("batch persist failed: all %d segments failed to write to database", failed)
-		}
-		return nil
-	}
 
-	result, translateErr := eng.Translate(ctx, doc,
-		engine.WithSegmentFilter(segmentIndexes),
-		engine.WithBatchHandler(batchHandler),
-	)
-
-	if translateErr != nil {
-		if errors.Is(translateErr, context.Canceled) && completedCount > 0 {
-			r.logger.Warn("translation cancelled, preserving partial progress",
-				"resource_id", item.ID, "completed", completedCount, "total", len(selectedRows))
-			_ = r.recordUsage(ctx, exec, completedCount, result.InputTokens, result.OutputTokens)
-			_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(completedCount).Exec(ctx)
-			_ = r.jobs.MarkJobResourceCancelled(ctx, job.ID, item.ID)
+		// 每轮从 DB 重新加载段落（Worker 通过 DB 重新加载避免保护态问题）
+		selectedRows, allRows, loadErr := r.loadSegments(ctx, res.ID, item.SegmentIds)
+		if loadErr != nil {
+			_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, loadErr)
 			return nil
 		}
-		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, fmt.Errorf("translate: %w", translateErr))
-		return nil
+		if len(selectedRows) == 0 {
+			break
+		}
+
+		// 过滤出 pending 段落
+		pendingRows := filterPendingSegments(selectedRows)
+		if len(pendingRows) == 0 {
+			break
+		}
+
+		// 构建 Document
+		inputs := buildSegmentInputs(allRows)
+		doc := pipeline.BuildDocumentFromSegments(inputs,
+			snapshot.SourceLang, snapshot.TargetLang, res.Format)
+
+		// 构建索引映射
+		dbIDToIndex := make(map[int]int, len(allRows))
+		for i, row := range allRows {
+			dbIDToIndex[row.ID] = i
+		}
+		segmentIndexes := make([]int, 0, len(pendingRows))
+		for _, row := range pendingRows {
+			if idx, ok := dbIDToIndex[row.ID]; ok {
+				segmentIndexes = append(segmentIndexes, idx)
+			}
+		}
+
+		docIndexToDBID := make(map[int]int, len(allRows))
+		for _, row := range allRows {
+			if idx, ok := dbIDToIndex[row.ID]; ok {
+				docIndexToDBID[idx] = row.ID
+			}
+		}
+
+		batchHandler := func(_ context.Context, batchResult pipeline.BatchResult) error {
+			status := service.SegmentStatusTranslated
+			if autoApprove {
+				status = service.SegmentStatusApproved
+			}
+			localCompleted := 0
+			failed := 0
+			for _, ts := range batchResult.Segments {
+				if ts.TargetText == "" {
+					continue
+				}
+				dbID, ok := docIndexToDBID[ts.Index]
+				if !ok {
+					continue
+				}
+				update := r.client.Segment.UpdateOneID(dbID).
+					SetSourceText(firstNonEmpty(ts.SourceText, " ")).
+					SetTargetText(ts.TargetText).
+					SetStatus(status)
+				if autoApprove {
+					update.ClearReviewComment()
+				}
+				if err := update.Exec(ctx); err != nil {
+					r.logger.Warn("persist segment failed", "segment_id", dbID, "err", err)
+					failed++
+					continue
+				}
+				localCompleted++
+			}
+			mu.Lock()
+			completedCount += localCompleted
+			mu.Unlock()
+			if failed > 0 && localCompleted == 0 {
+				return fmt.Errorf("batch persist failed: all %d segments failed to write to database", failed)
+			}
+			return nil
+		}
+
+		result, translateErr := eng.TranslateRound(ctx, roundIdx, doc,
+			engine.WithSegmentFilter(segmentIndexes),
+			engine.WithBatchHandler(batchHandler),
+		)
+		lastResult = result
+
+		if translateErr != nil {
+			if errors.Is(translateErr, context.Canceled) && completedCount > 0 {
+				r.logger.Warn("translation cancelled, preserving partial progress",
+					"resource_id", item.ID, "completed", completedCount, "total", len(selectedRows))
+				_ = r.recordUsage(ctx, exec, completedCount, lastResult.InputTokens, lastResult.OutputTokens)
+				_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(completedCount).Exec(ctx)
+				_ = r.jobs.MarkJobResourceCancelled(ctx, job.ID, item.ID)
+				return nil
+			}
+			_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, fmt.Errorf("translate round %d: %w", roundIdx, translateErr))
+			return nil
+		}
+
+		if result.UnresolvedCount == 0 {
+			break
+		}
 	}
 
-	// 7. 处理结果
-	if result.UnresolvedCount > 0 {
+	eng.SaveGlossary(ctx)
+
+	if lastResult.UnresolvedCount > 0 {
 		r.logger.Warn("translation partially failed: some segments could not be resolved",
 			"resource_id", item.ID,
-			"unresolved_count", result.UnresolvedCount,
-			"total_segments", len(selectedRows),
+			"unresolved_count", lastResult.UnresolvedCount,
 			"completed_count", completedCount,
 		)
-		_ = r.recordUsage(ctx, exec, completedCount, result.InputTokens, result.OutputTokens)
+		_ = r.recordUsage(ctx, exec, completedCount, lastResult.InputTokens, lastResult.OutputTokens)
 		_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(completedCount).Exec(ctx)
-		err := fmt.Errorf("%d/%d segments failed to translate (completed: %d): LLM could not preserve all protected placeholders after retries",
-			result.UnresolvedCount, len(selectedRows), completedCount)
+		err := fmt.Errorf("%d segments failed to translate (completed: %d): LLM could not preserve all protected placeholders after retries",
+			lastResult.UnresolvedCount, completedCount)
 		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
 
-	// 8. 全部成功：记录用量并标记完成
-	if err := r.recordUsage(ctx, exec, completedCount, result.InputTokens, result.OutputTokens); err != nil {
+	if err := r.recordUsage(ctx, exec, completedCount, lastResult.InputTokens, lastResult.OutputTokens); err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
 
 	return r.jobs.MarkJobResourceCompleted(ctx, job.ID, item.ID, "", completedCount)
+}
+
+// filterPendingSegments 过滤出待翻译的段落（status 为 pending）。
+func filterPendingSegments(rows []*ent.Segment) []*ent.Segment {
+	var pending []*ent.Segment
+	for _, row := range rows {
+		if row.Status == "pending" {
+			pending = append(pending, row)
+		}
+	}
+	return pending
 }
 
 // buildSegmentInputs 将 DB segments 转换为 SegmentInput 切片。
@@ -365,8 +385,22 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 				Backoff:     time.Duration(rs.Retry.BackoffMs) * time.Millisecond,
 				Jitter:      rs.Retry.Jitter,
 			},
-			Renderer:     roundRenderer,
-			ResponseMode: responseModeFromBackendOptions(rs.Backend.Options),
+			Renderer:          roundRenderer,
+			ResponseMode:      responseModeFromBackendOptions(rs.Backend.Options),
+			Mode:              pipeline.RoundModeTranslate,
+			ProtectRules:      rs.Strategy.Protect.Rules,
+			RubyEnabled:       rs.Strategy.Ruby.Enabled,
+			RubyPreserveKinds: rs.Strategy.Ruby.PreserveKinds,
+			Context: &config.ContextConfig{
+				Enabled:  rs.Strategy.Context.Enabled,
+				Before:   rs.Strategy.Context.Before,
+				After:    rs.Strategy.Context.After,
+				MaxChars: rs.Strategy.Context.MaxChars,
+			},
+			Postprocess: &config.PostprocessConfig{
+				Enabled:    rs.Strategy.Postprocess.Enabled,
+				TrimSpaces: rs.Strategy.Postprocess.TrimSpaces,
+			},
 		})
 	}
 
@@ -426,39 +460,25 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 
 // buildStrategyConfig 从快照构建全局策略配置。
 //
-// 以下设置是 Pipeline 级别的全局配置，在所有轮次间共享，取自第一轮的 Strategy：
-//   - Split（段落拆分）：在翻译前对整个文档生效
-//   - Protect（内容保护）：在翻译前对整个文档生效
-//   - Ruby（注音保护）：在翻译前后对整个文档生效
-//   - Context（上下文窗口）：影响分批逻辑，全局统一
-//   - Postprocess（后处理）：在翻译后对整个文档生效
+// 以下设置是 Pipeline 级别的全局配置，在所有轮次间共享：
+//   - Protect（内容保护）：per-round 构建 Protector
+//   - Ruby（注音保护）：全局启用开关
 //   - Glossary Bootstrap（术语自举参数）：全局统一
+//   - Repair（修复策略）：全局默认值，每轮可覆盖
 //
 // 以下设置是轮次级别的，每轮独立配置，不在此函数中设置：
-//   - Backend（后端）：每轮使用独立的 AI 后端
-//   - Prompt/Renderer（提示词渲染器）：每轮使用独立的 prompt 模板
-//   - BatchSize / Concurrency / FallbackShrink / Retry：每轮独立配置
-//   - Repair（修复策略）：全局默认从此函数设置，但每轮可通过 Round.Repair 覆盖
-//   - ResponseMode（响应模式）：每轮独立配置
+//   - Context / Postprocess / ProtectRules / RubyEnabled：per-round
 func buildStrategyConfig(snapshot *service.JobExecutionSnapshot) *config.Config {
 	cfg := config.Default()
 
-	// 翻译记忆开关从快照读取（全局基础设施级功能，默认关闭）
 	cfg.TranslationMemory.Enabled = snapshot.TMEnabled
 
-	// 全局 Prompt 配置（作为 Engine 级 Renderer 的兜底，实际翻译时每轮使用自己的 Renderer）
 	if len(snapshot.Rounds) > 0 {
 		cfg.Prompt.SystemTemplateContent = snapshot.Rounds[0].Prompt.Content
 	}
 
-	// Pipeline 级全局策略配置（取自第一轮的 Strategy，适用于整个文档处理流程）
 	if len(snapshot.Rounds) > 0 {
 		s := snapshot.Rounds[0].Strategy
-		cfg.Pipeline.Split = config.SplitConfig{
-			Enabled:  s.Split.Enabled,
-			Strategy: s.Split.Strategy,
-			MaxChars: s.Split.MaxChars,
-		}
 		cfg.Pipeline.Protect = config.ProtectConfig{
 			Enabled: s.Protect.Enabled,
 			Rules:   s.Protect.Rules,
@@ -467,11 +487,6 @@ func buildStrategyConfig(snapshot *service.JobExecutionSnapshot) *config.Config 
 			Enabled:       s.Ruby.Enabled,
 			PreserveKinds: s.Ruby.PreserveKinds,
 		}
-		cfg.Pipeline.Postprocess = config.PostprocessConfig{
-			Enabled:    s.Postprocess.Enabled,
-			TrimSpaces: s.Postprocess.TrimSpaces,
-		}
-		// Repair 全局默认值；每轮可通过 Round.Repair 独立覆盖
 		cfg.Pipeline.Translate.Repair = config.RepairConfig{
 			Enabled:              s.Repair.Enabled,
 			JSONStructural:       s.Repair.JSONStructural,
@@ -489,14 +504,7 @@ func buildStrategyConfig(snapshot *service.JobExecutionSnapshot) *config.Config 
 				InlineConflictStrategy: s.Glossary.Bootstrap.InlineConflictStrategy,
 			},
 		}
-		cfg.Pipeline.Context = config.ContextConfig{
-			Enabled:  s.Context.Enabled,
-			Before:   s.Context.Before,
-			After:    s.Context.After,
-			MaxChars: s.Context.MaxChars,
-		}
 
-		// 独立自举配置从 snapshot.Bootstrap 读取
 		if snapshot.Bootstrap != nil {
 			cfg.Glossary.Standalone = config.StandaloneBootstrapConfig{
 				Enabled:          snapshot.Bootstrap.Enabled,

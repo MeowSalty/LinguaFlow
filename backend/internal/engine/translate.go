@@ -7,15 +7,17 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 )
 
-// Translate 是 Engine 的统一入口。
-// 调用方负责：Parse（CLI）或 BuildDocumentFromSegments（Worker）构造 *pipeline.Document。
-// Engine 负责：Bootstrap(可选) → Protect 全文 → Pipeline(分批 + 翻译) → Unprotect 全文 → RubyRestore。
-func (e *Engine) Translate(ctx context.Context, doc *pipeline.Document, opts ...TranslateOption) (pipeline.TranslateResult, error) {
+// TranslateRound 执行单轮翻译。
+func (e *Engine) TranslateRound(ctx context.Context, roundIdx int, doc *pipeline.Document, opts ...TranslateOption) (pipeline.TranslateResult, error) {
 	start := time.Now()
+
+	if roundIdx >= len(e.rounds) {
+		return pipeline.TranslateResult{}, fmt.Errorf("engine: round %d out of range", roundIdx)
+	}
 
 	cfg := &translateConfig{}
 	for _, opt := range opts {
@@ -29,54 +31,61 @@ func (e *Engine) Translate(ctx context.Context, doc *pipeline.Document, opts ...
 		return pipeline.TranslateResult{}, nil
 	}
 
-	// 1. Prepare document (language, vars, segment filter)
-	e.PrepareDocument(doc, nil)
-	if len(cfg.segmentFilter) > 0 {
-		applySegmentSelection(doc, cfg.segmentFilter)
-	}
+	round := e.rounds[roundIdx]
 
-	e.logger.Info("translate start",
-		"segments", len(doc.Segments),
-		"source_lang", doc.SourceLang,
-		"target_lang", doc.TargetLang)
-
-	// 2. Optional Bootstrap (global, before batch processing)
-	if e.standaloneBootstrap != nil && e.standaloneBootstrap.Enabled && e.bootstrapRenderer != nil {
+	// Bootstrap 仅首轮
+	if roundIdx == 0 && e.standaloneBootstrap != nil && e.standaloneBootstrap.Enabled && e.bootstrapRenderer != nil {
 		bootstrapStage := e.buildBootstrapStage()
 		if err := bootstrapStage.Run(ctx, doc); err != nil {
 			e.logger.Warn("bootstrap failed, continuing without incremental terms", "err", err)
 		}
 	}
 
-	// 3. Build processing components
-	pc := e.cfg.Pipeline
-	protector := e.buildProtector()
-
-	var restorer *ruby.Restorer
-	if pc.Ruby.Enabled {
-		restorer = ruby.NewRestorer()
+	// Prepare document
+	e.PrepareDocument(doc, nil)
+	if len(cfg.segmentFilter) > 0 {
+		applySegmentSelection(doc, cfg.segmentFilter)
 	}
 
-	translatePipe := e.BuildTranslateStage(protector, restorer)
+	e.logger.Info("translate round start",
+		"round", roundIdx,
+		"name", round.Name,
+		"segments", len(doc.Segments),
+		"source_lang", doc.SourceLang,
+		"target_lang", doc.TargetLang)
 
-	// 4. 设置 batchHandler 并调用 Pipeline
-	if cfg.batchHandler != nil {
-		translatePipe.SetBatchHandler(cfg.batchHandler)
-		defer translatePipe.SetBatchHandler(nil)
+	inlineBootstrap := e.cfg.Glossary.Enabled && e.cfg.Glossary.Bootstrap.Enabled
+	repairOpts := toRepairOptions(e.cfg.Pipeline.Translate.Repair)
+
+	executor := &pipeline.RoundExecutor{
+		Round:                  round,
+		Renderer:               round.Renderer,
+		Glossary:               e.glossary,
+		TM:                     e.tm,
+		Logger:                 e.logger,
+		Reporter:               e.reporter,
+		RubyRestorer:           e.rubyRestorer,
+		RubyRetryBackends:      e.rubyRetryBackends,
+		InlineBootstrap:        inlineBootstrap,
+		MaxTermsPer1000Chars:   e.cfg.Glossary.Bootstrap.MaxTermsPer1000Chars,
+		MinBootstrapSourceLen:  e.cfg.Glossary.Bootstrap.MinSourceLen,
+		InlineConflictStrategy: e.cfg.Glossary.Bootstrap.InlineConflictStrategy,
+		Repair:                 repairOpts,
+		Context:                config.DefaultContextConfig(),
+		BatchHandler:           cfg.batchHandler,
 	}
-	if err := translatePipe.Run(ctx, doc); err != nil {
+
+	if err := executor.Run(ctx, doc); err != nil {
 		return pipeline.TranslateResult{}, err
 	}
 
-	// 7. Save glossary if needed
-	e.maybeSaveGlossary(ctx)
-
-	// 10. 构建结果
 	result := buildTranslateResult(doc)
 	result.InputTokens = atomic.LoadInt64(&doc.InputTokens)
 	result.OutputTokens = atomic.LoadInt64(&doc.OutputTokens)
 
-	e.logger.Info("translate done",
+	e.logger.Info("translate round done",
+		"round", roundIdx,
+		"name", round.Name,
 		"segments", len(doc.Segments),
 		"unresolved", result.UnresolvedCount,
 		"duration", time.Since(start).Round(time.Millisecond))
@@ -86,7 +95,6 @@ func (e *Engine) Translate(ctx context.Context, doc *pipeline.Document, opts ...
 
 // buildTranslateResult 从实际段落状态构建翻译结果。
 func buildTranslateResult(doc *pipeline.Document) pipeline.TranslateResult {
-	// 从 doc.Vars 解析失败索引
 	failedSet := pipeline.ParseFailedIndices(doc.Vars)
 
 	result := pipeline.TranslateResult{
@@ -113,11 +121,7 @@ func buildTranslateResult(doc *pipeline.Document) pipeline.TranslateResult {
 // buildBootstrapStage constructs the Bootstrap stage.
 func (e *Engine) buildBootstrapStage() *pipeline.Bootstrap {
 	pc := e.cfg.Pipeline
-	retry := backend.RetryPolicy{
-		MaxAttempts: pc.Translate.Retry.MaxAttempts,
-		Backoff:     time.Duration(pc.Translate.Retry.BackoffMs) * time.Millisecond,
-		Jitter:      pc.Translate.Retry.Jitter,
-	}
+	retry := toRetryPolicy(pc)
 	repairOpts := toRepairOptions(pc.Translate.Repair)
 	return &pipeline.Bootstrap{
 		Backends:         e.bootstrapBackends,
@@ -131,5 +135,13 @@ func (e *Engine) buildBootstrapStage() *pipeline.Bootstrap {
 		Logger:           e.logger,
 		Reporter:         e.reporter,
 		Repair:           repairOpts,
+	}
+}
+
+func toRetryPolicy(pc config.PipelineConfig) backend.RetryPolicy {
+	return backend.RetryPolicy{
+		MaxAttempts: pc.Translate.Retry.MaxAttempts,
+		Backoff:     time.Duration(pc.Translate.Retry.BackoffMs) * time.Millisecond,
+		Jitter:      pc.Translate.Retry.Jitter,
 	}
 }

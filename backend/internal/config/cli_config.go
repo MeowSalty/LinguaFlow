@@ -68,12 +68,12 @@ type CLIConfigPromptTemplate struct {
 // 注意：不包含 Glossary 字段。术语表使用 CLIConfig 全局的 Glossary 配置。
 // 多轮共享同一份术语表，避免术语表实例化冲突。
 type CLIConfigTranslationProfile struct {
-	Split       SplitConfig       `yaml:"split"`
 	Protect     ProtectConfig     `yaml:"protect"`
 	Postprocess PostprocessConfig `yaml:"postprocess"`
 	Repair      RepairConfig      `yaml:"repair"`
 	Bootstrap   BootstrapConfig   `yaml:"bootstrap"`
 	Context     ContextConfig     `yaml:"context"`
+	Ruby        RubyConfig        `yaml:"ruby"`
 
 	File string `yaml:"file"` // 外部文件引用（与内联字段二选一）
 }
@@ -222,8 +222,7 @@ func resolveExternalReferences(cliCfg *CLIConfig, configDir string) error {
 
 // hasInlineProfileConfig 检查翻译策略是否有内联配置。
 func hasInlineProfileConfig(tp CLIConfigTranslationProfile) bool {
-	return tp.Split.Strategy != "" || tp.Split.MaxChars > 0 ||
-		len(tp.Protect.Rules) > 0 ||
+	return len(tp.Protect.Rules) > 0 ||
 		tp.Postprocess.TrimSpaces ||
 		tp.Repair.Enabled
 }
@@ -383,7 +382,6 @@ func defaultCLIConfig() *CLIConfig {
 		},
 		TranslationProfiles: map[string]CLIConfigTranslationProfile{
 			"default": {
-				Split:       SplitConfig{Enabled: true, Strategy: "paragraph", MaxChars: 1200},
 				Protect:     ProtectConfig{Enabled: true, Rules: []string{"code", "link", "placeholder", "xml"}},
 				Postprocess: PostprocessConfig{Enabled: true, TrimSpaces: true},
 				Repair: RepairConfig{

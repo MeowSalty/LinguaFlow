@@ -21,7 +21,7 @@ import (
 )
 
 // buildRequest 构建翻译请求的 prompt 和 backend.Request。
-func (s *Translate) buildRequest(
+func (s *RoundExecutor) buildRequest(
 	ctx context.Context,
 	doc *Document,
 	idxs []int,
@@ -79,7 +79,7 @@ func (s *Translate) buildRequest(
 		StrictSchema:      !isTextMode,
 		TextMode:          isTextMode,
 		RubyAnnotations:   rubyAnns,
-		RubyMode:          s.RubyMode,
+		RubyMode:          round.RubyMode,
 	}
 	sys, usr, err := renderer.Render(data)
 	if err != nil {
@@ -91,7 +91,7 @@ func (s *Translate) buildRequest(
 		User:   usr,
 	}
 	if !isTextMode {
-		req.JSONSchema = translationsSchema(wantIDs, s.InlineBootstrap, s.RubyMode != "")
+		req.JSONSchema = translationsSchema(wantIDs, s.InlineBootstrap, round.RubyMode != "")
 	} else {
 		req.ResponseFormat = "none"
 	}
@@ -110,14 +110,12 @@ func isRetryableByBackoff(err error) bool {
 }
 
 // backoffDuration 计算退避等待时间。
-// 429 错误优先使用服务端 Retry-After；否则按指数退避 + 可选抖动。
 func backoffDuration(attempt int, retry backend.RetryPolicy, lastErr error) time.Duration {
 	wait := retry.Backoff << attempt
 	if wait < minRateLimitBackoff {
 		wait = minRateLimitBackoff
 	}
 
-	// 429 错误：优先使用服务端 Retry-After
 	var raErr backend.RetryAfterError
 	if errors.As(lastErr, &raErr) && raErr.HTTPStatus() == 429 {
 		if ra := raErr.GetRetryAfter(); ra > wait {
@@ -135,7 +133,6 @@ func backoffDuration(attempt int, retry backend.RetryPolicy, lastErr error) time
 const minRateLimitBackoff = 5 * time.Second
 
 // shrinkTo 计算缩批后的大小。
-// 有效范围为 (0, 1)；<=0 / >=1 / NaN / Inf 均为防御性兜底，正常路径下验证层会拦截。
 func shrinkTo(idxs []int, shrink float64) int {
 	if shrink <= 0 || shrink >= 1 || math.IsNaN(shrink) || math.IsInf(shrink, 0) {
 		return 1
@@ -151,8 +148,7 @@ func shrinkTo(idxs []int, shrink float64) int {
 }
 
 // tryPromptUpgrade 尝试通过附加反例 reminder 重试一次。
-// 返回 (resp, res, ok)；ok=true 表示升级成功。
-func (s *Translate) tryPromptUpgrade(
+func (s *RoundExecutor) tryPromptUpgrade(
 	ctx context.Context,
 	doc *Document,
 	round Round,
@@ -196,9 +192,7 @@ func (s *Translate) tryPromptUpgrade(
 }
 
 // processBatchAttempt 执行单次 LLM 调用尝试，返回 batchResult。
-// 不循环，不递归，只执行一次 LLM 调用。
-// expandedIdxs 包含上下文段落，用于构建完整 prompt；job.idxs 仅包含待翻译段落。
-func (s *Translate) processBatchAttempt(
+func (s *RoundExecutor) processBatchAttempt(
 	ctx context.Context,
 	doc *Document,
 	job batchJob,
@@ -210,7 +204,6 @@ func (s *Translate) processBatchAttempt(
 	batchStart := time.Now()
 	repairOpts := s.resolveRoundRepair(round)
 
-	// 1. 构建 prompt（使用 expandedIdxs 包含上下文段落）
 	_, usr, req, wantIDs, _, glos, buildErr := s.buildRequest(ctx, doc, expandedIdxs, round, contextSet, logger)
 	if buildErr != nil {
 		logger.Error("build request failed", "err", buildErr)
@@ -220,11 +213,9 @@ func (s *Translate) processBatchAttempt(
 	tried := []string{round.Backend.Name()}
 	pendingIdxs := filterPendingIdxs(job.idxs, contextSet)
 
-	// 2. 单次 LLM 调用
 	callStart := time.Now()
 	resp, callErr := s.callOnce(ctx, round.Backend, req)
 
-	// 3. 错误处理
 	if callErr != nil {
 		if isFatalBackendError(callErr) {
 			logger.Error("backend returned fatal error",
@@ -261,7 +252,6 @@ func (s *Translate) processBatchAttempt(
 				ErrorMessage:  callErr.Error(),
 				HTTPStatus:    httpStatusFromErr(callErr),
 			})
-			// Worker 内退避等待
 			wait := backoffDuration(job.attempt, round.Retry, callErr)
 			timer := time.NewTimer(wait)
 			select {
@@ -273,7 +263,6 @@ func (s *Translate) processBatchAttempt(
 			return batchResult{retry: &batchJob{idxs: job.idxs, attempt: job.attempt + 1}}
 		}
 
-		// 网络/超时: 缩批
 		logger.Warn("backend failed for batch, shrinking",
 			"backend", round.Backend.Name(), "batch_size", len(job.idxs), "err", callErr)
 		s.emitBatchOutcome(progress.BatchEvent{
@@ -291,7 +280,6 @@ func (s *Translate) processBatchAttempt(
 			ShrinkAttempted: len(pendingIdxs) > 1,
 		})
 		nextSize := shrinkTo(job.idxs, round.FallbackShrink)
-		// 缩批后，被丢弃的段落标记为 unresolved
 		var dropped []int
 		if nextSize < len(job.idxs) {
 			dropped = filterPendingIdxs(job.idxs[nextSize:], contextSet)
@@ -302,7 +290,6 @@ func (s *Translate) processBatchAttempt(
 		}
 	}
 
-	// 4. 解析
 	atomic.AddInt64(&doc.InputTokens, resp.Usage.PromptTokens)
 	atomic.AddInt64(&doc.OutputTokens, resp.Usage.CompletionTokens)
 
@@ -315,12 +302,10 @@ func (s *Translate) processBatchAttempt(
 	}
 
 	if res.ParseErr != nil {
-		// 尝试 PromptUpgrade
 		if upgradedResp, upgradedRes, ok := s.tryPromptUpgrade(ctx, doc, round, req, resp, res, wantIDs, logger); ok {
 			resp = upgradedResp
 			res = upgradedRes
 		} else {
-			// 解析失败: 缩批
 			logger.Warn("batch response parse failed, shrinking",
 				"backend", round.Backend.Name(), "batch_size", len(pendingIdxs), "err", res.ParseErr,
 				"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200),
@@ -342,7 +327,6 @@ func (s *Translate) processBatchAttempt(
 				ShrinkAttempted: len(pendingIdxs) > 1,
 			})
 			nextSize := shrinkTo(job.idxs, round.FallbackShrink)
-			// 缩批后，被丢弃的段落标记为 unresolved
 			var dropped []int
 			if nextSize < len(job.idxs) {
 				dropped = filterPendingIdxs(job.idxs[nextSize:], contextSet)
@@ -354,7 +338,6 @@ func (s *Translate) processBatchAttempt(
 		}
 	}
 
-	// 5. 处理翻译结果 + postSegment hooks
 	missingRatio := 0.0
 	if len(wantIDs) > 0 {
 		missingRatio = float64(len(res.Missing)) / float64(len(wantIDs))
@@ -387,14 +370,12 @@ func (s *Translate) processBatchAttempt(
 
 	s.absorbInlineGlossary(ctx, glosEntries, trans, doc.TargetLang, logger)
 
-	// 处理翻译结果
 	unresolved, missing := s.processTranslatedSegments(ctx, doc, job.idxs, wantIDs, trans, rubyOutputMap, contextSet, repairOpts, round, logger)
 	return batchResult{unresolved: unresolved, missing: missing}
 }
 
-// processTranslatedSegments 处理翻译结果：写回译文、占位符校验、postSegment hooks。
-// 返回 unresolved（占位符校验失败的段）和 missing（LLM 未返回的段）。
-func (s *Translate) processTranslatedSegments(
+// processTranslatedSegments 处理翻译结果：写回译文、占位符校验、Unprotect/RubyRestore/TM。
+func (s *RoundExecutor) processTranslatedSegments(
 	ctx context.Context,
 	doc *Document,
 	idxs []int,
@@ -420,7 +401,6 @@ func (s *Translate) processTranslatedSegments(
 			missing = append(missing, idx)
 			continue
 		}
-		// 分发 ruby_output 到各段
 		if rubyOutputMap != nil {
 			if ro, rok := rubyOutputMap[id]; rok && len(ro) > 0 {
 				if _, hasAnns := seg.Meta["ruby_annotations"]; hasAnns {
@@ -428,7 +408,6 @@ func (s *Translate) processTranslatedSegments(
 				}
 			}
 		}
-		// L3 占位符归一化
 		if repairOpts.PlaceholderNormalize {
 			if normText, normalized := repair.NormalizePlaceholders(text, seg.Protected); len(normalized) > 0 {
 				logger.Info("placeholders normalized",
@@ -440,21 +419,48 @@ func (s *Translate) processTranslatedSegments(
 		if missingPH := protect.MissingPlaceholders(seg); len(missingPH) > 0 {
 			logger.Warn("batch segment placeholders missing",
 				"seg", seg.ID, "missing", missingPH)
+			seg.Target = ""
 			unresolved = append(unresolved, idx)
 			continue
 		}
-		if s.postSegment != nil {
-			if err := s.postSegment(ctx, doc, seg); err != nil {
-				logger.Warn("postSegment hook failed", "seg", seg.ID, "err", err)
+
+		// TrimSpaces（在 Unprotect 之前）
+		if round.Postprocess != nil && round.Postprocess.TrimSpaces {
+			seg.Target = strings.TrimSpace(seg.Target)
+		}
+
+		// Unprotect
+		if round.Protector != nil {
+			if err := round.Protector.Unprotect(seg); err != nil {
+				logger.Warn("unprotect failed", "seg", seg.ID, "err", err)
 			}
 		}
+
+		// RubyRestore
+		if round.RubyEnabled && s.RubyRestorer != nil {
+			keepSet := kindSet(round.RubyPreserveKinds)
+			isTextMode := round.ResponseMode == "text"
+			restoreSegmentRuby(ctx, seg, s.RubyRestorer, keepSet,
+				s.RubyRetryBackends, round.Retry, logger, s.Reporter, isTextMode)
+		}
+
+		// TM（直接调用，使用 OriginalSource）
+		if s.TM != nil {
+			source := seg.OriginalSource
+			if source == "" {
+				source = seg.Source
+			}
+			if err := s.TM.Add(ctx, source, seg.Target, doc.SourceLang, doc.TargetLang); err != nil {
+				logger.Debug("tm add failed", "err", err)
+			}
+		}
+
 		rep.SegmentDone()
 	}
 	return unresolved, missing
 }
 
-// isContext 检查 idx 是否在 contextSet 中（即作为上下文参考、不需要翻译）。
-// contextSet 为 nil 或空时返回 false（所有段落都需要翻译）。
+// isContext 检查 idx 是否在 contextSet 中。
 func isContext(contextSet map[int]struct{}, idx int) bool {
 	if len(contextSet) == 0 {
 		return false
@@ -463,16 +469,7 @@ func isContext(contextSet map[int]struct{}, idx int) bool {
 	return ok
 }
 
-// contextWindow 从配置计算上下文窗口大小。
-func (s *Translate) contextWindow() int {
-	if !s.Context.Enabled {
-		return 0
-	}
-	return max(s.Context.Before, s.Context.After)
-}
-
-// isFatalBackendError 判断是否为不可恢复的致命错误（如 401、403 认证失败）。
-// 遇到此类错误时当前 backend 被视为不可用，段将推迟到后续轮次处理。
+// isFatalBackendError 判断是否为不可恢复的致命错误。
 func isFatalBackendError(err error) bool {
 	var hsErr backend.HTTPStatusError
 	if errors.As(err, &hsErr) {
@@ -482,7 +479,6 @@ func isFatalBackendError(err error) bool {
 	return false
 }
 
-// filterPendingIdxs 过滤出需要翻译的段落索引（排除上下文段落）。
 func filterPendingIdxs(idxs []int, contextSet map[int]struct{}) []int {
 	if len(contextSet) == 0 {
 		return idxs
@@ -512,7 +508,7 @@ func httpStatusFromErr(err error) int {
 	return 0
 }
 
-func (s *Translate) emitBatchOutcome(evt progress.BatchEvent) {
+func (s *RoundExecutor) emitBatchOutcome(evt progress.BatchEvent) {
 	rep := s.Reporter
 	if rep == nil {
 		return
@@ -524,9 +520,7 @@ func (s *Translate) emitBatchOutcome(evt progress.BatchEvent) {
 	obs.OnBatchEvent(evt)
 }
 
-// emitBatchEvent constructs a BatchEvent and delivers it via the Reporter's
-// BatchObserver interface (if implemented).
-func (s *Translate) emitBatchEvent(
+func (s *RoundExecutor) emitBatchEvent(
 	pendingIdxs []int,
 	wantIDs []string,
 	backendName string,

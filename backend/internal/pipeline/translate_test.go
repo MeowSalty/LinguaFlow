@@ -276,7 +276,7 @@ func TestCountWords(t *testing.T) {
 }
 
 func TestCalcMaxBootstrapTerms_UsesCountWords(t *testing.T) {
-	s := &Translate{MaxTermsPer1000Chars: 3.0}
+	s := &RoundExecutor{MaxTermsPer1000Chars: 3.0}
 	// CJK: 4 字 → 4 words → ceil(4/1000*3) = 1
 	got := s.calcMaxBootstrapTerms([]string{"你好世界"})
 	if got != 1 {
@@ -326,7 +326,7 @@ func TestAbsorbInlineGlossary_RewritesConflictInBatch(t *testing.T) {
 	if _, err := g.Add(context.Background(), glossary.Entry{Source: "thread pool", Target: "线程池"}); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
-	s := &Translate{
+	s := &RoundExecutor{
 		Glossary:               g,
 		InlineBootstrap:        true,
 		MinBootstrapSourceLen:  2,
@@ -362,7 +362,7 @@ func TestAbsorbInlineGlossary_RewritesConflictInBatch(t *testing.T) {
 func TestAbsorbInlineGlossary_StrategyOffKeepsConflict(t *testing.T) {
 	g := glossary.NewMemory()
 	_, _ = g.Add(context.Background(), glossary.Entry{Source: "thread pool", Target: "线程池"})
-	s := &Translate{
+	s := &RoundExecutor{
 		Glossary:               g,
 		InlineBootstrap:        true,
 		MinBootstrapSourceLen:  2,
@@ -382,7 +382,7 @@ func TestAbsorbInlineGlossary_StrategyOffKeepsConflict(t *testing.T) {
 // TestAbsorbInlineGlossary_NoConflictNoChange 没有冲突时 translations 不应被动。
 func TestAbsorbInlineGlossary_NoConflictNoChange(t *testing.T) {
 	g := glossary.NewMemory()
-	s := &Translate{
+	s := &RoundExecutor{
 		Glossary:               g,
 		InlineBootstrap:        true,
 		MinBootstrapSourceLen:  2,
@@ -403,7 +403,7 @@ func TestAbsorbInlineGlossary_NoConflictNoChange(t *testing.T) {
 func TestAbsorbInlineGlossary_SameTargetIsNoop(t *testing.T) {
 	g := glossary.NewMemory()
 	_, _ = g.Add(context.Background(), glossary.Entry{Source: "thread pool", Target: "线程池"})
-	s := &Translate{
+	s := &RoundExecutor{
 		Glossary:               g,
 		InlineBootstrap:        true,
 		MinBootstrapSourceLen:  2,
@@ -424,7 +424,7 @@ func TestAbsorbInlineGlossary_SameTargetIsNoop(t *testing.T) {
 func TestAbsorbInlineGlossary_ProposedTargetMissingInTranslations(t *testing.T) {
 	g := glossary.NewMemory()
 	_, _ = g.Add(context.Background(), glossary.Entry{Source: "thread pool", Target: "线程池"})
-	s := &Translate{
+	s := &RoundExecutor{
 		Glossary:               g,
 		InlineBootstrap:        true,
 		MinBootstrapSourceLen:  2,
@@ -550,8 +550,8 @@ func TestProcessBatch_PartialRecovery_BelowThreshold(t *testing.T) {
 			`{"translations":{"1":"d"}}`,
 		},
 	}
-	s := &Translate{
-		Rounds:   defaultTestRound(fb, 4, 1),
+	s := &RoundExecutor{
+		Round:    defaultTestRound(fb, 4, 1)[0],
 		Renderer: newTestRenderer(t),
 		Logger:   quietLogger(),
 		Reporter: rep,
@@ -589,8 +589,8 @@ func TestProcessBatch_PartialRecovery_AboveThresholdShrinks(t *testing.T) {
 			`{"translations":{"1":"x1","2":"x2","3":"x3"}}`,
 		},
 	}
-	s := &Translate{
-		Rounds:   []Round{{Name: "default", Backend: fb, BatchSize: 4, Concurrency: 1, FallbackShrink: 0}},
+	s := &RoundExecutor{
+		Round:    Round{Name: "default", Backend: fb, BatchSize: 4, Concurrency: 1, FallbackShrink: 0},
 		Renderer: newTestRenderer(t),
 		Logger:   quietLogger(),
 		Reporter: rep,
@@ -628,8 +628,8 @@ func TestProcessBatch_PlaceholderNormalizeAvoidsRetry(t *testing.T) {
 			`{"translations":{"1":"你好 __lf_000001__"}}`,
 		},
 	}
-	s := &Translate{
-		Rounds:   defaultTestRound(fb, 1, 1),
+	s := &RoundExecutor{
+		Round:    defaultTestRound(fb, 1, 1)[0],
 		Renderer: newTestRenderer(t),
 		Logger:   quietLogger(),
 		Reporter: rep,
@@ -660,8 +660,8 @@ func TestProcessBatch_PromptUpgradeRecovers(t *testing.T) {
 			`{"translations":{"1":"a","2":"b"}}`,
 		},
 	}
-	s := &Translate{
-		Rounds:   defaultTestRound(fb, 2, 1),
+	s := &RoundExecutor{
+		Round:    defaultTestRound(fb, 2, 1)[0],
 		Renderer: newTestRenderer(t),
 		Logger:   quietLogger(),
 		Reporter: rep,
@@ -679,7 +679,7 @@ func TestProcessBatch_PromptUpgradeRecovers(t *testing.T) {
 }
 
 // TestProcessBatch_PromptUpgradeDisabledFallsBack 升级重试关闭时，fatal JSON 直接进 shrink。
-// 缩批后被丢弃的段落进入 unresolved，后续轮次可补救。
+// 缩批后被丢弃的段落进入 unresolved。
 func TestProcessBatch_PromptUpgradeDisabledFallsBack(t *testing.T) {
 	doc := newTestDoc(2)
 	rep := &countingReporter{}
@@ -689,16 +689,12 @@ func TestProcessBatch_PromptUpgradeDisabledFallsBack(t *testing.T) {
 		responses: []string{
 			"not json",
 			`{"translations":{"1":"x0"}}`,
-			`{"translations":{"1":"x1"}}`,
 		},
 	}
 	opts := defaultRepairOpts()
 	opts.PromptUpgrade = false
-	s := &Translate{
-		Rounds: []Round{
-			{Name: "r1", Backend: fb, BatchSize: 2, Concurrency: 1, FallbackShrink: 0.5, Retry: backend.RetryPolicy{MaxAttempts: 1}},
-			{Name: "r2", Backend: fb, BatchSize: 1, Concurrency: 1},
-		},
+	s := &RoundExecutor{
+		Round:    Round{Name: "r1", Backend: fb, BatchSize: 2, Concurrency: 1, FallbackShrink: 0.5, Retry: backend.RetryPolicy{MaxAttempts: 1}},
 		Renderer: newTestRenderer(t),
 		Logger:   quietLogger(),
 		Reporter: rep,
@@ -707,18 +703,13 @@ func TestProcessBatch_PromptUpgradeDisabledFallsBack(t *testing.T) {
 	if err := s.Run(context.Background(), doc); err != nil {
 		t.Fatalf("run: %v", err)
 	}
-	// 预期：Round 1: 1 batch (parse error, shrink to 1) + 1 retry = 2 调用
-	//       Round 2: 1 single = 1 调用
-	// 总计 3 次调用
-	if got := int(fb.idx.Load()); got != 3 {
-		t.Errorf("backend calls: %d want 3", got)
-	}
-	if doc.Segments[0].Target != "x0" || doc.Segments[1].Target != "x1" {
-		t.Errorf("targets: %q, %q", doc.Segments[0].Target, doc.Segments[1].Target)
+	// 预期：1 batch (parse error, shrink to 1) + 1 retry = 2 调用
+	if got := int(fb.idx.Load()); got != 2 {
+		t.Errorf("backend calls: %d want 2", got)
 	}
 }
 
-func TestTranslatePlan_UsesLongestContinuousRunsAndNextRoundFallback(t *testing.T) {
+func TestTranslatePlan_UsesLongestContinuousRunsAndMissingRetry(t *testing.T) {
 	doc := newTestDoc(7)
 	doc.Segments[3].Skip = true
 	doc.Segments[3].Source = "skipped"
@@ -731,11 +722,8 @@ func TestTranslatePlan_UsesLongestContinuousRunsAndNextRoundFallback(t *testing.
 			`{"translations":{"1":"c6"}}`,
 		},
 	}
-	s := &Translate{
-		Rounds: []Round{
-			{Name: "bulk", Backend: fb, BatchSize: 3, Concurrency: 1},
-			{Name: "single", Backend: fb, BatchSize: 1, Concurrency: 1},
-		},
+	s := &RoundExecutor{
+		Round:    Round{Name: "bulk", Backend: fb, BatchSize: 3, Concurrency: 1},
 		Renderer: newTestRenderer(t),
 		Logger:   quietLogger(),
 		Reporter: &countingReporter{},
@@ -776,10 +764,8 @@ func TestTranslatePlan_ExhaustedRoundsKeepSource(t *testing.T) {
 			"",
 		},
 	}
-	s := &Translate{
-		Rounds: []Round{
-			{Name: "only", Backend: fb, BatchSize: 2, Concurrency: 1},
-		},
+	s := &RoundExecutor{
+		Round:    Round{Name: "only", Backend: fb, BatchSize: 2, Concurrency: 1},
 		Renderer: newTestRenderer(t),
 		Logger:   quietLogger(),
 		Reporter: &countingReporter{},

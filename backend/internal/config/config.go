@@ -43,18 +43,9 @@ type BackendConfig struct {
 }
 
 type PipelineConfig struct {
-	Split       SplitConfig       `yaml:"split"`
-	Protect     ProtectConfig     `yaml:"protect"`
-	Translate   TranslateConfig   `yaml:"translate"`
-	Postprocess PostprocessConfig `yaml:"postprocess"`
-	Context     ContextConfig     `yaml:"context"`
-	Ruby        RubyConfig        `yaml:"ruby"`
-}
-
-type SplitConfig struct {
-	Enabled  bool   `yaml:"enabled"`
-	Strategy string `yaml:"strategy"`
-	MaxChars int    `yaml:"max_chars"`
+	Protect   ProtectConfig   `yaml:"protect"`
+	Translate TranslateConfig `yaml:"translate"`
+	Ruby      RubyConfig      `yaml:"ruby"`
 }
 
 type ProtectConfig struct {
@@ -304,7 +295,6 @@ func Default() *Config {
 			},
 		}},
 		Pipeline: PipelineConfig{
-			Split: SplitConfig{Enabled: true, Strategy: "paragraph", MaxChars: 1200},
 			Protect: ProtectConfig{
 				Enabled: true,
 				Rules:   []string{"code", "link", "placeholder", "xml"},
@@ -325,8 +315,6 @@ func Default() *Config {
 					PromptUpgrade:        true,
 				},
 			},
-			Postprocess: PostprocessConfig{Enabled: true, TrimSpaces: true},
-			Context:     DefaultContextConfig(),
 		},
 		Prompt: PromptConfig{
 			Vars: map[string]any{"style": "concise, technical", "audience": "developers"},
@@ -419,9 +407,6 @@ func (c *Config) Validate() error {
 		c.Pipeline.Translate.FallbackShrink = defaultFallbackShrink
 	} else if shrink >= 1 {
 		return fmt.Errorf("pipeline.translate.fallback_shrink must be < 1, got %v", shrink)
-	}
-	if c.Pipeline.Split.MaxChars < 1 {
-		c.Pipeline.Split.MaxChars = 1200
 	}
 	validRubyKinds := map[string]bool{"phonetic": true, "semantic": true, "creative": true}
 	for _, k := range c.Pipeline.Ruby.PreserveKinds {

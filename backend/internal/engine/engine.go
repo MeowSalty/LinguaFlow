@@ -12,6 +12,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
@@ -20,14 +21,15 @@ type Engine struct {
 	cfg                 *config.Config
 	logger              *slog.Logger
 	reporter            progress.Reporter
-	rounds              []pipeline.Round                  // 替代 selector
-	bootstrapBackends   []backend.Backend                 // 自举后端
-	rubyRetryBackends   []backend.Backend                 // 注音对齐重试后端
-	standaloneBootstrap *config.StandaloneBootstrapConfig // 独立自举配置
+	rounds              []pipeline.Round
+	bootstrapBackends   []backend.Backend
+	rubyRetryBackends   []backend.Backend
+	standaloneBootstrap *config.StandaloneBootstrapConfig
 	renderer            *prompt.Renderer
 	bootstrapRenderer   *prompt.BootstrapRenderer
 	glossary            glossary.Glossary
 	tm                  tm.TranslationMemory
+	rubyRestorer        *ruby.Restorer
 }
 
 // NewWithOptions 按 Options 构造 Engine。rounds 必须非空，每轮 backends 必须非空。
@@ -79,6 +81,9 @@ func NewWithOptions(opts Options) (*Engine, error) {
 		renderer:            rend,
 		glossary:            glos,
 		tm:                  translationMemory,
+	}
+	if opts.Config.Pipeline.Ruby.Enabled {
+		e.rubyRestorer = ruby.NewRestorer()
 	}
 	if opts.Config.Glossary.Standalone.Enabled {
 		if opts.Config.Glossary.Standalone.TemplateContent == "" {
@@ -141,13 +146,11 @@ func (e *Engine) maybeSaveGlossary(ctx context.Context) {
 	e.logger.Info("glossary saved", "path", e.cfg.Glossary.Path)
 }
 
-func stageNames(ss []pipeline.Stage) []string {
-	out := make([]string, len(ss))
-	for i, s := range ss {
-		out[i] = s.Name()
-	}
-	return out
-}
+// Rounds 返回引擎的轮次配置。
+func (e *Engine) Rounds() []pipeline.Round { return e.rounds }
+
+// SaveGlossary 保存术语表到磁盘。
+func (e *Engine) SaveGlossary(ctx context.Context) { e.maybeSaveGlossary(ctx) }
 
 func firstNonEmpty(xs ...string) string {
 	for _, x := range xs {

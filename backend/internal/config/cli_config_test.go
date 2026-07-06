@@ -57,12 +57,6 @@ func TestLoadCLIConfig_Default(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected profile \"通用策略\" in TranslationProfiles map; keys: %v", mapKeys(cfg.TranslationProfiles))
 	}
-	if prof.Split.Strategy != "paragraph" {
-		t.Errorf("profile split.strategy = %q, want %q", prof.Split.Strategy, "paragraph")
-	}
-	if prof.Split.MaxChars != 1200 {
-		t.Errorf("profile split.max_chars = %d, want 1200", prof.Split.MaxChars)
-	}
 	if !prof.Repair.Enabled {
 		t.Error("expected repair.enabled = true")
 	}
@@ -217,14 +211,10 @@ execution:
 		t.Errorf("prompt content = %q", pt.Content)
 	}
 
-	prof, ok := cfg.TranslationProfiles["subtitle"]
+	_, ok = cfg.TranslationProfiles["subtitle"]
 	if !ok {
 		t.Fatal("expected profile \"subtitle\"")
 	}
-	if prof.Split.Strategy != "newline" {
-		t.Errorf("split.strategy = %q, want %q", prof.Split.Strategy, "newline")
-	}
-
 	// ── 验证 Glossary 为 CLIConfigGlossary 类型 ──
 	if !cfg.Glossary.Enabled {
 		t.Error("expected glossary.enabled = true")

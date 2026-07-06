@@ -27,15 +27,15 @@ func TestProcessBatchAttempt_BackendErrorEmitsBatch(t *testing.T) {
 	rep := &recordingBatchObserver{}
 	err429 := &backend.StatusError{StatusCode: 429, Err: errors.New("too many requests")}
 	fb := &fakeBackend{name: "fake", errs: []error{err429}}
-	s := &Translate{
-		Rounds:   defaultTestRound(fb, 1, 1),
+	s := &RoundExecutor{
+		Round:    defaultTestRound(fb, 1, 1)[0],
 		Renderer: newTestRenderer(t),
 		Logger:   quietLogger(),
 		Reporter: rep,
 		Repair:   defaultRepairOpts(),
 	}
 	job := batchJob{idxs: []int{0}, attempt: 0}
-	result := s.processBatchAttempt(context.Background(), doc, job, s.Rounds[0], quietLogger(), nil, job.idxs)
+	result := s.processBatchAttempt(context.Background(), doc, job, s.Round, quietLogger(), nil, job.idxs)
 
 	// 429 error triggers retry (not unresolved)
 	if result.retry == nil {

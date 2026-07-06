@@ -82,11 +82,6 @@ func profileConfigToResponse(c *schema.TranslationProfileConfigData) Translation
 	}
 
 	return TranslationProfileConfig{
-		Split: ProfileSplitConfig{
-			Enabled:  c.Split.Enabled,
-			Strategy: c.Split.Strategy,
-			MaxChars: c.Split.MaxChars,
-		},
 		Protect: ProfileProtectConfig{
 			Enabled: c.Protect.Enabled,
 			Rules:   &rules,
@@ -145,11 +140,6 @@ func parseProfileConfig(c *TranslationProfileConfig) *schema.TranslationProfileC
 	}
 
 	return &schema.TranslationProfileConfigData{
-		Split: schema.ProfileSplitConfig{
-			Enabled:  c.Split.Enabled,
-			Strategy: c.Split.Strategy,
-			MaxChars: c.Split.MaxChars,
-		},
 		Protect: schema.ProfileProtectConfig{
 			Enabled: c.Protect.Enabled,
 			Rules:   rules,
@@ -189,12 +179,6 @@ func parseProfileConfig(c *TranslationProfileConfig) *schema.TranslationProfileC
 // 仅覆盖请求中显式提供的字段，未指定的字段保留现有值。
 func mergeProfileConfig(existing *schema.TranslationProfileConfigData, incoming *TranslationProfileConfig) *schema.TranslationProfileConfigData {
 	merged := *existing
-
-	if incoming.Split.Strategy != "" || incoming.Split.MaxChars > 0 {
-		merged.Split.Enabled = incoming.Split.Enabled
-		merged.Split.Strategy = incoming.Split.Strategy
-		merged.Split.MaxChars = incoming.Split.MaxChars
-	}
 
 	if incoming.Protect.Rules != nil {
 		rules := make([]string, len(*incoming.Protect.Rules))

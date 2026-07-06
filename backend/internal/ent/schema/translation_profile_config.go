@@ -5,20 +5,12 @@ package schema
 
 // TranslationProfileConfigData 翻译配置模板的 JSON 存储结构。
 type TranslationProfileConfigData struct {
-	Split       ProfileSplitConfig       `json:"split"       yaml:"split"`
 	Protect     ProfileProtectConfig     `json:"protect"     yaml:"protect"`
 	Postprocess ProfilePostprocessConfig `json:"postprocess" yaml:"postprocess"`
 	Repair      ProfileRepairConfig      `json:"repair"      yaml:"repair"`
 	Glossary    ProfileGlossaryConfig    `json:"glossary"    yaml:"glossary"`
 	Context     ProfileContextConfig     `json:"context"     yaml:"context"`
 	Ruby        ProfileRubyConfig        `json:"ruby"        yaml:"ruby"`
-}
-
-// ProfileSplitConfig 分割策略配置。
-type ProfileSplitConfig struct {
-	Enabled  bool   `json:"enabled"  yaml:"enabled"`
-	Strategy string `json:"strategy" yaml:"strategy"`
-	MaxChars int    `json:"max_chars" yaml:"max_chars"`
 }
 
 // ProfileProtectConfig 保护规则配置。
@@ -74,11 +66,6 @@ type ProfileContextConfig struct {
 // DefaultProfileConfig 返回默认的翻译配置。
 func DefaultProfileConfig() TranslationProfileConfigData {
 	return TranslationProfileConfigData{
-		Split: ProfileSplitConfig{
-			Enabled:  true,
-			Strategy: "paragraph",
-			MaxChars: 1200,
-		},
 		Protect: ProfileProtectConfig{
 			Enabled: true,
 			Rules:   []string{"code", "link", "placeholder", "xml"},

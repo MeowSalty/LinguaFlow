@@ -177,7 +177,6 @@ type PromptSnapshot struct {
 type StrategySnapshot struct {
 	ProfileID   *int                            `json:"profile_id,omitempty"`
 	ProfileName string                          `json:"profile_name"`
-	Split       schema.ProfileSplitConfig       `json:"split"`
 	Protect     schema.ProfileProtectConfig     `json:"protect"`
 	Postprocess schema.ProfilePostprocessConfig `json:"postprocess"`
 	Repair      schema.ProfileRepairConfig      `json:"repair"`
@@ -504,7 +503,6 @@ func (s *TranslationJobService) snapshotProfile(ctx context.Context, profileID i
 	return &StrategySnapshot{
 		ProfileID:   &id,
 		ProfileName: tp.Name,
-		Split:       tp.Config.Split,
 		Protect:     tp.Config.Protect,
 		Postprocess: tp.Config.Postprocess,
 		Repair:      tp.Config.Repair,
