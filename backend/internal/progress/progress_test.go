@@ -39,12 +39,12 @@ func TestTerminal_RendersCountAndCloses(t *testing.T) {
 func TestTerminal_NoTotalSkipsBar(t *testing.T) {
 	var buf bytes.Buffer
 	r := NewTerminal(&buf)
-	r.StageStart("split", 0) // 没有段级进度
-	r.SegmentDone()          // 应被忽略，不 panic
+	r.StageStart("protect", 0) // 没有段级进度
+	r.SegmentDone()            // 应被忽略，不 panic
 	r.StageDone()
 	_ = r.Close()
 	out := buf.String()
-	if !strings.Contains(out, "split") {
+	if !strings.Contains(out, "protect") {
 		t.Errorf("expected stage name in output, got %q", out)
 	}
 }
@@ -80,14 +80,14 @@ func TestTerminal_CloseStopsTicker(t *testing.T) {
 func TestTerminal_NoTotalTickerSilent(t *testing.T) {
 	var buf bytes.Buffer
 	r := newTerminalWithInterval(&buf, 5*time.Millisecond)
-	r.StageStart("split", 0) // total<=0：不创建 bar，ticker 应空转
+	r.StageStart("protect", 0) // total<=0：不创建 bar，ticker 应空转
 	time.Sleep(40 * time.Millisecond)
 	afterStart := buf.Len()
 	_ = r.Close()
 	// 等待区间内不应有任何 bar 重绘输出；唯一写入是 StageStart 的提示行。
-	if afterStart != len("▶ split\n") {
+	if afterStart != len("▶ protect\n") {
 		t.Errorf("unexpected buf len after sleep: got %d, want %d, buf=%q",
-			afterStart, len("▶ split\n"), buf.String())
+			afterStart, len("▶ protect\n"), buf.String())
 	}
 }
 
@@ -136,7 +136,7 @@ func TestLog_StageDoneWithoutTotal(t *testing.T) {
 	var buf bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	r := NewLog(logger, 0, 5)
-	r.StageStart("split", 0)
+	r.StageStart("protect", 0)
 	r.StageDone()
 	out := buf.String()
 	if strings.Contains(out, `total=`) {

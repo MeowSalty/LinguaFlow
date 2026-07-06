@@ -17,7 +17,7 @@ import (
 // Reporter 接收翻译流水线发出的进度事件。所有方法必须并发安全。
 //
 // 生命周期：StageStart → 任意多次 SegmentDone → StageDone，可反复出现。
-// total <= 0 表示该阶段无段级进度（如 split / protect / unprotect），
+// total <= 0 表示该阶段无段级进度（如 protect / unprotect），
 // 实现可选择只展示阶段开始/结束，跳过段计数。
 //
 // Close 释放底层资源（如终端进度条），幂等。

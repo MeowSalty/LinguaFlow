@@ -156,10 +156,6 @@ prompt_templates:
     content: "You are a technical translator."
 translation_profiles:
   subtitle:
-    split:
-      enabled: true
-      strategy: newline
-      max_chars: 80
     repair:
       enabled: true
 glossary:
@@ -381,10 +377,6 @@ prompt_templates:
     bootstrap_content: "Extract domain terms from the text."
 translation_profiles:
   default:
-    split:
-      enabled: true
-      strategy: paragraph
-      max_chars: 1200
 execution:
   rounds:
     - name: "首轮"

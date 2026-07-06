@@ -198,7 +198,7 @@ func resolveExternalReferences(cliCfg *CLIConfig, configDir string) error {
 		if tp.File == "" {
 			continue
 		}
-		// 如果已有内联配置（split/protect/postprocess/repair 任一非零值），忽略 file
+		// 如果已有内联配置（protect/postprocess/repair 任一非零值），忽略 file
 		if hasInlineProfileConfig(tp) {
 			tp.File = ""
 			cliCfg.TranslationProfiles[name] = tp

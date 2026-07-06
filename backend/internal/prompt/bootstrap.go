@@ -137,8 +137,7 @@ func ParseBootstrapResponse(text string) ([]BootstrapEntry, error) {
 }
 
 // jsonObjectSlice 从 text 中截取首个 { 到与之配对的 } 之间的子串。
-// 行为与 internal/pipeline/stages/translate.go 中的同名函数一致；为避免跨包依赖
-// 在此独立维护一份（约 20 行）。
+// 为避免跨包依赖在此独立维护一份（约 20 行）。
 func jsonObjectSlice(text string) string {
 	start := strings.IndexByte(text, '{')
 	if start < 0 {

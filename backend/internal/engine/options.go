@@ -10,8 +10,8 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
@@ -143,23 +143,23 @@ func buildStagesRounds(in []Round, cfg *config.Config) []pipeline.Round {
 		}
 
 		out = append(out, pipeline.Round{
-			Name:             resolveName(r.Name, i),
-			Backend:          r.Backend,
-			BatchSize:        resolveDefault(r.BatchSize, cfg.Pipeline.Translate.BatchSize, 1),
-			MaxWordsPerBatch: r.MaxWordsPerBatch,
-			Concurrency:      resolveDefault(r.Concurrency, cfg.Pipeline.Translate.Concurrency, 1),
-			FallbackShrink:   resolveShrink(r.FallbackShrink, cfg.Pipeline.Translate.FallbackShrink),
-			Retry:            retry,
-			Renderer:         r.Renderer,
-			Repair:           roundRepair,
-			ResponseMode:     r.ResponseMode,
-			Mode:             mode,
-			Protector:        prot,
-			RubyEnabled:      r.RubyEnabled,
+			Name:              resolveName(r.Name, i),
+			Backend:           r.Backend,
+			BatchSize:         resolveDefault(r.BatchSize, cfg.Pipeline.Translate.BatchSize, 1),
+			MaxWordsPerBatch:  r.MaxWordsPerBatch,
+			Concurrency:       resolveDefault(r.Concurrency, cfg.Pipeline.Translate.Concurrency, 1),
+			FallbackShrink:    resolveShrink(r.FallbackShrink, cfg.Pipeline.Translate.FallbackShrink),
+			Retry:             retry,
+			Renderer:          r.Renderer,
+			Repair:            roundRepair,
+			ResponseMode:      r.ResponseMode,
+			Mode:              mode,
+			Protector:         prot,
+			RubyEnabled:       r.RubyEnabled,
 			RubyPreserveKinds: r.RubyPreserveKinds,
-			RubyMode:         rubyMode,
-			Context:          roundCtx,
-			Postprocess:      roundPostprocess,
+			RubyMode:          rubyMode,
+			Context:           roundCtx,
+			Postprocess:       roundPostprocess,
 		})
 	}
 	return out
