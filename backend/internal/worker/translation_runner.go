@@ -19,6 +19,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
@@ -344,6 +345,14 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 			b = backend.NewRateLimitedBackend(b, limiter)
 		}
 
+		// 为每轮构建独立的 Renderer（使用该轮自己的 prompt 模板）
+		roundRenderer, err := prompt.NewRenderer(config.PromptConfig{
+			SystemTemplateContent: rs.Prompt.Content,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("round %q build renderer: %w", rs.Name, err)
+		}
+
 		rounds = append(rounds, engine.Round{
 			Backend:          b,
 			Name:             rs.Name,
@@ -356,6 +365,7 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 				Backoff:     time.Duration(rs.Retry.BackoffMs) * time.Millisecond,
 				Jitter:      rs.Retry.Jitter,
 			},
+			Renderer:     roundRenderer,
 			ResponseMode: responseModeFromBackendOptions(rs.Backend.Options),
 		})
 	}
@@ -414,19 +424,34 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 	})
 }
 
-// buildStrategyConfig 从快照构建策略配置。
+// buildStrategyConfig 从快照构建全局策略配置。
+//
+// 以下设置是 Pipeline 级别的全局配置，在所有轮次间共享，取自第一轮的 Strategy：
+//   - Split（段落拆分）：在翻译前对整个文档生效
+//   - Protect（内容保护）：在翻译前对整个文档生效
+//   - Ruby（注音保护）：在翻译前后对整个文档生效
+//   - Context（上下文窗口）：影响分批逻辑，全局统一
+//   - Postprocess（后处理）：在翻译后对整个文档生效
+//   - Glossary Bootstrap（术语自举参数）：全局统一
+//
+// 以下设置是轮次级别的，每轮独立配置，不在此函数中设置：
+//   - Backend（后端）：每轮使用独立的 AI 后端
+//   - Prompt/Renderer（提示词渲染器）：每轮使用独立的 prompt 模板
+//   - BatchSize / Concurrency / FallbackShrink / Retry：每轮独立配置
+//   - Repair（修复策略）：全局默认从此函数设置，但每轮可通过 Round.Repair 覆盖
+//   - ResponseMode（响应模式）：每轮独立配置
 func buildStrategyConfig(snapshot *service.JobExecutionSnapshot) *config.Config {
 	cfg := config.Default()
 
 	// 翻译记忆开关从快照读取（全局基础设施级功能，默认关闭）
 	cfg.TranslationMemory.Enabled = snapshot.TMEnabled
 
-	// 提示词配置
+	// 全局 Prompt 配置（作为 Engine 级 Renderer 的兜底，实际翻译时每轮使用自己的 Renderer）
 	if len(snapshot.Rounds) > 0 {
 		cfg.Prompt.SystemTemplateContent = snapshot.Rounds[0].Prompt.Content
 	}
 
-	// 策略配置
+	// Pipeline 级全局策略配置（取自第一轮的 Strategy，适用于整个文档处理流程）
 	if len(snapshot.Rounds) > 0 {
 		s := snapshot.Rounds[0].Strategy
 		cfg.Pipeline.Split = config.SplitConfig{
@@ -446,6 +471,7 @@ func buildStrategyConfig(snapshot *service.JobExecutionSnapshot) *config.Config 
 			Enabled:    s.Postprocess.Enabled,
 			TrimSpaces: s.Postprocess.TrimSpaces,
 		}
+		// Repair 全局默认值；每轮可通过 Round.Repair 独立覆盖
 		cfg.Pipeline.Translate.Repair = config.RepairConfig{
 			Enabled:              s.Repair.Enabled,
 			JSONStructural:       s.Repair.JSONStructural,
