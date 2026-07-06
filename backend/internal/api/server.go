@@ -22,8 +22,10 @@ import (
 
 const readinessPingTimeout = 2 * time.Second
 
+const defaultWorkerQueueSize = 32
+
 type Server struct {
-	config                *config.Config
+	serverCfg             *config.ServerConfig
 	logger                *slog.Logger
 	db                    *sql.DB
 	entClient             *ent.Client
@@ -67,13 +69,13 @@ func (s *Server) localAuthUser() (authenticatedUser, bool) {
 	return authenticatedUser{}, false
 }
 
-func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.Client, mode string, localUser *ent.User) (*Server, error) {
+func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client *ent.Client, mode string, localUser *ent.User) (*Server, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
 	s := &Server{
-		config:      cfg,
+		serverCfg:   cfg,
 		logger:      logger,
 		db:          db,
 		entClient:   client,
@@ -83,16 +85,16 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 	}
 	limiterPool := backend.NewLimiterPool()
 	s.adminService = service.NewAdminService(client)
-	s.authService = service.NewAuthService(client, service.AuthConfigFromServer(cfg.Server), s.adminService)
+	s.authService = service.NewAuthService(client, service.AuthConfigFromServer(*cfg), s.adminService)
 	s.userService = service.NewUserService(client, s.authService)
 
 	// Seed default system settings from YAML config (only writes if table is empty for each key).
 	regEnabled := "true"
-	if !cfg.Server.Registration.Enabled {
+	if !cfg.Registration.Enabled {
 		regEnabled = "false"
 	}
 	autoAdmin := "true"
-	if !cfg.Server.Registration.AutoAdmin {
+	if !cfg.Registration.AutoAdmin {
 		autoAdmin = "false"
 	}
 	if err := s.adminService.InitializeSettings(context.Background(), map[string]string{
@@ -108,7 +110,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 	s.glossarySvc = service.NewGlossaryService(client, s.projectSvc)
 	s.promptTemplateSvc = service.NewPromptTemplateService(client)
 	s.translationProfileSvc = service.NewTranslationProfileService(client)
-	jobStore, err := filestore.NewLocal(filepath.Join(cfg.Server.DataDir, "jobs"))
+	jobStore, err := filestore.NewLocal(filepath.Join(cfg.DataDir, "jobs"))
 	if err != nil {
 		return nil, err
 	}
@@ -121,16 +123,12 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 	s.auditSvc = service.NewAuditService(client, s.userService, s.projectSvc)
 	s.glossarySyncSvc = service.NewGlossarySyncService(client, s.glossarySvc, s.projectSvc, s.auditSvc, logger)
 	s.resourceSvc = service.NewResourceService(client, s.projectSvc, jobStore)
-	queueSize := cfg.Pipeline.Translate.Concurrency * 8
-	if queueSize < 16 {
-		queueSize = 16
-	}
-	s.translationJobQueue = worker.NewQueue(queueSize)
-	s.translationJobRunner = worker.NewTranslationRunner(cfg, logger, client, s.translationJobSvc, jobStore, s.translationJobQueue, s.eventBroker, limiterPool)
+	s.translationJobQueue = worker.NewQueue(defaultWorkerQueueSize)
+	s.translationJobRunner = worker.NewTranslationRunner(logger, client, s.translationJobSvc, jobStore, s.translationJobQueue, s.eventBroker, limiterPool)
 	s.syncTaskQueue = worker.NewQueue(100)
-	s.syncTaskRunner = worker.NewSyncTaskRunner(cfg, logger, client, s.glossarySyncSvc, s.syncTaskQueue)
+	s.syncTaskRunner = worker.NewSyncTaskRunner(logger, client, s.glossarySyncSvc, s.syncTaskQueue)
 	s.httpServer = &http.Server{
-		Addr:              cfg.Server.Address(),
+		Addr:              cfg.Address(),
 		Handler:           s.newRouter(),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
@@ -194,7 +192,7 @@ func (s *Server) Run(ctx context.Context, ln net.Listener) error {
 	select {
 	case <-ctx.Done():
 		s.ready.Store(false)
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), s.config.Server.ShutdownTimeout)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), s.serverCfg.ShutdownTimeout)
 		defer cancel()
 		if err := s.Shutdown(shutdownCtx); err != nil {
 			return err

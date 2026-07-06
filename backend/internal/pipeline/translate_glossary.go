@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 )
@@ -115,7 +114,7 @@ func (s *RoundExecutor) absorbInlineGlossary(
 			"received", len(entries))
 	}
 
-	if s.InlineConflictStrategy != config.InlineConflictRewriteLocal {
+	if s.InlineConflictStrategy != InlineConflictRewriteLocal {
 		return
 	}
 	if len(result.Skipped) == 0 || len(translations) == 0 {

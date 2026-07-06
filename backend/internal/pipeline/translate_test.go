@@ -10,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
@@ -331,7 +330,7 @@ func TestAbsorbInlineGlossary_RewritesConflictInBatch(t *testing.T) {
 		InlineBootstrap:        true,
 		MinBootstrapSourceLen:  2,
 		MaxTermsPer1000Chars:   3.0,
-		InlineConflictStrategy: config.InlineConflictRewriteLocal,
+		InlineConflictStrategy: InlineConflictRewriteLocal,
 	}
 	// Worker B 的本批响应：translations 用了 "并发池"；glossary 项也提议 thread pool→并发池。
 	entries := []prompt.BootstrapEntry{
@@ -367,7 +366,7 @@ func TestAbsorbInlineGlossary_StrategyOffKeepsConflict(t *testing.T) {
 		InlineBootstrap:        true,
 		MinBootstrapSourceLen:  2,
 		MaxTermsPer1000Chars:   3.0,
-		InlineConflictStrategy: config.InlineConflictOff,
+		InlineConflictStrategy: InlineConflictOff,
 	}
 	entries := []prompt.BootstrapEntry{
 		{Source: "thread pool", Target: "并发池"},
@@ -387,7 +386,7 @@ func TestAbsorbInlineGlossary_NoConflictNoChange(t *testing.T) {
 		InlineBootstrap:        true,
 		MinBootstrapSourceLen:  2,
 		MaxTermsPer1000Chars:   3.0,
-		InlineConflictStrategy: config.InlineConflictRewriteLocal,
+		InlineConflictStrategy: InlineConflictRewriteLocal,
 	}
 	entries := []prompt.BootstrapEntry{
 		{Source: "thread pool", Target: "线程池"},
@@ -408,7 +407,7 @@ func TestAbsorbInlineGlossary_SameTargetIsNoop(t *testing.T) {
 		InlineBootstrap:        true,
 		MinBootstrapSourceLen:  2,
 		MaxTermsPer1000Chars:   3.0,
-		InlineConflictStrategy: config.InlineConflictRewriteLocal,
+		InlineConflictStrategy: InlineConflictRewriteLocal,
 	}
 	entries := []prompt.BootstrapEntry{
 		{Source: "thread pool", Target: "线程池"}, // 与已有完全相同
@@ -429,7 +428,7 @@ func TestAbsorbInlineGlossary_ProposedTargetMissingInTranslations(t *testing.T) 
 		InlineBootstrap:        true,
 		MinBootstrapSourceLen:  2,
 		MaxTermsPer1000Chars:   3.0,
-		InlineConflictStrategy: config.InlineConflictRewriteLocal,
+		InlineConflictStrategy: InlineConflictRewriteLocal,
 	}
 	entries := []prompt.BootstrapEntry{
 		{Source: "thread pool", Target: "并发池"},
@@ -467,9 +466,7 @@ const testSystemTmpl = `你是 LinguaFlow，一个专业的翻译引擎。
 
 func newTestRenderer(t *testing.T) *prompt.Renderer {
 	t.Helper()
-	r, err := prompt.NewRenderer(config.PromptConfig{
-		SystemTemplateContent: testSystemTmpl,
-	})
+	r, err := prompt.NewRenderer(testSystemTmpl)
 	if err != nil {
 		t.Fatalf("renderer: %v", err)
 	}

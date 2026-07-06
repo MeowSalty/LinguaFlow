@@ -5,8 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 )
 
 // Request 是发往后端的统一请求。
@@ -74,8 +72,8 @@ func Register(typ string, f Factory) {
 	factories[typ] = f
 }
 
-// Build 按 BackendConfig 构造后端实例。
-func Build(cfg config.BackendConfig) (Backend, error) {
+// Build 按 Config 构造后端实例。
+func Build(cfg Config) (Backend, error) {
 	f, ok := factories[cfg.Type]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrUnknownBackendType, cfg.Type)

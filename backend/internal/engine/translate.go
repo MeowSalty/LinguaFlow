@@ -6,8 +6,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 )
 
@@ -34,7 +32,7 @@ func (e *Engine) TranslateRound(ctx context.Context, roundIdx int, doc *pipeline
 	round := e.rounds[roundIdx]
 
 	// Bootstrap 仅首轮
-	if roundIdx == 0 && e.standaloneBootstrap != nil && e.standaloneBootstrap.Enabled && e.bootstrapRenderer != nil {
+	if roundIdx == 0 && e.standaloneBootstrap && e.standaloneCfg != nil && e.bootstrapRenderer != nil {
 		bootstrapStage := e.buildBootstrapStage()
 		if err := bootstrapStage.Run(ctx, doc); err != nil {
 			e.logger.Warn("bootstrap failed, continuing without incremental terms", "err", err)
@@ -55,7 +53,7 @@ func (e *Engine) TranslateRound(ctx context.Context, roundIdx int, doc *pipeline
 		"target_lang", doc.TargetLang)
 
 	inlineBootstrap := e.cfg.Glossary.Enabled && e.cfg.Glossary.Bootstrap.Enabled
-	repairOpts := toRepairOptions(e.cfg.Pipeline.Translate.Repair)
+	repairOpts := e.cfg.Repair
 
 	executor := &pipeline.RoundExecutor{
 		Round:                  round,
@@ -71,7 +69,7 @@ func (e *Engine) TranslateRound(ctx context.Context, roundIdx int, doc *pipeline
 		MinBootstrapSourceLen:  e.cfg.Glossary.Bootstrap.MinSourceLen,
 		InlineConflictStrategy: e.cfg.Glossary.Bootstrap.InlineConflictStrategy,
 		Repair:                 repairOpts,
-		Context:                config.DefaultContextConfig(),
+		Context:                pipeline.DefaultContextConfig(),
 		BatchHandler:           cfg.batchHandler,
 	}
 
@@ -120,28 +118,19 @@ func buildTranslateResult(doc *pipeline.Document) pipeline.TranslateResult {
 
 // buildBootstrapStage constructs the Bootstrap stage.
 func (e *Engine) buildBootstrapStage() *pipeline.Bootstrap {
-	pc := e.cfg.Pipeline
-	retry := toRetryPolicy(pc)
-	repairOpts := toRepairOptions(pc.Translate.Repair)
+	retry := e.cfg.TranslateDefaults.Retry
+	repairOpts := e.cfg.Repair
 	return &pipeline.Bootstrap{
 		Backends:         e.bootstrapBackends,
 		Renderer:         e.bootstrapRenderer,
 		Glossary:         e.glossary,
 		Retry:            retry,
-		Concurrency:      e.standaloneBootstrap.Concurrency,
-		BatchSize:        e.standaloneBootstrap.BatchSize,
-		MaxTermsPerBatch: e.standaloneBootstrap.MaxTermsPerBatch,
-		MinSourceLen:     e.standaloneBootstrap.MinSourceLen,
+		Concurrency:      e.standaloneCfg.Concurrency,
+		BatchSize:        e.standaloneCfg.BatchSize,
+		MaxTermsPerBatch: e.standaloneCfg.MaxTermsPerBatch,
+		MinSourceLen:     e.standaloneCfg.MinSourceLen,
 		Logger:           e.logger,
 		Reporter:         e.reporter,
 		Repair:           repairOpts,
-	}
-}
-
-func toRetryPolicy(pc config.PipelineConfig) backend.RetryPolicy {
-	return backend.RetryPolicy{
-		MaxAttempts: pc.Translate.Retry.MaxAttempts,
-		Backoff:     time.Duration(pc.Translate.Retry.BackoffMs) * time.Millisecond,
-		Jitter:      pc.Translate.Retry.Jitter,
 	}
 }

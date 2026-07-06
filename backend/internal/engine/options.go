@@ -3,10 +3,8 @@ package engine
 import (
 	"fmt"
 	"log/slog"
-	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
@@ -22,7 +20,7 @@ type Options struct {
 	Rounds            []Round
 	BootstrapBackends []backend.Backend
 	RubyRetryBackends []backend.Backend
-	Config            *config.Config
+	Config            *Config
 	Logger            *slog.Logger
 	Reporter          progress.Reporter
 	Resources         RuntimeResources
@@ -38,15 +36,15 @@ type Round struct {
 	FallbackShrink   float64
 	Retry            backend.RetryPolicy
 	Renderer         *prompt.Renderer
-	Repair           *config.RepairConfig
+	Repair           *repair.Config
 	ResponseMode     string
 
 	Mode              string
 	ProtectRules      []string
 	RubyEnabled       bool
 	RubyPreserveKinds []string
-	Context           *config.ContextConfig
-	Postprocess       *config.PostprocessConfig
+	Context           *pipeline.ContextConfig
+	Postprocess       *pipeline.PostprocessConfig
 }
 
 // RuntimeResources 封装可选的运行时资源。
@@ -80,15 +78,11 @@ func resolveShrink(val, global float64) float64 {
 }
 
 // buildStagesRounds 将 engine.Round 转换为 pipeline.Round。
-func buildStagesRounds(in []Round, cfg *config.Config) []pipeline.Round {
+func buildStagesRounds(in []Round, cfg *Config) []pipeline.Round {
 	if len(in) == 0 {
 		return nil
 	}
-	globalRetry := backend.RetryPolicy{
-		MaxAttempts: cfg.Pipeline.Translate.Retry.MaxAttempts,
-		Backoff:     time.Duration(cfg.Pipeline.Translate.Retry.BackoffMs) * time.Millisecond,
-		Jitter:      cfg.Pipeline.Translate.Retry.Jitter,
-	}
+	globalRetry := cfg.TranslateDefaults.Retry
 	out := make([]pipeline.Round, 0, len(in))
 	for i, r := range in {
 		retry := r.Retry
@@ -100,7 +94,7 @@ func buildStagesRounds(in []Round, cfg *config.Config) []pipeline.Round {
 		if r.Repair != nil {
 			rc := *r.Repair
 			rc.Normalize()
-			opts := toRepairOptions(rc)
+			opts := rc.ToOptions()
 			roundRepair = &opts
 		}
 
@@ -124,13 +118,13 @@ func buildStagesRounds(in []Round, cfg *config.Config) []pipeline.Round {
 
 		rubyMode := ""
 		if r.RubyEnabled {
-			rubyMode = config.RubyModeJSON
+			rubyMode = prompt.RubyModeJSON
 			if r.ResponseMode == "text" {
-				rubyMode = config.RubyModeSection
+				rubyMode = prompt.RubyModeSection
 			}
 		}
 
-		var roundCtx *config.ContextConfig
+		var roundCtx *pipeline.ContextConfig
 		if r.Context != nil {
 			roundCtx = r.Context
 		}
@@ -145,10 +139,10 @@ func buildStagesRounds(in []Round, cfg *config.Config) []pipeline.Round {
 		out = append(out, pipeline.Round{
 			Name:              resolveName(r.Name, i),
 			Backend:           r.Backend,
-			BatchSize:         resolveDefault(r.BatchSize, cfg.Pipeline.Translate.BatchSize, 1),
+			BatchSize:         resolveDefault(r.BatchSize, cfg.TranslateDefaults.BatchSize, 1),
 			MaxWordsPerBatch:  r.MaxWordsPerBatch,
-			Concurrency:       resolveDefault(r.Concurrency, cfg.Pipeline.Translate.Concurrency, 1),
-			FallbackShrink:    resolveShrink(r.FallbackShrink, cfg.Pipeline.Translate.FallbackShrink),
+			Concurrency:       resolveDefault(r.Concurrency, cfg.TranslateDefaults.Concurrency, 1),
+			FallbackShrink:    resolveShrink(r.FallbackShrink, cfg.TranslateDefaults.FallbackShrink),
 			Retry:             retry,
 			Renderer:          r.Renderer,
 			Repair:            roundRepair,

@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
@@ -17,7 +16,6 @@ type SyncTaskRunner struct {
 
 // NewSyncTaskRunner 创建一个新的术语同步任务执行器。
 func NewSyncTaskRunner(
-	cfg *config.Config,
 	logger *slog.Logger,
 	client *ent.Client,
 	syncSvc *service.GlossarySyncService,
@@ -26,7 +24,7 @@ func NewSyncTaskRunner(
 	r := &SyncTaskRunner{
 		syncSvc: syncSvc,
 	}
-	r.BaseRunner = newBaseRunner(cfg, logger, client, nil, queue, syncSvc, r.processTask, "sync task worker")
+	r.BaseRunner = newBaseRunner(logger, client, nil, queue, syncSvc, r.processTask, "sync task worker")
 	return r
 }
 

@@ -20,6 +20,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
@@ -39,7 +40,6 @@ type TranslationRunner struct {
 
 // NewTranslationRunner 创建一个新的翻译任务执行器。
 func NewTranslationRunner(
-	cfg *config.Config,
 	logger *slog.Logger,
 	client *ent.Client,
 	jobs *service.TranslationJobService,
@@ -54,7 +54,7 @@ func NewTranslationRunner(
 		limiterPool: limiterPool,
 		activeJobs:  make(map[int]context.CancelFunc),
 	}
-	r.BaseRunner = newBaseRunner(cfg, logger, client, store, queue, jobs, r.processJob, "translation worker")
+	r.BaseRunner = newBaseRunner(logger, client, store, queue, jobs, r.processJob, "translation worker")
 	return r
 }
 
@@ -151,14 +151,14 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		return nil
 	}
 
-	cfg := buildStrategyConfig(snapshot)
+	cfg := buildEngineConfig(snapshot)
 	autoApprove := snapshot.AutoApprove
-	runtimeGlossary, err := r.buildRuntimeGlossary(exec.Project, cfg)
+	runtimeGlossary, err := r.buildRuntimeGlossary(exec.Project, cfg.Glossary.Enabled)
 	if err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
-	memory, err := r.buildRuntimeTM(exec.Project, cfg)
+	memory, err := r.buildRuntimeTM(exec.Project, cfg.TMEnabled)
 	if err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
@@ -348,13 +348,13 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 	var rounds []engine.Round
 	for _, rs := range snapshot.Rounds {
 		// 从快照直接构建后端实例（无需名称匹配）
-		cfg := config.BackendConfig{
+		bCfg := backend.Config{
 			Name:    rs.Backend.Name, // 仅用于日志，不用于匹配
 			Type:    rs.Backend.Type,
 			Enabled: true,
 			Options: rs.Backend.Options,
 		}
-		b, err := backend.Build(cfg)
+		b, err := backend.Build(bCfg)
 		if err != nil {
 			return nil, fmt.Errorf("round %q build backend: %w", rs.Name, err)
 		}
@@ -366,9 +366,7 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 		}
 
 		// 为每轮构建独立的 Renderer（使用该轮自己的 prompt 模板）
-		roundRenderer, err := prompt.NewRenderer(config.PromptConfig{
-			SystemTemplateContent: rs.Prompt.Content,
-		})
+		roundRenderer, err := prompt.NewRenderer(rs.Prompt.Content)
 		if err != nil {
 			return nil, fmt.Errorf("round %q build renderer: %w", rs.Name, err)
 		}
@@ -391,26 +389,25 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 			ProtectRules:      rs.Strategy.Protect.Rules,
 			RubyEnabled:       rs.Strategy.Ruby.Enabled,
 			RubyPreserveKinds: rs.Strategy.Ruby.PreserveKinds,
-			Context: &config.ContextConfig{
+			Context: &pipeline.ContextConfig{
 				Enabled:  rs.Strategy.Context.Enabled,
 				Before:   rs.Strategy.Context.Before,
 				After:    rs.Strategy.Context.After,
 				MaxChars: rs.Strategy.Context.MaxChars,
 			},
-			Postprocess: &config.PostprocessConfig{
-				Enabled:    rs.Strategy.Postprocess.Enabled,
+			Postprocess: &pipeline.PostprocessConfig{
 				TrimSpaces: rs.Strategy.Postprocess.TrimSpaces,
 			},
 		})
 	}
 
 	// 构建策略配置（不含后端信息）
-	cfg := buildStrategyConfig(snapshot)
+	cfg := buildEngineConfig(snapshot)
 
 	// 构建注音对齐重试后端
 	var rubyRetryBackends []backend.Backend
 	if snapshot.RubyRetry != nil && snapshot.RubyRetry.Enabled {
-		rrCfg := config.BackendConfig{
+		rrCfg := backend.Config{
 			Name:    snapshot.RubyRetry.Backend.Name,
 			Type:    snapshot.RubyRetry.Backend.Type,
 			Enabled: true,
@@ -430,7 +427,7 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 	// 构建独立自举后端
 	var bootstrapBackends []backend.Backend
 	if snapshot.Bootstrap != nil && snapshot.Bootstrap.Enabled {
-		bsCfg := config.BackendConfig{
+		bsCfg := backend.Config{
 			Name:    snapshot.Bootstrap.Backend.Name,
 			Type:    snapshot.Bootstrap.Backend.Type,
 			Enabled: true,
@@ -458,36 +455,17 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 	})
 }
 
-// buildStrategyConfig 从快照构建全局策略配置。
-//
-// 以下设置是 Pipeline 级别的全局配置，在所有轮次间共享：
-//   - Protect（内容保护）：per-round 构建 Protector
-//   - Ruby（注音保护）：全局启用开关
-//   - Glossary Bootstrap（术语自举参数）：全局统一
-//   - Repair（修复策略）：全局默认值，每轮可覆盖
-//
-// 以下设置是轮次级别的，每轮独立配置，不在此函数中设置：
-//   - Context / Postprocess / ProtectRules / RubyEnabled：per-round
-func buildStrategyConfig(snapshot *service.JobExecutionSnapshot) *config.Config {
-	cfg := config.Default()
-
-	cfg.TranslationMemory.Enabled = snapshot.TMEnabled
-
-	if len(snapshot.Rounds) > 0 {
-		cfg.Prompt.SystemTemplateContent = snapshot.Rounds[0].Prompt.Content
+// buildEngineConfig 从快照构建引擎运行时配置。
+func buildEngineConfig(snapshot *service.JobExecutionSnapshot) *engine.Config {
+	cfg := &engine.Config{
+		SourceLang: snapshot.SourceLang,
+		TargetLang: snapshot.TargetLang,
+		TMEnabled:  snapshot.TMEnabled,
 	}
 
 	if len(snapshot.Rounds) > 0 {
 		s := snapshot.Rounds[0].Strategy
-		cfg.Pipeline.Protect = config.ProtectConfig{
-			Enabled: s.Protect.Enabled,
-			Rules:   s.Protect.Rules,
-		}
-		cfg.Pipeline.Ruby = config.RubyConfig{
-			Enabled:       s.Ruby.Enabled,
-			PreserveKinds: s.Ruby.PreserveKinds,
-		}
-		cfg.Pipeline.Translate.Repair = config.RepairConfig{
+		rc := repair.Config{
 			Enabled:              s.Repair.Enabled,
 			JSONStructural:       s.Repair.JSONStructural,
 			SchemaAliases:        s.Repair.SchemaAliases,
@@ -496,7 +474,12 @@ func buildStrategyConfig(snapshot *service.JobExecutionSnapshot) *config.Config 
 			PlaceholderNormalize: s.Repair.PlaceholderNormalize,
 			PromptUpgrade:        s.Repair.PromptUpgrade,
 		}
-		cfg.Glossary = config.GlossaryConfig{
+		cfg.Repair = rc.ToOptions()
+		cfg.Ruby = engine.RubyConfig{
+			Enabled:       s.Ruby.Enabled,
+			PreserveKinds: s.Ruby.PreserveKinds,
+		}
+		cfg.Glossary = engine.GlossaryConfig{
 			Enabled: snapshot.GlossaryEnabled,
 			Bootstrap: config.BootstrapConfig{
 				MaxTermsPer1000Chars:   s.Glossary.Bootstrap.MaxTermsPer1000Chars,
@@ -504,16 +487,16 @@ func buildStrategyConfig(snapshot *service.JobExecutionSnapshot) *config.Config 
 				InlineConflictStrategy: s.Glossary.Bootstrap.InlineConflictStrategy,
 			},
 		}
+	}
 
-		if snapshot.Bootstrap != nil {
-			cfg.Glossary.Standalone = config.StandaloneBootstrapConfig{
-				Enabled:          snapshot.Bootstrap.Enabled,
-				TemplateContent:  snapshot.Bootstrap.TemplateContent,
-				BatchSize:        snapshot.Bootstrap.BatchSize,
-				Concurrency:      snapshot.Bootstrap.Concurrency,
-				MaxTermsPerBatch: snapshot.Bootstrap.MaxTermsPerBatch,
-				MinSourceLen:     snapshot.Bootstrap.MinSourceLen,
-			}
+	if snapshot.Bootstrap != nil {
+		cfg.Glossary.Standalone = config.StandaloneBootstrapConfig{
+			Enabled:          snapshot.Bootstrap.Enabled,
+			TemplateContent:  snapshot.Bootstrap.TemplateContent,
+			BatchSize:        snapshot.Bootstrap.BatchSize,
+			Concurrency:      snapshot.Bootstrap.Concurrency,
+			MaxTermsPerBatch: snapshot.Bootstrap.MaxTermsPerBatch,
+			MinSourceLen:     snapshot.Bootstrap.MinSourceLen,
 		}
 	}
 
@@ -521,16 +504,16 @@ func buildStrategyConfig(snapshot *service.JobExecutionSnapshot) *config.Config 
 }
 
 // buildRuntimeGlossary 根据配置构建运行时术语表，未启用则返回空实现。
-func (r *TranslationRunner) buildRuntimeGlossary(projectRow *ent.Project, cfg *config.Config) (glossary.Glossary, error) {
-	if cfg == nil || !cfg.Glossary.Enabled {
+func (r *TranslationRunner) buildRuntimeGlossary(projectRow *ent.Project, enabled bool) (glossary.Glossary, error) {
+	if !enabled {
 		return glossary.Nop{}, nil
 	}
 	return service.NewDatabaseGlossary(r.client, projectRow)
 }
 
 // buildRuntimeTM 根据配置构建运行时翻译记忆，未启用则返回空实现。
-func (r *TranslationRunner) buildRuntimeTM(projectRow *ent.Project, cfg *config.Config) (tm.TranslationMemory, error) {
-	if cfg == nil || !cfg.TranslationMemory.Enabled {
+func (r *TranslationRunner) buildRuntimeTM(projectRow *ent.Project, enabled bool) (tm.TranslationMemory, error) {
+	if !enabled {
 		return tm.Nop{}, nil
 	}
 	scope, err := tm.ScopeFromProject(projectRow)

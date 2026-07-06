@@ -396,7 +396,7 @@ func defaultCLIConfig() *CLIConfig {
 				Bootstrap: BootstrapConfig{
 					MaxTermsPer1000Chars:   3.0,
 					MinSourceLen:           2,
-					InlineConflictStrategy: InlineConflictRewriteLocal,
+					InlineConflictStrategy: "rewrite-local",
 				},
 			},
 		},
@@ -415,7 +415,7 @@ func defaultCLIConfig() *CLIConfig {
 				Profile:        "default",
 				BatchSize:      1,
 				Concurrency:    4,
-				FallbackShrink: defaultFallbackShrink,
+				FallbackShrink: 0.5,
 				Retry:          RetryConfig{MaxAttempts: 3, BackoffMs: 2000, Jitter: true},
 			}},
 		},

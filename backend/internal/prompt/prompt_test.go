@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 )
 
 // defaultTestSystemTmpl 是测试用的最小系统模板。
@@ -34,9 +32,7 @@ func mustUnmarshalUser(t *testing.T, s string) userMsg {
 }
 
 func TestRenderer_BatchMode(t *testing.T) {
-	r, err := NewRenderer(config.PromptConfig{
-		SystemTemplateContent: defaultTestSystemTmpl,
-	})
+	r, err := NewRenderer(defaultTestSystemTmpl)
 	if err != nil {
 		t.Fatalf("renderer: %v", err)
 	}
@@ -67,9 +63,7 @@ func TestRenderer_BatchMode(t *testing.T) {
 }
 
 func TestRenderer_BatchModeWithContext(t *testing.T) {
-	r, err := NewRenderer(config.PromptConfig{
-		SystemTemplateContent: defaultTestSystemTmpl,
-	})
+	r, err := NewRenderer(defaultTestSystemTmpl)
 	if err != nil {
 		t.Fatalf("renderer: %v", err)
 	}
@@ -99,9 +93,7 @@ func TestRenderer_BatchModeWithContext(t *testing.T) {
 }
 
 func TestRenderer_SingleMode(t *testing.T) {
-	r, err := NewRenderer(config.PromptConfig{
-		SystemTemplateContent: defaultTestSystemTmpl,
-	})
+	r, err := NewRenderer(defaultTestSystemTmpl)
 	if err != nil {
 		t.Fatalf("renderer: %v", err)
 	}
@@ -126,8 +118,7 @@ func TestRenderer_SingleMode(t *testing.T) {
 }
 
 func TestRenderer_TextMode(t *testing.T) {
-	r, err := NewRenderer(config.PromptConfig{
-		SystemTemplateContent: `你是 LinguaFlow，一个专业的翻译引擎。
+	r, err := NewRenderer(`你是 LinguaFlow，一个专业的翻译引擎。
 将用户的文本从 {{.SourceLang}} 翻译为 {{.TargetLang}}。
 {{- if .TextMode}}
 
@@ -138,8 +129,7 @@ func TestRenderer_TextMode(t *testing.T) {
 
 协议与输出规则：
 - 用户消息是一个 JSON 对象。
-{{- end}}`,
-	})
+{{- end}}`)
 	if err != nil {
 		t.Fatalf("renderer: %v", err)
 	}
@@ -174,9 +164,7 @@ func TestRenderer_TextMode(t *testing.T) {
 }
 
 func TestRenderer_TextModeWithContext(t *testing.T) {
-	r, err := NewRenderer(config.PromptConfig{
-		SystemTemplateContent: `{{- if .TextMode}}text mode{{- else}}json mode{{- end}}`,
-	})
+	r, err := NewRenderer(`{{- if .TextMode}}text mode{{- else}}json mode{{- end}}`)
 	if err != nil {
 		t.Fatalf("renderer: %v", err)
 	}
@@ -212,9 +200,7 @@ func TestRenderer_TextModeWithContext(t *testing.T) {
 }
 
 func TestRenderer_TextModeUserFormat(t *testing.T) {
-	r, err := NewRenderer(config.PromptConfig{
-		SystemTemplateContent: defaultTestSystemTmpl,
-	})
+	r, err := NewRenderer(defaultTestSystemTmpl)
 	if err != nil {
 		t.Fatalf("renderer: %v", err)
 	}
@@ -238,16 +224,14 @@ func TestRenderer_TextModeUserFormat(t *testing.T) {
 }
 
 func TestRenderer_TextModeWithRuby(t *testing.T) {
-	r, err := NewRenderer(config.PromptConfig{
-		SystemTemplateContent: defaultTestSystemTmpl,
-	})
+	r, err := NewRenderer(defaultTestSystemTmpl)
 	if err != nil {
 		t.Fatalf("renderer: %v", err)
 	}
 	data := Data{
 		SourceLang: "ja", TargetLang: "zh-Hans",
 		TextMode: true,
-		RubyMode: config.RubyModeInline,
+		RubyMode: RubyModeInline,
 		Segments: []SegmentInput{
 			{ID: "1", Source: "椎名は静かに微笑んだ。", Translate: true},
 			{ID: "2", Source: "少年が呪を唱えた。", Translate: true},
@@ -277,9 +261,7 @@ func TestRenderer_TextModeWithRuby(t *testing.T) {
 }
 
 func TestRenderer_TextModeWithEmptyRuby(t *testing.T) {
-	r, err := NewRenderer(config.PromptConfig{
-		SystemTemplateContent: defaultTestSystemTmpl,
-	})
+	r, err := NewRenderer(defaultTestSystemTmpl)
 	if err != nil {
 		t.Fatalf("renderer: %v", err)
 	}
@@ -301,16 +283,14 @@ func TestRenderer_TextModeWithEmptyRuby(t *testing.T) {
 }
 
 func TestRenderer_TextModeWithRubyInline(t *testing.T) {
-	r, err := NewRenderer(config.PromptConfig{
-		SystemTemplateContent: defaultTestSystemTmpl,
-	})
+	r, err := NewRenderer(defaultTestSystemTmpl)
 	if err != nil {
 		t.Fatalf("renderer: %v", err)
 	}
 	data := Data{
 		SourceLang: "ja", TargetLang: "zh-Hans",
 		TextMode: true,
-		RubyMode: config.RubyModeInline,
+		RubyMode: RubyModeInline,
 		Segments: []SegmentInput{
 			{ID: "1", Source: "椎名は静かに微笑んだ。", Translate: true},
 			{ID: "2", Source: "少年が呪を唱えた。", Translate: true},
@@ -340,16 +320,14 @@ func TestRenderer_TextModeWithRubyInline(t *testing.T) {
 }
 
 func TestRenderer_TextModeWithRubySection(t *testing.T) {
-	r, err := NewRenderer(config.PromptConfig{
-		SystemTemplateContent: defaultTestSystemTmpl,
-	})
+	r, err := NewRenderer(defaultTestSystemTmpl)
 	if err != nil {
 		t.Fatalf("renderer: %v", err)
 	}
 	data := Data{
 		SourceLang: "ja", TargetLang: "zh-Hans",
 		TextMode: true,
-		RubyMode: config.RubyModeSection,
+		RubyMode: RubyModeSection,
 		Segments: []SegmentInput{
 			{ID: "1", Source: "椎名は静かに微笑んだ。", Translate: true},
 			{ID: "2", Source: "少年が呪を唱えた。", Translate: true},
@@ -391,16 +369,14 @@ func TestRenderer_TextModeWithRubySection(t *testing.T) {
 }
 
 func TestRenderer_TextModeWithRubySectionEmpty(t *testing.T) {
-	r, err := NewRenderer(config.PromptConfig{
-		SystemTemplateContent: defaultTestSystemTmpl,
-	})
+	r, err := NewRenderer(defaultTestSystemTmpl)
 	if err != nil {
 		t.Fatalf("renderer: %v", err)
 	}
 	data := Data{
 		SourceLang: "ja", TargetLang: "zh-Hans",
 		TextMode: true,
-		RubyMode: config.RubyModeSection,
+		RubyMode: RubyModeSection,
 		Segments: []SegmentInput{
 			{ID: "1", Source: "hello", Translate: true},
 		},
@@ -416,9 +392,7 @@ func TestRenderer_TextModeWithRubySectionEmpty(t *testing.T) {
 }
 
 func TestRenderer_TextModeWithRubyDefaultMode(t *testing.T) {
-	r, err := NewRenderer(config.PromptConfig{
-		SystemTemplateContent: defaultTestSystemTmpl,
-	})
+	r, err := NewRenderer(defaultTestSystemTmpl)
 	if err != nil {
 		t.Fatalf("renderer: %v", err)
 	}

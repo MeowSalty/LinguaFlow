@@ -16,7 +16,7 @@ func (e *Engine) PrepareDocument(doc *pipeline.Document, segmentIndexes []int) {
 	if doc.Vars == nil {
 		doc.Vars = map[string]any{}
 	}
-	for k, v := range e.cfg.Prompt.Vars {
+	for k, v := range e.cfg.PromptVars {
 		if _, exists := doc.Vars[k]; !exists {
 			doc.Vars[k] = v
 		}

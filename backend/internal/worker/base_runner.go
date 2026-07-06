@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 )
@@ -32,18 +31,16 @@ type JobController interface {
 
 // BaseRunner 包含所有 Worker Runner 共享的字段和逻辑。
 type BaseRunner struct {
-	baseConfig *config.Config
-	logger     *slog.Logger
-	client     *ent.Client
-	store      *filestore.LocalStore
-	queue      *Queue
-	jobCtrl    JobController                              // 任务生命周期控制器
-	processFn  func(ctx context.Context, jobID int) error // 具体的任务处理函数，由子类注入
-	tag        string                                     // 日志标签，如 "worker" 或 "translation worker"
+	logger    *slog.Logger
+	client    *ent.Client
+	store     *filestore.LocalStore
+	queue     *Queue
+	jobCtrl   JobController                              // 任务生命周期控制器
+	processFn func(ctx context.Context, jobID int) error // 具体的任务处理函数，由子类注入
+	tag       string                                     // 日志标签，如 "worker" 或 "translation worker"
 }
 
 func newBaseRunner(
-	cfg *config.Config,
 	logger *slog.Logger,
 	client *ent.Client,
 	store *filestore.LocalStore,
@@ -56,14 +53,13 @@ func newBaseRunner(
 		logger = slog.Default()
 	}
 	return &BaseRunner{
-		baseConfig: cfg,
-		logger:     logger,
-		client:     client,
-		store:      store,
-		queue:      queue,
-		jobCtrl:    jobCtrl,
-		processFn:  processFn,
-		tag:        tag,
+		logger:    logger,
+		client:    client,
+		store:     store,
+		queue:     queue,
+		jobCtrl:   jobCtrl,
+		processFn: processFn,
+		tag:       tag,
 	}
 }
 

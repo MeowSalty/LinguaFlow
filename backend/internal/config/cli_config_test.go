@@ -119,9 +119,9 @@ func TestDefaultCLIConfig_Fallback(t *testing.T) {
 	if defProf.Bootstrap.MaxTermsPer1000Chars != 3.0 {
 		t.Errorf("profile bootstrap.max_terms_per_1000_chars = %v, want 3.0", defProf.Bootstrap.MaxTermsPer1000Chars)
 	}
-	if defProf.Bootstrap.InlineConflictStrategy != InlineConflictRewriteLocal {
+	if defProf.Bootstrap.InlineConflictStrategy != "rewrite-local" {
 		t.Errorf("profile bootstrap.inline_conflict_strategy = %q, want %q",
-			defProf.Bootstrap.InlineConflictStrategy, InlineConflictRewriteLocal)
+			defProf.Bootstrap.InlineConflictStrategy, "rewrite-local")
 	}
 
 	// ── 验证 Execution.Bootstrap 默认配置 ──

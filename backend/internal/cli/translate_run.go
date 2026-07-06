@@ -15,6 +15,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 )
 
 type translateOptions struct {
@@ -106,39 +107,37 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 		return nil, fmt.Errorf("prompt_templates %q has no content (translation prompt is required)", firstRound.Prompt)
 	}
 
-	cfg := &config.Config{
-		Version:    cliCfg.Version,
+	cfg := &engine.Config{
 		SourceLang: cliCfg.SourceLang,
 		TargetLang: cliCfg.TargetLang,
-		Pipeline: config.PipelineConfig{
-			Protect: firstProfile.Protect,
-			Translate: config.TranslateConfig{
-				BatchSize:        firstRound.BatchSize,
-				MaxWordsPerBatch: firstRound.MaxWordsPerBatch,
-				Concurrency:      firstRound.Concurrency,
-				FallbackShrink:   firstRound.FallbackShrink,
-				Retry:            firstRound.Retry,
-				Repair:           firstProfile.Repair,
-			},
-			Ruby: config.RubyConfig{
-				Enabled:       firstProfile.Ruby.Enabled,
-				PreserveKinds: firstProfile.Ruby.PreserveKinds,
-			},
+		TranslateDefaults: engine.TranslateDefaults{
+			BatchSize:        firstRound.BatchSize,
+			MaxWordsPerBatch: firstRound.MaxWordsPerBatch,
+			Concurrency:      firstRound.Concurrency,
+			FallbackShrink:   firstRound.FallbackShrink,
+			Retry:            toBackendRetryPolicy(firstRound.Retry),
 		},
-		Prompt: config.PromptConfig{
-			SystemTemplateContent: firstPromptContent,
+		Repair: repair.Config{
+			Enabled:              firstProfile.Repair.Enabled,
+			JSONStructural:       firstProfile.Repair.JSONStructural,
+			SchemaAliases:        firstProfile.Repair.SchemaAliases,
+			Partial:              firstProfile.Repair.Partial,
+			PartialThreshold:     firstProfile.Repair.PartialThreshold,
+			PlaceholderNormalize: firstProfile.Repair.PlaceholderNormalize,
+			PromptUpgrade:        firstProfile.Repair.PromptUpgrade,
+		}.ToOptions(),
+		Ruby: engine.RubyConfig{
+			Enabled:       firstProfile.Ruby.Enabled,
+			PreserveKinds: firstProfile.Ruby.PreserveKinds,
 		},
-		Glossary: config.GlossaryConfig{
+		Glossary: engine.GlossaryConfig{
 			Enabled:    cliCfg.Glossary.Enabled,
 			Path:       cliCfg.Glossary.Path,
 			Save:       cliCfg.Glossary.Save,
 			Bootstrap:  firstProfile.Bootstrap,
 			Standalone: cliCfg.Execution.Bootstrap,
 		},
-		TranslationMemory: cliCfg.TranslationMemory,
-		Plugins:           cliCfg.Plugins,
-		Output:            cliCfg.Output,
-		Log:               cliCfg.Log,
+		TMEnabled: cliCfg.TranslationMemory.Enabled,
 	}
 
 	if cliCfg.Execution.Bootstrap.Enabled && cliCfg.Execution.Bootstrap.Template != "" {
@@ -167,67 +166,77 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 		if !ok {
 			return nil, fmt.Errorf("backend %q not found in backends", r.Backend)
 		}
-		backends, err := engine.BuildBackends([]config.BackendConfig{{
+		b, err := backend.Build(backend.Config{
 			Name:               r.Backend,
 			Type:               bCfg.Type,
 			Enabled:            bCfg.Enabled,
 			RateLimitPerMinute: bCfg.RateLimitPerMinute,
 			Options:            bCfg.Options,
-		}})
+		})
 		if err != nil {
 			return nil, fmt.Errorf("build backend %q: %w", r.Backend, err)
 		}
 
 		if bCfg.RateLimitPerMinute > 0 {
 			limiter := backend.NewRateLimiterPerMinute(bCfg.RateLimitPerMinute)
-			for i, b := range backends {
-				backends[i] = backend.NewRateLimitedBackend(b, limiter)
-			}
+			b = backend.NewRateLimitedBackend(b, limiter)
 		}
 
-		var renderer *prompt.Renderer
+		var roundRenderer *prompt.Renderer
 		if promptContent := resolvePromptContent(cliCfg, r.Prompt); promptContent != "" {
-			renderer, err = prompt.NewRenderer(config.PromptConfig{
-				SystemTemplateContent: promptContent,
-			})
+			roundRenderer, err = prompt.NewRenderer(promptContent)
 			if err != nil {
 				return nil, fmt.Errorf("build renderer for prompt %q: %w", r.Prompt, err)
 			}
 		}
 
-		var roundRepair *config.RepairConfig
-		var roundContext *config.ContextConfig
-		var roundPostprocess *config.PostprocessConfig
-		var roundRuby config.RubyConfig
-		var roundProtect config.ProtectConfig
+		var roundRepair *repair.Config
+		var roundContext *pipeline.ContextConfig
+		var roundPostprocess *pipeline.PostprocessConfig
+		var roundRuby engine.RubyConfig
+		var roundProtectRules []string
 		if profileCfg, ok := cliCfg.TranslationProfiles[r.Profile]; ok {
-			rc := profileCfg.Repair
+			rc := repair.Config{
+				Enabled:              profileCfg.Repair.Enabled,
+				JSONStructural:       profileCfg.Repair.JSONStructural,
+				SchemaAliases:        profileCfg.Repair.SchemaAliases,
+				Partial:              profileCfg.Repair.Partial,
+				PartialThreshold:     profileCfg.Repair.PartialThreshold,
+				PlaceholderNormalize: profileCfg.Repair.PlaceholderNormalize,
+				PromptUpgrade:        profileCfg.Repair.PromptUpgrade,
+			}
 			roundRepair = &rc
-			ctx := profileCfg.Context
+			ctx := pipeline.ContextConfig{
+				Enabled:  profileCfg.Context.Enabled,
+				Before:   profileCfg.Context.Before,
+				After:    profileCfg.Context.After,
+				MaxChars: profileCfg.Context.MaxChars,
+			}
 			roundContext = &ctx
-			pp := profileCfg.Postprocess
+			pp := pipeline.PostprocessConfig{
+				TrimSpaces: profileCfg.Postprocess.TrimSpaces,
+			}
 			roundPostprocess = &pp
-			roundRuby = profileCfg.Ruby
-			roundProtect = profileCfg.Protect
+			roundRuby = engine.RubyConfig{
+				Enabled:       profileCfg.Ruby.Enabled,
+				PreserveKinds: profileCfg.Ruby.PreserveKinds,
+			}
+			roundProtectRules = profileCfg.Protect.Rules
 		}
 
 		rounds = append(rounds, engine.Round{
-			Name:             r.Name,
-			Backend:          backends[0],
-			BatchSize:        r.BatchSize,
-			MaxWordsPerBatch: r.MaxWordsPerBatch,
-			Concurrency:      r.Concurrency,
-			FallbackShrink:   r.FallbackShrink,
-			Retry: backend.RetryPolicy{
-				MaxAttempts: r.Retry.MaxAttempts,
-				Backoff:     time.Duration(r.Retry.BackoffMs) * time.Millisecond,
-				Jitter:      r.Retry.Jitter,
-			},
-			Renderer:          renderer,
+			Name:              r.Name,
+			Backend:           b,
+			BatchSize:         r.BatchSize,
+			MaxWordsPerBatch:  r.MaxWordsPerBatch,
+			Concurrency:       r.Concurrency,
+			FallbackShrink:    r.FallbackShrink,
+			Retry:             toBackendRetryPolicy(r.Retry),
+			Renderer:          roundRenderer,
 			Repair:            roundRepair,
 			ResponseMode:      responseModeFromOptions(bCfg.Options),
 			Mode:              pipeline.RoundModeTranslate,
-			ProtectRules:      roundProtect.Rules,
+			ProtectRules:      roundProtectRules,
 			RubyEnabled:       roundRuby.Enabled,
 			RubyPreserveKinds: roundRuby.PreserveKinds,
 			Context:           roundContext,
@@ -236,23 +245,27 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 	}
 
 	var rubyRetryBackends []backend.Backend
-	retryName := cfg.Pipeline.Ruby.RetryBackend
+	retryName := firstProfile.Ruby.RetryBackend
 	if retryName != "" {
 		bCfg, ok := cliCfg.Backends[retryName]
 		if !ok {
 			return nil, fmt.Errorf("ruby retry backend %q not found in backends", retryName)
 		}
-		b, bErr := engine.BuildBackends([]config.BackendConfig{{
+		b, bErr := backend.Build(backend.Config{
 			Name:               retryName,
 			Type:               bCfg.Type,
 			Enabled:            bCfg.Enabled,
 			RateLimitPerMinute: bCfg.RateLimitPerMinute,
 			Options:            bCfg.Options,
-		}})
+		})
 		if bErr != nil {
 			return nil, fmt.Errorf("build ruby retry backend %q: %w", retryName, bErr)
 		}
-		rubyRetryBackends = b
+		if bCfg.RateLimitPerMinute > 0 {
+			limiter := backend.NewRateLimiterPerMinute(bCfg.RateLimitPerMinute)
+			b = backend.NewRateLimitedBackend(b, limiter)
+		}
+		rubyRetryBackends = []backend.Backend{b}
 	}
 
 	return &engine.Options{
@@ -382,4 +395,13 @@ func responseModeFromOptions(opts map[string]any) string {
 		return v
 	}
 	return ""
+}
+
+// toBackendRetryPolicy 将 config.RetryConfig 转换为 backend.RetryPolicy。
+func toBackendRetryPolicy(cfg config.RetryConfig) backend.RetryPolicy {
+	return backend.RetryPolicy{
+		MaxAttempts: cfg.MaxAttempts,
+		Backoff:     time.Duration(cfg.BackoffMs) * time.Millisecond,
+		Jitter:      cfg.Jitter,
+	}
 }

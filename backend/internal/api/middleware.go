@@ -16,11 +16,11 @@ func (s *Server) applyMiddleware(r *chi.Mux) {
 	r.Use(s.requestLoggingMiddleware)
 	r.Use(chimiddleware.Recoverer)
 
-	allowedOrigins := s.config.Server.CORS.AllowedOrigins
+	allowedOrigins := s.serverCfg.CORS.AllowedOrigins
 	if s.isLocal() {
 		allowedOrigins = []string{
-			"http://127.0.0.1:" + fmt.Sprintf("%d", s.config.Server.Port),
-			"http://localhost:" + fmt.Sprintf("%d", s.config.Server.Port),
+			"http://127.0.0.1:" + fmt.Sprintf("%d", s.serverCfg.Port),
+			"http://localhost:" + fmt.Sprintf("%d", s.serverCfg.Port),
 			"http://127.0.0.1",
 			"http://localhost",
 		}

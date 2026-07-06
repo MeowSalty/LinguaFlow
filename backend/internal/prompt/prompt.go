@@ -20,17 +20,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"text/template"
-
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 )
 
 // SingleID 是单段模式下 envelope 内唯一段的 id。translate stage 用它回写。
 const SingleID = "0"
 
-// RubyMode 的合法取值定义在 config 包中（RubyModeJSON / RubyModeInline / RubyModeSection）。
+// RubyMode 的合法取值定义在本包中（RubyModeJSON / RubyModeInline / RubyModeSection）。
 
 // RubyAnnotation 用于在提示词中展示 Ruby 标注信息。
 type RubyAnnotation struct {
@@ -110,22 +107,13 @@ var templateFuncs = template.FuncMap{
 	},
 }
 
-// NewRenderer 按配置创建 Renderer。
-// 优先级：SystemTemplateContent（内联内容）> SystemTemplate（文件路径）。
-// 缺少配置时直接报错，不再使用内置默认值。
-func NewRenderer(cfg config.PromptConfig) (*Renderer, error) {
-	if cfg.SystemTemplateContent == "" && cfg.SystemTemplate == "" {
-		return nil, fmt.Errorf("prompt: system_template_content and system_template are both empty; configure a prompt template in your config file")
+// NewRenderer 按 systemPrompt 内容创建 Renderer。
+// systemPrompt 不能为空。
+func NewRenderer(systemPrompt string) (*Renderer, error) {
+	if systemPrompt == "" {
+		return nil, fmt.Errorf("prompt: system prompt content is empty; configure a prompt template in your config file")
 	}
-	sys := cfg.SystemTemplateContent
-	if cfg.SystemTemplate != "" {
-		b, err := os.ReadFile(cfg.SystemTemplate)
-		if err != nil {
-			return nil, fmt.Errorf("prompt: read system template: %w", err)
-		}
-		sys = string(b)
-	}
-	systemT, err := template.New("system").Funcs(templateFuncs).Parse(sys)
+	systemT, err := template.New("system").Funcs(templateFuncs).Parse(systemPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("prompt: parse system template: %w", err)
 	}
@@ -157,7 +145,7 @@ func (r *Renderer) Render(d Data) (string, string, error) {
 	if d.TextMode {
 		mode := d.RubyMode
 		if mode == "" {
-			mode = config.RubyModeSection
+			mode = RubyModeSection
 		}
 		return sys, buildTextUser(segs, d.RubyAnnotations, mode), nil
 	}
@@ -205,7 +193,7 @@ func buildTextUser(segs []SegmentInput, rubyAnnotations map[string][]RubyAnnotat
 			sb.WriteString("[")
 			sb.WriteString(s.ID)
 			sb.WriteString("] ")
-			if rubyInputMode == config.RubyModeInline && len(rubyAnnotations) > 0 {
+			if rubyInputMode == RubyModeInline && len(rubyAnnotations) > 0 {
 				sb.WriteString(inlineRubyInSource(s.Source, rubyAnnotations[s.ID]))
 			} else {
 				sb.WriteString(s.Source)
@@ -216,7 +204,7 @@ func buildTextUser(segs []SegmentInput, rubyAnnotations map[string][]RubyAnnotat
 		}
 	}
 
-	if rubyInputMode == config.RubyModeSection && len(rubyAnnotations) > 0 {
+	if rubyInputMode == RubyModeSection && len(rubyAnnotations) > 0 {
 		sb.WriteString("\n[ruby]")
 		for _, s := range segs {
 			if !s.Translate {

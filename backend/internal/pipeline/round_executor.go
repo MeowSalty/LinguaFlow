@@ -14,7 +14,6 @@ import (
 	"unicode"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
@@ -53,7 +52,7 @@ type Round struct {
 	RubyEnabled       bool
 	RubyPreserveKinds []string
 	RubyMode          string
-	Context           *config.ContextConfig
+	Context           *ContextConfig
 	Postprocess       *PostprocessConfig
 }
 
@@ -88,7 +87,7 @@ type RoundExecutor struct {
 	InlineConflictStrategy string
 
 	Repair  repair.Options
-	Context config.ContextConfig // 全局兜底
+	Context ContextConfig // 全局兜底
 
 	BatchHandler func(ctx context.Context, result BatchResult) error
 }
