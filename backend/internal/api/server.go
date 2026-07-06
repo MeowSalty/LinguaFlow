@@ -73,31 +73,32 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 	}
 
 	s := &Server{
-		config:    cfg,
-		logger:    logger,
-		db:        db,
-		entClient: client,
-		mode:      mode,
-		localUser: localUser,
-		authService: service.NewAuthService(client, service.AuthConfigFromServer(cfg.Server), &service.RegistrationConfig{
-			Enabled:   cfg.Server.Registration.Enabled,
-			AutoAdmin: cfg.Server.Registration.AutoAdmin,
-		}),
+		config:      cfg,
+		logger:      logger,
+		db:          db,
+		entClient:   client,
+		mode:        mode,
+		localUser:   localUser,
 		eventBroker: event.NewBroker(),
 	}
 	limiterPool := backend.NewLimiterPool()
-	s.userService = service.NewUserService(client, s.authService)
 	s.adminService = service.NewAdminService(client)
-	s.authService.SetAdminService(s.adminService)
+	s.authService = service.NewAuthService(client, service.AuthConfigFromServer(cfg.Server), s.adminService)
+	s.userService = service.NewUserService(client, s.authService)
 
 	// Seed default system settings from YAML config (only writes if table is empty for each key).
 	regEnabled := "true"
 	if !cfg.Server.Registration.Enabled {
 		regEnabled = "false"
 	}
+	autoAdmin := "true"
+	if !cfg.Server.Registration.AutoAdmin {
+		autoAdmin = "false"
+	}
 	if err := s.adminService.InitializeSettings(context.Background(), map[string]string{
 		service.SettingRegistrationEnabled: regEnabled,
 		service.SettingDefaultUserRole:     "user",
+		service.SettingAutoAdmin:           autoAdmin,
 	}); err != nil {
 		logger.Warn("failed to initialize system settings", "error", err)
 	}

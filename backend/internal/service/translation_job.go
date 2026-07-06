@@ -118,6 +118,7 @@ type JobExecutionSnapshot struct {
 	SourceLang        string                          `json:"source_lang"`
 	TargetLang        string                          `json:"target_lang"`
 	GlossaryEnabled   bool                            `json:"glossary_enabled"`
+	TMEnabled         bool                            `json:"tm_enabled,omitempty"`
 	AutoApprove       bool                            `json:"auto_approve,omitempty"`
 	OverwriteMode     string                          `json:"overwrite_mode,omitempty"`
 	Bootstrap         *ExecutionPlanBootstrapSnapshot `json:"bootstrap,omitempty"`

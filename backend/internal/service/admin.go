@@ -23,6 +23,7 @@ var (
 const (
 	SettingRegistrationEnabled = "registration_enabled"
 	SettingDefaultUserRole     = "default_user_role"
+	SettingAutoAdmin           = "auto_admin"
 )
 
 type AdminService struct {
@@ -420,12 +421,19 @@ func (s *AdminService) IsRegistrationEnabled(ctx context.Context) bool {
 	return val == "true"
 }
 
-// ShouldAutoAdmin reads the auto_admin flag from the database.
+// ShouldAutoAdmin reads the auto_admin setting from the database.
 // Returns true if no admin exists and the setting is "true" or missing.
 func (s *AdminService) ShouldAutoAdmin(ctx context.Context) bool {
 	hasAdmin, err := s.HasAnyAdmin(ctx)
 	if err != nil || hasAdmin {
 		return false
 	}
-	return true
+	val, err := s.GetSetting(ctx, SettingAutoAdmin)
+	if err != nil {
+		return true // Fail open: auto-promote on error.
+	}
+	if val == "" {
+		return true // Default: enabled.
+	}
+	return val == "true"
 }
