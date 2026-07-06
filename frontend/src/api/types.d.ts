@@ -2121,11 +2121,6 @@ export interface components {
         PromptTemplateScope: "user" | "org" | "system";
         /** @enum {string} */
         TranslationProfileScope: "user" | "org" | "system";
-        ProfileSplitConfig: {
-            enabled: boolean;
-            strategy: string;
-            max_chars: number;
-        };
         ProfileProtectConfig: {
             enabled: boolean;
             rules?: ("code" | "link" | "placeholder" | "xml")[];
@@ -2201,7 +2196,6 @@ export interface components {
             max_chars: number;
         };
         TranslationProfileConfig: {
-            split: components["schemas"]["ProfileSplitConfig"];
             protect: components["schemas"]["ProfileProtectConfig"];
             ruby?: components["schemas"]["ProfileRubyConfig"];
             postprocess: components["schemas"]["ProfilePostprocessConfig"];
