@@ -128,7 +128,7 @@ func (s *RoundExecutor) Run(ctx context.Context, doc *Document) error {
 		if !seg.Translate {
 			continue
 		}
-		if strings.TrimSpace(seg.Source) == "" || isPlaceholderOnly(seg) || isDecorativeSeparator(seg) {
+		if strings.TrimSpace(seg.Source) == "" || isDecorativeSeparator(seg) {
 			seg.Target = seg.Source
 			skippedCount++
 			continue
@@ -160,6 +160,7 @@ func (s *RoundExecutor) Run(ctx context.Context, doc *Document) error {
 	switch mode {
 	case RoundModeTranslate:
 		if round.Protector != nil {
+			filtered := pending[:0]
 			for _, idx := range pending {
 				seg := &doc.Segments[idx]
 				if seg.OriginalSource == "" {
@@ -168,10 +169,21 @@ func (s *RoundExecutor) Run(ctx context.Context, doc *Document) error {
 				if err := round.Protector.Protect(seg); err != nil {
 					return fmt.Errorf("protect segment %d: %w", idx, err)
 				}
+				if isPlaceholderOnly(seg) {
+					seg.Target = seg.OriginalSource
+					skippedCount++
+					continue
+				}
+				filtered = append(filtered, idx)
 			}
+			pending = filtered
 		}
 	default:
 		return fmt.Errorf("unsupported round mode: %s", mode)
+	}
+
+	if len(pending) == 0 {
+		return nil
 	}
 
 	// 3. 上下文窗口
@@ -248,11 +260,19 @@ func expandBatchWithContext(doc *Document, idxs []int, totalSegments, ctxWindow 
 	if ctxWindow <= 0 || len(idxs) == 0 {
 		return idxs
 	}
+	batchSet := make(map[int]struct{}, len(idxs))
+	for _, idx := range idxs {
+		batchSet[idx] = struct{}{}
+	}
 	firstIdx, lastIdx := idxs[0], idxs[len(idxs)-1]
 	expandFrom := max(firstIdx-ctxWindow, 0)
 	expandTo := min(lastIdx+ctxWindow, totalSegments-1)
 	expanded := make([]int, 0, expandTo-expandFrom+1)
 	for i := expandFrom; i <= expandTo; i++ {
+		if _, inBatch := batchSet[i]; inBatch {
+			expanded = append(expanded, i)
+			continue
+		}
 		seg := &doc.Segments[i]
 		if seg.Skip {
 			continue

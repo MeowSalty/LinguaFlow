@@ -253,12 +253,6 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 			break
 		}
 
-		// 过滤出 pending 段落
-		pendingRows := filterPendingSegments(selectedRows)
-		if len(pendingRows) == 0 {
-			break
-		}
-
 		// 构建 Document
 		inputs := buildSegmentInputs(allRows)
 		doc := pipeline.BuildDocumentFromSegments(inputs,
@@ -269,8 +263,8 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		for i, row := range allRows {
 			dbIDToIndex[row.ID] = i
 		}
-		segmentIndexes := make([]int, 0, len(pendingRows))
-		for _, row := range pendingRows {
+		segmentIndexes := make([]int, 0, len(selectedRows))
+		for _, row := range selectedRows {
 			if idx, ok := dbIDToIndex[row.ID]; ok {
 				segmentIndexes = append(segmentIndexes, idx)
 			}
@@ -388,17 +382,6 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	}
 
 	return r.jobs.MarkJobResourceCompleted(ctx, job.ID, item.ID, "", completedCount, skippedCount)
-}
-
-// filterPendingSegments 过滤出待翻译的段落（status 为 pending）。
-func filterPendingSegments(rows []*ent.Segment) []*ent.Segment {
-	var pending []*ent.Segment
-	for _, row := range rows {
-		if row.Status == "pending" {
-			pending = append(pending, row)
-		}
-	}
-	return pending
 }
 
 // buildSegmentInputs 将 DB segments 转换为 SegmentInput 切片。

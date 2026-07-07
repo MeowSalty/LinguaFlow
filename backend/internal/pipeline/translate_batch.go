@@ -370,7 +370,7 @@ func (s *RoundExecutor) processBatchAttempt(
 
 	s.absorbInlineGlossary(ctx, glosEntries, trans, doc.TargetLang, logger)
 
-	unresolved, missing := s.processTranslatedSegments(ctx, doc, job.idxs, wantIDs, trans, rubyOutputMap, contextSet, repairOpts, round, logger)
+	unresolved, missing := s.processTranslatedSegments(ctx, doc, expandedIdxs, wantIDs, trans, rubyOutputMap, contextSet, repairOpts, round, logger)
 	return batchResult{unresolved: unresolved, missing: missing}
 }
 
