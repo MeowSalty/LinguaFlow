@@ -176,6 +176,7 @@ var (
 		{Name: "segment_ids", Type: field.TypeJSON},
 		{Name: "segment_count", Type: field.TypeInt, Default: 0},
 		{Name: "completed_segments", Type: field.TypeInt, Default: 0},
+		{Name: "skipped_segments", Type: field.TypeInt, Default: 0},
 		{Name: "output_path", Type: field.TypeString, Nullable: true},
 		{Name: "error_message", Type: field.TypeString, Nullable: true},
 		{Name: "current_stage", Type: field.TypeString, Nullable: true, Default: ""},
@@ -193,13 +194,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "job_resources_resources_job_resources",
-				Columns:    []*schema.Column{JobResourcesColumns[13]},
+				Columns:    []*schema.Column{JobResourcesColumns[14]},
 				RefColumns: []*schema.Column{ResourcesColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "job_resources_translation_jobs_job_resources",
-				Columns:    []*schema.Column{JobResourcesColumns[14]},
+				Columns:    []*schema.Column{JobResourcesColumns[15]},
 				RefColumns: []*schema.Column{TranslationJobsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -534,11 +535,12 @@ var (
 		{Name: "completed_resources", Type: field.TypeInt, Default: 0},
 		{Name: "failed_resources", Type: field.TypeInt, Default: 0},
 		{Name: "total_segments", Type: field.TypeInt, Default: 0},
+		{Name: "skipped_segments", Type: field.TypeInt, Default: 0},
 		{Name: "stage_total", Type: field.TypeInt, Default: 0},
 		{Name: "completed_segments", Type: field.TypeInt, Default: 0},
 		{Name: "error_message", Type: field.TypeString, Nullable: true},
 		{Name: "started_at", Type: field.TypeTime, Nullable: true},
-		{Name: "project_translation_jobs", Type: field.TypeInt},
+		{Name: "project_id", Type: field.TypeInt},
 		{Name: "user_created_translation_jobs", Type: field.TypeInt, Nullable: true},
 	}
 	// TranslationJobsTable holds the schema information for the "translation_jobs" table.
@@ -549,15 +551,22 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "translation_jobs_projects_translation_jobs",
-				Columns:    []*schema.Column{TranslationJobsColumns[15]},
+				Columns:    []*schema.Column{TranslationJobsColumns[16]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "translation_jobs_users_created_translation_jobs",
-				Columns:    []*schema.Column{TranslationJobsColumns[16]},
+				Columns:    []*schema.Column{TranslationJobsColumns[17]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "translationjob_project_id_id",
+				Unique:  false,
+				Columns: []*schema.Column{TranslationJobsColumns[16], TranslationJobsColumns[0]},
 			},
 		},
 	}

@@ -117,10 +117,12 @@ func (s *RoundExecutor) Run(ctx context.Context, doc *Document) error {
 
 	// 1. 收集 pending（Translate=true 的段落）
 	var pending []int
+	skippedCount := 0
 	for i := range doc.Segments {
 		seg := &doc.Segments[i]
 		if seg.Skip {
 			seg.Target = seg.Source
+			skippedCount++
 			continue
 		}
 		if !seg.Translate {
@@ -128,9 +130,22 @@ func (s *RoundExecutor) Run(ctx context.Context, doc *Document) error {
 		}
 		if strings.TrimSpace(seg.Source) == "" || isPlaceholderOnly(seg) || isDecorativeSeparator(seg) {
 			seg.Target = seg.Source
+			skippedCount++
 			continue
 		}
 		pending = append(pending, i)
+	}
+
+	// 存储跳过计数，供 buildTranslateResult 使用（累加，因为每轮都会执行相同的跳过判断）
+	if doc.Vars == nil {
+		doc.Vars = map[string]any{}
+	}
+	if prev, ok := doc.Vars["_skipped_count"].(int); ok {
+		if skippedCount > prev {
+			doc.Vars["_skipped_count"] = skippedCount
+		}
+	} else {
+		doc.Vars["_skipped_count"] = skippedCount
 	}
 
 	if len(pending) == 0 {

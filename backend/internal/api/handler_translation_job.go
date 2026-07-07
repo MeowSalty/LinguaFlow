@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -25,9 +26,9 @@ type translationJobResourceResponse struct {
 	ID                int               `json:"id"`
 	ResourceID        int               `json:"resource_id"`
 	Status            string            `json:"status"`
-	SegmentIDs        []int             `json:"segment_ids,omitempty"`
 	SegmentCount      int               `json:"segment_count"`
 	CompletedSegments int               `json:"completed_segments"`
+	SkippedSegments   int               `json:"skipped_segments"`
 	OutputPath        string            `json:"output_path,omitempty"`
 	ErrorMessage      *string           `json:"error_message,omitempty"`
 	Resource          *resourceResponse `json:"resource,omitempty"`
@@ -39,27 +40,36 @@ type translationJobResourceResponse struct {
 	UpdatedAt         string            `json:"updated_at"`
 }
 
+type userBriefResponse struct {
+	ID       int    `json:"id"`
+	Username string `json:"username"`
+}
+
+type translationJobProgressResponse struct {
+	TotalResources     int  `json:"total_resources"`
+	CompletedResources int  `json:"completed_resources"`
+	FailedResources    int  `json:"failed_resources"`
+	TotalSegments      int  `json:"total_segments"`
+	CompletedSegments  int  `json:"completed_segments"`
+	SkippedSegments    int  `json:"skipped_segments"`
+	QueuePosition      *int `json:"queue_position,omitempty"`
+	QueueSize          *int `json:"queue_size,omitempty"`
+}
+
 type translationJobResponse struct {
-	ID                 int                              `json:"id"`
-	ProjectID          int                              `json:"project_id"`
-	Status             string                           `json:"status"`
-	TriggerType        string                           `json:"trigger_type"`
-	ExecutionPlanID    int                              `json:"execution_plan_id"`
-	TranslationConfig  map[string]any                   `json:"translation_config,omitempty"`
-	ResourceCount      int                              `json:"resource_count"`
-	CompletedResources int                              `json:"completed_resources"`
-	FailedResources    int                              `json:"failed_resources"`
-	TotalSegments      int                              `json:"total_segments"`
-	StageTotal         int                              `json:"stage_total"`
-	CompletedSegments  int                              `json:"completed_segments"`
-	ErrorMessage       *string                          `json:"error_message,omitempty"`
-	StartedAt          *string                          `json:"started_at,omitempty"`
-	CurrentStage       string                           `json:"current_stage,omitempty"`
-	QueuePosition      *int                             `json:"queue_position,omitempty"`
-	QueueSize          *int                             `json:"queue_size,omitempty"`
-	CreatedAt          string                           `json:"created_at"`
-	UpdatedAt          string                           `json:"updated_at"`
-	JobResources       []translationJobResourceResponse `json:"job_resources,omitempty"`
+	ID                int                              `json:"id"`
+	ProjectID         int                              `json:"project_id"`
+	CreatedBy         *userBriefResponse               `json:"created_by,omitempty"`
+	Status            string                           `json:"status"`
+	TriggerType       string                           `json:"trigger_type"`
+	ExecutionPlanID   int                              `json:"execution_plan_id"`
+	TranslationConfig map[string]any                   `json:"translation_config,omitempty"`
+	ErrorMessage      *string                          `json:"error_message,omitempty"`
+	Progress          translationJobProgressResponse   `json:"progress"`
+	StartedAt         *string                          `json:"started_at,omitempty"`
+	CreatedAt         string                           `json:"created_at"`
+	UpdatedAt         string                           `json:"updated_at"`
+	JobResources      []translationJobResourceResponse `json:"job_resources,omitempty"`
 }
 
 // queueInfoForJob returns queue position info for a job, or nil if queue is
@@ -110,7 +120,7 @@ func (s *Server) handleCreateTranslationJob(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	}
-	writeJSON(w, http.StatusAccepted, toTranslationJobResponse(created, s.queueInfoForJob(created.ID)))
+	writeJSON(w, http.StatusAccepted, toTranslationJobDetailResponse(created, s.queueInfoForJob(created.ID)))
 }
 
 func (s *Server) handleListTranslationJobs(w http.ResponseWriter, r *http.Request) {
@@ -139,7 +149,7 @@ func (s *Server) handleListTranslationJobs(w http.ResponseWriter, r *http.Reques
 	}
 	items := make([]translationJobResponse, 0, len(jobs))
 	for _, job := range jobs {
-		items = append(items, toTranslationJobResponse(job, s.queueInfoForJob(job.ID)))
+		items = append(items, toTranslationJobListResponse(job, s.queueInfoForJob(job.ID)))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
@@ -159,7 +169,7 @@ func (s *Server) handleGetTranslationJob(w http.ResponseWriter, r *http.Request)
 		writeTranslationJobServiceError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toTranslationJobResponse(job, s.queueInfoForJob(jobID)))
+	writeJSON(w, http.StatusOK, toTranslationJobDetailResponse(job, s.queueInfoForJob(jobID)))
 }
 
 func (s *Server) handleCancelTranslationJob(w http.ResponseWriter, r *http.Request) {
@@ -182,7 +192,7 @@ func (s *Server) handleCancelTranslationJob(w http.ResponseWriter, r *http.Reque
 		s.dispatcher.CancelTask("translation", jobID)
 	}
 	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "translation_job.cancel", ResourceType: "translation_job", ResourceID: job.ID, Message: "取消翻译任务"})
-	writeJSON(w, http.StatusOK, toTranslationJobResponse(job, s.queueInfoForJob(job.ID)))
+	writeJSON(w, http.StatusOK, toTranslationJobDetailResponse(job, s.queueInfoForJob(job.ID)))
 }
 
 func (s *Server) handleRetryTranslationJob(w http.ResponseWriter, r *http.Request) {
@@ -207,60 +217,101 @@ func (s *Server) handleRetryTranslationJob(w http.ResponseWriter, r *http.Reques
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, toTranslationJobResponse(job, s.queueInfoForJob(job.ID)))
+	writeJSON(w, http.StatusOK, toTranslationJobDetailResponse(job, s.queueInfoForJob(job.ID)))
 }
 
-func toTranslationJobResponse(row *ent.TranslationJob, queueInfo *worker.QueueInfo) translationJobResponse {
-	resp := translationJobResponse{
-		ID:                 row.ID,
-		Status:             row.Status,
-		TriggerType:        row.TriggerType,
-		ExecutionPlanID:    row.ExecutionPlanID,
-		TranslationConfig:  row.TranslationConfig,
-		ResourceCount:      row.ResourceCount,
-		CompletedResources: row.CompletedResources,
-		FailedResources:    row.FailedResources,
-		TotalSegments:      row.TotalSegments,
-		StageTotal:         row.StageTotal,
-		CompletedSegments:  row.CompletedSegments,
-		ErrorMessage:       row.ErrorMessage,
-		StartedAt:          timePtrToString(row.StartedAt),
-		CreatedAt:          row.CreatedAt.Format(timeRFC3339),
-		UpdatedAt:          row.UpdatedAt.Format(timeRFC3339),
+func sanitizeTranslationConfig(config map[string]any) map[string]any {
+	if config == nil {
+		return nil
 	}
-
-	if row.Edges.Project != nil {
-		resp.ProjectID = row.Edges.Project.ID
+	raw, err := json.Marshal(config)
+	if err != nil {
+		return nil
 	}
-
-	// 聚合当前阶段（取第一个 running 资源的 stage）
-	if len(row.Edges.JobResources) > 0 {
-		resp.JobResources = make([]translationJobResourceResponse, 0, len(row.Edges.JobResources))
-		for _, item := range row.Edges.JobResources {
-			rr := toTranslationJobResourceResponse(item)
-			resp.JobResources = append(resp.JobResources, rr)
-			if item.Status == "running" && item.CurrentStage != "" && resp.CurrentStage == "" {
-				resp.CurrentStage = item.CurrentStage
+	var sanitized map[string]any
+	if err := json.Unmarshal(raw, &sanitized); err != nil {
+		return nil
+	}
+	if rounds, ok := sanitized["rounds"].([]any); ok {
+		for _, r := range rounds {
+			if round, ok := r.(map[string]any); ok {
+				maskBackendOptions(round)
 			}
 		}
 	}
-
-	// 队列信息
-	if queueInfo != nil {
-		resp.QueuePosition = &queueInfo.Position
-		resp.QueueSize = &queueInfo.Size
+	if bootstrap, ok := sanitized["bootstrap"].(map[string]any); ok {
+		maskBackendOptions(bootstrap)
 	}
+	if rubyRetry, ok := sanitized["ruby_retry"].(map[string]any); ok {
+		maskBackendOptions(rubyRetry)
+	}
+	return sanitized
+}
 
+func maskBackendOptions(node map[string]any) {
+	if backend, ok := node["backend"].(map[string]any); ok {
+		if opts, ok := backend["options"].(map[string]any); ok {
+			if _, hasKey := opts["api_key"]; hasKey {
+				opts["api_key"] = "***"
+			}
+		}
+	}
+}
+
+func toTranslationJobListResponse(row *ent.TranslationJob, queueInfo *worker.QueueInfo) translationJobResponse {
+	resp := translationJobResponse{
+		ID:              row.ID,
+		ProjectID:       row.ProjectID,
+		Status:          row.Status,
+		TriggerType:     row.TriggerType,
+		ExecutionPlanID: row.ExecutionPlanID,
+		ErrorMessage:    row.ErrorMessage,
+		StartedAt:       timePtrToString(row.StartedAt),
+		CreatedAt:       row.CreatedAt.Format(timeRFC3339),
+		UpdatedAt:       row.UpdatedAt.Format(timeRFC3339),
+	}
+	if row.Edges.CreatedBy != nil {
+		resp.CreatedBy = &userBriefResponse{ID: row.Edges.CreatedBy.ID, Username: row.Edges.CreatedBy.Username}
+	}
+	resp.Progress = buildProgressResponse(row, queueInfo)
 	return resp
+}
+
+func toTranslationJobDetailResponse(row *ent.TranslationJob, queueInfo *worker.QueueInfo) translationJobResponse {
+	resp := toTranslationJobListResponse(row, queueInfo)
+	resp.TranslationConfig = sanitizeTranslationConfig(row.TranslationConfig)
+	if len(row.Edges.JobResources) > 0 {
+		resp.JobResources = make([]translationJobResourceResponse, 0, len(row.Edges.JobResources))
+		for _, item := range row.Edges.JobResources {
+			resp.JobResources = append(resp.JobResources, toTranslationJobResourceResponse(item))
+		}
+	}
+	return resp
+}
+
+func buildProgressResponse(row *ent.TranslationJob, queueInfo *worker.QueueInfo) translationJobProgressResponse {
+	progress := translationJobProgressResponse{
+		TotalResources:     row.ResourceCount,
+		CompletedResources: row.CompletedResources,
+		FailedResources:    row.FailedResources,
+		TotalSegments:      row.TotalSegments,
+		CompletedSegments:  row.CompletedSegments,
+		SkippedSegments:    row.SkippedSegments,
+	}
+	if queueInfo != nil {
+		progress.QueuePosition = &queueInfo.Position
+		progress.QueueSize = &queueInfo.Size
+	}
+	return progress
 }
 
 func toTranslationJobResourceResponse(row *ent.JobResource) translationJobResourceResponse {
 	resp := translationJobResourceResponse{
 		ID:                row.ID,
 		Status:            row.Status,
-		SegmentIDs:        row.SegmentIds,
 		SegmentCount:      row.SegmentCount,
 		CompletedSegments: row.CompletedSegments,
+		SkippedSegments:   row.SkippedSegments,
 		OutputPath:        row.OutputPath,
 		ErrorMessage:      row.ErrorMessage,
 		CurrentStage:      row.CurrentStage,

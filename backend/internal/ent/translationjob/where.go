@@ -65,6 +65,11 @@ func UpdatedAt(v time.Time) predicate.TranslationJob {
 	return predicate.TranslationJob(sql.FieldEQ(FieldUpdatedAt, v))
 }
 
+// ProjectID applies equality check predicate on the "project_id" field. It's identical to ProjectIDEQ.
+func ProjectID(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldEQ(FieldProjectID, v))
+}
+
 // Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
 func Status(v string) predicate.TranslationJob {
 	return predicate.TranslationJob(sql.FieldEQ(FieldStatus, v))
@@ -98,6 +103,11 @@ func FailedResources(v int) predicate.TranslationJob {
 // TotalSegments applies equality check predicate on the "total_segments" field. It's identical to TotalSegmentsEQ.
 func TotalSegments(v int) predicate.TranslationJob {
 	return predicate.TranslationJob(sql.FieldEQ(FieldTotalSegments, v))
+}
+
+// SkippedSegments applies equality check predicate on the "skipped_segments" field. It's identical to SkippedSegmentsEQ.
+func SkippedSegments(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldEQ(FieldSkippedSegments, v))
 }
 
 // StageTotal applies equality check predicate on the "stage_total" field. It's identical to StageTotalEQ.
@@ -198,6 +208,26 @@ func UpdatedAtLT(v time.Time) predicate.TranslationJob {
 // UpdatedAtLTE applies the LTE predicate on the "updated_at" field.
 func UpdatedAtLTE(v time.Time) predicate.TranslationJob {
 	return predicate.TranslationJob(sql.FieldLTE(FieldUpdatedAt, v))
+}
+
+// ProjectIDEQ applies the EQ predicate on the "project_id" field.
+func ProjectIDEQ(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldEQ(FieldProjectID, v))
+}
+
+// ProjectIDNEQ applies the NEQ predicate on the "project_id" field.
+func ProjectIDNEQ(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldNEQ(FieldProjectID, v))
+}
+
+// ProjectIDIn applies the In predicate on the "project_id" field.
+func ProjectIDIn(vs ...int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldIn(FieldProjectID, vs...))
+}
+
+// ProjectIDNotIn applies the NotIn predicate on the "project_id" field.
+func ProjectIDNotIn(vs ...int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldNotIn(FieldProjectID, vs...))
 }
 
 // StatusEQ applies the EQ predicate on the "status" field.
@@ -528,6 +558,46 @@ func TotalSegmentsLT(v int) predicate.TranslationJob {
 // TotalSegmentsLTE applies the LTE predicate on the "total_segments" field.
 func TotalSegmentsLTE(v int) predicate.TranslationJob {
 	return predicate.TranslationJob(sql.FieldLTE(FieldTotalSegments, v))
+}
+
+// SkippedSegmentsEQ applies the EQ predicate on the "skipped_segments" field.
+func SkippedSegmentsEQ(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldEQ(FieldSkippedSegments, v))
+}
+
+// SkippedSegmentsNEQ applies the NEQ predicate on the "skipped_segments" field.
+func SkippedSegmentsNEQ(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldNEQ(FieldSkippedSegments, v))
+}
+
+// SkippedSegmentsIn applies the In predicate on the "skipped_segments" field.
+func SkippedSegmentsIn(vs ...int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldIn(FieldSkippedSegments, vs...))
+}
+
+// SkippedSegmentsNotIn applies the NotIn predicate on the "skipped_segments" field.
+func SkippedSegmentsNotIn(vs ...int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldNotIn(FieldSkippedSegments, vs...))
+}
+
+// SkippedSegmentsGT applies the GT predicate on the "skipped_segments" field.
+func SkippedSegmentsGT(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldGT(FieldSkippedSegments, v))
+}
+
+// SkippedSegmentsGTE applies the GTE predicate on the "skipped_segments" field.
+func SkippedSegmentsGTE(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldGTE(FieldSkippedSegments, v))
+}
+
+// SkippedSegmentsLT applies the LT predicate on the "skipped_segments" field.
+func SkippedSegmentsLT(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldLT(FieldSkippedSegments, v))
+}
+
+// SkippedSegmentsLTE applies the LTE predicate on the "skipped_segments" field.
+func SkippedSegmentsLTE(v int) predicate.TranslationJob {
+	return predicate.TranslationJob(sql.FieldLTE(FieldSkippedSegments, v))
 }
 
 // StageTotalEQ applies the EQ predicate on the "stage_total" field.

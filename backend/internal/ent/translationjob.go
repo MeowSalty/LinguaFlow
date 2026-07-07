@@ -24,6 +24,8 @@ type TranslationJob struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
+	// 所属项目 ID
+	ProjectID int `json:"project_id,omitempty"`
 	// pending, running, completed, failed, cancelled
 	Status string `json:"status,omitempty"`
 	// 触发类型：manual, file_update, glossary_change, web_edit
@@ -38,8 +40,10 @@ type TranslationJob struct {
 	CompletedResources int `json:"completed_resources,omitempty"`
 	// 失败的资源数
 	FailedResources int `json:"failed_resources,omitempty"`
-	// 总段落数（创建时为选中的 segment 数，ReconcileJob 修正为实际翻译量）
+	// 总段落数（创建时选中的 segment 数）
 	TotalSegments int `json:"total_segments,omitempty"`
+	// 被系统跳过的段落数（聚合自 JobResource）
+	SkippedSegments int `json:"skipped_segments,omitempty"`
 	// 实际需要翻译的段落数（ReconcileJob 从各资源的 stage_total 聚合）
 	StageTotal int `json:"stage_total,omitempty"`
 	// 已完成段落数
@@ -51,7 +55,6 @@ type TranslationJob struct {
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the TranslationJobQuery when eager-loading is set.
 	Edges                         TranslationJobEdges `json:"edges"`
-	project_translation_jobs      *int
 	user_created_translation_jobs *int
 	selectValues                  sql.SelectValues
 }
@@ -107,15 +110,13 @@ func (*TranslationJob) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case translationjob.FieldTranslationConfig:
 			values[i] = new([]byte)
-		case translationjob.FieldID, translationjob.FieldExecutionPlanID, translationjob.FieldResourceCount, translationjob.FieldCompletedResources, translationjob.FieldFailedResources, translationjob.FieldTotalSegments, translationjob.FieldStageTotal, translationjob.FieldCompletedSegments:
+		case translationjob.FieldID, translationjob.FieldProjectID, translationjob.FieldExecutionPlanID, translationjob.FieldResourceCount, translationjob.FieldCompletedResources, translationjob.FieldFailedResources, translationjob.FieldTotalSegments, translationjob.FieldSkippedSegments, translationjob.FieldStageTotal, translationjob.FieldCompletedSegments:
 			values[i] = new(sql.NullInt64)
 		case translationjob.FieldStatus, translationjob.FieldTriggerType, translationjob.FieldErrorMessage:
 			values[i] = new(sql.NullString)
 		case translationjob.FieldCreatedAt, translationjob.FieldUpdatedAt, translationjob.FieldStartedAt:
 			values[i] = new(sql.NullTime)
-		case translationjob.ForeignKeys[0]: // project_translation_jobs
-			values[i] = new(sql.NullInt64)
-		case translationjob.ForeignKeys[1]: // user_created_translation_jobs
+		case translationjob.ForeignKeys[0]: // user_created_translation_jobs
 			values[i] = new(sql.NullInt64)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -149,6 +150,12 @@ func (_m *TranslationJob) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
+			}
+		case translationjob.FieldProjectID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field project_id", values[i])
+			} else if value.Valid {
+				_m.ProjectID = int(value.Int64)
 			}
 		case translationjob.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -200,6 +207,12 @@ func (_m *TranslationJob) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.TotalSegments = int(value.Int64)
 			}
+		case translationjob.FieldSkippedSegments:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field skipped_segments", values[i])
+			} else if value.Valid {
+				_m.SkippedSegments = int(value.Int64)
+			}
 		case translationjob.FieldStageTotal:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field stage_total", values[i])
@@ -227,13 +240,6 @@ func (_m *TranslationJob) assignValues(columns []string, values []any) error {
 				*_m.StartedAt = value.Time
 			}
 		case translationjob.ForeignKeys[0]:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for edge-field project_translation_jobs", value)
-			} else if value.Valid {
-				_m.project_translation_jobs = new(int)
-				*_m.project_translation_jobs = int(value.Int64)
-			}
-		case translationjob.ForeignKeys[1]:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for edge-field user_created_translation_jobs", value)
 			} else if value.Valid {
@@ -297,6 +303,9 @@ func (_m *TranslationJob) String() string {
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
 	builder.WriteString(", ")
+	builder.WriteString("project_id=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ProjectID))
+	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)
 	builder.WriteString(", ")
@@ -320,6 +329,9 @@ func (_m *TranslationJob) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("total_segments=")
 	builder.WriteString(fmt.Sprintf("%v", _m.TotalSegments))
+	builder.WriteString(", ")
+	builder.WriteString("skipped_segments=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SkippedSegments))
 	builder.WriteString(", ")
 	builder.WriteString("stage_total=")
 	builder.WriteString(fmt.Sprintf("%v", _m.StageTotal))

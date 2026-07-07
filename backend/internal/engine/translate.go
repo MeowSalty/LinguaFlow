@@ -94,9 +94,14 @@ func (e *Engine) TranslateRound(ctx context.Context, roundIdx int, doc *pipeline
 // buildTranslateResult 从实际段落状态构建翻译结果。
 func buildTranslateResult(doc *pipeline.Document) pipeline.TranslateResult {
 	failedSet := pipeline.ParseFailedIndices(doc.Vars)
+	skippedCount := 0
+	if v, ok := doc.Vars["_skipped_count"].(int); ok {
+		skippedCount = v
+	}
 
 	result := pipeline.TranslateResult{
 		SegmentCount:    len(doc.Segments),
+		SkippedCount:    skippedCount,
 		UnresolvedCount: len(failedSet),
 	}
 	result.Segments = make([]pipeline.SegmentResult, len(doc.Segments))

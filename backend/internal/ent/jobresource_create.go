@@ -98,6 +98,20 @@ func (_c *JobResourceCreate) SetNillableCompletedSegments(v *int) *JobResourceCr
 	return _c
 }
 
+// SetSkippedSegments sets the "skipped_segments" field.
+func (_c *JobResourceCreate) SetSkippedSegments(v int) *JobResourceCreate {
+	_c.mutation.SetSkippedSegments(v)
+	return _c
+}
+
+// SetNillableSkippedSegments sets the "skipped_segments" field if the given value is not nil.
+func (_c *JobResourceCreate) SetNillableSkippedSegments(v *int) *JobResourceCreate {
+	if v != nil {
+		_c.SetSkippedSegments(*v)
+	}
+	return _c
+}
+
 // SetOutputPath sets the "output_path" field.
 func (_c *JobResourceCreate) SetOutputPath(v string) *JobResourceCreate {
 	_c.mutation.SetOutputPath(v)
@@ -263,6 +277,10 @@ func (_c *JobResourceCreate) defaults() {
 		v := jobresource.DefaultCompletedSegments
 		_c.mutation.SetCompletedSegments(v)
 	}
+	if _, ok := _c.mutation.SkippedSegments(); !ok {
+		v := jobresource.DefaultSkippedSegments
+		_c.mutation.SetSkippedSegments(v)
+	}
 	if _, ok := _c.mutation.CurrentStage(); !ok {
 		v := jobresource.DefaultCurrentStage
 		_c.mutation.SetCurrentStage(v)
@@ -305,6 +323,14 @@ func (_c *JobResourceCreate) check() error {
 	if v, ok := _c.mutation.CompletedSegments(); ok {
 		if err := jobresource.CompletedSegmentsValidator(v); err != nil {
 			return &ValidationError{Name: "completed_segments", err: fmt.Errorf(`ent: validator failed for field "JobResource.completed_segments": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.SkippedSegments(); !ok {
+		return &ValidationError{Name: "skipped_segments", err: errors.New(`ent: missing required field "JobResource.skipped_segments"`)}
+	}
+	if v, ok := _c.mutation.SkippedSegments(); ok {
+		if err := jobresource.SkippedSegmentsValidator(v); err != nil {
+			return &ValidationError{Name: "skipped_segments", err: fmt.Errorf(`ent: validator failed for field "JobResource.skipped_segments": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.StageTotal(); !ok {
@@ -378,6 +404,10 @@ func (_c *JobResourceCreate) createSpec() (*JobResource, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.CompletedSegments(); ok {
 		_spec.SetField(jobresource.FieldCompletedSegments, field.TypeInt, value)
 		_node.CompletedSegments = value
+	}
+	if value, ok := _c.mutation.SkippedSegments(); ok {
+		_spec.SetField(jobresource.FieldSkippedSegments, field.TypeInt, value)
+		_node.SkippedSegments = value
 	}
 	if value, ok := _c.mutation.OutputPath(); ok {
 		_spec.SetField(jobresource.FieldOutputPath, field.TypeString, value)

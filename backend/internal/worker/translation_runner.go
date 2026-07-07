@@ -325,14 +325,16 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 			engine.WithSegmentFilter(segmentIndexes),
 			engine.WithBatchHandler(batchHandler),
 		)
-		lastResult = result
+		if translateErr == nil {
+			lastResult = result
+		}
 
 		if translateErr != nil {
 			if errors.Is(translateErr, context.Canceled) && completedCount > 0 {
 				r.logger.Warn("translation cancelled, preserving partial progress",
 					"resource_id", item.ID, "completed", completedCount, "total", len(selectedRows))
 				_ = r.recordUsage(ctx, exec, completedCount, lastResult.InputTokens, lastResult.OutputTokens)
-				_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(completedCount).Exec(ctx)
+				_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(completedCount).SetSkippedSegments(lastResult.SkippedCount).Exec(ctx)
 				_ = r.jobs.MarkJobResourceCancelled(ctx, job.ID, item.ID)
 				return nil
 			}
@@ -345,6 +347,24 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		}
 	}
 
+	completedQuery := r.client.Segment.Query().
+		Where(
+			segment.ResourceIDEQ(res.ID),
+			segment.StatusIn(
+				service.SegmentStatusTranslated,
+				service.SegmentStatusEdited,
+				service.SegmentStatusApproved,
+			),
+		)
+	if len(item.SegmentIds) > 0 {
+		completedQuery = completedQuery.Where(segment.IDIn(item.SegmentIds...))
+	}
+	actualCompleted, countErr := completedQuery.Count(ctx)
+	if countErr == nil {
+		completedCount = actualCompleted
+	}
+	skippedCount := lastResult.SkippedCount
+
 	eng.SaveGlossary(ctx)
 
 	if lastResult.UnresolvedCount > 0 {
@@ -354,7 +374,7 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 			"completed_count", completedCount,
 		)
 		_ = r.recordUsage(ctx, exec, completedCount, lastResult.InputTokens, lastResult.OutputTokens)
-		_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(completedCount).Exec(ctx)
+		_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(completedCount).SetSkippedSegments(skippedCount).Exec(ctx)
 		err := fmt.Errorf("%d segments failed to translate (completed: %d): LLM could not preserve all protected placeholders after retries",
 			lastResult.UnresolvedCount, completedCount)
 		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
@@ -362,11 +382,12 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	}
 
 	if err := r.recordUsage(ctx, exec, completedCount, lastResult.InputTokens, lastResult.OutputTokens); err != nil {
+		_ = r.client.JobResource.UpdateOneID(item.ID).SetCompletedSegments(completedCount).SetSkippedSegments(skippedCount).Exec(ctx)
 		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
 
-	return r.jobs.MarkJobResourceCompleted(ctx, job.ID, item.ID, "", completedCount)
+	return r.jobs.MarkJobResourceCompleted(ctx, job.ID, item.ID, "", completedCount, skippedCount)
 }
 
 // filterPendingSegments 过滤出待翻译的段落（status 为 pending）。

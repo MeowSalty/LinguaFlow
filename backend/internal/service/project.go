@@ -191,7 +191,7 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 
 	// 收集项目关联的 TranslationJob IDs（用于删除 JobResource）
 	tjIDs, err := tx.TranslationJob.Query().
-		Where(translationjob.HasProjectWith(project.IDEQ(projectID))).
+		Where(translationjob.ProjectIDEQ(projectID)).
 		IDs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("query translation job IDs: %w", err)
@@ -260,7 +260,7 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 
 	// Step 7: 删除 GlossaryEntry
 	_, err = tx.GlossaryEntry.Delete().
-		Where(glossaryentry.HasProjectWith(project.IDEQ(projectID))).
+		Where(glossaryentry.ProjectIDEQ(projectID)).
 		Exec(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("delete glossary entries: %w", err)
@@ -268,7 +268,7 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 
 	// Step 8: 删除 TMEntry
 	_, err = tx.TMEntry.Delete().
-		Where(tmentry.HasProjectWith(project.IDEQ(projectID))).
+		Where(tmentry.ProjectIDEQ(projectID)).
 		Exec(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("delete tm entries: %w", err)

@@ -18,6 +18,8 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
+	// FieldProjectID holds the string denoting the project_id field in the database.
+	FieldProjectID = "project_id"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
 	// FieldTriggerType holds the string denoting the trigger_type field in the database.
@@ -34,6 +36,8 @@ const (
 	FieldFailedResources = "failed_resources"
 	// FieldTotalSegments holds the string denoting the total_segments field in the database.
 	FieldTotalSegments = "total_segments"
+	// FieldSkippedSegments holds the string denoting the skipped_segments field in the database.
+	FieldSkippedSegments = "skipped_segments"
 	// FieldStageTotal holds the string denoting the stage_total field in the database.
 	FieldStageTotal = "stage_total"
 	// FieldCompletedSegments holds the string denoting the completed_segments field in the database.
@@ -56,7 +60,7 @@ const (
 	// It exists in this package in order to avoid circular dependency with the "project" package.
 	ProjectInverseTable = "projects"
 	// ProjectColumn is the table column denoting the project relation/edge.
-	ProjectColumn = "project_translation_jobs"
+	ProjectColumn = "project_id"
 	// CreatedByTable is the table that holds the created_by relation/edge.
 	CreatedByTable = "translation_jobs"
 	// CreatedByInverseTable is the table name for the User entity.
@@ -78,6 +82,7 @@ var Columns = []string{
 	FieldID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
+	FieldProjectID,
 	FieldStatus,
 	FieldTriggerType,
 	FieldExecutionPlanID,
@@ -86,6 +91,7 @@ var Columns = []string{
 	FieldCompletedResources,
 	FieldFailedResources,
 	FieldTotalSegments,
+	FieldSkippedSegments,
 	FieldStageTotal,
 	FieldCompletedSegments,
 	FieldErrorMessage,
@@ -95,7 +101,6 @@ var Columns = []string{
 // ForeignKeys holds the SQL foreign-keys that are owned by the "translation_jobs"
 // table and are not defined as standalone fields in the schema.
 var ForeignKeys = []string{
-	"project_translation_jobs",
 	"user_created_translation_jobs",
 }
 
@@ -121,6 +126,8 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
+	ProjectIDValidator func(int) error
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
 	// DefaultTriggerType holds the default value on creation for the "trigger_type" field.
@@ -145,6 +152,10 @@ var (
 	DefaultTotalSegments int
 	// TotalSegmentsValidator is a validator for the "total_segments" field. It is called by the builders before save.
 	TotalSegmentsValidator func(int) error
+	// DefaultSkippedSegments holds the default value on creation for the "skipped_segments" field.
+	DefaultSkippedSegments int
+	// SkippedSegmentsValidator is a validator for the "skipped_segments" field. It is called by the builders before save.
+	SkippedSegmentsValidator func(int) error
 	// DefaultStageTotal holds the default value on creation for the "stage_total" field.
 	DefaultStageTotal int
 	// StageTotalValidator is a validator for the "stage_total" field. It is called by the builders before save.
@@ -171,6 +182,11 @@ func ByCreatedAt(opts ...sql.OrderTermOption) OrderOption {
 // ByUpdatedAt orders the results by the updated_at field.
 func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
+}
+
+// ByProjectID orders the results by the project_id field.
+func ByProjectID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldProjectID, opts...).ToFunc()
 }
 
 // ByStatus orders the results by the status field.
@@ -206,6 +222,11 @@ func ByFailedResources(opts ...sql.OrderTermOption) OrderOption {
 // ByTotalSegments orders the results by the total_segments field.
 func ByTotalSegments(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldTotalSegments, opts...).ToFunc()
+}
+
+// BySkippedSegments orders the results by the skipped_segments field.
+func BySkippedSegments(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSkippedSegments, opts...).ToFunc()
 }
 
 // ByStageTotal orders the results by the stage_total field.

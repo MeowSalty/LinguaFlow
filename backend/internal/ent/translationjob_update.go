@@ -37,6 +37,20 @@ func (_u *TranslationJobUpdate) SetUpdatedAt(v time.Time) *TranslationJobUpdate 
 	return _u
 }
 
+// SetProjectID sets the "project_id" field.
+func (_u *TranslationJobUpdate) SetProjectID(v int) *TranslationJobUpdate {
+	_u.mutation.SetProjectID(v)
+	return _u
+}
+
+// SetNillableProjectID sets the "project_id" field if the given value is not nil.
+func (_u *TranslationJobUpdate) SetNillableProjectID(v *int) *TranslationJobUpdate {
+	if v != nil {
+		_u.SetProjectID(*v)
+	}
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *TranslationJobUpdate) SetStatus(v string) *TranslationJobUpdate {
 	_u.mutation.SetStatus(v)
@@ -176,6 +190,27 @@ func (_u *TranslationJobUpdate) AddTotalSegments(v int) *TranslationJobUpdate {
 	return _u
 }
 
+// SetSkippedSegments sets the "skipped_segments" field.
+func (_u *TranslationJobUpdate) SetSkippedSegments(v int) *TranslationJobUpdate {
+	_u.mutation.ResetSkippedSegments()
+	_u.mutation.SetSkippedSegments(v)
+	return _u
+}
+
+// SetNillableSkippedSegments sets the "skipped_segments" field if the given value is not nil.
+func (_u *TranslationJobUpdate) SetNillableSkippedSegments(v *int) *TranslationJobUpdate {
+	if v != nil {
+		_u.SetSkippedSegments(*v)
+	}
+	return _u
+}
+
+// AddSkippedSegments adds value to the "skipped_segments" field.
+func (_u *TranslationJobUpdate) AddSkippedSegments(v int) *TranslationJobUpdate {
+	_u.mutation.AddSkippedSegments(v)
+	return _u
+}
+
 // SetStageTotal sets the "stage_total" field.
 func (_u *TranslationJobUpdate) SetStageTotal(v int) *TranslationJobUpdate {
 	_u.mutation.ResetStageTotal()
@@ -255,12 +290,6 @@ func (_u *TranslationJobUpdate) SetNillableStartedAt(v *time.Time) *TranslationJ
 // ClearStartedAt clears the value of the "started_at" field.
 func (_u *TranslationJobUpdate) ClearStartedAt() *TranslationJobUpdate {
 	_u.mutation.ClearStartedAt()
-	return _u
-}
-
-// SetProjectID sets the "project" edge to the Project entity by ID.
-func (_u *TranslationJobUpdate) SetProjectID(id int) *TranslationJobUpdate {
-	_u.mutation.SetProjectID(id)
 	return _u
 }
 
@@ -379,6 +408,11 @@ func (_u *TranslationJobUpdate) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *TranslationJobUpdate) check() error {
+	if v, ok := _u.mutation.ProjectID(); ok {
+		if err := translationjob.ProjectIDValidator(v); err != nil {
+			return &ValidationError{Name: "project_id", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.project_id": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.ExecutionPlanID(); ok {
 		if err := translationjob.ExecutionPlanIDValidator(v); err != nil {
 			return &ValidationError{Name: "execution_plan_id", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.execution_plan_id": %w`, err)}
@@ -402,6 +436,11 @@ func (_u *TranslationJobUpdate) check() error {
 	if v, ok := _u.mutation.TotalSegments(); ok {
 		if err := translationjob.TotalSegmentsValidator(v); err != nil {
 			return &ValidationError{Name: "total_segments", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.total_segments": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SkippedSegments(); ok {
+		if err := translationjob.SkippedSegmentsValidator(v); err != nil {
+			return &ValidationError{Name: "skipped_segments", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.skipped_segments": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.StageTotal(); ok {
@@ -473,6 +512,12 @@ func (_u *TranslationJobUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if value, ok := _u.mutation.AddedTotalSegments(); ok {
 		_spec.AddField(translationjob.FieldTotalSegments, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.SkippedSegments(); ok {
+		_spec.SetField(translationjob.FieldSkippedSegments, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedSkippedSegments(); ok {
+		_spec.AddField(translationjob.FieldSkippedSegments, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.StageTotal(); ok {
 		_spec.SetField(translationjob.FieldStageTotal, field.TypeInt, value)
@@ -627,6 +672,20 @@ func (_u *TranslationJobUpdateOne) SetUpdatedAt(v time.Time) *TranslationJobUpda
 	return _u
 }
 
+// SetProjectID sets the "project_id" field.
+func (_u *TranslationJobUpdateOne) SetProjectID(v int) *TranslationJobUpdateOne {
+	_u.mutation.SetProjectID(v)
+	return _u
+}
+
+// SetNillableProjectID sets the "project_id" field if the given value is not nil.
+func (_u *TranslationJobUpdateOne) SetNillableProjectID(v *int) *TranslationJobUpdateOne {
+	if v != nil {
+		_u.SetProjectID(*v)
+	}
+	return _u
+}
+
 // SetStatus sets the "status" field.
 func (_u *TranslationJobUpdateOne) SetStatus(v string) *TranslationJobUpdateOne {
 	_u.mutation.SetStatus(v)
@@ -766,6 +825,27 @@ func (_u *TranslationJobUpdateOne) AddTotalSegments(v int) *TranslationJobUpdate
 	return _u
 }
 
+// SetSkippedSegments sets the "skipped_segments" field.
+func (_u *TranslationJobUpdateOne) SetSkippedSegments(v int) *TranslationJobUpdateOne {
+	_u.mutation.ResetSkippedSegments()
+	_u.mutation.SetSkippedSegments(v)
+	return _u
+}
+
+// SetNillableSkippedSegments sets the "skipped_segments" field if the given value is not nil.
+func (_u *TranslationJobUpdateOne) SetNillableSkippedSegments(v *int) *TranslationJobUpdateOne {
+	if v != nil {
+		_u.SetSkippedSegments(*v)
+	}
+	return _u
+}
+
+// AddSkippedSegments adds value to the "skipped_segments" field.
+func (_u *TranslationJobUpdateOne) AddSkippedSegments(v int) *TranslationJobUpdateOne {
+	_u.mutation.AddSkippedSegments(v)
+	return _u
+}
+
 // SetStageTotal sets the "stage_total" field.
 func (_u *TranslationJobUpdateOne) SetStageTotal(v int) *TranslationJobUpdateOne {
 	_u.mutation.ResetStageTotal()
@@ -845,12 +925,6 @@ func (_u *TranslationJobUpdateOne) SetNillableStartedAt(v *time.Time) *Translati
 // ClearStartedAt clears the value of the "started_at" field.
 func (_u *TranslationJobUpdateOne) ClearStartedAt() *TranslationJobUpdateOne {
 	_u.mutation.ClearStartedAt()
-	return _u
-}
-
-// SetProjectID sets the "project" edge to the Project entity by ID.
-func (_u *TranslationJobUpdateOne) SetProjectID(id int) *TranslationJobUpdateOne {
-	_u.mutation.SetProjectID(id)
 	return _u
 }
 
@@ -982,6 +1056,11 @@ func (_u *TranslationJobUpdateOne) defaults() {
 
 // check runs all checks and user-defined validators on the builder.
 func (_u *TranslationJobUpdateOne) check() error {
+	if v, ok := _u.mutation.ProjectID(); ok {
+		if err := translationjob.ProjectIDValidator(v); err != nil {
+			return &ValidationError{Name: "project_id", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.project_id": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.ExecutionPlanID(); ok {
 		if err := translationjob.ExecutionPlanIDValidator(v); err != nil {
 			return &ValidationError{Name: "execution_plan_id", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.execution_plan_id": %w`, err)}
@@ -1005,6 +1084,11 @@ func (_u *TranslationJobUpdateOne) check() error {
 	if v, ok := _u.mutation.TotalSegments(); ok {
 		if err := translationjob.TotalSegmentsValidator(v); err != nil {
 			return &ValidationError{Name: "total_segments", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.total_segments": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SkippedSegments(); ok {
+		if err := translationjob.SkippedSegmentsValidator(v); err != nil {
+			return &ValidationError{Name: "skipped_segments", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.skipped_segments": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.StageTotal(); ok {
@@ -1093,6 +1177,12 @@ func (_u *TranslationJobUpdateOne) sqlSave(ctx context.Context) (_node *Translat
 	}
 	if value, ok := _u.mutation.AddedTotalSegments(); ok {
 		_spec.AddField(translationjob.FieldTotalSegments, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.SkippedSegments(); ok {
+		_spec.SetField(translationjob.FieldSkippedSegments, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedSkippedSegments(); ok {
+		_spec.AddField(translationjob.FieldSkippedSegments, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.StageTotal(); ok {
 		_spec.SetField(translationjob.FieldStageTotal, field.TypeInt, value)

@@ -105,6 +105,27 @@ func (_u *JobResourceUpdate) AddCompletedSegments(v int) *JobResourceUpdate {
 	return _u
 }
 
+// SetSkippedSegments sets the "skipped_segments" field.
+func (_u *JobResourceUpdate) SetSkippedSegments(v int) *JobResourceUpdate {
+	_u.mutation.ResetSkippedSegments()
+	_u.mutation.SetSkippedSegments(v)
+	return _u
+}
+
+// SetNillableSkippedSegments sets the "skipped_segments" field if the given value is not nil.
+func (_u *JobResourceUpdate) SetNillableSkippedSegments(v *int) *JobResourceUpdate {
+	if v != nil {
+		_u.SetSkippedSegments(*v)
+	}
+	return _u
+}
+
+// AddSkippedSegments adds value to the "skipped_segments" field.
+func (_u *JobResourceUpdate) AddSkippedSegments(v int) *JobResourceUpdate {
+	_u.mutation.AddSkippedSegments(v)
+	return _u
+}
+
 // SetOutputPath sets the "output_path" field.
 func (_u *JobResourceUpdate) SetOutputPath(v string) *JobResourceUpdate {
 	_u.mutation.SetOutputPath(v)
@@ -314,6 +335,11 @@ func (_u *JobResourceUpdate) check() error {
 			return &ValidationError{Name: "completed_segments", err: fmt.Errorf(`ent: validator failed for field "JobResource.completed_segments": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.SkippedSegments(); ok {
+		if err := jobresource.SkippedSegmentsValidator(v); err != nil {
+			return &ValidationError{Name: "skipped_segments", err: fmt.Errorf(`ent: validator failed for field "JobResource.skipped_segments": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.StageTotal(); ok {
 		if err := jobresource.StageTotalValidator(v); err != nil {
 			return &ValidationError{Name: "stage_total", err: fmt.Errorf(`ent: validator failed for field "JobResource.stage_total": %w`, err)}
@@ -370,6 +396,12 @@ func (_u *JobResourceUpdate) sqlSave(ctx context.Context) (_node int, err error)
 	}
 	if value, ok := _u.mutation.AddedCompletedSegments(); ok {
 		_spec.AddField(jobresource.FieldCompletedSegments, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.SkippedSegments(); ok {
+		_spec.SetField(jobresource.FieldSkippedSegments, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedSkippedSegments(); ok {
+		_spec.AddField(jobresource.FieldSkippedSegments, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.OutputPath(); ok {
 		_spec.SetField(jobresource.FieldOutputPath, field.TypeString, value)
@@ -556,6 +588,27 @@ func (_u *JobResourceUpdateOne) SetNillableCompletedSegments(v *int) *JobResourc
 // AddCompletedSegments adds value to the "completed_segments" field.
 func (_u *JobResourceUpdateOne) AddCompletedSegments(v int) *JobResourceUpdateOne {
 	_u.mutation.AddCompletedSegments(v)
+	return _u
+}
+
+// SetSkippedSegments sets the "skipped_segments" field.
+func (_u *JobResourceUpdateOne) SetSkippedSegments(v int) *JobResourceUpdateOne {
+	_u.mutation.ResetSkippedSegments()
+	_u.mutation.SetSkippedSegments(v)
+	return _u
+}
+
+// SetNillableSkippedSegments sets the "skipped_segments" field if the given value is not nil.
+func (_u *JobResourceUpdateOne) SetNillableSkippedSegments(v *int) *JobResourceUpdateOne {
+	if v != nil {
+		_u.SetSkippedSegments(*v)
+	}
+	return _u
+}
+
+// AddSkippedSegments adds value to the "skipped_segments" field.
+func (_u *JobResourceUpdateOne) AddSkippedSegments(v int) *JobResourceUpdateOne {
+	_u.mutation.AddSkippedSegments(v)
 	return _u
 }
 
@@ -781,6 +834,11 @@ func (_u *JobResourceUpdateOne) check() error {
 			return &ValidationError{Name: "completed_segments", err: fmt.Errorf(`ent: validator failed for field "JobResource.completed_segments": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.SkippedSegments(); ok {
+		if err := jobresource.SkippedSegmentsValidator(v); err != nil {
+			return &ValidationError{Name: "skipped_segments", err: fmt.Errorf(`ent: validator failed for field "JobResource.skipped_segments": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.StageTotal(); ok {
 		if err := jobresource.StageTotalValidator(v); err != nil {
 			return &ValidationError{Name: "stage_total", err: fmt.Errorf(`ent: validator failed for field "JobResource.stage_total": %w`, err)}
@@ -854,6 +912,12 @@ func (_u *JobResourceUpdateOne) sqlSave(ctx context.Context) (_node *JobResource
 	}
 	if value, ok := _u.mutation.AddedCompletedSegments(); ok {
 		_spec.AddField(jobresource.FieldCompletedSegments, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.SkippedSegments(); ok {
+		_spec.SetField(jobresource.FieldSkippedSegments, field.TypeInt, value)
+	}
+	if value, ok := _u.mutation.AddedSkippedSegments(); ok {
+		_spec.AddField(jobresource.FieldSkippedSegments, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.OutputPath(); ok {
 		_spec.SetField(jobresource.FieldOutputPath, field.TypeString, value)

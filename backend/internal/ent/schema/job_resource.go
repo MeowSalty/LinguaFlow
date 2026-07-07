@@ -25,6 +25,8 @@ func (JobResource) Fields() []ent.Field {
 			Comment("待翻译的段落数"),
 		field.Int("completed_segments").Default(0).NonNegative().
 			Comment("已完成的段落数"),
+		field.Int("skipped_segments").Default(0).NonNegative().
+			Comment("被系统跳过的段落数（已翻译、空文本、纯占位符等）"),
 		field.String("output_path").Optional().
 			Comment("输出文件路径"),
 		field.String("error_message").Optional().Nillable().

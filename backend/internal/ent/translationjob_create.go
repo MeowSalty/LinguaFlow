@@ -51,6 +51,12 @@ func (_c *TranslationJobCreate) SetNillableUpdatedAt(v *time.Time) *TranslationJ
 	return _c
 }
 
+// SetProjectID sets the "project_id" field.
+func (_c *TranslationJobCreate) SetProjectID(v int) *TranslationJobCreate {
+	_c.mutation.SetProjectID(v)
+	return _c
+}
+
 // SetStatus sets the "status" field.
 func (_c *TranslationJobCreate) SetStatus(v string) *TranslationJobCreate {
 	_c.mutation.SetStatus(v)
@@ -147,6 +153,20 @@ func (_c *TranslationJobCreate) SetNillableTotalSegments(v *int) *TranslationJob
 	return _c
 }
 
+// SetSkippedSegments sets the "skipped_segments" field.
+func (_c *TranslationJobCreate) SetSkippedSegments(v int) *TranslationJobCreate {
+	_c.mutation.SetSkippedSegments(v)
+	return _c
+}
+
+// SetNillableSkippedSegments sets the "skipped_segments" field if the given value is not nil.
+func (_c *TranslationJobCreate) SetNillableSkippedSegments(v *int) *TranslationJobCreate {
+	if v != nil {
+		_c.SetSkippedSegments(*v)
+	}
+	return _c
+}
+
 // SetStageTotal sets the "stage_total" field.
 func (_c *TranslationJobCreate) SetStageTotal(v int) *TranslationJobCreate {
 	_c.mutation.SetStageTotal(v)
@@ -200,12 +220,6 @@ func (_c *TranslationJobCreate) SetNillableStartedAt(v *time.Time) *TranslationJ
 	if v != nil {
 		_c.SetStartedAt(*v)
 	}
-	return _c
-}
-
-// SetProjectID sets the "project" edge to the Project entity by ID.
-func (_c *TranslationJobCreate) SetProjectID(id int) *TranslationJobCreate {
-	_c.mutation.SetProjectID(id)
 	return _c
 }
 
@@ -319,6 +333,10 @@ func (_c *TranslationJobCreate) defaults() {
 		v := translationjob.DefaultTotalSegments
 		_c.mutation.SetTotalSegments(v)
 	}
+	if _, ok := _c.mutation.SkippedSegments(); !ok {
+		v := translationjob.DefaultSkippedSegments
+		_c.mutation.SetSkippedSegments(v)
+	}
 	if _, ok := _c.mutation.StageTotal(); !ok {
 		v := translationjob.DefaultStageTotal
 		_c.mutation.SetStageTotal(v)
@@ -336,6 +354,14 @@ func (_c *TranslationJobCreate) check() error {
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "TranslationJob.updated_at"`)}
+	}
+	if _, ok := _c.mutation.ProjectID(); !ok {
+		return &ValidationError{Name: "project_id", err: errors.New(`ent: missing required field "TranslationJob.project_id"`)}
+	}
+	if v, ok := _c.mutation.ProjectID(); ok {
+		if err := translationjob.ProjectIDValidator(v); err != nil {
+			return &ValidationError{Name: "project_id", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.project_id": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "TranslationJob.status"`)}
@@ -384,6 +410,14 @@ func (_c *TranslationJobCreate) check() error {
 	if v, ok := _c.mutation.TotalSegments(); ok {
 		if err := translationjob.TotalSegmentsValidator(v); err != nil {
 			return &ValidationError{Name: "total_segments", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.total_segments": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.SkippedSegments(); !ok {
+		return &ValidationError{Name: "skipped_segments", err: errors.New(`ent: missing required field "TranslationJob.skipped_segments"`)}
+	}
+	if v, ok := _c.mutation.SkippedSegments(); ok {
+		if err := translationjob.SkippedSegmentsValidator(v); err != nil {
+			return &ValidationError{Name: "skipped_segments", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.skipped_segments": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.StageTotal(); !ok {
@@ -471,6 +505,10 @@ func (_c *TranslationJobCreate) createSpec() (*TranslationJob, *sqlgraph.CreateS
 		_spec.SetField(translationjob.FieldTotalSegments, field.TypeInt, value)
 		_node.TotalSegments = value
 	}
+	if value, ok := _c.mutation.SkippedSegments(); ok {
+		_spec.SetField(translationjob.FieldSkippedSegments, field.TypeInt, value)
+		_node.SkippedSegments = value
+	}
 	if value, ok := _c.mutation.StageTotal(); ok {
 		_spec.SetField(translationjob.FieldStageTotal, field.TypeInt, value)
 		_node.StageTotal = value
@@ -501,7 +539,7 @@ func (_c *TranslationJobCreate) createSpec() (*TranslationJob, *sqlgraph.CreateS
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
-		_node.project_translation_jobs = &nodes[0]
+		_node.ProjectID = nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	if nodes := _c.mutation.CreatedByIDs(); len(nodes) > 0 {
