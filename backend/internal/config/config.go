@@ -5,6 +5,7 @@ import (
 	"math"
 	"net"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"time"
 )
@@ -138,6 +139,32 @@ type LogConfig struct {
 	Format string `yaml:"format"`
 }
 
+// WorkerConfig 控制后台任务 Worker 的并发和队列参数。
+type WorkerConfig struct {
+	Translation RunnerConfig `yaml:"translation"`
+	Sync        RunnerConfig `yaml:"sync"`
+}
+
+// RunnerConfig 单个 Runner 的并发数和队列容量。
+type RunnerConfig struct {
+	Count         int `yaml:"count"`          // Worker goroutine 数，默认 NumCPU()（下限 2）
+	QueueCapacity int `yaml:"queue_capacity"` // 队列最大排队深度
+}
+
+// DefaultWorkerConfig 返回默认的 Worker 配置。
+// Worker 数量基于 CPU 核数，下限 2。
+// 队列容量按 Worker 数倍增：翻译 4x，同步 8x。
+func DefaultWorkerConfig() WorkerConfig {
+	count := runtime.NumCPU()
+	if count < 2 {
+		count = 2
+	}
+	return WorkerConfig{
+		Translation: RunnerConfig{Count: count, QueueCapacity: count * 4},
+		Sync:        RunnerConfig{Count: count, QueueCapacity: count * 8},
+	}
+}
+
 type ServerConfig struct {
 	Host            string             `yaml:"host"`
 	Port            int                `yaml:"port"`
@@ -150,6 +177,7 @@ type ServerConfig struct {
 	JWTExpiry       time.Duration      `yaml:"jwt_expiry"`
 	RefreshExpiry   time.Duration      `yaml:"refresh_token_expiry"`
 	ShutdownTimeout time.Duration      `yaml:"shutdown_timeout"`
+	Workers         WorkerConfig       `yaml:"workers"`
 	CORS            CORSConfig         `yaml:"cors"`
 	Registration    RegistrationConfig `yaml:"registration"`
 }
@@ -205,6 +233,7 @@ func DefaultServerConfig() *ServerConfig {
 		JWTExpiry:       15 * time.Minute,
 		RefreshExpiry:   30 * 24 * time.Hour,
 		ShutdownTimeout: 10 * time.Second,
+		Workers:         DefaultWorkerConfig(),
 		CORS: CORSConfig{
 			AllowedOrigins: []string{"*"},
 		},
@@ -251,6 +280,18 @@ func ValidateServerConfig(c *ServerConfig) error {
 	}
 	if len(c.CORS.AllowedOrigins) == 0 {
 		c.CORS.AllowedOrigins = []string{"*"}
+	}
+	if c.Workers.Translation.Count < 1 {
+		c.Workers.Translation.Count = 1
+	}
+	if c.Workers.Translation.QueueCapacity < 1 {
+		c.Workers.Translation.QueueCapacity = 1
+	}
+	if c.Workers.Sync.Count < 1 {
+		c.Workers.Sync.Count = 1
+	}
+	if c.Workers.Sync.QueueCapacity < 1 {
+		c.Workers.Sync.QueueCapacity = 1
 	}
 	return nil
 }

@@ -735,7 +735,7 @@ func (s *TranslationJobService) ReconcileJob(ctx context.Context, jobID int) err
 	// [DEBUG] 诊断：记录每个资源的状态
 	for _, item := range current.Edges.JobResources {
 		completedSegments += item.CompletedSegments
-		slog.Info("[DEBUG] ReconcileJob resource status",
+		slog.Debug("reconcile job resource status",
 			"job_id", jobID,
 			"resource_id", item.ID,
 			"status", item.Status,
@@ -761,7 +761,7 @@ func (s *TranslationJobService) ReconcileJob(ctx context.Context, jobID int) err
 	}
 	// [DEBUG] 诊断：记录汇总信息
 	total := len(current.Edges.JobResources)
-	slog.Info("[DEBUG] ReconcileJob summary",
+	slog.Debug("reconcile job summary",
 		"job_id", jobID,
 		"total_resources", total,
 		"pending", pendingCount,
@@ -773,7 +773,7 @@ func (s *TranslationJobService) ReconcileJob(ctx context.Context, jobID int) err
 	)
 	status := deriveTranslationJobStatus(len(current.Edges.JobResources), pendingCount, runningCount, completed, failed, cancelled)
 	// [DEBUG] 诊断：记录最终决定的作业状态
-	slog.Info("[DEBUG] ReconcileJob derived status",
+	slog.Debug("reconcile job derived status",
 		"job_id", jobID,
 		"derived_status", status,
 		"completed_resources", completed,

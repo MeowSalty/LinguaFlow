@@ -6,12 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
-	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
@@ -19,19 +19,21 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
-// TranslationRunner 翻译任务的执行器，通过嵌入 BaseRunner 复用公共逻辑。
+// TranslationRunner 翻译任务的执行器，实现 TaskRunner 接口。
 type TranslationRunner struct {
-	*BaseRunner
+	logger      *slog.Logger
+	client      *ent.Client
 	jobs        *service.TranslationJobService
+	store       *filestore.LocalStore
+	queue       *Queue
 	eventBroker *event.Broker
 	limiterPool *backend.LimiterPool
+	resMutex    *ResourceMutex
 
 	// per-job 取消注册表：jobID → cancel 函数
 	mu         sync.Mutex
@@ -47,26 +49,74 @@ func NewTranslationRunner(
 	queue *Queue,
 	eventBroker *event.Broker,
 	limiterPool *backend.LimiterPool,
+	resMutex *ResourceMutex,
 ) *TranslationRunner {
-	r := &TranslationRunner{
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return &TranslationRunner{
+		logger:      logger,
+		client:      client,
 		jobs:        jobs,
+		store:       store,
+		queue:       queue,
 		eventBroker: eventBroker,
 		limiterPool: limiterPool,
+		resMutex:    resMutex,
 		activeJobs:  make(map[int]context.CancelFunc),
 	}
-	r.BaseRunner = newBaseRunner(logger, client, store, queue, jobs, r.processJob, "translation worker")
-	return r
 }
 
-// CancelRunningJob 通知运行中的翻译任务立即停止。
-func (r *TranslationRunner) CancelRunningJob(jobID int) {
+// Type 返回任务类型标识。
+func (r *TranslationRunner) Type() string {
+	return "translation"
+}
+
+// Queue 返回此 Runner 的任务队列。
+func (r *TranslationRunner) Queue() *Queue {
+	return r.queue
+}
+
+// ProcessOne 处理单个翻译任务，不负责 Dequeue/Done。
+func (r *TranslationRunner) ProcessOne(ctx context.Context, jobID int) error {
+	return r.processJob(ctx, jobID)
+}
+
+// Run 从队列中取任务并执行，直到 ctx 取消。
+func (r *TranslationRunner) Run(ctx context.Context) error {
+	for {
+		jobID, err := r.queue.Dequeue(ctx)
+		if err != nil {
+			if errors.Is(err, context.Canceled) {
+				return nil
+			}
+			return err
+		}
+		if err := r.processJob(ctx, jobID); err != nil {
+			r.logger.Error("translation worker: process job failed", "job_id", jobID, "err", err)
+		}
+		r.queue.Done(jobID)
+	}
+}
+
+// Cancel 通知运行中的翻译任务立即停止。
+func (r *TranslationRunner) Cancel(taskID int) {
 	r.mu.Lock()
-	cancel, ok := r.activeJobs[jobID]
+	cancel, ok := r.activeJobs[taskID]
 	r.mu.Unlock()
 	if ok {
-		r.logger.Info("cancelling running translation job", "job_id", jobID)
+		r.logger.Info("cancelling running translation job", "job_id", taskID)
 		cancel()
 	}
+}
+
+// Recover 从数据库恢复挂起的任务并重新入队。
+func (r *TranslationRunner) Recover(ctx context.Context) ([]int, error) {
+	jobIDs, err := r.jobs.RecoverPendingJobs(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return jobIDs, nil
 }
 
 // processJob 处理单个翻译任务：加载执行上下文，筛选待处理的资源并依次执行。
@@ -75,7 +125,7 @@ func (r *TranslationRunner) processJob(ctx context.Context, jobID int) error {
 	jobCtx, jobCancel := context.WithCancel(ctx)
 	defer jobCancel()
 
-	// 注册到 activeJobs，使 CancelRunningJob 能触发取消
+	// 注册到 activeJobs，使 Cancel 能触发取消
 	r.mu.Lock()
 	r.activeJobs[jobID] = jobCancel
 	r.mu.Unlock()
@@ -143,6 +193,16 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	if err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
+	}
+
+	// 获取 Resource 级互斥锁
+	if r.resMutex != nil {
+		release, err := r.resMutex.Acquire(ctx, res.ID)
+		if err != nil {
+			_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, fmt.Errorf("acquire resource lock: %w", err))
+			return nil
+		}
+		defer release()
 	}
 
 	snapshot, err := r.jobs.GetTranslationSnapshot(ctx, job.ID)
@@ -337,172 +397,6 @@ func buildSegmentInputs(rows []*ent.Segment) []pipeline.SegmentInput {
 	return inputs
 }
 
-// buildEngineFromSnapshot 从任务快照构建引擎实例。
-// 后端实例由快照中的 Type + Options 直接构建，不依赖名称查找。
-func (r *TranslationRunner) buildEngineFromSnapshot(
-	ctx context.Context,
-	snapshot *service.JobExecutionSnapshot,
-	resources engine.RuntimeResources,
-	reporter progress.Reporter,
-) (*engine.Engine, error) {
-	var rounds []engine.Round
-	for _, rs := range snapshot.Rounds {
-		// 从快照直接构建后端实例（无需名称匹配）
-		bCfg := backend.Config{
-			Name:    rs.Backend.Name, // 仅用于日志，不用于匹配
-			Type:    rs.Backend.Type,
-			Enabled: true,
-			Options: rs.Backend.Options,
-		}
-		b, err := backend.Build(bCfg)
-		if err != nil {
-			return nil, fmt.Errorf("round %q build backend: %w", rs.Name, err)
-		}
-
-		// 使用共享 limiter pool 包装后端
-		if r.limiterPool != nil && rs.Backend.RateLimitPerMinute > 0 {
-			limiter := r.limiterPool.Get(rs.Backend.ID, rs.Backend.RateLimitPerMinute)
-			b = backend.NewRateLimitedBackend(b, limiter)
-		}
-
-		// 为每轮构建独立的 Renderer（使用该轮自己的 prompt 模板）
-		roundRenderer, err := prompt.NewRenderer(rs.Prompt.Content)
-		if err != nil {
-			return nil, fmt.Errorf("round %q build renderer: %w", rs.Name, err)
-		}
-
-		rounds = append(rounds, engine.Round{
-			Backend:          b,
-			Name:             rs.Name,
-			BatchSize:        rs.BatchSize,
-			MaxWordsPerBatch: rs.MaxWordsPerBatch,
-			Concurrency:      rs.Concurrency,
-			FallbackShrink:   rs.FallbackShrink,
-			Retry: backend.RetryPolicy{
-				MaxAttempts: rs.Retry.MaxAttempts,
-				Backoff:     time.Duration(rs.Retry.BackoffMs) * time.Millisecond,
-				Jitter:      rs.Retry.Jitter,
-			},
-			Renderer:          roundRenderer,
-			ResponseMode:      responseModeFromBackendOptions(rs.Backend.Options),
-			Mode:              pipeline.RoundModeTranslate,
-			ProtectRules:      rs.Strategy.Protect.Rules,
-			RubyEnabled:       rs.Strategy.Ruby.Enabled,
-			RubyPreserveKinds: rs.Strategy.Ruby.PreserveKinds,
-			Context: &pipeline.ContextConfig{
-				Enabled:  rs.Strategy.Context.Enabled,
-				Before:   rs.Strategy.Context.Before,
-				After:    rs.Strategy.Context.After,
-				MaxChars: rs.Strategy.Context.MaxChars,
-			},
-			Postprocess: &pipeline.PostprocessConfig{
-				TrimSpaces: rs.Strategy.Postprocess.TrimSpaces,
-			},
-		})
-	}
-
-	// 构建策略配置（不含后端信息）
-	cfg := buildEngineConfig(snapshot)
-
-	// 构建注音对齐重试后端
-	var rubyRetryBackends []backend.Backend
-	if snapshot.RubyRetry != nil && snapshot.RubyRetry.Enabled {
-		rrCfg := backend.Config{
-			Name:    snapshot.RubyRetry.Backend.Name,
-			Type:    snapshot.RubyRetry.Backend.Type,
-			Enabled: true,
-			Options: snapshot.RubyRetry.Backend.Options,
-		}
-		rrBackend, err := backend.Build(rrCfg)
-		if err != nil {
-			return nil, fmt.Errorf("ruby retry backend: %w", err)
-		}
-		if r.limiterPool != nil && snapshot.RubyRetry.Backend.RateLimitPerMinute > 0 {
-			limiter := r.limiterPool.Get(snapshot.RubyRetry.Backend.ID, snapshot.RubyRetry.Backend.RateLimitPerMinute)
-			rrBackend = backend.NewRateLimitedBackend(rrBackend, limiter)
-		}
-		rubyRetryBackends = []backend.Backend{rrBackend}
-	}
-
-	// 构建独立自举后端
-	var bootstrapBackends []backend.Backend
-	if snapshot.Bootstrap != nil && snapshot.Bootstrap.Enabled {
-		bsCfg := backend.Config{
-			Name:    snapshot.Bootstrap.Backend.Name,
-			Type:    snapshot.Bootstrap.Backend.Type,
-			Enabled: true,
-			Options: snapshot.Bootstrap.Backend.Options,
-		}
-		bsBackend, err := backend.Build(bsCfg)
-		if err != nil {
-			return nil, fmt.Errorf("bootstrap backend: %w", err)
-		}
-		if r.limiterPool != nil && snapshot.Bootstrap.Backend.RateLimitPerMinute > 0 {
-			limiter := r.limiterPool.Get(snapshot.Bootstrap.Backend.ID, snapshot.Bootstrap.Backend.RateLimitPerMinute)
-			bsBackend = backend.NewRateLimitedBackend(bsBackend, limiter)
-		}
-		bootstrapBackends = []backend.Backend{bsBackend}
-	}
-
-	return engine.NewWithOptions(engine.Options{
-		Rounds:            rounds,
-		BootstrapBackends: bootstrapBackends,
-		RubyRetryBackends: rubyRetryBackends,
-		Config:            cfg,
-		Logger:            r.logger,
-		Resources:         resources,
-		Reporter:          reporter,
-	})
-}
-
-// buildEngineConfig 从快照构建引擎运行时配置。
-func buildEngineConfig(snapshot *service.JobExecutionSnapshot) *engine.Config {
-	cfg := &engine.Config{
-		SourceLang: snapshot.SourceLang,
-		TargetLang: snapshot.TargetLang,
-		TMEnabled:  snapshot.TMEnabled,
-	}
-
-	if len(snapshot.Rounds) > 0 {
-		s := snapshot.Rounds[0].Strategy
-		rc := repair.Config{
-			Enabled:              s.Repair.Enabled,
-			JSONStructural:       s.Repair.JSONStructural,
-			SchemaAliases:        s.Repair.SchemaAliases,
-			Partial:              s.Repair.Partial,
-			PartialThreshold:     s.Repair.PartialThreshold,
-			PlaceholderNormalize: s.Repair.PlaceholderNormalize,
-			PromptUpgrade:        s.Repair.PromptUpgrade,
-		}
-		cfg.Repair = rc.ToOptions()
-		cfg.Ruby = engine.RubyConfig{
-			Enabled:       s.Ruby.Enabled,
-			PreserveKinds: s.Ruby.PreserveKinds,
-		}
-		cfg.Glossary = engine.GlossaryConfig{
-			Enabled: snapshot.GlossaryEnabled,
-			Bootstrap: config.BootstrapConfig{
-				MaxTermsPer1000Chars:   s.Glossary.Bootstrap.MaxTermsPer1000Chars,
-				MinSourceLen:           s.Glossary.Bootstrap.MinSourceLen,
-				InlineConflictStrategy: s.Glossary.Bootstrap.InlineConflictStrategy,
-			},
-		}
-	}
-
-	if snapshot.Bootstrap != nil {
-		cfg.Glossary.Standalone = config.StandaloneBootstrapConfig{
-			Enabled:          snapshot.Bootstrap.Enabled,
-			TemplateContent:  snapshot.Bootstrap.TemplateContent,
-			BatchSize:        snapshot.Bootstrap.BatchSize,
-			Concurrency:      snapshot.Bootstrap.Concurrency,
-			MaxTermsPerBatch: snapshot.Bootstrap.MaxTermsPerBatch,
-			MinSourceLen:     snapshot.Bootstrap.MinSourceLen,
-		}
-	}
-
-	return cfg
-}
-
 // buildRuntimeGlossary 根据配置构建运行时术语表，未启用则返回空实现。
 func (r *TranslationRunner) buildRuntimeGlossary(projectRow *ent.Project, enabled bool) (glossary.Glossary, error) {
 	if !enabled {
@@ -578,11 +472,24 @@ func clampInt64ToInt(v int64) int {
 	return int(v)
 }
 
-// responseModeFromBackendOptions 从后端 Options map 中读取 response_format 值。
-// 用于设置 engine.Round.ResponseMode，使 pipeline 能区分 json/text 模式。
-func responseModeFromBackendOptions(opts map[string]any) string {
-	if v, ok := opts["response_format"].(string); ok {
-		return v
+// firstNonEmpty 返回参数中第一个非空白字符串。
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
 	}
 	return ""
+}
+
+// resolvePath 将路径解析为绝对路径，相对路径通过 store 转换。
+func (r *TranslationRunner) resolvePath(raw string) (string, error) {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return "", fmt.Errorf("worker: empty path")
+	}
+	if filepath.IsAbs(raw) {
+		return raw, nil
+	}
+	return r.store.Absolute(raw)
 }

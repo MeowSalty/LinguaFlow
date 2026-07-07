@@ -50,8 +50,8 @@ func (s *Server) handleExecuteGlossarySyncUpdate(w http.ResponseWriter, r *http.
 	}
 
 	// 将任务入队，通知 SyncTaskRunner 处理
-	if s.syncTaskQueue != nil {
-		if err := s.syncTaskQueue.Enqueue(r.Context(), taskInfo.TaskID); err != nil {
+	if s.dispatcher != nil {
+		if err := s.dispatcher.Enqueue(r.Context(), "sync", taskInfo.TaskID); err != nil {
 			writeServiceError(w, err)
 			return
 		}

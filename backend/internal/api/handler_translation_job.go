@@ -9,6 +9,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/worker"
 )
 
 type createTranslationJobRequest struct {
@@ -18,12 +19,6 @@ type createTranslationJobRequest struct {
 	SegmentGroupKeys []string `json:"segment_group_keys"`
 	AutoApprove      bool     `json:"auto_approve"`
 	OverwriteMode    string   `json:"overwrite_mode"`
-}
-
-// QueueInfo 携带翻译队列的位置信息。
-type QueueInfo struct {
-	Position int
-	Size     int
 }
 
 type translationJobResourceResponse struct {
@@ -69,18 +64,15 @@ type translationJobResponse struct {
 
 // queueInfoForJob returns queue position info for a job, or nil if queue is
 // unavailable or the job is not currently queued.
-func (s *Server) queueInfoForJob(jobID int) *QueueInfo {
-	if s.translationJobQueue == nil {
+func (s *Server) queueInfoForJob(jobID int) *worker.QueueInfo {
+	if s.dispatcher == nil {
 		return nil
 	}
-	info := s.translationJobQueue.Position(jobID)
-	if info.Position < 0 {
+	info := s.dispatcher.QueuePosition("translation", jobID)
+	if info == nil || info.Position < 0 {
 		return nil
 	}
-	return &QueueInfo{
-		Position: info.Position,
-		Size:     info.Size,
-	}
+	return info
 }
 
 func (s *Server) handleCreateTranslationJob(w http.ResponseWriter, r *http.Request) {
@@ -112,8 +104,8 @@ func (s *Server) handleCreateTranslationJob(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "translation_job.create", ResourceType: "translation_job", ResourceID: created.ID, Message: "创建翻译任务"})
-	if s.translationJobQueue != nil {
-		if err := s.translationJobQueue.Enqueue(r.Context(), created.ID); err != nil {
+	if s.dispatcher != nil {
+		if err := s.dispatcher.Enqueue(r.Context(), "translation", created.ID); err != nil {
 			writeServiceError(w, err)
 			return
 		}
@@ -186,8 +178,8 @@ func (s *Server) handleCancelTranslationJob(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	// 通知正在运行的 worker 立即停止
-	if s.translationJobRunner != nil {
-		s.translationJobRunner.CancelRunningJob(jobID)
+	if s.dispatcher != nil {
+		s.dispatcher.CancelTask("translation", jobID)
 	}
 	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "translation_job.cancel", ResourceType: "translation_job", ResourceID: job.ID, Message: "取消翻译任务"})
 	writeJSON(w, http.StatusOK, toTranslationJobResponse(job, s.queueInfoForJob(job.ID)))
@@ -209,8 +201,8 @@ func (s *Server) handleRetryTranslationJob(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "translation_job.retry", ResourceType: "translation_job", ResourceID: job.ID, Message: "重试翻译任务"})
-	if s.translationJobQueue != nil {
-		if err := s.translationJobQueue.Enqueue(r.Context(), job.ID); err != nil {
+	if s.dispatcher != nil {
+		if err := s.dispatcher.Enqueue(r.Context(), "translation", job.ID); err != nil {
 			writeServiceError(w, err)
 			return
 		}
@@ -218,7 +210,7 @@ func (s *Server) handleRetryTranslationJob(w http.ResponseWriter, r *http.Reques
 	writeJSON(w, http.StatusOK, toTranslationJobResponse(job, s.queueInfoForJob(job.ID)))
 }
 
-func toTranslationJobResponse(row *ent.TranslationJob, queueInfo *QueueInfo) translationJobResponse {
+func toTranslationJobResponse(row *ent.TranslationJob, queueInfo *worker.QueueInfo) translationJobResponse {
 	resp := translationJobResponse{
 		ID:                 row.ID,
 		Status:             row.Status,
