@@ -11,6 +11,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
@@ -164,6 +165,12 @@ func buildEngineConfig(snapshot *service.JobExecutionSnapshot) *engine.Config {
 				MinSourceLen:           s.Glossary.Bootstrap.MinSourceLen,
 				InlineConflictStrategy: s.Glossary.Bootstrap.InlineConflictStrategy,
 			},
+		}
+		cfg.QA = qa.Config{
+			Enabled:        s.QA.Enabled,
+			AutoReject:     s.QA.AutoReject,
+			LengthRatioMin: s.QA.LengthRatioMin,
+			LengthRatioMax: s.QA.LengthRatioMax,
 		}
 	}
 

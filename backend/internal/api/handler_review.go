@@ -6,23 +6,25 @@ import (
 	"net/http"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/go-chi/chi/v5"
 )
 
 type segmentResponse struct {
-	ID            int            `json:"id"`
-	SubJobID      int            `json:"sub_job_id,omitempty"`
-	ResourceID    int            `json:"resource_id,omitempty"`
-	SegmentIndex  int            `json:"segment_index"`
-	SourceText    string         `json:"source_text"`
-	TargetText    string         `json:"target_text,omitempty"`
-	Status        string         `json:"status"`
-	ReviewComment *string        `json:"review_comment,omitempty"`
-	ReviewedBy    *userResponse  `json:"reviewed_by,omitempty"`
-	Meta          map[string]any `json:"meta,omitempty"`
-	CreatedAt     string         `json:"created_at"`
-	UpdatedAt     string         `json:"updated_at"`
+	ID            int               `json:"id"`
+	SubJobID      int               `json:"sub_job_id,omitempty"`
+	ResourceID    int               `json:"resource_id,omitempty"`
+	SegmentIndex  int               `json:"segment_index"`
+	SourceText    string            `json:"source_text"`
+	TargetText    string            `json:"target_text,omitempty"`
+	Status        string            `json:"status"`
+	ReviewComment *string           `json:"review_comment,omitempty"`
+	ReviewedBy    *userResponse     `json:"reviewed_by,omitempty"`
+	QualityIssues []qa.QualityIssue `json:"quality_issues,omitempty"`
+	Meta          map[string]any    `json:"meta,omitempty"`
+	CreatedAt     string            `json:"created_at"`
+	UpdatedAt     string            `json:"updated_at"`
 }
 
 type segmentListResponse struct {
@@ -89,6 +91,9 @@ func toSegmentResponse(row *ent.Segment) segmentResponse {
 	if row.Edges.ReviewedBy != nil {
 		reviewer := toUserResponse(row.Edges.ReviewedBy)
 		resp.ReviewedBy = &reviewer
+	}
+	if len(row.QualityIssues) > 0 {
+		resp.QualityIssues = row.QualityIssues
 	}
 	if row.Meta != nil {
 		var meta map[string]any

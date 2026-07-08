@@ -65,7 +65,8 @@ func (s *ReviewService) EditSegment(ctx context.Context, actorUserID, projectID,
 	update := s.client.Segment.UpdateOneID(segmentID).
 		SetTargetText(input.TargetText).
 		SetStatus(SegmentStatusEdited).
-		SetReviewedByID(actorUserID)
+		SetReviewedByID(actorUserID).
+		ClearQualityIssues()
 	if strings.TrimSpace(input.Comment) == "" {
 		update.ClearReviewComment()
 	} else {
@@ -261,6 +262,7 @@ func (s *ReviewService) RetranslateRejected(ctx context.Context, actorUserID, pr
 		SetStatus(SegmentStatusPending).
 		ClearReviewedBy().
 		ClearReviewComment().
+		ClearQualityIssues().
 		Exec(ctx); err != nil {
 		return 0, err
 	}

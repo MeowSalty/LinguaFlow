@@ -32,6 +32,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
 
 const (
@@ -11029,26 +11030,28 @@ func (m *ResourceMutation) ResetEdge(name string) error {
 // SegmentMutation represents an operation that mutates the Segment nodes in the graph.
 type SegmentMutation struct {
 	config
-	op                 Op
-	typ                string
-	id                 *int
-	created_at         *time.Time
-	updated_at         *time.Time
-	segment_index      *int
-	addsegment_index   *int
-	source_text        *string
-	target_text        *string
-	status             *segment.Status
-	review_comment     *string
-	meta               *string
-	clearedFields      map[string]struct{}
-	resource           *int
-	clearedresource    bool
-	reviewed_by        *int
-	clearedreviewed_by bool
-	done               bool
-	oldValue           func(context.Context) (*Segment, error)
-	predicates         []predicate.Segment
+	op                   Op
+	typ                  string
+	id                   *int
+	created_at           *time.Time
+	updated_at           *time.Time
+	segment_index        *int
+	addsegment_index     *int
+	source_text          *string
+	target_text          *string
+	status               *segment.Status
+	review_comment       *string
+	meta                 *string
+	quality_issues       *[]qa.QualityIssue
+	appendquality_issues []qa.QualityIssue
+	clearedFields        map[string]struct{}
+	resource             *int
+	clearedresource      bool
+	reviewed_by          *int
+	clearedreviewed_by   bool
+	done                 bool
+	oldValue             func(context.Context) (*Segment, error)
+	predicates           []predicate.Segment
 }
 
 var _ ent.Mutation = (*SegmentMutation)(nil)
@@ -11545,6 +11548,71 @@ func (m *SegmentMutation) ResetMeta() {
 	delete(m.clearedFields, segment.FieldMeta)
 }
 
+// SetQualityIssues sets the "quality_issues" field.
+func (m *SegmentMutation) SetQualityIssues(qi []qa.QualityIssue) {
+	m.quality_issues = &qi
+	m.appendquality_issues = nil
+}
+
+// QualityIssues returns the value of the "quality_issues" field in the mutation.
+func (m *SegmentMutation) QualityIssues() (r []qa.QualityIssue, exists bool) {
+	v := m.quality_issues
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldQualityIssues returns the old "quality_issues" field's value of the Segment entity.
+// If the Segment object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SegmentMutation) OldQualityIssues(ctx context.Context) (v []qa.QualityIssue, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldQualityIssues is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldQualityIssues requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldQualityIssues: %w", err)
+	}
+	return oldValue.QualityIssues, nil
+}
+
+// AppendQualityIssues adds qi to the "quality_issues" field.
+func (m *SegmentMutation) AppendQualityIssues(qi []qa.QualityIssue) {
+	m.appendquality_issues = append(m.appendquality_issues, qi...)
+}
+
+// AppendedQualityIssues returns the list of values that were appended to the "quality_issues" field in this mutation.
+func (m *SegmentMutation) AppendedQualityIssues() ([]qa.QualityIssue, bool) {
+	if len(m.appendquality_issues) == 0 {
+		return nil, false
+	}
+	return m.appendquality_issues, true
+}
+
+// ClearQualityIssues clears the value of the "quality_issues" field.
+func (m *SegmentMutation) ClearQualityIssues() {
+	m.quality_issues = nil
+	m.appendquality_issues = nil
+	m.clearedFields[segment.FieldQualityIssues] = struct{}{}
+}
+
+// QualityIssuesCleared returns if the "quality_issues" field was cleared in this mutation.
+func (m *SegmentMutation) QualityIssuesCleared() bool {
+	_, ok := m.clearedFields[segment.FieldQualityIssues]
+	return ok
+}
+
+// ResetQualityIssues resets all changes to the "quality_issues" field.
+func (m *SegmentMutation) ResetQualityIssues() {
+	m.quality_issues = nil
+	m.appendquality_issues = nil
+	delete(m.clearedFields, segment.FieldQualityIssues)
+}
+
 // ClearResource clears the "resource" edge to the Resource entity.
 func (m *SegmentMutation) ClearResource() {
 	m.clearedresource = true
@@ -11645,7 +11713,7 @@ func (m *SegmentMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *SegmentMutation) Fields() []string {
-	fields := make([]string, 0, 9)
+	fields := make([]string, 0, 10)
 	if m.created_at != nil {
 		fields = append(fields, segment.FieldCreatedAt)
 	}
@@ -11673,6 +11741,9 @@ func (m *SegmentMutation) Fields() []string {
 	if m.meta != nil {
 		fields = append(fields, segment.FieldMeta)
 	}
+	if m.quality_issues != nil {
+		fields = append(fields, segment.FieldQualityIssues)
+	}
 	return fields
 }
 
@@ -11699,6 +11770,8 @@ func (m *SegmentMutation) Field(name string) (ent.Value, bool) {
 		return m.ResourceID()
 	case segment.FieldMeta:
 		return m.Meta()
+	case segment.FieldQualityIssues:
+		return m.QualityIssues()
 	}
 	return nil, false
 }
@@ -11726,6 +11799,8 @@ func (m *SegmentMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldResourceID(ctx)
 	case segment.FieldMeta:
 		return m.OldMeta(ctx)
+	case segment.FieldQualityIssues:
+		return m.OldQualityIssues(ctx)
 	}
 	return nil, fmt.Errorf("unknown Segment field %s", name)
 }
@@ -11798,6 +11873,13 @@ func (m *SegmentMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetMeta(v)
 		return nil
+	case segment.FieldQualityIssues:
+		v, ok := value.([]qa.QualityIssue)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetQualityIssues(v)
+		return nil
 	}
 	return fmt.Errorf("unknown Segment field %s", name)
 }
@@ -11855,6 +11937,9 @@ func (m *SegmentMutation) ClearedFields() []string {
 	if m.FieldCleared(segment.FieldMeta) {
 		fields = append(fields, segment.FieldMeta)
 	}
+	if m.FieldCleared(segment.FieldQualityIssues) {
+		fields = append(fields, segment.FieldQualityIssues)
+	}
 	return fields
 }
 
@@ -11880,6 +11965,9 @@ func (m *SegmentMutation) ClearField(name string) error {
 		return nil
 	case segment.FieldMeta:
 		m.ClearMeta()
+		return nil
+	case segment.FieldQualityIssues:
+		m.ClearQualityIssues()
 		return nil
 	}
 	return fmt.Errorf("unknown Segment nullable field %s", name)
@@ -11915,6 +12003,9 @@ func (m *SegmentMutation) ResetField(name string) error {
 		return nil
 	case segment.FieldMeta:
 		m.ResetMeta()
+		return nil
+	case segment.FieldQualityIssues:
+		m.ResetQualityIssues()
 		return nil
 	}
 	return fmt.Errorf("unknown Segment field %s", name)

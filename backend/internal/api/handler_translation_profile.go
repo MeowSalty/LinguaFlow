@@ -114,6 +114,12 @@ func profileConfigToResponse(c *schema.TranslationProfileConfigData) Translation
 			After:    c.Context.After,
 			MaxChars: c.Context.MaxChars,
 		},
+		Qa: &ProfileQAConfig{
+			Enabled:        c.QA.Enabled,
+			AutoReject:     &c.QA.AutoReject,
+			LengthRatioMin: &c.QA.LengthRatioMin,
+			LengthRatioMax: &c.QA.LengthRatioMax,
+		},
 	}
 }
 
@@ -136,6 +142,20 @@ func parseProfileConfig(c *TranslationProfileConfig) *schema.TranslationProfileC
 		ruby.Enabled = c.Ruby.Enabled
 		if c.Ruby.PreserveKinds != nil {
 			ruby.PreserveKinds = fromAPIPreserveKinds(*c.Ruby.PreserveKinds)
+		}
+	}
+
+	qa := schema.ProfileQAConfig{}
+	if c.Qa != nil {
+		qa.Enabled = c.Qa.Enabled
+		if c.Qa.AutoReject != nil {
+			qa.AutoReject = *c.Qa.AutoReject
+		}
+		if c.Qa.LengthRatioMin != nil {
+			qa.LengthRatioMin = *c.Qa.LengthRatioMin
+		}
+		if c.Qa.LengthRatioMax != nil {
+			qa.LengthRatioMax = *c.Qa.LengthRatioMax
 		}
 	}
 
@@ -172,6 +192,7 @@ func parseProfileConfig(c *TranslationProfileConfig) *schema.TranslationProfileC
 			After:    c.Context.After,
 			MaxChars: c.Context.MaxChars,
 		},
+		QA: qa,
 	}
 }
 
@@ -214,6 +235,19 @@ func mergeProfileConfig(existing *schema.TranslationProfileConfigData, incoming 
 	merged.Context.Before = incoming.Context.Before
 	merged.Context.After = incoming.Context.After
 	merged.Context.MaxChars = incoming.Context.MaxChars
+
+	if incoming.Qa != nil {
+		merged.QA.Enabled = incoming.Qa.Enabled
+		if incoming.Qa.AutoReject != nil {
+			merged.QA.AutoReject = *incoming.Qa.AutoReject
+		}
+		if incoming.Qa.LengthRatioMin != nil {
+			merged.QA.LengthRatioMin = *incoming.Qa.LengthRatioMin
+		}
+		if incoming.Qa.LengthRatioMax != nil {
+			merged.QA.LengthRatioMax = *incoming.Qa.LengthRatioMax
+		}
+	}
 
 	return &merged
 }

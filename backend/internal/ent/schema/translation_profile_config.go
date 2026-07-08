@@ -11,6 +11,7 @@ type TranslationProfileConfigData struct {
 	Glossary    ProfileGlossaryConfig    `json:"glossary"    yaml:"glossary"`
 	Context     ProfileContextConfig     `json:"context"     yaml:"context"`
 	Ruby        ProfileRubyConfig        `json:"ruby"        yaml:"ruby"`
+	QA          ProfileQAConfig          `json:"qa"          yaml:"qa"`
 }
 
 // ProfileProtectConfig 保护规则配置。
@@ -63,6 +64,14 @@ type ProfileContextConfig struct {
 	MaxChars int  `json:"max_chars" yaml:"max_chars"`
 }
 
+// ProfileQAConfig 翻译质量检测配置。
+type ProfileQAConfig struct {
+	Enabled        bool    `json:"enabled"          yaml:"enabled"`
+	AutoReject     bool    `json:"auto_reject"      yaml:"auto_reject"`
+	LengthRatioMin float64 `json:"length_ratio_min" yaml:"length_ratio_min"`
+	LengthRatioMax float64 `json:"length_ratio_max" yaml:"length_ratio_max"`
+}
+
 // DefaultProfileConfig 返回默认的翻译配置。
 func DefaultProfileConfig() TranslationProfileConfigData {
 	return TranslationProfileConfigData{
@@ -97,6 +106,9 @@ func DefaultProfileConfig() TranslationProfileConfigData {
 			Before:   1,
 			After:    1,
 			MaxChars: 0,
+		},
+		QA: ProfileQAConfig{
+			Enabled: false,
 		},
 	}
 }

@@ -555,6 +555,16 @@ func MetaContainsFold(v string) predicate.Segment {
 	return predicate.Segment(sql.FieldContainsFold(FieldMeta, v))
 }
 
+// QualityIssuesIsNil applies the IsNil predicate on the "quality_issues" field.
+func QualityIssuesIsNil() predicate.Segment {
+	return predicate.Segment(sql.FieldIsNull(FieldQualityIssues))
+}
+
+// QualityIssuesNotNil applies the NotNil predicate on the "quality_issues" field.
+func QualityIssuesNotNil() predicate.Segment {
+	return predicate.Segment(sql.FieldNotNull(FieldQualityIssues))
+}
+
 // HasResource applies the HasEdge predicate on the "resource" edge.
 func HasResource() predicate.Segment {
 	return predicate.Segment(func(s *sql.Selector) {

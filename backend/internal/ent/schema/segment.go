@@ -4,6 +4,8 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
 
 type Segment struct {
@@ -27,6 +29,8 @@ func (Segment) Fields() []ent.Field {
 			Comment("所属资源 ID"),
 		field.Text("meta").Optional().Nillable().
 			Comment("parser 注入的格式元数据（JSON 序列化），用于按需渲染时还原格式"),
+		field.JSON("quality_issues", []qa.QualityIssue{}).Optional().
+			Comment("QA 检测到的质量问题列表"),
 	}
 }
 
