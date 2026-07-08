@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NButton, NInput, NPopover, NTag, NText } from 'naive-ui'
+import { NButton, NInput, NTag, NText } from 'naive-ui'
 
 import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
@@ -29,7 +29,7 @@ const emit = defineEmits<{
   saveComment: [segment: Segment]
   closeComment: []
   updateCommentText: [value: string]
-  updateEditField: [field: 'source_text' | 'target_text', value: string]
+  updateEditField: [field: 'source_text' | 'target_text' | 'comment', value: string]
   translate: [segment: Segment]
 }>()
 </script>
@@ -98,6 +98,7 @@ const emit = defineEmits<{
         type="textarea"
         :autosize="{ minRows: 1, maxRows: 3 }"
         :placeholder="t('workspace.segment.form.comment')"
+        @update:value="(val: string) => emit('updateEditField', 'comment', val)"
       />
     </div>
 
@@ -113,36 +114,9 @@ const emit = defineEmits<{
       </template>
       <template v-else>
         <!-- 评论按钮 -->
-        <NPopover
-          v-if="showComment"
-          :show="isCommentOpen"
-          trigger="click"
-          placement="bottom-end"
-          @update:show="
-            (show: boolean) => {
-              if (show) emit('openComment', segment)
-              else emit('closeComment')
-            }
-          "
-        >
-          <template #trigger>
-            <NButton size="tiny" quaternary>
-              {{ t('workspace.segment.actions.comment') }}
-            </NButton>
-          </template>
-          <div class="w-64 space-y-3">
-            <NInput
-              :value="commentText"
-              type="textarea"
-              :autosize="{ minRows: 2, maxRows: 4 }"
-              :placeholder="t('workspace.segment.form.comment')"
-              @update:value="(val: string) => emit('updateCommentText', val)"
-            />
-            <NButton size="small" type="primary" block @click="emit('saveComment', segment)">
-              {{ t('workspace.common.save') }}
-            </NButton>
-          </div>
-        </NPopover>
+        <NButton v-if="showComment" size="tiny" quaternary @click="emit('openComment', segment)">
+          {{ t('workspace.segment.actions.comment') }}
+        </NButton>
 
         <!-- 编辑按钮 -->
         <NButton

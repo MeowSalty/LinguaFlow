@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { DataTableRowKey } from 'naive-ui'
-import { NButton, NDataTable, NEmpty, NSpin } from 'naive-ui'
+import { NButton, NDataTable, NEmpty, NInput, NModal, NSpin } from 'naive-ui'
 import { ref, toRef, computed } from 'vue'
 
 import type { ApiSchemas } from '@/api/client'
@@ -41,7 +41,7 @@ const emit = defineEmits<{
   saveInlineComment: [segment: Segment]
   closeInlineComment: []
   'update:inlineCommentText': [value: string]
-  'update:inlineEditForm': [field: 'source_text' | 'target_text', value: string]
+  'update:inlineEditForm': [field: 'source_text' | 'target_text' | 'comment', value: string]
 }>()
 
 // ── 响应式配置 ──
@@ -79,7 +79,10 @@ const deps: SegmentColumnDeps = {
   onTranslate: (segment) => emit('translate', segment),
 }
 
-// ── 列定义 ──
+// ── 评论弹窗当前段落 ──
+const commentSegment = computed<Segment | undefined>(() =>
+  props.segments.find((s) => s.id === props.inlineCommentVisible),
+)
 const columns = useSegmentColumns(configRef, deps)
 
 // ── 行选择 ──
@@ -163,5 +166,43 @@ defineExpose({
       class="py-8"
       :description="t('workspace.segment.empty')"
     />
+
+    <!-- 评论编辑弹窗 -->
+    <NModal
+      :show="inlineCommentVisible !== null"
+      preset="card"
+      :title="t('workspace.segment.actions.comment')"
+      class="max-w-md"
+      :bordered="false"
+      :segmented="{ content: true, footer: true }"
+      @update:show="
+        (show: boolean) => {
+          if (!show) emit('closeInlineComment')
+        }
+      "
+    >
+      <NInput
+        :value="inlineCommentText"
+        type="textarea"
+        :autosize="{ minRows: 3, maxRows: 6 }"
+        :placeholder="t('workspace.segment.form.comment')"
+        @update:value="(val: string) => emit('update:inlineCommentText', val)"
+      />
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <NButton size="small" @click="emit('closeInlineComment')">
+            {{ t('workspace.segment.actions.cancelInline') }}
+          </NButton>
+          <NButton
+            size="small"
+            type="primary"
+            :disabled="!commentSegment"
+            @click="commentSegment && emit('saveInlineComment', commentSegment)"
+          >
+            {{ t('workspace.common.save') }}
+          </NButton>
+        </div>
+      </template>
+    </NModal>
   </div>
 </template>
