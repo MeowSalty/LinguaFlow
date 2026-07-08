@@ -194,6 +194,8 @@ components:
       $ref: './components/schemas/organization.yaml#/UpdateOrganizationMemberRequest'
     Segment:
       $ref: './components/schemas/job.yaml#/Segment'
+    QualityIssue:
+      $ref: './components/schemas/job.yaml#/QualityIssue'
     UsageStats:
       $ref: './components/schemas/job.yaml#/UsageStats'
     Resource:

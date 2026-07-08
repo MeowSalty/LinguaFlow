@@ -468,11 +468,14 @@ const messages = {
       noResource: '请先选择一个资源文件查看段落。',
       empty: '当前资源没有符合条件的段落。',
       emptyTarget: '暂无译文',
+      qualityError: '错误',
+      qualityWarning: '警告',
       editTitle: '编辑段落',
       columns: {
         source: '原文',
         target: '译文',
         status: '状态',
+        qualityIssues: '质量',
       },
       actions: {
         edit: '编辑',
@@ -1076,6 +1079,18 @@ const messages = {
       after: '后文段落数',
       maxChars: '段落字符上限',
       maxCharsHint: '0 表示不限制',
+    },
+    qa: {
+      title: '质量检测',
+      enabled: '启用质量检测',
+      autoReject: '错误自动拒绝',
+      lengthMethod: '长度计算方式',
+      lengthMethodCharWeight: '字符加权（CJK×2）',
+      lengthMethodWordCount: '字（词）计数',
+      lengthRatioMin: '最小长度比',
+      lengthRatioMax: '最大长度比',
+      lengthRatioHint: '比值 = 译文长度 / 原文长度，0 表示不检测',
+      lengthRatioMinMaxError: '最小长度比不能大于最大长度比',
     },
   },
   executionPlanTemplates: {

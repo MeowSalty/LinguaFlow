@@ -2179,12 +2179,37 @@ components:
           type: string
         reviewed_by:
           $ref: '#/components/schemas/User'
+        quality_issues:
+          type: array
+          description: QA 检测到的质量问题列表
+          items:
+            $ref: '#/components/schemas/QualityIssue'
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
+    QualityIssue:
+      type: object
+      required:
+        - segment_index
+        - severity
+        - code
+        - message
+      properties:
+        segment_index:
+          type: integer
+        severity:
+          type: string
+          enum:
+            - warning
+            - error
+        code:
+          type: string
+          description: 问题代码（untranslated, length_ratio, duplicate）
+        message:
+          type: string
     UsageStats:
       type: object
       required:
@@ -3934,6 +3959,38 @@ components:
           minimum: 0
           default: 0
           description: 每个上下文段落的字符数上限，0 表示不限制
+    ProfileQAConfig:
+      type: object
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+          default: false
+          description: 是否启用翻译质量检测
+        auto_reject:
+          type: boolean
+          default: false
+          description: error 级别问题自动 reject
+        length_method:
+          type: string
+          enum:
+            - char_weight
+            - word_count
+          default: char_weight
+          description: '长度计算方式。char_weight: CJK 字符×2 拉丁字符×1；word_count: CJK 每字 1 词拉丁每词 1 词'
+        length_ratio_min:
+          type: number
+          format: double
+          minimum: 0
+          default: 0
+          description: 译文/原文最短长度比，0 表示不检测
+        length_ratio_max:
+          type: number
+          format: double
+          minimum: 0
+          default: 0
+          description: 译文/原文最长长度比，0 表示不检测
     TranslationProfileConfig:
       type: object
       required:
@@ -3955,3 +4012,5 @@ components:
           $ref: '#/components/schemas/ProfileGlossaryConfig'
         context:
           $ref: '#/components/schemas/ProfileContextConfig'
+        qa:
+          $ref: '#/components/schemas/ProfileQAConfig'

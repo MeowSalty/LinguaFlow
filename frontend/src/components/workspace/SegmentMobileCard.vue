@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NButton, NInput, NTag, NText } from 'naive-ui'
+import { NButton, NInput, NTag, NText, NTooltip } from 'naive-ui'
 
 import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
@@ -34,9 +34,25 @@ const emit = defineEmits<{
     <!-- 序号与状态 -->
     <div class="flex items-center justify-between">
       <span class="text-xs text-lf-text-muted">#{{ segment.segment_index }}</span>
-      <NTag size="small" :type="statusTagType(segment.status)">
-        {{ getSegmentStatusLabel(segment.status) }}
-      </NTag>
+      <div class="flex items-center gap-1">
+        <template v-if="segment.quality_issues?.length">
+          <NTooltip v-for="issue in segment.quality_issues" :key="issue.code">
+            <template #trigger>
+              <NTag size="small" :type="issue.severity === 'error' ? 'error' : 'warning'" round>
+                {{
+                  issue.severity === 'error'
+                    ? t('workspace.segment.qualityError')
+                    : t('workspace.segment.qualityWarning')
+                }}
+              </NTag>
+            </template>
+            {{ issue.message }}
+          </NTooltip>
+        </template>
+        <NTag size="small" :type="statusTagType(segment.status)">
+          {{ getSegmentStatusLabel(segment.status) }}
+        </NTag>
+      </div>
     </div>
 
     <!-- 源文本 -->
