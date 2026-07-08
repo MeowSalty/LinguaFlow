@@ -42,9 +42,36 @@ CreateTranslationJobRequest:
       additionalProperties: true
   additionalProperties: false
 
+TranslationJobProgress:
+  type: object
+  required: [total_resources, completed_resources, failed_resources, total_segments, completed_segments, skipped_segments]
+  properties:
+    total_resources:
+      type: integer
+    completed_resources:
+      type: integer
+    failed_resources:
+      type: integer
+    total_segments:
+      type: integer
+      description: 总段落数（创建时选中的 segment 数）
+    completed_segments:
+      type: integer
+    skipped_segments:
+      type: integer
+      description: 被系统跳过的段落数（已翻译、空文本、纯占位符等）
+    queue_position:
+      type: integer
+      nullable: true
+      description: 在队列中的位置（1-based），null 表示不在队列中
+    queue_size:
+      type: integer
+      nullable: true
+      description: 当前队列中的任务总数
+
 TranslationJobResource:
   type: object
-  required: [id, resource_id, status, segment_count, completed_segments, created_at, updated_at]
+  required: [id, resource_id, status, segment_count, completed_segments, skipped_segments, created_at, updated_at]
   properties:
     id:
       type: integer
@@ -53,14 +80,13 @@ TranslationJobResource:
     status:
       type: string
       enum: [pending, running, completed, failed, cancelled]
-    segment_ids:
-      type: array
-      items:
-        type: integer
     segment_count:
       type: integer
     completed_segments:
       type: integer
+    skipped_segments:
+      type: integer
+      description: 被系统跳过的段落数
     output_path:
       type: string
     error_message:
@@ -89,12 +115,19 @@ TranslationJobResource:
 
 TranslationJob:
   type: object
-  required: [id, project_id, execution_plan_id, status, trigger_type, resource_count, completed_resources, failed_resources, total_segments, completed_segments, created_at, updated_at]
+  required: [id, project_id, execution_plan_id, status, trigger_type, progress, created_at, updated_at]
   properties:
     id:
       type: integer
     project_id:
       type: integer
+    created_by:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
     execution_plan_id:
       type: integer
     status:
@@ -106,28 +139,11 @@ TranslationJob:
     translation_config:
       type: object
       additionalProperties: true
-    resource_count:
-      type: integer
-    completed_resources:
-      type: integer
-    failed_resources:
-      type: integer
-    total_segments:
-      type: integer
-      description: 总段落数（创建时为选中的 segment 数，ReconcileJob 修正为实际翻译量）
-    stage_total:
-      type: integer
-      description: 实际需要翻译的段落数（ReconcileJob 从各资源的 stage_total 聚合，执行中动态更新）
-    completed_segments:
-      type: integer
+      description: 翻译执行配置快照（已脱敏，不含 API 密钥）
     error_message:
       type: string
-    created_at:
-      type: string
-      format: date-time
-    updated_at:
-      type: string
-      format: date-time
+    progress:
+      $ref: '#/TranslationJobProgress'
     job_resources:
       type: array
       items:
@@ -136,17 +152,12 @@ TranslationJob:
       type: string
       format: date-time
       description: 任务开始执行的时间
-    current_stage:
+    created_at:
       type: string
-      description: 当前活跃的执行阶段名称（聚合自 JobResource）
-    queue_position:
-      type: integer
-      nullable: true
-      description: 在队列中的位置（1-based），null 表示不在队列中
-    queue_size:
-      type: integer
-      nullable: true
-      description: 当前队列中的任务总数
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
 
 TranslationJobListResponse:
   type: object

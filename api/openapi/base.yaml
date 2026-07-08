@@ -238,6 +238,8 @@ components:
       $ref: './components/schemas/translation-job.yaml#/TranslationJobResource'
     TranslationJob:
       $ref: './components/schemas/translation-job.yaml#/TranslationJob'
+    TranslationJobProgress:
+      $ref: './components/schemas/translation-job.yaml#/TranslationJobProgress'
     TranslationJobListResponse:
       $ref: './components/schemas/translation-job.yaml#/TranslationJobListResponse'
     Activity:
