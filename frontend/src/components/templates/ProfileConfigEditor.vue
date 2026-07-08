@@ -45,6 +45,12 @@ const CONFIG_DEFAULTS: TranslationProfileConfig = {
     },
   },
   context: { enabled: true, before: 1, after: 1, max_chars: 0 },
+  qa: {
+    enabled: false,
+    auto_reject: false,
+    length_ratio_min: 0,
+    length_ratio_max: 0,
+  },
 }
 
 // ─── 工具函数 ────────────────────────────────────────────────
@@ -71,6 +77,12 @@ function mergeConfig(source?: Partial<TranslationProfileConfig>): TranslationPro
       bootstrap: { ...CONFIG_DEFAULTS.glossary.bootstrap, ...source.glossary?.bootstrap },
     },
     context: { ...CONFIG_DEFAULTS.context, ...source.context },
+    qa: {
+      enabled: source.qa?.enabled ?? CONFIG_DEFAULTS.qa!.enabled,
+      auto_reject: source.qa?.auto_reject ?? CONFIG_DEFAULTS.qa!.auto_reject,
+      length_ratio_min: source.qa?.length_ratio_min ?? CONFIG_DEFAULTS.qa!.length_ratio_min,
+      length_ratio_max: source.qa?.length_ratio_max ?? CONFIG_DEFAULTS.qa!.length_ratio_max,
+    },
   }
 }
 
@@ -466,6 +478,87 @@ function onRubyUpdate(field: string, value: unknown): void {
               <div class="mt-1 text-xs text-lf-text-subtle">
                 {{ t('profileConfigEditor.context.maxCharsHint') }}
               </div>
+            </NGi>
+          </NGrid>
+        </div>
+      </div>
+    </NCard>
+
+    <!-- 质量检测 -->
+    <NCard size="small" :bordered="true">
+      <template #header>
+        <span class="text-sm font-semibold">🔍 {{ t('profileConfigEditor.qa.title') }}</span>
+      </template>
+      <div class="flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <span class="text-sm">{{ t('profileConfigEditor.qa.enabled') }}</span>
+          <NSwitch v-model:value="configModel.qa!.enabled" size="small" :disabled="disabled" />
+        </div>
+        <div :class="{ 'opacity-50 pointer-events-none': !configModel.qa!.enabled }">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-lf-text-subtle">{{
+              t('profileConfigEditor.qa.autoReject')
+            }}</span>
+            <NSwitch
+              v-model:value="configModel.qa!.auto_reject"
+              size="small"
+              :disabled="disabled || !configModel.qa!.enabled"
+            />
+          </div>
+          <NGrid :cols="2" :x-gap="12" :y-gap="10" class="mt-2">
+            <NGi>
+              <div class="mb-1 flex items-center gap-2">
+                <NCheckbox
+                  :checked="configModel.qa!.length_ratio_min > 0"
+                  :disabled="disabled || !configModel.qa!.enabled"
+                  @update:checked="
+                    (val: boolean) => {
+                      configModel.qa!.length_ratio_min = val ? 0.2 : 0
+                    }
+                  "
+                />
+                <span class="text-xs text-lf-text-subtle">
+                  {{ t('profileConfigEditor.qa.lengthRatioMin') }}
+                </span>
+              </div>
+              <NInputNumber
+                v-model:value="configModel.qa!.length_ratio_min"
+                :min="0.01"
+                :max="1"
+                :step="0.05"
+                size="tiny"
+                :disabled="
+                  disabled || !configModel.qa!.enabled || configModel.qa!.length_ratio_min === 0
+                "
+                class="w-full"
+              />
+            </NGi>
+            <NGi>
+              <div class="mb-1 flex items-center gap-2">
+                <NCheckbox
+                  :checked="configModel.qa!.length_ratio_max > 0"
+                  :disabled="disabled || !configModel.qa!.enabled"
+                  @update:checked="
+                    (val: boolean) => {
+                      configModel.qa!.length_ratio_max = val ? 3 : 0
+                    }
+                  "
+                />
+                <span class="text-xs text-lf-text-subtle">
+                  {{ t('profileConfigEditor.qa.lengthRatioMax') }}
+                </span>
+              </div>
+              <NInputNumber
+                v-model:value="configModel.qa!.length_ratio_max"
+                :min="0.01"
+                :max="10"
+                :step="0.5"
+                size="tiny"
+                :disabled="
+                  disabled || !configModel.qa!.enabled || configModel.qa!.length_ratio_max === 0
+                "
+                class="w-full"
+              />
             </NGi>
           </NGrid>
         </div>

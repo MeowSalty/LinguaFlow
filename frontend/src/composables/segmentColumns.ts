@@ -1,6 +1,6 @@
 import type { DataTableColumns } from 'naive-ui'
-import { NButton, NInput, NSpace, NTag, NText } from 'naive-ui'
-import type { ComputedRef, Ref } from 'vue'
+import { NButton, NInput, NSpace, NTag, NText, NTooltip } from 'naive-ui'
+import type { ComputedRef, Ref, VNode } from 'vue'
 import { computed, h } from 'vue'
 
 import type { ApiSchemas } from '@/api/client'
@@ -141,6 +141,60 @@ export function useSegmentColumns(
           { size: 'small', type: statusTagType(row.status) },
           { default: () => getSegmentStatusLabel(row.status) },
         ),
+    })
+
+    // ── Quality Issues 列 ──
+    columns.push({
+      title: t('workspace.segment.columns.qualityIssues'),
+      key: 'quality_issues',
+      width: 100,
+      render: (row) => {
+        if (!row.quality_issues || row.quality_issues.length === 0) return null
+        const errorCount = row.quality_issues.filter((i) => i.severity === 'error').length
+        const warningCount = row.quality_issues.filter((i) => i.severity === 'warning').length
+        const tags: VNode[] = []
+        if (errorCount > 0) {
+          tags.push(
+            h(
+              NTooltip,
+              {},
+              {
+                trigger: () =>
+                  h(
+                    NTag,
+                    { size: 'small', type: 'error', round: true },
+                    { default: () => `${errorCount} ${t('workspace.segment.qualityError')}` },
+                  ),
+                default: () =>
+                  row
+                    .quality_issues!.filter((i) => i.severity === 'error')
+                    .map((i) => h('div', { key: i.code }, i.message)),
+              },
+            ),
+          )
+        }
+        if (warningCount > 0) {
+          tags.push(
+            h(
+              NTooltip,
+              {},
+              {
+                trigger: () =>
+                  h(
+                    NTag,
+                    { size: 'small', type: 'warning', round: true },
+                    { default: () => `${warningCount} ${t('workspace.segment.qualityWarning')}` },
+                  ),
+                default: () =>
+                  row
+                    .quality_issues!.filter((i) => i.severity === 'warning')
+                    .map((i) => h('div', { key: i.code }, i.message)),
+              },
+            ),
+          )
+        }
+        return h(NSpace, { size: 4, wrap: false }, () => tags)
+      },
     })
 
     // ── Updated At 列（条件显示） ──

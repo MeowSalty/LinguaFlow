@@ -63,6 +63,12 @@ const CONFIG_DEFAULTS: TranslationProfileConfig = {
     },
   },
   context: { enabled: true, before: 1, after: 1, max_chars: 0 },
+  qa: {
+    enabled: false,
+    auto_reject: false,
+    length_ratio_min: 0,
+    length_ratio_max: 0,
+  },
 }
 
 function deepClone<T>(obj: T): T {
@@ -142,6 +148,12 @@ function extractConfig(profile: TranslationProfile): TranslationProfileConfig {
       bootstrap: { ...CONFIG_DEFAULTS.glossary.bootstrap, ...src.glossary?.bootstrap },
     },
     context: { ...CONFIG_DEFAULTS.context, ...src.context },
+    qa: {
+      enabled: src.qa?.enabled ?? CONFIG_DEFAULTS.qa!.enabled,
+      auto_reject: src.qa?.auto_reject ?? CONFIG_DEFAULTS.qa!.auto_reject,
+      length_ratio_min: src.qa?.length_ratio_min ?? CONFIG_DEFAULTS.qa!.length_ratio_min,
+      length_ratio_max: src.qa?.length_ratio_max ?? CONFIG_DEFAULTS.qa!.length_ratio_max,
+    },
   }
 }
 

@@ -1288,10 +1288,20 @@ export interface components {
             status: "pending" | "translated" | "edited" | "approved" | "rejected";
             review_comment?: string;
             reviewed_by?: components["schemas"]["User"];
+            /** @description QA 检测到的质量问题列表 */
+            quality_issues?: components["schemas"]["QualityIssue"][];
             /** Format: date-time */
             created_at: string;
             /** Format: date-time */
             updated_at: string;
+        };
+        QualityIssue: {
+            segment_index: number;
+            /** @enum {string} */
+            severity: "warning" | "error";
+            /** @description 问题代码（empty_target, untranslated, placeholder_missing, length_ratio, duplicate） */
+            code: string;
+            message: string;
         };
         UsageStats: {
             api_calls: number;
@@ -2202,6 +2212,30 @@ export interface components {
              */
             max_chars: number;
         };
+        ProfileQAConfig: {
+            /**
+             * @description 是否启用翻译质量检测
+             * @default false
+             */
+            enabled: boolean;
+            /**
+             * @description error 级别问题自动 reject
+             * @default false
+             */
+            auto_reject: boolean;
+            /**
+             * Format: double
+             * @description 译文最短长度比（加权），0 表示不检测
+             * @default 0
+             */
+            length_ratio_min: number;
+            /**
+             * Format: double
+             * @description 译文最长长度比（加权），0 表示不检测
+             * @default 0
+             */
+            length_ratio_max: number;
+        };
         TranslationProfileConfig: {
             protect: components["schemas"]["ProfileProtectConfig"];
             ruby?: components["schemas"]["ProfileRubyConfig"];
@@ -2209,6 +2243,7 @@ export interface components {
             repair: components["schemas"]["ProfileRepairConfig"];
             glossary: components["schemas"]["ProfileGlossaryConfig"];
             context: components["schemas"]["ProfileContextConfig"];
+            qa?: components["schemas"]["ProfileQAConfig"];
         };
     };
     responses: {
