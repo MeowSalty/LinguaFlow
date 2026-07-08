@@ -991,7 +991,6 @@ const messages = {
       noDescription: '暂无描述',
     },
     feature: {
-      split: '分段',
       protect: '保护',
       repair: '修复',
       postprocess: '后处理',
@@ -1026,12 +1025,6 @@ const messages = {
     },
   },
   profileConfigEditor: {
-    split: {
-      title: '分段策略',
-      enabled: '启用分段',
-      strategy: '分段策略',
-      maxChars: '最大字符数',
-    },
     protect: {
       title: '内容保护',
       enabled: '启用保护',

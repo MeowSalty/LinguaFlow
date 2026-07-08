@@ -18,7 +18,6 @@ type TranslationProfileConfig = ApiSchemas['TranslationProfileConfig']
 // ─── 默认值（与后端 config.Default() 对齐） ─────────────────
 
 const CONFIG_DEFAULTS: TranslationProfileConfig = {
-  split: { enabled: true, strategy: 'paragraph', max_chars: 1200 },
   protect: {
     enabled: true,
     rules: ['code', 'link', 'placeholder', 'xml'],
@@ -57,7 +56,6 @@ function deepClone<T>(obj: T): T {
 function mergeConfig(source?: Partial<TranslationProfileConfig>): TranslationProfileConfig {
   if (!source) return deepClone(CONFIG_DEFAULTS)
   return {
-    split: { ...CONFIG_DEFAULTS.split, ...source.split },
     protect: {
       ...CONFIG_DEFAULTS.protect,
       ...source.protect,
@@ -136,8 +134,6 @@ const inlineConflictStrategyOptions = computed(() => [
   { label: 'rewrite-local', value: 'rewrite-local' },
 ])
 
-const splitStrategyOptions = computed(() => [{ label: 'paragraph', value: 'paragraph' }])
-
 const rubyPreserveKindsOptions = computed(() => [
   { label: t('profileConfigEditor.ruby.preserveKindsPhonetic'), value: 'phonetic' },
   { label: t('profileConfigEditor.ruby.preserveKindsSemantic'), value: 'semantic' },
@@ -167,46 +163,6 @@ function onRubyUpdate(field: string, value: unknown): void {
 
 <template>
   <div class="flex flex-col gap-4">
-    <!-- 分段策略 -->
-    <NCard size="small" :bordered="true">
-      <template #header>
-        <span class="text-sm font-semibold">📐 {{ t('profileConfigEditor.split.title') }}</span>
-      </template>
-      <NGrid :cols="3" :x-gap="12" :y-gap="10">
-        <NGi>
-          <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('profileConfigEditor.split.enabled') }}
-          </div>
-          <NSwitch v-model:value="configModel.split.enabled" size="small" :disabled="disabled" />
-        </NGi>
-        <NGi>
-          <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('profileConfigEditor.split.strategy') }}
-          </div>
-          <NSelect
-            v-model:value="configModel.split.strategy"
-            :options="splitStrategyOptions"
-            size="small"
-            :disabled="disabled || !configModel.split.enabled"
-          />
-        </NGi>
-        <NGi>
-          <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('profileConfigEditor.split.maxChars') }}
-          </div>
-          <NInputNumber
-            v-model:value="configModel.split.max_chars"
-            :min="100"
-            :max="10000"
-            :step="100"
-            size="small"
-            :disabled="disabled || !configModel.split.enabled"
-            class="w-full"
-          />
-        </NGi>
-      </NGrid>
-    </NCard>
-
     <!-- 内容保护 -->
     <NCard size="small" :bordered="true">
       <template #header>
