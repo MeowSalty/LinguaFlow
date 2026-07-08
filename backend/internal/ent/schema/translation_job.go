@@ -4,6 +4,7 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
+	"entgo.io/ent/schema/index"
 )
 
 type TranslationJob struct {
@@ -16,6 +17,8 @@ func (TranslationJob) Mixin() []ent.Mixin {
 
 func (TranslationJob) Fields() []ent.Field {
 	return []ent.Field{
+		field.Int("project_id").Positive().
+			Comment("所属项目 ID"),
 		field.String("status").Default("pending").
 			Comment("pending, running, completed, failed, cancelled"),
 		field.String("trigger_type").Default("manual").
@@ -32,7 +35,9 @@ func (TranslationJob) Fields() []ent.Field {
 		field.Int("failed_resources").Default(0).NonNegative().
 			Comment("失败的资源数"),
 		field.Int("total_segments").Default(0).NonNegative().
-			Comment("总段落数（创建时为选中的 segment 数，ReconcileJob 修正为实际翻译量）"),
+			Comment("总段落数（创建时选中的 segment 数）"),
+		field.Int("skipped_segments").Default(0).NonNegative().
+			Comment("被系统跳过的段落数（聚合自 JobResource）"),
 		field.Int("stage_total").Default(0).NonNegative().
 			Comment("实际需要翻译的段落数（ReconcileJob 从各资源的 stage_total 聚合）"),
 		field.Int("completed_segments").Default(0).NonNegative().
@@ -48,11 +53,18 @@ func (TranslationJob) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.From("project", Project.Type).
 			Ref("translation_jobs").
+			Field("project_id").
 			Unique().
 			Required(),
 		edge.From("created_by", User.Type).
 			Ref("created_translation_jobs").
 			Unique(),
 		edge.To("job_resources", JobResource.Type),
+	}
+}
+
+func (TranslationJob) Indexes() []ent.Index {
+	return []ent.Index{
+		index.Fields("project_id", "id"),
 	}
 }

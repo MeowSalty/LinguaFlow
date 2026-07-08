@@ -88,7 +88,7 @@ const (
 	// It exists in this package in order to avoid circular dependency with the "translationjob" package.
 	TranslationJobsInverseTable = "translation_jobs"
 	// TranslationJobsColumn is the table column denoting the translation_jobs relation/edge.
-	TranslationJobsColumn = "project_translation_jobs"
+	TranslationJobsColumn = "project_id"
 	// ActivityLogsTable is the table that holds the activity_logs relation/edge.
 	ActivityLogsTable = "activity_logs"
 	// ActivityLogsInverseTable is the table name for the ActivityLog entity.

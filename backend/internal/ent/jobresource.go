@@ -32,6 +32,8 @@ type JobResource struct {
 	SegmentCount int `json:"segment_count,omitempty"`
 	// 已完成的段落数
 	CompletedSegments int `json:"completed_segments,omitempty"`
+	// 被系统跳过的段落数（已翻译、空文本、纯占位符等）
+	SkippedSegments int `json:"skipped_segments,omitempty"`
 	// 输出文件路径
 	OutputPath string `json:"output_path,omitempty"`
 	// 翻译错误信息
@@ -92,7 +94,7 @@ func (*JobResource) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case jobresource.FieldSegmentIds:
 			values[i] = new([]byte)
-		case jobresource.FieldID, jobresource.FieldSegmentCount, jobresource.FieldCompletedSegments, jobresource.FieldStageTotal, jobresource.FieldStageCompleted:
+		case jobresource.FieldID, jobresource.FieldSegmentCount, jobresource.FieldCompletedSegments, jobresource.FieldSkippedSegments, jobresource.FieldStageTotal, jobresource.FieldStageCompleted:
 			values[i] = new(sql.NullInt64)
 		case jobresource.FieldStatus, jobresource.FieldOutputPath, jobresource.FieldErrorMessage, jobresource.FieldCurrentStage:
 			values[i] = new(sql.NullString)
@@ -160,6 +162,12 @@ func (_m *JobResource) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field completed_segments", values[i])
 			} else if value.Valid {
 				_m.CompletedSegments = int(value.Int64)
+			}
+		case jobresource.FieldSkippedSegments:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field skipped_segments", values[i])
+			} else if value.Valid {
+				_m.SkippedSegments = int(value.Int64)
 			}
 		case jobresource.FieldOutputPath:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -276,6 +284,9 @@ func (_m *JobResource) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("completed_segments=")
 	builder.WriteString(fmt.Sprintf("%v", _m.CompletedSegments))
+	builder.WriteString(", ")
+	builder.WriteString("skipped_segments=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SkippedSegments))
 	builder.WriteString(", ")
 	builder.WriteString("output_path=")
 	builder.WriteString(_m.OutputPath)

@@ -32,6 +32,7 @@ type BatchResult struct {
 type TranslateResult struct {
 	SegmentCount    int
 	Segments        []SegmentResult
+	SkippedCount    int   // 因结构性原因被主动跳过的段数量（空白/纯符号/装饰分隔符/Skip 标记等）
 	UnresolvedCount int   // 所有轮次结束后仍未解决（被原文填充）的段数量
 	InputTokens     int64 // LLM 调用消耗的 input token 总数
 	OutputTokens    int64 // LLM 调用消耗的 output token 总数

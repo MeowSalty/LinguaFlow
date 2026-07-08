@@ -14,7 +14,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
@@ -177,7 +176,6 @@ type PromptSnapshot struct {
 type StrategySnapshot struct {
 	ProfileID   *int                            `json:"profile_id,omitempty"`
 	ProfileName string                          `json:"profile_name"`
-	Split       schema.ProfileSplitConfig       `json:"split"`
 	Protect     schema.ProfileProtectConfig     `json:"protect"`
 	Postprocess schema.ProfilePostprocessConfig `json:"postprocess"`
 	Repair      schema.ProfileRepairConfig      `json:"repair"`
@@ -504,7 +502,6 @@ func (s *TranslationJobService) snapshotProfile(ctx context.Context, profileID i
 	return &StrategySnapshot{
 		ProfileID:   &id,
 		ProfileName: tp.Name,
-		Split:       tp.Config.Split,
 		Protect:     tp.Config.Protect,
 		Postprocess: tp.Config.Postprocess,
 		Repair:      tp.Config.Repair,
@@ -626,11 +623,12 @@ func (s *TranslationJobService) MarkJobResourceRunning(ctx context.Context, jobI
 	return nil
 }
 
-func (s *TranslationJobService) MarkJobResourceCompleted(ctx context.Context, jobID, jobResourceID int, outputPath string, completedSegments int) error {
+func (s *TranslationJobService) MarkJobResourceCompleted(ctx context.Context, jobID, jobResourceID int, outputPath string, completedSegments, skippedSegments int) error {
 	if err := s.client.JobResource.UpdateOneID(jobResourceID).
 		SetStatus(JobResourceStatusCompleted).
 		SetOutputPath(strings.TrimSpace(outputPath)).
 		SetCompletedSegments(completedSegments).
+		SetSkippedSegments(skippedSegments).
 		ClearErrorMessage().
 		Exec(ctx); err != nil {
 		if ent.IsNotFound(err) {
@@ -704,6 +702,7 @@ func (s *TranslationJobService) RetryJob(ctx context.Context, actorUserID, jobID
 	if err := s.client.JobResource.Update().
 		Where(jobresource.HasJobWith(translationjob.IDEQ(current.ID)), jobresource.StatusEQ(JobResourceStatusFailed)).
 		SetStatus(JobResourceStatusPending).
+		SetSkippedSegments(0).
 		ClearErrorMessage().
 		Exec(ctx); err != nil {
 		return nil, err
@@ -711,6 +710,7 @@ func (s *TranslationJobService) RetryJob(ctx context.Context, actorUserID, jobID
 	if err := s.client.TranslationJob.UpdateOneID(current.ID).
 		SetStatus(TranslationJobStatusPending).
 		SetFailedResources(0).
+		SetSkippedSegments(0).
 		ClearErrorMessage().
 		Exec(ctx); err != nil {
 		if ent.IsNotFound(err) {
@@ -732,12 +732,13 @@ func (s *TranslationJobService) ReconcileJob(ctx context.Context, jobID int) err
 		}
 		return err
 	}
-	var pendingCount, runningCount, completed, failed, cancelled, completedSegments int
+	var pendingCount, runningCount, completed, failed, cancelled, completedSegments, skippedSegments int
 	var firstFailure *string
 	// [DEBUG] 诊断：记录每个资源的状态
 	for _, item := range current.Edges.JobResources {
 		completedSegments += item.CompletedSegments
-		slog.Info("[DEBUG] ReconcileJob resource status",
+		skippedSegments += item.SkippedSegments
+		slog.Debug("reconcile job resource status",
 			"job_id", jobID,
 			"resource_id", item.ID,
 			"status", item.Status,
@@ -763,7 +764,7 @@ func (s *TranslationJobService) ReconcileJob(ctx context.Context, jobID int) err
 	}
 	// [DEBUG] 诊断：记录汇总信息
 	total := len(current.Edges.JobResources)
-	slog.Info("[DEBUG] ReconcileJob summary",
+	slog.Debug("reconcile job summary",
 		"job_id", jobID,
 		"total_resources", total,
 		"pending", pendingCount,
@@ -775,7 +776,7 @@ func (s *TranslationJobService) ReconcileJob(ctx context.Context, jobID int) err
 	)
 	status := deriveTranslationJobStatus(len(current.Edges.JobResources), pendingCount, runningCount, completed, failed, cancelled)
 	// [DEBUG] 诊断：记录最终决定的作业状态
-	slog.Info("[DEBUG] ReconcileJob derived status",
+	slog.Debug("reconcile job derived status",
 		"job_id", jobID,
 		"derived_status", status,
 		"completed_resources", completed,
@@ -797,15 +798,12 @@ func (s *TranslationJobService) ReconcileJob(ctx context.Context, jobID int) err
 		SetCompletedResources(completed).
 		SetFailedResources(failed).
 		SetCompletedSegments(completedSegments).
+		SetSkippedSegments(skippedSegments).
 		SetStageTotal(stageTotal)
 	if firstFailure != nil && status == TranslationJobStatusFailed {
 		update.SetErrorMessage(*firstFailure)
 	} else {
 		update.ClearErrorMessage()
-	}
-	// 所有资源结束后，用 stage_total 修正 total_segments，保持一致
-	if pendingCount == 0 && runningCount == 0 && stageTotal > 0 {
-		update.SetTotalSegments(stageTotal)
 	}
 	if err := update.Exec(ctx); err != nil {
 		if ent.IsNotFound(err) {
@@ -863,7 +861,7 @@ func (s *TranslationJobService) ListJobs(ctx context.Context, actorUserID, proje
 	if opts.Limit <= 0 || opts.Limit > 100 {
 		opts.Limit = 50
 	}
-	q := s.client.TranslationJob.Query().Where(translationjob.HasProjectWith(project.IDEQ(projectID)))
+	q := s.client.TranslationJob.Query().Where(translationjob.ProjectIDEQ(projectID))
 	if opts.AfterID > 0 {
 		q = q.Where(translationjob.IDGT(opts.AfterID))
 	}
@@ -873,7 +871,11 @@ func (s *TranslationJobService) ListJobs(ctx context.Context, actorUserID, proje
 	if triggerType := strings.TrimSpace(opts.TriggerType); triggerType != "" {
 		q = q.Where(translationjob.TriggerTypeEQ(triggerType))
 	}
-	return q.Order(ent.Asc(translationjob.FieldID)).Limit(opts.Limit).All(ctx)
+	return q.
+		WithCreatedBy().
+		Order(ent.Asc(translationjob.FieldID)).
+		Limit(opts.Limit).
+		All(ctx)
 }
 
 func (s *TranslationJobService) GetJob(ctx context.Context, actorUserID, jobID int) (*ent.TranslationJob, error) {

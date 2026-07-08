@@ -80,6 +80,11 @@ func CompletedSegments(v int) predicate.JobResource {
 	return predicate.JobResource(sql.FieldEQ(FieldCompletedSegments, v))
 }
 
+// SkippedSegments applies equality check predicate on the "skipped_segments" field. It's identical to SkippedSegmentsEQ.
+func SkippedSegments(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldEQ(FieldSkippedSegments, v))
+}
+
 // OutputPath applies equality check predicate on the "output_path" field. It's identical to OutputPathEQ.
 func OutputPath(v string) predicate.JobResource {
 	return predicate.JobResource(sql.FieldEQ(FieldOutputPath, v))
@@ -333,6 +338,46 @@ func CompletedSegmentsLT(v int) predicate.JobResource {
 // CompletedSegmentsLTE applies the LTE predicate on the "completed_segments" field.
 func CompletedSegmentsLTE(v int) predicate.JobResource {
 	return predicate.JobResource(sql.FieldLTE(FieldCompletedSegments, v))
+}
+
+// SkippedSegmentsEQ applies the EQ predicate on the "skipped_segments" field.
+func SkippedSegmentsEQ(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldEQ(FieldSkippedSegments, v))
+}
+
+// SkippedSegmentsNEQ applies the NEQ predicate on the "skipped_segments" field.
+func SkippedSegmentsNEQ(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldNEQ(FieldSkippedSegments, v))
+}
+
+// SkippedSegmentsIn applies the In predicate on the "skipped_segments" field.
+func SkippedSegmentsIn(vs ...int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldIn(FieldSkippedSegments, vs...))
+}
+
+// SkippedSegmentsNotIn applies the NotIn predicate on the "skipped_segments" field.
+func SkippedSegmentsNotIn(vs ...int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldNotIn(FieldSkippedSegments, vs...))
+}
+
+// SkippedSegmentsGT applies the GT predicate on the "skipped_segments" field.
+func SkippedSegmentsGT(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldGT(FieldSkippedSegments, v))
+}
+
+// SkippedSegmentsGTE applies the GTE predicate on the "skipped_segments" field.
+func SkippedSegmentsGTE(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldGTE(FieldSkippedSegments, v))
+}
+
+// SkippedSegmentsLT applies the LT predicate on the "skipped_segments" field.
+func SkippedSegmentsLT(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldLT(FieldSkippedSegments, v))
+}
+
+// SkippedSegmentsLTE applies the LTE predicate on the "skipped_segments" field.
+func SkippedSegmentsLTE(v int) predicate.JobResource {
+	return predicate.JobResource(sql.FieldLTE(FieldSkippedSegments, v))
 }
 
 // OutputPathEQ applies the EQ predicate on the "output_path" field.

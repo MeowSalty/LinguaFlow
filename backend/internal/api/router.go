@@ -62,7 +62,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) handlePing(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, healthResponse{Status: "ok", Service: s.config.Server.ServiceName})
+	writeJSON(w, http.StatusOK, healthResponse{Status: "ok", Service: s.serverCfg.ServiceName})
 }
 
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {

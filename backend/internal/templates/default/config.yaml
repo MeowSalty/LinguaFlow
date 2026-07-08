@@ -20,10 +20,6 @@ translation_profile:
   name: "通用策略"
   description: "默认策略配置，适用于一般文档翻译"
   config:
-    split:
-      enabled: true
-      strategy: paragraph
-      max_chars: 1200
     protect:
       enabled: true
       rules: [code, link, placeholder, xml]

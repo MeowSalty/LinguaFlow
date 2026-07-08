@@ -197,11 +197,6 @@ func (s *TranslationProfileService) Delete(ctx context.Context, id int) error {
 
 // validateProfileConfig 校验翻译配置的有效性。
 func validateProfileConfig(cfg *schema.TranslationProfileConfigData) error {
-	if cfg.Split.Enabled {
-		if cfg.Split.MaxChars < 1 {
-			return fmt.Errorf("%w: split.max_chars must be >= 1 when split is enabled", ErrTranslationProfileConfigInvalid)
-		}
-	}
 	validRubyKinds := map[string]bool{"phonetic": true, "semantic": true, "creative": true}
 	for _, k := range cfg.Ruby.PreserveKinds {
 		if !validRubyKinds[k] {

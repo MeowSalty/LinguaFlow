@@ -26,6 +26,8 @@ const (
 	FieldSegmentCount = "segment_count"
 	// FieldCompletedSegments holds the string denoting the completed_segments field in the database.
 	FieldCompletedSegments = "completed_segments"
+	// FieldSkippedSegments holds the string denoting the skipped_segments field in the database.
+	FieldSkippedSegments = "skipped_segments"
 	// FieldOutputPath holds the string denoting the output_path field in the database.
 	FieldOutputPath = "output_path"
 	// FieldErrorMessage holds the string denoting the error_message field in the database.
@@ -69,6 +71,7 @@ var Columns = []string{
 	FieldSegmentIds,
 	FieldSegmentCount,
 	FieldCompletedSegments,
+	FieldSkippedSegments,
 	FieldOutputPath,
 	FieldErrorMessage,
 	FieldCurrentStage,
@@ -118,6 +121,10 @@ var (
 	DefaultCompletedSegments int
 	// CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.
 	CompletedSegmentsValidator func(int) error
+	// DefaultSkippedSegments holds the default value on creation for the "skipped_segments" field.
+	DefaultSkippedSegments int
+	// SkippedSegmentsValidator is a validator for the "skipped_segments" field. It is called by the builders before save.
+	SkippedSegmentsValidator func(int) error
 	// DefaultCurrentStage holds the default value on creation for the "current_stage" field.
 	DefaultCurrentStage string
 	// DefaultStageTotal holds the default value on creation for the "stage_total" field.
@@ -161,6 +168,11 @@ func BySegmentCount(opts ...sql.OrderTermOption) OrderOption {
 // ByCompletedSegments orders the results by the completed_segments field.
 func ByCompletedSegments(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCompletedSegments, opts...).ToFunc()
+}
+
+// BySkippedSegments orders the results by the skipped_segments field.
+func BySkippedSegments(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSkippedSegments, opts...).ToFunc()
 }
 
 // ByOutputPath orders the results by the output_path field.

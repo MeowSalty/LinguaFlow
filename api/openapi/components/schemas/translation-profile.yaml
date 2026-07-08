@@ -2,18 +2,6 @@ TranslationProfileScope:
   type: string
   enum: [user, org, system]
 
-ProfileSplitConfig:
-  type: object
-  required: [enabled, strategy, max_chars]
-  properties:
-    enabled:
-      type: boolean
-    strategy:
-      type: string
-    max_chars:
-      type: integer
-      minimum: 1
-
 ProfileRubyConfig:
   type: object
   required: [enabled]
@@ -126,10 +114,8 @@ ProfileContextConfig:
 
 TranslationProfileConfig:
   type: object
-  required: [split, protect, postprocess, repair, glossary, context]
+  required: [protect, postprocess, repair, glossary, context]
   properties:
-    split:
-      $ref: '#/ProfileSplitConfig'
     protect:
       $ref: '#/ProfileProtectConfig'
     ruby:

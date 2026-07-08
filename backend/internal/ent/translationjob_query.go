@@ -451,7 +451,7 @@ func (_q *TranslationJobQuery) sqlAll(ctx context.Context, hooks ...queryHook) (
 			_q.withJobResources != nil,
 		}
 	)
-	if _q.withProject != nil || _q.withCreatedBy != nil {
+	if _q.withCreatedBy != nil {
 		withFKs = true
 	}
 	if withFKs {
@@ -501,10 +501,7 @@ func (_q *TranslationJobQuery) loadProject(ctx context.Context, query *ProjectQu
 	ids := make([]int, 0, len(nodes))
 	nodeids := make(map[int][]*TranslationJob)
 	for i := range nodes {
-		if nodes[i].project_translation_jobs == nil {
-			continue
-		}
-		fk := *nodes[i].project_translation_jobs
+		fk := nodes[i].ProjectID
 		if _, ok := nodeids[fk]; !ok {
 			ids = append(ids, fk)
 		}
@@ -521,7 +518,7 @@ func (_q *TranslationJobQuery) loadProject(ctx context.Context, query *ProjectQu
 	for _, n := range neighbors {
 		nodes, ok := nodeids[n.ID]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "project_translation_jobs" returned %v`, n.ID)
+			return fmt.Errorf(`unexpected foreign-key "project_id" returned %v`, n.ID)
 		}
 		for i := range nodes {
 			assign(nodes[i], n)
@@ -617,6 +614,9 @@ func (_q *TranslationJobQuery) querySpec() *sqlgraph.QuerySpec {
 			if fields[i] != translationjob.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
+		}
+		if _q.withProject != nil {
+			_spec.Node.AddColumnOnce(translationjob.FieldProjectID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {

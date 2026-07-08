@@ -891,6 +891,9 @@ func (_q *ProjectQuery) loadTranslationJobs(ctx context.Context, query *Translat
 		}
 	}
 	query.withFKs = true
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(translationjob.FieldProjectID)
+	}
 	query.Where(predicate.TranslationJob(func(s *sql.Selector) {
 		s.Where(sql.InValues(s.C(project.TranslationJobsColumn), fks...))
 	}))
@@ -899,13 +902,10 @@ func (_q *ProjectQuery) loadTranslationJobs(ctx context.Context, query *Translat
 		return err
 	}
 	for _, n := range neighbors {
-		fk := n.project_translation_jobs
-		if fk == nil {
-			return fmt.Errorf(`foreign-key "project_translation_jobs" is nil for node %v`, n.ID)
-		}
-		node, ok := nodeids[*fk]
+		fk := n.ProjectID
+		node, ok := nodeids[fk]
 		if !ok {
-			return fmt.Errorf(`unexpected referenced foreign-key "project_translation_jobs" returned %v for node %v`, *fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "project_id" returned %v for node %v`, fk, n.ID)
 		}
 		assign(node, n)
 	}

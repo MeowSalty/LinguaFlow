@@ -57,12 +57,6 @@ func TestLoadCLIConfig_Default(t *testing.T) {
 	if !ok {
 		t.Fatalf("expected profile \"通用策略\" in TranslationProfiles map; keys: %v", mapKeys(cfg.TranslationProfiles))
 	}
-	if prof.Split.Strategy != "paragraph" {
-		t.Errorf("profile split.strategy = %q, want %q", prof.Split.Strategy, "paragraph")
-	}
-	if prof.Split.MaxChars != 1200 {
-		t.Errorf("profile split.max_chars = %d, want 1200", prof.Split.MaxChars)
-	}
 	if !prof.Repair.Enabled {
 		t.Error("expected repair.enabled = true")
 	}
@@ -125,9 +119,9 @@ func TestDefaultCLIConfig_Fallback(t *testing.T) {
 	if defProf.Bootstrap.MaxTermsPer1000Chars != 3.0 {
 		t.Errorf("profile bootstrap.max_terms_per_1000_chars = %v, want 3.0", defProf.Bootstrap.MaxTermsPer1000Chars)
 	}
-	if defProf.Bootstrap.InlineConflictStrategy != InlineConflictRewriteLocal {
+	if defProf.Bootstrap.InlineConflictStrategy != "rewrite-local" {
 		t.Errorf("profile bootstrap.inline_conflict_strategy = %q, want %q",
-			defProf.Bootstrap.InlineConflictStrategy, InlineConflictRewriteLocal)
+			defProf.Bootstrap.InlineConflictStrategy, "rewrite-local")
 	}
 
 	// ── 验证 Execution.Bootstrap 默认配置 ──
@@ -162,10 +156,6 @@ prompt_templates:
     content: "You are a technical translator."
 translation_profiles:
   subtitle:
-    split:
-      enabled: true
-      strategy: newline
-      max_chars: 80
     repair:
       enabled: true
 glossary:
@@ -217,14 +207,10 @@ execution:
 		t.Errorf("prompt content = %q", pt.Content)
 	}
 
-	prof, ok := cfg.TranslationProfiles["subtitle"]
+	_, ok = cfg.TranslationProfiles["subtitle"]
 	if !ok {
 		t.Fatal("expected profile \"subtitle\"")
 	}
-	if prof.Split.Strategy != "newline" {
-		t.Errorf("split.strategy = %q, want %q", prof.Split.Strategy, "newline")
-	}
-
 	// ── 验证 Glossary 为 CLIConfigGlossary 类型 ──
 	if !cfg.Glossary.Enabled {
 		t.Error("expected glossary.enabled = true")
@@ -391,10 +377,6 @@ prompt_templates:
     bootstrap_content: "Extract domain terms from the text."
 translation_profiles:
   default:
-    split:
-      enabled: true
-      strategy: paragraph
-      max_chars: 1200
 execution:
   rounds:
     - name: "首轮"

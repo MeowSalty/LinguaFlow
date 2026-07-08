@@ -34,8 +34,6 @@ type Bootstrap struct {
 	Repair repair.Options
 }
 
-func (*Bootstrap) Name() string { return "bootstrap" }
-
 func (s *Bootstrap) reporter() progress.Reporter {
 	if s.Reporter == nil {
 		return progress.Nop{}

@@ -4,14 +4,13 @@ import (
 	"context"
 	"log/slog"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 )
 
 // lookupHints 为 idxs 中每段查 glossary / TM 并合并去重。
 // glossary 以 source+target 为键；TM 同样以 source+target 去重，保留最高分。
-func (s *Translate) lookupHints(ctx context.Context, doc *Document, idxs []int, logger *slog.Logger) ([]prompt.GlossaryEntry, []prompt.TMHint) {
+func (s *RoundExecutor) lookupHints(ctx context.Context, doc *Document, idxs []int, logger *slog.Logger) ([]prompt.GlossaryEntry, []prompt.TMHint) {
 	if ctx.Err() != nil {
 		return nil, nil
 	}
@@ -63,15 +62,6 @@ func (s *Translate) lookupHints(ctx context.Context, doc *Document, idxs []int, 
 	return glos, hints
 }
 
-func (s *Translate) addTM(ctx context.Context, doc *Document, seg *Segment, logger *slog.Logger) {
-	if s.TM == nil {
-		return
-	}
-	if err := s.TM.Add(ctx, seg.Source, seg.Target, doc.SourceLang, doc.TargetLang); err != nil {
-		logger.Debug("tm add failed", "err", err)
-	}
-}
-
 // absorbInlineGlossary 把 LLM 在 translate 响应中携带的 glossary 条目写入运行时 Glossary，
 // 并在并发冲突时就地修正本批 translations，避免文档内同一术语翻译不一致。
 //
@@ -81,7 +71,7 @@ func (s *Translate) addTM(ctx context.Context, doc *Document, seg *Segment, logg
 // 歧义场景仅 Warn 不动。InlineConflictStrategy == off 时跳过修正，沿用旧行为。
 //
 // translations 会被原地改写——调用方必须在拿到本函数返回后再写回 doc.Segments[*].Target。
-func (s *Translate) absorbInlineGlossary(
+func (s *RoundExecutor) absorbInlineGlossary(
 	ctx context.Context,
 	entries []prompt.BootstrapEntry,
 	translations map[string]string,
@@ -124,7 +114,7 @@ func (s *Translate) absorbInlineGlossary(
 			"received", len(entries))
 	}
 
-	if s.InlineConflictStrategy != config.InlineConflictRewriteLocal {
+	if s.InlineConflictStrategy != InlineConflictRewriteLocal {
 		return
 	}
 	if len(result.Skipped) == 0 || len(translations) == 0 {
@@ -135,7 +125,7 @@ func (s *Translate) absorbInlineGlossary(
 
 // rewriteConflictsInBatch 遍历 Skipped 列表，把本批译文里 worker 自己用的 target 字面值
 // 替换为权威表里已有的版本。仅处理 Reason == SkipReasonExists 且 target 不同的项。
-func (s *Translate) rewriteConflictsInBatch(
+func (s *RoundExecutor) rewriteConflictsInBatch(
 	skipped []glossary.SkippedEntry,
 	translations map[string]string,
 	targetLang string,

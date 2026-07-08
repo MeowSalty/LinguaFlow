@@ -5,58 +5,12 @@ import (
 	"math"
 	"net"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"time"
 )
 
-// Config 是 LinguaFlow 的根配置。字段顺序与 linguaflow.example.yaml 对齐。
-type Config struct {
-	Version    int    `yaml:"version"`
-	SourceLang string `yaml:"source_lang"`
-	TargetLang string `yaml:"target_lang"`
-
-	// Deprecated: CLI 端应使用 CLIConfig.Execution 替代。
-	// 保留此字段是为了 Web Server 端兼容。
-	Backends []BackendConfig `yaml:"backends"`
-
-	// Deprecated: CLI 端应使用 CLIConfig.TranslationProfiles 替代。
-	Pipeline PipelineConfig `yaml:"pipeline"`
-
-	// Deprecated: CLI 端应使用 CLIConfig.PromptTemplates 替代。
-	Prompt PromptConfig `yaml:"prompt"`
-
-	Glossary          GlossaryConfig `yaml:"glossary"`
-	TranslationMemory TMConfig       `yaml:"translation_memory"`
-	Plugins           PluginsConfig  `yaml:"plugins"`
-
-	Output OutputConfig `yaml:"output"`
-	Log    LogConfig    `yaml:"log"`
-	Server ServerConfig `yaml:"server"`
-}
-
-type BackendConfig struct {
-	Name               string         `yaml:"name"`
-	Type               string         `yaml:"type"`
-	Enabled            bool           `yaml:"enabled"`
-	RateLimitPerMinute int            `yaml:"rate_limit_per_minute"` // 按后端独立限流（每分钟）；0 表示不限速
-	Options            map[string]any `yaml:"options"`
-}
-
-type PipelineConfig struct {
-	Split       SplitConfig       `yaml:"split"`
-	Protect     ProtectConfig     `yaml:"protect"`
-	Translate   TranslateConfig   `yaml:"translate"`
-	Postprocess PostprocessConfig `yaml:"postprocess"`
-	Context     ContextConfig     `yaml:"context"`
-	Ruby        RubyConfig        `yaml:"ruby"`
-}
-
-type SplitConfig struct {
-	Enabled  bool   `yaml:"enabled"`
-	Strategy string `yaml:"strategy"`
-	MaxChars int    `yaml:"max_chars"`
-}
-
+// ProtectConfig 控制内容保护的行为。
 type ProtectConfig struct {
 	Enabled bool     `yaml:"enabled"`
 	Rules   []string `yaml:"rules"`
@@ -69,38 +23,9 @@ type RubyConfig struct {
 	PreserveKinds []string `yaml:"preserve_kinds"` // 保留的注音 kind 列表：phonetic/semantic/creative
 }
 
-// RubyMode 常量（引擎内部使用，根据响应模式自动选择）。
-const (
-	RubyModeJSON    = "json"
-	RubyModeInline  = "inline" // TODO: inline 模式尚未激活，待其他功能适配完成后启用
-	RubyModeSection = "section"
-)
-
-// ResponseFormatText 是纯文本响应模式的取值。
-// 与 json_schema / json_object / none 对齐，由各 backend factory 独立校验。
-const ResponseFormatText = "text"
-
-// FallbackShrink 默认值：0 表示未设置，回退到此值。
-const defaultFallbackShrink = 0.5
-
-type TranslateConfig struct {
-	Concurrency      int          `yaml:"concurrency"`
-	BatchSize        int          `yaml:"batch_size"`          // 一次合并发送的段数；<=1 表示禁用批量
-	MaxWordsPerBatch int          `yaml:"max_words_per_batch"` // 每批字词数上限；0=不限制
-	FallbackShrink   float64      `yaml:"fallback_shrink"`     // (0,1) 整批失败时下一级 batch = floor(cur*shrink)；0 = 回退默认；>=1 非法
-	Retry            RetryConfig  `yaml:"retry"`
-	Repair           RepairConfig `yaml:"repair"`
-}
-
-type RetryConfig struct {
-	MaxAttempts int  `yaml:"max_attempts"` // 重试次数；0=不重试，1=重试 1 次，以此类推；负值归 0
-	BackoffMs   int  `yaml:"backoff_ms"`   // 429/503 限流退避基础时间（毫秒）
-	Jitter      bool `yaml:"jitter"`       // 退避时是否添加随机抖动
-}
-
 // RepairConfig 控制 LLM 响应解析失败 / 部分缺失时的"主动修复"行为。
 //
-// 各子开关默认开启（见 Default）；Enabled=false 时强制全部清零，调用方可一键关闭。
+// 各子开关默认开启（见 DefaultServerConfig）；Enabled=false 时强制全部清零，调用方可一键关闭。
 // 修复算子无错时是 no-op，对正常响应零成本；主要受益场景是 Anthropic Tool Use 模拟、
 // Google 等非 strict JSON Schema 后端。
 type RepairConfig struct {
@@ -136,19 +61,10 @@ func DefaultContextConfig() ContextConfig {
 	}
 }
 
-type PromptConfig struct {
-	SystemTemplate        string         `yaml:"system_template"`
-	SystemTemplateContent string         `yaml:"system_template_content"` // 新增：内联内容，优先级高于 SystemTemplate
-	UserTemplate          string         `yaml:"user_template"`           // Deprecated: 保留兼容，不再使用
-	Vars                  map[string]any `yaml:"vars"`
-}
-
-type GlossaryConfig struct {
-	Enabled    bool                      `yaml:"enabled"`
-	Path       string                    `yaml:"path"`
-	Save       bool                      `yaml:"save"`
-	Bootstrap  BootstrapConfig           `yaml:"bootstrap"`  // inline 配置
-	Standalone StandaloneBootstrapConfig `yaml:"standalone"` // 独立自举配置
+type RetryConfig struct {
+	MaxAttempts int  `yaml:"max_attempts"` // 重试次数；0=不重试，1=重试 1 次，以此类推；负值归 0
+	BackoffMs   int  `yaml:"backoff_ms"`   // 429/503 限流退避基础时间（毫秒）
+	Jitter      bool `yaml:"jitter"`       // 退避时是否添加随机抖动
 }
 
 // BootstrapConfig 控制内联自举（inline）：翻译的 LLM 调用顺带返回术语。
@@ -183,12 +99,6 @@ const (
 	BootstrapModeOff    = "off"
 	BootstrapModePre    = "pre"
 	BootstrapModeInline = "inline"
-)
-
-// Inline 模式下并发术语冲突的处理策略。
-const (
-	InlineConflictOff          = "off"
-	InlineConflictRewriteLocal = "rewrite-local"
 )
 
 // Normalize 规范化 RepairConfig：
@@ -229,6 +139,32 @@ type LogConfig struct {
 	Format string `yaml:"format"`
 }
 
+// WorkerConfig 控制后台任务 Worker 的并发和队列参数。
+type WorkerConfig struct {
+	Translation RunnerConfig `yaml:"translation"`
+	Sync        RunnerConfig `yaml:"sync"`
+}
+
+// RunnerConfig 单个 Runner 的并发数和队列容量。
+type RunnerConfig struct {
+	Count         int `yaml:"count"`          // Worker goroutine 数，默认 NumCPU()（下限 2）
+	QueueCapacity int `yaml:"queue_capacity"` // 队列最大排队深度
+}
+
+// DefaultWorkerConfig 返回默认的 Worker 配置。
+// Worker 数量基于 CPU 核数，下限 2。
+// 队列容量按 Worker 数倍增：翻译 4x，同步 8x。
+func DefaultWorkerConfig() WorkerConfig {
+	count := runtime.NumCPU()
+	if count < 2 {
+		count = 2
+	}
+	return WorkerConfig{
+		Translation: RunnerConfig{Count: count, QueueCapacity: count * 4},
+		Sync:        RunnerConfig{Count: count, QueueCapacity: count * 8},
+	}
+}
+
 type ServerConfig struct {
 	Host            string             `yaml:"host"`
 	Port            int                `yaml:"port"`
@@ -241,6 +177,7 @@ type ServerConfig struct {
 	JWTExpiry       time.Duration      `yaml:"jwt_expiry"`
 	RefreshExpiry   time.Duration      `yaml:"refresh_token_expiry"`
 	ShutdownTimeout time.Duration      `yaml:"shutdown_timeout"`
+	Workers         WorkerConfig       `yaml:"workers"`
 	CORS            CORSConfig         `yaml:"cors"`
 	Registration    RegistrationConfig `yaml:"registration"`
 }
@@ -283,232 +220,78 @@ func (c ServerConfig) DatabaseDSN() string {
 		"&_pragma=synchronous(NORMAL)"
 }
 
-// Default 返回内置默认配置。loader 在解析 yaml 前以此为基底合并。
-func Default() *Config {
-	return &Config{
-		Version:    1,
-		SourceLang: "auto",
-		TargetLang: "zh",
-		Backends: []BackendConfig{{
-			Name:    "openai-default",
-			Type:    "openai",
-			Enabled: true,
-			Options: map[string]any{
-				"api_key":         "${OPENAI_API_KEY}",
-				"base_url":        "https://api.openai.com/v1",
-				"model":           "gpt-4o-mini",
-				"temperature":     0.2,
-				"max_tokens":      0,
-				"timeout":         "60s",
-				"response_format": "json_schema",
-			},
-		}},
-		Pipeline: PipelineConfig{
-			Split: SplitConfig{Enabled: true, Strategy: "paragraph", MaxChars: 1200},
-			Protect: ProtectConfig{
-				Enabled: true,
-				Rules:   []string{"code", "link", "placeholder", "xml"},
-			},
-			Ruby: RubyConfig{Enabled: false},
-			Translate: TranslateConfig{
-				Concurrency:    4,
-				BatchSize:      1,
-				FallbackShrink: defaultFallbackShrink,
-				Retry:          RetryConfig{MaxAttempts: 3, BackoffMs: 2000},
-				Repair: RepairConfig{
-					Enabled:              true,
-					JSONStructural:       true,
-					SchemaAliases:        true,
-					Partial:              true,
-					PartialThreshold:     0.5,
-					PlaceholderNormalize: true,
-					PromptUpgrade:        true,
-				},
-			},
-			Postprocess: PostprocessConfig{Enabled: true, TrimSpaces: true},
-			Context:     DefaultContextConfig(),
+// DefaultServerConfig 返回内置默认服务器配置。loader 在解析 yaml 前以此为基底合并。
+func DefaultServerConfig() *ServerConfig {
+	return &ServerConfig{
+		Host:            "0.0.0.0",
+		Port:            8080,
+		ServiceName:     "linguaflow",
+		DataDir:         "./data",
+		AutoMigrate:     true,
+		JWTSecret:       "dev-insecure-secret-change-me",
+		JWTIssuer:       "linguaflow",
+		JWTExpiry:       15 * time.Minute,
+		RefreshExpiry:   30 * 24 * time.Hour,
+		ShutdownTimeout: 10 * time.Second,
+		Workers:         DefaultWorkerConfig(),
+		CORS: CORSConfig{
+			AllowedOrigins: []string{"*"},
 		},
-		Prompt: PromptConfig{
-			Vars: map[string]any{"style": "concise, technical", "audience": "developers"},
-		},
-		Glossary: GlossaryConfig{
-			Enabled: false,
-			Path:    "./glossary.csv",
-			Save:    true,
-			Bootstrap: BootstrapConfig{
-				MaxTermsPer1000Chars:   3.0,
-				MinSourceLen:           2,
-				InlineConflictStrategy: InlineConflictRewriteLocal,
-			},
-			Standalone: StandaloneBootstrapConfig{
-				Enabled:          false,
-				BatchSize:        20,
-				Concurrency:      2,
-				MaxTermsPerBatch: 20,
-				MinSourceLen:     2,
-			},
-		},
-		TranslationMemory: TMConfig{Enabled: false, Driver: "sqlite", DSN: "./.linguaflow/tm.db"},
-		Plugins:           PluginsConfig{Enabled: false},
-		Output:            OutputConfig{Mode: "overwrite", PreserveExtension: true, Incremental: false},
-		Log:               LogConfig{Level: "info", Format: "text"},
-		Server: ServerConfig{
-			Host:            "0.0.0.0",
-			Port:            8080,
-			ServiceName:     "linguaflow",
-			DataDir:         "./data",
-			AutoMigrate:     true,
-			JWTSecret:       "dev-insecure-secret-change-me",
-			JWTIssuer:       "linguaflow",
-			JWTExpiry:       15 * time.Minute,
-			RefreshExpiry:   30 * 24 * time.Hour,
-			ShutdownTimeout: 10 * time.Second,
-			CORS: CORSConfig{
-				AllowedOrigins: []string{"*"},
-			},
-			Registration: RegistrationConfig{
-				Enabled:   true,
-				AutoAdmin: true,
-			},
+		Registration: RegistrationConfig{
+			Enabled:   true,
+			AutoAdmin: true,
 		},
 	}
 }
 
-// Validate 检查关键字段是否合法。loader 在合并后调用。
-func (c *Config) Validate() error {
-	if c.TargetLang == "" {
-		return errEmptyTargetLang
-	}
-	// 校验后端 name 唯一性和 name/type 非空
-	seen := make(map[string]int, len(c.Backends))
-	for i, b := range c.Backends {
-		if b.Name == "" {
-			return fmt.Errorf("配置错误：backends[%d].name 不能为空", i)
-		}
-		if b.Type == "" {
-			return fmt.Errorf("配置错误：backends[%d].type 不能为空（后端 %q）", i, b.Name)
-		}
-		if prev, dup := seen[b.Name]; dup {
-			return fmt.Errorf("%w：%q 在 backends[%d] 与 backends[%d] 重复",
-				errDuplicateBackendName, b.Name, i, prev)
-		}
-		seen[b.Name] = i
-	}
-	enabled := 0
-	for _, b := range c.Backends {
-		if b.Enabled {
-			enabled++
-		}
-	}
-	if enabled == 0 {
-		return errNoEnabledBackend
-	}
-	if c.Pipeline.Translate.Concurrency < 1 {
-		c.Pipeline.Translate.Concurrency = 1
-	}
-	if c.Pipeline.Translate.BatchSize <= 0 && c.Pipeline.Translate.MaxWordsPerBatch <= 0 {
-		c.Pipeline.Translate.BatchSize = 1
-	}
-	if c.Pipeline.Translate.Retry.BackoffMs < 1000 {
-		c.Pipeline.Translate.Retry.BackoffMs = 1000
-	}
-	if c.Pipeline.Translate.Retry.MaxAttempts < 0 {
-		c.Pipeline.Translate.Retry.MaxAttempts = 0
-	}
-	if shrink := c.Pipeline.Translate.FallbackShrink; math.IsNaN(shrink) || math.IsInf(shrink, 0) || shrink < 0 {
-		c.Pipeline.Translate.FallbackShrink = defaultFallbackShrink
-	} else if shrink >= 1 {
-		return fmt.Errorf("pipeline.translate.fallback_shrink must be < 1, got %v", shrink)
-	}
-	if c.Pipeline.Split.MaxChars < 1 {
-		c.Pipeline.Split.MaxChars = 1200
-	}
-	validRubyKinds := map[string]bool{"phonetic": true, "semantic": true, "creative": true}
-	for _, k := range c.Pipeline.Ruby.PreserveKinds {
-		if !validRubyKinds[k] {
-			return fmt.Errorf("pipeline.ruby.preserve_kinds: invalid kind %q (must be one of phonetic, semantic, creative)", k)
-		}
-	}
-	c.Pipeline.Translate.Repair.Normalize()
-	// Inline bootstrap 校验
-	if c.Glossary.Bootstrap.MaxTermsPer1000Chars <= 0 {
-		c.Glossary.Bootstrap.MaxTermsPer1000Chars = 3.0
-	}
-	if c.Glossary.Bootstrap.MinSourceLen < 1 {
-		c.Glossary.Bootstrap.MinSourceLen = 2
-	}
-	switch c.Glossary.Bootstrap.InlineConflictStrategy {
-	case "":
-		c.Glossary.Bootstrap.InlineConflictStrategy = InlineConflictRewriteLocal
-	case InlineConflictOff, InlineConflictRewriteLocal:
-		// ok
-	default:
-		return fmt.Errorf("glossary.bootstrap.inline_conflict_strategy must be one of off|rewrite-local, got %q",
-			c.Glossary.Bootstrap.InlineConflictStrategy)
-	}
-	// Standalone bootstrap 校验
-	if c.Glossary.Standalone.Enabled {
-		c.Glossary.Enabled = true
-		if c.Glossary.Standalone.TemplateContent == "" {
-			return fmt.Errorf("glossary.standalone.template_content is required when enabled is true")
-		}
-	}
-	if c.Glossary.Standalone.BatchSize < 1 {
-		c.Glossary.Standalone.BatchSize = 20
-	}
-	if c.Glossary.Standalone.Concurrency < 1 {
-		c.Glossary.Standalone.Concurrency = 2
-	}
-	if c.Glossary.Standalone.MaxTermsPerBatch < 1 {
-		c.Glossary.Standalone.MaxTermsPerBatch = 20
-	}
-	if c.Glossary.Standalone.MinSourceLen < 1 {
-		c.Glossary.Standalone.MinSourceLen = 2
-	}
-	switch c.Server.Mode {
+// ValidateServerConfig 检查服务器配置字段是否合法。loader 在合并后调用。
+func ValidateServerConfig(c *ServerConfig) error {
+	switch c.Mode {
 	case "", ModeServer:
-		c.Server.Mode = ModeServer
+		c.Mode = ModeServer
 	case ModeLocal:
 		// ok
 	default:
-		return fmt.Errorf("server.mode must be one of %s|%s, got %q", ModeServer, ModeLocal, c.Server.Mode)
+		return fmt.Errorf("server.mode must be one of %s|%s, got %q", ModeServer, ModeLocal, c.Mode)
 	}
-	if c.Server.Host == "" {
-		c.Server.Host = "0.0.0.0"
+	if c.Host == "" {
+		c.Host = "0.0.0.0"
 	}
-	if c.Server.Port < 1 || c.Server.Port > 65535 {
-		c.Server.Port = 8080
+	if c.Port < 1 || c.Port > 65535 {
+		c.Port = 8080
 	}
-	if c.Server.DataDir == "" {
-		c.Server.DataDir = "./data"
+	if c.DataDir == "" {
+		c.DataDir = "./data"
 	}
-	if c.Server.JWTSecret == "" {
-		c.Server.JWTSecret = "dev-insecure-secret-change-me"
+	if c.JWTSecret == "" {
+		c.JWTSecret = "dev-insecure-secret-change-me"
 	}
-	if c.Server.JWTIssuer == "" {
-		c.Server.JWTIssuer = "linguaflow"
+	if c.JWTIssuer == "" {
+		c.JWTIssuer = "linguaflow"
 	}
-	if c.Server.JWTExpiry <= 0 {
-		c.Server.JWTExpiry = 15 * time.Minute
+	if c.JWTExpiry <= 0 {
+		c.JWTExpiry = 15 * time.Minute
 	}
-	if c.Server.RefreshExpiry <= 0 {
-		c.Server.RefreshExpiry = 30 * 24 * time.Hour
+	if c.RefreshExpiry <= 0 {
+		c.RefreshExpiry = 30 * 24 * time.Hour
 	}
-	if c.Server.ShutdownTimeout <= 0 {
-		c.Server.ShutdownTimeout = 10 * time.Second
+	if c.ShutdownTimeout <= 0 {
+		c.ShutdownTimeout = 10 * time.Second
 	}
-	if len(c.Server.CORS.AllowedOrigins) == 0 {
-		c.Server.CORS.AllowedOrigins = []string{"*"}
+	if len(c.CORS.AllowedOrigins) == 0 {
+		c.CORS.AllowedOrigins = []string{"*"}
 	}
-	// Registration defaults: Enabled and AutoAdmin both default to true.
-	// Go bools default to false, so we normalize zero-values here.
-	// If the user explicitly sets enabled: false, that will be preserved
-	// because the YAML parser will have set it. We only default when
-	// both fields are false AND the registration block was likely omitted.
-	// However, since we can't distinguish "omitted" from "explicitly false",
-	// we use a separate flag approach: if Enabled is false AND AutoAdmin is false,
-	// we check if the registration block exists in the config.
-	// For simplicity, we default both to true only in Default(), and
-	// here in Validate() we just ensure they're valid.
+	if c.Workers.Translation.Count < 1 {
+		c.Workers.Translation.Count = 1
+	}
+	if c.Workers.Translation.QueueCapacity < 1 {
+		c.Workers.Translation.QueueCapacity = 1
+	}
+	if c.Workers.Sync.Count < 1 {
+		c.Workers.Sync.Count = 1
+	}
+	if c.Workers.Sync.QueueCapacity < 1 {
+		c.Workers.Sync.QueueCapacity = 1
+	}
 	return nil
 }

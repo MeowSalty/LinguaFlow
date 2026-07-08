@@ -23,7 +23,7 @@ import (
 const readinessPingTimeout = 2 * time.Second
 
 type Server struct {
-	config                *config.Config
+	serverCfg             *config.ServerConfig
 	logger                *slog.Logger
 	db                    *sql.DB
 	entClient             *ent.Client
@@ -46,10 +46,8 @@ type Server struct {
 	auditSvc              *service.AuditService
 	resourceSvc           *service.ResourceService
 	jobStore              *filestore.LocalStore
-	translationJobQueue   *worker.Queue
-	translationJobRunner  *worker.TranslationRunner
-	syncTaskQueue         *worker.Queue
-	syncTaskRunner        *worker.SyncTaskRunner
+	dispatcher            *worker.Dispatcher
+	resMutex              *worker.ResourceMutex
 	httpServer            *http.Server
 	executionPlanHandler  *HandlerExecutionPlan
 	eventBroker           *event.Broker
@@ -67,13 +65,13 @@ func (s *Server) localAuthUser() (authenticatedUser, bool) {
 	return authenticatedUser{}, false
 }
 
-func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.Client, mode string, localUser *ent.User) (*Server, error) {
+func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client *ent.Client, mode string, localUser *ent.User) (*Server, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
 
 	s := &Server{
-		config:      cfg,
+		serverCfg:   cfg,
 		logger:      logger,
 		db:          db,
 		entClient:   client,
@@ -83,16 +81,16 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 	}
 	limiterPool := backend.NewLimiterPool()
 	s.adminService = service.NewAdminService(client)
-	s.authService = service.NewAuthService(client, service.AuthConfigFromServer(cfg.Server), s.adminService)
+	s.authService = service.NewAuthService(client, service.AuthConfigFromServer(*cfg), s.adminService)
 	s.userService = service.NewUserService(client, s.authService)
 
 	// Seed default system settings from YAML config (only writes if table is empty for each key).
 	regEnabled := "true"
-	if !cfg.Server.Registration.Enabled {
+	if !cfg.Registration.Enabled {
 		regEnabled = "false"
 	}
 	autoAdmin := "true"
-	if !cfg.Server.Registration.AutoAdmin {
+	if !cfg.Registration.AutoAdmin {
 		autoAdmin = "false"
 	}
 	if err := s.adminService.InitializeSettings(context.Background(), map[string]string{
@@ -108,7 +106,7 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 	s.glossarySvc = service.NewGlossaryService(client, s.projectSvc)
 	s.promptTemplateSvc = service.NewPromptTemplateService(client)
 	s.translationProfileSvc = service.NewTranslationProfileService(client)
-	jobStore, err := filestore.NewLocal(filepath.Join(cfg.Server.DataDir, "jobs"))
+	jobStore, err := filestore.NewLocal(filepath.Join(cfg.DataDir, "jobs"))
 	if err != nil {
 		return nil, err
 	}
@@ -121,16 +119,27 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 	s.auditSvc = service.NewAuditService(client, s.userService, s.projectSvc)
 	s.glossarySyncSvc = service.NewGlossarySyncService(client, s.glossarySvc, s.projectSvc, s.auditSvc, logger)
 	s.resourceSvc = service.NewResourceService(client, s.projectSvc, jobStore)
-	queueSize := cfg.Pipeline.Translate.Concurrency * 8
-	if queueSize < 16 {
-		queueSize = 16
-	}
-	s.translationJobQueue = worker.NewQueue(queueSize)
-	s.translationJobRunner = worker.NewTranslationRunner(cfg, logger, client, s.translationJobSvc, jobStore, s.translationJobQueue, s.eventBroker, limiterPool)
-	s.syncTaskQueue = worker.NewQueue(100)
-	s.syncTaskRunner = worker.NewSyncTaskRunner(cfg, logger, client, s.glossarySyncSvc, s.syncTaskQueue)
+
+	// 创建 ResourceMutex
+	s.resMutex = worker.NewResourceMutex()
+
+	translationQueue := worker.NewQueue(cfg.Workers.Translation.QueueCapacity)
+	syncQueue := worker.NewQueue(cfg.Workers.Sync.QueueCapacity)
+
+	// 创建 Runner
+	translationRunner := worker.NewTranslationRunner(
+		logger, client, s.translationJobSvc, jobStore,
+		translationQueue, s.eventBroker, limiterPool, s.resMutex,
+	)
+	syncTaskRunner := worker.NewSyncTaskRunner(
+		logger, client, s.glossarySyncSvc, syncQueue, s.resMutex,
+	)
+
+	// 创建 Dispatcher
+	s.dispatcher = worker.NewDispatcher(logger, s.resMutex, cfg.Workers, translationRunner, syncTaskRunner)
+
 	s.httpServer = &http.Server{
-		Addr:              cfg.Server.Address(),
+		Addr:              cfg.Address(),
 		Handler:           s.newRouter(),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
@@ -140,25 +149,12 @@ func NewServer(cfg *config.Config, logger *slog.Logger, db *sql.DB, client *ent.
 
 func (s *Server) Run(ctx context.Context, ln net.Listener) error {
 	serveErr := make(chan error, 1)
-	if s.translationJobRunner != nil {
-		if err := s.translationJobRunner.Recover(ctx); err != nil {
-			return err
-		}
-		go func() {
-			if err := s.translationJobRunner.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-				s.logger.Error("translation job runner stopped with error", "err", err)
-			}
-		}()
-	}
 
-	// 恢复并启动同步任务执行器
-	if s.syncTaskRunner != nil {
-		if err := s.syncTaskRunner.Recover(ctx); err != nil {
-			s.logger.Warn("failed to recover sync tasks", "error", err)
-		}
+	// 启动 Dispatcher（内部执行 Recover + WorkerPool）
+	if s.dispatcher != nil {
 		go func() {
-			if err := s.syncTaskRunner.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
-				s.logger.Error("sync task runner stopped with error", "err", err)
+			if err := s.dispatcher.Run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+				s.logger.Error("dispatcher stopped with error", "err", err)
 			}
 		}()
 	}
@@ -194,7 +190,7 @@ func (s *Server) Run(ctx context.Context, ln net.Listener) error {
 	select {
 	case <-ctx.Done():
 		s.ready.Store(false)
-		shutdownCtx, cancel := context.WithTimeout(context.Background(), s.config.Server.ShutdownTimeout)
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), s.serverCfg.ShutdownTimeout)
 		defer cancel()
 		if err := s.Shutdown(shutdownCtx); err != nil {
 			return err

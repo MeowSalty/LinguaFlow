@@ -403,14 +403,9 @@ func (s *GlossarySyncService) ExecuteSyncTask(
 	// 7. 分批处理，每批 100 个段落
 	batchSize := 100
 	for i := 0; i < len(segmentIDs); i += batchSize {
-		// 每批开始前检查取消标志
-		currentTask, err := s.client.SyncTask.Get(ctx, taskID)
-		if err != nil {
-			s.logger.Warn("failed to check cancel flag, continuing execution",
-				"task_id", taskID, "error", err)
-		}
-		if currentTask != nil && currentTask.Status == SyncTaskStatusCancelled {
-			s.logger.Info("sync task cancelled by user",
+		// 每批开始前检查 context 是否已取消
+		if ctx.Err() != nil {
+			s.logger.Info("sync task cancelled via context",
 				"task_id", taskID,
 				"processed", result.TotalUpdated+result.TotalSkipped,
 				"remaining", len(segmentIDs)-i,

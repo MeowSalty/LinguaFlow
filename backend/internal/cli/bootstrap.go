@@ -24,31 +24,30 @@ import (
 
 // BootOptions 描述服务器引导的共享参数。
 type BootOptions struct {
-	ConfigPath string
-	Logger     *slog.Logger
-	Overrides  func(cfg *config.Config)
-	Mode       string // "server" | "local"
+	Logger    *slog.Logger
+	Overrides func(cfg *config.ServerConfig)
+	Mode      string // "server" | "local"
 }
 
 // bootstrapServer 加载配置、打开数据库、运行迁移、创建监听器，
 // 返回准备就绪的 *api.Server 和监听器。调用方负责调用 server.Run(ctx, ln)。
 func bootstrapServer(ctx context.Context, opts BootOptions) (*api.Server, net.Listener, func() error, error) {
-	cfg, err := config.Load(opts.ConfigPath)
+	cfg, err := config.LoadServerConfig()
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	cfg.Server.Mode = opts.Mode
+	cfg.Mode = opts.Mode
 	if opts.Overrides != nil {
 		opts.Overrides(cfg)
 	}
 
-	if err := os.MkdirAll(cfg.Server.DataDir, 0o755); err != nil {
-		return nil, nil, nil, fmt.Errorf("create server data dir %s: %w", cfg.Server.DataDir, err)
+	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
+		return nil, nil, nil, fmt.Errorf("create server data dir %s: %w", cfg.DataDir, err)
 	}
 
-	dbPath := cfg.Server.DatabasePath()
-	dbDSN := cfg.Server.DatabaseDSN()
+	dbPath := cfg.DatabasePath()
+	dbDSN := cfg.DatabaseDSN()
 	db, err := sql.Open("sqlite", dbDSN)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("open sqlite database %s: %w", dbPath, err)
@@ -61,7 +60,7 @@ func bootstrapServer(ctx context.Context, opts BootOptions) (*api.Server, net.Li
 	driver := entsql.OpenDB(dialect.SQLite, db)
 	client := ent.NewClient(ent.Driver(driver))
 
-	if cfg.Server.AutoMigrate {
+	if cfg.AutoMigrate {
 		if err := client.Schema.Create(ctx); err != nil {
 			_ = client.Close()
 			_ = db.Close()
@@ -70,7 +69,7 @@ func bootstrapServer(ctx context.Context, opts BootOptions) (*api.Server, net.Li
 	}
 
 	var localUser *ent.User
-	if cfg.Server.IsLocal() {
+	if cfg.IsLocal() {
 		localUser, err = ensureLocalUser(ctx, client)
 		if err != nil {
 			_ = client.Close()
@@ -85,24 +84,24 @@ func bootstrapServer(ctx context.Context, opts BootOptions) (*api.Server, net.Li
 		return nil, nil, nil, fmt.Errorf("ensure admin user: %w", err)
 	}
 
-	ln, err := net.Listen("tcp", cfg.Server.Address())
+	ln, err := net.Listen("tcp", cfg.Address())
 	if err != nil {
 		_ = client.Close()
 		_ = db.Close()
-		return nil, nil, nil, fmt.Errorf("listen on %s: %w", cfg.Server.Address(), err)
+		return nil, nil, nil, fmt.Errorf("listen on %s: %w", cfg.Address(), err)
 	}
 
 	// 回写实际端口（当端口为 0 时由 OS 分配）。
 	actualPort := ln.Addr().(*net.TCPAddr).Port
-	cfg.Server.Port = actualPort
+	cfg.Port = actualPort
 
 	opts.Logger.Info("server bootstrapped",
-		"mode", cfg.Server.Mode,
+		"mode", cfg.Mode,
 		"addr", ln.Addr().String(),
 		"database_path", dbPath,
-		"auto_migrate", cfg.Server.AutoMigrate)
+		"auto_migrate", cfg.AutoMigrate)
 
-	server, err := api.NewServer(cfg, opts.Logger, db, client, cfg.Server.Mode, localUser)
+	server, err := api.NewServer(cfg, opts.Logger, db, client, cfg.Mode, localUser)
 	if err != nil {
 		_ = ln.Close()
 		_ = client.Close()
