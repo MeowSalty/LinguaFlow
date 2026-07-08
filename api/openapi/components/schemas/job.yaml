@@ -160,7 +160,7 @@ QualityIssue:
       enum: [warning, error]
     code:
       type: string
-      description: 问题代码（empty_target, untranslated, placeholder_missing, length_ratio, duplicate）
+      description: 问题代码（untranslated, length_ratio, duplicate）
     message:
       type: string
 
