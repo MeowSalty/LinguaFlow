@@ -137,12 +137,32 @@ Segment:
       type: string
     reviewed_by:
       $ref: '../../base.yaml#/components/schemas/User'
+    quality_issues:
+      type: array
+      description: QA 检测到的质量问题列表
+      items:
+        $ref: '#/QualityIssue'
     created_at:
       type: string
       format: date-time
     updated_at:
       type: string
       format: date-time
+
+QualityIssue:
+  type: object
+  required: [segment_index, severity, code, message]
+  properties:
+    segment_index:
+      type: integer
+    severity:
+      type: string
+      enum: [warning, error]
+    code:
+      type: string
+      description: 问题代码（empty_target, untranslated, placeholder_missing, length_ratio, duplicate）
+    message:
+      type: string
 
 SegmentEditRequest:
   type: object
