@@ -2207,7 +2207,7 @@ components:
             - error
         code:
           type: string
-          description: 问题代码（empty_target, untranslated, placeholder_missing, length_ratio, duplicate）
+          description: 问题代码（untranslated, length_ratio, duplicate）
         message:
           type: string
     UsageStats:
@@ -3972,18 +3972,25 @@ components:
           type: boolean
           default: false
           description: error 级别问题自动 reject
+        length_method:
+          type: string
+          enum:
+            - char_weight
+            - word_count
+          default: char_weight
+          description: '长度计算方式。char_weight: CJK 字符×2 拉丁字符×1；word_count: CJK 每字 1 词拉丁每词 1 词'
         length_ratio_min:
           type: number
           format: double
           minimum: 0
           default: 0
-          description: 译文最短长度比（加权），0 表示不检测
+          description: 译文/原文最短长度比，0 表示不检测
         length_ratio_max:
           type: number
           format: double
           minimum: 0
           default: 0
-          description: 译文最长长度比（加权），0 表示不检测
+          description: 译文/原文最长长度比，0 表示不检测
     TranslationProfileConfig:
       type: object
       required:
