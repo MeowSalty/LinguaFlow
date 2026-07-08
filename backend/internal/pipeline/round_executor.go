@@ -136,25 +136,9 @@ func (s *RoundExecutor) Run(ctx context.Context, doc *Document) error {
 		pending = append(pending, i)
 	}
 
-	// 存储跳过计数，供 buildTranslateResult 使用（累加，因为每轮都会执行相同的跳过判断）
-	if doc.Vars == nil {
-		doc.Vars = map[string]any{}
-	}
-	if prev, ok := doc.Vars["_skipped_count"].(int); ok {
-		if skippedCount > prev {
-			doc.Vars["_skipped_count"] = skippedCount
-		}
-	} else {
-		doc.Vars["_skipped_count"] = skippedCount
-	}
-
 	if len(pending) == 0 {
 		return nil
 	}
-
-	rep := s.reporter()
-	rep.StageStart(mode, len(pending))
-	defer rep.StageDone()
 
 	// 2. Protect（仅 translate 模式）
 	switch mode {
@@ -182,9 +166,25 @@ func (s *RoundExecutor) Run(ctx context.Context, doc *Document) error {
 		return fmt.Errorf("unsupported round mode: %s", mode)
 	}
 
+	// 存储跳过计数（Protect 之后，确保包含所有跳过），供 buildTranslateResult 使用
+	if doc.Vars == nil {
+		doc.Vars = map[string]any{}
+	}
+	if prev, ok := doc.Vars["_skipped_count"].(int); ok {
+		if skippedCount > prev {
+			doc.Vars["_skipped_count"] = skippedCount
+		}
+	} else {
+		doc.Vars["_skipped_count"] = skippedCount
+	}
+
 	if len(pending) == 0 {
 		return nil
 	}
+
+	rep := s.reporter()
+	rep.StageStart(mode, len(pending))
+	defer rep.StageDone()
 
 	// 3. 上下文窗口
 	ctxConfig := s.Context
