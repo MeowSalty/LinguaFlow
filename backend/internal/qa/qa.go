@@ -13,6 +13,16 @@ const (
 	SeverityError   IssueSeverity = "error"
 )
 
+// LengthMethod 定义长度计算方式。
+type LengthMethod string
+
+const (
+	// LengthMethodCharWeight 加权字符计数：CJK 字符×2，拉丁字符×1。
+	LengthMethodCharWeight LengthMethod = "char_weight"
+	// LengthMethodWordCount 语义单元计数：CJK 每字 1 词，拉丁每词 1 词。
+	LengthMethodWordCount LengthMethod = "word_count"
+)
+
 // QualityIssue 是持久化到数据库的质量问题记录。
 type QualityIssue struct {
 	SegmentIndex int           `json:"segment_index"`
@@ -39,6 +49,7 @@ type Checker interface {
 type Config struct {
 	Enabled        bool
 	AutoReject     bool
+	LengthMethod   LengthMethod
 	LengthRatioMin float64
 	LengthRatioMax float64
 }
@@ -48,6 +59,7 @@ func DefaultConfig() Config {
 	return Config{
 		Enabled:        false,
 		AutoReject:     false,
+		LengthMethod:   LengthMethodCharWeight,
 		LengthRatioMin: 0.2,
 		LengthRatioMax: 3.0,
 	}
@@ -71,7 +83,7 @@ func NewEngine(cfg Config, logger *slog.Logger) *Engine {
 	}
 	e.checkers = []Checker{
 		NewUntranslatedChecker(),
-		NewLengthRatioChecker(cfg.LengthRatioMin, cfg.LengthRatioMax),
+		NewLengthRatioChecker(cfg.LengthRatioMin, cfg.LengthRatioMax, cfg.LengthMethod),
 		NewDuplicateTranslationChecker(),
 	}
 	return e

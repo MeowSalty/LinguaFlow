@@ -68,6 +68,7 @@ type ProfileContextConfig struct {
 type ProfileQAConfig struct {
 	Enabled        bool    `json:"enabled"          yaml:"enabled"`
 	AutoReject     bool    `json:"auto_reject"      yaml:"auto_reject"`
+	LengthMethod   string  `json:"length_method"    yaml:"length_method"`
 	LengthRatioMin float64 `json:"length_ratio_min" yaml:"length_ratio_min"`
 	LengthRatioMax float64 `json:"length_ratio_max" yaml:"length_ratio_max"`
 }

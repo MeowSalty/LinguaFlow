@@ -203,5 +203,16 @@ func validateProfileConfig(cfg *schema.TranslationProfileConfigData) error {
 			return fmt.Errorf("%w: ruby.preserve_kinds contains invalid kind %q (must be one of phonetic, semantic, creative)", ErrTranslationProfileConfigInvalid, k)
 		}
 	}
+
+	if cfg.QA.Enabled {
+		validLengthMethods := map[string]bool{"char_weight": true, "word_count": true, "": true}
+		if !validLengthMethods[cfg.QA.LengthMethod] {
+			return fmt.Errorf("%w: qa.length_method must be one of char_weight, word_count", ErrTranslationProfileConfigInvalid)
+		}
+		if cfg.QA.LengthRatioMin > 0 && cfg.QA.LengthRatioMax > 0 && cfg.QA.LengthRatioMin > cfg.QA.LengthRatioMax {
+			return fmt.Errorf("%w: qa.length_ratio_min (%v) must not exceed qa.length_ratio_max (%v)", ErrTranslationProfileConfigInvalid, cfg.QA.LengthRatioMin, cfg.QA.LengthRatioMax)
+		}
+	}
+
 	return nil
 }

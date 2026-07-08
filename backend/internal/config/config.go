@@ -47,6 +47,7 @@ type PostprocessConfig struct {
 type QAConfig struct {
 	Enabled        bool    `yaml:"enabled"`
 	AutoReject     bool    `yaml:"auto_reject"`
+	LengthMethod   string  `yaml:"length_method"`
 	LengthRatioMin float64 `yaml:"length_ratio_min"`
 	LengthRatioMax float64 `yaml:"length_ratio_max"`
 }

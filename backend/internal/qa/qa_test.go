@@ -54,7 +54,7 @@ func TestUntranslatedChecker(t *testing.T) {
 }
 
 func TestLengthRatioChecker(t *testing.T) {
-	checker := NewLengthRatioChecker(0.2, 3.0)
+	checker := NewLengthRatioChecker(0.2, 3.0, LengthMethodCharWeight)
 
 	tests := []struct {
 		name     string
@@ -110,7 +110,7 @@ func TestLengthRatioChecker(t *testing.T) {
 }
 
 func TestLengthRatioChecker_MinRatioZeroDisablesShortCheck(t *testing.T) {
-	checker := NewLengthRatioChecker(0, 3.0)
+	checker := NewLengthRatioChecker(0, 3.0, LengthMethodCharWeight)
 
 	segments := []CheckInput{
 		{Index: 0, SourceText: "This is a long sentence with many words", TargetText: "短"},
@@ -123,7 +123,7 @@ func TestLengthRatioChecker_MinRatioZeroDisablesShortCheck(t *testing.T) {
 }
 
 func TestLengthRatioChecker_NegativeMinRatioFallsBack(t *testing.T) {
-	checker := NewLengthRatioChecker(-1, 3.0)
+	checker := NewLengthRatioChecker(-1, 3.0, LengthMethodCharWeight)
 
 	segments := []CheckInput{
 		{Index: 0, SourceText: "This is a long sentence with many words", TargetText: "短"},
@@ -136,7 +136,7 @@ func TestLengthRatioChecker_NegativeMinRatioFallsBack(t *testing.T) {
 }
 
 func TestLengthRatioChecker_ZeroMaxRatioDisablesLongCheck(t *testing.T) {
-	checker := NewLengthRatioChecker(0.2, 0)
+	checker := NewLengthRatioChecker(0.2, 0, LengthMethodCharWeight)
 
 	segments := []CheckInput{
 		{Index: 0, SourceText: "Hello World", TargetText: "这是一个非常非常非常非常非常非常非常非常非常非常非常长的译文"},
@@ -149,7 +149,7 @@ func TestLengthRatioChecker_ZeroMaxRatioDisablesLongCheck(t *testing.T) {
 }
 
 func TestLengthRatioChecker_NegativeMaxRatioFallsBack(t *testing.T) {
-	checker := NewLengthRatioChecker(0.2, -1)
+	checker := NewLengthRatioChecker(0.2, -1, LengthMethodCharWeight)
 
 	segments := []CheckInput{
 		{Index: 0, SourceText: "Hello World", TargetText: "这是一个非常非常非常非常非常非常非常非常非常非常非常长的译文"},
@@ -324,5 +324,81 @@ func TestIsCJK(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("isCJK(%q) = %v, want %v", tt.r, got, tt.want)
 		}
+	}
+}
+
+func TestCountWords(t *testing.T) {
+	tests := []struct {
+		text string
+		want int
+	}{
+		{"Hello", 1},
+		{"Hello World", 2},
+		{"你好", 2},
+		{"你好世界", 4},
+		{"Hello你好世界", 5},
+		{"", 0},
+		{"   ", 0},
+		{" a  b  c ", 3},
+	}
+	for _, tt := range tests {
+		got := countWords(tt.text)
+		if got != tt.want {
+			t.Errorf("countWords(%q) = %d, want %d", tt.text, got, tt.want)
+		}
+	}
+}
+
+func TestLengthRatioChecker_WordCountMethod(t *testing.T) {
+	checker := NewLengthRatioChecker(0.3, 2.5, LengthMethodWordCount)
+
+	tests := []struct {
+		name     string
+		segments []CheckInput
+		want     int
+	}{
+		{
+			name: "zh to en normal",
+			segments: []CheckInput{
+				{Index: 0, SourceText: "你好世界", TargetText: "Hello World"},
+			},
+			want: 0,
+		},
+		{
+			name: "en to zh normal",
+			segments: []CheckInput{
+				{Index: 0, SourceText: "Hello World", TargetText: "你好世界"},
+			},
+			want: 0,
+		},
+		{
+			name: "zh to en too short",
+			segments: []CheckInput{
+				{Index: 0, SourceText: "这是一段很长的句子用于测试", TargetText: "test"},
+			},
+			want: 1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			issues := checker.Check(context.Background(), tt.segments)
+			if len(issues) != tt.want {
+				t.Errorf("got %d issues, want %d", len(issues), tt.want)
+			}
+		})
+	}
+}
+
+func TestLengthRatioChecker_EmptyMethodDefaultsToCharWeight(t *testing.T) {
+	checker := NewLengthRatioChecker(0.2, 3.0, "")
+
+	segments := []CheckInput{
+		{Index: 0, SourceText: "Hello World", TargetText: "你好世界"},
+	}
+
+	issues := checker.Check(context.Background(), segments)
+	if len(issues) != 0 {
+		t.Errorf("empty method should default to char_weight, got %d issues", len(issues))
 	}
 }
