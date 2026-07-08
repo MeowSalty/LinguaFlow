@@ -39,7 +39,6 @@ interface FormModel {
 // ── 默认配置 ──────────────────────────────────────────────────
 
 const CONFIG_DEFAULTS: TranslationProfileConfig = {
-  split: { enabled: true, strategy: 'paragraph', max_chars: 1200 },
   protect: { enabled: true, rules: ['code', 'link', 'placeholder', 'xml'] },
   ruby: {
     enabled: false,
@@ -128,7 +127,6 @@ function extractConfig(profile: TranslationProfile): TranslationProfileConfig {
   const src = profile.config
   if (!src) return deepClone(CONFIG_DEFAULTS)
   return {
-    split: { ...CONFIG_DEFAULTS.split, ...src.split },
     protect: {
       ...CONFIG_DEFAULTS.protect,
       ...src.protect,
@@ -406,9 +404,6 @@ onMounted(() => {
 
           <!-- 专属摘要：配置特征标签 -->
           <div class="flex flex-wrap gap-1.5">
-            <NTag v-if="item.config?.split?.enabled" size="small" :bordered="false">
-              {{ t('translationProfiles.feature.split') }}: {{ item.config.split.strategy }}
-            </NTag>
             <NTag v-if="item.config?.protect?.enabled" size="small" :bordered="false">
               {{ t('translationProfiles.feature.protect') }}:
               {{ item.config.protect.rules?.length ?? 0 }}

@@ -139,7 +139,10 @@ const handleTranslate = (segment: Segment): void => {
   emit('translate', segment)
 }
 
-const handleUpdateInlineEditForm = (field: 'source_text' | 'target_text', value: string): void => {
+const handleUpdateInlineEditForm = (
+  field: 'source_text' | 'target_text' | 'comment',
+  value: string,
+): void => {
   inlineEditForm[field] = value
 }
 
