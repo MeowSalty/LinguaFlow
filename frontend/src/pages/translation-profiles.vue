@@ -66,6 +66,7 @@ const CONFIG_DEFAULTS: TranslationProfileConfig = {
   qa: {
     enabled: false,
     auto_reject: false,
+    length_method: 'char_weight',
     length_ratio_min: 0,
     length_ratio_max: 0,
   },
@@ -84,6 +85,7 @@ const { t } = useI18n()
 // ── 表单状态 ──────────────────────────────────────────────────
 
 const formRef = ref<FormInst | null>(null)
+const configEditorRef = ref<InstanceType<typeof ProfileConfigEditor> | null>(null)
 const drawerVisible = ref(false)
 const editingItem = ref<TranslationProfile | null>(null)
 const deleteModalVisible = ref(false)
@@ -115,6 +117,8 @@ const drawerTitle = computed(() =>
     ? t('translationProfiles.actions.edit')
     : t('translationProfiles.actions.create'),
 )
+
+const hasConfigError = computed(() => Boolean(configEditorRef.value?.lengthRatioError))
 
 const rules = computed<FormRules>(() => ({
   name: [
@@ -151,6 +155,7 @@ function extractConfig(profile: TranslationProfile): TranslationProfileConfig {
     qa: {
       enabled: src.qa?.enabled ?? CONFIG_DEFAULTS.qa!.enabled,
       auto_reject: src.qa?.auto_reject ?? CONFIG_DEFAULTS.qa!.auto_reject,
+      length_method: src.qa?.length_method ?? CONFIG_DEFAULTS.qa!.length_method,
       length_ratio_min: src.qa?.length_ratio_min ?? CONFIG_DEFAULTS.qa!.length_ratio_min,
       length_ratio_max: src.qa?.length_ratio_max ?? CONFIG_DEFAULTS.qa!.length_ratio_max,
     },
@@ -515,6 +520,7 @@ onMounted(() => {
               {{ t('translationProfiles.form.translationConfig') }}
             </span>
             <ProfileConfigEditor
+              ref="configEditorRef"
               :config="formModel.config"
               :disabled="isSystemScope"
               @update:config="formModel.config = $event"
@@ -531,6 +537,7 @@ onMounted(() => {
               v-if="!isSystemScope"
               type="primary"
               :loading="store.creating || store.updating"
+              :disabled="hasConfigError"
               @click="onSubmit"
             >
               {{

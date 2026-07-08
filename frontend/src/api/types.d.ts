@@ -1299,7 +1299,7 @@ export interface components {
             segment_index: number;
             /** @enum {string} */
             severity: "warning" | "error";
-            /** @description 问题代码（empty_target, untranslated, placeholder_missing, length_ratio, duplicate） */
+            /** @description 问题代码（untranslated, length_ratio, duplicate） */
             code: string;
             message: string;
         };
@@ -2224,14 +2224,20 @@ export interface components {
              */
             auto_reject: boolean;
             /**
+             * @description 长度计算方式。char_weight: CJK 字符×2 拉丁字符×1；word_count: CJK 每字 1 词拉丁每词 1 词
+             * @default char_weight
+             * @enum {string}
+             */
+            length_method: "char_weight" | "word_count";
+            /**
              * Format: double
-             * @description 译文最短长度比（加权），0 表示不检测
+             * @description 译文/原文最短长度比，0 表示不检测
              * @default 0
              */
             length_ratio_min: number;
             /**
              * Format: double
-             * @description 译文最长长度比（加权），0 表示不检测
+             * @description 译文/原文最长长度比，0 表示不检测
              * @default 0
              */
             length_ratio_max: number;
