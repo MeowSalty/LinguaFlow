@@ -16,8 +16,6 @@ defineProps<{
   showComment: boolean
   isEditing: boolean
   editForm: SegmentFormModel
-  isCommentOpen: boolean
-  commentText: string
   isSaving: boolean
 }>()
 
@@ -26,9 +24,6 @@ const emit = defineEmits<{
   cancelEdit: []
   saveEdit: [segment: Segment]
   openComment: [segment: Segment]
-  saveComment: [segment: Segment]
-  closeComment: []
-  updateCommentText: [value: string]
   updateEditField: [field: 'source_text' | 'target_text' | 'comment', value: string]
   translate: [segment: Segment]
 }>()
