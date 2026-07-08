@@ -530,6 +530,7 @@ const messages = {
         executionPlan: '执行计划',
         resources: '资源',
         segments: '段落',
+        skipped: '跳过',
         trigger: '触发方式',
         error: '错误信息',
         stage: '阶段',
@@ -569,6 +570,7 @@ const messages = {
         startingSoon: '即将开始',
         queued: '排队中，前面有 {ahead} 个任务',
         running: '{stage}{completed}/{total} 段落',
+        runningWithSkipped: '{stage}{completed}/{total} 段落（跳过 {skipped}）',
         completed: '翻译完成',
         failed: '翻译失败',
         cancelled: '已取消',
@@ -584,6 +586,13 @@ const messages = {
       speed: {
         verySlow: '速度较慢',
         perMinute: '{count} 段落/分钟',
+      },
+      // 统计标签
+      stats: {
+        completed: '已完成',
+        skipped: '已跳过',
+        failed: '已失败',
+        total: '总计',
       },
       // 事件日志
       events: {

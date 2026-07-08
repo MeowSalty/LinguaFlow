@@ -153,13 +153,22 @@ const emit = defineEmits<{
           {
             title: t('workspace.job.columns.segments'),
             key: 'segments',
-            width: 90,
-            render: (row: ApiSchemas['TranslationJobResource']) =>
-              h(
+            width: 120,
+            render: (row: ApiSchemas['TranslationJobResource']) => {
+              const skipped = row.skipped_segments ?? 0
+              if (skipped > 0) {
+                return h('span', { class: 'font-mono tabular-nums whitespace-nowrap text-xs' }, [
+                  h('span', { class: 'text-lf-text-strong' }, `${row.completed_segments}`),
+                  h('span', { class: 'text-lf-text-muted' }, ` +${skipped} `),
+                  h('span', { class: 'text-lf-text-muted' }, `/ ${row.segment_count}`),
+                ])
+              }
+              return h(
                 'span',
-                { class: 'font-mono tabular-nums whitespace-nowrap' },
+                { class: 'font-mono tabular-nums whitespace-nowrap text-xs' },
                 { default: () => `${row.completed_segments}/${row.segment_count}` },
-              ),
+              )
+            },
           },
           {
             title: t('workspace.job.columns.error'),

@@ -1464,9 +1464,10 @@ export interface components {
             resource_id: number;
             /** @enum {string} */
             status: "pending" | "running" | "completed" | "failed" | "cancelled";
-            segment_ids?: number[];
             segment_count: number;
             completed_segments: number;
+            /** @description 被系统跳过的段落数 */
+            skipped_segments: number;
             output_path?: string;
             error_message?: string;
             resource?: components["schemas"]["Resource"];
@@ -1489,35 +1490,41 @@ export interface components {
         TranslationJob: {
             id: number;
             project_id: number;
+            created_by?: {
+                id?: number;
+                username?: string;
+            };
             execution_plan_id: number;
             /** @enum {string} */
             status: "pending" | "running" | "completed" | "failed" | "cancelled";
             /** @enum {string} */
             trigger_type: "manual" | "file_update" | "glossary_change" | "web_edit";
+            /** @description 翻译执行配置快照（已脱敏，不含 API 密钥） */
             translation_config?: {
                 [key: string]: unknown;
             };
-            resource_count: number;
-            completed_resources: number;
-            failed_resources: number;
-            /** @description 总段落数（创建时为选中的 segment 数，ReconcileJob 修正为实际翻译量） */
-            total_segments: number;
-            /** @description 实际需要翻译的段落数（ReconcileJob 从各资源的 stage_total 聚合，执行中动态更新） */
-            stage_total?: number;
-            completed_segments: number;
             error_message?: string;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
+            progress: components["schemas"]["TranslationJobProgress"];
             job_resources?: components["schemas"]["TranslationJobResource"][];
             /**
              * Format: date-time
              * @description 任务开始执行的时间
              */
             started_at?: string;
-            /** @description 当前活跃的执行阶段名称（聚合自 JobResource） */
-            current_stage?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        TranslationJobProgress: {
+            total_resources: number;
+            completed_resources: number;
+            failed_resources: number;
+            /** @description 总段落数（创建时选中的 segment 数） */
+            total_segments: number;
+            completed_segments: number;
+            /** @description 被系统跳过的段落数（已翻译、空文本、纯占位符等） */
+            skipped_segments: number;
             /** @description 在队列中的位置（1-based），null 表示不在队列中 */
             queue_position?: number | null;
             /** @description 当前队列中的任务总数 */

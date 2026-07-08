@@ -72,11 +72,11 @@ export const getJobTriggerLabel = (trigger: TranslationJob['trigger_type']): str
  * 计算任务进度百分比
  */
 export const getJobProgress = (job: TranslationJob): number => {
-  if (job.total_segments <= 0) {
-    return job.status === 'completed' ? 100 : 0
-  }
+  if (job.status === 'completed') return 100
+  if (job.status === 'failed' || job.status === 'cancelled') return 0
+  if (job.progress.total_segments <= 0) return 0
 
-  return Math.round((job.completed_segments / job.total_segments) * 100)
+  return Math.round((job.progress.completed_segments / job.progress.total_segments) * 100)
 }
 
 /**
@@ -125,21 +125,24 @@ export const getStageLabel = (stage: string | undefined): string => {
  */
 export const getJobProgressText = (job: TranslationJob): string => {
   if (job.status === 'pending') {
-    if (job.queue_position != null && job.queue_position > 1) {
-      return t('workspace.job.progress.queued', { ahead: job.queue_position - 1 })
+    if (job.progress.queue_position != null && job.progress.queue_position > 1) {
+      return t('workspace.job.progress.queued', { ahead: job.progress.queue_position - 1 })
     }
-    if (job.queue_position === 1) {
+    if (job.progress.queue_position === 1) {
       return t('workspace.job.progress.startingSoon')
     }
     return t('workspace.job.progress.waiting')
   }
 
   if (job.status === 'running') {
-    const stage = job.current_stage ? `${getStageLabel(job.current_stage)} · ` : ''
-    return t('workspace.job.progress.running', {
-      stage,
-      completed: job.completed_segments,
-      total: job.total_segments,
+    const skipped = job.progress.skipped_segments
+    const key =
+      skipped > 0 ? 'workspace.job.progress.runningWithSkipped' : 'workspace.job.progress.running'
+    return t(key, {
+      stage: '',
+      completed: job.progress.completed_segments,
+      total: job.progress.total_segments,
+      skipped,
     })
   }
 
@@ -156,14 +159,14 @@ export const getJobProgressText = (job: TranslationJob): string => {
  * 返回 null 表示无法计算（未开始、无完成段落、已完成）。
  */
 export const calculateJobETA = (job: TranslationJob): number | null => {
-  if (!job.started_at || job.completed_segments < 3) return null
+  if (!job.started_at || job.progress.completed_segments < 3) return null
   if (job.status !== 'running') return null
 
   const elapsed = (Date.now() - new Date(job.started_at).getTime()) / 1000
   if (elapsed <= 0) return null
 
-  const speed = job.completed_segments / elapsed
-  const remaining = job.total_segments - job.completed_segments
+  const speed = job.progress.completed_segments / elapsed
+  const remaining = job.progress.total_segments - job.progress.completed_segments
   return remaining / speed
 }
 
@@ -189,13 +192,13 @@ export const formatETA = (seconds: number | null): string => {
  * 建议在 completed_segments >= 3 后再展示。
  */
 export const calculateJobSpeed = (job: TranslationJob): number | null => {
-  if (!job.started_at || job.completed_segments < 3) return null
+  if (!job.started_at || job.progress.completed_segments < 3) return null
   if (job.status !== 'running') return null
 
   const elapsed = (Date.now() - new Date(job.started_at).getTime()) / 1000
   if (elapsed <= 0) return null
 
-  return (job.completed_segments / elapsed) * 60 // 转为 段落/分钟
+  return (job.progress.completed_segments / elapsed) * 60 // 转为 段落/分钟
 }
 
 /** 将速度格式化为可读文案，如 "3.2 段落/分钟" */
