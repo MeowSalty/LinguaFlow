@@ -1,5 +1,5 @@
 import type { DataTableColumns } from 'naive-ui'
-import { NButton, NInput, NPopover, NSpace, NTag, NText } from 'naive-ui'
+import { NButton, NInput, NSpace, NTag, NText } from 'naive-ui'
 import type { ComputedRef, Ref } from 'vue'
 import { computed, h } from 'vue'
 
@@ -45,7 +45,7 @@ export interface SegmentColumnDeps {
   saveInlineComment: (segment: Segment) => Promise<void>
   closeInlineComment: () => void
   updateCommentText: (value: string) => void
-  updateEditFormField: (field: 'source_text' | 'target_text', value: string) => void
+  updateEditFormField: (field: 'source_text' | 'target_text' | 'comment', value: string) => void
 
   // ── 外部状态 ──
   editingSegmentIds: Ref<number[]>
@@ -202,50 +202,13 @@ export function useSegmentColumns(
           ...(config.value.showComment
             ? [
                 h(
-                  NPopover,
+                  NButton,
                   {
-                    show: deps.inlineCommentVisible.value === row.id,
-                    trigger: 'click',
-                    placement: 'bottom',
-                    'onUpdate:show': (show: boolean) => {
-                      if (show) {
-                        deps.openInlineComment(row)
-                      } else {
-                        deps.closeInlineComment()
-                      }
-                    },
+                    size: 'small',
+                    quaternary: true,
+                    onClick: () => deps.openInlineComment(row),
                   },
-                  {
-                    trigger: () =>
-                      h(
-                        NButton,
-                        {
-                          size: 'small',
-                          quaternary: true,
-                        },
-                        { default: () => t('workspace.segment.actions.comment') },
-                      ),
-                    default: () =>
-                      h('div', { class: 'w-64 space-y-3' }, [
-                        h(NInput, {
-                          value: deps.inlineCommentText.value,
-                          type: 'textarea',
-                          autosize: { minRows: 2, maxRows: 4 },
-                          placeholder: t('workspace.segment.form.comment'),
-                          'onUpdate:value': (val: string) => deps.updateCommentText(val),
-                        }),
-                        h(
-                          NButton,
-                          {
-                            size: 'small',
-                            type: 'primary',
-                            block: true,
-                            onClick: () => deps.saveInlineComment(row),
-                          },
-                          { default: () => t('workspace.common.save') },
-                        ),
-                      ]),
-                  },
+                  { default: () => t('workspace.segment.actions.comment') },
                 ),
               ]
             : []),

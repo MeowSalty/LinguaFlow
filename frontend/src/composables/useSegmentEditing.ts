@@ -89,8 +89,6 @@ export function useSegmentEditing(
 
     try {
       await workspace.updateSegment(projectId.value, activeResourceId.value, segment.id, {
-        source_text: segment.source_text,
-        target_text: segment.target_text || undefined,
         comment: inlineCommentText.value || undefined,
       })
       inlineCommentVisible.value = null
