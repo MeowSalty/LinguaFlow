@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import type { DataTableRowKey } from 'naive-ui'
-import { NButton, NDataTable, NEmpty, NInput, NModal, NSpin } from 'naive-ui'
+import { NButton, NDataTable, NEmpty, NSpin } from 'naive-ui'
 import { ref, toRef, computed } from 'vue'
 
 import type { ApiSchemas } from '@/api/client'
@@ -37,6 +37,7 @@ const emit = defineEmits<{
   startInlineEdit: [segment: Segment]
   cancelInlineEdit: []
   saveInlineEdit: [segment: Segment]
+  saveAndEditNext: [segment: Segment]
   openInlineComment: [segment: Segment]
   saveInlineComment: [segment: Segment]
   closeInlineComment: []
@@ -68,6 +69,10 @@ const deps: SegmentColumnDeps = {
     emit('saveInlineEdit', segment)
     return Promise.resolve()
   },
+  saveAndEditNext: (segment) => {
+    emit('saveAndEditNext', segment)
+    return Promise.resolve()
+  },
   openInlineComment: (segment) => emit('openInlineComment', segment),
   saveInlineComment: (segment) => {
     emit('saveInlineComment', segment)
@@ -79,11 +84,15 @@ const deps: SegmentColumnDeps = {
   onTranslate: (segment) => emit('translate', segment),
 }
 
-// ── 评论弹窗当前段落 ──
-const commentSegment = computed<Segment | undefined>(() =>
-  props.segments.find((s) => s.id === props.inlineCommentVisible),
-)
 const columns = useSegmentColumns(configRef, deps)
+
+const scrollX = computed(() => {
+  const base = 50 + 280 + 280 + 110 + 160 // index + source + target + status + actions
+  const selection = props.showSelection ? 48 : 0
+  const quality = 100
+  const updatedAt = props.showUpdatedAt ? 170 : 0
+  return selection + base + quality + updatedAt
+})
 
 // ── 行选择 ──
 const selectedSegmentIds = ref<DataTableRowKey[]>([])
@@ -112,7 +121,7 @@ defineExpose({
         :data="segments"
         :loading="loading"
         :row-key="(row: Segment) => row.id"
-        :scroll-x="1040"
+        :scroll-x="scrollX"
         :checked-row-keys="selectedSegmentIds"
         @update:checked-row-keys="handleSelectionChange"
       />
@@ -137,11 +146,17 @@ defineExpose({
           :is-editing="inlineEditingSegmentId === segment.id"
           :edit-form="inlineEditForm"
           :is-saving="editingSegmentIds.includes(segment.id)"
+          :is-comment-visible="inlineCommentVisible === segment.id"
+          :comment-text="inlineCommentText"
           @start-edit="emit('startInlineEdit', segment)"
           @cancel-edit="emit('cancelInlineEdit')"
           @save-edit="emit('saveInlineEdit', segment)"
+          @save-and-next="emit('saveAndEditNext', segment)"
           @open-comment="emit('openInlineComment', segment)"
+          @save-comment="emit('saveInlineComment', segment)"
+          @close-comment="emit('closeInlineComment')"
           @update-edit-field="(field, val) => emit('update:inlineEditForm', field, val)"
+          @update-comment-text="(val) => emit('update:inlineCommentText', val)"
           @translate="emit('translate', segment)"
         />
       </template>
@@ -161,43 +176,5 @@ defineExpose({
       class="py-8"
       :description="t('workspace.segment.empty')"
     />
-
-    <!-- 评论编辑弹窗 -->
-    <NModal
-      :show="inlineCommentVisible !== null"
-      preset="card"
-      :title="t('workspace.segment.actions.comment')"
-      class="max-w-md"
-      :bordered="false"
-      :segmented="{ content: true, footer: true }"
-      @update:show="
-        (show: boolean) => {
-          if (!show) emit('closeInlineComment')
-        }
-      "
-    >
-      <NInput
-        :value="inlineCommentText"
-        type="textarea"
-        :autosize="{ minRows: 3, maxRows: 6 }"
-        :placeholder="t('workspace.segment.form.comment')"
-        @update:value="(val: string) => emit('update:inlineCommentText', val)"
-      />
-      <template #footer>
-        <div class="flex justify-end gap-2">
-          <NButton size="small" @click="emit('closeInlineComment')">
-            {{ t('workspace.segment.actions.cancelInline') }}
-          </NButton>
-          <NButton
-            size="small"
-            type="primary"
-            :disabled="!commentSegment"
-            @click="commentSegment && emit('saveInlineComment', commentSegment)"
-          >
-            {{ t('workspace.common.save') }}
-          </NButton>
-        </div>
-      </template>
-    </NModal>
   </div>
 </template>

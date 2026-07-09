@@ -118,3 +118,15 @@ body {
   transition-duration: 160ms;
   transition-timing-function: ease;
 }
+
+/* 空译文占位样式 */
+.target-empty {
+  border: 1px dashed var(--lf-border-soft);
+  border-radius: 6px;
+  padding: 8px 12px;
+  background: var(--lf-info-soft);
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}

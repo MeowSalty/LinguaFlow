@@ -1,7 +1,14 @@
 import type { DataTableColumns } from 'naive-ui'
-import { NButton, NInput, NSpace, NTag, NText, NTooltip } from 'naive-ui'
+import { NButton, NIcon, NInput, NSpace, NTag, NText, NTooltip } from 'naive-ui'
 import type { ComputedRef, Ref, VNode } from 'vue'
 import { computed, h } from 'vue'
+
+import IconCarbonEdit from '~icons/carbon/edit'
+import IconCarbonChat from '~icons/carbon/chat'
+import IconCarbonLanguage from '~icons/carbon/language'
+import IconCarbonCheckmark from '~icons/carbon/checkmark'
+import IconCarbonClose from '~icons/carbon/close'
+import IconCarbonChevronDown from '~icons/carbon/chevron-down'
 
 import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
@@ -41,6 +48,7 @@ export interface SegmentColumnDeps {
   startInlineEdit: (segment: Segment) => void
   cancelInlineEdit: () => void
   saveInlineEdit: (segment: Segment) => Promise<void>
+  saveAndEditNext: (segment: Segment) => Promise<void>
   openInlineComment: (segment: Segment) => void
   saveInlineComment: (segment: Segment) => Promise<void>
   closeInlineComment: () => void
@@ -78,24 +86,16 @@ export function useSegmentColumns(
     columns.push({
       title: '#',
       key: 'segment_index',
-      width: 70,
+      width: 50,
+      align: 'center',
     })
 
     // ── Source Text 列 ──
     columns.push({
       title: t('workspace.segment.columns.source'),
       key: 'source_text',
-      minWidth: 220,
+      minWidth: 280,
       render: (row) => {
-        if (deps.inlineEditingSegmentId.value === row.id) {
-          return h(NInput, {
-            value: deps.inlineEditForm.source_text,
-            type: 'textarea',
-            autosize: { minRows: 2, maxRows: 6 },
-            'onUpdate:value': (val: string) => deps.updateEditFormField('source_text', val),
-          })
-        }
-
         if (config.value.textRenderMode === 'html') {
           return h(HtmlContent, { content: row.source_text, maxLines: 4 })
         }
@@ -107,26 +107,91 @@ export function useSegmentColumns(
     columns.push({
       title: t('workspace.segment.columns.target'),
       key: 'target_text',
-      minWidth: 220,
+      minWidth: 280,
       render: (row) => {
+        const elements: VNode[] = []
+
+        // 编辑态：译文输入框
         if (deps.inlineEditingSegmentId.value === row.id) {
-          return h(NInput, {
-            value: deps.inlineEditForm.target_text,
-            type: 'textarea',
-            autosize: { minRows: 2, maxRows: 6 },
-            placeholder: t('workspace.segment.form.target'),
-            'onUpdate:value': (val: string) => deps.updateEditFormField('target_text', val),
-          })
+          elements.push(
+            h(NInput, {
+              value: deps.inlineEditForm.target_text,
+              type: 'textarea',
+              autosize: { minRows: 2, maxRows: 6 },
+              placeholder: t('workspace.segment.form.target'),
+              'onUpdate:value': (val: string) => deps.updateEditFormField('target_text', val),
+            }),
+          )
+        } else {
+          // 非编辑态：译文展示
+          if (!row.target_text) {
+            elements.push(
+              h('div', { class: 'target-empty' }, [
+                h(NText, { depth: 3 }, { default: () => t('workspace.segment.emptyTarget') }),
+              ]),
+            )
+          } else if (config.value.textRenderMode === 'html') {
+            elements.push(h(HtmlContent, { content: row.target_text, maxLines: 4 }))
+          } else {
+            elements.push(h('span', null, row.target_text))
+          }
         }
 
-        if (!row.target_text) {
-          return h(NText, { depth: 3 }, { default: () => t('workspace.segment.emptyTarget') })
+        // 评论区域（行内展开）
+        if (config.value.showComment && deps.inlineCommentVisible.value === row.id) {
+          elements.push(
+            h(
+              'div',
+              { class: 'mt-2 rounded-lg border border-lf-border-soft bg-lf-surface-muted p-3' },
+              [
+                h(
+                  'div',
+                  { class: 'mb-2 text-xs text-lf-text-muted' },
+                  t('workspace.segment.form.comment'),
+                ),
+                h(NInput, {
+                  value: deps.inlineCommentText.value,
+                  type: 'textarea',
+                  autosize: { minRows: 2, maxRows: 4 },
+                  placeholder: t('workspace.segment.form.comment'),
+                  'onUpdate:value': (val: string) => deps.updateCommentText(val),
+                }),
+                h('div', { class: 'mt-2 flex justify-end gap-2' }, [
+                  h(
+                    NButton,
+                    { size: 'small', onClick: () => deps.closeInlineComment() },
+                    { default: () => t('workspace.segment.actions.cancelInline') },
+                  ),
+                  h(
+                    NButton,
+                    {
+                      size: 'small',
+                      type: 'primary',
+                      onClick: () => deps.saveInlineComment(row),
+                    },
+                    { default: () => t('workspace.common.save') },
+                  ),
+                ]),
+              ],
+            ),
+          )
         }
 
-        if (config.value.textRenderMode === 'html') {
-          return h(HtmlContent, { content: row.target_text, maxLines: 4 })
+        // 评论摘要（有评论时显示）
+        if (
+          config.value.showComment &&
+          row.review_comment &&
+          deps.inlineCommentVisible.value !== row.id
+        ) {
+          elements.push(
+            h('div', { class: 'mt-1 flex items-center gap-1 text-xs text-lf-text-muted' }, [
+              h(NIcon, { size: 14 }, { default: () => h(IconCarbonChat) }),
+              h('span', { class: 'truncate max-w-[200px]' }, row.review_comment),
+            ]),
+          )
         }
-        return row.target_text
+
+        return elements.length === 1 ? elements[0] : h('div', { class: 'space-y-1' }, elements)
       },
     })
 
@@ -211,71 +276,128 @@ export function useSegmentColumns(
     columns.push({
       title: t('workspace.common.actions'),
       key: 'actions',
-      width: 220,
+      width: 160,
       fixed: 'right',
       render: (row) => {
         if (deps.inlineEditingSegmentId.value === row.id) {
           return h(NSpace, { size: 4, wrap: false }, () => [
             h(
-              NButton,
+              NTooltip,
+              { placement: 'top' },
               {
-                size: 'small',
-                quaternary: true,
-                onClick: () => deps.cancelInlineEdit(),
+                trigger: () =>
+                  h(
+                    NButton,
+                    {
+                      size: 'small',
+                      quaternary: true,
+                      onClick: () => deps.cancelInlineEdit(),
+                    },
+                    { icon: () => h(NIcon, null, { default: () => h(IconCarbonClose) }) },
+                  ),
+                default: () => t('workspace.segment.actions.cancelInline'),
               },
-              { default: () => t('workspace.segment.actions.cancelInline') },
             ),
             h(
-              NButton,
+              NTooltip,
+              { placement: 'top' },
               {
-                size: 'small',
-                type: 'primary',
-                loading: deps.editingSegmentIds.value.includes(row.id),
-                onClick: () => deps.saveInlineEdit(row),
+                trigger: () =>
+                  h(
+                    NButton,
+                    {
+                      size: 'small',
+                      type: 'primary',
+                      loading: deps.editingSegmentIds.value.includes(row.id),
+                      onClick: () => deps.saveInlineEdit(row),
+                    },
+                    { icon: () => h(NIcon, null, { default: () => h(IconCarbonCheckmark) }) },
+                  ),
+                default: () => t('workspace.segment.actions.saveInline'),
               },
-              { default: () => t('workspace.segment.actions.saveInline') },
+            ),
+            h(
+              NTooltip,
+              { placement: 'top' },
+              {
+                trigger: () =>
+                  h(
+                    NButton,
+                    {
+                      size: 'small',
+                      type: 'primary',
+                      loading: deps.editingSegmentIds.value.includes(row.id),
+                      onClick: () => deps.saveAndEditNext(row),
+                    },
+                    {
+                      icon: () => h(NIcon, null, { default: () => h(IconCarbonChevronDown) }),
+                    },
+                  ),
+                default: () => t('workspace.segment.actions.saveAndNext'),
+              },
             ),
           ])
         }
 
         return h(NSpace, { size: 4, wrap: false }, () => [
-          // 编辑按钮
           h(
-            NButton,
+            NTooltip,
+            { placement: 'top' },
             {
-              size: 'small',
-              quaternary: true,
-              type: 'primary',
-              loading: deps.editingSegmentIds.value.includes(row.id),
-              onClick: () => deps.startInlineEdit(row),
-            },
-            { default: () => t('workspace.segment.actions.edit') },
-          ),
-
-          // 评论按钮（条件：showComment）
-          ...(config.value.showComment
-            ? [
+              trigger: () =>
                 h(
                   NButton,
                   {
                     size: 'small',
                     quaternary: true,
-                    onClick: () => deps.openInlineComment(row),
+                    type: 'primary',
+                    loading: deps.editingSegmentIds.value.includes(row.id),
+                    onClick: () => deps.startInlineEdit(row),
                   },
-                  { default: () => t('workspace.segment.actions.comment') },
+                  { icon: () => h(NIcon, null, { default: () => h(IconCarbonEdit) }) },
+                ),
+              default: () => t('workspace.segment.actions.edit'),
+            },
+          ),
+
+          ...(config.value.showComment
+            ? [
+                h(
+                  NTooltip,
+                  { placement: 'top' },
+                  {
+                    trigger: () =>
+                      h(
+                        NButton,
+                        {
+                          size: 'small',
+                          quaternary: true,
+                          onClick: () => deps.openInlineComment(row),
+                        },
+                        { icon: () => h(NIcon, null, { default: () => h(IconCarbonChat) }) },
+                      ),
+                    default: () => t('workspace.segment.actions.comment'),
+                  },
                 ),
               ]
             : []),
 
-          // 翻译按钮
           h(
-            NButton,
+            NTooltip,
+            { placement: 'top' },
             {
-              size: 'small',
-              quaternary: true,
-              onClick: () => deps.onTranslate(row),
+              trigger: () =>
+                h(
+                  NButton,
+                  {
+                    size: 'small',
+                    quaternary: true,
+                    onClick: () => deps.onTranslate(row),
+                  },
+                  { icon: () => h(NIcon, null, { default: () => h(IconCarbonLanguage) }) },
+                ),
+              default: () => t('workspace.segment.actions.translate'),
             },
-            { default: () => t('workspace.segment.actions.translate') },
           ),
         ])
       },
