@@ -10,6 +10,8 @@ import IconCarbonCheckmark from '~icons/carbon/checkmark'
 import IconCarbonClose from '~icons/carbon/close'
 import IconCarbonChevronDown from '~icons/carbon/chevron-down'
 import IconCarbonCircleDash from '~icons/carbon/circle-dash'
+import IconCarbonWarning from '~icons/carbon/warning'
+import IconCarbonError from '~icons/carbon/error'
 
 import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
@@ -138,6 +140,51 @@ export function useSegmentColumns(
           }
         }
 
+        // 质量问题图标 + 评论摘要（同一行显示）
+        const metaElements: VNode[] = []
+
+        if (row.quality_issues && row.quality_issues.length > 0) {
+          for (const issue of row.quality_issues) {
+            const isError = issue.severity === 'error'
+            metaElements.push(
+              h(
+                NTooltip,
+                {},
+                {
+                  trigger: () =>
+                    h(
+                      NIcon,
+                      { size: 14, color: isError ? '#d03050' : '#f0a020' },
+                      { default: () => h(isError ? IconCarbonError : IconCarbonWarning) },
+                    ),
+                  default: () => issue.message,
+                },
+              ),
+            )
+          }
+        }
+
+        if (
+          config.value.showComment &&
+          row.review_comment &&
+          deps.inlineCommentVisible.value !== row.id
+        ) {
+          metaElements.push(
+            h(NIcon, { size: 14 }, { default: () => h(IconCarbonChat) }),
+            h('span', { class: 'truncate max-w-[200px]' }, row.review_comment),
+          )
+        }
+
+        if (metaElements.length > 0) {
+          elements.push(
+            h(
+              'div',
+              { class: 'mt-1 flex items-center gap-1 text-xs text-lf-text-muted' },
+              metaElements,
+            ),
+          )
+        }
+
         // 评论区域（行内展开）
         if (config.value.showComment && deps.inlineCommentVisible.value === row.id) {
           elements.push(
@@ -178,20 +225,6 @@ export function useSegmentColumns(
           )
         }
 
-        // 评论摘要（有评论时显示）
-        if (
-          config.value.showComment &&
-          row.review_comment &&
-          deps.inlineCommentVisible.value !== row.id
-        ) {
-          elements.push(
-            h('div', { class: 'mt-1 flex items-center gap-1 text-xs text-lf-text-muted' }, [
-              h(NIcon, { size: 14 }, { default: () => h(IconCarbonChat) }),
-              h('span', { class: 'truncate max-w-[200px]' }, row.review_comment),
-            ]),
-          )
-        }
-
         return elements.length === 1 ? elements[0] : h('div', { class: 'space-y-1' }, elements)
       },
     })
@@ -218,60 +251,6 @@ export function useSegmentColumns(
             icon: () => h(NIcon, { size: 14 }, { default: () => h(icon) }),
           },
         )
-      },
-    })
-
-    // ── Quality Issues 列 ──
-    columns.push({
-      title: t('workspace.segment.columns.qualityIssues'),
-      key: 'quality_issues',
-      width: 100,
-      render: (row) => {
-        if (!row.quality_issues || row.quality_issues.length === 0) return null
-        const errorCount = row.quality_issues.filter((i) => i.severity === 'error').length
-        const warningCount = row.quality_issues.filter((i) => i.severity === 'warning').length
-        const tags: VNode[] = []
-        if (errorCount > 0) {
-          tags.push(
-            h(
-              NTooltip,
-              {},
-              {
-                trigger: () =>
-                  h(
-                    NTag,
-                    { size: 'small', type: 'error', round: true },
-                    { default: () => `${errorCount} ${t('workspace.segment.qualityError')}` },
-                  ),
-                default: () =>
-                  row
-                    .quality_issues!.filter((i) => i.severity === 'error')
-                    .map((i) => h('div', { key: i.code }, i.message)),
-              },
-            ),
-          )
-        }
-        if (warningCount > 0) {
-          tags.push(
-            h(
-              NTooltip,
-              {},
-              {
-                trigger: () =>
-                  h(
-                    NTag,
-                    { size: 'small', type: 'warning', round: true },
-                    { default: () => `${warningCount} ${t('workspace.segment.qualityWarning')}` },
-                  ),
-                default: () =>
-                  row
-                    .quality_issues!.filter((i) => i.severity === 'warning')
-                    .map((i) => h('div', { key: i.code }, i.message)),
-              },
-            ),
-          )
-        }
-        return h(NSpace, { size: 4, wrap: false }, () => tags)
       },
     })
 
