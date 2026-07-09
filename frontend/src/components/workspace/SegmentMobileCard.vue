@@ -1,5 +1,7 @@
 <script setup lang="ts">
-import { NButton, NInput, NTag, NText, NTooltip } from 'naive-ui'
+import { NButton, NIcon, NInput, NTag, NText, NTooltip } from 'naive-ui'
+
+import IconCarbonChat from '~icons/carbon/chat'
 
 import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
@@ -17,6 +19,8 @@ defineProps<{
   isEditing: boolean
   editForm: SegmentFormModel
   isSaving: boolean
+  isCommentVisible: boolean
+  commentText: string
 }>()
 
 const emit = defineEmits<{
@@ -25,7 +29,10 @@ const emit = defineEmits<{
   saveEdit: [segment: Segment]
   saveAndNext: [segment: Segment]
   openComment: [segment: Segment]
+  saveComment: [segment: Segment]
+  closeComment: []
   updateEditField: [field: 'source_text' | 'target_text' | 'comment', value: string]
+  updateCommentText: [value: string]
   translate: [segment: Segment]
 }>()
 </script>
@@ -91,7 +98,39 @@ const emit = defineEmits<{
       {{ formatDate(segment.updated_at) }}
     </p>
 
-    <!-- 评论编辑区（编辑态下展示） -->
+    <!-- 评论摘要（有评论时显示） -->
+    <div
+      v-if="showComment && segment.review_comment && !isCommentVisible"
+      class="flex items-center gap-1 text-xs text-lf-text-muted"
+    >
+      <NIcon :size="14" :component="IconCarbonChat" />
+      <span class="truncate">{{ segment.review_comment }}</span>
+    </div>
+
+    <!-- 评论编辑区（行内展开） -->
+    <div
+      v-if="showComment && isCommentVisible"
+      class="rounded-lg border border-lf-border-soft bg-lf-surface-muted p-3"
+    >
+      <p class="mb-2 text-xs text-lf-text-muted">{{ t('workspace.segment.form.comment') }}</p>
+      <NInput
+        :value="commentText"
+        type="textarea"
+        :autosize="{ minRows: 2, maxRows: 4 }"
+        :placeholder="t('workspace.segment.form.comment')"
+        @update:value="(val: string) => emit('updateCommentText', val)"
+      />
+      <div class="mt-2 flex justify-end gap-2">
+        <NButton size="tiny" @click="emit('closeComment')">
+          {{ t('workspace.segment.actions.cancelInline') }}
+        </NButton>
+        <NButton size="tiny" type="primary" @click="emit('saveComment', segment)">
+          {{ t('workspace.common.save') }}
+        </NButton>
+      </div>
+    </div>
+
+    <!-- 编辑态评论 -->
     <div v-if="isEditing" class="pt-1">
       <NInput
         :value="editForm.comment"
