@@ -89,7 +89,9 @@ const emit = defineEmits<{
           :max-lines="4"
         />
         <span v-else-if="segment.target_text">{{ segment.target_text }}</span>
-        <NText v-else depth="3">{{ t('workspace.segment.emptyTarget') }}</NText>
+        <div v-else class="target-empty">
+          <NText depth="3">{{ t('workspace.segment.emptyTarget') }}</NText>
+        </div>
       </template>
     </div>
 
