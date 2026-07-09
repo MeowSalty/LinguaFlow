@@ -94,13 +94,13 @@ type BootstrapConfig struct {
 // StandaloneBootstrapConfig 控制独立自举（pre）：translate 之前独立扫一遍文档，
 // 整篇翻译都能用上抽到的术语；多一次 LLM 调用。
 type StandaloneBootstrapConfig struct {
-	Enabled          bool   `yaml:"enabled"`
-	Template         string `yaml:"template"` // 引用 prompt_templates 中的 key（CLI 用）
-	TemplateContent  string `yaml:"-"`        // 运行时解析后的 bootstrap 模板内容（不序列化）
-	BatchSize        int    `yaml:"batch_size"`
-	Concurrency      int    `yaml:"concurrency"`
-	MaxTermsPerBatch int    `yaml:"max_terms_per_batch"`
-	MinSourceLen     int    `yaml:"min_source_len"`
+	Enabled              bool    `yaml:"enabled"`
+	Template             string  `yaml:"template"` // 引用 prompt_templates 中的 key（CLI 用）
+	TemplateContent      string  `yaml:"-"`        // 运行时解析后的 bootstrap 模板内容（不序列化）
+	BatchSize            int     `yaml:"batch_size"`
+	Concurrency          int     `yaml:"concurrency"`
+	MaxTermsPer1000Chars float64 `yaml:"max_terms_per_1000_chars"`
+	MinSourceLen         int     `yaml:"min_source_len"`
 }
 
 // Bootstrap 模式常量（保留用于向后兼容）。

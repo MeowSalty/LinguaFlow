@@ -21,13 +21,13 @@ type ExecutionRoundConfig struct {
 
 // ExecutionPlanBootstrapConfig 独立自举配置。
 type ExecutionPlanBootstrapConfig struct {
-	Enabled          bool `json:"enabled"             yaml:"enabled"`
-	BackendID        int  `json:"backend_id"          yaml:"backend_id"`
-	PromptTemplateID int  `json:"prompt_template_id"  yaml:"prompt_template_id"`
-	BatchSize        int  `json:"batch_size"          yaml:"batch_size"`
-	Concurrency      int  `json:"concurrency"         yaml:"concurrency"`
-	MaxTermsPerBatch int  `json:"max_terms_per_batch" yaml:"max_terms_per_batch"`
-	MinSourceLen     int  `json:"min_source_len"      yaml:"min_source_len"`
+	Enabled              bool    `json:"enabled"                 yaml:"enabled"`
+	BackendID            int     `json:"backend_id"              yaml:"backend_id"`
+	PromptTemplateID     int     `json:"prompt_template_id"      yaml:"prompt_template_id"`
+	BatchSize            int     `json:"batch_size"              yaml:"batch_size"`
+	Concurrency          int     `json:"concurrency"             yaml:"concurrency"`
+	MaxTermsPer1000Chars float64 `json:"max_terms_per_1000_chars" yaml:"max_terms_per_1000_chars"`
+	MinSourceLen         int     `json:"min_source_len"          yaml:"min_source_len"`
 }
 
 // ExecutionPlanRubyRetryConfig 注音对齐重试配置。

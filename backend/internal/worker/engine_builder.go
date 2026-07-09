@@ -177,12 +177,12 @@ func buildEngineConfig(snapshot *service.JobExecutionSnapshot) *engine.Config {
 
 	if snapshot.Bootstrap != nil {
 		cfg.Glossary.Standalone = config.StandaloneBootstrapConfig{
-			Enabled:          snapshot.Bootstrap.Enabled,
-			TemplateContent:  snapshot.Bootstrap.TemplateContent,
-			BatchSize:        snapshot.Bootstrap.BatchSize,
-			Concurrency:      snapshot.Bootstrap.Concurrency,
-			MaxTermsPerBatch: snapshot.Bootstrap.MaxTermsPerBatch,
-			MinSourceLen:     snapshot.Bootstrap.MinSourceLen,
+			Enabled:              snapshot.Bootstrap.Enabled,
+			TemplateContent:      snapshot.Bootstrap.TemplateContent,
+			BatchSize:            snapshot.Bootstrap.BatchSize,
+			Concurrency:          snapshot.Bootstrap.Concurrency,
+			MaxTermsPer1000Chars: snapshot.Bootstrap.MaxTermsPer1000Chars,
+			MinSourceLen:         snapshot.Bootstrap.MinSourceLen,
 		}
 	}
 

@@ -79,14 +79,14 @@ func TestBootstrap_AddsExtractedTermsToGlossary(t *testing.T) {
 	g := glossary.NewMemory()
 
 	s := &Bootstrap{
-		Backends:         []backend.Backend{fb},
-		Renderer:         newBootstrapRenderer(t),
-		Glossary:         g,
-		BatchSize:        10,
-		Concurrency:      1,
-		MaxTermsPerBatch: 20,
-		MinSourceLen:     2,
-		Logger:           discardLogger(),
+		Backends:             []backend.Backend{fb},
+		Renderer:             newBootstrapRenderer(t),
+		Glossary:             g,
+		BatchSize:            10,
+		Concurrency:          1,
+		MaxTermsPer1000Chars: 25.0,
+		MinSourceLen:         2,
+		Logger:               discardLogger(),
 	}
 	if err := s.Run(context.Background(), doc); err != nil {
 		t.Fatalf("run: %v", err)
@@ -110,14 +110,14 @@ func TestBootstrap_FiltersTooShortTerms(t *testing.T) {
 	g := glossary.NewMemory()
 
 	s := &Bootstrap{
-		Backends:         []backend.Backend{fb},
-		Renderer:         newBootstrapRenderer(t),
-		Glossary:         g,
-		BatchSize:        10,
-		Concurrency:      1,
-		MaxTermsPerBatch: 20,
-		MinSourceLen:     2,
-		Logger:           discardLogger(),
+		Backends:             []backend.Backend{fb},
+		Renderer:             newBootstrapRenderer(t),
+		Glossary:             g,
+		BatchSize:            10,
+		Concurrency:          1,
+		MaxTermsPer1000Chars: 25.0,
+		MinSourceLen:         2,
+		Logger:               discardLogger(),
 	}
 	if err := s.Run(context.Background(), doc); err != nil {
 		t.Fatalf("run: %v", err)
@@ -148,15 +148,15 @@ func TestBootstrap_BatchFailureDoesNotAbortStage(t *testing.T) {
 	g := glossary.NewMemory()
 
 	s := &Bootstrap{
-		Backends:         []backend.Backend{fb},
-		Renderer:         newBootstrapRenderer(t),
-		Glossary:         g,
-		BatchSize:        1,
-		Concurrency:      1, // 顺序，保证第一批先跑
-		MaxTermsPerBatch: 20,
-		MinSourceLen:     2,
-		Retry:            backend.RetryPolicy{MaxAttempts: 1},
-		Logger:           discardLogger(),
+		Backends:             []backend.Backend{fb},
+		Renderer:             newBootstrapRenderer(t),
+		Glossary:             g,
+		BatchSize:            1,
+		Concurrency:          1, // 顺序，保证第一批先跑
+		MaxTermsPer1000Chars: 25.0,
+		MinSourceLen:         2,
+		Retry:                backend.RetryPolicy{MaxAttempts: 1},
+		Logger:               discardLogger(),
 	}
 	if err := s.Run(context.Background(), doc); err != nil {
 		t.Fatalf("run should not fail on single batch error, got: %v", err)

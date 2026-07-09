@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"math"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,16 +20,16 @@ import (
 // 整个 stage 是「尽力而为」：单批失败仅 warn，不阻断 pipeline——下游 translate 仍能
 // 在没有增量术语的情况下跑完。
 type Bootstrap struct {
-	Backends         []backend.Backend
-	Renderer         *prompt.BootstrapRenderer
-	Glossary         glossary.Glossary
-	Retry            backend.RetryPolicy
-	Concurrency      int
-	BatchSize        int
-	MaxTermsPerBatch int
-	MinSourceLen     int
-	Logger           *slog.Logger
-	Reporter         progress.Reporter
+	Backends             []backend.Backend
+	Renderer             *prompt.BootstrapRenderer
+	Glossary             glossary.Glossary
+	Retry                backend.RetryPolicy
+	Concurrency          int
+	BatchSize            int
+	MaxTermsPer1000Chars float64
+	MinSourceLen         int
+	Logger               *slog.Logger
+	Reporter             progress.Reporter
 
 	// Repair 控制 LLM 响应解析的主动修复行为；零值等同 prompt.ParseBootstrapResponse 旧行为。
 	Repair repair.Options
@@ -139,7 +140,7 @@ func (s *Bootstrap) processBatch(ctx context.Context, texts []string, doc *Docum
 		TargetLang: doc.TargetLang,
 		Texts:      texts,
 		Existing:   existing,
-		MaxTerms:   s.MaxTermsPerBatch,
+		MaxTerms:   s.calcMaxTerms(texts),
 	})
 	if err != nil {
 		logger.Warn("bootstrap render failed", "err", err)
@@ -243,4 +244,21 @@ func (s *Bootstrap) glossarySize() int {
 		return l.Len()
 	}
 	return -1
+}
+
+// calcMaxTerms 基于文本字词数动态计算本批最大术语抽取数。
+// 复用 RoundExecutor.calcMaxBootstrapTerms 的公式：
+//
+//	maxTerms = ceil(totalWords / 1000.0 * coeff), 下限 1
+func (s *Bootstrap) calcMaxTerms(texts []string) int {
+	coeff := s.MaxTermsPer1000Chars
+	if coeff <= 0 {
+		coeff = 25.0
+	}
+	totalWords := 0
+	for _, t := range texts {
+		totalWords += CountWords(t)
+	}
+	maxTerms := int(math.Ceil(float64(totalWords) / 1000.0 * coeff))
+	return max(maxTerms, 1)
 }
