@@ -126,16 +126,16 @@ func (e *Engine) buildBootstrapStage() *pipeline.Bootstrap {
 	retry := e.cfg.TranslateDefaults.Retry
 	repairOpts := e.cfg.Repair
 	return &pipeline.Bootstrap{
-		Backends:         e.bootstrapBackends,
-		Renderer:         e.bootstrapRenderer,
-		Glossary:         e.glossary,
-		Retry:            retry,
-		Concurrency:      e.standaloneCfg.Concurrency,
-		BatchSize:        e.standaloneCfg.BatchSize,
-		MaxTermsPerBatch: e.standaloneCfg.MaxTermsPerBatch,
-		MinSourceLen:     e.standaloneCfg.MinSourceLen,
-		Logger:           e.logger,
-		Reporter:         e.reporter,
-		Repair:           repairOpts,
+		Backends:             e.bootstrapBackends,
+		Renderer:             e.bootstrapRenderer,
+		Glossary:             e.glossary,
+		Retry:                retry,
+		Concurrency:          e.standaloneCfg.Concurrency,
+		BatchSize:            e.standaloneCfg.BatchSize,
+		MaxTermsPer1000Chars: e.standaloneCfg.MaxTermsPer1000Chars,
+		MinSourceLen:         e.standaloneCfg.MinSourceLen,
+		Logger:               e.logger,
+		Reporter:             e.reporter,
+		Repair:               repairOpts,
 	}
 }

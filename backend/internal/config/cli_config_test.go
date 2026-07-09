@@ -167,7 +167,7 @@ execution:
     enabled: true
     batch_size: 10
     concurrency: 4
-    max_terms_per_batch: 15
+    max_terms_per_1000_chars: 25.0
     min_source_len: 3
   rounds:
     - name: "首轮"
@@ -232,8 +232,8 @@ execution:
 	if cfg.Execution.Bootstrap.Concurrency != 4 {
 		t.Errorf("execution.bootstrap.concurrency = %d, want 4", cfg.Execution.Bootstrap.Concurrency)
 	}
-	if cfg.Execution.Bootstrap.MaxTermsPerBatch != 15 {
-		t.Errorf("execution.bootstrap.max_terms_per_batch = %d, want 15", cfg.Execution.Bootstrap.MaxTermsPerBatch)
+	if cfg.Execution.Bootstrap.MaxTermsPer1000Chars != 25.0 {
+		t.Errorf("execution.bootstrap.max_terms_per_1000_chars = %v, want 25.0", cfg.Execution.Bootstrap.MaxTermsPer1000Chars)
 	}
 	if cfg.Execution.Bootstrap.MinSourceLen != 3 {
 		t.Errorf("execution.bootstrap.min_source_len = %d, want 3", cfg.Execution.Bootstrap.MinSourceLen)

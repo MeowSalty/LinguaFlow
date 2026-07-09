@@ -126,13 +126,13 @@ type JobExecutionSnapshot struct {
 
 // ExecutionPlanBootstrapSnapshot 独立自举快照。
 type ExecutionPlanBootstrapSnapshot struct {
-	Enabled          bool            `json:"enabled"`
-	Backend          BackendSnapshot `json:"backend"`
-	TemplateContent  string          `json:"template_content"`
-	BatchSize        int             `json:"batch_size"`
-	Concurrency      int             `json:"concurrency"`
-	MaxTermsPerBatch int             `json:"max_terms_per_batch"`
-	MinSourceLen     int             `json:"min_source_len"`
+	Enabled              bool            `json:"enabled"`
+	Backend              BackendSnapshot `json:"backend"`
+	TemplateContent      string          `json:"template_content"`
+	BatchSize            int             `json:"batch_size"`
+	Concurrency          int             `json:"concurrency"`
+	MaxTermsPer1000Chars float64         `json:"max_terms_per_1000_chars"`
+	MinSourceLen         int             `json:"min_source_len"`
 }
 
 // ExecutionPlanRubyRetrySnapshot 注音对齐重试快照。
@@ -383,13 +383,13 @@ func (s *TranslationJobService) validateAndSnapshot(
 
 		snapshot.GlossaryEnabled = true
 		snapshot.Bootstrap = &ExecutionPlanBootstrapSnapshot{
-			Enabled:          true,
-			Backend:          *bootstrapBackendSnap,
-			TemplateContent:  bootstrapPromptSnap.BootstrapContent,
-			BatchSize:        bs.BatchSize,
-			Concurrency:      bs.Concurrency,
-			MaxTermsPerBatch: bs.MaxTermsPerBatch,
-			MinSourceLen:     bs.MinSourceLen,
+			Enabled:              true,
+			Backend:              *bootstrapBackendSnap,
+			TemplateContent:      bootstrapPromptSnap.BootstrapContent,
+			BatchSize:            bs.BatchSize,
+			Concurrency:          bs.Concurrency,
+			MaxTermsPer1000Chars: bs.MaxTermsPer1000Chars,
+			MinSourceLen:         bs.MinSourceLen,
 		}
 	}
 

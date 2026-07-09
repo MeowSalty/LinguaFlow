@@ -126,8 +126,9 @@ func toBootstrapConfigAPI(bs schema.ExecutionPlanBootstrapConfig) ExecutionPlanB
 		BatchSize:        bs.BatchSize,
 		Concurrency:      bs.Concurrency,
 	}
-	if bs.MaxTermsPerBatch > 0 {
-		result.MaxTermsPerBatch = &bs.MaxTermsPerBatch
+	if bs.MaxTermsPer1000Chars > 0 {
+		v := float32(bs.MaxTermsPer1000Chars)
+		result.MaxTermsPer1000Chars = &v
 	}
 	if bs.MinSourceLen > 0 {
 		result.MinSourceLen = &bs.MinSourceLen
@@ -147,8 +148,8 @@ func parseBootstrapConfig(api *ExecutionPlanBootstrapConfig) schema.ExecutionPla
 		BatchSize:        api.BatchSize,
 		Concurrency:      api.Concurrency,
 	}
-	if api.MaxTermsPerBatch != nil {
-		result.MaxTermsPerBatch = *api.MaxTermsPerBatch
+	if api.MaxTermsPer1000Chars != nil {
+		result.MaxTermsPer1000Chars = float64(*api.MaxTermsPer1000Chars)
 	}
 	if api.MinSourceLen != nil {
 		result.MinSourceLen = *api.MinSourceLen

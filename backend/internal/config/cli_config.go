@@ -404,11 +404,11 @@ func defaultCLIConfig() *CLIConfig {
 		},
 		Execution: CLIConfigExecution{
 			Bootstrap: StandaloneBootstrapConfig{
-				Enabled:          false,
-				BatchSize:        20,
-				Concurrency:      2,
-				MaxTermsPerBatch: 20,
-				MinSourceLen:     2,
+				Enabled:              false,
+				BatchSize:            20,
+				Concurrency:          2,
+				MaxTermsPer1000Chars: 25.0,
+				MinSourceLen:         2,
 			},
 			Rounds: []CLIConfigRound{{
 				Name:           "主翻译",

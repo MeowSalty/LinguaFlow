@@ -35,11 +35,11 @@ type Engine struct {
 
 // StandaloneBootstrapParams 是独立自举的运行时参数。
 type StandaloneBootstrapParams struct {
-	TemplateContent  string
-	BatchSize        int
-	Concurrency      int
-	MaxTermsPerBatch int
-	MinSourceLen     int
+	TemplateContent      string
+	BatchSize            int
+	Concurrency          int
+	MaxTermsPer1000Chars float64
+	MinSourceLen         int
 }
 
 // NewWithOptions 按 Options 构造 Engine。rounds 必须非空，每轮 backends 必须非空。
@@ -95,11 +95,11 @@ func NewWithOptions(opts Options) (*Engine, error) {
 		}
 		e.standaloneBootstrap = true
 		e.standaloneCfg = &StandaloneBootstrapParams{
-			TemplateContent:  opts.Config.Glossary.Standalone.TemplateContent,
-			BatchSize:        opts.Config.Glossary.Standalone.BatchSize,
-			Concurrency:      opts.Config.Glossary.Standalone.Concurrency,
-			MaxTermsPerBatch: opts.Config.Glossary.Standalone.MaxTermsPerBatch,
-			MinSourceLen:     opts.Config.Glossary.Standalone.MinSourceLen,
+			TemplateContent:      opts.Config.Glossary.Standalone.TemplateContent,
+			BatchSize:            opts.Config.Glossary.Standalone.BatchSize,
+			Concurrency:          opts.Config.Glossary.Standalone.Concurrency,
+			MaxTermsPer1000Chars: opts.Config.Glossary.Standalone.MaxTermsPer1000Chars,
+			MinSourceLen:         opts.Config.Glossary.Standalone.MinSourceLen,
 		}
 		br, err := prompt.NewBootstrapRenderer(opts.Config.Glossary.Standalone.TemplateContent)
 		if err != nil {
