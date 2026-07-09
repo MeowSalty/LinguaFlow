@@ -15,7 +15,7 @@ import IconCarbonError from '~icons/carbon/error'
 
 import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
-import { formatDate, getSegmentStatusLabel, statusTagType } from '@/composables/useWorkspaceUtils'
+import { getSegmentStatusLabel, statusTagType } from '@/composables/useWorkspaceUtils'
 import HtmlContent from '@/components/workspace/HtmlContent.vue'
 import { t } from '@/i18n'
 
@@ -259,8 +259,26 @@ export function useSegmentColumns(
       columns.push({
         title: t('workspace.common.updatedAt'),
         key: 'updated_at',
-        width: 170,
-        render: (row) => formatDate(row.updated_at),
+        width: 90,
+        render: (row) => {
+          if (!row.updated_at) {
+            return h('span', { class: 'text-lf-text-muted' }, t('workspace.common.noDate'))
+          }
+          const date = new Date(row.updated_at)
+          const dateStr = new Intl.DateTimeFormat('zh-Hans', {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+          }).format(date)
+          const timeStr = new Intl.DateTimeFormat('zh-Hans', {
+            hour: '2-digit',
+            minute: '2-digit',
+          }).format(date)
+          return h('div', { class: 'leading-tight' }, [
+            h('div', { class: 'text-xs text-lf-text-muted' }, dateStr),
+            h('div', { class: 'text-sm' }, timeStr),
+          ])
+        },
       })
     }
 
