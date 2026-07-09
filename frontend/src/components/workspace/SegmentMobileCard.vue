@@ -23,6 +23,7 @@ const emit = defineEmits<{
   startEdit: [segment: Segment]
   cancelEdit: []
   saveEdit: [segment: Segment]
+  saveAndNext: [segment: Segment]
   openComment: [segment: Segment]
   updateEditField: [field: 'source_text' | 'target_text' | 'comment', value: string]
   translate: [segment: Segment]
@@ -109,6 +110,14 @@ const emit = defineEmits<{
         </NButton>
         <NButton size="tiny" type="primary" :loading="isSaving" @click="emit('saveEdit', segment)">
           {{ t('workspace.segment.actions.saveInline') }}
+        </NButton>
+        <NButton
+          size="tiny"
+          type="primary"
+          :loading="isSaving"
+          @click="emit('saveAndNext', segment)"
+        >
+          {{ t('workspace.segment.actions.saveAndNext') }}
         </NButton>
       </template>
       <template v-else>

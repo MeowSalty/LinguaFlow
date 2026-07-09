@@ -8,6 +8,7 @@ import IconCarbonChat from '~icons/carbon/chat'
 import IconCarbonLanguage from '~icons/carbon/language'
 import IconCarbonCheckmark from '~icons/carbon/checkmark'
 import IconCarbonClose from '~icons/carbon/close'
+import IconCarbonChevronDown from '~icons/carbon/chevron-down'
 
 import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
@@ -47,6 +48,7 @@ export interface SegmentColumnDeps {
   startInlineEdit: (segment: Segment) => void
   cancelInlineEdit: () => void
   saveInlineEdit: (segment: Segment) => Promise<void>
+  saveAndEditNext: (segment: Segment) => Promise<void>
   openInlineComment: (segment: Segment) => void
   saveInlineComment: (segment: Segment) => Promise<void>
   closeInlineComment: () => void
@@ -209,7 +211,7 @@ export function useSegmentColumns(
     columns.push({
       title: t('workspace.common.actions'),
       key: 'actions',
-      width: 120,
+      width: 160,
       fixed: 'right',
       render: (row) => {
         if (deps.inlineEditingSegmentId.value === row.id) {
@@ -247,6 +249,26 @@ export function useSegmentColumns(
                     { icon: () => h(NIcon, null, { default: () => h(IconCarbonCheckmark) }) },
                   ),
                 default: () => t('workspace.segment.actions.saveInline'),
+              },
+            ),
+            h(
+              NTooltip,
+              { placement: 'top' },
+              {
+                trigger: () =>
+                  h(
+                    NButton,
+                    {
+                      size: 'small',
+                      type: 'primary',
+                      loading: deps.editingSegmentIds.value.includes(row.id),
+                      onClick: () => deps.saveAndEditNext(row),
+                    },
+                    {
+                      icon: () => h(NIcon, null, { default: () => h(IconCarbonChevronDown) }),
+                    },
+                  ),
+                default: () => t('workspace.segment.actions.saveAndNext'),
               },
             ),
           ])

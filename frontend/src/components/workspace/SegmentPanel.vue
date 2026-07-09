@@ -37,6 +37,7 @@ const {
   startInlineEdit,
   cancelInlineEdit,
   saveInlineEdit,
+  saveAndEditNext,
   openInlineComment,
   saveInlineComment,
 } = useSegmentEditing(projectIdRef, activeResourceIdRef)
@@ -137,6 +138,10 @@ const handleSelectionChange = (ids: number[]): void => {
 
 const handleTranslate = (segment: Segment): void => {
   emit('translate', segment)
+}
+
+const handleSaveAndEditNext = (segment: Segment): void => {
+  void saveAndEditNext(segment, workspace.segments)
 }
 
 const handleUpdateInlineEditForm = (
@@ -257,6 +262,7 @@ const handleCloseInlineComment = (): void => {
       @start-inline-edit="startInlineEdit"
       @cancel-inline-edit="cancelInlineEdit"
       @save-inline-edit="saveInlineEdit"
+      @save-and-edit-next="handleSaveAndEditNext"
       @open-inline-comment="openInlineComment"
       @save-inline-comment="saveInlineComment"
       @close-inline-comment="handleCloseInlineComment"

@@ -482,6 +482,7 @@ const messages = {
         translate: '翻译',
         translateSelected: '翻译选中 ({count})',
         saveInline: '保存',
+        saveAndNext: '保存并下一个',
         cancelInline: '取消',
         comment: '备注',
       },

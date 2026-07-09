@@ -37,6 +37,7 @@ const emit = defineEmits<{
   startInlineEdit: [segment: Segment]
   cancelInlineEdit: []
   saveInlineEdit: [segment: Segment]
+  saveAndEditNext: [segment: Segment]
   openInlineComment: [segment: Segment]
   saveInlineComment: [segment: Segment]
   closeInlineComment: []
@@ -68,6 +69,10 @@ const deps: SegmentColumnDeps = {
     emit('saveInlineEdit', segment)
     return Promise.resolve()
   },
+  saveAndEditNext: (segment) => {
+    emit('saveAndEditNext', segment)
+    return Promise.resolve()
+  },
   openInlineComment: (segment) => emit('openInlineComment', segment),
   saveInlineComment: (segment) => {
     emit('saveInlineComment', segment)
@@ -86,7 +91,7 @@ const commentSegment = computed<Segment | undefined>(() =>
 const columns = useSegmentColumns(configRef, deps)
 
 const scrollX = computed(() => {
-  const base = 50 + 280 + 280 + 110 + 120 // index + source + target + status + actions
+  const base = 50 + 280 + 280 + 110 + 160 // index + source + target + status + actions
   const selection = props.showSelection ? 48 : 0
   const quality = 100
   const updatedAt = props.showUpdatedAt ? 170 : 0
@@ -148,6 +153,7 @@ defineExpose({
           @start-edit="emit('startInlineEdit', segment)"
           @cancel-edit="emit('cancelInlineEdit')"
           @save-edit="emit('saveInlineEdit', segment)"
+          @save-and-next="emit('saveAndEditNext', segment)"
           @open-comment="emit('openInlineComment', segment)"
           @update-edit-field="(field, val) => emit('update:inlineEditForm', field, val)"
           @translate="emit('translate', segment)"
