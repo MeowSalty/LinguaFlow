@@ -22,6 +22,7 @@
   --color-lf-shadow-strong: var(--lf-shadow-strong);
   --color-lf-code-bg: var(--lf-code-bg);
   --color-lf-brand-soft: var(--lf-brand-soft);
+  --color-lf-info: var(--lf-info);
   --color-lf-info-soft: var(--lf-info-soft);
   --color-lf-success-soft: var(--lf-success-soft);
   --color-lf-danger-soft: var(--lf-danger-soft);
@@ -52,6 +53,7 @@
   --lf-shadow-strong: rgb(148 163 184 / 0.28);
   --lf-code-bg: #f1f5f9;
   --lf-brand-soft: #ecfdf5;
+  --lf-info: #3b82f6;
   --lf-info-soft: #eff6ff;
   --lf-success-soft: #f0fdf4;
   --lf-danger-soft: #fef2f2;
@@ -82,6 +84,7 @@ html[data-theme='dark'] {
   --lf-shadow-strong: rgb(0 0 0 / 0.36);
   --lf-code-bg: #202938;
   --lf-brand-soft: rgb(24 160 88 / 0.14);
+  --lf-info: #60a5fa;
   --lf-info-soft: rgb(59 130 246 / 0.13);
   --lf-success-soft: rgb(34 197 94 / 0.13);
   --lf-danger-soft: rgb(239 68 68 / 0.13);
@@ -129,4 +132,33 @@ body {
   display: flex;
   align-items: center;
   justify-content: center;
+}
+
+/* 段落表格行视觉区分 */
+.segment-row--editing td:first-child {
+  border-left: 3px solid var(--lf-brand-soft);
+}
+
+.segment-row--editing td:not(.n-data-table-td--fixed-right) {
+  background: var(--lf-brand-soft) !important;
+}
+
+.segment-row--focused {
+  box-shadow: inset 3px 0 0 0 var(--lf-info);
+}
+
+.segment-row--focused td:not(.n-data-table-td--fixed-right) {
+  background: var(--lf-info-soft) !important;
+}
+
+.segment-row--translated td:not(.n-data-table-td--fixed-right) {
+  background: var(--lf-success-soft) !important;
+}
+
+.segment-row--approved td:not(.n-data-table-td--fixed-right) {
+  background: var(--lf-success-soft) !important;
+}
+
+.segment-row--rejected td:not(.n-data-table-td--fixed-right) {
+  background: var(--lf-danger-soft) !important;
 }

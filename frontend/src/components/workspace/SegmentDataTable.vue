@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { DataTableRowKey } from 'naive-ui'
 import { NButton, NDataTable, NEmpty, NSpin } from 'naive-ui'
-import { ref, toRef, computed } from 'vue'
+import { ref, toRef, computed, onMounted, onUnmounted } from 'vue'
 
 import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
@@ -89,9 +89,8 @@ const columns = useSegmentColumns(configRef, deps)
 const scrollX = computed(() => {
   const base = 50 + 280 + 280 + 110 + 160 // index + source + target + status + actions
   const selection = props.showSelection ? 48 : 0
-  const quality = 100
-  const updatedAt = props.showUpdatedAt ? 170 : 0
-  return selection + base + quality + updatedAt
+  const updatedAt = props.showUpdatedAt ? 90 : 0
+  return selection + base + updatedAt
 })
 
 // ── 行选择 ──
@@ -100,6 +99,80 @@ const selectedSegmentIds = ref<DataTableRowKey[]>([])
 const handleSelectionChange = (keys: DataTableRowKey[]): void => {
   selectedSegmentIds.value = keys
   emit('selectionChange', keys as number[])
+}
+
+// ── 键盘导航 ──
+const focusedRowIndex = ref<number>(-1)
+
+const rowClassName = (row: Segment): string => {
+  const classes: string[] = []
+  if (row.id === props.inlineEditingSegmentId) {
+    classes.push('segment-row--editing')
+  } else if (row.status === 'approved') {
+    classes.push('segment-row--approved')
+  } else if (row.status === 'translated' || row.status === 'edited') {
+    classes.push('segment-row--translated')
+  } else if (row.status === 'rejected') {
+    classes.push('segment-row--rejected')
+  }
+  if (props.segments.indexOf(row) === focusedRowIndex.value) {
+    classes.push('segment-row--focused')
+  }
+  return classes.join(' ')
+}
+
+const handleKeyDown = (e: KeyboardEvent): void => {
+  const target = e.target as HTMLElement
+  const isInInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
+
+  if (e.key === 'Escape') {
+    if (props.inlineEditingSegmentId !== null) {
+      e.preventDefault()
+      emit('cancelInlineEdit')
+    }
+    return
+  }
+
+  if (isInInput) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && props.inlineEditingSegmentId !== null) {
+      e.preventDefault()
+      const editingSegment = props.segments.find((s) => s.id === props.inlineEditingSegmentId)
+      if (editingSegment) {
+        emit('saveAndEditNext', editingSegment)
+      }
+    }
+    return
+  }
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    if (focusedRowIndex.value < props.segments.length - 1) {
+      focusedRowIndex.value++
+    }
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    if (focusedRowIndex.value > 0) {
+      focusedRowIndex.value--
+    }
+  } else if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
+    if (focusedRowIndex.value >= 0 && focusedRowIndex.value < props.segments.length) {
+      e.preventDefault()
+      const segment = props.segments[focusedRowIndex.value]
+      if (segment) emit('startInlineEdit', segment)
+    }
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('keydown', handleKeyDown)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleKeyDown)
+})
+
+const handleRowClick = (_event: MouseEvent, row: Segment): void => {
+  focusedRowIndex.value = props.segments.indexOf(row)
 }
 
 // ── 暴露给父组件 ──
@@ -122,6 +195,8 @@ defineExpose({
         :loading="loading"
         :row-key="(row: Segment) => row.id"
         :scroll-x="scrollX"
+        :row-class-name="rowClassName"
+        :row-props="(row: Segment) => ({ onClick: (e: MouseEvent) => handleRowClick(e, row) })"
         :checked-row-keys="selectedSegmentIds"
         @update:checked-row-keys="handleSelectionChange"
       />
