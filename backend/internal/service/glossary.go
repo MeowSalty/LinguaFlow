@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bufio"
 	"context"
 	"encoding/csv"
 	"errors"
@@ -156,7 +157,12 @@ func (s *GlossaryService) ImportCSV(ctx context.Context, actorUserID, projectID 
 	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true); err != nil {
 		return nil, err
 	}
-	reader := csv.NewReader(r)
+	// Strip UTF-8 BOM if present
+	br := bufio.NewReader(r)
+	if b, err := br.Peek(3); err == nil && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF {
+		_, _ = br.Discard(3)
+	}
+	reader := csv.NewReader(br)
 	reader.FieldsPerRecord = -1
 	reader.TrimLeadingSpace = true
 	result := &GlossaryImportResult{}
