@@ -58,19 +58,7 @@ const emit = defineEmits<{
     <!-- 源文本 -->
     <div>
       <p class="mb-1 text-xs text-lf-text-muted">{{ t('workspace.segment.columns.source') }}</p>
-      <div v-if="isEditing">
-        <NInput
-          :value="editForm.source_text"
-          type="textarea"
-          :autosize="{ minRows: 2, maxRows: 6 }"
-          @update:value="(val: string) => emit('updateEditField', 'source_text', val)"
-        />
-      </div>
-      <HtmlContent
-        v-else-if="textRenderMode === 'html'"
-        :content="segment.source_text"
-        :max-lines="4"
-      />
+      <HtmlContent v-if="textRenderMode === 'html'" :content="segment.source_text" :max-lines="4" />
       <span v-else>{{ segment.source_text }}</span>
     </div>
 

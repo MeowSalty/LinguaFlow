@@ -85,6 +85,14 @@ const commentSegment = computed<Segment | undefined>(() =>
 )
 const columns = useSegmentColumns(configRef, deps)
 
+const scrollX = computed(() => {
+  const base = 50 + 280 + 280 + 110 + 120 // index + source + target + status + actions
+  const selection = props.showSelection ? 48 : 0
+  const quality = 100
+  const updatedAt = props.showUpdatedAt ? 170 : 0
+  return selection + base + quality + updatedAt
+})
+
 // ── 行选择 ──
 const selectedSegmentIds = ref<DataTableRowKey[]>([])
 
@@ -112,7 +120,7 @@ defineExpose({
         :data="segments"
         :loading="loading"
         :row-key="(row: Segment) => row.id"
-        :scroll-x="1040"
+        :scroll-x="scrollX"
         :checked-row-keys="selectedSegmentIds"
         @update:checked-row-keys="handleSelectionChange"
       />
