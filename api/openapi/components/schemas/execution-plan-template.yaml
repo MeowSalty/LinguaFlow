@@ -77,11 +77,11 @@ ExecutionPlanBootstrapConfig:
       minimum: 1
       default: 2
       description: 自举并发数
-    max_terms_per_batch:
-      type: integer
-      minimum: 1
-      default: 20
-      description: 每批最多抽取的术语数
+    max_terms_per_1000_chars:
+      type: number
+      minimum: 0
+      default: 25.0
+      description: 每 1000 字词的术语抽取上限系数，实际限制 = totalWords/1000*coeff
     min_source_len:
       type: integer
       minimum: 1
