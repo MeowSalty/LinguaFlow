@@ -261,6 +261,16 @@ onMounted(() => {
     openCreateDrawer()
   }
 })
+
+watch(
+  () => projects.error,
+  (err) => {
+    if (err) {
+      message.error(err, { duration: 0, closable: true })
+      projects.error = null
+    }
+  },
+)
 </script>
 
 <template>
@@ -326,10 +336,6 @@ onMounted(() => {
         </NButton>
       </div>
     </NCard>
-
-    <NAlert v-if="projects.error" type="error" :bordered="false">
-      {{ projects.error }}
-    </NAlert>
 
     <div v-if="projects.loading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
       <NCard v-for="index in 6" :key="index" :bordered="false" class="shadow-sm shadow-lf-shadow">

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NAlert, NButton, NEmpty, NInput, NSkeleton, useMessage } from 'naive-ui'
+import { NButton, NEmpty, NInput, NSkeleton, useMessage } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 import { useAdminStore } from '@/stores/admin'
@@ -85,6 +85,16 @@ const hasChanges = computed(() => {
 onMounted(() => {
   admin.loadSettings()
 })
+
+watch(
+  () => admin.settingsError,
+  (err) => {
+    if (err) {
+      message.error(err, { duration: 0, closable: true })
+      admin.settingsError = null
+    }
+  },
+)
 </script>
 
 <template>
@@ -121,10 +131,6 @@ onMounted(() => {
         </div>
       </div>
     </NCard>
-
-    <NAlert v-if="admin.settingsError" type="error" :bordered="false">
-      {{ admin.settingsError }}
-    </NAlert>
 
     <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
       <div v-if="admin.settingsLoading" class="space-y-4">

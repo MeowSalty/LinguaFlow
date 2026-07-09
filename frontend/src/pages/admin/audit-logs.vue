@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import {
-  NAlert,
   NButton,
   NEmpty,
   NSkeleton,
   NTag,
   NDataTable,
+  useMessage,
   type DataTableColumns,
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
@@ -16,6 +16,7 @@ import { useAdminStore } from '@/stores/admin'
 type Activity = ApiSchemas['Activity']
 
 const admin = useAdminStore()
+const message = useMessage()
 const { t } = useI18n()
 
 const formatTime = (dateStr: string): string => {
@@ -98,6 +99,16 @@ const columns = computed<DataTableColumns<Activity>>(() => [
 onMounted(() => {
   admin.loadAuditLogs(true)
 })
+
+watch(
+  () => admin.auditLogsError,
+  (err) => {
+    if (err) {
+      message.error(err, { duration: 0, closable: true })
+      admin.auditLogsError = null
+    }
+  },
+)
 </script>
 
 <template>
@@ -124,10 +135,6 @@ onMounted(() => {
         </NButton>
       </div>
     </NCard>
-
-    <NAlert v-if="admin.auditLogsError" type="error" :bordered="false">
-      {{ admin.auditLogsError }}
-    </NAlert>
 
     <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
       <div v-if="admin.auditLogsLoading" class="space-y-4">

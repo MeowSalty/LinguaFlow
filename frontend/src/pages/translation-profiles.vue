@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import {
-  NAlert,
   NButton,
   NCard,
   NDrawer,
@@ -262,6 +261,16 @@ const formatDate = (dateStr: string | undefined): string => {
 onMounted(() => {
   store.loadProfiles()
 })
+
+watch(
+  () => store.error,
+  (err) => {
+    if (err) {
+      message.error(err, { duration: 0, closable: true })
+      store.error = null
+    }
+  },
+)
 </script>
 
 <template>
@@ -352,11 +361,6 @@ onMounted(() => {
         </div>
       </div>
     </NCard>
-
-    <!-- 错误提示 -->
-    <NAlert v-if="store.error" type="error" :bordered="false">
-      {{ store.error }}
-    </NAlert>
 
     <!-- 加载骨架屏 -->
     <div v-if="store.loading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">

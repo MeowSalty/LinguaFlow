@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import {
-  NAlert,
   NButton,
   NDrawer,
   NDrawerContent,
@@ -264,6 +263,16 @@ const resetFilters = (): void => {
 onMounted(() => {
   admin.loadUsers()
 })
+
+watch(
+  () => admin.usersError,
+  (err) => {
+    if (err) {
+      message.error(err, { duration: 0, closable: true })
+      admin.usersError = null
+    }
+  },
+)
 </script>
 
 <template>
@@ -317,10 +326,6 @@ onMounted(() => {
         </div>
       </div>
     </NCard>
-
-    <NAlert v-if="admin.usersError" type="error" :bordered="false">
-      {{ admin.usersError }}
-    </NAlert>
 
     <div v-if="admin.usersLoading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
       <NCard v-for="index in 6" :key="index" :bordered="false" class="shadow-sm shadow-lf-shadow">
