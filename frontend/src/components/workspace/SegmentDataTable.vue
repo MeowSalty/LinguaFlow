@@ -102,6 +102,15 @@ const handleSelectionChange = (keys: DataTableRowKey[]): void => {
   emit('selectionChange', keys as number[])
 }
 
+// ── 行样式 ──
+const rowClassName = (row: Segment): string => {
+  if (row.id === props.inlineEditingSegmentId) return 'segment-row--editing'
+  if (row.status === 'approved') return 'segment-row--approved'
+  if (row.status === 'translated' || row.status === 'edited') return 'segment-row--translated'
+  if (row.status === 'rejected') return 'segment-row--rejected'
+  return ''
+}
+
 // ── 暴露给父组件 ──
 defineExpose({
   selectedSegmentIds,
@@ -122,6 +131,7 @@ defineExpose({
         :loading="loading"
         :row-key="(row: Segment) => row.id"
         :scroll-x="scrollX"
+        :row-class-name="rowClassName"
         :checked-row-keys="selectedSegmentIds"
         @update:checked-row-keys="handleSelectionChange"
       />

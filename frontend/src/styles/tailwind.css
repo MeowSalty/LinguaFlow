@@ -130,3 +130,25 @@ body {
   align-items: center;
   justify-content: center;
 }
+
+/* 段落表格行视觉区分 */
+.segment-row--editing td {
+  border-left: 3px solid var(--lf-brand-soft);
+  background: var(--lf-brand-soft);
+}
+
+.segment-row--focused td {
+  background: var(--lf-info-soft);
+}
+
+.segment-row--translated td {
+  background: var(--lf-success-soft);
+}
+
+.segment-row--approved td {
+  background: var(--lf-success-soft);
+}
+
+.segment-row--rejected td {
+  background: var(--lf-danger-soft);
+}
