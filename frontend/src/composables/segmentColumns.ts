@@ -9,6 +9,7 @@ import IconCarbonLanguage from '~icons/carbon/language'
 import IconCarbonCheckmark from '~icons/carbon/checkmark'
 import IconCarbonClose from '~icons/carbon/close'
 import IconCarbonChevronDown from '~icons/carbon/chevron-down'
+import IconCarbonCircleDash from '~icons/carbon/circle-dash'
 
 import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
@@ -200,12 +201,24 @@ export function useSegmentColumns(
       title: t('workspace.segment.columns.status'),
       key: 'status',
       width: 110,
-      render: (row) =>
-        h(
+      render: (row) => {
+        const iconMap: Record<string, typeof IconCarbonCircleDash> = {
+          pending: IconCarbonCircleDash,
+          translated: IconCarbonCheckmark,
+          edited: IconCarbonEdit,
+          approved: IconCarbonCheckmark,
+          rejected: IconCarbonClose,
+        }
+        const icon = iconMap[row.status] ?? IconCarbonCircleDash
+        return h(
           NTag,
           { size: 'small', type: statusTagType(row.status) },
-          { default: () => getSegmentStatusLabel(row.status) },
-        ),
+          {
+            default: () => getSegmentStatusLabel(row.status),
+            icon: () => h(NIcon, { size: 14 }, { default: () => h(icon) }),
+          },
+        )
+      },
     })
 
     // ── Quality Issues 列 ──
