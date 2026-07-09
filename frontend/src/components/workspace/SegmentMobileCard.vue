@@ -170,7 +170,7 @@ const emit = defineEmits<{
         <!-- 编辑按钮 -->
         <NButton
           size="tiny"
-          quaternary
+          secondary
           type="primary"
           :loading="isSaving"
           @click="emit('startEdit', segment)"
@@ -179,7 +179,7 @@ const emit = defineEmits<{
         </NButton>
 
         <!-- 翻译按钮 -->
-        <NButton size="tiny" quaternary @click="emit('translate', segment)">
+        <NButton size="tiny" type="primary" @click="emit('translate', segment)">
           {{ t('workspace.segment.actions.translate') }}
         </NButton>
       </template>
