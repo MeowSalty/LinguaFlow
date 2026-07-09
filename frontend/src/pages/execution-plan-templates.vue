@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import {
-  NAlert,
   NButton,
   NCard,
   NDrawer,
@@ -308,6 +307,16 @@ onMounted(async () => {
     translationProfilesStore.loadProfiles(),
   ])
 })
+
+watch(
+  () => store.error,
+  (err) => {
+    if (err) {
+      message.error(err, { duration: 0, closable: true })
+      store.error = null
+    }
+  },
+)
 </script>
 
 <template>
@@ -398,11 +407,6 @@ onMounted(async () => {
         </div>
       </div>
     </NCard>
-
-    <!-- 错误提示（抽屉关闭时显示在主页面） -->
-    <NAlert v-if="store.error && !drawerVisible" type="error" :bordered="false">
-      {{ store.error }}
-    </NAlert>
 
     <!-- 加载骨架屏 -->
     <div v-if="store.loading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
@@ -542,11 +546,6 @@ onMounted(async () => {
             <div class="text-lg font-semibold">{{ drawerTitle }}</div>
           </div>
         </template>
-
-        <!-- 错误提示（抽屉打开时显示在抽屉内部） -->
-        <NAlert v-if="store.error && drawerVisible" type="error" class="mb-4">
-          {{ store.error }}
-        </NAlert>
 
         <NForm
           ref="formRef"

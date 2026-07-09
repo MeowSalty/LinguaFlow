@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import {
-  NAlert,
   NButton,
   NDropdown,
   NDrawer,
@@ -345,6 +344,16 @@ const handleCardAction = (backend: Backend, key: string | number): void => {
 onMounted(() => {
   backends.loadBackends()
 })
+
+watch(
+  () => backends.error,
+  (err) => {
+    if (err) {
+      message.error(err, { duration: 0, closable: true })
+      backends.error = null
+    }
+  },
+)
 </script>
 
 <template>
@@ -435,11 +444,6 @@ onMounted(() => {
         </div>
       </div>
     </NCard>
-
-    <!-- 错误提示 -->
-    <NAlert v-if="backends.error" type="error" :bordered="false">
-      {{ backends.error }}
-    </NAlert>
 
     <!-- 加载骨架屏 -->
     <div v-if="backends.loading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
