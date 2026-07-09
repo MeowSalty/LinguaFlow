@@ -62,7 +62,7 @@ const DEFAULT_BOOTSTRAP: ExecutionPlanBootstrapConfig = {
   prompt_template_id: 0,
   batch_size: 20,
   concurrency: 2,
-  max_terms_per_batch: 20,
+  max_terms_per_1000_chars: 25.0,
   min_source_len: 2,
 }
 

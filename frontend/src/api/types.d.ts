@@ -2090,10 +2090,10 @@ export interface components {
              */
             concurrency: number;
             /**
-             * @description 每批最多抽取的术语数
-             * @default 20
+             * @description 每 1000 字词的术语抽取上限系数，实际限制 = totalWords/1000*coeff
+             * @default 25
              */
-            max_terms_per_batch: number;
+            max_terms_per_1000_chars: number;
             /**
              * @description 术语源文最短字符数
              * @default 2

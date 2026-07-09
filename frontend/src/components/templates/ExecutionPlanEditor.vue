@@ -45,7 +45,7 @@ const DEFAULT_BOOTSTRAP: ExecutionPlanBootstrapConfig = {
   prompt_template_id: 0,
   batch_size: 20,
   concurrency: 2,
-  max_terms_per_batch: 20,
+  max_terms_per_1000_chars: 25.0,
   min_source_len: 2,
 }
 
@@ -91,7 +91,8 @@ function mergeBootstrap(
     prompt_template_id: source.prompt_template_id ?? DEFAULT_BOOTSTRAP.prompt_template_id,
     batch_size: source.batch_size ?? DEFAULT_BOOTSTRAP.batch_size,
     concurrency: source.concurrency ?? DEFAULT_BOOTSTRAP.concurrency,
-    max_terms_per_batch: source.max_terms_per_batch ?? DEFAULT_BOOTSTRAP.max_terms_per_batch,
+    max_terms_per_1000_chars:
+      source.max_terms_per_1000_chars ?? DEFAULT_BOOTSTRAP.max_terms_per_1000_chars,
     min_source_len: source.min_source_len ?? DEFAULT_BOOTSTRAP.min_source_len,
   }
 }
@@ -308,12 +309,13 @@ const emitUpdate = (): void => {
           </NGi>
           <NGi>
             <div class="mb-1 text-xs text-lf-text-subtle">
-              {{ t('executionPlanEditor.bootstrap.maxTermsPerBatch') }}
+              {{ t('executionPlanEditor.bootstrap.maxTermsPer1000Chars') }}
             </div>
             <NInputNumber
-              v-model:value="bootstrapModel.max_terms_per_batch"
-              :min="1"
+              v-model:value="bootstrapModel.max_terms_per_1000_chars"
+              :min="0"
               :max="1000"
+              :step="0.1"
               size="small"
               :disabled="disabled || !bootstrapModel.enabled"
               class="w-full"

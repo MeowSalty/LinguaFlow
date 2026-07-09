@@ -1175,7 +1175,7 @@ const messages = {
       promptTemplatePlaceholder: '选择提示词模板（仅用其 bootstrap 提示词）',
       batchSize: '每批源文段数',
       concurrency: '自举并发数',
-      maxTermsPerBatch: '每批最大术语数',
+      maxTermsPer1000Chars: '每千字术语抽取系数',
       minSourceLen: '术语最短源文长度',
     },
     rubyRetry: {
