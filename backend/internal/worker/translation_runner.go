@@ -19,6 +19,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
@@ -213,6 +214,12 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 
 	cfg := buildEngineConfig(snapshot)
 	autoApprove := snapshot.AutoApprove
+
+	var qaEngine *qa.Engine
+	if cfg.QA.Enabled {
+		qaEngine = qa.NewEngine(cfg.QA, r.logger)
+	}
+
 	runtimeGlossary, err := r.buildRuntimeGlossary(exec.Project, cfg.Glossary.Enabled)
 	if err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
@@ -282,6 +289,17 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 			if autoApprove {
 				status = service.SegmentStatusApproved
 			}
+
+			// --- QA 规则检测 ---
+			var allIssues []qa.QualityIssue
+			if qaEngine != nil {
+				inputs := buildQACheckInputs(batchResult)
+				allIssues = qaEngine.Run(ctx, inputs)
+				if qa.HasErrors(allIssues) && cfg.QA.AutoReject {
+					status = service.SegmentStatusRejected
+				}
+			}
+
 			localCompleted := 0
 			failed := 0
 			for _, ts := range batchResult.Segments {
@@ -298,6 +316,12 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 					SetStatus(status)
 				if autoApprove {
 					update.ClearReviewComment()
+				}
+				// --- 写入 QA 结果 ---
+				// 先清除旧的 quality_issues，再按需写入新的
+				update.ClearQualityIssues()
+				if segIssues := qa.IssuesFor(ts.Index, allIssues); len(segIssues) > 0 {
+					update.SetQualityIssues(segIssues)
 				}
 				if err := update.Exec(ctx); err != nil {
 					r.logger.Warn("persist segment failed", "segment_id", dbID, "err", err)
@@ -397,6 +421,19 @@ func buildSegmentInputs(rows []*ent.Segment) []pipeline.SegmentInput {
 			SourceText: row.SourceText,
 			Meta:       meta,
 		}
+	}
+	return inputs
+}
+
+// buildQACheckInputs 将 BatchResult 转换为 QA 检测输入。
+func buildQACheckInputs(batchResult pipeline.BatchResult) []qa.CheckInput {
+	inputs := make([]qa.CheckInput, 0, len(batchResult.Segments))
+	for _, ts := range batchResult.Segments {
+		inputs = append(inputs, qa.CheckInput{
+			Index:      ts.Index,
+			SourceText: ts.SourceText,
+			TargetText: ts.TargetText,
+		})
 	}
 	return inputs
 }

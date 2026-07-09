@@ -392,6 +392,7 @@ var (
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"pending", "translated", "edited", "approved", "rejected"}, Default: "pending"},
 		{Name: "review_comment", Type: field.TypeString, Nullable: true},
 		{Name: "meta", Type: field.TypeString, Nullable: true, Size: 2147483647},
+		{Name: "quality_issues", Type: field.TypeJSON, Nullable: true},
 		{Name: "resource_id", Type: field.TypeInt, Nullable: true},
 		{Name: "user_reviewed_segments", Type: field.TypeInt, Nullable: true},
 	}
@@ -403,13 +404,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "segments_resources_segments",
-				Columns:    []*schema.Column{SegmentsColumns[9]},
+				Columns:    []*schema.Column{SegmentsColumns[10]},
 				RefColumns: []*schema.Column{ResourcesColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "segments_users_reviewed_segments",
-				Columns:    []*schema.Column{SegmentsColumns[10]},
+				Columns:    []*schema.Column{SegmentsColumns[11]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},

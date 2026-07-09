@@ -3,6 +3,7 @@
 package ent
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
 
 // Segment is the model entity for the Segment schema.
@@ -37,6 +39,8 @@ type Segment struct {
 	ResourceID *int `json:"resource_id,omitempty"`
 	// parser 注入的格式元数据（JSON 序列化），用于按需渲染时还原格式
 	Meta *string `json:"meta,omitempty"`
+	// QA 检测到的质量问题列表
+	QualityIssues []qa.QualityIssue `json:"quality_issues,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the SegmentQuery when eager-loading is set.
 	Edges                  SegmentEdges `json:"edges"`
@@ -82,6 +86,8 @@ func (*Segment) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
+		case segment.FieldQualityIssues:
+			values[i] = new([]byte)
 		case segment.FieldID, segment.FieldSegmentIndex, segment.FieldResourceID:
 			values[i] = new(sql.NullInt64)
 		case segment.FieldSourceText, segment.FieldTargetText, segment.FieldStatus, segment.FieldReviewComment, segment.FieldMeta:
@@ -168,6 +174,14 @@ func (_m *Segment) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.Meta = new(string)
 				*_m.Meta = value.String
+			}
+		case segment.FieldQualityIssues:
+			if value, ok := values[i].(*[]byte); !ok {
+				return fmt.Errorf("unexpected type %T for field quality_issues", values[i])
+			} else if value != nil && len(*value) > 0 {
+				if err := json.Unmarshal(*value, &_m.QualityIssues); err != nil {
+					return fmt.Errorf("unmarshal field quality_issues: %w", err)
+				}
 			}
 		case segment.ForeignKeys[0]:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
@@ -256,6 +270,9 @@ func (_m *Segment) String() string {
 		builder.WriteString("meta=")
 		builder.WriteString(*v)
 	}
+	builder.WriteString(", ")
+	builder.WriteString("quality_issues=")
+	builder.WriteString(fmt.Sprintf("%v", _m.QualityIssues))
 	builder.WriteByte(')')
 	return builder.String()
 }

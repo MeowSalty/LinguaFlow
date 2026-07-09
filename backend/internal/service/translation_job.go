@@ -182,6 +182,7 @@ type StrategySnapshot struct {
 	Glossary    schema.ProfileGlossaryConfig    `json:"glossary"`
 	Context     schema.ProfileContextConfig     `json:"context"`
 	Ruby        schema.ProfileRubyConfig        `json:"ruby"`
+	QA          schema.ProfileQAConfig          `json:"qa"`
 }
 
 // --- CRUD 方法 ---
@@ -508,6 +509,7 @@ func (s *TranslationJobService) snapshotProfile(ctx context.Context, profileID i
 		Glossary:    tp.Config.Glossary,
 		Context:     tp.Config.Context,
 		Ruby:        tp.Config.Ruby,
+		QA:          tp.Config.QA,
 	}, nil
 }
 

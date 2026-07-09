@@ -13,6 +13,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
 
 // SegmentCreate is the builder for creating a Segment entity.
@@ -129,6 +130,12 @@ func (_c *SegmentCreate) SetNillableMeta(v *string) *SegmentCreate {
 	if v != nil {
 		_c.SetMeta(*v)
 	}
+	return _c
+}
+
+// SetQualityIssues sets the "quality_issues" field.
+func (_c *SegmentCreate) SetQualityIssues(v []qa.QualityIssue) *SegmentCreate {
+	_c.mutation.SetQualityIssues(v)
 	return _c
 }
 
@@ -299,6 +306,10 @@ func (_c *SegmentCreate) createSpec() (*Segment, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Meta(); ok {
 		_spec.SetField(segment.FieldMeta, field.TypeString, value)
 		_node.Meta = &value
+	}
+	if value, ok := _c.mutation.QualityIssues(); ok {
+		_spec.SetField(segment.FieldQualityIssues, field.TypeJSON, value)
+		_node.QualityIssues = value
 	}
 	if nodes := _c.mutation.ResourceIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{

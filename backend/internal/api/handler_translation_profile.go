@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
@@ -114,6 +115,13 @@ func profileConfigToResponse(c *schema.TranslationProfileConfigData) Translation
 			After:    c.Context.After,
 			MaxChars: c.Context.MaxChars,
 		},
+		Qa: &ProfileQAConfig{
+			Enabled:        c.QA.Enabled,
+			AutoReject:     &c.QA.AutoReject,
+			LengthMethod:   (*ProfileQAConfigLengthMethod)(&c.QA.LengthMethod),
+			LengthRatioMin: &c.QA.LengthRatioMin,
+			LengthRatioMax: &c.QA.LengthRatioMax,
+		},
 	}
 }
 
@@ -136,6 +144,23 @@ func parseProfileConfig(c *TranslationProfileConfig) *schema.TranslationProfileC
 		ruby.Enabled = c.Ruby.Enabled
 		if c.Ruby.PreserveKinds != nil {
 			ruby.PreserveKinds = fromAPIPreserveKinds(*c.Ruby.PreserveKinds)
+		}
+	}
+
+	qa := schema.ProfileQAConfig{}
+	if c.Qa != nil {
+		qa.Enabled = c.Qa.Enabled
+		if c.Qa.AutoReject != nil {
+			qa.AutoReject = *c.Qa.AutoReject
+		}
+		if c.Qa.LengthMethod != nil {
+			qa.LengthMethod = string(*c.Qa.LengthMethod)
+		}
+		if c.Qa.LengthRatioMin != nil {
+			qa.LengthRatioMin = *c.Qa.LengthRatioMin
+		}
+		if c.Qa.LengthRatioMax != nil {
+			qa.LengthRatioMax = *c.Qa.LengthRatioMax
 		}
 	}
 
@@ -172,6 +197,7 @@ func parseProfileConfig(c *TranslationProfileConfig) *schema.TranslationProfileC
 			After:    c.Context.After,
 			MaxChars: c.Context.MaxChars,
 		},
+		QA: qa,
 	}
 }
 
@@ -214,6 +240,22 @@ func mergeProfileConfig(existing *schema.TranslationProfileConfigData, incoming 
 	merged.Context.Before = incoming.Context.Before
 	merged.Context.After = incoming.Context.After
 	merged.Context.MaxChars = incoming.Context.MaxChars
+
+	if incoming.Qa != nil {
+		merged.QA.Enabled = incoming.Qa.Enabled
+		if incoming.Qa.AutoReject != nil {
+			merged.QA.AutoReject = *incoming.Qa.AutoReject
+		}
+		if incoming.Qa.LengthMethod != nil {
+			merged.QA.LengthMethod = string(*incoming.Qa.LengthMethod)
+		}
+		if incoming.Qa.LengthRatioMin != nil {
+			merged.QA.LengthRatioMin = *incoming.Qa.LengthRatioMin
+		}
+		if incoming.Qa.LengthRatioMax != nil {
+			merged.QA.LengthRatioMax = *incoming.Qa.LengthRatioMax
+		}
+	}
 
 	return &merged
 }
@@ -273,7 +315,7 @@ func (s *Server) handleCreateTranslationProfile(w http.ResponseWriter, r *http.R
 
 	tp, err := s.translationProfileSvc.Create(r.Context(), input)
 	if err != nil {
-		if err == service.ErrTranslationProfileConfigInvalid {
+		if errors.Is(err, service.ErrTranslationProfileConfigInvalid) {
 			writeProblem(w, http.StatusBadRequest, "validation_error", err.Error())
 			return
 		}
@@ -338,7 +380,7 @@ func (s *Server) handleUpdateTranslationProfile(w http.ResponseWriter, r *http.R
 			writeProblem(w, http.StatusNotFound, "not_found", "翻译配置不存在")
 			return
 		}
-		if err == service.ErrTranslationProfileConfigInvalid {
+		if errors.Is(err, service.ErrTranslationProfileConfigInvalid) {
 			writeProblem(w, http.StatusBadRequest, "validation_error", err.Error())
 			return
 		}

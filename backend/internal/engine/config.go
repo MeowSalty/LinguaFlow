@@ -3,6 +3,7 @@ package engine
 import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 )
 
@@ -16,6 +17,7 @@ type Config struct {
 	Glossary          GlossaryConfig
 	TMEnabled         bool
 	PromptVars        map[string]any
+	QA                qa.Config
 }
 
 // TranslateDefaults 是翻译轮次的全局默认值。

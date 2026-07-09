@@ -43,6 +43,15 @@ type PostprocessConfig struct {
 	TrimSpaces bool `yaml:"trim_spaces"`
 }
 
+// QAConfig 控制翻译质量检测的行为。
+type QAConfig struct {
+	Enabled        bool    `yaml:"enabled"`
+	AutoReject     bool    `yaml:"auto_reject"`
+	LengthMethod   string  `yaml:"length_method"`
+	LengthRatioMin float64 `yaml:"length_ratio_min"`
+	LengthRatioMax float64 `yaml:"length_ratio_max"`
+}
+
 // ContextConfig 控制翻译上下文窗口。
 type ContextConfig struct {
 	Enabled  bool `yaml:"enabled"`   // 是否启用上下文，默认 true

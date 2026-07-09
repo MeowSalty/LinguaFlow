@@ -1,6 +1,6 @@
 module github.com/MeowSalty/LinguaFlow/backend
 
-go 1.25.11
+go 1.25.12
 
 require (
 	entgo.io/ent v0.14.5

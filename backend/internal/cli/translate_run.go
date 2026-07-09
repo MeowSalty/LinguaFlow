@@ -15,6 +15,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 )
 
@@ -60,6 +61,9 @@ func runTranslate(cmd *cobra.Command, rt *appCtx, opts translateOptions) error {
 	engOpts, err := buildEngineFromCLIConfig(cliCfg)
 	if err != nil {
 		return err
+	}
+	if engOpts.Config.QA.Enabled {
+		rt.logger.Warn("QA is configured but not yet supported in CLI mode; QA settings will be ignored")
 	}
 	engOpts.Logger = rt.logger
 	engOpts.Reporter = reporter
@@ -138,6 +142,13 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 			Standalone: cliCfg.Execution.Bootstrap,
 		},
 		TMEnabled: cliCfg.TranslationMemory.Enabled,
+		QA: qa.Config{
+			Enabled:        firstProfile.QA.Enabled,
+			AutoReject:     firstProfile.QA.AutoReject,
+			LengthMethod:   qa.LengthMethod(firstProfile.QA.LengthMethod),
+			LengthRatioMin: firstProfile.QA.LengthRatioMin,
+			LengthRatioMax: firstProfile.QA.LengthRatioMax,
+		},
 	}
 
 	if cliCfg.Execution.Bootstrap.Enabled && cliCfg.Execution.Bootstrap.Template != "" {

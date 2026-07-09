@@ -74,6 +74,7 @@ type CLIConfigTranslationProfile struct {
 	Bootstrap   BootstrapConfig   `yaml:"bootstrap"`
 	Context     ContextConfig     `yaml:"context"`
 	Ruby        RubyConfig        `yaml:"ruby"`
+	QA          QAConfig          `yaml:"qa"`
 
 	File string `yaml:"file"` // 外部文件引用（与内联字段二选一）
 }
@@ -398,6 +399,7 @@ func defaultCLIConfig() *CLIConfig {
 					MinSourceLen:           2,
 					InlineConflictStrategy: "rewrite-local",
 				},
+				QA: QAConfig{Enabled: false},
 			},
 		},
 		Execution: CLIConfigExecution{
