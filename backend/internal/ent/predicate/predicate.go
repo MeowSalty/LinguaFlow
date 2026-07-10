@@ -39,6 +39,9 @@ type RefreshToken func(*sql.Selector)
 // Resource is the predicate function for resource builders.
 type Resource func(*sql.Selector)
 
+// SSEEvent is the predicate function for sseevent builders.
+type SSEEvent func(*sql.Selector)
+
 // Segment is the predicate function for segment builders.
 type Segment func(*sql.Selector)
 

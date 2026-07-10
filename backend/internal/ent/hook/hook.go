@@ -141,6 +141,18 @@ func (f ResourceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, er
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ResourceMutation", m)
 }
 
+// The SSEEventFunc type is an adapter to allow the use of ordinary
+// function as SSEEvent mutator.
+type SSEEventFunc func(context.Context, *ent.SSEEventMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SSEEventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SSEEventMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SSEEventMutation", m)
+}
+
 // The SegmentFunc type is an adapter to allow the use of ordinary
 // function as Segment mutator.
 type SegmentFunc func(context.Context, *ent.SegmentMutation) (ent.Value, error)

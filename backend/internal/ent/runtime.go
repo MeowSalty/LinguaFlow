@@ -18,6 +18,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
@@ -416,6 +417,20 @@ func init() {
 	resourceDescProjectID := resourceFields[4].Descriptor()
 	// resource.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
 	resource.ProjectIDValidator = resourceDescProjectID.Validators[0].(func(int) error)
+	sseeventFields := schema.SSEEvent{}.Fields()
+	_ = sseeventFields
+	// sseeventDescJobID is the schema descriptor for job_id field.
+	sseeventDescJobID := sseeventFields[0].Descriptor()
+	// sseevent.JobIDValidator is a validator for the "job_id" field. It is called by the builders before save.
+	sseevent.JobIDValidator = sseeventDescJobID.Validators[0].(func(int) error)
+	// sseeventDescSeq is the schema descriptor for seq field.
+	sseeventDescSeq := sseeventFields[1].Descriptor()
+	// sseevent.SeqValidator is a validator for the "seq" field. It is called by the builders before save.
+	sseevent.SeqValidator = sseeventDescSeq.Validators[0].(func(int64) error)
+	// sseeventDescCreatedAt is the schema descriptor for created_at field.
+	sseeventDescCreatedAt := sseeventFields[7].Descriptor()
+	// sseevent.DefaultCreatedAt holds the default value on creation for the created_at field.
+	sseevent.DefaultCreatedAt = sseeventDescCreatedAt.Default.(func() time.Time)
 	segmentMixin := schema.Segment{}.Mixin()
 	segmentMixinFields0 := segmentMixin[0].Fields()
 	_ = segmentMixinFields0

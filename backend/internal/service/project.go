@@ -15,6 +15,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
@@ -217,6 +218,16 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 			Exec(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("delete job resources: %w", err)
+		}
+	}
+
+	// Step 1.5: 删除 SSEEvent（依赖 TranslationJob）
+	if len(tjIDs) > 0 {
+		_, err = tx.SSEEvent.Delete().
+			Where(sseevent.JobIDIn(tjIDs...)).
+			Exec(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("delete sse events: %w", err)
 		}
 	}
 
