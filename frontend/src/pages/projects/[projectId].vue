@@ -33,7 +33,6 @@ import GlossarySyncDialog from '@/components/workspace/GlossarySyncDialog.vue'
 import SegmentPanel from '@/components/workspace/SegmentPanel.vue'
 import JobPanel from '@/components/workspace/JobPanel.vue'
 import JobCreateDrawer from '@/components/workspace/JobCreateDrawer.vue'
-import JobDetailDrawer from '@/components/workspace/JobDetailDrawer.vue'
 import ConflictDialog from '@/components/workspace/ConflictDialog.vue'
 import IncrementalResultModal from '@/components/workspace/IncrementalResultModal.vue'
 import { useGlossaryManagement, GlossaryMgmtKey } from '@/composables/useGlossaryManagement'
@@ -530,7 +529,6 @@ onMounted(() => {
         <NTabPane name="jobs" :tab="t('workspace.tabs.jobs')">
           <JobPanel
             :project-id="projectId"
-            :detail-drawer-visible="jobMgmt.jobDetailDrawerVisible.value"
             @detail="(job) => jobMgmt.openJobDetail(job)"
             @cancel="(job) => jobMgmt.cancelJob(job)"
             @retry="(job) => jobMgmt.retryJob(job)"
@@ -565,9 +563,6 @@ onMounted(() => {
       @submit="jobMgmt.submitJob()"
       @close="jobMgmt.closeJobDrawer()"
     />
-
-    <!-- 任务详情抽屉 -->
-    <JobDetailDrawer v-model:show="jobMgmt.jobDetailDrawerVisible.value" />
 
     <!-- 冲突对话框 -->
     <ConflictDialog

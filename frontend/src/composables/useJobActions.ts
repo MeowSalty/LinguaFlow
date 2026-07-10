@@ -29,7 +29,6 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
   // ── 状态 ──
   const jobDrawerVisible = ref(false)
   const jobFormRef = ref<FormInst | null>(null)
-  const jobDetailDrawerVisible = ref(false)
   const jobTargetMode = ref<JobTargetMode>('resources')
   const jobTargetResourceIds = ref<number[]>([])
   const jobTargetSegmentIds = ref<number[]>([])
@@ -217,22 +216,15 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
   }
 
   const openJobDetail = async (job: TranslationJob): Promise<void> => {
-    jobDetailDrawerVisible.value = true
-    workspace.selectedJob = job
-
-    try {
-      await workspace.loadJobDetail(job.id)
-    } catch (error) {
-      console.error(error)
-      message.error(workspace.jobDetailError || t('workspace.messages.jobDetailFailed'))
-    }
+    const globalTracker = useGlobalJobTrackerStore()
+    globalTracker.trackJob(job, workspace.project?.name)
+    await globalTracker.openDetail(job.id)
   }
 
   return {
     // 状态
     jobDrawerVisible,
     jobFormRef,
-    jobDetailDrawerVisible,
     jobTargetMode,
     jobTargetResourceIds,
     jobTargetSegmentIds,
