@@ -20,6 +20,7 @@ const route = useRoute()
 const router = useRouter()
 const projects = useProjectsStore()
 const message = useMessage()
+const { t, d } = useI18n()
 const { targetLanguageOptions, sourceLanguageOptions } = useLanguageOptions()
 const formRef = ref<FormInst | null>(null)
 const drawerVisible = ref(false)
@@ -102,40 +103,27 @@ const closeCreateDrawer = (): void => {
   resetForm()
 }
 
-const formatDate = (value?: string): string => {
-  if (!value) {
-    return t('projects.card.noDate')
-  }
-
-  return new Intl.DateTimeFormat('zh-Hans', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value))
-}
-
 const formatRelativeTime = (dateStr: string | null): string => {
-  if (!dateStr) return '暂无更新'
+  if (!dateStr) return t('projects.card.noDate')
 
   const now = Date.now()
   const date = new Date(dateStr).getTime()
   const diffMs = now - date
 
-  if (diffMs < 0) return '刚刚'
+  if (diffMs < 0) return t('dashboard.activity.relativeTime.justNow')
 
   const diffSeconds = Math.floor(diffMs / 1000)
   const diffMinutes = Math.floor(diffSeconds / 60)
   const diffHours = Math.floor(diffMinutes / 60)
   const diffDays = Math.floor(diffHours / 24)
 
-  if (diffSeconds < 60) return '刚刚'
-  if (diffMinutes < 60) return `${diffMinutes} 分钟前`
-  if (diffHours < 24) return `${diffHours} 小时前`
-  if (diffDays < 7) return `${diffDays} 天前`
+  if (diffSeconds < 60) return t('dashboard.activity.relativeTime.justNow')
+  if (diffMinutes < 60)
+    return t('dashboard.activity.relativeTime.minutesAgo', { count: diffMinutes })
+  if (diffHours < 24) return t('dashboard.activity.relativeTime.hoursAgo', { count: diffHours })
+  if (diffDays < 30) return t('dashboard.activity.relativeTime.daysAgo', { count: diffDays })
 
-  return formatDate(dateStr)
+  return d(new Date(dateStr), 'short')
 }
 
 const buildProjectPayload = (): ApiSchemas['CreateProjectRequest'] => {
@@ -193,14 +181,14 @@ const deleteSelectedProject = async (project: Project): Promise<void> => {
   }
 }
 
-const cardDropdownOptions: DropdownOption[] = [
-  { label: '查看详情', key: 'details' },
-  { label: '编辑', key: 'edit' },
-  { label: '任务', key: 'jobs' },
-  { label: '术语表', key: 'glossary' },
+const cardDropdownOptions = computed<DropdownOption[]>(() => [
+  { label: t('projects.actions.details'), key: 'details' },
+  { label: t('projects.actions.edit'), key: 'edit' },
+  { label: t('projects.actions.jobs'), key: 'jobs' },
+  { label: t('projects.actions.glossary'), key: 'glossary' },
   { type: 'divider', key: 'd1' },
-  { label: '删除', key: 'delete', props: { style: 'color: #e53e3e' } },
-]
+  { label: t('projects.actions.delete'), key: 'delete', props: { style: 'color: #e53e3e' } },
+])
 
 const handleCardDropdownSelect = (project: Project, key: string | number): void => {
   switch (key) {
@@ -352,36 +340,57 @@ watch(
             >
               {{ project.name }}
             </h2>
+
+            <NTooltip trigger="hover">
+              <template #trigger>
+                <IconCarbonBook
+                  class="h-3.5 w-3.5 shrink-0 transition-colors"
+                  :class="project.glossary_enabled ? 'text-brand-500' : 'text-lf-text-subtle/40'"
+                />
+              </template>
+              {{
+                project.glossary_enabled
+                  ? t('projects.form.glossaryEnabled')
+                  : t('projects.form.glossaryDisabled')
+              }}
+            </NTooltip>
+
+            <div
+              class="shrink-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+              @click.stop
+            >
+              <NDropdown
+                trigger="click"
+                :options="cardDropdownOptions"
+                placement="bottom-end"
+                @select="(key: string | number) => handleCardDropdownSelect(project, key)"
+              >
+                <NButton quaternary circle size="tiny">
+                  <template #icon>
+                    <NIcon size="14">
+                      <IconCarbonOverflowMenuHorizontal />
+                    </NIcon>
+                  </template>
+                </NButton>
+              </NDropdown>
+            </div>
           </div>
 
-          <!-- 第二行：语言方向 + 更新时间 -->
-          <p class="text-xs text-lf-text-muted">
-            {{ project.source_lang || 'auto' }} → {{ project.target_lang }}
-            <span class="mx-1.5">·</span>
-            {{ formatRelativeTime(project.updated_at ?? project.created_at ?? null) }}
-          </p>
+          <div class="flex items-center gap-1.5 text-xs text-lf-text-muted">
+            <IconCarbonLanguage class="h-3.5 w-3.5 shrink-0 text-lf-text-subtle" />
+            <span>{{ project.source_lang || 'auto' }} → {{ project.target_lang }}</span>
+            <span class="mx-1">·</span>
+            <IconCarbonTime class="h-3.5 w-3.5 shrink-0 text-lf-text-subtle" />
+            <span>{{ formatRelativeTime(project.updated_at ?? project.created_at ?? null) }}</span>
+          </div>
         </div>
 
-        <!-- 悬显更多菜单 -->
-        <div
-          class="absolute right-3 top-3 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
-          @click.stop
-        >
-          <NDropdown
-            trigger="click"
-            :options="cardDropdownOptions"
-            placement="bottom-end"
-            @select="(key: string | number) => handleCardDropdownSelect(project, key)"
-          >
-            <NButton quaternary circle size="small">
-              <template #icon>
-                <NIcon size="16">
-                  <IconCarbonOverflowMenuHorizontal />
-                </NIcon>
-              </template>
-            </NButton>
-          </NDropdown>
-        </div>
+        <NSpin
+          v-if="projects.isDeletingProject(project.id)"
+          :show="true"
+          class="absolute inset-0 flex items-center justify-center bg-lf-surface/80"
+          size="medium"
+        />
       </div>
     </div>
 
