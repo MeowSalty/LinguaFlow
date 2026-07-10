@@ -1,14 +1,9 @@
 <script setup lang="ts">
-import {
-  useMessage,
-  type DropdownOption,
-  type FormInst,
-  type FormRules,
-  type SelectOption,
-} from 'naive-ui'
+import { useMessage, type DropdownOption, type FormInst, type FormRules } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
+import { useLanguageOptions } from '@/composables/useLanguageOptions'
 import { useProjectsStore } from '@/stores/projects'
 
 type Project = ApiSchemas['Project']
@@ -25,7 +20,7 @@ const route = useRoute()
 const router = useRouter()
 const projects = useProjectsStore()
 const message = useMessage()
-const { t } = useI18n()
+const { targetLanguageOptions, sourceLanguageOptions } = useLanguageOptions()
 const formRef = ref<FormInst | null>(null)
 const drawerVisible = ref(false)
 const editingProject = ref<Project | null>(null)
@@ -37,23 +32,6 @@ const formModel = reactive<ProjectFormModel>({
   owner_type: 'personal',
   glossary_enabled: false,
 })
-
-const targetLanguageOptions = computed<SelectOption[]>(() => [
-  { label: t('projects.languages.zhHans'), value: 'zh-Hans' },
-  { label: t('projects.languages.zhHant'), value: 'zh-Hant' },
-  { label: t('projects.languages.enUS'), value: 'en-US' },
-  { label: t('projects.languages.enGB'), value: 'en-GB' },
-  { label: t('projects.languages.ja'), value: 'ja' },
-  { label: t('projects.languages.ko'), value: 'ko' },
-  { label: t('projects.languages.fr'), value: 'fr' },
-  { label: t('projects.languages.de'), value: 'de' },
-  { label: t('projects.languages.es'), value: 'es' },
-])
-
-const sourceLanguageOptions = computed<SelectOption[]>(() => [
-  { label: t('projects.languages.auto'), value: 'auto' },
-  ...targetLanguageOptions.value,
-])
 
 const hasActiveFilters = computed(() => projects.searchQuery.trim().length > 0)
 

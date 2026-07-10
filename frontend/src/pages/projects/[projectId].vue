@@ -16,7 +16,6 @@ import {
   useMessage,
   type FormInst,
   type FormRules,
-  type SelectOption,
 } from 'naive-ui'
 import { ref, computed, reactive, watch, onMounted, onBeforeUnmount, provide } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -40,6 +39,7 @@ import IncrementalResultModal from '@/components/workspace/IncrementalResultModa
 import { useGlossaryManagement, GlossaryMgmtKey } from '@/composables/useGlossaryManagement'
 import { useJobActions } from '@/composables/useJobActions'
 import { useConflictHandling } from '@/composables/useConflictHandling'
+import { useLanguageOptions } from '@/composables/useLanguageOptions'
 import { formatDate } from '@/composables/useWorkspaceUtils'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import { useGlossaryStore } from '@/stores/glossary'
@@ -98,22 +98,7 @@ const editFormModel = reactive({
   glossary_enabled: false,
 })
 
-const targetLanguageOptions = computed<SelectOption[]>(() => [
-  { label: t('projects.languages.zhHans'), value: 'zh-Hans' },
-  { label: t('projects.languages.zhHant'), value: 'zh-Hant' },
-  { label: t('projects.languages.enUS'), value: 'en-US' },
-  { label: t('projects.languages.enGB'), value: 'en-GB' },
-  { label: t('projects.languages.ja'), value: 'ja' },
-  { label: t('projects.languages.ko'), value: 'ko' },
-  { label: t('projects.languages.fr'), value: 'fr' },
-  { label: t('projects.languages.de'), value: 'de' },
-  { label: t('projects.languages.es'), value: 'es' },
-])
-
-const sourceLanguageOptions = computed<SelectOption[]>(() => [
-  { label: t('projects.languages.auto'), value: 'auto' },
-  ...targetLanguageOptions.value,
-])
+const { targetLanguageOptions, sourceLanguageOptions } = useLanguageOptions()
 
 const editFormRules = computed<FormRules>(() => ({
   name: [
