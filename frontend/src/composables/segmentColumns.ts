@@ -47,6 +47,10 @@ export interface SegmentColumnDeps {
   inlineCommentVisible: Ref<number | null>
   inlineCommentText: Ref<string>
 
+  // ── 原文 HTML 切换 ──
+  showSourceHtml: Ref<boolean>
+  toggleSourceHtml: () => void
+
   // ── 编辑操作 ──
   startInlineEdit: (segment: Segment) => void
   cancelInlineEdit: () => void
@@ -99,10 +103,68 @@ export function useSegmentColumns(
       key: 'source_text',
       minWidth: 280,
       render: (row) => {
-        if (config.value.textRenderMode === 'html') {
-          return h(HtmlContent, { content: row.source_text, maxLines: 4 })
+        if (config.value.textRenderMode !== 'html') {
+          return row.source_text
         }
-        return row.source_text
+
+        const isEditing = deps.inlineEditingSegmentId.value === row.id
+        const hasHtmlTags = /<[a-z][\s\S]*>/i.test(row.source_text)
+
+        const elements: VNode[] = []
+
+        // 渲染后的 HTML
+        elements.push(
+          h(HtmlContent, {
+            content: row.source_text,
+            maxLines: isEditing ? 6 : 4,
+          }),
+        )
+
+        // 编辑态且包含 HTML 标签时，显示切换按钮
+        if (isEditing && hasHtmlTags) {
+          elements.push(
+            h('div', { class: 'mt-1.5' }, [
+              h(
+                NButton,
+                {
+                  size: 'tiny',
+                  quaternary: true,
+                  type: deps.showSourceHtml.value ? 'primary' : 'default',
+                  onClick: (e: MouseEvent) => {
+                    e.stopPropagation()
+                    deps.toggleSourceHtml()
+                  },
+                },
+                {
+                  default: () =>
+                    h(
+                      'span',
+                      { class: 'font-mono text-xs' },
+                      deps.showSourceHtml.value
+                        ? t('workspace.segment.actions.hideSourceHtml')
+                        : t('workspace.segment.actions.viewSourceHtml'),
+                    ),
+                },
+              ),
+            ]),
+          )
+
+          // 原始 HTML 源码
+          if (deps.showSourceHtml.value) {
+            elements.push(
+              h(
+                'pre',
+                {
+                  class:
+                    'mt-2 max-h-40 overflow-auto rounded-md bg-lf-surface-muted p-2.5 font-mono text-xs leading-relaxed whitespace-pre-wrap break-all',
+                },
+                row.source_text,
+              ),
+            )
+          }
+        }
+
+        return elements.length === 1 ? elements[0] : h('div', null, elements)
       },
     })
 
