@@ -121,6 +121,21 @@ const handleSelectionChange = (keys: DataTableRowKey[]): void => {
 // ── 键盘导航 ──
 const focusedRowIndex = ref<number>(-1)
 
+const HEADER_HEIGHT = 64
+
+const scrollFocusedRowIntoView = (): void => {
+  setTimeout(() => {
+    const rowEl = document.querySelector('.segment-row--focused') as HTMLElement | null
+    if (!rowEl) return
+    const rect = rowEl.getBoundingClientRect()
+    if (rect.top < HEADER_HEIGHT) {
+      window.scrollBy({ top: rect.top - HEADER_HEIGHT - 8, behavior: 'smooth' })
+    } else if (rect.bottom > window.innerHeight) {
+      window.scrollBy({ top: rect.bottom - window.innerHeight + 20, behavior: 'smooth' })
+    }
+  }, 50)
+}
+
 const rowClassName = (row: Segment): string => {
   const classes: string[] = []
   if (row.id === props.inlineEditingSegmentId) {
@@ -165,11 +180,13 @@ const handleKeyDown = (e: KeyboardEvent): void => {
     e.preventDefault()
     if (focusedRowIndex.value < props.segments.length - 1) {
       focusedRowIndex.value++
+      scrollFocusedRowIntoView()
     }
   } else if (e.key === 'ArrowUp') {
     e.preventDefault()
     if (focusedRowIndex.value > 0) {
       focusedRowIndex.value--
+      scrollFocusedRowIntoView()
     }
   } else if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
     if (focusedRowIndex.value >= 0 && focusedRowIndex.value < props.segments.length) {
