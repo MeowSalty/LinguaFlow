@@ -28,15 +28,9 @@ const tracker = useGlobalJobTrackerStore()
 
 const jobId = computed(() => props.job?.id ?? null)
 
-const events = computed(() => {
-  const id = jobId.value
-  return id != null ? tracker.getJobEvents(id) : []
-})
+const events = computed(() => tracker.getJobEvents())
 
-const connected = computed(() => {
-  const id = jobId.value
-  return id != null ? tracker.isJobSSEConnected(id) : false
-})
+const connected = computed(() => tracker.isJobSSEConnected())
 
 const syntheticEvents = ref<SyntheticEvent[]>([])
 
@@ -47,8 +41,7 @@ const refreshSyntheticEvents = (): void => {
 }
 
 const clearEventsAndCache = (): void => {
-  const id = jobId.value
-  if (id != null) tracker.clearJobEvents(id)
+  tracker.clearJobEvents()
 }
 
 watch(
