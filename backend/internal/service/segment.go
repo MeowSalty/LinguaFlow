@@ -58,7 +58,7 @@ func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, 
 	if opts.GroupKey != "" {
 		// group_key 过滤需要在应用层解析 JSON meta 字段
 		// 先加载所有匹配基础条件的 segments，再按 meta.epub_file 过滤后分页
-		allRows, err := q.Order(ent.Asc(segment.FieldID)).WithReviewedBy().WithResource().All(ctx)
+		allRows, err := q.Order(ent.Asc(segment.FieldSegmentIndex)).WithReviewedBy().WithResource().All(ctx)
 		if err != nil {
 			return nil, err
 		}
@@ -79,7 +79,7 @@ func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, 
 		start := 0
 		if opts.AfterID > 0 {
 			for i, row := range filtered {
-				if row.ID > opts.AfterID {
+				if row.SegmentIndex > opts.AfterID {
 					start = i
 					break
 				}
@@ -94,22 +94,22 @@ func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, 
 		page.Items = filtered[start:end]
 
 		if end < len(filtered) {
-			page.NextCursor = page.Items[len(page.Items)-1].ID
+			page.NextCursor = page.Items[len(page.Items)-1].SegmentIndex
 		}
 		return page, nil
 	}
 
 	// 默认路径：无 group_key 过滤，使用数据库分页
 	if opts.AfterID > 0 {
-		q = q.Where(segment.IDGT(opts.AfterID))
+		q = q.Where(segment.SegmentIndexGT(opts.AfterID))
 	}
-	rows, err := q.Order(ent.Asc(segment.FieldID)).Limit(opts.Limit + 1).WithReviewedBy().WithResource().All(ctx)
+	rows, err := q.Order(ent.Asc(segment.FieldSegmentIndex)).Limit(opts.Limit + 1).WithReviewedBy().WithResource().All(ctx)
 	if err != nil {
 		return nil, err
 	}
 	page := &ResourceSegmentPage{Items: rows}
 	if len(rows) > opts.Limit {
-		page.NextCursor = rows[opts.Limit-1].ID
+		page.NextCursor = rows[opts.Limit-1].SegmentIndex
 		page.Items = rows[:opts.Limit]
 	}
 	return page, nil

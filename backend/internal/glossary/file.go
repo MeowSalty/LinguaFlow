@@ -1,6 +1,7 @@
 package glossary
 
 import (
+	"bufio"
 	"context"
 	"encoding/csv"
 	"errors"
@@ -52,7 +53,12 @@ func LoadFile(path string) (*FileGlossary, error) {
 		return nil, fmt.Errorf("glossary: open %s: %w", path, err)
 	}
 	defer func() { _ = f.Close() }()
-	r := csv.NewReader(f)
+	// Strip UTF-8 BOM if present
+	br := bufio.NewReader(f)
+	if b, err := br.Peek(3); err == nil && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF {
+		_, _ = br.Discard(3)
+	}
+	r := csv.NewReader(br)
 	r.FieldsPerRecord = -1 // 允许变长，自己校验
 	r.TrimLeadingSpace = true
 
