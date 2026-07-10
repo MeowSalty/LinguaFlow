@@ -8,7 +8,8 @@ import (
 // EventStore defines the interface for event persistence and replay.
 type EventStore interface {
 	// Append stores an event and returns the assigned global sequence number.
-	Append(jobID int, evt Event) int64
+	// Returns an error if the event could not be persisted.
+	Append(jobID int, evt Event) (int64, error)
 
 	// Replay returns events with seq > afterSeq for the given job.
 	// If the requested range is older than the buffer, returns all available events.
@@ -75,7 +76,7 @@ func (s *RingBufferStore) getOrCreateBuffer(jobID int) *ringBuffer {
 }
 
 // Append stores an event and returns the assigned global sequence number.
-func (s *RingBufferStore) Append(jobID int, evt Event) int64 {
+func (s *RingBufferStore) Append(jobID int, evt Event) (int64, error) {
 	seq := s.nextSeq.Add(1)
 	evt.Seq = seq
 
@@ -86,7 +87,17 @@ func (s *RingBufferStore) Append(jobID int, evt Event) int64 {
 	buf.count++
 	buf.mu.Unlock()
 
-	return seq
+	return seq, nil
+}
+
+// AppendWithSeq stores an event with a pre-assigned seq (no internal seq assignment).
+func (s *RingBufferStore) AppendWithSeq(jobID int, evt Event) {
+	buf := s.getOrCreateBuffer(jobID)
+	buf.mu.Lock()
+	buf.events[buf.head%len(buf.events)] = evt
+	buf.head++
+	buf.count++
+	buf.mu.Unlock()
 }
 
 // Replay returns events with seq > afterSeq for the given job.
@@ -113,6 +124,14 @@ func (s *RingBufferStore) Replay(jobID int, afterSeq int64) []Event {
 		n = capacity
 	} else {
 		start = 0
+	}
+
+	// 当 buffer 溢出时，检查 afterSeq 是否指向被淘汰的事件
+	if buf.count > capacity {
+		oldestSeq := buf.events[start%capacity].Seq
+		if afterSeq < oldestSeq {
+			return nil
+		}
 	}
 
 	var result []Event

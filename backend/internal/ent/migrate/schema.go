@@ -381,6 +381,39 @@ var (
 			},
 		},
 	}
+	// SseEventsColumns holds the columns for the "sse_events" table.
+	SseEventsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "seq", Type: field.TypeInt64},
+		{Name: "type", Type: field.TypeString},
+		{Name: "level", Type: field.TypeString},
+		{Name: "stage", Type: field.TypeString, Nullable: true},
+		{Name: "message", Type: field.TypeString},
+		{Name: "metadata", Type: field.TypeJSON, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "job_id", Type: field.TypeInt},
+	}
+	// SseEventsTable holds the schema information for the "sse_events" table.
+	SseEventsTable = &schema.Table{
+		Name:       "sse_events",
+		Columns:    SseEventsColumns,
+		PrimaryKey: []*schema.Column{SseEventsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "sse_events_translation_jobs_sse_events",
+				Columns:    []*schema.Column{SseEventsColumns[8]},
+				RefColumns: []*schema.Column{TranslationJobsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "sseevent_job_id_seq",
+				Unique:  false,
+				Columns: []*schema.Column{SseEventsColumns[8], SseEventsColumns[1]},
+			},
+		},
+	}
 	// SegmentsColumns holds the columns for the "segments" table.
 	SegmentsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -675,6 +708,7 @@ var (
 		PromptTemplatesTable,
 		RefreshTokensTable,
 		ResourcesTable,
+		SseEventsTable,
 		SegmentsTable,
 		SyncTasksTable,
 		SystemSettingsTable,
@@ -705,6 +739,7 @@ func init() {
 	PromptTemplatesTable.ForeignKeys[1].RefTable = UsersTable
 	RefreshTokensTable.ForeignKeys[0].RefTable = UsersTable
 	ResourcesTable.ForeignKeys[0].RefTable = ProjectsTable
+	SseEventsTable.ForeignKeys[0].RefTable = TranslationJobsTable
 	SegmentsTable.ForeignKeys[0].RefTable = ResourcesTable
 	SegmentsTable.ForeignKeys[1].RefTable = UsersTable
 	SyncTasksTable.ForeignKeys[0].RefTable = GlossaryEntriesTable

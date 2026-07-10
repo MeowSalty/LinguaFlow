@@ -27,6 +27,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
@@ -63,6 +64,8 @@ type Client struct {
 	RefreshToken *RefreshTokenClient
 	// Resource is the client for interacting with the Resource builders.
 	Resource *ResourceClient
+	// SSEEvent is the client for interacting with the SSEEvent builders.
+	SSEEvent *SSEEventClient
 	// Segment is the client for interacting with the Segment builders.
 	Segment *SegmentClient
 	// SyncTask is the client for interacting with the SyncTask builders.
@@ -101,6 +104,7 @@ func (c *Client) init() {
 	c.PromptTemplate = NewPromptTemplateClient(c.config)
 	c.RefreshToken = NewRefreshTokenClient(c.config)
 	c.Resource = NewResourceClient(c.config)
+	c.SSEEvent = NewSSEEventClient(c.config)
 	c.Segment = NewSegmentClient(c.config)
 	c.SyncTask = NewSyncTaskClient(c.config)
 	c.SystemSetting = NewSystemSettingClient(c.config)
@@ -212,6 +216,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		PromptTemplate:        NewPromptTemplateClient(cfg),
 		RefreshToken:          NewRefreshTokenClient(cfg),
 		Resource:              NewResourceClient(cfg),
+		SSEEvent:              NewSSEEventClient(cfg),
 		Segment:               NewSegmentClient(cfg),
 		SyncTask:              NewSyncTaskClient(cfg),
 		SystemSetting:         NewSystemSettingClient(cfg),
@@ -250,6 +255,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		PromptTemplate:        NewPromptTemplateClient(cfg),
 		RefreshToken:          NewRefreshTokenClient(cfg),
 		Resource:              NewResourceClient(cfg),
+		SSEEvent:              NewSSEEventClient(cfg),
 		Segment:               NewSegmentClient(cfg),
 		SyncTask:              NewSyncTaskClient(cfg),
 		SystemSetting:         NewSystemSettingClient(cfg),
@@ -289,8 +295,8 @@ func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.ActivityLog, c.Backend, c.ExecutionPlanTemplate, c.GlossaryEntry,
 		c.JobResource, c.OrgMembership, c.Organization, c.Project, c.PromptTemplate,
-		c.RefreshToken, c.Resource, c.Segment, c.SyncTask, c.SystemSetting, c.TMEntry,
-		c.TranslationJob, c.TranslationProfile, c.UsageRecord, c.User,
+		c.RefreshToken, c.Resource, c.SSEEvent, c.Segment, c.SyncTask, c.SystemSetting,
+		c.TMEntry, c.TranslationJob, c.TranslationProfile, c.UsageRecord, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -302,8 +308,8 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.ActivityLog, c.Backend, c.ExecutionPlanTemplate, c.GlossaryEntry,
 		c.JobResource, c.OrgMembership, c.Organization, c.Project, c.PromptTemplate,
-		c.RefreshToken, c.Resource, c.Segment, c.SyncTask, c.SystemSetting, c.TMEntry,
-		c.TranslationJob, c.TranslationProfile, c.UsageRecord, c.User,
+		c.RefreshToken, c.Resource, c.SSEEvent, c.Segment, c.SyncTask, c.SystemSetting,
+		c.TMEntry, c.TranslationJob, c.TranslationProfile, c.UsageRecord, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -334,6 +340,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.RefreshToken.mutate(ctx, m)
 	case *ResourceMutation:
 		return c.Resource.mutate(ctx, m)
+	case *SSEEventMutation:
+		return c.SSEEvent.mutate(ctx, m)
 	case *SegmentMutation:
 		return c.Segment.mutate(ctx, m)
 	case *SyncTaskMutation:
@@ -2394,6 +2402,155 @@ func (c *ResourceClient) mutate(ctx context.Context, m *ResourceMutation) (Value
 	}
 }
 
+// SSEEventClient is a client for the SSEEvent schema.
+type SSEEventClient struct {
+	config
+}
+
+// NewSSEEventClient returns a client for the SSEEvent from the given config.
+func NewSSEEventClient(c config) *SSEEventClient {
+	return &SSEEventClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `sseevent.Hooks(f(g(h())))`.
+func (c *SSEEventClient) Use(hooks ...Hook) {
+	c.hooks.SSEEvent = append(c.hooks.SSEEvent, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `sseevent.Intercept(f(g(h())))`.
+func (c *SSEEventClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SSEEvent = append(c.inters.SSEEvent, interceptors...)
+}
+
+// Create returns a builder for creating a SSEEvent entity.
+func (c *SSEEventClient) Create() *SSEEventCreate {
+	mutation := newSSEEventMutation(c.config, OpCreate)
+	return &SSEEventCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SSEEvent entities.
+func (c *SSEEventClient) CreateBulk(builders ...*SSEEventCreate) *SSEEventCreateBulk {
+	return &SSEEventCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SSEEventClient) MapCreateBulk(slice any, setFunc func(*SSEEventCreate, int)) *SSEEventCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SSEEventCreateBulk{err: fmt.Errorf("calling to SSEEventClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SSEEventCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SSEEventCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SSEEvent.
+func (c *SSEEventClient) Update() *SSEEventUpdate {
+	mutation := newSSEEventMutation(c.config, OpUpdate)
+	return &SSEEventUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SSEEventClient) UpdateOne(_m *SSEEvent) *SSEEventUpdateOne {
+	mutation := newSSEEventMutation(c.config, OpUpdateOne, withSSEEvent(_m))
+	return &SSEEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SSEEventClient) UpdateOneID(id int) *SSEEventUpdateOne {
+	mutation := newSSEEventMutation(c.config, OpUpdateOne, withSSEEventID(id))
+	return &SSEEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SSEEvent.
+func (c *SSEEventClient) Delete() *SSEEventDelete {
+	mutation := newSSEEventMutation(c.config, OpDelete)
+	return &SSEEventDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SSEEventClient) DeleteOne(_m *SSEEvent) *SSEEventDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SSEEventClient) DeleteOneID(id int) *SSEEventDeleteOne {
+	builder := c.Delete().Where(sseevent.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SSEEventDeleteOne{builder}
+}
+
+// Query returns a query builder for SSEEvent.
+func (c *SSEEventClient) Query() *SSEEventQuery {
+	return &SSEEventQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSSEEvent},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SSEEvent entity by its id.
+func (c *SSEEventClient) Get(ctx context.Context, id int) (*SSEEvent, error) {
+	return c.Query().Where(sseevent.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SSEEventClient) GetX(ctx context.Context, id int) *SSEEvent {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryJob queries the job edge of a SSEEvent.
+func (c *SSEEventClient) QueryJob(_m *SSEEvent) *TranslationJobQuery {
+	query := (&TranslationJobClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(sseevent.Table, sseevent.FieldID, id),
+			sqlgraph.To(translationjob.Table, translationjob.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, sseevent.JobTable, sseevent.JobColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *SSEEventClient) Hooks() []Hook {
+	return c.hooks.SSEEvent
+}
+
+// Interceptors returns the client interceptors.
+func (c *SSEEventClient) Interceptors() []Interceptor {
+	return c.inters.SSEEvent
+}
+
+func (c *SSEEventClient) mutate(ctx context.Context, m *SSEEventMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SSEEventCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SSEEventUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SSEEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SSEEventDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SSEEvent mutation op: %q", m.Op())
+	}
+}
+
 // SegmentClient is a client for the Segment schema.
 type SegmentClient struct {
 	config
@@ -3178,6 +3335,22 @@ func (c *TranslationJobClient) QueryJobResources(_m *TranslationJob) *JobResourc
 	return query
 }
 
+// QuerySseEvents queries the sse_events edge of a TranslationJob.
+func (c *TranslationJobClient) QuerySseEvents(_m *TranslationJob) *SSEEventQuery {
+	query := (&SSEEventClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(translationjob.Table, translationjob.FieldID, id),
+			sqlgraph.To(sseevent.Table, sseevent.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, translationjob.SseEventsTable, translationjob.SseEventsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // Hooks returns the client hooks.
 func (c *TranslationJobClient) Hooks() []Hook {
 	return c.hooks.TranslationJob
@@ -3879,13 +4052,13 @@ type (
 	hooks struct {
 		ActivityLog, Backend, ExecutionPlanTemplate, GlossaryEntry, JobResource,
 		OrgMembership, Organization, Project, PromptTemplate, RefreshToken, Resource,
-		Segment, SyncTask, SystemSetting, TMEntry, TranslationJob, TranslationProfile,
-		UsageRecord, User []ent.Hook
+		SSEEvent, Segment, SyncTask, SystemSetting, TMEntry, TranslationJob,
+		TranslationProfile, UsageRecord, User []ent.Hook
 	}
 	inters struct {
 		ActivityLog, Backend, ExecutionPlanTemplate, GlossaryEntry, JobResource,
 		OrgMembership, Organization, Project, PromptTemplate, RefreshToken, Resource,
-		Segment, SyncTask, SystemSetting, TMEntry, TranslationJob, TranslationProfile,
-		UsageRecord, User []ent.Interceptor
+		SSEEvent, Segment, SyncTask, SystemSetting, TMEntry, TranslationJob,
+		TranslationProfile, UsageRecord, User []ent.Interceptor
 	}
 )

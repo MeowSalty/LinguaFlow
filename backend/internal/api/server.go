@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -70,6 +71,14 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 		logger = slog.Default()
 	}
 
+	hybridStore, err := event.NewHybridStore(
+		event.NewRingBufferStore(event.DefaultRingBufferConfig()),
+		event.NewEntEventStore(client),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("init event store: %w", err)
+	}
+
 	s := &Server{
 		serverCfg:   cfg,
 		logger:      logger,
@@ -77,7 +86,7 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 		entClient:   client,
 		mode:        mode,
 		localUser:   localUser,
-		eventBroker: event.NewBroker(event.NewRingBufferStore(event.DefaultRingBufferConfig())),
+		eventBroker: event.NewBroker(hybridStore),
 	}
 	limiterPool := backend.NewLimiterPool()
 	s.adminService = service.NewAdminService(client)

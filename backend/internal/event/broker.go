@@ -1,6 +1,7 @@
 package event
 
 import (
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -62,10 +63,16 @@ func (b *Broker) Unsubscribe(jobID int, ch chan Event) {
 
 // Publish sends an event to all subscribers of the given job ID.
 // If a store is configured, the event is persisted first and assigned a global Seq.
+// If persistence fails, the event is still broadcast in degraded mode (memory-only).
 // Non-blocking: if a subscriber's buffer is full, the event is dropped for that subscriber.
 func (b *Broker) Publish(jobID int, evt Event) {
 	if b.store != nil {
-		evt.Seq = b.store.Append(jobID, evt)
+		seq, err := b.store.Append(jobID, evt)
+		if err != nil {
+			slog.Warn("broker: store append failed, event broadcasted in degraded mode",
+				"job_id", jobID, "error", err)
+		}
+		evt.Seq = seq
 	}
 
 	b.mu.RLock()
