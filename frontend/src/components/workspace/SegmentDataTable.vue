@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { DataTableRowKey } from 'naive-ui'
 import { NButton, NDataTable, NEmpty, NSpin } from 'naive-ui'
-import { ref, toRef, computed, onMounted, onUnmounted } from 'vue'
+import { ref, toRef, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 
 import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
@@ -55,6 +55,31 @@ const config = computed<SegmentTableConfig>(() => ({
 
 const configRef = toRef(config)
 
+// ── 原文 HTML 源码切换 ──
+const showSourceHtml = ref(false)
+
+const toggleSourceHtml = (): void => {
+  showSourceHtml.value = !showSourceHtml.value
+}
+
+watch(
+  () => props.inlineEditingSegmentId,
+  (newId) => {
+    showSourceHtml.value = false
+    if (newId !== null) {
+      const idx = props.segments.findIndex((s) => s.id === newId)
+      if (idx >= 0) {
+        focusedRowIndex.value = idx
+      }
+      nextTick(() => {
+        const editingRow = document.querySelector('.segment-row--editing')
+        const textarea = editingRow?.querySelector('textarea') as HTMLTextAreaElement | null
+        textarea?.focus()
+      })
+    }
+  },
+)
+
 // ── 依赖注入（委托 emit） ──
 const deps: SegmentColumnDeps = {
   inlineEditingSegmentId: toRef(props, 'inlineEditingSegmentId'),
@@ -62,6 +87,9 @@ const deps: SegmentColumnDeps = {
   inlineCommentVisible: toRef(props, 'inlineCommentVisible'),
   inlineCommentText: toRef(props, 'inlineCommentText'),
   editingSegmentIds: toRef(props, 'editingSegmentIds'),
+
+  showSourceHtml,
+  toggleSourceHtml,
 
   startInlineEdit: (segment) => emit('startInlineEdit', segment),
   cancelInlineEdit: () => emit('cancelInlineEdit'),
@@ -103,6 +131,21 @@ const handleSelectionChange = (keys: DataTableRowKey[]): void => {
 
 // ── 键盘导航 ──
 const focusedRowIndex = ref<number>(-1)
+
+const HEADER_HEIGHT = 64
+
+const scrollFocusedRowIntoView = (): void => {
+  setTimeout(() => {
+    const rowEl = document.querySelector('.segment-row--focused') as HTMLElement | null
+    if (!rowEl) return
+    const rect = rowEl.getBoundingClientRect()
+    if (rect.top < HEADER_HEIGHT) {
+      window.scrollBy({ top: rect.top - HEADER_HEIGHT - 8, behavior: 'smooth' })
+    } else if (rect.bottom > window.innerHeight) {
+      window.scrollBy({ top: rect.bottom - window.innerHeight + 20, behavior: 'smooth' })
+    }
+  }, 50)
+}
 
 const rowClassName = (row: Segment): string => {
   const classes: string[] = []
@@ -148,11 +191,13 @@ const handleKeyDown = (e: KeyboardEvent): void => {
     e.preventDefault()
     if (focusedRowIndex.value < props.segments.length - 1) {
       focusedRowIndex.value++
+      scrollFocusedRowIntoView()
     }
   } else if (e.key === 'ArrowUp') {
     e.preventDefault()
     if (focusedRowIndex.value > 0) {
       focusedRowIndex.value--
+      scrollFocusedRowIntoView()
     }
   } else if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
     if (focusedRowIndex.value >= 0 && focusedRowIndex.value < props.segments.length) {

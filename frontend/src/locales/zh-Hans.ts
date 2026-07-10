@@ -485,6 +485,8 @@ const messages = {
         saveAndNext: '保存并下一个',
         cancelInline: '取消',
         comment: '备注',
+        viewSourceHtml: '查看 HTML 源码',
+        hideSourceHtml: '隐藏 HTML 源码',
       },
       form: {
         target: '译文',
