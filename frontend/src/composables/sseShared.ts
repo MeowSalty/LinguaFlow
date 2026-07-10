@@ -10,6 +10,7 @@ export interface SSEEvent {
   message: string
   metadata?: Record<string, unknown>
   created_at: string
+  seq: number
 }
 
 export interface BatchEventMetadata {

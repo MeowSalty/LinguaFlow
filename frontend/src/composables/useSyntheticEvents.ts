@@ -26,6 +26,7 @@ export function buildSyntheticEvents(job: TranslationJob): SyntheticEvent[] {
     message,
     stage,
     created_at: timestamp,
+    seq: 0,
     synthetic: true,
   })
 
