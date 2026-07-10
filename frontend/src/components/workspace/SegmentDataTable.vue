@@ -67,6 +67,10 @@ watch(
   (newId) => {
     showSourceHtml.value = false
     if (newId !== null) {
+      const idx = props.segments.findIndex((s) => s.id === newId)
+      if (idx >= 0) {
+        focusedRowIndex.value = idx
+      }
       nextTick(() => {
         const editingRow = document.querySelector('.segment-row--editing')
         const textarea = editingRow?.querySelector('textarea') as HTMLTextAreaElement | null
