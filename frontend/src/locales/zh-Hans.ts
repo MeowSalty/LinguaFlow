@@ -266,7 +266,8 @@ const messages = {
       personal: '个人',
       orgOwner: '组织',
       comingSoon: '还没做',
-      glossaryEnabled: '启用术语表',
+      glossaryEnabled: '术语表已启用',
+      glossaryDisabled: '术语表未启用',
     },
     validation: {
       nameRequired: '请输入项目名称',
