@@ -224,15 +224,19 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 				MaxChars: profileCfg.Context.MaxChars,
 			}
 			roundContext = &ctx
-			pp := pipeline.PostprocessConfig{
-				TrimSpaces: profileCfg.Postprocess.TrimSpaces,
+			if profileCfg.Postprocess.Enabled {
+				pp := pipeline.PostprocessConfig{
+					TrimSpaces: profileCfg.Postprocess.TrimSpaces,
+				}
+				roundPostprocess = &pp
 			}
-			roundPostprocess = &pp
 			roundRuby = engine.RubyConfig{
 				Enabled:       profileCfg.Ruby.Enabled,
 				PreserveKinds: profileCfg.Ruby.PreserveKinds,
 			}
-			roundProtectRules = profileCfg.Protect.Rules
+			if profileCfg.Protect.Enabled {
+				roundProtectRules = profileCfg.Protect.Rules
+			}
 		}
 
 		rounds = append(rounds, engine.Round{
