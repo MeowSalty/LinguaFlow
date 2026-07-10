@@ -50,6 +50,16 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 			return nil, fmt.Errorf("round %q build renderer: %w", rs.Name, err)
 		}
 
+		var protectRules []string
+		if rs.Strategy.Protect.Enabled {
+			protectRules = rs.Strategy.Protect.Rules
+		}
+		var roundPostprocess *pipeline.PostprocessConfig
+		if rs.Strategy.Postprocess.Enabled {
+			roundPostprocess = &pipeline.PostprocessConfig{
+				TrimSpaces: rs.Strategy.Postprocess.TrimSpaces,
+			}
+		}
 		rounds = append(rounds, engine.Round{
 			Backend:          b,
 			Name:             rs.Name,
@@ -65,7 +75,7 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 			Renderer:          roundRenderer,
 			ResponseMode:      responseModeFromBackendOptions(rs.Backend.Options),
 			Mode:              pipeline.RoundModeTranslate,
-			ProtectRules:      rs.Strategy.Protect.Rules,
+			ProtectRules:      protectRules,
 			RubyEnabled:       rs.Strategy.Ruby.Enabled,
 			RubyPreserveKinds: rs.Strategy.Ruby.PreserveKinds,
 			Context: &pipeline.ContextConfig{
@@ -74,9 +84,7 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 				After:    rs.Strategy.Context.After,
 				MaxChars: rs.Strategy.Context.MaxChars,
 			},
-			Postprocess: &pipeline.PostprocessConfig{
-				TrimSpaces: rs.Strategy.Postprocess.TrimSpaces,
-			},
+			Postprocess: roundPostprocess,
 		})
 	}
 
@@ -161,6 +169,7 @@ func buildEngineConfig(snapshot *service.JobExecutionSnapshot) *engine.Config {
 		cfg.Glossary = engine.GlossaryConfig{
 			Enabled: snapshot.GlossaryEnabled,
 			Bootstrap: config.BootstrapConfig{
+				Enabled:                s.Glossary.Bootstrap.Enabled,
 				MaxTermsPer1000Chars:   s.Glossary.Bootstrap.MaxTermsPer1000Chars,
 				MinSourceLen:           s.Glossary.Bootstrap.MinSourceLen,
 				InlineConflictStrategy: s.Glossary.Bootstrap.InlineConflictStrategy,
