@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { DataTableRowKey } from 'naive-ui'
 import { NButton, NDataTable, NEmpty, NSpin } from 'naive-ui'
-import { ref, toRef, computed, onMounted, onUnmounted } from 'vue'
+import { ref, toRef, computed, watch, onMounted, onUnmounted } from 'vue'
 
 import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
@@ -55,6 +55,20 @@ const config = computed<SegmentTableConfig>(() => ({
 
 const configRef = toRef(config)
 
+// ── 原文 HTML 源码切换 ──
+const showSourceHtml = ref(false)
+
+const toggleSourceHtml = (): void => {
+  showSourceHtml.value = !showSourceHtml.value
+}
+
+watch(
+  () => props.inlineEditingSegmentId,
+  () => {
+    showSourceHtml.value = false
+  },
+)
+
 // ── 依赖注入（委托 emit） ──
 const deps: SegmentColumnDeps = {
   inlineEditingSegmentId: toRef(props, 'inlineEditingSegmentId'),
@@ -62,6 +76,9 @@ const deps: SegmentColumnDeps = {
   inlineCommentVisible: toRef(props, 'inlineCommentVisible'),
   inlineCommentText: toRef(props, 'inlineCommentText'),
   editingSegmentIds: toRef(props, 'editingSegmentIds'),
+
+  showSourceHtml,
+  toggleSourceHtml,
 
   startInlineEdit: (segment) => emit('startInlineEdit', segment),
   cancelInlineEdit: () => emit('cancelInlineEdit'),
