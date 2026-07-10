@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { DataTableRowKey } from 'naive-ui'
 import { NButton, NDataTable, NEmpty, NSpin } from 'naive-ui'
-import { ref, toRef, computed, watch, onMounted, onUnmounted } from 'vue'
+import { ref, toRef, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 
 import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
@@ -64,8 +64,15 @@ const toggleSourceHtml = (): void => {
 
 watch(
   () => props.inlineEditingSegmentId,
-  () => {
+  (newId) => {
     showSourceHtml.value = false
+    if (newId !== null) {
+      nextTick(() => {
+        const editingRow = document.querySelector('.segment-row--editing')
+        const textarea = editingRow?.querySelector('textarea') as HTMLTextAreaElement | null
+        textarea?.focus()
+      })
+    }
   },
 )
 
