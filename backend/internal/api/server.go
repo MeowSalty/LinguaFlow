@@ -77,7 +77,7 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 		entClient:   client,
 		mode:        mode,
 		localUser:   localUser,
-		eventBroker: event.NewBroker(),
+		eventBroker: event.NewBroker(event.NewRingBufferStore(event.DefaultRingBufferConfig())),
 	}
 	limiterPool := backend.NewLimiterPool()
 	s.adminService = service.NewAdminService(client)

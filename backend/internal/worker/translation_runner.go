@@ -151,25 +151,26 @@ func (r *TranslationRunner) processJob(ctx context.Context, jobID int) error {
 			pending = append(pending, item)
 		}
 	}
-	if len(pending) == 0 {
-		return r.jobs.ReconcileJob(jobCtx, jobID)
-	}
-	if err := r.jobs.MarkJobRunning(jobCtx, jobID); err != nil {
-		return err
-	}
-	// 记录任务开始时间
-	_ = r.jobs.MarkJobStarted(jobCtx, jobID)
-	for _, item := range pending {
-		// 每次处理资源前检查 context 是否已取消
-		if jobCtx.Err() != nil {
-			r.logger.Info("job context cancelled, stopping", "job_id", jobID)
-			return jobCtx.Err()
+	if len(pending) > 0 {
+		if err := r.jobs.MarkJobRunning(jobCtx, jobID); err != nil {
+			return err
 		}
-		if err := r.processJobResource(jobCtx, exec, item); err != nil {
-			r.logger.Warn("translation job resource failed", "job_id", jobID, "job_resource_id", item.ID, "err", err)
+		// 记录任务开始时间
+		_ = r.jobs.MarkJobStarted(jobCtx, jobID)
+		for _, item := range pending {
+			// 每次处理资源前检查 context 是否已取消
+			if jobCtx.Err() != nil {
+				r.logger.Info("job context cancelled, stopping", "job_id", jobID)
+				break
+			}
+			if err := r.processJobResource(jobCtx, exec, item); err != nil {
+				r.logger.Warn("translation job resource failed", "job_id", jobID, "job_resource_id", item.ID, "err", err)
+			}
 		}
 	}
-	return r.jobs.ReconcileJob(jobCtx, jobID)
+	reconcileErr := r.jobs.ReconcileJob(jobCtx, jobID)
+	r.eventBroker.Purge(jobID)
+	return reconcileErr
 }
 
 // processJobResource 处理单个翻译资源：从 DB 加载段落、轮次循环翻译、写回 DB。
