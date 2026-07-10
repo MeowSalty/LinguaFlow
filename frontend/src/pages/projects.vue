@@ -25,6 +25,8 @@ const { targetLanguageOptions, sourceLanguageOptions } = useLanguageOptions()
 const formRef = ref<FormInst | null>(null)
 const drawerVisible = ref(false)
 const editingProject = ref<Project | null>(null)
+const deleteConfirmVisible = ref(false)
+const deletingProject = ref<Project | null>(null)
 
 const formModel = reactive<ProjectFormModel>({
   name: '',
@@ -171,7 +173,18 @@ const openProjectWorkspace = (project: Project, tab?: string): void => {
   })
 }
 
-const deleteSelectedProject = async (project: Project): Promise<void> => {
+const openDeleteConfirm = (project: Project): void => {
+  deletingProject.value = project
+  deleteConfirmVisible.value = true
+}
+
+const closeDeleteConfirm = (): void => {
+  deleteConfirmVisible.value = false
+  deletingProject.value = null
+}
+
+const confirmDelete = async (): Promise<void> => {
+  if (!deletingProject.value) return
   try {
     await projects.deleteProject(project.id)
     message.success(t('projects.messages.deleteSuccess'))
@@ -205,7 +218,7 @@ const handleCardDropdownSelect = (project: Project, key: string | number): void 
       openProjectWorkspace(project, 'glossary')
       break
     case 'delete':
-      void deleteSelectedProject(project)
+      openDeleteConfirm(project)
       break
   }
 }
@@ -329,6 +342,7 @@ watch(
         v-for="project in projects.filteredItems"
         :key="project.id"
         class="group relative cursor-pointer overflow-hidden rounded-2xl border border-lf-border-soft bg-lf-surface p-5 shadow-sm shadow-lf-shadow transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-lf-shadow-strong"
+        :class="{ 'pointer-events-none opacity-60': projects.isDeletingProject(project.id) }"
         @click="openProjectWorkspace(project)"
       >
         <div class="flex h-full flex-col gap-3">
@@ -462,5 +476,18 @@ watch(
         </template>
       </NDrawerContent>
     </NDrawer>
+
+    <NModal
+      v-model:show="deleteConfirmVisible"
+      preset="dialog"
+      type="warning"
+      :title="t('projects.actions.confirmDelete')"
+      :content="t('projects.delete.confirm', { name: deletingProject?.name ?? '' })"
+      :positive-text="t('projects.actions.delete')"
+      :negative-text="t('projects.actions.cancel')"
+      :loading="projects.deletingProjectIds.length > 0"
+      @positive-click="confirmDelete"
+      @negative-click="closeDeleteConfirm"
+    />
   </div>
 </template>
