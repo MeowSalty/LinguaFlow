@@ -52,6 +52,8 @@ const (
 	EdgeCreatedBy = "created_by"
 	// EdgeJobResources holds the string denoting the job_resources edge name in mutations.
 	EdgeJobResources = "job_resources"
+	// EdgeSseEvents holds the string denoting the sse_events edge name in mutations.
+	EdgeSseEvents = "sse_events"
 	// Table holds the table name of the translationjob in the database.
 	Table = "translation_jobs"
 	// ProjectTable is the table that holds the project relation/edge.
@@ -75,6 +77,13 @@ const (
 	JobResourcesInverseTable = "job_resources"
 	// JobResourcesColumn is the table column denoting the job_resources relation/edge.
 	JobResourcesColumn = "translation_job_job_resources"
+	// SseEventsTable is the table that holds the sse_events relation/edge.
+	SseEventsTable = "sse_events"
+	// SseEventsInverseTable is the table name for the SSEEvent entity.
+	// It exists in this package in order to avoid circular dependency with the "sseevent" package.
+	SseEventsInverseTable = "sse_events"
+	// SseEventsColumn is the table column denoting the sse_events relation/edge.
+	SseEventsColumn = "job_id"
 )
 
 // Columns holds all SQL columns for translationjob fields.
@@ -276,6 +285,20 @@ func ByJobResources(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newJobResourcesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// BySseEventsCount orders the results by sse_events count.
+func BySseEventsCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newSseEventsStep(), opts...)
+	}
+}
+
+// BySseEvents orders the results by sse_events terms.
+func BySseEvents(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newSseEventsStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newProjectStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -295,5 +318,12 @@ func newJobResourcesStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(JobResourcesInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, JobResourcesTable, JobResourcesColumn),
+	)
+}
+func newSseEventsStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(SseEventsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, SseEventsTable, SseEventsColumn),
 	)
 }

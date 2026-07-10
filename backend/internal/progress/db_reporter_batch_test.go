@@ -8,7 +8,7 @@ import (
 )
 
 func TestDBReporter_OnBatchEvent_TypeAndLevel(t *testing.T) {
-	broker := event.NewBroker()
+	broker := event.NewBroker(event.NewRingBufferStore(event.DefaultRingBufferConfig()))
 	ch := broker.Subscribe(1)
 	defer broker.Unsubscribe(1, ch)
 
@@ -46,7 +46,7 @@ func TestDBReporter_OnBatchEvent_TypeAndLevel(t *testing.T) {
 }
 
 func TestDBReporter_OnBatchEvent_Truncation(t *testing.T) {
-	broker := event.NewBroker()
+	broker := event.NewBroker(event.NewRingBufferStore(event.DefaultRingBufferConfig()))
 	ch := broker.Subscribe(2)
 	defer broker.Unsubscribe(2, ch)
 

@@ -151,25 +151,26 @@ func (r *TranslationRunner) processJob(ctx context.Context, jobID int) error {
 			pending = append(pending, item)
 		}
 	}
-	if len(pending) == 0 {
-		return r.jobs.ReconcileJob(jobCtx, jobID)
-	}
-	if err := r.jobs.MarkJobRunning(jobCtx, jobID); err != nil {
-		return err
-	}
-	// 记录任务开始时间
-	_ = r.jobs.MarkJobStarted(jobCtx, jobID)
-	for _, item := range pending {
-		// 每次处理资源前检查 context 是否已取消
-		if jobCtx.Err() != nil {
-			r.logger.Info("job context cancelled, stopping", "job_id", jobID)
-			return jobCtx.Err()
+	if len(pending) > 0 {
+		if err := r.jobs.MarkJobRunning(jobCtx, jobID); err != nil {
+			return err
 		}
-		if err := r.processJobResource(jobCtx, exec, item); err != nil {
-			r.logger.Warn("translation job resource failed", "job_id", jobID, "job_resource_id", item.ID, "err", err)
+		// 记录任务开始时间
+		_ = r.jobs.MarkJobStarted(jobCtx, jobID)
+		for _, item := range pending {
+			// 每次处理资源前检查 context 是否已取消
+			if jobCtx.Err() != nil {
+				r.logger.Info("job context cancelled, stopping", "job_id", jobID)
+				break
+			}
+			if err := r.processJobResource(jobCtx, exec, item); err != nil {
+				r.logger.Warn("translation job resource failed", "job_id", jobID, "job_resource_id", item.ID, "err", err)
+			}
 		}
 	}
-	return r.jobs.ReconcileJob(jobCtx, jobID)
+	reconcileErr := r.jobs.ReconcileJob(jobCtx, jobID)
+	r.eventBroker.Purge(jobID)
+	return reconcileErr
 }
 
 // processJobResource 处理单个翻译资源：从 DB 加载段落、轮次循环翻译、写回 DB。
@@ -285,9 +286,9 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 		}
 
 		batchHandler := func(_ context.Context, batchResult pipeline.BatchResult) error {
-			status := service.SegmentStatusTranslated
+			defaultStatus := service.SegmentStatusTranslated
 			if autoApprove {
-				status = service.SegmentStatusApproved
+				defaultStatus = service.SegmentStatusApproved
 			}
 
 			// --- QA 规则检测 ---
@@ -295,9 +296,6 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 			if qaEngine != nil {
 				inputs := buildQACheckInputs(batchResult)
 				allIssues = qaEngine.Run(ctx, inputs)
-				if qa.HasErrors(allIssues) && cfg.QA.AutoReject {
-					status = service.SegmentStatusRejected
-				}
 			}
 
 			localCompleted := 0
@@ -310,17 +308,25 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 				if !ok {
 					continue
 				}
+
+				segIssues := qa.IssuesFor(ts.Index, allIssues)
+
+				segStatus := defaultStatus
+				if qa.HasErrors(segIssues) && cfg.QA.AutoReject {
+					segStatus = service.SegmentStatusRejected
+				}
+
 				update := r.client.Segment.UpdateOneID(dbID).
 					SetSourceText(firstNonEmpty(ts.SourceText, " ")).
 					SetTargetText(ts.TargetText).
-					SetStatus(status)
+					SetStatus(segStatus)
 				if autoApprove {
 					update.ClearReviewComment()
 				}
 				// --- 写入 QA 结果 ---
 				// 先清除旧的 quality_issues，再按需写入新的
 				update.ClearQualityIssues()
-				if segIssues := qa.IssuesFor(ts.Index, allIssues); len(segIssues) > 0 {
+				if len(segIssues) > 0 {
 					update.SetQualityIssues(segIssues)
 				}
 				if err := update.Exec(ctx); err != nil {

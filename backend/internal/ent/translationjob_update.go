@@ -14,6 +14,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
@@ -332,6 +333,21 @@ func (_u *TranslationJobUpdate) AddJobResources(v ...*JobResource) *TranslationJ
 	return _u.AddJobResourceIDs(ids...)
 }
 
+// AddSseEventIDs adds the "sse_events" edge to the SSEEvent entity by IDs.
+func (_u *TranslationJobUpdate) AddSseEventIDs(ids ...int) *TranslationJobUpdate {
+	_u.mutation.AddSseEventIDs(ids...)
+	return _u
+}
+
+// AddSseEvents adds the "sse_events" edges to the SSEEvent entity.
+func (_u *TranslationJobUpdate) AddSseEvents(v ...*SSEEvent) *TranslationJobUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddSseEventIDs(ids...)
+}
+
 // Mutation returns the TranslationJobMutation object of the builder.
 func (_u *TranslationJobUpdate) Mutation() *TranslationJobMutation {
 	return _u.mutation
@@ -368,6 +384,27 @@ func (_u *TranslationJobUpdate) RemoveJobResources(v ...*JobResource) *Translati
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveJobResourceIDs(ids...)
+}
+
+// ClearSseEvents clears all "sse_events" edges to the SSEEvent entity.
+func (_u *TranslationJobUpdate) ClearSseEvents() *TranslationJobUpdate {
+	_u.mutation.ClearSseEvents()
+	return _u
+}
+
+// RemoveSseEventIDs removes the "sse_events" edge to SSEEvent entities by IDs.
+func (_u *TranslationJobUpdate) RemoveSseEventIDs(ids ...int) *TranslationJobUpdate {
+	_u.mutation.RemoveSseEventIDs(ids...)
+	return _u
+}
+
+// RemoveSseEvents removes "sse_events" edges to SSEEvent entities.
+func (_u *TranslationJobUpdate) RemoveSseEvents(v ...*SSEEvent) *TranslationJobUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveSseEventIDs(ids...)
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
@@ -639,6 +676,51 @@ func (_u *TranslationJobUpdate) sqlSave(ctx context.Context) (_node int, err err
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.SseEventsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   translationjob.SseEventsTable,
+			Columns: []string{translationjob.SseEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(sseevent.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedSseEventsIDs(); len(nodes) > 0 && !_u.mutation.SseEventsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   translationjob.SseEventsTable,
+			Columns: []string{translationjob.SseEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(sseevent.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.SseEventsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   translationjob.SseEventsTable,
+			Columns: []string{translationjob.SseEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(sseevent.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -967,6 +1049,21 @@ func (_u *TranslationJobUpdateOne) AddJobResources(v ...*JobResource) *Translati
 	return _u.AddJobResourceIDs(ids...)
 }
 
+// AddSseEventIDs adds the "sse_events" edge to the SSEEvent entity by IDs.
+func (_u *TranslationJobUpdateOne) AddSseEventIDs(ids ...int) *TranslationJobUpdateOne {
+	_u.mutation.AddSseEventIDs(ids...)
+	return _u
+}
+
+// AddSseEvents adds the "sse_events" edges to the SSEEvent entity.
+func (_u *TranslationJobUpdateOne) AddSseEvents(v ...*SSEEvent) *TranslationJobUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddSseEventIDs(ids...)
+}
+
 // Mutation returns the TranslationJobMutation object of the builder.
 func (_u *TranslationJobUpdateOne) Mutation() *TranslationJobMutation {
 	return _u.mutation
@@ -1003,6 +1100,27 @@ func (_u *TranslationJobUpdateOne) RemoveJobResources(v ...*JobResource) *Transl
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveJobResourceIDs(ids...)
+}
+
+// ClearSseEvents clears all "sse_events" edges to the SSEEvent entity.
+func (_u *TranslationJobUpdateOne) ClearSseEvents() *TranslationJobUpdateOne {
+	_u.mutation.ClearSseEvents()
+	return _u
+}
+
+// RemoveSseEventIDs removes the "sse_events" edge to SSEEvent entities by IDs.
+func (_u *TranslationJobUpdateOne) RemoveSseEventIDs(ids ...int) *TranslationJobUpdateOne {
+	_u.mutation.RemoveSseEventIDs(ids...)
+	return _u
+}
+
+// RemoveSseEvents removes "sse_events" edges to SSEEvent entities.
+func (_u *TranslationJobUpdateOne) RemoveSseEvents(v ...*SSEEvent) *TranslationJobUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveSseEventIDs(ids...)
 }
 
 // Where appends a list predicates to the TranslationJobUpdate builder.
@@ -1304,6 +1422,51 @@ func (_u *TranslationJobUpdateOne) sqlSave(ctx context.Context) (_node *Translat
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.SseEventsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   translationjob.SseEventsTable,
+			Columns: []string{translationjob.SseEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(sseevent.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedSseEventsIDs(); len(nodes) > 0 && !_u.mutation.SseEventsCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   translationjob.SseEventsTable,
+			Columns: []string{translationjob.SseEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(sseevent.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.SseEventsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   translationjob.SseEventsTable,
+			Columns: []string{translationjob.SseEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(sseevent.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

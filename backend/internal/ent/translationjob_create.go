@@ -12,6 +12,7 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
@@ -260,6 +261,21 @@ func (_c *TranslationJobCreate) AddJobResources(v ...*JobResource) *TranslationJ
 		ids[i] = v[i].ID
 	}
 	return _c.AddJobResourceIDs(ids...)
+}
+
+// AddSseEventIDs adds the "sse_events" edge to the SSEEvent entity by IDs.
+func (_c *TranslationJobCreate) AddSseEventIDs(ids ...int) *TranslationJobCreate {
+	_c.mutation.AddSseEventIDs(ids...)
+	return _c
+}
+
+// AddSseEvents adds the "sse_events" edges to the SSEEvent entity.
+func (_c *TranslationJobCreate) AddSseEvents(v ...*SSEEvent) *TranslationJobCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddSseEventIDs(ids...)
 }
 
 // Mutation returns the TranslationJobMutation object of the builder.
@@ -568,6 +584,22 @@ func (_c *TranslationJobCreate) createSpec() (*TranslationJob, *sqlgraph.CreateS
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.SseEventsIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   translationjob.SseEventsTable,
+			Columns: []string{translationjob.SseEventsColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(sseevent.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

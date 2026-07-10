@@ -874,6 +874,29 @@ func HasJobResourcesWith(preds ...predicate.JobResource) predicate.TranslationJo
 	})
 }
 
+// HasSseEvents applies the HasEdge predicate on the "sse_events" edge.
+func HasSseEvents() predicate.TranslationJob {
+	return predicate.TranslationJob(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, SseEventsTable, SseEventsColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasSseEventsWith applies the HasEdge predicate on the "sse_events" edge with a given conditions (other predicates).
+func HasSseEventsWith(preds ...predicate.SSEEvent) predicate.TranslationJob {
+	return predicate.TranslationJob(func(s *sql.Selector) {
+		step := newSseEventsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // And groups predicates with the AND operator between them.
 func And(predicates ...predicate.TranslationJob) predicate.TranslationJob {
 	return predicate.TranslationJob(sql.AndPredicates(predicates...))

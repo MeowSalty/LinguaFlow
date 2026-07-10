@@ -25,6 +25,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
@@ -55,6 +56,7 @@ const (
 	TypePromptTemplate        = "PromptTemplate"
 	TypeRefreshToken          = "RefreshToken"
 	TypeResource              = "Resource"
+	TypeSSEEvent              = "SSEEvent"
 	TypeSegment               = "Segment"
 	TypeSyncTask              = "SyncTask"
 	TypeSystemSetting         = "SystemSetting"
@@ -11027,6 +11029,841 @@ func (m *ResourceMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown Resource edge %s", name)
 }
 
+// SSEEventMutation represents an operation that mutates the SSEEvent nodes in the graph.
+type SSEEventMutation struct {
+	config
+	op            Op
+	typ           string
+	id            *int
+	seq           *int64
+	addseq        *int64
+	_type         *string
+	level         *string
+	stage         *string
+	message       *string
+	metadata      *map[string]interface{}
+	created_at    *time.Time
+	clearedFields map[string]struct{}
+	job           *int
+	clearedjob    bool
+	done          bool
+	oldValue      func(context.Context) (*SSEEvent, error)
+	predicates    []predicate.SSEEvent
+}
+
+var _ ent.Mutation = (*SSEEventMutation)(nil)
+
+// sseeventOption allows management of the mutation configuration using functional options.
+type sseeventOption func(*SSEEventMutation)
+
+// newSSEEventMutation creates new mutation for the SSEEvent entity.
+func newSSEEventMutation(c config, op Op, opts ...sseeventOption) *SSEEventMutation {
+	m := &SSEEventMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeSSEEvent,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withSSEEventID sets the ID field of the mutation.
+func withSSEEventID(id int) sseeventOption {
+	return func(m *SSEEventMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *SSEEvent
+		)
+		m.oldValue = func(ctx context.Context) (*SSEEvent, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().SSEEvent.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withSSEEvent sets the old SSEEvent of the mutation.
+func withSSEEvent(node *SSEEvent) sseeventOption {
+	return func(m *SSEEventMutation) {
+		m.oldValue = func(context.Context) (*SSEEvent, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m SSEEventMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m SSEEventMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *SSEEventMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *SSEEventMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().SSEEvent.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetJobID sets the "job_id" field.
+func (m *SSEEventMutation) SetJobID(i int) {
+	m.job = &i
+}
+
+// JobID returns the value of the "job_id" field in the mutation.
+func (m *SSEEventMutation) JobID() (r int, exists bool) {
+	v := m.job
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldJobID returns the old "job_id" field's value of the SSEEvent entity.
+// If the SSEEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SSEEventMutation) OldJobID(ctx context.Context) (v int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldJobID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldJobID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldJobID: %w", err)
+	}
+	return oldValue.JobID, nil
+}
+
+// ResetJobID resets all changes to the "job_id" field.
+func (m *SSEEventMutation) ResetJobID() {
+	m.job = nil
+}
+
+// SetSeq sets the "seq" field.
+func (m *SSEEventMutation) SetSeq(i int64) {
+	m.seq = &i
+	m.addseq = nil
+}
+
+// Seq returns the value of the "seq" field in the mutation.
+func (m *SSEEventMutation) Seq() (r int64, exists bool) {
+	v := m.seq
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSeq returns the old "seq" field's value of the SSEEvent entity.
+// If the SSEEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SSEEventMutation) OldSeq(ctx context.Context) (v int64, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSeq is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSeq requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSeq: %w", err)
+	}
+	return oldValue.Seq, nil
+}
+
+// AddSeq adds i to the "seq" field.
+func (m *SSEEventMutation) AddSeq(i int64) {
+	if m.addseq != nil {
+		*m.addseq += i
+	} else {
+		m.addseq = &i
+	}
+}
+
+// AddedSeq returns the value that was added to the "seq" field in this mutation.
+func (m *SSEEventMutation) AddedSeq() (r int64, exists bool) {
+	v := m.addseq
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// ResetSeq resets all changes to the "seq" field.
+func (m *SSEEventMutation) ResetSeq() {
+	m.seq = nil
+	m.addseq = nil
+}
+
+// SetType sets the "type" field.
+func (m *SSEEventMutation) SetType(s string) {
+	m._type = &s
+}
+
+// GetType returns the value of the "type" field in the mutation.
+func (m *SSEEventMutation) GetType() (r string, exists bool) {
+	v := m._type
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldType returns the old "type" field's value of the SSEEvent entity.
+// If the SSEEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SSEEventMutation) OldType(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldType is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldType requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldType: %w", err)
+	}
+	return oldValue.Type, nil
+}
+
+// ResetType resets all changes to the "type" field.
+func (m *SSEEventMutation) ResetType() {
+	m._type = nil
+}
+
+// SetLevel sets the "level" field.
+func (m *SSEEventMutation) SetLevel(s string) {
+	m.level = &s
+}
+
+// Level returns the value of the "level" field in the mutation.
+func (m *SSEEventMutation) Level() (r string, exists bool) {
+	v := m.level
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldLevel returns the old "level" field's value of the SSEEvent entity.
+// If the SSEEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SSEEventMutation) OldLevel(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldLevel is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldLevel requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldLevel: %w", err)
+	}
+	return oldValue.Level, nil
+}
+
+// ResetLevel resets all changes to the "level" field.
+func (m *SSEEventMutation) ResetLevel() {
+	m.level = nil
+}
+
+// SetStage sets the "stage" field.
+func (m *SSEEventMutation) SetStage(s string) {
+	m.stage = &s
+}
+
+// Stage returns the value of the "stage" field in the mutation.
+func (m *SSEEventMutation) Stage() (r string, exists bool) {
+	v := m.stage
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldStage returns the old "stage" field's value of the SSEEvent entity.
+// If the SSEEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SSEEventMutation) OldStage(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldStage is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldStage requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldStage: %w", err)
+	}
+	return oldValue.Stage, nil
+}
+
+// ClearStage clears the value of the "stage" field.
+func (m *SSEEventMutation) ClearStage() {
+	m.stage = nil
+	m.clearedFields[sseevent.FieldStage] = struct{}{}
+}
+
+// StageCleared returns if the "stage" field was cleared in this mutation.
+func (m *SSEEventMutation) StageCleared() bool {
+	_, ok := m.clearedFields[sseevent.FieldStage]
+	return ok
+}
+
+// ResetStage resets all changes to the "stage" field.
+func (m *SSEEventMutation) ResetStage() {
+	m.stage = nil
+	delete(m.clearedFields, sseevent.FieldStage)
+}
+
+// SetMessage sets the "message" field.
+func (m *SSEEventMutation) SetMessage(s string) {
+	m.message = &s
+}
+
+// Message returns the value of the "message" field in the mutation.
+func (m *SSEEventMutation) Message() (r string, exists bool) {
+	v := m.message
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMessage returns the old "message" field's value of the SSEEvent entity.
+// If the SSEEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SSEEventMutation) OldMessage(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMessage is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMessage requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMessage: %w", err)
+	}
+	return oldValue.Message, nil
+}
+
+// ResetMessage resets all changes to the "message" field.
+func (m *SSEEventMutation) ResetMessage() {
+	m.message = nil
+}
+
+// SetMetadata sets the "metadata" field.
+func (m *SSEEventMutation) SetMetadata(value map[string]interface{}) {
+	m.metadata = &value
+}
+
+// Metadata returns the value of the "metadata" field in the mutation.
+func (m *SSEEventMutation) Metadata() (r map[string]interface{}, exists bool) {
+	v := m.metadata
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMetadata returns the old "metadata" field's value of the SSEEvent entity.
+// If the SSEEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SSEEventMutation) OldMetadata(ctx context.Context) (v map[string]interface{}, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMetadata is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMetadata requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMetadata: %w", err)
+	}
+	return oldValue.Metadata, nil
+}
+
+// ClearMetadata clears the value of the "metadata" field.
+func (m *SSEEventMutation) ClearMetadata() {
+	m.metadata = nil
+	m.clearedFields[sseevent.FieldMetadata] = struct{}{}
+}
+
+// MetadataCleared returns if the "metadata" field was cleared in this mutation.
+func (m *SSEEventMutation) MetadataCleared() bool {
+	_, ok := m.clearedFields[sseevent.FieldMetadata]
+	return ok
+}
+
+// ResetMetadata resets all changes to the "metadata" field.
+func (m *SSEEventMutation) ResetMetadata() {
+	m.metadata = nil
+	delete(m.clearedFields, sseevent.FieldMetadata)
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *SSEEventMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *SSEEventMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the SSEEvent entity.
+// If the SSEEvent object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *SSEEventMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *SSEEventMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// ClearJob clears the "job" edge to the TranslationJob entity.
+func (m *SSEEventMutation) ClearJob() {
+	m.clearedjob = true
+	m.clearedFields[sseevent.FieldJobID] = struct{}{}
+}
+
+// JobCleared reports if the "job" edge to the TranslationJob entity was cleared.
+func (m *SSEEventMutation) JobCleared() bool {
+	return m.clearedjob
+}
+
+// JobIDs returns the "job" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// JobID instead. It exists only for internal usage by the builders.
+func (m *SSEEventMutation) JobIDs() (ids []int) {
+	if id := m.job; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetJob resets all changes to the "job" edge.
+func (m *SSEEventMutation) ResetJob() {
+	m.job = nil
+	m.clearedjob = false
+}
+
+// Where appends a list predicates to the SSEEventMutation builder.
+func (m *SSEEventMutation) Where(ps ...predicate.SSEEvent) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the SSEEventMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *SSEEventMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.SSEEvent, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *SSEEventMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *SSEEventMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (SSEEvent).
+func (m *SSEEventMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *SSEEventMutation) Fields() []string {
+	fields := make([]string, 0, 8)
+	if m.job != nil {
+		fields = append(fields, sseevent.FieldJobID)
+	}
+	if m.seq != nil {
+		fields = append(fields, sseevent.FieldSeq)
+	}
+	if m._type != nil {
+		fields = append(fields, sseevent.FieldType)
+	}
+	if m.level != nil {
+		fields = append(fields, sseevent.FieldLevel)
+	}
+	if m.stage != nil {
+		fields = append(fields, sseevent.FieldStage)
+	}
+	if m.message != nil {
+		fields = append(fields, sseevent.FieldMessage)
+	}
+	if m.metadata != nil {
+		fields = append(fields, sseevent.FieldMetadata)
+	}
+	if m.created_at != nil {
+		fields = append(fields, sseevent.FieldCreatedAt)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *SSEEventMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case sseevent.FieldJobID:
+		return m.JobID()
+	case sseevent.FieldSeq:
+		return m.Seq()
+	case sseevent.FieldType:
+		return m.GetType()
+	case sseevent.FieldLevel:
+		return m.Level()
+	case sseevent.FieldStage:
+		return m.Stage()
+	case sseevent.FieldMessage:
+		return m.Message()
+	case sseevent.FieldMetadata:
+		return m.Metadata()
+	case sseevent.FieldCreatedAt:
+		return m.CreatedAt()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *SSEEventMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case sseevent.FieldJobID:
+		return m.OldJobID(ctx)
+	case sseevent.FieldSeq:
+		return m.OldSeq(ctx)
+	case sseevent.FieldType:
+		return m.OldType(ctx)
+	case sseevent.FieldLevel:
+		return m.OldLevel(ctx)
+	case sseevent.FieldStage:
+		return m.OldStage(ctx)
+	case sseevent.FieldMessage:
+		return m.OldMessage(ctx)
+	case sseevent.FieldMetadata:
+		return m.OldMetadata(ctx)
+	case sseevent.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	}
+	return nil, fmt.Errorf("unknown SSEEvent field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SSEEventMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case sseevent.FieldJobID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetJobID(v)
+		return nil
+	case sseevent.FieldSeq:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSeq(v)
+		return nil
+	case sseevent.FieldType:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetType(v)
+		return nil
+	case sseevent.FieldLevel:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetLevel(v)
+		return nil
+	case sseevent.FieldStage:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetStage(v)
+		return nil
+	case sseevent.FieldMessage:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMessage(v)
+		return nil
+	case sseevent.FieldMetadata:
+		v, ok := value.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMetadata(v)
+		return nil
+	case sseevent.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SSEEvent field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *SSEEventMutation) AddedFields() []string {
+	var fields []string
+	if m.addseq != nil {
+		fields = append(fields, sseevent.FieldSeq)
+	}
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *SSEEventMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	case sseevent.FieldSeq:
+		return m.AddedSeq()
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *SSEEventMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	case sseevent.FieldSeq:
+		v, ok := value.(int64)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.AddSeq(v)
+		return nil
+	}
+	return fmt.Errorf("unknown SSEEvent numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *SSEEventMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(sseevent.FieldStage) {
+		fields = append(fields, sseevent.FieldStage)
+	}
+	if m.FieldCleared(sseevent.FieldMetadata) {
+		fields = append(fields, sseevent.FieldMetadata)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *SSEEventMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *SSEEventMutation) ClearField(name string) error {
+	switch name {
+	case sseevent.FieldStage:
+		m.ClearStage()
+		return nil
+	case sseevent.FieldMetadata:
+		m.ClearMetadata()
+		return nil
+	}
+	return fmt.Errorf("unknown SSEEvent nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *SSEEventMutation) ResetField(name string) error {
+	switch name {
+	case sseevent.FieldJobID:
+		m.ResetJobID()
+		return nil
+	case sseevent.FieldSeq:
+		m.ResetSeq()
+		return nil
+	case sseevent.FieldType:
+		m.ResetType()
+		return nil
+	case sseevent.FieldLevel:
+		m.ResetLevel()
+		return nil
+	case sseevent.FieldStage:
+		m.ResetStage()
+		return nil
+	case sseevent.FieldMessage:
+		m.ResetMessage()
+		return nil
+	case sseevent.FieldMetadata:
+		m.ResetMetadata()
+		return nil
+	case sseevent.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	}
+	return fmt.Errorf("unknown SSEEvent field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *SSEEventMutation) AddedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.job != nil {
+		edges = append(edges, sseevent.EdgeJob)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *SSEEventMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case sseevent.EdgeJob:
+		if id := m.job; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *SSEEventMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 1)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *SSEEventMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *SSEEventMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 1)
+	if m.clearedjob {
+		edges = append(edges, sseevent.EdgeJob)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *SSEEventMutation) EdgeCleared(name string) bool {
+	switch name {
+	case sseevent.EdgeJob:
+		return m.clearedjob
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *SSEEventMutation) ClearEdge(name string) error {
+	switch name {
+	case sseevent.EdgeJob:
+		m.ClearJob()
+		return nil
+	}
+	return fmt.Errorf("unknown SSEEvent unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *SSEEventMutation) ResetEdge(name string) error {
+	switch name {
+	case sseevent.EdgeJob:
+		m.ResetJob()
+		return nil
+	}
+	return fmt.Errorf("unknown SSEEvent edge %s", name)
+}
+
 // SegmentMutation represents an operation that mutates the Segment nodes in the graph.
 type SegmentMutation struct {
 	config
@@ -15017,6 +15854,9 @@ type TranslationJobMutation struct {
 	job_resources          map[int]struct{}
 	removedjob_resources   map[int]struct{}
 	clearedjob_resources   bool
+	sse_events             map[int]struct{}
+	removedsse_events      map[int]struct{}
+	clearedsse_events      bool
 	done                   bool
 	oldValue               func(context.Context) (*TranslationJob, error)
 	predicates             []predicate.TranslationJob
@@ -16002,6 +16842,60 @@ func (m *TranslationJobMutation) ResetJobResources() {
 	m.removedjob_resources = nil
 }
 
+// AddSseEventIDs adds the "sse_events" edge to the SSEEvent entity by ids.
+func (m *TranslationJobMutation) AddSseEventIDs(ids ...int) {
+	if m.sse_events == nil {
+		m.sse_events = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.sse_events[ids[i]] = struct{}{}
+	}
+}
+
+// ClearSseEvents clears the "sse_events" edge to the SSEEvent entity.
+func (m *TranslationJobMutation) ClearSseEvents() {
+	m.clearedsse_events = true
+}
+
+// SseEventsCleared reports if the "sse_events" edge to the SSEEvent entity was cleared.
+func (m *TranslationJobMutation) SseEventsCleared() bool {
+	return m.clearedsse_events
+}
+
+// RemoveSseEventIDs removes the "sse_events" edge to the SSEEvent entity by IDs.
+func (m *TranslationJobMutation) RemoveSseEventIDs(ids ...int) {
+	if m.removedsse_events == nil {
+		m.removedsse_events = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.sse_events, ids[i])
+		m.removedsse_events[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedSseEvents returns the removed IDs of the "sse_events" edge to the SSEEvent entity.
+func (m *TranslationJobMutation) RemovedSseEventsIDs() (ids []int) {
+	for id := range m.removedsse_events {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// SseEventsIDs returns the "sse_events" edge IDs in the mutation.
+func (m *TranslationJobMutation) SseEventsIDs() (ids []int) {
+	for id := range m.sse_events {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetSseEvents resets all changes to the "sse_events" edge.
+func (m *TranslationJobMutation) ResetSseEvents() {
+	m.sse_events = nil
+	m.clearedsse_events = false
+	m.removedsse_events = nil
+}
+
 // Where appends a list predicates to the TranslationJobMutation builder.
 func (m *TranslationJobMutation) Where(ps ...predicate.TranslationJob) {
 	m.predicates = append(m.predicates, ps...)
@@ -16504,7 +17398,7 @@ func (m *TranslationJobMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *TranslationJobMutation) AddedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.project != nil {
 		edges = append(edges, translationjob.EdgeProject)
 	}
@@ -16513,6 +17407,9 @@ func (m *TranslationJobMutation) AddedEdges() []string {
 	}
 	if m.job_resources != nil {
 		edges = append(edges, translationjob.EdgeJobResources)
+	}
+	if m.sse_events != nil {
+		edges = append(edges, translationjob.EdgeSseEvents)
 	}
 	return edges
 }
@@ -16535,15 +17432,24 @@ func (m *TranslationJobMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case translationjob.EdgeSseEvents:
+		ids := make([]ent.Value, 0, len(m.sse_events))
+		for id := range m.sse_events {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *TranslationJobMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.removedjob_resources != nil {
 		edges = append(edges, translationjob.EdgeJobResources)
+	}
+	if m.removedsse_events != nil {
+		edges = append(edges, translationjob.EdgeSseEvents)
 	}
 	return edges
 }
@@ -16558,13 +17464,19 @@ func (m *TranslationJobMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case translationjob.EdgeSseEvents:
+		ids := make([]ent.Value, 0, len(m.removedsse_events))
+		for id := range m.removedsse_events {
+			ids = append(ids, id)
+		}
+		return ids
 	}
 	return nil
 }
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *TranslationJobMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 3)
+	edges := make([]string, 0, 4)
 	if m.clearedproject {
 		edges = append(edges, translationjob.EdgeProject)
 	}
@@ -16573,6 +17485,9 @@ func (m *TranslationJobMutation) ClearedEdges() []string {
 	}
 	if m.clearedjob_resources {
 		edges = append(edges, translationjob.EdgeJobResources)
+	}
+	if m.clearedsse_events {
+		edges = append(edges, translationjob.EdgeSseEvents)
 	}
 	return edges
 }
@@ -16587,6 +17502,8 @@ func (m *TranslationJobMutation) EdgeCleared(name string) bool {
 		return m.clearedcreated_by
 	case translationjob.EdgeJobResources:
 		return m.clearedjob_resources
+	case translationjob.EdgeSseEvents:
+		return m.clearedsse_events
 	}
 	return false
 }
@@ -16617,6 +17534,9 @@ func (m *TranslationJobMutation) ResetEdge(name string) error {
 		return nil
 	case translationjob.EdgeJobResources:
 		m.ResetJobResources()
+		return nil
+	case translationjob.EdgeSseEvents:
+		m.ResetSseEvents()
 		return nil
 	}
 	return fmt.Errorf("unknown TranslationJob edge %s", name)

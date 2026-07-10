@@ -34,6 +34,8 @@ type Tx struct {
 	RefreshToken *RefreshTokenClient
 	// Resource is the client for interacting with the Resource builders.
 	Resource *ResourceClient
+	// SSEEvent is the client for interacting with the SSEEvent builders.
+	SSEEvent *SSEEventClient
 	// Segment is the client for interacting with the Segment builders.
 	Segment *SegmentClient
 	// SyncTask is the client for interacting with the SyncTask builders.
@@ -192,6 +194,7 @@ func (tx *Tx) init() {
 	tx.PromptTemplate = NewPromptTemplateClient(tx.config)
 	tx.RefreshToken = NewRefreshTokenClient(tx.config)
 	tx.Resource = NewResourceClient(tx.config)
+	tx.SSEEvent = NewSSEEventClient(tx.config)
 	tx.Segment = NewSegmentClient(tx.config)
 	tx.SyncTask = NewSyncTaskClient(tx.config)
 	tx.SystemSetting = NewSystemSettingClient(tx.config)
