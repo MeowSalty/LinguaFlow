@@ -8,6 +8,7 @@ import {
   pingService,
   readStoredApiBaseUrl,
   setApiBaseUrl,
+  setLocalMode,
   type ApiSchemas,
 } from '@/api/client'
 
@@ -101,6 +102,7 @@ export const useServiceStore = defineStore('service', () => {
     try {
       const response = await fetchMode()
       mode.value = response.mode
+      setLocalMode(response.mode === 'local')
       return response.mode
     } catch {
       mode.value = null
@@ -137,6 +139,7 @@ export const useServiceStore = defineStore('service', () => {
     }
     setConnectedService(trimmed, probed.health)
     mode.value = probed.mode
+    setLocalMode(probed.mode === 'local')
 
     return { health: probed.health, mode: probed.mode }
   }

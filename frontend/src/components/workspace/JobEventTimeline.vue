@@ -67,18 +67,23 @@ const RESOURCE_EVENT_TYPES = new Set([
   'resource_cancelled',
 ])
 
+const STAGE_EVENT_TYPES = new Set(['stage_start', 'stage_done'])
+
 const filteredSyntheticEvents = computed(() => {
   const synthetic = props.syntheticEvents ?? []
   const live = props.events
 
   const liveJobTypes = new Set<string>()
   const liveResourceTypes = new Set<string>()
+  const liveStageTypes = new Set<string>()
 
   for (const event of live) {
     if (JOB_EVENT_TYPES.has(event.type)) {
       liveJobTypes.add(event.type)
     } else if (RESOURCE_EVENT_TYPES.has(event.type)) {
       liveResourceTypes.add(event.type)
+    } else if (STAGE_EVENT_TYPES.has(event.type)) {
+      liveStageTypes.add(event.type)
     }
   }
 
@@ -88,6 +93,9 @@ const filteredSyntheticEvents = computed(() => {
     }
     if (RESOURCE_EVENT_TYPES.has(event.type)) {
       return !liveResourceTypes.has(event.type)
+    }
+    if (STAGE_EVENT_TYPES.has(event.type)) {
+      return !liveStageTypes.has(event.type)
     }
     return true
   })

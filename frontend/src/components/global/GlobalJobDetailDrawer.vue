@@ -8,6 +8,7 @@ import { useGlobalJobTrackerStore } from '@/stores/globalJobTracker'
 import JobDetailDrawerBase from '@/components/workspace/JobDetailDrawerBase.vue'
 
 const { t } = useI18n()
+const route = useRoute()
 const router = useRouter()
 const tracker = useGlobalJobTrackerStore()
 
@@ -23,6 +24,11 @@ const job = computed(() => tracker.detailJob)
 const projectName = computed(() => {
   if (!job.value) return undefined
   return tracker.trackedJobs.find((j) => j.id === job.value!.id)?.project_name
+})
+
+const isInProjectPage = computed(() => {
+  if (!job.value) return false
+  return route.path === `/projects/${job.value.project_id}`
 })
 
 const handleGoToProject = (): void => {
@@ -46,7 +52,7 @@ const handleGoToProject = (): void => {
     <template #footer>
       <div class="flex flex-wrap justify-end gap-3">
         <NButton @click="tracker.closeDetail()">{{ t('globalJobTracker.close') }}</NButton>
-        <NButton v-if="job" type="primary" @click="handleGoToProject">
+        <NButton v-if="job && !isInProjectPage" type="primary" @click="handleGoToProject">
           {{ t('globalJobTracker.goToProject') }}
         </NButton>
       </div>

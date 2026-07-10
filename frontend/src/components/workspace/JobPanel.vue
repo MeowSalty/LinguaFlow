@@ -6,16 +6,17 @@ import { useI18n } from 'vue-i18n'
 import { type ApiSchemas } from '@/api/client'
 import { useJobColumns } from '@/composables/useJobColumns'
 import { useJobPolling } from '@/composables/useJobPolling'
+import { useGlobalJobTrackerStore } from '@/stores/globalJobTracker'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 
 type TranslationJob = ApiSchemas['TranslationJob']
 
 const { t } = useI18n()
 const workspace = useProjectWorkspaceStore()
+const globalTracker = useGlobalJobTrackerStore()
 
 const props = defineProps<{
   projectId: number | null
-  detailDrawerVisible?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -33,7 +34,8 @@ const { jobColumns, jobStatusOptions } = useJobColumns({
 // ── 自适应轮询：面板挂载时自动轮询运行中的任务 ──
 const projectIdRef = toRef(props, 'projectId')
 const autoRefreshEnabled = ref(true)
-const pollingEnabled = computed(() => autoRefreshEnabled.value && !props.detailDrawerVisible)
+const detailDrawerOpen = computed(() => globalTracker.drawerJobId != null)
+const pollingEnabled = computed(() => autoRefreshEnabled.value && !detailDrawerOpen.value)
 const { isPolling } = useJobPolling({ projectId: projectIdRef, enabled: pollingEnabled })
 </script>
 

@@ -100,12 +100,9 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   // ── 重新导出任务 Store 的响应式状态 ──
   const {
     jobs,
-    selectedJob,
     jobsCursor,
     loadingJobs,
-    loadingJobDetail,
     jobsError,
-    jobDetailError,
     creatingJob,
     cancellingJobIds,
     retryingJobIds,
@@ -178,7 +175,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   } = segmentStore
 
   // ── 直接委托的任务方法 ──
-  const { loadJobs, loadJobDetail, createJob, cancelJob, retryJob } = jobStore
+  const { loadJobs, createJob, cancelJob, retryJob } = jobStore
 
   // ── 协调跨域操作 ──
 
@@ -250,7 +247,6 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     // 段落 & 任务
     segments,
     jobs,
-    selectedJob,
     // 游标
     resourcesCursor,
     segmentsCursor,
@@ -260,7 +256,6 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     loadingResources,
     loadingSegments,
     loadingJobs,
-    loadingJobDetail,
     uploadTasks,
     pendingUploadItems,
     lastUploadResult,
@@ -278,7 +273,6 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     resourcesError,
     segmentsError,
     jobsError,
-    jobDetailError,
     actionError,
     // 筛选器
     resourceSearch,
@@ -320,7 +314,6 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     loadResources,
     loadSegments,
     loadJobs,
-    loadJobDetail,
     addUploadTask,
     updateUploadTaskProgress,
     updateUploadTaskStage,
