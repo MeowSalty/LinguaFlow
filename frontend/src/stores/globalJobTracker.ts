@@ -6,9 +6,6 @@ import {
   type SSEEvent,
   KNOWN_EVENT_TYPES,
   resolveStreamUrl,
-  readCachedSSEEvents,
-  persistSSEEvents,
-  clearSSECacheFromStorage,
 } from '@/composables/sseShared'
 
 type TranslationJob = ApiSchemas['TranslationJob']
@@ -111,7 +108,6 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
         const next = new Map(eventBuffers.value)
         next.set(jobId, updated)
         eventBuffers.value = next
-        persistSSEEvents(jobId, updated)
       } catch {
         // ignore malformed events
       }
@@ -165,7 +161,6 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     const next = new Map(eventBuffers.value)
     next.delete(jobId)
     eventBuffers.value = next
-    clearSSECacheFromStorage(jobId)
   }
 
   // ── 单个任务刷新 ──
@@ -421,14 +416,8 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     trackedJobs.value = jobs
     persistIds()
 
-    // Restore cached SSE events and reconnect for active jobs
+    // Reconnect for active jobs (backend will replay all historical events)
     for (const job of jobs) {
-      const cached = readCachedSSEEvents(job.id)
-      if (cached.length > 0) {
-        const next = new Map(eventBuffers.value)
-        next.set(job.id, cached)
-        eventBuffers.value = next
-      }
       if (!TERMINAL_STATUSES.has(job.status)) {
         connectJobSSE(job.id)
       }
