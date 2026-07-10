@@ -78,7 +78,7 @@ const rules = computed<FormRules>(() => ({
 const resetForm = (): void => {
   formModel.name = ''
   formModel.source_lang = 'auto'
-  formModel.target_lang = 'en-US'
+  formModel.target_lang = 'zh-Hans'
   formModel.owner_type = 'personal'
   formModel.glossary_enabled = false
 }
@@ -186,8 +186,9 @@ const closeDeleteConfirm = (): void => {
 const confirmDelete = async (): Promise<void> => {
   if (!deletingProject.value) return
   try {
-    await projects.deleteProject(project.id)
+    await projects.deleteProject(deletingProject.value.id)
     message.success(t('projects.messages.deleteSuccess'))
+    closeDeleteConfirm()
   } catch (error) {
     console.error(error)
     message.error(projects.deleteError || t('projects.messages.deleteFailed'))
@@ -283,36 +284,32 @@ watch(
       </div>
     </NCard>
 
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('projects.stats.total') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ projects.projectCount }}
-        </div>
-      </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('projects.stats.languagePairs') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ projects.languagePairCount }}
-        </div>
-      </NCard>
-    </div>
-
     <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <NInput
-          v-model:value="projects.searchQuery"
-          clearable
-          class="lg:max-w-sm"
-          :placeholder="t('projects.filters.searchPlaceholder')"
-        />
-        <NButton v-if="hasActiveFilters" quaternary @click="projects.resetFilters">
-          {{ t('projects.filters.reset') }}
-        </NButton>
+        <div class="flex items-center gap-4 text-sm">
+          <span class="text-lf-text-muted">
+            {{ t('projects.stats.total') }}
+            <span class="ml-1 font-semibold text-lf-text-strong">{{ projects.projectCount }}</span>
+          </span>
+          <span class="h-3.5 w-px bg-lf-border-soft" />
+          <span class="text-lf-text-muted">
+            {{ t('projects.stats.languagePairs') }}
+            <span class="ml-1 font-semibold text-lf-text-strong">{{
+              projects.languagePairCount
+            }}</span>
+          </span>
+        </div>
+        <div class="flex items-center gap-2">
+          <NInput
+            v-model:value="projects.searchQuery"
+            clearable
+            class="lg:max-w-xs"
+            :placeholder="t('projects.filters.searchPlaceholder')"
+          />
+          <NButton v-if="hasActiveFilters" quaternary @click="projects.resetFilters">
+            {{ t('projects.filters.reset') }}
+          </NButton>
+        </div>
       </div>
     </NCard>
 
@@ -346,11 +343,10 @@ watch(
         @click="openProjectWorkspace(project)"
       >
         <div class="flex h-full flex-col gap-3">
-          <!-- 标题行：项目名称 -->
-          <div class="flex items-start justify-between gap-3">
+          <div class="flex items-center gap-2">
             <h2
               class="min-w-0 flex-1 truncate text-base font-semibold text-lf-text-strong"
-              :title="`Project #${project.id}`"
+              :title="project.name"
             >
               {{ project.name }}
             </h2>
@@ -408,7 +404,7 @@ watch(
       </div>
     </div>
 
-    <NDrawer v-model:show="drawerVisible" :width="480" placement="right">
+    <NDrawer v-model:show="drawerVisible" :width="420" placement="right">
       <NDrawerContent :title="drawerTitle" closable>
         <div class="mb-6 rounded-2xl bg-lf-surface-muted p-4 text-sm leading-6 text-lf-text-muted">
           {{ drawerDescription }}
