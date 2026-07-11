@@ -18,18 +18,18 @@ type resourceSegmentUpdateRequest struct {
 func (s *Server) handleListResourceSegments(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
-	resourceID, ok := parseIntParam(w, chi.URLParam(r, "resourceId"), "resourceId")
+	resourceID, ok := s.parseIntParam(w, r, chi.URLParam(r, "resourceId"), "resourceId")
 	if !ok {
 		return
 	}
-	pageReq, ok := parseCursorPagination(w, r, 50, 200)
+	pageReq, ok := s.parseCursorPagination(w, r, 50, 200)
 	if !ok {
 		return
 	}
@@ -42,7 +42,7 @@ func (s *Server) handleListResourceSegments(w http.ResponseWriter, r *http.Reque
 		GroupKey: strings.TrimSpace(r.URL.Query().Get("group_key")),
 	})
 	if err != nil {
-		writeReviewServiceError(w, err)
+		s.writeReviewServiceError(w, r, err)
 		return
 	}
 
@@ -56,24 +56,24 @@ func (s *Server) handleListResourceSegments(w http.ResponseWriter, r *http.Reque
 func (s *Server) handleUpdateResourceSegment(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
-	resourceID, ok := parseIntParam(w, chi.URLParam(r, "resourceId"), "resourceId")
+	resourceID, ok := s.parseIntParam(w, r, chi.URLParam(r, "resourceId"), "resourceId")
 	if !ok {
 		return
 	}
-	segmentID, ok := parseIntParam(w, chi.URLParam(r, "segmentId"), "segmentId")
+	segmentID, ok := s.parseIntParam(w, r, chi.URLParam(r, "segmentId"), "segmentId")
 	if !ok {
 		return
 	}
 
 	var req resourceSegmentUpdateRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 
@@ -83,7 +83,7 @@ func (s *Server) handleUpdateResourceSegment(w http.ResponseWriter, r *http.Requ
 		Comment:    req.Comment,
 	})
 	if err != nil {
-		writeReviewServiceError(w, err)
+		s.writeReviewServiceError(w, r, err)
 		return
 	}
 
@@ -94,21 +94,21 @@ func (s *Server) handleUpdateResourceSegment(w http.ResponseWriter, r *http.Requ
 func (s *Server) handleListResourceSegmentGroups(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
-	resourceID, ok := parseIntParam(w, chi.URLParam(r, "resourceId"), "resourceId")
+	resourceID, ok := s.parseIntParam(w, r, chi.URLParam(r, "resourceId"), "resourceId")
 	if !ok {
 		return
 	}
 
 	groups, err := s.segmentSvc.ListResourceSegmentGroups(r.Context(), authUser.User.ID, projectID, resourceID)
 	if err != nil {
-		writeReviewServiceError(w, err)
+		s.writeReviewServiceError(w, r, err)
 		return
 	}
 

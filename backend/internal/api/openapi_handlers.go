@@ -308,7 +308,7 @@ func (s *Server) ListExecutionPlanTemplates(w http.ResponseWriter, r *http.Reque
 	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authUser, ok := authUserFromContext(r.Context())
 		if !ok {
-			writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+			s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 			return
 		}
 		s.executionPlanHandler.handleList(w, r, authUser.User.ID)
@@ -319,7 +319,7 @@ func (s *Server) CreateExecutionPlanTemplate(w http.ResponseWriter, r *http.Requ
 	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authUser, ok := authUserFromContext(r.Context())
 		if !ok {
-			writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+			s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 			return
 		}
 		s.executionPlanHandler.handleCreate(w, r, authUser.User.ID)
@@ -330,7 +330,7 @@ func (s *Server) GetExecutionPlanTemplate(w http.ResponseWriter, r *http.Request
 	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authUser, ok := authUserFromContext(r.Context())
 		if !ok {
-			writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+			s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 			return
 		}
 		s.executionPlanHandler.handleGet(w, r, authUser.User.ID, executionPlanTemplateId)
@@ -341,7 +341,7 @@ func (s *Server) UpdateExecutionPlanTemplate(w http.ResponseWriter, r *http.Requ
 	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authUser, ok := authUserFromContext(r.Context())
 		if !ok {
-			writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+			s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 			return
 		}
 		s.executionPlanHandler.handleUpdate(w, r, authUser.User.ID, executionPlanTemplateId)
@@ -352,7 +352,7 @@ func (s *Server) DeleteExecutionPlanTemplate(w http.ResponseWriter, r *http.Requ
 	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authUser, ok := authUserFromContext(r.Context())
 		if !ok {
-			writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+			s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 			return
 		}
 		s.executionPlanHandler.handleDelete(w, r, authUser.User.ID, executionPlanTemplateId)

@@ -56,16 +56,16 @@ type retranslateResponse struct {
 	ResetCount int `json:"reset_count"`
 }
 
-func writeReviewServiceError(w http.ResponseWriter, err error) {
+func (s *Server) writeReviewServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, service.ErrSegmentNotFound), errors.Is(err, service.ErrResourceNotFound), errors.Is(err, service.ErrTranslationJobNotFound):
-		writeProblem(w, http.StatusNotFound, "not_found", "资源不存在")
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "资源不存在")
 	case errors.Is(err, service.ErrForbidden):
-		writeProblem(w, http.StatusForbidden, "forbidden", "没有权限执行该操作")
+		s.writeProblem(w, r, http.StatusForbidden, "forbidden", "没有权限执行该操作")
 	case errors.Is(err, service.ErrInvalidInput), errors.Is(err, service.ErrInvalidReviewState), errors.Is(err, service.ErrRetranslateNoReject):
-		writeProblem(w, http.StatusBadRequest, "invalid_input", err.Error())
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", err.Error())
 	default:
-		writeProjectServiceError(w, err)
+		s.writeProjectServiceError(w, r, err)
 	}
 }
 
@@ -108,24 +108,24 @@ func toSegmentResponse(row *ent.Segment) segmentResponse {
 func (s *Server) handleReviewSegment(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
-	resourceID, ok := parseIntParam(w, chi.URLParam(r, "resourceId"), "resourceId")
+	resourceID, ok := s.parseIntParam(w, r, chi.URLParam(r, "resourceId"), "resourceId")
 	if !ok {
 		return
 	}
-	segmentID, ok := parseIntParam(w, chi.URLParam(r, "segmentId"), "segmentId")
+	segmentID, ok := s.parseIntParam(w, r, chi.URLParam(r, "segmentId"), "segmentId")
 	if !ok {
 		return
 	}
 
 	var req segmentReviewRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 
@@ -137,7 +137,7 @@ func (s *Server) handleReviewSegment(w http.ResponseWriter, r *http.Request) {
 		}
 		updated, err := s.reviewSvc.ApproveSegment(r.Context(), authUser.User.ID, projectID, resourceID, segmentID, service.SegmentDecisionInput{Comment: comment})
 		if err != nil {
-			writeReviewServiceError(w, err)
+			s.writeReviewServiceError(w, r, err)
 			return
 		}
 		_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "segment.approve", ResourceType: "segment", ResourceID: segmentID, Message: "审批通过段落"})
@@ -150,7 +150,7 @@ func (s *Server) handleReviewSegment(w http.ResponseWriter, r *http.Request) {
 		}
 		updated, err := s.reviewSvc.RejectSegment(r.Context(), authUser.User.ID, projectID, resourceID, segmentID, service.SegmentDecisionInput{Comment: comment})
 		if err != nil {
-			writeReviewServiceError(w, err)
+			s.writeReviewServiceError(w, r, err)
 			return
 		}
 		_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "segment.reject", ResourceType: "segment", ResourceID: segmentID, Message: "审批拒绝段落"})
@@ -158,7 +158,7 @@ func (s *Server) handleReviewSegment(w http.ResponseWriter, r *http.Request) {
 
 	case "edit":
 		if req.TargetText == nil {
-			writeProblem(w, http.StatusBadRequest, "invalid_input", "编辑操作需要 target_text")
+			s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "编辑操作需要 target_text")
 			return
 		}
 		comment := ""
@@ -167,14 +167,14 @@ func (s *Server) handleReviewSegment(w http.ResponseWriter, r *http.Request) {
 		}
 		updated, err := s.reviewSvc.EditSegment(r.Context(), authUser.User.ID, projectID, resourceID, segmentID, service.SegmentEditInput{TargetText: *req.TargetText, Comment: comment})
 		if err != nil {
-			writeReviewServiceError(w, err)
+			s.writeReviewServiceError(w, r, err)
 			return
 		}
 		_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "segment.edit", ResourceType: "segment", ResourceID: segmentID, Message: "编辑段落译文"})
 		writeJSON(w, http.StatusOK, toSegmentResponse(updated))
 
 	default:
-		writeProblem(w, http.StatusBadRequest, "invalid_input", "action 必须是 approve, reject 或 edit")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "action 必须是 approve, reject 或 edit")
 	}
 }
 
@@ -182,20 +182,20 @@ func (s *Server) handleReviewSegment(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleBatchReviewSegments(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
-	resourceID, ok := parseIntParam(w, chi.URLParam(r, "resourceId"), "resourceId")
+	resourceID, ok := s.parseIntParam(w, r, chi.URLParam(r, "resourceId"), "resourceId")
 	if !ok {
 		return
 	}
 
 	var req batchReviewRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 
@@ -210,7 +210,7 @@ func (s *Server) handleBatchReviewSegments(w http.ResponseWriter, r *http.Reques
 		Comment:    comment,
 	})
 	if err != nil {
-		writeReviewServiceError(w, err)
+		s.writeReviewServiceError(w, r, err)
 		return
 	}
 
@@ -226,21 +226,21 @@ func (s *Server) handleBatchReviewSegments(w http.ResponseWriter, r *http.Reques
 func (s *Server) handleApproveAllResourceSegments(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
-	resourceID, ok := parseIntParam(w, chi.URLParam(r, "resourceId"), "resourceId")
+	resourceID, ok := s.parseIntParam(w, r, chi.URLParam(r, "resourceId"), "resourceId")
 	if !ok {
 		return
 	}
 
 	count, err := s.reviewSvc.ApproveAllResource(r.Context(), authUser.User.ID, projectID, resourceID)
 	if err != nil {
-		writeReviewServiceError(w, err)
+		s.writeReviewServiceError(w, r, err)
 		return
 	}
 
@@ -252,21 +252,21 @@ func (s *Server) handleApproveAllResourceSegments(w http.ResponseWriter, r *http
 func (s *Server) handleRetranslateRejected(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
-	resourceID, ok := parseIntParam(w, chi.URLParam(r, "resourceId"), "resourceId")
+	resourceID, ok := s.parseIntParam(w, r, chi.URLParam(r, "resourceId"), "resourceId")
 	if !ok {
 		return
 	}
 
 	count, err := s.reviewSvc.RetranslateRejected(r.Context(), authUser.User.ID, projectID, resourceID)
 	if err != nil {
-		writeReviewServiceError(w, err)
+		s.writeReviewServiceError(w, r, err)
 		return
 	}
 

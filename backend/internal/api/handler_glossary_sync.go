@@ -13,18 +13,18 @@ import (
 func (s *Server) handleAnalyzeGlossarySyncImpact(w http.ResponseWriter, r *http.Request, projectId int, entryId int) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 
 	var input service.GlossarySyncImpactInput
-	if !decodeJSON(w, r, &input) {
+	if !s.decodeJSON(w, r, &input) {
 		return
 	}
 
 	result, err := s.glossarySyncSvc.AnalyzeSyncImpact(r.Context(), authUser.User.ID, projectId, entryId, input)
 	if err != nil {
-		writeGlossarySyncServiceError(w, err)
+		s.writeGlossarySyncServiceError(w, r, err)
 		return
 	}
 
@@ -34,25 +34,25 @@ func (s *Server) handleAnalyzeGlossarySyncImpact(w http.ResponseWriter, r *http.
 func (s *Server) handleExecuteGlossarySyncUpdate(w http.ResponseWriter, r *http.Request, projectId int, entryId int) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 
 	var input service.GlossarySyncExecuteInput
-	if !decodeJSON(w, r, &input) {
+	if !s.decodeJSON(w, r, &input) {
 		return
 	}
 
 	taskInfo, err := s.glossarySyncSvc.SubmitSyncTask(r.Context(), authUser.User.ID, projectId, entryId, input)
 	if err != nil {
-		writeGlossarySyncServiceError(w, err)
+		s.writeGlossarySyncServiceError(w, r, err)
 		return
 	}
 
 	// 将任务入队，通知 SyncTaskRunner 处理
 	if s.dispatcher != nil {
 		if err := s.dispatcher.Enqueue(r.Context(), "sync", taskInfo.TaskID); err != nil {
-			writeServiceError(w, err)
+			s.writeServiceError(w, r, err)
 			return
 		}
 	}
@@ -63,19 +63,19 @@ func (s *Server) handleExecuteGlossarySyncUpdate(w http.ResponseWriter, r *http.
 func (s *Server) handleGetGlossarySyncTaskStatus(w http.ResponseWriter, r *http.Request, projectId int, taskId string) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 
 	taskID, err := strconv.Atoi(taskId)
 	if err != nil {
-		writeProblem(w, http.StatusBadRequest, "invalid_task_id", "任务 ID 格式不正确")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_task_id", "任务 ID 格式不正确")
 		return
 	}
 
 	task, err := s.glossarySyncSvc.GetSyncTaskStatus(r.Context(), authUser.User.ID, projectId, taskID)
 	if err != nil {
-		writeGlossarySyncServiceError(w, err)
+		s.writeGlossarySyncServiceError(w, r, err)
 		return
 	}
 
@@ -85,41 +85,41 @@ func (s *Server) handleGetGlossarySyncTaskStatus(w http.ResponseWriter, r *http.
 func (s *Server) handleCancelGlossarySyncTask(w http.ResponseWriter, r *http.Request, projectId int, taskId string) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 
 	taskID, err := strconv.Atoi(taskId)
 	if err != nil {
-		writeProblem(w, http.StatusBadRequest, "invalid_task_id", "任务 ID 格式不正确")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_task_id", "任务 ID 格式不正确")
 		return
 	}
 
 	task, err := s.glossarySyncSvc.CancelSyncTask(r.Context(), authUser.User.ID, projectId, taskID)
 	if err != nil {
-		writeGlossarySyncServiceError(w, err)
+		s.writeGlossarySyncServiceError(w, r, err)
 		return
 	}
 
 	writeJSON(w, http.StatusOK, convertSyncTaskToCancelResponse(task))
 }
 
-func writeGlossarySyncServiceError(w http.ResponseWriter, err error) {
+func (s *Server) writeGlossarySyncServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, service.ErrForbidden):
-		writeProblem(w, http.StatusForbidden, "forbidden", "没有权限执行该操作")
+		s.writeProblem(w, r, http.StatusForbidden, "forbidden", "没有权限执行该操作")
 	case errors.Is(err, service.ErrProjectNotFound):
-		writeProblem(w, http.StatusNotFound, "not_found", "项目不存在")
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "项目不存在")
 	case errors.Is(err, service.ErrGlossaryEntryNotFound):
-		writeProblem(w, http.StatusNotFound, "not_found", "术语条目不存在")
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "术语条目不存在")
 	case errors.Is(err, service.ErrInvalidInput):
-		writeProblem(w, http.StatusBadRequest, "invalid_input", "请求参数不合法")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请求参数不合法")
 	case errors.Is(err, service.ErrNoAffectedSegments):
-		writeProblem(w, http.StatusNotFound, "not_found", "未找到受影响的段落")
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "未找到受影响的段落")
 	case ent.IsNotFound(err):
-		writeProblem(w, http.StatusNotFound, "not_found", "同步任务不存在")
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "同步任务不存在")
 	default:
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 	}
 }
 

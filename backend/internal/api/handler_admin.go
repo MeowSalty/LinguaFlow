@@ -70,7 +70,7 @@ type updateSystemSettingsRequest struct {
 func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 	_ = authUser
@@ -96,7 +96,7 @@ func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
 
 	result, err := s.adminService.ListUsers(r.Context(), params)
 	if err != nil {
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 		return
 	}
 
@@ -108,13 +108,13 @@ func (s *Server) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleAdminGetUser(w http.ResponseWriter, r *http.Request) {
-	userID, ok := parseIntParam(w, chi.URLParam(r, "userId"), "userId")
+	userID, ok := s.parseIntParam(w, r, chi.URLParam(r, "userId"), "userId")
 	if !ok {
 		return
 	}
 	u, err := s.adminService.GetUser(r.Context(), userID)
 	if err != nil {
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toUserResponse(u))
@@ -122,7 +122,7 @@ func (s *Server) handleAdminGetUser(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
 	var req adminCreateUserRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	u, err := s.adminService.CreateUser(r.Context(), service.AdminCreateUserInput{
@@ -133,7 +133,7 @@ func (s *Server) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
 		Role:        req.Role,
 	})
 	if err != nil {
-		writeAdminServiceError(w, err)
+		s.writeAdminServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, toUserResponse(u))
@@ -142,15 +142,15 @@ func (s *Server) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAdminUpdateUser(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	userID, ok := parseIntParam(w, chi.URLParam(r, "userId"), "userId")
+	userID, ok := s.parseIntParam(w, r, chi.URLParam(r, "userId"), "userId")
 	if !ok {
 		return
 	}
 	var req adminUpdateUserRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	u, err := s.adminService.UpdateUser(r.Context(), authUser.User.ID, userID, service.AdminUpdateUserInput{
@@ -160,7 +160,7 @@ func (s *Server) handleAdminUpdateUser(w http.ResponseWriter, r *http.Request) {
 		Active:      req.Active,
 	})
 	if err != nil {
-		writeAdminServiceError(w, err)
+		s.writeAdminServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toUserResponse(u))
@@ -169,31 +169,31 @@ func (s *Server) handleAdminUpdateUser(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAdminDisableUser(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	userID, ok := parseIntParam(w, chi.URLParam(r, "userId"), "userId")
+	userID, ok := s.parseIntParam(w, r, chi.URLParam(r, "userId"), "userId")
 	if !ok {
 		return
 	}
 	if err := s.adminService.DisableUser(r.Context(), authUser.User.ID, userID); err != nil {
-		writeAdminServiceError(w, err)
+		s.writeAdminServiceError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s *Server) handleAdminResetPassword(w http.ResponseWriter, r *http.Request) {
-	userID, ok := parseIntParam(w, chi.URLParam(r, "userId"), "userId")
+	userID, ok := s.parseIntParam(w, r, chi.URLParam(r, "userId"), "userId")
 	if !ok {
 		return
 	}
 	var req adminResetPasswordRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	if err := s.adminService.ResetPassword(r.Context(), userID, req.NewPassword); err != nil {
-		writeAdminServiceError(w, err)
+		s.writeAdminServiceError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -202,7 +202,7 @@ func (s *Server) handleAdminResetPassword(w http.ResponseWriter, r *http.Request
 func (s *Server) handleAdminGetStats(w http.ResponseWriter, r *http.Request) {
 	stats, err := s.adminService.GetSystemStats(r.Context())
 	if err != nil {
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, systemStatsResponse{
@@ -230,7 +230,7 @@ func (s *Server) handleAdminListAuditLogs(w http.ResponseWriter, r *http.Request
 
 	result, err := s.adminService.ListAuditLogs(r.Context(), params)
 	if err != nil {
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 		return
 	}
 
@@ -259,7 +259,7 @@ func (s *Server) handleAdminListAuditLogs(w http.ResponseWriter, r *http.Request
 func (s *Server) handleAdminGetSettings(w http.ResponseWriter, r *http.Request) {
 	settings, err := s.adminService.GetSettings(r.Context())
 	if err != nil {
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, systemSettingsResponse{Settings: settings})
@@ -267,32 +267,32 @@ func (s *Server) handleAdminGetSettings(w http.ResponseWriter, r *http.Request) 
 
 func (s *Server) handleAdminUpdateSettings(w http.ResponseWriter, r *http.Request) {
 	var req updateSystemSettingsRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	if err := s.adminService.UpdateSettings(r.Context(), req.Settings); err != nil {
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 		return
 	}
 	settings, err := s.adminService.GetSettings(r.Context())
 	if err != nil {
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, systemSettingsResponse{Settings: settings})
 }
 
-func writeAdminServiceError(w http.ResponseWriter, err error) {
+func (s *Server) writeAdminServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, service.ErrAdminSelfDemotion):
-		writeProblem(w, http.StatusConflict, "conflict", "管理员不能修改自己的角色")
+		s.writeProblem(w, r, http.StatusConflict, "conflict", "管理员不能修改自己的角色")
 	case errors.Is(err, service.ErrAdminSelfDeletion):
-		writeProblem(w, http.StatusConflict, "conflict", "管理员不能停用自己的账户")
+		s.writeProblem(w, r, http.StatusConflict, "conflict", "管理员不能停用自己的账户")
 	case errors.Is(err, service.ErrLastAdmin):
-		writeProblem(w, http.StatusConflict, "conflict", "不能移除最后一个活跃管理员")
+		s.writeProblem(w, r, http.StatusConflict, "conflict", "不能移除最后一个活跃管理员")
 	case errors.Is(err, service.ErrRegistrationClosed):
-		writeProblem(w, http.StatusForbidden, "forbidden", "注册已关闭")
+		s.writeProblem(w, r, http.StatusForbidden, "forbidden", "注册已关闭")
 	default:
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 	}
 }

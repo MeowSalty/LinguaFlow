@@ -121,7 +121,7 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 	}
 	s.jobStore = jobStore
 	s.translationJobSvc = service.NewTranslationJobService(client, s.projectSvc, s.executionPlanSvc, s.backendSvc, s.promptTemplateSvc, s.translationProfileSvc, jobStore, s.eventBroker)
-	s.executionPlanHandler = NewHandlerExecutionPlan(s.executionPlanSvc)
+	s.executionPlanHandler = NewHandlerExecutionPlan(s.executionPlanSvc, s)
 	s.reviewSvc = service.NewReviewService(client, s.projectSvc)
 	s.segmentSvc = service.NewSegmentService(client, s.projectSvc)
 	s.statsSvc = service.NewStatsService(client, s.projectSvc)
