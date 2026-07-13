@@ -13,37 +13,37 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
-// PromptTemplateUpdate is the builder for updating PromptTemplate entities.
-type PromptTemplateUpdate struct {
+// TranslationPromptTemplateUpdate is the builder for updating TranslationPromptTemplate entities.
+type TranslationPromptTemplateUpdate struct {
 	config
 	hooks    []Hook
-	mutation *PromptTemplateMutation
+	mutation *TranslationPromptTemplateMutation
 }
 
-// Where appends a list predicates to the PromptTemplateUpdate builder.
-func (_u *PromptTemplateUpdate) Where(ps ...predicate.PromptTemplate) *PromptTemplateUpdate {
+// Where appends a list predicates to the TranslationPromptTemplateUpdate builder.
+func (_u *TranslationPromptTemplateUpdate) Where(ps ...predicate.TranslationPromptTemplate) *TranslationPromptTemplateUpdate {
 	_u.mutation.Where(ps...)
 	return _u
 }
 
 // SetUpdatedAt sets the "updated_at" field.
-func (_u *PromptTemplateUpdate) SetUpdatedAt(v time.Time) *PromptTemplateUpdate {
+func (_u *TranslationPromptTemplateUpdate) SetUpdatedAt(v time.Time) *TranslationPromptTemplateUpdate {
 	_u.mutation.SetUpdatedAt(v)
 	return _u
 }
 
 // SetName sets the "name" field.
-func (_u *PromptTemplateUpdate) SetName(v string) *PromptTemplateUpdate {
+func (_u *TranslationPromptTemplateUpdate) SetName(v string) *TranslationPromptTemplateUpdate {
 	_u.mutation.SetName(v)
 	return _u
 }
 
 // SetNillableName sets the "name" field if the given value is not nil.
-func (_u *PromptTemplateUpdate) SetNillableName(v *string) *PromptTemplateUpdate {
+func (_u *TranslationPromptTemplateUpdate) SetNillableName(v *string) *TranslationPromptTemplateUpdate {
 	if v != nil {
 		_u.SetName(*v)
 	}
@@ -51,13 +51,13 @@ func (_u *PromptTemplateUpdate) SetNillableName(v *string) *PromptTemplateUpdate
 }
 
 // SetDescription sets the "description" field.
-func (_u *PromptTemplateUpdate) SetDescription(v string) *PromptTemplateUpdate {
+func (_u *TranslationPromptTemplateUpdate) SetDescription(v string) *TranslationPromptTemplateUpdate {
 	_u.mutation.SetDescription(v)
 	return _u
 }
 
 // SetNillableDescription sets the "description" field if the given value is not nil.
-func (_u *PromptTemplateUpdate) SetNillableDescription(v *string) *PromptTemplateUpdate {
+func (_u *TranslationPromptTemplateUpdate) SetNillableDescription(v *string) *TranslationPromptTemplateUpdate {
 	if v != nil {
 		_u.SetDescription(*v)
 	}
@@ -65,13 +65,13 @@ func (_u *PromptTemplateUpdate) SetNillableDescription(v *string) *PromptTemplat
 }
 
 // SetScope sets the "scope" field.
-func (_u *PromptTemplateUpdate) SetScope(v string) *PromptTemplateUpdate {
+func (_u *TranslationPromptTemplateUpdate) SetScope(v string) *TranslationPromptTemplateUpdate {
 	_u.mutation.SetScope(v)
 	return _u
 }
 
 // SetNillableScope sets the "scope" field if the given value is not nil.
-func (_u *PromptTemplateUpdate) SetNillableScope(v *string) *PromptTemplateUpdate {
+func (_u *TranslationPromptTemplateUpdate) SetNillableScope(v *string) *TranslationPromptTemplateUpdate {
 	if v != nil {
 		_u.SetScope(*v)
 	}
@@ -79,13 +79,13 @@ func (_u *PromptTemplateUpdate) SetNillableScope(v *string) *PromptTemplateUpdat
 }
 
 // SetOwnerUserID sets the "owner_user_id" field.
-func (_u *PromptTemplateUpdate) SetOwnerUserID(v int) *PromptTemplateUpdate {
+func (_u *TranslationPromptTemplateUpdate) SetOwnerUserID(v int) *TranslationPromptTemplateUpdate {
 	_u.mutation.SetOwnerUserID(v)
 	return _u
 }
 
 // SetNillableOwnerUserID sets the "owner_user_id" field if the given value is not nil.
-func (_u *PromptTemplateUpdate) SetNillableOwnerUserID(v *int) *PromptTemplateUpdate {
+func (_u *TranslationPromptTemplateUpdate) SetNillableOwnerUserID(v *int) *TranslationPromptTemplateUpdate {
 	if v != nil {
 		_u.SetOwnerUserID(*v)
 	}
@@ -93,19 +93,19 @@ func (_u *PromptTemplateUpdate) SetNillableOwnerUserID(v *int) *PromptTemplateUp
 }
 
 // ClearOwnerUserID clears the value of the "owner_user_id" field.
-func (_u *PromptTemplateUpdate) ClearOwnerUserID() *PromptTemplateUpdate {
+func (_u *TranslationPromptTemplateUpdate) ClearOwnerUserID() *TranslationPromptTemplateUpdate {
 	_u.mutation.ClearOwnerUserID()
 	return _u
 }
 
 // SetOwnerOrgID sets the "owner_org_id" field.
-func (_u *PromptTemplateUpdate) SetOwnerOrgID(v int) *PromptTemplateUpdate {
+func (_u *TranslationPromptTemplateUpdate) SetOwnerOrgID(v int) *TranslationPromptTemplateUpdate {
 	_u.mutation.SetOwnerOrgID(v)
 	return _u
 }
 
 // SetNillableOwnerOrgID sets the "owner_org_id" field if the given value is not nil.
-func (_u *PromptTemplateUpdate) SetNillableOwnerOrgID(v *int) *PromptTemplateUpdate {
+func (_u *TranslationPromptTemplateUpdate) SetNillableOwnerOrgID(v *int) *TranslationPromptTemplateUpdate {
 	if v != nil {
 		_u.SetOwnerOrgID(*v)
 	}
@@ -113,74 +113,60 @@ func (_u *PromptTemplateUpdate) SetNillableOwnerOrgID(v *int) *PromptTemplateUpd
 }
 
 // ClearOwnerOrgID clears the value of the "owner_org_id" field.
-func (_u *PromptTemplateUpdate) ClearOwnerOrgID() *PromptTemplateUpdate {
+func (_u *TranslationPromptTemplateUpdate) ClearOwnerOrgID() *TranslationPromptTemplateUpdate {
 	_u.mutation.ClearOwnerOrgID()
 	return _u
 }
 
 // SetSystemPromptContent sets the "system_prompt_content" field.
-func (_u *PromptTemplateUpdate) SetSystemPromptContent(v string) *PromptTemplateUpdate {
+func (_u *TranslationPromptTemplateUpdate) SetSystemPromptContent(v string) *TranslationPromptTemplateUpdate {
 	_u.mutation.SetSystemPromptContent(v)
 	return _u
 }
 
 // SetNillableSystemPromptContent sets the "system_prompt_content" field if the given value is not nil.
-func (_u *PromptTemplateUpdate) SetNillableSystemPromptContent(v *string) *PromptTemplateUpdate {
+func (_u *TranslationPromptTemplateUpdate) SetNillableSystemPromptContent(v *string) *TranslationPromptTemplateUpdate {
 	if v != nil {
 		_u.SetSystemPromptContent(*v)
 	}
 	return _u
 }
 
-// SetBootstrapPromptContent sets the "bootstrap_prompt_content" field.
-func (_u *PromptTemplateUpdate) SetBootstrapPromptContent(v string) *PromptTemplateUpdate {
-	_u.mutation.SetBootstrapPromptContent(v)
-	return _u
-}
-
-// SetNillableBootstrapPromptContent sets the "bootstrap_prompt_content" field if the given value is not nil.
-func (_u *PromptTemplateUpdate) SetNillableBootstrapPromptContent(v *string) *PromptTemplateUpdate {
-	if v != nil {
-		_u.SetBootstrapPromptContent(*v)
-	}
-	return _u
-}
-
 // SetOwnerUser sets the "owner_user" edge to the User entity.
-func (_u *PromptTemplateUpdate) SetOwnerUser(v *User) *PromptTemplateUpdate {
+func (_u *TranslationPromptTemplateUpdate) SetOwnerUser(v *User) *TranslationPromptTemplateUpdate {
 	return _u.SetOwnerUserID(v.ID)
 }
 
 // SetOwnerOrg sets the "owner_org" edge to the Organization entity.
-func (_u *PromptTemplateUpdate) SetOwnerOrg(v *Organization) *PromptTemplateUpdate {
+func (_u *TranslationPromptTemplateUpdate) SetOwnerOrg(v *Organization) *TranslationPromptTemplateUpdate {
 	return _u.SetOwnerOrgID(v.ID)
 }
 
-// Mutation returns the PromptTemplateMutation object of the builder.
-func (_u *PromptTemplateUpdate) Mutation() *PromptTemplateMutation {
+// Mutation returns the TranslationPromptTemplateMutation object of the builder.
+func (_u *TranslationPromptTemplateUpdate) Mutation() *TranslationPromptTemplateMutation {
 	return _u.mutation
 }
 
 // ClearOwnerUser clears the "owner_user" edge to the User entity.
-func (_u *PromptTemplateUpdate) ClearOwnerUser() *PromptTemplateUpdate {
+func (_u *TranslationPromptTemplateUpdate) ClearOwnerUser() *TranslationPromptTemplateUpdate {
 	_u.mutation.ClearOwnerUser()
 	return _u
 }
 
 // ClearOwnerOrg clears the "owner_org" edge to the Organization entity.
-func (_u *PromptTemplateUpdate) ClearOwnerOrg() *PromptTemplateUpdate {
+func (_u *TranslationPromptTemplateUpdate) ClearOwnerOrg() *TranslationPromptTemplateUpdate {
 	_u.mutation.ClearOwnerOrg()
 	return _u
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
-func (_u *PromptTemplateUpdate) Save(ctx context.Context) (int, error) {
+func (_u *TranslationPromptTemplateUpdate) Save(ctx context.Context) (int, error) {
 	_u.defaults()
 	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
-func (_u *PromptTemplateUpdate) SaveX(ctx context.Context) int {
+func (_u *TranslationPromptTemplateUpdate) SaveX(ctx context.Context) int {
 	affected, err := _u.Save(ctx)
 	if err != nil {
 		panic(err)
@@ -189,51 +175,51 @@ func (_u *PromptTemplateUpdate) SaveX(ctx context.Context) int {
 }
 
 // Exec executes the query.
-func (_u *PromptTemplateUpdate) Exec(ctx context.Context) error {
+func (_u *TranslationPromptTemplateUpdate) Exec(ctx context.Context) error {
 	_, err := _u.Save(ctx)
 	return err
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (_u *PromptTemplateUpdate) ExecX(ctx context.Context) {
+func (_u *TranslationPromptTemplateUpdate) ExecX(ctx context.Context) {
 	if err := _u.Exec(ctx); err != nil {
 		panic(err)
 	}
 }
 
 // defaults sets the default values of the builder before save.
-func (_u *PromptTemplateUpdate) defaults() {
+func (_u *TranslationPromptTemplateUpdate) defaults() {
 	if _, ok := _u.mutation.UpdatedAt(); !ok {
-		v := prompttemplate.UpdateDefaultUpdatedAt()
+		v := translationprompttemplate.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
 }
 
 // check runs all checks and user-defined validators on the builder.
-func (_u *PromptTemplateUpdate) check() error {
+func (_u *TranslationPromptTemplateUpdate) check() error {
 	if v, ok := _u.mutation.Name(); ok {
-		if err := prompttemplate.NameValidator(v); err != nil {
-			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "PromptTemplate.name": %w`, err)}
+		if err := translationprompttemplate.NameValidator(v); err != nil {
+			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "TranslationPromptTemplate.name": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.OwnerUserID(); ok {
-		if err := prompttemplate.OwnerUserIDValidator(v); err != nil {
-			return &ValidationError{Name: "owner_user_id", err: fmt.Errorf(`ent: validator failed for field "PromptTemplate.owner_user_id": %w`, err)}
+		if err := translationprompttemplate.OwnerUserIDValidator(v); err != nil {
+			return &ValidationError{Name: "owner_user_id", err: fmt.Errorf(`ent: validator failed for field "TranslationPromptTemplate.owner_user_id": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.OwnerOrgID(); ok {
-		if err := prompttemplate.OwnerOrgIDValidator(v); err != nil {
-			return &ValidationError{Name: "owner_org_id", err: fmt.Errorf(`ent: validator failed for field "PromptTemplate.owner_org_id": %w`, err)}
+		if err := translationprompttemplate.OwnerOrgIDValidator(v); err != nil {
+			return &ValidationError{Name: "owner_org_id", err: fmt.Errorf(`ent: validator failed for field "TranslationPromptTemplate.owner_org_id": %w`, err)}
 		}
 	}
 	return nil
 }
 
-func (_u *PromptTemplateUpdate) sqlSave(ctx context.Context) (_node int, err error) {
+func (_u *TranslationPromptTemplateUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(prompttemplate.Table, prompttemplate.Columns, sqlgraph.NewFieldSpec(prompttemplate.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(translationprompttemplate.Table, translationprompttemplate.Columns, sqlgraph.NewFieldSpec(translationprompttemplate.FieldID, field.TypeInt))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -242,29 +228,26 @@ func (_u *PromptTemplateUpdate) sqlSave(ctx context.Context) (_node int, err err
 		}
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
-		_spec.SetField(prompttemplate.FieldUpdatedAt, field.TypeTime, value)
+		_spec.SetField(translationprompttemplate.FieldUpdatedAt, field.TypeTime, value)
 	}
 	if value, ok := _u.mutation.Name(); ok {
-		_spec.SetField(prompttemplate.FieldName, field.TypeString, value)
+		_spec.SetField(translationprompttemplate.FieldName, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Description(); ok {
-		_spec.SetField(prompttemplate.FieldDescription, field.TypeString, value)
+		_spec.SetField(translationprompttemplate.FieldDescription, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Scope(); ok {
-		_spec.SetField(prompttemplate.FieldScope, field.TypeString, value)
+		_spec.SetField(translationprompttemplate.FieldScope, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.SystemPromptContent(); ok {
-		_spec.SetField(prompttemplate.FieldSystemPromptContent, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.BootstrapPromptContent(); ok {
-		_spec.SetField(prompttemplate.FieldBootstrapPromptContent, field.TypeString, value)
+		_spec.SetField(translationprompttemplate.FieldSystemPromptContent, field.TypeString, value)
 	}
 	if _u.mutation.OwnerUserCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   prompttemplate.OwnerUserTable,
-			Columns: []string{prompttemplate.OwnerUserColumn},
+			Table:   translationprompttemplate.OwnerUserTable,
+			Columns: []string{translationprompttemplate.OwnerUserColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
@@ -276,8 +259,8 @@ func (_u *PromptTemplateUpdate) sqlSave(ctx context.Context) (_node int, err err
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   prompttemplate.OwnerUserTable,
-			Columns: []string{prompttemplate.OwnerUserColumn},
+			Table:   translationprompttemplate.OwnerUserTable,
+			Columns: []string{translationprompttemplate.OwnerUserColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
@@ -292,8 +275,8 @@ func (_u *PromptTemplateUpdate) sqlSave(ctx context.Context) (_node int, err err
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   prompttemplate.OwnerOrgTable,
-			Columns: []string{prompttemplate.OwnerOrgColumn},
+			Table:   translationprompttemplate.OwnerOrgTable,
+			Columns: []string{translationprompttemplate.OwnerOrgColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
@@ -305,8 +288,8 @@ func (_u *PromptTemplateUpdate) sqlSave(ctx context.Context) (_node int, err err
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   prompttemplate.OwnerOrgTable,
-			Columns: []string{prompttemplate.OwnerOrgColumn},
+			Table:   translationprompttemplate.OwnerOrgTable,
+			Columns: []string{translationprompttemplate.OwnerOrgColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
@@ -319,7 +302,7 @@ func (_u *PromptTemplateUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
-			err = &NotFoundError{prompttemplate.Label}
+			err = &NotFoundError{translationprompttemplate.Label}
 		} else if sqlgraph.IsConstraintError(err) {
 			err = &ConstraintError{msg: err.Error(), wrap: err}
 		}
@@ -329,28 +312,28 @@ func (_u *PromptTemplateUpdate) sqlSave(ctx context.Context) (_node int, err err
 	return _node, nil
 }
 
-// PromptTemplateUpdateOne is the builder for updating a single PromptTemplate entity.
-type PromptTemplateUpdateOne struct {
+// TranslationPromptTemplateUpdateOne is the builder for updating a single TranslationPromptTemplate entity.
+type TranslationPromptTemplateUpdateOne struct {
 	config
 	fields   []string
 	hooks    []Hook
-	mutation *PromptTemplateMutation
+	mutation *TranslationPromptTemplateMutation
 }
 
 // SetUpdatedAt sets the "updated_at" field.
-func (_u *PromptTemplateUpdateOne) SetUpdatedAt(v time.Time) *PromptTemplateUpdateOne {
+func (_u *TranslationPromptTemplateUpdateOne) SetUpdatedAt(v time.Time) *TranslationPromptTemplateUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
 	return _u
 }
 
 // SetName sets the "name" field.
-func (_u *PromptTemplateUpdateOne) SetName(v string) *PromptTemplateUpdateOne {
+func (_u *TranslationPromptTemplateUpdateOne) SetName(v string) *TranslationPromptTemplateUpdateOne {
 	_u.mutation.SetName(v)
 	return _u
 }
 
 // SetNillableName sets the "name" field if the given value is not nil.
-func (_u *PromptTemplateUpdateOne) SetNillableName(v *string) *PromptTemplateUpdateOne {
+func (_u *TranslationPromptTemplateUpdateOne) SetNillableName(v *string) *TranslationPromptTemplateUpdateOne {
 	if v != nil {
 		_u.SetName(*v)
 	}
@@ -358,13 +341,13 @@ func (_u *PromptTemplateUpdateOne) SetNillableName(v *string) *PromptTemplateUpd
 }
 
 // SetDescription sets the "description" field.
-func (_u *PromptTemplateUpdateOne) SetDescription(v string) *PromptTemplateUpdateOne {
+func (_u *TranslationPromptTemplateUpdateOne) SetDescription(v string) *TranslationPromptTemplateUpdateOne {
 	_u.mutation.SetDescription(v)
 	return _u
 }
 
 // SetNillableDescription sets the "description" field if the given value is not nil.
-func (_u *PromptTemplateUpdateOne) SetNillableDescription(v *string) *PromptTemplateUpdateOne {
+func (_u *TranslationPromptTemplateUpdateOne) SetNillableDescription(v *string) *TranslationPromptTemplateUpdateOne {
 	if v != nil {
 		_u.SetDescription(*v)
 	}
@@ -372,13 +355,13 @@ func (_u *PromptTemplateUpdateOne) SetNillableDescription(v *string) *PromptTemp
 }
 
 // SetScope sets the "scope" field.
-func (_u *PromptTemplateUpdateOne) SetScope(v string) *PromptTemplateUpdateOne {
+func (_u *TranslationPromptTemplateUpdateOne) SetScope(v string) *TranslationPromptTemplateUpdateOne {
 	_u.mutation.SetScope(v)
 	return _u
 }
 
 // SetNillableScope sets the "scope" field if the given value is not nil.
-func (_u *PromptTemplateUpdateOne) SetNillableScope(v *string) *PromptTemplateUpdateOne {
+func (_u *TranslationPromptTemplateUpdateOne) SetNillableScope(v *string) *TranslationPromptTemplateUpdateOne {
 	if v != nil {
 		_u.SetScope(*v)
 	}
@@ -386,13 +369,13 @@ func (_u *PromptTemplateUpdateOne) SetNillableScope(v *string) *PromptTemplateUp
 }
 
 // SetOwnerUserID sets the "owner_user_id" field.
-func (_u *PromptTemplateUpdateOne) SetOwnerUserID(v int) *PromptTemplateUpdateOne {
+func (_u *TranslationPromptTemplateUpdateOne) SetOwnerUserID(v int) *TranslationPromptTemplateUpdateOne {
 	_u.mutation.SetOwnerUserID(v)
 	return _u
 }
 
 // SetNillableOwnerUserID sets the "owner_user_id" field if the given value is not nil.
-func (_u *PromptTemplateUpdateOne) SetNillableOwnerUserID(v *int) *PromptTemplateUpdateOne {
+func (_u *TranslationPromptTemplateUpdateOne) SetNillableOwnerUserID(v *int) *TranslationPromptTemplateUpdateOne {
 	if v != nil {
 		_u.SetOwnerUserID(*v)
 	}
@@ -400,19 +383,19 @@ func (_u *PromptTemplateUpdateOne) SetNillableOwnerUserID(v *int) *PromptTemplat
 }
 
 // ClearOwnerUserID clears the value of the "owner_user_id" field.
-func (_u *PromptTemplateUpdateOne) ClearOwnerUserID() *PromptTemplateUpdateOne {
+func (_u *TranslationPromptTemplateUpdateOne) ClearOwnerUserID() *TranslationPromptTemplateUpdateOne {
 	_u.mutation.ClearOwnerUserID()
 	return _u
 }
 
 // SetOwnerOrgID sets the "owner_org_id" field.
-func (_u *PromptTemplateUpdateOne) SetOwnerOrgID(v int) *PromptTemplateUpdateOne {
+func (_u *TranslationPromptTemplateUpdateOne) SetOwnerOrgID(v int) *TranslationPromptTemplateUpdateOne {
 	_u.mutation.SetOwnerOrgID(v)
 	return _u
 }
 
 // SetNillableOwnerOrgID sets the "owner_org_id" field if the given value is not nil.
-func (_u *PromptTemplateUpdateOne) SetNillableOwnerOrgID(v *int) *PromptTemplateUpdateOne {
+func (_u *TranslationPromptTemplateUpdateOne) SetNillableOwnerOrgID(v *int) *TranslationPromptTemplateUpdateOne {
 	if v != nil {
 		_u.SetOwnerOrgID(*v)
 	}
@@ -420,87 +403,73 @@ func (_u *PromptTemplateUpdateOne) SetNillableOwnerOrgID(v *int) *PromptTemplate
 }
 
 // ClearOwnerOrgID clears the value of the "owner_org_id" field.
-func (_u *PromptTemplateUpdateOne) ClearOwnerOrgID() *PromptTemplateUpdateOne {
+func (_u *TranslationPromptTemplateUpdateOne) ClearOwnerOrgID() *TranslationPromptTemplateUpdateOne {
 	_u.mutation.ClearOwnerOrgID()
 	return _u
 }
 
 // SetSystemPromptContent sets the "system_prompt_content" field.
-func (_u *PromptTemplateUpdateOne) SetSystemPromptContent(v string) *PromptTemplateUpdateOne {
+func (_u *TranslationPromptTemplateUpdateOne) SetSystemPromptContent(v string) *TranslationPromptTemplateUpdateOne {
 	_u.mutation.SetSystemPromptContent(v)
 	return _u
 }
 
 // SetNillableSystemPromptContent sets the "system_prompt_content" field if the given value is not nil.
-func (_u *PromptTemplateUpdateOne) SetNillableSystemPromptContent(v *string) *PromptTemplateUpdateOne {
+func (_u *TranslationPromptTemplateUpdateOne) SetNillableSystemPromptContent(v *string) *TranslationPromptTemplateUpdateOne {
 	if v != nil {
 		_u.SetSystemPromptContent(*v)
 	}
 	return _u
 }
 
-// SetBootstrapPromptContent sets the "bootstrap_prompt_content" field.
-func (_u *PromptTemplateUpdateOne) SetBootstrapPromptContent(v string) *PromptTemplateUpdateOne {
-	_u.mutation.SetBootstrapPromptContent(v)
-	return _u
-}
-
-// SetNillableBootstrapPromptContent sets the "bootstrap_prompt_content" field if the given value is not nil.
-func (_u *PromptTemplateUpdateOne) SetNillableBootstrapPromptContent(v *string) *PromptTemplateUpdateOne {
-	if v != nil {
-		_u.SetBootstrapPromptContent(*v)
-	}
-	return _u
-}
-
 // SetOwnerUser sets the "owner_user" edge to the User entity.
-func (_u *PromptTemplateUpdateOne) SetOwnerUser(v *User) *PromptTemplateUpdateOne {
+func (_u *TranslationPromptTemplateUpdateOne) SetOwnerUser(v *User) *TranslationPromptTemplateUpdateOne {
 	return _u.SetOwnerUserID(v.ID)
 }
 
 // SetOwnerOrg sets the "owner_org" edge to the Organization entity.
-func (_u *PromptTemplateUpdateOne) SetOwnerOrg(v *Organization) *PromptTemplateUpdateOne {
+func (_u *TranslationPromptTemplateUpdateOne) SetOwnerOrg(v *Organization) *TranslationPromptTemplateUpdateOne {
 	return _u.SetOwnerOrgID(v.ID)
 }
 
-// Mutation returns the PromptTemplateMutation object of the builder.
-func (_u *PromptTemplateUpdateOne) Mutation() *PromptTemplateMutation {
+// Mutation returns the TranslationPromptTemplateMutation object of the builder.
+func (_u *TranslationPromptTemplateUpdateOne) Mutation() *TranslationPromptTemplateMutation {
 	return _u.mutation
 }
 
 // ClearOwnerUser clears the "owner_user" edge to the User entity.
-func (_u *PromptTemplateUpdateOne) ClearOwnerUser() *PromptTemplateUpdateOne {
+func (_u *TranslationPromptTemplateUpdateOne) ClearOwnerUser() *TranslationPromptTemplateUpdateOne {
 	_u.mutation.ClearOwnerUser()
 	return _u
 }
 
 // ClearOwnerOrg clears the "owner_org" edge to the Organization entity.
-func (_u *PromptTemplateUpdateOne) ClearOwnerOrg() *PromptTemplateUpdateOne {
+func (_u *TranslationPromptTemplateUpdateOne) ClearOwnerOrg() *TranslationPromptTemplateUpdateOne {
 	_u.mutation.ClearOwnerOrg()
 	return _u
 }
 
-// Where appends a list predicates to the PromptTemplateUpdate builder.
-func (_u *PromptTemplateUpdateOne) Where(ps ...predicate.PromptTemplate) *PromptTemplateUpdateOne {
+// Where appends a list predicates to the TranslationPromptTemplateUpdate builder.
+func (_u *TranslationPromptTemplateUpdateOne) Where(ps ...predicate.TranslationPromptTemplate) *TranslationPromptTemplateUpdateOne {
 	_u.mutation.Where(ps...)
 	return _u
 }
 
 // Select allows selecting one or more fields (columns) of the returned entity.
 // The default is selecting all fields defined in the entity schema.
-func (_u *PromptTemplateUpdateOne) Select(field string, fields ...string) *PromptTemplateUpdateOne {
+func (_u *TranslationPromptTemplateUpdateOne) Select(field string, fields ...string) *TranslationPromptTemplateUpdateOne {
 	_u.fields = append([]string{field}, fields...)
 	return _u
 }
 
-// Save executes the query and returns the updated PromptTemplate entity.
-func (_u *PromptTemplateUpdateOne) Save(ctx context.Context) (*PromptTemplate, error) {
+// Save executes the query and returns the updated TranslationPromptTemplate entity.
+func (_u *TranslationPromptTemplateUpdateOne) Save(ctx context.Context) (*TranslationPromptTemplate, error) {
 	_u.defaults()
 	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
-func (_u *PromptTemplateUpdateOne) SaveX(ctx context.Context) *PromptTemplate {
+func (_u *TranslationPromptTemplateUpdateOne) SaveX(ctx context.Context) *TranslationPromptTemplate {
 	node, err := _u.Save(ctx)
 	if err != nil {
 		panic(err)
@@ -509,64 +478,64 @@ func (_u *PromptTemplateUpdateOne) SaveX(ctx context.Context) *PromptTemplate {
 }
 
 // Exec executes the query on the entity.
-func (_u *PromptTemplateUpdateOne) Exec(ctx context.Context) error {
+func (_u *TranslationPromptTemplateUpdateOne) Exec(ctx context.Context) error {
 	_, err := _u.Save(ctx)
 	return err
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (_u *PromptTemplateUpdateOne) ExecX(ctx context.Context) {
+func (_u *TranslationPromptTemplateUpdateOne) ExecX(ctx context.Context) {
 	if err := _u.Exec(ctx); err != nil {
 		panic(err)
 	}
 }
 
 // defaults sets the default values of the builder before save.
-func (_u *PromptTemplateUpdateOne) defaults() {
+func (_u *TranslationPromptTemplateUpdateOne) defaults() {
 	if _, ok := _u.mutation.UpdatedAt(); !ok {
-		v := prompttemplate.UpdateDefaultUpdatedAt()
+		v := translationprompttemplate.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
 }
 
 // check runs all checks and user-defined validators on the builder.
-func (_u *PromptTemplateUpdateOne) check() error {
+func (_u *TranslationPromptTemplateUpdateOne) check() error {
 	if v, ok := _u.mutation.Name(); ok {
-		if err := prompttemplate.NameValidator(v); err != nil {
-			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "PromptTemplate.name": %w`, err)}
+		if err := translationprompttemplate.NameValidator(v); err != nil {
+			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "TranslationPromptTemplate.name": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.OwnerUserID(); ok {
-		if err := prompttemplate.OwnerUserIDValidator(v); err != nil {
-			return &ValidationError{Name: "owner_user_id", err: fmt.Errorf(`ent: validator failed for field "PromptTemplate.owner_user_id": %w`, err)}
+		if err := translationprompttemplate.OwnerUserIDValidator(v); err != nil {
+			return &ValidationError{Name: "owner_user_id", err: fmt.Errorf(`ent: validator failed for field "TranslationPromptTemplate.owner_user_id": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.OwnerOrgID(); ok {
-		if err := prompttemplate.OwnerOrgIDValidator(v); err != nil {
-			return &ValidationError{Name: "owner_org_id", err: fmt.Errorf(`ent: validator failed for field "PromptTemplate.owner_org_id": %w`, err)}
+		if err := translationprompttemplate.OwnerOrgIDValidator(v); err != nil {
+			return &ValidationError{Name: "owner_org_id", err: fmt.Errorf(`ent: validator failed for field "TranslationPromptTemplate.owner_org_id": %w`, err)}
 		}
 	}
 	return nil
 }
 
-func (_u *PromptTemplateUpdateOne) sqlSave(ctx context.Context) (_node *PromptTemplate, err error) {
+func (_u *TranslationPromptTemplateUpdateOne) sqlSave(ctx context.Context) (_node *TranslationPromptTemplate, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(prompttemplate.Table, prompttemplate.Columns, sqlgraph.NewFieldSpec(prompttemplate.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(translationprompttemplate.Table, translationprompttemplate.Columns, sqlgraph.NewFieldSpec(translationprompttemplate.FieldID, field.TypeInt))
 	id, ok := _u.mutation.ID()
 	if !ok {
-		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "PromptTemplate.id" for update`)}
+		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "TranslationPromptTemplate.id" for update`)}
 	}
 	_spec.Node.ID.Value = id
 	if fields := _u.fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
-		_spec.Node.Columns = append(_spec.Node.Columns, prompttemplate.FieldID)
+		_spec.Node.Columns = append(_spec.Node.Columns, translationprompttemplate.FieldID)
 		for _, f := range fields {
-			if !prompttemplate.ValidColumn(f) {
+			if !translationprompttemplate.ValidColumn(f) {
 				return nil, &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 			}
-			if f != prompttemplate.FieldID {
+			if f != translationprompttemplate.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, f)
 			}
 		}
@@ -579,29 +548,26 @@ func (_u *PromptTemplateUpdateOne) sqlSave(ctx context.Context) (_node *PromptTe
 		}
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
-		_spec.SetField(prompttemplate.FieldUpdatedAt, field.TypeTime, value)
+		_spec.SetField(translationprompttemplate.FieldUpdatedAt, field.TypeTime, value)
 	}
 	if value, ok := _u.mutation.Name(); ok {
-		_spec.SetField(prompttemplate.FieldName, field.TypeString, value)
+		_spec.SetField(translationprompttemplate.FieldName, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Description(); ok {
-		_spec.SetField(prompttemplate.FieldDescription, field.TypeString, value)
+		_spec.SetField(translationprompttemplate.FieldDescription, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Scope(); ok {
-		_spec.SetField(prompttemplate.FieldScope, field.TypeString, value)
+		_spec.SetField(translationprompttemplate.FieldScope, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.SystemPromptContent(); ok {
-		_spec.SetField(prompttemplate.FieldSystemPromptContent, field.TypeString, value)
-	}
-	if value, ok := _u.mutation.BootstrapPromptContent(); ok {
-		_spec.SetField(prompttemplate.FieldBootstrapPromptContent, field.TypeString, value)
+		_spec.SetField(translationprompttemplate.FieldSystemPromptContent, field.TypeString, value)
 	}
 	if _u.mutation.OwnerUserCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   prompttemplate.OwnerUserTable,
-			Columns: []string{prompttemplate.OwnerUserColumn},
+			Table:   translationprompttemplate.OwnerUserTable,
+			Columns: []string{translationprompttemplate.OwnerUserColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
@@ -613,8 +579,8 @@ func (_u *PromptTemplateUpdateOne) sqlSave(ctx context.Context) (_node *PromptTe
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   prompttemplate.OwnerUserTable,
-			Columns: []string{prompttemplate.OwnerUserColumn},
+			Table:   translationprompttemplate.OwnerUserTable,
+			Columns: []string{translationprompttemplate.OwnerUserColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
@@ -629,8 +595,8 @@ func (_u *PromptTemplateUpdateOne) sqlSave(ctx context.Context) (_node *PromptTe
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   prompttemplate.OwnerOrgTable,
-			Columns: []string{prompttemplate.OwnerOrgColumn},
+			Table:   translationprompttemplate.OwnerOrgTable,
+			Columns: []string{translationprompttemplate.OwnerOrgColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
@@ -642,8 +608,8 @@ func (_u *PromptTemplateUpdateOne) sqlSave(ctx context.Context) (_node *PromptTe
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   prompttemplate.OwnerOrgTable,
-			Columns: []string{prompttemplate.OwnerOrgColumn},
+			Table:   translationprompttemplate.OwnerOrgTable,
+			Columns: []string{translationprompttemplate.OwnerOrgColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
@@ -654,12 +620,12 @@ func (_u *PromptTemplateUpdateOne) sqlSave(ctx context.Context) (_node *PromptTe
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	_node = &PromptTemplate{config: _u.config}
+	_node = &TranslationPromptTemplate{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues
 	if err = sqlgraph.UpdateNode(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
-			err = &NotFoundError{prompttemplate.Label}
+			err = &NotFoundError{translationprompttemplate.Label}
 		} else if sqlgraph.IsConstraintError(err) {
 			err = &ConstraintError{msg: err.Error(), wrap: err}
 		}

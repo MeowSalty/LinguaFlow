@@ -48,14 +48,15 @@ var (
 
 // TranslationJobService 翻译任务服务。
 type TranslationJobService struct {
-	client          *ent.Client
-	projects        *ProjectService
-	executionPlans  *ExecutionPlanService
-	backends        *BackendService
-	promptTemplates *PromptTemplateService
-	profiles        *TranslationProfileService
-	store           *filestore.LocalStore
-	broker          *event.Broker
+	client                     *ent.Client
+	projects                   *ProjectService
+	executionPlans             *ExecutionPlanService
+	backends                   *BackendService
+	translationPromptTemplates *TranslationPromptTemplateService
+	bootstrapPromptTemplates   *BootstrapPromptTemplateService
+	profiles                   *TranslationProfileService
+	store                      *filestore.LocalStore
+	broker                     *event.Broker
 }
 
 // CreateTranslationJobInput 创建翻译任务的输入参数。
@@ -82,20 +83,22 @@ func NewTranslationJobService(
 	projects *ProjectService,
 	executionPlans *ExecutionPlanService,
 	backends *BackendService,
-	promptTemplates *PromptTemplateService,
+	translationPromptTemplates *TranslationPromptTemplateService,
+	bootstrapPromptTemplates *BootstrapPromptTemplateService,
 	profiles *TranslationProfileService,
 	store *filestore.LocalStore,
 	broker *event.Broker,
 ) *TranslationJobService {
 	return &TranslationJobService{
-		client:          client,
-		projects:        projects,
-		executionPlans:  executionPlans,
-		backends:        backends,
-		promptTemplates: promptTemplates,
-		profiles:        profiles,
-		store:           store,
-		broker:          broker,
+		client:                     client,
+		projects:                   projects,
+		executionPlans:             executionPlans,
+		backends:                   backends,
+		translationPromptTemplates: translationPromptTemplates,
+		bootstrapPromptTemplates:   bootstrapPromptTemplates,
+		profiles:                   profiles,
+		store:                      store,
+		broker:                     broker,
 	}
 }
 
@@ -164,12 +167,18 @@ type BackendSnapshot struct {
 	RateLimitPerMinute int            `json:"rate_limit_per_minute"`
 }
 
-// PromptSnapshot 提示词模板快照。
+// PromptSnapshot 翻译提示词模板快照。
 type PromptSnapshot struct {
-	TemplateID       *int   `json:"template_id,omitempty"`
-	TemplateName     string `json:"template_name"`
-	Content          string `json:"content"`
-	BootstrapContent string `json:"bootstrap_content,omitempty"`
+	TemplateID   *int   `json:"template_id,omitempty"`
+	TemplateName string `json:"template_name"`
+	Content      string `json:"content"`
+}
+
+// BootstrapPromptSnapshot 术语抽取提示词模板快照。
+type BootstrapPromptSnapshot struct {
+	TemplateID   *int   `json:"template_id,omitempty"`
+	TemplateName string `json:"template_name"`
+	Content      string `json:"content"`
 }
 
 // StrategySnapshot 策略模板快照。
@@ -371,21 +380,21 @@ func (s *TranslationJobService) validateAndSnapshot(
 			return nil, fmt.Errorf("bootstrap snapshot backend: %w", err)
 		}
 
-		// 快照自举提示词模板（仅用其 bootstrap_prompt_content）
-		bootstrapPromptSnap, err := s.snapshotPromptTemplate(ctx, bs.PromptTemplateID)
+		// 快照自举提示词模板（仅用其 content）
+		bootstrapPromptSnap, err := s.snapshotBootstrapTemplate(ctx, bs.PromptTemplateID)
 		if err != nil {
 			return nil, fmt.Errorf("bootstrap snapshot prompt: %w", err)
 		}
 
-		if bootstrapPromptSnap.BootstrapContent == "" {
-			return nil, fmt.Errorf("bootstrap prompt_template %q has no bootstrap_prompt_content", bootstrapPromptSnap.TemplateName)
+		if bootstrapPromptSnap.Content == "" {
+			return nil, fmt.Errorf("bootstrap prompt_template %q has no content", bootstrapPromptSnap.TemplateName)
 		}
 
 		snapshot.GlossaryEnabled = true
 		snapshot.Bootstrap = &ExecutionPlanBootstrapSnapshot{
 			Enabled:              true,
 			Backend:              *bootstrapBackendSnap,
-			TemplateContent:      bootstrapPromptSnap.BootstrapContent,
+			TemplateContent:      bootstrapPromptSnap.Content,
 			BatchSize:            bs.BatchSize,
 			Concurrency:          bs.Concurrency,
 			MaxTermsPer1000Chars: bs.MaxTermsPer1000Chars,
@@ -476,18 +485,31 @@ func (s *TranslationJobService) snapshotBackend(ctx context.Context, backendID i
 	}, nil
 }
 
-// snapshotPromptTemplate 快照提示词模板。
+// snapshotPromptTemplate 快照翻译提示词模板。
 func (s *TranslationJobService) snapshotPromptTemplate(ctx context.Context, templateID int) (*PromptSnapshot, error) {
-	pt, err := s.promptTemplates.GetByID(ctx, templateID)
+	pt, err := s.translationPromptTemplates.GetByID(ctx, templateID)
 	if err != nil {
 		return nil, err
 	}
 	id := pt.ID
 	return &PromptSnapshot{
-		TemplateID:       &id,
-		TemplateName:     pt.Name,
-		Content:          pt.SystemPromptContent,
-		BootstrapContent: pt.BootstrapPromptContent,
+		TemplateID:   &id,
+		TemplateName: pt.Name,
+		Content:      pt.SystemPromptContent,
+	}, nil
+}
+
+// snapshotBootstrapTemplate 快照术语抽取提示词模板。
+func (s *TranslationJobService) snapshotBootstrapTemplate(ctx context.Context, templateID int) (*BootstrapPromptSnapshot, error) {
+	pt, err := s.bootstrapPromptTemplates.GetByID(ctx, templateID)
+	if err != nil {
+		return nil, err
+	}
+	id := pt.ID
+	return &BootstrapPromptSnapshot{
+		TemplateID:   &id,
+		TemplateName: pt.Name,
+		Content:      pt.Content,
 	}, nil
 }
 

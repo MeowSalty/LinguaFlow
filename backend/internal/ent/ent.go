@@ -14,13 +14,13 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
@@ -30,6 +30,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
@@ -92,26 +93,27 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			activitylog.Table:           activitylog.ValidColumn,
-			backend.Table:               backend.ValidColumn,
-			executionplantemplate.Table: executionplantemplate.ValidColumn,
-			glossaryentry.Table:         glossaryentry.ValidColumn,
-			jobresource.Table:           jobresource.ValidColumn,
-			orgmembership.Table:         orgmembership.ValidColumn,
-			organization.Table:          organization.ValidColumn,
-			project.Table:               project.ValidColumn,
-			prompttemplate.Table:        prompttemplate.ValidColumn,
-			refreshtoken.Table:          refreshtoken.ValidColumn,
-			resource.Table:              resource.ValidColumn,
-			sseevent.Table:              sseevent.ValidColumn,
-			segment.Table:               segment.ValidColumn,
-			synctask.Table:              synctask.ValidColumn,
-			systemsetting.Table:         systemsetting.ValidColumn,
-			tmentry.Table:               tmentry.ValidColumn,
-			translationjob.Table:        translationjob.ValidColumn,
-			translationprofile.Table:    translationprofile.ValidColumn,
-			usagerecord.Table:           usagerecord.ValidColumn,
-			user.Table:                  user.ValidColumn,
+			activitylog.Table:               activitylog.ValidColumn,
+			backend.Table:                   backend.ValidColumn,
+			bootstrapprompttemplate.Table:   bootstrapprompttemplate.ValidColumn,
+			executionplantemplate.Table:     executionplantemplate.ValidColumn,
+			glossaryentry.Table:             glossaryentry.ValidColumn,
+			jobresource.Table:               jobresource.ValidColumn,
+			orgmembership.Table:             orgmembership.ValidColumn,
+			organization.Table:              organization.ValidColumn,
+			project.Table:                   project.ValidColumn,
+			refreshtoken.Table:              refreshtoken.ValidColumn,
+			resource.Table:                  resource.ValidColumn,
+			sseevent.Table:                  sseevent.ValidColumn,
+			segment.Table:                   segment.ValidColumn,
+			synctask.Table:                  synctask.ValidColumn,
+			systemsetting.Table:             systemsetting.ValidColumn,
+			tmentry.Table:                   tmentry.ValidColumn,
+			translationjob.Table:            translationjob.ValidColumn,
+			translationprofile.Table:        translationprofile.ValidColumn,
+			translationprompttemplate.Table: translationprompttemplate.ValidColumn,
+			usagerecord.Table:               usagerecord.ValidColumn,
+			user.Table:                      user.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)

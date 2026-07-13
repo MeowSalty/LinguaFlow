@@ -100,6 +100,38 @@ var (
 			},
 		},
 	}
+	// BootstrapPromptTemplatesColumns holds the columns for the "bootstrap_prompt_templates" table.
+	BootstrapPromptTemplatesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "name", Type: field.TypeString},
+		{Name: "description", Type: field.TypeString, Default: ""},
+		{Name: "scope", Type: field.TypeString, Default: "user"},
+		{Name: "content", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
+		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
+	}
+	// BootstrapPromptTemplatesTable holds the schema information for the "bootstrap_prompt_templates" table.
+	BootstrapPromptTemplatesTable = &schema.Table{
+		Name:       "bootstrap_prompt_templates",
+		Columns:    BootstrapPromptTemplatesColumns,
+		PrimaryKey: []*schema.Column{BootstrapPromptTemplatesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "bootstrap_prompt_templates_organizations_bootstrap_prompt_templates",
+				Columns:    []*schema.Column{BootstrapPromptTemplatesColumns[7]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "bootstrap_prompt_templates_users_bootstrap_prompt_templates",
+				Columns:    []*schema.Column{BootstrapPromptTemplatesColumns[8]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
 	// ExecutionPlanTemplatesColumns holds the columns for the "execution_plan_templates" table.
 	ExecutionPlanTemplatesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -287,39 +319,6 @@ var (
 			{
 				Symbol:     "projects_users_owned_projects",
 				Columns:    []*schema.Column{ProjectsColumns[10]},
-				RefColumns: []*schema.Column{UsersColumns[0]},
-				OnDelete:   schema.SetNull,
-			},
-		},
-	}
-	// PromptTemplatesColumns holds the columns for the "prompt_templates" table.
-	PromptTemplatesColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "created_at", Type: field.TypeTime},
-		{Name: "updated_at", Type: field.TypeTime},
-		{Name: "name", Type: field.TypeString},
-		{Name: "description", Type: field.TypeString, Default: ""},
-		{Name: "scope", Type: field.TypeString, Default: "user"},
-		{Name: "system_prompt_content", Type: field.TypeString, Size: 2147483647, Default: ""},
-		{Name: "bootstrap_prompt_content", Type: field.TypeString, Size: 2147483647, Default: ""},
-		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
-		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
-	}
-	// PromptTemplatesTable holds the schema information for the "prompt_templates" table.
-	PromptTemplatesTable = &schema.Table{
-		Name:       "prompt_templates",
-		Columns:    PromptTemplatesColumns,
-		PrimaryKey: []*schema.Column{PromptTemplatesColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{
-			{
-				Symbol:     "prompt_templates_organizations_prompt_templates",
-				Columns:    []*schema.Column{PromptTemplatesColumns[8]},
-				RefColumns: []*schema.Column{OrganizationsColumns[0]},
-				OnDelete:   schema.SetNull,
-			},
-			{
-				Symbol:     "prompt_templates_users_prompt_templates",
-				Columns:    []*schema.Column{PromptTemplatesColumns[9]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -636,6 +635,38 @@ var (
 			},
 		},
 	}
+	// TranslationPromptTemplatesColumns holds the columns for the "translation_prompt_templates" table.
+	TranslationPromptTemplatesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "name", Type: field.TypeString},
+		{Name: "description", Type: field.TypeString, Default: ""},
+		{Name: "scope", Type: field.TypeString, Default: "user"},
+		{Name: "system_prompt_content", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
+		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
+	}
+	// TranslationPromptTemplatesTable holds the schema information for the "translation_prompt_templates" table.
+	TranslationPromptTemplatesTable = &schema.Table{
+		Name:       "translation_prompt_templates",
+		Columns:    TranslationPromptTemplatesColumns,
+		PrimaryKey: []*schema.Column{TranslationPromptTemplatesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "translation_prompt_templates_organizations_translation_prompt_templates",
+				Columns:    []*schema.Column{TranslationPromptTemplatesColumns[7]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "translation_prompt_templates_users_translation_prompt_templates",
+				Columns:    []*schema.Column{TranslationPromptTemplatesColumns[8]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
 	// UsageRecordsColumns holds the columns for the "usage_records" table.
 	UsageRecordsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -699,13 +730,13 @@ var (
 	Tables = []*schema.Table{
 		ActivityLogsTable,
 		BackendsTable,
+		BootstrapPromptTemplatesTable,
 		ExecutionPlanTemplatesTable,
 		GlossaryEntriesTable,
 		JobResourcesTable,
 		OrgMembershipsTable,
 		OrganizationsTable,
 		ProjectsTable,
-		PromptTemplatesTable,
 		RefreshTokensTable,
 		ResourcesTable,
 		SseEventsTable,
@@ -715,6 +746,7 @@ var (
 		TmEntriesTable,
 		TranslationJobsTable,
 		TranslationProfilesTable,
+		TranslationPromptTemplatesTable,
 		UsageRecordsTable,
 		UsersTable,
 	}
@@ -726,6 +758,8 @@ func init() {
 	ActivityLogsTable.ForeignKeys[2].RefTable = UsersTable
 	BackendsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	BackendsTable.ForeignKeys[1].RefTable = UsersTable
+	BootstrapPromptTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
+	BootstrapPromptTemplatesTable.ForeignKeys[1].RefTable = UsersTable
 	ExecutionPlanTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	ExecutionPlanTemplatesTable.ForeignKeys[1].RefTable = UsersTable
 	GlossaryEntriesTable.ForeignKeys[0].RefTable = ProjectsTable
@@ -735,8 +769,6 @@ func init() {
 	OrgMembershipsTable.ForeignKeys[1].RefTable = UsersTable
 	ProjectsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	ProjectsTable.ForeignKeys[1].RefTable = UsersTable
-	PromptTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
-	PromptTemplatesTable.ForeignKeys[1].RefTable = UsersTable
 	RefreshTokensTable.ForeignKeys[0].RefTable = UsersTable
 	ResourcesTable.ForeignKeys[0].RefTable = ProjectsTable
 	SseEventsTable.ForeignKeys[0].RefTable = TranslationJobsTable
@@ -750,6 +782,8 @@ func init() {
 	TranslationJobsTable.ForeignKeys[1].RefTable = UsersTable
 	TranslationProfilesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	TranslationProfilesTable.ForeignKeys[1].RefTable = UsersTable
+	TranslationPromptTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
+	TranslationPromptTemplatesTable.ForeignKeys[1].RefTable = UsersTable
 	UsageRecordsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	UsageRecordsTable.ForeignKeys[1].RefTable = ProjectsTable
 	UsageRecordsTable.ForeignKeys[2].RefTable = UsersTable

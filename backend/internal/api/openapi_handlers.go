@@ -296,6 +296,28 @@ func (s *Server) DeletePromptTemplate(w http.ResponseWriter, r *http.Request, _ 
 	s.requireAuth(http.HandlerFunc(s.handleDeletePromptTemplate)).ServeHTTP(w, r)
 }
 
+// ---- 术语抽取提示词模板适配器 ----
+
+func (s *Server) ListBootstrapPromptTemplates(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleListBootstrapPromptTemplates)).ServeHTTP(w, r)
+}
+
+func (s *Server) CreateBootstrapPromptTemplate(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleCreateBootstrapPromptTemplate)).ServeHTTP(w, r)
+}
+
+func (s *Server) GetBootstrapPromptTemplate(w http.ResponseWriter, r *http.Request, _ BootstrapPromptTemplateId) {
+	s.requireAuth(http.HandlerFunc(s.handleGetBootstrapPromptTemplate)).ServeHTTP(w, r)
+}
+
+func (s *Server) UpdateBootstrapPromptTemplate(w http.ResponseWriter, r *http.Request, _ BootstrapPromptTemplateId) {
+	s.requireAuth(http.HandlerFunc(s.handleUpdateBootstrapPromptTemplate)).ServeHTTP(w, r)
+}
+
+func (s *Server) DeleteBootstrapPromptTemplate(w http.ResponseWriter, r *http.Request, _ BootstrapPromptTemplateId) {
+	s.requireAuth(http.HandlerFunc(s.handleDeleteBootstrapPromptTemplate)).ServeHTTP(w, r)
+}
+
 // ---- 翻译配置适配器 ----
 
 func (s *Server) ListTranslationProfiles(w http.ResponseWriter, r *http.Request) {

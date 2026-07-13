@@ -10,10 +10,15 @@ backend:
     timeout: 60s
     response_format: json_schema
 
-prompt_template:
+translation_prompt_template:
   id: -1
-  name: "通用提示词"
-  description: "默认提示词，适用于一般文档翻译"
+  name: "通用翻译提示词"
+  description: "默认翻译提示词模板，适用于一般文档翻译"
+
+bootstrap_prompt_template:
+  id: -1
+  name: "通用术语抽取提示词"
+  description: "默认术语抽取提示词模板"
 
 translation_profile:
   id: -1

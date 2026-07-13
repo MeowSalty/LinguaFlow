@@ -11,19 +11,19 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
-// PromptTemplateQuery is the builder for querying PromptTemplate entities.
-type PromptTemplateQuery struct {
+// BootstrapPromptTemplateQuery is the builder for querying BootstrapPromptTemplate entities.
+type BootstrapPromptTemplateQuery struct {
 	config
 	ctx           *QueryContext
-	order         []prompttemplate.OrderOption
+	order         []bootstrapprompttemplate.OrderOption
 	inters        []Interceptor
-	predicates    []predicate.PromptTemplate
+	predicates    []predicate.BootstrapPromptTemplate
 	withOwnerUser *UserQuery
 	withOwnerOrg  *OrganizationQuery
 	// intermediate query (i.e. traversal path).
@@ -31,39 +31,39 @@ type PromptTemplateQuery struct {
 	path func(context.Context) (*sql.Selector, error)
 }
 
-// Where adds a new predicate for the PromptTemplateQuery builder.
-func (_q *PromptTemplateQuery) Where(ps ...predicate.PromptTemplate) *PromptTemplateQuery {
+// Where adds a new predicate for the BootstrapPromptTemplateQuery builder.
+func (_q *BootstrapPromptTemplateQuery) Where(ps ...predicate.BootstrapPromptTemplate) *BootstrapPromptTemplateQuery {
 	_q.predicates = append(_q.predicates, ps...)
 	return _q
 }
 
 // Limit the number of records to be returned by this query.
-func (_q *PromptTemplateQuery) Limit(limit int) *PromptTemplateQuery {
+func (_q *BootstrapPromptTemplateQuery) Limit(limit int) *BootstrapPromptTemplateQuery {
 	_q.ctx.Limit = &limit
 	return _q
 }
 
 // Offset to start from.
-func (_q *PromptTemplateQuery) Offset(offset int) *PromptTemplateQuery {
+func (_q *BootstrapPromptTemplateQuery) Offset(offset int) *BootstrapPromptTemplateQuery {
 	_q.ctx.Offset = &offset
 	return _q
 }
 
 // Unique configures the query builder to filter duplicate records on query.
 // By default, unique is set to true, and can be disabled using this method.
-func (_q *PromptTemplateQuery) Unique(unique bool) *PromptTemplateQuery {
+func (_q *BootstrapPromptTemplateQuery) Unique(unique bool) *BootstrapPromptTemplateQuery {
 	_q.ctx.Unique = &unique
 	return _q
 }
 
 // Order specifies how the records should be ordered.
-func (_q *PromptTemplateQuery) Order(o ...prompttemplate.OrderOption) *PromptTemplateQuery {
+func (_q *BootstrapPromptTemplateQuery) Order(o ...bootstrapprompttemplate.OrderOption) *BootstrapPromptTemplateQuery {
 	_q.order = append(_q.order, o...)
 	return _q
 }
 
 // QueryOwnerUser chains the current query on the "owner_user" edge.
-func (_q *PromptTemplateQuery) QueryOwnerUser() *UserQuery {
+func (_q *BootstrapPromptTemplateQuery) QueryOwnerUser() *UserQuery {
 	query := (&UserClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
@@ -74,9 +74,9 @@ func (_q *PromptTemplateQuery) QueryOwnerUser() *UserQuery {
 			return nil, err
 		}
 		step := sqlgraph.NewStep(
-			sqlgraph.From(prompttemplate.Table, prompttemplate.FieldID, selector),
+			sqlgraph.From(bootstrapprompttemplate.Table, bootstrapprompttemplate.FieldID, selector),
 			sqlgraph.To(user.Table, user.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, prompttemplate.OwnerUserTable, prompttemplate.OwnerUserColumn),
+			sqlgraph.Edge(sqlgraph.M2O, true, bootstrapprompttemplate.OwnerUserTable, bootstrapprompttemplate.OwnerUserColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -85,7 +85,7 @@ func (_q *PromptTemplateQuery) QueryOwnerUser() *UserQuery {
 }
 
 // QueryOwnerOrg chains the current query on the "owner_org" edge.
-func (_q *PromptTemplateQuery) QueryOwnerOrg() *OrganizationQuery {
+func (_q *BootstrapPromptTemplateQuery) QueryOwnerOrg() *OrganizationQuery {
 	query := (&OrganizationClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
@@ -96,9 +96,9 @@ func (_q *PromptTemplateQuery) QueryOwnerOrg() *OrganizationQuery {
 			return nil, err
 		}
 		step := sqlgraph.NewStep(
-			sqlgraph.From(prompttemplate.Table, prompttemplate.FieldID, selector),
+			sqlgraph.From(bootstrapprompttemplate.Table, bootstrapprompttemplate.FieldID, selector),
 			sqlgraph.To(organization.Table, organization.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, prompttemplate.OwnerOrgTable, prompttemplate.OwnerOrgColumn),
+			sqlgraph.Edge(sqlgraph.M2O, true, bootstrapprompttemplate.OwnerOrgTable, bootstrapprompttemplate.OwnerOrgColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -106,21 +106,21 @@ func (_q *PromptTemplateQuery) QueryOwnerOrg() *OrganizationQuery {
 	return query
 }
 
-// First returns the first PromptTemplate entity from the query.
-// Returns a *NotFoundError when no PromptTemplate was found.
-func (_q *PromptTemplateQuery) First(ctx context.Context) (*PromptTemplate, error) {
+// First returns the first BootstrapPromptTemplate entity from the query.
+// Returns a *NotFoundError when no BootstrapPromptTemplate was found.
+func (_q *BootstrapPromptTemplateQuery) First(ctx context.Context) (*BootstrapPromptTemplate, error) {
 	nodes, err := _q.Limit(1).All(setContextOp(ctx, _q.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
 	if len(nodes) == 0 {
-		return nil, &NotFoundError{prompttemplate.Label}
+		return nil, &NotFoundError{bootstrapprompttemplate.Label}
 	}
 	return nodes[0], nil
 }
 
 // FirstX is like First, but panics if an error occurs.
-func (_q *PromptTemplateQuery) FirstX(ctx context.Context) *PromptTemplate {
+func (_q *BootstrapPromptTemplateQuery) FirstX(ctx context.Context) *BootstrapPromptTemplate {
 	node, err := _q.First(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
@@ -128,22 +128,22 @@ func (_q *PromptTemplateQuery) FirstX(ctx context.Context) *PromptTemplate {
 	return node
 }
 
-// FirstID returns the first PromptTemplate ID from the query.
-// Returns a *NotFoundError when no PromptTemplate ID was found.
-func (_q *PromptTemplateQuery) FirstID(ctx context.Context) (id int, err error) {
+// FirstID returns the first BootstrapPromptTemplate ID from the query.
+// Returns a *NotFoundError when no BootstrapPromptTemplate ID was found.
+func (_q *BootstrapPromptTemplateQuery) FirstID(ctx context.Context) (id int, err error) {
 	var ids []int
 	if ids, err = _q.Limit(1).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
 	if len(ids) == 0 {
-		err = &NotFoundError{prompttemplate.Label}
+		err = &NotFoundError{bootstrapprompttemplate.Label}
 		return
 	}
 	return ids[0], nil
 }
 
 // FirstIDX is like FirstID, but panics if an error occurs.
-func (_q *PromptTemplateQuery) FirstIDX(ctx context.Context) int {
+func (_q *BootstrapPromptTemplateQuery) FirstIDX(ctx context.Context) int {
 	id, err := _q.FirstID(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
@@ -151,10 +151,10 @@ func (_q *PromptTemplateQuery) FirstIDX(ctx context.Context) int {
 	return id
 }
 
-// Only returns a single PromptTemplate entity found by the query, ensuring it only returns one.
-// Returns a *NotSingularError when more than one PromptTemplate entity is found.
-// Returns a *NotFoundError when no PromptTemplate entities are found.
-func (_q *PromptTemplateQuery) Only(ctx context.Context) (*PromptTemplate, error) {
+// Only returns a single BootstrapPromptTemplate entity found by the query, ensuring it only returns one.
+// Returns a *NotSingularError when more than one BootstrapPromptTemplate entity is found.
+// Returns a *NotFoundError when no BootstrapPromptTemplate entities are found.
+func (_q *BootstrapPromptTemplateQuery) Only(ctx context.Context) (*BootstrapPromptTemplate, error) {
 	nodes, err := _q.Limit(2).All(setContextOp(ctx, _q.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
@@ -163,14 +163,14 @@ func (_q *PromptTemplateQuery) Only(ctx context.Context) (*PromptTemplate, error
 	case 1:
 		return nodes[0], nil
 	case 0:
-		return nil, &NotFoundError{prompttemplate.Label}
+		return nil, &NotFoundError{bootstrapprompttemplate.Label}
 	default:
-		return nil, &NotSingularError{prompttemplate.Label}
+		return nil, &NotSingularError{bootstrapprompttemplate.Label}
 	}
 }
 
 // OnlyX is like Only, but panics if an error occurs.
-func (_q *PromptTemplateQuery) OnlyX(ctx context.Context) *PromptTemplate {
+func (_q *BootstrapPromptTemplateQuery) OnlyX(ctx context.Context) *BootstrapPromptTemplate {
 	node, err := _q.Only(ctx)
 	if err != nil {
 		panic(err)
@@ -178,10 +178,10 @@ func (_q *PromptTemplateQuery) OnlyX(ctx context.Context) *PromptTemplate {
 	return node
 }
 
-// OnlyID is like Only, but returns the only PromptTemplate ID in the query.
-// Returns a *NotSingularError when more than one PromptTemplate ID is found.
+// OnlyID is like Only, but returns the only BootstrapPromptTemplate ID in the query.
+// Returns a *NotSingularError when more than one BootstrapPromptTemplate ID is found.
 // Returns a *NotFoundError when no entities are found.
-func (_q *PromptTemplateQuery) OnlyID(ctx context.Context) (id int, err error) {
+func (_q *BootstrapPromptTemplateQuery) OnlyID(ctx context.Context) (id int, err error) {
 	var ids []int
 	if ids, err = _q.Limit(2).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
@@ -190,15 +190,15 @@ func (_q *PromptTemplateQuery) OnlyID(ctx context.Context) (id int, err error) {
 	case 1:
 		id = ids[0]
 	case 0:
-		err = &NotFoundError{prompttemplate.Label}
+		err = &NotFoundError{bootstrapprompttemplate.Label}
 	default:
-		err = &NotSingularError{prompttemplate.Label}
+		err = &NotSingularError{bootstrapprompttemplate.Label}
 	}
 	return
 }
 
 // OnlyIDX is like OnlyID, but panics if an error occurs.
-func (_q *PromptTemplateQuery) OnlyIDX(ctx context.Context) int {
+func (_q *BootstrapPromptTemplateQuery) OnlyIDX(ctx context.Context) int {
 	id, err := _q.OnlyID(ctx)
 	if err != nil {
 		panic(err)
@@ -206,18 +206,18 @@ func (_q *PromptTemplateQuery) OnlyIDX(ctx context.Context) int {
 	return id
 }
 
-// All executes the query and returns a list of PromptTemplates.
-func (_q *PromptTemplateQuery) All(ctx context.Context) ([]*PromptTemplate, error) {
+// All executes the query and returns a list of BootstrapPromptTemplates.
+func (_q *BootstrapPromptTemplateQuery) All(ctx context.Context) ([]*BootstrapPromptTemplate, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryAll)
 	if err := _q.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
-	qr := querierAll[[]*PromptTemplate, *PromptTemplateQuery]()
-	return withInterceptors[[]*PromptTemplate](ctx, _q, qr, _q.inters)
+	qr := querierAll[[]*BootstrapPromptTemplate, *BootstrapPromptTemplateQuery]()
+	return withInterceptors[[]*BootstrapPromptTemplate](ctx, _q, qr, _q.inters)
 }
 
 // AllX is like All, but panics if an error occurs.
-func (_q *PromptTemplateQuery) AllX(ctx context.Context) []*PromptTemplate {
+func (_q *BootstrapPromptTemplateQuery) AllX(ctx context.Context) []*BootstrapPromptTemplate {
 	nodes, err := _q.All(ctx)
 	if err != nil {
 		panic(err)
@@ -225,20 +225,20 @@ func (_q *PromptTemplateQuery) AllX(ctx context.Context) []*PromptTemplate {
 	return nodes
 }
 
-// IDs executes the query and returns a list of PromptTemplate IDs.
-func (_q *PromptTemplateQuery) IDs(ctx context.Context) (ids []int, err error) {
+// IDs executes the query and returns a list of BootstrapPromptTemplate IDs.
+func (_q *BootstrapPromptTemplateQuery) IDs(ctx context.Context) (ids []int, err error) {
 	if _q.ctx.Unique == nil && _q.path != nil {
 		_q.Unique(true)
 	}
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryIDs)
-	if err = _q.Select(prompttemplate.FieldID).Scan(ctx, &ids); err != nil {
+	if err = _q.Select(bootstrapprompttemplate.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
 }
 
 // IDsX is like IDs, but panics if an error occurs.
-func (_q *PromptTemplateQuery) IDsX(ctx context.Context) []int {
+func (_q *BootstrapPromptTemplateQuery) IDsX(ctx context.Context) []int {
 	ids, err := _q.IDs(ctx)
 	if err != nil {
 		panic(err)
@@ -247,16 +247,16 @@ func (_q *PromptTemplateQuery) IDsX(ctx context.Context) []int {
 }
 
 // Count returns the count of the given query.
-func (_q *PromptTemplateQuery) Count(ctx context.Context) (int, error) {
+func (_q *BootstrapPromptTemplateQuery) Count(ctx context.Context) (int, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryCount)
 	if err := _q.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
-	return withInterceptors[int](ctx, _q, querierCount[*PromptTemplateQuery](), _q.inters)
+	return withInterceptors[int](ctx, _q, querierCount[*BootstrapPromptTemplateQuery](), _q.inters)
 }
 
 // CountX is like Count, but panics if an error occurs.
-func (_q *PromptTemplateQuery) CountX(ctx context.Context) int {
+func (_q *BootstrapPromptTemplateQuery) CountX(ctx context.Context) int {
 	count, err := _q.Count(ctx)
 	if err != nil {
 		panic(err)
@@ -265,7 +265,7 @@ func (_q *PromptTemplateQuery) CountX(ctx context.Context) int {
 }
 
 // Exist returns true if the query has elements in the graph.
-func (_q *PromptTemplateQuery) Exist(ctx context.Context) (bool, error) {
+func (_q *BootstrapPromptTemplateQuery) Exist(ctx context.Context) (bool, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryExist)
 	switch _, err := _q.FirstID(ctx); {
 	case IsNotFound(err):
@@ -278,7 +278,7 @@ func (_q *PromptTemplateQuery) Exist(ctx context.Context) (bool, error) {
 }
 
 // ExistX is like Exist, but panics if an error occurs.
-func (_q *PromptTemplateQuery) ExistX(ctx context.Context) bool {
+func (_q *BootstrapPromptTemplateQuery) ExistX(ctx context.Context) bool {
 	exist, err := _q.Exist(ctx)
 	if err != nil {
 		panic(err)
@@ -286,18 +286,18 @@ func (_q *PromptTemplateQuery) ExistX(ctx context.Context) bool {
 	return exist
 }
 
-// Clone returns a duplicate of the PromptTemplateQuery builder, including all associated steps. It can be
+// Clone returns a duplicate of the BootstrapPromptTemplateQuery builder, including all associated steps. It can be
 // used to prepare common query builders and use them differently after the clone is made.
-func (_q *PromptTemplateQuery) Clone() *PromptTemplateQuery {
+func (_q *BootstrapPromptTemplateQuery) Clone() *BootstrapPromptTemplateQuery {
 	if _q == nil {
 		return nil
 	}
-	return &PromptTemplateQuery{
+	return &BootstrapPromptTemplateQuery{
 		config:        _q.config,
 		ctx:           _q.ctx.Clone(),
-		order:         append([]prompttemplate.OrderOption{}, _q.order...),
+		order:         append([]bootstrapprompttemplate.OrderOption{}, _q.order...),
 		inters:        append([]Interceptor{}, _q.inters...),
-		predicates:    append([]predicate.PromptTemplate{}, _q.predicates...),
+		predicates:    append([]predicate.BootstrapPromptTemplate{}, _q.predicates...),
 		withOwnerUser: _q.withOwnerUser.Clone(),
 		withOwnerOrg:  _q.withOwnerOrg.Clone(),
 		// clone intermediate query.
@@ -308,7 +308,7 @@ func (_q *PromptTemplateQuery) Clone() *PromptTemplateQuery {
 
 // WithOwnerUser tells the query-builder to eager-load the nodes that are connected to
 // the "owner_user" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *PromptTemplateQuery) WithOwnerUser(opts ...func(*UserQuery)) *PromptTemplateQuery {
+func (_q *BootstrapPromptTemplateQuery) WithOwnerUser(opts ...func(*UserQuery)) *BootstrapPromptTemplateQuery {
 	query := (&UserClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
@@ -319,7 +319,7 @@ func (_q *PromptTemplateQuery) WithOwnerUser(opts ...func(*UserQuery)) *PromptTe
 
 // WithOwnerOrg tells the query-builder to eager-load the nodes that are connected to
 // the "owner_org" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *PromptTemplateQuery) WithOwnerOrg(opts ...func(*OrganizationQuery)) *PromptTemplateQuery {
+func (_q *BootstrapPromptTemplateQuery) WithOwnerOrg(opts ...func(*OrganizationQuery)) *BootstrapPromptTemplateQuery {
 	query := (&OrganizationClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
@@ -338,15 +338,15 @@ func (_q *PromptTemplateQuery) WithOwnerOrg(opts ...func(*OrganizationQuery)) *P
 //		Count int `json:"count,omitempty"`
 //	}
 //
-//	client.PromptTemplate.Query().
-//		GroupBy(prompttemplate.FieldCreatedAt).
+//	client.BootstrapPromptTemplate.Query().
+//		GroupBy(bootstrapprompttemplate.FieldCreatedAt).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
-func (_q *PromptTemplateQuery) GroupBy(field string, fields ...string) *PromptTemplateGroupBy {
+func (_q *BootstrapPromptTemplateQuery) GroupBy(field string, fields ...string) *BootstrapPromptTemplateGroupBy {
 	_q.ctx.Fields = append([]string{field}, fields...)
-	grbuild := &PromptTemplateGroupBy{build: _q}
+	grbuild := &BootstrapPromptTemplateGroupBy{build: _q}
 	grbuild.flds = &_q.ctx.Fields
-	grbuild.label = prompttemplate.Label
+	grbuild.label = bootstrapprompttemplate.Label
 	grbuild.scan = grbuild.Scan
 	return grbuild
 }
@@ -360,23 +360,23 @@ func (_q *PromptTemplateQuery) GroupBy(field string, fields ...string) *PromptTe
 //		CreatedAt time.Time `json:"created_at,omitempty"`
 //	}
 //
-//	client.PromptTemplate.Query().
-//		Select(prompttemplate.FieldCreatedAt).
+//	client.BootstrapPromptTemplate.Query().
+//		Select(bootstrapprompttemplate.FieldCreatedAt).
 //		Scan(ctx, &v)
-func (_q *PromptTemplateQuery) Select(fields ...string) *PromptTemplateSelect {
+func (_q *BootstrapPromptTemplateQuery) Select(fields ...string) *BootstrapPromptTemplateSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)
-	sbuild := &PromptTemplateSelect{PromptTemplateQuery: _q}
-	sbuild.label = prompttemplate.Label
+	sbuild := &BootstrapPromptTemplateSelect{BootstrapPromptTemplateQuery: _q}
+	sbuild.label = bootstrapprompttemplate.Label
 	sbuild.flds, sbuild.scan = &_q.ctx.Fields, sbuild.Scan
 	return sbuild
 }
 
-// Aggregate returns a PromptTemplateSelect configured with the given aggregations.
-func (_q *PromptTemplateQuery) Aggregate(fns ...AggregateFunc) *PromptTemplateSelect {
+// Aggregate returns a BootstrapPromptTemplateSelect configured with the given aggregations.
+func (_q *BootstrapPromptTemplateQuery) Aggregate(fns ...AggregateFunc) *BootstrapPromptTemplateSelect {
 	return _q.Select().Aggregate(fns...)
 }
 
-func (_q *PromptTemplateQuery) prepareQuery(ctx context.Context) error {
+func (_q *BootstrapPromptTemplateQuery) prepareQuery(ctx context.Context) error {
 	for _, inter := range _q.inters {
 		if inter == nil {
 			return fmt.Errorf("ent: uninitialized interceptor (forgotten import ent/runtime?)")
@@ -388,7 +388,7 @@ func (_q *PromptTemplateQuery) prepareQuery(ctx context.Context) error {
 		}
 	}
 	for _, f := range _q.ctx.Fields {
-		if !prompttemplate.ValidColumn(f) {
+		if !bootstrapprompttemplate.ValidColumn(f) {
 			return &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 		}
 	}
@@ -402,9 +402,9 @@ func (_q *PromptTemplateQuery) prepareQuery(ctx context.Context) error {
 	return nil
 }
 
-func (_q *PromptTemplateQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*PromptTemplate, error) {
+func (_q *BootstrapPromptTemplateQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*BootstrapPromptTemplate, error) {
 	var (
-		nodes       = []*PromptTemplate{}
+		nodes       = []*BootstrapPromptTemplate{}
 		_spec       = _q.querySpec()
 		loadedTypes = [2]bool{
 			_q.withOwnerUser != nil,
@@ -412,10 +412,10 @@ func (_q *PromptTemplateQuery) sqlAll(ctx context.Context, hooks ...queryHook) (
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
-		return (*PromptTemplate).scanValues(nil, columns)
+		return (*BootstrapPromptTemplate).scanValues(nil, columns)
 	}
 	_spec.Assign = func(columns []string, values []any) error {
-		node := &PromptTemplate{config: _q.config}
+		node := &BootstrapPromptTemplate{config: _q.config}
 		nodes = append(nodes, node)
 		node.Edges.loadedTypes = loadedTypes
 		return node.assignValues(columns, values)
@@ -431,22 +431,22 @@ func (_q *PromptTemplateQuery) sqlAll(ctx context.Context, hooks ...queryHook) (
 	}
 	if query := _q.withOwnerUser; query != nil {
 		if err := _q.loadOwnerUser(ctx, query, nodes, nil,
-			func(n *PromptTemplate, e *User) { n.Edges.OwnerUser = e }); err != nil {
+			func(n *BootstrapPromptTemplate, e *User) { n.Edges.OwnerUser = e }); err != nil {
 			return nil, err
 		}
 	}
 	if query := _q.withOwnerOrg; query != nil {
 		if err := _q.loadOwnerOrg(ctx, query, nodes, nil,
-			func(n *PromptTemplate, e *Organization) { n.Edges.OwnerOrg = e }); err != nil {
+			func(n *BootstrapPromptTemplate, e *Organization) { n.Edges.OwnerOrg = e }); err != nil {
 			return nil, err
 		}
 	}
 	return nodes, nil
 }
 
-func (_q *PromptTemplateQuery) loadOwnerUser(ctx context.Context, query *UserQuery, nodes []*PromptTemplate, init func(*PromptTemplate), assign func(*PromptTemplate, *User)) error {
+func (_q *BootstrapPromptTemplateQuery) loadOwnerUser(ctx context.Context, query *UserQuery, nodes []*BootstrapPromptTemplate, init func(*BootstrapPromptTemplate), assign func(*BootstrapPromptTemplate, *User)) error {
 	ids := make([]int, 0, len(nodes))
-	nodeids := make(map[int][]*PromptTemplate)
+	nodeids := make(map[int][]*BootstrapPromptTemplate)
 	for i := range nodes {
 		if nodes[i].OwnerUserID == nil {
 			continue
@@ -476,9 +476,9 @@ func (_q *PromptTemplateQuery) loadOwnerUser(ctx context.Context, query *UserQue
 	}
 	return nil
 }
-func (_q *PromptTemplateQuery) loadOwnerOrg(ctx context.Context, query *OrganizationQuery, nodes []*PromptTemplate, init func(*PromptTemplate), assign func(*PromptTemplate, *Organization)) error {
+func (_q *BootstrapPromptTemplateQuery) loadOwnerOrg(ctx context.Context, query *OrganizationQuery, nodes []*BootstrapPromptTemplate, init func(*BootstrapPromptTemplate), assign func(*BootstrapPromptTemplate, *Organization)) error {
 	ids := make([]int, 0, len(nodes))
-	nodeids := make(map[int][]*PromptTemplate)
+	nodeids := make(map[int][]*BootstrapPromptTemplate)
 	for i := range nodes {
 		if nodes[i].OwnerOrgID == nil {
 			continue
@@ -509,7 +509,7 @@ func (_q *PromptTemplateQuery) loadOwnerOrg(ctx context.Context, query *Organiza
 	return nil
 }
 
-func (_q *PromptTemplateQuery) sqlCount(ctx context.Context) (int, error) {
+func (_q *BootstrapPromptTemplateQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := _q.querySpec()
 	_spec.Node.Columns = _q.ctx.Fields
 	if len(_q.ctx.Fields) > 0 {
@@ -518,8 +518,8 @@ func (_q *PromptTemplateQuery) sqlCount(ctx context.Context) (int, error) {
 	return sqlgraph.CountNodes(ctx, _q.driver, _spec)
 }
 
-func (_q *PromptTemplateQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := sqlgraph.NewQuerySpec(prompttemplate.Table, prompttemplate.Columns, sqlgraph.NewFieldSpec(prompttemplate.FieldID, field.TypeInt))
+func (_q *BootstrapPromptTemplateQuery) querySpec() *sqlgraph.QuerySpec {
+	_spec := sqlgraph.NewQuerySpec(bootstrapprompttemplate.Table, bootstrapprompttemplate.Columns, sqlgraph.NewFieldSpec(bootstrapprompttemplate.FieldID, field.TypeInt))
 	_spec.From = _q.sql
 	if unique := _q.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
@@ -528,17 +528,17 @@ func (_q *PromptTemplateQuery) querySpec() *sqlgraph.QuerySpec {
 	}
 	if fields := _q.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
-		_spec.Node.Columns = append(_spec.Node.Columns, prompttemplate.FieldID)
+		_spec.Node.Columns = append(_spec.Node.Columns, bootstrapprompttemplate.FieldID)
 		for i := range fields {
-			if fields[i] != prompttemplate.FieldID {
+			if fields[i] != bootstrapprompttemplate.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
 		}
 		if _q.withOwnerUser != nil {
-			_spec.Node.AddColumnOnce(prompttemplate.FieldOwnerUserID)
+			_spec.Node.AddColumnOnce(bootstrapprompttemplate.FieldOwnerUserID)
 		}
 		if _q.withOwnerOrg != nil {
-			_spec.Node.AddColumnOnce(prompttemplate.FieldOwnerOrgID)
+			_spec.Node.AddColumnOnce(bootstrapprompttemplate.FieldOwnerOrgID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {
@@ -564,12 +564,12 @@ func (_q *PromptTemplateQuery) querySpec() *sqlgraph.QuerySpec {
 	return _spec
 }
 
-func (_q *PromptTemplateQuery) sqlQuery(ctx context.Context) *sql.Selector {
+func (_q *BootstrapPromptTemplateQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(_q.driver.Dialect())
-	t1 := builder.Table(prompttemplate.Table)
+	t1 := builder.Table(bootstrapprompttemplate.Table)
 	columns := _q.ctx.Fields
 	if len(columns) == 0 {
-		columns = prompttemplate.Columns
+		columns = bootstrapprompttemplate.Columns
 	}
 	selector := builder.Select(t1.Columns(columns...)...).From(t1)
 	if _q.sql != nil {
@@ -596,28 +596,28 @@ func (_q *PromptTemplateQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	return selector
 }
 
-// PromptTemplateGroupBy is the group-by builder for PromptTemplate entities.
-type PromptTemplateGroupBy struct {
+// BootstrapPromptTemplateGroupBy is the group-by builder for BootstrapPromptTemplate entities.
+type BootstrapPromptTemplateGroupBy struct {
 	selector
-	build *PromptTemplateQuery
+	build *BootstrapPromptTemplateQuery
 }
 
 // Aggregate adds the given aggregation functions to the group-by query.
-func (_g *PromptTemplateGroupBy) Aggregate(fns ...AggregateFunc) *PromptTemplateGroupBy {
+func (_g *BootstrapPromptTemplateGroupBy) Aggregate(fns ...AggregateFunc) *BootstrapPromptTemplateGroupBy {
 	_g.fns = append(_g.fns, fns...)
 	return _g
 }
 
 // Scan applies the selector query and scans the result into the given value.
-func (_g *PromptTemplateGroupBy) Scan(ctx context.Context, v any) error {
+func (_g *BootstrapPromptTemplateGroupBy) Scan(ctx context.Context, v any) error {
 	ctx = setContextOp(ctx, _g.build.ctx, ent.OpQueryGroupBy)
 	if err := _g.build.prepareQuery(ctx); err != nil {
 		return err
 	}
-	return scanWithInterceptors[*PromptTemplateQuery, *PromptTemplateGroupBy](ctx, _g.build, _g, _g.build.inters, v)
+	return scanWithInterceptors[*BootstrapPromptTemplateQuery, *BootstrapPromptTemplateGroupBy](ctx, _g.build, _g, _g.build.inters, v)
 }
 
-func (_g *PromptTemplateGroupBy) sqlScan(ctx context.Context, root *PromptTemplateQuery, v any) error {
+func (_g *BootstrapPromptTemplateGroupBy) sqlScan(ctx context.Context, root *BootstrapPromptTemplateQuery, v any) error {
 	selector := root.sqlQuery(ctx).Select()
 	aggregation := make([]string, 0, len(_g.fns))
 	for _, fn := range _g.fns {
@@ -644,28 +644,28 @@ func (_g *PromptTemplateGroupBy) sqlScan(ctx context.Context, root *PromptTempla
 	return sql.ScanSlice(rows, v)
 }
 
-// PromptTemplateSelect is the builder for selecting fields of PromptTemplate entities.
-type PromptTemplateSelect struct {
-	*PromptTemplateQuery
+// BootstrapPromptTemplateSelect is the builder for selecting fields of BootstrapPromptTemplate entities.
+type BootstrapPromptTemplateSelect struct {
+	*BootstrapPromptTemplateQuery
 	selector
 }
 
 // Aggregate adds the given aggregation functions to the selector query.
-func (_s *PromptTemplateSelect) Aggregate(fns ...AggregateFunc) *PromptTemplateSelect {
+func (_s *BootstrapPromptTemplateSelect) Aggregate(fns ...AggregateFunc) *BootstrapPromptTemplateSelect {
 	_s.fns = append(_s.fns, fns...)
 	return _s
 }
 
 // Scan applies the selector query and scans the result into the given value.
-func (_s *PromptTemplateSelect) Scan(ctx context.Context, v any) error {
+func (_s *BootstrapPromptTemplateSelect) Scan(ctx context.Context, v any) error {
 	ctx = setContextOp(ctx, _s.ctx, ent.OpQuerySelect)
 	if err := _s.prepareQuery(ctx); err != nil {
 		return err
 	}
-	return scanWithInterceptors[*PromptTemplateQuery, *PromptTemplateSelect](ctx, _s.PromptTemplateQuery, _s, _s.inters, v)
+	return scanWithInterceptors[*BootstrapPromptTemplateQuery, *BootstrapPromptTemplateSelect](ctx, _s.BootstrapPromptTemplateQuery, _s, _s.inters, v)
 }
 
-func (_s *PromptTemplateSelect) sqlScan(ctx context.Context, root *PromptTemplateQuery, v any) error {
+func (_s *BootstrapPromptTemplateSelect) sqlScan(ctx context.Context, root *BootstrapPromptTemplateQuery, v any) error {
 	selector := root.sqlQuery(ctx)
 	aggregation := make([]string, 0, len(_s.fns))
 	for _, fn := range _s.fns {

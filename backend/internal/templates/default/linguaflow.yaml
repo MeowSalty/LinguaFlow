@@ -46,12 +46,19 @@ backends:
 # key 为模板名称，可在 execution.rounds[].prompt 中按名称引用。
 # content 与 file 二选一：content 为内联内容，file 为外部文件路径。
 # 两者都为空时使用内置默认提示词。
-prompt_templates:
+translation_prompt_templates:
   通用提示词:
     # 引用 prompts/ 目录下的提示词模板文件（Go template 格式）
     file: prompts/default.tmpl
+
+# ─────────────────────────────────────────────────────────────
+# 术语抽取提示词模板配置
+# ─────────────────────────────────────────────────────────────
+# key 为模板名称，用于术语表自举时的术语抽取 prompt。
+bootstrap_prompt_templates:
+  通用术语抽取:
     # 引用 prompts/ 目录下的 bootstrap 模板文件（Go template 格式）
-    bootstrap_file: prompts/bootstrap_system.tmpl
+    file: prompts/bootstrap_system.tmpl
 
 # ─────────────────────────────────────────────────────────────
 # 翻译策略配置
@@ -70,7 +77,7 @@ translation_profiles:
 execution:
   bootstrap:
     enabled: false
-    template: 通用提示词
+    template: 通用术语抽取
     batch_size: 20
     concurrency: 2
     max_terms_per_1000_chars: 25.0

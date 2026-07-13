@@ -16,6 +16,8 @@ type Tx struct {
 	ActivityLog *ActivityLogClient
 	// Backend is the client for interacting with the Backend builders.
 	Backend *BackendClient
+	// BootstrapPromptTemplate is the client for interacting with the BootstrapPromptTemplate builders.
+	BootstrapPromptTemplate *BootstrapPromptTemplateClient
 	// ExecutionPlanTemplate is the client for interacting with the ExecutionPlanTemplate builders.
 	ExecutionPlanTemplate *ExecutionPlanTemplateClient
 	// GlossaryEntry is the client for interacting with the GlossaryEntry builders.
@@ -28,8 +30,6 @@ type Tx struct {
 	Organization *OrganizationClient
 	// Project is the client for interacting with the Project builders.
 	Project *ProjectClient
-	// PromptTemplate is the client for interacting with the PromptTemplate builders.
-	PromptTemplate *PromptTemplateClient
 	// RefreshToken is the client for interacting with the RefreshToken builders.
 	RefreshToken *RefreshTokenClient
 	// Resource is the client for interacting with the Resource builders.
@@ -48,6 +48,8 @@ type Tx struct {
 	TranslationJob *TranslationJobClient
 	// TranslationProfile is the client for interacting with the TranslationProfile builders.
 	TranslationProfile *TranslationProfileClient
+	// TranslationPromptTemplate is the client for interacting with the TranslationPromptTemplate builders.
+	TranslationPromptTemplate *TranslationPromptTemplateClient
 	// UsageRecord is the client for interacting with the UsageRecord builders.
 	UsageRecord *UsageRecordClient
 	// User is the client for interacting with the User builders.
@@ -185,13 +187,13 @@ func (tx *Tx) Client() *Client {
 func (tx *Tx) init() {
 	tx.ActivityLog = NewActivityLogClient(tx.config)
 	tx.Backend = NewBackendClient(tx.config)
+	tx.BootstrapPromptTemplate = NewBootstrapPromptTemplateClient(tx.config)
 	tx.ExecutionPlanTemplate = NewExecutionPlanTemplateClient(tx.config)
 	tx.GlossaryEntry = NewGlossaryEntryClient(tx.config)
 	tx.JobResource = NewJobResourceClient(tx.config)
 	tx.OrgMembership = NewOrgMembershipClient(tx.config)
 	tx.Organization = NewOrganizationClient(tx.config)
 	tx.Project = NewProjectClient(tx.config)
-	tx.PromptTemplate = NewPromptTemplateClient(tx.config)
 	tx.RefreshToken = NewRefreshTokenClient(tx.config)
 	tx.Resource = NewResourceClient(tx.config)
 	tx.SSEEvent = NewSSEEventClient(tx.config)
@@ -201,6 +203,7 @@ func (tx *Tx) init() {
 	tx.TMEntry = NewTMEntryClient(tx.config)
 	tx.TranslationJob = NewTranslationJobClient(tx.config)
 	tx.TranslationProfile = NewTranslationProfileClient(tx.config)
+	tx.TranslationPromptTemplate = NewTranslationPromptTemplateClient(tx.config)
 	tx.UsageRecord = NewUsageRecordClient(tx.config)
 	tx.User = NewUserClient(tx.config)
 }

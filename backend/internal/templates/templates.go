@@ -32,7 +32,7 @@ func DefaultConfigYAML() []byte {
 	return data
 }
 
-// EmbeddedPromptTemplate 返回嵌入的默认提示词模板内容。
+// EmbeddedPromptTemplate 返回嵌入的默认翻译提示词模板内容。
 func EmbeddedPromptTemplate() string {
 	data, err := fs.ReadFile(builtinFS, "default/prompts/default.tmpl")
 	if err != nil {
@@ -62,8 +62,10 @@ func EmbeddedProfileConfig() []byte {
 // ── 内置模板常量 ──────────────────────────────────────────────
 
 const (
-	// BuiltinPromptTemplateID 内置提示词模板的虚拟 ID。
-	BuiltinPromptTemplateID = -1
+	// BuiltinTranslationPromptTemplateID 内置翻译提示词模板的虚拟 ID。
+	BuiltinTranslationPromptTemplateID = -1
+	// BuiltinBootstrapPromptTemplateID 内置术语抽取提示词模板的虚拟 ID。
+	BuiltinBootstrapPromptTemplateID = -1
 	// BuiltinTranslationProfileID 内置翻译策略的虚拟 ID。
 	BuiltinTranslationProfileID = -1
 )
@@ -82,8 +84,9 @@ type builtinMeta struct {
 
 // builtinConfig 对应 config.yaml 的顶层结构（仅解析所需字段）。
 type builtinConfig struct {
-	PromptTemplate     builtinMeta `yaml:"prompt_template"`
-	TranslationProfile builtinMeta `yaml:"translation_profile"`
+	TranslationPromptTemplate builtinMeta `yaml:"translation_prompt_template"`
+	BootstrapPromptTemplate   builtinMeta `yaml:"bootstrap_prompt_template"`
+	TranslationProfile        builtinMeta `yaml:"translation_profile"`
 }
 
 // parseBuiltinConfig 从嵌入 FS 解析 config.yaml 元数据。
@@ -99,31 +102,58 @@ func parseBuiltinConfig() builtinConfig {
 	return cfg
 }
 
-// ── 内置 PromptTemplate 虚拟实体 ────────────────────────────
+// ── 内置 TranslationPromptTemplate 虚拟实体 ─────────────────
 
-var builtinPromptTemplate *ent.PromptTemplate
+var builtinTranslationPromptTemplate *ent.TranslationPromptTemplate
 
 func init() {
 	meta := parseBuiltinConfig()
-	builtinPromptTemplate = &ent.PromptTemplate{
-		ID:                     BuiltinPromptTemplateID,
-		Name:                   meta.PromptTemplate.Name,
-		Description:            meta.PromptTemplate.Description,
-		Scope:                  "system",
-		SystemPromptContent:    EmbeddedPromptTemplate(),
-		BootstrapPromptContent: EmbeddedBootstrapTemplate(),
+	builtinTranslationPromptTemplate = &ent.TranslationPromptTemplate{
+		ID:                  BuiltinTranslationPromptTemplateID,
+		Name:                meta.TranslationPromptTemplate.Name,
+		Description:         meta.TranslationPromptTemplate.Description,
+		Scope:               "system",
+		SystemPromptContent: EmbeddedPromptTemplate(),
 	}
 }
 
-// BuiltinPromptTemplates 返回所有内置提示词模板（当前仅一个）。
-func BuiltinPromptTemplates() []*ent.PromptTemplate {
-	return []*ent.PromptTemplate{builtinPromptTemplate}
+// BuiltinTranslationPromptTemplates 返回所有内置翻译提示词模板（当前仅一个）。
+func BuiltinTranslationPromptTemplates() []*ent.TranslationPromptTemplate {
+	return []*ent.TranslationPromptTemplate{builtinTranslationPromptTemplate}
 }
 
-// BuiltinPromptTemplate 根据 id 返回内置提示词模板，id 不匹配时返回 nil。
-func BuiltinPromptTemplate(id int) *ent.PromptTemplate {
-	if id == BuiltinPromptTemplateID {
-		return builtinPromptTemplate
+// BuiltinTranslationPromptTemplate 根据 id 返回内置翻译提示词模板，id 不匹配时返回 nil。
+func BuiltinTranslationPromptTemplate(id int) *ent.TranslationPromptTemplate {
+	if id == BuiltinTranslationPromptTemplateID {
+		return builtinTranslationPromptTemplate
+	}
+	return nil
+}
+
+// ── 内置 BootstrapPromptTemplate 虚拟实体 ───────────────────
+
+var builtinBootstrapPromptTemplate *ent.BootstrapPromptTemplate
+
+func init() {
+	meta := parseBuiltinConfig()
+	builtinBootstrapPromptTemplate = &ent.BootstrapPromptTemplate{
+		ID:          BuiltinBootstrapPromptTemplateID,
+		Name:        meta.BootstrapPromptTemplate.Name,
+		Description: meta.BootstrapPromptTemplate.Description,
+		Scope:       "system",
+		Content:     EmbeddedBootstrapTemplate(),
+	}
+}
+
+// BuiltinBootstrapPromptTemplates 返回所有内置术语抽取提示词模板（当前仅一个）。
+func BuiltinBootstrapPromptTemplates() []*ent.BootstrapPromptTemplate {
+	return []*ent.BootstrapPromptTemplate{builtinBootstrapPromptTemplate}
+}
+
+// BuiltinBootstrapPromptTemplate 根据 id 返回内置术语抽取提示词模板，id 不匹配时返回 nil。
+func BuiltinBootstrapPromptTemplate(id int) *ent.BootstrapPromptTemplate {
+	if id == BuiltinBootstrapPromptTemplateID {
+		return builtinBootstrapPromptTemplate
 	}
 	return nil
 }
