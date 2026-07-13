@@ -61,6 +61,13 @@ PromptTemplateId:
   schema:
     type: integer
 
+BootstrapPromptTemplateId:
+  name: bootstrapPromptTemplateId
+  in: path
+  required: true
+  schema:
+    type: integer
+
 TranslationProfileId:
   name: translationProfileId
   in: path
