@@ -36,9 +36,9 @@ const (
 	Table = "sse_events"
 	// JobTable is the table that holds the job relation/edge.
 	JobTable = "sse_events"
-	// JobInverseTable is the table name for the TranslationJob entity.
-	// It exists in this package in order to avoid circular dependency with the "translationjob" package.
-	JobInverseTable = "translation_jobs"
+	// JobInverseTable is the table name for the Job entity.
+	// It exists in this package in order to avoid circular dependency with the "job" package.
+	JobInverseTable = "jobs"
 	// JobColumn is the table column denoting the job relation/edge.
 	JobColumn = "job_id"
 )

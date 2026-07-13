@@ -10,9 +10,9 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 )
 
 // JobResource is the model entity for the JobResource schema.
@@ -48,16 +48,16 @@ type JobResource struct {
 	StartedAt *time.Time `json:"started_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the JobResourceQuery when eager-loading is set.
-	Edges                         JobResourceEdges `json:"edges"`
-	resource_job_resources        *int
-	translation_job_job_resources *int
-	selectValues                  sql.SelectValues
+	Edges                  JobResourceEdges `json:"edges"`
+	job_job_resources      *int
+	resource_job_resources *int
+	selectValues           sql.SelectValues
 }
 
 // JobResourceEdges holds the relations/edges for other nodes in the graph.
 type JobResourceEdges struct {
 	// Job holds the value of the job edge.
-	Job *TranslationJob `json:"job,omitempty"`
+	Job *Job `json:"job,omitempty"`
 	// Resource holds the value of the resource edge.
 	Resource *Resource `json:"resource,omitempty"`
 	// loadedTypes holds the information for reporting if a
@@ -67,11 +67,11 @@ type JobResourceEdges struct {
 
 // JobOrErr returns the Job value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
-func (e JobResourceEdges) JobOrErr() (*TranslationJob, error) {
+func (e JobResourceEdges) JobOrErr() (*Job, error) {
 	if e.Job != nil {
 		return e.Job, nil
 	} else if e.loadedTypes[0] {
-		return nil, &NotFoundError{label: translationjob.Label}
+		return nil, &NotFoundError{label: job.Label}
 	}
 	return nil, &NotLoadedError{edge: "job"}
 }
@@ -100,9 +100,9 @@ func (*JobResource) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullString)
 		case jobresource.FieldCreatedAt, jobresource.FieldUpdatedAt, jobresource.FieldStartedAt:
 			values[i] = new(sql.NullTime)
-		case jobresource.ForeignKeys[0]: // resource_job_resources
+		case jobresource.ForeignKeys[0]: // job_job_resources
 			values[i] = new(sql.NullInt64)
-		case jobresource.ForeignKeys[1]: // translation_job_job_resources
+		case jobresource.ForeignKeys[1]: // resource_job_resources
 			values[i] = new(sql.NullInt64)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -209,17 +209,17 @@ func (_m *JobResource) assignValues(columns []string, values []any) error {
 			}
 		case jobresource.ForeignKeys[0]:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for edge-field job_job_resources", value)
+			} else if value.Valid {
+				_m.job_job_resources = new(int)
+				*_m.job_job_resources = int(value.Int64)
+			}
+		case jobresource.ForeignKeys[1]:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for edge-field resource_job_resources", value)
 			} else if value.Valid {
 				_m.resource_job_resources = new(int)
 				*_m.resource_job_resources = int(value.Int64)
-			}
-		case jobresource.ForeignKeys[1]:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for edge-field translation_job_job_resources", value)
-			} else if value.Valid {
-				_m.translation_job_job_resources = new(int)
-				*_m.translation_job_job_resources = int(value.Int64)
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -235,7 +235,7 @@ func (_m *JobResource) Value(name string) (ent.Value, error) {
 }
 
 // QueryJob queries the "job" edge of the JobResource entity.
-func (_m *JobResource) QueryJob() *TranslationJobQuery {
+func (_m *JobResource) QueryJob() *JobQuery {
 	return NewJobResourceClient(_m.config).QueryJob(_m)
 }
 

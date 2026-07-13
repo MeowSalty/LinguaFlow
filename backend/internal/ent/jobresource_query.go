@@ -11,10 +11,10 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 )
 
 // JobResourceQuery is the builder for querying JobResource entities.
@@ -24,7 +24,7 @@ type JobResourceQuery struct {
 	order        []jobresource.OrderOption
 	inters       []Interceptor
 	predicates   []predicate.JobResource
-	withJob      *TranslationJobQuery
+	withJob      *JobQuery
 	withResource *ResourceQuery
 	withFKs      bool
 	// intermediate query (i.e. traversal path).
@@ -64,8 +64,8 @@ func (_q *JobResourceQuery) Order(o ...jobresource.OrderOption) *JobResourceQuer
 }
 
 // QueryJob chains the current query on the "job" edge.
-func (_q *JobResourceQuery) QueryJob() *TranslationJobQuery {
-	query := (&TranslationJobClient{config: _q.config}).Query()
+func (_q *JobResourceQuery) QueryJob() *JobQuery {
+	query := (&JobClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
 			return nil, err
@@ -76,7 +76,7 @@ func (_q *JobResourceQuery) QueryJob() *TranslationJobQuery {
 		}
 		step := sqlgraph.NewStep(
 			sqlgraph.From(jobresource.Table, jobresource.FieldID, selector),
-			sqlgraph.To(translationjob.Table, translationjob.FieldID),
+			sqlgraph.To(job.Table, job.FieldID),
 			sqlgraph.Edge(sqlgraph.M2O, true, jobresource.JobTable, jobresource.JobColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
@@ -309,8 +309,8 @@ func (_q *JobResourceQuery) Clone() *JobResourceQuery {
 
 // WithJob tells the query-builder to eager-load the nodes that are connected to
 // the "job" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *JobResourceQuery) WithJob(opts ...func(*TranslationJobQuery)) *JobResourceQuery {
-	query := (&TranslationJobClient{config: _q.config}).Query()
+func (_q *JobResourceQuery) WithJob(opts ...func(*JobQuery)) *JobResourceQuery {
+	query := (&JobClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
@@ -439,7 +439,7 @@ func (_q *JobResourceQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*
 	}
 	if query := _q.withJob; query != nil {
 		if err := _q.loadJob(ctx, query, nodes, nil,
-			func(n *JobResource, e *TranslationJob) { n.Edges.Job = e }); err != nil {
+			func(n *JobResource, e *Job) { n.Edges.Job = e }); err != nil {
 			return nil, err
 		}
 	}
@@ -452,14 +452,14 @@ func (_q *JobResourceQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*
 	return nodes, nil
 }
 
-func (_q *JobResourceQuery) loadJob(ctx context.Context, query *TranslationJobQuery, nodes []*JobResource, init func(*JobResource), assign func(*JobResource, *TranslationJob)) error {
+func (_q *JobResourceQuery) loadJob(ctx context.Context, query *JobQuery, nodes []*JobResource, init func(*JobResource), assign func(*JobResource, *Job)) error {
 	ids := make([]int, 0, len(nodes))
 	nodeids := make(map[int][]*JobResource)
 	for i := range nodes {
-		if nodes[i].translation_job_job_resources == nil {
+		if nodes[i].job_job_resources == nil {
 			continue
 		}
-		fk := *nodes[i].translation_job_job_resources
+		fk := *nodes[i].job_job_resources
 		if _, ok := nodeids[fk]; !ok {
 			ids = append(ids, fk)
 		}
@@ -468,7 +468,7 @@ func (_q *JobResourceQuery) loadJob(ctx context.Context, query *TranslationJobQu
 	if len(ids) == 0 {
 		return nil
 	}
-	query.Where(translationjob.IDIn(ids...))
+	query.Where(job.IDIn(ids...))
 	neighbors, err := query.All(ctx)
 	if err != nil {
 		return err
@@ -476,7 +476,7 @@ func (_q *JobResourceQuery) loadJob(ctx context.Context, query *TranslationJobQu
 	for _, n := range neighbors {
 		nodes, ok := nodeids[n.ID]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "translation_job_job_resources" returned %v`, n.ID)
+			return fmt.Errorf(`unexpected foreign-key "job_job_resources" returned %v`, n.ID)
 		}
 		for i := range nodes {
 			assign(nodes[i], n)

@@ -69,6 +69,18 @@ func (f GlossaryEntryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Valu
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GlossaryEntryMutation", m)
 }
 
+// The JobFunc type is an adapter to allow the use of ordinary
+// function as Job mutator.
+type JobFunc func(context.Context, *ent.JobMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f JobFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.JobMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.JobMutation", m)
+}
+
 // The JobResourceFunc type is an adapter to allow the use of ordinary
 // function as JobResource mutator.
 type JobResourceFunc func(context.Context, *ent.JobResourceMutation) (ent.Value, error)
@@ -199,18 +211,6 @@ func (f TMEntryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.TMEntryMutation", m)
-}
-
-// The TranslationJobFunc type is an adapter to allow the use of ordinary
-// function as TranslationJob mutator.
-type TranslationJobFunc func(context.Context, *ent.TranslationJobMutation) (ent.Value, error)
-
-// Mutate calls f(ctx, m).
-func (f TranslationJobFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	if mv, ok := m.(*ent.TranslationJobMutation); ok {
-		return f(ctx, mv)
-	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.TranslationJobMutation", m)
 }
 
 // The TranslationProfileFunc type is an adapter to allow the use of ordinary

@@ -30,8 +30,8 @@ const (
 	FieldRole = "role"
 	// FieldActive holds the string denoting the active field in the database.
 	FieldActive = "active"
-	// EdgeCreatedTranslationJobs holds the string denoting the created_translation_jobs edge name in mutations.
-	EdgeCreatedTranslationJobs = "created_translation_jobs"
+	// EdgeCreatedJobs holds the string denoting the created_jobs edge name in mutations.
+	EdgeCreatedJobs = "created_jobs"
 	// EdgeReviewedSegments holds the string denoting the reviewed_segments edge name in mutations.
 	EdgeReviewedSegments = "reviewed_segments"
 	// EdgeRefreshTokens holds the string denoting the refresh_tokens edge name in mutations.
@@ -58,13 +58,13 @@ const (
 	EdgeSyncTasks = "sync_tasks"
 	// Table holds the table name of the user in the database.
 	Table = "users"
-	// CreatedTranslationJobsTable is the table that holds the created_translation_jobs relation/edge.
-	CreatedTranslationJobsTable = "translation_jobs"
-	// CreatedTranslationJobsInverseTable is the table name for the TranslationJob entity.
-	// It exists in this package in order to avoid circular dependency with the "translationjob" package.
-	CreatedTranslationJobsInverseTable = "translation_jobs"
-	// CreatedTranslationJobsColumn is the table column denoting the created_translation_jobs relation/edge.
-	CreatedTranslationJobsColumn = "user_created_translation_jobs"
+	// CreatedJobsTable is the table that holds the created_jobs relation/edge.
+	CreatedJobsTable = "jobs"
+	// CreatedJobsInverseTable is the table name for the Job entity.
+	// It exists in this package in order to avoid circular dependency with the "job" package.
+	CreatedJobsInverseTable = "jobs"
+	// CreatedJobsColumn is the table column denoting the created_jobs relation/edge.
+	CreatedJobsColumn = "user_created_jobs"
 	// ReviewedSegmentsTable is the table that holds the reviewed_segments relation/edge.
 	ReviewedSegmentsTable = "segments"
 	// ReviewedSegmentsInverseTable is the table name for the Segment entity.
@@ -241,17 +241,17 @@ func ByActive(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldActive, opts...).ToFunc()
 }
 
-// ByCreatedTranslationJobsCount orders the results by created_translation_jobs count.
-func ByCreatedTranslationJobsCount(opts ...sql.OrderTermOption) OrderOption {
+// ByCreatedJobsCount orders the results by created_jobs count.
+func ByCreatedJobsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newCreatedTranslationJobsStep(), opts...)
+		sqlgraph.OrderByNeighborsCount(s, newCreatedJobsStep(), opts...)
 	}
 }
 
-// ByCreatedTranslationJobs orders the results by created_translation_jobs terms.
-func ByCreatedTranslationJobs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+// ByCreatedJobs orders the results by created_jobs terms.
+func ByCreatedJobs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newCreatedTranslationJobsStep(), append([]sql.OrderTerm{term}, terms...)...)
+		sqlgraph.OrderByNeighborTerms(s, newCreatedJobsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
 
@@ -422,11 +422,11 @@ func BySyncTasks(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newSyncTasksStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
-func newCreatedTranslationJobsStep() *sqlgraph.Step {
+func newCreatedJobsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(CreatedTranslationJobsInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, CreatedTranslationJobsTable, CreatedTranslationJobsColumn),
+		sqlgraph.To(CreatedJobsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, CreatedJobsTable, CreatedJobsColumn),
 	)
 }
 func newReviewedSegmentsStep() *sqlgraph.Step {

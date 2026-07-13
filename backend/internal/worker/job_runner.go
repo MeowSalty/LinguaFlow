@@ -19,17 +19,18 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
-// TranslationRunner 翻译任务的执行器，实现 TaskRunner 接口。
-type TranslationRunner struct {
+// JobRunner 翻译任务的执行器，实现 TaskRunner 接口。
+type JobRunner struct {
 	logger      *slog.Logger
 	client      *ent.Client
-	jobs        *service.TranslationJobService
+	jobs        *service.JobService
 	store       *filestore.LocalStore
 	queue       *Queue
 	eventBroker *event.Broker
@@ -41,21 +42,21 @@ type TranslationRunner struct {
 	activeJobs map[int]context.CancelFunc
 }
 
-// NewTranslationRunner 创建一个新的翻译任务执行器。
-func NewTranslationRunner(
+// NewJobRunner 创建一个新的翻译任务执行器。
+func NewJobRunner(
 	logger *slog.Logger,
 	client *ent.Client,
-	jobs *service.TranslationJobService,
+	jobs *service.JobService,
 	store *filestore.LocalStore,
 	queue *Queue,
 	eventBroker *event.Broker,
 	limiterPool *backend.LimiterPool,
 	resMutex *ResourceMutex,
-) *TranslationRunner {
+) *JobRunner {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	return &TranslationRunner{
+	return &JobRunner{
 		logger:      logger,
 		client:      client,
 		jobs:        jobs,
@@ -69,22 +70,22 @@ func NewTranslationRunner(
 }
 
 // Type 返回任务类型标识。
-func (r *TranslationRunner) Type() string {
+func (r *JobRunner) Type() string {
 	return "translation"
 }
 
 // Queue 返回此 Runner 的任务队列。
-func (r *TranslationRunner) Queue() *Queue {
+func (r *JobRunner) Queue() *Queue {
 	return r.queue
 }
 
 // ProcessOne 处理单个翻译任务，不负责 Dequeue/Done。
-func (r *TranslationRunner) ProcessOne(ctx context.Context, jobID int) error {
+func (r *JobRunner) ProcessOne(ctx context.Context, jobID int) error {
 	return r.processJob(ctx, jobID)
 }
 
 // Run 从队列中取任务并执行，直到 ctx 取消。
-func (r *TranslationRunner) Run(ctx context.Context) error {
+func (r *JobRunner) Run(ctx context.Context) error {
 	for {
 		jobID, err := r.queue.Dequeue(ctx)
 		if err != nil {
@@ -101,7 +102,7 @@ func (r *TranslationRunner) Run(ctx context.Context) error {
 }
 
 // Cancel 通知运行中的翻译任务立即停止。
-func (r *TranslationRunner) Cancel(taskID int) {
+func (r *JobRunner) Cancel(taskID int) {
 	r.mu.Lock()
 	cancel, ok := r.activeJobs[taskID]
 	r.mu.Unlock()
@@ -112,7 +113,7 @@ func (r *TranslationRunner) Cancel(taskID int) {
 }
 
 // Recover 从数据库恢复挂起的任务并重新入队。
-func (r *TranslationRunner) Recover(ctx context.Context) ([]int, error) {
+func (r *JobRunner) Recover(ctx context.Context) ([]int, error) {
 	jobIDs, err := r.jobs.RecoverPendingJobs(ctx)
 	if err != nil {
 		return nil, err
@@ -121,7 +122,7 @@ func (r *TranslationRunner) Recover(ctx context.Context) ([]int, error) {
 }
 
 // processJob 处理单个翻译任务：加载执行上下文，筛选待处理的资源并依次执行。
-func (r *TranslationRunner) processJob(ctx context.Context, jobID int) error {
+func (r *JobRunner) processJob(ctx context.Context, jobID int) error {
 	// 创建 per-job context，支持外部取消
 	jobCtx, jobCancel := context.WithCancel(ctx)
 	defer jobCancel()
@@ -141,7 +142,7 @@ func (r *TranslationRunner) processJob(ctx context.Context, jobID int) error {
 		return err
 	}
 	// 二次校验：任务可能在入队后、执行前被取消
-	if exec.Job.Status == service.TranslationJobStatusCancelled {
+	if exec.Job.Status == service.JobStatusCancelled {
 		r.logger.Info("job already cancelled, skipping", "job_id", jobID)
 		return nil
 	}
@@ -174,7 +175,7 @@ func (r *TranslationRunner) processJob(ctx context.Context, jobID int) error {
 }
 
 // processJobResource 处理单个翻译资源：从 DB 加载段落、轮次循环翻译、写回 DB。
-func (r *TranslationRunner) processJobResource(ctx context.Context, exec *service.TranslationJobExecution, item *ent.JobResource) error {
+func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExecution, item *ent.JobResource) error {
 	job := exec.Job
 
 	if err := r.jobs.MarkJobResourceRunning(ctx, job.ID, item.ID); err != nil {
@@ -243,12 +244,29 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	var mu sync.Mutex
 	completedCount := 0
 	var lastResult pipeline.TranslateResult
+	engineRoundIdx := 0 // 独立计数器，映射 snapshot 轮次到 engine.translateRound 索引
 
 	// 轮次循环
 	for roundIdx := range snapshot.Rounds {
 		if ctx.Err() != nil {
 			r.logger.Info("context cancelled, stopping round loop", "job_id", job.ID)
 			break
+		}
+
+		round := snapshot.Rounds[roundIdx]
+
+		// 按轮次 mode 分发
+		switch round.Mode {
+		case "extract":
+			if err := r.runExtractRound(ctx, round, res, runtimeGlossary, exec, item, reporter); err != nil {
+				r.logger.Warn("extract round failed", "job_id", job.ID, "round", roundIdx, "err", err)
+			}
+			continue
+		case "translate":
+			// 继续执行翻译逻辑
+		default:
+			r.logger.Warn("unknown round mode, skipping", "job_id", job.ID, "round", roundIdx, "mode", round.Mode)
+			continue
 		}
 
 		// 每轮从 DB 重新加载段落（Worker 通过 DB 重新加载避免保护态问题）
@@ -345,10 +363,13 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 			return nil
 		}
 
-		result, translateErr := eng.TranslateRound(ctx, roundIdx, doc,
+		roundIdx := roundIdx // capture for closure
+		curEngineRound := engineRoundIdx
+		result, translateErr := eng.TranslateRound(ctx, curEngineRound, doc,
 			engine.WithSegmentFilter(segmentIndexes),
 			engine.WithBatchHandler(batchHandler),
 		)
+		engineRoundIdx++
 		if translateErr == nil {
 			lastResult = result
 		}
@@ -414,6 +435,74 @@ func (r *TranslationRunner) processJobResource(ctx context.Context, exec *servic
 	return r.jobs.MarkJobResourceCompleted(ctx, job.ID, item.ID, "", completedCount, skippedCount)
 }
 
+// runExtractRound 执行术语抽取轮次。
+func (r *JobRunner) runExtractRound(ctx context.Context, round service.JobRoundSnapshot, res *ent.Resource, runtimeGlossary glossary.Glossary, exec *service.JobExecution, item *ent.JobResource, reporter progress.Reporter) error {
+	if round.Extract == nil {
+		return fmt.Errorf("extract round config is nil")
+	}
+
+	// 加载段落
+	selectedRows, allRows, err := r.loadSegments(ctx, res.ID, item.SegmentIds)
+	if err != nil {
+		return fmt.Errorf("load segments: %w", err)
+	}
+	if len(selectedRows) == 0 {
+		return nil
+	}
+
+	// 构建 Document
+	inputs := buildSegmentInputs(allRows)
+	doc := pipeline.BuildDocumentFromSegments(inputs,
+		exec.Project.SourceLang, exec.Project.TargetLang, res.Format)
+
+	// 构建后端
+	bCfg := backend.Config{
+		Name:    round.Backend.Name,
+		Type:    round.Backend.Type,
+		Enabled: true,
+		Options: round.Backend.Options,
+	}
+	b, err := backend.Build(bCfg)
+	if err != nil {
+		return fmt.Errorf("build backend: %w", err)
+	}
+	defer b.Close()
+
+	// 使用共享 limiter pool 包装后端
+	if r.limiterPool != nil && round.Backend.RateLimitPerMinute > 0 {
+		limiter := r.limiterPool.Get(round.Backend.ID, round.Backend.RateLimitPerMinute)
+		b = backend.NewRateLimitedBackend(b, limiter)
+	}
+
+	// 构建 BootstrapRenderer
+	renderer, err := prompt.NewBootstrapRenderer(round.Extract.TemplateContent)
+	if err != nil {
+		return fmt.Errorf("build bootstrap renderer: %w", err)
+	}
+
+	// 构建 pipeline.Bootstrap
+	retry := backend.RetryPolicy{
+		MaxAttempts: 3,
+		Backoff:     1000,
+		Jitter:      true,
+	}
+	extractStage := &pipeline.Bootstrap{
+		Backends:             []backend.Backend{b},
+		Renderer:             renderer,
+		Glossary:             runtimeGlossary,
+		Retry:                retry,
+		Concurrency:          round.Extract.Concurrency,
+		BatchSize:            round.Extract.BatchSize,
+		MaxTermsPer1000Chars: round.Extract.MaxTermsPer1000Chars,
+		MinSourceLen:         round.Extract.MinSourceLen,
+		Logger:               r.logger,
+		Reporter:             reporter,
+	}
+
+	// 运行
+	return extractStage.Run(ctx, doc)
+}
+
 // buildSegmentInputs 将 DB segments 转换为 SegmentInput 切片。
 func buildSegmentInputs(rows []*ent.Segment) []pipeline.SegmentInput {
 	inputs := make([]pipeline.SegmentInput, len(rows))
@@ -445,7 +534,7 @@ func buildQACheckInputs(batchResult pipeline.BatchResult) []qa.CheckInput {
 }
 
 // buildRuntimeGlossary 根据配置构建运行时术语表，未启用则返回空实现。
-func (r *TranslationRunner) buildRuntimeGlossary(projectRow *ent.Project, enabled bool) (glossary.Glossary, error) {
+func (r *JobRunner) buildRuntimeGlossary(projectRow *ent.Project, enabled bool) (glossary.Glossary, error) {
 	if !enabled {
 		return glossary.Nop{}, nil
 	}
@@ -453,7 +542,7 @@ func (r *TranslationRunner) buildRuntimeGlossary(projectRow *ent.Project, enable
 }
 
 // buildRuntimeTM 根据配置构建运行时翻译记忆，未启用则返回空实现。
-func (r *TranslationRunner) buildRuntimeTM(projectRow *ent.Project, enabled bool) (tm.TranslationMemory, error) {
+func (r *JobRunner) buildRuntimeTM(projectRow *ent.Project, enabled bool) (tm.TranslationMemory, error) {
 	if !enabled {
 		return tm.Nop{}, nil
 	}
@@ -465,7 +554,7 @@ func (r *TranslationRunner) buildRuntimeTM(projectRow *ent.Project, enabled bool
 }
 
 // loadSegments 从数据库加载指定资源的所有片段，并按 selectedIDs 过滤。
-func (r *TranslationRunner) loadSegments(ctx context.Context, resourceID int, selectedIDs []int) ([]*ent.Segment, []*ent.Segment, error) {
+func (r *JobRunner) loadSegments(ctx context.Context, resourceID int, selectedIDs []int) ([]*ent.Segment, []*ent.Segment, error) {
 	allRows, err := r.client.Segment.Query().
 		Where(segment.ResourceIDEQ(resourceID)).
 		Order(ent.Asc(segment.FieldSegmentIndex), ent.Asc(segment.FieldID)).
@@ -473,24 +562,21 @@ func (r *TranslationRunner) loadSegments(ctx context.Context, resourceID int, se
 	if err != nil {
 		return nil, nil, err
 	}
-	selectedSet := make(map[int]struct{}, len(selectedIDs))
-	for _, id := range selectedIDs {
-		selectedSet[id] = struct{}{}
+	if len(selectedIDs) == 0 {
+		return allRows, allRows, nil
 	}
-	selectedRows := make([]*ent.Segment, 0, len(allRows))
-	for _, row := range allRows {
-		if len(selectedSet) > 0 {
-			if _, ok := selectedSet[row.ID]; !ok {
-				continue
-			}
-		}
-		selectedRows = append(selectedRows, row)
+	selectedRows, err := r.client.Segment.Query().
+		Where(segment.IDIn(selectedIDs...), segment.ResourceIDEQ(resourceID)).
+		Order(ent.Asc(segment.FieldSegmentIndex), ent.Asc(segment.FieldID)).
+		All(ctx)
+	if err != nil {
+		return nil, nil, err
 	}
 	return selectedRows, allRows, nil
 }
 
 // recordUsage 记录翻译用量到数据库。
-func (r *TranslationRunner) recordUsage(ctx context.Context, exec *service.TranslationJobExecution, segmentCount int, inputTokens, outputTokens int64) error {
+func (r *JobRunner) recordUsage(ctx context.Context, exec *service.JobExecution, segmentCount int, inputTokens, outputTokens int64) error {
 	usage := r.client.UsageRecord.Create().
 		SetProjectID(exec.Project.ID).
 		SetSource("translation_job").
@@ -530,7 +616,7 @@ func firstNonEmpty(values ...string) string {
 }
 
 // resolvePath 将路径解析为绝对路径，相对路径通过 store 转换。
-func (r *TranslationRunner) resolvePath(raw string) (string, error) {
+func (r *JobRunner) resolvePath(raw string) (string, error) {
 	raw = strings.TrimSpace(raw)
 	if raw == "" {
 		return "", fmt.Errorf("worker: empty path")

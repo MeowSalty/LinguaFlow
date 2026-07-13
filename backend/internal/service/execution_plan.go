@@ -8,11 +8,11 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
@@ -223,8 +223,8 @@ func (s *ExecutionPlanService) Delete(ctx context.Context, userID, planID int) e
 	}
 
 	// 检查是否有任务引用
-	count, err := s.client.TranslationJob.Query().
-		Where(translationjob.ExecutionPlanIDEQ(plan.ID)).
+	count, err := s.client.Job.Query().
+		Where(job.ExecutionPlanIDEQ(plan.ID)).
 		Count(ctx)
 	if err != nil {
 		return fmt.Errorf("check job references: %w", err)

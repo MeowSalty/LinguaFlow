@@ -135,11 +135,10 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 			PreserveKinds: firstProfile.Ruby.PreserveKinds,
 		},
 		Glossary: engine.GlossaryConfig{
-			Enabled:    cliCfg.Glossary.Enabled,
-			Path:       cliCfg.Glossary.Path,
-			Save:       cliCfg.Glossary.Save,
-			Bootstrap:  firstProfile.Bootstrap,
-			Standalone: cliCfg.Execution.Bootstrap,
+			Enabled:   cliCfg.Glossary.Enabled,
+			Path:      cliCfg.Glossary.Path,
+			Save:      cliCfg.Glossary.Save,
+			Bootstrap: firstProfile.Bootstrap,
 		},
 		TMEnabled: cliCfg.TranslationMemory.Enabled,
 		QA: qa.Config{
@@ -149,19 +148,6 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 			LengthRatioMin: firstProfile.QA.LengthRatioMin,
 			LengthRatioMax: firstProfile.QA.LengthRatioMax,
 		},
-	}
-
-	if cliCfg.Execution.Bootstrap.Enabled && cliCfg.Execution.Bootstrap.Template != "" {
-		bt, ok := cliCfg.BootstrapPromptTemplates[cliCfg.Execution.Bootstrap.Template]
-		if !ok {
-			return nil, fmt.Errorf("bootstrap_prompt_templates %q not found (referenced by execution.bootstrap.template)", cliCfg.Execution.Bootstrap.Template)
-		}
-		bootstrapContent := bt.Content
-		if bootstrapContent == "" {
-			return nil, fmt.Errorf("bootstrap_prompt_templates %q has no content (required when execution.bootstrap.enabled is true)",
-				cliCfg.Execution.Bootstrap.Template)
-		}
-		cfg.Glossary.Standalone.TemplateContent = bootstrapContent
 	}
 
 	var rounds []engine.Round

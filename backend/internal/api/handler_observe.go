@@ -8,7 +8,7 @@ import (
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	translationJobCount, err := s.entClient.TranslationJob.Query().Count(ctx)
+	translationJobCount, err := s.entClient.Job.Query().Count(ctx)
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return

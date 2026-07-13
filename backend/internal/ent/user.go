@@ -41,8 +41,8 @@ type User struct {
 
 // UserEdges holds the relations/edges for other nodes in the graph.
 type UserEdges struct {
-	// CreatedTranslationJobs holds the value of the created_translation_jobs edge.
-	CreatedTranslationJobs []*TranslationJob `json:"created_translation_jobs,omitempty"`
+	// CreatedJobs holds the value of the created_jobs edge.
+	CreatedJobs []*Job `json:"created_jobs,omitempty"`
 	// ReviewedSegments holds the value of the reviewed_segments edge.
 	ReviewedSegments []*Segment `json:"reviewed_segments,omitempty"`
 	// RefreshTokens holds the value of the refresh_tokens edge.
@@ -72,13 +72,13 @@ type UserEdges struct {
 	loadedTypes [13]bool
 }
 
-// CreatedTranslationJobsOrErr returns the CreatedTranslationJobs value or an error if the edge
+// CreatedJobsOrErr returns the CreatedJobs value or an error if the edge
 // was not loaded in eager-loading.
-func (e UserEdges) CreatedTranslationJobsOrErr() ([]*TranslationJob, error) {
+func (e UserEdges) CreatedJobsOrErr() ([]*Job, error) {
 	if e.loadedTypes[0] {
-		return e.CreatedTranslationJobs, nil
+		return e.CreatedJobs, nil
 	}
-	return nil, &NotLoadedError{edge: "created_translation_jobs"}
+	return nil, &NotLoadedError{edge: "created_jobs"}
 }
 
 // ReviewedSegmentsOrErr returns the ReviewedSegments value or an error if the edge
@@ -284,9 +284,9 @@ func (_m *User) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
 }
 
-// QueryCreatedTranslationJobs queries the "created_translation_jobs" edge of the User entity.
-func (_m *User) QueryCreatedTranslationJobs() *TranslationJobQuery {
-	return NewUserClient(_m.config).QueryCreatedTranslationJobs(_m)
+// QueryCreatedJobs queries the "created_jobs" edge of the User entity.
+func (_m *User) QueryCreatedJobs() *JobQuery {
+	return NewUserClient(_m.config).QueryCreatedJobs(_m)
 }
 
 // QueryReviewedSegments queries the "reviewed_segments" edge of the User entity.

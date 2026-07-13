@@ -18,7 +18,7 @@ import (
 
 // buildEngineFromSnapshot 从任务快照构建引擎实例。
 // 后端实例由快照中的 Type + Options 直接构建，不依赖名称查找。
-func (r *TranslationRunner) buildEngineFromSnapshot(
+func (r *JobRunner) buildEngineFromSnapshot(
 	ctx context.Context,
 	snapshot *service.JobExecutionSnapshot,
 	resources engine.RuntimeResources,

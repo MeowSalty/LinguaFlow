@@ -520,21 +520,21 @@ func ActiveNEQ(v bool) predicate.User {
 	return predicate.User(sql.FieldNEQ(FieldActive, v))
 }
 
-// HasCreatedTranslationJobs applies the HasEdge predicate on the "created_translation_jobs" edge.
-func HasCreatedTranslationJobs() predicate.User {
+// HasCreatedJobs applies the HasEdge predicate on the "created_jobs" edge.
+func HasCreatedJobs() predicate.User {
 	return predicate.User(func(s *sql.Selector) {
 		step := sqlgraph.NewStep(
 			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, CreatedTranslationJobsTable, CreatedTranslationJobsColumn),
+			sqlgraph.Edge(sqlgraph.O2M, false, CreatedJobsTable, CreatedJobsColumn),
 		)
 		sqlgraph.HasNeighbors(s, step)
 	})
 }
 
-// HasCreatedTranslationJobsWith applies the HasEdge predicate on the "created_translation_jobs" edge with a given conditions (other predicates).
-func HasCreatedTranslationJobsWith(preds ...predicate.TranslationJob) predicate.User {
+// HasCreatedJobsWith applies the HasEdge predicate on the "created_jobs" edge with a given conditions (other predicates).
+func HasCreatedJobsWith(preds ...predicate.Job) predicate.User {
 	return predicate.User(func(s *sql.Selector) {
-		step := newCreatedTranslationJobsStep()
+		step := newCreatedJobsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

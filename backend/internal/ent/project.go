@@ -56,8 +56,8 @@ type ProjectEdges struct {
 	GlossaryEntries []*GlossaryEntry `json:"glossary_entries,omitempty"`
 	// TmEntries holds the value of the tm_entries edge.
 	TmEntries []*TMEntry `json:"tm_entries,omitempty"`
-	// TranslationJobs holds the value of the translation_jobs edge.
-	TranslationJobs []*TranslationJob `json:"translation_jobs,omitempty"`
+	// Jobs holds the value of the jobs edge.
+	Jobs []*Job `json:"jobs,omitempty"`
 	// ActivityLogs holds the value of the activity_logs edge.
 	ActivityLogs []*ActivityLog `json:"activity_logs,omitempty"`
 	// UsageRecords holds the value of the usage_records edge.
@@ -111,13 +111,13 @@ func (e ProjectEdges) TmEntriesOrErr() ([]*TMEntry, error) {
 	return nil, &NotLoadedError{edge: "tm_entries"}
 }
 
-// TranslationJobsOrErr returns the TranslationJobs value or an error if the edge
+// JobsOrErr returns the Jobs value or an error if the edge
 // was not loaded in eager-loading.
-func (e ProjectEdges) TranslationJobsOrErr() ([]*TranslationJob, error) {
+func (e ProjectEdges) JobsOrErr() ([]*Job, error) {
 	if e.loadedTypes[4] {
-		return e.TranslationJobs, nil
+		return e.Jobs, nil
 	}
-	return nil, &NotLoadedError{edge: "translation_jobs"}
+	return nil, &NotLoadedError{edge: "jobs"}
 }
 
 // ActivityLogsOrErr returns the ActivityLogs value or an error if the edge
@@ -291,9 +291,9 @@ func (_m *Project) QueryTmEntries() *TMEntryQuery {
 	return NewProjectClient(_m.config).QueryTmEntries(_m)
 }
 
-// QueryTranslationJobs queries the "translation_jobs" edge of the Project entity.
-func (_m *Project) QueryTranslationJobs() *TranslationJobQuery {
-	return NewProjectClient(_m.config).QueryTranslationJobs(_m)
+// QueryJobs queries the "jobs" edge of the Project entity.
+func (_m *Project) QueryJobs() *JobQuery {
+	return NewProjectClient(_m.config).QueryJobs(_m)
 }
 
 // QueryActivityLogs queries the "activity_logs" edge of the Project entity.

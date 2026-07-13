@@ -7,15 +7,15 @@ import (
 	"entgo.io/ent/schema/index"
 )
 
-type TranslationJob struct {
+type Job struct {
 	ent.Schema
 }
 
-func (TranslationJob) Mixin() []ent.Mixin {
+func (Job) Mixin() []ent.Mixin {
 	return []ent.Mixin{TimeMixin{}}
 }
 
-func (TranslationJob) Fields() []ent.Field {
+func (Job) Fields() []ent.Field {
 	return []ent.Field{
 		field.Int("project_id").Positive().
 			Comment("所属项目 ID"),
@@ -49,22 +49,22 @@ func (TranslationJob) Fields() []ent.Field {
 	}
 }
 
-func (TranslationJob) Edges() []ent.Edge {
+func (Job) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.From("project", Project.Type).
-			Ref("translation_jobs").
+			Ref("jobs").
 			Field("project_id").
 			Unique().
 			Required(),
 		edge.From("created_by", User.Type).
-			Ref("created_translation_jobs").
+			Ref("created_jobs").
 			Unique(),
 		edge.To("job_resources", JobResource.Type),
 		edge.To("sse_events", SSEEvent.Type),
 	}
 }
 
-func (TranslationJob) Indexes() []ent.Index {
+func (Job) Indexes() []ent.Index {
 	return []ent.Index{
 		index.Fields("project_id", "id"),
 	}

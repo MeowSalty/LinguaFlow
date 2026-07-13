@@ -9,37 +9,23 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
 // Engine 封装一次进程内的翻译能力。它持有 rounds / Renderer 等可复用组件。
 type Engine struct {
-	cfg                 *Config
-	logger              *slog.Logger
-	reporter            progress.Reporter
-	rounds              []pipeline.Round
-	bootstrapBackends   []backend.Backend
-	rubyRetryBackends   []backend.Backend
-	standaloneBootstrap bool
-	standaloneCfg       *StandaloneBootstrapParams
-	renderer            *prompt.Renderer
-	bootstrapRenderer   *prompt.BootstrapRenderer
-	glossary            glossary.Glossary
-	tm                  tm.TranslationMemory
-	rubyRestorer        *ruby.Restorer
-	saveGlossary        bool
-	glossaryPath        string
-}
-
-// StandaloneBootstrapParams 是独立自举的运行时参数。
-type StandaloneBootstrapParams struct {
-	TemplateContent      string
-	BatchSize            int
-	Concurrency          int
-	MaxTermsPer1000Chars float64
-	MinSourceLen         int
+	cfg               *Config
+	logger            *slog.Logger
+	reporter          progress.Reporter
+	rounds            []pipeline.Round
+	bootstrapBackends []backend.Backend
+	rubyRetryBackends []backend.Backend
+	glossary          glossary.Glossary
+	tm                tm.TranslationMemory
+	rubyRestorer      *ruby.Restorer
+	saveGlossary      bool
+	glossaryPath      string
 }
 
 // NewWithOptions 按 Options 构造 Engine。rounds 必须非空，每轮 backends 必须非空。
@@ -88,24 +74,6 @@ func NewWithOptions(opts Options) (*Engine, error) {
 		tm:                translationMemory,
 		saveGlossary:      opts.Config.Glossary.Save,
 		glossaryPath:      opts.Config.Glossary.Path,
-	}
-	if opts.Config.Glossary.Standalone.Enabled {
-		if opts.Config.Glossary.Standalone.TemplateContent == "" {
-			return nil, fmt.Errorf("engine: standalone bootstrap template content is required when enabled")
-		}
-		e.standaloneBootstrap = true
-		e.standaloneCfg = &StandaloneBootstrapParams{
-			TemplateContent:      opts.Config.Glossary.Standalone.TemplateContent,
-			BatchSize:            opts.Config.Glossary.Standalone.BatchSize,
-			Concurrency:          opts.Config.Glossary.Standalone.Concurrency,
-			MaxTermsPer1000Chars: opts.Config.Glossary.Standalone.MaxTermsPer1000Chars,
-			MinSourceLen:         opts.Config.Glossary.Standalone.MinSourceLen,
-		}
-		br, err := prompt.NewBootstrapRenderer(opts.Config.Glossary.Standalone.TemplateContent)
-		if err != nil {
-			return nil, fmt.Errorf("engine: build bootstrap renderer: %w", err)
-		}
-		e.bootstrapRenderer = br
 	}
 	if opts.Config.Ruby.Enabled {
 		e.rubyRestorer = ruby.NewRestorer()

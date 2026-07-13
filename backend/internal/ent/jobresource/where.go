@@ -747,7 +747,7 @@ func HasJob() predicate.JobResource {
 }
 
 // HasJobWith applies the HasEdge predicate on the "job" edge with a given conditions (other predicates).
-func HasJobWith(preds ...predicate.TranslationJob) predicate.JobResource {
+func HasJobWith(preds ...predicate.Job) predicate.JobResource {
 	return predicate.JobResource(func(s *sql.Selector) {
 		step := newJobStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {

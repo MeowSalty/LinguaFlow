@@ -17,6 +17,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -28,7 +29,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
@@ -98,6 +98,7 @@ func checkColumn(t, c string) error {
 			bootstrapprompttemplate.Table:   bootstrapprompttemplate.ValidColumn,
 			executionplantemplate.Table:     executionplantemplate.ValidColumn,
 			glossaryentry.Table:             glossaryentry.ValidColumn,
+			job.Table:                       job.ValidColumn,
 			jobresource.Table:               jobresource.ValidColumn,
 			orgmembership.Table:             orgmembership.ValidColumn,
 			organization.Table:              organization.ValidColumn,
@@ -109,7 +110,6 @@ func checkColumn(t, c string) error {
 			synctask.Table:                  synctask.ValidColumn,
 			systemsetting.Table:             systemsetting.ValidColumn,
 			tmentry.Table:                   tmentry.ValidColumn,
-			translationjob.Table:            translationjob.ValidColumn,
 			translationprofile.Table:        translationprofile.ValidColumn,
 			translationprompttemplate.Table: translationprompttemplate.ValidColumn,
 			usagerecord.Table:               usagerecord.ValidColumn,

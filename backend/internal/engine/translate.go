@@ -31,14 +31,6 @@ func (e *Engine) TranslateRound(ctx context.Context, roundIdx int, doc *pipeline
 
 	round := e.rounds[roundIdx]
 
-	// Bootstrap 仅首轮
-	if roundIdx == 0 && e.standaloneBootstrap && e.standaloneCfg != nil && e.bootstrapRenderer != nil {
-		bootstrapStage := e.buildBootstrapStage()
-		if err := bootstrapStage.Run(ctx, doc); err != nil {
-			e.logger.Warn("bootstrap failed, continuing without incremental terms", "err", err)
-		}
-	}
-
 	// Prepare document
 	e.PrepareDocument(doc, nil)
 	if len(cfg.segmentFilter) > 0 {
@@ -119,23 +111,4 @@ func buildTranslateResult(doc *pipeline.Document) pipeline.TranslateResult {
 		}
 	}
 	return result
-}
-
-// buildBootstrapStage constructs the Bootstrap stage.
-func (e *Engine) buildBootstrapStage() *pipeline.Bootstrap {
-	retry := e.cfg.TranslateDefaults.Retry
-	repairOpts := e.cfg.Repair
-	return &pipeline.Bootstrap{
-		Backends:             e.bootstrapBackends,
-		Renderer:             e.bootstrapRenderer,
-		Glossary:             e.glossary,
-		Retry:                retry,
-		Concurrency:          e.standaloneCfg.Concurrency,
-		BatchSize:            e.standaloneCfg.BatchSize,
-		MaxTermsPer1000Chars: e.standaloneCfg.MaxTermsPer1000Chars,
-		MinSourceLen:         e.standaloneCfg.MinSourceLen,
-		Logger:               e.logger,
-		Reporter:             e.reporter,
-		Repair:               repairOpts,
-	}
 }

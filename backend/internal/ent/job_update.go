@@ -11,41 +11,41 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
-// TranslationJobUpdate is the builder for updating TranslationJob entities.
-type TranslationJobUpdate struct {
+// JobUpdate is the builder for updating Job entities.
+type JobUpdate struct {
 	config
 	hooks    []Hook
-	mutation *TranslationJobMutation
+	mutation *JobMutation
 }
 
-// Where appends a list predicates to the TranslationJobUpdate builder.
-func (_u *TranslationJobUpdate) Where(ps ...predicate.TranslationJob) *TranslationJobUpdate {
+// Where appends a list predicates to the JobUpdate builder.
+func (_u *JobUpdate) Where(ps ...predicate.Job) *JobUpdate {
 	_u.mutation.Where(ps...)
 	return _u
 }
 
 // SetUpdatedAt sets the "updated_at" field.
-func (_u *TranslationJobUpdate) SetUpdatedAt(v time.Time) *TranslationJobUpdate {
+func (_u *JobUpdate) SetUpdatedAt(v time.Time) *JobUpdate {
 	_u.mutation.SetUpdatedAt(v)
 	return _u
 }
 
 // SetProjectID sets the "project_id" field.
-func (_u *TranslationJobUpdate) SetProjectID(v int) *TranslationJobUpdate {
+func (_u *JobUpdate) SetProjectID(v int) *JobUpdate {
 	_u.mutation.SetProjectID(v)
 	return _u
 }
 
 // SetNillableProjectID sets the "project_id" field if the given value is not nil.
-func (_u *TranslationJobUpdate) SetNillableProjectID(v *int) *TranslationJobUpdate {
+func (_u *JobUpdate) SetNillableProjectID(v *int) *JobUpdate {
 	if v != nil {
 		_u.SetProjectID(*v)
 	}
@@ -53,13 +53,13 @@ func (_u *TranslationJobUpdate) SetNillableProjectID(v *int) *TranslationJobUpda
 }
 
 // SetStatus sets the "status" field.
-func (_u *TranslationJobUpdate) SetStatus(v string) *TranslationJobUpdate {
+func (_u *JobUpdate) SetStatus(v string) *JobUpdate {
 	_u.mutation.SetStatus(v)
 	return _u
 }
 
 // SetNillableStatus sets the "status" field if the given value is not nil.
-func (_u *TranslationJobUpdate) SetNillableStatus(v *string) *TranslationJobUpdate {
+func (_u *JobUpdate) SetNillableStatus(v *string) *JobUpdate {
 	if v != nil {
 		_u.SetStatus(*v)
 	}
@@ -67,13 +67,13 @@ func (_u *TranslationJobUpdate) SetNillableStatus(v *string) *TranslationJobUpda
 }
 
 // SetTriggerType sets the "trigger_type" field.
-func (_u *TranslationJobUpdate) SetTriggerType(v string) *TranslationJobUpdate {
+func (_u *JobUpdate) SetTriggerType(v string) *JobUpdate {
 	_u.mutation.SetTriggerType(v)
 	return _u
 }
 
 // SetNillableTriggerType sets the "trigger_type" field if the given value is not nil.
-func (_u *TranslationJobUpdate) SetNillableTriggerType(v *string) *TranslationJobUpdate {
+func (_u *JobUpdate) SetNillableTriggerType(v *string) *JobUpdate {
 	if v != nil {
 		_u.SetTriggerType(*v)
 	}
@@ -81,14 +81,14 @@ func (_u *TranslationJobUpdate) SetNillableTriggerType(v *string) *TranslationJo
 }
 
 // SetExecutionPlanID sets the "execution_plan_id" field.
-func (_u *TranslationJobUpdate) SetExecutionPlanID(v int) *TranslationJobUpdate {
+func (_u *JobUpdate) SetExecutionPlanID(v int) *JobUpdate {
 	_u.mutation.ResetExecutionPlanID()
 	_u.mutation.SetExecutionPlanID(v)
 	return _u
 }
 
 // SetNillableExecutionPlanID sets the "execution_plan_id" field if the given value is not nil.
-func (_u *TranslationJobUpdate) SetNillableExecutionPlanID(v *int) *TranslationJobUpdate {
+func (_u *JobUpdate) SetNillableExecutionPlanID(v *int) *JobUpdate {
 	if v != nil {
 		_u.SetExecutionPlanID(*v)
 	}
@@ -96,26 +96,26 @@ func (_u *TranslationJobUpdate) SetNillableExecutionPlanID(v *int) *TranslationJ
 }
 
 // AddExecutionPlanID adds value to the "execution_plan_id" field.
-func (_u *TranslationJobUpdate) AddExecutionPlanID(v int) *TranslationJobUpdate {
+func (_u *JobUpdate) AddExecutionPlanID(v int) *JobUpdate {
 	_u.mutation.AddExecutionPlanID(v)
 	return _u
 }
 
 // SetTranslationConfig sets the "translation_config" field.
-func (_u *TranslationJobUpdate) SetTranslationConfig(v map[string]interface{}) *TranslationJobUpdate {
+func (_u *JobUpdate) SetTranslationConfig(v map[string]interface{}) *JobUpdate {
 	_u.mutation.SetTranslationConfig(v)
 	return _u
 }
 
 // SetResourceCount sets the "resource_count" field.
-func (_u *TranslationJobUpdate) SetResourceCount(v int) *TranslationJobUpdate {
+func (_u *JobUpdate) SetResourceCount(v int) *JobUpdate {
 	_u.mutation.ResetResourceCount()
 	_u.mutation.SetResourceCount(v)
 	return _u
 }
 
 // SetNillableResourceCount sets the "resource_count" field if the given value is not nil.
-func (_u *TranslationJobUpdate) SetNillableResourceCount(v *int) *TranslationJobUpdate {
+func (_u *JobUpdate) SetNillableResourceCount(v *int) *JobUpdate {
 	if v != nil {
 		_u.SetResourceCount(*v)
 	}
@@ -123,20 +123,20 @@ func (_u *TranslationJobUpdate) SetNillableResourceCount(v *int) *TranslationJob
 }
 
 // AddResourceCount adds value to the "resource_count" field.
-func (_u *TranslationJobUpdate) AddResourceCount(v int) *TranslationJobUpdate {
+func (_u *JobUpdate) AddResourceCount(v int) *JobUpdate {
 	_u.mutation.AddResourceCount(v)
 	return _u
 }
 
 // SetCompletedResources sets the "completed_resources" field.
-func (_u *TranslationJobUpdate) SetCompletedResources(v int) *TranslationJobUpdate {
+func (_u *JobUpdate) SetCompletedResources(v int) *JobUpdate {
 	_u.mutation.ResetCompletedResources()
 	_u.mutation.SetCompletedResources(v)
 	return _u
 }
 
 // SetNillableCompletedResources sets the "completed_resources" field if the given value is not nil.
-func (_u *TranslationJobUpdate) SetNillableCompletedResources(v *int) *TranslationJobUpdate {
+func (_u *JobUpdate) SetNillableCompletedResources(v *int) *JobUpdate {
 	if v != nil {
 		_u.SetCompletedResources(*v)
 	}
@@ -144,20 +144,20 @@ func (_u *TranslationJobUpdate) SetNillableCompletedResources(v *int) *Translati
 }
 
 // AddCompletedResources adds value to the "completed_resources" field.
-func (_u *TranslationJobUpdate) AddCompletedResources(v int) *TranslationJobUpdate {
+func (_u *JobUpdate) AddCompletedResources(v int) *JobUpdate {
 	_u.mutation.AddCompletedResources(v)
 	return _u
 }
 
 // SetFailedResources sets the "failed_resources" field.
-func (_u *TranslationJobUpdate) SetFailedResources(v int) *TranslationJobUpdate {
+func (_u *JobUpdate) SetFailedResources(v int) *JobUpdate {
 	_u.mutation.ResetFailedResources()
 	_u.mutation.SetFailedResources(v)
 	return _u
 }
 
 // SetNillableFailedResources sets the "failed_resources" field if the given value is not nil.
-func (_u *TranslationJobUpdate) SetNillableFailedResources(v *int) *TranslationJobUpdate {
+func (_u *JobUpdate) SetNillableFailedResources(v *int) *JobUpdate {
 	if v != nil {
 		_u.SetFailedResources(*v)
 	}
@@ -165,20 +165,20 @@ func (_u *TranslationJobUpdate) SetNillableFailedResources(v *int) *TranslationJ
 }
 
 // AddFailedResources adds value to the "failed_resources" field.
-func (_u *TranslationJobUpdate) AddFailedResources(v int) *TranslationJobUpdate {
+func (_u *JobUpdate) AddFailedResources(v int) *JobUpdate {
 	_u.mutation.AddFailedResources(v)
 	return _u
 }
 
 // SetTotalSegments sets the "total_segments" field.
-func (_u *TranslationJobUpdate) SetTotalSegments(v int) *TranslationJobUpdate {
+func (_u *JobUpdate) SetTotalSegments(v int) *JobUpdate {
 	_u.mutation.ResetTotalSegments()
 	_u.mutation.SetTotalSegments(v)
 	return _u
 }
 
 // SetNillableTotalSegments sets the "total_segments" field if the given value is not nil.
-func (_u *TranslationJobUpdate) SetNillableTotalSegments(v *int) *TranslationJobUpdate {
+func (_u *JobUpdate) SetNillableTotalSegments(v *int) *JobUpdate {
 	if v != nil {
 		_u.SetTotalSegments(*v)
 	}
@@ -186,20 +186,20 @@ func (_u *TranslationJobUpdate) SetNillableTotalSegments(v *int) *TranslationJob
 }
 
 // AddTotalSegments adds value to the "total_segments" field.
-func (_u *TranslationJobUpdate) AddTotalSegments(v int) *TranslationJobUpdate {
+func (_u *JobUpdate) AddTotalSegments(v int) *JobUpdate {
 	_u.mutation.AddTotalSegments(v)
 	return _u
 }
 
 // SetSkippedSegments sets the "skipped_segments" field.
-func (_u *TranslationJobUpdate) SetSkippedSegments(v int) *TranslationJobUpdate {
+func (_u *JobUpdate) SetSkippedSegments(v int) *JobUpdate {
 	_u.mutation.ResetSkippedSegments()
 	_u.mutation.SetSkippedSegments(v)
 	return _u
 }
 
 // SetNillableSkippedSegments sets the "skipped_segments" field if the given value is not nil.
-func (_u *TranslationJobUpdate) SetNillableSkippedSegments(v *int) *TranslationJobUpdate {
+func (_u *JobUpdate) SetNillableSkippedSegments(v *int) *JobUpdate {
 	if v != nil {
 		_u.SetSkippedSegments(*v)
 	}
@@ -207,20 +207,20 @@ func (_u *TranslationJobUpdate) SetNillableSkippedSegments(v *int) *TranslationJ
 }
 
 // AddSkippedSegments adds value to the "skipped_segments" field.
-func (_u *TranslationJobUpdate) AddSkippedSegments(v int) *TranslationJobUpdate {
+func (_u *JobUpdate) AddSkippedSegments(v int) *JobUpdate {
 	_u.mutation.AddSkippedSegments(v)
 	return _u
 }
 
 // SetStageTotal sets the "stage_total" field.
-func (_u *TranslationJobUpdate) SetStageTotal(v int) *TranslationJobUpdate {
+func (_u *JobUpdate) SetStageTotal(v int) *JobUpdate {
 	_u.mutation.ResetStageTotal()
 	_u.mutation.SetStageTotal(v)
 	return _u
 }
 
 // SetNillableStageTotal sets the "stage_total" field if the given value is not nil.
-func (_u *TranslationJobUpdate) SetNillableStageTotal(v *int) *TranslationJobUpdate {
+func (_u *JobUpdate) SetNillableStageTotal(v *int) *JobUpdate {
 	if v != nil {
 		_u.SetStageTotal(*v)
 	}
@@ -228,20 +228,20 @@ func (_u *TranslationJobUpdate) SetNillableStageTotal(v *int) *TranslationJobUpd
 }
 
 // AddStageTotal adds value to the "stage_total" field.
-func (_u *TranslationJobUpdate) AddStageTotal(v int) *TranslationJobUpdate {
+func (_u *JobUpdate) AddStageTotal(v int) *JobUpdate {
 	_u.mutation.AddStageTotal(v)
 	return _u
 }
 
 // SetCompletedSegments sets the "completed_segments" field.
-func (_u *TranslationJobUpdate) SetCompletedSegments(v int) *TranslationJobUpdate {
+func (_u *JobUpdate) SetCompletedSegments(v int) *JobUpdate {
 	_u.mutation.ResetCompletedSegments()
 	_u.mutation.SetCompletedSegments(v)
 	return _u
 }
 
 // SetNillableCompletedSegments sets the "completed_segments" field if the given value is not nil.
-func (_u *TranslationJobUpdate) SetNillableCompletedSegments(v *int) *TranslationJobUpdate {
+func (_u *JobUpdate) SetNillableCompletedSegments(v *int) *JobUpdate {
 	if v != nil {
 		_u.SetCompletedSegments(*v)
 	}
@@ -249,19 +249,19 @@ func (_u *TranslationJobUpdate) SetNillableCompletedSegments(v *int) *Translatio
 }
 
 // AddCompletedSegments adds value to the "completed_segments" field.
-func (_u *TranslationJobUpdate) AddCompletedSegments(v int) *TranslationJobUpdate {
+func (_u *JobUpdate) AddCompletedSegments(v int) *JobUpdate {
 	_u.mutation.AddCompletedSegments(v)
 	return _u
 }
 
 // SetErrorMessage sets the "error_message" field.
-func (_u *TranslationJobUpdate) SetErrorMessage(v string) *TranslationJobUpdate {
+func (_u *JobUpdate) SetErrorMessage(v string) *JobUpdate {
 	_u.mutation.SetErrorMessage(v)
 	return _u
 }
 
 // SetNillableErrorMessage sets the "error_message" field if the given value is not nil.
-func (_u *TranslationJobUpdate) SetNillableErrorMessage(v *string) *TranslationJobUpdate {
+func (_u *JobUpdate) SetNillableErrorMessage(v *string) *JobUpdate {
 	if v != nil {
 		_u.SetErrorMessage(*v)
 	}
@@ -269,19 +269,19 @@ func (_u *TranslationJobUpdate) SetNillableErrorMessage(v *string) *TranslationJ
 }
 
 // ClearErrorMessage clears the value of the "error_message" field.
-func (_u *TranslationJobUpdate) ClearErrorMessage() *TranslationJobUpdate {
+func (_u *JobUpdate) ClearErrorMessage() *JobUpdate {
 	_u.mutation.ClearErrorMessage()
 	return _u
 }
 
 // SetStartedAt sets the "started_at" field.
-func (_u *TranslationJobUpdate) SetStartedAt(v time.Time) *TranslationJobUpdate {
+func (_u *JobUpdate) SetStartedAt(v time.Time) *JobUpdate {
 	_u.mutation.SetStartedAt(v)
 	return _u
 }
 
 // SetNillableStartedAt sets the "started_at" field if the given value is not nil.
-func (_u *TranslationJobUpdate) SetNillableStartedAt(v *time.Time) *TranslationJobUpdate {
+func (_u *JobUpdate) SetNillableStartedAt(v *time.Time) *JobUpdate {
 	if v != nil {
 		_u.SetStartedAt(*v)
 	}
@@ -289,24 +289,24 @@ func (_u *TranslationJobUpdate) SetNillableStartedAt(v *time.Time) *TranslationJ
 }
 
 // ClearStartedAt clears the value of the "started_at" field.
-func (_u *TranslationJobUpdate) ClearStartedAt() *TranslationJobUpdate {
+func (_u *JobUpdate) ClearStartedAt() *JobUpdate {
 	_u.mutation.ClearStartedAt()
 	return _u
 }
 
 // SetProject sets the "project" edge to the Project entity.
-func (_u *TranslationJobUpdate) SetProject(v *Project) *TranslationJobUpdate {
+func (_u *JobUpdate) SetProject(v *Project) *JobUpdate {
 	return _u.SetProjectID(v.ID)
 }
 
 // SetCreatedByID sets the "created_by" edge to the User entity by ID.
-func (_u *TranslationJobUpdate) SetCreatedByID(id int) *TranslationJobUpdate {
+func (_u *JobUpdate) SetCreatedByID(id int) *JobUpdate {
 	_u.mutation.SetCreatedByID(id)
 	return _u
 }
 
 // SetNillableCreatedByID sets the "created_by" edge to the User entity by ID if the given value is not nil.
-func (_u *TranslationJobUpdate) SetNillableCreatedByID(id *int) *TranslationJobUpdate {
+func (_u *JobUpdate) SetNillableCreatedByID(id *int) *JobUpdate {
 	if id != nil {
 		_u = _u.SetCreatedByID(*id)
 	}
@@ -314,18 +314,18 @@ func (_u *TranslationJobUpdate) SetNillableCreatedByID(id *int) *TranslationJobU
 }
 
 // SetCreatedBy sets the "created_by" edge to the User entity.
-func (_u *TranslationJobUpdate) SetCreatedBy(v *User) *TranslationJobUpdate {
+func (_u *JobUpdate) SetCreatedBy(v *User) *JobUpdate {
 	return _u.SetCreatedByID(v.ID)
 }
 
 // AddJobResourceIDs adds the "job_resources" edge to the JobResource entity by IDs.
-func (_u *TranslationJobUpdate) AddJobResourceIDs(ids ...int) *TranslationJobUpdate {
+func (_u *JobUpdate) AddJobResourceIDs(ids ...int) *JobUpdate {
 	_u.mutation.AddJobResourceIDs(ids...)
 	return _u
 }
 
 // AddJobResources adds the "job_resources" edges to the JobResource entity.
-func (_u *TranslationJobUpdate) AddJobResources(v ...*JobResource) *TranslationJobUpdate {
+func (_u *JobUpdate) AddJobResources(v ...*JobResource) *JobUpdate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
@@ -334,13 +334,13 @@ func (_u *TranslationJobUpdate) AddJobResources(v ...*JobResource) *TranslationJ
 }
 
 // AddSseEventIDs adds the "sse_events" edge to the SSEEvent entity by IDs.
-func (_u *TranslationJobUpdate) AddSseEventIDs(ids ...int) *TranslationJobUpdate {
+func (_u *JobUpdate) AddSseEventIDs(ids ...int) *JobUpdate {
 	_u.mutation.AddSseEventIDs(ids...)
 	return _u
 }
 
 // AddSseEvents adds the "sse_events" edges to the SSEEvent entity.
-func (_u *TranslationJobUpdate) AddSseEvents(v ...*SSEEvent) *TranslationJobUpdate {
+func (_u *JobUpdate) AddSseEvents(v ...*SSEEvent) *JobUpdate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
@@ -348,37 +348,37 @@ func (_u *TranslationJobUpdate) AddSseEvents(v ...*SSEEvent) *TranslationJobUpda
 	return _u.AddSseEventIDs(ids...)
 }
 
-// Mutation returns the TranslationJobMutation object of the builder.
-func (_u *TranslationJobUpdate) Mutation() *TranslationJobMutation {
+// Mutation returns the JobMutation object of the builder.
+func (_u *JobUpdate) Mutation() *JobMutation {
 	return _u.mutation
 }
 
 // ClearProject clears the "project" edge to the Project entity.
-func (_u *TranslationJobUpdate) ClearProject() *TranslationJobUpdate {
+func (_u *JobUpdate) ClearProject() *JobUpdate {
 	_u.mutation.ClearProject()
 	return _u
 }
 
 // ClearCreatedBy clears the "created_by" edge to the User entity.
-func (_u *TranslationJobUpdate) ClearCreatedBy() *TranslationJobUpdate {
+func (_u *JobUpdate) ClearCreatedBy() *JobUpdate {
 	_u.mutation.ClearCreatedBy()
 	return _u
 }
 
 // ClearJobResources clears all "job_resources" edges to the JobResource entity.
-func (_u *TranslationJobUpdate) ClearJobResources() *TranslationJobUpdate {
+func (_u *JobUpdate) ClearJobResources() *JobUpdate {
 	_u.mutation.ClearJobResources()
 	return _u
 }
 
 // RemoveJobResourceIDs removes the "job_resources" edge to JobResource entities by IDs.
-func (_u *TranslationJobUpdate) RemoveJobResourceIDs(ids ...int) *TranslationJobUpdate {
+func (_u *JobUpdate) RemoveJobResourceIDs(ids ...int) *JobUpdate {
 	_u.mutation.RemoveJobResourceIDs(ids...)
 	return _u
 }
 
 // RemoveJobResources removes "job_resources" edges to JobResource entities.
-func (_u *TranslationJobUpdate) RemoveJobResources(v ...*JobResource) *TranslationJobUpdate {
+func (_u *JobUpdate) RemoveJobResources(v ...*JobResource) *JobUpdate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
@@ -387,19 +387,19 @@ func (_u *TranslationJobUpdate) RemoveJobResources(v ...*JobResource) *Translati
 }
 
 // ClearSseEvents clears all "sse_events" edges to the SSEEvent entity.
-func (_u *TranslationJobUpdate) ClearSseEvents() *TranslationJobUpdate {
+func (_u *JobUpdate) ClearSseEvents() *JobUpdate {
 	_u.mutation.ClearSseEvents()
 	return _u
 }
 
 // RemoveSseEventIDs removes the "sse_events" edge to SSEEvent entities by IDs.
-func (_u *TranslationJobUpdate) RemoveSseEventIDs(ids ...int) *TranslationJobUpdate {
+func (_u *JobUpdate) RemoveSseEventIDs(ids ...int) *JobUpdate {
 	_u.mutation.RemoveSseEventIDs(ids...)
 	return _u
 }
 
 // RemoveSseEvents removes "sse_events" edges to SSEEvent entities.
-func (_u *TranslationJobUpdate) RemoveSseEvents(v ...*SSEEvent) *TranslationJobUpdate {
+func (_u *JobUpdate) RemoveSseEvents(v ...*SSEEvent) *JobUpdate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
@@ -408,13 +408,13 @@ func (_u *TranslationJobUpdate) RemoveSseEvents(v ...*SSEEvent) *TranslationJobU
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
-func (_u *TranslationJobUpdate) Save(ctx context.Context) (int, error) {
+func (_u *JobUpdate) Save(ctx context.Context) (int, error) {
 	_u.defaults()
 	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
-func (_u *TranslationJobUpdate) SaveX(ctx context.Context) int {
+func (_u *JobUpdate) SaveX(ctx context.Context) int {
 	affected, err := _u.Save(ctx)
 	if err != nil {
 		panic(err)
@@ -423,84 +423,84 @@ func (_u *TranslationJobUpdate) SaveX(ctx context.Context) int {
 }
 
 // Exec executes the query.
-func (_u *TranslationJobUpdate) Exec(ctx context.Context) error {
+func (_u *JobUpdate) Exec(ctx context.Context) error {
 	_, err := _u.Save(ctx)
 	return err
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (_u *TranslationJobUpdate) ExecX(ctx context.Context) {
+func (_u *JobUpdate) ExecX(ctx context.Context) {
 	if err := _u.Exec(ctx); err != nil {
 		panic(err)
 	}
 }
 
 // defaults sets the default values of the builder before save.
-func (_u *TranslationJobUpdate) defaults() {
+func (_u *JobUpdate) defaults() {
 	if _, ok := _u.mutation.UpdatedAt(); !ok {
-		v := translationjob.UpdateDefaultUpdatedAt()
+		v := job.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
 }
 
 // check runs all checks and user-defined validators on the builder.
-func (_u *TranslationJobUpdate) check() error {
+func (_u *JobUpdate) check() error {
 	if v, ok := _u.mutation.ProjectID(); ok {
-		if err := translationjob.ProjectIDValidator(v); err != nil {
-			return &ValidationError{Name: "project_id", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.project_id": %w`, err)}
+		if err := job.ProjectIDValidator(v); err != nil {
+			return &ValidationError{Name: "project_id", err: fmt.Errorf(`ent: validator failed for field "Job.project_id": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.ExecutionPlanID(); ok {
-		if err := translationjob.ExecutionPlanIDValidator(v); err != nil {
-			return &ValidationError{Name: "execution_plan_id", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.execution_plan_id": %w`, err)}
+		if err := job.ExecutionPlanIDValidator(v); err != nil {
+			return &ValidationError{Name: "execution_plan_id", err: fmt.Errorf(`ent: validator failed for field "Job.execution_plan_id": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.ResourceCount(); ok {
-		if err := translationjob.ResourceCountValidator(v); err != nil {
-			return &ValidationError{Name: "resource_count", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.resource_count": %w`, err)}
+		if err := job.ResourceCountValidator(v); err != nil {
+			return &ValidationError{Name: "resource_count", err: fmt.Errorf(`ent: validator failed for field "Job.resource_count": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.CompletedResources(); ok {
-		if err := translationjob.CompletedResourcesValidator(v); err != nil {
-			return &ValidationError{Name: "completed_resources", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.completed_resources": %w`, err)}
+		if err := job.CompletedResourcesValidator(v); err != nil {
+			return &ValidationError{Name: "completed_resources", err: fmt.Errorf(`ent: validator failed for field "Job.completed_resources": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.FailedResources(); ok {
-		if err := translationjob.FailedResourcesValidator(v); err != nil {
-			return &ValidationError{Name: "failed_resources", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.failed_resources": %w`, err)}
+		if err := job.FailedResourcesValidator(v); err != nil {
+			return &ValidationError{Name: "failed_resources", err: fmt.Errorf(`ent: validator failed for field "Job.failed_resources": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.TotalSegments(); ok {
-		if err := translationjob.TotalSegmentsValidator(v); err != nil {
-			return &ValidationError{Name: "total_segments", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.total_segments": %w`, err)}
+		if err := job.TotalSegmentsValidator(v); err != nil {
+			return &ValidationError{Name: "total_segments", err: fmt.Errorf(`ent: validator failed for field "Job.total_segments": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.SkippedSegments(); ok {
-		if err := translationjob.SkippedSegmentsValidator(v); err != nil {
-			return &ValidationError{Name: "skipped_segments", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.skipped_segments": %w`, err)}
+		if err := job.SkippedSegmentsValidator(v); err != nil {
+			return &ValidationError{Name: "skipped_segments", err: fmt.Errorf(`ent: validator failed for field "Job.skipped_segments": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.StageTotal(); ok {
-		if err := translationjob.StageTotalValidator(v); err != nil {
-			return &ValidationError{Name: "stage_total", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.stage_total": %w`, err)}
+		if err := job.StageTotalValidator(v); err != nil {
+			return &ValidationError{Name: "stage_total", err: fmt.Errorf(`ent: validator failed for field "Job.stage_total": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.CompletedSegments(); ok {
-		if err := translationjob.CompletedSegmentsValidator(v); err != nil {
-			return &ValidationError{Name: "completed_segments", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.completed_segments": %w`, err)}
+		if err := job.CompletedSegmentsValidator(v); err != nil {
+			return &ValidationError{Name: "completed_segments", err: fmt.Errorf(`ent: validator failed for field "Job.completed_segments": %w`, err)}
 		}
 	}
 	if _u.mutation.ProjectCleared() && len(_u.mutation.ProjectIDs()) > 0 {
-		return errors.New(`ent: clearing a required unique edge "TranslationJob.project"`)
+		return errors.New(`ent: clearing a required unique edge "Job.project"`)
 	}
 	return nil
 }
 
-func (_u *TranslationJobUpdate) sqlSave(ctx context.Context) (_node int, err error) {
+func (_u *JobUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(translationjob.Table, translationjob.Columns, sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(job.Table, job.Columns, sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -509,83 +509,83 @@ func (_u *TranslationJobUpdate) sqlSave(ctx context.Context) (_node int, err err
 		}
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
-		_spec.SetField(translationjob.FieldUpdatedAt, field.TypeTime, value)
+		_spec.SetField(job.FieldUpdatedAt, field.TypeTime, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
-		_spec.SetField(translationjob.FieldStatus, field.TypeString, value)
+		_spec.SetField(job.FieldStatus, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.TriggerType(); ok {
-		_spec.SetField(translationjob.FieldTriggerType, field.TypeString, value)
+		_spec.SetField(job.FieldTriggerType, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.ExecutionPlanID(); ok {
-		_spec.SetField(translationjob.FieldExecutionPlanID, field.TypeInt, value)
+		_spec.SetField(job.FieldExecutionPlanID, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedExecutionPlanID(); ok {
-		_spec.AddField(translationjob.FieldExecutionPlanID, field.TypeInt, value)
+		_spec.AddField(job.FieldExecutionPlanID, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.TranslationConfig(); ok {
-		_spec.SetField(translationjob.FieldTranslationConfig, field.TypeJSON, value)
+		_spec.SetField(job.FieldTranslationConfig, field.TypeJSON, value)
 	}
 	if value, ok := _u.mutation.ResourceCount(); ok {
-		_spec.SetField(translationjob.FieldResourceCount, field.TypeInt, value)
+		_spec.SetField(job.FieldResourceCount, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedResourceCount(); ok {
-		_spec.AddField(translationjob.FieldResourceCount, field.TypeInt, value)
+		_spec.AddField(job.FieldResourceCount, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.CompletedResources(); ok {
-		_spec.SetField(translationjob.FieldCompletedResources, field.TypeInt, value)
+		_spec.SetField(job.FieldCompletedResources, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedCompletedResources(); ok {
-		_spec.AddField(translationjob.FieldCompletedResources, field.TypeInt, value)
+		_spec.AddField(job.FieldCompletedResources, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.FailedResources(); ok {
-		_spec.SetField(translationjob.FieldFailedResources, field.TypeInt, value)
+		_spec.SetField(job.FieldFailedResources, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedFailedResources(); ok {
-		_spec.AddField(translationjob.FieldFailedResources, field.TypeInt, value)
+		_spec.AddField(job.FieldFailedResources, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.TotalSegments(); ok {
-		_spec.SetField(translationjob.FieldTotalSegments, field.TypeInt, value)
+		_spec.SetField(job.FieldTotalSegments, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedTotalSegments(); ok {
-		_spec.AddField(translationjob.FieldTotalSegments, field.TypeInt, value)
+		_spec.AddField(job.FieldTotalSegments, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.SkippedSegments(); ok {
-		_spec.SetField(translationjob.FieldSkippedSegments, field.TypeInt, value)
+		_spec.SetField(job.FieldSkippedSegments, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedSkippedSegments(); ok {
-		_spec.AddField(translationjob.FieldSkippedSegments, field.TypeInt, value)
+		_spec.AddField(job.FieldSkippedSegments, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.StageTotal(); ok {
-		_spec.SetField(translationjob.FieldStageTotal, field.TypeInt, value)
+		_spec.SetField(job.FieldStageTotal, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedStageTotal(); ok {
-		_spec.AddField(translationjob.FieldStageTotal, field.TypeInt, value)
+		_spec.AddField(job.FieldStageTotal, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.CompletedSegments(); ok {
-		_spec.SetField(translationjob.FieldCompletedSegments, field.TypeInt, value)
+		_spec.SetField(job.FieldCompletedSegments, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedCompletedSegments(); ok {
-		_spec.AddField(translationjob.FieldCompletedSegments, field.TypeInt, value)
+		_spec.AddField(job.FieldCompletedSegments, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.ErrorMessage(); ok {
-		_spec.SetField(translationjob.FieldErrorMessage, field.TypeString, value)
+		_spec.SetField(job.FieldErrorMessage, field.TypeString, value)
 	}
 	if _u.mutation.ErrorMessageCleared() {
-		_spec.ClearField(translationjob.FieldErrorMessage, field.TypeString)
+		_spec.ClearField(job.FieldErrorMessage, field.TypeString)
 	}
 	if value, ok := _u.mutation.StartedAt(); ok {
-		_spec.SetField(translationjob.FieldStartedAt, field.TypeTime, value)
+		_spec.SetField(job.FieldStartedAt, field.TypeTime, value)
 	}
 	if _u.mutation.StartedAtCleared() {
-		_spec.ClearField(translationjob.FieldStartedAt, field.TypeTime)
+		_spec.ClearField(job.FieldStartedAt, field.TypeTime)
 	}
 	if _u.mutation.ProjectCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   translationjob.ProjectTable,
-			Columns: []string{translationjob.ProjectColumn},
+			Table:   job.ProjectTable,
+			Columns: []string{job.ProjectColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(project.FieldID, field.TypeInt),
@@ -597,8 +597,8 @@ func (_u *TranslationJobUpdate) sqlSave(ctx context.Context) (_node int, err err
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   translationjob.ProjectTable,
-			Columns: []string{translationjob.ProjectColumn},
+			Table:   job.ProjectTable,
+			Columns: []string{job.ProjectColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(project.FieldID, field.TypeInt),
@@ -613,8 +613,8 @@ func (_u *TranslationJobUpdate) sqlSave(ctx context.Context) (_node int, err err
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   translationjob.CreatedByTable,
-			Columns: []string{translationjob.CreatedByColumn},
+			Table:   job.CreatedByTable,
+			Columns: []string{job.CreatedByColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
@@ -626,8 +626,8 @@ func (_u *TranslationJobUpdate) sqlSave(ctx context.Context) (_node int, err err
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   translationjob.CreatedByTable,
-			Columns: []string{translationjob.CreatedByColumn},
+			Table:   job.CreatedByTable,
+			Columns: []string{job.CreatedByColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
@@ -642,8 +642,8 @@ func (_u *TranslationJobUpdate) sqlSave(ctx context.Context) (_node int, err err
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   translationjob.JobResourcesTable,
-			Columns: []string{translationjob.JobResourcesColumn},
+			Table:   job.JobResourcesTable,
+			Columns: []string{job.JobResourcesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
@@ -655,8 +655,8 @@ func (_u *TranslationJobUpdate) sqlSave(ctx context.Context) (_node int, err err
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   translationjob.JobResourcesTable,
-			Columns: []string{translationjob.JobResourcesColumn},
+			Table:   job.JobResourcesTable,
+			Columns: []string{job.JobResourcesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
@@ -671,8 +671,8 @@ func (_u *TranslationJobUpdate) sqlSave(ctx context.Context) (_node int, err err
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   translationjob.JobResourcesTable,
-			Columns: []string{translationjob.JobResourcesColumn},
+			Table:   job.JobResourcesTable,
+			Columns: []string{job.JobResourcesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
@@ -687,8 +687,8 @@ func (_u *TranslationJobUpdate) sqlSave(ctx context.Context) (_node int, err err
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   translationjob.SseEventsTable,
-			Columns: []string{translationjob.SseEventsColumn},
+			Table:   job.SseEventsTable,
+			Columns: []string{job.SseEventsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(sseevent.FieldID, field.TypeInt),
@@ -700,8 +700,8 @@ func (_u *TranslationJobUpdate) sqlSave(ctx context.Context) (_node int, err err
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   translationjob.SseEventsTable,
-			Columns: []string{translationjob.SseEventsColumn},
+			Table:   job.SseEventsTable,
+			Columns: []string{job.SseEventsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(sseevent.FieldID, field.TypeInt),
@@ -716,8 +716,8 @@ func (_u *TranslationJobUpdate) sqlSave(ctx context.Context) (_node int, err err
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   translationjob.SseEventsTable,
-			Columns: []string{translationjob.SseEventsColumn},
+			Table:   job.SseEventsTable,
+			Columns: []string{job.SseEventsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(sseevent.FieldID, field.TypeInt),
@@ -730,7 +730,7 @@ func (_u *TranslationJobUpdate) sqlSave(ctx context.Context) (_node int, err err
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
-			err = &NotFoundError{translationjob.Label}
+			err = &NotFoundError{job.Label}
 		} else if sqlgraph.IsConstraintError(err) {
 			err = &ConstraintError{msg: err.Error(), wrap: err}
 		}
@@ -740,28 +740,28 @@ func (_u *TranslationJobUpdate) sqlSave(ctx context.Context) (_node int, err err
 	return _node, nil
 }
 
-// TranslationJobUpdateOne is the builder for updating a single TranslationJob entity.
-type TranslationJobUpdateOne struct {
+// JobUpdateOne is the builder for updating a single Job entity.
+type JobUpdateOne struct {
 	config
 	fields   []string
 	hooks    []Hook
-	mutation *TranslationJobMutation
+	mutation *JobMutation
 }
 
 // SetUpdatedAt sets the "updated_at" field.
-func (_u *TranslationJobUpdateOne) SetUpdatedAt(v time.Time) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetUpdatedAt(v time.Time) *JobUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
 	return _u
 }
 
 // SetProjectID sets the "project_id" field.
-func (_u *TranslationJobUpdateOne) SetProjectID(v int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetProjectID(v int) *JobUpdateOne {
 	_u.mutation.SetProjectID(v)
 	return _u
 }
 
 // SetNillableProjectID sets the "project_id" field if the given value is not nil.
-func (_u *TranslationJobUpdateOne) SetNillableProjectID(v *int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetNillableProjectID(v *int) *JobUpdateOne {
 	if v != nil {
 		_u.SetProjectID(*v)
 	}
@@ -769,13 +769,13 @@ func (_u *TranslationJobUpdateOne) SetNillableProjectID(v *int) *TranslationJobU
 }
 
 // SetStatus sets the "status" field.
-func (_u *TranslationJobUpdateOne) SetStatus(v string) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetStatus(v string) *JobUpdateOne {
 	_u.mutation.SetStatus(v)
 	return _u
 }
 
 // SetNillableStatus sets the "status" field if the given value is not nil.
-func (_u *TranslationJobUpdateOne) SetNillableStatus(v *string) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetNillableStatus(v *string) *JobUpdateOne {
 	if v != nil {
 		_u.SetStatus(*v)
 	}
@@ -783,13 +783,13 @@ func (_u *TranslationJobUpdateOne) SetNillableStatus(v *string) *TranslationJobU
 }
 
 // SetTriggerType sets the "trigger_type" field.
-func (_u *TranslationJobUpdateOne) SetTriggerType(v string) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetTriggerType(v string) *JobUpdateOne {
 	_u.mutation.SetTriggerType(v)
 	return _u
 }
 
 // SetNillableTriggerType sets the "trigger_type" field if the given value is not nil.
-func (_u *TranslationJobUpdateOne) SetNillableTriggerType(v *string) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetNillableTriggerType(v *string) *JobUpdateOne {
 	if v != nil {
 		_u.SetTriggerType(*v)
 	}
@@ -797,14 +797,14 @@ func (_u *TranslationJobUpdateOne) SetNillableTriggerType(v *string) *Translatio
 }
 
 // SetExecutionPlanID sets the "execution_plan_id" field.
-func (_u *TranslationJobUpdateOne) SetExecutionPlanID(v int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetExecutionPlanID(v int) *JobUpdateOne {
 	_u.mutation.ResetExecutionPlanID()
 	_u.mutation.SetExecutionPlanID(v)
 	return _u
 }
 
 // SetNillableExecutionPlanID sets the "execution_plan_id" field if the given value is not nil.
-func (_u *TranslationJobUpdateOne) SetNillableExecutionPlanID(v *int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetNillableExecutionPlanID(v *int) *JobUpdateOne {
 	if v != nil {
 		_u.SetExecutionPlanID(*v)
 	}
@@ -812,26 +812,26 @@ func (_u *TranslationJobUpdateOne) SetNillableExecutionPlanID(v *int) *Translati
 }
 
 // AddExecutionPlanID adds value to the "execution_plan_id" field.
-func (_u *TranslationJobUpdateOne) AddExecutionPlanID(v int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) AddExecutionPlanID(v int) *JobUpdateOne {
 	_u.mutation.AddExecutionPlanID(v)
 	return _u
 }
 
 // SetTranslationConfig sets the "translation_config" field.
-func (_u *TranslationJobUpdateOne) SetTranslationConfig(v map[string]interface{}) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetTranslationConfig(v map[string]interface{}) *JobUpdateOne {
 	_u.mutation.SetTranslationConfig(v)
 	return _u
 }
 
 // SetResourceCount sets the "resource_count" field.
-func (_u *TranslationJobUpdateOne) SetResourceCount(v int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetResourceCount(v int) *JobUpdateOne {
 	_u.mutation.ResetResourceCount()
 	_u.mutation.SetResourceCount(v)
 	return _u
 }
 
 // SetNillableResourceCount sets the "resource_count" field if the given value is not nil.
-func (_u *TranslationJobUpdateOne) SetNillableResourceCount(v *int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetNillableResourceCount(v *int) *JobUpdateOne {
 	if v != nil {
 		_u.SetResourceCount(*v)
 	}
@@ -839,20 +839,20 @@ func (_u *TranslationJobUpdateOne) SetNillableResourceCount(v *int) *Translation
 }
 
 // AddResourceCount adds value to the "resource_count" field.
-func (_u *TranslationJobUpdateOne) AddResourceCount(v int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) AddResourceCount(v int) *JobUpdateOne {
 	_u.mutation.AddResourceCount(v)
 	return _u
 }
 
 // SetCompletedResources sets the "completed_resources" field.
-func (_u *TranslationJobUpdateOne) SetCompletedResources(v int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetCompletedResources(v int) *JobUpdateOne {
 	_u.mutation.ResetCompletedResources()
 	_u.mutation.SetCompletedResources(v)
 	return _u
 }
 
 // SetNillableCompletedResources sets the "completed_resources" field if the given value is not nil.
-func (_u *TranslationJobUpdateOne) SetNillableCompletedResources(v *int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetNillableCompletedResources(v *int) *JobUpdateOne {
 	if v != nil {
 		_u.SetCompletedResources(*v)
 	}
@@ -860,20 +860,20 @@ func (_u *TranslationJobUpdateOne) SetNillableCompletedResources(v *int) *Transl
 }
 
 // AddCompletedResources adds value to the "completed_resources" field.
-func (_u *TranslationJobUpdateOne) AddCompletedResources(v int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) AddCompletedResources(v int) *JobUpdateOne {
 	_u.mutation.AddCompletedResources(v)
 	return _u
 }
 
 // SetFailedResources sets the "failed_resources" field.
-func (_u *TranslationJobUpdateOne) SetFailedResources(v int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetFailedResources(v int) *JobUpdateOne {
 	_u.mutation.ResetFailedResources()
 	_u.mutation.SetFailedResources(v)
 	return _u
 }
 
 // SetNillableFailedResources sets the "failed_resources" field if the given value is not nil.
-func (_u *TranslationJobUpdateOne) SetNillableFailedResources(v *int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetNillableFailedResources(v *int) *JobUpdateOne {
 	if v != nil {
 		_u.SetFailedResources(*v)
 	}
@@ -881,20 +881,20 @@ func (_u *TranslationJobUpdateOne) SetNillableFailedResources(v *int) *Translati
 }
 
 // AddFailedResources adds value to the "failed_resources" field.
-func (_u *TranslationJobUpdateOne) AddFailedResources(v int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) AddFailedResources(v int) *JobUpdateOne {
 	_u.mutation.AddFailedResources(v)
 	return _u
 }
 
 // SetTotalSegments sets the "total_segments" field.
-func (_u *TranslationJobUpdateOne) SetTotalSegments(v int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetTotalSegments(v int) *JobUpdateOne {
 	_u.mutation.ResetTotalSegments()
 	_u.mutation.SetTotalSegments(v)
 	return _u
 }
 
 // SetNillableTotalSegments sets the "total_segments" field if the given value is not nil.
-func (_u *TranslationJobUpdateOne) SetNillableTotalSegments(v *int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetNillableTotalSegments(v *int) *JobUpdateOne {
 	if v != nil {
 		_u.SetTotalSegments(*v)
 	}
@@ -902,20 +902,20 @@ func (_u *TranslationJobUpdateOne) SetNillableTotalSegments(v *int) *Translation
 }
 
 // AddTotalSegments adds value to the "total_segments" field.
-func (_u *TranslationJobUpdateOne) AddTotalSegments(v int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) AddTotalSegments(v int) *JobUpdateOne {
 	_u.mutation.AddTotalSegments(v)
 	return _u
 }
 
 // SetSkippedSegments sets the "skipped_segments" field.
-func (_u *TranslationJobUpdateOne) SetSkippedSegments(v int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetSkippedSegments(v int) *JobUpdateOne {
 	_u.mutation.ResetSkippedSegments()
 	_u.mutation.SetSkippedSegments(v)
 	return _u
 }
 
 // SetNillableSkippedSegments sets the "skipped_segments" field if the given value is not nil.
-func (_u *TranslationJobUpdateOne) SetNillableSkippedSegments(v *int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetNillableSkippedSegments(v *int) *JobUpdateOne {
 	if v != nil {
 		_u.SetSkippedSegments(*v)
 	}
@@ -923,20 +923,20 @@ func (_u *TranslationJobUpdateOne) SetNillableSkippedSegments(v *int) *Translati
 }
 
 // AddSkippedSegments adds value to the "skipped_segments" field.
-func (_u *TranslationJobUpdateOne) AddSkippedSegments(v int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) AddSkippedSegments(v int) *JobUpdateOne {
 	_u.mutation.AddSkippedSegments(v)
 	return _u
 }
 
 // SetStageTotal sets the "stage_total" field.
-func (_u *TranslationJobUpdateOne) SetStageTotal(v int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetStageTotal(v int) *JobUpdateOne {
 	_u.mutation.ResetStageTotal()
 	_u.mutation.SetStageTotal(v)
 	return _u
 }
 
 // SetNillableStageTotal sets the "stage_total" field if the given value is not nil.
-func (_u *TranslationJobUpdateOne) SetNillableStageTotal(v *int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetNillableStageTotal(v *int) *JobUpdateOne {
 	if v != nil {
 		_u.SetStageTotal(*v)
 	}
@@ -944,20 +944,20 @@ func (_u *TranslationJobUpdateOne) SetNillableStageTotal(v *int) *TranslationJob
 }
 
 // AddStageTotal adds value to the "stage_total" field.
-func (_u *TranslationJobUpdateOne) AddStageTotal(v int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) AddStageTotal(v int) *JobUpdateOne {
 	_u.mutation.AddStageTotal(v)
 	return _u
 }
 
 // SetCompletedSegments sets the "completed_segments" field.
-func (_u *TranslationJobUpdateOne) SetCompletedSegments(v int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetCompletedSegments(v int) *JobUpdateOne {
 	_u.mutation.ResetCompletedSegments()
 	_u.mutation.SetCompletedSegments(v)
 	return _u
 }
 
 // SetNillableCompletedSegments sets the "completed_segments" field if the given value is not nil.
-func (_u *TranslationJobUpdateOne) SetNillableCompletedSegments(v *int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetNillableCompletedSegments(v *int) *JobUpdateOne {
 	if v != nil {
 		_u.SetCompletedSegments(*v)
 	}
@@ -965,19 +965,19 @@ func (_u *TranslationJobUpdateOne) SetNillableCompletedSegments(v *int) *Transla
 }
 
 // AddCompletedSegments adds value to the "completed_segments" field.
-func (_u *TranslationJobUpdateOne) AddCompletedSegments(v int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) AddCompletedSegments(v int) *JobUpdateOne {
 	_u.mutation.AddCompletedSegments(v)
 	return _u
 }
 
 // SetErrorMessage sets the "error_message" field.
-func (_u *TranslationJobUpdateOne) SetErrorMessage(v string) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetErrorMessage(v string) *JobUpdateOne {
 	_u.mutation.SetErrorMessage(v)
 	return _u
 }
 
 // SetNillableErrorMessage sets the "error_message" field if the given value is not nil.
-func (_u *TranslationJobUpdateOne) SetNillableErrorMessage(v *string) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetNillableErrorMessage(v *string) *JobUpdateOne {
 	if v != nil {
 		_u.SetErrorMessage(*v)
 	}
@@ -985,19 +985,19 @@ func (_u *TranslationJobUpdateOne) SetNillableErrorMessage(v *string) *Translati
 }
 
 // ClearErrorMessage clears the value of the "error_message" field.
-func (_u *TranslationJobUpdateOne) ClearErrorMessage() *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) ClearErrorMessage() *JobUpdateOne {
 	_u.mutation.ClearErrorMessage()
 	return _u
 }
 
 // SetStartedAt sets the "started_at" field.
-func (_u *TranslationJobUpdateOne) SetStartedAt(v time.Time) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetStartedAt(v time.Time) *JobUpdateOne {
 	_u.mutation.SetStartedAt(v)
 	return _u
 }
 
 // SetNillableStartedAt sets the "started_at" field if the given value is not nil.
-func (_u *TranslationJobUpdateOne) SetNillableStartedAt(v *time.Time) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetNillableStartedAt(v *time.Time) *JobUpdateOne {
 	if v != nil {
 		_u.SetStartedAt(*v)
 	}
@@ -1005,24 +1005,24 @@ func (_u *TranslationJobUpdateOne) SetNillableStartedAt(v *time.Time) *Translati
 }
 
 // ClearStartedAt clears the value of the "started_at" field.
-func (_u *TranslationJobUpdateOne) ClearStartedAt() *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) ClearStartedAt() *JobUpdateOne {
 	_u.mutation.ClearStartedAt()
 	return _u
 }
 
 // SetProject sets the "project" edge to the Project entity.
-func (_u *TranslationJobUpdateOne) SetProject(v *Project) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetProject(v *Project) *JobUpdateOne {
 	return _u.SetProjectID(v.ID)
 }
 
 // SetCreatedByID sets the "created_by" edge to the User entity by ID.
-func (_u *TranslationJobUpdateOne) SetCreatedByID(id int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetCreatedByID(id int) *JobUpdateOne {
 	_u.mutation.SetCreatedByID(id)
 	return _u
 }
 
 // SetNillableCreatedByID sets the "created_by" edge to the User entity by ID if the given value is not nil.
-func (_u *TranslationJobUpdateOne) SetNillableCreatedByID(id *int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetNillableCreatedByID(id *int) *JobUpdateOne {
 	if id != nil {
 		_u = _u.SetCreatedByID(*id)
 	}
@@ -1030,18 +1030,18 @@ func (_u *TranslationJobUpdateOne) SetNillableCreatedByID(id *int) *TranslationJ
 }
 
 // SetCreatedBy sets the "created_by" edge to the User entity.
-func (_u *TranslationJobUpdateOne) SetCreatedBy(v *User) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) SetCreatedBy(v *User) *JobUpdateOne {
 	return _u.SetCreatedByID(v.ID)
 }
 
 // AddJobResourceIDs adds the "job_resources" edge to the JobResource entity by IDs.
-func (_u *TranslationJobUpdateOne) AddJobResourceIDs(ids ...int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) AddJobResourceIDs(ids ...int) *JobUpdateOne {
 	_u.mutation.AddJobResourceIDs(ids...)
 	return _u
 }
 
 // AddJobResources adds the "job_resources" edges to the JobResource entity.
-func (_u *TranslationJobUpdateOne) AddJobResources(v ...*JobResource) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) AddJobResources(v ...*JobResource) *JobUpdateOne {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
@@ -1050,13 +1050,13 @@ func (_u *TranslationJobUpdateOne) AddJobResources(v ...*JobResource) *Translati
 }
 
 // AddSseEventIDs adds the "sse_events" edge to the SSEEvent entity by IDs.
-func (_u *TranslationJobUpdateOne) AddSseEventIDs(ids ...int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) AddSseEventIDs(ids ...int) *JobUpdateOne {
 	_u.mutation.AddSseEventIDs(ids...)
 	return _u
 }
 
 // AddSseEvents adds the "sse_events" edges to the SSEEvent entity.
-func (_u *TranslationJobUpdateOne) AddSseEvents(v ...*SSEEvent) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) AddSseEvents(v ...*SSEEvent) *JobUpdateOne {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
@@ -1064,37 +1064,37 @@ func (_u *TranslationJobUpdateOne) AddSseEvents(v ...*SSEEvent) *TranslationJobU
 	return _u.AddSseEventIDs(ids...)
 }
 
-// Mutation returns the TranslationJobMutation object of the builder.
-func (_u *TranslationJobUpdateOne) Mutation() *TranslationJobMutation {
+// Mutation returns the JobMutation object of the builder.
+func (_u *JobUpdateOne) Mutation() *JobMutation {
 	return _u.mutation
 }
 
 // ClearProject clears the "project" edge to the Project entity.
-func (_u *TranslationJobUpdateOne) ClearProject() *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) ClearProject() *JobUpdateOne {
 	_u.mutation.ClearProject()
 	return _u
 }
 
 // ClearCreatedBy clears the "created_by" edge to the User entity.
-func (_u *TranslationJobUpdateOne) ClearCreatedBy() *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) ClearCreatedBy() *JobUpdateOne {
 	_u.mutation.ClearCreatedBy()
 	return _u
 }
 
 // ClearJobResources clears all "job_resources" edges to the JobResource entity.
-func (_u *TranslationJobUpdateOne) ClearJobResources() *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) ClearJobResources() *JobUpdateOne {
 	_u.mutation.ClearJobResources()
 	return _u
 }
 
 // RemoveJobResourceIDs removes the "job_resources" edge to JobResource entities by IDs.
-func (_u *TranslationJobUpdateOne) RemoveJobResourceIDs(ids ...int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) RemoveJobResourceIDs(ids ...int) *JobUpdateOne {
 	_u.mutation.RemoveJobResourceIDs(ids...)
 	return _u
 }
 
 // RemoveJobResources removes "job_resources" edges to JobResource entities.
-func (_u *TranslationJobUpdateOne) RemoveJobResources(v ...*JobResource) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) RemoveJobResources(v ...*JobResource) *JobUpdateOne {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
@@ -1103,19 +1103,19 @@ func (_u *TranslationJobUpdateOne) RemoveJobResources(v ...*JobResource) *Transl
 }
 
 // ClearSseEvents clears all "sse_events" edges to the SSEEvent entity.
-func (_u *TranslationJobUpdateOne) ClearSseEvents() *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) ClearSseEvents() *JobUpdateOne {
 	_u.mutation.ClearSseEvents()
 	return _u
 }
 
 // RemoveSseEventIDs removes the "sse_events" edge to SSEEvent entities by IDs.
-func (_u *TranslationJobUpdateOne) RemoveSseEventIDs(ids ...int) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) RemoveSseEventIDs(ids ...int) *JobUpdateOne {
 	_u.mutation.RemoveSseEventIDs(ids...)
 	return _u
 }
 
 // RemoveSseEvents removes "sse_events" edges to SSEEvent entities.
-func (_u *TranslationJobUpdateOne) RemoveSseEvents(v ...*SSEEvent) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) RemoveSseEvents(v ...*SSEEvent) *JobUpdateOne {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
@@ -1123,27 +1123,27 @@ func (_u *TranslationJobUpdateOne) RemoveSseEvents(v ...*SSEEvent) *TranslationJ
 	return _u.RemoveSseEventIDs(ids...)
 }
 
-// Where appends a list predicates to the TranslationJobUpdate builder.
-func (_u *TranslationJobUpdateOne) Where(ps ...predicate.TranslationJob) *TranslationJobUpdateOne {
+// Where appends a list predicates to the JobUpdate builder.
+func (_u *JobUpdateOne) Where(ps ...predicate.Job) *JobUpdateOne {
 	_u.mutation.Where(ps...)
 	return _u
 }
 
 // Select allows selecting one or more fields (columns) of the returned entity.
 // The default is selecting all fields defined in the entity schema.
-func (_u *TranslationJobUpdateOne) Select(field string, fields ...string) *TranslationJobUpdateOne {
+func (_u *JobUpdateOne) Select(field string, fields ...string) *JobUpdateOne {
 	_u.fields = append([]string{field}, fields...)
 	return _u
 }
 
-// Save executes the query and returns the updated TranslationJob entity.
-func (_u *TranslationJobUpdateOne) Save(ctx context.Context) (*TranslationJob, error) {
+// Save executes the query and returns the updated Job entity.
+func (_u *JobUpdateOne) Save(ctx context.Context) (*Job, error) {
 	_u.defaults()
 	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
-func (_u *TranslationJobUpdateOne) SaveX(ctx context.Context) *TranslationJob {
+func (_u *JobUpdateOne) SaveX(ctx context.Context) *Job {
 	node, err := _u.Save(ctx)
 	if err != nil {
 		panic(err)
@@ -1152,97 +1152,97 @@ func (_u *TranslationJobUpdateOne) SaveX(ctx context.Context) *TranslationJob {
 }
 
 // Exec executes the query on the entity.
-func (_u *TranslationJobUpdateOne) Exec(ctx context.Context) error {
+func (_u *JobUpdateOne) Exec(ctx context.Context) error {
 	_, err := _u.Save(ctx)
 	return err
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (_u *TranslationJobUpdateOne) ExecX(ctx context.Context) {
+func (_u *JobUpdateOne) ExecX(ctx context.Context) {
 	if err := _u.Exec(ctx); err != nil {
 		panic(err)
 	}
 }
 
 // defaults sets the default values of the builder before save.
-func (_u *TranslationJobUpdateOne) defaults() {
+func (_u *JobUpdateOne) defaults() {
 	if _, ok := _u.mutation.UpdatedAt(); !ok {
-		v := translationjob.UpdateDefaultUpdatedAt()
+		v := job.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
 }
 
 // check runs all checks and user-defined validators on the builder.
-func (_u *TranslationJobUpdateOne) check() error {
+func (_u *JobUpdateOne) check() error {
 	if v, ok := _u.mutation.ProjectID(); ok {
-		if err := translationjob.ProjectIDValidator(v); err != nil {
-			return &ValidationError{Name: "project_id", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.project_id": %w`, err)}
+		if err := job.ProjectIDValidator(v); err != nil {
+			return &ValidationError{Name: "project_id", err: fmt.Errorf(`ent: validator failed for field "Job.project_id": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.ExecutionPlanID(); ok {
-		if err := translationjob.ExecutionPlanIDValidator(v); err != nil {
-			return &ValidationError{Name: "execution_plan_id", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.execution_plan_id": %w`, err)}
+		if err := job.ExecutionPlanIDValidator(v); err != nil {
+			return &ValidationError{Name: "execution_plan_id", err: fmt.Errorf(`ent: validator failed for field "Job.execution_plan_id": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.ResourceCount(); ok {
-		if err := translationjob.ResourceCountValidator(v); err != nil {
-			return &ValidationError{Name: "resource_count", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.resource_count": %w`, err)}
+		if err := job.ResourceCountValidator(v); err != nil {
+			return &ValidationError{Name: "resource_count", err: fmt.Errorf(`ent: validator failed for field "Job.resource_count": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.CompletedResources(); ok {
-		if err := translationjob.CompletedResourcesValidator(v); err != nil {
-			return &ValidationError{Name: "completed_resources", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.completed_resources": %w`, err)}
+		if err := job.CompletedResourcesValidator(v); err != nil {
+			return &ValidationError{Name: "completed_resources", err: fmt.Errorf(`ent: validator failed for field "Job.completed_resources": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.FailedResources(); ok {
-		if err := translationjob.FailedResourcesValidator(v); err != nil {
-			return &ValidationError{Name: "failed_resources", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.failed_resources": %w`, err)}
+		if err := job.FailedResourcesValidator(v); err != nil {
+			return &ValidationError{Name: "failed_resources", err: fmt.Errorf(`ent: validator failed for field "Job.failed_resources": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.TotalSegments(); ok {
-		if err := translationjob.TotalSegmentsValidator(v); err != nil {
-			return &ValidationError{Name: "total_segments", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.total_segments": %w`, err)}
+		if err := job.TotalSegmentsValidator(v); err != nil {
+			return &ValidationError{Name: "total_segments", err: fmt.Errorf(`ent: validator failed for field "Job.total_segments": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.SkippedSegments(); ok {
-		if err := translationjob.SkippedSegmentsValidator(v); err != nil {
-			return &ValidationError{Name: "skipped_segments", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.skipped_segments": %w`, err)}
+		if err := job.SkippedSegmentsValidator(v); err != nil {
+			return &ValidationError{Name: "skipped_segments", err: fmt.Errorf(`ent: validator failed for field "Job.skipped_segments": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.StageTotal(); ok {
-		if err := translationjob.StageTotalValidator(v); err != nil {
-			return &ValidationError{Name: "stage_total", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.stage_total": %w`, err)}
+		if err := job.StageTotalValidator(v); err != nil {
+			return &ValidationError{Name: "stage_total", err: fmt.Errorf(`ent: validator failed for field "Job.stage_total": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.CompletedSegments(); ok {
-		if err := translationjob.CompletedSegmentsValidator(v); err != nil {
-			return &ValidationError{Name: "completed_segments", err: fmt.Errorf(`ent: validator failed for field "TranslationJob.completed_segments": %w`, err)}
+		if err := job.CompletedSegmentsValidator(v); err != nil {
+			return &ValidationError{Name: "completed_segments", err: fmt.Errorf(`ent: validator failed for field "Job.completed_segments": %w`, err)}
 		}
 	}
 	if _u.mutation.ProjectCleared() && len(_u.mutation.ProjectIDs()) > 0 {
-		return errors.New(`ent: clearing a required unique edge "TranslationJob.project"`)
+		return errors.New(`ent: clearing a required unique edge "Job.project"`)
 	}
 	return nil
 }
 
-func (_u *TranslationJobUpdateOne) sqlSave(ctx context.Context) (_node *TranslationJob, err error) {
+func (_u *JobUpdateOne) sqlSave(ctx context.Context) (_node *Job, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(translationjob.Table, translationjob.Columns, sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(job.Table, job.Columns, sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt))
 	id, ok := _u.mutation.ID()
 	if !ok {
-		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "TranslationJob.id" for update`)}
+		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "Job.id" for update`)}
 	}
 	_spec.Node.ID.Value = id
 	if fields := _u.fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
-		_spec.Node.Columns = append(_spec.Node.Columns, translationjob.FieldID)
+		_spec.Node.Columns = append(_spec.Node.Columns, job.FieldID)
 		for _, f := range fields {
-			if !translationjob.ValidColumn(f) {
+			if !job.ValidColumn(f) {
 				return nil, &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 			}
-			if f != translationjob.FieldID {
+			if f != job.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, f)
 			}
 		}
@@ -1255,83 +1255,83 @@ func (_u *TranslationJobUpdateOne) sqlSave(ctx context.Context) (_node *Translat
 		}
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
-		_spec.SetField(translationjob.FieldUpdatedAt, field.TypeTime, value)
+		_spec.SetField(job.FieldUpdatedAt, field.TypeTime, value)
 	}
 	if value, ok := _u.mutation.Status(); ok {
-		_spec.SetField(translationjob.FieldStatus, field.TypeString, value)
+		_spec.SetField(job.FieldStatus, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.TriggerType(); ok {
-		_spec.SetField(translationjob.FieldTriggerType, field.TypeString, value)
+		_spec.SetField(job.FieldTriggerType, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.ExecutionPlanID(); ok {
-		_spec.SetField(translationjob.FieldExecutionPlanID, field.TypeInt, value)
+		_spec.SetField(job.FieldExecutionPlanID, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedExecutionPlanID(); ok {
-		_spec.AddField(translationjob.FieldExecutionPlanID, field.TypeInt, value)
+		_spec.AddField(job.FieldExecutionPlanID, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.TranslationConfig(); ok {
-		_spec.SetField(translationjob.FieldTranslationConfig, field.TypeJSON, value)
+		_spec.SetField(job.FieldTranslationConfig, field.TypeJSON, value)
 	}
 	if value, ok := _u.mutation.ResourceCount(); ok {
-		_spec.SetField(translationjob.FieldResourceCount, field.TypeInt, value)
+		_spec.SetField(job.FieldResourceCount, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedResourceCount(); ok {
-		_spec.AddField(translationjob.FieldResourceCount, field.TypeInt, value)
+		_spec.AddField(job.FieldResourceCount, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.CompletedResources(); ok {
-		_spec.SetField(translationjob.FieldCompletedResources, field.TypeInt, value)
+		_spec.SetField(job.FieldCompletedResources, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedCompletedResources(); ok {
-		_spec.AddField(translationjob.FieldCompletedResources, field.TypeInt, value)
+		_spec.AddField(job.FieldCompletedResources, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.FailedResources(); ok {
-		_spec.SetField(translationjob.FieldFailedResources, field.TypeInt, value)
+		_spec.SetField(job.FieldFailedResources, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedFailedResources(); ok {
-		_spec.AddField(translationjob.FieldFailedResources, field.TypeInt, value)
+		_spec.AddField(job.FieldFailedResources, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.TotalSegments(); ok {
-		_spec.SetField(translationjob.FieldTotalSegments, field.TypeInt, value)
+		_spec.SetField(job.FieldTotalSegments, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedTotalSegments(); ok {
-		_spec.AddField(translationjob.FieldTotalSegments, field.TypeInt, value)
+		_spec.AddField(job.FieldTotalSegments, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.SkippedSegments(); ok {
-		_spec.SetField(translationjob.FieldSkippedSegments, field.TypeInt, value)
+		_spec.SetField(job.FieldSkippedSegments, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedSkippedSegments(); ok {
-		_spec.AddField(translationjob.FieldSkippedSegments, field.TypeInt, value)
+		_spec.AddField(job.FieldSkippedSegments, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.StageTotal(); ok {
-		_spec.SetField(translationjob.FieldStageTotal, field.TypeInt, value)
+		_spec.SetField(job.FieldStageTotal, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedStageTotal(); ok {
-		_spec.AddField(translationjob.FieldStageTotal, field.TypeInt, value)
+		_spec.AddField(job.FieldStageTotal, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.CompletedSegments(); ok {
-		_spec.SetField(translationjob.FieldCompletedSegments, field.TypeInt, value)
+		_spec.SetField(job.FieldCompletedSegments, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.AddedCompletedSegments(); ok {
-		_spec.AddField(translationjob.FieldCompletedSegments, field.TypeInt, value)
+		_spec.AddField(job.FieldCompletedSegments, field.TypeInt, value)
 	}
 	if value, ok := _u.mutation.ErrorMessage(); ok {
-		_spec.SetField(translationjob.FieldErrorMessage, field.TypeString, value)
+		_spec.SetField(job.FieldErrorMessage, field.TypeString, value)
 	}
 	if _u.mutation.ErrorMessageCleared() {
-		_spec.ClearField(translationjob.FieldErrorMessage, field.TypeString)
+		_spec.ClearField(job.FieldErrorMessage, field.TypeString)
 	}
 	if value, ok := _u.mutation.StartedAt(); ok {
-		_spec.SetField(translationjob.FieldStartedAt, field.TypeTime, value)
+		_spec.SetField(job.FieldStartedAt, field.TypeTime, value)
 	}
 	if _u.mutation.StartedAtCleared() {
-		_spec.ClearField(translationjob.FieldStartedAt, field.TypeTime)
+		_spec.ClearField(job.FieldStartedAt, field.TypeTime)
 	}
 	if _u.mutation.ProjectCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   translationjob.ProjectTable,
-			Columns: []string{translationjob.ProjectColumn},
+			Table:   job.ProjectTable,
+			Columns: []string{job.ProjectColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(project.FieldID, field.TypeInt),
@@ -1343,8 +1343,8 @@ func (_u *TranslationJobUpdateOne) sqlSave(ctx context.Context) (_node *Translat
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   translationjob.ProjectTable,
-			Columns: []string{translationjob.ProjectColumn},
+			Table:   job.ProjectTable,
+			Columns: []string{job.ProjectColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(project.FieldID, field.TypeInt),
@@ -1359,8 +1359,8 @@ func (_u *TranslationJobUpdateOne) sqlSave(ctx context.Context) (_node *Translat
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   translationjob.CreatedByTable,
-			Columns: []string{translationjob.CreatedByColumn},
+			Table:   job.CreatedByTable,
+			Columns: []string{job.CreatedByColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
@@ -1372,8 +1372,8 @@ func (_u *TranslationJobUpdateOne) sqlSave(ctx context.Context) (_node *Translat
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   translationjob.CreatedByTable,
-			Columns: []string{translationjob.CreatedByColumn},
+			Table:   job.CreatedByTable,
+			Columns: []string{job.CreatedByColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
@@ -1388,8 +1388,8 @@ func (_u *TranslationJobUpdateOne) sqlSave(ctx context.Context) (_node *Translat
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   translationjob.JobResourcesTable,
-			Columns: []string{translationjob.JobResourcesColumn},
+			Table:   job.JobResourcesTable,
+			Columns: []string{job.JobResourcesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
@@ -1401,8 +1401,8 @@ func (_u *TranslationJobUpdateOne) sqlSave(ctx context.Context) (_node *Translat
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   translationjob.JobResourcesTable,
-			Columns: []string{translationjob.JobResourcesColumn},
+			Table:   job.JobResourcesTable,
+			Columns: []string{job.JobResourcesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
@@ -1417,8 +1417,8 @@ func (_u *TranslationJobUpdateOne) sqlSave(ctx context.Context) (_node *Translat
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   translationjob.JobResourcesTable,
-			Columns: []string{translationjob.JobResourcesColumn},
+			Table:   job.JobResourcesTable,
+			Columns: []string{job.JobResourcesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
@@ -1433,8 +1433,8 @@ func (_u *TranslationJobUpdateOne) sqlSave(ctx context.Context) (_node *Translat
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   translationjob.SseEventsTable,
-			Columns: []string{translationjob.SseEventsColumn},
+			Table:   job.SseEventsTable,
+			Columns: []string{job.SseEventsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(sseevent.FieldID, field.TypeInt),
@@ -1446,8 +1446,8 @@ func (_u *TranslationJobUpdateOne) sqlSave(ctx context.Context) (_node *Translat
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   translationjob.SseEventsTable,
-			Columns: []string{translationjob.SseEventsColumn},
+			Table:   job.SseEventsTable,
+			Columns: []string{job.SseEventsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(sseevent.FieldID, field.TypeInt),
@@ -1462,8 +1462,8 @@ func (_u *TranslationJobUpdateOne) sqlSave(ctx context.Context) (_node *Translat
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   translationjob.SseEventsTable,
-			Columns: []string{translationjob.SseEventsColumn},
+			Table:   job.SseEventsTable,
+			Columns: []string{job.SseEventsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(sseevent.FieldID, field.TypeInt),
@@ -1474,12 +1474,12 @@ func (_u *TranslationJobUpdateOne) sqlSave(ctx context.Context) (_node *Translat
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	_node = &TranslationJob{config: _u.config}
+	_node = &Job{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues
 	if err = sqlgraph.UpdateNode(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
-			err = &NotFoundError{translationjob.Label}
+			err = &NotFoundError{job.Label}
 		} else if sqlgraph.IsConstraintError(err) {
 			err = &ConstraintError{msg: err.Error(), wrap: err}
 		}

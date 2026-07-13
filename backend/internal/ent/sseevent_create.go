@@ -10,8 +10,8 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 )
 
 // SSEEventCreate is the builder for creating a SSEEvent entity.
@@ -85,8 +85,8 @@ func (_c *SSEEventCreate) SetNillableCreatedAt(v *time.Time) *SSEEventCreate {
 	return _c
 }
 
-// SetJob sets the "job" edge to the TranslationJob entity.
-func (_c *SSEEventCreate) SetJob(v *TranslationJob) *SSEEventCreate {
+// SetJob sets the "job" edge to the Job entity.
+func (_c *SSEEventCreate) SetJob(v *Job) *SSEEventCreate {
 	return _c.SetJobID(v.ID)
 }
 
@@ -226,7 +226,7 @@ func (_c *SSEEventCreate) createSpec() (*SSEEvent, *sqlgraph.CreateSpec) {
 			Columns: []string{sseevent.JobColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

@@ -11,26 +11,26 @@ import (
 	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/event"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
 )
 
 const (
-	TranslationJobStatusPending   = "pending"
-	TranslationJobStatusRunning   = "running"
-	TranslationJobStatusCompleted = "completed"
-	TranslationJobStatusFailed    = "failed"
-	TranslationJobStatusCancelled = "cancelled"
+	JobStatusPending   = "pending"
+	JobStatusRunning   = "running"
+	JobStatusCompleted = "completed"
+	JobStatusFailed    = "failed"
+	JobStatusCancelled = "cancelled"
 
-	TranslationJobTriggerManual = "manual"
+	JobTriggerManual = "manual"
 
 	JobResourceStatusPending   = "pending"
 	JobResourceStatusRunning   = "running"
@@ -40,14 +40,14 @@ const (
 )
 
 var (
-	ErrTranslationJobNotFound     = errors.New("translation job not found")
-	ErrTranslationJobEmpty        = errors.New("translation job has no pending segments")
-	ErrJobResourceNotFound        = errors.New("job resource not found")
-	ErrTranslationJobActorMissing = errors.New("translation job actor unavailable")
+	ErrJobNotFound         = errors.New("job not found")
+	ErrJobEmpty            = errors.New("job has no pending segments")
+	ErrJobResourceNotFound = errors.New("job resource not found")
+	ErrJobActorMissing     = errors.New("job actor unavailable")
 )
 
-// TranslationJobService 翻译任务服务。
-type TranslationJobService struct {
+// JobService 翻译任务服务。
+type JobService struct {
 	client                     *ent.Client
 	projects                   *ProjectService
 	executionPlans             *ExecutionPlanService
@@ -59,8 +59,8 @@ type TranslationJobService struct {
 	broker                     *event.Broker
 }
 
-// CreateTranslationJobInput 创建翻译任务的输入参数。
-type CreateTranslationJobInput struct {
+// CreateJobInput 创建任务的输入参数。
+type CreateJobInput struct {
 	ResourceIDs      []int
 	SegmentIDs       []int
 	SegmentGroupKeys []string
@@ -69,16 +69,16 @@ type CreateTranslationJobInput struct {
 	OverwriteMode    string
 }
 
-// TranslationJobListOptions 任务列表查询选项。
-type TranslationJobListOptions struct {
+// JobListOptions 任务列表查询选项。
+type JobListOptions struct {
 	Status      string
 	TriggerType string
 	AfterID     int
 	Limit       int
 }
 
-// NewTranslationJobService 创建翻译任务服务。
-func NewTranslationJobService(
+// NewJobService 创建任务服务。
+func NewJobService(
 	client *ent.Client,
 	projects *ProjectService,
 	executionPlans *ExecutionPlanService,
@@ -88,8 +88,8 @@ func NewTranslationJobService(
 	profiles *TranslationProfileService,
 	store *filestore.LocalStore,
 	broker *event.Broker,
-) *TranslationJobService {
-	return &TranslationJobService{
+) *JobService {
+	return &JobService{
 		client:                     client,
 		projects:                   projects,
 		executionPlans:             executionPlans,
@@ -102,9 +102,9 @@ func NewTranslationJobService(
 	}
 }
 
-// TranslationJobExecution 任务执行上下文。
-type TranslationJobExecution struct {
-	Job          *ent.TranslationJob
+// JobExecution 任务执行上下文。
+type JobExecution struct {
+	Job          *ent.Job
 	Project      *ent.Project
 	JobResources []*ent.JobResource
 	ActorUserID  int
@@ -201,7 +201,7 @@ type StrategySnapshot struct {
 // --- CRUD 方法 ---
 
 // CreateManualJob 创建手动翻译任务。
-func (s *TranslationJobService) CreateManualJob(ctx context.Context, actorUserID, projectID int, input CreateTranslationJobInput) (*ent.TranslationJob, error) {
+func (s *JobService) CreateManualJob(ctx context.Context, actorUserID, projectID int, input CreateJobInput) (*ent.Job, error) {
 	// 1. 校验项目访问权限
 	projectRow, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true)
 	if err != nil {
@@ -246,7 +246,7 @@ func (s *TranslationJobService) CreateManualJob(ctx context.Context, actorUserID
 		return nil, err
 	}
 	if len(selection) == 0 {
-		return nil, ErrTranslationJobEmpty
+		return nil, ErrJobEmpty
 	}
 
 	resourceIDs := make([]int, 0, len(selection))
@@ -274,11 +274,11 @@ func (s *TranslationJobService) CreateManualJob(ctx context.Context, actorUserID
 		return nil, fmt.Errorf("unmarshal snapshot: %w", err)
 	}
 
-	created, err := tx.TranslationJob.Create().
+	created, err := tx.Job.Create().
 		SetProjectID(projectID).
 		SetCreatedByID(actorUserID).
-		SetStatus(TranslationJobStatusPending).
-		SetTriggerType(TranslationJobTriggerManual).
+		SetStatus(JobStatusPending).
+		SetTriggerType(JobTriggerManual).
 		SetExecutionPlanID(plan.ID).
 		SetTranslationConfig(snapshotMap).
 		SetResourceCount(len(selection)).
@@ -313,7 +313,7 @@ func (s *TranslationJobService) CreateManualJob(ctx context.Context, actorUserID
 // --- 快照方法 ---
 
 // validateAndSnapshot 校验执行计划中的每轮配置，并生成完整快照。
-func (s *TranslationJobService) validateAndSnapshot(
+func (s *JobService) validateAndSnapshot(
 	ctx context.Context,
 	actorUserID int,
 	projectRow *ent.Project,
@@ -434,7 +434,7 @@ func (s *TranslationJobService) validateAndSnapshot(
 }
 
 // validateBackendAccess 检查后端对项目是否可访问。
-func (s *TranslationJobService) validateBackendAccess(
+func (s *JobService) validateBackendAccess(
 	ctx context.Context,
 	projectRow *ent.Project,
 	backendID int,
@@ -465,7 +465,7 @@ func (s *TranslationJobService) validateBackendAccess(
 }
 
 // userBelongsToOrg 检查用户是否属于指定组织。
-func (s *TranslationJobService) userBelongsToOrg(ctx context.Context, userID, orgID int) bool {
+func (s *JobService) userBelongsToOrg(ctx context.Context, userID, orgID int) bool {
 	count, err := s.client.OrgMembership.Query().
 		Where(
 			orgmembership.HasOrganizationWith(organization.IDEQ(orgID)),
@@ -476,7 +476,7 @@ func (s *TranslationJobService) userBelongsToOrg(ctx context.Context, userID, or
 }
 
 // snapshotBackend 快照后端配置。
-func (s *TranslationJobService) snapshotBackend(ctx context.Context, backendID int) (*BackendSnapshot, error) {
+func (s *JobService) snapshotBackend(ctx context.Context, backendID int) (*BackendSnapshot, error) {
 	b, err := s.client.Backend.Get(ctx, backendID)
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -495,7 +495,7 @@ func (s *TranslationJobService) snapshotBackend(ctx context.Context, backendID i
 }
 
 // snapshotPromptTemplate 快照翻译提示词模板。
-func (s *TranslationJobService) snapshotPromptTemplate(ctx context.Context, templateID int) (*PromptSnapshot, error) {
+func (s *JobService) snapshotPromptTemplate(ctx context.Context, templateID int) (*PromptSnapshot, error) {
 	pt, err := s.translationPromptTemplates.GetByID(ctx, templateID)
 	if err != nil {
 		return nil, err
@@ -509,7 +509,7 @@ func (s *TranslationJobService) snapshotPromptTemplate(ctx context.Context, temp
 }
 
 // snapshotBootstrapTemplate 快照术语抽取提示词模板。
-func (s *TranslationJobService) snapshotBootstrapTemplate(ctx context.Context, templateID int) (*BootstrapPromptSnapshot, error) {
+func (s *JobService) snapshotBootstrapTemplate(ctx context.Context, templateID int) (*BootstrapPromptSnapshot, error) {
 	pt, err := s.bootstrapPromptTemplates.GetByID(ctx, templateID)
 	if err != nil {
 		return nil, err
@@ -523,7 +523,7 @@ func (s *TranslationJobService) snapshotBootstrapTemplate(ctx context.Context, t
 }
 
 // snapshotProfile 快照策略模板。
-func (s *TranslationJobService) snapshotProfile(ctx context.Context, profileID int) (*StrategySnapshot, error) {
+func (s *JobService) snapshotProfile(ctx context.Context, profileID int) (*StrategySnapshot, error) {
 	tp, err := s.profiles.GetByID(ctx, profileID)
 	if err != nil {
 		return nil, err
@@ -546,10 +546,10 @@ func (s *TranslationJobService) snapshotProfile(ctx context.Context, profileID i
 
 // --- 其他方法 ---
 
-func (s *TranslationJobService) RecoverPendingJobs(ctx context.Context) ([]int, error) {
-	jobs, err := s.client.TranslationJob.Query().
-		Where(translationjob.StatusIn(TranslationJobStatusPending, TranslationJobStatusRunning)).
-		Order(ent.Asc(translationjob.FieldID)).
+func (s *JobService) RecoverPendingJobs(ctx context.Context) ([]int, error) {
+	jobs, err := s.client.Job.Query().
+		Where(job.StatusIn(JobStatusPending, JobStatusRunning)).
+		Order(ent.Asc(job.FieldID)).
 		All(ctx)
 	if err != nil {
 		return nil, err
@@ -557,13 +557,13 @@ func (s *TranslationJobService) RecoverPendingJobs(ctx context.Context) ([]int, 
 	ids := make([]int, 0, len(jobs))
 	for _, current := range jobs {
 		ids = append(ids, current.ID)
-		if current.Status == TranslationJobStatusRunning {
-			if err := s.client.TranslationJob.UpdateOneID(current.ID).SetStatus(TranslationJobStatusPending).Exec(ctx); err != nil {
+		if current.Status == JobStatusRunning {
+			if err := s.client.Job.UpdateOneID(current.ID).SetStatus(JobStatusPending).Exec(ctx); err != nil {
 				return nil, err
 			}
 		}
 		if err := s.client.JobResource.Update().
-			Where(jobresource.HasJobWith(translationjob.IDEQ(current.ID)), jobresource.StatusEQ(JobResourceStatusRunning)).
+			Where(jobresource.HasJobWith(job.IDEQ(current.ID)), jobresource.StatusEQ(JobResourceStatusRunning)).
 			SetStatus(JobResourceStatusPending).
 			Exec(ctx); err != nil {
 			return nil, err
@@ -572,9 +572,9 @@ func (s *TranslationJobService) RecoverPendingJobs(ctx context.Context) ([]int, 
 	return ids, nil
 }
 
-func (s *TranslationJobService) LoadJobExecution(ctx context.Context, jobID int) (*TranslationJobExecution, error) {
-	current, err := s.client.TranslationJob.Query().
-		Where(translationjob.IDEQ(jobID)).
+func (s *JobService) LoadJobExecution(ctx context.Context, jobID int) (*JobExecution, error) {
+	current, err := s.client.Job.Query().
+		Where(job.IDEQ(jobID)).
 		WithProject().
 		WithCreatedBy().
 		WithJobResources(func(q *ent.JobResourceQuery) {
@@ -583,7 +583,7 @@ func (s *TranslationJobService) LoadJobExecution(ctx context.Context, jobID int)
 		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
-			return nil, ErrTranslationJobNotFound
+			return nil, ErrJobNotFound
 		}
 		return nil, err
 	}
@@ -598,13 +598,13 @@ func (s *TranslationJobService) LoadJobExecution(ctx context.Context, jobID int)
 		actorUserID = *projectRow.OwnerUserID
 	}
 	if actorUserID <= 0 {
-		return nil, ErrTranslationJobActorMissing
+		return nil, ErrJobActorMissing
 	}
-	return &TranslationJobExecution{Job: current, Project: projectRow, JobResources: current.Edges.JobResources, ActorUserID: actorUserID}, nil
+	return &JobExecution{Job: current, Project: projectRow, JobResources: current.Edges.JobResources, ActorUserID: actorUserID}, nil
 }
 
-func (s *TranslationJobService) MarkJobRunning(ctx context.Context, jobID int) error {
-	if err := s.client.TranslationJob.UpdateOneID(jobID).SetStatus(TranslationJobStatusRunning).Exec(ctx); err != nil {
+func (s *JobService) MarkJobRunning(ctx context.Context, jobID int) error {
+	if err := s.client.Job.UpdateOneID(jobID).SetStatus(JobStatusRunning).Exec(ctx); err != nil {
 		return err
 	}
 	s.publishEvent(jobID, "job_started", "info", "", "任务开始执行")
@@ -612,7 +612,7 @@ func (s *TranslationJobService) MarkJobRunning(ctx context.Context, jobID int) e
 }
 
 // publishEvent publishes a lifecycle event to the Broker. No-op if broker is nil.
-func (s *TranslationJobService) publishEvent(jobID int, eventType, level, stage, message string) {
+func (s *JobService) publishEvent(jobID int, eventType, level, stage, message string) {
 	if s.broker == nil {
 		return
 	}
@@ -627,22 +627,22 @@ func (s *TranslationJobService) publishEvent(jobID int, eventType, level, stage,
 }
 
 // MarkJobStarted 记录任务开始时间。
-func (s *TranslationJobService) MarkJobStarted(ctx context.Context, jobID int) error {
+func (s *JobService) MarkJobStarted(ctx context.Context, jobID int) error {
 	now := time.Now()
-	return s.client.TranslationJob.UpdateOneID(jobID).
+	return s.client.Job.UpdateOneID(jobID).
 		SetStartedAt(now).
 		Exec(ctx)
 }
 
 // MarkJobResourceStarted 记录资源开始时间。
-func (s *TranslationJobService) MarkJobResourceStarted(ctx context.Context, jobResourceID int) error {
+func (s *JobService) MarkJobResourceStarted(ctx context.Context, jobResourceID int) error {
 	now := time.Now()
 	return s.client.JobResource.UpdateOneID(jobResourceID).
 		SetStartedAt(now).
 		Exec(ctx)
 }
 
-func (s *TranslationJobService) MarkJobResourceRunning(ctx context.Context, jobID, jobResourceID int) error {
+func (s *JobService) MarkJobResourceRunning(ctx context.Context, jobID, jobResourceID int) error {
 	if err := s.client.JobResource.UpdateOneID(jobResourceID).
 		SetStatus(JobResourceStatusRunning).
 		ClearErrorMessage().
@@ -656,7 +656,7 @@ func (s *TranslationJobService) MarkJobResourceRunning(ctx context.Context, jobI
 	return nil
 }
 
-func (s *TranslationJobService) MarkJobResourceCompleted(ctx context.Context, jobID, jobResourceID int, outputPath string, completedSegments, skippedSegments int) error {
+func (s *JobService) MarkJobResourceCompleted(ctx context.Context, jobID, jobResourceID int, outputPath string, completedSegments, skippedSegments int) error {
 	if err := s.client.JobResource.UpdateOneID(jobResourceID).
 		SetStatus(JobResourceStatusCompleted).
 		SetOutputPath(strings.TrimSpace(outputPath)).
@@ -673,7 +673,7 @@ func (s *TranslationJobService) MarkJobResourceCompleted(ctx context.Context, jo
 	return nil
 }
 
-func (s *TranslationJobService) MarkJobResourceFailed(ctx context.Context, jobID, jobResourceID int, failure error) error {
+func (s *JobService) MarkJobResourceFailed(ctx context.Context, jobID, jobResourceID int, failure error) error {
 	message := "job resource failed"
 	if failure != nil {
 		message = failure.Error()
@@ -691,7 +691,7 @@ func (s *TranslationJobService) MarkJobResourceFailed(ctx context.Context, jobID
 	return nil
 }
 
-func (s *TranslationJobService) MarkJobResourceCancelled(ctx context.Context, jobID, jobResourceID int) error {
+func (s *JobService) MarkJobResourceCancelled(ctx context.Context, jobID, jobResourceID int) error {
 	if err := s.client.JobResource.UpdateOneID(jobResourceID).
 		SetStatus(JobResourceStatusCancelled).
 		Exec(ctx); err != nil {
@@ -704,22 +704,22 @@ func (s *TranslationJobService) MarkJobResourceCancelled(ctx context.Context, jo
 	return nil
 }
 
-func (s *TranslationJobService) CancelJob(ctx context.Context, actorUserID, jobID int) (*ent.TranslationJob, error) {
+func (s *JobService) CancelJob(ctx context.Context, actorUserID, jobID int) (*ent.Job, error) {
 	current, err := s.GetJob(ctx, actorUserID, jobID)
 	if err != nil {
 		return nil, err
 	}
 	if err := s.client.JobResource.Update().
-		Where(jobresource.HasJobWith(translationjob.IDEQ(current.ID)), jobresource.StatusIn(JobResourceStatusPending, JobResourceStatusRunning)).
+		Where(jobresource.HasJobWith(job.IDEQ(current.ID)), jobresource.StatusIn(JobResourceStatusPending, JobResourceStatusRunning)).
 		SetStatus(JobResourceStatusCancelled).
 		Exec(ctx); err != nil {
 		return nil, err
 	}
-	if err := s.client.TranslationJob.UpdateOneID(current.ID).
-		SetStatus(TranslationJobStatusCancelled).
+	if err := s.client.Job.UpdateOneID(current.ID).
+		SetStatus(JobStatusCancelled).
 		Exec(ctx); err != nil {
 		if ent.IsNotFound(err) {
-			return nil, ErrTranslationJobNotFound
+			return nil, ErrJobNotFound
 		}
 		return nil, err
 	}
@@ -727,41 +727,41 @@ func (s *TranslationJobService) CancelJob(ctx context.Context, actorUserID, jobI
 	return s.GetJob(ctx, actorUserID, current.ID)
 }
 
-func (s *TranslationJobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent.TranslationJob, error) {
+func (s *JobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent.Job, error) {
 	current, err := s.GetJob(ctx, actorUserID, jobID)
 	if err != nil {
 		return nil, err
 	}
 	if err := s.client.JobResource.Update().
-		Where(jobresource.HasJobWith(translationjob.IDEQ(current.ID)), jobresource.StatusEQ(JobResourceStatusFailed)).
+		Where(jobresource.HasJobWith(job.IDEQ(current.ID)), jobresource.StatusEQ(JobResourceStatusFailed)).
 		SetStatus(JobResourceStatusPending).
 		SetSkippedSegments(0).
 		ClearErrorMessage().
 		Exec(ctx); err != nil {
 		return nil, err
 	}
-	if err := s.client.TranslationJob.UpdateOneID(current.ID).
-		SetStatus(TranslationJobStatusPending).
+	if err := s.client.Job.UpdateOneID(current.ID).
+		SetStatus(JobStatusPending).
 		SetFailedResources(0).
 		SetSkippedSegments(0).
 		ClearErrorMessage().
 		Exec(ctx); err != nil {
 		if ent.IsNotFound(err) {
-			return nil, ErrTranslationJobNotFound
+			return nil, ErrJobNotFound
 		}
 		return nil, err
 	}
 	return s.GetJob(ctx, actorUserID, current.ID)
 }
 
-func (s *TranslationJobService) ReconcileJob(ctx context.Context, jobID int) error {
-	current, err := s.client.TranslationJob.Query().
-		Where(translationjob.IDEQ(jobID)).
+func (s *JobService) ReconcileJob(ctx context.Context, jobID int) error {
+	current, err := s.client.Job.Query().
+		Where(job.IDEQ(jobID)).
 		WithJobResources().
 		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
-			return ErrTranslationJobNotFound
+			return ErrJobNotFound
 		}
 		return err
 	}
@@ -807,7 +807,7 @@ func (s *TranslationJobService) ReconcileJob(ctx context.Context, jobID int) err
 		"cancelled", cancelled,
 		"completed_segments", completedSegments,
 	)
-	status := deriveTranslationJobStatus(len(current.Edges.JobResources), pendingCount, runningCount, completed, failed, cancelled)
+	status := deriveJobStatus(len(current.Edges.JobResources), pendingCount, runningCount, completed, failed, cancelled)
 	// [DEBUG] 诊断：记录最终决定的作业状态
 	slog.Debug("reconcile job derived status",
 		"job_id", jobID,
@@ -825,7 +825,7 @@ func (s *TranslationJobService) ReconcileJob(ctx context.Context, jobID int) err
 		}
 	}
 
-	update := s.client.TranslationJob.UpdateOneID(jobID).
+	update := s.client.Job.UpdateOneID(jobID).
 		SetStatus(status).
 		SetResourceCount(len(current.Edges.JobResources)).
 		SetCompletedResources(completed).
@@ -833,87 +833,87 @@ func (s *TranslationJobService) ReconcileJob(ctx context.Context, jobID int) err
 		SetCompletedSegments(completedSegments).
 		SetSkippedSegments(skippedSegments).
 		SetStageTotal(stageTotal)
-	if firstFailure != nil && status == TranslationJobStatusFailed {
+	if firstFailure != nil && status == JobStatusFailed {
 		update.SetErrorMessage(*firstFailure)
 	} else {
 		update.ClearErrorMessage()
 	}
 	if err := update.Exec(ctx); err != nil {
 		if ent.IsNotFound(err) {
-			return ErrTranslationJobNotFound
+			return ErrJobNotFound
 		}
 		return err
 	}
 
 	// Publish lifecycle events based on derived status.
 	switch status {
-	case TranslationJobStatusCompleted:
+	case JobStatusCompleted:
 		s.publishEvent(jobID, "job_completed", "info", "", "任务完成")
-	case TranslationJobStatusFailed:
+	case JobStatusFailed:
 		errMsg := "任务失败"
 		if firstFailure != nil {
 			errMsg = *firstFailure
 		}
 		s.publishEvent(jobID, "job_failed", "error", "", errMsg)
-	case TranslationJobStatusCancelled:
+	case JobStatusCancelled:
 		s.publishEvent(jobID, "job_cancelled", "info", "", "任务已取消")
 	}
 
 	return nil
 }
 
-func deriveTranslationJobStatus(total, pendingCount, runningCount, completed, failed, cancelled int) string {
+func deriveJobStatus(total, pendingCount, runningCount, completed, failed, cancelled int) string {
 	if total == 0 {
-		return TranslationJobStatusPending
+		return JobStatusPending
 	}
 	if runningCount > 0 {
-		return TranslationJobStatusRunning
+		return JobStatusRunning
 	}
 	if completed == total {
-		return TranslationJobStatusCompleted
+		return JobStatusCompleted
 	}
 	if cancelled == total {
-		return TranslationJobStatusCancelled
+		return JobStatusCancelled
 	}
 	if pendingCount == total {
-		return TranslationJobStatusPending
+		return JobStatusPending
 	}
 	if failed > 0 && completed+failed+cancelled == total {
-		return TranslationJobStatusFailed
+		return JobStatusFailed
 	}
 	if completed > 0 || failed > 0 || cancelled > 0 {
-		return TranslationJobStatusRunning
+		return JobStatusRunning
 	}
-	return TranslationJobStatusPending
+	return JobStatusPending
 }
 
-func (s *TranslationJobService) ListJobs(ctx context.Context, actorUserID, projectID int, opts TranslationJobListOptions) ([]*ent.TranslationJob, error) {
+func (s *JobService) ListJobs(ctx context.Context, actorUserID, projectID int, opts JobListOptions) ([]*ent.Job, error) {
 	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, false); err != nil {
 		return nil, err
 	}
 	if opts.Limit <= 0 || opts.Limit > 100 {
 		opts.Limit = 50
 	}
-	q := s.client.TranslationJob.Query().Where(translationjob.ProjectIDEQ(projectID))
+	q := s.client.Job.Query().Where(job.ProjectIDEQ(projectID))
 	if opts.AfterID > 0 {
-		q = q.Where(translationjob.IDGT(opts.AfterID))
+		q = q.Where(job.IDGT(opts.AfterID))
 	}
 	if status := strings.TrimSpace(opts.Status); status != "" {
-		q = q.Where(translationjob.StatusEQ(status))
+		q = q.Where(job.StatusEQ(status))
 	}
 	if triggerType := strings.TrimSpace(opts.TriggerType); triggerType != "" {
-		q = q.Where(translationjob.TriggerTypeEQ(triggerType))
+		q = q.Where(job.TriggerTypeEQ(triggerType))
 	}
 	return q.
 		WithCreatedBy().
-		Order(ent.Asc(translationjob.FieldID)).
+		Order(ent.Asc(job.FieldID)).
 		Limit(opts.Limit).
 		All(ctx)
 }
 
-func (s *TranslationJobService) GetJob(ctx context.Context, actorUserID, jobID int) (*ent.TranslationJob, error) {
-	row, err := s.client.TranslationJob.Query().
-		Where(translationjob.IDEQ(jobID)).
+func (s *JobService) GetJob(ctx context.Context, actorUserID, jobID int) (*ent.Job, error) {
+	row, err := s.client.Job.Query().
+		Where(job.IDEQ(jobID)).
 		WithProject().
 		WithCreatedBy().
 		WithJobResources(func(q *ent.JobResourceQuery) {
@@ -922,7 +922,7 @@ func (s *TranslationJobService) GetJob(ctx context.Context, actorUserID, jobID i
 		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
-			return nil, ErrTranslationJobNotFound
+			return nil, ErrJobNotFound
 		}
 		return nil, err
 	}
@@ -952,7 +952,7 @@ func statusFilterForOverwriteMode(mode string) []segment.Status {
 	}
 }
 
-func (s *TranslationJobService) resolveJobSelection(ctx context.Context, projectID int, input CreateTranslationJobInput, overwriteMode string) (map[int][]int, error) {
+func (s *JobService) resolveJobSelection(ctx context.Context, projectID int, input CreateJobInput, overwriteMode string) (map[int][]int, error) {
 	if len(input.SegmentGroupKeys) > 0 {
 		return s.resolveGroupKeySelection(ctx, projectID, input.SegmentGroupKeys, input.ResourceIDs, overwriteMode)
 	}
@@ -962,7 +962,7 @@ func (s *TranslationJobService) resolveJobSelection(ctx context.Context, project
 	return s.resolveResourceSelection(ctx, projectID, input.ResourceIDs, overwriteMode)
 }
 
-func (s *TranslationJobService) resolveSegmentSelection(ctx context.Context, projectID int, segmentIDs []int) (map[int][]int, error) {
+func (s *JobService) resolveSegmentSelection(ctx context.Context, projectID int, segmentIDs []int) (map[int][]int, error) {
 	rows, err := s.client.Segment.Query().
 		Where(segment.IDIn(uniqueInts(segmentIDs)...), segment.HasResourceWith(resource.ProjectIDEQ(projectID))).
 		All(ctx)
@@ -982,7 +982,7 @@ func (s *TranslationJobService) resolveSegmentSelection(ctx context.Context, pro
 	return selection, nil
 }
 
-func (s *TranslationJobService) resolveGroupKeySelection(ctx context.Context, projectID int, groupKeys []string, resourceIDs []int, overwriteMode string) (map[int][]int, error) {
+func (s *JobService) resolveGroupKeySelection(ctx context.Context, projectID int, groupKeys []string, resourceIDs []int, overwriteMode string) (map[int][]int, error) {
 	uniqueKeys := make(map[string]struct{}, len(groupKeys))
 	for _, key := range groupKeys {
 		k := strings.TrimSpace(key)
@@ -1048,7 +1048,7 @@ func (s *TranslationJobService) resolveGroupKeySelection(ctx context.Context, pr
 	return selection, nil
 }
 
-func (s *TranslationJobService) resolveResourceSelection(ctx context.Context, projectID int, resourceIDs []int, overwriteMode string) (map[int][]int, error) {
+func (s *JobService) resolveResourceSelection(ctx context.Context, projectID int, resourceIDs []int, overwriteMode string) (map[int][]int, error) {
 	resourceQuery := s.client.Resource.Query().Where(resource.ProjectIDEQ(projectID))
 	if len(resourceIDs) > 0 {
 		ids := uniqueInts(resourceIDs)
@@ -1122,8 +1122,8 @@ func uniqueInts(values []int) []int {
 	return out
 }
 
-// GetSnapshot 从 TranslationJob 的 TranslationConfig 字段解析快照。
-func GetSnapshot(job *ent.TranslationJob) (*JobExecutionSnapshot, error) {
+// GetSnapshot 从 Job 的 TranslationConfig 字段解析快照。
+func GetSnapshot(job *ent.Job) (*JobExecutionSnapshot, error) {
 	if job.TranslationConfig == nil {
 		return nil, nil
 	}
@@ -1138,24 +1138,24 @@ func GetSnapshot(job *ent.TranslationJob) (*JobExecutionSnapshot, error) {
 	return &snap, nil
 }
 
-// GetTranslationSnapshot 从翻译任务获取执行快照。
-func (s *TranslationJobService) GetTranslationSnapshot(ctx context.Context, jobID int) (*JobExecutionSnapshot, error) {
-	job, err := s.client.TranslationJob.Get(ctx, jobID)
+// GetTranslationSnapshot 从任务获取执行快照。
+func (s *JobService) GetTranslationSnapshot(ctx context.Context, jobID int) (*JobExecutionSnapshot, error) {
+	job, err := s.client.Job.Get(ctx, jobID)
 	if err != nil {
 		return nil, fmt.Errorf("load job: %w", err)
 	}
 	return GetSnapshot(job)
 }
 
-// CheckJobAccess 校验用户是否有权访问翻译任务。
-func (s *TranslationJobService) CheckJobAccess(ctx context.Context, userID, jobID int) error {
-	job, err := s.client.TranslationJob.Query().
-		Where(translationjob.IDEQ(jobID)).
+// CheckJobAccess 校验用户是否有权访问任务。
+func (s *JobService) CheckJobAccess(ctx context.Context, userID, jobID int) error {
+	job, err := s.client.Job.Query().
+		Where(job.IDEQ(jobID)).
 		WithProject().
 		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
-			return ErrTranslationJobNotFound
+			return ErrJobNotFound
 		}
 		return fmt.Errorf("load job: %w", err)
 	}

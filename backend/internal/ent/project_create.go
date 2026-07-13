@@ -12,12 +12,12 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
@@ -185,19 +185,19 @@ func (_c *ProjectCreate) AddTmEntries(v ...*TMEntry) *ProjectCreate {
 	return _c.AddTmEntryIDs(ids...)
 }
 
-// AddTranslationJobIDs adds the "translation_jobs" edge to the TranslationJob entity by IDs.
-func (_c *ProjectCreate) AddTranslationJobIDs(ids ...int) *ProjectCreate {
-	_c.mutation.AddTranslationJobIDs(ids...)
+// AddJobIDs adds the "jobs" edge to the Job entity by IDs.
+func (_c *ProjectCreate) AddJobIDs(ids ...int) *ProjectCreate {
+	_c.mutation.AddJobIDs(ids...)
 	return _c
 }
 
-// AddTranslationJobs adds the "translation_jobs" edges to the TranslationJob entity.
-func (_c *ProjectCreate) AddTranslationJobs(v ...*TranslationJob) *ProjectCreate {
+// AddJobs adds the "jobs" edges to the Job entity.
+func (_c *ProjectCreate) AddJobs(v ...*Job) *ProjectCreate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _c.AddTranslationJobIDs(ids...)
+	return _c.AddJobIDs(ids...)
 }
 
 // AddActivityLogIDs adds the "activity_logs" edge to the ActivityLog entity by IDs.
@@ -490,15 +490,15 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
-	if nodes := _c.mutation.TranslationJobsIDs(); len(nodes) > 0 {
+	if nodes := _c.mutation.JobsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   project.TranslationJobsTable,
-			Columns: []string{project.TranslationJobsColumn},
+			Table:   project.JobsTable,
+			Columns: []string{project.JobsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

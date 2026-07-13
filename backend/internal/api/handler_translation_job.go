@@ -101,7 +101,7 @@ func (s *Server) handleCreateTranslationJob(w http.ResponseWriter, r *http.Reque
 			return
 		}
 	}
-	created, err := s.translationJobSvc.CreateManualJob(r.Context(), authUser.User.ID, projectID, service.CreateTranslationJobInput{
+	created, err := s.translationJobSvc.CreateManualJob(r.Context(), authUser.User.ID, projectID, service.CreateJobInput{
 		ResourceIDs:      req.ResourceIDs,
 		SegmentIDs:       req.SegmentIDs,
 		SegmentGroupKeys: req.SegmentGroupKeys,
@@ -137,7 +137,7 @@ func (s *Server) handleListTranslationJobs(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	jobs, err := s.translationJobSvc.ListJobs(r.Context(), authUser.User.ID, projectID, service.TranslationJobListOptions{
+	jobs, err := s.translationJobSvc.ListJobs(r.Context(), authUser.User.ID, projectID, service.JobListOptions{
 		Status:      strings.TrimSpace(r.URL.Query().Get("status")),
 		TriggerType: strings.TrimSpace(r.URL.Query().Get("trigger_type")),
 		AfterID:     pageReq.AfterID,
@@ -258,7 +258,7 @@ func maskBackendOptions(node map[string]any) {
 	}
 }
 
-func toTranslationJobListResponse(row *ent.TranslationJob, queueInfo *worker.QueueInfo) translationJobResponse {
+func toTranslationJobListResponse(row *ent.Job, queueInfo *worker.QueueInfo) translationJobResponse {
 	resp := translationJobResponse{
 		ID:              row.ID,
 		ProjectID:       row.ProjectID,
@@ -277,7 +277,7 @@ func toTranslationJobListResponse(row *ent.TranslationJob, queueInfo *worker.Que
 	return resp
 }
 
-func toTranslationJobDetailResponse(row *ent.TranslationJob, queueInfo *worker.QueueInfo) translationJobResponse {
+func toTranslationJobDetailResponse(row *ent.Job, queueInfo *worker.QueueInfo) translationJobResponse {
 	resp := toTranslationJobListResponse(row, queueInfo)
 	resp.TranslationConfig = sanitizeTranslationConfig(row.TranslationConfig)
 	if len(row.Edges.JobResources) > 0 {
@@ -289,7 +289,7 @@ func toTranslationJobDetailResponse(row *ent.TranslationJob, queueInfo *worker.Q
 	return resp
 }
 
-func buildProgressResponse(row *ent.TranslationJob, queueInfo *worker.QueueInfo) translationJobProgressResponse {
+func buildProgressResponse(row *ent.Job, queueInfo *worker.QueueInfo) translationJobProgressResponse {
 	progress := translationJobProgressResponse{
 		TotalResources:     row.ResourceCount,
 		CompletedResources: row.CompletedResources,
@@ -331,9 +331,9 @@ func toTranslationJobResourceResponse(row *ent.JobResource) translationJobResour
 
 func (s *Server) writeTranslationJobServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
-	case errors.Is(err, service.ErrTranslationJobNotFound):
+	case errors.Is(err, service.ErrJobNotFound):
 		s.writeProblem(w, r, http.StatusNotFound, "not_found", "翻译任务不存在")
-	case errors.Is(err, service.ErrTranslationJobEmpty):
+	case errors.Is(err, service.ErrJobEmpty):
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "没有可翻译的待处理段落")
 	case errors.Is(err, service.ErrProjectNotFound):
 		s.writeProblem(w, r, http.StatusNotFound, "not_found", "项目不存在")

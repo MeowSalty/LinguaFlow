@@ -40,7 +40,7 @@ type Server struct {
 	translationPromptTemplateSvc *service.TranslationPromptTemplateService
 	bootstrapPromptTemplateSvc   *service.BootstrapPromptTemplateService
 	translationProfileSvc        *service.TranslationProfileService
-	translationJobSvc            *service.TranslationJobService
+	translationJobSvc            *service.JobService
 	executionPlanSvc             *service.ExecutionPlanService
 	reviewSvc                    *service.ReviewService
 	segmentSvc                   *service.SegmentService
@@ -122,7 +122,7 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 		return nil, err
 	}
 	s.jobStore = jobStore
-	s.translationJobSvc = service.NewTranslationJobService(client, s.projectSvc, s.executionPlanSvc, s.backendSvc, s.translationPromptTemplateSvc, s.bootstrapPromptTemplateSvc, s.translationProfileSvc, jobStore, s.eventBroker)
+	s.translationJobSvc = service.NewJobService(client, s.projectSvc, s.executionPlanSvc, s.backendSvc, s.translationPromptTemplateSvc, s.bootstrapPromptTemplateSvc, s.translationProfileSvc, jobStore, s.eventBroker)
 	s.executionPlanHandler = NewHandlerExecutionPlan(s.executionPlanSvc, s)
 	s.reviewSvc = service.NewReviewService(client, s.projectSvc)
 	s.segmentSvc = service.NewSegmentService(client, s.projectSvc)
@@ -138,7 +138,7 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 	syncQueue := worker.NewQueue(cfg.Workers.Sync.QueueCapacity)
 
 	// 创建 Runner
-	translationRunner := worker.NewTranslationRunner(
+	translationRunner := worker.NewJobRunner(
 		logger, client, s.translationJobSvc, jobStore,
 		translationQueue, s.eventBroker, limiterPool, s.resMutex,
 	)
