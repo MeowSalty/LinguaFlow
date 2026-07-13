@@ -26,6 +26,12 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 ) (*engine.Engine, error) {
 	var rounds []engine.Round
 	for _, rs := range snapshot.Rounds {
+		// 仅处理翻译轮次，跳过抽取轮次（抽取轮次由独立流程处理）
+		if rs.Mode != "translate" || rs.Translate == nil {
+			continue
+		}
+		t := rs.Translate
+
 		// 从快照直接构建后端实例（无需名称匹配）
 		bCfg := backend.Config{
 			Name:    rs.Backend.Name, // 仅用于日志，不用于匹配
@@ -45,44 +51,44 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 		}
 
 		// 为每轮构建独立的 Renderer（使用该轮自己的 prompt 模板）
-		roundRenderer, err := prompt.NewRenderer(rs.Prompt.Content)
+		roundRenderer, err := prompt.NewRenderer(t.Prompt.Content)
 		if err != nil {
 			return nil, fmt.Errorf("round %q build renderer: %w", rs.Name, err)
 		}
 
 		var protectRules []string
-		if rs.Strategy.Protect.Enabled {
-			protectRules = rs.Strategy.Protect.Rules
+		if t.Strategy.Protect.Enabled {
+			protectRules = t.Strategy.Protect.Rules
 		}
 		var roundPostprocess *pipeline.PostprocessConfig
-		if rs.Strategy.Postprocess.Enabled {
+		if t.Strategy.Postprocess.Enabled {
 			roundPostprocess = &pipeline.PostprocessConfig{
-				TrimSpaces: rs.Strategy.Postprocess.TrimSpaces,
+				TrimSpaces: t.Strategy.Postprocess.TrimSpaces,
 			}
 		}
 		rounds = append(rounds, engine.Round{
 			Backend:          b,
 			Name:             rs.Name,
-			BatchSize:        rs.BatchSize,
-			MaxWordsPerBatch: rs.MaxWordsPerBatch,
-			Concurrency:      rs.Concurrency,
-			FallbackShrink:   rs.FallbackShrink,
+			BatchSize:        t.BatchSize,
+			MaxWordsPerBatch: t.MaxWordsPerBatch,
+			Concurrency:      t.Concurrency,
+			FallbackShrink:   t.FallbackShrink,
 			Retry: backend.RetryPolicy{
-				MaxAttempts: rs.Retry.MaxAttempts,
-				Backoff:     time.Duration(rs.Retry.BackoffMs) * time.Millisecond,
-				Jitter:      rs.Retry.Jitter,
+				MaxAttempts: t.Retry.MaxAttempts,
+				Backoff:     time.Duration(t.Retry.BackoffMs) * time.Millisecond,
+				Jitter:      t.Retry.Jitter,
 			},
 			Renderer:          roundRenderer,
 			ResponseMode:      responseModeFromBackendOptions(rs.Backend.Options),
 			Mode:              pipeline.RoundModeTranslate,
 			ProtectRules:      protectRules,
-			RubyEnabled:       rs.Strategy.Ruby.Enabled,
-			RubyPreserveKinds: rs.Strategy.Ruby.PreserveKinds,
+			RubyEnabled:       t.Strategy.Ruby.Enabled,
+			RubyPreserveKinds: t.Strategy.Ruby.PreserveKinds,
 			Context: &pipeline.ContextConfig{
-				Enabled:  rs.Strategy.Context.Enabled,
-				Before:   rs.Strategy.Context.Before,
-				After:    rs.Strategy.Context.After,
-				MaxChars: rs.Strategy.Context.MaxChars,
+				Enabled:  t.Strategy.Context.Enabled,
+				Before:   t.Strategy.Context.Before,
+				After:    t.Strategy.Context.After,
+				MaxChars: t.Strategy.Context.MaxChars,
 			},
 			Postprocess: roundPostprocess,
 		})
@@ -111,29 +117,8 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 		rubyRetryBackends = []backend.Backend{rrBackend}
 	}
 
-	// 构建独立自举后端
-	var bootstrapBackends []backend.Backend
-	if snapshot.Bootstrap != nil && snapshot.Bootstrap.Enabled {
-		bsCfg := backend.Config{
-			Name:    snapshot.Bootstrap.Backend.Name,
-			Type:    snapshot.Bootstrap.Backend.Type,
-			Enabled: true,
-			Options: snapshot.Bootstrap.Backend.Options,
-		}
-		bsBackend, err := backend.Build(bsCfg)
-		if err != nil {
-			return nil, fmt.Errorf("bootstrap backend: %w", err)
-		}
-		if r.limiterPool != nil && snapshot.Bootstrap.Backend.RateLimitPerMinute > 0 {
-			limiter := r.limiterPool.Get(snapshot.Bootstrap.Backend.ID, snapshot.Bootstrap.Backend.RateLimitPerMinute)
-			bsBackend = backend.NewRateLimitedBackend(bsBackend, limiter)
-		}
-		bootstrapBackends = []backend.Backend{bsBackend}
-	}
-
 	return engine.NewWithOptions(engine.Options{
 		Rounds:            rounds,
-		BootstrapBackends: bootstrapBackends,
 		RubyRetryBackends: rubyRetryBackends,
 		Config:            cfg,
 		Logger:            r.logger,
@@ -150,8 +135,12 @@ func buildEngineConfig(snapshot *service.JobExecutionSnapshot) *engine.Config {
 		TMEnabled:  snapshot.TMEnabled,
 	}
 
-	if len(snapshot.Rounds) > 0 {
-		s := snapshot.Rounds[0].Strategy
+	// 从第一个翻译轮次读取策略配置
+	for _, rs := range snapshot.Rounds {
+		if rs.Mode != "translate" || rs.Translate == nil {
+			continue
+		}
+		s := rs.Translate.Strategy
 		rc := repair.Config{
 			Enabled:              s.Repair.Enabled,
 			JSONStructural:       s.Repair.JSONStructural,
@@ -182,17 +171,7 @@ func buildEngineConfig(snapshot *service.JobExecutionSnapshot) *engine.Config {
 			LengthRatioMin: s.QA.LengthRatioMin,
 			LengthRatioMax: s.QA.LengthRatioMax,
 		}
-	}
-
-	if snapshot.Bootstrap != nil {
-		cfg.Glossary.Standalone = config.StandaloneBootstrapConfig{
-			Enabled:              snapshot.Bootstrap.Enabled,
-			TemplateContent:      snapshot.Bootstrap.TemplateContent,
-			BatchSize:            snapshot.Bootstrap.BatchSize,
-			Concurrency:          snapshot.Bootstrap.Concurrency,
-			MaxTermsPer1000Chars: snapshot.Bootstrap.MaxTermsPer1000Chars,
-			MinSourceLen:         snapshot.Bootstrap.MinSourceLen,
-		}
+		break
 	}
 
 	return cfg

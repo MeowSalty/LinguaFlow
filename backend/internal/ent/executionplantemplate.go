@@ -35,8 +35,6 @@ type ExecutionPlanTemplate struct {
 	OwnerUserID *int `json:"owner_user_id,omitempty"`
 	// OwnerOrgID holds the value of the "owner_org_id" field.
 	OwnerOrgID *int `json:"owner_org_id,omitempty"`
-	// 独立自举配置
-	Bootstrap schema.ExecutionPlanBootstrapConfig `json:"bootstrap,omitempty"`
 	// 注音对齐重试配置
 	RubyRetry schema.ExecutionPlanRubyRetryConfig `json:"ruby_retry,omitempty"`
 	// 轮次配置列表，每轮引用后端+提示词+策略
@@ -85,7 +83,7 @@ func (*ExecutionPlanTemplate) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case executionplantemplate.FieldBootstrap, executionplantemplate.FieldRubyRetry, executionplantemplate.FieldRounds:
+		case executionplantemplate.FieldRubyRetry, executionplantemplate.FieldRounds:
 			values[i] = new([]byte)
 		case executionplantemplate.FieldID, executionplantemplate.FieldOwnerUserID, executionplantemplate.FieldOwnerOrgID:
 			values[i] = new(sql.NullInt64)
@@ -157,14 +155,6 @@ func (_m *ExecutionPlanTemplate) assignValues(columns []string, values []any) er
 			} else if value.Valid {
 				_m.OwnerOrgID = new(int)
 				*_m.OwnerOrgID = int(value.Int64)
-			}
-		case executionplantemplate.FieldBootstrap:
-			if value, ok := values[i].(*[]byte); !ok {
-				return fmt.Errorf("unexpected type %T for field bootstrap", values[i])
-			} else if value != nil && len(*value) > 0 {
-				if err := json.Unmarshal(*value, &_m.Bootstrap); err != nil {
-					return fmt.Errorf("unmarshal field bootstrap: %w", err)
-				}
 			}
 		case executionplantemplate.FieldRubyRetry:
 			if value, ok := values[i].(*[]byte); !ok {
@@ -252,9 +242,6 @@ func (_m *ExecutionPlanTemplate) String() string {
 		builder.WriteString("owner_org_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
-	builder.WriteString(", ")
-	builder.WriteString("bootstrap=")
-	builder.WriteString(fmt.Sprintf("%v", _m.Bootstrap))
 	builder.WriteString(", ")
 	builder.WriteString("ruby_retry=")
 	builder.WriteString(fmt.Sprintf("%v", _m.RubyRetry))

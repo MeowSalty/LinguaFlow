@@ -2776,7 +2776,6 @@ type ExecutionPlanTemplateMutation struct {
 	name              *string
 	description       *string
 	scope             *string
-	bootstrap         *schema.ExecutionPlanBootstrapConfig
 	ruby_retry        *schema.ExecutionPlanRubyRetryConfig
 	rounds            *[]schema.ExecutionRoundConfig
 	appendrounds      []schema.ExecutionRoundConfig
@@ -3166,55 +3165,6 @@ func (m *ExecutionPlanTemplateMutation) ResetOwnerOrgID() {
 	delete(m.clearedFields, executionplantemplate.FieldOwnerOrgID)
 }
 
-// SetBootstrap sets the "bootstrap" field.
-func (m *ExecutionPlanTemplateMutation) SetBootstrap(spbc schema.ExecutionPlanBootstrapConfig) {
-	m.bootstrap = &spbc
-}
-
-// Bootstrap returns the value of the "bootstrap" field in the mutation.
-func (m *ExecutionPlanTemplateMutation) Bootstrap() (r schema.ExecutionPlanBootstrapConfig, exists bool) {
-	v := m.bootstrap
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldBootstrap returns the old "bootstrap" field's value of the ExecutionPlanTemplate entity.
-// If the ExecutionPlanTemplate object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ExecutionPlanTemplateMutation) OldBootstrap(ctx context.Context) (v schema.ExecutionPlanBootstrapConfig, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldBootstrap is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldBootstrap requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldBootstrap: %w", err)
-	}
-	return oldValue.Bootstrap, nil
-}
-
-// ClearBootstrap clears the value of the "bootstrap" field.
-func (m *ExecutionPlanTemplateMutation) ClearBootstrap() {
-	m.bootstrap = nil
-	m.clearedFields[executionplantemplate.FieldBootstrap] = struct{}{}
-}
-
-// BootstrapCleared returns if the "bootstrap" field was cleared in this mutation.
-func (m *ExecutionPlanTemplateMutation) BootstrapCleared() bool {
-	_, ok := m.clearedFields[executionplantemplate.FieldBootstrap]
-	return ok
-}
-
-// ResetBootstrap resets all changes to the "bootstrap" field.
-func (m *ExecutionPlanTemplateMutation) ResetBootstrap() {
-	m.bootstrap = nil
-	delete(m.clearedFields, executionplantemplate.FieldBootstrap)
-}
-
 // SetRubyRetry sets the "ruby_retry" field.
 func (m *ExecutionPlanTemplateMutation) SetRubyRetry(sprrc schema.ExecutionPlanRubyRetryConfig) {
 	m.ruby_retry = &sprrc
@@ -3403,7 +3353,7 @@ func (m *ExecutionPlanTemplateMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ExecutionPlanTemplateMutation) Fields() []string {
-	fields := make([]string, 0, 10)
+	fields := make([]string, 0, 9)
 	if m.created_at != nil {
 		fields = append(fields, executionplantemplate.FieldCreatedAt)
 	}
@@ -3424,9 +3374,6 @@ func (m *ExecutionPlanTemplateMutation) Fields() []string {
 	}
 	if m.owner_org != nil {
 		fields = append(fields, executionplantemplate.FieldOwnerOrgID)
-	}
-	if m.bootstrap != nil {
-		fields = append(fields, executionplantemplate.FieldBootstrap)
 	}
 	if m.ruby_retry != nil {
 		fields = append(fields, executionplantemplate.FieldRubyRetry)
@@ -3456,8 +3403,6 @@ func (m *ExecutionPlanTemplateMutation) Field(name string) (ent.Value, bool) {
 		return m.OwnerUserID()
 	case executionplantemplate.FieldOwnerOrgID:
 		return m.OwnerOrgID()
-	case executionplantemplate.FieldBootstrap:
-		return m.Bootstrap()
 	case executionplantemplate.FieldRubyRetry:
 		return m.RubyRetry()
 	case executionplantemplate.FieldRounds:
@@ -3485,8 +3430,6 @@ func (m *ExecutionPlanTemplateMutation) OldField(ctx context.Context, name strin
 		return m.OldOwnerUserID(ctx)
 	case executionplantemplate.FieldOwnerOrgID:
 		return m.OldOwnerOrgID(ctx)
-	case executionplantemplate.FieldBootstrap:
-		return m.OldBootstrap(ctx)
 	case executionplantemplate.FieldRubyRetry:
 		return m.OldRubyRetry(ctx)
 	case executionplantemplate.FieldRounds:
@@ -3549,13 +3492,6 @@ func (m *ExecutionPlanTemplateMutation) SetField(name string, value ent.Value) e
 		}
 		m.SetOwnerOrgID(v)
 		return nil
-	case executionplantemplate.FieldBootstrap:
-		v, ok := value.(schema.ExecutionPlanBootstrapConfig)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetBootstrap(v)
-		return nil
 	case executionplantemplate.FieldRubyRetry:
 		v, ok := value.(schema.ExecutionPlanRubyRetryConfig)
 		if !ok {
@@ -3609,9 +3545,6 @@ func (m *ExecutionPlanTemplateMutation) ClearedFields() []string {
 	if m.FieldCleared(executionplantemplate.FieldOwnerOrgID) {
 		fields = append(fields, executionplantemplate.FieldOwnerOrgID)
 	}
-	if m.FieldCleared(executionplantemplate.FieldBootstrap) {
-		fields = append(fields, executionplantemplate.FieldBootstrap)
-	}
 	if m.FieldCleared(executionplantemplate.FieldRubyRetry) {
 		fields = append(fields, executionplantemplate.FieldRubyRetry)
 	}
@@ -3634,9 +3567,6 @@ func (m *ExecutionPlanTemplateMutation) ClearField(name string) error {
 		return nil
 	case executionplantemplate.FieldOwnerOrgID:
 		m.ClearOwnerOrgID()
-		return nil
-	case executionplantemplate.FieldBootstrap:
-		m.ClearBootstrap()
 		return nil
 	case executionplantemplate.FieldRubyRetry:
 		m.ClearRubyRetry()
@@ -3669,9 +3599,6 @@ func (m *ExecutionPlanTemplateMutation) ResetField(name string) error {
 		return nil
 	case executionplantemplate.FieldOwnerOrgID:
 		m.ResetOwnerOrgID()
-		return nil
-	case executionplantemplate.FieldBootstrap:
-		m.ResetBootstrap()
 		return nil
 	case executionplantemplate.FieldRubyRetry:
 		m.ResetRubyRetry()

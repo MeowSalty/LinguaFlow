@@ -37,31 +37,35 @@ func (s *Server) parseExecutionPlanTemplateID(w http.ResponseWriter, r *http.Req
 }
 
 // toExecutionRoundConfigAPI 将 schema 层的轮次配置转换为 API 响应类型。
+// 仅支持 translate 轮次；extract 轮次暂不映射到旧 API 类型。
 func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundConfig {
 	apiRC := ExecutionRoundConfig{
-		BackendId:        rc.BackendID,
-		Concurrency:      rc.Concurrency,
-		ProfileId:        rc.ProfileID,
-		PromptTemplateId: rc.PromptTemplateID,
+		BackendId: rc.BackendID,
 	}
 	if rc.Name != "" {
 		name := rc.Name
 		apiRC.Name = &name
 	}
-	if rc.BatchSize > 0 {
-		bs := rc.BatchSize
-		apiRC.BatchSize = &bs
+	if rc.Mode == "translate" && rc.Translate != nil {
+		t := rc.Translate
+		apiRC.Concurrency = t.Concurrency
+		apiRC.ProfileId = t.ProfileID
+		apiRC.PromptTemplateId = t.PromptTemplateID
+		if t.BatchSize > 0 {
+			bs := t.BatchSize
+			apiRC.BatchSize = &bs
+		}
+		if t.MaxWordsPerBatch > 0 {
+			mwpb := t.MaxWordsPerBatch
+			apiRC.MaxWordsPerBatch = &mwpb
+		}
+		if t.FallbackShrink > 0 {
+			fs := float32(t.FallbackShrink)
+			apiRC.FallbackShrink = &fs
+		}
+		retry := toRetryConfigAPI(t.Retry)
+		apiRC.Retry = &retry
 	}
-	if rc.MaxWordsPerBatch > 0 {
-		mwpb := rc.MaxWordsPerBatch
-		apiRC.MaxWordsPerBatch = &mwpb
-	}
-	if rc.FallbackShrink > 0 {
-		fs := float32(rc.FallbackShrink)
-		apiRC.FallbackShrink = &fs
-	}
-	retry := toRetryConfigAPI(rc.Retry)
-	apiRC.Retry = &retry
 	return apiRC
 }
 
@@ -100,11 +104,6 @@ func toExecutionPlanTemplateResponse(t *ent.ExecutionPlanTemplate) ExecutionPlan
 	if !t.UpdatedAt.IsZero() {
 		resp.UpdatedAt = &t.UpdatedAt
 	}
-	// 独立自举配置
-	if t.Bootstrap.Enabled {
-		bs := toBootstrapConfigAPI(t.Bootstrap)
-		resp.Bootstrap = &bs
-	}
 	// 注音对齐重试配置
 	if t.RubyRetry.Enabled {
 		rr := toRubyRetryConfigAPI(t.RubyRetry)
@@ -116,46 +115,6 @@ func toExecutionPlanTemplateResponse(t *ent.ExecutionPlanTemplate) ExecutionPlan
 	}
 	resp.Rounds = rounds
 	return resp
-}
-
-// toBootstrapConfigAPI 将 schema 层的独立自举配置转换为 API 响应类型。
-func toBootstrapConfigAPI(bs schema.ExecutionPlanBootstrapConfig) ExecutionPlanBootstrapConfig {
-	result := ExecutionPlanBootstrapConfig{
-		Enabled:          bs.Enabled,
-		BackendId:        bs.BackendID,
-		PromptTemplateId: bs.PromptTemplateID,
-		BatchSize:        bs.BatchSize,
-		Concurrency:      bs.Concurrency,
-	}
-	if bs.MaxTermsPer1000Chars > 0 {
-		v := float32(bs.MaxTermsPer1000Chars)
-		result.MaxTermsPer1000Chars = &v
-	}
-	if bs.MinSourceLen > 0 {
-		result.MinSourceLen = &bs.MinSourceLen
-	}
-	return result
-}
-
-// parseBootstrapConfig 将 API 请求中的独立自举配置转换为 schema 层。
-func parseBootstrapConfig(api *ExecutionPlanBootstrapConfig) schema.ExecutionPlanBootstrapConfig {
-	if api == nil {
-		return schema.ExecutionPlanBootstrapConfig{}
-	}
-	result := schema.ExecutionPlanBootstrapConfig{
-		Enabled:          api.Enabled,
-		BackendID:        api.BackendId,
-		PromptTemplateID: api.PromptTemplateId,
-		BatchSize:        api.BatchSize,
-		Concurrency:      api.Concurrency,
-	}
-	if api.MaxTermsPer1000Chars != nil {
-		result.MaxTermsPer1000Chars = float64(*api.MaxTermsPer1000Chars)
-	}
-	if api.MinSourceLen != nil {
-		result.MinSourceLen = *api.MinSourceLen
-	}
-	return result
 }
 
 // toRubyRetryConfigAPI 将 schema 层的注音对齐重试配置转换为 API 响应类型。
@@ -184,38 +143,43 @@ func parseRubyRetryConfig(api *ExecutionPlanRubyRetryConfig) schema.ExecutionPla
 }
 
 // toExecutionPlanRoundsAPI 将 API 请求中的轮次配置转换为 schema 层。
+// 旧 API 类型为扁平结构，默认映射为 translate 轮次。
 func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.ExecutionRoundConfig {
 	rounds := make([]schema.ExecutionRoundConfig, 0, len(apiRounds))
 	for _, ar := range apiRounds {
 		rc := schema.ExecutionRoundConfig{
-			BackendID:        ar.BackendId,
-			Concurrency:      ar.Concurrency,
-			ProfileID:        ar.ProfileId,
-			PromptTemplateID: ar.PromptTemplateId,
+			Mode:      "translate",
+			BackendID: ar.BackendId,
 		}
 		if ar.Name != nil {
 			rc.Name = *ar.Name
 		}
+		t := &schema.TranslateRoundConfig{
+			PromptTemplateID: ar.PromptTemplateId,
+			ProfileID:        ar.ProfileId,
+			Concurrency:      ar.Concurrency,
+		}
 		if ar.BatchSize != nil {
-			rc.BatchSize = *ar.BatchSize
+			t.BatchSize = *ar.BatchSize
 		}
 		if ar.MaxWordsPerBatch != nil {
-			rc.MaxWordsPerBatch = *ar.MaxWordsPerBatch
+			t.MaxWordsPerBatch = *ar.MaxWordsPerBatch
 		}
 		if ar.FallbackShrink != nil {
-			rc.FallbackShrink = float64(*ar.FallbackShrink)
+			t.FallbackShrink = float64(*ar.FallbackShrink)
 		}
 		if ar.Retry != nil {
 			if ar.Retry.MaxAttempts != nil {
-				rc.Retry.MaxAttempts = *ar.Retry.MaxAttempts
+				t.Retry.MaxAttempts = *ar.Retry.MaxAttempts
 			}
 			if ar.Retry.BackoffMs != nil {
-				rc.Retry.BackoffMs = *ar.Retry.BackoffMs
+				t.Retry.BackoffMs = *ar.Retry.BackoffMs
 			}
 			if ar.Retry.Jitter != nil {
-				rc.Retry.Jitter = *ar.Retry.Jitter
+				t.Retry.Jitter = *ar.Retry.Jitter
 			}
 		}
+		rc.Translate = t
 		rounds = append(rounds, rc)
 	}
 	return rounds
@@ -252,7 +216,6 @@ func (h *HandlerExecutionPlan) handleCreate(w http.ResponseWriter, r *http.Reque
 		Name:        req.Name,
 		Scope:       "user",
 		OwnerUserID: &userID,
-		Bootstrap:   parseBootstrapConfig(req.Bootstrap),
 		RubyRetry:   parseRubyRetryConfig(req.RubyRetry),
 		Rounds:      toExecutionPlanRoundsAPI(req.Rounds),
 	}
@@ -288,10 +251,6 @@ func (h *HandlerExecutionPlan) handleUpdate(w http.ResponseWriter, r *http.Reque
 	input := service.UpdateExecutionPlanTemplateInput{
 		Name:        req.Name,
 		Description: req.Description,
-	}
-	if req.Bootstrap != nil {
-		bs := parseBootstrapConfig(req.Bootstrap)
-		input.Bootstrap = &bs
 	}
 	if req.RubyRetry != nil {
 		rr := parseRubyRetryConfig(req.RubyRetry)

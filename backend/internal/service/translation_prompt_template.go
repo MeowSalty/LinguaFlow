@@ -166,14 +166,14 @@ func (s *TranslationPromptTemplateService) Delete(ctx context.Context, id int) e
 		return ErrTranslationPromptTemplateNotFound // 系统模板不可删除
 	}
 
-	// 检查是否有执行计划模板引用了该提示词模板
+	// 检查是否有执行计划模板引用了该提示词模板（通过 translate 轮次）
 	plans, err := s.client.ExecutionPlanTemplate.Query().All(ctx)
 	if err != nil {
 		return fmt.Errorf("check execution plan references: %w", err)
 	}
 	for _, plan := range plans {
 		for _, round := range plan.Rounds {
-			if round.PromptTemplateID == id {
+			if round.Mode == "translate" && round.Translate != nil && round.Translate.PromptTemplateID == id {
 				return fmt.Errorf("%w: %q is referenced by execution plan %q",
 					ErrTranslationPromptTemplateInUse, pt.Name, plan.Name)
 			}

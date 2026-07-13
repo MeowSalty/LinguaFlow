@@ -123,19 +123,7 @@ type JobExecutionSnapshot struct {
 	TMEnabled         bool                            `json:"tm_enabled,omitempty"`
 	AutoApprove       bool                            `json:"auto_approve,omitempty"`
 	OverwriteMode     string                          `json:"overwrite_mode,omitempty"`
-	Bootstrap         *ExecutionPlanBootstrapSnapshot `json:"bootstrap,omitempty"`
 	RubyRetry         *ExecutionPlanRubyRetrySnapshot `json:"ruby_retry,omitempty"`
-}
-
-// ExecutionPlanBootstrapSnapshot 独立自举快照。
-type ExecutionPlanBootstrapSnapshot struct {
-	Enabled              bool            `json:"enabled"`
-	Backend              BackendSnapshot `json:"backend"`
-	TemplateContent      string          `json:"template_content"`
-	BatchSize            int             `json:"batch_size"`
-	Concurrency          int             `json:"concurrency"`
-	MaxTermsPer1000Chars float64         `json:"max_terms_per_1000_chars"`
-	MinSourceLen         int             `json:"min_source_len"`
 }
 
 // ExecutionPlanRubyRetrySnapshot 注音对齐重试快照。
@@ -146,8 +134,15 @@ type ExecutionPlanRubyRetrySnapshot struct {
 
 // JobRoundSnapshot 单轮的完整执行快照。
 type JobRoundSnapshot struct {
-	Name             string             `json:"name"`
-	Backend          BackendSnapshot    `json:"backend"`
+	Mode      string                     `json:"mode"` // "translate" | "extract"
+	Name      string                     `json:"name"`
+	Backend   BackendSnapshot            `json:"backend"`
+	Translate *JobTranslateRoundSnapshot `json:"translate,omitempty"`
+	Extract   *JobExtractRoundSnapshot   `json:"extract,omitempty"`
+}
+
+// JobTranslateRoundSnapshot 翻译轮次快照。
+type JobTranslateRoundSnapshot struct {
 	Prompt           PromptSnapshot     `json:"prompt"`
 	Strategy         StrategySnapshot   `json:"strategy"`
 	BatchSize        int                `json:"batch_size"`
@@ -155,6 +150,15 @@ type JobRoundSnapshot struct {
 	Concurrency      int                `json:"concurrency"`
 	FallbackShrink   float64            `json:"fallback_shrink"`
 	Retry            schema.RetryConfig `json:"retry"`
+}
+
+// JobExtractRoundSnapshot 术语抽取轮次快照。
+type JobExtractRoundSnapshot struct {
+	TemplateContent      string  `json:"template_content"` // 从 BootstrapPromptTemplate.Content 快照
+	BatchSize            int     `json:"batch_size"`
+	Concurrency          int     `json:"concurrency"`
+	MaxTermsPer1000Chars float64 `json:"max_terms_per_1000_chars"`
+	MinSourceLen         int     `json:"min_source_len"`
 }
 
 // BackendSnapshot 后端配置快照。
@@ -333,72 +337,77 @@ func (s *TranslationJobService) validateAndSnapshot(
 			return nil, fmt.Errorf("rounds[%d] snapshot backend: %w", i, err)
 		}
 
-		// 快照提示词模板
-		promptSnap, err := s.snapshotPromptTemplate(ctx, round.PromptTemplateID)
-		if err != nil {
-			return nil, fmt.Errorf("rounds[%d] snapshot prompt: %w", i, err)
-		}
+		switch round.Mode {
+		case "translate":
+			if round.Translate == nil {
+				return nil, fmt.Errorf("rounds[%d] translate config is nil", i)
+			}
+			t := round.Translate
 
-		// 快照策略模板
-		strategySnap, err := s.snapshotProfile(ctx, round.ProfileID)
-		if err != nil {
-			return nil, fmt.Errorf("rounds[%d] snapshot profile: %w", i, err)
-		}
+			// 快照提示词模板
+			promptSnap, err := s.snapshotPromptTemplate(ctx, t.PromptTemplateID)
+			if err != nil {
+				return nil, fmt.Errorf("rounds[%d] snapshot prompt: %w", i, err)
+			}
 
-		// 校验翻译模板必填
-		if promptSnap.Content == "" {
-			return nil, fmt.Errorf("rounds[%d] prompt_template %q has no system_prompt_content (translation prompt is required)", i, promptSnap.TemplateName)
-		}
+			// 快照策略模板
+			strategySnap, err := s.snapshotProfile(ctx, t.ProfileID)
+			if err != nil {
+				return nil, fmt.Errorf("rounds[%d] snapshot profile: %w", i, err)
+			}
 
-		// 内联自举不再需要独立的 bootstrap 模板（inline 是翻译 prompt 的一部分）
+			// 校验翻译模板必填
+			if promptSnap.Content == "" {
+				return nil, fmt.Errorf("rounds[%d] prompt_template %q has no system_prompt_content (translation prompt is required)", i, promptSnap.TemplateName)
+			}
 
-		snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
-			Name:             round.Name,
-			Backend:          *backendSnap,
-			Prompt:           *promptSnap,
-			Strategy:         *strategySnap,
-			BatchSize:        round.BatchSize,
-			MaxWordsPerBatch: round.MaxWordsPerBatch,
-			Concurrency:      round.Concurrency,
-			FallbackShrink:   round.FallbackShrink,
-			Retry:            round.Retry,
-		})
-	}
+			snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
+				Mode:    "translate",
+				Name:    round.Name,
+				Backend: *backendSnap,
+				Translate: &JobTranslateRoundSnapshot{
+					Prompt:           *promptSnap,
+					Strategy:         *strategySnap,
+					BatchSize:        t.BatchSize,
+					MaxWordsPerBatch: t.MaxWordsPerBatch,
+					Concurrency:      t.Concurrency,
+					FallbackShrink:   t.FallbackShrink,
+					Retry:            t.Retry,
+				},
+			})
 
-	// 独立自举快照
-	if plan.Bootstrap.Enabled {
-		bs := &plan.Bootstrap
+		case "extract":
+			if round.Extract == nil {
+				return nil, fmt.Errorf("rounds[%d] extract config is nil", i)
+			}
+			e := round.Extract
 
-		// 校验自举后端可访问性
-		if err := s.validateBackendAccess(ctx, projectRow, bs.BackendID); err != nil {
-			return nil, fmt.Errorf("bootstrap backend: %w", err)
-		}
+			// 快照自举提示词模板
+			bootstrapSnap, err := s.snapshotBootstrapTemplate(ctx, e.BootstrapTemplateID)
+			if err != nil {
+				return nil, fmt.Errorf("rounds[%d] snapshot bootstrap template: %w", i, err)
+			}
 
-		// 快照自举后端
-		bootstrapBackendSnap, err := s.snapshotBackend(ctx, bs.BackendID)
-		if err != nil {
-			return nil, fmt.Errorf("bootstrap snapshot backend: %w", err)
-		}
+			if bootstrapSnap.Content == "" {
+				return nil, fmt.Errorf("rounds[%d] bootstrap_template %q has no content", i, bootstrapSnap.TemplateName)
+			}
 
-		// 快照自举提示词模板（仅用其 content）
-		bootstrapPromptSnap, err := s.snapshotBootstrapTemplate(ctx, bs.PromptTemplateID)
-		if err != nil {
-			return nil, fmt.Errorf("bootstrap snapshot prompt: %w", err)
-		}
+			snapshot.GlossaryEnabled = true
+			snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
+				Mode:    "extract",
+				Name:    round.Name,
+				Backend: *backendSnap,
+				Extract: &JobExtractRoundSnapshot{
+					TemplateContent:      bootstrapSnap.Content,
+					BatchSize:            e.BatchSize,
+					Concurrency:          e.Concurrency,
+					MaxTermsPer1000Chars: e.MaxTermsPer1000Chars,
+					MinSourceLen:         e.MinSourceLen,
+				},
+			})
 
-		if bootstrapPromptSnap.Content == "" {
-			return nil, fmt.Errorf("bootstrap prompt_template %q has no content", bootstrapPromptSnap.TemplateName)
-		}
-
-		snapshot.GlossaryEnabled = true
-		snapshot.Bootstrap = &ExecutionPlanBootstrapSnapshot{
-			Enabled:              true,
-			Backend:              *bootstrapBackendSnap,
-			TemplateContent:      bootstrapPromptSnap.Content,
-			BatchSize:            bs.BatchSize,
-			Concurrency:          bs.Concurrency,
-			MaxTermsPer1000Chars: bs.MaxTermsPer1000Chars,
-			MinSourceLen:         bs.MinSourceLen,
+		default:
+			return nil, fmt.Errorf("rounds[%d] unsupported mode: %s", i, round.Mode)
 		}
 	}
 
