@@ -565,7 +565,7 @@ const emitUpdate = (): void => {
             </span>
           </div>
           <div
-            class="grid grid-cols-1 gap-3 md:grid-cols-3"
+            class="grid grid-cols-1 gap-3 md:grid-cols-2"
             :class="{
               'opacity-50 pointer-events-none': isNoBatch(
                 round.extract.batch_size,
@@ -605,20 +605,20 @@ const emitUpdate = (): void => {
                 {{ t('executionPlanEditor.round.extractMaxWordsPerBatchHint') }}
               </div>
             </div>
-            <div>
-              <div class="mb-1 text-xs text-lf-text-subtle">
-                {{ t('executionPlanEditor.round.extractMaxTerms') }}
-              </div>
-              <NInputNumber
-                v-model:value="round.extract.max_terms_per_1000_chars"
-                :min="0"
-                :max="1000"
-                :step="0.1"
-                size="small"
-                :disabled="disabled"
-                class="w-full"
-              />
+          </div>
+          <div class="mt-3">
+            <div class="mb-1 text-xs text-lf-text-subtle">
+              {{ t('executionPlanEditor.round.extractMaxTerms') }}
             </div>
+            <NInputNumber
+              v-model:value="round.extract.max_terms_per_1000_chars"
+              :min="0"
+              :max="1000"
+              :step="0.1"
+              size="small"
+              :disabled="disabled"
+              class="w-full"
+            />
           </div>
         </div>
 
