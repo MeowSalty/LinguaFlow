@@ -19,7 +19,7 @@ func (s *Server) handleTranslationJobStream(w http.ResponseWriter, r *http.Reque
 		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	jobID, ok := s.parseIntParam(w, r, chi.URLParam(r, "translationJobId"), "translationJobId")
+	jobID, ok := s.parseIntParam(w, r, chi.URLParam(r, "jobId"), "jobId")
 	if !ok {
 		return
 	}

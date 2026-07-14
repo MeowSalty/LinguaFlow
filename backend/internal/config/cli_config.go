@@ -86,21 +86,36 @@ type CLIConfigTranslationProfile struct {
 
 // CLIConfigExecution 执行计划配置。
 type CLIConfigExecution struct {
-	Bootstrap StandaloneBootstrapConfig `yaml:"bootstrap"`
-	Rounds    []CLIConfigRound          `yaml:"rounds"`
+	Rounds []CLIConfigRound `yaml:"rounds"`
 }
 
 // CLIConfigRound 单轮执行配置。
 type CLIConfigRound struct {
-	Name             string      `yaml:"name"`
-	Backend          string      `yaml:"backend"` // 引用 backends key
-	Prompt           string      `yaml:"prompt"`  // 引用 prompt_templates key
+	Mode      string                   `yaml:"mode"` // "translate" | "extract"
+	Name      string                   `yaml:"name"`
+	Backend   string                   `yaml:"backend"` // 引用 backends key
+	Translate *CLIConfigTranslateRound `yaml:"translate,omitempty"`
+	Extract   *CLIConfigExtractRound   `yaml:"extract,omitempty"`
+}
+
+// CLIConfigTranslateRound 翻译轮次配置。
+type CLIConfigTranslateRound struct {
+	Prompt           string      `yaml:"prompt"`  // 引用 translation_prompt_templates key
 	Profile          string      `yaml:"profile"` // 引用 translation_profiles key
 	BatchSize        int         `yaml:"batch_size"`
 	MaxWordsPerBatch int         `yaml:"max_words_per_batch"`
 	Concurrency      int         `yaml:"concurrency"`
 	FallbackShrink   float64     `yaml:"fallback_shrink"`
 	Retry            RetryConfig `yaml:"retry"`
+}
+
+// CLIConfigExtractRound 术语抽取轮次配置。
+type CLIConfigExtractRound struct {
+	Template             string  `yaml:"template"` // 引用 bootstrap_prompt_templates key
+	BatchSize            int     `yaml:"batch_size"`
+	Concurrency          int     `yaml:"concurrency"`
+	MaxTermsPer1000Chars float64 `yaml:"max_terms_per_1000_chars"`
+	MinSourceLen         int     `yaml:"min_source_len"`
 }
 
 // ---------------------------------------------------------------------------
@@ -161,7 +176,45 @@ func LoadCLIConfig(path string) (*CLIConfig, error) {
 		return nil, fmt.Errorf("unsupported config version: %d", cliCfg.Version)
 	}
 
+	// ── 8. Rounds 校验 ──
+	if err := validateCLIConfigRounds(cliCfg); err != nil {
+		return nil, err
+	}
+
 	return cliCfg, nil
+}
+
+// ---------------------------------------------------------------------------
+// validateCLIConfigRounds — 执行轮次校验
+// ---------------------------------------------------------------------------
+
+// validateCLIConfigRounds 校验 execution.rounds 的合法性。
+//   - 空 Mode 规范化为 "translate"（与 pipeline/engine 层默认行为一致）。
+//   - Mode 必须为 "translate" 或 "extract"，拒绝拼写错误等无效值。
+//   - translate 轮次必须包含 Translate 子配置，extract 轮次必须包含 Extract 子配置。
+func validateCLIConfigRounds(cfg *CLIConfig) error {
+	for i := range cfg.Execution.Rounds {
+		r := &cfg.Execution.Rounds[i]
+
+		// 空 Mode 规范化为 "translate"
+		if r.Mode == "" {
+			r.Mode = "translate"
+		}
+
+		switch r.Mode {
+		case "translate":
+			if r.Translate == nil {
+				return fmt.Errorf("execution.rounds[%d]: mode=translate requires translate config", i)
+			}
+		case "extract":
+			if r.Extract == nil {
+				return fmt.Errorf("execution.rounds[%d]: mode=extract requires extract config", i)
+			}
+		default:
+			return fmt.Errorf("execution.rounds[%d]: invalid mode %q, must be \"translate\" or \"extract\"", i, r.Mode)
+		}
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -423,22 +476,18 @@ func defaultCLIConfig() *CLIConfig {
 			},
 		},
 		Execution: CLIConfigExecution{
-			Bootstrap: StandaloneBootstrapConfig{
-				Enabled:              false,
-				BatchSize:            20,
-				Concurrency:          2,
-				MaxTermsPer1000Chars: 25.0,
-				MinSourceLen:         2,
-			},
 			Rounds: []CLIConfigRound{{
-				Name:           "主翻译",
-				Backend:        "openai-default",
-				Prompt:         "default",
-				Profile:        "default",
-				BatchSize:      1,
-				Concurrency:    4,
-				FallbackShrink: 0.5,
-				Retry:          RetryConfig{MaxAttempts: 3, BackoffMs: 2000, Jitter: true},
+				Mode:    "translate",
+				Name:    "主翻译",
+				Backend: "openai-default",
+				Translate: &CLIConfigTranslateRound{
+					Prompt:         "default",
+					Profile:        "default",
+					BatchSize:      1,
+					Concurrency:    4,
+					FallbackShrink: 0.5,
+					Retry:          RetryConfig{MaxAttempts: 3, BackoffMs: 2000, Jitter: true},
+				},
 			}},
 		},
 		Glossary: CLIConfigGlossary{

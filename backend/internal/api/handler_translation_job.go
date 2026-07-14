@@ -160,7 +160,7 @@ func (s *Server) handleGetTranslationJob(w http.ResponseWriter, r *http.Request)
 		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	jobID, ok := s.parseIntParam(w, r, chi.URLParam(r, "translationJobId"), "translationJobId")
+	jobID, ok := s.parseIntParam(w, r, chi.URLParam(r, "jobId"), "jobId")
 	if !ok {
 		return
 	}
@@ -178,7 +178,7 @@ func (s *Server) handleCancelTranslationJob(w http.ResponseWriter, r *http.Reque
 		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	jobID, ok := s.parseIntParam(w, r, chi.URLParam(r, "translationJobId"), "translationJobId")
+	jobID, ok := s.parseIntParam(w, r, chi.URLParam(r, "jobId"), "jobId")
 	if !ok {
 		return
 	}
@@ -201,7 +201,7 @@ func (s *Server) handleRetryTranslationJob(w http.ResponseWriter, r *http.Reques
 		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	jobID, ok := s.parseIntParam(w, r, chi.URLParam(r, "translationJobId"), "translationJobId")
+	jobID, ok := s.parseIntParam(w, r, chi.URLParam(r, "jobId"), "jobId")
 	if !ok {
 		return
 	}

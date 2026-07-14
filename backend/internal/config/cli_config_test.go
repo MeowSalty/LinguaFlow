@@ -66,17 +66,23 @@ func TestLoadCLIConfig_Default(t *testing.T) {
 		t.Fatalf("execution rounds = %d, want 1", len(cfg.Execution.Rounds))
 	}
 	r := cfg.Execution.Rounds[0]
+	if r.Mode != "translate" {
+		t.Errorf("round mode = %q, want %q", r.Mode, "translate")
+	}
 	if r.Backend != "openai-default" {
 		t.Errorf("round backend = %q, want %q", r.Backend, "openai-default")
 	}
-	if r.Prompt != "通用提示词" {
-		t.Errorf("round prompt = %q, want %q", r.Prompt, "通用提示词")
+	if r.Translate == nil {
+		t.Fatal("expected translate config to be non-nil")
 	}
-	if r.Profile != "通用策略" {
-		t.Errorf("round profile = %q, want %q", r.Profile, "通用策略")
+	if r.Translate.Prompt != "通用提示词" {
+		t.Errorf("round translate.prompt = %q, want %q", r.Translate.Prompt, "通用提示词")
 	}
-	if r.Retry.Jitter != true {
-		t.Error("expected retry.jitter = true")
+	if r.Translate.Profile != "通用策略" {
+		t.Errorf("round translate.profile = %q, want %q", r.Translate.Profile, "通用策略")
+	}
+	if r.Translate.Retry.Jitter != true {
+		t.Error("expected translate.retry.jitter = true")
 	}
 
 	// ── 验证 Glossary 为 CLIConfigGlossary 类型 ──
@@ -85,11 +91,6 @@ func TestLoadCLIConfig_Default(t *testing.T) {
 	}
 	if !cfg.Glossary.Save {
 		t.Error("expected glossary.save = true in default config")
-	}
-
-	// ── 验证 Execution.Bootstrap 默认配置 ──
-	if cfg.Execution.Bootstrap.Enabled {
-		t.Error("expected execution.bootstrap.enabled = false in default config")
 	}
 }
 
@@ -124,15 +125,16 @@ func TestDefaultCLIConfig_Fallback(t *testing.T) {
 			defProf.Bootstrap.InlineConflictStrategy, "rewrite-local")
 	}
 
-	// ── 验证 Execution.Bootstrap 默认配置 ──
-	if cfg.Execution.Bootstrap.Enabled {
-		t.Error("expected execution.bootstrap.enabled = false in default config")
+	// ── 验证 Execution.Rounds 默认配置 ──
+	if len(cfg.Execution.Rounds) != 1 {
+		t.Fatalf("execution rounds = %d, want 1", len(cfg.Execution.Rounds))
 	}
-	if cfg.Execution.Bootstrap.BatchSize != 20 {
-		t.Errorf("execution.bootstrap.batch_size = %d, want 20", cfg.Execution.Bootstrap.BatchSize)
+	r := cfg.Execution.Rounds[0]
+	if r.Mode != "translate" {
+		t.Errorf("round mode = %q, want %q", r.Mode, "translate")
 	}
-	if cfg.Execution.Bootstrap.Concurrency != 2 {
-		t.Errorf("execution.bootstrap.concurrency = %d, want 2", cfg.Execution.Bootstrap.Concurrency)
+	if r.Translate == nil {
+		t.Fatal("expected translate config to be non-nil")
 	}
 }
 
@@ -163,19 +165,15 @@ glossary:
   path: ./terms.csv
   save: true
 execution:
-  bootstrap:
-    enabled: true
-    batch_size: 10
-    concurrency: 4
-    max_terms_per_1000_chars: 25.0
-    min_source_len: 3
   rounds:
-    - name: "首轮"
+    - mode: translate
+      name: "首轮"
       backend: gpt4
-      prompt: tech
-      profile: subtitle
-      batch_size: 5
-      concurrency: 2
+      translate:
+        prompt: tech
+        profile: subtitle
+        batch_size: 5
+        concurrency: 2
 `
 	path := writeTempFile(t, "new-format.yaml", yaml)
 
@@ -222,33 +220,27 @@ execution:
 		t.Error("expected glossary.save = true")
 	}
 
-	// ── 验证 Execution.Bootstrap ──
-	if !cfg.Execution.Bootstrap.Enabled {
-		t.Error("expected execution.bootstrap.enabled = true")
-	}
-	if cfg.Execution.Bootstrap.BatchSize != 10 {
-		t.Errorf("execution.bootstrap.batch_size = %d, want 10", cfg.Execution.Bootstrap.BatchSize)
-	}
-	if cfg.Execution.Bootstrap.Concurrency != 4 {
-		t.Errorf("execution.bootstrap.concurrency = %d, want 4", cfg.Execution.Bootstrap.Concurrency)
-	}
-	if cfg.Execution.Bootstrap.MaxTermsPer1000Chars != 25.0 {
-		t.Errorf("execution.bootstrap.max_terms_per_1000_chars = %v, want 25.0", cfg.Execution.Bootstrap.MaxTermsPer1000Chars)
-	}
-	if cfg.Execution.Bootstrap.MinSourceLen != 3 {
-		t.Errorf("execution.bootstrap.min_source_len = %d, want 3", cfg.Execution.Bootstrap.MinSourceLen)
-	}
-
 	if len(cfg.Execution.Rounds) != 1 {
 		t.Fatalf("rounds = %d, want 1", len(cfg.Execution.Rounds))
 	}
 	r := cfg.Execution.Rounds[0]
-	if r.Backend != "gpt4" || r.Prompt != "tech" || r.Profile != "subtitle" {
-		t.Errorf("round = {backend:%q, prompt:%q, profile:%q}, want {gpt4, tech, subtitle}",
-			r.Backend, r.Prompt, r.Profile)
+	if r.Mode != "translate" {
+		t.Errorf("round mode = %q, want %q", r.Mode, "translate")
 	}
-	if r.BatchSize != 5 {
-		t.Errorf("batch_size = %d, want 5", r.BatchSize)
+	if r.Backend != "gpt4" {
+		t.Errorf("round backend = %q, want %q", r.Backend, "gpt4")
+	}
+	if r.Translate == nil {
+		t.Fatal("expected translate config to be non-nil")
+	}
+	if r.Translate.Prompt != "tech" {
+		t.Errorf("translate.prompt = %q, want %q", r.Translate.Prompt, "tech")
+	}
+	if r.Translate.Profile != "subtitle" {
+		t.Errorf("translate.profile = %q, want %q", r.Translate.Profile, "subtitle")
+	}
+	if r.Translate.BatchSize != 5 {
+		t.Errorf("translate.batch_size = %d, want 5", r.Translate.BatchSize)
 	}
 }
 
@@ -381,10 +373,12 @@ translation_profiles:
   default:
 execution:
   rounds:
-    - name: "首轮"
+    - mode: translate
+      name: "首轮"
       backend: gpt4
-      prompt: tech
-      profile: default
+      translate:
+        prompt: tech
+        profile: default
 `
 	path := writeTempFile(t, "bootstrap-inline.yaml", yamlContent)
 
@@ -606,10 +600,12 @@ backends:
       api_key: ${TEST_API_KEY}
 execution:
   rounds:
-    - name: "test"
+    - mode: translate
+      name: "test"
       backend: test
-      prompt: default
-      profile: default
+      translate:
+        prompt: default
+        profile: default
 `
 	path := writeTempFile(t, "env-expand.yaml", yaml)
 
@@ -658,6 +654,141 @@ func TestReadExternalFileBytes_Security(t *testing.T) {
 		}
 		if string(data) != "hello" {
 			t.Errorf("data = %q, want %q", string(data), "hello")
+		}
+	})
+}
+
+// ---------------------------------------------------------------------------
+// Test: validateCLIConfigRounds
+// ---------------------------------------------------------------------------
+
+func TestValidateCLIConfigRounds(t *testing.T) {
+	t.Run("empty mode normalized to translate", func(t *testing.T) {
+		cfg := &CLIConfig{
+			Execution: CLIConfigExecution{
+				Rounds: []CLIConfigRound{
+					{
+						Mode:    "",
+						Name:    "test",
+						Backend: "default",
+						Translate: &CLIConfigTranslateRound{
+							Prompt:  "default",
+							Profile: "default",
+						},
+					},
+				},
+			},
+		}
+		if err := validateCLIConfigRounds(cfg); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if cfg.Execution.Rounds[0].Mode != "translate" {
+			t.Errorf("mode = %q, want %q", cfg.Execution.Rounds[0].Mode, "translate")
+		}
+	})
+
+	t.Run("invalid mode rejected", func(t *testing.T) {
+		cfg := &CLIConfig{
+			Execution: CLIConfigExecution{
+				Rounds: []CLIConfigRound{
+					{
+						Mode:    "translat",
+						Name:    "test",
+						Backend: "default",
+					},
+				},
+			},
+		}
+		err := validateCLIConfigRounds(cfg)
+		if err == nil {
+			t.Fatal("expected error for invalid mode")
+		}
+		if !strings.Contains(err.Error(), "invalid mode") {
+			t.Errorf("error = %q, want contains %q", err, "invalid mode")
+		}
+	})
+
+	t.Run("translate round without translate config rejected", func(t *testing.T) {
+		cfg := &CLIConfig{
+			Execution: CLIConfigExecution{
+				Rounds: []CLIConfigRound{
+					{
+						Mode:    "translate",
+						Name:    "test",
+						Backend: "default",
+					},
+				},
+			},
+		}
+		err := validateCLIConfigRounds(cfg)
+		if err == nil {
+			t.Fatal("expected error for missing translate config")
+		}
+		if !strings.Contains(err.Error(), "requires translate config") {
+			t.Errorf("error = %q, want contains %q", err, "requires translate config")
+		}
+	})
+
+	t.Run("extract round without extract config rejected", func(t *testing.T) {
+		cfg := &CLIConfig{
+			Execution: CLIConfigExecution{
+				Rounds: []CLIConfigRound{
+					{
+						Mode:    "extract",
+						Name:    "test",
+						Backend: "default",
+					},
+				},
+			},
+		}
+		err := validateCLIConfigRounds(cfg)
+		if err == nil {
+			t.Fatal("expected error for missing extract config")
+		}
+		if !strings.Contains(err.Error(), "requires extract config") {
+			t.Errorf("error = %q, want contains %q", err, "requires extract config")
+		}
+	})
+
+	t.Run("valid translate round passes", func(t *testing.T) {
+		cfg := &CLIConfig{
+			Execution: CLIConfigExecution{
+				Rounds: []CLIConfigRound{
+					{
+						Mode:    "translate",
+						Name:    "主翻译",
+						Backend: "default",
+						Translate: &CLIConfigTranslateRound{
+							Prompt:  "default",
+							Profile: "default",
+						},
+					},
+				},
+			},
+		}
+		if err := validateCLIConfigRounds(cfg); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	})
+
+	t.Run("valid extract round passes", func(t *testing.T) {
+		cfg := &CLIConfig{
+			Execution: CLIConfigExecution{
+				Rounds: []CLIConfigRound{
+					{
+						Mode:    "extract",
+						Name:    "术语抽取",
+						Backend: "default",
+						Extract: &CLIConfigExtractRound{
+							Template:  "default",
+							BatchSize: 20,
+						},
+					},
+				},
+			},
+		}
+		if err := validateCLIConfigRounds(cfg); err != nil {
+			t.Fatalf("unexpected error: %v", err)
 		}
 	})
 }

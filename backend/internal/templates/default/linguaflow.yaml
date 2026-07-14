@@ -74,39 +74,36 @@ translation_profiles:
 # 执行计划配置
 # ─────────────────────────────────────────────────────────────
 # rounds 定义翻译执行轮次，按顺序执行。
+# 每个轮次必须指定 mode：translate（翻译）或 extract（术语抽取）。
 execution:
-  bootstrap:
-    enabled: false
-    template: 通用术语抽取
-    batch_size: 20
-    concurrency: 2
-    max_terms_per_1000_chars: 25.0
-    min_source_len: 2
   rounds:
-    - name: 主翻译
+    - mode: translate
+      name: 主翻译
       # 引用 backends 中定义的后端名称
       backend: openai-default
-      # 引用 prompt_templates 中定义的模板名称
-      prompt: 通用提示词
-      # 引用 translation_profiles 中定义的策略名称
-      profile: 通用策略
-      # 一次合并发送的段数；1 表示逐段翻译，>1 为批量模式；0 表示不限段落数（需配合 max_words_per_batch）
-      batch_size: 1
-      # 每批字词数上限；0 表示不限制（仅使用 batch_size 约束）
-      # CJK 每字算 1，拉丁文按空格分词每词算 1
-      # max_words_per_batch: 500
-      # 并发翻译数
-      concurrency: 4
-      # 整批失败时的缩放因子（0-1）；0 表示直接降到单段重试
-      fallback_shrink: 0.5
-      # 重试配置
-      retry:
-        # 最大重试次数
-        max_attempts: 3
-        # 重试间隔（毫秒）
-        backoff_ms: 2000
-        # 是否在重试间隔上添加随机抖动，避免雷群效应
-        jitter: true
+      # 翻译模式配置
+      translate:
+        # 引用 translation_prompt_templates 中定义的模板名称
+        prompt: 通用提示词
+        # 引用 translation_profiles 中定义的策略名称
+        profile: 通用策略
+        # 一次合并发送的段数；1 表示逐段翻译，>1 为批量模式；0 表示不限段落数（需配合 max_words_per_batch）
+        batch_size: 1
+        # 每批字词数上限；0 表示不限制（仅使用 batch_size 约束）
+        # CJK 每字算 1，拉丁文按空格分词每词算 1
+        # max_words_per_batch: 500
+        # 并发翻译数
+        concurrency: 4
+        # 整批失败时的缩放因子（0-1）；0 表示直接降到单段重试
+        fallback_shrink: 0.5
+        # 重试配置
+        retry:
+          # 最大重试次数
+          max_attempts: 3
+          # 重试间隔（毫秒）
+          backoff_ms: 2000
+          # 是否在重试间隔上添加随机抖动，避免雷群效应
+          jitter: true
 
 # ─────────────────────────────────────────────────────────────
 # 术语表配置

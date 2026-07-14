@@ -103,23 +103,34 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 		return nil, fmt.Errorf("execution.rounds 不能为空")
 	}
 
-	firstRound := cliCfg.Execution.Rounds[0]
-	firstProfile := resolveProfile(cliCfg, firstRound.Profile)
+	// 找到第一个 translate 轮次作为主翻译配置
+	var firstTranslateRound *config.CLIConfigTranslateRound
+	for _, r := range cliCfg.Execution.Rounds {
+		if r.Mode == "translate" && r.Translate != nil {
+			firstTranslateRound = r.Translate
+			break
+		}
+	}
+	if firstTranslateRound == nil {
+		return nil, fmt.Errorf("execution.rounds 中必须至少有一个 translate 轮次")
+	}
 
-	firstPromptContent := resolvePromptContent(cliCfg, firstRound.Prompt)
+	firstProfile := resolveProfile(cliCfg, firstTranslateRound.Profile)
+
+	firstPromptContent := resolvePromptContent(cliCfg, firstTranslateRound.Prompt)
 	if firstPromptContent == "" {
-		return nil, fmt.Errorf("prompt_templates %q has no content (translation prompt is required)", firstRound.Prompt)
+		return nil, fmt.Errorf("prompt_templates %q has no content (translation prompt is required)", firstTranslateRound.Prompt)
 	}
 
 	cfg := &engine.Config{
 		SourceLang: cliCfg.SourceLang,
 		TargetLang: cliCfg.TargetLang,
 		TranslateDefaults: engine.TranslateDefaults{
-			BatchSize:        firstRound.BatchSize,
-			MaxWordsPerBatch: firstRound.MaxWordsPerBatch,
-			Concurrency:      firstRound.Concurrency,
-			FallbackShrink:   firstRound.FallbackShrink,
-			Retry:            toBackendRetryPolicy(firstRound.Retry),
+			BatchSize:        firstTranslateRound.BatchSize,
+			MaxWordsPerBatch: firstTranslateRound.MaxWordsPerBatch,
+			Concurrency:      firstTranslateRound.Concurrency,
+			FallbackShrink:   firstTranslateRound.FallbackShrink,
+			Retry:            toBackendRetryPolicy(firstTranslateRound.Retry),
 		},
 		Repair: repair.Config{
 			Enabled:              firstProfile.Repair.Enabled,
@@ -151,7 +162,20 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 	}
 
 	var rounds []engine.Round
-	for _, r := range cliCfg.Execution.Rounds {
+	for i, r := range cliCfg.Execution.Rounds {
+		switch r.Mode {
+		case "translate":
+			if r.Translate == nil {
+				return nil, fmt.Errorf("execution.rounds[%d]: mode=translate requires translate config", i)
+			}
+		case "extract":
+			// CLI 模式下独立自举由 engine 内部处理
+			continue
+		default:
+			return nil, fmt.Errorf("execution.rounds[%d]: unsupported mode %q", i, r.Mode)
+		}
+
+		t := r.Translate
 		bCfg, ok := cliCfg.Backends[r.Backend]
 		if !ok {
 			return nil, fmt.Errorf("backend %q not found in backends", r.Backend)
@@ -173,10 +197,10 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 		}
 
 		var roundRenderer *prompt.Renderer
-		if promptContent := resolvePromptContent(cliCfg, r.Prompt); promptContent != "" {
+		if promptContent := resolvePromptContent(cliCfg, t.Prompt); promptContent != "" {
 			roundRenderer, err = prompt.NewRenderer(promptContent)
 			if err != nil {
-				return nil, fmt.Errorf("build renderer for prompt %q: %w", r.Prompt, err)
+				return nil, fmt.Errorf("build renderer for prompt %q: %w", t.Prompt, err)
 			}
 		}
 
@@ -185,7 +209,7 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 		var roundPostprocess *pipeline.PostprocessConfig
 		var roundRuby engine.RubyConfig
 		var roundProtectRules []string
-		if profileCfg, ok := cliCfg.TranslationProfiles[r.Profile]; ok {
+		if profileCfg, ok := cliCfg.TranslationProfiles[t.Profile]; ok {
 			rc := repair.Config{
 				Enabled:              profileCfg.Repair.Enabled,
 				JSONStructural:       profileCfg.Repair.JSONStructural,
@@ -221,11 +245,11 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 		rounds = append(rounds, engine.Round{
 			Name:              r.Name,
 			Backend:           b,
-			BatchSize:         r.BatchSize,
-			MaxWordsPerBatch:  r.MaxWordsPerBatch,
-			Concurrency:       r.Concurrency,
-			FallbackShrink:    r.FallbackShrink,
-			Retry:             toBackendRetryPolicy(r.Retry),
+			BatchSize:         t.BatchSize,
+			MaxWordsPerBatch:  t.MaxWordsPerBatch,
+			Concurrency:       t.Concurrency,
+			FallbackShrink:    t.FallbackShrink,
+			Retry:             toBackendRetryPolicy(t.Retry),
 			Renderer:          roundRenderer,
 			Repair:            roundRepair,
 			ResponseMode:      responseModeFromOptions(bCfg.Options),

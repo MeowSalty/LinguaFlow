@@ -230,15 +230,15 @@ func (s *Server) CreateTranslationJob(w http.ResponseWriter, r *http.Request, _ 
 	s.requireAuth(http.HandlerFunc(s.handleCreateTranslationJob)).ServeHTTP(w, r)
 }
 
-func (s *Server) GetTranslationJob(w http.ResponseWriter, r *http.Request, _ TranslationJobId) {
+func (s *Server) GetTranslationJob(w http.ResponseWriter, r *http.Request, _ JobId) {
 	s.requireAuth(http.HandlerFunc(s.handleGetTranslationJob)).ServeHTTP(w, r)
 }
 
-func (s *Server) CancelTranslationJob(w http.ResponseWriter, r *http.Request, _ TranslationJobId) {
+func (s *Server) CancelTranslationJob(w http.ResponseWriter, r *http.Request, _ JobId) {
 	s.requireAuth(http.HandlerFunc(s.handleCancelTranslationJob)).ServeHTTP(w, r)
 }
 
-func (s *Server) RetryTranslationJob(w http.ResponseWriter, r *http.Request, _ TranslationJobId) {
+func (s *Server) RetryTranslationJob(w http.ResponseWriter, r *http.Request, _ JobId) {
 	s.requireAuth(http.HandlerFunc(s.handleRetryTranslationJob)).ServeHTTP(w, r)
 }
 
@@ -284,15 +284,15 @@ func (s *Server) CreatePromptTemplate(w http.ResponseWriter, r *http.Request) {
 	s.requireAuth(http.HandlerFunc(s.handleCreatePromptTemplate)).ServeHTTP(w, r)
 }
 
-func (s *Server) GetPromptTemplate(w http.ResponseWriter, r *http.Request, _ PromptTemplateId) {
+func (s *Server) GetPromptTemplate(w http.ResponseWriter, r *http.Request, _ TranslationPromptTemplateId) {
 	s.requireAuth(http.HandlerFunc(s.handleGetPromptTemplate)).ServeHTTP(w, r)
 }
 
-func (s *Server) UpdatePromptTemplate(w http.ResponseWriter, r *http.Request, _ PromptTemplateId) {
+func (s *Server) UpdatePromptTemplate(w http.ResponseWriter, r *http.Request, _ TranslationPromptTemplateId) {
 	s.requireAuth(http.HandlerFunc(s.handleUpdatePromptTemplate)).ServeHTTP(w, r)
 }
 
-func (s *Server) DeletePromptTemplate(w http.ResponseWriter, r *http.Request, _ PromptTemplateId) {
+func (s *Server) DeletePromptTemplate(w http.ResponseWriter, r *http.Request, _ TranslationPromptTemplateId) {
 	s.requireAuth(http.HandlerFunc(s.handleDeletePromptTemplate)).ServeHTTP(w, r)
 }
 
