@@ -46,38 +46,29 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 		t := rc.Translate
 		apiRC.Concurrency = t.Concurrency
 		translateCfg := TranslateRoundConfig{}
-		if t.PromptTemplateID > 0 {
-			translateCfg.PromptTemplateId = &t.PromptTemplateID
-		}
-		if t.ProfileID > 0 {
-			translateCfg.ProfileId = &t.ProfileID
-		}
-		if t.BatchSize > 0 {
-			bs := t.BatchSize
-			translateCfg.BatchSize = &bs
-		}
-		if t.MaxWordsPerBatch > 0 {
-			mwpb := t.MaxWordsPerBatch
-			translateCfg.MaxWordsPerBatch = &mwpb
-		}
+		translateCfg.PromptTemplateId = &t.PromptTemplateID
+		translateCfg.ProfileId = &t.ProfileID
+		translateCfg.BatchSize = &t.BatchSize
+		translateCfg.MaxWordsPerBatch = &t.MaxWordsPerBatch
 		if t.FallbackShrink > 0 {
 			fs := float32(t.FallbackShrink)
 			translateCfg.FallbackShrink = &fs
 		}
-		retry := toRetryConfigAPI(t.Retry)
-		translateCfg.Retry = &retry
+		if t.Retry.MaxAttempts > 0 || t.Retry.BackoffMs > 0 || t.Retry.Jitter {
+			retry := toRetryConfigAPI(t.Retry)
+			translateCfg.Retry = &retry
+		}
 		apiRC.Translate = &translateCfg
 	}
 	if rc.Mode == "extract" && rc.Extract != nil {
 		e := rc.Extract
 		apiRC.Concurrency = e.Concurrency
 		extractCfg := ExtractRoundConfig{}
-		if e.BootstrapTemplateID > 0 {
-			extractCfg.TemplateId = &e.BootstrapTemplateID
-		}
-		if e.BatchSize > 0 {
-			bs := e.BatchSize
-			extractCfg.BatchSize = &bs
+		extractCfg.TemplateId = &e.BootstrapTemplateID
+		extractCfg.BatchSize = &e.BatchSize
+		if e.MaxWordsPerBatch > 0 {
+			mwpb := e.MaxWordsPerBatch
+			extractCfg.MaxWordsPerBatch = &mwpb
 		}
 		if e.MaxTermsPer1000Chars > 0 {
 			mtpc := float32(e.MaxTermsPer1000Chars)
@@ -87,8 +78,10 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 			msl := e.MinSourceLen
 			extractCfg.MinSourceLen = &msl
 		}
-		retry := toRetryConfigAPI(e.Retry)
-		extractCfg.Retry = &retry
+		if e.Retry.MaxAttempts > 0 || e.Retry.BackoffMs > 0 || e.Retry.Jitter {
+			retry := toRetryConfigAPI(e.Retry)
+			extractCfg.Retry = &retry
+		}
 		apiRC.Extract = &extractCfg
 	}
 	return apiRC
@@ -218,6 +211,9 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 			}
 			if e.BatchSize != nil {
 				extractCfg.BatchSize = *e.BatchSize
+			}
+			if e.MaxWordsPerBatch != nil {
+				extractCfg.MaxWordsPerBatch = *e.MaxWordsPerBatch
 			}
 			if e.MaxTermsPer1000Chars != nil {
 				extractCfg.MaxTermsPer1000Chars = float64(*e.MaxTermsPer1000Chars)
