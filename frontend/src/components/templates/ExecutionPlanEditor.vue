@@ -41,6 +41,7 @@ const DEFAULT_TRANSLATE: TranslateRoundConfig = {
 const DEFAULT_EXTRACT: ExtractRoundConfig = {
   template_id: 0,
   batch_size: 20,
+  max_words_per_batch: 0,
   max_terms_per_1000_chars: 25.0,
   min_source_len: 2,
   retry: { ...DEFAULT_RETRY },
@@ -85,6 +86,7 @@ function mergeExtract(source?: Partial<ExtractRoundConfig>): ExtractRoundConfig 
   return {
     template_id: source.template_id ?? DEFAULT_EXTRACT.template_id,
     batch_size: source.batch_size ?? DEFAULT_EXTRACT.batch_size,
+    max_words_per_batch: source.max_words_per_batch ?? DEFAULT_EXTRACT.max_words_per_batch,
     max_terms_per_1000_chars:
       source.max_terms_per_1000_chars ?? DEFAULT_EXTRACT.max_terms_per_1000_chars,
     min_source_len: source.min_source_len ?? DEFAULT_EXTRACT.min_source_len,
@@ -105,6 +107,22 @@ function mergeRound(source?: Partial<ExecutionRoundConfig>): RoundModel {
     concurrency: source.concurrency ?? DEFAULT_ROUND.concurrency,
     translate: mode === 'translate' ? mergeTranslate(source.translate) : undefined,
     extract: mode === 'extract' ? mergeExtract(source.extract) : undefined,
+  }
+}
+
+function isNoBatch(batchSize?: number, maxWords?: number): boolean {
+  return (!batchSize || batchSize === 0) && (!maxWords || maxWords === 0)
+}
+
+function setNoBatch(
+  target: { batch_size?: number; max_words_per_batch?: number },
+  noBatch: boolean,
+): void {
+  if (noBatch) {
+    target.batch_size = 0
+    if ('max_words_per_batch' in target) target.max_words_per_batch = 0
+  } else {
+    target.batch_size = target.batch_size === 0 ? 20 : target.batch_size
   }
 }
 
@@ -519,36 +537,6 @@ const emitUpdate = (): void => {
               clearable
             />
           </div>
-        </div>
-
-        <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div>
-            <div class="mb-1 text-xs text-lf-text-subtle">
-              {{ t('executionPlanEditor.round.extractBatchSize') }}
-            </div>
-            <NInputNumber
-              v-model:value="round.extract.batch_size"
-              :min="1"
-              :max="10000"
-              size="small"
-              :disabled="disabled"
-              class="w-full"
-            />
-          </div>
-          <div>
-            <div class="mb-1 text-xs text-lf-text-subtle">
-              {{ t('executionPlanEditor.round.extractMaxTerms') }}
-            </div>
-            <NInputNumber
-              v-model:value="round.extract.max_terms_per_1000_chars"
-              :min="0"
-              :max="1000"
-              :step="0.1"
-              size="small"
-              :disabled="disabled"
-              class="w-full"
-            />
-          </div>
           <div>
             <div class="mb-1 text-xs text-lf-text-subtle">
               {{ t('executionPlanEditor.round.extractMinSourceLen') }}
@@ -561,6 +549,76 @@ const emitUpdate = (): void => {
               :disabled="disabled"
               class="w-full"
             />
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <div class="mb-2 flex items-center gap-2">
+            <NSwitch
+              :value="isNoBatch(round.extract.batch_size, round.extract.max_words_per_batch)"
+              size="small"
+              :disabled="disabled"
+              @update:value="(v: boolean) => setNoBatch(round.extract!, v)"
+            />
+            <span class="text-xs text-lf-text-subtle">
+              {{ t('executionPlanEditor.round.noBatch') }}
+            </span>
+          </div>
+          <div
+            class="grid grid-cols-1 gap-3 md:grid-cols-3"
+            :class="{
+              'opacity-50 pointer-events-none': isNoBatch(
+                round.extract.batch_size,
+                round.extract.max_words_per_batch,
+              ),
+            }"
+          >
+            <div>
+              <div class="mb-1 text-xs text-lf-text-subtle">
+                {{ t('executionPlanEditor.round.extractBatchSize') }}
+              </div>
+              <NInputNumber
+                v-model:value="round.extract.batch_size"
+                :min="0"
+                :max="10000"
+                size="small"
+                :disabled="disabled"
+                class="w-full"
+              />
+              <div class="mt-1 text-[11px] text-lf-text-subtle">
+                {{ t('executionPlanEditor.round.extractBatchSizeHint') }}
+              </div>
+            </div>
+            <div>
+              <div class="mb-1 text-xs text-lf-text-subtle">
+                {{ t('executionPlanEditor.round.extractMaxWordsPerBatch') }}
+              </div>
+              <NInputNumber
+                v-model:value="round.extract.max_words_per_batch"
+                :min="0"
+                :max="100000"
+                size="small"
+                :disabled="disabled"
+                class="w-full"
+              />
+              <div class="mt-1 text-[11px] text-lf-text-subtle">
+                {{ t('executionPlanEditor.round.extractMaxWordsPerBatchHint') }}
+              </div>
+            </div>
+            <div>
+              <div class="mb-1 text-xs text-lf-text-subtle">
+                {{ t('executionPlanEditor.round.extractMaxTerms') }}
+              </div>
+              <NInputNumber
+                v-model:value="round.extract.max_terms_per_1000_chars"
+                :min="0"
+                :max="1000"
+                :step="0.1"
+                size="small"
+                :disabled="disabled"
+                class="w-full"
+              />
+            </div>
           </div>
         </div>
 

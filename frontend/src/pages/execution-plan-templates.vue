@@ -218,6 +218,7 @@ const buildPayload = (): CreateRequest => {
           extract: {
             template_id: round.extract.template_id,
             batch_size: round.extract.batch_size,
+            max_words_per_batch: round.extract.max_words_per_batch,
             max_terms_per_1000_chars: round.extract.max_terms_per_1000_chars,
             min_source_len: round.extract.min_source_len,
           },
