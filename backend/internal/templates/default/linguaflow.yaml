@@ -49,7 +49,7 @@ backends:
 translation_prompt_templates:
   通用提示词:
     # 引用 prompts/ 目录下的提示词模板文件（Go template 格式）
-    file: prompts/default.tmpl
+    file: prompts/default_translation.tmpl
 
 # ─────────────────────────────────────────────────────────────
 # 术语抽取提示词模板配置
@@ -58,7 +58,7 @@ translation_prompt_templates:
 bootstrap_prompt_templates:
   通用术语抽取:
     # 引用 prompts/ 目录下的 bootstrap 模板文件（Go template 格式）
-    file: prompts/bootstrap_system.tmpl
+    file: prompts/default_bootstrap.tmpl
 
 # ─────────────────────────────────────────────────────────────
 # 翻译策略配置
