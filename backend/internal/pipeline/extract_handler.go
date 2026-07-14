@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"math"
 	"strconv"
@@ -31,11 +32,21 @@ type ExtractHandler struct {
 
 	Logger   *slog.Logger
 	Reporter progress.Reporter
+
+	totalBatches  atomic.Int64
+	failedBatches atomic.Int64
 }
 
 func (h *ExtractHandler) ModeName() string { return "extract" }
 
-func (h *ExtractHandler) Finalize(_ context.Context, _ *Document, _ []int) error { return nil }
+func (h *ExtractHandler) Finalize(_ context.Context, _ *Document, _ []int) error {
+	total := h.totalBatches.Load()
+	failed := h.failedBatches.Load()
+	if total > 0 && failed == total {
+		return fmt.Errorf("extract: all %d batch(es) failed", total)
+	}
+	return nil
+}
 
 func (h *ExtractHandler) logger() *slog.Logger {
 	if h.Logger == nil {
@@ -131,6 +142,7 @@ func (h *ExtractHandler) BuildBatches(_ context.Context, doc *Document) ([][]int
 // 从索引取文本 → collectExisting → render → call LLM → parse → glossary.Add。
 // 失败时返回空 batchResult（尽力而为，不阻断）。
 func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []int, _ int, logger *slog.Logger) batchResult {
+	h.totalBatches.Add(1)
 	rep := h.reporter()
 	start := time.Now()
 
@@ -165,7 +177,10 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			ErrorType:    "render_error",
 			ErrorMessage: err.Error(),
 		})
-		rep.SegmentDone()
+		for range idxs {
+			rep.SegmentDone()
+		}
+		h.failedBatches.Add(1)
 		return batchResult{}
 	}
 
@@ -247,7 +262,9 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			AddedGlossary: toBootstrapEntries(res.Added),
 		})
 
-		rep.SegmentDone()
+		for range idxs {
+			rep.SegmentDone()
+		}
 		return batchResult{}
 	}
 
@@ -263,7 +280,10 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 		ErrorType:    "backend_error",
 		ErrorMessage: lastErr.Error(),
 	})
-	rep.SegmentDone()
+	for range idxs {
+		rep.SegmentDone()
+	}
+	h.failedBatches.Add(1)
 	return batchResult{}
 }
 
