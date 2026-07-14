@@ -105,7 +105,7 @@ const templateNavOptions = computed<DropdownOption[]>(() => [
   {
     label: t('nav.bootstrapPromptTemplates'),
     key: '/bootstrap-prompt-templates',
-    icon: () => h(IconifyIcon, { icon: 'carbon:text-extract', class: 'text-base' }),
+    icon: () => h(IconifyIcon, { icon: 'carbon:text-mining', class: 'text-base' }),
   },
   {
     label: t('nav.translationProfiles'),
@@ -188,7 +188,7 @@ const onSelectLocale = (key: string | number): void => {
           <RouterLink
             to="/prompt-templates"
             class="flex items-center gap-1.5 text-lf-text-muted no-underline transition-colors hover:text-brand-500"
-            :class="{ '!text-brand-500 font-semibold': isTemplateRoute }"
+            :class="{ 'text-brand-500! font-semibold': isTemplateRoute }"
           >
             <IconifyIcon icon="carbon:settings" class="text-base" />
             {{ t('nav.translationConfig') }}
@@ -214,7 +214,7 @@ const onSelectLocale = (key: string | number): void => {
           v-if="isAdmin"
           to="/admin"
           class="flex items-center gap-1.5 text-lf-text-muted no-underline transition-colors hover:text-brand-500"
-          :class="{ '!text-brand-500 font-semibold': isAdminRoute }"
+          :class="{ 'text-brand-500! font-semibold': isAdminRoute }"
         >
           <IconifyIcon icon="carbon:security" class="text-base" />
           {{ t('nav.admin') }}
