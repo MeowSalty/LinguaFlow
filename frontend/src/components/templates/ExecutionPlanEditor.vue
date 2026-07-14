@@ -43,6 +43,7 @@ const DEFAULT_EXTRACT: ExtractRoundConfig = {
   batch_size: 20,
   max_terms_per_1000_chars: 25.0,
   min_source_len: 2,
+  retry: { ...DEFAULT_RETRY },
 }
 
 const DEFAULT_ROUND: RoundModel = {
@@ -87,6 +88,11 @@ function mergeExtract(source?: Partial<ExtractRoundConfig>): ExtractRoundConfig 
     max_terms_per_1000_chars:
       source.max_terms_per_1000_chars ?? DEFAULT_EXTRACT.max_terms_per_1000_chars,
     min_source_len: source.min_source_len ?? DEFAULT_EXTRACT.min_source_len,
+    retry: {
+      max_attempts: source.retry?.max_attempts ?? DEFAULT_RETRY.max_attempts,
+      backoff_ms: source.retry?.backoff_ms ?? DEFAULT_RETRY.backoff_ms,
+      jitter: source.retry?.jitter ?? DEFAULT_RETRY.jitter,
+    },
   }
 }
 
@@ -557,6 +563,53 @@ const emitUpdate = (): void => {
             />
           </div>
         </div>
+
+        <!-- 高级配置（可折叠） -->
+        <NCollapse class="mt-3">
+          <NCollapseItem :title="t('executionPlanEditor.round.advancedConfig')">
+            <NGrid :cols="2" :x-gap="12" :y-gap="10">
+              <NGi>
+                <div class="mb-1 text-xs text-lf-text-subtle">
+                  {{ t('executionPlanEditor.round.retryMaxAttempts') }}
+                </div>
+                <NInputNumber
+                  v-if="round.extract.retry"
+                  v-model:value="round.extract.retry.max_attempts"
+                  :min="0"
+                  :max="10"
+                  size="small"
+                  :disabled="disabled"
+                  class="w-full"
+                />
+              </NGi>
+              <NGi>
+                <div class="mb-1 text-xs text-lf-text-subtle">
+                  {{ t('executionPlanEditor.round.retryBackoffMs') }}
+                </div>
+                <NInputNumber
+                  v-if="round.extract.retry"
+                  v-model:value="round.extract.retry.backoff_ms"
+                  :min="0"
+                  :max="60000"
+                  :step="100"
+                  size="small"
+                  :disabled="disabled"
+                  class="w-full"
+                />
+              </NGi>
+            </NGrid>
+            <div v-if="round.extract.retry" class="mt-2 flex items-center gap-2">
+              <NSwitch
+                v-model:value="round.extract.retry.jitter"
+                size="small"
+                :disabled="disabled"
+              />
+              <span class="text-xs text-lf-text-subtle">
+                {{ t('executionPlanEditor.round.retryJitter') }}
+              </span>
+            </div>
+          </NCollapseItem>
+        </NCollapse>
       </template>
     </NCard>
 

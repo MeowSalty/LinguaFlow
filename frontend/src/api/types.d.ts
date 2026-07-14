@@ -2179,6 +2179,7 @@ export interface components {
              * @default 2
              */
             min_source_len: number;
+            retry?: components["schemas"]["RetryConfig"];
         };
         ExecutionRoundConfig: {
             /**
