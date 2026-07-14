@@ -23,10 +23,10 @@ import type { ApiSchemas } from '@/api/client'
 import PromptTemplateEditor from '@/components/templates/PromptTemplateEditor.vue'
 import { usePromptTemplatesStore } from '@/stores/promptTemplates'
 
-type PromptTemplate = ApiSchemas['PromptTemplate']
-type CreateRequest = ApiSchemas['CreatePromptTemplateRequest']
-type UpdateRequest = ApiSchemas['UpdatePromptTemplateRequest']
-type Scope = PromptTemplate['scope']
+type TranslationPromptTemplate = ApiSchemas['TranslationPromptTemplate']
+type CreateRequest = ApiSchemas['CreateTranslationPromptTemplateRequest']
+type UpdateRequest = ApiSchemas['UpdateTranslationPromptTemplateRequest']
+type Scope = TranslationPromptTemplate['scope']
 
 interface FormModel {
   name: string
@@ -44,9 +44,9 @@ const { t } = useI18n()
 
 const formRef = ref<FormInst | null>(null)
 const drawerVisible = ref(false)
-const editingItem = ref<PromptTemplate | null>(null)
+const editingItem = ref<TranslationPromptTemplate | null>(null)
 const deleteModalVisible = ref(false)
-const deletingItem = ref<PromptTemplate | null>(null)
+const deletingItem = ref<TranslationPromptTemplate | null>(null)
 
 const formModel = reactive<FormModel>({
   name: '',
@@ -97,7 +97,7 @@ const openCreateDrawer = (): void => {
   drawerVisible.value = true
 }
 
-const openEditDrawer = (item: PromptTemplate): void => {
+const openEditDrawer = (item: TranslationPromptTemplate): void => {
   editingItem.value = item
   formModel.name = item.name
   formModel.description = item.description ?? ''
@@ -140,7 +140,7 @@ const onSubmit = async (): Promise<void> => {
   }
 }
 
-const confirmDelete = (item: PromptTemplate): void => {
+const confirmDelete = (item: TranslationPromptTemplate): void => {
   if (item.scope === 'system') {
     message.warning(t('promptTemplates.messages.systemDeleteForbidden'))
     return

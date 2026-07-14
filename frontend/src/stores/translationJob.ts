@@ -10,7 +10,7 @@ import {
 } from '@/api/client'
 import { t } from '@/i18n'
 
-type TranslationJob = ApiSchemas['TranslationJob']
+type TranslationJob = ApiSchemas['Job']
 type CreateTranslationJobPayload = ApiSchemas['CreateTranslationJobRequest']
 
 export type JobStatusFilter = TranslationJob['status'] | 'all'
@@ -80,33 +80,33 @@ export const useTranslationJobStore = defineStore('translationJob', () => {
     }
   }
 
-  const cancelJob = async (translationJobId: number): Promise<void> => {
-    cancellingJobIds.value = [...cancellingJobIds.value, translationJobId]
+  const cancelJob = async (jobId: number): Promise<void> => {
+    cancellingJobIds.value = [...cancellingJobIds.value, jobId]
     actionError.value = null
 
     try {
-      const job = await cancelTranslationJobRequest(translationJobId)
+      const job = await cancelTranslationJobRequest(jobId)
       jobs.value = jobs.value.map((item) => (item.id === job.id ? job : item))
     } catch (error) {
       actionError.value = getErrorMessage(error, t('api.errors.cancelTranslationJobFailed'))
       throw error
     } finally {
-      cancellingJobIds.value = cancellingJobIds.value.filter((id) => id !== translationJobId)
+      cancellingJobIds.value = cancellingJobIds.value.filter((id) => id !== jobId)
     }
   }
 
-  const retryJob = async (translationJobId: number): Promise<void> => {
-    retryingJobIds.value = [...retryingJobIds.value, translationJobId]
+  const retryJob = async (jobId: number): Promise<void> => {
+    retryingJobIds.value = [...retryingJobIds.value, jobId]
     actionError.value = null
 
     try {
-      const job = await retryTranslationJobRequest(translationJobId)
+      const job = await retryTranslationJobRequest(jobId)
       jobs.value = jobs.value.map((item) => (item.id === job.id ? job : item))
     } catch (error) {
       actionError.value = getErrorMessage(error, t('api.errors.retryTranslationJobFailed'))
       throw error
     } finally {
-      retryingJobIds.value = retryingJobIds.value.filter((id) => id !== translationJobId)
+      retryingJobIds.value = retryingJobIds.value.filter((id) => id !== jobId)
     }
   }
 

@@ -4,14 +4,14 @@ import type { ApiClient, ApiSchemas } from './client'
 import { apiClient } from './client'
 import { buildRequestFailureError } from './utils'
 
-type PromptTemplate = ApiSchemas['PromptTemplate']
-type CreatePromptTemplateRequest = ApiSchemas['CreatePromptTemplateRequest']
-type UpdatePromptTemplateRequest = ApiSchemas['UpdatePromptTemplateRequest']
+type TranslationPromptTemplate = ApiSchemas['TranslationPromptTemplate']
+type CreateTranslationPromptTemplateRequest = ApiSchemas['CreateTranslationPromptTemplateRequest']
+type UpdateTranslationPromptTemplateRequest = ApiSchemas['UpdateTranslationPromptTemplateRequest']
 
 export const fetchPromptTemplates = async (
   client: ApiClient = apiClient,
-): Promise<ApiSchemas['PromptTemplateListResponse']> => {
-  const { data, error, response } = await client.GET('/prompt-templates')
+): Promise<ApiSchemas['TranslationPromptTemplateListResponse']> => {
+  const { data, error, response } = await client.GET('/translation-prompt-templates')
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.fetchPromptTemplatesFailed'), error, response)
@@ -21,10 +21,10 @@ export const fetchPromptTemplates = async (
 }
 
 export const createPromptTemplate = async (
-  payload: CreatePromptTemplateRequest,
+  payload: CreateTranslationPromptTemplateRequest,
   client: ApiClient = apiClient,
-): Promise<PromptTemplate> => {
-  const { data, error, response } = await client.POST('/prompt-templates', {
+): Promise<TranslationPromptTemplate> => {
+  const { data, error, response } = await client.POST('/translation-prompt-templates', {
     body: payload,
   })
 
@@ -36,12 +36,15 @@ export const createPromptTemplate = async (
 }
 
 export const getPromptTemplate = async (
-  promptTemplateId: number,
+  translationPromptTemplateId: number,
   client: ApiClient = apiClient,
-): Promise<PromptTemplate> => {
-  const { data, error, response } = await client.GET('/prompt-templates/{promptTemplateId}', {
-    params: { path: { promptTemplateId } },
-  })
+): Promise<TranslationPromptTemplate> => {
+  const { data, error, response } = await client.GET(
+    '/translation-prompt-templates/{translationPromptTemplateId}',
+    {
+      params: { path: { translationPromptTemplateId } },
+    },
+  )
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.fetchPromptTemplateFailed'), error, response)
@@ -51,14 +54,17 @@ export const getPromptTemplate = async (
 }
 
 export const updatePromptTemplate = async (
-  promptTemplateId: number,
-  payload: UpdatePromptTemplateRequest,
+  translationPromptTemplateId: number,
+  payload: UpdateTranslationPromptTemplateRequest,
   client: ApiClient = apiClient,
-): Promise<PromptTemplate> => {
-  const { data, error, response } = await client.PUT('/prompt-templates/{promptTemplateId}', {
-    params: { path: { promptTemplateId } },
-    body: payload,
-  })
+): Promise<TranslationPromptTemplate> => {
+  const { data, error, response } = await client.PUT(
+    '/translation-prompt-templates/{translationPromptTemplateId}',
+    {
+      params: { path: { translationPromptTemplateId } },
+      body: payload,
+    },
+  )
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.updatePromptTemplateFailed'), error, response)
@@ -68,12 +74,15 @@ export const updatePromptTemplate = async (
 }
 
 export const deletePromptTemplate = async (
-  promptTemplateId: number,
+  translationPromptTemplateId: number,
   client: ApiClient = apiClient,
 ): Promise<void> => {
-  const { error, response } = await client.DELETE('/prompt-templates/{promptTemplateId}', {
-    params: { path: { promptTemplateId } },
-  })
+  const { error, response } = await client.DELETE(
+    '/translation-prompt-templates/{translationPromptTemplateId}',
+    {
+      params: { path: { translationPromptTemplateId } },
+    },
+  )
 
   if (response && !response.ok) {
     throw buildRequestFailureError(t('api.errors.deletePromptTemplateFailed'), error, response)

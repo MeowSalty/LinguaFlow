@@ -70,5 +70,5 @@ export const resolveStreamUrl = (jobId: number): string | null => {
   const storedBase = readStoredApiBaseUrl()
   const base = (storedBase || '/api/v1').replace(/\/+$/, '')
 
-  return `${base}/translation-jobs/${jobId}/stream?access_token=${encodeURIComponent(token)}`
+  return `${base}/jobs/${jobId}/stream?access_token=${encodeURIComponent(token)}`
 }

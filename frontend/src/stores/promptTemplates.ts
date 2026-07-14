@@ -10,10 +10,10 @@ import {
 } from '@/api/client'
 import { t } from '@/i18n'
 
-type PromptTemplate = ApiSchemas['PromptTemplate']
-type CreateRequest = ApiSchemas['CreatePromptTemplateRequest']
-type UpdateRequest = ApiSchemas['UpdatePromptTemplateRequest']
-type Scope = PromptTemplate['scope']
+type TranslationPromptTemplate = ApiSchemas['TranslationPromptTemplate']
+type CreateRequest = ApiSchemas['CreateTranslationPromptTemplateRequest']
+type UpdateRequest = ApiSchemas['UpdateTranslationPromptTemplateRequest']
+type Scope = TranslationPromptTemplate['scope']
 
 const includesNormalized = (source: string | undefined, query: string): boolean => {
   return source?.toLowerCase().includes(query) ?? false
@@ -21,7 +21,7 @@ const includesNormalized = (source: string | undefined, query: string): boolean 
 
 export const usePromptTemplatesStore = defineStore('promptTemplates', () => {
   // ── 状态 ──
-  const items = ref<PromptTemplate[]>([])
+  const items = ref<TranslationPromptTemplate[]>([])
 
   const loading = ref(false)
   const creating = ref(false)
@@ -75,7 +75,7 @@ export const usePromptTemplatesStore = defineStore('promptTemplates', () => {
     }
   }
 
-  const createTemplate = async (payload: CreateRequest): Promise<PromptTemplate> => {
+  const createTemplate = async (payload: CreateRequest): Promise<TranslationPromptTemplate> => {
     creating.value = true
     error.value = null
 
@@ -97,7 +97,7 @@ export const usePromptTemplatesStore = defineStore('promptTemplates', () => {
   const updateTemplate = async (
     templateId: number,
     payload: UpdateRequest,
-  ): Promise<PromptTemplate> => {
+  ): Promise<TranslationPromptTemplate> => {
     updating.value = true
     error.value = null
 

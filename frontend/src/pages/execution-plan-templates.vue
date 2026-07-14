@@ -29,7 +29,6 @@ import { useTranslationProfilesStore } from '@/stores/translationProfiles'
 
 type ExecutionPlanTemplate = ApiSchemas['ExecutionPlanTemplate']
 type ExecutionRoundConfig = ApiSchemas['ExecutionRoundConfig']
-type ExecutionPlanBootstrapConfig = ApiSchemas['ExecutionPlanBootstrapConfig']
 type ExecutionPlanRubyRetryConfig = ApiSchemas['ExecutionPlanRubyRetryConfig']
 type CreateRequest = ApiSchemas['CreateExecutionPlanTemplateRequest']
 type UpdateRequest = ApiSchemas['UpdateExecutionPlanTemplateRequest']
@@ -38,7 +37,6 @@ type Scope = ExecutionPlanTemplate['scope']
 interface FormModel {
   name: string
   description: string
-  bootstrap: ExecutionPlanBootstrapConfig
   ruby_retry: ExecutionPlanRubyRetryConfig
   rounds: ExecutionRoundConfig[]
 }
@@ -46,24 +44,17 @@ interface FormModel {
 // ── 默认值 ────────────────────────────────────────────────────
 
 const DEFAULT_ROUND: ExecutionRoundConfig = {
+  mode: 'translate',
   backend_id: 0,
-  prompt_template_id: 0,
-  profile_id: 0,
-  batch_size: 10,
-  max_words_per_batch: 0,
   concurrency: 3,
-  fallback_shrink: undefined,
-  retry: { max_attempts: 3, backoff_ms: 2000, jitter: true },
-}
-
-const DEFAULT_BOOTSTRAP: ExecutionPlanBootstrapConfig = {
-  enabled: false,
-  backend_id: 0,
-  prompt_template_id: 0,
-  batch_size: 20,
-  concurrency: 2,
-  max_terms_per_1000_chars: 25.0,
-  min_source_len: 2,
+  translate: {
+    prompt_template_id: 0,
+    profile_id: 0,
+    batch_size: 10,
+    max_words_per_batch: 0,
+    fallback_shrink: undefined,
+    retry: { max_attempts: 3, backoff_ms: 2000, jitter: true },
+  },
 }
 
 const DEFAULT_RUBY_RETRY: ExecutionPlanRubyRetryConfig = {
@@ -96,7 +87,6 @@ const deletingItem = ref<ExecutionPlanTemplate | null>(null)
 const formModel = reactive<FormModel>({
   name: '',
   description: '',
-  bootstrap: deepClone(DEFAULT_BOOTSTRAP),
   ruby_retry: deepClone(DEFAULT_RUBY_RETRY),
   rounds: [],
 })
@@ -155,7 +145,6 @@ const rules = computed<FormRules>(() => ({
 const resetForm = (): void => {
   formModel.name = ''
   formModel.description = ''
-  formModel.bootstrap = deepClone(DEFAULT_BOOTSTRAP)
   formModel.ruby_retry = deepClone(DEFAULT_RUBY_RETRY)
   formModel.rounds = [deepClone(DEFAULT_ROUND)]
   editingItem.value = null
@@ -170,7 +159,6 @@ const openEditDrawer = (item: ExecutionPlanTemplate): void => {
   editingItem.value = item
   formModel.name = item.name
   formModel.description = item.description ?? ''
-  formModel.bootstrap = item.bootstrap ? deepClone(item.bootstrap) : deepClone(DEFAULT_BOOTSTRAP)
   formModel.ruby_retry = item.ruby_retry
     ? deepClone(item.ruby_retry)
     : deepClone(DEFAULT_RUBY_RETRY)
@@ -178,7 +166,6 @@ const openEditDrawer = (item: ExecutionPlanTemplate): void => {
   drawerVisible.value = true
 }
 
-/** 轮次级别校验 */
 const validateRounds = (): boolean => {
   for (let i = 0; i < formModel.rounds.length; i++) {
     const round = formModel.rounds[i]!
@@ -186,23 +173,18 @@ const validateRounds = (): boolean => {
       message.error(t('executionPlanTemplates.validation.roundBackendRequired', { n: i + 1 }))
       return false
     }
-    if (!round.prompt_template_id) {
-      message.error(t('executionPlanTemplates.validation.roundPromptRequired', { n: i + 1 }))
-      return false
-    }
-    if (!round.profile_id) {
-      message.error(t('executionPlanTemplates.validation.roundProfileRequired', { n: i + 1 }))
-      return false
-    }
-    const hasBatchSize = round.batch_size && round.batch_size > 0
-    const hasMaxWords = round.max_words_per_batch && round.max_words_per_batch > 0
-    if (!hasBatchSize && !hasMaxWords) {
-      message.error(t('executionPlanTemplates.validation.roundBatchConfigRequired', { n: i + 1 }))
-      return false
-    }
     if (!round.concurrency || round.concurrency < 1) {
       message.error(t('executionPlanTemplates.validation.roundConcurrencyRequired', { n: i + 1 }))
       return false
+    }
+    if (round.mode === 'translate' && round.translate) {
+      const hasBatchSize = round.translate.batch_size && round.translate.batch_size > 0
+      const hasMaxWords =
+        round.translate.max_words_per_batch && round.translate.max_words_per_batch > 0
+      if (!hasBatchSize && !hasMaxWords) {
+        message.error(t('executionPlanTemplates.validation.roundBatchConfigRequired', { n: i + 1 }))
+        return false
+      }
     }
   }
   return true
@@ -211,26 +193,43 @@ const validateRounds = (): boolean => {
 const buildPayload = (): CreateRequest => {
   const payload: CreateRequest = {
     name: formModel.name.trim(),
-    rounds: formModel.rounds.map((round) => ({
-      name: round.name?.trim() || undefined,
-      backend_id: round.backend_id,
-      prompt_template_id: round.prompt_template_id,
-      profile_id: round.profile_id,
-      batch_size: round.batch_size,
-      max_words_per_batch: round.max_words_per_batch,
-      concurrency: round.concurrency,
-      fallback_shrink: round.fallback_shrink ?? undefined,
-      ...(round.retry ? { retry: round.retry } : {}),
-    })),
+    rounds: formModel.rounds.map((round) => {
+      const base = {
+        mode: round.mode,
+        name: round.name?.trim() || undefined,
+        backend_id: round.backend_id,
+        concurrency: round.concurrency,
+      }
+      if (round.mode === 'translate' && round.translate) {
+        return {
+          ...base,
+          translate: {
+            prompt_template_id: round.translate.prompt_template_id,
+            profile_id: round.translate.profile_id,
+            batch_size: round.translate.batch_size,
+            max_words_per_batch: round.translate.max_words_per_batch,
+            fallback_shrink: round.translate.fallback_shrink ?? undefined,
+            ...(round.translate.retry ? { retry: round.translate.retry } : {}),
+          },
+        }
+      }
+      if (round.mode === 'extract' && round.extract) {
+        return {
+          ...base,
+          extract: {
+            template_id: round.extract.template_id,
+            batch_size: round.extract.batch_size,
+            max_terms_per_1000_chars: round.extract.max_terms_per_1000_chars,
+            min_source_len: round.extract.min_source_len,
+          },
+        }
+      }
+      return base
+    }),
   }
   if (formModel.description.trim()) {
     payload.description = formModel.description.trim()
   }
-  // 仅当 bootstrap.enabled 为 true 时才包含 bootstrap 配置
-  if (formModel.bootstrap.enabled) {
-    payload.bootstrap = deepClone(formModel.bootstrap)
-  }
-  // 仅当 ruby_retry.enabled 为 true 时才包含 ruby_retry 配置
   if (formModel.ruby_retry.enabled) {
     payload.ruby_retry = deepClone(formModel.ruby_retry)
   }
@@ -303,7 +302,7 @@ const formatDate = (dateStr: string | undefined): string => {
   return new Date(dateStr).toLocaleDateString()
 }
 
-// ── 生命周期：并行加载四个 Store ───────────────────────────────
+// ── 生命周期 ──────────────────────────────────────────────────
 
 onMounted(async () => {
   await Promise.all([
@@ -357,7 +356,7 @@ watch(
       </div>
     </NCard>
 
-    <!-- 统计卡片（第 4 个为平均轮次） -->
+    <!-- 统计卡片 -->
     <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
       <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
         <div class="text-xs font-medium text-lf-text-muted">
@@ -476,7 +475,7 @@ watch(
             {{ item.description || t('executionPlanTemplates.card.noDescription') }}
           </p>
 
-          <!-- 专属摘要：轮次概览 -->
+          <!-- 轮次概览 -->
           <div class="space-y-2">
             <div class="flex items-center gap-2">
               <NTag size="small" type="info" :bordered="false">
@@ -490,13 +489,29 @@ watch(
                 class="flex items-center gap-2 text-xs text-lf-text-muted"
               >
                 <span
-                  class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-lf-brand-soft text-[10px] font-semibold text-brand-600"
+                  class="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold"
+                  :class="
+                    round.mode === 'translate'
+                      ? 'bg-lf-brand-soft text-brand-600'
+                      : 'bg-amber-50 text-amber-600'
+                  "
                 >
                   {{ idx + 1 }}
                 </span>
                 <span class="truncate">
                   {{ round.name || `round-${idx + 1}` }}
                 </span>
+                <NTag
+                  size="tiny"
+                  :type="round.mode === 'translate' ? 'info' : 'warning'"
+                  :bordered="false"
+                >
+                  {{
+                    round.mode === 'translate'
+                      ? t('executionPlanEditor.round.modeTranslate')
+                      : t('executionPlanEditor.round.modeExtract')
+                  }}
+                </NTag>
               </div>
               <div v-if="item.rounds.length > 3" class="text-xs text-lf-text-subtle">
                 +{{ item.rounds.length - 3 }} {{ t('executionPlanTemplates.card.moreRounds') }}
@@ -579,14 +594,13 @@ watch(
             />
           </NFormItem>
 
-          <!-- Bootstrap + 轮次编辑器 -->
+          <!-- 轮次编辑器 -->
           <div class="mb-4">
             <span class="mb-2 block text-sm font-medium text-lf-text-strong">
               {{ t('executionPlanTemplates.form.rounds') }}
             </span>
             <ExecutionPlanEditor
               :rounds="formModel.rounds"
-              :bootstrap="formModel.bootstrap"
               :ruby-retry="formModel.ruby_retry"
               :backends="backendOptions"
               :prompt-templates="promptTemplateOptions"
@@ -594,7 +608,6 @@ watch(
               :translation-profiles="translationProfileOptions"
               :disabled="isSystemScope"
               @update:rounds="formModel.rounds = $event"
-              @update:bootstrap="formModel.bootstrap = $event"
               @update:ruby-retry="formModel.ruby_retry = $event"
             />
           </div>
