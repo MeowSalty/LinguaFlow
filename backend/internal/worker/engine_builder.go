@@ -161,18 +161,16 @@ func (r *JobRunner) buildExtractRound(rs service.JobRoundSnapshot, b backend.Bac
 		return engine.Round{}, fmt.Errorf("build bootstrap renderer: %w", err)
 	}
 
-	retry := backend.RetryPolicy{
-		MaxAttempts: 3,
-		Backoff:     1000,
-		Jitter:      true,
-	}
-
 	return engine.Round{
 		Backend:     b,
 		BatchSize:   e.BatchSize,
 		Concurrency: e.Concurrency,
-		Retry:       retry,
-		Mode:        pipeline.RoundModeExtract,
+		Retry: backend.RetryPolicy{
+			MaxAttempts: e.Retry.MaxAttempts,
+			Backoff:     time.Duration(e.Retry.BackoffMs) * time.Millisecond,
+			Jitter:      e.Retry.Jitter,
+		},
+		Mode: pipeline.RoundModeExtract,
 
 		ExtractRenderer:             renderer,
 		ExtractMaxTermsPer1000Chars: e.MaxTermsPer1000Chars,

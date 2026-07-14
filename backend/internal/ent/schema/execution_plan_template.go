@@ -27,11 +27,12 @@ type TranslateRoundConfig struct {
 
 // ExtractRoundConfig 术语抽取轮次配置。
 type ExtractRoundConfig struct {
-	BootstrapTemplateID  int     `json:"bootstrap_template_id"   yaml:"bootstrap_template_id"` // 引用 BootstrapPromptTemplate
-	BatchSize            int     `json:"batch_size"              yaml:"batch_size"`
-	Concurrency          int     `json:"concurrency"             yaml:"concurrency"`
-	MaxTermsPer1000Chars float64 `json:"max_terms_per_1000_chars" yaml:"max_terms_per_1000_chars"`
-	MinSourceLen         int     `json:"min_source_len"          yaml:"min_source_len"`
+	BootstrapTemplateID  int         `json:"bootstrap_template_id"   yaml:"bootstrap_template_id"` // 引用 BootstrapPromptTemplate
+	BatchSize            int         `json:"batch_size"              yaml:"batch_size"`
+	Concurrency          int         `json:"concurrency"             yaml:"concurrency"`
+	MaxTermsPer1000Chars float64     `json:"max_terms_per_1000_chars" yaml:"max_terms_per_1000_chars"`
+	MinSourceLen         int         `json:"min_source_len"          yaml:"min_source_len"`
+	Retry                RetryConfig `json:"retry"                   yaml:"retry"`
 }
 
 // ExecutionPlanRubyRetryConfig 注音对齐重试配置。

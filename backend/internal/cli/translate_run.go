@@ -268,17 +268,11 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 				}
 			}
 
-			retry := backend.RetryPolicy{
-				MaxAttempts: 3,
-				Backoff:     1000,
-				Jitter:      true,
-			}
-
 			rounds = append(rounds, engine.Round{
 				Backend:     b,
 				BatchSize:   e.BatchSize,
 				Concurrency: e.Concurrency,
-				Retry:       retry,
+				Retry:       toBackendRetryPolicy(e.Retry),
 				Mode:        pipeline.RoundModeExtract,
 
 				ExtractRenderer:             extractRenderer,

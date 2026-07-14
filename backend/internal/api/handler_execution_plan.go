@@ -87,6 +87,8 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 			msl := e.MinSourceLen
 			extractCfg.MinSourceLen = &msl
 		}
+		retry := toRetryConfigAPI(e.Retry)
+		extractCfg.Retry = &retry
 		apiRC.Extract = &extractCfg
 	}
 	return apiRC
@@ -222,6 +224,17 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 			}
 			if e.MinSourceLen != nil {
 				extractCfg.MinSourceLen = *e.MinSourceLen
+			}
+			if e.Retry != nil {
+				if e.Retry.MaxAttempts != nil {
+					extractCfg.Retry.MaxAttempts = *e.Retry.MaxAttempts
+				}
+				if e.Retry.BackoffMs != nil {
+					extractCfg.Retry.BackoffMs = *e.Retry.BackoffMs
+				}
+				if e.Retry.Jitter != nil {
+					extractCfg.Retry.Jitter = *e.Retry.Jitter
+				}
 			}
 			rc.Extract = extractCfg
 		}
