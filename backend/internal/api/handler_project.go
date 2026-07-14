@@ -221,7 +221,7 @@ func (s *Server) handleGetProjectBackends(w http.ResponseWriter, r *http.Request
 type setBackendOrderRequest struct {
 	Bindings []struct {
 		Source    string `json:"source"`
-		BackendID int   `json:"backend_id"`
+		BackendID int    `json:"backend_id"`
 	} `json:"bindings"`
 }
 

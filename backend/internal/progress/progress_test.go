@@ -40,7 +40,7 @@ func TestTerminal_NoTotalSkipsBar(t *testing.T) {
 	var buf bytes.Buffer
 	r := NewTerminal(&buf)
 	r.StageStart("split", 0) // 没有段级进度
-	r.SegmentDone()           // 应被忽略，不 panic
+	r.SegmentDone()          // 应被忽略，不 panic
 	r.StageDone()
 	_ = r.Close()
 	out := buf.String()

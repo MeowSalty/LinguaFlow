@@ -20,68 +20,23 @@ import {
 import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
-import ExecutionPlanEditor from '@/components/templates/ExecutionPlanEditor.vue'
-import { useBackendsStore } from '@/stores/backends'
+import PromptTemplateEditor from '@/components/templates/PromptTemplateEditor.vue'
 import { useBootstrapPromptTemplatesStore } from '@/stores/bootstrapPromptTemplates'
-import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
-import { usePromptTemplatesStore } from '@/stores/promptTemplates'
-import { useTranslationProfilesStore } from '@/stores/translationProfiles'
 
-type ExecutionPlanTemplate = ApiSchemas['ExecutionPlanTemplate']
-type ExecutionRoundConfig = ApiSchemas['ExecutionRoundConfig']
-type ExecutionPlanBootstrapConfig = ApiSchemas['ExecutionPlanBootstrapConfig']
-type ExecutionPlanRubyRetryConfig = ApiSchemas['ExecutionPlanRubyRetryConfig']
-type CreateRequest = ApiSchemas['CreateExecutionPlanTemplateRequest']
-type UpdateRequest = ApiSchemas['UpdateExecutionPlanTemplateRequest']
-type Scope = ExecutionPlanTemplate['scope']
+type BootstrapPromptTemplate = ApiSchemas['BootstrapPromptTemplate']
+type CreateRequest = ApiSchemas['CreateBootstrapPromptTemplateRequest']
+type UpdateRequest = ApiSchemas['UpdateBootstrapPromptTemplateRequest']
+type Scope = BootstrapPromptTemplate['scope']
 
 interface FormModel {
   name: string
   description: string
-  bootstrap: ExecutionPlanBootstrapConfig
-  ruby_retry: ExecutionPlanRubyRetryConfig
-  rounds: ExecutionRoundConfig[]
-}
-
-// ── 默认值 ────────────────────────────────────────────────────
-
-const DEFAULT_ROUND: ExecutionRoundConfig = {
-  backend_id: 0,
-  prompt_template_id: 0,
-  profile_id: 0,
-  batch_size: 10,
-  max_words_per_batch: 0,
-  concurrency: 3,
-  fallback_shrink: undefined,
-  retry: { max_attempts: 3, backoff_ms: 2000, jitter: true },
-}
-
-const DEFAULT_BOOTSTRAP: ExecutionPlanBootstrapConfig = {
-  enabled: false,
-  backend_id: 0,
-  prompt_template_id: 0,
-  batch_size: 20,
-  concurrency: 2,
-  max_terms_per_1000_chars: 25.0,
-  min_source_len: 2,
-}
-
-const DEFAULT_RUBY_RETRY: ExecutionPlanRubyRetryConfig = {
-  enabled: false,
-  backend_id: 0,
-}
-
-function deepClone<T>(obj: T): T {
-  return JSON.parse(JSON.stringify(obj))
+  content: string
 }
 
 // ── Store & 依赖 ──────────────────────────────────────────────
 
-const store = useExecutionPlanTemplatesStore()
-const backendsStore = useBackendsStore()
-const promptTemplatesStore = usePromptTemplatesStore()
-const bootstrapPromptTemplatesStore = useBootstrapPromptTemplatesStore()
-const translationProfilesStore = useTranslationProfilesStore()
+const store = useBootstrapPromptTemplatesStore()
 const message = useMessage()
 const { t } = useI18n()
 
@@ -89,43 +44,23 @@ const { t } = useI18n()
 
 const formRef = ref<FormInst | null>(null)
 const drawerVisible = ref(false)
-const editingItem = ref<ExecutionPlanTemplate | null>(null)
+const editingItem = ref<BootstrapPromptTemplate | null>(null)
 const deleteModalVisible = ref(false)
-const deletingItem = ref<ExecutionPlanTemplate | null>(null)
+const deletingItem = ref<BootstrapPromptTemplate | null>(null)
 
 const formModel = reactive<FormModel>({
   name: '',
   description: '',
-  bootstrap: deepClone(DEFAULT_BOOTSTRAP),
-  ruby_retry: deepClone(DEFAULT_RUBY_RETRY),
-  rounds: [],
+  content: '',
 })
-
-// ── 依赖选项（供 ExecutionPlanEditor 使用） ────────────────────
-
-const backendOptions = computed<SelectOption[]>(() =>
-  backendsStore.items.map((b) => ({ label: b.name, value: b.id })),
-)
-
-const promptTemplateOptions = computed<SelectOption[]>(() =>
-  promptTemplatesStore.items.map((t) => ({ label: t.name, value: t.id })),
-)
-
-const bootstrapPromptTemplateOptions = computed<SelectOption[]>(() =>
-  bootstrapPromptTemplatesStore.items.map((t) => ({ label: t.name, value: t.id })),
-)
-
-const translationProfileOptions = computed<SelectOption[]>(() =>
-  translationProfilesStore.items.map((p) => ({ label: p.name, value: p.id })),
-)
 
 // ── 计算属性 ──────────────────────────────────────────────────
 
 const filterScopeOptions = computed<SelectOption[]>(() => [
-  { label: t('executionPlanTemplates.filters.allScopes'), value: 'all' },
-  { label: t('executionPlanTemplates.scopes.system'), value: 'system' },
-  { label: t('executionPlanTemplates.scopes.user'), value: 'user' },
-  { label: t('executionPlanTemplates.scopes.org'), value: 'org' },
+  { label: t('bootstrapPromptTemplates.filters.allScopes'), value: 'all' },
+  { label: t('bootstrapPromptTemplates.scopes.system'), value: 'system' },
+  { label: t('bootstrapPromptTemplates.scopes.user'), value: 'user' },
+  { label: t('bootstrapPromptTemplates.scopes.org'), value: 'org' },
 ])
 
 const hasActiveFilters = computed(
@@ -136,15 +71,15 @@ const isEditMode = computed(() => Boolean(editingItem.value))
 const isSystemScope = computed(() => editingItem.value?.scope === 'system')
 const drawerTitle = computed(() =>
   isEditMode.value
-    ? t('executionPlanTemplates.actions.edit')
-    : t('executionPlanTemplates.actions.create'),
+    ? t('bootstrapPromptTemplates.actions.edit')
+    : t('bootstrapPromptTemplates.actions.create'),
 )
 
 const rules = computed<FormRules>(() => ({
   name: [
     {
       required: true,
-      message: t('executionPlanTemplates.validation.nameRequired'),
+      message: t('bootstrapPromptTemplates.validation.nameRequired'),
       trigger: ['input', 'blur'],
     },
   ],
@@ -155,9 +90,7 @@ const rules = computed<FormRules>(() => ({
 const resetForm = (): void => {
   formModel.name = ''
   formModel.description = ''
-  formModel.bootstrap = deepClone(DEFAULT_BOOTSTRAP)
-  formModel.ruby_retry = deepClone(DEFAULT_RUBY_RETRY)
-  formModel.rounds = [deepClone(DEFAULT_ROUND)]
+  formModel.content = ''
   editingItem.value = null
 }
 
@@ -166,73 +99,21 @@ const openCreateDrawer = (): void => {
   drawerVisible.value = true
 }
 
-const openEditDrawer = (item: ExecutionPlanTemplate): void => {
+const openEditDrawer = (item: BootstrapPromptTemplate): void => {
   editingItem.value = item
   formModel.name = item.name
   formModel.description = item.description ?? ''
-  formModel.bootstrap = item.bootstrap ? deepClone(item.bootstrap) : deepClone(DEFAULT_BOOTSTRAP)
-  formModel.ruby_retry = item.ruby_retry
-    ? deepClone(item.ruby_retry)
-    : deepClone(DEFAULT_RUBY_RETRY)
-  formModel.rounds = item.rounds?.length ? deepClone(item.rounds) : [deepClone(DEFAULT_ROUND)]
+  formModel.content = item.content ?? ''
   drawerVisible.value = true
 }
 
-/** 轮次级别校验 */
-const validateRounds = (): boolean => {
-  for (let i = 0; i < formModel.rounds.length; i++) {
-    const round = formModel.rounds[i]!
-    if (!round.backend_id) {
-      message.error(t('executionPlanTemplates.validation.roundBackendRequired', { n: i + 1 }))
-      return false
-    }
-    if (!round.prompt_template_id) {
-      message.error(t('executionPlanTemplates.validation.roundPromptRequired', { n: i + 1 }))
-      return false
-    }
-    if (!round.profile_id) {
-      message.error(t('executionPlanTemplates.validation.roundProfileRequired', { n: i + 1 }))
-      return false
-    }
-    const hasBatchSize = round.batch_size && round.batch_size > 0
-    const hasMaxWords = round.max_words_per_batch && round.max_words_per_batch > 0
-    if (!hasBatchSize && !hasMaxWords) {
-      message.error(t('executionPlanTemplates.validation.roundBatchConfigRequired', { n: i + 1 }))
-      return false
-    }
-    if (!round.concurrency || round.concurrency < 1) {
-      message.error(t('executionPlanTemplates.validation.roundConcurrencyRequired', { n: i + 1 }))
-      return false
-    }
-  }
-  return true
-}
-
 const buildPayload = (): CreateRequest => {
-  const payload: CreateRequest = {
-    name: formModel.name.trim(),
-    rounds: formModel.rounds.map((round) => ({
-      name: round.name?.trim() || undefined,
-      backend_id: round.backend_id,
-      prompt_template_id: round.prompt_template_id,
-      profile_id: round.profile_id,
-      batch_size: round.batch_size,
-      max_words_per_batch: round.max_words_per_batch,
-      concurrency: round.concurrency,
-      fallback_shrink: round.fallback_shrink ?? undefined,
-      ...(round.retry ? { retry: round.retry } : {}),
-    })),
-  }
+  const payload: CreateRequest = { name: formModel.name.trim() }
   if (formModel.description.trim()) {
     payload.description = formModel.description.trim()
   }
-  // 仅当 bootstrap.enabled 为 true 时才包含 bootstrap 配置
-  if (formModel.bootstrap.enabled) {
-    payload.bootstrap = deepClone(formModel.bootstrap)
-  }
-  // 仅当 ruby_retry.enabled 为 true 时才包含 ruby_retry 配置
-  if (formModel.ruby_retry.enabled) {
-    payload.ruby_retry = deepClone(formModel.ruby_retry)
+  if (formModel.content.trim()) {
+    payload.content = formModel.content.trim()
   }
   return payload
 }
@@ -244,17 +125,15 @@ const onSubmit = async (): Promise<void> => {
     return
   }
 
-  if (!validateRounds()) return
-
   const payload = buildPayload()
 
   try {
     if (isEditMode.value && editingItem.value) {
       await store.updateTemplate(editingItem.value.id, payload as UpdateRequest)
-      message.success(t('executionPlanTemplates.messages.updateSuccess'))
+      message.success(t('bootstrapPromptTemplates.messages.updateSuccess'))
     } else {
       await store.createTemplate(payload)
-      message.success(t('executionPlanTemplates.messages.createSuccess'))
+      message.success(t('bootstrapPromptTemplates.messages.createSuccess'))
     }
     drawerVisible.value = false
     resetForm()
@@ -263,9 +142,9 @@ const onSubmit = async (): Promise<void> => {
   }
 }
 
-const confirmDelete = (item: ExecutionPlanTemplate): void => {
+const confirmDelete = (item: BootstrapPromptTemplate): void => {
   if (item.scope === 'system') {
-    message.warning(t('executionPlanTemplates.messages.systemDeleteForbidden'))
+    message.warning(t('bootstrapPromptTemplates.messages.systemDeleteForbidden'))
     return
   }
   deletingItem.value = item
@@ -277,7 +156,7 @@ const executeDelete = async (): Promise<void> => {
 
   try {
     await store.deleteTemplate(deletingItem.value.id)
-    message.success(t('executionPlanTemplates.messages.deleteSuccess'))
+    message.success(t('bootstrapPromptTemplates.messages.deleteSuccess'))
     deleteModalVisible.value = false
     deletingItem.value = null
   } catch {
@@ -303,16 +182,10 @@ const formatDate = (dateStr: string | undefined): string => {
   return new Date(dateStr).toLocaleDateString()
 }
 
-// ── 生命周期：并行加载四个 Store ───────────────────────────────
+// ── 生命周期 ──────────────────────────────────────────────────
 
-onMounted(async () => {
-  await Promise.all([
-    store.loadTemplates(),
-    backendsStore.loadBackends(),
-    promptTemplatesStore.loadTemplates(),
-    bootstrapPromptTemplatesStore.loadTemplates(),
-    translationProfilesStore.loadProfiles(),
-  ])
+onMounted(() => {
+  store.loadTemplates()
 })
 
 watch(
@@ -335,33 +208,33 @@ watch(
           <div
             class="inline-flex items-center rounded-full bg-lf-brand-soft px-3 py-1 text-xs font-medium text-brand-600"
           >
-            {{ t('executionPlanTemplates.eyebrow') }}
+            {{ t('bootstrapPromptTemplates.eyebrow') }}
           </div>
           <div>
             <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
-              {{ t('executionPlanTemplates.title') }}
+              {{ t('bootstrapPromptTemplates.title') }}
             </h1>
             <p class="mt-2 max-w-2xl text-sm leading-6 text-lf-text-muted">
-              {{ t('executionPlanTemplates.subtitle') }}
+              {{ t('bootstrapPromptTemplates.subtitle') }}
             </p>
           </div>
         </div>
         <div class="flex flex-wrap gap-3">
           <NButton secondary :loading="store.loading" @click="store.loadTemplates">
-            {{ t('executionPlanTemplates.actions.refresh') }}
+            {{ t('bootstrapPromptTemplates.actions.refresh') }}
           </NButton>
           <NButton type="primary" @click="openCreateDrawer">
-            {{ t('executionPlanTemplates.actions.create') }}
+            {{ t('bootstrapPromptTemplates.actions.create') }}
           </NButton>
         </div>
       </div>
     </NCard>
 
-    <!-- 统计卡片（第 4 个为平均轮次） -->
+    <!-- 统计卡片 -->
     <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
       <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
         <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('executionPlanTemplates.stats.total') }}
+          {{ t('bootstrapPromptTemplates.stats.total') }}
         </div>
         <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
           {{ store.totalCount }}
@@ -369,7 +242,7 @@ watch(
       </NCard>
       <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
         <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('executionPlanTemplates.stats.system') }}
+          {{ t('bootstrapPromptTemplates.stats.system') }}
         </div>
         <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
           {{ store.systemCount }}
@@ -377,7 +250,7 @@ watch(
       </NCard>
       <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
         <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('executionPlanTemplates.stats.user') }}
+          {{ t('bootstrapPromptTemplates.stats.user') }}
         </div>
         <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
           {{ store.userCount }}
@@ -385,10 +258,10 @@ watch(
       </NCard>
       <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
         <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('executionPlanTemplates.stats.avgRounds') }}
+          {{ t('bootstrapPromptTemplates.stats.org') }}
         </div>
         <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ store.avgRoundsPerPlan }}
+          {{ store.orgCount }}
         </div>
       </NCard>
     </div>
@@ -400,7 +273,7 @@ watch(
           v-model:value="store.searchQuery"
           clearable
           class="lg:max-w-sm"
-          :placeholder="t('executionPlanTemplates.filters.searchPlaceholder')"
+          :placeholder="t('bootstrapPromptTemplates.filters.searchPlaceholder')"
         />
         <div class="flex flex-wrap gap-3">
           <NSelect v-model:value="store.scopeFilter" class="w-44" :options="filterScopeOptions" />
@@ -409,7 +282,7 @@ watch(
             quaternary
             @click="((store.searchQuery = ''), (store.scopeFilter = 'all'))"
           >
-            {{ t('executionPlanTemplates.filters.reset') }}
+            {{ t('bootstrapPromptTemplates.filters.reset') }}
           </NButton>
         </div>
       </div>
@@ -428,8 +301,8 @@ watch(
       class="rounded-2xl bg-lf-surface py-16 shadow-sm shadow-lf-shadow"
       :description="
         hasActiveFilters
-          ? t('executionPlanTemplates.empty.filtered')
-          : t('executionPlanTemplates.empty.default')
+          ? t('bootstrapPromptTemplates.empty.filtered')
+          : t('bootstrapPromptTemplates.empty.default')
       "
     >
       <template #extra>
@@ -438,10 +311,10 @@ watch(
           secondary
           @click="((store.searchQuery = ''), (store.scopeFilter = 'all'))"
         >
-          {{ t('executionPlanTemplates.filters.reset') }}
+          {{ t('bootstrapPromptTemplates.filters.reset') }}
         </NButton>
         <NButton v-else type="primary" @click="openCreateDrawer">
-          {{ t('executionPlanTemplates.actions.createFirst') }}
+          {{ t('bootstrapPromptTemplates.actions.createFirst') }}
         </NButton>
       </template>
     </NEmpty>
@@ -464,7 +337,7 @@ watch(
               </h2>
             </div>
             <NTag round size="small" :type="getScopeTagType(item.scope)">
-              {{ t(`executionPlanTemplates.scopes.${item.scope}`) }}
+              {{ t(`bootstrapPromptTemplates.scopes.${item.scope}`) }}
             </NTag>
           </div>
 
@@ -473,42 +346,25 @@ watch(
             class="line-clamp-2 text-sm leading-6 text-lf-text-muted"
             :class="{ 'italic text-lf-text-subtle': !item.description }"
           >
-            {{ item.description || t('executionPlanTemplates.card.noDescription') }}
+            {{ item.description || t('bootstrapPromptTemplates.card.noDescription') }}
           </p>
 
-          <!-- 专属摘要：轮次概览 -->
-          <div class="space-y-2">
-            <div class="flex items-center gap-2">
-              <NTag size="small" type="info" :bordered="false">
-                {{ item.rounds?.length ?? 0 }} {{ t('executionPlanTemplates.card.rounds') }}
-              </NTag>
-            </div>
-            <div v-if="item.rounds?.length" class="space-y-1">
-              <div
-                v-for="(round, idx) in item.rounds.slice(0, 3)"
-                :key="idx"
-                class="flex items-center gap-2 text-xs text-lf-text-muted"
-              >
-                <span
-                  class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-lf-brand-soft text-[10px] font-semibold text-brand-600"
-                >
-                  {{ idx + 1 }}
-                </span>
-                <span class="truncate">
-                  {{ round.name || `round-${idx + 1}` }}
-                </span>
-              </div>
-              <div v-if="item.rounds.length > 3" class="text-xs text-lf-text-subtle">
-                +{{ item.rounds.length - 3 }} {{ t('executionPlanTemplates.card.moreRounds') }}
-              </div>
-            </div>
+          <!-- 专属摘要：内容预览 -->
+          <div
+            v-if="item.content"
+            class="rounded-lg bg-lf-code-bg px-3 py-2 font-mono text-xs leading-5 text-lf-text-muted line-clamp-3"
+          >
+            {{ item.content }}
           </div>
+          <p v-else class="text-xs italic text-lf-text-subtle">
+            {{ t('bootstrapPromptTemplates.card.noContent') }}
+          </p>
 
           <!-- 底部：时间 + 操作 -->
           <div class="mt-auto border-t border-lf-border-soft pt-4">
             <div class="flex items-center justify-between gap-3">
               <span class="text-xs text-lf-text-subtle">
-                {{ t('executionPlanTemplates.card.createdAt') }} {{ formatDate(item.created_at) }}
+                {{ t('bootstrapPromptTemplates.card.createdAt') }} {{ formatDate(item.created_at) }}
               </span>
               <div class="flex items-center gap-2">
                 <NButton
@@ -518,7 +374,7 @@ watch(
                   class="font-medium"
                   @click="openEditDrawer(item)"
                 >
-                  {{ t('executionPlanTemplates.actions.edit') }}
+                  {{ t('bootstrapPromptTemplates.actions.edit') }}
                 </NButton>
                 <NButton
                   v-if="item.scope !== 'system'"
@@ -527,7 +383,7 @@ watch(
                   class="font-medium"
                   @click="confirmDelete(item)"
                 >
-                  {{ t('executionPlanTemplates.actions.delete') }}
+                  {{ t('bootstrapPromptTemplates.actions.delete') }}
                 </NButton>
                 <NButton
                   v-if="item.scope === 'system'"
@@ -536,7 +392,7 @@ watch(
                   class="font-medium"
                   @click="openEditDrawer(item)"
                 >
-                  {{ t('executionPlanTemplates.actions.view') }}
+                  {{ t('bootstrapPromptTemplates.actions.view') }}
                 </NButton>
               </div>
             </div>
@@ -546,7 +402,7 @@ watch(
     </div>
 
     <!-- 创建/编辑抽屉 -->
-    <NDrawer v-model:show="drawerVisible" :width="720" placement="right">
+    <NDrawer v-model:show="drawerVisible" :width="640" placement="right">
       <NDrawerContent :native-scrollbar="false">
         <template #header>
           <div>
@@ -561,49 +417,38 @@ watch(
           label-placement="top"
           require-mark-placement="right-hanging"
         >
-          <NFormItem :label="t('executionPlanTemplates.form.name')" path="name">
+          <NFormItem :label="t('bootstrapPromptTemplates.form.name')" path="name">
             <NInput
               v-model:value="formModel.name"
-              :placeholder="t('executionPlanTemplates.form.namePlaceholder')"
+              :placeholder="t('bootstrapPromptTemplates.form.namePlaceholder')"
               :disabled="isSystemScope"
             />
           </NFormItem>
 
-          <NFormItem :label="t('executionPlanTemplates.form.description')" path="description">
+          <NFormItem :label="t('bootstrapPromptTemplates.form.description')" path="description">
             <NInput
               v-model:value="formModel.description"
               type="textarea"
-              :placeholder="t('executionPlanTemplates.form.descriptionPlaceholder')"
+              :placeholder="t('bootstrapPromptTemplates.form.descriptionPlaceholder')"
               :rows="3"
               :disabled="isSystemScope"
             />
           </NFormItem>
 
-          <!-- Bootstrap + 轮次编辑器 -->
-          <div class="mb-4">
-            <span class="mb-2 block text-sm font-medium text-lf-text-strong">
-              {{ t('executionPlanTemplates.form.rounds') }}
-            </span>
-            <ExecutionPlanEditor
-              :rounds="formModel.rounds"
-              :bootstrap="formModel.bootstrap"
-              :ruby-retry="formModel.ruby_retry"
-              :backends="backendOptions"
-              :prompt-templates="promptTemplateOptions"
-              :bootstrap-prompt-templates="bootstrapPromptTemplateOptions"
-              :translation-profiles="translationProfileOptions"
+          <NFormItem :label="t('bootstrapPromptTemplates.form.content')" path="content">
+            <PromptTemplateEditor
+              v-model="formModel.content"
               :disabled="isSystemScope"
-              @update:rounds="formModel.rounds = $event"
-              @update:bootstrap="formModel.bootstrap = $event"
-              @update:ruby-retry="formModel.ruby_retry = $event"
+              :rows="8"
+              variable-set="bootstrap"
             />
-          </div>
+          </NFormItem>
         </NForm>
 
         <template #footer>
           <div class="flex justify-end gap-3">
             <NButton @click="drawerVisible = false">
-              {{ t('executionPlanTemplates.actions.cancel') }}
+              {{ t('bootstrapPromptTemplates.actions.cancel') }}
             </NButton>
             <NButton
               v-if="!isSystemScope"
@@ -613,8 +458,8 @@ watch(
             >
               {{
                 isEditMode
-                  ? t('executionPlanTemplates.actions.submitUpdate')
-                  : t('executionPlanTemplates.actions.submitCreate')
+                  ? t('bootstrapPromptTemplates.actions.submitUpdate')
+                  : t('bootstrapPromptTemplates.actions.submitCreate')
               }}
             </NButton>
           </div>
@@ -627,12 +472,14 @@ watch(
       v-model:show="deleteModalVisible"
       preset="dialog"
       type="warning"
-      :title="t('executionPlanTemplates.actions.confirmDelete')"
+      :title="t('bootstrapPromptTemplates.actions.confirmDelete')"
       :content="
-        deletingItem ? t('executionPlanTemplates.delete.confirm', { name: deletingItem.name }) : ''
+        deletingItem
+          ? t('bootstrapPromptTemplates.delete.confirm', { name: deletingItem.name })
+          : ''
       "
-      :positive-text="t('executionPlanTemplates.actions.confirmDelete')"
-      :negative-text="t('executionPlanTemplates.actions.cancel')"
+      :positive-text="t('bootstrapPromptTemplates.actions.confirmDelete')"
+      :negative-text="t('bootstrapPromptTemplates.actions.cancel')"
       :loading="deletingItem ? store.deletingIds.includes(deletingItem.id) : false"
       @positive-click="executeDelete"
     />

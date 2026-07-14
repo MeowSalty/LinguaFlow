@@ -27,8 +27,8 @@ const (
 // （例如 inline bootstrap 在 Skipped 出现时把本批译文里的 Proposed.Target
 // 替换成 Existing.Target，避免文档内术语不一致）。
 type SkippedEntry struct {
-	Proposed Entry      // 调用方提交的版本
-	Existing Entry      // 表中已有版本（仅 Reason == SkipReasonExists 时有效）
+	Proposed Entry // 调用方提交的版本
+	Existing Entry // 表中已有版本（仅 Reason == SkipReasonExists 时有效）
 	Reason   SkipReason
 }
 

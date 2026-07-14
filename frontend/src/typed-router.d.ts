@@ -80,6 +80,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/bootstrap-prompt-templates': RouteRecordInfo<
+      '/bootstrap-prompt-templates',
+      '/bootstrap-prompt-templates',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/changelog': RouteRecordInfo<
       '/changelog',
       '/changelog',
@@ -195,6 +202,12 @@ declare module 'vue-router/auto-routes' {
     'src/pages/backends.vue': {
       routes:
         | '/backends'
+      views:
+        | never
+    }
+    'src/pages/bootstrap-prompt-templates.vue': {
+      routes:
+        | '/bootstrap-prompt-templates'
       views:
         | never
     }
