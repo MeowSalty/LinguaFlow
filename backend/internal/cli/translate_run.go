@@ -278,6 +278,7 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 				ExtractRenderer:             extractRenderer,
 				ExtractMaxTermsPer1000Chars: e.MaxTermsPer1000Chars,
 				ExtractMinSourceLen:         e.MinSourceLen,
+				ExtractMaxWordsPerBatch:     e.MaxWordsPerBatch,
 			})
 
 		default:

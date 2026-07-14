@@ -175,6 +175,7 @@ func (r *JobRunner) buildExtractRound(rs service.JobRoundSnapshot, b backend.Bac
 		ExtractRenderer:             renderer,
 		ExtractMaxTermsPer1000Chars: e.MaxTermsPer1000Chars,
 		ExtractMinSourceLen:         e.MinSourceLen,
+		ExtractMaxWordsPerBatch:     e.MaxWordsPerBatch,
 	}, nil
 }
 

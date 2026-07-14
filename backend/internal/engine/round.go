@@ -39,5 +39,6 @@ type ExtractRoundConfig struct {
 	Renderer             *prompt.BootstrapRenderer
 	MaxTermsPer1000Chars float64
 	MinSourceLen         int
+	MaxWordsPerBatch     int
 	Repair               repair.Options
 }

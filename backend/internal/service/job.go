@@ -155,6 +155,7 @@ type JobTranslateRoundSnapshot struct {
 type JobExtractRoundSnapshot struct {
 	TemplateContent      string             `json:"template_content"` // 从 BootstrapPromptTemplate.Content 快照
 	BatchSize            int                `json:"batch_size"`
+	MaxWordsPerBatch     int                `json:"max_words_per_batch"`
 	Concurrency          int                `json:"concurrency"`
 	MaxTermsPer1000Chars float64            `json:"max_terms_per_1000_chars"`
 	MinSourceLen         int                `json:"min_source_len"`
@@ -398,6 +399,7 @@ func (s *JobService) validateAndSnapshot(
 				Extract: &JobExtractRoundSnapshot{
 					TemplateContent:      bootstrapSnap.Content,
 					BatchSize:            e.BatchSize,
+					MaxWordsPerBatch:     e.MaxWordsPerBatch,
 					Concurrency:          e.Concurrency,
 					MaxTermsPer1000Chars: e.MaxTermsPer1000Chars,
 					MinSourceLen:         e.MinSourceLen,

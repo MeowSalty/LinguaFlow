@@ -48,6 +48,7 @@ type Round struct {
 	ExtractRenderer             *prompt.BootstrapRenderer
 	ExtractMaxTermsPer1000Chars float64
 	ExtractMinSourceLen         int
+	ExtractMaxWordsPerBatch     int
 	ExtractRepair               repair.Options
 }
 
@@ -138,6 +139,7 @@ func buildRoundConfigs(in []Round, cfg *Config) []RoundConfig {
 				Renderer:             r.ExtractRenderer,
 				MaxTermsPer1000Chars: r.ExtractMaxTermsPer1000Chars,
 				MinSourceLen:         r.ExtractMinSourceLen,
+				MaxWordsPerBatch:     r.ExtractMaxWordsPerBatch,
 				Repair:               r.ExtractRepair,
 			}
 
@@ -310,6 +312,7 @@ func buildExtractPipelineRound(
 		Glossary:             glossaryRes,
 		Retry:                rc.Retry,
 		BatchSize:            rc.BatchSize,
+		MaxWordsPerBatch:     e.MaxWordsPerBatch,
 		MaxTermsPer1000Chars: e.MaxTermsPer1000Chars,
 		MinSourceLen:         e.MinSourceLen,
 		Repair:               e.Repair,

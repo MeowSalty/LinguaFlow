@@ -29,6 +29,7 @@ type TranslateRoundConfig struct {
 type ExtractRoundConfig struct {
 	BootstrapTemplateID  int         `json:"bootstrap_template_id"   yaml:"bootstrap_template_id"` // 引用 BootstrapPromptTemplate
 	BatchSize            int         `json:"batch_size"              yaml:"batch_size"`
+	MaxWordsPerBatch     int         `json:"max_words_per_batch"     yaml:"max_words_per_batch"`
 	Concurrency          int         `json:"concurrency"             yaml:"concurrency"`
 	MaxTermsPer1000Chars float64     `json:"max_terms_per_1000_chars" yaml:"max_terms_per_1000_chars"`
 	MinSourceLen         int         `json:"min_source_len"          yaml:"min_source_len"`

@@ -22,6 +22,7 @@ type ExtractHandler struct {
 	Glossary             glossary.Glossary
 	Retry                backend.RetryPolicy
 	BatchSize            int
+	MaxWordsPerBatch     int
 	MaxTermsPer1000Chars float64
 	MinSourceLen         int
 	Repair               repair.Options
@@ -48,8 +49,9 @@ func (h *ExtractHandler) reporter() progress.Reporter {
 	return h.Reporter
 }
 
-// BuildBatches 收集待抽取的段落索引，按 BatchSize 分批。
+// BuildBatches 收集待抽取的段落索引，按 BatchConstraint 分批。
 // 跳过 Skip 和空白段落。不扩展上下文。
+// batch_size 和 max_words_per_batch 都为 0 时，不分批，全部一次发送。
 func (h *ExtractHandler) BuildBatches(_ context.Context, doc *Document) ([][]int, error) {
 	logger := h.logger()
 
@@ -87,17 +89,25 @@ func (h *ExtractHandler) BuildBatches(_ context.Context, doc *Document) ([][]int
 		return nil, nil
 	}
 
-	bs := max(h.BatchSize, 1)
-	var batches [][]int
-	for i := 0; i < len(pending); i += bs {
-		end := min(i+bs, len(pending))
-		batches = append(batches, pending[i:end])
+	constraint := BatchConstraint{
+		MaxSegments: h.BatchSize,
+		MaxWords:    h.MaxWordsPerBatch,
 	}
+
+	// 两者都为 0 → 不分批，全部一次发送
+	if constraint.MaxSegments <= 0 && constraint.MaxWords <= 0 {
+		logger.Info("extract handler: no batch limit, sending all segments at once",
+			"segments", len(pending))
+		return [][]int{pending}, nil
+	}
+
+	batches := BuildContinuousPendingBatches(doc, pending, constraint)
 
 	logger.Info("extract handler: batches built",
 		"segments", len(pending),
 		"batches", len(batches),
-		"batch_size", bs)
+		"batch_size", h.BatchSize,
+		"max_words_per_batch", h.MaxWordsPerBatch)
 
 	return batches, nil
 }

@@ -312,6 +312,9 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 			if e.BatchSize < 0 {
 				return fmt.Errorf("%w: rounds[%d].extract.batch_size must be >= 0", ErrExecutionPlanConfigInvalid, i)
 			}
+			if e.MaxWordsPerBatch < 0 {
+				return fmt.Errorf("%w: rounds[%d].extract.max_words_per_batch must be >= 0", ErrExecutionPlanConfigInvalid, i)
+			}
 			if e.Concurrency < 1 {
 				return fmt.Errorf("%w: rounds[%d].extract.concurrency must be >= 1", ErrExecutionPlanConfigInvalid, i)
 			}

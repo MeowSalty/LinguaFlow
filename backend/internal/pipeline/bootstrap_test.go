@@ -213,3 +213,97 @@ func TestExtractHandler_NoSegments(t *testing.T) {
 		t.Errorf("backend should not be called for empty pending; calls=%d", fb.idx.Load())
 	}
 }
+
+func TestExtractHandler_SendAll_BothZero(t *testing.T) {
+	doc := &Document{
+		SourceLang: "en", TargetLang: "zh",
+		Segments: []Segment{
+			{ID: "0", Source: "First segment with Gemini API.", Translate: true},
+			{ID: "1", Source: "Second segment with OAuth2 authentication.", Translate: true},
+			{ID: "2", Source: "Third segment with JWT tokens.", Translate: true},
+		},
+	}
+	fb := &fakeBackend{
+		name: "fake",
+		responses: []string{
+			`{"glossary":[{"source":"Gemini","target":"哈基米","notes":""},{"source":"OAuth2","target":"OAuth2","notes":""},{"source":"JWT","target":"JWT","notes":""}]}`,
+		},
+	}
+	g := glossary.NewMemory()
+
+	h := &ExtractHandler{
+		Backends:             []backend.Backend{fb},
+		Renderer:             newBootstrapRenderer(t),
+		Glossary:             g,
+		BatchSize:            0,
+		MaxWordsPerBatch:     0,
+		MaxTermsPer1000Chars: 25.0,
+		MinSourceLen:         2,
+		Logger:               discardLogger(),
+	}
+
+	round := Round{
+		Concurrency: 1,
+		Handler:     h,
+	}
+
+	result, err := RunRound(context.Background(), round, doc, nil, discardLogger(), nil)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if result.Unresolved != nil && len(result.Unresolved) > 0 {
+		t.Errorf("expected no unresolved, got %v", result.Unresolved)
+	}
+	if g.Len() != 3 {
+		t.Errorf("want 3 entries, got %d (entries=%v)", g.Len(), g.SnapshotSources())
+	}
+	// Should be exactly 1 LLM call (single batch)
+	if got := fb.idx.Load(); got != 1 {
+		t.Errorf("expected 1 backend call (send-all mode), got %d", got)
+	}
+}
+
+func TestExtractHandler_MaxWordsPerBatch(t *testing.T) {
+	doc := &Document{
+		SourceLang: "en", TargetLang: "zh",
+		Segments: []Segment{
+			{ID: "0", Source: "Use the Gemini API for translation.", Translate: true},       // ~6 words
+			{ID: "1", Source: "Configure OAuth2 authentication properly.", Translate: true}, // ~5 words
+			{ID: "2", Source: "Implement JWT token validation.", Translate: true},           // ~5 words
+		},
+	}
+	fb := &fakeBackend{
+		name: "fake",
+		responses: []string{
+			`{"glossary":[{"source":"Gemini","target":"哈基米","notes":""}]}`,
+			`{"glossary":[{"source":"OAuth2","target":"OAuth2","notes":""},{"source":"JWT","target":"JWT","notes":""}]}`,
+		},
+	}
+	g := glossary.NewMemory()
+
+	// MaxWordsPerBatch=10 means each batch can have at most 10 words
+	// With ~6, ~5, ~5 words per segment, this should produce 2-3 batches
+	h := &ExtractHandler{
+		Backends:             []backend.Backend{fb},
+		Renderer:             newBootstrapRenderer(t),
+		Glossary:             g,
+		BatchSize:            0,  // no segment count limit
+		MaxWordsPerBatch:     10, // word count limit only
+		MaxTermsPer1000Chars: 25.0,
+		MinSourceLen:         2,
+		Logger:               discardLogger(),
+	}
+
+	round := Round{
+		Concurrency: 1,
+		Handler:     h,
+	}
+
+	_, err := RunRound(context.Background(), round, doc, nil, discardLogger(), nil)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if g.Len() != 3 {
+		t.Errorf("want 3 entries, got %d (entries=%v)", g.Len(), g.SnapshotSources())
+	}
+}

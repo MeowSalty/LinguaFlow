@@ -112,6 +112,7 @@ type CLIConfigTranslateRound struct {
 type CLIConfigExtractRound struct {
 	Template             string      `yaml:"template"` // 引用 bootstrap_prompt_templates key
 	BatchSize            int         `yaml:"batch_size"`
+	MaxWordsPerBatch     int         `yaml:"max_words_per_batch"`
 	Concurrency          int         `yaml:"concurrency"`
 	MaxTermsPer1000Chars float64     `yaml:"max_terms_per_1000_chars"`
 	MinSourceLen         int         `yaml:"min_source_len"`
