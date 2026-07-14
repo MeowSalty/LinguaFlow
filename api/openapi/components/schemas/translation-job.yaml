@@ -42,7 +42,7 @@ CreateTranslationJobRequest:
       additionalProperties: true
   additionalProperties: false
 
-TranslationJobProgress:
+JobProgress:
   type: object
   required: [total_resources, completed_resources, failed_resources, total_segments, completed_segments, skipped_segments]
   properties:
@@ -69,7 +69,7 @@ TranslationJobProgress:
       nullable: true
       description: 当前队列中的任务总数
 
-TranslationJobResource:
+JobResource:
   type: object
   required: [id, resource_id, status, segment_count, completed_segments, skipped_segments, created_at, updated_at]
   properties:
@@ -113,7 +113,7 @@ TranslationJobResource:
       format: date-time
       description: 资源开始执行的时间
 
-TranslationJob:
+Job:
   type: object
   required: [id, project_id, execution_plan_id, status, trigger_type, progress, created_at, updated_at]
   properties:
@@ -143,11 +143,11 @@ TranslationJob:
     error_message:
       type: string
     progress:
-      $ref: '#/TranslationJobProgress'
+      $ref: '#/JobProgress'
     job_resources:
       type: array
       items:
-        $ref: '#/TranslationJobResource'
+        $ref: '#/JobResource'
     started_at:
       type: string
       format: date-time
@@ -159,13 +159,13 @@ TranslationJob:
       type: string
       format: date-time
 
-TranslationJobListResponse:
+JobListResponse:
   type: object
   required: [items]
   properties:
     items:
       type: array
       items:
-        $ref: '#/TranslationJob'
+        $ref: '#/Job'
     next_cursor:
       type: string

@@ -1228,7 +1228,7 @@ paths:
           description: 任务已完成或已失败，无法取消
         default:
           $ref: '#/components/responses/Problem'
-  /projects/{projectId}/translation-jobs:
+  /projects/{projectId}/jobs:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
     get:
@@ -1266,7 +1266,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TranslationJobListResponse'
+                $ref: '#/components/schemas/JobListResponse'
         default:
           $ref: '#/components/responses/Problem'
     post:
@@ -1286,12 +1286,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TranslationJob'
+                $ref: '#/components/schemas/Job'
         default:
           $ref: '#/components/responses/Problem'
-  /translation-jobs/{translationJobId}:
+  /jobs/{jobId}:
     parameters:
-      - $ref: '#/components/parameters/TranslationJobId'
+      - $ref: '#/components/parameters/JobId'
     get:
       operationId: GetTranslationJob
       summary: 获取翻译任务详情
@@ -1303,12 +1303,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TranslationJob'
+                $ref: '#/components/schemas/Job'
         default:
           $ref: '#/components/responses/Problem'
-  /translation-jobs/{translationJobId}/cancel:
+  /jobs/{jobId}/cancel:
     parameters:
-      - $ref: '#/components/parameters/TranslationJobId'
+      - $ref: '#/components/parameters/JobId'
     post:
       operationId: CancelTranslationJob
       summary: 取消翻译任务
@@ -1320,12 +1320,12 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TranslationJob'
+                $ref: '#/components/schemas/Job'
         default:
           $ref: '#/components/responses/Problem'
-  /translation-jobs/{translationJobId}/retry:
+  /jobs/{jobId}/retry:
     parameters:
-      - $ref: '#/components/parameters/TranslationJobId'
+      - $ref: '#/components/parameters/JobId'
     post:
       operationId: RetryTranslationJob
       summary: 重试失败的资源翻译
@@ -1337,7 +1337,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TranslationJob'
+                $ref: '#/components/schemas/Job'
         default:
           $ref: '#/components/responses/Problem'
   /execution-plan-templates:
@@ -1422,24 +1422,24 @@ paths:
           description: 删除成功
         default:
           $ref: '#/components/responses/Problem'
-  /prompt-templates:
+  /translation-prompt-templates:
     get:
       operationId: ListPromptTemplates
-      summary: 列出当前用户的提示词模板
+      summary: 列出当前用户的翻译提示词模板
       security:
         - bearerAuth: []
       responses:
         '200':
-          description: 提示词模板列表
+          description: 翻译提示词模板列表
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PromptTemplateListResponse'
+                $ref: '#/components/schemas/TranslationPromptTemplateListResponse'
         default:
           $ref: '#/components/responses/Problem'
     post:
       operationId: CreatePromptTemplate
-      summary: 创建提示词模板
+      summary: 创建翻译提示词模板
       security:
         - bearerAuth: []
       requestBody:
@@ -1447,36 +1447,36 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreatePromptTemplateRequest'
+              $ref: '#/components/schemas/CreateTranslationPromptTemplateRequest'
       responses:
         '201':
           description: 创建成功
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PromptTemplate'
+                $ref: '#/components/schemas/TranslationPromptTemplate'
         default:
           $ref: '#/components/responses/Problem'
-  /prompt-templates/{promptTemplateId}:
+  /translation-prompt-templates/{translationPromptTemplateId}:
     parameters:
-      - $ref: '#/components/parameters/PromptTemplateId'
+      - $ref: '#/components/parameters/TranslationPromptTemplateId'
     get:
       operationId: GetPromptTemplate
-      summary: 获取提示词模板详情
+      summary: 获取翻译提示词模板详情
       security:
         - bearerAuth: []
       responses:
         '200':
-          description: 提示词模板详情
+          description: 翻译提示词模板详情
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PromptTemplate'
+                $ref: '#/components/schemas/TranslationPromptTemplate'
         default:
           $ref: '#/components/responses/Problem'
     put:
       operationId: UpdatePromptTemplate
-      summary: 更新提示词模板
+      summary: 更新翻译提示词模板
       security:
         - bearerAuth: []
       requestBody:
@@ -1484,19 +1484,19 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdatePromptTemplateRequest'
+              $ref: '#/components/schemas/UpdateTranslationPromptTemplateRequest'
       responses:
         '200':
           description: 更新成功
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PromptTemplate'
+                $ref: '#/components/schemas/TranslationPromptTemplate'
         default:
           $ref: '#/components/responses/Problem'
     delete:
       operationId: DeletePromptTemplate
-      summary: 删除提示词模板
+      summary: 删除翻译提示词模板
       security:
         - bearerAuth: []
       responses:
@@ -1927,8 +1927,8 @@ components:
       schema:
         type: integer
         minimum: 1
-    TranslationJobId:
-      name: translationJobId
+    JobId:
+      name: jobId
       in: path
       required: true
       schema:
@@ -1948,8 +1948,8 @@ components:
       schema:
         type: integer
         minimum: 1
-    PromptTemplateId:
-      name: promptTemplateId
+    TranslationPromptTemplateId:
+      name: translationPromptTemplateId
       in: path
       required: true
       schema:
@@ -2641,166 +2641,13 @@ components:
           additionalProperties: true
       additionalProperties: false
     TranslationJobResource:
-      type: object
-      required:
-        - id
-        - resource_id
-        - status
-        - segment_count
-        - completed_segments
-        - skipped_segments
-        - created_at
-        - updated_at
-      properties:
-        id:
-          type: integer
-        resource_id:
-          type: integer
-        status:
-          type: string
-          enum:
-            - pending
-            - running
-            - completed
-            - failed
-            - cancelled
-        segment_count:
-          type: integer
-        completed_segments:
-          type: integer
-        skipped_segments:
-          type: integer
-          description: 被系统跳过的段落数
-        output_path:
-          type: string
-        error_message:
-          type: string
-        resource:
-          $ref: '#/components/schemas/Resource'
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
-        current_stage:
-          type: string
-          description: 当前执行阶段名称
-        stage_total:
-          type: integer
-          description: 当前阶段的总段落数
-        stage_completed:
-          type: integer
-          description: 当前阶段已完成的段落数
-        started_at:
-          type: string
-          format: date-time
-          description: 资源开始执行的时间
+      $ref: '#/components/schemas/JobResource'
     TranslationJob:
-      type: object
-      required:
-        - id
-        - project_id
-        - execution_plan_id
-        - status
-        - trigger_type
-        - progress
-        - created_at
-        - updated_at
-      properties:
-        id:
-          type: integer
-        project_id:
-          type: integer
-        created_by:
-          type: object
-          properties:
-            id:
-              type: integer
-            username:
-              type: string
-        execution_plan_id:
-          type: integer
-        status:
-          type: string
-          enum:
-            - pending
-            - running
-            - completed
-            - failed
-            - cancelled
-        trigger_type:
-          type: string
-          enum:
-            - manual
-            - file_update
-            - glossary_change
-            - web_edit
-        translation_config:
-          type: object
-          additionalProperties: true
-          description: 翻译执行配置快照（已脱敏，不含 API 密钥）
-        error_message:
-          type: string
-        progress:
-          $ref: '#/components/schemas/TranslationJobProgress'
-        job_resources:
-          type: array
-          items:
-            $ref: '#/components/schemas/TranslationJobResource'
-        started_at:
-          type: string
-          format: date-time
-          description: 任务开始执行的时间
-        created_at:
-          type: string
-          format: date-time
-        updated_at:
-          type: string
-          format: date-time
+      $ref: '#/components/schemas/Job'
     TranslationJobProgress:
-      type: object
-      required:
-        - total_resources
-        - completed_resources
-        - failed_resources
-        - total_segments
-        - completed_segments
-        - skipped_segments
-      properties:
-        total_resources:
-          type: integer
-        completed_resources:
-          type: integer
-        failed_resources:
-          type: integer
-        total_segments:
-          type: integer
-          description: 总段落数（创建时选中的 segment 数）
-        completed_segments:
-          type: integer
-        skipped_segments:
-          type: integer
-          description: 被系统跳过的段落数（已翻译、空文本、纯占位符等）
-        queue_position:
-          type: integer
-          nullable: true
-          description: 在队列中的位置（1-based），null 表示不在队列中
-        queue_size:
-          type: integer
-          nullable: true
-          description: 当前队列中的任务总数
+      $ref: '#/components/schemas/JobProgress'
     TranslationJobListResponse:
-      type: object
-      required:
-        - items
-      properties:
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/TranslationJob'
-        next_cursor:
-          type: string
+      $ref: '#/components/schemas/JobListResponse'
     Activity:
       type: object
       required:
@@ -3233,7 +3080,7 @@ components:
           type: string
           enum:
             - cancelled
-    PromptTemplate:
+    TranslationPromptTemplate:
       type: object
       required:
         - id
@@ -3248,7 +3095,7 @@ components:
         description:
           type: string
         scope:
-          $ref: '#/components/schemas/PromptTemplateScope'
+          $ref: '#/components/schemas/TranslationPromptTemplateScope'
         owner_user_id:
           type: integer
         owner_org_id:
@@ -3262,7 +3109,7 @@ components:
         updated_at:
           type: string
           format: date-time
-    PromptTemplateListResponse:
+    TranslationPromptTemplateListResponse:
       type: object
       required:
         - items
@@ -3270,8 +3117,8 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/PromptTemplate'
-    CreatePromptTemplateRequest:
+            $ref: '#/components/schemas/TranslationPromptTemplate'
+    CreateTranslationPromptTemplateRequest:
       type: object
       required:
         - name
@@ -3284,7 +3131,7 @@ components:
           type: string
           description: 翻译提示词内容。
       additionalProperties: false
-    UpdatePromptTemplateRequest:
+    UpdateTranslationPromptTemplateRequest:
       type: object
       properties:
         name:
@@ -3437,8 +3284,6 @@ components:
           type: integer
         owner_org_id:
           type: integer
-        bootstrap:
-          $ref: '#/components/schemas/ExecutionPlanBootstrapConfig'
         ruby_retry:
           $ref: '#/components/schemas/ExecutionPlanRubyRetryConfig'
         rounds:
@@ -3577,8 +3422,6 @@ components:
           type: string
         description:
           type: string
-        bootstrap:
-          $ref: '#/components/schemas/ExecutionPlanBootstrapConfig'
         ruby_retry:
           $ref: '#/components/schemas/ExecutionPlanRubyRetryConfig'
         rounds:
@@ -3594,8 +3437,6 @@ components:
           type: string
         description:
           type: string
-        bootstrap:
-          $ref: '#/components/schemas/ExecutionPlanBootstrapConfig'
         ruby_retry:
           $ref: '#/components/schemas/ExecutionPlanRubyRetryConfig'
         rounds:
@@ -3843,51 +3684,173 @@ components:
           type: integer
         skipped_count:
           type: integer
+    JobProgress:
+      type: object
+      required:
+        - total_resources
+        - completed_resources
+        - failed_resources
+        - total_segments
+        - completed_segments
+        - skipped_segments
+      properties:
+        total_resources:
+          type: integer
+        completed_resources:
+          type: integer
+        failed_resources:
+          type: integer
+        total_segments:
+          type: integer
+          description: 总段落数（创建时选中的 segment 数）
+        completed_segments:
+          type: integer
+        skipped_segments:
+          type: integer
+          description: 被系统跳过的段落数（已翻译、空文本、纯占位符等）
+        queue_position:
+          type: integer
+          nullable: true
+          description: 在队列中的位置（1-based），null 表示不在队列中
+        queue_size:
+          type: integer
+          nullable: true
+          description: 当前队列中的任务总数
+    JobResource:
+      type: object
+      required:
+        - id
+        - resource_id
+        - status
+        - segment_count
+        - completed_segments
+        - skipped_segments
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+        resource_id:
+          type: integer
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
+            - cancelled
+        segment_count:
+          type: integer
+        completed_segments:
+          type: integer
+        skipped_segments:
+          type: integer
+          description: 被系统跳过的段落数
+        output_path:
+          type: string
+        error_message:
+          type: string
+        resource:
+          $ref: '#/components/schemas/Resource'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        current_stage:
+          type: string
+          description: 当前执行阶段名称
+        stage_total:
+          type: integer
+          description: 当前阶段的总段落数
+        stage_completed:
+          type: integer
+          description: 当前阶段已完成的段落数
+        started_at:
+          type: string
+          format: date-time
+          description: 资源开始执行的时间
+    Job:
+      type: object
+      required:
+        - id
+        - project_id
+        - execution_plan_id
+        - status
+        - trigger_type
+        - progress
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+        project_id:
+          type: integer
+        created_by:
+          type: object
+          properties:
+            id:
+              type: integer
+            username:
+              type: string
+        execution_plan_id:
+          type: integer
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
+            - cancelled
+        trigger_type:
+          type: string
+          enum:
+            - manual
+            - file_update
+            - glossary_change
+            - web_edit
+        translation_config:
+          type: object
+          additionalProperties: true
+          description: 翻译执行配置快照（已脱敏，不含 API 密钥）
+        error_message:
+          type: string
+        progress:
+          $ref: '#/components/schemas/JobProgress'
+        job_resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobResource'
+        started_at:
+          type: string
+          format: date-time
+          description: 任务开始执行的时间
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    JobListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Job'
+        next_cursor:
+          type: string
     ExecutionPlanTemplateScope:
       type: string
       enum:
         - user
         - org
         - system
-    ExecutionPlanBootstrapConfig:
-      type: object
-      required:
-        - enabled
-        - backend_id
-        - prompt_template_id
-        - batch_size
-        - concurrency
-      properties:
-        enabled:
-          type: boolean
-          default: false
-          description: 是否启用独立自举
-        backend_id:
-          type: integer
-          description: 自举使用的后端 ID
-        prompt_template_id:
-          type: integer
-          description: 自举使用的提示词模板 ID
-        batch_size:
-          type: integer
-          minimum: 1
-          default: 20
-          description: 每批发送给 LLM 的源文段数
-        concurrency:
-          type: integer
-          minimum: 1
-          default: 2
-          description: 自举并发数
-        max_terms_per_1000_chars:
-          type: number
-          minimum: 0
-          default: 25
-          description: 每 1000 字词的术语抽取上限系数，实际限制 = totalWords/1000*coeff
-        min_source_len:
-          type: integer
-          minimum: 1
-          default: 2
-          description: 术语源文最短字符数
     ExecutionPlanRubyRetryConfig:
       type: object
       required:
@@ -3914,23 +3877,12 @@ components:
         jitter:
           type: boolean
           default: true
-    ExecutionRoundConfig:
+    TranslateRoundConfig:
       type: object
-      required:
-        - backend_id
-        - prompt_template_id
-        - profile_id
-        - concurrency
       properties:
-        name:
-          type: string
-          description: 轮次名称（可选，空值自动生成 round-N）
-        backend_id:
-          type: integer
-          description: 后端 ID（Backend 单表全局唯一）
         prompt_template_id:
           type: integer
-          description: 提示词模板 ID（PromptTemplate 单表全局唯一）
+          description: 翻译提示词模板 ID
         profile_id:
           type: integer
           description: 策略模板 ID（TranslationProfile 单表全局唯一）
@@ -3942,9 +3894,6 @@ components:
           type: integer
           minimum: 0
           description: 字词数上限；0=不限制，与 batch_size 至少填一项
-        concurrency:
-          type: integer
-          minimum: 1
         fallback_shrink:
           type: number
           minimum: 0
@@ -3953,7 +3902,56 @@ components:
           exclusiveMaximum: true
         retry:
           $ref: '#/components/schemas/RetryConfig'
-    PromptTemplateScope:
+    ExtractRoundConfig:
+      type: object
+      properties:
+        template_id:
+          type: integer
+          description: 术语抽取提示词模板 ID（BootstrapPromptTemplate）
+        batch_size:
+          type: integer
+          minimum: 1
+          default: 20
+          description: 每批发送给 LLM 的源文段数
+        max_terms_per_1000_chars:
+          type: number
+          minimum: 0
+          default: 25
+          description: 每 1000 字词的术语抽取上限系数
+        min_source_len:
+          type: integer
+          minimum: 1
+          default: 2
+          description: 术语源文最短字符数
+    ExecutionRoundConfig:
+      type: object
+      required:
+        - mode
+        - backend_id
+        - concurrency
+      properties:
+        mode:
+          type: string
+          enum:
+            - translate
+            - extract
+          description: 轮次模式：translate=翻译，extract=术语抽取
+        name:
+          type: string
+          description: 轮次名称（可选，空值自动生成 round-N）
+        backend_id:
+          type: integer
+          description: 后端 ID（Backend 单表全局唯一）
+        concurrency:
+          type: integer
+          minimum: 1
+        translate:
+          $ref: '#/components/schemas/TranslateRoundConfig'
+          description: 翻译模式配置（mode=translate 时必填）
+        extract:
+          $ref: '#/components/schemas/ExtractRoundConfig'
+          description: 术语抽取模式配置（mode=extract 时必填）
+    TranslationPromptTemplateScope:
       type: string
       enum:
         - user
