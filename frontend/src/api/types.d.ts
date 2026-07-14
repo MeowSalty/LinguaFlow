@@ -2186,8 +2186,6 @@ export interface components {
              * @enum {string}
              */
             mode: "translate" | "extract";
-            /** @description 轮次名称（可选，空值自动生成 round-N） */
-            name?: string;
             /** @description 后端 ID（Backend 单表全局唯一） */
             backend_id: number;
             concurrency: number;

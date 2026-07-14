@@ -1241,8 +1241,6 @@ const messages = {
       backendPlaceholder: '留空则使用翻译主后端',
     },
     round: {
-      name: '轮次名称',
-      namePlaceholder: '留空自动生成 round-{n}',
       mode: '轮次模式',
       modeTranslate: '翻译',
       modeExtract: '术语抽取',

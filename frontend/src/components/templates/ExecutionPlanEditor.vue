@@ -6,7 +6,6 @@ import {
   NCollapseItem,
   NGrid,
   NGi,
-  NInput,
   NInputNumber,
   NSelect,
   NSwitch,
@@ -96,7 +95,6 @@ function mergeRound(source?: Partial<ExecutionRoundConfig>): RoundModel {
   const mode = source.mode ?? 'translate'
   return {
     mode,
-    name: source.name,
     backend_id: source.backend_id ?? DEFAULT_ROUND.backend_id,
     concurrency: source.concurrency ?? DEFAULT_ROUND.concurrency,
     translate: mode === 'translate' ? mergeTranslate(source.translate) : undefined,
@@ -279,19 +277,12 @@ const emitUpdate = (): void => {
             {{ index + 1 }}
           </span>
           <span class="text-sm font-semibold">
-            {{ round.name || `round-${index + 1}` }}
-          </span>
-          <NTag
-            size="small"
-            :type="round.mode === 'translate' ? 'info' : 'warning'"
-            :bordered="false"
-          >
             {{
               round.mode === 'translate'
                 ? t('executionPlanEditor.round.modeTranslate')
                 : t('executionPlanEditor.round.modeExtract')
             }}
-          </NTag>
+          </span>
         </div>
       </template>
 
@@ -325,38 +316,25 @@ const emitUpdate = (): void => {
         </div>
       </template>
 
-      <!-- 轮次名称 + 模式选择 -->
-      <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div>
-          <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('executionPlanEditor.round.name') }}
-          </div>
-          <NInput
-            v-model:value="round.name"
-            :placeholder="t('executionPlanEditor.round.namePlaceholder', { n: index + 1 })"
-            size="small"
-            :disabled="disabled"
+      <!-- 模式选择 -->
+      <div>
+        <div class="mb-1 text-xs text-lf-text-subtle">
+          {{ t('executionPlanEditor.round.mode') }}
+          <span class="text-red-400">*</span>
+        </div>
+        <NRadioGroup
+          :value="round.mode"
+          size="small"
+          :disabled="disabled"
+          @update:value="(v: 'translate' | 'extract') => switchRoundMode(round, v)"
+        >
+          <NRadioButton
+            v-for="opt in modeOptions"
+            :key="opt.value"
+            :value="opt.value"
+            :label="opt.label"
           />
-        </div>
-        <div>
-          <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('executionPlanEditor.round.mode') }}
-            <span class="text-red-400">*</span>
-          </div>
-          <NRadioGroup
-            :value="round.mode"
-            size="small"
-            :disabled="disabled"
-            @update:value="(v: 'translate' | 'extract') => switchRoundMode(round, v)"
-          >
-            <NRadioButton
-              v-for="opt in modeOptions"
-              :key="opt.value"
-              :value="opt.value"
-              :label="opt.label"
-            />
-          </NRadioGroup>
-        </div>
+        </NRadioGroup>
       </div>
 
       <!-- 公共字段：后端 + 并发 -->
