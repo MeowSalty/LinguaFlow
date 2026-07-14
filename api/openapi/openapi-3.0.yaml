@@ -3936,9 +3936,6 @@ components:
             - translate
             - extract
           description: 轮次模式：translate=翻译，extract=术语抽取
-        name:
-          type: string
-          description: 轮次名称（可选，空值自动生成 round-N）
         backend_id:
           type: integer
           description: 后端 ID（Backend 单表全局唯一）
