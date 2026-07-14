@@ -60,6 +60,8 @@ ExtractRoundConfig:
       minimum: 1
       default: 2
       description: 术语源文最短字符数
+    retry:
+      $ref: '#/RetryConfig'
 
 ExecutionRoundConfig:
   type: object
