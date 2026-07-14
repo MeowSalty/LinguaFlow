@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"fmt"
 	"log/slog"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -29,7 +28,6 @@ type Options struct {
 // Round 描述一轮翻译的执行配置（Engine 级别）。
 type Round struct {
 	Backend          backend.Backend
-	Name             string
 	BatchSize        int
 	MaxWordsPerBatch int
 	Concurrency      int
@@ -59,13 +57,6 @@ type RuntimeResources struct {
 	TM       tm.TranslationMemory
 }
 
-func resolveName(name string, idx int) string {
-	if name != "" {
-		return name
-	}
-	return fmt.Sprintf("round-%d", idx+1)
-}
-
 func resolveDefault(val, global, fallback int) int {
 	if val > 0 {
 		return val
@@ -90,7 +81,7 @@ func buildRoundConfigs(in []Round, cfg *Config) []RoundConfig {
 	}
 	globalRetry := cfg.TranslateDefaults.Retry
 	out := make([]RoundConfig, 0, len(in))
-	for i, r := range in {
+	for _, r := range in {
 		retry := r.Retry
 		if retry.MaxAttempts == 0 {
 			retry = globalRetry
@@ -107,7 +98,6 @@ func buildRoundConfigs(in []Round, cfg *Config) []RoundConfig {
 		}
 
 		rc := RoundConfig{
-			Name:             resolveName(r.Name, i),
 			Backend:          r.Backend,
 			BatchSize:        resolveDefault(r.BatchSize, cfg.TranslateDefaults.BatchSize, 1),
 			MaxWordsPerBatch: r.MaxWordsPerBatch,
@@ -296,7 +286,6 @@ func buildTranslatePipelineRound(
 	}
 
 	return pipeline.Round{
-		Name:        rc.Name,
 		Concurrency: rc.Concurrency,
 		Retry:       rc.Retry,
 		Context:     rc.Context,
@@ -329,7 +318,6 @@ func buildExtractPipelineRound(
 	}
 
 	return pipeline.Round{
-		Name:        rc.Name,
 		Concurrency: rc.Concurrency,
 		Retry:       rc.Retry,
 		Context:     rc.Context,

@@ -78,7 +78,6 @@ translation_profiles:
 execution:
   rounds:
     - mode: translate
-      name: 主翻译
       # 引用 backends 中定义的后端名称
       backend: openai-default
       # 翻译模式配置

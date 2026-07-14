@@ -40,7 +40,6 @@ func (e *Engine) ExecuteRound(ctx context.Context, roundIdx int, doc *pipeline.D
 
 	e.logger.Info("execute round start",
 		"round", roundIdx,
-		"name", round.Name,
 		"mode", handler.ModeName(),
 		"segments", len(doc.Segments),
 		"source_lang", doc.SourceLang,
@@ -59,7 +58,6 @@ func (e *Engine) ExecuteRound(ctx context.Context, roundIdx int, doc *pipeline.D
 
 	e.logger.Info("execute round done",
 		"round", roundIdx,
-		"name", round.Name,
 		"mode", handler.ModeName(),
 		"segments", len(doc.Segments),
 		"unresolved", roundResult.UnresolvedCount,

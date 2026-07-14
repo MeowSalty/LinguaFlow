@@ -237,7 +237,6 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 			}
 
 			rounds = append(rounds, engine.Round{
-				Name:              r.Name,
 				Backend:           b,
 				BatchSize:         t.BatchSize,
 				MaxWordsPerBatch:  t.MaxWordsPerBatch,
@@ -276,7 +275,6 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 			}
 
 			rounds = append(rounds, engine.Round{
-				Name:        r.Name,
 				Backend:     b,
 				BatchSize:   e.BatchSize,
 				Concurrency: e.Concurrency,

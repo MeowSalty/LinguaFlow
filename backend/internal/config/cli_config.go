@@ -91,8 +91,7 @@ type CLIConfigExecution struct {
 
 // CLIConfigRound 单轮执行配置。
 type CLIConfigRound struct {
-	Mode      string                   `yaml:"mode"` // "translate" | "extract"
-	Name      string                   `yaml:"name"`
+	Mode      string                   `yaml:"mode"`    // "translate" | "extract"
 	Backend   string                   `yaml:"backend"` // 引用 backends key
 	Translate *CLIConfigTranslateRound `yaml:"translate,omitempty"`
 	Extract   *CLIConfigExtractRound   `yaml:"extract,omitempty"`
@@ -478,7 +477,6 @@ func defaultCLIConfig() *CLIConfig {
 		Execution: CLIConfigExecution{
 			Rounds: []CLIConfigRound{{
 				Mode:    "translate",
-				Name:    "主翻译",
 				Backend: "openai-default",
 				Translate: &CLIConfigTranslateRound{
 					Prompt:         "default",

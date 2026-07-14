@@ -89,7 +89,6 @@ func TestExtractHandler_AddsExtractedTermsToGlossary(t *testing.T) {
 	}
 
 	round := Round{
-		Name:        "extract",
 		Concurrency: 1,
 		Handler:     h,
 	}
@@ -127,7 +126,6 @@ func TestExtractHandler_FiltersTooShortTerms(t *testing.T) {
 	}
 
 	round := Round{
-		Name:        "extract",
 		Concurrency: 1,
 		Handler:     h,
 	}
@@ -173,8 +171,7 @@ func TestExtractHandler_BatchFailureDoesNotAbortStage(t *testing.T) {
 	}
 
 	round := Round{
-		Name:        "extract",
-		Concurrency: 1, // 顺序，保证第一批先跑
+		Concurrency: 1,
 		Handler:     h,
 	}
 
@@ -204,7 +201,6 @@ func TestExtractHandler_NoSegments(t *testing.T) {
 	}
 
 	round := Round{
-		Name:        "extract",
 		Concurrency: 1,
 		Handler:     h,
 	}

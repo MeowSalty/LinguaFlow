@@ -135,7 +135,6 @@ type ExecutionPlanRubyRetrySnapshot struct {
 // JobRoundSnapshot 单轮的完整执行快照。
 type JobRoundSnapshot struct {
 	Mode      string                     `json:"mode"` // "translate" | "extract"
-	Name      string                     `json:"name"`
 	Backend   BackendSnapshot            `json:"backend"`
 	Translate *JobTranslateRoundSnapshot `json:"translate,omitempty"`
 	Extract   *JobExtractRoundSnapshot   `json:"extract,omitempty"`
@@ -363,7 +362,6 @@ func (s *JobService) validateAndSnapshot(
 
 			snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
 				Mode:    "translate",
-				Name:    round.Name,
 				Backend: *backendSnap,
 				Translate: &JobTranslateRoundSnapshot{
 					Prompt:           *promptSnap,
@@ -395,7 +393,6 @@ func (s *JobService) validateAndSnapshot(
 			snapshot.GlossaryEnabled = true
 			snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
 				Mode:    "extract",
-				Name:    round.Name,
 				Backend: *backendSnap,
 				Extract: &JobExtractRoundSnapshot{
 					TemplateContent:      bootstrapSnap.Content,

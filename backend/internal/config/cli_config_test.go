@@ -669,7 +669,6 @@ func TestValidateCLIConfigRounds(t *testing.T) {
 				Rounds: []CLIConfigRound{
 					{
 						Mode:    "",
-						Name:    "test",
 						Backend: "default",
 						Translate: &CLIConfigTranslateRound{
 							Prompt:  "default",
@@ -693,7 +692,6 @@ func TestValidateCLIConfigRounds(t *testing.T) {
 				Rounds: []CLIConfigRound{
 					{
 						Mode:    "translat",
-						Name:    "test",
 						Backend: "default",
 					},
 				},
@@ -714,7 +712,6 @@ func TestValidateCLIConfigRounds(t *testing.T) {
 				Rounds: []CLIConfigRound{
 					{
 						Mode:    "translate",
-						Name:    "test",
 						Backend: "default",
 					},
 				},
@@ -735,7 +732,6 @@ func TestValidateCLIConfigRounds(t *testing.T) {
 				Rounds: []CLIConfigRound{
 					{
 						Mode:    "extract",
-						Name:    "test",
 						Backend: "default",
 					},
 				},
@@ -756,7 +752,6 @@ func TestValidateCLIConfigRounds(t *testing.T) {
 				Rounds: []CLIConfigRound{
 					{
 						Mode:    "translate",
-						Name:    "主翻译",
 						Backend: "default",
 						Translate: &CLIConfigTranslateRound{
 							Prompt:  "default",
@@ -777,7 +772,6 @@ func TestValidateCLIConfigRounds(t *testing.T) {
 				Rounds: []CLIConfigRound{
 					{
 						Mode:    "extract",
-						Name:    "术语抽取",
 						Backend: "default",
 						Extract: &CLIConfigExtractRound{
 							Template:  "default",

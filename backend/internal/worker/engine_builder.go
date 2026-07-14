@@ -25,7 +25,7 @@ func (r *JobRunner) buildEngineFromSnapshot(
 	reporter progress.Reporter,
 ) (*engine.Engine, error) {
 	var rounds []engine.Round
-	for _, rs := range snapshot.Rounds {
+	for i, rs := range snapshot.Rounds {
 		// 从快照直接构建后端实例（无需名称匹配）
 		bCfg := backend.Config{
 			Name:    rs.Backend.Name, // 仅用于日志，不用于匹配
@@ -35,7 +35,7 @@ func (r *JobRunner) buildEngineFromSnapshot(
 		}
 		b, err := backend.Build(bCfg)
 		if err != nil {
-			return nil, fmt.Errorf("round %q build backend: %w", rs.Name, err)
+			return nil, fmt.Errorf("round[%d] build backend: %w", i, err)
 		}
 
 		// 使用共享 limiter pool 包装后端
@@ -47,7 +47,7 @@ func (r *JobRunner) buildEngineFromSnapshot(
 		switch rs.Mode {
 		case "translate":
 			if rs.Translate == nil {
-				return nil, fmt.Errorf("round %q: mode=translate but translate config is nil", rs.Name)
+				return nil, fmt.Errorf("round[%d]: mode=translate but translate config is nil", i)
 			}
 			round, err := r.buildTranslateRound(rs, b)
 			if err != nil {
@@ -57,7 +57,7 @@ func (r *JobRunner) buildEngineFromSnapshot(
 
 		case "extract":
 			if rs.Extract == nil {
-				return nil, fmt.Errorf("round %q: mode=extract but extract config is nil", rs.Name)
+				return nil, fmt.Errorf("round[%d]: mode=extract but extract config is nil", i)
 			}
 			round, err := r.buildExtractRound(rs, b)
 			if err != nil {
@@ -66,7 +66,7 @@ func (r *JobRunner) buildEngineFromSnapshot(
 			rounds = append(rounds, round)
 
 		default:
-			return nil, fmt.Errorf("round %q: unsupported mode %q", rs.Name, rs.Mode)
+			return nil, fmt.Errorf("round[%d]: unsupported mode %q", i, rs.Mode)
 		}
 	}
 
@@ -110,7 +110,7 @@ func (r *JobRunner) buildTranslateRound(rs service.JobRoundSnapshot, b backend.B
 	// 为每轮构建独立的 Renderer（使用该轮自己的 prompt 模板）
 	roundRenderer, err := prompt.NewRenderer(t.Prompt.Content)
 	if err != nil {
-		return engine.Round{}, fmt.Errorf("round %q build renderer: %w", rs.Name, err)
+		return engine.Round{}, fmt.Errorf("build renderer: %w", err)
 	}
 
 	var protectRules []string
@@ -126,7 +126,6 @@ func (r *JobRunner) buildTranslateRound(rs service.JobRoundSnapshot, b backend.B
 
 	return engine.Round{
 		Backend:          b,
-		Name:             rs.Name,
 		BatchSize:        t.BatchSize,
 		MaxWordsPerBatch: t.MaxWordsPerBatch,
 		Concurrency:      t.Concurrency,
@@ -159,7 +158,7 @@ func (r *JobRunner) buildExtractRound(rs service.JobRoundSnapshot, b backend.Bac
 	// 构建 BootstrapRenderer
 	renderer, err := prompt.NewBootstrapRenderer(e.TemplateContent)
 	if err != nil {
-		return engine.Round{}, fmt.Errorf("round %q build bootstrap renderer: %w", rs.Name, err)
+		return engine.Round{}, fmt.Errorf("build bootstrap renderer: %w", err)
 	}
 
 	retry := backend.RetryPolicy{
@@ -170,7 +169,6 @@ func (r *JobRunner) buildExtractRound(rs service.JobRoundSnapshot, b backend.Bac
 
 	return engine.Round{
 		Backend:     b,
-		Name:        rs.Name,
 		BatchSize:   e.BatchSize,
 		Concurrency: e.Concurrency,
 		Retry:       retry,

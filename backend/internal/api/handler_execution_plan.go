@@ -42,10 +42,6 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 		Mode:      ExecutionRoundConfigMode(rc.Mode),
 		BackendId: rc.BackendID,
 	}
-	if rc.Name != "" {
-		name := rc.Name
-		apiRC.Name = &name
-	}
 	if rc.Mode == "translate" && rc.Translate != nil {
 		t := rc.Translate
 		apiRC.Concurrency = t.Concurrency
@@ -176,9 +172,6 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 		rc := schema.ExecutionRoundConfig{
 			Mode:      string(ar.Mode),
 			BackendID: ar.BackendId,
-		}
-		if ar.Name != nil {
-			rc.Name = *ar.Name
 		}
 		if ar.Mode == Translate && ar.Translate != nil {
 			t := ar.Translate

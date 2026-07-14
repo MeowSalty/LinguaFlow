@@ -262,9 +262,6 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 		return fmt.Errorf("%w: rounds must not be empty", ErrExecutionPlanConfigInvalid)
 	}
 	for i, round := range rounds {
-		if strings.TrimSpace(round.Name) == "" {
-			return fmt.Errorf("%w: rounds[%d].name must not be empty", ErrExecutionPlanConfigInvalid, i)
-		}
 		if round.BackendID <= 0 {
 			return fmt.Errorf("%w: rounds[%d].backend_id must be positive", ErrExecutionPlanConfigInvalid, i)
 		}

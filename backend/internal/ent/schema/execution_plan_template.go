@@ -9,7 +9,6 @@ import (
 // ExecutionRoundConfig 单轮执行配置。
 type ExecutionRoundConfig struct {
 	Mode      string                `json:"mode"               yaml:"mode"` // "translate" | "extract"
-	Name      string                `json:"name"               yaml:"name"`
 	BackendID int                   `json:"backend_id"         yaml:"backend_id"`
 	Translate *TranslateRoundConfig `json:"translate,omitempty" yaml:"translate,omitempty"`
 	Extract   *ExtractRoundConfig   `json:"extract,omitempty"   yaml:"extract,omitempty"`

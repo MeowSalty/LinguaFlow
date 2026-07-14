@@ -540,7 +540,6 @@ func runTestTranslateRound(t *testing.T, h *TranslateHandler, doc *Document, con
 		conc = concurrency[0]
 	}
 	round := Round{
-		Name:        "test",
 		Concurrency: conc,
 		Handler:     h,
 	}

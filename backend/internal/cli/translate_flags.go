@@ -42,7 +42,6 @@ func applyTranslateFlags(cliCfg *config.CLIConfig, opts translateOptions) error 
 				// 在最前面插入一个 extract 轮次
 				extractRound := config.CLIConfigRound{
 					Mode:    "extract",
-					Name:    "术语抽取",
 					Backend: "openai-default",
 					Extract: &config.CLIConfigExtractRound{
 						Template:             "default",
