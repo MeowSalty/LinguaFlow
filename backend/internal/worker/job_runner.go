@@ -19,7 +19,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
@@ -244,7 +243,6 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 	var mu sync.Mutex
 	completedCount := 0
 	var lastResult pipeline.TranslateResult
-	engineRoundIdx := 0 // 独立计数器，映射 snapshot 轮次到 engine.translateRound 索引
 
 	// 轮次循环
 	for roundIdx := range snapshot.Rounds {
@@ -254,20 +252,6 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 		}
 
 		round := snapshot.Rounds[roundIdx]
-
-		// 按轮次 mode 分发
-		switch round.Mode {
-		case "extract":
-			if err := r.runExtractRound(ctx, round, res, runtimeGlossary, exec, item, reporter); err != nil {
-				r.logger.Warn("extract round failed", "job_id", job.ID, "round", roundIdx, "err", err)
-			}
-			continue
-		case "translate":
-			// 继续执行翻译逻辑
-		default:
-			r.logger.Warn("unknown round mode, skipping", "job_id", job.ID, "round", roundIdx, "mode", round.Mode)
-			continue
-		}
 
 		// 每轮从 DB 重新加载段落（Worker 通过 DB 重新加载避免保护态问题）
 		selectedRows, allRows, loadErr := r.loadSegments(ctx, res.ID, item.SegmentIds)
@@ -303,79 +287,80 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 			}
 		}
 
-		batchHandler := func(_ context.Context, batchResult pipeline.BatchResult) error {
-			defaultStatus := service.SegmentStatusTranslated
-			if autoApprove {
-				defaultStatus = service.SegmentStatusApproved
-			}
-
-			// --- QA 规则检测 ---
-			var allIssues []qa.QualityIssue
-			if qaEngine != nil {
-				inputs := buildQACheckInputs(batchResult)
-				allIssues = qaEngine.Run(ctx, inputs)
-			}
-
-			localCompleted := 0
-			failed := 0
-			for _, ts := range batchResult.Segments {
-				if ts.TargetText == "" {
-					continue
-				}
-				dbID, ok := docIndexToDBID[ts.Index]
-				if !ok {
-					continue
-				}
-
-				segIssues := qa.IssuesFor(ts.Index, allIssues)
-
-				segStatus := defaultStatus
-				if qa.HasErrors(segIssues) && cfg.QA.AutoReject {
-					segStatus = service.SegmentStatusRejected
-				}
-
-				update := r.client.Segment.UpdateOneID(dbID).
-					SetSourceText(firstNonEmpty(ts.SourceText, " ")).
-					SetTargetText(ts.TargetText).
-					SetStatus(segStatus)
+		// 构建 BatchHandler（翻译轮次用于持久化，抽取轮次不需要）
+		var batchHandler func(_ context.Context, batchResult pipeline.BatchResult) error
+		if round.Mode == "translate" {
+			batchHandler = func(_ context.Context, batchResult pipeline.BatchResult) error {
+				defaultStatus := service.SegmentStatusTranslated
 				if autoApprove {
-					update.ClearReviewComment()
+					defaultStatus = service.SegmentStatusApproved
 				}
-				// --- 写入 QA 结果 ---
-				// 先清除旧的 quality_issues，再按需写入新的
-				update.ClearQualityIssues()
-				if len(segIssues) > 0 {
-					update.SetQualityIssues(segIssues)
+
+				// --- QA 规则检测 ---
+				var allIssues []qa.QualityIssue
+				if qaEngine != nil {
+					inputs := buildQACheckInputs(batchResult)
+					allIssues = qaEngine.Run(ctx, inputs)
 				}
-				if err := update.Exec(ctx); err != nil {
-					r.logger.Warn("persist segment failed", "segment_id", dbID, "err", err)
-					failed++
-					continue
+
+				localCompleted := 0
+				failed := 0
+				for _, ts := range batchResult.Segments {
+					if ts.TargetText == "" {
+						continue
+					}
+					dbID, ok := docIndexToDBID[ts.Index]
+					if !ok {
+						continue
+					}
+
+					segIssues := qa.IssuesFor(ts.Index, allIssues)
+
+					segStatus := defaultStatus
+					if qa.HasErrors(segIssues) && cfg.QA.AutoReject {
+						segStatus = service.SegmentStatusRejected
+					}
+
+					update := r.client.Segment.UpdateOneID(dbID).
+						SetSourceText(firstNonEmpty(ts.SourceText, " ")).
+						SetTargetText(ts.TargetText).
+						SetStatus(segStatus)
+					if autoApprove {
+						update.ClearReviewComment()
+					}
+					// --- 写入 QA 结果 ---
+					update.ClearQualityIssues()
+					if len(segIssues) > 0 {
+						update.SetQualityIssues(segIssues)
+					}
+					if err := update.Exec(ctx); err != nil {
+						r.logger.Warn("persist segment failed", "segment_id", dbID, "err", err)
+						failed++
+						continue
+					}
+					localCompleted++
 				}
-				localCompleted++
+				mu.Lock()
+				completedCount += localCompleted
+				mu.Unlock()
+				if failed > 0 && localCompleted == 0 {
+					return fmt.Errorf("batch persist failed: all %d segments failed to write to database", failed)
+				}
+				return nil
 			}
-			mu.Lock()
-			completedCount += localCompleted
-			mu.Unlock()
-			if failed > 0 && localCompleted == 0 {
-				return fmt.Errorf("batch persist failed: all %d segments failed to write to database", failed)
-			}
-			return nil
 		}
 
 		roundIdx := roundIdx // capture for closure
-		curEngineRound := engineRoundIdx
-		result, translateErr := eng.TranslateRound(ctx, curEngineRound, doc,
+		result, roundErr := eng.ExecuteRound(ctx, roundIdx, doc,
 			engine.WithSegmentFilter(segmentIndexes),
 			engine.WithBatchHandler(batchHandler),
 		)
-		engineRoundIdx++
-		if translateErr == nil {
+		if roundErr == nil {
 			lastResult = result
 		}
 
-		if translateErr != nil {
-			if errors.Is(translateErr, context.Canceled) && completedCount > 0 {
+		if roundErr != nil {
+			if errors.Is(roundErr, context.Canceled) && completedCount > 0 {
 				r.logger.Warn("translation cancelled, preserving partial progress",
 					"resource_id", item.ID, "completed", completedCount, "total", len(selectedRows))
 				_ = r.recordUsage(ctx, exec, completedCount, lastResult.InputTokens, lastResult.OutputTokens)
@@ -383,7 +368,7 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 				_ = r.jobs.MarkJobResourceCancelled(ctx, job.ID, item.ID)
 				return nil
 			}
-			_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, fmt.Errorf("translate round %d: %w", roundIdx, translateErr))
+			_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, fmt.Errorf("round %d (%s): %w", roundIdx, round.Mode, roundErr))
 			return nil
 		}
 
@@ -433,74 +418,6 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 	}
 
 	return r.jobs.MarkJobResourceCompleted(ctx, job.ID, item.ID, "", completedCount, skippedCount)
-}
-
-// runExtractRound 执行术语抽取轮次。
-func (r *JobRunner) runExtractRound(ctx context.Context, round service.JobRoundSnapshot, res *ent.Resource, runtimeGlossary glossary.Glossary, exec *service.JobExecution, item *ent.JobResource, reporter progress.Reporter) error {
-	if round.Extract == nil {
-		return fmt.Errorf("extract round config is nil")
-	}
-
-	// 加载段落
-	selectedRows, allRows, err := r.loadSegments(ctx, res.ID, item.SegmentIds)
-	if err != nil {
-		return fmt.Errorf("load segments: %w", err)
-	}
-	if len(selectedRows) == 0 {
-		return nil
-	}
-
-	// 构建 Document
-	inputs := buildSegmentInputs(allRows)
-	doc := pipeline.BuildDocumentFromSegments(inputs,
-		exec.Project.SourceLang, exec.Project.TargetLang, res.Format)
-
-	// 构建后端
-	bCfg := backend.Config{
-		Name:    round.Backend.Name,
-		Type:    round.Backend.Type,
-		Enabled: true,
-		Options: round.Backend.Options,
-	}
-	b, err := backend.Build(bCfg)
-	if err != nil {
-		return fmt.Errorf("build backend: %w", err)
-	}
-	defer b.Close()
-
-	// 使用共享 limiter pool 包装后端
-	if r.limiterPool != nil && round.Backend.RateLimitPerMinute > 0 {
-		limiter := r.limiterPool.Get(round.Backend.ID, round.Backend.RateLimitPerMinute)
-		b = backend.NewRateLimitedBackend(b, limiter)
-	}
-
-	// 构建 BootstrapRenderer
-	renderer, err := prompt.NewBootstrapRenderer(round.Extract.TemplateContent)
-	if err != nil {
-		return fmt.Errorf("build bootstrap renderer: %w", err)
-	}
-
-	// 构建 pipeline.Bootstrap
-	retry := backend.RetryPolicy{
-		MaxAttempts: 3,
-		Backoff:     1000,
-		Jitter:      true,
-	}
-	extractStage := &pipeline.Bootstrap{
-		Backends:             []backend.Backend{b},
-		Renderer:             renderer,
-		Glossary:             runtimeGlossary,
-		Retry:                retry,
-		Concurrency:          round.Extract.Concurrency,
-		BatchSize:            round.Extract.BatchSize,
-		MaxTermsPer1000Chars: round.Extract.MaxTermsPer1000Chars,
-		MinSourceLen:         round.Extract.MinSourceLen,
-		Logger:               r.logger,
-		Reporter:             reporter,
-	}
-
-	// 运行
-	return extractStage.Run(ctx, doc)
 }
 
 // buildSegmentInputs 将 DB segments 转换为 SegmentInput 切片。

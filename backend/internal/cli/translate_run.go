@@ -163,19 +163,6 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 
 	var rounds []engine.Round
 	for i, r := range cliCfg.Execution.Rounds {
-		switch r.Mode {
-		case "translate":
-			if r.Translate == nil {
-				return nil, fmt.Errorf("execution.rounds[%d]: mode=translate requires translate config", i)
-			}
-		case "extract":
-			// CLI 模式下独立自举由 engine 内部处理
-			continue
-		default:
-			return nil, fmt.Errorf("execution.rounds[%d]: unsupported mode %q", i, r.Mode)
-		}
-
-		t := r.Translate
 		bCfg, ok := cliCfg.Backends[r.Backend]
 		if !ok {
 			return nil, fmt.Errorf("backend %q not found in backends", r.Backend)
@@ -196,70 +183,114 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 			b = backend.NewRateLimitedBackend(b, limiter)
 		}
 
-		var roundRenderer *prompt.Renderer
-		if promptContent := resolvePromptContent(cliCfg, t.Prompt); promptContent != "" {
-			roundRenderer, err = prompt.NewRenderer(promptContent)
-			if err != nil {
-				return nil, fmt.Errorf("build renderer for prompt %q: %w", t.Prompt, err)
+		switch r.Mode {
+		case "translate":
+			if r.Translate == nil {
+				return nil, fmt.Errorf("execution.rounds[%d]: mode=translate requires translate config", i)
 			}
-		}
+			t := r.Translate
 
-		var roundRepair *repair.Config
-		var roundContext *pipeline.ContextConfig
-		var roundPostprocess *pipeline.PostprocessConfig
-		var roundRuby engine.RubyConfig
-		var roundProtectRules []string
-		if profileCfg, ok := cliCfg.TranslationProfiles[t.Profile]; ok {
-			rc := repair.Config{
-				Enabled:              profileCfg.Repair.Enabled,
-				JSONStructural:       profileCfg.Repair.JSONStructural,
-				SchemaAliases:        profileCfg.Repair.SchemaAliases,
-				Partial:              profileCfg.Repair.Partial,
-				PartialThreshold:     profileCfg.Repair.PartialThreshold,
-				PlaceholderNormalize: profileCfg.Repair.PlaceholderNormalize,
-				PromptUpgrade:        profileCfg.Repair.PromptUpgrade,
-			}
-			roundRepair = &rc
-			ctx := pipeline.ContextConfig{
-				Enabled:  profileCfg.Context.Enabled,
-				Before:   profileCfg.Context.Before,
-				After:    profileCfg.Context.After,
-				MaxChars: profileCfg.Context.MaxChars,
-			}
-			roundContext = &ctx
-			if profileCfg.Postprocess.Enabled {
-				pp := pipeline.PostprocessConfig{
-					TrimSpaces: profileCfg.Postprocess.TrimSpaces,
+			var roundRenderer *prompt.Renderer
+			if promptContent := resolvePromptContent(cliCfg, t.Prompt); promptContent != "" {
+				roundRenderer, err = prompt.NewRenderer(promptContent)
+				if err != nil {
+					return nil, fmt.Errorf("build renderer for prompt %q: %w", t.Prompt, err)
 				}
-				roundPostprocess = &pp
 			}
-			roundRuby = engine.RubyConfig{
-				Enabled:       profileCfg.Ruby.Enabled,
-				PreserveKinds: profileCfg.Ruby.PreserveKinds,
-			}
-			if profileCfg.Protect.Enabled {
-				roundProtectRules = profileCfg.Protect.Rules
-			}
-		}
 
-		rounds = append(rounds, engine.Round{
-			Name:              r.Name,
-			Backend:           b,
-			BatchSize:         t.BatchSize,
-			MaxWordsPerBatch:  t.MaxWordsPerBatch,
-			Concurrency:       t.Concurrency,
-			FallbackShrink:    t.FallbackShrink,
-			Retry:             toBackendRetryPolicy(t.Retry),
-			Renderer:          roundRenderer,
-			Repair:            roundRepair,
-			ResponseMode:      responseModeFromOptions(bCfg.Options),
-			Mode:              pipeline.RoundModeTranslate,
-			ProtectRules:      roundProtectRules,
-			RubyEnabled:       roundRuby.Enabled,
-			RubyPreserveKinds: roundRuby.PreserveKinds,
-			Context:           roundContext,
-			Postprocess:       roundPostprocess,
-		})
+			var roundRepair *repair.Config
+			var roundContext *pipeline.ContextConfig
+			var roundPostprocess *pipeline.PostprocessConfig
+			var roundRuby engine.RubyConfig
+			var roundProtectRules []string
+			if profileCfg, ok := cliCfg.TranslationProfiles[t.Profile]; ok {
+				rc := repair.Config{
+					Enabled:              profileCfg.Repair.Enabled,
+					JSONStructural:       profileCfg.Repair.JSONStructural,
+					SchemaAliases:        profileCfg.Repair.SchemaAliases,
+					Partial:              profileCfg.Repair.Partial,
+					PartialThreshold:     profileCfg.Repair.PartialThreshold,
+					PlaceholderNormalize: profileCfg.Repair.PlaceholderNormalize,
+					PromptUpgrade:        profileCfg.Repair.PromptUpgrade,
+				}
+				roundRepair = &rc
+				ctx := pipeline.ContextConfig{
+					Enabled:  profileCfg.Context.Enabled,
+					Before:   profileCfg.Context.Before,
+					After:    profileCfg.Context.After,
+					MaxChars: profileCfg.Context.MaxChars,
+				}
+				roundContext = &ctx
+				if profileCfg.Postprocess.Enabled {
+					pp := pipeline.PostprocessConfig{
+						TrimSpaces: profileCfg.Postprocess.TrimSpaces,
+					}
+					roundPostprocess = &pp
+				}
+				roundRuby = engine.RubyConfig{
+					Enabled:       profileCfg.Ruby.Enabled,
+					PreserveKinds: profileCfg.Ruby.PreserveKinds,
+				}
+				if profileCfg.Protect.Enabled {
+					roundProtectRules = profileCfg.Protect.Rules
+				}
+			}
+
+			rounds = append(rounds, engine.Round{
+				Name:              r.Name,
+				Backend:           b,
+				BatchSize:         t.BatchSize,
+				MaxWordsPerBatch:  t.MaxWordsPerBatch,
+				Concurrency:       t.Concurrency,
+				FallbackShrink:    t.FallbackShrink,
+				Retry:             toBackendRetryPolicy(t.Retry),
+				Renderer:          roundRenderer,
+				Repair:            roundRepair,
+				ResponseMode:      responseModeFromOptions(bCfg.Options),
+				Mode:              pipeline.RoundModeTranslate,
+				ProtectRules:      roundProtectRules,
+				RubyEnabled:       roundRuby.Enabled,
+				RubyPreserveKinds: roundRuby.PreserveKinds,
+				Context:           roundContext,
+				Postprocess:       roundPostprocess,
+			})
+
+		case "extract":
+			if r.Extract == nil {
+				return nil, fmt.Errorf("execution.rounds[%d]: mode=extract requires extract config", i)
+			}
+			e := r.Extract
+
+			var extractRenderer *prompt.BootstrapRenderer
+			if pt, ok := cliCfg.PromptTemplates[e.Template]; ok && pt.Content != "" {
+				extractRenderer, err = prompt.NewBootstrapRenderer(pt.Content)
+				if err != nil {
+					return nil, fmt.Errorf("build bootstrap renderer for template %q: %w", e.Template, err)
+				}
+			}
+
+			retry := backend.RetryPolicy{
+				MaxAttempts: 3,
+				Backoff:     1000,
+				Jitter:      true,
+			}
+
+			rounds = append(rounds, engine.Round{
+				Name:        r.Name,
+				Backend:     b,
+				BatchSize:   e.BatchSize,
+				Concurrency: e.Concurrency,
+				Retry:       retry,
+				Mode:        pipeline.RoundModeExtract,
+
+				ExtractRenderer:             extractRenderer,
+				ExtractMaxTermsPer1000Chars: e.MaxTermsPer1000Chars,
+				ExtractMinSourceLen:         e.MinSourceLen,
+			})
+
+		default:
+			return nil, fmt.Errorf("execution.rounds[%d]: unsupported mode %q", i, r.Mode)
+		}
 	}
 
 	var rubyRetryBackends []backend.Backend
@@ -341,7 +372,7 @@ func translateSingleFile(ctx context.Context, eng *engine.Engine, fj FileJob, so
 			restoreFailedSegments(doc, segmentIndexes)
 		}
 
-		_, err := eng.TranslateRound(ctx, roundIdx, doc, engine.WithSegmentFilter(segmentIndexes))
+		_, err := eng.ExecuteRound(ctx, roundIdx, doc, engine.WithSegmentFilter(segmentIndexes))
 		if err != nil {
 			return fmt.Errorf("cli: translate round %d: %w", roundIdx, err)
 		}

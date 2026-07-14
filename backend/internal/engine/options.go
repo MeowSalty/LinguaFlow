@@ -26,7 +26,7 @@ type Options struct {
 	Resources         RuntimeResources
 }
 
-// Round 描述一轮翻译的执行配置。
+// Round 描述一轮翻译的执行配置（Engine 级别）。
 type Round struct {
 	Backend          backend.Backend
 	Name             string
@@ -45,6 +45,12 @@ type Round struct {
 	RubyPreserveKinds []string
 	Context           *pipeline.ContextConfig
 	Postprocess       *pipeline.PostprocessConfig
+
+	// 抽取轮次专用字段
+	ExtractRenderer             *prompt.BootstrapRenderer
+	ExtractMaxTermsPer1000Chars float64
+	ExtractMinSourceLen         int
+	ExtractRepair               repair.Options
 }
 
 // RuntimeResources 封装可选的运行时资源。
@@ -77,25 +83,17 @@ func resolveShrink(val, global float64) float64 {
 	return global
 }
 
-// buildStagesRounds 将 engine.Round 转换为 pipeline.Round。
-func buildStagesRounds(in []Round, cfg *Config) []pipeline.Round {
+// buildRoundConfigs 将 engine.Round 转换为 RoundConfig（中间配置）。
+func buildRoundConfigs(in []Round, cfg *Config) []RoundConfig {
 	if len(in) == 0 {
 		return nil
 	}
 	globalRetry := cfg.TranslateDefaults.Retry
-	out := make([]pipeline.Round, 0, len(in))
+	out := make([]RoundConfig, 0, len(in))
 	for i, r := range in {
 		retry := r.Retry
 		if retry.MaxAttempts == 0 {
 			retry = globalRetry
-		}
-
-		var roundRepair *repair.Options
-		if r.Repair != nil {
-			rc := *r.Repair
-			rc.Normalize()
-			opts := rc.ToOptions()
-			roundRepair = &opts
 		}
 
 		mode := r.Mode
@@ -103,58 +101,238 @@ func buildStagesRounds(in []Round, cfg *Config) []pipeline.Round {
 			mode = pipeline.RoundModeTranslate
 		}
 
-		// 构建 per-round Protector
-		var prot protect.Protector
-		if mode == pipeline.RoundModeTranslate && (r.RubyEnabled || len(r.ProtectRules) > 0) {
-			ps := []protect.Protector{}
-			if r.RubyEnabled {
-				ps = append(ps, &ruby.Extractor{})
-			}
-			if len(r.ProtectRules) > 0 {
-				ps = append(ps, protect.FromRules(r.ProtectRules))
-			}
-			prot = protect.Compose(ps...)
-		}
-
-		rubyMode := ""
-		if r.RubyEnabled {
-			rubyMode = prompt.RubyModeJSON
-			if r.ResponseMode == "text" {
-				rubyMode = prompt.RubyModeSection
-			}
-		}
-
 		var roundCtx *pipeline.ContextConfig
 		if r.Context != nil {
 			roundCtx = r.Context
 		}
 
-		var roundPostprocess *pipeline.PostprocessConfig
-		if r.Postprocess != nil {
-			roundPostprocess = &pipeline.PostprocessConfig{
-				TrimSpaces: r.Postprocess.TrimSpaces,
+		rc := RoundConfig{
+			Name:             resolveName(r.Name, i),
+			Backend:          r.Backend,
+			BatchSize:        resolveDefault(r.BatchSize, cfg.TranslateDefaults.BatchSize, 1),
+			MaxWordsPerBatch: r.MaxWordsPerBatch,
+			Concurrency:      resolveDefault(r.Concurrency, cfg.TranslateDefaults.Concurrency, 1),
+			FallbackShrink:   resolveShrink(r.FallbackShrink, cfg.TranslateDefaults.FallbackShrink),
+			Retry:            retry,
+			Context:          roundCtx,
+		}
+
+		switch mode {
+		case pipeline.RoundModeTranslate:
+			var roundRepair *repair.Config
+			if r.Repair != nil {
+				rr := *r.Repair
+				rr.Normalize()
+				roundRepair = &rr
+			}
+
+			var roundPostprocess *pipeline.PostprocessConfig
+			if r.Postprocess != nil {
+				roundPostprocess = &pipeline.PostprocessConfig{
+					TrimSpaces: r.Postprocess.TrimSpaces,
+				}
+			}
+
+			rc.Translate = &TranslateRoundConfig{
+				Renderer:          r.Renderer,
+				Repair:            roundRepair,
+				ResponseMode:      r.ResponseMode,
+				ProtectRules:      r.ProtectRules,
+				RubyEnabled:       r.RubyEnabled,
+				RubyPreserveKinds: r.RubyPreserveKinds,
+				Postprocess:       roundPostprocess,
+			}
+
+		case pipeline.RoundModeExtract:
+			rc.Extract = &ExtractRoundConfig{
+				Renderer:             r.ExtractRenderer,
+				MaxTermsPer1000Chars: r.ExtractMaxTermsPer1000Chars,
+				MinSourceLen:         r.ExtractMinSourceLen,
+				Repair:               r.ExtractRepair,
+			}
+
+		default:
+			// 未知模式默认为翻译
+			rc.Translate = &TranslateRoundConfig{
+				Renderer: r.Renderer,
 			}
 		}
 
-		out = append(out, pipeline.Round{
-			Name:              resolveName(r.Name, i),
-			Backend:           r.Backend,
-			BatchSize:         resolveDefault(r.BatchSize, cfg.TranslateDefaults.BatchSize, 1),
-			MaxWordsPerBatch:  r.MaxWordsPerBatch,
-			Concurrency:       resolveDefault(r.Concurrency, cfg.TranslateDefaults.Concurrency, 1),
-			FallbackShrink:    resolveShrink(r.FallbackShrink, cfg.TranslateDefaults.FallbackShrink),
-			Retry:             retry,
-			Renderer:          r.Renderer,
-			Repair:            roundRepair,
-			ResponseMode:      r.ResponseMode,
-			Mode:              mode,
-			Protector:         prot,
-			RubyEnabled:       r.RubyEnabled,
-			RubyPreserveKinds: r.RubyPreserveKinds,
-			RubyMode:          rubyMode,
-			Context:           roundCtx,
-			Postprocess:       roundPostprocess,
-		})
+		out = append(out, rc)
 	}
 	return out
+}
+
+// buildPipelineRounds 将 RoundConfig 转换为 pipeline.Round（含 Handler）。
+// 注入引擎级资源：glossary、TM、ruby restorer 等。
+func buildPipelineRounds(
+	configs []RoundConfig,
+	glossaryRes glossary.Glossary,
+	tmRes tm.TranslationMemory,
+	rubyRestorer *ruby.Restorer,
+	rubyRetryBackends []backend.Backend,
+	defaultRepair repair.Options,
+	inlineBootstrap bool,
+	maxTermsPer1000 float64,
+	minSourceLen int,
+	inlineConflictStr string,
+	logger *slog.Logger,
+	reporter progress.Reporter,
+) ([]pipeline.Round, error) {
+	out := make([]pipeline.Round, 0, len(configs))
+	for _, rc := range configs {
+		round, err := buildSinglePipelineRound(
+			rc, glossaryRes, tmRes, rubyRestorer, rubyRetryBackends,
+			defaultRepair, inlineBootstrap, maxTermsPer1000, minSourceLen,
+			inlineConflictStr, logger, reporter,
+		)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, round)
+	}
+	return out, nil
+}
+
+func buildSinglePipelineRound(
+	rc RoundConfig,
+	glossaryRes glossary.Glossary,
+	tmRes tm.TranslationMemory,
+	rubyRestorer *ruby.Restorer,
+	rubyRetryBackends []backend.Backend,
+	defaultRepair repair.Options,
+	inlineBootstrap bool,
+	maxTermsPer1000 float64,
+	minSourceLen int,
+	inlineConflictStr string,
+	logger *slog.Logger,
+	reporter progress.Reporter,
+) (pipeline.Round, error) {
+	if rc.Extract != nil {
+		return buildExtractPipelineRound(rc, glossaryRes, logger, reporter)
+	}
+	return buildTranslatePipelineRound(
+		rc, glossaryRes, tmRes, rubyRestorer, rubyRetryBackends,
+		defaultRepair, inlineBootstrap, maxTermsPer1000, minSourceLen,
+		inlineConflictStr, logger, reporter,
+	)
+}
+
+func buildTranslatePipelineRound(
+	rc RoundConfig,
+	glossaryRes glossary.Glossary,
+	tmRes tm.TranslationMemory,
+	rubyRestorer *ruby.Restorer,
+	rubyRetryBackends []backend.Backend,
+	defaultRepair repair.Options,
+	inlineBootstrap bool,
+	maxTermsPer1000 float64,
+	minSourceLen int,
+	inlineConflictStr string,
+	logger *slog.Logger,
+	reporter progress.Reporter,
+) (pipeline.Round, error) {
+	t := rc.Translate
+	if t == nil {
+		t = &TranslateRoundConfig{}
+	}
+
+	repairOpts := defaultRepair
+	if t.Repair != nil {
+		repairOpts = t.Repair.ToOptions()
+	}
+
+	// 构建 per-round Protector
+	var prot protect.Protector
+	if t.RubyEnabled || len(t.ProtectRules) > 0 {
+		ps := []protect.Protector{}
+		if t.RubyEnabled {
+			ps = append(ps, &ruby.Extractor{})
+		}
+		if len(t.ProtectRules) > 0 {
+			ps = append(ps, protect.FromRules(t.ProtectRules))
+		}
+		prot = protect.Compose(ps...)
+	}
+
+	rubyMode := ""
+	if t.RubyEnabled {
+		rubyMode = prompt.RubyModeJSON
+		if t.ResponseMode == "text" {
+			rubyMode = prompt.RubyModeSection
+		}
+	}
+
+	ctxConfig := pipeline.DefaultContextConfig()
+	if rc.Context != nil {
+		ctxConfig = *rc.Context
+	}
+
+	handler := &pipeline.TranslateHandler{
+		Backend:                rc.Backend,
+		BatchSize:              rc.BatchSize,
+		MaxWordsPerBatch:       rc.MaxWordsPerBatch,
+		FallbackShrink:         rc.FallbackShrink,
+		Retry:                  rc.Retry,
+		ResponseMode:           t.ResponseMode,
+		Renderer:               t.Renderer,
+		Glossary:               glossaryRes,
+		TM:                     tmRes,
+		Repair:                 repairOpts,
+		Context:                ctxConfig,
+		Protector:              prot,
+		RubyEnabled:            t.RubyEnabled,
+		RubyPreserveKinds:      t.RubyPreserveKinds,
+		RubyMode:               rubyMode,
+		Postprocess:            t.Postprocess,
+		RubyRestorer:           rubyRestorer,
+		RubyRetryBackends:      rubyRetryBackends,
+		InlineBootstrap:        inlineBootstrap,
+		MaxTermsPer1000Chars:   maxTermsPer1000,
+		MinBootstrapSourceLen:  minSourceLen,
+		InlineConflictStrategy: inlineConflictStr,
+		Reporter:               reporter,
+		Logger:                 logger,
+	}
+
+	return pipeline.Round{
+		Name:        rc.Name,
+		Concurrency: rc.Concurrency,
+		Retry:       rc.Retry,
+		Context:     rc.Context,
+		Handler:     handler,
+	}, nil
+}
+
+func buildExtractPipelineRound(
+	rc RoundConfig,
+	glossaryRes glossary.Glossary,
+	logger *slog.Logger,
+	reporter progress.Reporter,
+) (pipeline.Round, error) {
+	e := rc.Extract
+	if e == nil {
+		e = &ExtractRoundConfig{}
+	}
+
+	handler := &pipeline.ExtractHandler{
+		Backends:             []backend.Backend{rc.Backend},
+		Renderer:             e.Renderer,
+		Glossary:             glossaryRes,
+		Retry:                rc.Retry,
+		BatchSize:            rc.BatchSize,
+		MaxTermsPer1000Chars: e.MaxTermsPer1000Chars,
+		MinSourceLen:         e.MinSourceLen,
+		Repair:               e.Repair,
+		Logger:               logger,
+		Reporter:             reporter,
+	}
+
+	return pipeline.Round{
+		Name:        rc.Name,
+		Concurrency: rc.Concurrency,
+		Retry:       rc.Retry,
+		Context:     rc.Context,
+		Handler:     handler,
+	}, nil
 }

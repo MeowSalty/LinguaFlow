@@ -57,12 +57,42 @@ func NewWithOptions(opts Options) (*Engine, error) {
 	if translationMemory == nil {
 		translationMemory = tm.Nop{}
 	}
-	rounds := buildStagesRounds(opts.Rounds, opts.Config)
+
+	roundConfigs := buildRoundConfigs(opts.Rounds, opts.Config)
 	bootstrapBackends := opts.BootstrapBackends
 	if len(bootstrapBackends) == 0 {
 		bootstrapBackends = []backend.Backend{opts.Rounds[0].Backend}
 	}
 	rubyRetryBackends := opts.RubyRetryBackends
+
+	inlineBootstrap := opts.Config.Glossary.Enabled && opts.Config.Glossary.Bootstrap.Enabled
+	maxTermsPer1000 := opts.Config.Glossary.Bootstrap.MaxTermsPer1000Chars
+	minSourceLen := opts.Config.Glossary.Bootstrap.MinSourceLen
+	inlineConflictStr := opts.Config.Glossary.Bootstrap.InlineConflictStrategy
+
+	var rubyRestorer *ruby.Restorer
+	if opts.Config.Ruby.Enabled {
+		rubyRestorer = ruby.NewRestorer()
+	}
+
+	rounds, err := buildPipelineRounds(
+		roundConfigs,
+		glos,
+		translationMemory,
+		rubyRestorer,
+		rubyRetryBackends,
+		opts.Config.Repair,
+		inlineBootstrap,
+		maxTermsPer1000,
+		minSourceLen,
+		inlineConflictStr,
+		opts.Logger,
+		opts.Reporter,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("engine: build rounds: %w", err)
+	}
+
 	e := &Engine{
 		cfg:               opts.Config,
 		logger:            opts.Logger,
@@ -72,11 +102,9 @@ func NewWithOptions(opts Options) (*Engine, error) {
 		rubyRetryBackends: rubyRetryBackends,
 		glossary:          glos,
 		tm:                translationMemory,
+		rubyRestorer:      rubyRestorer,
 		saveGlossary:      opts.Config.Glossary.Save,
 		glossaryPath:      opts.Config.Glossary.Path,
-	}
-	if opts.Config.Ruby.Enabled {
-		e.rubyRestorer = ruby.NewRestorer()
 	}
 	return e, nil
 }
@@ -86,7 +114,17 @@ func (e *Engine) Close() error {
 	seen := make(map[backend.Backend]struct{})
 	var firstErr error
 	for _, r := range e.rounds {
-		b := r.Backend
+		var b backend.Backend
+		if th, ok := r.Handler.(*pipeline.TranslateHandler); ok {
+			b = th.Backend
+		} else if eh, ok := r.Handler.(*pipeline.ExtractHandler); ok {
+			if len(eh.Backends) > 0 {
+				b = eh.Backends[0]
+			}
+		}
+		if b == nil {
+			continue
+		}
 		if _, ok := seen[b]; ok {
 			continue
 		}
@@ -108,7 +146,6 @@ func (e *Engine) Close() error {
 }
 
 // maybeSaveGlossary 在 bootstrap.save=true 且 glossary 实现 Saver 时回写到磁盘。
-// FileGlossary 还会通过 Dirty() 跳过无变化情况，避免无意义的文件写。
 func (e *Engine) maybeSaveGlossary(ctx context.Context) {
 	if !e.saveGlossary {
 		return

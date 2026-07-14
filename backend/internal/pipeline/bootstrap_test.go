@@ -63,11 +63,11 @@ func discardLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(io.Discard, nil))
 }
 
-func TestBootstrap_AddsExtractedTermsToGlossary(t *testing.T) {
+func TestExtractHandler_AddsExtractedTermsToGlossary(t *testing.T) {
 	doc := &Document{
 		SourceLang: "en", TargetLang: "zh",
 		Segments: []Segment{
-			{OriginalSource: "Call the Gemini API to translate text."},
+			{ID: "0", Source: "Call the Gemini API to translate text.", Translate: true},
 		},
 	}
 	fb := &fakeBackend{
@@ -78,17 +78,24 @@ func TestBootstrap_AddsExtractedTermsToGlossary(t *testing.T) {
 	}
 	g := glossary.NewMemory()
 
-	s := &Bootstrap{
+	h := &ExtractHandler{
 		Backends:             []backend.Backend{fb},
 		Renderer:             newBootstrapRenderer(t),
 		Glossary:             g,
 		BatchSize:            10,
-		Concurrency:          1,
 		MaxTermsPer1000Chars: 25.0,
 		MinSourceLen:         2,
 		Logger:               discardLogger(),
 	}
-	if err := s.Run(context.Background(), doc); err != nil {
+
+	round := Round{
+		Name:        "extract",
+		Concurrency: 1,
+		Handler:     h,
+	}
+
+	_, err := RunRound(context.Background(), round, doc, nil, discardLogger(), nil)
+	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if got := g.Len(); got != 2 {
@@ -96,10 +103,10 @@ func TestBootstrap_AddsExtractedTermsToGlossary(t *testing.T) {
 	}
 }
 
-func TestBootstrap_FiltersTooShortTerms(t *testing.T) {
+func TestExtractHandler_FiltersTooShortTerms(t *testing.T) {
 	doc := &Document{
 		SourceLang: "en", TargetLang: "zh",
-		Segments: []Segment{{OriginalSource: "x"}},
+		Segments: []Segment{{ID: "0", Source: "x", Translate: true}},
 	}
 	fb := &fakeBackend{
 		name: "fake",
@@ -109,17 +116,24 @@ func TestBootstrap_FiltersTooShortTerms(t *testing.T) {
 	}
 	g := glossary.NewMemory()
 
-	s := &Bootstrap{
+	h := &ExtractHandler{
 		Backends:             []backend.Backend{fb},
 		Renderer:             newBootstrapRenderer(t),
 		Glossary:             g,
 		BatchSize:            10,
-		Concurrency:          1,
 		MaxTermsPer1000Chars: 25.0,
 		MinSourceLen:         2,
 		Logger:               discardLogger(),
 	}
-	if err := s.Run(context.Background(), doc); err != nil {
+
+	round := Round{
+		Name:        "extract",
+		Concurrency: 1,
+		Handler:     h,
+	}
+
+	_, err := RunRound(context.Background(), round, doc, nil, discardLogger(), nil)
+	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	// "A" 长度 1 被过滤，只剩 "AI"。
@@ -128,12 +142,12 @@ func TestBootstrap_FiltersTooShortTerms(t *testing.T) {
 	}
 }
 
-func TestBootstrap_BatchFailureDoesNotAbortStage(t *testing.T) {
+func TestExtractHandler_BatchFailureDoesNotAbortStage(t *testing.T) {
 	doc := &Document{
 		SourceLang: "en", TargetLang: "zh",
 		Segments: []Segment{
-			{OriginalSource: "first batch text"},
-			{OriginalSource: "second batch text"},
+			{ID: "0", Source: "first batch text", Translate: true},
+			{ID: "1", Source: "second batch text", Translate: true},
 		},
 	}
 	// BatchSize=1 ⇒ 两批；第一批返回错误，第二批正常。
@@ -147,18 +161,25 @@ func TestBootstrap_BatchFailureDoesNotAbortStage(t *testing.T) {
 	}
 	g := glossary.NewMemory()
 
-	s := &Bootstrap{
+	h := &ExtractHandler{
 		Backends:             []backend.Backend{fb},
 		Renderer:             newBootstrapRenderer(t),
 		Glossary:             g,
 		BatchSize:            1,
-		Concurrency:          1, // 顺序，保证第一批先跑
 		MaxTermsPer1000Chars: 25.0,
 		MinSourceLen:         2,
 		Retry:                backend.RetryPolicy{MaxAttempts: 1},
 		Logger:               discardLogger(),
 	}
-	if err := s.Run(context.Background(), doc); err != nil {
+
+	round := Round{
+		Name:        "extract",
+		Concurrency: 1, // 顺序，保证第一批先跑
+		Handler:     h,
+	}
+
+	_, err := RunRound(context.Background(), round, doc, nil, discardLogger(), nil)
+	if err != nil {
 		t.Fatalf("run should not fail on single batch error, got: %v", err)
 	}
 	if g.Len() != 1 {
@@ -166,7 +187,7 @@ func TestBootstrap_BatchFailureDoesNotAbortStage(t *testing.T) {
 	}
 }
 
-func TestBootstrap_NoSegments(t *testing.T) {
+func TestExtractHandler_NoSegments(t *testing.T) {
 	doc := &Document{
 		SourceLang: "en", TargetLang: "zh",
 		Segments: []Segment{{Skip: true, Source: "skipped"}, {Source: "   "}},
@@ -174,15 +195,22 @@ func TestBootstrap_NoSegments(t *testing.T) {
 	fb := &fakeBackend{name: "fake"}
 	g := glossary.NewMemory()
 
-	s := &Bootstrap{
-		Backends:    []backend.Backend{fb},
-		Renderer:    newBootstrapRenderer(t),
-		Glossary:    g,
-		BatchSize:   10,
-		Concurrency: 1,
-		Logger:      discardLogger(),
+	h := &ExtractHandler{
+		Backends:  []backend.Backend{fb},
+		Renderer:  newBootstrapRenderer(t),
+		Glossary:  g,
+		BatchSize: 10,
+		Logger:    discardLogger(),
 	}
-	if err := s.Run(context.Background(), doc); err != nil {
+
+	round := Round{
+		Name:        "extract",
+		Concurrency: 1,
+		Handler:     h,
+	}
+
+	_, err := RunRound(context.Background(), round, doc, nil, discardLogger(), nil)
+	if err != nil {
 		t.Fatalf("run: %v", err)
 	}
 	if fb.idx.Load() != 0 {
