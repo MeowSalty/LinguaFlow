@@ -379,6 +379,8 @@ execution:
       translate:
         prompt: tech
         profile: default
+        batch_size: 1
+        concurrency: 1
 `
 	path := writeTempFile(t, "bootstrap-inline.yaml", yamlContent)
 
@@ -606,6 +608,8 @@ execution:
       translate:
         prompt: default
         profile: default
+        batch_size: 1
+        concurrency: 1
 `
 	path := writeTempFile(t, "env-expand.yaml", yaml)
 
@@ -671,8 +675,10 @@ func TestValidateCLIConfigRounds(t *testing.T) {
 						Mode:    "",
 						Backend: "default",
 						Translate: &CLIConfigTranslateRound{
-							Prompt:  "default",
-							Profile: "default",
+							Prompt:      "default",
+							Profile:     "default",
+							BatchSize:   1,
+							Concurrency: 1,
 						},
 					},
 				},
@@ -754,8 +760,10 @@ func TestValidateCLIConfigRounds(t *testing.T) {
 						Mode:    "translate",
 						Backend: "default",
 						Translate: &CLIConfigTranslateRound{
-							Prompt:  "default",
-							Profile: "default",
+							Prompt:      "default",
+							Profile:     "default",
+							BatchSize:   1,
+							Concurrency: 1,
 						},
 					},
 				},
@@ -774,8 +782,9 @@ func TestValidateCLIConfigRounds(t *testing.T) {
 						Mode:    "extract",
 						Backend: "default",
 						Extract: &CLIConfigExtractRound{
-							Template:  "default",
-							BatchSize: 20,
+							Template:    "default",
+							BatchSize:   20,
+							Concurrency: 1,
 						},
 					},
 				},

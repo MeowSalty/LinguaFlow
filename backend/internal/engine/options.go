@@ -58,23 +58,6 @@ type RuntimeResources struct {
 	TM       tm.TranslationMemory
 }
 
-func resolveDefault(val, global, fallback int) int {
-	if val > 0 {
-		return val
-	}
-	if global > 0 {
-		return global
-	}
-	return fallback
-}
-
-func resolveShrink(val, global float64) float64 {
-	if val > 0 {
-		return val
-	}
-	return global
-}
-
 // buildRoundConfigs 将 engine.Round 转换为 RoundConfig（中间配置）。
 func buildRoundConfigs(in []Round, cfg *Config) []RoundConfig {
 	if len(in) == 0 {
@@ -100,10 +83,10 @@ func buildRoundConfigs(in []Round, cfg *Config) []RoundConfig {
 
 		rc := RoundConfig{
 			Backend:          r.Backend,
-			BatchSize:        resolveDefault(r.BatchSize, cfg.TranslateDefaults.BatchSize, 1),
+			BatchSize:        r.BatchSize,
 			MaxWordsPerBatch: r.MaxWordsPerBatch,
-			Concurrency:      resolveDefault(r.Concurrency, cfg.TranslateDefaults.Concurrency, 1),
-			FallbackShrink:   resolveShrink(r.FallbackShrink, cfg.TranslateDefaults.FallbackShrink),
+			Concurrency:      r.Concurrency,
+			FallbackShrink:   r.FallbackShrink,
 			Retry:            retry,
 			Context:          roundCtx,
 		}

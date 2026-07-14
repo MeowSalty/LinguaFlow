@@ -193,6 +193,7 @@ func LoadCLIConfig(path string) (*CLIConfig, error) {
 //   - 空 Mode 规范化为 "translate"（与 pipeline/engine 层默认行为一致）。
 //   - Mode 必须为 "translate" 或 "extract"，拒绝拼写错误等无效值。
 //   - translate 轮次必须包含 Translate 子配置，extract 轮次必须包含 Extract 子配置。
+//   - BatchSize、Concurrency 等字段必须合法，不合法直接报错而非静默 fallback。
 func validateCLIConfigRounds(cfg *CLIConfig) error {
 	for i := range cfg.Execution.Rounds {
 		r := &cfg.Execution.Rounds[i]
@@ -207,9 +208,35 @@ func validateCLIConfigRounds(cfg *CLIConfig) error {
 			if r.Translate == nil {
 				return fmt.Errorf("execution.rounds[%d]: mode=translate requires translate config", i)
 			}
+			t := r.Translate
+			if t.BatchSize < 0 {
+				return fmt.Errorf("execution.rounds[%d].translate.batch_size must be >= 0", i)
+			}
+			if t.MaxWordsPerBatch < 0 {
+				return fmt.Errorf("execution.rounds[%d].translate.max_words_per_batch must be >= 0", i)
+			}
+			if t.BatchSize <= 0 && t.MaxWordsPerBatch <= 0 {
+				return fmt.Errorf("execution.rounds[%d].translate.batch_size and max_words_per_batch cannot both be 0", i)
+			}
+			if t.Concurrency < 1 {
+				return fmt.Errorf("execution.rounds[%d].translate.concurrency must be >= 1", i)
+			}
+			if t.FallbackShrink < 0 || t.FallbackShrink >= 1 {
+				return fmt.Errorf("execution.rounds[%d].translate.fallback_shrink must be in [0, 1)", i)
+			}
 		case "extract":
 			if r.Extract == nil {
 				return fmt.Errorf("execution.rounds[%d]: mode=extract requires extract config", i)
+			}
+			e := r.Extract
+			if e.BatchSize < 0 {
+				return fmt.Errorf("execution.rounds[%d].extract.batch_size must be >= 0", i)
+			}
+			if e.MaxWordsPerBatch < 0 {
+				return fmt.Errorf("execution.rounds[%d].extract.max_words_per_batch must be >= 0", i)
+			}
+			if e.Concurrency < 1 {
+				return fmt.Errorf("execution.rounds[%d].extract.concurrency must be >= 1", i)
 			}
 		default:
 			return fmt.Errorf("execution.rounds[%d]: invalid mode %q, must be \"translate\" or \"extract\"", i, r.Mode)
