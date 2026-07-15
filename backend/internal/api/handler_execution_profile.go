@@ -32,24 +32,24 @@ func fromAPIPreserveKinds(kinds []ProfileRubyConfigPreserveKinds) []string {
 	return result
 }
 
-// parseTranslationProfileID 从路径参数解析 translationProfileId。
-func (s *Server) parseTranslationProfileID(w http.ResponseWriter, r *http.Request) (int, bool) {
-	raw := chi.URLParam(r, "translationProfileId")
+// parseExecutionProfileID 从路径参数解析 executionProfileId。
+func (s *Server) parseExecutionProfileID(w http.ResponseWriter, r *http.Request) (int, bool) {
+	raw := chi.URLParam(r, "executionProfileId")
 	id, err := strconv.Atoi(raw)
 	if err != nil {
-		s.writeProblem(w, r, http.StatusBadRequest, "invalid_id", "翻译配置 ID 必须为整数")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_id", "执行策略配置 ID 必须为整数")
 		return 0, false
 	}
 	return id, true
 }
 
-// entTranslationProfileToResponse 将数据库翻译配置转换为 API 响应。
-func entTranslationProfileToResponse(t *ent.TranslationProfile) TranslationProfile {
-	resp := TranslationProfile{
+// entExecutionProfileToResponse 将数据库执行策略配置转换为 API 响应。
+func entExecutionProfileToResponse(t *ent.ExecutionProfile) ExecutionProfile {
+	resp := ExecutionProfile{
 		Id:          t.ID,
 		Name:        t.Name,
 		Description: t.Description,
-		Scope:       TranslationProfileScope(t.Scope),
+		Scope:       ExecutionProfileScope(t.Scope),
 		Config:      profileConfigToResponse(&t.Config),
 	}
 	if t.OwnerUserID != nil {
@@ -68,7 +68,7 @@ func entTranslationProfileToResponse(t *ent.TranslationProfile) TranslationProfi
 }
 
 // profileConfigToResponse 将 schema 配置转换为 API 响应。
-func profileConfigToResponse(c *schema.TranslationProfileConfigData) TranslationProfileConfig {
+func profileConfigToResponse(c *schema.ExecutionProfileConfigData) ExecutionProfileConfig {
 	rules := make([]ProfileProtectConfigRules, len(c.Protect.Rules))
 	for i, r := range c.Protect.Rules {
 		rules[i] = ProfileProtectConfigRules(r)
@@ -82,7 +82,7 @@ func profileConfigToResponse(c *schema.TranslationProfileConfigData) Translation
 		rubyConfig.PreserveKinds = &pk
 	}
 
-	return TranslationProfileConfig{
+	return ExecutionProfileConfig{
 		Protect: ProfileProtectConfig{
 			Enabled: c.Protect.Enabled,
 			Rules:   &rules,
@@ -126,7 +126,7 @@ func profileConfigToResponse(c *schema.TranslationProfileConfigData) Translation
 }
 
 // parseProfileConfig 从 API 请求解析配置。
-func parseProfileConfig(c *TranslationProfileConfig) *schema.TranslationProfileConfigData {
+func parseProfileConfig(c *ExecutionProfileConfig) *schema.ExecutionProfileConfigData {
 	if c == nil {
 		return nil
 	}
@@ -164,7 +164,7 @@ func parseProfileConfig(c *TranslationProfileConfig) *schema.TranslationProfileC
 		}
 	}
 
-	return &schema.TranslationProfileConfigData{
+	return &schema.ExecutionProfileConfigData{
 		Protect: schema.ProfileProtectConfig{
 			Enabled: c.Protect.Enabled,
 			Rules:   rules,
@@ -203,7 +203,7 @@ func parseProfileConfig(c *TranslationProfileConfig) *schema.TranslationProfileC
 
 // mergeProfileConfig 将请求中的部分配置合并到现有配置上。
 // 仅覆盖请求中显式提供的字段，未指定的字段保留现有值。
-func mergeProfileConfig(existing *schema.TranslationProfileConfigData, incoming *TranslationProfileConfig) *schema.TranslationProfileConfigData {
+func mergeProfileConfig(existing *schema.ExecutionProfileConfigData, incoming *ExecutionProfileConfig) *schema.ExecutionProfileConfigData {
 	merged := *existing
 
 	if incoming.Protect.Rules != nil {
@@ -262,46 +262,46 @@ func mergeProfileConfig(existing *schema.TranslationProfileConfigData, incoming 
 
 // ---- Handler 方法 ----
 
-// handleListTranslationProfiles 列出当前用户的翻译配置。
-func (s *Server) handleListTranslationProfiles(w http.ResponseWriter, r *http.Request) {
+// handleListExecutionProfiles 列出当前用户的执行策略配置。
+func (s *Server) handleListExecutionProfiles(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
 		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 
-	profiles, err := s.translationProfileSvc.ListByUser(r.Context(), authUser.User.ID)
+	profiles, err := s.executionProfileSvc.ListByUser(r.Context(), authUser.User.ID)
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return
 	}
 
-	items := make([]TranslationProfile, 0, len(profiles))
+	items := make([]ExecutionProfile, 0, len(profiles))
 	for _, t := range profiles {
-		items = append(items, entTranslationProfileToResponse(t))
+		items = append(items, entExecutionProfileToResponse(t))
 	}
 
-	writeJSON(w, http.StatusOK, TranslationProfileListResponse{Items: items})
+	writeJSON(w, http.StatusOK, ExecutionProfileListResponse{Items: items})
 }
 
-// handleCreateTranslationProfile 创建翻译配置。
-func (s *Server) handleCreateTranslationProfile(w http.ResponseWriter, r *http.Request) {
+// handleCreateExecutionProfile 创建执行策略配置。
+func (s *Server) handleCreateExecutionProfile(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
 		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 
-	var req CreateTranslationProfileRequest
+	var req CreateExecutionProfileRequest
 	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	if req.Name == "" {
-		s.writeProblem(w, r, http.StatusBadRequest, "validation_error", "翻译配置名称不能为空")
+		s.writeProblem(w, r, http.StatusBadRequest, "validation_error", "执行策略配置名称不能为空")
 		return
 	}
 
-	input := service.CreateTranslationProfileInput{
+	input := service.CreateExecutionProfileInput{
 		Name:        req.Name,
 		Scope:       "user",
 		OwnerUserID: &authUser.User.ID,
@@ -313,59 +313,59 @@ func (s *Server) handleCreateTranslationProfile(w http.ResponseWriter, r *http.R
 		input.Config = parseProfileConfig(req.Config)
 	}
 
-	tp, err := s.translationProfileSvc.Create(r.Context(), input)
+	tp, err := s.executionProfileSvc.Create(r.Context(), input)
 	if err != nil {
-		if errors.Is(err, service.ErrTranslationProfileConfigInvalid) {
+		if errors.Is(err, service.ErrExecutionProfileConfigInvalid) {
 			s.writeProblem(w, r, http.StatusBadRequest, "validation_error", err.Error())
 			return
 		}
 		s.writeServiceError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, entTranslationProfileToResponse(tp))
+	writeJSON(w, http.StatusCreated, entExecutionProfileToResponse(tp))
 }
 
-// handleGetTranslationProfile 获取翻译配置详情。
-func (s *Server) handleGetTranslationProfile(w http.ResponseWriter, r *http.Request) {
-	id, ok := s.parseTranslationProfileID(w, r)
+// handleGetExecutionProfile 获取执行策略配置详情。
+func (s *Server) handleGetExecutionProfile(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.parseExecutionProfileID(w, r)
 	if !ok {
 		return
 	}
 
-	tp, err := s.translationProfileSvc.GetByID(r.Context(), id)
+	tp, err := s.executionProfileSvc.GetByID(r.Context(), id)
 	if err != nil {
-		if err == service.ErrTranslationProfileNotFound {
-			s.writeProblem(w, r, http.StatusNotFound, "not_found", "翻译配置不存在")
+		if err == service.ErrExecutionProfileNotFound {
+			s.writeProblem(w, r, http.StatusNotFound, "not_found", "执行策略配置不存在")
 			return
 		}
 		s.writeServiceError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, entTranslationProfileToResponse(tp))
+	writeJSON(w, http.StatusOK, entExecutionProfileToResponse(tp))
 }
 
-// handleUpdateTranslationProfile 更新翻译配置。
-func (s *Server) handleUpdateTranslationProfile(w http.ResponseWriter, r *http.Request) {
-	id, ok := s.parseTranslationProfileID(w, r)
+// handleUpdateExecutionProfile 更新执行策略配置。
+func (s *Server) handleUpdateExecutionProfile(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.parseExecutionProfileID(w, r)
 	if !ok {
 		return
 	}
 
-	var req UpdateTranslationProfileRequest
+	var req UpdateExecutionProfileRequest
 	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 
-	input := service.UpdateTranslationProfileInput{
+	input := service.UpdateExecutionProfileInput{
 		Name:        req.Name,
 		Description: req.Description,
 	}
 	if req.Config != nil {
 		// 获取现有配置，将请求中的字段合并上去，避免未指定字段被零值覆盖。
-		existing, err := s.translationProfileSvc.GetByID(r.Context(), id)
+		existing, err := s.executionProfileSvc.GetByID(r.Context(), id)
 		if err != nil {
-			if err == service.ErrTranslationProfileNotFound {
-				s.writeProblem(w, r, http.StatusNotFound, "not_found", "翻译配置不存在")
+			if err == service.ErrExecutionProfileNotFound {
+				s.writeProblem(w, r, http.StatusNotFound, "not_found", "执行策略配置不存在")
 				return
 			}
 			s.writeServiceError(w, r, err)
@@ -374,33 +374,33 @@ func (s *Server) handleUpdateTranslationProfile(w http.ResponseWriter, r *http.R
 		input.Config = mergeProfileConfig(&existing.Config, req.Config)
 	}
 
-	tp, err := s.translationProfileSvc.Update(r.Context(), id, input)
+	tp, err := s.executionProfileSvc.Update(r.Context(), id, input)
 	if err != nil {
-		if err == service.ErrTranslationProfileNotFound {
-			s.writeProblem(w, r, http.StatusNotFound, "not_found", "翻译配置不存在")
+		if err == service.ErrExecutionProfileNotFound {
+			s.writeProblem(w, r, http.StatusNotFound, "not_found", "执行策略配置不存在")
 			return
 		}
-		if errors.Is(err, service.ErrTranslationProfileConfigInvalid) {
+		if errors.Is(err, service.ErrExecutionProfileConfigInvalid) {
 			s.writeProblem(w, r, http.StatusBadRequest, "validation_error", err.Error())
 			return
 		}
 		s.writeServiceError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, entTranslationProfileToResponse(tp))
+	writeJSON(w, http.StatusOK, entExecutionProfileToResponse(tp))
 }
 
-// handleDeleteTranslationProfile 删除翻译配置。
-func (s *Server) handleDeleteTranslationProfile(w http.ResponseWriter, r *http.Request) {
-	id, ok := s.parseTranslationProfileID(w, r)
+// handleDeleteExecutionProfile 删除执行策略配置。
+func (s *Server) handleDeleteExecutionProfile(w http.ResponseWriter, r *http.Request) {
+	id, ok := s.parseExecutionProfileID(w, r)
 	if !ok {
 		return
 	}
 
-	err := s.translationProfileSvc.Delete(r.Context(), id)
+	err := s.executionProfileSvc.Delete(r.Context(), id)
 	if err != nil {
-		if err == service.ErrTranslationProfileNotFound {
-			s.writeProblem(w, r, http.StatusNotFound, "not_found", "翻译配置不存在")
+		if err == service.ErrExecutionProfileNotFound {
+			s.writeProblem(w, r, http.StatusNotFound, "not_found", "执行策略配置不存在")
 			return
 		}
 		s.writeServiceError(w, r, err)

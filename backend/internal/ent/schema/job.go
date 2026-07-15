@@ -25,9 +25,9 @@ func (Job) Fields() []ent.Field {
 			Comment("触发类型：manual, file_update, glossary_change, web_edit"),
 		field.Int("execution_plan_id").Positive().
 			Comment("引用的执行计划模板 ID（必填）"),
-		field.JSON("translation_config", map[string]any{}).
+		field.JSON("execution_config", map[string]any{}).
 			Default(func() map[string]any { return map[string]any{} }).
-			Comment("翻译配置快照，创建时从项目配置复制并可覆盖"),
+			Comment("执行配置快照，创建时从项目配置复制并可覆盖"),
 		field.Int("resource_count").Default(0).NonNegative().
 			Comment("关联的资源文件数"),
 		field.Int("completed_resources").Default(0).NonNegative().
@@ -39,7 +39,7 @@ func (Job) Fields() []ent.Field {
 		field.Int("skipped_segments").Default(0).NonNegative().
 			Comment("被系统跳过的段落数（聚合自 JobResource）"),
 		field.Int("stage_total").Default(0).NonNegative().
-			Comment("实际需要翻译的段落数（ReconcileJob 从各资源的 stage_total 聚合）"),
+			Comment("实际需要处理的段落数（ReconcileJob 从各资源的 stage_total 聚合）"),
 		field.Int("completed_segments").Default(0).NonNegative().
 			Comment("已完成段落数"),
 		field.String("error_message").Optional().Nillable().

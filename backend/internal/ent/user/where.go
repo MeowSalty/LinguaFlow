@@ -750,21 +750,21 @@ func HasBootstrapPromptTemplatesWith(preds ...predicate.BootstrapPromptTemplate)
 	})
 }
 
-// HasTranslationProfiles applies the HasEdge predicate on the "translation_profiles" edge.
-func HasTranslationProfiles() predicate.User {
+// HasExecutionProfiles applies the HasEdge predicate on the "execution_profiles" edge.
+func HasExecutionProfiles() predicate.User {
 	return predicate.User(func(s *sql.Selector) {
 		step := sqlgraph.NewStep(
 			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, TranslationProfilesTable, TranslationProfilesColumn),
+			sqlgraph.Edge(sqlgraph.O2M, false, ExecutionProfilesTable, ExecutionProfilesColumn),
 		)
 		sqlgraph.HasNeighbors(s, step)
 	})
 }
 
-// HasTranslationProfilesWith applies the HasEdge predicate on the "translation_profiles" edge with a given conditions (other predicates).
-func HasTranslationProfilesWith(preds ...predicate.TranslationProfile) predicate.User {
+// HasExecutionProfilesWith applies the HasEdge predicate on the "execution_profiles" edge with a given conditions (other predicates).
+func HasExecutionProfilesWith(preds ...predicate.ExecutionProfile) predicate.User {
 	return predicate.User(func(s *sql.Selector) {
-		step := newTranslationProfilesStep()
+		step := newExecutionProfilesStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

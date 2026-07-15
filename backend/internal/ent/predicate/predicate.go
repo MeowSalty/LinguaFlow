@@ -18,6 +18,9 @@ type BootstrapPromptTemplate func(*sql.Selector)
 // ExecutionPlanTemplate is the predicate function for executionplantemplate builders.
 type ExecutionPlanTemplate func(*sql.Selector)
 
+// ExecutionProfile is the predicate function for executionprofile builders.
+type ExecutionProfile func(*sql.Selector)
+
 // GlossaryEntry is the predicate function for glossaryentry builders.
 type GlossaryEntry func(*sql.Selector)
 
@@ -56,9 +59,6 @@ type SystemSetting func(*sql.Selector)
 
 // TMEntry is the predicate function for tmentry builders.
 type TMEntry func(*sql.Selector)
-
-// TranslationProfile is the predicate function for translationprofile builders.
-type TranslationProfile func(*sql.Selector)
 
 // TranslationPromptTemplate is the predicate function for translationprompttemplate builders.
 type TranslationPromptTemplate func(*sql.Selector)

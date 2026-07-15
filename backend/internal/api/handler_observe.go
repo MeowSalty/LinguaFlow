@@ -8,7 +8,7 @@ import (
 
 func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	translationJobCount, err := s.entClient.Job.Query().Count(ctx)
+	jobCount, err := s.entClient.Job.Query().Count(ctx)
 	if err != nil {
 		s.writeServiceError(w, r, err)
 		return
@@ -35,9 +35,9 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
-	_, _ = fmt.Fprintf(w, "# HELP linguaflow_translation_jobs_total Total translation jobs persisted.\n")
-	_, _ = fmt.Fprintf(w, "# TYPE linguaflow_translation_jobs_total gauge\n")
-	_, _ = fmt.Fprintf(w, "linguaflow_translation_jobs_total %d\n", translationJobCount)
+	_, _ = fmt.Fprintf(w, "# HELP linguaflow_jobs_total Total jobs persisted.\n")
+	_, _ = fmt.Fprintf(w, "# TYPE linguaflow_jobs_total gauge\n")
+	_, _ = fmt.Fprintf(w, "linguaflow_jobs_total %d\n", jobCount)
 	_, _ = fmt.Fprintf(w, "# HELP linguaflow_resources_total Total resources persisted.\n")
 	_, _ = fmt.Fprintf(w, "# TYPE linguaflow_resources_total gauge\n")
 	_, _ = fmt.Fprintf(w, "linguaflow_resources_total %d\n", resourceCount)

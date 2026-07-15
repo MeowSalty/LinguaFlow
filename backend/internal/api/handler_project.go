@@ -13,45 +13,41 @@ import (
 type createProjectRequest struct {
 	Name string `json:"name"`
 	// OwnerOrgID 已移除 — 组织项目通过专用路由创建
-	Config                   map[string]any `json:"config"`
-	DefaultTranslationConfig map[string]any `json:"default_translation_config"`
-	GlossaryEnabled          *bool          `json:"glossary_enabled"`
-	SourceLang               string         `json:"source_lang"`
-	TargetLang               string         `json:"target_lang"`
+	Config          map[string]any `json:"config"`
+	GlossaryEnabled *bool          `json:"glossary_enabled"`
+	SourceLang      string         `json:"source_lang"`
+	TargetLang      string         `json:"target_lang"`
 }
 
 type updateProjectRequest struct {
-	Name                     string         `json:"name"`
-	Config                   map[string]any `json:"config"`
-	DefaultTranslationConfig map[string]any `json:"default_translation_config"`
-	GlossaryEnabled          *bool          `json:"glossary_enabled"`
-	SourceLang               string         `json:"source_lang"`
-	TargetLang               string         `json:"target_lang"`
+	Name            string         `json:"name"`
+	Config          map[string]any `json:"config"`
+	GlossaryEnabled *bool          `json:"glossary_enabled"`
+	SourceLang      string         `json:"source_lang"`
+	TargetLang      string         `json:"target_lang"`
 }
 
 type projectResponse struct {
-	ID                       int            `json:"id"`
-	Name                     string         `json:"name"`
-	OwnerUserID              *int           `json:"owner_user_id,omitempty"`
-	OwnerOrgID               *int           `json:"owner_org_id,omitempty"`
-	Config                   map[string]any `json:"config,omitempty"`
-	DefaultTranslationConfig map[string]any `json:"default_translation_config,omitempty"`
-	GlossaryEnabled          bool           `json:"glossary_enabled"`
-	SourceLang               string         `json:"source_lang"`
-	TargetLang               string         `json:"target_lang"`
+	ID              int            `json:"id"`
+	Name            string         `json:"name"`
+	OwnerUserID     *int           `json:"owner_user_id,omitempty"`
+	OwnerOrgID      *int           `json:"owner_org_id,omitempty"`
+	Config          map[string]any `json:"config,omitempty"`
+	GlossaryEnabled bool           `json:"glossary_enabled"`
+	SourceLang      string         `json:"source_lang"`
+	TargetLang      string         `json:"target_lang"`
 }
 
 func toProjectResponse(p *ent.Project) projectResponse {
 	return projectResponse{
-		ID:                       p.ID,
-		Name:                     p.Name,
-		OwnerUserID:              p.OwnerUserID,
-		OwnerOrgID:               p.OwnerOrgID,
-		Config:                   p.Config,
-		DefaultTranslationConfig: p.DefaultTranslationConfig,
-		GlossaryEnabled:          p.GlossaryEnabled,
-		SourceLang:               p.SourceLang,
-		TargetLang:               p.TargetLang,
+		ID:              p.ID,
+		Name:            p.Name,
+		OwnerUserID:     p.OwnerUserID,
+		OwnerOrgID:      p.OwnerOrgID,
+		Config:          p.Config,
+		GlossaryEnabled: p.GlossaryEnabled,
+		SourceLang:      p.SourceLang,
+		TargetLang:      p.TargetLang,
 	}
 }
 
@@ -74,12 +70,11 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, err := s.projectSvc.CreateProject(r.Context(), authUser.User.ID, service.CreateProjectInput{
-		Name:                     req.Name,
-		Config:                   req.Config,
-		DefaultTranslationConfig: req.DefaultTranslationConfig,
-		GlossaryEnabled:          req.GlossaryEnabled,
-		SourceLang:               req.SourceLang,
-		TargetLang:               req.TargetLang,
+		Name:            req.Name,
+		Config:          req.Config,
+		GlossaryEnabled: req.GlossaryEnabled,
+		SourceLang:      req.SourceLang,
+		TargetLang:      req.TargetLang,
 	})
 	if err != nil {
 		s.writeProjectServiceError(w, r, err)
@@ -108,12 +103,11 @@ func (s *Server) handleCreateOrgProject(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	p, err := s.projectSvc.CreateOrgProject(r.Context(), authUser.User.ID, orgID, service.CreateProjectInput{
-		Name:                     req.Name,
-		Config:                   req.Config,
-		DefaultTranslationConfig: req.DefaultTranslationConfig,
-		GlossaryEnabled:          req.GlossaryEnabled,
-		SourceLang:               req.SourceLang,
-		TargetLang:               req.TargetLang,
+		Name:            req.Name,
+		Config:          req.Config,
+		GlossaryEnabled: req.GlossaryEnabled,
+		SourceLang:      req.SourceLang,
+		TargetLang:      req.TargetLang,
 	})
 	if err != nil {
 		s.writeProjectServiceError(w, r, err)
@@ -192,12 +186,11 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p, err := s.projectSvc.UpdateProject(r.Context(), authUser.User.ID, projectID, service.UpdateProjectInput{
-		Name:                     req.Name,
-		Config:                   req.Config,
-		DefaultTranslationConfig: req.DefaultTranslationConfig,
-		GlossaryEnabled:          req.GlossaryEnabled,
-		SourceLang:               req.SourceLang,
-		TargetLang:               req.TargetLang,
+		Name:            req.Name,
+		Config:          req.Config,
+		GlossaryEnabled: req.GlossaryEnabled,
+		SourceLang:      req.SourceLang,
+		TargetLang:      req.TargetLang,
 	})
 	if err != nil {
 		s.writeProjectServiceError(w, r, err)

@@ -92,9 +92,9 @@ func (_c *JobCreate) SetExecutionPlanID(v int) *JobCreate {
 	return _c
 }
 
-// SetTranslationConfig sets the "translation_config" field.
-func (_c *JobCreate) SetTranslationConfig(v map[string]interface{}) *JobCreate {
-	_c.mutation.SetTranslationConfig(v)
+// SetExecutionConfig sets the "execution_config" field.
+func (_c *JobCreate) SetExecutionConfig(v map[string]interface{}) *JobCreate {
+	_c.mutation.SetExecutionConfig(v)
 	return _c
 }
 
@@ -329,9 +329,9 @@ func (_c *JobCreate) defaults() {
 		v := job.DefaultTriggerType
 		_c.mutation.SetTriggerType(v)
 	}
-	if _, ok := _c.mutation.TranslationConfig(); !ok {
-		v := job.DefaultTranslationConfig()
-		_c.mutation.SetTranslationConfig(v)
+	if _, ok := _c.mutation.ExecutionConfig(); !ok {
+		v := job.DefaultExecutionConfig()
+		_c.mutation.SetExecutionConfig(v)
 	}
 	if _, ok := _c.mutation.ResourceCount(); !ok {
 		v := job.DefaultResourceCount
@@ -393,8 +393,8 @@ func (_c *JobCreate) check() error {
 			return &ValidationError{Name: "execution_plan_id", err: fmt.Errorf(`ent: validator failed for field "Job.execution_plan_id": %w`, err)}
 		}
 	}
-	if _, ok := _c.mutation.TranslationConfig(); !ok {
-		return &ValidationError{Name: "translation_config", err: errors.New(`ent: missing required field "Job.translation_config"`)}
+	if _, ok := _c.mutation.ExecutionConfig(); !ok {
+		return &ValidationError{Name: "execution_config", err: errors.New(`ent: missing required field "Job.execution_config"`)}
 	}
 	if _, ok := _c.mutation.ResourceCount(); !ok {
 		return &ValidationError{Name: "resource_count", err: errors.New(`ent: missing required field "Job.resource_count"`)}
@@ -501,9 +501,9 @@ func (_c *JobCreate) createSpec() (*Job, *sqlgraph.CreateSpec) {
 		_spec.SetField(job.FieldExecutionPlanID, field.TypeInt, value)
 		_node.ExecutionPlanID = value
 	}
-	if value, ok := _c.mutation.TranslationConfig(); ok {
-		_spec.SetField(job.FieldTranslationConfig, field.TypeJSON, value)
-		_node.TranslationConfig = value
+	if value, ok := _c.mutation.ExecutionConfig(); ok {
+		_spec.SetField(job.FieldExecutionConfig, field.TypeJSON, value)
+		_node.ExecutionConfig = value
 	}
 	if value, ok := _c.mutation.ResourceCount(); ok {
 		_spec.SetField(job.FieldResourceCount, field.TypeInt, value)

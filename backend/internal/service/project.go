@@ -33,23 +33,21 @@ type ProjectService struct {
 }
 
 type CreateProjectInput struct {
-	Name                     string
-	OwnerUserID              *int
-	OwnerOrgID               *int
-	Config                   map[string]any
-	DefaultTranslationConfig map[string]any
-	GlossaryEnabled          *bool
-	SourceLang               string
-	TargetLang               string
+	Name            string
+	OwnerUserID     *int
+	OwnerOrgID      *int
+	Config          map[string]any
+	GlossaryEnabled *bool
+	SourceLang      string
+	TargetLang      string
 }
 
 type UpdateProjectInput struct {
-	Name                     string
-	Config                   map[string]any
-	DefaultTranslationConfig map[string]any
-	GlossaryEnabled          *bool
-	SourceLang               string
-	TargetLang               string
+	Name            string
+	Config          map[string]any
+	GlossaryEnabled *bool
+	SourceLang      string
+	TargetLang      string
 }
 
 func NewProjectService(client *ent.Client, users *UserService) *ProjectService {
@@ -64,7 +62,6 @@ func (s *ProjectService) CreateProject(ctx context.Context, actorUserID int, inp
 	create := s.client.Project.Create().
 		SetName(normalized.Name).
 		SetConfig(cloneMap(normalized.Config)).
-		SetDefaultTranslationConfig(cloneMap(normalized.DefaultTranslationConfig)).
 		SetGlossaryEnabled(normalized.GlossaryEnabled != nil && *normalized.GlossaryEnabled).
 		SetSourceLang(normalized.SourceLang).
 		SetTargetLang(normalized.TargetLang)
@@ -92,7 +89,6 @@ func (s *ProjectService) CreateOrgProject(ctx context.Context, actorUserID, orgI
 		SetName(name).
 		SetOwnerOrgID(orgID).
 		SetConfig(cloneMap(input.Config)).
-		SetDefaultTranslationConfig(cloneMap(input.DefaultTranslationConfig)).
 		SetGlossaryEnabled(input.GlossaryEnabled != nil && *input.GlossaryEnabled).
 		SetSourceLang(normalizeLangOrDefault(input.SourceLang, "auto")).
 		SetTargetLang(normalizeLangOrDefault(input.TargetLang, "zh"))
@@ -142,7 +138,6 @@ func (s *ProjectService) UpdateProject(ctx context.Context, actorUserID, project
 	updated, err := s.client.Project.UpdateOneID(projectID).
 		SetName(normalized.Name).
 		SetConfig(cloneMap(normalized.Config)).
-		SetDefaultTranslationConfig(cloneMap(normalized.DefaultTranslationConfig)).
 		SetGlossaryEnabled(glossaryEnabled != nil && *glossaryEnabled).
 		SetSourceLang(normalized.SourceLang).
 		SetTargetLang(normalized.TargetLang).
@@ -221,7 +216,7 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 		}
 	}
 
-	// Step 1.5: 删除 SSEEvent（依赖 TranslationJob）
+	// Step 1.5: 删除 SSEEvent（依赖 Job）
 	if len(tjIDs) > 0 {
 		_, err = tx.SSEEvent.Delete().
 			Where(sseevent.JobIDIn(tjIDs...)).
@@ -339,13 +334,12 @@ func (s *ProjectService) normalizeCreateInput(ctx context.Context, actorUserID i
 		return CreateProjectInput{}, ErrForbidden // 不应通过此路径创建组织项目
 	}
 	return CreateProjectInput{
-		Name:                     name,
-		OwnerUserID:              ownerUserID,
-		Config:                   cloneMap(input.Config),
-		DefaultTranslationConfig: cloneMap(input.DefaultTranslationConfig),
-		GlossaryEnabled:          input.GlossaryEnabled,
-		SourceLang:               normalizeLangOrDefault(input.SourceLang, "auto"),
-		TargetLang:               normalizeLangOrDefault(input.TargetLang, "zh"),
+		Name:            name,
+		OwnerUserID:     ownerUserID,
+		Config:          cloneMap(input.Config),
+		GlossaryEnabled: input.GlossaryEnabled,
+		SourceLang:      normalizeLangOrDefault(input.SourceLang, "auto"),
+		TargetLang:      normalizeLangOrDefault(input.TargetLang, "zh"),
 	}, nil
 }
 
@@ -358,22 +352,17 @@ func (s *ProjectService) normalizeUpdateInput(current *ent.Project, input Update
 	if len(configValue) == 0 {
 		configValue = cloneMap(current.Config)
 	}
-	defaultTranslationConfig := cloneMap(input.DefaultTranslationConfig)
-	if len(defaultTranslationConfig) == 0 {
-		defaultTranslationConfig = cloneMap(current.DefaultTranslationConfig)
-	}
 	glossaryEnabled := input.GlossaryEnabled
 	if glossaryEnabled == nil {
 		currentVal := current.GlossaryEnabled
 		glossaryEnabled = &currentVal
 	}
 	return UpdateProjectInput{
-		Name:                     name,
-		Config:                   configValue,
-		DefaultTranslationConfig: defaultTranslationConfig,
-		GlossaryEnabled:          glossaryEnabled,
-		SourceLang:               normalizeLangOrDefault(input.SourceLang, current.SourceLang),
-		TargetLang:               normalizeLangOrDefault(input.TargetLang, current.TargetLang),
+		Name:            name,
+		Config:          configValue,
+		GlossaryEnabled: glossaryEnabled,
+		SourceLang:      normalizeLangOrDefault(input.SourceLang, current.SourceLang),
+		TargetLang:      normalizeLangOrDefault(input.TargetLang, current.TargetLang),
 	}, nil
 }
 

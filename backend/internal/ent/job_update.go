@@ -101,9 +101,9 @@ func (_u *JobUpdate) AddExecutionPlanID(v int) *JobUpdate {
 	return _u
 }
 
-// SetTranslationConfig sets the "translation_config" field.
-func (_u *JobUpdate) SetTranslationConfig(v map[string]interface{}) *JobUpdate {
-	_u.mutation.SetTranslationConfig(v)
+// SetExecutionConfig sets the "execution_config" field.
+func (_u *JobUpdate) SetExecutionConfig(v map[string]interface{}) *JobUpdate {
+	_u.mutation.SetExecutionConfig(v)
 	return _u
 }
 
@@ -523,8 +523,8 @@ func (_u *JobUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.AddedExecutionPlanID(); ok {
 		_spec.AddField(job.FieldExecutionPlanID, field.TypeInt, value)
 	}
-	if value, ok := _u.mutation.TranslationConfig(); ok {
-		_spec.SetField(job.FieldTranslationConfig, field.TypeJSON, value)
+	if value, ok := _u.mutation.ExecutionConfig(); ok {
+		_spec.SetField(job.FieldExecutionConfig, field.TypeJSON, value)
 	}
 	if value, ok := _u.mutation.ResourceCount(); ok {
 		_spec.SetField(job.FieldResourceCount, field.TypeInt, value)
@@ -817,9 +817,9 @@ func (_u *JobUpdateOne) AddExecutionPlanID(v int) *JobUpdateOne {
 	return _u
 }
 
-// SetTranslationConfig sets the "translation_config" field.
-func (_u *JobUpdateOne) SetTranslationConfig(v map[string]interface{}) *JobUpdateOne {
-	_u.mutation.SetTranslationConfig(v)
+// SetExecutionConfig sets the "execution_config" field.
+func (_u *JobUpdateOne) SetExecutionConfig(v map[string]interface{}) *JobUpdateOne {
+	_u.mutation.SetExecutionConfig(v)
 	return _u
 }
 
@@ -1269,8 +1269,8 @@ func (_u *JobUpdateOne) sqlSave(ctx context.Context) (_node *Job, err error) {
 	if value, ok := _u.mutation.AddedExecutionPlanID(); ok {
 		_spec.AddField(job.FieldExecutionPlanID, field.TypeInt, value)
 	}
-	if value, ok := _u.mutation.TranslationConfig(); ok {
-		_spec.SetField(job.FieldTranslationConfig, field.TypeJSON, value)
+	if value, ok := _u.mutation.ExecutionConfig(); ok {
+		_spec.SetField(job.FieldExecutionConfig, field.TypeJSON, value)
 	}
 	if value, ok := _u.mutation.ResourceCount(); ok {
 		_spec.SetField(job.FieldResourceCount, field.TypeInt, value)

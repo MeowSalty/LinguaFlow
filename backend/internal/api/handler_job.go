@@ -13,7 +13,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/worker"
 )
 
-type createTranslationJobRequest struct {
+type createJobRequest struct {
 	ExecutionPlanID  int      `json:"execution_plan_id"`
 	ResourceIDs      []int    `json:"resource_ids"`
 	SegmentIDs       []int    `json:"segment_ids"`
@@ -22,7 +22,7 @@ type createTranslationJobRequest struct {
 	OverwriteMode    string   `json:"overwrite_mode"`
 }
 
-type translationJobResourceResponse struct {
+type jobResourceResponse struct {
 	ID                int               `json:"id"`
 	ResourceID        int               `json:"resource_id"`
 	Status            string            `json:"status"`
@@ -45,7 +45,7 @@ type userBriefResponse struct {
 	Username string `json:"username"`
 }
 
-type translationJobProgressResponse struct {
+type jobProgressResponse struct {
 	TotalResources     int  `json:"total_resources"`
 	CompletedResources int  `json:"completed_resources"`
 	FailedResources    int  `json:"failed_resources"`
@@ -56,20 +56,20 @@ type translationJobProgressResponse struct {
 	QueueSize          *int `json:"queue_size,omitempty"`
 }
 
-type translationJobResponse struct {
-	ID                int                              `json:"id"`
-	ProjectID         int                              `json:"project_id"`
-	CreatedBy         *userBriefResponse               `json:"created_by,omitempty"`
-	Status            string                           `json:"status"`
-	TriggerType       string                           `json:"trigger_type"`
-	ExecutionPlanID   int                              `json:"execution_plan_id"`
-	TranslationConfig map[string]any                   `json:"translation_config,omitempty"`
-	ErrorMessage      *string                          `json:"error_message,omitempty"`
-	Progress          translationJobProgressResponse   `json:"progress"`
-	StartedAt         *string                          `json:"started_at,omitempty"`
-	CreatedAt         string                           `json:"created_at"`
-	UpdatedAt         string                           `json:"updated_at"`
-	JobResources      []translationJobResourceResponse `json:"job_resources,omitempty"`
+type jobResponse struct {
+	ID              int                   `json:"id"`
+	ProjectID       int                   `json:"project_id"`
+	CreatedBy       *userBriefResponse    `json:"created_by,omitempty"`
+	Status          string                `json:"status"`
+	TriggerType     string                `json:"trigger_type"`
+	ExecutionPlanID int                   `json:"execution_plan_id"`
+	ExecutionConfig map[string]any        `json:"execution_config,omitempty"`
+	ErrorMessage    *string               `json:"error_message,omitempty"`
+	Progress        jobProgressResponse   `json:"progress"`
+	StartedAt       *string               `json:"started_at,omitempty"`
+	CreatedAt       string                `json:"created_at"`
+	UpdatedAt       string                `json:"updated_at"`
+	JobResources    []jobResourceResponse `json:"job_resources,omitempty"`
 }
 
 // queueInfoForJob returns queue position info for a job, or nil if queue is
@@ -85,7 +85,7 @@ func (s *Server) queueInfoForJob(jobID int) *worker.QueueInfo {
 	return info
 }
 
-func (s *Server) handleCreateTranslationJob(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
 		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
@@ -95,13 +95,13 @@ func (s *Server) handleCreateTranslationJob(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	var req createTranslationJobRequest
+	var req createJobRequest
 	if r.Body != nil && strings.TrimSpace(r.Header.Get("Content-Length")) != "0" {
 		if !s.decodeJSON(w, r, &req) {
 			return
 		}
 	}
-	created, err := s.translationJobSvc.CreateManualJob(r.Context(), authUser.User.ID, projectID, service.CreateJobInput{
+	created, err := s.jobSvc.CreateManualJob(r.Context(), authUser.User.ID, projectID, service.CreateJobInput{
 		ResourceIDs:      req.ResourceIDs,
 		SegmentIDs:       req.SegmentIDs,
 		SegmentGroupKeys: req.SegmentGroupKeys,
@@ -110,20 +110,20 @@ func (s *Server) handleCreateTranslationJob(w http.ResponseWriter, r *http.Reque
 		OverwriteMode:    req.OverwriteMode,
 	})
 	if err != nil {
-		s.writeTranslationJobServiceError(w, r, err)
+		s.writeJobServiceError(w, r, err)
 		return
 	}
-	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "translation_job.create", ResourceType: "translation_job", ResourceID: created.ID, Message: "创建翻译任务"})
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "job.create", ResourceType: "job", ResourceID: created.ID, Message: "创建任务"})
 	if s.dispatcher != nil {
 		if err := s.dispatcher.Enqueue(r.Context(), "translation", created.ID); err != nil {
 			s.writeServiceError(w, r, err)
 			return
 		}
 	}
-	writeJSON(w, http.StatusAccepted, toTranslationJobDetailResponse(created, s.queueInfoForJob(created.ID)))
+	writeJSON(w, http.StatusAccepted, toJobDetailResponse(created, s.queueInfoForJob(created.ID)))
 }
 
-func (s *Server) handleListTranslationJobs(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleListJobs(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
 		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
@@ -137,24 +137,24 @@ func (s *Server) handleListTranslationJobs(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	jobs, err := s.translationJobSvc.ListJobs(r.Context(), authUser.User.ID, projectID, service.JobListOptions{
+	jobs, err := s.jobSvc.ListJobs(r.Context(), authUser.User.ID, projectID, service.JobListOptions{
 		Status:      strings.TrimSpace(r.URL.Query().Get("status")),
 		TriggerType: strings.TrimSpace(r.URL.Query().Get("trigger_type")),
 		AfterID:     pageReq.AfterID,
 		Limit:       pageReq.Limit,
 	})
 	if err != nil {
-		s.writeTranslationJobServiceError(w, r, err)
+		s.writeJobServiceError(w, r, err)
 		return
 	}
-	items := make([]translationJobResponse, 0, len(jobs))
+	items := make([]jobResponse, 0, len(jobs))
 	for _, job := range jobs {
-		items = append(items, toTranslationJobListResponse(job, s.queueInfoForJob(job.ID)))
+		items = append(items, toJobListResponse(job, s.queueInfoForJob(job.ID)))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
-func (s *Server) handleGetTranslationJob(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleGetJob(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
 		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
@@ -164,15 +164,15 @@ func (s *Server) handleGetTranslationJob(w http.ResponseWriter, r *http.Request)
 	if !ok {
 		return
 	}
-	job, err := s.translationJobSvc.GetJob(r.Context(), authUser.User.ID, jobID)
+	job, err := s.jobSvc.GetJob(r.Context(), authUser.User.ID, jobID)
 	if err != nil {
-		s.writeTranslationJobServiceError(w, r, err)
+		s.writeJobServiceError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toTranslationJobDetailResponse(job, s.queueInfoForJob(jobID)))
+	writeJSON(w, http.StatusOK, toJobDetailResponse(job, s.queueInfoForJob(jobID)))
 }
 
-func (s *Server) handleCancelTranslationJob(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleCancelJob(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
 		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
@@ -182,20 +182,20 @@ func (s *Server) handleCancelTranslationJob(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	job, err := s.translationJobSvc.CancelJob(r.Context(), authUser.User.ID, jobID)
+	job, err := s.jobSvc.CancelJob(r.Context(), authUser.User.ID, jobID)
 	if err != nil {
-		s.writeTranslationJobServiceError(w, r, err)
+		s.writeJobServiceError(w, r, err)
 		return
 	}
 	// 通知正在运行的 worker 立即停止
 	if s.dispatcher != nil {
 		s.dispatcher.CancelTask("translation", jobID)
 	}
-	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "translation_job.cancel", ResourceType: "translation_job", ResourceID: job.ID, Message: "取消翻译任务"})
-	writeJSON(w, http.StatusOK, toTranslationJobDetailResponse(job, s.queueInfoForJob(job.ID)))
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "job.cancel", ResourceType: "job", ResourceID: job.ID, Message: "取消任务"})
+	writeJSON(w, http.StatusOK, toJobDetailResponse(job, s.queueInfoForJob(job.ID)))
 }
 
-func (s *Server) handleRetryTranslationJob(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleRetryJob(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
 		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
@@ -205,22 +205,22 @@ func (s *Server) handleRetryTranslationJob(w http.ResponseWriter, r *http.Reques
 	if !ok {
 		return
 	}
-	job, err := s.translationJobSvc.RetryJob(r.Context(), authUser.User.ID, jobID)
+	job, err := s.jobSvc.RetryJob(r.Context(), authUser.User.ID, jobID)
 	if err != nil {
-		s.writeTranslationJobServiceError(w, r, err)
+		s.writeJobServiceError(w, r, err)
 		return
 	}
-	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "translation_job.retry", ResourceType: "translation_job", ResourceID: job.ID, Message: "重试翻译任务"})
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "job.retry", ResourceType: "job", ResourceID: job.ID, Message: "重试任务"})
 	if s.dispatcher != nil {
 		if err := s.dispatcher.Enqueue(r.Context(), "translation", job.ID); err != nil {
 			s.writeServiceError(w, r, err)
 			return
 		}
 	}
-	writeJSON(w, http.StatusOK, toTranslationJobDetailResponse(job, s.queueInfoForJob(job.ID)))
+	writeJSON(w, http.StatusOK, toJobDetailResponse(job, s.queueInfoForJob(job.ID)))
 }
 
-func sanitizeTranslationConfig(config map[string]any) map[string]any {
+func sanitizeExecutionConfig(config map[string]any) map[string]any {
 	if config == nil {
 		return nil
 	}
@@ -258,8 +258,8 @@ func maskBackendOptions(node map[string]any) {
 	}
 }
 
-func toTranslationJobListResponse(row *ent.Job, queueInfo *worker.QueueInfo) translationJobResponse {
-	resp := translationJobResponse{
+func toJobListResponse(row *ent.Job, queueInfo *worker.QueueInfo) jobResponse {
+	resp := jobResponse{
 		ID:              row.ID,
 		ProjectID:       row.ProjectID,
 		Status:          row.Status,
@@ -277,20 +277,20 @@ func toTranslationJobListResponse(row *ent.Job, queueInfo *worker.QueueInfo) tra
 	return resp
 }
 
-func toTranslationJobDetailResponse(row *ent.Job, queueInfo *worker.QueueInfo) translationJobResponse {
-	resp := toTranslationJobListResponse(row, queueInfo)
-	resp.TranslationConfig = sanitizeTranslationConfig(row.TranslationConfig)
+func toJobDetailResponse(row *ent.Job, queueInfo *worker.QueueInfo) jobResponse {
+	resp := toJobListResponse(row, queueInfo)
+	resp.ExecutionConfig = sanitizeExecutionConfig(row.ExecutionConfig)
 	if len(row.Edges.JobResources) > 0 {
-		resp.JobResources = make([]translationJobResourceResponse, 0, len(row.Edges.JobResources))
+		resp.JobResources = make([]jobResourceResponse, 0, len(row.Edges.JobResources))
 		for _, item := range row.Edges.JobResources {
-			resp.JobResources = append(resp.JobResources, toTranslationJobResourceResponse(item))
+			resp.JobResources = append(resp.JobResources, toJobResourceResponse(item))
 		}
 	}
 	return resp
 }
 
-func buildProgressResponse(row *ent.Job, queueInfo *worker.QueueInfo) translationJobProgressResponse {
-	progress := translationJobProgressResponse{
+func buildProgressResponse(row *ent.Job, queueInfo *worker.QueueInfo) jobProgressResponse {
+	progress := jobProgressResponse{
 		TotalResources:     row.ResourceCount,
 		CompletedResources: row.CompletedResources,
 		FailedResources:    row.FailedResources,
@@ -305,8 +305,8 @@ func buildProgressResponse(row *ent.Job, queueInfo *worker.QueueInfo) translatio
 	return progress
 }
 
-func toTranslationJobResourceResponse(row *ent.JobResource) translationJobResourceResponse {
-	resp := translationJobResourceResponse{
+func toJobResourceResponse(row *ent.JobResource) jobResourceResponse {
+	resp := jobResourceResponse{
 		ID:                row.ID,
 		Status:            row.Status,
 		SegmentCount:      row.SegmentCount,
@@ -329,12 +329,12 @@ func toTranslationJobResourceResponse(row *ent.JobResource) translationJobResour
 	return resp
 }
 
-func (s *Server) writeTranslationJobServiceError(w http.ResponseWriter, r *http.Request, err error) {
+func (s *Server) writeJobServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, service.ErrJobNotFound):
-		s.writeProblem(w, r, http.StatusNotFound, "not_found", "翻译任务不存在")
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "任务不存在")
 	case errors.Is(err, service.ErrJobEmpty):
-		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "没有可翻译的待处理段落")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "没有可处理的待处理段落")
 	case errors.Is(err, service.ErrProjectNotFound):
 		s.writeProblem(w, r, http.StatusNotFound, "not_found", "项目不存在")
 	case errors.Is(err, service.ErrResourceNotFound), errors.Is(err, service.ErrSegmentNotFound):

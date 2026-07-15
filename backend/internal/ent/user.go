@@ -61,8 +61,8 @@ type UserEdges struct {
 	TranslationPromptTemplates []*TranslationPromptTemplate `json:"translation_prompt_templates,omitempty"`
 	// BootstrapPromptTemplates holds the value of the bootstrap_prompt_templates edge.
 	BootstrapPromptTemplates []*BootstrapPromptTemplate `json:"bootstrap_prompt_templates,omitempty"`
-	// TranslationProfiles holds the value of the translation_profiles edge.
-	TranslationProfiles []*TranslationProfile `json:"translation_profiles,omitempty"`
+	// ExecutionProfiles holds the value of the execution_profiles edge.
+	ExecutionProfiles []*ExecutionProfile `json:"execution_profiles,omitempty"`
 	// ExecutionPlanTemplates holds the value of the execution_plan_templates edge.
 	ExecutionPlanTemplates []*ExecutionPlanTemplate `json:"execution_plan_templates,omitempty"`
 	// SyncTasks holds the value of the sync_tasks edge.
@@ -162,13 +162,13 @@ func (e UserEdges) BootstrapPromptTemplatesOrErr() ([]*BootstrapPromptTemplate, 
 	return nil, &NotLoadedError{edge: "bootstrap_prompt_templates"}
 }
 
-// TranslationProfilesOrErr returns the TranslationProfiles value or an error if the edge
+// ExecutionProfilesOrErr returns the ExecutionProfiles value or an error if the edge
 // was not loaded in eager-loading.
-func (e UserEdges) TranslationProfilesOrErr() ([]*TranslationProfile, error) {
+func (e UserEdges) ExecutionProfilesOrErr() ([]*ExecutionProfile, error) {
 	if e.loadedTypes[10] {
-		return e.TranslationProfiles, nil
+		return e.ExecutionProfiles, nil
 	}
-	return nil, &NotLoadedError{edge: "translation_profiles"}
+	return nil, &NotLoadedError{edge: "execution_profiles"}
 }
 
 // ExecutionPlanTemplatesOrErr returns the ExecutionPlanTemplates value or an error if the edge
@@ -334,9 +334,9 @@ func (_m *User) QueryBootstrapPromptTemplates() *BootstrapPromptTemplateQuery {
 	return NewUserClient(_m.config).QueryBootstrapPromptTemplates(_m)
 }
 
-// QueryTranslationProfiles queries the "translation_profiles" edge of the User entity.
-func (_m *User) QueryTranslationProfiles() *TranslationProfileQuery {
-	return NewUserClient(_m.config).QueryTranslationProfiles(_m)
+// QueryExecutionProfiles queries the "execution_profiles" edge of the User entity.
+func (_m *User) QueryExecutionProfiles() *ExecutionProfileQuery {
+	return NewUserClient(_m.config).QueryExecutionProfiles(_m)
 }
 
 // QueryExecutionPlanTemplates queries the "execution_plan_templates" edge of the User entity.

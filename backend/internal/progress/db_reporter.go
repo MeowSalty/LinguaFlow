@@ -192,7 +192,7 @@ func (r *DBReporter) flush() error {
 	return r.flushFn(updates)
 }
 
-// defaultFlush 默认 flush 实现：更新 JobResource 的 stage_completed 和 TranslationJob 的 completed_segments。
+// defaultFlush 默认 flush 实现：更新 JobResource 的 stage_completed 和 Job 的 completed_segments。
 func (r *DBReporter) defaultFlush(updates []segmentUpdate) error {
 	if len(updates) == 0 {
 		return nil
@@ -217,7 +217,7 @@ func (r *DBReporter) defaultFlush(updates []segmentUpdate) error {
 		return err
 	}
 
-	// 按缓冲区长度增量更新 TranslationJob 的 completed_segments
+	// 按缓冲区长度增量更新 Job 的 completed_segments
 	return r.updateJobProgress(ctx, delta)
 }
 

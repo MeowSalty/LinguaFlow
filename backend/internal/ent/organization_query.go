@@ -16,11 +16,11 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 )
@@ -39,7 +39,7 @@ type OrganizationQuery struct {
 	withUsageRecords               *UsageRecordQuery
 	withTranslationPromptTemplates *TranslationPromptTemplateQuery
 	withBootstrapPromptTemplates   *BootstrapPromptTemplateQuery
-	withTranslationProfiles        *TranslationProfileQuery
+	withExecutionProfiles          *ExecutionProfileQuery
 	withExecutionPlanTemplates     *ExecutionPlanTemplateQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
@@ -231,9 +231,9 @@ func (_q *OrganizationQuery) QueryBootstrapPromptTemplates() *BootstrapPromptTem
 	return query
 }
 
-// QueryTranslationProfiles chains the current query on the "translation_profiles" edge.
-func (_q *OrganizationQuery) QueryTranslationProfiles() *TranslationProfileQuery {
-	query := (&TranslationProfileClient{config: _q.config}).Query()
+// QueryExecutionProfiles chains the current query on the "execution_profiles" edge.
+func (_q *OrganizationQuery) QueryExecutionProfiles() *ExecutionProfileQuery {
+	query := (&ExecutionProfileClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
 			return nil, err
@@ -244,8 +244,8 @@ func (_q *OrganizationQuery) QueryTranslationProfiles() *TranslationProfileQuery
 		}
 		step := sqlgraph.NewStep(
 			sqlgraph.From(organization.Table, organization.FieldID, selector),
-			sqlgraph.To(translationprofile.Table, translationprofile.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, organization.TranslationProfilesTable, organization.TranslationProfilesColumn),
+			sqlgraph.To(executionprofile.Table, executionprofile.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, organization.ExecutionProfilesTable, organization.ExecutionProfilesColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -474,7 +474,7 @@ func (_q *OrganizationQuery) Clone() *OrganizationQuery {
 		withUsageRecords:               _q.withUsageRecords.Clone(),
 		withTranslationPromptTemplates: _q.withTranslationPromptTemplates.Clone(),
 		withBootstrapPromptTemplates:   _q.withBootstrapPromptTemplates.Clone(),
-		withTranslationProfiles:        _q.withTranslationProfiles.Clone(),
+		withExecutionProfiles:          _q.withExecutionProfiles.Clone(),
 		withExecutionPlanTemplates:     _q.withExecutionPlanTemplates.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
@@ -559,14 +559,14 @@ func (_q *OrganizationQuery) WithBootstrapPromptTemplates(opts ...func(*Bootstra
 	return _q
 }
 
-// WithTranslationProfiles tells the query-builder to eager-load the nodes that are connected to
-// the "translation_profiles" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *OrganizationQuery) WithTranslationProfiles(opts ...func(*TranslationProfileQuery)) *OrganizationQuery {
-	query := (&TranslationProfileClient{config: _q.config}).Query()
+// WithExecutionProfiles tells the query-builder to eager-load the nodes that are connected to
+// the "execution_profiles" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *OrganizationQuery) WithExecutionProfiles(opts ...func(*ExecutionProfileQuery)) *OrganizationQuery {
+	query := (&ExecutionProfileClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
-	_q.withTranslationProfiles = query
+	_q.withExecutionProfiles = query
 	return _q
 }
 
@@ -667,7 +667,7 @@ func (_q *OrganizationQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 			_q.withUsageRecords != nil,
 			_q.withTranslationPromptTemplates != nil,
 			_q.withBootstrapPromptTemplates != nil,
-			_q.withTranslationProfiles != nil,
+			_q.withExecutionProfiles != nil,
 			_q.withExecutionPlanTemplates != nil,
 		}
 	)
@@ -742,11 +742,11 @@ func (_q *OrganizationQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 			return nil, err
 		}
 	}
-	if query := _q.withTranslationProfiles; query != nil {
-		if err := _q.loadTranslationProfiles(ctx, query, nodes,
-			func(n *Organization) { n.Edges.TranslationProfiles = []*TranslationProfile{} },
-			func(n *Organization, e *TranslationProfile) {
-				n.Edges.TranslationProfiles = append(n.Edges.TranslationProfiles, e)
+	if query := _q.withExecutionProfiles; query != nil {
+		if err := _q.loadExecutionProfiles(ctx, query, nodes,
+			func(n *Organization) { n.Edges.ExecutionProfiles = []*ExecutionProfile{} },
+			func(n *Organization, e *ExecutionProfile) {
+				n.Edges.ExecutionProfiles = append(n.Edges.ExecutionProfiles, e)
 			}); err != nil {
 			return nil, err
 		}
@@ -988,7 +988,7 @@ func (_q *OrganizationQuery) loadBootstrapPromptTemplates(ctx context.Context, q
 	}
 	return nil
 }
-func (_q *OrganizationQuery) loadTranslationProfiles(ctx context.Context, query *TranslationProfileQuery, nodes []*Organization, init func(*Organization), assign func(*Organization, *TranslationProfile)) error {
+func (_q *OrganizationQuery) loadExecutionProfiles(ctx context.Context, query *ExecutionProfileQuery, nodes []*Organization, init func(*Organization), assign func(*Organization, *ExecutionProfile)) error {
 	fks := make([]driver.Value, 0, len(nodes))
 	nodeids := make(map[int]*Organization)
 	for i := range nodes {
@@ -999,10 +999,10 @@ func (_q *OrganizationQuery) loadTranslationProfiles(ctx context.Context, query 
 		}
 	}
 	if len(query.ctx.Fields) > 0 {
-		query.ctx.AppendFieldOnce(translationprofile.FieldOwnerOrgID)
+		query.ctx.AppendFieldOnce(executionprofile.FieldOwnerOrgID)
 	}
-	query.Where(predicate.TranslationProfile(func(s *sql.Selector) {
-		s.Where(sql.InValues(s.C(organization.TranslationProfilesColumn), fks...))
+	query.Where(predicate.ExecutionProfile(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(organization.ExecutionProfilesColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {

@@ -15,6 +15,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
@@ -30,7 +31,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
@@ -50,6 +50,7 @@ const (
 	TypeBackend                   = "Backend"
 	TypeBootstrapPromptTemplate   = "BootstrapPromptTemplate"
 	TypeExecutionPlanTemplate     = "ExecutionPlanTemplate"
+	TypeExecutionProfile          = "ExecutionProfile"
 	TypeGlossaryEntry             = "GlossaryEntry"
 	TypeJob                       = "Job"
 	TypeJobResource               = "JobResource"
@@ -63,7 +64,6 @@ const (
 	TypeSyncTask                  = "SyncTask"
 	TypeSystemSetting             = "SystemSetting"
 	TypeTMEntry                   = "TMEntry"
-	TypeTranslationProfile        = "TranslationProfile"
 	TypeTranslationPromptTemplate = "TranslationPromptTemplate"
 	TypeUsageRecord               = "UsageRecord"
 	TypeUser                      = "User"
@@ -3702,6 +3702,854 @@ func (m *ExecutionPlanTemplateMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown ExecutionPlanTemplate edge %s", name)
 }
 
+// ExecutionProfileMutation represents an operation that mutates the ExecutionProfile nodes in the graph.
+type ExecutionProfileMutation struct {
+	config
+	op                Op
+	typ               string
+	id                *int
+	created_at        *time.Time
+	updated_at        *time.Time
+	name              *string
+	description       *string
+	scope             *string
+	_config           *schema.ExecutionProfileConfigData
+	clearedFields     map[string]struct{}
+	owner_user        *int
+	clearedowner_user bool
+	owner_org         *int
+	clearedowner_org  bool
+	done              bool
+	oldValue          func(context.Context) (*ExecutionProfile, error)
+	predicates        []predicate.ExecutionProfile
+}
+
+var _ ent.Mutation = (*ExecutionProfileMutation)(nil)
+
+// executionprofileOption allows management of the mutation configuration using functional options.
+type executionprofileOption func(*ExecutionProfileMutation)
+
+// newExecutionProfileMutation creates new mutation for the ExecutionProfile entity.
+func newExecutionProfileMutation(c config, op Op, opts ...executionprofileOption) *ExecutionProfileMutation {
+	m := &ExecutionProfileMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeExecutionProfile,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withExecutionProfileID sets the ID field of the mutation.
+func withExecutionProfileID(id int) executionprofileOption {
+	return func(m *ExecutionProfileMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *ExecutionProfile
+		)
+		m.oldValue = func(ctx context.Context) (*ExecutionProfile, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().ExecutionProfile.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withExecutionProfile sets the old ExecutionProfile of the mutation.
+func withExecutionProfile(node *ExecutionProfile) executionprofileOption {
+	return func(m *ExecutionProfileMutation) {
+		m.oldValue = func(context.Context) (*ExecutionProfile, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m ExecutionProfileMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m ExecutionProfileMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *ExecutionProfileMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *ExecutionProfileMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().ExecutionProfile.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *ExecutionProfileMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *ExecutionProfileMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the ExecutionProfile entity.
+// If the ExecutionProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExecutionProfileMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *ExecutionProfileMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *ExecutionProfileMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *ExecutionProfileMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the ExecutionProfile entity.
+// If the ExecutionProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExecutionProfileMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *ExecutionProfileMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetName sets the "name" field.
+func (m *ExecutionProfileMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *ExecutionProfileMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the ExecutionProfile entity.
+// If the ExecutionProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExecutionProfileMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *ExecutionProfileMutation) ResetName() {
+	m.name = nil
+}
+
+// SetDescription sets the "description" field.
+func (m *ExecutionProfileMutation) SetDescription(s string) {
+	m.description = &s
+}
+
+// Description returns the value of the "description" field in the mutation.
+func (m *ExecutionProfileMutation) Description() (r string, exists bool) {
+	v := m.description
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDescription returns the old "description" field's value of the ExecutionProfile entity.
+// If the ExecutionProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExecutionProfileMutation) OldDescription(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDescription is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDescription requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDescription: %w", err)
+	}
+	return oldValue.Description, nil
+}
+
+// ResetDescription resets all changes to the "description" field.
+func (m *ExecutionProfileMutation) ResetDescription() {
+	m.description = nil
+}
+
+// SetScope sets the "scope" field.
+func (m *ExecutionProfileMutation) SetScope(s string) {
+	m.scope = &s
+}
+
+// Scope returns the value of the "scope" field in the mutation.
+func (m *ExecutionProfileMutation) Scope() (r string, exists bool) {
+	v := m.scope
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldScope returns the old "scope" field's value of the ExecutionProfile entity.
+// If the ExecutionProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExecutionProfileMutation) OldScope(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldScope is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldScope requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldScope: %w", err)
+	}
+	return oldValue.Scope, nil
+}
+
+// ResetScope resets all changes to the "scope" field.
+func (m *ExecutionProfileMutation) ResetScope() {
+	m.scope = nil
+}
+
+// SetOwnerUserID sets the "owner_user_id" field.
+func (m *ExecutionProfileMutation) SetOwnerUserID(i int) {
+	m.owner_user = &i
+}
+
+// OwnerUserID returns the value of the "owner_user_id" field in the mutation.
+func (m *ExecutionProfileMutation) OwnerUserID() (r int, exists bool) {
+	v := m.owner_user
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOwnerUserID returns the old "owner_user_id" field's value of the ExecutionProfile entity.
+// If the ExecutionProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExecutionProfileMutation) OldOwnerUserID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOwnerUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOwnerUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOwnerUserID: %w", err)
+	}
+	return oldValue.OwnerUserID, nil
+}
+
+// ClearOwnerUserID clears the value of the "owner_user_id" field.
+func (m *ExecutionProfileMutation) ClearOwnerUserID() {
+	m.owner_user = nil
+	m.clearedFields[executionprofile.FieldOwnerUserID] = struct{}{}
+}
+
+// OwnerUserIDCleared returns if the "owner_user_id" field was cleared in this mutation.
+func (m *ExecutionProfileMutation) OwnerUserIDCleared() bool {
+	_, ok := m.clearedFields[executionprofile.FieldOwnerUserID]
+	return ok
+}
+
+// ResetOwnerUserID resets all changes to the "owner_user_id" field.
+func (m *ExecutionProfileMutation) ResetOwnerUserID() {
+	m.owner_user = nil
+	delete(m.clearedFields, executionprofile.FieldOwnerUserID)
+}
+
+// SetOwnerOrgID sets the "owner_org_id" field.
+func (m *ExecutionProfileMutation) SetOwnerOrgID(i int) {
+	m.owner_org = &i
+}
+
+// OwnerOrgID returns the value of the "owner_org_id" field in the mutation.
+func (m *ExecutionProfileMutation) OwnerOrgID() (r int, exists bool) {
+	v := m.owner_org
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOwnerOrgID returns the old "owner_org_id" field's value of the ExecutionProfile entity.
+// If the ExecutionProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExecutionProfileMutation) OldOwnerOrgID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOwnerOrgID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOwnerOrgID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOwnerOrgID: %w", err)
+	}
+	return oldValue.OwnerOrgID, nil
+}
+
+// ClearOwnerOrgID clears the value of the "owner_org_id" field.
+func (m *ExecutionProfileMutation) ClearOwnerOrgID() {
+	m.owner_org = nil
+	m.clearedFields[executionprofile.FieldOwnerOrgID] = struct{}{}
+}
+
+// OwnerOrgIDCleared returns if the "owner_org_id" field was cleared in this mutation.
+func (m *ExecutionProfileMutation) OwnerOrgIDCleared() bool {
+	_, ok := m.clearedFields[executionprofile.FieldOwnerOrgID]
+	return ok
+}
+
+// ResetOwnerOrgID resets all changes to the "owner_org_id" field.
+func (m *ExecutionProfileMutation) ResetOwnerOrgID() {
+	m.owner_org = nil
+	delete(m.clearedFields, executionprofile.FieldOwnerOrgID)
+}
+
+// SetConfig sets the "config" field.
+func (m *ExecutionProfileMutation) SetConfig(spcd schema.ExecutionProfileConfigData) {
+	m._config = &spcd
+}
+
+// Config returns the value of the "config" field in the mutation.
+func (m *ExecutionProfileMutation) Config() (r schema.ExecutionProfileConfigData, exists bool) {
+	v := m._config
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldConfig returns the old "config" field's value of the ExecutionProfile entity.
+// If the ExecutionProfile object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *ExecutionProfileMutation) OldConfig(ctx context.Context) (v schema.ExecutionProfileConfigData, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldConfig is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldConfig requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldConfig: %w", err)
+	}
+	return oldValue.Config, nil
+}
+
+// ResetConfig resets all changes to the "config" field.
+func (m *ExecutionProfileMutation) ResetConfig() {
+	m._config = nil
+}
+
+// ClearOwnerUser clears the "owner_user" edge to the User entity.
+func (m *ExecutionProfileMutation) ClearOwnerUser() {
+	m.clearedowner_user = true
+	m.clearedFields[executionprofile.FieldOwnerUserID] = struct{}{}
+}
+
+// OwnerUserCleared reports if the "owner_user" edge to the User entity was cleared.
+func (m *ExecutionProfileMutation) OwnerUserCleared() bool {
+	return m.OwnerUserIDCleared() || m.clearedowner_user
+}
+
+// OwnerUserIDs returns the "owner_user" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// OwnerUserID instead. It exists only for internal usage by the builders.
+func (m *ExecutionProfileMutation) OwnerUserIDs() (ids []int) {
+	if id := m.owner_user; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetOwnerUser resets all changes to the "owner_user" edge.
+func (m *ExecutionProfileMutation) ResetOwnerUser() {
+	m.owner_user = nil
+	m.clearedowner_user = false
+}
+
+// ClearOwnerOrg clears the "owner_org" edge to the Organization entity.
+func (m *ExecutionProfileMutation) ClearOwnerOrg() {
+	m.clearedowner_org = true
+	m.clearedFields[executionprofile.FieldOwnerOrgID] = struct{}{}
+}
+
+// OwnerOrgCleared reports if the "owner_org" edge to the Organization entity was cleared.
+func (m *ExecutionProfileMutation) OwnerOrgCleared() bool {
+	return m.OwnerOrgIDCleared() || m.clearedowner_org
+}
+
+// OwnerOrgIDs returns the "owner_org" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// OwnerOrgID instead. It exists only for internal usage by the builders.
+func (m *ExecutionProfileMutation) OwnerOrgIDs() (ids []int) {
+	if id := m.owner_org; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetOwnerOrg resets all changes to the "owner_org" edge.
+func (m *ExecutionProfileMutation) ResetOwnerOrg() {
+	m.owner_org = nil
+	m.clearedowner_org = false
+}
+
+// Where appends a list predicates to the ExecutionProfileMutation builder.
+func (m *ExecutionProfileMutation) Where(ps ...predicate.ExecutionProfile) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the ExecutionProfileMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *ExecutionProfileMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.ExecutionProfile, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *ExecutionProfileMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *ExecutionProfileMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (ExecutionProfile).
+func (m *ExecutionProfileMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *ExecutionProfileMutation) Fields() []string {
+	fields := make([]string, 0, 8)
+	if m.created_at != nil {
+		fields = append(fields, executionprofile.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, executionprofile.FieldUpdatedAt)
+	}
+	if m.name != nil {
+		fields = append(fields, executionprofile.FieldName)
+	}
+	if m.description != nil {
+		fields = append(fields, executionprofile.FieldDescription)
+	}
+	if m.scope != nil {
+		fields = append(fields, executionprofile.FieldScope)
+	}
+	if m.owner_user != nil {
+		fields = append(fields, executionprofile.FieldOwnerUserID)
+	}
+	if m.owner_org != nil {
+		fields = append(fields, executionprofile.FieldOwnerOrgID)
+	}
+	if m._config != nil {
+		fields = append(fields, executionprofile.FieldConfig)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *ExecutionProfileMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case executionprofile.FieldCreatedAt:
+		return m.CreatedAt()
+	case executionprofile.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case executionprofile.FieldName:
+		return m.Name()
+	case executionprofile.FieldDescription:
+		return m.Description()
+	case executionprofile.FieldScope:
+		return m.Scope()
+	case executionprofile.FieldOwnerUserID:
+		return m.OwnerUserID()
+	case executionprofile.FieldOwnerOrgID:
+		return m.OwnerOrgID()
+	case executionprofile.FieldConfig:
+		return m.Config()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *ExecutionProfileMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case executionprofile.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case executionprofile.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case executionprofile.FieldName:
+		return m.OldName(ctx)
+	case executionprofile.FieldDescription:
+		return m.OldDescription(ctx)
+	case executionprofile.FieldScope:
+		return m.OldScope(ctx)
+	case executionprofile.FieldOwnerUserID:
+		return m.OldOwnerUserID(ctx)
+	case executionprofile.FieldOwnerOrgID:
+		return m.OldOwnerOrgID(ctx)
+	case executionprofile.FieldConfig:
+		return m.OldConfig(ctx)
+	}
+	return nil, fmt.Errorf("unknown ExecutionProfile field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ExecutionProfileMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case executionprofile.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case executionprofile.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case executionprofile.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
+	case executionprofile.FieldDescription:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDescription(v)
+		return nil
+	case executionprofile.FieldScope:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetScope(v)
+		return nil
+	case executionprofile.FieldOwnerUserID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOwnerUserID(v)
+		return nil
+	case executionprofile.FieldOwnerOrgID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOwnerOrgID(v)
+		return nil
+	case executionprofile.FieldConfig:
+		v, ok := value.(schema.ExecutionProfileConfigData)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetConfig(v)
+		return nil
+	}
+	return fmt.Errorf("unknown ExecutionProfile field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *ExecutionProfileMutation) AddedFields() []string {
+	var fields []string
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *ExecutionProfileMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *ExecutionProfileMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown ExecutionProfile numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *ExecutionProfileMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(executionprofile.FieldOwnerUserID) {
+		fields = append(fields, executionprofile.FieldOwnerUserID)
+	}
+	if m.FieldCleared(executionprofile.FieldOwnerOrgID) {
+		fields = append(fields, executionprofile.FieldOwnerOrgID)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *ExecutionProfileMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *ExecutionProfileMutation) ClearField(name string) error {
+	switch name {
+	case executionprofile.FieldOwnerUserID:
+		m.ClearOwnerUserID()
+		return nil
+	case executionprofile.FieldOwnerOrgID:
+		m.ClearOwnerOrgID()
+		return nil
+	}
+	return fmt.Errorf("unknown ExecutionProfile nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *ExecutionProfileMutation) ResetField(name string) error {
+	switch name {
+	case executionprofile.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case executionprofile.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case executionprofile.FieldName:
+		m.ResetName()
+		return nil
+	case executionprofile.FieldDescription:
+		m.ResetDescription()
+		return nil
+	case executionprofile.FieldScope:
+		m.ResetScope()
+		return nil
+	case executionprofile.FieldOwnerUserID:
+		m.ResetOwnerUserID()
+		return nil
+	case executionprofile.FieldOwnerOrgID:
+		m.ResetOwnerOrgID()
+		return nil
+	case executionprofile.FieldConfig:
+		m.ResetConfig()
+		return nil
+	}
+	return fmt.Errorf("unknown ExecutionProfile field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *ExecutionProfileMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.owner_user != nil {
+		edges = append(edges, executionprofile.EdgeOwnerUser)
+	}
+	if m.owner_org != nil {
+		edges = append(edges, executionprofile.EdgeOwnerOrg)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *ExecutionProfileMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case executionprofile.EdgeOwnerUser:
+		if id := m.owner_user; id != nil {
+			return []ent.Value{*id}
+		}
+	case executionprofile.EdgeOwnerOrg:
+		if id := m.owner_org; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *ExecutionProfileMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *ExecutionProfileMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *ExecutionProfileMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.clearedowner_user {
+		edges = append(edges, executionprofile.EdgeOwnerUser)
+	}
+	if m.clearedowner_org {
+		edges = append(edges, executionprofile.EdgeOwnerOrg)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *ExecutionProfileMutation) EdgeCleared(name string) bool {
+	switch name {
+	case executionprofile.EdgeOwnerUser:
+		return m.clearedowner_user
+	case executionprofile.EdgeOwnerOrg:
+		return m.clearedowner_org
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *ExecutionProfileMutation) ClearEdge(name string) error {
+	switch name {
+	case executionprofile.EdgeOwnerUser:
+		m.ClearOwnerUser()
+		return nil
+	case executionprofile.EdgeOwnerOrg:
+		m.ClearOwnerOrg()
+		return nil
+	}
+	return fmt.Errorf("unknown ExecutionProfile unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *ExecutionProfileMutation) ResetEdge(name string) error {
+	switch name {
+	case executionprofile.EdgeOwnerUser:
+		m.ResetOwnerUser()
+		return nil
+	case executionprofile.EdgeOwnerOrg:
+		m.ResetOwnerOrg()
+		return nil
+	}
+	return fmt.Errorf("unknown ExecutionProfile edge %s", name)
+}
+
 // GlossaryEntryMutation represents an operation that mutates the GlossaryEntry nodes in the graph.
 type GlossaryEntryMutation struct {
 	config
@@ -4582,7 +5430,7 @@ type JobMutation struct {
 	trigger_type           *string
 	execution_plan_id      *int
 	addexecution_plan_id   *int
-	translation_config     *map[string]interface{}
+	execution_config       *map[string]interface{}
 	resource_count         *int
 	addresource_count      *int
 	completed_resources    *int
@@ -4949,40 +5797,40 @@ func (m *JobMutation) ResetExecutionPlanID() {
 	m.addexecution_plan_id = nil
 }
 
-// SetTranslationConfig sets the "translation_config" field.
-func (m *JobMutation) SetTranslationConfig(value map[string]interface{}) {
-	m.translation_config = &value
+// SetExecutionConfig sets the "execution_config" field.
+func (m *JobMutation) SetExecutionConfig(value map[string]interface{}) {
+	m.execution_config = &value
 }
 
-// TranslationConfig returns the value of the "translation_config" field in the mutation.
-func (m *JobMutation) TranslationConfig() (r map[string]interface{}, exists bool) {
-	v := m.translation_config
+// ExecutionConfig returns the value of the "execution_config" field in the mutation.
+func (m *JobMutation) ExecutionConfig() (r map[string]interface{}, exists bool) {
+	v := m.execution_config
 	if v == nil {
 		return
 	}
 	return *v, true
 }
 
-// OldTranslationConfig returns the old "translation_config" field's value of the Job entity.
+// OldExecutionConfig returns the old "execution_config" field's value of the Job entity.
 // If the Job object wasn't provided to the builder, the object is fetched from the database.
 // An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *JobMutation) OldTranslationConfig(ctx context.Context) (v map[string]interface{}, err error) {
+func (m *JobMutation) OldExecutionConfig(ctx context.Context) (v map[string]interface{}, err error) {
 	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldTranslationConfig is only allowed on UpdateOne operations")
+		return v, errors.New("OldExecutionConfig is only allowed on UpdateOne operations")
 	}
 	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldTranslationConfig requires an ID field in the mutation")
+		return v, errors.New("OldExecutionConfig requires an ID field in the mutation")
 	}
 	oldValue, err := m.oldValue(ctx)
 	if err != nil {
-		return v, fmt.Errorf("querying old value for OldTranslationConfig: %w", err)
+		return v, fmt.Errorf("querying old value for OldExecutionConfig: %w", err)
 	}
-	return oldValue.TranslationConfig, nil
+	return oldValue.ExecutionConfig, nil
 }
 
-// ResetTranslationConfig resets all changes to the "translation_config" field.
-func (m *JobMutation) ResetTranslationConfig() {
-	m.translation_config = nil
+// ResetExecutionConfig resets all changes to the "execution_config" field.
+func (m *JobMutation) ResetExecutionConfig() {
+	m.execution_config = nil
 }
 
 // SetResourceCount sets the "resource_count" field.
@@ -5702,8 +6550,8 @@ func (m *JobMutation) Fields() []string {
 	if m.execution_plan_id != nil {
 		fields = append(fields, job.FieldExecutionPlanID)
 	}
-	if m.translation_config != nil {
-		fields = append(fields, job.FieldTranslationConfig)
+	if m.execution_config != nil {
+		fields = append(fields, job.FieldExecutionConfig)
 	}
 	if m.resource_count != nil {
 		fields = append(fields, job.FieldResourceCount)
@@ -5752,8 +6600,8 @@ func (m *JobMutation) Field(name string) (ent.Value, bool) {
 		return m.TriggerType()
 	case job.FieldExecutionPlanID:
 		return m.ExecutionPlanID()
-	case job.FieldTranslationConfig:
-		return m.TranslationConfig()
+	case job.FieldExecutionConfig:
+		return m.ExecutionConfig()
 	case job.FieldResourceCount:
 		return m.ResourceCount()
 	case job.FieldCompletedResources:
@@ -5793,8 +6641,8 @@ func (m *JobMutation) OldField(ctx context.Context, name string) (ent.Value, err
 		return m.OldTriggerType(ctx)
 	case job.FieldExecutionPlanID:
 		return m.OldExecutionPlanID(ctx)
-	case job.FieldTranslationConfig:
-		return m.OldTranslationConfig(ctx)
+	case job.FieldExecutionConfig:
+		return m.OldExecutionConfig(ctx)
 	case job.FieldResourceCount:
 		return m.OldResourceCount(ctx)
 	case job.FieldCompletedResources:
@@ -5864,12 +6712,12 @@ func (m *JobMutation) SetField(name string, value ent.Value) error {
 		}
 		m.SetExecutionPlanID(v)
 		return nil
-	case job.FieldTranslationConfig:
+	case job.FieldExecutionConfig:
 		v, ok := value.(map[string]interface{})
 		if !ok {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
-		m.SetTranslationConfig(v)
+		m.SetExecutionConfig(v)
 		return nil
 	case job.FieldResourceCount:
 		v, ok := value.(int)
@@ -6115,8 +6963,8 @@ func (m *JobMutation) ResetField(name string) error {
 	case job.FieldExecutionPlanID:
 		m.ResetExecutionPlanID()
 		return nil
-	case job.FieldTranslationConfig:
-		m.ResetTranslationConfig()
+	case job.FieldExecutionConfig:
+		m.ResetExecutionConfig()
 		return nil
 	case job.FieldResourceCount:
 		m.ResetResourceCount()
@@ -8252,9 +9100,9 @@ type OrganizationMutation struct {
 	bootstrap_prompt_templates          map[int]struct{}
 	removedbootstrap_prompt_templates   map[int]struct{}
 	clearedbootstrap_prompt_templates   bool
-	translation_profiles                map[int]struct{}
-	removedtranslation_profiles         map[int]struct{}
-	clearedtranslation_profiles         bool
+	execution_profiles                  map[int]struct{}
+	removedexecution_profiles           map[int]struct{}
+	clearedexecution_profiles           bool
 	execution_plan_templates            map[int]struct{}
 	removedexecution_plan_templates     map[int]struct{}
 	clearedexecution_plan_templates     bool
@@ -8981,58 +9829,58 @@ func (m *OrganizationMutation) ResetBootstrapPromptTemplates() {
 	m.removedbootstrap_prompt_templates = nil
 }
 
-// AddTranslationProfileIDs adds the "translation_profiles" edge to the TranslationProfile entity by ids.
-func (m *OrganizationMutation) AddTranslationProfileIDs(ids ...int) {
-	if m.translation_profiles == nil {
-		m.translation_profiles = make(map[int]struct{})
+// AddExecutionProfileIDs adds the "execution_profiles" edge to the ExecutionProfile entity by ids.
+func (m *OrganizationMutation) AddExecutionProfileIDs(ids ...int) {
+	if m.execution_profiles == nil {
+		m.execution_profiles = make(map[int]struct{})
 	}
 	for i := range ids {
-		m.translation_profiles[ids[i]] = struct{}{}
+		m.execution_profiles[ids[i]] = struct{}{}
 	}
 }
 
-// ClearTranslationProfiles clears the "translation_profiles" edge to the TranslationProfile entity.
-func (m *OrganizationMutation) ClearTranslationProfiles() {
-	m.clearedtranslation_profiles = true
+// ClearExecutionProfiles clears the "execution_profiles" edge to the ExecutionProfile entity.
+func (m *OrganizationMutation) ClearExecutionProfiles() {
+	m.clearedexecution_profiles = true
 }
 
-// TranslationProfilesCleared reports if the "translation_profiles" edge to the TranslationProfile entity was cleared.
-func (m *OrganizationMutation) TranslationProfilesCleared() bool {
-	return m.clearedtranslation_profiles
+// ExecutionProfilesCleared reports if the "execution_profiles" edge to the ExecutionProfile entity was cleared.
+func (m *OrganizationMutation) ExecutionProfilesCleared() bool {
+	return m.clearedexecution_profiles
 }
 
-// RemoveTranslationProfileIDs removes the "translation_profiles" edge to the TranslationProfile entity by IDs.
-func (m *OrganizationMutation) RemoveTranslationProfileIDs(ids ...int) {
-	if m.removedtranslation_profiles == nil {
-		m.removedtranslation_profiles = make(map[int]struct{})
+// RemoveExecutionProfileIDs removes the "execution_profiles" edge to the ExecutionProfile entity by IDs.
+func (m *OrganizationMutation) RemoveExecutionProfileIDs(ids ...int) {
+	if m.removedexecution_profiles == nil {
+		m.removedexecution_profiles = make(map[int]struct{})
 	}
 	for i := range ids {
-		delete(m.translation_profiles, ids[i])
-		m.removedtranslation_profiles[ids[i]] = struct{}{}
+		delete(m.execution_profiles, ids[i])
+		m.removedexecution_profiles[ids[i]] = struct{}{}
 	}
 }
 
-// RemovedTranslationProfiles returns the removed IDs of the "translation_profiles" edge to the TranslationProfile entity.
-func (m *OrganizationMutation) RemovedTranslationProfilesIDs() (ids []int) {
-	for id := range m.removedtranslation_profiles {
+// RemovedExecutionProfiles returns the removed IDs of the "execution_profiles" edge to the ExecutionProfile entity.
+func (m *OrganizationMutation) RemovedExecutionProfilesIDs() (ids []int) {
+	for id := range m.removedexecution_profiles {
 		ids = append(ids, id)
 	}
 	return
 }
 
-// TranslationProfilesIDs returns the "translation_profiles" edge IDs in the mutation.
-func (m *OrganizationMutation) TranslationProfilesIDs() (ids []int) {
-	for id := range m.translation_profiles {
+// ExecutionProfilesIDs returns the "execution_profiles" edge IDs in the mutation.
+func (m *OrganizationMutation) ExecutionProfilesIDs() (ids []int) {
+	for id := range m.execution_profiles {
 		ids = append(ids, id)
 	}
 	return
 }
 
-// ResetTranslationProfiles resets all changes to the "translation_profiles" edge.
-func (m *OrganizationMutation) ResetTranslationProfiles() {
-	m.translation_profiles = nil
-	m.clearedtranslation_profiles = false
-	m.removedtranslation_profiles = nil
+// ResetExecutionProfiles resets all changes to the "execution_profiles" edge.
+func (m *OrganizationMutation) ResetExecutionProfiles() {
+	m.execution_profiles = nil
+	m.clearedexecution_profiles = false
+	m.removedexecution_profiles = nil
 }
 
 // AddExecutionPlanTemplateIDs adds the "execution_plan_templates" edge to the ExecutionPlanTemplate entity by ids.
@@ -9344,8 +10192,8 @@ func (m *OrganizationMutation) AddedEdges() []string {
 	if m.bootstrap_prompt_templates != nil {
 		edges = append(edges, organization.EdgeBootstrapPromptTemplates)
 	}
-	if m.translation_profiles != nil {
-		edges = append(edges, organization.EdgeTranslationProfiles)
+	if m.execution_profiles != nil {
+		edges = append(edges, organization.EdgeExecutionProfiles)
 	}
 	if m.execution_plan_templates != nil {
 		edges = append(edges, organization.EdgeExecutionPlanTemplates)
@@ -9399,9 +10247,9 @@ func (m *OrganizationMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
-	case organization.EdgeTranslationProfiles:
-		ids := make([]ent.Value, 0, len(m.translation_profiles))
-		for id := range m.translation_profiles {
+	case organization.EdgeExecutionProfiles:
+		ids := make([]ent.Value, 0, len(m.execution_profiles))
+		for id := range m.execution_profiles {
 			ids = append(ids, id)
 		}
 		return ids
@@ -9439,8 +10287,8 @@ func (m *OrganizationMutation) RemovedEdges() []string {
 	if m.removedbootstrap_prompt_templates != nil {
 		edges = append(edges, organization.EdgeBootstrapPromptTemplates)
 	}
-	if m.removedtranslation_profiles != nil {
-		edges = append(edges, organization.EdgeTranslationProfiles)
+	if m.removedexecution_profiles != nil {
+		edges = append(edges, organization.EdgeExecutionProfiles)
 	}
 	if m.removedexecution_plan_templates != nil {
 		edges = append(edges, organization.EdgeExecutionPlanTemplates)
@@ -9494,9 +10342,9 @@ func (m *OrganizationMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
-	case organization.EdgeTranslationProfiles:
-		ids := make([]ent.Value, 0, len(m.removedtranslation_profiles))
-		for id := range m.removedtranslation_profiles {
+	case organization.EdgeExecutionProfiles:
+		ids := make([]ent.Value, 0, len(m.removedexecution_profiles))
+		for id := range m.removedexecution_profiles {
 			ids = append(ids, id)
 		}
 		return ids
@@ -9534,8 +10382,8 @@ func (m *OrganizationMutation) ClearedEdges() []string {
 	if m.clearedbootstrap_prompt_templates {
 		edges = append(edges, organization.EdgeBootstrapPromptTemplates)
 	}
-	if m.clearedtranslation_profiles {
-		edges = append(edges, organization.EdgeTranslationProfiles)
+	if m.clearedexecution_profiles {
+		edges = append(edges, organization.EdgeExecutionProfiles)
 	}
 	if m.clearedexecution_plan_templates {
 		edges = append(edges, organization.EdgeExecutionPlanTemplates)
@@ -9561,8 +10409,8 @@ func (m *OrganizationMutation) EdgeCleared(name string) bool {
 		return m.clearedtranslation_prompt_templates
 	case organization.EdgeBootstrapPromptTemplates:
 		return m.clearedbootstrap_prompt_templates
-	case organization.EdgeTranslationProfiles:
-		return m.clearedtranslation_profiles
+	case organization.EdgeExecutionProfiles:
+		return m.clearedexecution_profiles
 	case organization.EdgeExecutionPlanTemplates:
 		return m.clearedexecution_plan_templates
 	}
@@ -9602,8 +10450,8 @@ func (m *OrganizationMutation) ResetEdge(name string) error {
 	case organization.EdgeBootstrapPromptTemplates:
 		m.ResetBootstrapPromptTemplates()
 		return nil
-	case organization.EdgeTranslationProfiles:
-		m.ResetTranslationProfiles()
+	case organization.EdgeExecutionProfiles:
+		m.ResetExecutionProfiles()
 		return nil
 	case organization.EdgeExecutionPlanTemplates:
 		m.ResetExecutionPlanTemplates()
@@ -9615,46 +10463,45 @@ func (m *OrganizationMutation) ResetEdge(name string) error {
 // ProjectMutation represents an operation that mutates the Project nodes in the graph.
 type ProjectMutation struct {
 	config
-	op                         Op
-	typ                        string
-	id                         *int
-	created_at                 *time.Time
-	updated_at                 *time.Time
-	name                       *string
-	_config                    *map[string]interface{}
-	default_translation_config *map[string]interface{}
-	glossary_enabled           *bool
-	source_lang                *string
-	target_lang                *string
-	clearedFields              map[string]struct{}
-	owner_user                 *int
-	clearedowner_user          bool
-	owner_org                  *int
-	clearedowner_org           bool
-	glossary_entries           map[int]struct{}
-	removedglossary_entries    map[int]struct{}
-	clearedglossary_entries    bool
-	tm_entries                 map[int]struct{}
-	removedtm_entries          map[int]struct{}
-	clearedtm_entries          bool
-	jobs                       map[int]struct{}
-	removedjobs                map[int]struct{}
-	clearedjobs                bool
-	activity_logs              map[int]struct{}
-	removedactivity_logs       map[int]struct{}
-	clearedactivity_logs       bool
-	usage_records              map[int]struct{}
-	removedusage_records       map[int]struct{}
-	clearedusage_records       bool
-	resources                  map[int]struct{}
-	removedresources           map[int]struct{}
-	clearedresources           bool
-	sync_tasks                 map[int]struct{}
-	removedsync_tasks          map[int]struct{}
-	clearedsync_tasks          bool
-	done                       bool
-	oldValue                   func(context.Context) (*Project, error)
-	predicates                 []predicate.Project
+	op                      Op
+	typ                     string
+	id                      *int
+	created_at              *time.Time
+	updated_at              *time.Time
+	name                    *string
+	_config                 *map[string]interface{}
+	glossary_enabled        *bool
+	source_lang             *string
+	target_lang             *string
+	clearedFields           map[string]struct{}
+	owner_user              *int
+	clearedowner_user       bool
+	owner_org               *int
+	clearedowner_org        bool
+	glossary_entries        map[int]struct{}
+	removedglossary_entries map[int]struct{}
+	clearedglossary_entries bool
+	tm_entries              map[int]struct{}
+	removedtm_entries       map[int]struct{}
+	clearedtm_entries       bool
+	jobs                    map[int]struct{}
+	removedjobs             map[int]struct{}
+	clearedjobs             bool
+	activity_logs           map[int]struct{}
+	removedactivity_logs    map[int]struct{}
+	clearedactivity_logs    bool
+	usage_records           map[int]struct{}
+	removedusage_records    map[int]struct{}
+	clearedusage_records    bool
+	resources               map[int]struct{}
+	removedresources        map[int]struct{}
+	clearedresources        bool
+	sync_tasks              map[int]struct{}
+	removedsync_tasks       map[int]struct{}
+	clearedsync_tasks       bool
+	done                    bool
+	oldValue                func(context.Context) (*Project, error)
+	predicates              []predicate.Project
 }
 
 var _ ent.Mutation = (*ProjectMutation)(nil)
@@ -9995,42 +10842,6 @@ func (m *ProjectMutation) OldConfig(ctx context.Context) (v map[string]interface
 // ResetConfig resets all changes to the "config" field.
 func (m *ProjectMutation) ResetConfig() {
 	m._config = nil
-}
-
-// SetDefaultTranslationConfig sets the "default_translation_config" field.
-func (m *ProjectMutation) SetDefaultTranslationConfig(value map[string]interface{}) {
-	m.default_translation_config = &value
-}
-
-// DefaultTranslationConfig returns the value of the "default_translation_config" field in the mutation.
-func (m *ProjectMutation) DefaultTranslationConfig() (r map[string]interface{}, exists bool) {
-	v := m.default_translation_config
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldDefaultTranslationConfig returns the old "default_translation_config" field's value of the Project entity.
-// If the Project object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *ProjectMutation) OldDefaultTranslationConfig(ctx context.Context) (v map[string]interface{}, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldDefaultTranslationConfig is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldDefaultTranslationConfig requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldDefaultTranslationConfig: %w", err)
-	}
-	return oldValue.DefaultTranslationConfig, nil
-}
-
-// ResetDefaultTranslationConfig resets all changes to the "default_translation_config" field.
-func (m *ProjectMutation) ResetDefaultTranslationConfig() {
-	m.default_translation_config = nil
 }
 
 // SetGlossaryEnabled sets the "glossary_enabled" field.
@@ -10607,7 +11418,7 @@ func (m *ProjectMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *ProjectMutation) Fields() []string {
-	fields := make([]string, 0, 10)
+	fields := make([]string, 0, 9)
 	if m.created_at != nil {
 		fields = append(fields, project.FieldCreatedAt)
 	}
@@ -10625,9 +11436,6 @@ func (m *ProjectMutation) Fields() []string {
 	}
 	if m._config != nil {
 		fields = append(fields, project.FieldConfig)
-	}
-	if m.default_translation_config != nil {
-		fields = append(fields, project.FieldDefaultTranslationConfig)
 	}
 	if m.glossary_enabled != nil {
 		fields = append(fields, project.FieldGlossaryEnabled)
@@ -10658,8 +11466,6 @@ func (m *ProjectMutation) Field(name string) (ent.Value, bool) {
 		return m.OwnerOrgID()
 	case project.FieldConfig:
 		return m.Config()
-	case project.FieldDefaultTranslationConfig:
-		return m.DefaultTranslationConfig()
 	case project.FieldGlossaryEnabled:
 		return m.GlossaryEnabled()
 	case project.FieldSourceLang:
@@ -10687,8 +11493,6 @@ func (m *ProjectMutation) OldField(ctx context.Context, name string) (ent.Value,
 		return m.OldOwnerOrgID(ctx)
 	case project.FieldConfig:
 		return m.OldConfig(ctx)
-	case project.FieldDefaultTranslationConfig:
-		return m.OldDefaultTranslationConfig(ctx)
 	case project.FieldGlossaryEnabled:
 		return m.OldGlossaryEnabled(ctx)
 	case project.FieldSourceLang:
@@ -10745,13 +11549,6 @@ func (m *ProjectMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetConfig(v)
-		return nil
-	case project.FieldDefaultTranslationConfig:
-		v, ok := value.(map[string]interface{})
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetDefaultTranslationConfig(v)
 		return nil
 	case project.FieldGlossaryEnabled:
 		v, ok := value.(bool)
@@ -10858,9 +11655,6 @@ func (m *ProjectMutation) ResetField(name string) error {
 		return nil
 	case project.FieldConfig:
 		m.ResetConfig()
-		return nil
-	case project.FieldDefaultTranslationConfig:
-		m.ResetDefaultTranslationConfig()
 		return nil
 	case project.FieldGlossaryEnabled:
 		m.ResetGlossaryEnabled()
@@ -17500,854 +18294,6 @@ func (m *TMEntryMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown TMEntry edge %s", name)
 }
 
-// TranslationProfileMutation represents an operation that mutates the TranslationProfile nodes in the graph.
-type TranslationProfileMutation struct {
-	config
-	op                Op
-	typ               string
-	id                *int
-	created_at        *time.Time
-	updated_at        *time.Time
-	name              *string
-	description       *string
-	scope             *string
-	_config           *schema.TranslationProfileConfigData
-	clearedFields     map[string]struct{}
-	owner_user        *int
-	clearedowner_user bool
-	owner_org         *int
-	clearedowner_org  bool
-	done              bool
-	oldValue          func(context.Context) (*TranslationProfile, error)
-	predicates        []predicate.TranslationProfile
-}
-
-var _ ent.Mutation = (*TranslationProfileMutation)(nil)
-
-// translationprofileOption allows management of the mutation configuration using functional options.
-type translationprofileOption func(*TranslationProfileMutation)
-
-// newTranslationProfileMutation creates new mutation for the TranslationProfile entity.
-func newTranslationProfileMutation(c config, op Op, opts ...translationprofileOption) *TranslationProfileMutation {
-	m := &TranslationProfileMutation{
-		config:        c,
-		op:            op,
-		typ:           TypeTranslationProfile,
-		clearedFields: make(map[string]struct{}),
-	}
-	for _, opt := range opts {
-		opt(m)
-	}
-	return m
-}
-
-// withTranslationProfileID sets the ID field of the mutation.
-func withTranslationProfileID(id int) translationprofileOption {
-	return func(m *TranslationProfileMutation) {
-		var (
-			err   error
-			once  sync.Once
-			value *TranslationProfile
-		)
-		m.oldValue = func(ctx context.Context) (*TranslationProfile, error) {
-			once.Do(func() {
-				if m.done {
-					err = errors.New("querying old values post mutation is not allowed")
-				} else {
-					value, err = m.Client().TranslationProfile.Get(ctx, id)
-				}
-			})
-			return value, err
-		}
-		m.id = &id
-	}
-}
-
-// withTranslationProfile sets the old TranslationProfile of the mutation.
-func withTranslationProfile(node *TranslationProfile) translationprofileOption {
-	return func(m *TranslationProfileMutation) {
-		m.oldValue = func(context.Context) (*TranslationProfile, error) {
-			return node, nil
-		}
-		m.id = &node.ID
-	}
-}
-
-// Client returns a new `ent.Client` from the mutation. If the mutation was
-// executed in a transaction (ent.Tx), a transactional client is returned.
-func (m TranslationProfileMutation) Client() *Client {
-	client := &Client{config: m.config}
-	client.init()
-	return client
-}
-
-// Tx returns an `ent.Tx` for mutations that were executed in transactions;
-// it returns an error otherwise.
-func (m TranslationProfileMutation) Tx() (*Tx, error) {
-	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
-	}
-	tx := &Tx{config: m.config}
-	tx.init()
-	return tx, nil
-}
-
-// ID returns the ID value in the mutation. Note that the ID is only available
-// if it was provided to the builder or after it was returned from the database.
-func (m *TranslationProfileMutation) ID() (id int, exists bool) {
-	if m.id == nil {
-		return
-	}
-	return *m.id, true
-}
-
-// IDs queries the database and returns the entity ids that match the mutation's predicate.
-// That means, if the mutation is applied within a transaction with an isolation level such
-// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
-// or updated by the mutation.
-func (m *TranslationProfileMutation) IDs(ctx context.Context) ([]int, error) {
-	switch {
-	case m.op.Is(OpUpdateOne | OpDeleteOne):
-		id, exists := m.ID()
-		if exists {
-			return []int{id}, nil
-		}
-		fallthrough
-	case m.op.Is(OpUpdate | OpDelete):
-		return m.Client().TranslationProfile.Query().Where(m.predicates...).IDs(ctx)
-	default:
-		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
-	}
-}
-
-// SetCreatedAt sets the "created_at" field.
-func (m *TranslationProfileMutation) SetCreatedAt(t time.Time) {
-	m.created_at = &t
-}
-
-// CreatedAt returns the value of the "created_at" field in the mutation.
-func (m *TranslationProfileMutation) CreatedAt() (r time.Time, exists bool) {
-	v := m.created_at
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldCreatedAt returns the old "created_at" field's value of the TranslationProfile entity.
-// If the TranslationProfile object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *TranslationProfileMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
-	}
-	return oldValue.CreatedAt, nil
-}
-
-// ResetCreatedAt resets all changes to the "created_at" field.
-func (m *TranslationProfileMutation) ResetCreatedAt() {
-	m.created_at = nil
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (m *TranslationProfileMutation) SetUpdatedAt(t time.Time) {
-	m.updated_at = &t
-}
-
-// UpdatedAt returns the value of the "updated_at" field in the mutation.
-func (m *TranslationProfileMutation) UpdatedAt() (r time.Time, exists bool) {
-	v := m.updated_at
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldUpdatedAt returns the old "updated_at" field's value of the TranslationProfile entity.
-// If the TranslationProfile object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *TranslationProfileMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
-	}
-	return oldValue.UpdatedAt, nil
-}
-
-// ResetUpdatedAt resets all changes to the "updated_at" field.
-func (m *TranslationProfileMutation) ResetUpdatedAt() {
-	m.updated_at = nil
-}
-
-// SetName sets the "name" field.
-func (m *TranslationProfileMutation) SetName(s string) {
-	m.name = &s
-}
-
-// Name returns the value of the "name" field in the mutation.
-func (m *TranslationProfileMutation) Name() (r string, exists bool) {
-	v := m.name
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldName returns the old "name" field's value of the TranslationProfile entity.
-// If the TranslationProfile object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *TranslationProfileMutation) OldName(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldName is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldName requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldName: %w", err)
-	}
-	return oldValue.Name, nil
-}
-
-// ResetName resets all changes to the "name" field.
-func (m *TranslationProfileMutation) ResetName() {
-	m.name = nil
-}
-
-// SetDescription sets the "description" field.
-func (m *TranslationProfileMutation) SetDescription(s string) {
-	m.description = &s
-}
-
-// Description returns the value of the "description" field in the mutation.
-func (m *TranslationProfileMutation) Description() (r string, exists bool) {
-	v := m.description
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldDescription returns the old "description" field's value of the TranslationProfile entity.
-// If the TranslationProfile object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *TranslationProfileMutation) OldDescription(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldDescription is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldDescription requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldDescription: %w", err)
-	}
-	return oldValue.Description, nil
-}
-
-// ResetDescription resets all changes to the "description" field.
-func (m *TranslationProfileMutation) ResetDescription() {
-	m.description = nil
-}
-
-// SetScope sets the "scope" field.
-func (m *TranslationProfileMutation) SetScope(s string) {
-	m.scope = &s
-}
-
-// Scope returns the value of the "scope" field in the mutation.
-func (m *TranslationProfileMutation) Scope() (r string, exists bool) {
-	v := m.scope
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldScope returns the old "scope" field's value of the TranslationProfile entity.
-// If the TranslationProfile object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *TranslationProfileMutation) OldScope(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldScope is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldScope requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldScope: %w", err)
-	}
-	return oldValue.Scope, nil
-}
-
-// ResetScope resets all changes to the "scope" field.
-func (m *TranslationProfileMutation) ResetScope() {
-	m.scope = nil
-}
-
-// SetOwnerUserID sets the "owner_user_id" field.
-func (m *TranslationProfileMutation) SetOwnerUserID(i int) {
-	m.owner_user = &i
-}
-
-// OwnerUserID returns the value of the "owner_user_id" field in the mutation.
-func (m *TranslationProfileMutation) OwnerUserID() (r int, exists bool) {
-	v := m.owner_user
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldOwnerUserID returns the old "owner_user_id" field's value of the TranslationProfile entity.
-// If the TranslationProfile object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *TranslationProfileMutation) OldOwnerUserID(ctx context.Context) (v *int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldOwnerUserID is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldOwnerUserID requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldOwnerUserID: %w", err)
-	}
-	return oldValue.OwnerUserID, nil
-}
-
-// ClearOwnerUserID clears the value of the "owner_user_id" field.
-func (m *TranslationProfileMutation) ClearOwnerUserID() {
-	m.owner_user = nil
-	m.clearedFields[translationprofile.FieldOwnerUserID] = struct{}{}
-}
-
-// OwnerUserIDCleared returns if the "owner_user_id" field was cleared in this mutation.
-func (m *TranslationProfileMutation) OwnerUserIDCleared() bool {
-	_, ok := m.clearedFields[translationprofile.FieldOwnerUserID]
-	return ok
-}
-
-// ResetOwnerUserID resets all changes to the "owner_user_id" field.
-func (m *TranslationProfileMutation) ResetOwnerUserID() {
-	m.owner_user = nil
-	delete(m.clearedFields, translationprofile.FieldOwnerUserID)
-}
-
-// SetOwnerOrgID sets the "owner_org_id" field.
-func (m *TranslationProfileMutation) SetOwnerOrgID(i int) {
-	m.owner_org = &i
-}
-
-// OwnerOrgID returns the value of the "owner_org_id" field in the mutation.
-func (m *TranslationProfileMutation) OwnerOrgID() (r int, exists bool) {
-	v := m.owner_org
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldOwnerOrgID returns the old "owner_org_id" field's value of the TranslationProfile entity.
-// If the TranslationProfile object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *TranslationProfileMutation) OldOwnerOrgID(ctx context.Context) (v *int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldOwnerOrgID is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldOwnerOrgID requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldOwnerOrgID: %w", err)
-	}
-	return oldValue.OwnerOrgID, nil
-}
-
-// ClearOwnerOrgID clears the value of the "owner_org_id" field.
-func (m *TranslationProfileMutation) ClearOwnerOrgID() {
-	m.owner_org = nil
-	m.clearedFields[translationprofile.FieldOwnerOrgID] = struct{}{}
-}
-
-// OwnerOrgIDCleared returns if the "owner_org_id" field was cleared in this mutation.
-func (m *TranslationProfileMutation) OwnerOrgIDCleared() bool {
-	_, ok := m.clearedFields[translationprofile.FieldOwnerOrgID]
-	return ok
-}
-
-// ResetOwnerOrgID resets all changes to the "owner_org_id" field.
-func (m *TranslationProfileMutation) ResetOwnerOrgID() {
-	m.owner_org = nil
-	delete(m.clearedFields, translationprofile.FieldOwnerOrgID)
-}
-
-// SetConfig sets the "config" field.
-func (m *TranslationProfileMutation) SetConfig(spcd schema.TranslationProfileConfigData) {
-	m._config = &spcd
-}
-
-// Config returns the value of the "config" field in the mutation.
-func (m *TranslationProfileMutation) Config() (r schema.TranslationProfileConfigData, exists bool) {
-	v := m._config
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldConfig returns the old "config" field's value of the TranslationProfile entity.
-// If the TranslationProfile object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *TranslationProfileMutation) OldConfig(ctx context.Context) (v schema.TranslationProfileConfigData, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldConfig is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldConfig requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldConfig: %w", err)
-	}
-	return oldValue.Config, nil
-}
-
-// ResetConfig resets all changes to the "config" field.
-func (m *TranslationProfileMutation) ResetConfig() {
-	m._config = nil
-}
-
-// ClearOwnerUser clears the "owner_user" edge to the User entity.
-func (m *TranslationProfileMutation) ClearOwnerUser() {
-	m.clearedowner_user = true
-	m.clearedFields[translationprofile.FieldOwnerUserID] = struct{}{}
-}
-
-// OwnerUserCleared reports if the "owner_user" edge to the User entity was cleared.
-func (m *TranslationProfileMutation) OwnerUserCleared() bool {
-	return m.OwnerUserIDCleared() || m.clearedowner_user
-}
-
-// OwnerUserIDs returns the "owner_user" edge IDs in the mutation.
-// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
-// OwnerUserID instead. It exists only for internal usage by the builders.
-func (m *TranslationProfileMutation) OwnerUserIDs() (ids []int) {
-	if id := m.owner_user; id != nil {
-		ids = append(ids, *id)
-	}
-	return
-}
-
-// ResetOwnerUser resets all changes to the "owner_user" edge.
-func (m *TranslationProfileMutation) ResetOwnerUser() {
-	m.owner_user = nil
-	m.clearedowner_user = false
-}
-
-// ClearOwnerOrg clears the "owner_org" edge to the Organization entity.
-func (m *TranslationProfileMutation) ClearOwnerOrg() {
-	m.clearedowner_org = true
-	m.clearedFields[translationprofile.FieldOwnerOrgID] = struct{}{}
-}
-
-// OwnerOrgCleared reports if the "owner_org" edge to the Organization entity was cleared.
-func (m *TranslationProfileMutation) OwnerOrgCleared() bool {
-	return m.OwnerOrgIDCleared() || m.clearedowner_org
-}
-
-// OwnerOrgIDs returns the "owner_org" edge IDs in the mutation.
-// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
-// OwnerOrgID instead. It exists only for internal usage by the builders.
-func (m *TranslationProfileMutation) OwnerOrgIDs() (ids []int) {
-	if id := m.owner_org; id != nil {
-		ids = append(ids, *id)
-	}
-	return
-}
-
-// ResetOwnerOrg resets all changes to the "owner_org" edge.
-func (m *TranslationProfileMutation) ResetOwnerOrg() {
-	m.owner_org = nil
-	m.clearedowner_org = false
-}
-
-// Where appends a list predicates to the TranslationProfileMutation builder.
-func (m *TranslationProfileMutation) Where(ps ...predicate.TranslationProfile) {
-	m.predicates = append(m.predicates, ps...)
-}
-
-// WhereP appends storage-level predicates to the TranslationProfileMutation builder. Using this method,
-// users can use type-assertion to append predicates that do not depend on any generated package.
-func (m *TranslationProfileMutation) WhereP(ps ...func(*sql.Selector)) {
-	p := make([]predicate.TranslationProfile, len(ps))
-	for i := range ps {
-		p[i] = ps[i]
-	}
-	m.Where(p...)
-}
-
-// Op returns the operation name.
-func (m *TranslationProfileMutation) Op() Op {
-	return m.op
-}
-
-// SetOp allows setting the mutation operation.
-func (m *TranslationProfileMutation) SetOp(op Op) {
-	m.op = op
-}
-
-// Type returns the node type of this mutation (TranslationProfile).
-func (m *TranslationProfileMutation) Type() string {
-	return m.typ
-}
-
-// Fields returns all fields that were changed during this mutation. Note that in
-// order to get all numeric fields that were incremented/decremented, call
-// AddedFields().
-func (m *TranslationProfileMutation) Fields() []string {
-	fields := make([]string, 0, 8)
-	if m.created_at != nil {
-		fields = append(fields, translationprofile.FieldCreatedAt)
-	}
-	if m.updated_at != nil {
-		fields = append(fields, translationprofile.FieldUpdatedAt)
-	}
-	if m.name != nil {
-		fields = append(fields, translationprofile.FieldName)
-	}
-	if m.description != nil {
-		fields = append(fields, translationprofile.FieldDescription)
-	}
-	if m.scope != nil {
-		fields = append(fields, translationprofile.FieldScope)
-	}
-	if m.owner_user != nil {
-		fields = append(fields, translationprofile.FieldOwnerUserID)
-	}
-	if m.owner_org != nil {
-		fields = append(fields, translationprofile.FieldOwnerOrgID)
-	}
-	if m._config != nil {
-		fields = append(fields, translationprofile.FieldConfig)
-	}
-	return fields
-}
-
-// Field returns the value of a field with the given name. The second boolean
-// return value indicates that this field was not set, or was not defined in the
-// schema.
-func (m *TranslationProfileMutation) Field(name string) (ent.Value, bool) {
-	switch name {
-	case translationprofile.FieldCreatedAt:
-		return m.CreatedAt()
-	case translationprofile.FieldUpdatedAt:
-		return m.UpdatedAt()
-	case translationprofile.FieldName:
-		return m.Name()
-	case translationprofile.FieldDescription:
-		return m.Description()
-	case translationprofile.FieldScope:
-		return m.Scope()
-	case translationprofile.FieldOwnerUserID:
-		return m.OwnerUserID()
-	case translationprofile.FieldOwnerOrgID:
-		return m.OwnerOrgID()
-	case translationprofile.FieldConfig:
-		return m.Config()
-	}
-	return nil, false
-}
-
-// OldField returns the old value of the field from the database. An error is
-// returned if the mutation operation is not UpdateOne, or the query to the
-// database failed.
-func (m *TranslationProfileMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
-	switch name {
-	case translationprofile.FieldCreatedAt:
-		return m.OldCreatedAt(ctx)
-	case translationprofile.FieldUpdatedAt:
-		return m.OldUpdatedAt(ctx)
-	case translationprofile.FieldName:
-		return m.OldName(ctx)
-	case translationprofile.FieldDescription:
-		return m.OldDescription(ctx)
-	case translationprofile.FieldScope:
-		return m.OldScope(ctx)
-	case translationprofile.FieldOwnerUserID:
-		return m.OldOwnerUserID(ctx)
-	case translationprofile.FieldOwnerOrgID:
-		return m.OldOwnerOrgID(ctx)
-	case translationprofile.FieldConfig:
-		return m.OldConfig(ctx)
-	}
-	return nil, fmt.Errorf("unknown TranslationProfile field %s", name)
-}
-
-// SetField sets the value of a field with the given name. It returns an error if
-// the field is not defined in the schema, or if the type mismatched the field
-// type.
-func (m *TranslationProfileMutation) SetField(name string, value ent.Value) error {
-	switch name {
-	case translationprofile.FieldCreatedAt:
-		v, ok := value.(time.Time)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetCreatedAt(v)
-		return nil
-	case translationprofile.FieldUpdatedAt:
-		v, ok := value.(time.Time)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetUpdatedAt(v)
-		return nil
-	case translationprofile.FieldName:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetName(v)
-		return nil
-	case translationprofile.FieldDescription:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetDescription(v)
-		return nil
-	case translationprofile.FieldScope:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetScope(v)
-		return nil
-	case translationprofile.FieldOwnerUserID:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetOwnerUserID(v)
-		return nil
-	case translationprofile.FieldOwnerOrgID:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetOwnerOrgID(v)
-		return nil
-	case translationprofile.FieldConfig:
-		v, ok := value.(schema.TranslationProfileConfigData)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetConfig(v)
-		return nil
-	}
-	return fmt.Errorf("unknown TranslationProfile field %s", name)
-}
-
-// AddedFields returns all numeric fields that were incremented/decremented during
-// this mutation.
-func (m *TranslationProfileMutation) AddedFields() []string {
-	var fields []string
-	return fields
-}
-
-// AddedField returns the numeric value that was incremented/decremented on a field
-// with the given name. The second boolean return value indicates that this field
-// was not set, or was not defined in the schema.
-func (m *TranslationProfileMutation) AddedField(name string) (ent.Value, bool) {
-	switch name {
-	}
-	return nil, false
-}
-
-// AddField adds the value to the field with the given name. It returns an error if
-// the field is not defined in the schema, or if the type mismatched the field
-// type.
-func (m *TranslationProfileMutation) AddField(name string, value ent.Value) error {
-	switch name {
-	}
-	return fmt.Errorf("unknown TranslationProfile numeric field %s", name)
-}
-
-// ClearedFields returns all nullable fields that were cleared during this
-// mutation.
-func (m *TranslationProfileMutation) ClearedFields() []string {
-	var fields []string
-	if m.FieldCleared(translationprofile.FieldOwnerUserID) {
-		fields = append(fields, translationprofile.FieldOwnerUserID)
-	}
-	if m.FieldCleared(translationprofile.FieldOwnerOrgID) {
-		fields = append(fields, translationprofile.FieldOwnerOrgID)
-	}
-	return fields
-}
-
-// FieldCleared returns a boolean indicating if a field with the given name was
-// cleared in this mutation.
-func (m *TranslationProfileMutation) FieldCleared(name string) bool {
-	_, ok := m.clearedFields[name]
-	return ok
-}
-
-// ClearField clears the value of the field with the given name. It returns an
-// error if the field is not defined in the schema.
-func (m *TranslationProfileMutation) ClearField(name string) error {
-	switch name {
-	case translationprofile.FieldOwnerUserID:
-		m.ClearOwnerUserID()
-		return nil
-	case translationprofile.FieldOwnerOrgID:
-		m.ClearOwnerOrgID()
-		return nil
-	}
-	return fmt.Errorf("unknown TranslationProfile nullable field %s", name)
-}
-
-// ResetField resets all changes in the mutation for the field with the given name.
-// It returns an error if the field is not defined in the schema.
-func (m *TranslationProfileMutation) ResetField(name string) error {
-	switch name {
-	case translationprofile.FieldCreatedAt:
-		m.ResetCreatedAt()
-		return nil
-	case translationprofile.FieldUpdatedAt:
-		m.ResetUpdatedAt()
-		return nil
-	case translationprofile.FieldName:
-		m.ResetName()
-		return nil
-	case translationprofile.FieldDescription:
-		m.ResetDescription()
-		return nil
-	case translationprofile.FieldScope:
-		m.ResetScope()
-		return nil
-	case translationprofile.FieldOwnerUserID:
-		m.ResetOwnerUserID()
-		return nil
-	case translationprofile.FieldOwnerOrgID:
-		m.ResetOwnerOrgID()
-		return nil
-	case translationprofile.FieldConfig:
-		m.ResetConfig()
-		return nil
-	}
-	return fmt.Errorf("unknown TranslationProfile field %s", name)
-}
-
-// AddedEdges returns all edge names that were set/added in this mutation.
-func (m *TranslationProfileMutation) AddedEdges() []string {
-	edges := make([]string, 0, 2)
-	if m.owner_user != nil {
-		edges = append(edges, translationprofile.EdgeOwnerUser)
-	}
-	if m.owner_org != nil {
-		edges = append(edges, translationprofile.EdgeOwnerOrg)
-	}
-	return edges
-}
-
-// AddedIDs returns all IDs (to other nodes) that were added for the given edge
-// name in this mutation.
-func (m *TranslationProfileMutation) AddedIDs(name string) []ent.Value {
-	switch name {
-	case translationprofile.EdgeOwnerUser:
-		if id := m.owner_user; id != nil {
-			return []ent.Value{*id}
-		}
-	case translationprofile.EdgeOwnerOrg:
-		if id := m.owner_org; id != nil {
-			return []ent.Value{*id}
-		}
-	}
-	return nil
-}
-
-// RemovedEdges returns all edge names that were removed in this mutation.
-func (m *TranslationProfileMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 2)
-	return edges
-}
-
-// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
-// the given name in this mutation.
-func (m *TranslationProfileMutation) RemovedIDs(name string) []ent.Value {
-	return nil
-}
-
-// ClearedEdges returns all edge names that were cleared in this mutation.
-func (m *TranslationProfileMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 2)
-	if m.clearedowner_user {
-		edges = append(edges, translationprofile.EdgeOwnerUser)
-	}
-	if m.clearedowner_org {
-		edges = append(edges, translationprofile.EdgeOwnerOrg)
-	}
-	return edges
-}
-
-// EdgeCleared returns a boolean which indicates if the edge with the given name
-// was cleared in this mutation.
-func (m *TranslationProfileMutation) EdgeCleared(name string) bool {
-	switch name {
-	case translationprofile.EdgeOwnerUser:
-		return m.clearedowner_user
-	case translationprofile.EdgeOwnerOrg:
-		return m.clearedowner_org
-	}
-	return false
-}
-
-// ClearEdge clears the value of the edge with the given name. It returns an error
-// if that edge is not defined in the schema.
-func (m *TranslationProfileMutation) ClearEdge(name string) error {
-	switch name {
-	case translationprofile.EdgeOwnerUser:
-		m.ClearOwnerUser()
-		return nil
-	case translationprofile.EdgeOwnerOrg:
-		m.ClearOwnerOrg()
-		return nil
-	}
-	return fmt.Errorf("unknown TranslationProfile unique edge %s", name)
-}
-
-// ResetEdge resets all changes to the edge with the given name in this mutation.
-// It returns an error if the edge is not defined in the schema.
-func (m *TranslationProfileMutation) ResetEdge(name string) error {
-	switch name {
-	case translationprofile.EdgeOwnerUser:
-		m.ResetOwnerUser()
-		return nil
-	case translationprofile.EdgeOwnerOrg:
-		m.ResetOwnerOrg()
-		return nil
-	}
-	return fmt.Errorf("unknown TranslationProfile edge %s", name)
-}
-
 // TranslationPromptTemplateMutation represents an operation that mutates the TranslationPromptTemplate nodes in the graph.
 type TranslationPromptTemplateMutation struct {
 	config
@@ -20287,9 +20233,9 @@ type UserMutation struct {
 	bootstrap_prompt_templates          map[int]struct{}
 	removedbootstrap_prompt_templates   map[int]struct{}
 	clearedbootstrap_prompt_templates   bool
-	translation_profiles                map[int]struct{}
-	removedtranslation_profiles         map[int]struct{}
-	clearedtranslation_profiles         bool
+	execution_profiles                  map[int]struct{}
+	removedexecution_profiles           map[int]struct{}
+	clearedexecution_profiles           bool
 	execution_plan_templates            map[int]struct{}
 	removedexecution_plan_templates     map[int]struct{}
 	clearedexecution_plan_templates     bool
@@ -21240,58 +21186,58 @@ func (m *UserMutation) ResetBootstrapPromptTemplates() {
 	m.removedbootstrap_prompt_templates = nil
 }
 
-// AddTranslationProfileIDs adds the "translation_profiles" edge to the TranslationProfile entity by ids.
-func (m *UserMutation) AddTranslationProfileIDs(ids ...int) {
-	if m.translation_profiles == nil {
-		m.translation_profiles = make(map[int]struct{})
+// AddExecutionProfileIDs adds the "execution_profiles" edge to the ExecutionProfile entity by ids.
+func (m *UserMutation) AddExecutionProfileIDs(ids ...int) {
+	if m.execution_profiles == nil {
+		m.execution_profiles = make(map[int]struct{})
 	}
 	for i := range ids {
-		m.translation_profiles[ids[i]] = struct{}{}
+		m.execution_profiles[ids[i]] = struct{}{}
 	}
 }
 
-// ClearTranslationProfiles clears the "translation_profiles" edge to the TranslationProfile entity.
-func (m *UserMutation) ClearTranslationProfiles() {
-	m.clearedtranslation_profiles = true
+// ClearExecutionProfiles clears the "execution_profiles" edge to the ExecutionProfile entity.
+func (m *UserMutation) ClearExecutionProfiles() {
+	m.clearedexecution_profiles = true
 }
 
-// TranslationProfilesCleared reports if the "translation_profiles" edge to the TranslationProfile entity was cleared.
-func (m *UserMutation) TranslationProfilesCleared() bool {
-	return m.clearedtranslation_profiles
+// ExecutionProfilesCleared reports if the "execution_profiles" edge to the ExecutionProfile entity was cleared.
+func (m *UserMutation) ExecutionProfilesCleared() bool {
+	return m.clearedexecution_profiles
 }
 
-// RemoveTranslationProfileIDs removes the "translation_profiles" edge to the TranslationProfile entity by IDs.
-func (m *UserMutation) RemoveTranslationProfileIDs(ids ...int) {
-	if m.removedtranslation_profiles == nil {
-		m.removedtranslation_profiles = make(map[int]struct{})
+// RemoveExecutionProfileIDs removes the "execution_profiles" edge to the ExecutionProfile entity by IDs.
+func (m *UserMutation) RemoveExecutionProfileIDs(ids ...int) {
+	if m.removedexecution_profiles == nil {
+		m.removedexecution_profiles = make(map[int]struct{})
 	}
 	for i := range ids {
-		delete(m.translation_profiles, ids[i])
-		m.removedtranslation_profiles[ids[i]] = struct{}{}
+		delete(m.execution_profiles, ids[i])
+		m.removedexecution_profiles[ids[i]] = struct{}{}
 	}
 }
 
-// RemovedTranslationProfiles returns the removed IDs of the "translation_profiles" edge to the TranslationProfile entity.
-func (m *UserMutation) RemovedTranslationProfilesIDs() (ids []int) {
-	for id := range m.removedtranslation_profiles {
+// RemovedExecutionProfiles returns the removed IDs of the "execution_profiles" edge to the ExecutionProfile entity.
+func (m *UserMutation) RemovedExecutionProfilesIDs() (ids []int) {
+	for id := range m.removedexecution_profiles {
 		ids = append(ids, id)
 	}
 	return
 }
 
-// TranslationProfilesIDs returns the "translation_profiles" edge IDs in the mutation.
-func (m *UserMutation) TranslationProfilesIDs() (ids []int) {
-	for id := range m.translation_profiles {
+// ExecutionProfilesIDs returns the "execution_profiles" edge IDs in the mutation.
+func (m *UserMutation) ExecutionProfilesIDs() (ids []int) {
+	for id := range m.execution_profiles {
 		ids = append(ids, id)
 	}
 	return
 }
 
-// ResetTranslationProfiles resets all changes to the "translation_profiles" edge.
-func (m *UserMutation) ResetTranslationProfiles() {
-	m.translation_profiles = nil
-	m.clearedtranslation_profiles = false
-	m.removedtranslation_profiles = nil
+// ResetExecutionProfiles resets all changes to the "execution_profiles" edge.
+func (m *UserMutation) ResetExecutionProfiles() {
+	m.execution_profiles = nil
+	m.clearedexecution_profiles = false
+	m.removedexecution_profiles = nil
 }
 
 // AddExecutionPlanTemplateIDs adds the "execution_plan_templates" edge to the ExecutionPlanTemplate entity by ids.
@@ -21694,8 +21640,8 @@ func (m *UserMutation) AddedEdges() []string {
 	if m.bootstrap_prompt_templates != nil {
 		edges = append(edges, user.EdgeBootstrapPromptTemplates)
 	}
-	if m.translation_profiles != nil {
-		edges = append(edges, user.EdgeTranslationProfiles)
+	if m.execution_profiles != nil {
+		edges = append(edges, user.EdgeExecutionProfiles)
 	}
 	if m.execution_plan_templates != nil {
 		edges = append(edges, user.EdgeExecutionPlanTemplates)
@@ -21770,9 +21716,9 @@ func (m *UserMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
-	case user.EdgeTranslationProfiles:
-		ids := make([]ent.Value, 0, len(m.translation_profiles))
-		for id := range m.translation_profiles {
+	case user.EdgeExecutionProfiles:
+		ids := make([]ent.Value, 0, len(m.execution_profiles))
+		for id := range m.execution_profiles {
 			ids = append(ids, id)
 		}
 		return ids
@@ -21825,8 +21771,8 @@ func (m *UserMutation) RemovedEdges() []string {
 	if m.removedbootstrap_prompt_templates != nil {
 		edges = append(edges, user.EdgeBootstrapPromptTemplates)
 	}
-	if m.removedtranslation_profiles != nil {
-		edges = append(edges, user.EdgeTranslationProfiles)
+	if m.removedexecution_profiles != nil {
+		edges = append(edges, user.EdgeExecutionProfiles)
 	}
 	if m.removedexecution_plan_templates != nil {
 		edges = append(edges, user.EdgeExecutionPlanTemplates)
@@ -21901,9 +21847,9 @@ func (m *UserMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
-	case user.EdgeTranslationProfiles:
-		ids := make([]ent.Value, 0, len(m.removedtranslation_profiles))
-		for id := range m.removedtranslation_profiles {
+	case user.EdgeExecutionProfiles:
+		ids := make([]ent.Value, 0, len(m.removedexecution_profiles))
+		for id := range m.removedexecution_profiles {
 			ids = append(ids, id)
 		}
 		return ids
@@ -21956,8 +21902,8 @@ func (m *UserMutation) ClearedEdges() []string {
 	if m.clearedbootstrap_prompt_templates {
 		edges = append(edges, user.EdgeBootstrapPromptTemplates)
 	}
-	if m.clearedtranslation_profiles {
-		edges = append(edges, user.EdgeTranslationProfiles)
+	if m.clearedexecution_profiles {
+		edges = append(edges, user.EdgeExecutionProfiles)
 	}
 	if m.clearedexecution_plan_templates {
 		edges = append(edges, user.EdgeExecutionPlanTemplates)
@@ -21992,8 +21938,8 @@ func (m *UserMutation) EdgeCleared(name string) bool {
 		return m.clearedtranslation_prompt_templates
 	case user.EdgeBootstrapPromptTemplates:
 		return m.clearedbootstrap_prompt_templates
-	case user.EdgeTranslationProfiles:
-		return m.clearedtranslation_profiles
+	case user.EdgeExecutionProfiles:
+		return m.clearedexecution_profiles
 	case user.EdgeExecutionPlanTemplates:
 		return m.clearedexecution_plan_templates
 	case user.EdgeSyncTasks:
@@ -22044,8 +21990,8 @@ func (m *UserMutation) ResetEdge(name string) error {
 	case user.EdgeBootstrapPromptTemplates:
 		m.ResetBootstrapPromptTemplates()
 		return nil
-	case user.EdgeTranslationProfiles:
-		m.ResetTranslationProfiles()
+	case user.EdgeExecutionProfiles:
+		m.ResetExecutionProfiles()
 		return nil
 	case user.EdgeExecutionPlanTemplates:
 		m.ResetExecutionPlanTemplates()

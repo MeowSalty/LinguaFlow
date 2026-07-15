@@ -46,7 +46,7 @@ var (
 	ErrJobActorMissing     = errors.New("job actor unavailable")
 )
 
-// JobService 翻译任务服务。
+// JobService 任务服务。
 type JobService struct {
 	client                     *ent.Client
 	projects                   *ProjectService
@@ -54,7 +54,7 @@ type JobService struct {
 	backends                   *BackendService
 	translationPromptTemplates *TranslationPromptTemplateService
 	bootstrapPromptTemplates   *BootstrapPromptTemplateService
-	profiles                   *TranslationProfileService
+	profiles                   *ExecutionProfileService
 	store                      *filestore.LocalStore
 	broker                     *event.Broker
 }
@@ -85,7 +85,7 @@ func NewJobService(
 	backends *BackendService,
 	translationPromptTemplates *TranslationPromptTemplateService,
 	bootstrapPromptTemplates *BootstrapPromptTemplateService,
-	profiles *TranslationProfileService,
+	profiles *ExecutionProfileService,
 	store *filestore.LocalStore,
 	broker *event.Broker,
 ) *JobService {
@@ -281,7 +281,7 @@ func (s *JobService) CreateManualJob(ctx context.Context, actorUserID, projectID
 		SetStatus(JobStatusPending).
 		SetTriggerType(JobTriggerManual).
 		SetExecutionPlanID(plan.ID).
-		SetTranslationConfig(snapshotMap).
+		SetExecutionConfig(snapshotMap).
 		SetResourceCount(len(selection)).
 		SetTotalSegments(totalSegments).
 		Save(ctx)
@@ -653,7 +653,7 @@ func (s *JobService) MarkJobResourceRunning(ctx context.Context, jobID, jobResou
 		}
 		return err
 	}
-	s.publishEvent(jobID, "resource_started", "info", "", "开始翻译资源")
+	s.publishEvent(jobID, "resource_started", "info", "", "开始处理资源")
 	return nil
 }
 
@@ -670,7 +670,7 @@ func (s *JobService) MarkJobResourceCompleted(ctx context.Context, jobID, jobRes
 		}
 		return err
 	}
-	s.publishEvent(jobID, "resource_completed", "info", "", fmt.Sprintf("资源翻译完成 (%d 段)", completedSegments))
+	s.publishEvent(jobID, "resource_completed", "info", "", fmt.Sprintf("资源处理完成 (%d 段)", completedSegments))
 	return nil
 }
 
@@ -688,7 +688,7 @@ func (s *JobService) MarkJobResourceFailed(ctx context.Context, jobID, jobResour
 		}
 		return err
 	}
-	s.publishEvent(jobID, "resource_failed", "error", "", fmt.Sprintf("资源翻译失败: %s", message))
+	s.publishEvent(jobID, "resource_failed", "error", "", fmt.Sprintf("资源处理失败: %s", message))
 	return nil
 }
 
@@ -701,7 +701,7 @@ func (s *JobService) MarkJobResourceCancelled(ctx context.Context, jobID, jobRes
 		}
 		return err
 	}
-	s.publishEvent(jobID, "resource_cancelled", "info", "", "资源翻译取消")
+	s.publishEvent(jobID, "resource_cancelled", "info", "", "资源处理取消")
 	return nil
 }
 
@@ -1008,7 +1008,7 @@ func (s *JobService) resolveGroupKeySelection(ctx context.Context, projectID int
 	}
 	rows, err := segQuery.All(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("查询 segments 失败: %w", err)
+		return nil, fmt.Errorf("查询 segments 失败：%w", err)
 	}
 
 	selection := make(map[int][]int)
@@ -1092,7 +1092,7 @@ func (s *JobService) resolveResourceSelection(ctx context.Context, projectID int
 	return selection, nil
 }
 
-func defaultProjectTranslationConfig(projectRow *ent.Project) map[string]any {
+func defaultProjectConfig(projectRow *ent.Project) map[string]any {
 	base := map[string]any{}
 	if projectRow == nil {
 		return base
@@ -1103,7 +1103,7 @@ func defaultProjectTranslationConfig(projectRow *ent.Project) map[string]any {
 	if targetLang := strings.TrimSpace(projectRow.TargetLang); targetLang != "" {
 		base["target_lang"] = targetLang
 	}
-	return mergeConfigMaps(base, projectRow.DefaultTranslationConfig)
+	return base
 }
 
 func uniqueInts(values []int) []int {
@@ -1123,14 +1123,14 @@ func uniqueInts(values []int) []int {
 	return out
 }
 
-// GetSnapshot 从 Job 的 TranslationConfig 字段解析快照。
+// GetSnapshot 从 Job 的 ExecutionConfig 字段解析快照。
 func GetSnapshot(job *ent.Job) (*JobExecutionSnapshot, error) {
-	if job.TranslationConfig == nil {
+	if job.ExecutionConfig == nil {
 		return nil, nil
 	}
-	raw, err := json.Marshal(job.TranslationConfig)
+	raw, err := json.Marshal(job.ExecutionConfig)
 	if err != nil {
-		return nil, fmt.Errorf("marshal translation config: %w", err)
+		return nil, fmt.Errorf("marshal execution config: %w", err)
 	}
 	var snap JobExecutionSnapshot
 	if err := json.Unmarshal(raw, &snap); err != nil {
@@ -1139,8 +1139,8 @@ func GetSnapshot(job *ent.Job) (*JobExecutionSnapshot, error) {
 	return &snap, nil
 }
 
-// GetTranslationSnapshot 从任务获取执行快照。
-func (s *JobService) GetTranslationSnapshot(ctx context.Context, jobID int) (*JobExecutionSnapshot, error) {
+// GetExecutionSnapshot 从任务获取执行快照。
+func (s *JobService) GetExecutionSnapshot(ctx context.Context, jobID int) (*JobExecutionSnapshot, error) {
 	job, err := s.client.Job.Get(ctx, jobID)
 	if err != nil {
 		return nil, fmt.Errorf("load job: %w", err)

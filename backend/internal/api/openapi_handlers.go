@@ -222,24 +222,24 @@ func (s *Server) UpdateResourceSegment(w http.ResponseWriter, r *http.Request, _
 	s.requireAuth(http.HandlerFunc(s.handleUpdateResourceSegment)).ServeHTTP(w, r)
 }
 
-func (s *Server) ListTranslationJobs(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ListTranslationJobsParams) {
-	s.requireAuth(http.HandlerFunc(s.handleListTranslationJobs)).ServeHTTP(w, r)
+func (s *Server) ListJobs(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ListJobsParams) {
+	s.requireAuth(http.HandlerFunc(s.handleListJobs)).ServeHTTP(w, r)
 }
 
-func (s *Server) CreateTranslationJob(w http.ResponseWriter, r *http.Request, _ ProjectId) {
-	s.requireAuth(http.HandlerFunc(s.handleCreateTranslationJob)).ServeHTTP(w, r)
+func (s *Server) CreateJob(w http.ResponseWriter, r *http.Request, _ ProjectId) {
+	s.requireAuth(http.HandlerFunc(s.handleCreateJob)).ServeHTTP(w, r)
 }
 
-func (s *Server) GetTranslationJob(w http.ResponseWriter, r *http.Request, _ JobId) {
-	s.requireAuth(http.HandlerFunc(s.handleGetTranslationJob)).ServeHTTP(w, r)
+func (s *Server) GetJob(w http.ResponseWriter, r *http.Request, _ JobId) {
+	s.requireAuth(http.HandlerFunc(s.handleGetJob)).ServeHTTP(w, r)
 }
 
-func (s *Server) CancelTranslationJob(w http.ResponseWriter, r *http.Request, _ JobId) {
-	s.requireAuth(http.HandlerFunc(s.handleCancelTranslationJob)).ServeHTTP(w, r)
+func (s *Server) CancelJob(w http.ResponseWriter, r *http.Request, _ JobId) {
+	s.requireAuth(http.HandlerFunc(s.handleCancelJob)).ServeHTTP(w, r)
 }
 
-func (s *Server) RetryTranslationJob(w http.ResponseWriter, r *http.Request, _ JobId) {
-	s.requireAuth(http.HandlerFunc(s.handleRetryTranslationJob)).ServeHTTP(w, r)
+func (s *Server) RetryJob(w http.ResponseWriter, r *http.Request, _ JobId) {
+	s.requireAuth(http.HandlerFunc(s.handleRetryJob)).ServeHTTP(w, r)
 }
 
 func (s *Server) DownloadTranslatedResourceFile(w http.ResponseWriter, r *http.Request, _ ProjectId, _ ResourceId) {
@@ -318,10 +318,10 @@ func (s *Server) DeleteBootstrapPromptTemplate(w http.ResponseWriter, r *http.Re
 	s.requireAuth(http.HandlerFunc(s.handleDeleteBootstrapPromptTemplate)).ServeHTTP(w, r)
 }
 
-// ---- 翻译配置适配器 ----
+// ---- 执行策略配置适配器 ----
 
-func (s *Server) ListTranslationProfiles(w http.ResponseWriter, r *http.Request) {
-	s.requireAuth(http.HandlerFunc(s.handleListTranslationProfiles)).ServeHTTP(w, r)
+func (s *Server) ListExecutionProfiles(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleListExecutionProfiles)).ServeHTTP(w, r)
 }
 
 // ---- 执行计划模板适配器 ----
@@ -381,20 +381,20 @@ func (s *Server) DeleteExecutionPlanTemplate(w http.ResponseWriter, r *http.Requ
 	})).ServeHTTP(w, r)
 }
 
-func (s *Server) CreateTranslationProfile(w http.ResponseWriter, r *http.Request) {
-	s.requireAuth(http.HandlerFunc(s.handleCreateTranslationProfile)).ServeHTTP(w, r)
+func (s *Server) CreateExecutionProfile(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleCreateExecutionProfile)).ServeHTTP(w, r)
 }
 
-func (s *Server) GetTranslationProfile(w http.ResponseWriter, r *http.Request, _ TranslationProfileId) {
-	s.requireAuth(http.HandlerFunc(s.handleGetTranslationProfile)).ServeHTTP(w, r)
+func (s *Server) GetExecutionProfile(w http.ResponseWriter, r *http.Request, _ ExecutionProfileId) {
+	s.requireAuth(http.HandlerFunc(s.handleGetExecutionProfile)).ServeHTTP(w, r)
 }
 
-func (s *Server) UpdateTranslationProfile(w http.ResponseWriter, r *http.Request, _ TranslationProfileId) {
-	s.requireAuth(http.HandlerFunc(s.handleUpdateTranslationProfile)).ServeHTTP(w, r)
+func (s *Server) UpdateExecutionProfile(w http.ResponseWriter, r *http.Request, _ ExecutionProfileId) {
+	s.requireAuth(http.HandlerFunc(s.handleUpdateExecutionProfile)).ServeHTTP(w, r)
 }
 
-func (s *Server) DeleteTranslationProfile(w http.ResponseWriter, r *http.Request, _ TranslationProfileId) {
-	s.requireAuth(http.HandlerFunc(s.handleDeleteTranslationProfile)).ServeHTTP(w, r)
+func (s *Server) DeleteExecutionProfile(w http.ResponseWriter, r *http.Request, _ ExecutionProfileId) {
+	s.requireAuth(http.HandlerFunc(s.handleDeleteExecutionProfile)).ServeHTTP(w, r)
 }
 
 // ---- 管理员适配器 ----

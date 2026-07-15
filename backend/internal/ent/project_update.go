@@ -103,12 +103,6 @@ func (_u *ProjectUpdate) SetConfig(v map[string]interface{}) *ProjectUpdate {
 	return _u
 }
 
-// SetDefaultTranslationConfig sets the "default_translation_config" field.
-func (_u *ProjectUpdate) SetDefaultTranslationConfig(v map[string]interface{}) *ProjectUpdate {
-	_u.mutation.SetDefaultTranslationConfig(v)
-	return _u
-}
-
 // SetGlossaryEnabled sets the "glossary_enabled" field.
 func (_u *ProjectUpdate) SetGlossaryEnabled(v bool) *ProjectUpdate {
 	_u.mutation.SetGlossaryEnabled(v)
@@ -506,9 +500,6 @@ func (_u *ProjectUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Config(); ok {
 		_spec.SetField(project.FieldConfig, field.TypeJSON, value)
-	}
-	if value, ok := _u.mutation.DefaultTranslationConfig(); ok {
-		_spec.SetField(project.FieldDefaultTranslationConfig, field.TypeJSON, value)
 	}
 	if value, ok := _u.mutation.GlossaryEnabled(); ok {
 		_spec.SetField(project.FieldGlossaryEnabled, field.TypeBool, value)
@@ -978,12 +969,6 @@ func (_u *ProjectUpdateOne) SetConfig(v map[string]interface{}) *ProjectUpdateOn
 	return _u
 }
 
-// SetDefaultTranslationConfig sets the "default_translation_config" field.
-func (_u *ProjectUpdateOne) SetDefaultTranslationConfig(v map[string]interface{}) *ProjectUpdateOne {
-	_u.mutation.SetDefaultTranslationConfig(v)
-	return _u
-}
-
 // SetGlossaryEnabled sets the "glossary_enabled" field.
 func (_u *ProjectUpdateOne) SetGlossaryEnabled(v bool) *ProjectUpdateOne {
 	_u.mutation.SetGlossaryEnabled(v)
@@ -1411,9 +1396,6 @@ func (_u *ProjectUpdateOne) sqlSave(ctx context.Context) (_node *Project, err er
 	}
 	if value, ok := _u.mutation.Config(); ok {
 		_spec.SetField(project.FieldConfig, field.TypeJSON, value)
-	}
-	if value, ok := _u.mutation.DefaultTranslationConfig(); ok {
-		_spec.SetField(project.FieldDefaultTranslationConfig, field.TypeJSON, value)
 	}
 	if value, ok := _u.mutation.GlossaryEnabled(); ok {
 		_spec.SetField(project.FieldGlossaryEnabled, field.TypeBool, value)

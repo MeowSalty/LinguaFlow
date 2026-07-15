@@ -11,40 +11,40 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
-// TranslationProfileUpdate is the builder for updating TranslationProfile entities.
-type TranslationProfileUpdate struct {
+// ExecutionProfileUpdate is the builder for updating ExecutionProfile entities.
+type ExecutionProfileUpdate struct {
 	config
 	hooks    []Hook
-	mutation *TranslationProfileMutation
+	mutation *ExecutionProfileMutation
 }
 
-// Where appends a list predicates to the TranslationProfileUpdate builder.
-func (_u *TranslationProfileUpdate) Where(ps ...predicate.TranslationProfile) *TranslationProfileUpdate {
+// Where appends a list predicates to the ExecutionProfileUpdate builder.
+func (_u *ExecutionProfileUpdate) Where(ps ...predicate.ExecutionProfile) *ExecutionProfileUpdate {
 	_u.mutation.Where(ps...)
 	return _u
 }
 
 // SetUpdatedAt sets the "updated_at" field.
-func (_u *TranslationProfileUpdate) SetUpdatedAt(v time.Time) *TranslationProfileUpdate {
+func (_u *ExecutionProfileUpdate) SetUpdatedAt(v time.Time) *ExecutionProfileUpdate {
 	_u.mutation.SetUpdatedAt(v)
 	return _u
 }
 
 // SetName sets the "name" field.
-func (_u *TranslationProfileUpdate) SetName(v string) *TranslationProfileUpdate {
+func (_u *ExecutionProfileUpdate) SetName(v string) *ExecutionProfileUpdate {
 	_u.mutation.SetName(v)
 	return _u
 }
 
 // SetNillableName sets the "name" field if the given value is not nil.
-func (_u *TranslationProfileUpdate) SetNillableName(v *string) *TranslationProfileUpdate {
+func (_u *ExecutionProfileUpdate) SetNillableName(v *string) *ExecutionProfileUpdate {
 	if v != nil {
 		_u.SetName(*v)
 	}
@@ -52,13 +52,13 @@ func (_u *TranslationProfileUpdate) SetNillableName(v *string) *TranslationProfi
 }
 
 // SetDescription sets the "description" field.
-func (_u *TranslationProfileUpdate) SetDescription(v string) *TranslationProfileUpdate {
+func (_u *ExecutionProfileUpdate) SetDescription(v string) *ExecutionProfileUpdate {
 	_u.mutation.SetDescription(v)
 	return _u
 }
 
 // SetNillableDescription sets the "description" field if the given value is not nil.
-func (_u *TranslationProfileUpdate) SetNillableDescription(v *string) *TranslationProfileUpdate {
+func (_u *ExecutionProfileUpdate) SetNillableDescription(v *string) *ExecutionProfileUpdate {
 	if v != nil {
 		_u.SetDescription(*v)
 	}
@@ -66,13 +66,13 @@ func (_u *TranslationProfileUpdate) SetNillableDescription(v *string) *Translati
 }
 
 // SetScope sets the "scope" field.
-func (_u *TranslationProfileUpdate) SetScope(v string) *TranslationProfileUpdate {
+func (_u *ExecutionProfileUpdate) SetScope(v string) *ExecutionProfileUpdate {
 	_u.mutation.SetScope(v)
 	return _u
 }
 
 // SetNillableScope sets the "scope" field if the given value is not nil.
-func (_u *TranslationProfileUpdate) SetNillableScope(v *string) *TranslationProfileUpdate {
+func (_u *ExecutionProfileUpdate) SetNillableScope(v *string) *ExecutionProfileUpdate {
 	if v != nil {
 		_u.SetScope(*v)
 	}
@@ -80,13 +80,13 @@ func (_u *TranslationProfileUpdate) SetNillableScope(v *string) *TranslationProf
 }
 
 // SetOwnerUserID sets the "owner_user_id" field.
-func (_u *TranslationProfileUpdate) SetOwnerUserID(v int) *TranslationProfileUpdate {
+func (_u *ExecutionProfileUpdate) SetOwnerUserID(v int) *ExecutionProfileUpdate {
 	_u.mutation.SetOwnerUserID(v)
 	return _u
 }
 
 // SetNillableOwnerUserID sets the "owner_user_id" field if the given value is not nil.
-func (_u *TranslationProfileUpdate) SetNillableOwnerUserID(v *int) *TranslationProfileUpdate {
+func (_u *ExecutionProfileUpdate) SetNillableOwnerUserID(v *int) *ExecutionProfileUpdate {
 	if v != nil {
 		_u.SetOwnerUserID(*v)
 	}
@@ -94,19 +94,19 @@ func (_u *TranslationProfileUpdate) SetNillableOwnerUserID(v *int) *TranslationP
 }
 
 // ClearOwnerUserID clears the value of the "owner_user_id" field.
-func (_u *TranslationProfileUpdate) ClearOwnerUserID() *TranslationProfileUpdate {
+func (_u *ExecutionProfileUpdate) ClearOwnerUserID() *ExecutionProfileUpdate {
 	_u.mutation.ClearOwnerUserID()
 	return _u
 }
 
 // SetOwnerOrgID sets the "owner_org_id" field.
-func (_u *TranslationProfileUpdate) SetOwnerOrgID(v int) *TranslationProfileUpdate {
+func (_u *ExecutionProfileUpdate) SetOwnerOrgID(v int) *ExecutionProfileUpdate {
 	_u.mutation.SetOwnerOrgID(v)
 	return _u
 }
 
 // SetNillableOwnerOrgID sets the "owner_org_id" field if the given value is not nil.
-func (_u *TranslationProfileUpdate) SetNillableOwnerOrgID(v *int) *TranslationProfileUpdate {
+func (_u *ExecutionProfileUpdate) SetNillableOwnerOrgID(v *int) *ExecutionProfileUpdate {
 	if v != nil {
 		_u.SetOwnerOrgID(*v)
 	}
@@ -114,19 +114,19 @@ func (_u *TranslationProfileUpdate) SetNillableOwnerOrgID(v *int) *TranslationPr
 }
 
 // ClearOwnerOrgID clears the value of the "owner_org_id" field.
-func (_u *TranslationProfileUpdate) ClearOwnerOrgID() *TranslationProfileUpdate {
+func (_u *ExecutionProfileUpdate) ClearOwnerOrgID() *ExecutionProfileUpdate {
 	_u.mutation.ClearOwnerOrgID()
 	return _u
 }
 
 // SetConfig sets the "config" field.
-func (_u *TranslationProfileUpdate) SetConfig(v schema.TranslationProfileConfigData) *TranslationProfileUpdate {
+func (_u *ExecutionProfileUpdate) SetConfig(v schema.ExecutionProfileConfigData) *ExecutionProfileUpdate {
 	_u.mutation.SetConfig(v)
 	return _u
 }
 
 // SetNillableConfig sets the "config" field if the given value is not nil.
-func (_u *TranslationProfileUpdate) SetNillableConfig(v *schema.TranslationProfileConfigData) *TranslationProfileUpdate {
+func (_u *ExecutionProfileUpdate) SetNillableConfig(v *schema.ExecutionProfileConfigData) *ExecutionProfileUpdate {
 	if v != nil {
 		_u.SetConfig(*v)
 	}
@@ -134,40 +134,40 @@ func (_u *TranslationProfileUpdate) SetNillableConfig(v *schema.TranslationProfi
 }
 
 // SetOwnerUser sets the "owner_user" edge to the User entity.
-func (_u *TranslationProfileUpdate) SetOwnerUser(v *User) *TranslationProfileUpdate {
+func (_u *ExecutionProfileUpdate) SetOwnerUser(v *User) *ExecutionProfileUpdate {
 	return _u.SetOwnerUserID(v.ID)
 }
 
 // SetOwnerOrg sets the "owner_org" edge to the Organization entity.
-func (_u *TranslationProfileUpdate) SetOwnerOrg(v *Organization) *TranslationProfileUpdate {
+func (_u *ExecutionProfileUpdate) SetOwnerOrg(v *Organization) *ExecutionProfileUpdate {
 	return _u.SetOwnerOrgID(v.ID)
 }
 
-// Mutation returns the TranslationProfileMutation object of the builder.
-func (_u *TranslationProfileUpdate) Mutation() *TranslationProfileMutation {
+// Mutation returns the ExecutionProfileMutation object of the builder.
+func (_u *ExecutionProfileUpdate) Mutation() *ExecutionProfileMutation {
 	return _u.mutation
 }
 
 // ClearOwnerUser clears the "owner_user" edge to the User entity.
-func (_u *TranslationProfileUpdate) ClearOwnerUser() *TranslationProfileUpdate {
+func (_u *ExecutionProfileUpdate) ClearOwnerUser() *ExecutionProfileUpdate {
 	_u.mutation.ClearOwnerUser()
 	return _u
 }
 
 // ClearOwnerOrg clears the "owner_org" edge to the Organization entity.
-func (_u *TranslationProfileUpdate) ClearOwnerOrg() *TranslationProfileUpdate {
+func (_u *ExecutionProfileUpdate) ClearOwnerOrg() *ExecutionProfileUpdate {
 	_u.mutation.ClearOwnerOrg()
 	return _u
 }
 
 // Save executes the query and returns the number of nodes affected by the update operation.
-func (_u *TranslationProfileUpdate) Save(ctx context.Context) (int, error) {
+func (_u *ExecutionProfileUpdate) Save(ctx context.Context) (int, error) {
 	_u.defaults()
 	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
-func (_u *TranslationProfileUpdate) SaveX(ctx context.Context) int {
+func (_u *ExecutionProfileUpdate) SaveX(ctx context.Context) int {
 	affected, err := _u.Save(ctx)
 	if err != nil {
 		panic(err)
@@ -176,51 +176,51 @@ func (_u *TranslationProfileUpdate) SaveX(ctx context.Context) int {
 }
 
 // Exec executes the query.
-func (_u *TranslationProfileUpdate) Exec(ctx context.Context) error {
+func (_u *ExecutionProfileUpdate) Exec(ctx context.Context) error {
 	_, err := _u.Save(ctx)
 	return err
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (_u *TranslationProfileUpdate) ExecX(ctx context.Context) {
+func (_u *ExecutionProfileUpdate) ExecX(ctx context.Context) {
 	if err := _u.Exec(ctx); err != nil {
 		panic(err)
 	}
 }
 
 // defaults sets the default values of the builder before save.
-func (_u *TranslationProfileUpdate) defaults() {
+func (_u *ExecutionProfileUpdate) defaults() {
 	if _, ok := _u.mutation.UpdatedAt(); !ok {
-		v := translationprofile.UpdateDefaultUpdatedAt()
+		v := executionprofile.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
 }
 
 // check runs all checks and user-defined validators on the builder.
-func (_u *TranslationProfileUpdate) check() error {
+func (_u *ExecutionProfileUpdate) check() error {
 	if v, ok := _u.mutation.Name(); ok {
-		if err := translationprofile.NameValidator(v); err != nil {
-			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "TranslationProfile.name": %w`, err)}
+		if err := executionprofile.NameValidator(v); err != nil {
+			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "ExecutionProfile.name": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.OwnerUserID(); ok {
-		if err := translationprofile.OwnerUserIDValidator(v); err != nil {
-			return &ValidationError{Name: "owner_user_id", err: fmt.Errorf(`ent: validator failed for field "TranslationProfile.owner_user_id": %w`, err)}
+		if err := executionprofile.OwnerUserIDValidator(v); err != nil {
+			return &ValidationError{Name: "owner_user_id", err: fmt.Errorf(`ent: validator failed for field "ExecutionProfile.owner_user_id": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.OwnerOrgID(); ok {
-		if err := translationprofile.OwnerOrgIDValidator(v); err != nil {
-			return &ValidationError{Name: "owner_org_id", err: fmt.Errorf(`ent: validator failed for field "TranslationProfile.owner_org_id": %w`, err)}
+		if err := executionprofile.OwnerOrgIDValidator(v); err != nil {
+			return &ValidationError{Name: "owner_org_id", err: fmt.Errorf(`ent: validator failed for field "ExecutionProfile.owner_org_id": %w`, err)}
 		}
 	}
 	return nil
 }
 
-func (_u *TranslationProfileUpdate) sqlSave(ctx context.Context) (_node int, err error) {
+func (_u *ExecutionProfileUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(translationprofile.Table, translationprofile.Columns, sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(executionprofile.Table, executionprofile.Columns, sqlgraph.NewFieldSpec(executionprofile.FieldID, field.TypeInt))
 	if ps := _u.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -229,26 +229,26 @@ func (_u *TranslationProfileUpdate) sqlSave(ctx context.Context) (_node int, err
 		}
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
-		_spec.SetField(translationprofile.FieldUpdatedAt, field.TypeTime, value)
+		_spec.SetField(executionprofile.FieldUpdatedAt, field.TypeTime, value)
 	}
 	if value, ok := _u.mutation.Name(); ok {
-		_spec.SetField(translationprofile.FieldName, field.TypeString, value)
+		_spec.SetField(executionprofile.FieldName, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Description(); ok {
-		_spec.SetField(translationprofile.FieldDescription, field.TypeString, value)
+		_spec.SetField(executionprofile.FieldDescription, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Scope(); ok {
-		_spec.SetField(translationprofile.FieldScope, field.TypeString, value)
+		_spec.SetField(executionprofile.FieldScope, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Config(); ok {
-		_spec.SetField(translationprofile.FieldConfig, field.TypeJSON, value)
+		_spec.SetField(executionprofile.FieldConfig, field.TypeJSON, value)
 	}
 	if _u.mutation.OwnerUserCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   translationprofile.OwnerUserTable,
-			Columns: []string{translationprofile.OwnerUserColumn},
+			Table:   executionprofile.OwnerUserTable,
+			Columns: []string{executionprofile.OwnerUserColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
@@ -260,8 +260,8 @@ func (_u *TranslationProfileUpdate) sqlSave(ctx context.Context) (_node int, err
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   translationprofile.OwnerUserTable,
-			Columns: []string{translationprofile.OwnerUserColumn},
+			Table:   executionprofile.OwnerUserTable,
+			Columns: []string{executionprofile.OwnerUserColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
@@ -276,8 +276,8 @@ func (_u *TranslationProfileUpdate) sqlSave(ctx context.Context) (_node int, err
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   translationprofile.OwnerOrgTable,
-			Columns: []string{translationprofile.OwnerOrgColumn},
+			Table:   executionprofile.OwnerOrgTable,
+			Columns: []string{executionprofile.OwnerOrgColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
@@ -289,8 +289,8 @@ func (_u *TranslationProfileUpdate) sqlSave(ctx context.Context) (_node int, err
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   translationprofile.OwnerOrgTable,
-			Columns: []string{translationprofile.OwnerOrgColumn},
+			Table:   executionprofile.OwnerOrgTable,
+			Columns: []string{executionprofile.OwnerOrgColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
@@ -303,7 +303,7 @@ func (_u *TranslationProfileUpdate) sqlSave(ctx context.Context) (_node int, err
 	}
 	if _node, err = sqlgraph.UpdateNodes(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
-			err = &NotFoundError{translationprofile.Label}
+			err = &NotFoundError{executionprofile.Label}
 		} else if sqlgraph.IsConstraintError(err) {
 			err = &ConstraintError{msg: err.Error(), wrap: err}
 		}
@@ -313,28 +313,28 @@ func (_u *TranslationProfileUpdate) sqlSave(ctx context.Context) (_node int, err
 	return _node, nil
 }
 
-// TranslationProfileUpdateOne is the builder for updating a single TranslationProfile entity.
-type TranslationProfileUpdateOne struct {
+// ExecutionProfileUpdateOne is the builder for updating a single ExecutionProfile entity.
+type ExecutionProfileUpdateOne struct {
 	config
 	fields   []string
 	hooks    []Hook
-	mutation *TranslationProfileMutation
+	mutation *ExecutionProfileMutation
 }
 
 // SetUpdatedAt sets the "updated_at" field.
-func (_u *TranslationProfileUpdateOne) SetUpdatedAt(v time.Time) *TranslationProfileUpdateOne {
+func (_u *ExecutionProfileUpdateOne) SetUpdatedAt(v time.Time) *ExecutionProfileUpdateOne {
 	_u.mutation.SetUpdatedAt(v)
 	return _u
 }
 
 // SetName sets the "name" field.
-func (_u *TranslationProfileUpdateOne) SetName(v string) *TranslationProfileUpdateOne {
+func (_u *ExecutionProfileUpdateOne) SetName(v string) *ExecutionProfileUpdateOne {
 	_u.mutation.SetName(v)
 	return _u
 }
 
 // SetNillableName sets the "name" field if the given value is not nil.
-func (_u *TranslationProfileUpdateOne) SetNillableName(v *string) *TranslationProfileUpdateOne {
+func (_u *ExecutionProfileUpdateOne) SetNillableName(v *string) *ExecutionProfileUpdateOne {
 	if v != nil {
 		_u.SetName(*v)
 	}
@@ -342,13 +342,13 @@ func (_u *TranslationProfileUpdateOne) SetNillableName(v *string) *TranslationPr
 }
 
 // SetDescription sets the "description" field.
-func (_u *TranslationProfileUpdateOne) SetDescription(v string) *TranslationProfileUpdateOne {
+func (_u *ExecutionProfileUpdateOne) SetDescription(v string) *ExecutionProfileUpdateOne {
 	_u.mutation.SetDescription(v)
 	return _u
 }
 
 // SetNillableDescription sets the "description" field if the given value is not nil.
-func (_u *TranslationProfileUpdateOne) SetNillableDescription(v *string) *TranslationProfileUpdateOne {
+func (_u *ExecutionProfileUpdateOne) SetNillableDescription(v *string) *ExecutionProfileUpdateOne {
 	if v != nil {
 		_u.SetDescription(*v)
 	}
@@ -356,13 +356,13 @@ func (_u *TranslationProfileUpdateOne) SetNillableDescription(v *string) *Transl
 }
 
 // SetScope sets the "scope" field.
-func (_u *TranslationProfileUpdateOne) SetScope(v string) *TranslationProfileUpdateOne {
+func (_u *ExecutionProfileUpdateOne) SetScope(v string) *ExecutionProfileUpdateOne {
 	_u.mutation.SetScope(v)
 	return _u
 }
 
 // SetNillableScope sets the "scope" field if the given value is not nil.
-func (_u *TranslationProfileUpdateOne) SetNillableScope(v *string) *TranslationProfileUpdateOne {
+func (_u *ExecutionProfileUpdateOne) SetNillableScope(v *string) *ExecutionProfileUpdateOne {
 	if v != nil {
 		_u.SetScope(*v)
 	}
@@ -370,13 +370,13 @@ func (_u *TranslationProfileUpdateOne) SetNillableScope(v *string) *TranslationP
 }
 
 // SetOwnerUserID sets the "owner_user_id" field.
-func (_u *TranslationProfileUpdateOne) SetOwnerUserID(v int) *TranslationProfileUpdateOne {
+func (_u *ExecutionProfileUpdateOne) SetOwnerUserID(v int) *ExecutionProfileUpdateOne {
 	_u.mutation.SetOwnerUserID(v)
 	return _u
 }
 
 // SetNillableOwnerUserID sets the "owner_user_id" field if the given value is not nil.
-func (_u *TranslationProfileUpdateOne) SetNillableOwnerUserID(v *int) *TranslationProfileUpdateOne {
+func (_u *ExecutionProfileUpdateOne) SetNillableOwnerUserID(v *int) *ExecutionProfileUpdateOne {
 	if v != nil {
 		_u.SetOwnerUserID(*v)
 	}
@@ -384,19 +384,19 @@ func (_u *TranslationProfileUpdateOne) SetNillableOwnerUserID(v *int) *Translati
 }
 
 // ClearOwnerUserID clears the value of the "owner_user_id" field.
-func (_u *TranslationProfileUpdateOne) ClearOwnerUserID() *TranslationProfileUpdateOne {
+func (_u *ExecutionProfileUpdateOne) ClearOwnerUserID() *ExecutionProfileUpdateOne {
 	_u.mutation.ClearOwnerUserID()
 	return _u
 }
 
 // SetOwnerOrgID sets the "owner_org_id" field.
-func (_u *TranslationProfileUpdateOne) SetOwnerOrgID(v int) *TranslationProfileUpdateOne {
+func (_u *ExecutionProfileUpdateOne) SetOwnerOrgID(v int) *ExecutionProfileUpdateOne {
 	_u.mutation.SetOwnerOrgID(v)
 	return _u
 }
 
 // SetNillableOwnerOrgID sets the "owner_org_id" field if the given value is not nil.
-func (_u *TranslationProfileUpdateOne) SetNillableOwnerOrgID(v *int) *TranslationProfileUpdateOne {
+func (_u *ExecutionProfileUpdateOne) SetNillableOwnerOrgID(v *int) *ExecutionProfileUpdateOne {
 	if v != nil {
 		_u.SetOwnerOrgID(*v)
 	}
@@ -404,19 +404,19 @@ func (_u *TranslationProfileUpdateOne) SetNillableOwnerOrgID(v *int) *Translatio
 }
 
 // ClearOwnerOrgID clears the value of the "owner_org_id" field.
-func (_u *TranslationProfileUpdateOne) ClearOwnerOrgID() *TranslationProfileUpdateOne {
+func (_u *ExecutionProfileUpdateOne) ClearOwnerOrgID() *ExecutionProfileUpdateOne {
 	_u.mutation.ClearOwnerOrgID()
 	return _u
 }
 
 // SetConfig sets the "config" field.
-func (_u *TranslationProfileUpdateOne) SetConfig(v schema.TranslationProfileConfigData) *TranslationProfileUpdateOne {
+func (_u *ExecutionProfileUpdateOne) SetConfig(v schema.ExecutionProfileConfigData) *ExecutionProfileUpdateOne {
 	_u.mutation.SetConfig(v)
 	return _u
 }
 
 // SetNillableConfig sets the "config" field if the given value is not nil.
-func (_u *TranslationProfileUpdateOne) SetNillableConfig(v *schema.TranslationProfileConfigData) *TranslationProfileUpdateOne {
+func (_u *ExecutionProfileUpdateOne) SetNillableConfig(v *schema.ExecutionProfileConfigData) *ExecutionProfileUpdateOne {
 	if v != nil {
 		_u.SetConfig(*v)
 	}
@@ -424,53 +424,53 @@ func (_u *TranslationProfileUpdateOne) SetNillableConfig(v *schema.TranslationPr
 }
 
 // SetOwnerUser sets the "owner_user" edge to the User entity.
-func (_u *TranslationProfileUpdateOne) SetOwnerUser(v *User) *TranslationProfileUpdateOne {
+func (_u *ExecutionProfileUpdateOne) SetOwnerUser(v *User) *ExecutionProfileUpdateOne {
 	return _u.SetOwnerUserID(v.ID)
 }
 
 // SetOwnerOrg sets the "owner_org" edge to the Organization entity.
-func (_u *TranslationProfileUpdateOne) SetOwnerOrg(v *Organization) *TranslationProfileUpdateOne {
+func (_u *ExecutionProfileUpdateOne) SetOwnerOrg(v *Organization) *ExecutionProfileUpdateOne {
 	return _u.SetOwnerOrgID(v.ID)
 }
 
-// Mutation returns the TranslationProfileMutation object of the builder.
-func (_u *TranslationProfileUpdateOne) Mutation() *TranslationProfileMutation {
+// Mutation returns the ExecutionProfileMutation object of the builder.
+func (_u *ExecutionProfileUpdateOne) Mutation() *ExecutionProfileMutation {
 	return _u.mutation
 }
 
 // ClearOwnerUser clears the "owner_user" edge to the User entity.
-func (_u *TranslationProfileUpdateOne) ClearOwnerUser() *TranslationProfileUpdateOne {
+func (_u *ExecutionProfileUpdateOne) ClearOwnerUser() *ExecutionProfileUpdateOne {
 	_u.mutation.ClearOwnerUser()
 	return _u
 }
 
 // ClearOwnerOrg clears the "owner_org" edge to the Organization entity.
-func (_u *TranslationProfileUpdateOne) ClearOwnerOrg() *TranslationProfileUpdateOne {
+func (_u *ExecutionProfileUpdateOne) ClearOwnerOrg() *ExecutionProfileUpdateOne {
 	_u.mutation.ClearOwnerOrg()
 	return _u
 }
 
-// Where appends a list predicates to the TranslationProfileUpdate builder.
-func (_u *TranslationProfileUpdateOne) Where(ps ...predicate.TranslationProfile) *TranslationProfileUpdateOne {
+// Where appends a list predicates to the ExecutionProfileUpdate builder.
+func (_u *ExecutionProfileUpdateOne) Where(ps ...predicate.ExecutionProfile) *ExecutionProfileUpdateOne {
 	_u.mutation.Where(ps...)
 	return _u
 }
 
 // Select allows selecting one or more fields (columns) of the returned entity.
 // The default is selecting all fields defined in the entity schema.
-func (_u *TranslationProfileUpdateOne) Select(field string, fields ...string) *TranslationProfileUpdateOne {
+func (_u *ExecutionProfileUpdateOne) Select(field string, fields ...string) *ExecutionProfileUpdateOne {
 	_u.fields = append([]string{field}, fields...)
 	return _u
 }
 
-// Save executes the query and returns the updated TranslationProfile entity.
-func (_u *TranslationProfileUpdateOne) Save(ctx context.Context) (*TranslationProfile, error) {
+// Save executes the query and returns the updated ExecutionProfile entity.
+func (_u *ExecutionProfileUpdateOne) Save(ctx context.Context) (*ExecutionProfile, error) {
 	_u.defaults()
 	return withHooks(ctx, _u.sqlSave, _u.mutation, _u.hooks)
 }
 
 // SaveX is like Save, but panics if an error occurs.
-func (_u *TranslationProfileUpdateOne) SaveX(ctx context.Context) *TranslationProfile {
+func (_u *ExecutionProfileUpdateOne) SaveX(ctx context.Context) *ExecutionProfile {
 	node, err := _u.Save(ctx)
 	if err != nil {
 		panic(err)
@@ -479,64 +479,64 @@ func (_u *TranslationProfileUpdateOne) SaveX(ctx context.Context) *TranslationPr
 }
 
 // Exec executes the query on the entity.
-func (_u *TranslationProfileUpdateOne) Exec(ctx context.Context) error {
+func (_u *ExecutionProfileUpdateOne) Exec(ctx context.Context) error {
 	_, err := _u.Save(ctx)
 	return err
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (_u *TranslationProfileUpdateOne) ExecX(ctx context.Context) {
+func (_u *ExecutionProfileUpdateOne) ExecX(ctx context.Context) {
 	if err := _u.Exec(ctx); err != nil {
 		panic(err)
 	}
 }
 
 // defaults sets the default values of the builder before save.
-func (_u *TranslationProfileUpdateOne) defaults() {
+func (_u *ExecutionProfileUpdateOne) defaults() {
 	if _, ok := _u.mutation.UpdatedAt(); !ok {
-		v := translationprofile.UpdateDefaultUpdatedAt()
+		v := executionprofile.UpdateDefaultUpdatedAt()
 		_u.mutation.SetUpdatedAt(v)
 	}
 }
 
 // check runs all checks and user-defined validators on the builder.
-func (_u *TranslationProfileUpdateOne) check() error {
+func (_u *ExecutionProfileUpdateOne) check() error {
 	if v, ok := _u.mutation.Name(); ok {
-		if err := translationprofile.NameValidator(v); err != nil {
-			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "TranslationProfile.name": %w`, err)}
+		if err := executionprofile.NameValidator(v); err != nil {
+			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "ExecutionProfile.name": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.OwnerUserID(); ok {
-		if err := translationprofile.OwnerUserIDValidator(v); err != nil {
-			return &ValidationError{Name: "owner_user_id", err: fmt.Errorf(`ent: validator failed for field "TranslationProfile.owner_user_id": %w`, err)}
+		if err := executionprofile.OwnerUserIDValidator(v); err != nil {
+			return &ValidationError{Name: "owner_user_id", err: fmt.Errorf(`ent: validator failed for field "ExecutionProfile.owner_user_id": %w`, err)}
 		}
 	}
 	if v, ok := _u.mutation.OwnerOrgID(); ok {
-		if err := translationprofile.OwnerOrgIDValidator(v); err != nil {
-			return &ValidationError{Name: "owner_org_id", err: fmt.Errorf(`ent: validator failed for field "TranslationProfile.owner_org_id": %w`, err)}
+		if err := executionprofile.OwnerOrgIDValidator(v); err != nil {
+			return &ValidationError{Name: "owner_org_id", err: fmt.Errorf(`ent: validator failed for field "ExecutionProfile.owner_org_id": %w`, err)}
 		}
 	}
 	return nil
 }
 
-func (_u *TranslationProfileUpdateOne) sqlSave(ctx context.Context) (_node *TranslationProfile, err error) {
+func (_u *ExecutionProfileUpdateOne) sqlSave(ctx context.Context) (_node *ExecutionProfile, err error) {
 	if err := _u.check(); err != nil {
 		return _node, err
 	}
-	_spec := sqlgraph.NewUpdateSpec(translationprofile.Table, translationprofile.Columns, sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt))
+	_spec := sqlgraph.NewUpdateSpec(executionprofile.Table, executionprofile.Columns, sqlgraph.NewFieldSpec(executionprofile.FieldID, field.TypeInt))
 	id, ok := _u.mutation.ID()
 	if !ok {
-		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "TranslationProfile.id" for update`)}
+		return nil, &ValidationError{Name: "id", err: errors.New(`ent: missing "ExecutionProfile.id" for update`)}
 	}
 	_spec.Node.ID.Value = id
 	if fields := _u.fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
-		_spec.Node.Columns = append(_spec.Node.Columns, translationprofile.FieldID)
+		_spec.Node.Columns = append(_spec.Node.Columns, executionprofile.FieldID)
 		for _, f := range fields {
-			if !translationprofile.ValidColumn(f) {
+			if !executionprofile.ValidColumn(f) {
 				return nil, &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 			}
-			if f != translationprofile.FieldID {
+			if f != executionprofile.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, f)
 			}
 		}
@@ -549,26 +549,26 @@ func (_u *TranslationProfileUpdateOne) sqlSave(ctx context.Context) (_node *Tran
 		}
 	}
 	if value, ok := _u.mutation.UpdatedAt(); ok {
-		_spec.SetField(translationprofile.FieldUpdatedAt, field.TypeTime, value)
+		_spec.SetField(executionprofile.FieldUpdatedAt, field.TypeTime, value)
 	}
 	if value, ok := _u.mutation.Name(); ok {
-		_spec.SetField(translationprofile.FieldName, field.TypeString, value)
+		_spec.SetField(executionprofile.FieldName, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Description(); ok {
-		_spec.SetField(translationprofile.FieldDescription, field.TypeString, value)
+		_spec.SetField(executionprofile.FieldDescription, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Scope(); ok {
-		_spec.SetField(translationprofile.FieldScope, field.TypeString, value)
+		_spec.SetField(executionprofile.FieldScope, field.TypeString, value)
 	}
 	if value, ok := _u.mutation.Config(); ok {
-		_spec.SetField(translationprofile.FieldConfig, field.TypeJSON, value)
+		_spec.SetField(executionprofile.FieldConfig, field.TypeJSON, value)
 	}
 	if _u.mutation.OwnerUserCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   translationprofile.OwnerUserTable,
-			Columns: []string{translationprofile.OwnerUserColumn},
+			Table:   executionprofile.OwnerUserTable,
+			Columns: []string{executionprofile.OwnerUserColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
@@ -580,8 +580,8 @@ func (_u *TranslationProfileUpdateOne) sqlSave(ctx context.Context) (_node *Tran
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   translationprofile.OwnerUserTable,
-			Columns: []string{translationprofile.OwnerUserColumn},
+			Table:   executionprofile.OwnerUserTable,
+			Columns: []string{executionprofile.OwnerUserColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
@@ -596,8 +596,8 @@ func (_u *TranslationProfileUpdateOne) sqlSave(ctx context.Context) (_node *Tran
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   translationprofile.OwnerOrgTable,
-			Columns: []string{translationprofile.OwnerOrgColumn},
+			Table:   executionprofile.OwnerOrgTable,
+			Columns: []string{executionprofile.OwnerOrgColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
@@ -609,8 +609,8 @@ func (_u *TranslationProfileUpdateOne) sqlSave(ctx context.Context) (_node *Tran
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   translationprofile.OwnerOrgTable,
-			Columns: []string{translationprofile.OwnerOrgColumn},
+			Table:   executionprofile.OwnerOrgTable,
+			Columns: []string{executionprofile.OwnerOrgColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
@@ -621,12 +621,12 @@ func (_u *TranslationProfileUpdateOne) sqlSave(ctx context.Context) (_node *Tran
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	_node = &TranslationProfile{config: _u.config}
+	_node = &ExecutionProfile{config: _u.config}
 	_spec.Assign = _node.assignValues
 	_spec.ScanValues = _node.scanValues
 	if err = sqlgraph.UpdateNode(ctx, _u.driver, _spec); err != nil {
 		if _, ok := err.(*sqlgraph.NotFoundError); ok {
-			err = &NotFoundError{translationprofile.Label}
+			err = &NotFoundError{executionprofile.Label}
 		} else if sqlgraph.IsConstraintError(err) {
 			err = &ConstraintError{msg: err.Error(), wrap: err}
 		}

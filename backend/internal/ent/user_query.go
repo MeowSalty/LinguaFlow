@@ -16,6 +16,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
@@ -23,7 +24,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
@@ -46,7 +46,7 @@ type UserQuery struct {
 	withUsageRecords               *UsageRecordQuery
 	withTranslationPromptTemplates *TranslationPromptTemplateQuery
 	withBootstrapPromptTemplates   *BootstrapPromptTemplateQuery
-	withTranslationProfiles        *TranslationProfileQuery
+	withExecutionProfiles          *ExecutionProfileQuery
 	withExecutionPlanTemplates     *ExecutionPlanTemplateQuery
 	withSyncTasks                  *SyncTaskQuery
 	// intermediate query (i.e. traversal path).
@@ -305,9 +305,9 @@ func (_q *UserQuery) QueryBootstrapPromptTemplates() *BootstrapPromptTemplateQue
 	return query
 }
 
-// QueryTranslationProfiles chains the current query on the "translation_profiles" edge.
-func (_q *UserQuery) QueryTranslationProfiles() *TranslationProfileQuery {
-	query := (&TranslationProfileClient{config: _q.config}).Query()
+// QueryExecutionProfiles chains the current query on the "execution_profiles" edge.
+func (_q *UserQuery) QueryExecutionProfiles() *ExecutionProfileQuery {
+	query := (&ExecutionProfileClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
 			return nil, err
@@ -318,8 +318,8 @@ func (_q *UserQuery) QueryTranslationProfiles() *TranslationProfileQuery {
 		}
 		step := sqlgraph.NewStep(
 			sqlgraph.From(user.Table, user.FieldID, selector),
-			sqlgraph.To(translationprofile.Table, translationprofile.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, user.TranslationProfilesTable, user.TranslationProfilesColumn),
+			sqlgraph.To(executionprofile.Table, executionprofile.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.ExecutionProfilesTable, user.ExecutionProfilesColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -573,7 +573,7 @@ func (_q *UserQuery) Clone() *UserQuery {
 		withUsageRecords:               _q.withUsageRecords.Clone(),
 		withTranslationPromptTemplates: _q.withTranslationPromptTemplates.Clone(),
 		withBootstrapPromptTemplates:   _q.withBootstrapPromptTemplates.Clone(),
-		withTranslationProfiles:        _q.withTranslationProfiles.Clone(),
+		withExecutionProfiles:          _q.withExecutionProfiles.Clone(),
 		withExecutionPlanTemplates:     _q.withExecutionPlanTemplates.Clone(),
 		withSyncTasks:                  _q.withSyncTasks.Clone(),
 		// clone intermediate query.
@@ -692,14 +692,14 @@ func (_q *UserQuery) WithBootstrapPromptTemplates(opts ...func(*BootstrapPromptT
 	return _q
 }
 
-// WithTranslationProfiles tells the query-builder to eager-load the nodes that are connected to
-// the "translation_profiles" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *UserQuery) WithTranslationProfiles(opts ...func(*TranslationProfileQuery)) *UserQuery {
-	query := (&TranslationProfileClient{config: _q.config}).Query()
+// WithExecutionProfiles tells the query-builder to eager-load the nodes that are connected to
+// the "execution_profiles" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithExecutionProfiles(opts ...func(*ExecutionProfileQuery)) *UserQuery {
+	query := (&ExecutionProfileClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
-	_q.withTranslationProfiles = query
+	_q.withExecutionProfiles = query
 	return _q
 }
 
@@ -814,7 +814,7 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 			_q.withUsageRecords != nil,
 			_q.withTranslationPromptTemplates != nil,
 			_q.withBootstrapPromptTemplates != nil,
-			_q.withTranslationProfiles != nil,
+			_q.withExecutionProfiles != nil,
 			_q.withExecutionPlanTemplates != nil,
 			_q.withSyncTasks != nil,
 		}
@@ -911,12 +911,10 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 			return nil, err
 		}
 	}
-	if query := _q.withTranslationProfiles; query != nil {
-		if err := _q.loadTranslationProfiles(ctx, query, nodes,
-			func(n *User) { n.Edges.TranslationProfiles = []*TranslationProfile{} },
-			func(n *User, e *TranslationProfile) {
-				n.Edges.TranslationProfiles = append(n.Edges.TranslationProfiles, e)
-			}); err != nil {
+	if query := _q.withExecutionProfiles; query != nil {
+		if err := _q.loadExecutionProfiles(ctx, query, nodes,
+			func(n *User) { n.Edges.ExecutionProfiles = []*ExecutionProfile{} },
+			func(n *User, e *ExecutionProfile) { n.Edges.ExecutionProfiles = append(n.Edges.ExecutionProfiles, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -1257,7 +1255,7 @@ func (_q *UserQuery) loadBootstrapPromptTemplates(ctx context.Context, query *Bo
 	}
 	return nil
 }
-func (_q *UserQuery) loadTranslationProfiles(ctx context.Context, query *TranslationProfileQuery, nodes []*User, init func(*User), assign func(*User, *TranslationProfile)) error {
+func (_q *UserQuery) loadExecutionProfiles(ctx context.Context, query *ExecutionProfileQuery, nodes []*User, init func(*User), assign func(*User, *ExecutionProfile)) error {
 	fks := make([]driver.Value, 0, len(nodes))
 	nodeids := make(map[int]*User)
 	for i := range nodes {
@@ -1268,10 +1266,10 @@ func (_q *UserQuery) loadTranslationProfiles(ctx context.Context, query *Transla
 		}
 	}
 	if len(query.ctx.Fields) > 0 {
-		query.ctx.AppendFieldOnce(translationprofile.FieldOwnerUserID)
+		query.ctx.AppendFieldOnce(executionprofile.FieldOwnerUserID)
 	}
-	query.Where(predicate.TranslationProfile(func(s *sql.Selector) {
-		s.Where(sql.InValues(s.C(user.TranslationProfilesColumn), fks...))
+	query.Where(predicate.ExecutionProfile(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.ExecutionProfilesColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {

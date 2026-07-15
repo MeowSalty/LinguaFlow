@@ -59,12 +59,12 @@ type AdminUpdateUserInput struct {
 }
 
 type SystemStats struct {
-	TotalUsers           int `json:"total_users"`
-	ActiveUsers          int `json:"active_users"`
-	TotalProjects        int `json:"total_projects"`
-	TotalOrganizations   int `json:"total_organizations"`
-	TotalTranslationJobs int `json:"total_translation_jobs"`
-	TotalResources       int `json:"total_resources"`
+	TotalUsers         int `json:"total_users"`
+	ActiveUsers        int `json:"active_users"`
+	TotalProjects      int `json:"total_projects"`
+	TotalOrganizations int `json:"total_organizations"`
+	TotalJobs          int `json:"total_jobs"`
+	TotalResources     int `json:"total_resources"`
 }
 
 type ListAuditLogsParams struct {
@@ -290,12 +290,12 @@ func (s *AdminService) GetSystemStats(ctx context.Context) (*SystemStats, error)
 	}
 
 	return &SystemStats{
-		TotalUsers:           totalUsers,
-		ActiveUsers:          activeUsers,
-		TotalProjects:        totalProjects,
-		TotalOrganizations:   totalOrgs,
-		TotalTranslationJobs: totalJobs,
-		TotalResources:       totalResources,
+		TotalUsers:         totalUsers,
+		ActiveUsers:        activeUsers,
+		TotalProjects:      totalProjects,
+		TotalOrganizations: totalOrgs,
+		TotalJobs:          totalJobs,
+		TotalResources:     totalResources,
 	}, nil
 }
 

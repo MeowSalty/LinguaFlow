@@ -26,8 +26,8 @@ const (
 	FieldTriggerType = "trigger_type"
 	// FieldExecutionPlanID holds the string denoting the execution_plan_id field in the database.
 	FieldExecutionPlanID = "execution_plan_id"
-	// FieldTranslationConfig holds the string denoting the translation_config field in the database.
-	FieldTranslationConfig = "translation_config"
+	// FieldExecutionConfig holds the string denoting the execution_config field in the database.
+	FieldExecutionConfig = "execution_config"
 	// FieldResourceCount holds the string denoting the resource_count field in the database.
 	FieldResourceCount = "resource_count"
 	// FieldCompletedResources holds the string denoting the completed_resources field in the database.
@@ -95,7 +95,7 @@ var Columns = []string{
 	FieldStatus,
 	FieldTriggerType,
 	FieldExecutionPlanID,
-	FieldTranslationConfig,
+	FieldExecutionConfig,
 	FieldResourceCount,
 	FieldCompletedResources,
 	FieldFailedResources,
@@ -143,8 +143,8 @@ var (
 	DefaultTriggerType string
 	// ExecutionPlanIDValidator is a validator for the "execution_plan_id" field. It is called by the builders before save.
 	ExecutionPlanIDValidator func(int) error
-	// DefaultTranslationConfig holds the default value on creation for the "translation_config" field.
-	DefaultTranslationConfig func() map[string]interface{}
+	// DefaultExecutionConfig holds the default value on creation for the "execution_config" field.
+	DefaultExecutionConfig func() map[string]interface{}
 	// DefaultResourceCount holds the default value on creation for the "resource_count" field.
 	DefaultResourceCount int
 	// ResourceCountValidator is a validator for the "resource_count" field. It is called by the builders before save.
