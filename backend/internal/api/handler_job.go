@@ -18,8 +18,8 @@ type createJobRequest struct {
 	ResourceIDs      []int    `json:"resource_ids"`
 	SegmentIDs       []int    `json:"segment_ids"`
 	SegmentGroupKeys []string `json:"segment_group_keys"`
+	SegmentFilter    string   `json:"segment_filter"`
 	AutoApprove      bool     `json:"auto_approve"`
-	OverwriteMode    string   `json:"overwrite_mode"`
 }
 
 type jobResourceResponse struct {
@@ -105,9 +105,9 @@ func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 		ResourceIDs:      req.ResourceIDs,
 		SegmentIDs:       req.SegmentIDs,
 		SegmentGroupKeys: req.SegmentGroupKeys,
+		SegmentFilter:    req.SegmentFilter,
 		ExecutionPlanID:  req.ExecutionPlanID,
 		AutoApprove:      req.AutoApprove,
-		OverwriteMode:    req.OverwriteMode,
 	})
 	if err != nil {
 		s.writeJobServiceError(w, r, err)

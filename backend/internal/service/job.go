@@ -64,9 +64,9 @@ type CreateJobInput struct {
 	ResourceIDs      []int
 	SegmentIDs       []int
 	SegmentGroupKeys []string
+	SegmentFilter    string // 覆盖模板中的段落过滤策略；空值表示使用模板默认
 	ExecutionPlanID  int
 	AutoApprove      bool
-	OverwriteMode    string
 }
 
 // JobListOptions 任务列表查询选项。
@@ -114,16 +114,16 @@ type JobExecution struct {
 
 // JobExecutionSnapshot 任务执行快照，创建时生成，不可变。
 type JobExecutionSnapshot struct {
-	ExecutionPlanID   int                             `json:"execution_plan_id"`
-	ExecutionPlanName string                          `json:"execution_plan_name"`
-	Rounds            []JobRoundSnapshot              `json:"rounds"`
-	SourceLang        string                          `json:"source_lang"`
-	TargetLang        string                          `json:"target_lang"`
-	GlossaryEnabled   bool                            `json:"glossary_enabled"`
-	TMEnabled         bool                            `json:"tm_enabled,omitempty"`
-	AutoApprove       bool                            `json:"auto_approve,omitempty"`
-	OverwriteMode     string                          `json:"overwrite_mode,omitempty"`
-	RubyRetry         *ExecutionPlanRubyRetrySnapshot `json:"ruby_retry,omitempty"`
+	ExecutionPlanID          int                             `json:"execution_plan_id"`
+	ExecutionPlanName        string                          `json:"execution_plan_name"`
+	Rounds                   []JobRoundSnapshot              `json:"rounds"`
+	SourceLang               string                          `json:"source_lang"`
+	TargetLang               string                          `json:"target_lang"`
+	GlossaryEnabled          bool                            `json:"glossary_enabled"`
+	TMEnabled                bool                            `json:"tm_enabled,omitempty"`
+	AutoApprove              bool                            `json:"auto_approve,omitempty"`
+	ExplicitSegmentSelection bool                            `json:"explicit_segment_selection,omitempty"`
+	RubyRetry                *ExecutionPlanRubyRetrySnapshot `json:"ruby_retry,omitempty"`
 }
 
 // ExecutionPlanRubyRetrySnapshot 注音对齐重试快照。
@@ -142,13 +142,14 @@ type JobRoundSnapshot struct {
 
 // JobTranslateRoundSnapshot 翻译轮次快照。
 type JobTranslateRoundSnapshot struct {
-	Prompt           PromptSnapshot     `json:"prompt"`
-	Strategy         StrategySnapshot   `json:"strategy"`
-	BatchSize        int                `json:"batch_size"`
-	MaxWordsPerBatch int                `json:"max_words_per_batch"`
-	Concurrency      int                `json:"concurrency"`
-	FallbackShrink   float64            `json:"fallback_shrink"`
-	Retry            schema.RetryConfig `json:"retry"`
+	Prompt           PromptSnapshot         `json:"prompt"`
+	Strategy         StrategySnapshot       `json:"strategy"`
+	BatchSize        int                    `json:"batch_size"`
+	MaxWordsPerBatch int                    `json:"max_words_per_batch"`
+	Concurrency      int                    `json:"concurrency"`
+	FallbackShrink   float64                `json:"fallback_shrink"`
+	SegmentFilter    *SegmentFilterSnapshot `json:"segment_filter,omitempty"`
+	Retry            schema.RetryConfig     `json:"retry"`
 }
 
 // JobExtractRoundSnapshot 术语抽取轮次快照。
@@ -160,6 +161,12 @@ type JobExtractRoundSnapshot struct {
 	MaxTermsPer1000Chars float64            `json:"max_terms_per_1000_chars"`
 	MinSourceLen         int                `json:"min_source_len"`
 	Retry                schema.RetryConfig `json:"retry"`
+}
+
+// SegmentFilterSnapshot 翻译轮次段落过滤快照。
+type SegmentFilterSnapshot struct {
+	StatusFilter string `json:"status_filter"`        // "pending_only" | "skip_approved" | "all"
+	Overridden   bool   `json:"overridden,omitempty"` // true 表示由任务创建时显式覆盖
 }
 
 // BackendSnapshot 后端配置快照。
@@ -216,33 +223,25 @@ func (s *JobService) CreateManualJob(ctx context.Context, actorUserID, projectID
 	}
 
 	// 3. 校验并生成快照
-	snapshot, err := s.validateAndSnapshot(ctx, actorUserID, projectRow, plan)
+	snapshot, err := s.validateAndSnapshot(ctx, actorUserID, projectRow, plan, input.SegmentFilter)
 	if err != nil {
 		return nil, err
 	}
 
-	// 4. 标准化 overwrite_mode
-	overwriteMode := strings.TrimSpace(input.OverwriteMode)
-	switch overwriteMode {
-	case "skip_translated", "overwrite_unapproved", "overwrite_all":
-	default:
-		overwriteMode = "skip_translated"
-	}
-
-	// 5. 填充通用配置
+	// 4. 填充通用配置
 	snapshot.SourceLang = projectRow.SourceLang
 	snapshot.TargetLang = projectRow.TargetLang
 	snapshot.GlossaryEnabled = projectRow.GlossaryEnabled
 	snapshot.AutoApprove = input.AutoApprove
-	snapshot.OverwriteMode = overwriteMode
+	snapshot.ExplicitSegmentSelection = len(input.SegmentGroupKeys) == 0 && len(input.SegmentIDs) > 0
 
 	snapshotBytes, err := json.Marshal(snapshot)
 	if err != nil {
 		return nil, fmt.Errorf("marshal snapshot: %w", err)
 	}
 
-	// 6. 解析任务选择
-	selection, err := s.resolveJobSelection(ctx, projectID, input, overwriteMode)
+	// 5. 解析任务选择
+	selection, err := s.resolveJobSelection(ctx, projectID, input)
 	if err != nil {
 		return nil, err
 	}
@@ -319,6 +318,7 @@ func (s *JobService) validateAndSnapshot(
 	actorUserID int,
 	projectRow *ent.Project,
 	plan *ent.ExecutionPlanTemplate,
+	overrideSegmentFilter string,
 ) (*JobExecutionSnapshot, error) {
 	snapshot := &JobExecutionSnapshot{
 		ExecutionPlanID:   plan.ID,
@@ -372,6 +372,7 @@ func (s *JobService) validateAndSnapshot(
 					MaxWordsPerBatch: t.MaxWordsPerBatch,
 					Concurrency:      t.Concurrency,
 					FallbackShrink:   t.FallbackShrink,
+					SegmentFilter:    snapshotSegmentFilter(t.SegmentFilter, overrideSegmentFilter),
 					Retry:            t.Retry,
 				},
 			})
@@ -543,6 +544,29 @@ func (s *JobService) snapshotProfile(ctx context.Context, profileID int) (*Strat
 		Ruby:        tp.Config.Ruby,
 		QA:          tp.Config.QA,
 	}, nil
+}
+
+// snapshotSegmentFilter 将轮次配置中的 SegmentFilter 转换为快照。
+// override 非空时覆盖模板值；未配置时默认 pending_only。
+func snapshotSegmentFilter(cfg *schema.TranslateSegmentFilterConfig, override string) *SegmentFilterSnapshot {
+	sf := "pending_only"
+	if cfg != nil && cfg.StatusFilter != "" {
+		sf = cfg.StatusFilter
+	}
+	overridden := false
+	if override != "" {
+		sf = override
+		overridden = true
+	}
+	switch sf {
+	case "pending_only", "skip_approved", "all":
+	default:
+		slog.Warn("invalid status_filter value, falling back to pending_only",
+			"value", sf,
+		)
+		sf = "pending_only"
+	}
+	return &SegmentFilterSnapshot{StatusFilter: sf, Overridden: overridden}
 }
 
 // --- 其他方法 ---
@@ -937,30 +961,14 @@ func (s *JobService) GetJob(ctx context.Context, actorUserID, jobID int) (*ent.J
 	return row, nil
 }
 
-func statusFilterForOverwriteMode(mode string) []segment.Status {
-	switch mode {
-	case "overwrite_all":
-		return nil
-	case "overwrite_unapproved":
-		return []segment.Status{
-			SegmentStatusPending,
-			SegmentStatusRejected,
-			SegmentStatusTranslated,
-			SegmentStatusEdited,
-		}
-	default: // "skip_translated"
-		return []segment.Status{SegmentStatusPending, SegmentStatusRejected}
-	}
-}
-
-func (s *JobService) resolveJobSelection(ctx context.Context, projectID int, input CreateJobInput, overwriteMode string) (map[int][]int, error) {
+func (s *JobService) resolveJobSelection(ctx context.Context, projectID int, input CreateJobInput) (map[int][]int, error) {
 	if len(input.SegmentGroupKeys) > 0 {
-		return s.resolveGroupKeySelection(ctx, projectID, input.SegmentGroupKeys, input.ResourceIDs, overwriteMode)
+		return s.resolveGroupKeySelection(ctx, projectID, input.SegmentGroupKeys, input.ResourceIDs)
 	}
 	if len(input.SegmentIDs) > 0 {
 		return s.resolveSegmentSelection(ctx, projectID, input.SegmentIDs)
 	}
-	return s.resolveResourceSelection(ctx, projectID, input.ResourceIDs, overwriteMode)
+	return s.resolveResourceSelection(ctx, projectID, input.ResourceIDs)
 }
 
 func (s *JobService) resolveSegmentSelection(ctx context.Context, projectID int, segmentIDs []int) (map[int][]int, error) {
@@ -983,7 +991,7 @@ func (s *JobService) resolveSegmentSelection(ctx context.Context, projectID int,
 	return selection, nil
 }
 
-func (s *JobService) resolveGroupKeySelection(ctx context.Context, projectID int, groupKeys []string, resourceIDs []int, overwriteMode string) (map[int][]int, error) {
+func (s *JobService) resolveGroupKeySelection(ctx context.Context, projectID int, groupKeys []string, resourceIDs []int) (map[int][]int, error) {
 	uniqueKeys := make(map[string]struct{}, len(groupKeys))
 	for _, key := range groupKeys {
 		k := strings.TrimSpace(key)
@@ -995,18 +1003,15 @@ func (s *JobService) resolveGroupKeySelection(ctx context.Context, projectID int
 		return nil, fmt.Errorf("segment_group_keys 不能为空")
 	}
 
-	statusFilter := statusFilterForOverwriteMode(overwriteMode)
-
 	// 查询该项目下指定资源的 segments（带 meta 字段）
 	segQuery := s.client.Segment.Query().
 		Where(segment.HasResourceWith(resource.ProjectIDEQ(projectID)))
 	if len(resourceIDs) > 0 {
 		segQuery = segQuery.Where(segment.HasResourceWith(resource.IDIn(uniqueInts(resourceIDs)...)))
 	}
-	if len(statusFilter) > 0 {
-		segQuery = segQuery.Where(segment.StatusIn(statusFilter...))
-	}
-	rows, err := segQuery.All(ctx)
+	rows, err := segQuery.
+		Select(segment.FieldID, segment.FieldMeta, segment.FieldResourceID).
+		All(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("查询 segments 失败：%w", err)
 	}
@@ -1049,7 +1054,7 @@ func (s *JobService) resolveGroupKeySelection(ctx context.Context, projectID int
 	return selection, nil
 }
 
-func (s *JobService) resolveResourceSelection(ctx context.Context, projectID int, resourceIDs []int, overwriteMode string) (map[int][]int, error) {
+func (s *JobService) resolveResourceSelection(ctx context.Context, projectID int, resourceIDs []int) (map[int][]int, error) {
 	resourceQuery := s.client.Resource.Query().Where(resource.ProjectIDEQ(projectID))
 	if len(resourceIDs) > 0 {
 		ids := uniqueInts(resourceIDs)
@@ -1066,26 +1071,17 @@ func (s *JobService) resolveResourceSelection(ctx context.Context, projectID int
 	if err != nil {
 		return nil, err
 	}
-	statusFilter := statusFilterForOverwriteMode(overwriteMode)
 	selection := make(map[int][]int)
 	for _, res := range resources {
-		segQuery := s.client.Segment.Query().
-			Where(segment.ResourceIDEQ(res.ID))
-		if len(statusFilter) > 0 {
-			segQuery = segQuery.Where(segment.StatusIn(statusFilter...))
-		}
-		segments, err := segQuery.
+		ids, err := s.client.Segment.Query().
+			Where(segment.ResourceIDEQ(res.ID)).
 			Order(ent.Asc(segment.FieldID)).
-			All(ctx)
+			IDs(ctx)
 		if err != nil {
 			return nil, err
 		}
-		if len(segments) == 0 {
+		if len(ids) == 0 {
 			continue
-		}
-		ids := make([]int, 0, len(segments))
-		for _, item := range segments {
-			ids = append(ids, item.ID)
 		}
 		selection[res.ID] = ids
 	}
