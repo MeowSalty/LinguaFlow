@@ -212,3 +212,86 @@ GlossarySyncExecuteResourceResult:
       type: integer
     skipped_count:
       type: integer
+
+GlossaryPruneRequest:
+  type: object
+  required: [backend_id]
+  properties:
+    backend_id:
+      type: integer
+      description: 用于精简分析的后端 ID
+    template_id:
+      type: integer
+      description: 精简提示词模板 ID，省略或为 0 时使用内置默认模板
+  additionalProperties: false
+
+GlossaryPruneSuggestion:
+  type: object
+  required: [entry_id, action, source, old_target, old_notes]
+  properties:
+    entry_id:
+      type: integer
+    action:
+      type: string
+      enum: [delete, update]
+    source:
+      type: string
+    old_target:
+      type: string
+    new_target:
+      type: string
+    old_notes:
+      type: string
+    new_notes:
+      type: string
+
+GlossaryPrunePreview:
+  type: object
+  required: [suggestions, total, to_delete, to_update, to_keep]
+  properties:
+    suggestions:
+      type: array
+      items:
+        $ref: '#/GlossaryPruneSuggestion'
+    total:
+      type: integer
+    to_delete:
+      type: integer
+    to_update:
+      type: integer
+    to_keep:
+      type: integer
+
+GlossaryPruneApplyRequest:
+  type: object
+  required: [changes]
+  properties:
+    changes:
+      type: array
+      items:
+        type: object
+        required: [entry_id, action]
+        properties:
+          entry_id:
+            type: integer
+          action:
+            type: string
+            enum: [delete, update]
+          target:
+            type: string
+            description: 新 target（仅 action=update 时使用）
+          notes:
+            type: string
+            description: 新 notes（仅 action=update 时使用）
+  additionalProperties: false
+
+GlossaryPruneApplyResult:
+  type: object
+  required: [deleted, updated, failed]
+  properties:
+    deleted:
+      type: integer
+    updated:
+      type: integer
+    failed:
+      type: integer

@@ -1228,6 +1228,59 @@ paths:
           description: 任务已完成或已失败，无法取消
         default:
           $ref: '#/components/responses/Problem'
+  /projects/{projectId}/glossary/prune:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      operationId: PreviewGlossaryPrune
+      summary: 预览术语表精简建议
+      description: |
+        调用 LLM 分析项目现有术语表，返回精简建议（删除/更新分类）。
+        此为无状态同步 API，不修改任何数据。
+        响应时间取决于 LLM 后端，客户端断开连接时自动取消 LLM 调用。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GlossaryPruneRequest'
+      responses:
+        '200':
+          description: 精简建议预览
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossaryPrunePreview'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/glossary/prune/apply:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      operationId: ApplyGlossaryPrune
+      summary: 应用术语表精简变更
+      description: |
+        应用用户从 Preview 中选中的变更。
+        逐条处理，单条失败不中断其余，返回 deleted/updated/failed 计数。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GlossaryPruneApplyRequest'
+      responses:
+        '200':
+          description: 应用结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossaryPruneApplyResult'
+        default:
+          $ref: '#/components/responses/Problem'
   /projects/{projectId}/jobs:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
@@ -1579,6 +1632,88 @@ paths:
     delete:
       operationId: DeleteBootstrapPromptTemplate
       summary: 删除术语抽取提示词模板
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
+  /prune-prompt-templates:
+    get:
+      operationId: ListPrunePromptTemplates
+      summary: 列出当前用户的术语精简提示词模板
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 术语精简提示词模板列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrunePromptTemplateListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreatePrunePromptTemplate
+      summary: 创建术语精简提示词模板
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePrunePromptTemplateRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrunePromptTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+  /prune-prompt-templates/{prunePromptTemplateId}:
+    parameters:
+      - $ref: '#/components/parameters/PrunePromptTemplateId'
+    get:
+      operationId: GetPrunePromptTemplate
+      summary: 获取术语精简提示词模板详情
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 术语精简提示词模板详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrunePromptTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: UpdatePrunePromptTemplate
+      summary: 更新术语精简提示词模板
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePrunePromptTemplateRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrunePromptTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeletePrunePromptTemplate
+      summary: 删除术语精简提示词模板
       security:
         - bearerAuth: []
       responses:
@@ -1956,6 +2091,12 @@ components:
         type: integer
     BootstrapPromptTemplateId:
       name: bootstrapPromptTemplateId
+      in: path
+      required: true
+      schema:
+        type: integer
+    PrunePromptTemplateId:
+      name: prunePromptTemplateId
       in: path
       required: true
       schema:
@@ -3223,6 +3364,105 @@ components:
           type: string
           enum:
             - cancelled
+    GlossaryPruneRequest:
+      type: object
+      required:
+        - backend_id
+      properties:
+        backend_id:
+          type: integer
+          description: 用于精简分析的后端 ID
+        template_id:
+          type: integer
+          description: 精简提示词模板 ID，省略或为 0 时使用内置默认模板
+      additionalProperties: false
+    GlossaryPruneSuggestion:
+      type: object
+      required:
+        - entry_id
+        - action
+        - source
+        - old_target
+        - old_notes
+      properties:
+        entry_id:
+          type: integer
+        action:
+          type: string
+          enum:
+            - delete
+            - update
+        source:
+          type: string
+        old_target:
+          type: string
+        new_target:
+          type: string
+        old_notes:
+          type: string
+        new_notes:
+          type: string
+    GlossaryPrunePreview:
+      type: object
+      required:
+        - suggestions
+        - total
+        - to_delete
+        - to_update
+        - to_keep
+      properties:
+        suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/GlossaryPruneSuggestion'
+        total:
+          type: integer
+        to_delete:
+          type: integer
+        to_update:
+          type: integer
+        to_keep:
+          type: integer
+    GlossaryPruneApplyRequest:
+      type: object
+      required:
+        - changes
+      properties:
+        changes:
+          type: array
+          items:
+            type: object
+            required:
+              - entry_id
+              - action
+            properties:
+              entry_id:
+                type: integer
+              action:
+                type: string
+                enum:
+                  - delete
+                  - update
+              target:
+                type: string
+                description: 新 target（仅 action=update 时使用）
+              notes:
+                type: string
+                description: 新 notes（仅 action=update 时使用）
+      additionalProperties: false
+    GlossaryPruneApplyResult:
+      type: object
+      required:
+        - deleted
+        - updated
+        - failed
+      properties:
+        deleted:
+          type: integer
+        updated:
+          type: integer
+        failed:
+          type: integer
     TranslationPromptTemplate:
       type: object
       required:
@@ -3346,6 +3586,68 @@ components:
         content:
           type: string
           description: 术语抽取提示词内容。
+      additionalProperties: false
+    PrunePromptTemplate:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - scope
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        scope:
+          $ref: '#/components/schemas/PrunePromptTemplateScope'
+        owner_user_id:
+          type: integer
+        owner_org_id:
+          type: integer
+        content:
+          type: string
+          description: 术语精简提示词内容。
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    PrunePromptTemplateListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrunePromptTemplate'
+    CreatePrunePromptTemplateRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        content:
+          type: string
+          description: 术语精简提示词内容。
+      additionalProperties: false
+    UpdatePrunePromptTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        content:
+          type: string
+          description: 术语精简提示词内容。
       additionalProperties: false
     ExecutionProfile:
       type: object
@@ -3961,6 +4263,12 @@ components:
         - org
         - system
     BootstrapPromptTemplateScope:
+      type: string
+      enum:
+        - user
+        - org
+        - system
+    PrunePromptTemplateScope:
       type: string
       enum:
         - user
