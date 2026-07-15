@@ -86,13 +86,13 @@ paths:
   /projects/{projectId}/sync-tasks/{taskId}/cancel:
     $ref: './paths/glossary.yaml#/glossarySyncTaskCancel'
   /projects/{projectId}/jobs:
-    $ref: './paths/translation-jobs.yaml#/projectTranslationJobs'
+    $ref: './paths/jobs.yaml#/projectJobs'
   /jobs/{jobId}:
-   $ref: './paths/translation-jobs.yaml#/translationJobById'
+   $ref: './paths/jobs.yaml#/jobById'
   /jobs/{jobId}/cancel:
-   $ref: './paths/translation-jobs.yaml#/translationJobCancel'
+   $ref: './paths/jobs.yaml#/jobCancel'
   /jobs/{jobId}/retry:
-   $ref: './paths/translation-jobs.yaml#/translationJobRetry'
+   $ref: './paths/jobs.yaml#/jobRetry'
   /execution-plan-templates:
     $ref: './paths/execution-plan-templates.yaml#/executionPlanTemplates'
   /execution-plan-templates/{executionPlanTemplateId}:
@@ -105,10 +105,10 @@ paths:
     $ref: './paths/bootstrap-prompt-templates.yaml#/bootstrapPromptTemplates'
   /bootstrap-prompt-templates/{bootstrapPromptTemplateId}:
     $ref: './paths/bootstrap-prompt-templates.yaml#/bootstrapPromptTemplateById'
-  /translation-profiles:
-    $ref: './paths/translation-profiles.yaml#/translationProfiles'
-  /translation-profiles/{translationProfileId}:
-    $ref: './paths/translation-profiles.yaml#/translationProfileById'
+  /execution-profiles:
+    $ref: './paths/execution-profiles.yaml#/executionProfiles'
+  /execution-profiles/{executionProfileId}:
+    $ref: './paths/execution-profiles.yaml#/executionProfileById'
   /admin/users:
     $ref: './paths/admin.yaml#/adminUsers'
   /admin/users/{userId}:
@@ -148,8 +148,8 @@ components:
       $ref: './components/parameters.yaml#/TranslationPromptTemplateId'
     BootstrapPromptTemplateId:
       $ref: './components/parameters.yaml#/BootstrapPromptTemplateId'
-    TranslationProfileId:
-      $ref: './components/parameters.yaml#/TranslationProfileId'
+    ExecutionProfileId:
+      $ref: './components/parameters.yaml#/ExecutionProfileId'
     ExecutionPlanTemplateId:
       $ref: './components/parameters.yaml#/ExecutionPlanTemplateId'
     SegmentId:
@@ -240,16 +240,16 @@ components:
       $ref: './components/schemas/resource.yaml#/ResourceSegmentGroup'
     ResourceSegmentGroupListResponse:
       $ref: './components/schemas/resource.yaml#/ResourceSegmentGroupListResponse'
-    CreateTranslationJobRequest:
-      $ref: './components/schemas/translation-job.yaml#/CreateTranslationJobRequest'
-    TranslationJobResource:
-      $ref: './components/schemas/translation-job.yaml#/JobResource'
-    TranslationJob:
-      $ref: './components/schemas/translation-job.yaml#/Job'
-    TranslationJobProgress:
-      $ref: './components/schemas/translation-job.yaml#/JobProgress'
-    TranslationJobListResponse:
-      $ref: './components/schemas/translation-job.yaml#/JobListResponse'
+    CreateJobRequest:
+      $ref: './components/schemas/job.yaml#/CreateJobRequest'
+    JobResource:
+      $ref: './components/schemas/job.yaml#/JobResource'
+    Job:
+      $ref: './components/schemas/job.yaml#/Job'
+    JobProgress:
+      $ref: './components/schemas/job.yaml#/JobProgress'
+    JobListResponse:
+      $ref: './components/schemas/job.yaml#/JobListResponse'
     Activity:
       $ref: './components/schemas/job.yaml#/Activity'
     ActivityListResponse:
@@ -310,14 +310,14 @@ components:
       $ref: './components/schemas/bootstrap-prompt-template.yaml#/CreateBootstrapPromptTemplateRequest'
     UpdateBootstrapPromptTemplateRequest:
       $ref: './components/schemas/bootstrap-prompt-template.yaml#/UpdateBootstrapPromptTemplateRequest'
-    TranslationProfile:
-      $ref: './components/schemas/translation-profile.yaml#/TranslationProfile'
-    TranslationProfileListResponse:
-      $ref: './components/schemas/translation-profile.yaml#/TranslationProfileListResponse'
-    CreateTranslationProfileRequest:
-      $ref: './components/schemas/translation-profile.yaml#/CreateTranslationProfileRequest'
-    UpdateTranslationProfileRequest:
-      $ref: './components/schemas/translation-profile.yaml#/UpdateTranslationProfileRequest'
+    ExecutionProfile:
+      $ref: './components/schemas/execution-profile.yaml#/ExecutionProfile'
+    ExecutionProfileListResponse:
+      $ref: './components/schemas/execution-profile.yaml#/ExecutionProfileListResponse'
+    CreateExecutionProfileRequest:
+      $ref: './components/schemas/execution-profile.yaml#/CreateExecutionProfileRequest'
+    UpdateExecutionProfileRequest:
+      $ref: './components/schemas/execution-profile.yaml#/UpdateExecutionProfileRequest'
     ExecutionPlanTemplate:
       $ref: './components/schemas/execution-plan-template.yaml#/ExecutionPlanTemplate'
     AdminUserListResponse:

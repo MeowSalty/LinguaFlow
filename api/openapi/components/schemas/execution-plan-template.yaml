@@ -21,7 +21,7 @@ TranslateRoundConfig:
       description: 翻译提示词模板 ID
     profile_id:
       type: integer
-      description: 策略模板 ID（TranslationProfile 单表全局唯一）
+      description: 策略模板 ID（ExecutionProfile 单表全局唯一）
     batch_size:
       type: integer
       minimum: 0
