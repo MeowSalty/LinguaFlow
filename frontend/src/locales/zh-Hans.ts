@@ -567,6 +567,7 @@ const messages = {
       // 阶段名称
       stage: {
         bootstrap: '术语提取',
+        extract: '术语提取',
         translate: '翻译',
         review: '审校',
         finalize: '收尾',
