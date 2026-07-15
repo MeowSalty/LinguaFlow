@@ -1,12 +1,12 @@
 import { defineStore } from 'pinia'
 import { computed, ref, watch, onScopeDispose } from 'vue'
 
-import { type ApiSchemas, fetchTranslationJob } from '@/api/client'
+import { type ApiSchemas, fetchJob } from '@/api/client'
 import { type SSEEvent, KNOWN_EVENT_TYPES, resolveStreamUrl } from '@/composables/sseShared'
 
-type TranslationJob = ApiSchemas['TranslationJob']
+type Job = ApiSchemas['Job']
 
-export interface TrackedJob extends TranslationJob {
+export interface TrackedJob extends Job {
   project_name?: string
 }
 
@@ -25,7 +25,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
   const initialized = ref(false)
 
   // ── 详情抽屉独立状态 ──
-  const detailJob = ref<TranslationJob | null>(null)
+  const detailJob = ref<Job | null>(null)
   const loadingDetail = ref(false)
 
   // ── SSE（仅在抽屉打开时连接） ──
@@ -138,7 +138,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     loadingJobIds.value = new Set([...loadingJobIds.value, jobId])
 
     try {
-      const job = await fetchTranslationJob(jobId)
+      const job = await fetchJob(jobId)
       const idx = trackedJobs.value.findIndex((j) => j.id === jobId)
       if (idx !== -1) {
         const existing = trackedJobs.value[idx]!
@@ -161,7 +161,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
   }
 
   // ── Actions ──
-  const trackJob = (job: TranslationJob, projectName?: string): void => {
+  const trackJob = (job: Job, projectName?: string): void => {
     const existing = trackedJobs.value.find((j) => j.id === job.id)
     if (existing) {
       Object.assign(existing, job)
@@ -222,7 +222,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
   const loadDetailJob = async (jobId: number): Promise<void> => {
     loadingDetail.value = true
     try {
-      const job = await fetchTranslationJob(jobId)
+      const job = await fetchJob(jobId)
       detailJob.value = job
       // Also update the tracked job
       const idx = trackedJobs.value.findIndex((j) => j.id === jobId)
@@ -365,7 +365,7 @@ export const useGlobalJobTrackerStore = defineStore('globalJobTracker', () => {
     if (ids.length === 0) return
 
     // Fetch all persisted jobs
-    const results = await Promise.allSettled(ids.map((id) => fetchTranslationJob(id)))
+    const results = await Promise.allSettled(ids.map((id) => fetchJob(id)))
     const jobs: TrackedJob[] = []
     for (const result of results) {
       if (result.status === 'fulfilled') {

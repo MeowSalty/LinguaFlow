@@ -25,7 +25,7 @@ import { useBackendsStore } from '@/stores/backends'
 import { useBootstrapPromptTemplatesStore } from '@/stores/bootstrapPromptTemplates'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import { usePromptTemplatesStore } from '@/stores/promptTemplates'
-import { useTranslationProfilesStore } from '@/stores/translationProfiles'
+import { useExecutionProfilesStore } from '@/stores/executionProfiles'
 
 type ExecutionPlanTemplate = ApiSchemas['ExecutionPlanTemplate']
 type ExecutionRoundConfig = ApiSchemas['ExecutionRoundConfig']
@@ -72,7 +72,7 @@ const store = useExecutionPlanTemplatesStore()
 const backendsStore = useBackendsStore()
 const promptTemplatesStore = usePromptTemplatesStore()
 const bootstrapPromptTemplatesStore = useBootstrapPromptTemplatesStore()
-const translationProfilesStore = useTranslationProfilesStore()
+const executionProfilesStore = useExecutionProfilesStore()
 const message = useMessage()
 const { t } = useI18n()
 
@@ -105,8 +105,8 @@ const bootstrapPromptTemplateOptions = computed<SelectOption[]>(() =>
   bootstrapPromptTemplatesStore.items.map((t) => ({ label: t.name, value: t.id })),
 )
 
-const translationProfileOptions = computed<SelectOption[]>(() =>
-  translationProfilesStore.items.map((p) => ({ label: p.name, value: p.id })),
+const executionProfileOptions = computed<SelectOption[]>(() =>
+  executionProfilesStore.items.map((p) => ({ label: p.name, value: p.id })),
 )
 
 // ── 计算属性 ──────────────────────────────────────────────────
@@ -310,7 +310,7 @@ onMounted(async () => {
     backendsStore.loadBackends(),
     promptTemplatesStore.loadTemplates(),
     bootstrapPromptTemplatesStore.loadTemplates(),
-    translationProfilesStore.loadProfiles(),
+    executionProfilesStore.loadProfiles(),
   ])
 })
 
@@ -598,7 +598,7 @@ watch(
               :backends="backendOptions"
               :prompt-templates="promptTemplateOptions"
               :bootstrap-prompt-templates="bootstrapPromptTemplateOptions"
-              :translation-profiles="translationProfileOptions"
+              :execution-profiles="executionProfileOptions"
               :disabled="isSystemScope"
               @update:rounds="formModel.rounds = $event"
               @update:ruby-retry="formModel.ruby_retry = $event"

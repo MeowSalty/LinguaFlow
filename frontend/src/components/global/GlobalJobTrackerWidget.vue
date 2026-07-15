@@ -7,7 +7,7 @@ import { type ApiSchemas } from '@/api/client'
 import { getJobProgressText } from '@/composables/useWorkspaceUtils'
 import { useGlobalJobTrackerStore } from '@/stores/globalJobTracker'
 
-type TranslationJob = ApiSchemas['TranslationJob']
+type Job = ApiSchemas['Job']
 
 const { t } = useI18n()
 const tracker = useGlobalJobTrackerStore()
@@ -42,10 +42,10 @@ const handleClearCompleted = (): void => {
   tracker.clearCompleted()
 }
 
-const isTerminal = (status: TranslationJob['status']): boolean =>
+const isTerminal = (status: Job['status']): boolean =>
   ['completed', 'failed', 'cancelled'].includes(status)
 
-const progressPercent = (job: TranslationJob): number => {
+const progressPercent = (job: Job): number => {
   if (job.status === 'completed') return 100
   if (job.status === 'failed' || job.status === 'cancelled') return 0
   if (job.progress.total_segments > 0)
@@ -53,7 +53,7 @@ const progressPercent = (job: TranslationJob): number => {
   return 0
 }
 
-const progressStatus = (job: TranslationJob): 'success' | 'error' | 'default' => {
+const progressStatus = (job: Job): 'success' | 'error' | 'default' => {
   if (job.status === 'completed') return 'success'
   if (job.status === 'failed') return 'error'
   return 'default'

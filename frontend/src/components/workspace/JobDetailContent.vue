@@ -17,12 +17,12 @@ import {
 import JobEventTimeline from './JobEventTimeline.vue'
 import JobProgressCard from './JobProgressCard.vue'
 
-type TranslationJob = ApiSchemas['TranslationJob']
+type Job = ApiSchemas['Job']
 
 const { t } = useI18n()
 
 defineProps<{
-  job: TranslationJob
+  job: Job
   externalError?: string | null
   projectName?: string
   events?: SSEEvent[]
@@ -79,13 +79,13 @@ const emit = defineEmits<{
       <div>
         <div class="text-xs text-lf-text-muted">{{ t('workspace.job.form.sourceLang') }}</div>
         <div class="text-sm font-medium">
-          {{ formatConfigValue(job.translation_config?.source_lang) }}
+          {{ formatConfigValue(job.execution_config?.source_lang) }}
         </div>
       </div>
       <div>
         <div class="text-xs text-lf-text-muted">{{ t('workspace.job.form.targetLang') }}</div>
         <div class="text-sm font-medium">
-          {{ formatConfigValue(job.translation_config?.target_lang) }}
+          {{ formatConfigValue(job.execution_config?.target_lang) }}
         </div>
       </div>
     </div>
@@ -105,30 +105,29 @@ const emit = defineEmits<{
             key: 'name',
             minWidth: 200,
             ellipsis: { tooltip: true },
-            render: (row: ApiSchemas['TranslationJobResource']) =>
-              row.resource?.name || `#${row.resource_id}`,
+            render: (row: ApiSchemas['JobResource']) => row.resource?.name || `#${row.resource_id}`,
           },
           {
             title: t('workspace.job.columns.status'),
             key: 'status',
             width: 80,
-            render: (row: ApiSchemas['TranslationJobResource']) =>
+            render: (row: ApiSchemas['JobResource']) =>
               h(
                 NTag,
                 {
                   size: 'tiny',
                   round: true,
-                  type: statusTagType(row.status as TranslationJob['status']),
+                  type: statusTagType(row.status as Job['status']),
                   bordered: false,
                 },
-                { default: () => getJobStatusLabel(row.status as TranslationJob['status']) },
+                { default: () => getJobStatusLabel(row.status as Job['status']) },
               ),
           },
           {
             title: t('workspace.job.columns.stage'),
             key: 'stage',
             width: 120,
-            render: (row: ApiSchemas['TranslationJobResource']) => {
+            render: (row: ApiSchemas['JobResource']) => {
               if (!row.current_stage) return h(NText, { depth: 3 }, { default: () => '-' })
               const label = getStageLabel(row.current_stage)
               if (row.stage_total) {
@@ -154,7 +153,7 @@ const emit = defineEmits<{
             title: t('workspace.job.columns.segments'),
             key: 'segments',
             width: 120,
-            render: (row: ApiSchemas['TranslationJobResource']) => {
+            render: (row: ApiSchemas['JobResource']) => {
               const skipped = row.skipped_segments ?? 0
               if (skipped > 0) {
                 return h('span', { class: 'font-mono tabular-nums whitespace-nowrap text-xs' }, [
@@ -175,10 +174,10 @@ const emit = defineEmits<{
             key: 'error_message',
             minWidth: 120,
             ellipsis: { tooltip: true },
-            render: (row: ApiSchemas['TranslationJobResource']) => row.error_message || '-',
+            render: (row: ApiSchemas['JobResource']) => row.error_message || '-',
           },
         ]"
-        :row-key="(row: ApiSchemas['TranslationJobResource']) => row.id"
+        :row-key="(row: ApiSchemas['JobResource']) => row.id"
         :scroll-x="720"
       />
     </div>

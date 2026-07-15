@@ -9,9 +9,9 @@ import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 import { t } from '@/i18n'
 
 type Segment = ApiSchemas['Segment']
-type TranslationJob = ApiSchemas['TranslationJob']
-type CreateTranslationJobPayload = ApiSchemas['CreateTranslationJobRequest']
-type OverwriteMode = CreateTranslationJobPayload['overwrite_mode']
+type Job = ApiSchemas['Job']
+type CreateJobRequest = ApiSchemas['CreateJobRequest']
+type OverwriteMode = CreateJobRequest['overwrite_mode']
 
 export type JobTargetMode = 'resources' | 'segments'
 
@@ -154,7 +154,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
       return
     }
 
-    const payload: CreateTranslationJobPayload = {
+    const payload: CreateJobRequest = {
       execution_plan_id: jobForm.execution_plan_id,
       resource_ids: jobTargetResourceIds.value,
       auto_approve: jobForm.auto_approve,
@@ -195,7 +195,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     }
   }
 
-  const cancelJob = async (job: TranslationJob): Promise<void> => {
+  const cancelJob = async (job: Job): Promise<void> => {
     try {
       await workspace.cancelJob(job.id)
       message.success(t('workspace.messages.jobCancelled'))
@@ -205,7 +205,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     }
   }
 
-  const retryJob = async (job: TranslationJob): Promise<void> => {
+  const retryJob = async (job: Job): Promise<void> => {
     try {
       await workspace.retryJob(job.id)
       message.success(t('workspace.messages.jobRetried'))
@@ -215,7 +215,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     }
   }
 
-  const openJobDetail = async (job: TranslationJob): Promise<void> => {
+  const openJobDetail = async (job: Job): Promise<void> => {
     const globalTracker = useGlobalJobTrackerStore()
     globalTracker.trackJob(job, workspace.project?.name)
     await globalTracker.openDetail(job.id)

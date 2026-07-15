@@ -851,11 +851,11 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** 列出项目翻译任务 */
-        get: operations["ListTranslationJobs"];
+        /** 列出项目任务 */
+        get: operations["ListJobs"];
         put?: never;
-        /** 创建翻译任务 */
-        post: operations["CreateTranslationJob"];
+        /** 创建任务 */
+        post: operations["CreateJob"];
         delete?: never;
         options?: never;
         head?: never;
@@ -871,8 +871,8 @@ export interface paths {
             };
             cookie?: never;
         };
-        /** 获取翻译任务详情 */
-        get: operations["GetTranslationJob"];
+        /** 获取任务详情 */
+        get: operations["GetJob"];
         put?: never;
         post?: never;
         delete?: never;
@@ -892,8 +892,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 取消翻译任务 */
-        post: operations["CancelTranslationJob"];
+        /** 取消任务 */
+        post: operations["CancelJob"];
         delete?: never;
         options?: never;
         head?: never;
@@ -911,8 +911,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** 重试失败的资源翻译 */
-        post: operations["RetryTranslationJob"];
+        /** 重试失败的资源 */
+        post: operations["RetryJob"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1036,40 +1036,40 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/translation-profiles": {
+    "/execution-profiles": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** 列出当前用户的翻译配置 */
-        get: operations["ListTranslationProfiles"];
+        /** 列出当前用户的执行策略配置 */
+        get: operations["ListExecutionProfiles"];
         put?: never;
-        /** 创建翻译配置 */
-        post: operations["CreateTranslationProfile"];
+        /** 创建执行策略配置 */
+        post: operations["CreateExecutionProfile"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/translation-profiles/{translationProfileId}": {
+    "/execution-profiles/{executionProfileId}": {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                translationProfileId: components["parameters"]["TranslationProfileId"];
+                executionProfileId: components["parameters"]["ExecutionProfileId"];
             };
             cookie?: never;
         };
-        /** 获取翻译配置详情 */
-        get: operations["GetTranslationProfile"];
-        /** 更新翻译配置 */
-        put: operations["UpdateTranslationProfile"];
+        /** 获取执行策略配置详情 */
+        get: operations["GetExecutionProfile"];
+        /** 更新执行策略配置 */
+        put: operations["UpdateExecutionProfile"];
         post?: never;
-        /** 删除翻译配置 */
-        delete: operations["DeleteTranslationProfile"];
+        /** 删除执行策略配置 */
+        delete: operations["DeleteExecutionProfile"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1478,7 +1478,7 @@ export interface components {
         ResourceSegmentGroupListResponse: {
             items: components["schemas"]["ResourceSegmentGroup"][];
         };
-        CreateTranslationJobRequest: {
+        CreateJobRequest: {
             /** @description 执行计划模板 ID */
             execution_plan_id: number;
             resource_ids?: number[];
@@ -1504,14 +1504,85 @@ export interface components {
              * @enum {string}
              */
             overwrite_mode: "skip_translated" | "overwrite_unapproved" | "overwrite_all";
-            translation_config?: {
+            execution_config?: {
                 [key: string]: unknown;
             };
         };
-        TranslationJobResource: components["schemas"]["JobResource"];
-        TranslationJob: components["schemas"]["Job"];
-        TranslationJobProgress: components["schemas"]["JobProgress"];
-        TranslationJobListResponse: components["schemas"]["JobListResponse"];
+        JobResource: {
+            id: number;
+            resource_id: number;
+            /** @enum {string} */
+            status: "pending" | "running" | "completed" | "failed" | "cancelled";
+            segment_count: number;
+            completed_segments: number;
+            /** @description 被系统跳过的段落数 */
+            skipped_segments: number;
+            output_path?: string;
+            error_message?: string;
+            resource?: components["schemas"]["Resource"];
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+            /** @description 当前执行阶段名称 */
+            current_stage?: string;
+            /** @description 当前阶段的总段落数 */
+            stage_total?: number;
+            /** @description 当前阶段已完成的段落数 */
+            stage_completed?: number;
+            /**
+             * Format: date-time
+             * @description 资源开始执行的时间
+             */
+            started_at?: string;
+        };
+        Job: {
+            id: number;
+            project_id: number;
+            created_by?: {
+                id?: number;
+                username?: string;
+            };
+            execution_plan_id: number;
+            /** @enum {string} */
+            status: "pending" | "running" | "completed" | "failed" | "cancelled";
+            /** @enum {string} */
+            trigger_type: "manual" | "file_update" | "glossary_change" | "web_edit";
+            /** @description 执行配置快照（已脱敏，不含 API 密钥） */
+            execution_config?: {
+                [key: string]: unknown;
+            };
+            error_message?: string;
+            progress: components["schemas"]["JobProgress"];
+            job_resources?: components["schemas"]["JobResource"][];
+            /**
+             * Format: date-time
+             * @description 任务开始执行的时间
+             */
+            started_at?: string;
+            /** Format: date-time */
+            created_at: string;
+            /** Format: date-time */
+            updated_at: string;
+        };
+        JobProgress: {
+            total_resources: number;
+            completed_resources: number;
+            failed_resources: number;
+            /** @description 总段落数（创建时选中的 segment 数） */
+            total_segments: number;
+            completed_segments: number;
+            /** @description 被系统跳过的段落数（已翻译、空文本、纯占位符等） */
+            skipped_segments: number;
+            /** @description 在队列中的位置（1-based），null 表示不在队列中 */
+            queue_position?: number | null;
+            /** @description 当前队列中的任务总数 */
+            queue_size?: number | null;
+        };
+        JobListResponse: {
+            items: components["schemas"]["Job"][];
+            next_cursor?: string;
+        };
         Activity: {
             id: number;
             action: string;
@@ -1580,11 +1651,8 @@ export interface components {
             config?: {
                 [key: string]: unknown;
             };
-            default_translation_config?: {
-                [key: string]: unknown;
-            };
             /**
-             * @description 翻译过程中是否启用术语表
+             * @description 是否启用术语表
              * @default false
              */
             glossary_enabled: boolean;
@@ -1603,11 +1671,8 @@ export interface components {
             config?: {
                 [key: string]: unknown;
             };
-            default_translation_config?: {
-                [key: string]: unknown;
-            };
             /**
-             * @description 翻译过程中是否启用术语表
+             * @description 是否启用术语表
              * @default false
              */
             glossary_enabled: boolean;
@@ -1619,10 +1684,7 @@ export interface components {
             config?: {
                 [key: string]: unknown;
             };
-            default_translation_config?: {
-                [key: string]: unknown;
-            };
-            /** @description 翻译过程中是否启用术语表 */
+            /** @description 是否启用术语表 */
             glossary_enabled?: boolean;
             source_lang?: string;
             target_lang?: string;
@@ -1776,31 +1838,31 @@ export interface components {
             /** @description 术语抽取提示词内容。 */
             content?: string;
         };
-        TranslationProfile: {
+        ExecutionProfile: {
             id: number;
             name: string;
             description: string;
-            scope: components["schemas"]["TranslationProfileScope"];
+            scope: components["schemas"]["ExecutionProfileScope"];
             owner_user_id?: number;
             owner_org_id?: number;
-            config: components["schemas"]["TranslationProfileConfig"];
+            config: components["schemas"]["ExecutionProfileConfig"];
             /** Format: date-time */
             created_at?: string;
             /** Format: date-time */
             updated_at?: string;
         };
-        TranslationProfileListResponse: {
-            items: components["schemas"]["TranslationProfile"][];
+        ExecutionProfileListResponse: {
+            items: components["schemas"]["ExecutionProfile"][];
         };
-        CreateTranslationProfileRequest: {
+        CreateExecutionProfileRequest: {
             name: string;
             description?: string;
-            config?: components["schemas"]["TranslationProfileConfig"];
+            config?: components["schemas"]["ExecutionProfileConfig"];
         };
-        UpdateTranslationProfileRequest: {
+        UpdateExecutionProfileRequest: {
             name?: string;
             description?: string;
-            config?: components["schemas"]["TranslationProfileConfig"];
+            config?: components["schemas"]["ExecutionProfileConfig"];
         };
         ExecutionPlanTemplate: {
             id: number;
@@ -1848,7 +1910,7 @@ export interface components {
             active_users: number;
             total_projects: number;
             total_organizations: number;
-            total_translation_jobs: number;
+            total_jobs: number;
             total_resources: number;
         };
         AdminAuditLogListResponse: {
@@ -2055,81 +2117,6 @@ export interface components {
             updated_count: number;
             skipped_count: number;
         };
-        JobProgress: {
-            total_resources: number;
-            completed_resources: number;
-            failed_resources: number;
-            /** @description 总段落数（创建时选中的 segment 数） */
-            total_segments: number;
-            completed_segments: number;
-            /** @description 被系统跳过的段落数（已翻译、空文本、纯占位符等） */
-            skipped_segments: number;
-            /** @description 在队列中的位置（1-based），null 表示不在队列中 */
-            queue_position?: number | null;
-            /** @description 当前队列中的任务总数 */
-            queue_size?: number | null;
-        };
-        JobResource: {
-            id: number;
-            resource_id: number;
-            /** @enum {string} */
-            status: "pending" | "running" | "completed" | "failed" | "cancelled";
-            segment_count: number;
-            completed_segments: number;
-            /** @description 被系统跳过的段落数 */
-            skipped_segments: number;
-            output_path?: string;
-            error_message?: string;
-            resource?: components["schemas"]["Resource"];
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
-            /** @description 当前执行阶段名称 */
-            current_stage?: string;
-            /** @description 当前阶段的总段落数 */
-            stage_total?: number;
-            /** @description 当前阶段已完成的段落数 */
-            stage_completed?: number;
-            /**
-             * Format: date-time
-             * @description 资源开始执行的时间
-             */
-            started_at?: string;
-        };
-        Job: {
-            id: number;
-            project_id: number;
-            created_by?: {
-                id?: number;
-                username?: string;
-            };
-            execution_plan_id: number;
-            /** @enum {string} */
-            status: "pending" | "running" | "completed" | "failed" | "cancelled";
-            /** @enum {string} */
-            trigger_type: "manual" | "file_update" | "glossary_change" | "web_edit";
-            /** @description 翻译执行配置快照（已脱敏，不含 API 密钥） */
-            translation_config?: {
-                [key: string]: unknown;
-            };
-            error_message?: string;
-            progress: components["schemas"]["JobProgress"];
-            job_resources?: components["schemas"]["JobResource"][];
-            /**
-             * Format: date-time
-             * @description 任务开始执行的时间
-             */
-            started_at?: string;
-            /** Format: date-time */
-            created_at: string;
-            /** Format: date-time */
-            updated_at: string;
-        };
-        JobListResponse: {
-            items: components["schemas"]["Job"][];
-            next_cursor?: string;
-        };
         /** @enum {string} */
         ExecutionPlanTemplateScope: "user" | "org" | "system";
         ExecutionPlanRubyRetryConfig: {
@@ -2152,7 +2139,7 @@ export interface components {
         TranslateRoundConfig: {
             /** @description 翻译提示词模板 ID */
             prompt_template_id?: number;
-            /** @description 策略模板 ID（TranslationProfile 单表全局唯一） */
+            /** @description 策略模板 ID（ExecutionProfile 单表全局唯一） */
             profile_id?: number;
             /** @description 段落数上限；0=不限制，与 max_words_per_batch 至少填一项 */
             batch_size?: number;
@@ -2202,7 +2189,7 @@ export interface components {
         /** @enum {string} */
         BootstrapPromptTemplateScope: "user" | "org" | "system";
         /** @enum {string} */
-        TranslationProfileScope: "user" | "org" | "system";
+        ExecutionProfileScope: "user" | "org" | "system";
         ProfileProtectConfig: {
             enabled: boolean;
             rules?: ("code" | "link" | "placeholder" | "xml")[];
@@ -2307,7 +2294,7 @@ export interface components {
              */
             length_ratio_max: number;
         };
-        TranslationProfileConfig: {
+        ExecutionProfileConfig: {
             protect: components["schemas"]["ProfileProtectConfig"];
             ruby?: components["schemas"]["ProfileRubyConfig"];
             postprocess: components["schemas"]["ProfilePostprocessConfig"];
@@ -2338,7 +2325,7 @@ export interface components {
         EntryId: number;
         TranslationPromptTemplateId: number;
         BootstrapPromptTemplateId: number;
-        TranslationProfileId: number;
+        ExecutionProfileId: number;
         ExecutionPlanTemplateId: number;
         SegmentId: number;
         Cursor: string;
@@ -3846,7 +3833,7 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    ListTranslationJobs: {
+    ListJobs: {
         parameters: {
             query?: {
                 status?: "pending" | "running" | "completed" | "failed" | "cancelled";
@@ -3862,7 +3849,7 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 翻译任务列表 */
+            /** @description 任务列表 */
             200: {
                 headers: {
                     [name: string]: unknown;
@@ -3874,7 +3861,7 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    CreateTranslationJob: {
+    CreateJob: {
         parameters: {
             query?: never;
             header?: never;
@@ -3885,7 +3872,7 @@ export interface operations {
         };
         requestBody?: {
             content: {
-                "application/json": components["schemas"]["CreateTranslationJobRequest"];
+                "application/json": components["schemas"]["CreateJobRequest"];
             };
         };
         responses: {
@@ -3901,7 +3888,7 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    GetTranslationJob: {
+    GetJob: {
         parameters: {
             query?: never;
             header?: never;
@@ -3924,7 +3911,7 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    CancelTranslationJob: {
+    CancelJob: {
         parameters: {
             query?: never;
             header?: never;
@@ -3947,7 +3934,7 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    RetryTranslationJob: {
+    RetryJob: {
         parameters: {
             query?: never;
             header?: never;
@@ -4321,7 +4308,7 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
-    ListTranslationProfiles: {
+    ListExecutionProfiles: {
         parameters: {
             query?: never;
             header?: never;
@@ -4330,19 +4317,19 @@ export interface operations {
         };
         requestBody?: never;
         responses: {
-            /** @description 翻译配置列表 */
+            /** @description 执行策略配置列表 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TranslationProfileListResponse"];
+                    "application/json": components["schemas"]["ExecutionProfileListResponse"];
                 };
             };
             default: components["responses"]["Problem"];
         };
     };
-    CreateTranslationProfile: {
+    CreateExecutionProfile: {
         parameters: {
             query?: never;
             header?: never;
@@ -4351,7 +4338,7 @@ export interface operations {
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["CreateTranslationProfileRequest"];
+                "application/json": components["schemas"]["CreateExecutionProfileRequest"];
             };
         };
         responses: {
@@ -4361,47 +4348,47 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TranslationProfile"];
+                    "application/json": components["schemas"]["ExecutionProfile"];
                 };
             };
             default: components["responses"]["Problem"];
         };
     };
-    GetTranslationProfile: {
+    GetExecutionProfile: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                translationProfileId: components["parameters"]["TranslationProfileId"];
+                executionProfileId: components["parameters"]["ExecutionProfileId"];
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
-            /** @description 翻译配置详情 */
+            /** @description 执行策略配置详情 */
             200: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TranslationProfile"];
+                    "application/json": components["schemas"]["ExecutionProfile"];
                 };
             };
             default: components["responses"]["Problem"];
         };
     };
-    UpdateTranslationProfile: {
+    UpdateExecutionProfile: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                translationProfileId: components["parameters"]["TranslationProfileId"];
+                executionProfileId: components["parameters"]["ExecutionProfileId"];
             };
             cookie?: never;
         };
         requestBody: {
             content: {
-                "application/json": components["schemas"]["UpdateTranslationProfileRequest"];
+                "application/json": components["schemas"]["UpdateExecutionProfileRequest"];
             };
         };
         responses: {
@@ -4411,18 +4398,18 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["TranslationProfile"];
+                    "application/json": components["schemas"]["ExecutionProfile"];
                 };
             };
             default: components["responses"]["Problem"];
         };
     };
-    DeleteTranslationProfile: {
+    DeleteExecutionProfile: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                translationProfileId: components["parameters"]["TranslationProfileId"];
+                executionProfileId: components["parameters"]["ExecutionProfileId"];
             };
             cookie?: never;
         };

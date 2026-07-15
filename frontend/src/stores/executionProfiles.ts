@@ -3,25 +3,25 @@ import { computed, ref } from 'vue'
 
 import {
   type ApiSchemas,
-  createTranslationProfile as createRequest,
-  deleteTranslationProfile as deleteRequest,
-  fetchTranslationProfiles,
-  updateTranslationProfile as updateRequest,
+  createExecutionProfile as createRequest,
+  deleteExecutionProfile as deleteRequest,
+  fetchExecutionProfiles,
+  updateExecutionProfile as updateRequest,
 } from '@/api/client'
 import { t } from '@/i18n'
 
-type TranslationProfile = ApiSchemas['TranslationProfile']
-type CreateRequest = ApiSchemas['CreateTranslationProfileRequest']
-type UpdateRequest = ApiSchemas['UpdateTranslationProfileRequest']
-type Scope = TranslationProfile['scope']
+type ExecutionProfile = ApiSchemas['ExecutionProfile']
+type CreateRequest = ApiSchemas['CreateExecutionProfileRequest']
+type UpdateRequest = ApiSchemas['UpdateExecutionProfileRequest']
+type Scope = ExecutionProfile['scope']
 
 const includesNormalized = (source: string | undefined, query: string): boolean => {
   return source?.toLowerCase().includes(query) ?? false
 }
 
-export const useTranslationProfilesStore = defineStore('translationProfiles', () => {
+export const useExecutionProfilesStore = defineStore('executionProfiles', () => {
   // ── 状态 ──
-  const items = ref<TranslationProfile[]>([])
+  const items = ref<ExecutionProfile[]>([])
 
   const loading = ref(false)
   const creating = ref(false)
@@ -70,19 +70,19 @@ export const useTranslationProfilesStore = defineStore('translationProfiles', ()
     error.value = null
 
     try {
-      const response = await fetchTranslationProfiles()
+      const response = await fetchExecutionProfiles()
       items.value = response.items
     } catch (loadError) {
       error.value =
         loadError instanceof Error
           ? loadError.message
-          : t('api.errors.fetchTranslationProfilesFailed')
+          : t('api.errors.fetchExecutionProfilesFailed')
     } finally {
       loading.value = false
     }
   }
 
-  const createProfile = async (payload: CreateRequest): Promise<TranslationProfile> => {
+  const createProfile = async (payload: CreateRequest): Promise<ExecutionProfile> => {
     creating.value = true
     error.value = null
 
@@ -94,7 +94,7 @@ export const useTranslationProfilesStore = defineStore('translationProfiles', ()
       error.value =
         submitError instanceof Error
           ? submitError.message
-          : t('api.errors.createTranslationProfileFailed')
+          : t('api.errors.createExecutionProfileFailed')
       throw submitError
     } finally {
       creating.value = false
@@ -104,7 +104,7 @@ export const useTranslationProfilesStore = defineStore('translationProfiles', ()
   const updateProfile = async (
     profileId: number,
     payload: UpdateRequest,
-  ): Promise<TranslationProfile> => {
+  ): Promise<ExecutionProfile> => {
     updating.value = true
     error.value = null
 
@@ -116,7 +116,7 @@ export const useTranslationProfilesStore = defineStore('translationProfiles', ()
       error.value =
         submitError instanceof Error
           ? submitError.message
-          : t('api.errors.updateTranslationProfileFailed')
+          : t('api.errors.updateExecutionProfileFailed')
       throw submitError
     } finally {
       updating.value = false
@@ -134,7 +134,7 @@ export const useTranslationProfilesStore = defineStore('translationProfiles', ()
       error.value =
         submitError instanceof Error
           ? submitError.message
-          : t('api.errors.deleteTranslationProfileFailed')
+          : t('api.errors.deleteExecutionProfileFailed')
       throw submitError
     } finally {
       deletingIds.value = deletingIds.value.filter((id) => id !== profileId)

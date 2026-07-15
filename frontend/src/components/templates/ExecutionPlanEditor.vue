@@ -145,7 +145,7 @@ const props = withDefaults(
     backends: SelectOption[]
     promptTemplates: SelectOption[]
     bootstrapPromptTemplates: SelectOption[]
-    translationProfiles: SelectOption[]
+    executionProfiles: SelectOption[]
     disabled?: boolean
   }>(),
   { disabled: false },
@@ -414,7 +414,7 @@ const emitUpdate = (): void => {
             </div>
             <NSelect
               v-model:value="round.translate.profile_id"
-              :options="translationProfiles"
+              :options="executionProfiles"
               size="small"
               :disabled="disabled"
               :placeholder="t('executionPlanEditor.round.profilePlaceholder')"

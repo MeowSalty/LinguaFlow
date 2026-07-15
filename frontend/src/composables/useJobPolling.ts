@@ -1,6 +1,6 @@
 import { computed, ref, watch, onMounted, onUnmounted, type Ref } from 'vue'
 
-import { useTranslationJobStore } from '@/stores/translationJob'
+import { useJobStore } from '@/stores/job'
 
 // ── 轮询间隔策略 ──
 
@@ -42,7 +42,7 @@ export function useJobPolling({
   enabled = ref(true),
   listInterval,
 }: UseJobPollingOptions): UseJobPollingReturn {
-  const jobStore = useTranslationJobStore()
+  const jobStore = useJobStore()
 
   const isPolling = ref(false)
   let listTimer: ReturnType<typeof setInterval> | null = null
