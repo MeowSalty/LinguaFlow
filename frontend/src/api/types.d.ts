@@ -1490,20 +1490,19 @@ export interface components {
              */
             segment_group_keys?: string[];
             /**
+             * @description 覆盖执行模板中翻译轮次的段落过滤策略（仅对翻译轮次生效）。
+             *     - pending_only: 仅处理 pending 和 rejected 状态的段落
+             *     - skip_approved: 处理除 approved 外的所有状态
+             *     - all: 处理所有状态的段落
+             *     省略时使用执行模板中的配置。
+             * @enum {string}
+             */
+            segment_filter?: "pending_only" | "skip_approved" | "all";
+            /**
              * @description 翻译完成后是否自动审批通过所有段落
              * @default false
              */
             auto_approve: boolean;
-            /**
-             * @description 段落覆盖策略。
-             *     - skip_translated: 跳过已有翻译的段落（仅翻译 pending/rejected）
-             *     - overwrite_unapproved: 覆盖所有非 approved 的段落（包括已翻译、已编辑和已拒绝的）
-             *     - overwrite_all: 覆盖所有段落，包括已审核通过的
-             *     对 segment_ids 选择方式无效（用户已精确指定段落）。
-             * @default skip_translated
-             * @enum {string}
-             */
-            overwrite_mode: "skip_translated" | "overwrite_unapproved" | "overwrite_all";
             execution_config?: {
                 [key: string]: unknown;
             };
@@ -2128,6 +2127,17 @@ export interface components {
             /** @description 注音对齐使用的后端 ID；为空或 0 时使用翻译主后端 */
             backend_id?: number;
         };
+        /** @description 翻译轮次段落过滤配置，决定处理哪些翻译状态的段落。 */
+        TranslateSegmentFilterConfig: {
+            /**
+             * @description - pending_only: 仅处理 pending 和 rejected 状态的段落（默认，等同旧 skip_translated）
+             *     - skip_approved: 处理除 approved 外的所有状态（等同旧 overwrite_unapproved）
+             *     - all: 处理所有状态的段落（等同旧 overwrite_all）
+             * @default pending_only
+             * @enum {string}
+             */
+            status_filter: "pending_only" | "skip_approved" | "all";
+        };
         RetryConfig: {
             /** @default 3 */
             max_attempts: number;
@@ -2146,6 +2156,8 @@ export interface components {
             /** @description 字词数上限；0=不限制，与 batch_size 至少填一项 */
             max_words_per_batch?: number;
             fallback_shrink?: number;
+            /** @description 段落过滤配置；省略时默认 pending_only */
+            segment_filter?: components["schemas"]["TranslateSegmentFilterConfig"];
             retry?: components["schemas"]["RetryConfig"];
         };
         ExtractRoundConfig: {

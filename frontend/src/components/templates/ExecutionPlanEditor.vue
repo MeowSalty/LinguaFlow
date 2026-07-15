@@ -35,6 +35,7 @@ const DEFAULT_TRANSLATE: TranslateRoundConfig = {
   batch_size: 10,
   max_words_per_batch: 0,
   fallback_shrink: undefined,
+  segment_filter: { status_filter: 'pending_only' },
   retry: { ...DEFAULT_RETRY },
 }
 
@@ -73,6 +74,9 @@ function mergeTranslate(source?: Partial<TranslateRoundConfig>): TranslateRoundC
     batch_size: source.batch_size ?? DEFAULT_TRANSLATE.batch_size,
     max_words_per_batch: source.max_words_per_batch ?? DEFAULT_TRANSLATE.max_words_per_batch,
     fallback_shrink: source.fallback_shrink ?? DEFAULT_TRANSLATE.fallback_shrink,
+    segment_filter: {
+      status_filter: source.segment_filter?.status_filter ?? 'pending_only',
+    },
     retry: {
       max_attempts: source.retry?.max_attempts ?? DEFAULT_RETRY.max_attempts,
       backoff_ms: source.retry?.backoff_ms ?? DEFAULT_RETRY.backoff_ms,
@@ -213,6 +217,12 @@ watch(
 const modeOptions = computed(() => [
   { label: t('executionPlanEditor.round.modeTranslate'), value: 'translate' },
   { label: t('executionPlanEditor.round.modeExtract'), value: 'extract' },
+])
+
+const segmentFilterOptions = computed(() => [
+  { label: t('executionPlanEditor.round.segmentFilterPendingOnly'), value: 'pending_only' },
+  { label: t('executionPlanEditor.round.segmentFilterSkipApproved'), value: 'skip_approved' },
+  { label: t('executionPlanEditor.round.segmentFilterAll'), value: 'all' },
 ])
 
 const switchRoundMode = (round: RoundModel, mode: 'translate' | 'extract'): void => {
@@ -470,6 +480,23 @@ const emitUpdate = (): void => {
               :disabled="disabled"
               class="w-full"
             />
+          </div>
+        </div>
+
+        <!-- 段落过滤配置 -->
+        <div class="mt-3">
+          <div class="mb-1 text-xs text-lf-text-subtle">
+            {{ t('executionPlanEditor.round.segmentFilter') }}
+          </div>
+          <NSelect
+            v-if="round.translate.segment_filter"
+            v-model:value="round.translate.segment_filter.status_filter"
+            :options="segmentFilterOptions"
+            size="small"
+            :disabled="disabled"
+          />
+          <div class="mt-1 text-[11px] text-lf-text-subtle">
+            {{ t('executionPlanEditor.round.segmentFilterHint') }}
           </div>
         </div>
 
