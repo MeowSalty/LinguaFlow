@@ -251,15 +251,16 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			status = "partial"
 		}
 		h.emitBatchOutcome(progress.BatchEvent{
-			Stage:         "extract",
-			SegmentIDs:    segmentIDStrings(idxs),
-			SegmentCount:  len(idxs),
-			BackendName:   b.Name(),
-			Status:        status,
-			DurationMs:    time.Since(start).Milliseconds(),
-			InputTokens:   resp.Usage.PromptTokens,
-			OutputTokens:  resp.Usage.CompletionTokens,
-			AddedGlossary: toBootstrapEntries(res.Added),
+			Stage:           "extract",
+			SegmentIDs:      segmentIDStrings(idxs),
+			SegmentCount:    len(idxs),
+			BackendName:     b.Name(),
+			Status:          status,
+			DurationMs:      time.Since(start).Milliseconds(),
+			InputTokens:     resp.Usage.PromptTokens,
+			OutputTokens:    resp.Usage.CompletionTokens,
+			ReceivedContent: resp.Text,
+			AddedGlossary:   toBootstrapEntries(res.Added),
 		})
 
 		for range idxs {
