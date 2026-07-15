@@ -13,6 +13,19 @@ RetryConfig:
       type: boolean
       default: true
 
+TranslateSegmentFilterConfig:
+  type: object
+  description: 翻译轮次段落过滤配置，决定处理哪些翻译状态的段落。
+  properties:
+    status_filter:
+      type: string
+      enum: [pending_only, skip_approved, all]
+      default: pending_only
+      description: |
+        - pending_only: 仅处理 pending 和 rejected 状态的段落（默认，等同旧 skip_translated）
+        - skip_approved: 处理除 approved 外的所有状态（等同旧 overwrite_unapproved）
+        - all: 处理所有状态的段落（等同旧 overwrite_all）
+
 TranslateRoundConfig:
   type: object
   properties:
@@ -36,6 +49,9 @@ TranslateRoundConfig:
       exclusiveMinimum: true
       maximum: 1
       exclusiveMaximum: true
+    segment_filter:
+      $ref: '#/TranslateSegmentFilterConfig'
+      description: 段落过滤配置；省略时默认 pending_only
     retry:
       $ref: '#/RetryConfig'
 
