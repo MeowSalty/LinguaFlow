@@ -1877,9 +1877,11 @@ export interface components {
             action: "delete" | "update";
             source: string;
             old_target: string;
-            new_target?: string;
+            new_target: string;
             old_notes: string;
-            new_notes?: string;
+            new_notes: string;
+            target_changed: boolean;
+            notes_changed: boolean;
         };
         GlossaryPrunePreview: {
             suggestions: components["schemas"]["GlossaryPruneSuggestion"][];
@@ -1887,6 +1889,32 @@ export interface components {
             to_delete: number;
             to_update: number;
             to_keep: number;
+            diagnostics: components["schemas"]["GlossaryPruneDiagnostics"];
+        };
+        GlossaryPruneDiagnostics: {
+            backend_name?: string;
+            template_name?: string;
+            duration_ms?: number;
+            prompt_tokens?: number;
+            completion_tokens?: number;
+            /** @description 发送给 LLM 的 system prompt 内容（截断至 128KB）。 */
+            system_prompt?: string;
+            /** @description 发送给 LLM 的 user message 内容（截断至 128KB）。 */
+            user_message?: string;
+            system_truncated?: boolean;
+            user_truncated?: boolean;
+            system_length?: number;
+            user_length?: number;
+            /** @description LLM 返回的原始响应内容（截断至 128KB）。 */
+            received_content?: string;
+            received_truncated?: boolean;
+            received_length?: number;
+            entry_count?: number;
+            parsed_count?: number;
+            repaired_ops?: string[];
+            error_type?: string;
+            error_message?: string;
+            http_status?: number;
         };
         GlossaryPruneApplyRequest: {
             changes: {
