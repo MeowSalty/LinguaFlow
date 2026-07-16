@@ -5,14 +5,11 @@ import {
   NCollapse,
   NCollapseItem,
   NDataTable,
-  NDescriptions,
-  NDescriptionsItem,
   NDrawer,
   NDrawerContent,
   NEmpty,
   NFormItem,
   NSelect,
-  NStatistic,
   NTag,
   NText,
   useMessage,
@@ -75,6 +72,151 @@ const totalTokens = computed(() => {
   const d = diagnostics.value
   if (!d || d.prompt_tokens == null || d.completion_tokens == null) return null
   return d.prompt_tokens + d.completion_tokens
+})
+
+const formatMetric = (value: string | number | null | undefined): string => {
+  if (value == null || value === '') return '—'
+  return typeof value === 'number' ? value.toLocaleString() : String(value)
+}
+
+const diagnosticMetrics = computed(() => {
+  const d = diagnostics.value
+  if (!d) return []
+
+  const parsed =
+    d.parsed_count != null && d.entry_count != null
+      ? `${d.parsed_count} / ${d.entry_count}`
+      : formatMetric(d.parsed_count ?? d.entry_count)
+
+  const metrics: { key: string; label: string; value: string; mono?: boolean }[] = [
+    {
+      key: 'backend',
+      label: t('workspace.glossary.prune.diagnostics.metrics.backend'),
+      value: formatMetric(d.backend_name),
+    },
+    {
+      key: 'template',
+      label: t('workspace.glossary.prune.diagnostics.metrics.template'),
+      value: formatMetric(d.template_name),
+    },
+    {
+      key: 'duration',
+      label: t('workspace.glossary.prune.diagnostics.metrics.duration'),
+      value:
+        d.duration_ms != null
+          ? t('workspace.glossary.prune.diagnostics.metrics.durationValue', { ms: d.duration_ms })
+          : '—',
+    },
+    {
+      key: 'http',
+      label: t('workspace.glossary.prune.diagnostics.metrics.httpStatus'),
+      value: formatMetric(d.http_status),
+      mono: true,
+    },
+    {
+      key: 'prompt',
+      label: t('workspace.glossary.prune.diagnostics.metrics.promptTokens'),
+      value: formatMetric(d.prompt_tokens),
+    },
+    {
+      key: 'completion',
+      label: t('workspace.glossary.prune.diagnostics.metrics.completionTokens'),
+      value: formatMetric(d.completion_tokens),
+    },
+    {
+      key: 'total',
+      label: t('workspace.glossary.prune.diagnostics.metrics.totalTokens'),
+      value:
+        totalTokens.value != null
+          ? t('workspace.glossary.prune.diagnostics.metrics.totalTokensValue', {
+              total: totalTokens.value.toLocaleString(),
+            })
+          : '—',
+    },
+    {
+      key: 'parsed',
+      label: t('workspace.glossary.prune.diagnostics.metrics.parsedCount'),
+      value: parsed,
+    },
+    {
+      key: 'repaired',
+      label: t('workspace.glossary.prune.diagnostics.metrics.repairedOps'),
+      value: d.repaired_ops?.length
+        ? `${t('workspace.glossary.prune.diagnostics.metrics.repairedOpsValue', {
+            count: d.repaired_ops.length,
+          })} (${d.repaired_ops.join(', ')})`
+        : '—',
+    },
+  ]
+
+  if (hasError.value) {
+    metrics.push({
+      key: 'errorType',
+      label: t('workspace.glossary.prune.diagnostics.errorType'),
+      value: formatMetric(d.error_type),
+      mono: true,
+    })
+  }
+
+  return metrics
+})
+
+const previewStats = computed(() => {
+  if (!preview.value) return []
+  return [
+    {
+      key: 'total',
+      label: t('workspace.glossary.prune.total'),
+      value: preview.value.total,
+      valueClass: 'text-lf-text-strong',
+      accentClass: 'bg-lf-text-subtle/40',
+    },
+    {
+      key: 'delete',
+      label: t('workspace.glossary.prune.toDelete'),
+      value: preview.value.to_delete,
+      valueClass: 'text-red-500',
+      accentClass: 'bg-red-500',
+    },
+    {
+      key: 'update',
+      label: t('workspace.glossary.prune.toUpdate'),
+      value: preview.value.to_update,
+      valueClass: 'text-amber-500',
+      accentClass: 'bg-amber-500',
+    },
+    {
+      key: 'keep',
+      label: t('workspace.glossary.prune.toKeep'),
+      value: preview.value.to_keep,
+      valueClass: 'text-brand-500',
+      accentClass: 'bg-brand-500',
+    },
+  ]
+})
+
+const resultStats = computed(() => {
+  if (!result.value) return []
+  return [
+    {
+      key: 'deleted',
+      label: t('workspace.glossary.prune.deleted'),
+      value: result.value.deleted,
+      valueClass: 'text-red-500',
+    },
+    {
+      key: 'updated',
+      label: t('workspace.glossary.prune.updated'),
+      value: result.value.updated,
+      valueClass: 'text-amber-500',
+    },
+    {
+      key: 'failed',
+      label: t('workspace.glossary.prune.failed'),
+      value: result.value.failed,
+      valueClass: result.value.failed ? 'text-red-500' : 'text-lf-text-strong',
+    },
+  ]
 })
 
 const columns = computed<DataTableColumns<Suggestion>>(() => [
@@ -215,14 +357,15 @@ watch(show, (visible) => {
           {{ t('workspace.glossary.prune.resultSummary') }}
         </NAlert>
         <div class="grid grid-cols-3 gap-3">
-          <div class="rounded-lg bg-lf-surface-muted p-4">
-            <NStatistic :label="t('workspace.glossary.prune.deleted')" :value="result.deleted" />
-          </div>
-          <div class="rounded-lg bg-lf-surface-muted p-4">
-            <NStatistic :label="t('workspace.glossary.prune.updated')" :value="result.updated" />
-          </div>
-          <div class="rounded-lg bg-lf-surface-muted p-4">
-            <NStatistic :label="t('workspace.glossary.prune.failed')" :value="result.failed" />
+          <div
+            v-for="stat in resultStats"
+            :key="stat.key"
+            class="rounded-xl border border-lf-border-soft bg-lf-surface-muted/60 px-4 py-3"
+          >
+            <div class="text-xs font-medium text-lf-text-muted">{{ stat.label }}</div>
+            <div class="mt-1.5 text-2xl font-semibold tracking-tight" :class="stat.valueClass">
+              {{ stat.value.toLocaleString() }}
+            </div>
           </div>
         </div>
       </div>
@@ -261,38 +404,35 @@ watch(show, (visible) => {
           >
             <div class="space-y-1">
               <template v-if="diagnostics?.error_message">{{ diagnostics.error_message }}</template>
-              <div class="text-xs opacity-80">
+              <div class="text-xs text-lf-text-muted">
                 {{ t('workspace.glossary.prune.diagnostics.analysisFailedHint') }}
               </div>
             </div>
           </NAlert>
 
           <div class="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div class="rounded-lg bg-lf-surface-muted p-3">
-              <NStatistic :label="t('workspace.glossary.prune.total')" :value="preview.total" />
-            </div>
-            <div class="rounded-lg bg-red-50 p-3 dark:bg-red-950/20">
-              <NStatistic
-                :label="t('workspace.glossary.prune.toDelete')"
-                :value="preview.to_delete"
+            <div
+              v-for="stat in previewStats"
+              :key="stat.key"
+              class="relative overflow-hidden rounded-xl border border-lf-border-soft bg-lf-surface px-3.5 py-3 shadow-sm shadow-lf-shadow"
+            >
+              <div
+                class="absolute inset-y-0 left-0 w-0.5"
+                :class="stat.accentClass"
+                aria-hidden="true"
               />
-            </div>
-            <div class="rounded-lg bg-amber-50 p-3 dark:bg-amber-950/20">
-              <NStatistic
-                :label="t('workspace.glossary.prune.toUpdate')"
-                :value="preview.to_update"
-              />
-            </div>
-            <div class="rounded-lg bg-emerald-50 p-3 dark:bg-emerald-950/20">
-              <NStatistic :label="t('workspace.glossary.prune.toKeep')" :value="preview.to_keep" />
+              <div class="text-xs font-medium text-lf-text-muted">{{ stat.label }}</div>
+              <div class="mt-1.5 text-2xl font-semibold tracking-tight" :class="stat.valueClass">
+                {{ stat.value.toLocaleString() }}
+              </div>
             </div>
           </div>
 
           <NCollapse v-if="diagnostics" :default-expanded-names="hasError ? ['diagnostics'] : []">
             <NCollapseItem name="diagnostics">
               <template #header>
-                <div class="flex items-center gap-2">
-                  <span class="text-sm font-medium">
+                <div class="flex min-w-0 items-center gap-2">
+                  <span class="text-sm font-medium text-lf-text-strong">
                     {{ t('workspace.glossary.prune.diagnostics.title') }}
                   </span>
                   <NTag v-if="hasError" size="tiny" type="error" :bordered="false">
@@ -303,138 +443,78 @@ watch(show, (visible) => {
 
               <div class="space-y-4">
                 <div>
-                  <div class="mb-2 text-xs font-medium text-lf-text-subtle">
+                  <div class="mb-2.5 text-xs font-medium text-lf-text-subtle">
                     {{ t('workspace.glossary.prune.diagnostics.summary') }}
                   </div>
-                  <NDescriptions label-placement="left" :column="2" size="small" bordered>
-                    <NDescriptionsItem
-                      :label="t('workspace.glossary.prune.diagnostics.metrics.backend')"
+                  <div class="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
+                    <div
+                      v-for="metric in diagnosticMetrics"
+                      :key="metric.key"
+                      class="flex items-baseline justify-between gap-3 border-b border-lf-border-soft pb-2"
                     >
-                      {{ diagnostics?.backend_name || '—' }}
-                    </NDescriptionsItem>
-                    <NDescriptionsItem
-                      :label="t('workspace.glossary.prune.diagnostics.metrics.template')"
-                    >
-                      {{ diagnostics?.template_name || '—' }}
-                    </NDescriptionsItem>
-                    <NDescriptionsItem
-                      :label="t('workspace.glossary.prune.diagnostics.metrics.duration')"
-                    >
-                      <template v-if="diagnostics?.duration_ms != null">
-                        {{
-                          t('workspace.glossary.prune.diagnostics.metrics.durationValue', {
-                            ms: diagnostics.duration_ms,
-                          })
-                        }}
-                      </template>
-                      <template v-else>—</template>
-                    </NDescriptionsItem>
-                    <NDescriptionsItem
-                      :label="t('workspace.glossary.prune.diagnostics.metrics.httpStatus')"
-                    >
-                      {{ diagnostics?.http_status ?? '—' }}
-                    </NDescriptionsItem>
-                    <NDescriptionsItem
-                      :label="t('workspace.glossary.prune.diagnostics.metrics.promptTokens')"
-                    >
-                      {{ diagnostics?.prompt_tokens?.toLocaleString() ?? '—' }}
-                    </NDescriptionsItem>
-                    <NDescriptionsItem
-                      :label="t('workspace.glossary.prune.diagnostics.metrics.completionTokens')"
-                    >
-                      {{ diagnostics?.completion_tokens?.toLocaleString() ?? '—' }}
-                    </NDescriptionsItem>
-                    <NDescriptionsItem
-                      :label="t('workspace.glossary.prune.diagnostics.metrics.totalTokens')"
-                    >
-                      <template v-if="totalTokens != null">
-                        {{
-                          t('workspace.glossary.prune.diagnostics.metrics.totalTokensValue', {
-                            total: totalTokens.toLocaleString(),
-                          })
-                        }}
-                      </template>
-                      <template v-else>—</template>
-                    </NDescriptionsItem>
-                    <NDescriptionsItem
-                      :label="t('workspace.glossary.prune.diagnostics.metrics.parsedCount')"
-                    >
+                      <span class="shrink-0 text-xs text-lf-text-muted">{{ metric.label }}</span>
                       <span
-                        v-if="diagnostics?.parsed_count != null && diagnostics?.entry_count != null"
+                        class="min-w-0 text-right text-xs font-medium text-lf-text-strong"
+                        :class="metric.mono ? 'font-mono' : ''"
                       >
-                        {{ diagnostics.parsed_count }} / {{ diagnostics.entry_count }}
+                        {{ metric.value }}
                       </span>
-                      <template v-else>{{
-                        diagnostics?.parsed_count ?? diagnostics?.entry_count ?? '—'
-                      }}</template>
-                    </NDescriptionsItem>
-                    <NDescriptionsItem
-                      :label="t('workspace.glossary.prune.diagnostics.metrics.repairedOps')"
-                    >
-                      <template v-if="diagnostics?.repaired_ops?.length">
-                        {{
-                          t('workspace.glossary.prune.diagnostics.metrics.repairedOpsValue', {
-                            count: diagnostics.repaired_ops.length,
-                          })
-                        }}
-                        <span class="ml-1 text-xs text-lf-text-subtle">
-                          ({{ diagnostics.repaired_ops.join(', ') }})
-                        </span>
-                      </template>
-                      <template v-else>—</template>
-                    </NDescriptionsItem>
-                    <NDescriptionsItem
-                      v-if="hasError"
-                      :label="t('workspace.glossary.prune.diagnostics.errorType')"
-                    >
-                      <span class="font-mono text-xs">{{ diagnostics?.error_type || '—' }}</span>
-                    </NDescriptionsItem>
-                  </NDescriptions>
+                    </div>
+                  </div>
                 </div>
 
-                <BatchContentViewer
-                  v-if="diagnostics?.system_prompt"
-                  :content="diagnostics.system_prompt"
-                  :label="t('workspace.glossary.prune.diagnostics.content.systemPrompt')"
-                  :truncated="diagnostics?.system_truncated"
-                  :original-length="diagnostics?.system_length"
-                />
-                <BatchContentViewer
-                  v-if="diagnostics?.user_message"
-                  :content="diagnostics.user_message"
-                  :label="t('workspace.glossary.prune.diagnostics.content.userMessage')"
-                  :truncated="diagnostics?.user_truncated"
-                  :original-length="diagnostics?.user_length"
-                />
-                <BatchContentViewer
-                  v-if="diagnostics?.received_content"
-                  :content="diagnostics.received_content"
-                  :label="t('workspace.glossary.prune.diagnostics.content.received')"
-                  :truncated="diagnostics?.received_truncated"
-                  :original-length="diagnostics?.received_length"
-                />
+                <div
+                  v-if="
+                    diagnostics?.system_prompt ||
+                    diagnostics?.user_message ||
+                    diagnostics?.received_content
+                  "
+                  class="space-y-3 border-t border-lf-border-soft pt-3"
+                >
+                  <BatchContentViewer
+                    v-if="diagnostics?.system_prompt"
+                    :content="diagnostics.system_prompt"
+                    :label="t('workspace.glossary.prune.diagnostics.content.systemPrompt')"
+                    :truncated="diagnostics?.system_truncated"
+                    :original-length="diagnostics?.system_length"
+                  />
+                  <BatchContentViewer
+                    v-if="diagnostics?.user_message"
+                    :content="diagnostics.user_message"
+                    :label="t('workspace.glossary.prune.diagnostics.content.userMessage')"
+                    :truncated="diagnostics?.user_truncated"
+                    :original-length="diagnostics?.user_length"
+                  />
+                  <BatchContentViewer
+                    v-if="diagnostics?.received_content"
+                    :content="diagnostics.received_content"
+                    :label="t('workspace.glossary.prune.diagnostics.content.received')"
+                    :truncated="diagnostics?.received_truncated"
+                    :original-length="diagnostics?.received_length"
+                  />
+                </div>
               </div>
             </NCollapseItem>
           </NCollapse>
-          <div
-            v-else
-            class="rounded-lg bg-lf-surface-muted p-3 text-center text-xs text-lf-text-muted"
-          >
+          <div v-else class="text-center text-xs text-lf-text-muted">
             {{ t('workspace.glossary.prune.diagnostics.noData') }}
           </div>
 
-          <NDataTable
-            v-model:checked-row-keys="selectedKeys"
-            :columns="columns"
-            :data="preview.suggestions"
-            :row-key="(row: Suggestion) => row.entry_id"
-            :scroll-x="720"
-            max-height="460"
-          >
-            <template #empty>
-              <NEmpty :description="t('workspace.glossary.prune.noSuggestions')" class="py-10" />
-            </template>
-          </NDataTable>
+          <div class="overflow-hidden rounded-xl border border-lf-border-soft">
+            <NDataTable
+              v-model:checked-row-keys="selectedKeys"
+              :columns="columns"
+              :data="preview.suggestions"
+              :row-key="(row: Suggestion) => row.entry_id"
+              :scroll-x="720"
+              max-height="460"
+              size="small"
+            >
+              <template #empty>
+                <NEmpty :description="t('workspace.glossary.prune.noSuggestions')" class="py-10" />
+              </template>
+            </NDataTable>
+          </div>
         </template>
       </div>
 
