@@ -1,18 +1,21 @@
 <script setup lang="ts">
-import { inject } from 'vue'
+import { inject, ref } from 'vue'
 import { NAlert, NButton, NDataTable, NEmpty, NIcon, NInput } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
+import GlossaryPruneDrawer from '@/components/workspace/GlossaryPruneDrawer.vue'
 import { GlossaryMgmtKey } from '@/composables/useGlossaryManagement'
 import { useGlossaryStore } from '@/stores/glossary'
 
 const { t } = useI18n()
 const glossary = useGlossaryStore()
 
-defineProps<{
+const props = defineProps<{
   projectId: number | null
 }>()
+
+const pruneDrawerVisible = ref(false)
 
 // 从父组件注入术语表管理实例（消除重复实例）
 const glossaryMgmt = inject(GlossaryMgmtKey)!
@@ -27,6 +30,10 @@ const handleExport = (): void => {
 
 const handleImport = (): void => {
   glossaryMgmt.glossaryImportVisible.value = true
+}
+
+const handlePruneApplied = (): void => {
+  if (props.projectId) void glossary.loadEntries(props.projectId)
 }
 </script>
 
@@ -48,7 +55,17 @@ const handleImport = (): void => {
           class="md:max-w-sm"
           :placeholder="t('workspace.segment.searchPlaceholder')"
         />
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
+          <NButton
+            secondary
+            :disabled="!projectId || glossary.items.length === 0"
+            @click="pruneDrawerVisible = true"
+          >
+            <template #icon>
+              <NIcon><IconCarbonMagicWand /></NIcon>
+            </template>
+            {{ t('workspace.glossary.actions.prune') }}
+          </NButton>
           <NButton secondary :loading="glossary.importing" @click="handleImport">
             <template #icon>
               <NIcon><IconCarbonUpload /></NIcon>
@@ -98,5 +115,12 @@ const handleImport = (): void => {
         />
       </template>
     </NDataTable>
+
+    <GlossaryPruneDrawer
+      v-if="projectId"
+      v-model:show="pruneDrawerVisible"
+      :project-id="projectId"
+      @applied="handlePruneApplied"
+    />
   </div>
 </template>

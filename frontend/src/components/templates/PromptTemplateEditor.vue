@@ -11,7 +11,7 @@ const props = withDefaults(
     modelValue: string
     disabled?: boolean
     rows?: number
-    variableSet?: 'system' | 'bootstrap'
+    variableSet?: 'system' | 'bootstrap' | 'prune'
   }>(),
   { disabled: false, rows: 6, variableSet: 'system' },
 )
@@ -45,8 +45,33 @@ const bootstrapVariables = [
   { key: 'MaxTerms', label: '最大术语数' },
 ] as const
 
-const builtinVariables = computed(() =>
-  props.variableSet === 'bootstrap' ? bootstrapVariables : systemVariables,
+const pruneVariables = [
+  { key: 'SourceLang', label: '源语言' },
+  { key: 'TargetLang', label: '目标语言' },
+  { key: 'Entries', label: '完整术语条目集合' },
+] as const
+
+const builtinVariables = computed(() => {
+  switch (props.variableSet) {
+    case 'bootstrap':
+      return bootstrapVariables
+    case 'prune':
+      return pruneVariables
+    default:
+      return systemVariables
+  }
+})
+
+const placeholder = computed(() =>
+  props.variableSet === 'prune'
+    ? t('prunePromptTemplates.form.contentPlaceholder')
+    : t('promptTemplates.form.contentPlaceholder'),
+)
+
+const insertLabel = computed(() =>
+  props.variableSet === 'prune'
+    ? t('prunePromptTemplates.form.insertBuiltinVar')
+    : t('promptTemplates.form.insertBuiltinVar'),
 )
 
 // ─── 方法 ────────────────────────────────────────────────────
@@ -66,14 +91,14 @@ const insertVariable = (varName: string): void => {
     <HighlightTextarea
       ref="editorRef"
       :value="modelValue"
-      :placeholder="t('promptTemplates.form.contentPlaceholder')"
+      :placeholder="placeholder"
       :rows="rows"
       :disabled="disabled"
       @update:value="emit('update:modelValue', $event)"
     />
     <div class="mt-2 flex flex-wrap items-center gap-1.5">
       <span class="text-xs text-lf-text-muted">
-        {{ t('promptTemplates.form.insertBuiltinVar') }}
+        {{ insertLabel }}
       </span>
       <NButton
         v-for="v in builtinVariables"
