@@ -22,6 +22,7 @@ import { useI18n } from 'vue-i18n'
 import { applyGlossaryPrune, previewGlossaryPrune, type ApiSchemas } from '@/api/client'
 import BatchContentViewer from '@/components/workspace/BatchContentViewer.vue'
 import { useBackendsStore } from '@/stores/backends'
+import type { GlossarySyncQueueItem } from '@/stores/glossary'
 import { usePrunePromptTemplatesStore } from '@/stores/prunePromptTemplates'
 
 type Suggestion = ApiSchemas['GlossaryPruneSuggestion']
@@ -30,7 +31,9 @@ type ApplyResult = ApiSchemas['GlossaryPruneApplyResult']
 type Diagnostics = ApiSchemas['GlossaryPruneDiagnostics']
 
 const props = defineProps<{ projectId: number }>()
-const emit = defineEmits<{ applied: [] }>()
+const emit = defineEmits<{
+  applied: [payload: { targetChanges: GlossarySyncQueueItem[] }]
+}>()
 const show = defineModel<boolean>('show', { required: true })
 
 const { t } = useI18n()
@@ -320,8 +323,9 @@ const applySelected = async (): Promise<void> => {
   if (!selectedSuggestions.value.length) return
   applying.value = true
   try {
+    const selected = selectedSuggestions.value
     result.value = await applyGlossaryPrune(props.projectId, {
-      changes: selectedSuggestions.value.map((item) => ({
+      changes: selected.map((item) => ({
         entry_id: item.entry_id,
         action: item.action,
         ...(item.action === 'update' && item.new_target !== undefined
@@ -332,8 +336,30 @@ const applySelected = async (): Promise<void> => {
           : {}),
       })),
     })
-    emit('applied')
-    message.success(t('workspace.glossary.prune.applySuccess'))
+    // apply 结果仅有计数、无 per-entry 成功列表；存在失败时无法确认哪些 target 已写入，
+    // 避免把未真正更新的术语送入译文同步队列。
+    const targetChanges: GlossarySyncQueueItem[] =
+      result.value.failed > 0
+        ? []
+        : selected
+            .filter(
+              (item) =>
+                item.action === 'update' &&
+                item.target_changed &&
+                item.old_target !== item.new_target,
+            )
+            .map((item) => ({
+              entryId: item.entry_id,
+              source: item.source,
+              oldTarget: item.old_target,
+              newTarget: item.new_target,
+            }))
+    emit('applied', { targetChanges })
+    if (result.value.failed > 0) {
+      message.warning(t('workspace.glossary.prune.applyPartialSuccess'))
+    } else {
+      message.success(t('workspace.glossary.prune.applySuccess'))
+    }
   } catch (error) {
     message.error(
       error instanceof Error ? error.message : t('workspace.glossary.prune.applyFailed'),

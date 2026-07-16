@@ -778,6 +778,8 @@ const messages = {
         previewFailed: '生成术语精简建议失败',
         applyFailed: '应用术语精简建议失败',
         applySuccess: '术语精简变更已应用',
+        applyPartialSuccess:
+          '术语精简已部分应用，部分条目失败。为避免误改译文，本次未自动打开同步。',
         columns: {
           action: '操作',
           source: '源术语',
@@ -845,6 +847,9 @@ const messages = {
         resourcePath: '资源文件',
         affectedCount: '受影响段落',
         skip: '跳过',
+        skipAndNext: '跳过此项',
+        continueNext: '继续下一项',
+        queueProgress: '第 {current} / {total} 项',
         syncSelected: '限定范围同步 ({count})',
         syncAll: '全部同步',
         retry: '重试',

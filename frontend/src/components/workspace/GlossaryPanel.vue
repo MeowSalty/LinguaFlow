@@ -6,7 +6,7 @@ import { useI18n } from 'vue-i18n'
 import { type ApiSchemas } from '@/api/client'
 import GlossaryPruneDrawer from '@/components/workspace/GlossaryPruneDrawer.vue'
 import { GlossaryMgmtKey } from '@/composables/useGlossaryManagement'
-import { useGlossaryStore } from '@/stores/glossary'
+import { useGlossaryStore, type GlossarySyncQueueItem } from '@/stores/glossary'
 
 const { t } = useI18n()
 const glossary = useGlossaryStore()
@@ -32,8 +32,24 @@ const handleImport = (): void => {
   glossaryMgmt.glossaryImportVisible.value = true
 }
 
-const handlePruneApplied = (): void => {
-  if (props.projectId) void glossary.loadEntries(props.projectId)
+const handlePruneApplied = async (payload: {
+  targetChanges: GlossarySyncQueueItem[]
+}): Promise<void> => {
+  if (!props.projectId) return
+  await glossary.loadEntries(props.projectId)
+
+  if (payload.targetChanges.length === 0) return
+
+  // 仅同步术语表中已确认写入新译文的条目，避免 partial apply 误同步
+  const confirmedById = new Map(glossary.items.map((entry) => [entry.id, entry]))
+  const confirmedChanges = payload.targetChanges.filter((item) => {
+    const entry = confirmedById.get(item.entryId)
+    return entry != null && entry.target === item.newTarget
+  })
+  if (confirmedChanges.length === 0) return
+
+  pruneDrawerVisible.value = false
+  await glossary.openSyncQueue(props.projectId, confirmedChanges)
 }
 </script>
 
