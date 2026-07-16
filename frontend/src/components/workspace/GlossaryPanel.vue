@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { inject, ref } from 'vue'
-import { NAlert, NButton, NDataTable, NEmpty, NIcon, NInput } from 'naive-ui'
+import { NAlert, NButton, NDataTable, NEmpty, NIcon, NInput, NTooltip } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
@@ -48,39 +48,89 @@ const handlePruneApplied = (): void => {
           {{ t('workspace.sections.glossary.description') }}
         </p>
       </div>
-      <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <NInput
-          v-model:value="glossary.searchQuery"
-          clearable
-          class="md:max-w-sm"
-          :placeholder="t('workspace.segment.searchPlaceholder')"
-        />
-        <div class="flex flex-wrap gap-2">
-          <NButton
-            secondary
-            :disabled="!projectId || glossary.items.length === 0"
-            @click="pruneDrawerVisible = true"
+      <div
+        class="flex flex-col gap-2.5 rounded-xl border border-lf-border-soft bg-lf-surface px-3 py-2.5 shadow-sm shadow-lf-shadow sm:flex-row sm:items-center sm:justify-between sm:gap-3"
+      >
+        <div class="flex min-w-0 flex-1 items-center gap-3">
+          <NInput
+            v-model:value="glossary.searchQuery"
+            clearable
+            size="small"
+            class="w-full sm:max-w-xs"
+            :placeholder="t('workspace.segment.searchPlaceholder')"
+          />
+          <span
+            v-if="glossary.items.length > 0"
+            class="hidden shrink-0 text-xs tabular-nums text-lf-text-muted sm:inline"
           >
-            <template #icon>
-              <NIcon><IconCarbonMagicWand /></NIcon>
+            {{ glossary.filteredItems.length }}
+            <span class="text-lf-text-subtle">/ {{ glossary.items.length }}</span>
+          </span>
+        </div>
+        <div class="flex shrink-0 items-center justify-end gap-0.5">
+          <NTooltip trigger="hover" placement="top">
+            <template #trigger>
+              <span class="inline-flex">
+                <NButton
+                  quaternary
+                  circle
+                  size="small"
+                  class="text-lf-text-muted hover:text-lf-text-strong"
+                  :disabled="!projectId || glossary.items.length === 0"
+                  :aria-label="t('workspace.glossary.actions.prune')"
+                  @click="pruneDrawerVisible = true"
+                >
+                  <template #icon>
+                    <NIcon size="16"><IconCarbonMagicWand /></NIcon>
+                  </template>
+                </NButton>
+              </span>
             </template>
             {{ t('workspace.glossary.actions.prune') }}
-          </NButton>
-          <NButton secondary :loading="glossary.importing" @click="handleImport">
-            <template #icon>
-              <NIcon><IconCarbonUpload /></NIcon>
+          </NTooltip>
+          <NTooltip trigger="hover" placement="top">
+            <template #trigger>
+              <span class="inline-flex">
+                <NButton
+                  quaternary
+                  circle
+                  size="small"
+                  class="text-lf-text-muted hover:text-lf-text-strong"
+                  :loading="glossary.importing"
+                  :aria-label="t('workspace.glossary.actions.import')"
+                  @click="handleImport"
+                >
+                  <template #icon>
+                    <NIcon size="16"><IconCarbonUpload /></NIcon>
+                  </template>
+                </NButton>
+              </span>
             </template>
             {{ t('workspace.glossary.actions.import') }}
-          </NButton>
-          <NButton secondary @click="handleExport">
-            <template #icon>
-              <NIcon><IconCarbonDownload /></NIcon>
+          </NTooltip>
+          <NTooltip trigger="hover" placement="top">
+            <template #trigger>
+              <span class="inline-flex">
+                <NButton
+                  quaternary
+                  circle
+                  size="small"
+                  class="text-lf-text-muted hover:text-lf-text-strong"
+                  :aria-label="t('workspace.glossary.actions.export')"
+                  @click="handleExport"
+                >
+                  <template #icon>
+                    <NIcon size="16"><IconCarbonDownload /></NIcon>
+                  </template>
+                </NButton>
+              </span>
             </template>
             {{ t('workspace.glossary.actions.export') }}
-          </NButton>
-          <NButton type="primary" @click="handleCreate">
+          </NTooltip>
+          <span class="mx-1.5 h-4 w-px bg-lf-border-soft" />
+          <NButton type="primary" size="small" strong @click="handleCreate">
             <template #icon>
-              <NIcon><IconCarbonAdd /></NIcon>
+              <NIcon size="16"><IconCarbonAdd /></NIcon>
             </template>
             {{ t('workspace.glossary.actions.create') }}
           </NButton>
