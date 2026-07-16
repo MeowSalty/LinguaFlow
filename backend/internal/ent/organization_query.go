@@ -21,6 +21,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/pruneprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 )
@@ -39,6 +40,7 @@ type OrganizationQuery struct {
 	withUsageRecords               *UsageRecordQuery
 	withTranslationPromptTemplates *TranslationPromptTemplateQuery
 	withBootstrapPromptTemplates   *BootstrapPromptTemplateQuery
+	withPrunePromptTemplates       *PrunePromptTemplateQuery
 	withExecutionProfiles          *ExecutionProfileQuery
 	withExecutionPlanTemplates     *ExecutionPlanTemplateQuery
 	// intermediate query (i.e. traversal path).
@@ -224,6 +226,28 @@ func (_q *OrganizationQuery) QueryBootstrapPromptTemplates() *BootstrapPromptTem
 			sqlgraph.From(organization.Table, organization.FieldID, selector),
 			sqlgraph.To(bootstrapprompttemplate.Table, bootstrapprompttemplate.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, organization.BootstrapPromptTemplatesTable, organization.BootstrapPromptTemplatesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryPrunePromptTemplates chains the current query on the "prune_prompt_templates" edge.
+func (_q *OrganizationQuery) QueryPrunePromptTemplates() *PrunePromptTemplateQuery {
+	query := (&PrunePromptTemplateClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(organization.Table, organization.FieldID, selector),
+			sqlgraph.To(pruneprompttemplate.Table, pruneprompttemplate.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, organization.PrunePromptTemplatesTable, organization.PrunePromptTemplatesColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -474,6 +498,7 @@ func (_q *OrganizationQuery) Clone() *OrganizationQuery {
 		withUsageRecords:               _q.withUsageRecords.Clone(),
 		withTranslationPromptTemplates: _q.withTranslationPromptTemplates.Clone(),
 		withBootstrapPromptTemplates:   _q.withBootstrapPromptTemplates.Clone(),
+		withPrunePromptTemplates:       _q.withPrunePromptTemplates.Clone(),
 		withExecutionProfiles:          _q.withExecutionProfiles.Clone(),
 		withExecutionPlanTemplates:     _q.withExecutionPlanTemplates.Clone(),
 		// clone intermediate query.
@@ -556,6 +581,17 @@ func (_q *OrganizationQuery) WithBootstrapPromptTemplates(opts ...func(*Bootstra
 		opt(query)
 	}
 	_q.withBootstrapPromptTemplates = query
+	return _q
+}
+
+// WithPrunePromptTemplates tells the query-builder to eager-load the nodes that are connected to
+// the "prune_prompt_templates" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *OrganizationQuery) WithPrunePromptTemplates(opts ...func(*PrunePromptTemplateQuery)) *OrganizationQuery {
+	query := (&PrunePromptTemplateClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withPrunePromptTemplates = query
 	return _q
 }
 
@@ -659,7 +695,7 @@ func (_q *OrganizationQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 	var (
 		nodes       = []*Organization{}
 		_spec       = _q.querySpec()
-		loadedTypes = [9]bool{
+		loadedTypes = [10]bool{
 			_q.withProjects != nil,
 			_q.withMemberships != nil,
 			_q.withBackends != nil,
@@ -667,6 +703,7 @@ func (_q *OrganizationQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 			_q.withUsageRecords != nil,
 			_q.withTranslationPromptTemplates != nil,
 			_q.withBootstrapPromptTemplates != nil,
+			_q.withPrunePromptTemplates != nil,
 			_q.withExecutionProfiles != nil,
 			_q.withExecutionPlanTemplates != nil,
 		}
@@ -738,6 +775,15 @@ func (_q *OrganizationQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]
 			func(n *Organization) { n.Edges.BootstrapPromptTemplates = []*BootstrapPromptTemplate{} },
 			func(n *Organization, e *BootstrapPromptTemplate) {
 				n.Edges.BootstrapPromptTemplates = append(n.Edges.BootstrapPromptTemplates, e)
+			}); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withPrunePromptTemplates; query != nil {
+		if err := _q.loadPrunePromptTemplates(ctx, query, nodes,
+			func(n *Organization) { n.Edges.PrunePromptTemplates = []*PrunePromptTemplate{} },
+			func(n *Organization, e *PrunePromptTemplate) {
+				n.Edges.PrunePromptTemplates = append(n.Edges.PrunePromptTemplates, e)
 			}); err != nil {
 			return nil, err
 		}
@@ -970,6 +1016,39 @@ func (_q *OrganizationQuery) loadBootstrapPromptTemplates(ctx context.Context, q
 	}
 	query.Where(predicate.BootstrapPromptTemplate(func(s *sql.Selector) {
 		s.Where(sql.InValues(s.C(organization.BootstrapPromptTemplatesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.OwnerOrgID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "owner_org_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "owner_org_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *OrganizationQuery) loadPrunePromptTemplates(ctx context.Context, query *PrunePromptTemplateQuery, nodes []*Organization, init func(*Organization), assign func(*Organization, *PrunePromptTemplate)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*Organization)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(pruneprompttemplate.FieldOwnerOrgID)
+	}
+	query.Where(predicate.PrunePromptTemplate(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(organization.PrunePromptTemplatesColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {

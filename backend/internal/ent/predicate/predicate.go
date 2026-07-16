@@ -39,6 +39,9 @@ type Organization func(*sql.Selector)
 // Project is the predicate function for project builders.
 type Project func(*sql.Selector)
 
+// PrunePromptTemplate is the predicate function for pruneprompttemplate builders.
+type PrunePromptTemplate func(*sql.Selector)
+
 // RefreshToken is the predicate function for refreshtoken builders.
 type RefreshToken func(*sql.Selector)
 

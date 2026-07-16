@@ -34,6 +34,8 @@ type Tx struct {
 	Organization *OrganizationClient
 	// Project is the client for interacting with the Project builders.
 	Project *ProjectClient
+	// PrunePromptTemplate is the client for interacting with the PrunePromptTemplate builders.
+	PrunePromptTemplate *PrunePromptTemplateClient
 	// RefreshToken is the client for interacting with the RefreshToken builders.
 	RefreshToken *RefreshTokenClient
 	// Resource is the client for interacting with the Resource builders.
@@ -196,6 +198,7 @@ func (tx *Tx) init() {
 	tx.OrgMembership = NewOrgMembershipClient(tx.config)
 	tx.Organization = NewOrganizationClient(tx.config)
 	tx.Project = NewProjectClient(tx.config)
+	tx.PrunePromptTemplate = NewPrunePromptTemplateClient(tx.config)
 	tx.RefreshToken = NewRefreshTokenClient(tx.config)
 	tx.Resource = NewResourceClient(tx.config)
 	tx.SSEEvent = NewSSEEventClient(tx.config)

@@ -606,6 +606,29 @@ func HasBootstrapPromptTemplatesWith(preds ...predicate.BootstrapPromptTemplate)
 	})
 }
 
+// HasPrunePromptTemplates applies the HasEdge predicate on the "prune_prompt_templates" edge.
+func HasPrunePromptTemplates() predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, PrunePromptTemplatesTable, PrunePromptTemplatesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasPrunePromptTemplatesWith applies the HasEdge predicate on the "prune_prompt_templates" edge with a given conditions (other predicates).
+func HasPrunePromptTemplatesWith(preds ...predicate.PrunePromptTemplate) predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := newPrunePromptTemplatesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
 // HasExecutionProfiles applies the HasEdge predicate on the "execution_profiles" edge.
 func HasExecutionProfiles() predicate.Organization {
 	return predicate.Organization(func(s *sql.Selector) {

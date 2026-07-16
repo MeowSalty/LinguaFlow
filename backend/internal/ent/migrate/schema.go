@@ -402,6 +402,38 @@ var (
 			},
 		},
 	}
+	// PrunePromptTemplatesColumns holds the columns for the "prune_prompt_templates" table.
+	PrunePromptTemplatesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "name", Type: field.TypeString},
+		{Name: "description", Type: field.TypeString, Default: ""},
+		{Name: "scope", Type: field.TypeString, Default: "user"},
+		{Name: "content", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
+		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
+	}
+	// PrunePromptTemplatesTable holds the schema information for the "prune_prompt_templates" table.
+	PrunePromptTemplatesTable = &schema.Table{
+		Name:       "prune_prompt_templates",
+		Columns:    PrunePromptTemplatesColumns,
+		PrimaryKey: []*schema.Column{PrunePromptTemplatesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "prune_prompt_templates_organizations_prune_prompt_templates",
+				Columns:    []*schema.Column{PrunePromptTemplatesColumns[7]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "prune_prompt_templates_users_prune_prompt_templates",
+				Columns:    []*schema.Column{PrunePromptTemplatesColumns[8]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
 	// RefreshTokensColumns holds the columns for the "refresh_tokens" table.
 	RefreshTokensColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -737,6 +769,7 @@ var (
 		OrgMembershipsTable,
 		OrganizationsTable,
 		ProjectsTable,
+		PrunePromptTemplatesTable,
 		RefreshTokensTable,
 		ResourcesTable,
 		SseEventsTable,
@@ -771,6 +804,8 @@ func init() {
 	OrgMembershipsTable.ForeignKeys[1].RefTable = UsersTable
 	ProjectsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	ProjectsTable.ForeignKeys[1].RefTable = UsersTable
+	PrunePromptTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
+	PrunePromptTemplatesTable.ForeignKeys[1].RefTable = UsersTable
 	RefreshTokensTable.ForeignKeys[0].RefTable = UsersTable
 	ResourcesTable.ForeignKeys[0].RefTable = ProjectsTable
 	SseEventsTable.ForeignKeys[0].RefTable = JobsTable

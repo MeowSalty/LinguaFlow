@@ -23,6 +23,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/pruneprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
@@ -104,6 +105,7 @@ func checkColumn(t, c string) error {
 			orgmembership.Table:             orgmembership.ValidColumn,
 			organization.Table:              organization.ValidColumn,
 			project.Table:                   project.ValidColumn,
+			pruneprompttemplate.Table:       pruneprompttemplate.ValidColumn,
 			refreshtoken.Table:              refreshtoken.ValidColumn,
 			resource.Table:                  resource.ValidColumn,
 			sseevent.Table:                  sseevent.ValidColumn,

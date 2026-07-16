@@ -20,6 +20,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/pruneprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 )
@@ -216,6 +217,21 @@ func (_u *OrganizationUpdate) AddBootstrapPromptTemplates(v ...*BootstrapPromptT
 	return _u.AddBootstrapPromptTemplateIDs(ids...)
 }
 
+// AddPrunePromptTemplateIDs adds the "prune_prompt_templates" edge to the PrunePromptTemplate entity by IDs.
+func (_u *OrganizationUpdate) AddPrunePromptTemplateIDs(ids ...int) *OrganizationUpdate {
+	_u.mutation.AddPrunePromptTemplateIDs(ids...)
+	return _u
+}
+
+// AddPrunePromptTemplates adds the "prune_prompt_templates" edges to the PrunePromptTemplate entity.
+func (_u *OrganizationUpdate) AddPrunePromptTemplates(v ...*PrunePromptTemplate) *OrganizationUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddPrunePromptTemplateIDs(ids...)
+}
+
 // AddExecutionProfileIDs adds the "execution_profiles" edge to the ExecutionProfile entity by IDs.
 func (_u *OrganizationUpdate) AddExecutionProfileIDs(ids ...int) *OrganizationUpdate {
 	_u.mutation.AddExecutionProfileIDs(ids...)
@@ -396,6 +412,27 @@ func (_u *OrganizationUpdate) RemoveBootstrapPromptTemplates(v ...*BootstrapProm
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveBootstrapPromptTemplateIDs(ids...)
+}
+
+// ClearPrunePromptTemplates clears all "prune_prompt_templates" edges to the PrunePromptTemplate entity.
+func (_u *OrganizationUpdate) ClearPrunePromptTemplates() *OrganizationUpdate {
+	_u.mutation.ClearPrunePromptTemplates()
+	return _u
+}
+
+// RemovePrunePromptTemplateIDs removes the "prune_prompt_templates" edge to PrunePromptTemplate entities by IDs.
+func (_u *OrganizationUpdate) RemovePrunePromptTemplateIDs(ids ...int) *OrganizationUpdate {
+	_u.mutation.RemovePrunePromptTemplateIDs(ids...)
+	return _u
+}
+
+// RemovePrunePromptTemplates removes "prune_prompt_templates" edges to PrunePromptTemplate entities.
+func (_u *OrganizationUpdate) RemovePrunePromptTemplates(v ...*PrunePromptTemplate) *OrganizationUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemovePrunePromptTemplateIDs(ids...)
 }
 
 // ClearExecutionProfiles clears all "execution_profiles" edges to the ExecutionProfile entity.
@@ -839,6 +876,51 @@ func (_u *OrganizationUpdate) sqlSave(ctx context.Context) (_node int, err error
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
+	if _u.mutation.PrunePromptTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.PrunePromptTemplatesTable,
+			Columns: []string{organization.PrunePromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(pruneprompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedPrunePromptTemplatesIDs(); len(nodes) > 0 && !_u.mutation.PrunePromptTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.PrunePromptTemplatesTable,
+			Columns: []string{organization.PrunePromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(pruneprompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.PrunePromptTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.PrunePromptTemplatesTable,
+			Columns: []string{organization.PrunePromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(pruneprompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
 	if _u.mutation.ExecutionProfilesCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
@@ -1128,6 +1210,21 @@ func (_u *OrganizationUpdateOne) AddBootstrapPromptTemplates(v ...*BootstrapProm
 	return _u.AddBootstrapPromptTemplateIDs(ids...)
 }
 
+// AddPrunePromptTemplateIDs adds the "prune_prompt_templates" edge to the PrunePromptTemplate entity by IDs.
+func (_u *OrganizationUpdateOne) AddPrunePromptTemplateIDs(ids ...int) *OrganizationUpdateOne {
+	_u.mutation.AddPrunePromptTemplateIDs(ids...)
+	return _u
+}
+
+// AddPrunePromptTemplates adds the "prune_prompt_templates" edges to the PrunePromptTemplate entity.
+func (_u *OrganizationUpdateOne) AddPrunePromptTemplates(v ...*PrunePromptTemplate) *OrganizationUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddPrunePromptTemplateIDs(ids...)
+}
+
 // AddExecutionProfileIDs adds the "execution_profiles" edge to the ExecutionProfile entity by IDs.
 func (_u *OrganizationUpdateOne) AddExecutionProfileIDs(ids ...int) *OrganizationUpdateOne {
 	_u.mutation.AddExecutionProfileIDs(ids...)
@@ -1308,6 +1405,27 @@ func (_u *OrganizationUpdateOne) RemoveBootstrapPromptTemplates(v ...*BootstrapP
 		ids[i] = v[i].ID
 	}
 	return _u.RemoveBootstrapPromptTemplateIDs(ids...)
+}
+
+// ClearPrunePromptTemplates clears all "prune_prompt_templates" edges to the PrunePromptTemplate entity.
+func (_u *OrganizationUpdateOne) ClearPrunePromptTemplates() *OrganizationUpdateOne {
+	_u.mutation.ClearPrunePromptTemplates()
+	return _u
+}
+
+// RemovePrunePromptTemplateIDs removes the "prune_prompt_templates" edge to PrunePromptTemplate entities by IDs.
+func (_u *OrganizationUpdateOne) RemovePrunePromptTemplateIDs(ids ...int) *OrganizationUpdateOne {
+	_u.mutation.RemovePrunePromptTemplateIDs(ids...)
+	return _u
+}
+
+// RemovePrunePromptTemplates removes "prune_prompt_templates" edges to PrunePromptTemplate entities.
+func (_u *OrganizationUpdateOne) RemovePrunePromptTemplates(v ...*PrunePromptTemplate) *OrganizationUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemovePrunePromptTemplateIDs(ids...)
 }
 
 // ClearExecutionProfiles clears all "execution_profiles" edges to the ExecutionProfile entity.
@@ -1774,6 +1892,51 @@ func (_u *OrganizationUpdateOne) sqlSave(ctx context.Context) (_node *Organizati
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(bootstrapprompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.PrunePromptTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.PrunePromptTemplatesTable,
+			Columns: []string{organization.PrunePromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(pruneprompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedPrunePromptTemplatesIDs(); len(nodes) > 0 && !_u.mutation.PrunePromptTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.PrunePromptTemplatesTable,
+			Columns: []string{organization.PrunePromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(pruneprompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.PrunePromptTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   organization.PrunePromptTemplatesTable,
+			Columns: []string{organization.PrunePromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(pruneprompttemplate.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
