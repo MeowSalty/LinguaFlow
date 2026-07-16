@@ -6,11 +6,16 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
@@ -21,15 +26,56 @@ var (
 	ErrPruneParseFailed   = errors.New("prune: parse response failed")
 )
 
+// PruneDiagnostics 携带 Preview 调用过程中的诊断信息（与 SSE batch 事件对齐）。
+type PruneDiagnostics struct {
+	BackendName      string   `json:"backend_name,omitempty"`
+	TemplateName     string   `json:"template_name,omitempty"`
+	DurationMs       int      `json:"duration_ms,omitempty"`
+	PromptTokens     int      `json:"prompt_tokens,omitempty"`
+	CompletionTokens int      `json:"completion_tokens,omitempty"`
+	SystemPrompt     string   `json:"system_prompt,omitempty"`
+	UserMessage      string   `json:"user_message,omitempty"`
+	SystemTruncated  bool     `json:"system_truncated,omitempty"`
+	UserTruncated    bool     `json:"user_truncated,omitempty"`
+	SystemLength     int      `json:"system_length,omitempty"`
+	UserLength       int      `json:"user_length,omitempty"`
+	ReceivedContent  string   `json:"received_content,omitempty"`
+	RecvTruncated    bool     `json:"received_truncated,omitempty"`
+	RecvLength       int      `json:"received_length,omitempty"`
+	EntryCount       int      `json:"entry_count,omitempty"`
+	ParsedCount      int      `json:"parsed_count,omitempty"`
+	RepairedOps      []string `json:"repaired_ops,omitempty"`
+	ErrorType        string   `json:"error_type,omitempty"`
+	ErrorMessage     string   `json:"error_message,omitempty"`
+	HTTPStatus       int      `json:"http_status,omitempty"`
+}
+
+// PruneError 包装 sentinel 错误并携带诊断信息，使 handler 可在错误响应中返回收发内容。
+type PruneError struct {
+	Sentinel    error
+	Diagnostics PruneDiagnostics
+}
+
+func (e *PruneError) Error() string {
+	if e.Sentinel != nil {
+		return e.Sentinel.Error()
+	}
+	return "prune error"
+}
+
+func (e *PruneError) Unwrap() error { return e.Sentinel }
+
 // PruneSuggestion 是 Preview 返回的单条精简建议。
 type PruneSuggestion struct {
-	EntryID   int    `json:"entry_id"`
-	Action    string `json:"action"` // "delete" | "update"
-	Source    string `json:"source"`
-	OldTarget string `json:"old_target"`
-	NewTarget string `json:"new_target,omitempty"`
-	OldNotes  string `json:"old_notes"`
-	NewNotes  string `json:"new_notes,omitempty"`
+	EntryID       int    `json:"entry_id"`
+	Action        string `json:"action"` // "delete" | "update"
+	Source        string `json:"source"`
+	OldTarget     string `json:"old_target"`
+	NewTarget     string `json:"new_target"`
+	OldNotes      string `json:"old_notes"`
+	NewNotes      string `json:"new_notes"`
+	TargetChanged bool   `json:"target_changed"`
+	NotesChanged  bool   `json:"notes_changed"`
 }
 
 // PrunePreview 是 Preview 的返回结构。
@@ -39,6 +85,7 @@ type PrunePreview struct {
 	ToDelete    int               `json:"to_delete"`
 	ToUpdate    int               `json:"to_update"`
 	ToKeep      int               `json:"to_keep"`
+	Diagnostics PruneDiagnostics  `json:"diagnostics"`
 }
 
 // PruneChange 是 Apply 请求中的单条变更。
@@ -61,6 +108,7 @@ type GlossaryPruneService struct {
 	client         *ent.Client
 	projects       *ProjectService
 	backends       *BackendService
+	glossary       *GlossaryService
 	pruneTemplates *PrunePromptTemplateService
 	limiterPool    *backend.LimiterPool
 	logger         *slog.Logger
@@ -71,6 +119,7 @@ func NewGlossaryPruneService(
 	client *ent.Client,
 	projects *ProjectService,
 	backends *BackendService,
+	glossary *GlossaryService,
 	pruneTemplates *PrunePromptTemplateService,
 	limiterPool *backend.LimiterPool,
 	logger *slog.Logger,
@@ -82,6 +131,7 @@ func NewGlossaryPruneService(
 		client:         client,
 		projects:       projects,
 		backends:       backends,
+		glossary:       glossary,
 		pruneTemplates: pruneTemplates,
 		limiterPool:    limiterPool,
 		logger:         logger,
@@ -103,6 +153,37 @@ func defaultPruneRetryPolicy() backend.RetryPolicy {
 		Backoff:     2000,
 		Jitter:      true,
 	}
+}
+
+// validateBackendForProject 检查后端对项目是否可访问（参照 JobService.validateBackendAccess）。
+func (s *GlossaryPruneService) validateBackendForProject(ctx context.Context, projectRow *ent.Project, b *BackendRecord) error {
+	if projectRow.OwnerUserID != nil {
+		if b.Scope == ScopeUser && b.OwnerUserID != nil && *b.OwnerUserID == *projectRow.OwnerUserID {
+			return nil
+		}
+		if b.Scope == ScopeOrg && b.OwnerOrgID != nil && s.userBelongsToOrg(ctx, *projectRow.OwnerUserID, *b.OwnerOrgID) {
+			return nil
+		}
+		return ErrForbidden
+	}
+	if projectRow.OwnerOrgID != nil {
+		if b.Scope == ScopeOrg && b.OwnerOrgID != nil && *b.OwnerOrgID == *projectRow.OwnerOrgID {
+			return nil
+		}
+		return ErrForbidden
+	}
+	return ErrProjectOwnerConflict
+}
+
+// userBelongsToOrg 检查用户是否属于指定组织。
+func (s *GlossaryPruneService) userBelongsToOrg(ctx context.Context, userID, orgID int) bool {
+	count, err := s.client.OrgMembership.Query().
+		Where(
+			orgmembership.HasOrganizationWith(organization.IDEQ(orgID)),
+			orgmembership.HasUserWith(user.IDEQ(userID)),
+		).
+		Count(ctx)
+	return err == nil && count > 0
 }
 
 // Preview 调用 LLM 分析现有术语表，返回精简建议（不修改数据）。
@@ -159,6 +240,9 @@ func (s *GlossaryPruneService) Preview(ctx context.Context, actorUserID, project
 	if err != nil {
 		return nil, err
 	}
+	if err := s.validateBackendForProject(ctx, projectRow, backendRecord); err != nil {
+		return nil, err
+	}
 
 	b, err := backend.Build(backend.Config{
 		Name:    backendRecord.Name,
@@ -176,12 +260,15 @@ func (s *GlossaryPruneService) Preview(ctx context.Context, actorUserID, project
 		b = backend.NewRateLimitedBackend(b, limiter)
 	}
 
+	start := time.Now()
+
 	s.logger.Info("prune preview started",
 		"project_id", projectID,
 		"entry_count", len(entries),
 		"backend_name", backendRecord.Name,
 		"template_name", tmpl.Name)
 
+	// system 和 user 分开输出用于诊断（与 SSE 一致：sent_content 仅含 user）
 	req := backend.Request{
 		System:         sys,
 		User:           usr,
@@ -206,7 +293,11 @@ func (s *GlossaryPruneService) Preview(ctx context.Context, actorUserID, project
 		} else {
 			s.logger.Warn("prune LLM call failed", "backend_name", backendRecord.Name, "err", callErr)
 		}
-		return nil, fmt.Errorf("%w: %w", ErrPruneLLMCallFailed, callErr)
+		diag := s.buildDiagnostics(backendRecord, tmpl, start, sys, usr, "", 0, nil)
+		diag.ErrorType = "backend_error"
+		diag.ErrorMessage = callErr.Error()
+		diag.HTTPStatus = extractHTTPStatus(callErr)
+		return nil, &PruneError{Sentinel: fmt.Errorf("%w: %w", ErrPruneLLMCallFailed, callErr), Diagnostics: diag}
 	}
 
 	repairOpts := defaultPruneRepairOptions()
@@ -216,13 +307,20 @@ func (s *GlossaryPruneService) Preview(ctx context.Context, actorUserID, project
 			"resp_len", len(resp.Text),
 			"resp_head", headSnippetLocal(resp.Text, 200),
 			"repaired", parseRepaired)
-		return nil, fmt.Errorf("%w: %w", ErrPruneParseFailed, perr)
+		diag := s.buildDiagnostics(backendRecord, tmpl, start, sys, usr, resp.Text, resp.Usage.CompletionTokens, parseRepaired)
+		diag.PromptTokens = int(resp.Usage.PromptTokens)
+		diag.ErrorType = "parse_error"
+		diag.ErrorMessage = perr.Error()
+		return nil, &PruneError{Sentinel: fmt.Errorf("%w: %w", ErrPruneParseFailed, perr), Diagnostics: diag}
 	}
 	if len(parseRepaired) > 0 {
 		s.logger.Info("prune response repaired", "ops", parseRepaired)
 	}
 
 	preview := computePruneDiff(entries, refined)
+	preview.Diagnostics = s.buildDiagnostics(backendRecord, tmpl, start, sys, usr, resp.Text, resp.Usage.CompletionTokens, parseRepaired)
+	preview.Diagnostics.PromptTokens = int(resp.Usage.PromptTokens)
+	preview.Diagnostics.ParsedCount = len(refined)
 
 	s.logger.Debug("prune preview ok",
 		"prompt_tokens", resp.Usage.PromptTokens,
@@ -235,6 +333,40 @@ func (s *GlossaryPruneService) Preview(ctx context.Context, actorUserID, project
 	return preview, nil
 }
 
+// buildDiagnostics 构建 PruneDiagnostics，复用 SSE 的截断逻辑。
+func (s *GlossaryPruneService) buildDiagnostics(backendRecord *BackendRecord, tmpl *ent.PrunePromptTemplate, start time.Time, system, user, received string, completionTokens int64, repaired []string) PruneDiagnostics {
+	sysTrunc, sysTruncated, sysLen := progress.TruncateSSEContent(system)
+	usrTrunc, usrTruncated, usrLen := progress.TruncateSSEContent(user)
+	recvTrunc, recvTruncated, recvLen := progress.TruncateSSEContent(received)
+	return PruneDiagnostics{
+		BackendName:      backendRecord.Name,
+		TemplateName:     tmpl.Name,
+		DurationMs:       int(time.Since(start).Milliseconds()),
+		CompletionTokens: int(completionTokens),
+		SystemPrompt:     sysTrunc,
+		UserMessage:      usrTrunc,
+		SystemTruncated:  sysTruncated,
+		UserTruncated:    usrTruncated,
+		SystemLength:     sysLen,
+		UserLength:       usrLen,
+		ReceivedContent:  recvTrunc,
+		RecvTruncated:    recvTruncated,
+		RecvLength:       recvLen,
+		RepairedOps:      repaired,
+	}
+}
+
+// extractHTTPStatus 从错误中提取 HTTP 状态码（若可提取）。
+func extractHTTPStatus(err error) int {
+	if hsErr, ok := err.(backend.HTTPStatusError); ok {
+		return hsErr.HTTPStatus()
+	}
+	if code, ok := backend.ExtractHTTPStatusCode(err.Error()); ok {
+		return code
+	}
+	return 0
+}
+
 // computePruneDiff 计算现有术语表与 LLM 精炼结果之间的差异。
 func computePruneDiff(existing []*ent.GlossaryEntry, refined []prompt.BootstrapEntry) *PrunePreview {
 	type refinedEntry struct {
@@ -242,12 +374,21 @@ func computePruneDiff(existing []*ent.GlossaryEntry, refined []prompt.BootstrapE
 		Notes  string
 	}
 	refinedIdx := make(map[string]refinedEntry, len(refined))
+	var collisions []string
 	for _, r := range refined {
 		key := strings.ToLower(strings.TrimSpace(r.Source))
 		if key == "" {
 			continue
 		}
+		if _, exists := refinedIdx[key]; exists {
+			collisions = append(collisions, r.Source)
+			continue
+		}
 		refinedIdx[key] = refinedEntry{Target: r.Target, Notes: r.Notes}
+	}
+	if len(collisions) > 0 {
+		slog.Warn("prune diff: duplicate refined sources detected (case-insensitive), keeping first occurrence",
+			"collisions", collisions)
 	}
 
 	preview := &PrunePreview{
@@ -260,24 +401,30 @@ func computePruneDiff(existing []*ent.GlossaryEntry, refined []prompt.BootstrapE
 		r, ok := refinedIdx[key]
 		if !ok {
 			preview.Suggestions = append(preview.Suggestions, PruneSuggestion{
-				EntryID:   e.ID,
-				Action:    "delete",
-				Source:    e.Source,
-				OldTarget: e.Target,
-				OldNotes:  e.Notes,
+				EntryID:       e.ID,
+				Action:        "delete",
+				Source:        e.Source,
+				OldTarget:     e.Target,
+				OldNotes:      e.Notes,
+				TargetChanged: false,
+				NotesChanged:  false,
 			})
 			preview.ToDelete++
 			continue
 		}
-		if r.Target != e.Target || r.Notes != e.Notes {
+		targetChanged := r.Target != e.Target
+		notesChanged := r.Notes != e.Notes
+		if targetChanged || notesChanged {
 			preview.Suggestions = append(preview.Suggestions, PruneSuggestion{
-				EntryID:   e.ID,
-				Action:    "update",
-				Source:    e.Source,
-				OldTarget: e.Target,
-				NewTarget: r.Target,
-				OldNotes:  e.Notes,
-				NewNotes:  r.Notes,
+				EntryID:       e.ID,
+				Action:        "update",
+				Source:        e.Source,
+				OldTarget:     e.Target,
+				NewTarget:     r.Target,
+				OldNotes:      e.Notes,
+				NewNotes:      r.Notes,
+				TargetChanged: targetChanged,
+				NotesChanged:  notesChanged,
 			})
 			preview.ToUpdate++
 		} else {
@@ -305,7 +452,7 @@ func (s *GlossaryPruneService) Apply(ctx context.Context, actorUserID, projectID
 			}
 			result.Deleted++
 		case "update":
-			if err := s.applyUpdate(ctx, projectID, ch.EntryID, ch.Target, ch.Notes); err != nil {
+			if err := s.applyUpdate(ctx, actorUserID, projectID, ch.EntryID, ch.Target, ch.Notes); err != nil {
 				s.logger.Warn("prune apply update failed", "entry_id", ch.EntryID, "action", "update", "err", err)
 				result.Failed++
 				continue
@@ -327,13 +474,24 @@ func (s *GlossaryPruneService) Apply(ctx context.Context, actorUserID, projectID
 
 // applyDelete 删除指定条目（含关联 SyncTask），不校验权限（已在 Apply 中完成）。
 func (s *GlossaryPruneService) applyDelete(ctx context.Context, projectID, entryID int) error {
+	// 先验证条目属于该项目，避免跨项目删除 SyncTask
+	entry, err := s.client.GlossaryEntry.Query().
+		Where(glossaryentry.IDEQ(entryID), glossaryentry.ProjectIDEQ(projectID)).
+		Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return ErrGlossaryEntryNotFound
+		}
+		return err
+	}
+	// 删除关联的 SyncTask（带 entry_id 限定）
 	if _, err := s.client.SyncTask.Delete().
-		Where(synctask.EntryIDEQ(entryID)).
+		Where(synctask.EntryIDEQ(entry.ID)).
 		Exec(ctx); err != nil {
-		return fmt.Errorf("delete sync tasks for entry %d: %w", entryID, err)
+		return fmt.Errorf("delete sync tasks for entry %d: %w", entry.ID, err)
 	}
 	deleted, err := s.client.GlossaryEntry.Delete().
-		Where(glossaryentry.IDEQ(entryID), glossaryentry.ProjectIDEQ(projectID)).
+		Where(glossaryentry.IDEQ(entry.ID), glossaryentry.ProjectIDEQ(projectID)).
 		Exec(ctx)
 	if err != nil {
 		return err
@@ -345,7 +503,9 @@ func (s *GlossaryPruneService) applyDelete(ctx context.Context, projectID, entry
 }
 
 // applyUpdate 更新指定条目的 target/notes（保留 source 和 case_sensitive）。
-func (s *GlossaryPruneService) applyUpdate(ctx context.Context, projectID, entryID int, target, notes string) error {
+// 复用 GlossaryService.UpdateEntry 以共享标准化逻辑与 target_changed 信号。
+func (s *GlossaryPruneService) applyUpdate(ctx context.Context, actorUserID, projectID, entryID int, target, notes string) error {
+	// 先加载条目获取 source 和 case_sensitive（不修改这两个字段）
 	entry, err := s.client.GlossaryEntry.Query().
 		Where(glossaryentry.IDEQ(entryID), glossaryentry.ProjectIDEQ(projectID)).
 		Only(ctx)
@@ -355,17 +515,13 @@ func (s *GlossaryPruneService) applyUpdate(ctx context.Context, projectID, entry
 		}
 		return err
 	}
-	_, err = s.client.GlossaryEntry.UpdateOneID(entry.ID).
-		SetTarget(strings.TrimSpace(target)).
-		SetNotes(strings.TrimSpace(notes)).
-		Save(ctx)
-	if err != nil {
-		if ent.IsConstraintError(err) {
-			return ErrGlossaryEntryExists
-		}
-		return err
-	}
-	return nil
+	_, err = s.glossary.UpdateEntry(ctx, actorUserID, projectID, entryID, GlossaryEntryInput{
+		Source:        entry.Source,
+		Target:        target,
+		CaseSensitive: entry.CaseSensitive,
+		Notes:         notes,
+	})
+	return err
 }
 
 // headSnippetLocal 截取字符串前 n 个字符（与 pipeline.headSnippet 同逻辑）。

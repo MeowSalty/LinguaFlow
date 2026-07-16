@@ -44,7 +44,7 @@ func newTestServer(t *testing.T) (*Server, *ent.Client, *ent.User) {
 	projects := service.NewProjectService(client, users)
 	glossarySvc := service.NewGlossaryService(client, projects)
 	prunePromptTemplateSvc := service.NewPrunePromptTemplateService(client)
-	glossaryPruneSvc := service.NewGlossaryPruneService(client, projects, service.NewBackendService(client, users, nil), prunePromptTemplateSvc, nil, logger)
+	glossaryPruneSvc := service.NewGlossaryPruneService(client, projects, service.NewBackendService(client, users, nil), glossarySvc, prunePromptTemplateSvc, nil, logger)
 
 	// 创建测试用户
 	u, err := client.User.Create().
@@ -278,10 +278,4 @@ func TestHandler_ApplyGlossaryPrune_PartialFailure(t *testing.T) {
 	if resp.Deleted != 1 || resp.Failed != 1 {
 		t.Errorf("result mismatch: %+v", resp)
 	}
-}
-
-// ---- 辅助 ----
-
-func itoa(n int) string {
-	return strconv.Itoa(n)
 }

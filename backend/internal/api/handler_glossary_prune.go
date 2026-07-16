@@ -28,6 +28,23 @@ func (s *Server) handlePreviewGlossaryPrune(w http.ResponseWriter, r *http.Reque
 
 	preview, err := s.glossaryPruneSvc.Preview(r.Context(), authUser.User.ID, projectId, req.BackendId, templateID)
 	if err != nil {
+		// LLM 调用失败 / 解析失败 → 200 + 空建议 + diagnostics
+		var pruneErr *service.PruneError
+		if errors.As(err, &pruneErr) {
+			s.logger.Warn("prune preview completed with error",
+				slog.String("error_type", pruneErr.Diagnostics.ErrorType),
+				slog.String("error_message", pruneErr.Diagnostics.ErrorMessage))
+			writeJSON(w, http.StatusOK, GlossaryPrunePreview{
+				Suggestions: []GlossaryPruneSuggestion{},
+				Total:       0,
+				ToDelete:    0,
+				ToUpdate:    0,
+				ToKeep:      0,
+				Diagnostics: convertPruneDiagnostics(pruneErr.Diagnostics),
+			})
+			return
+		}
+		// 其他错误（认证、权限、项目不存在等）→ 标准 HTTP 错误
 		s.writeGlossaryPruneServiceError(w, r, err)
 		return
 	}
@@ -80,17 +97,15 @@ func convertPrunePreview(p *service.PrunePreview) GlossaryPrunePreview {
 	suggestions := make([]GlossaryPruneSuggestion, 0, len(p.Suggestions))
 	for _, s := range p.Suggestions {
 		sug := GlossaryPruneSuggestion{
-			Action:    GlossaryPruneSuggestionAction(s.Action),
-			EntryId:   s.EntryID,
-			Source:    s.Source,
-			OldTarget: s.OldTarget,
-			OldNotes:  s.OldNotes,
-		}
-		if s.NewTarget != "" {
-			sug.NewTarget = &s.NewTarget
-		}
-		if s.NewNotes != "" {
-			sug.NewNotes = &s.NewNotes
+			Action:        GlossaryPruneSuggestionAction(s.Action),
+			EntryId:       s.EntryID,
+			Source:        s.Source,
+			OldTarget:     s.OldTarget,
+			OldNotes:      s.OldNotes,
+			NewTarget:     s.NewTarget,
+			NewNotes:      s.NewNotes,
+			TargetChanged: s.TargetChanged,
+			NotesChanged:  s.NotesChanged,
 		}
 		suggestions = append(suggestions, sug)
 	}
@@ -100,10 +115,78 @@ func convertPrunePreview(p *service.PrunePreview) GlossaryPrunePreview {
 		ToDelete:    p.ToDelete,
 		ToUpdate:    p.ToUpdate,
 		ToKeep:      p.ToKeep,
+		Diagnostics: convertPruneDiagnostics(p.Diagnostics),
 	}
 }
 
-// writeGlossaryPruneServiceError 将 GlossaryPruneService 错误映射为 HTTP 状态码。
+// convertPruneDiagnostics 将 service.PruneDiagnostics 转换为 OpenAPI 生成的响应类型。
+func convertPruneDiagnostics(d service.PruneDiagnostics) GlossaryPruneDiagnostics {
+	diag := GlossaryPruneDiagnostics{}
+	if d.BackendName != "" {
+		diag.BackendName = &d.BackendName
+	}
+	if d.TemplateName != "" {
+		diag.TemplateName = &d.TemplateName
+	}
+	if d.DurationMs > 0 {
+		diag.DurationMs = &d.DurationMs
+	}
+	if d.PromptTokens > 0 {
+		diag.PromptTokens = &d.PromptTokens
+	}
+	if d.CompletionTokens > 0 {
+		diag.CompletionTokens = &d.CompletionTokens
+	}
+	if d.SystemPrompt != "" {
+		diag.SystemPrompt = &d.SystemPrompt
+	}
+	if d.UserMessage != "" {
+		diag.UserMessage = &d.UserMessage
+	}
+	if d.SystemTruncated {
+		diag.SystemTruncated = &d.SystemTruncated
+	}
+	if d.UserTruncated {
+		diag.UserTruncated = &d.UserTruncated
+	}
+	if d.SystemLength > 0 {
+		diag.SystemLength = &d.SystemLength
+	}
+	if d.UserLength > 0 {
+		diag.UserLength = &d.UserLength
+	}
+	if d.ReceivedContent != "" {
+		diag.ReceivedContent = &d.ReceivedContent
+	}
+	if d.RecvTruncated {
+		diag.ReceivedTruncated = &d.RecvTruncated
+	}
+	if d.RecvLength > 0 {
+		diag.ReceivedLength = &d.RecvLength
+	}
+	if d.EntryCount > 0 {
+		diag.EntryCount = &d.EntryCount
+	}
+	if d.ParsedCount > 0 {
+		diag.ParsedCount = &d.ParsedCount
+	}
+	if len(d.RepairedOps) > 0 {
+		diag.RepairedOps = &d.RepairedOps
+	}
+	if d.ErrorType != "" {
+		diag.ErrorType = &d.ErrorType
+	}
+	if d.ErrorMessage != "" {
+		diag.ErrorMessage = &d.ErrorMessage
+	}
+	if d.HTTPStatus > 0 {
+		diag.HttpStatus = &d.HTTPStatus
+	}
+	return diag
+}
+
+// writeGlossaryPruneServiceError 将 GlossaryPruneService 非 LLM 错误映射为 HTTP 状态码。
+// LLM 调用失败 / 解析失败已在 handlePreviewGlossaryPrune 中以 200 + diagnostics 返回。
 func (s *Server) writeGlossaryPruneServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, service.ErrForbidden):
@@ -122,12 +205,6 @@ func (s *Server) writeGlossaryPruneServiceError(w http.ResponseWriter, r *http.R
 		s.writeProblem(w, r, 499, "client_closed", "客户端已断开连接")
 	case errors.Is(err, context.DeadlineExceeded):
 		s.writeProblem(w, r, http.StatusGatewayTimeout, "gateway_timeout", "请求超时")
-	case errors.Is(err, service.ErrPruneLLMCallFailed):
-		s.writeProblem(w, r, http.StatusBadGateway, "llm_error", "LLM 调用失败",
-			slog.String("error", err.Error()))
-	case errors.Is(err, service.ErrPruneParseFailed):
-		s.writeProblem(w, r, http.StatusBadGateway, "parse_error", "LLM 响应解析失败",
-			slog.String("error", err.Error()))
 	default:
 		s.writeProblem(w, r, http.StatusInternalServerError, "internal_error", "服务器内部错误",
 			slog.String("error", err.Error()))

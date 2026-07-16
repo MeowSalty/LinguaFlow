@@ -132,7 +132,7 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 	s.statsSvc = service.NewStatsService(client, s.projectSvc)
 	s.auditSvc = service.NewAuditService(client, s.userService, s.projectSvc)
 	s.glossarySyncSvc = service.NewGlossarySyncService(client, s.glossarySvc, s.projectSvc, s.auditSvc, logger)
-	s.glossaryPruneSvc = service.NewGlossaryPruneService(client, s.projectSvc, s.backendSvc, s.prunePromptTemplateSvc, limiterPool, logger)
+	s.glossaryPruneSvc = service.NewGlossaryPruneService(client, s.projectSvc, s.backendSvc, s.glossarySvc, s.prunePromptTemplateSvc, limiterPool, logger)
 	s.resourceSvc = service.NewResourceService(client, s.projectSvc, jobStore)
 
 	// 创建 ResourceMutex

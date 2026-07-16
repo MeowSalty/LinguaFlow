@@ -6,7 +6,6 @@ import (
 	"errors"
 	"io"
 	"log/slog"
-	"strings"
 	"testing"
 
 	"entgo.io/ent/dialect"
@@ -165,7 +164,8 @@ func newTestPruneService(t *testing.T) (*GlossaryPruneService, *ent.Client) {
 	client := testClient(t)
 	users := NewUserService(client, NewAuthService(client, AuthConfig{}, NewAdminService(client)))
 	projects := NewProjectService(client, users)
-	svc := NewGlossaryPruneService(client, projects, NewBackendService(client, users, nil), NewPrunePromptTemplateService(client), nil, discardLogger())
+	glossarySvc := NewGlossaryService(client, projects)
+	svc := NewGlossaryPruneService(client, projects, NewBackendService(client, users, nil), glossarySvc, NewPrunePromptTemplateService(client), nil, discardLogger())
 	return svc, client
 }
 
@@ -321,9 +321,3 @@ func createTestProject(t *testing.T, client *ent.Client, name string, ownerID in
 	}
 	return p
 }
-
-// 确保 headSnippetLocal 编译可用（间接验证）。
-var _ = headSnippetLocal
-
-// 确保 strings 被引用（用于 diff 测试中的 string 比较）。
-var _ = strings.TrimSpace
