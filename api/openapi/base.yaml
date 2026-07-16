@@ -310,6 +310,8 @@ components:
       $ref: './components/schemas/glossary.yaml#/GlossaryPruneSuggestion'
     GlossaryPrunePreview:
       $ref: './components/schemas/glossary.yaml#/GlossaryPrunePreview'
+    GlossaryPruneDiagnostics:
+      $ref: './components/schemas/glossary.yaml#/GlossaryPruneDiagnostics'
     GlossaryPruneApplyRequest:
       $ref: './components/schemas/glossary.yaml#/GlossaryPruneApplyRequest'
     GlossaryPruneApplyResult:
