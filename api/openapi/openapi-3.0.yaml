@@ -2619,23 +2619,22 @@ components:
             按章节分组键选择 segments（仅适用于 EPUB 等多章节资源）。
             传入 meta.epub_file 值（如 ["OEBPS/chapter1.xhtml"]），后端自动解析为对应的 segment_ids。
             与 segment_ids 互斥，优先级：segment_group_keys > segment_ids > resource_ids。
+        segment_filter:
+          type: string
+          enum:
+            - pending_only
+            - skip_approved
+            - all
+          description: |
+            覆盖执行模板中翻译轮次的段落过滤策略（仅对翻译轮次生效）。
+            - pending_only: 仅处理 pending 和 rejected 状态的段落
+            - skip_approved: 处理除 approved 外的所有状态
+            - all: 处理所有状态的段落
+            省略时使用执行模板中的配置。
         auto_approve:
           type: boolean
           default: false
           description: 翻译完成后是否自动审批通过所有段落
-        overwrite_mode:
-          type: string
-          enum:
-            - skip_translated
-            - overwrite_unapproved
-            - overwrite_all
-          default: skip_translated
-          description: |
-            段落覆盖策略。
-            - skip_translated: 跳过已有翻译的段落（仅翻译 pending/rejected）
-            - overwrite_unapproved: 覆盖所有非 approved 的段落（包括已翻译、已编辑和已拒绝的）
-            - overwrite_all: 覆盖所有段落，包括已审核通过的
-            对 segment_ids 选择方式无效（用户已精确指定段落）。
         execution_config:
           type: object
           additionalProperties: true
@@ -3846,6 +3845,21 @@ components:
         backend_id:
           type: integer
           description: 注音对齐使用的后端 ID；为空或 0 时使用翻译主后端
+    TranslateSegmentFilterConfig:
+      type: object
+      description: 翻译轮次段落过滤配置，决定处理哪些翻译状态的段落。
+      properties:
+        status_filter:
+          type: string
+          enum:
+            - pending_only
+            - skip_approved
+            - all
+          default: pending_only
+          description: |
+            - pending_only: 仅处理 pending 和 rejected 状态的段落（默认，等同旧 skip_translated）
+            - skip_approved: 处理除 approved 外的所有状态（等同旧 overwrite_unapproved）
+            - all: 处理所有状态的段落（等同旧 overwrite_all）
     RetryConfig:
       type: object
       properties:
@@ -3883,6 +3897,9 @@ components:
           exclusiveMinimum: true
           maximum: 1
           exclusiveMaximum: true
+        segment_filter:
+          $ref: '#/components/schemas/TranslateSegmentFilterConfig'
+          description: 段落过滤配置；省略时默认 pending_only
         retry:
           $ref: '#/components/schemas/RetryConfig'
     ExtractRoundConfig:

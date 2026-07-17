@@ -244,6 +244,9 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 	completedCount := 0
 	var lastResult pipeline.TranslateResult
 
+	// 段落来源标记：仅 segment_ids 手动选择时跳过默认过滤
+	isExplicitSelection := snapshot.ExplicitSegmentSelection
+
 	// 轮次循环
 	for roundIdx := range snapshot.Rounds {
 		if ctx.Err() != nil {
@@ -259,6 +262,19 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 			_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, loadErr)
 			return nil
 		}
+
+		// 翻译轮次按 SegmentFilter 过滤
+		// 显式选择段落且未被任务级覆盖时跳过过滤，尊重用户选择
+		if round.Mode == "translate" && round.Translate != nil {
+			filter := round.Translate.SegmentFilter
+			if isExplicitSelection && (filter == nil || !filter.Overridden) {
+				r.logger.Debug("explicit segment selection, skipping default filter",
+					"job_id", job.ID, "resource_id", res.ID)
+			} else {
+				selectedRows = applyTranslateSegmentFilter(selectedRows, filter)
+			}
+		}
+
 		if len(selectedRows) == 0 {
 			break
 		}
@@ -530,6 +546,40 @@ func firstNonEmpty(values ...string) string {
 		}
 	}
 	return ""
+}
+
+// applyTranslateSegmentFilter 按翻译状态过滤段落。
+// 仅翻译轮次使用；抽取轮次不过滤。
+func applyTranslateSegmentFilter(segments []*ent.Segment, filter *service.SegmentFilterSnapshot) []*ent.Segment {
+	if filter == nil {
+		filter = &service.SegmentFilterSnapshot{StatusFilter: "pending_only"}
+	}
+
+	var allowed map[segment.Status]bool
+	switch filter.StatusFilter {
+	case "all":
+		return segments
+	case "skip_approved":
+		allowed = map[segment.Status]bool{
+			service.SegmentStatusPending:    true,
+			service.SegmentStatusRejected:   true,
+			service.SegmentStatusTranslated: true,
+			service.SegmentStatusEdited:     true,
+		}
+	default: // "pending_only"
+		allowed = map[segment.Status]bool{
+			service.SegmentStatusPending:  true,
+			service.SegmentStatusRejected: true,
+		}
+	}
+
+	result := make([]*ent.Segment, 0, len(segments))
+	for _, seg := range segments {
+		if allowed[seg.Status] {
+			result = append(result, seg)
+		}
+	}
+	return result
 }
 
 // resolvePath 将路径解析为绝对路径，相对路径通过 store 转换。
