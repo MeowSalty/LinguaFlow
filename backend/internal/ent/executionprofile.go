@@ -10,14 +10,14 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
-// TranslationProfile is the model entity for the TranslationProfile schema.
-type TranslationProfile struct {
+// ExecutionProfile is the model entity for the ExecutionProfile schema.
+type ExecutionProfile struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID int `json:"id,omitempty"`
@@ -35,16 +35,16 @@ type TranslationProfile struct {
 	OwnerUserID *int `json:"owner_user_id,omitempty"`
 	// OwnerOrgID holds the value of the "owner_org_id" field.
 	OwnerOrgID *int `json:"owner_org_id,omitempty"`
-	// 翻译配置，JSON 内联存储
-	Config schema.TranslationProfileConfigData `json:"config,omitempty"`
+	// 执行策略配置，JSON 内联存储
+	Config schema.ExecutionProfileConfigData `json:"config,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
-	// The values are being populated by the TranslationProfileQuery when eager-loading is set.
-	Edges        TranslationProfileEdges `json:"edges"`
+	// The values are being populated by the ExecutionProfileQuery when eager-loading is set.
+	Edges        ExecutionProfileEdges `json:"edges"`
 	selectValues sql.SelectValues
 }
 
-// TranslationProfileEdges holds the relations/edges for other nodes in the graph.
-type TranslationProfileEdges struct {
+// ExecutionProfileEdges holds the relations/edges for other nodes in the graph.
+type ExecutionProfileEdges struct {
 	// OwnerUser holds the value of the owner_user edge.
 	OwnerUser *User `json:"owner_user,omitempty"`
 	// OwnerOrg holds the value of the owner_org edge.
@@ -56,7 +56,7 @@ type TranslationProfileEdges struct {
 
 // OwnerUserOrErr returns the OwnerUser value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
-func (e TranslationProfileEdges) OwnerUserOrErr() (*User, error) {
+func (e ExecutionProfileEdges) OwnerUserOrErr() (*User, error) {
 	if e.OwnerUser != nil {
 		return e.OwnerUser, nil
 	} else if e.loadedTypes[0] {
@@ -67,7 +67,7 @@ func (e TranslationProfileEdges) OwnerUserOrErr() (*User, error) {
 
 // OwnerOrgOrErr returns the OwnerOrg value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
-func (e TranslationProfileEdges) OwnerOrgOrErr() (*Organization, error) {
+func (e ExecutionProfileEdges) OwnerOrgOrErr() (*Organization, error) {
 	if e.OwnerOrg != nil {
 		return e.OwnerOrg, nil
 	} else if e.loadedTypes[1] {
@@ -77,17 +77,17 @@ func (e TranslationProfileEdges) OwnerOrgOrErr() (*Organization, error) {
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
-func (*TranslationProfile) scanValues(columns []string) ([]any, error) {
+func (*ExecutionProfile) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case translationprofile.FieldConfig:
+		case executionprofile.FieldConfig:
 			values[i] = new([]byte)
-		case translationprofile.FieldID, translationprofile.FieldOwnerUserID, translationprofile.FieldOwnerOrgID:
+		case executionprofile.FieldID, executionprofile.FieldOwnerUserID, executionprofile.FieldOwnerOrgID:
 			values[i] = new(sql.NullInt64)
-		case translationprofile.FieldName, translationprofile.FieldDescription, translationprofile.FieldScope:
+		case executionprofile.FieldName, executionprofile.FieldDescription, executionprofile.FieldScope:
 			values[i] = new(sql.NullString)
-		case translationprofile.FieldCreatedAt, translationprofile.FieldUpdatedAt:
+		case executionprofile.FieldCreatedAt, executionprofile.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -97,64 +97,64 @@ func (*TranslationProfile) scanValues(columns []string) ([]any, error) {
 }
 
 // assignValues assigns the values that were returned from sql.Rows (after scanning)
-// to the TranslationProfile fields.
-func (_m *TranslationProfile) assignValues(columns []string, values []any) error {
+// to the ExecutionProfile fields.
+func (_m *ExecutionProfile) assignValues(columns []string, values []any) error {
 	if m, n := len(values), len(columns); m < n {
 		return fmt.Errorf("mismatch number of scan values: %d != %d", m, n)
 	}
 	for i := range columns {
 		switch columns[i] {
-		case translationprofile.FieldID:
+		case executionprofile.FieldID:
 			value, ok := values[i].(*sql.NullInt64)
 			if !ok {
 				return fmt.Errorf("unexpected type %T for field id", value)
 			}
 			_m.ID = int(value.Int64)
-		case translationprofile.FieldCreatedAt:
+		case executionprofile.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field created_at", values[i])
 			} else if value.Valid {
 				_m.CreatedAt = value.Time
 			}
-		case translationprofile.FieldUpdatedAt:
+		case executionprofile.FieldUpdatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
 			}
-		case translationprofile.FieldName:
+		case executionprofile.FieldName:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field name", values[i])
 			} else if value.Valid {
 				_m.Name = value.String
 			}
-		case translationprofile.FieldDescription:
+		case executionprofile.FieldDescription:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field description", values[i])
 			} else if value.Valid {
 				_m.Description = value.String
 			}
-		case translationprofile.FieldScope:
+		case executionprofile.FieldScope:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field scope", values[i])
 			} else if value.Valid {
 				_m.Scope = value.String
 			}
-		case translationprofile.FieldOwnerUserID:
+		case executionprofile.FieldOwnerUserID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field owner_user_id", values[i])
 			} else if value.Valid {
 				_m.OwnerUserID = new(int)
 				*_m.OwnerUserID = int(value.Int64)
 			}
-		case translationprofile.FieldOwnerOrgID:
+		case executionprofile.FieldOwnerOrgID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field owner_org_id", values[i])
 			} else if value.Valid {
 				_m.OwnerOrgID = new(int)
 				*_m.OwnerOrgID = int(value.Int64)
 			}
-		case translationprofile.FieldConfig:
+		case executionprofile.FieldConfig:
 			if value, ok := values[i].(*[]byte); !ok {
 				return fmt.Errorf("unexpected type %T for field config", values[i])
 			} else if value != nil && len(*value) > 0 {
@@ -169,44 +169,44 @@ func (_m *TranslationProfile) assignValues(columns []string, values []any) error
 	return nil
 }
 
-// Value returns the ent.Value that was dynamically selected and assigned to the TranslationProfile.
+// Value returns the ent.Value that was dynamically selected and assigned to the ExecutionProfile.
 // This includes values selected through modifiers, order, etc.
-func (_m *TranslationProfile) Value(name string) (ent.Value, error) {
+func (_m *ExecutionProfile) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
 }
 
-// QueryOwnerUser queries the "owner_user" edge of the TranslationProfile entity.
-func (_m *TranslationProfile) QueryOwnerUser() *UserQuery {
-	return NewTranslationProfileClient(_m.config).QueryOwnerUser(_m)
+// QueryOwnerUser queries the "owner_user" edge of the ExecutionProfile entity.
+func (_m *ExecutionProfile) QueryOwnerUser() *UserQuery {
+	return NewExecutionProfileClient(_m.config).QueryOwnerUser(_m)
 }
 
-// QueryOwnerOrg queries the "owner_org" edge of the TranslationProfile entity.
-func (_m *TranslationProfile) QueryOwnerOrg() *OrganizationQuery {
-	return NewTranslationProfileClient(_m.config).QueryOwnerOrg(_m)
+// QueryOwnerOrg queries the "owner_org" edge of the ExecutionProfile entity.
+func (_m *ExecutionProfile) QueryOwnerOrg() *OrganizationQuery {
+	return NewExecutionProfileClient(_m.config).QueryOwnerOrg(_m)
 }
 
-// Update returns a builder for updating this TranslationProfile.
-// Note that you need to call TranslationProfile.Unwrap() before calling this method if this TranslationProfile
+// Update returns a builder for updating this ExecutionProfile.
+// Note that you need to call ExecutionProfile.Unwrap() before calling this method if this ExecutionProfile
 // was returned from a transaction, and the transaction was committed or rolled back.
-func (_m *TranslationProfile) Update() *TranslationProfileUpdateOne {
-	return NewTranslationProfileClient(_m.config).UpdateOne(_m)
+func (_m *ExecutionProfile) Update() *ExecutionProfileUpdateOne {
+	return NewExecutionProfileClient(_m.config).UpdateOne(_m)
 }
 
-// Unwrap unwraps the TranslationProfile entity that was returned from a transaction after it was closed,
+// Unwrap unwraps the ExecutionProfile entity that was returned from a transaction after it was closed,
 // so that all future queries will be executed through the driver which created the transaction.
-func (_m *TranslationProfile) Unwrap() *TranslationProfile {
+func (_m *ExecutionProfile) Unwrap() *ExecutionProfile {
 	_tx, ok := _m.config.driver.(*txDriver)
 	if !ok {
-		panic("ent: TranslationProfile is not a transactional entity")
+		panic("ent: ExecutionProfile is not a transactional entity")
 	}
 	_m.config.driver = _tx.drv
 	return _m
 }
 
 // String implements the fmt.Stringer.
-func (_m *TranslationProfile) String() string {
+func (_m *ExecutionProfile) String() string {
 	var builder strings.Builder
-	builder.WriteString("TranslationProfile(")
+	builder.WriteString("ExecutionProfile(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))
@@ -239,5 +239,5 @@ func (_m *TranslationProfile) String() string {
 	return builder.String()
 }
 
-// TranslationProfiles is a parsable slice of TranslationProfile.
-type TranslationProfiles []*TranslationProfile
+// ExecutionProfiles is a parsable slice of ExecutionProfile.
+type ExecutionProfiles []*ExecutionProfile

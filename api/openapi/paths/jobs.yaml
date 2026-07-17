@@ -1,9 +1,9 @@
-projectTranslationJobs:
+projectJobs:
   parameters:
     - $ref: '../base.yaml#/components/parameters/ProjectId'
   get:
-    operationId: ListTranslationJobs
-    summary: 列出项目翻译任务
+    operationId: ListJobs
+    summary: 列出项目任务
     security:
       - bearerAuth: []
     parameters:
@@ -23,16 +23,16 @@ projectTranslationJobs:
       - $ref: '../base.yaml#/components/parameters/Limit'
     responses:
       '200':
-        description: 翻译任务列表
+        description: 任务列表
         content:
           application/json:
             schema:
-              $ref: '../base.yaml#/components/schemas/TranslationJobListResponse'
+              $ref: '../base.yaml#/components/schemas/JobListResponse'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
   post:
-    operationId: CreateTranslationJob
-    summary: 创建翻译任务
+    operationId: CreateJob
+    summary: 创建任务
     security:
       - bearerAuth: []
     requestBody:
@@ -40,23 +40,23 @@ projectTranslationJobs:
       content:
         application/json:
           schema:
-            $ref: '../base.yaml#/components/schemas/CreateTranslationJobRequest'
+            $ref: '../base.yaml#/components/schemas/CreateJobRequest'
     responses:
       '202':
         description: 任务已创建
         content:
           application/json:
             schema:
-              $ref: '../base.yaml#/components/schemas/TranslationJob'
+              $ref: '../base.yaml#/components/schemas/Job'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
 
-translationJobById:
+jobById:
   parameters:
     - $ref: '../base.yaml#/components/parameters/JobId'
   get:
-    operationId: GetTranslationJob
-    summary: 获取翻译任务详情
+    operationId: GetJob
+    summary: 获取任务详情
     security:
       - bearerAuth: []
     responses:
@@ -65,16 +65,16 @@ translationJobById:
         content:
           application/json:
             schema:
-              $ref: '../base.yaml#/components/schemas/TranslationJob'
+              $ref: '../base.yaml#/components/schemas/Job'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
 
-translationJobCancel:
+jobCancel:
   parameters:
     - $ref: '../base.yaml#/components/parameters/JobId'
   post:
-    operationId: CancelTranslationJob
-    summary: 取消翻译任务
+    operationId: CancelJob
+    summary: 取消任务
     security:
       - bearerAuth: []
     responses:
@@ -83,16 +83,16 @@ translationJobCancel:
         content:
           application/json:
             schema:
-              $ref: '../base.yaml#/components/schemas/TranslationJob'
+              $ref: '../base.yaml#/components/schemas/Job'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
 
-translationJobRetry:
+jobRetry:
   parameters:
     - $ref: '../base.yaml#/components/parameters/JobId'
   post:
-    operationId: RetryTranslationJob
-    summary: 重试失败的资源翻译
+    operationId: RetryJob
+    summary: 重试失败的资源
     security:
       - bearerAuth: []
     responses:
@@ -101,6 +101,6 @@ translationJobRetry:
         content:
           application/json:
             schema:
-              $ref: '../base.yaml#/components/schemas/TranslationJob'
+              $ref: '../base.yaml#/components/schemas/Job'
       default:
         $ref: '../base.yaml#/components/responses/Problem'

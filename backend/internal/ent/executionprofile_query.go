@@ -11,19 +11,19 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
-// TranslationProfileQuery is the builder for querying TranslationProfile entities.
-type TranslationProfileQuery struct {
+// ExecutionProfileQuery is the builder for querying ExecutionProfile entities.
+type ExecutionProfileQuery struct {
 	config
 	ctx           *QueryContext
-	order         []translationprofile.OrderOption
+	order         []executionprofile.OrderOption
 	inters        []Interceptor
-	predicates    []predicate.TranslationProfile
+	predicates    []predicate.ExecutionProfile
 	withOwnerUser *UserQuery
 	withOwnerOrg  *OrganizationQuery
 	// intermediate query (i.e. traversal path).
@@ -31,39 +31,39 @@ type TranslationProfileQuery struct {
 	path func(context.Context) (*sql.Selector, error)
 }
 
-// Where adds a new predicate for the TranslationProfileQuery builder.
-func (_q *TranslationProfileQuery) Where(ps ...predicate.TranslationProfile) *TranslationProfileQuery {
+// Where adds a new predicate for the ExecutionProfileQuery builder.
+func (_q *ExecutionProfileQuery) Where(ps ...predicate.ExecutionProfile) *ExecutionProfileQuery {
 	_q.predicates = append(_q.predicates, ps...)
 	return _q
 }
 
 // Limit the number of records to be returned by this query.
-func (_q *TranslationProfileQuery) Limit(limit int) *TranslationProfileQuery {
+func (_q *ExecutionProfileQuery) Limit(limit int) *ExecutionProfileQuery {
 	_q.ctx.Limit = &limit
 	return _q
 }
 
 // Offset to start from.
-func (_q *TranslationProfileQuery) Offset(offset int) *TranslationProfileQuery {
+func (_q *ExecutionProfileQuery) Offset(offset int) *ExecutionProfileQuery {
 	_q.ctx.Offset = &offset
 	return _q
 }
 
 // Unique configures the query builder to filter duplicate records on query.
 // By default, unique is set to true, and can be disabled using this method.
-func (_q *TranslationProfileQuery) Unique(unique bool) *TranslationProfileQuery {
+func (_q *ExecutionProfileQuery) Unique(unique bool) *ExecutionProfileQuery {
 	_q.ctx.Unique = &unique
 	return _q
 }
 
 // Order specifies how the records should be ordered.
-func (_q *TranslationProfileQuery) Order(o ...translationprofile.OrderOption) *TranslationProfileQuery {
+func (_q *ExecutionProfileQuery) Order(o ...executionprofile.OrderOption) *ExecutionProfileQuery {
 	_q.order = append(_q.order, o...)
 	return _q
 }
 
 // QueryOwnerUser chains the current query on the "owner_user" edge.
-func (_q *TranslationProfileQuery) QueryOwnerUser() *UserQuery {
+func (_q *ExecutionProfileQuery) QueryOwnerUser() *UserQuery {
 	query := (&UserClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
@@ -74,9 +74,9 @@ func (_q *TranslationProfileQuery) QueryOwnerUser() *UserQuery {
 			return nil, err
 		}
 		step := sqlgraph.NewStep(
-			sqlgraph.From(translationprofile.Table, translationprofile.FieldID, selector),
+			sqlgraph.From(executionprofile.Table, executionprofile.FieldID, selector),
 			sqlgraph.To(user.Table, user.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, translationprofile.OwnerUserTable, translationprofile.OwnerUserColumn),
+			sqlgraph.Edge(sqlgraph.M2O, true, executionprofile.OwnerUserTable, executionprofile.OwnerUserColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -85,7 +85,7 @@ func (_q *TranslationProfileQuery) QueryOwnerUser() *UserQuery {
 }
 
 // QueryOwnerOrg chains the current query on the "owner_org" edge.
-func (_q *TranslationProfileQuery) QueryOwnerOrg() *OrganizationQuery {
+func (_q *ExecutionProfileQuery) QueryOwnerOrg() *OrganizationQuery {
 	query := (&OrganizationClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
@@ -96,9 +96,9 @@ func (_q *TranslationProfileQuery) QueryOwnerOrg() *OrganizationQuery {
 			return nil, err
 		}
 		step := sqlgraph.NewStep(
-			sqlgraph.From(translationprofile.Table, translationprofile.FieldID, selector),
+			sqlgraph.From(executionprofile.Table, executionprofile.FieldID, selector),
 			sqlgraph.To(organization.Table, organization.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, translationprofile.OwnerOrgTable, translationprofile.OwnerOrgColumn),
+			sqlgraph.Edge(sqlgraph.M2O, true, executionprofile.OwnerOrgTable, executionprofile.OwnerOrgColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -106,21 +106,21 @@ func (_q *TranslationProfileQuery) QueryOwnerOrg() *OrganizationQuery {
 	return query
 }
 
-// First returns the first TranslationProfile entity from the query.
-// Returns a *NotFoundError when no TranslationProfile was found.
-func (_q *TranslationProfileQuery) First(ctx context.Context) (*TranslationProfile, error) {
+// First returns the first ExecutionProfile entity from the query.
+// Returns a *NotFoundError when no ExecutionProfile was found.
+func (_q *ExecutionProfileQuery) First(ctx context.Context) (*ExecutionProfile, error) {
 	nodes, err := _q.Limit(1).All(setContextOp(ctx, _q.ctx, ent.OpQueryFirst))
 	if err != nil {
 		return nil, err
 	}
 	if len(nodes) == 0 {
-		return nil, &NotFoundError{translationprofile.Label}
+		return nil, &NotFoundError{executionprofile.Label}
 	}
 	return nodes[0], nil
 }
 
 // FirstX is like First, but panics if an error occurs.
-func (_q *TranslationProfileQuery) FirstX(ctx context.Context) *TranslationProfile {
+func (_q *ExecutionProfileQuery) FirstX(ctx context.Context) *ExecutionProfile {
 	node, err := _q.First(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
@@ -128,22 +128,22 @@ func (_q *TranslationProfileQuery) FirstX(ctx context.Context) *TranslationProfi
 	return node
 }
 
-// FirstID returns the first TranslationProfile ID from the query.
-// Returns a *NotFoundError when no TranslationProfile ID was found.
-func (_q *TranslationProfileQuery) FirstID(ctx context.Context) (id int, err error) {
+// FirstID returns the first ExecutionProfile ID from the query.
+// Returns a *NotFoundError when no ExecutionProfile ID was found.
+func (_q *ExecutionProfileQuery) FirstID(ctx context.Context) (id int, err error) {
 	var ids []int
 	if ids, err = _q.Limit(1).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryFirstID)); err != nil {
 		return
 	}
 	if len(ids) == 0 {
-		err = &NotFoundError{translationprofile.Label}
+		err = &NotFoundError{executionprofile.Label}
 		return
 	}
 	return ids[0], nil
 }
 
 // FirstIDX is like FirstID, but panics if an error occurs.
-func (_q *TranslationProfileQuery) FirstIDX(ctx context.Context) int {
+func (_q *ExecutionProfileQuery) FirstIDX(ctx context.Context) int {
 	id, err := _q.FirstID(ctx)
 	if err != nil && !IsNotFound(err) {
 		panic(err)
@@ -151,10 +151,10 @@ func (_q *TranslationProfileQuery) FirstIDX(ctx context.Context) int {
 	return id
 }
 
-// Only returns a single TranslationProfile entity found by the query, ensuring it only returns one.
-// Returns a *NotSingularError when more than one TranslationProfile entity is found.
-// Returns a *NotFoundError when no TranslationProfile entities are found.
-func (_q *TranslationProfileQuery) Only(ctx context.Context) (*TranslationProfile, error) {
+// Only returns a single ExecutionProfile entity found by the query, ensuring it only returns one.
+// Returns a *NotSingularError when more than one ExecutionProfile entity is found.
+// Returns a *NotFoundError when no ExecutionProfile entities are found.
+func (_q *ExecutionProfileQuery) Only(ctx context.Context) (*ExecutionProfile, error) {
 	nodes, err := _q.Limit(2).All(setContextOp(ctx, _q.ctx, ent.OpQueryOnly))
 	if err != nil {
 		return nil, err
@@ -163,14 +163,14 @@ func (_q *TranslationProfileQuery) Only(ctx context.Context) (*TranslationProfil
 	case 1:
 		return nodes[0], nil
 	case 0:
-		return nil, &NotFoundError{translationprofile.Label}
+		return nil, &NotFoundError{executionprofile.Label}
 	default:
-		return nil, &NotSingularError{translationprofile.Label}
+		return nil, &NotSingularError{executionprofile.Label}
 	}
 }
 
 // OnlyX is like Only, but panics if an error occurs.
-func (_q *TranslationProfileQuery) OnlyX(ctx context.Context) *TranslationProfile {
+func (_q *ExecutionProfileQuery) OnlyX(ctx context.Context) *ExecutionProfile {
 	node, err := _q.Only(ctx)
 	if err != nil {
 		panic(err)
@@ -178,10 +178,10 @@ func (_q *TranslationProfileQuery) OnlyX(ctx context.Context) *TranslationProfil
 	return node
 }
 
-// OnlyID is like Only, but returns the only TranslationProfile ID in the query.
-// Returns a *NotSingularError when more than one TranslationProfile ID is found.
+// OnlyID is like Only, but returns the only ExecutionProfile ID in the query.
+// Returns a *NotSingularError when more than one ExecutionProfile ID is found.
 // Returns a *NotFoundError when no entities are found.
-func (_q *TranslationProfileQuery) OnlyID(ctx context.Context) (id int, err error) {
+func (_q *ExecutionProfileQuery) OnlyID(ctx context.Context) (id int, err error) {
 	var ids []int
 	if ids, err = _q.Limit(2).IDs(setContextOp(ctx, _q.ctx, ent.OpQueryOnlyID)); err != nil {
 		return
@@ -190,15 +190,15 @@ func (_q *TranslationProfileQuery) OnlyID(ctx context.Context) (id int, err erro
 	case 1:
 		id = ids[0]
 	case 0:
-		err = &NotFoundError{translationprofile.Label}
+		err = &NotFoundError{executionprofile.Label}
 	default:
-		err = &NotSingularError{translationprofile.Label}
+		err = &NotSingularError{executionprofile.Label}
 	}
 	return
 }
 
 // OnlyIDX is like OnlyID, but panics if an error occurs.
-func (_q *TranslationProfileQuery) OnlyIDX(ctx context.Context) int {
+func (_q *ExecutionProfileQuery) OnlyIDX(ctx context.Context) int {
 	id, err := _q.OnlyID(ctx)
 	if err != nil {
 		panic(err)
@@ -206,18 +206,18 @@ func (_q *TranslationProfileQuery) OnlyIDX(ctx context.Context) int {
 	return id
 }
 
-// All executes the query and returns a list of TranslationProfiles.
-func (_q *TranslationProfileQuery) All(ctx context.Context) ([]*TranslationProfile, error) {
+// All executes the query and returns a list of ExecutionProfiles.
+func (_q *ExecutionProfileQuery) All(ctx context.Context) ([]*ExecutionProfile, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryAll)
 	if err := _q.prepareQuery(ctx); err != nil {
 		return nil, err
 	}
-	qr := querierAll[[]*TranslationProfile, *TranslationProfileQuery]()
-	return withInterceptors[[]*TranslationProfile](ctx, _q, qr, _q.inters)
+	qr := querierAll[[]*ExecutionProfile, *ExecutionProfileQuery]()
+	return withInterceptors[[]*ExecutionProfile](ctx, _q, qr, _q.inters)
 }
 
 // AllX is like All, but panics if an error occurs.
-func (_q *TranslationProfileQuery) AllX(ctx context.Context) []*TranslationProfile {
+func (_q *ExecutionProfileQuery) AllX(ctx context.Context) []*ExecutionProfile {
 	nodes, err := _q.All(ctx)
 	if err != nil {
 		panic(err)
@@ -225,20 +225,20 @@ func (_q *TranslationProfileQuery) AllX(ctx context.Context) []*TranslationProfi
 	return nodes
 }
 
-// IDs executes the query and returns a list of TranslationProfile IDs.
-func (_q *TranslationProfileQuery) IDs(ctx context.Context) (ids []int, err error) {
+// IDs executes the query and returns a list of ExecutionProfile IDs.
+func (_q *ExecutionProfileQuery) IDs(ctx context.Context) (ids []int, err error) {
 	if _q.ctx.Unique == nil && _q.path != nil {
 		_q.Unique(true)
 	}
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryIDs)
-	if err = _q.Select(translationprofile.FieldID).Scan(ctx, &ids); err != nil {
+	if err = _q.Select(executionprofile.FieldID).Scan(ctx, &ids); err != nil {
 		return nil, err
 	}
 	return ids, nil
 }
 
 // IDsX is like IDs, but panics if an error occurs.
-func (_q *TranslationProfileQuery) IDsX(ctx context.Context) []int {
+func (_q *ExecutionProfileQuery) IDsX(ctx context.Context) []int {
 	ids, err := _q.IDs(ctx)
 	if err != nil {
 		panic(err)
@@ -247,16 +247,16 @@ func (_q *TranslationProfileQuery) IDsX(ctx context.Context) []int {
 }
 
 // Count returns the count of the given query.
-func (_q *TranslationProfileQuery) Count(ctx context.Context) (int, error) {
+func (_q *ExecutionProfileQuery) Count(ctx context.Context) (int, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryCount)
 	if err := _q.prepareQuery(ctx); err != nil {
 		return 0, err
 	}
-	return withInterceptors[int](ctx, _q, querierCount[*TranslationProfileQuery](), _q.inters)
+	return withInterceptors[int](ctx, _q, querierCount[*ExecutionProfileQuery](), _q.inters)
 }
 
 // CountX is like Count, but panics if an error occurs.
-func (_q *TranslationProfileQuery) CountX(ctx context.Context) int {
+func (_q *ExecutionProfileQuery) CountX(ctx context.Context) int {
 	count, err := _q.Count(ctx)
 	if err != nil {
 		panic(err)
@@ -265,7 +265,7 @@ func (_q *TranslationProfileQuery) CountX(ctx context.Context) int {
 }
 
 // Exist returns true if the query has elements in the graph.
-func (_q *TranslationProfileQuery) Exist(ctx context.Context) (bool, error) {
+func (_q *ExecutionProfileQuery) Exist(ctx context.Context) (bool, error) {
 	ctx = setContextOp(ctx, _q.ctx, ent.OpQueryExist)
 	switch _, err := _q.FirstID(ctx); {
 	case IsNotFound(err):
@@ -278,7 +278,7 @@ func (_q *TranslationProfileQuery) Exist(ctx context.Context) (bool, error) {
 }
 
 // ExistX is like Exist, but panics if an error occurs.
-func (_q *TranslationProfileQuery) ExistX(ctx context.Context) bool {
+func (_q *ExecutionProfileQuery) ExistX(ctx context.Context) bool {
 	exist, err := _q.Exist(ctx)
 	if err != nil {
 		panic(err)
@@ -286,18 +286,18 @@ func (_q *TranslationProfileQuery) ExistX(ctx context.Context) bool {
 	return exist
 }
 
-// Clone returns a duplicate of the TranslationProfileQuery builder, including all associated steps. It can be
+// Clone returns a duplicate of the ExecutionProfileQuery builder, including all associated steps. It can be
 // used to prepare common query builders and use them differently after the clone is made.
-func (_q *TranslationProfileQuery) Clone() *TranslationProfileQuery {
+func (_q *ExecutionProfileQuery) Clone() *ExecutionProfileQuery {
 	if _q == nil {
 		return nil
 	}
-	return &TranslationProfileQuery{
+	return &ExecutionProfileQuery{
 		config:        _q.config,
 		ctx:           _q.ctx.Clone(),
-		order:         append([]translationprofile.OrderOption{}, _q.order...),
+		order:         append([]executionprofile.OrderOption{}, _q.order...),
 		inters:        append([]Interceptor{}, _q.inters...),
-		predicates:    append([]predicate.TranslationProfile{}, _q.predicates...),
+		predicates:    append([]predicate.ExecutionProfile{}, _q.predicates...),
 		withOwnerUser: _q.withOwnerUser.Clone(),
 		withOwnerOrg:  _q.withOwnerOrg.Clone(),
 		// clone intermediate query.
@@ -308,7 +308,7 @@ func (_q *TranslationProfileQuery) Clone() *TranslationProfileQuery {
 
 // WithOwnerUser tells the query-builder to eager-load the nodes that are connected to
 // the "owner_user" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *TranslationProfileQuery) WithOwnerUser(opts ...func(*UserQuery)) *TranslationProfileQuery {
+func (_q *ExecutionProfileQuery) WithOwnerUser(opts ...func(*UserQuery)) *ExecutionProfileQuery {
 	query := (&UserClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
@@ -319,7 +319,7 @@ func (_q *TranslationProfileQuery) WithOwnerUser(opts ...func(*UserQuery)) *Tran
 
 // WithOwnerOrg tells the query-builder to eager-load the nodes that are connected to
 // the "owner_org" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *TranslationProfileQuery) WithOwnerOrg(opts ...func(*OrganizationQuery)) *TranslationProfileQuery {
+func (_q *ExecutionProfileQuery) WithOwnerOrg(opts ...func(*OrganizationQuery)) *ExecutionProfileQuery {
 	query := (&OrganizationClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
@@ -338,15 +338,15 @@ func (_q *TranslationProfileQuery) WithOwnerOrg(opts ...func(*OrganizationQuery)
 //		Count int `json:"count,omitempty"`
 //	}
 //
-//	client.TranslationProfile.Query().
-//		GroupBy(translationprofile.FieldCreatedAt).
+//	client.ExecutionProfile.Query().
+//		GroupBy(executionprofile.FieldCreatedAt).
 //		Aggregate(ent.Count()).
 //		Scan(ctx, &v)
-func (_q *TranslationProfileQuery) GroupBy(field string, fields ...string) *TranslationProfileGroupBy {
+func (_q *ExecutionProfileQuery) GroupBy(field string, fields ...string) *ExecutionProfileGroupBy {
 	_q.ctx.Fields = append([]string{field}, fields...)
-	grbuild := &TranslationProfileGroupBy{build: _q}
+	grbuild := &ExecutionProfileGroupBy{build: _q}
 	grbuild.flds = &_q.ctx.Fields
-	grbuild.label = translationprofile.Label
+	grbuild.label = executionprofile.Label
 	grbuild.scan = grbuild.Scan
 	return grbuild
 }
@@ -360,23 +360,23 @@ func (_q *TranslationProfileQuery) GroupBy(field string, fields ...string) *Tran
 //		CreatedAt time.Time `json:"created_at,omitempty"`
 //	}
 //
-//	client.TranslationProfile.Query().
-//		Select(translationprofile.FieldCreatedAt).
+//	client.ExecutionProfile.Query().
+//		Select(executionprofile.FieldCreatedAt).
 //		Scan(ctx, &v)
-func (_q *TranslationProfileQuery) Select(fields ...string) *TranslationProfileSelect {
+func (_q *ExecutionProfileQuery) Select(fields ...string) *ExecutionProfileSelect {
 	_q.ctx.Fields = append(_q.ctx.Fields, fields...)
-	sbuild := &TranslationProfileSelect{TranslationProfileQuery: _q}
-	sbuild.label = translationprofile.Label
+	sbuild := &ExecutionProfileSelect{ExecutionProfileQuery: _q}
+	sbuild.label = executionprofile.Label
 	sbuild.flds, sbuild.scan = &_q.ctx.Fields, sbuild.Scan
 	return sbuild
 }
 
-// Aggregate returns a TranslationProfileSelect configured with the given aggregations.
-func (_q *TranslationProfileQuery) Aggregate(fns ...AggregateFunc) *TranslationProfileSelect {
+// Aggregate returns a ExecutionProfileSelect configured with the given aggregations.
+func (_q *ExecutionProfileQuery) Aggregate(fns ...AggregateFunc) *ExecutionProfileSelect {
 	return _q.Select().Aggregate(fns...)
 }
 
-func (_q *TranslationProfileQuery) prepareQuery(ctx context.Context) error {
+func (_q *ExecutionProfileQuery) prepareQuery(ctx context.Context) error {
 	for _, inter := range _q.inters {
 		if inter == nil {
 			return fmt.Errorf("ent: uninitialized interceptor (forgotten import ent/runtime?)")
@@ -388,7 +388,7 @@ func (_q *TranslationProfileQuery) prepareQuery(ctx context.Context) error {
 		}
 	}
 	for _, f := range _q.ctx.Fields {
-		if !translationprofile.ValidColumn(f) {
+		if !executionprofile.ValidColumn(f) {
 			return &ValidationError{Name: f, err: fmt.Errorf("ent: invalid field %q for query", f)}
 		}
 	}
@@ -402,9 +402,9 @@ func (_q *TranslationProfileQuery) prepareQuery(ctx context.Context) error {
 	return nil
 }
 
-func (_q *TranslationProfileQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*TranslationProfile, error) {
+func (_q *ExecutionProfileQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*ExecutionProfile, error) {
 	var (
-		nodes       = []*TranslationProfile{}
+		nodes       = []*ExecutionProfile{}
 		_spec       = _q.querySpec()
 		loadedTypes = [2]bool{
 			_q.withOwnerUser != nil,
@@ -412,10 +412,10 @@ func (_q *TranslationProfileQuery) sqlAll(ctx context.Context, hooks ...queryHoo
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
-		return (*TranslationProfile).scanValues(nil, columns)
+		return (*ExecutionProfile).scanValues(nil, columns)
 	}
 	_spec.Assign = func(columns []string, values []any) error {
-		node := &TranslationProfile{config: _q.config}
+		node := &ExecutionProfile{config: _q.config}
 		nodes = append(nodes, node)
 		node.Edges.loadedTypes = loadedTypes
 		return node.assignValues(columns, values)
@@ -431,22 +431,22 @@ func (_q *TranslationProfileQuery) sqlAll(ctx context.Context, hooks ...queryHoo
 	}
 	if query := _q.withOwnerUser; query != nil {
 		if err := _q.loadOwnerUser(ctx, query, nodes, nil,
-			func(n *TranslationProfile, e *User) { n.Edges.OwnerUser = e }); err != nil {
+			func(n *ExecutionProfile, e *User) { n.Edges.OwnerUser = e }); err != nil {
 			return nil, err
 		}
 	}
 	if query := _q.withOwnerOrg; query != nil {
 		if err := _q.loadOwnerOrg(ctx, query, nodes, nil,
-			func(n *TranslationProfile, e *Organization) { n.Edges.OwnerOrg = e }); err != nil {
+			func(n *ExecutionProfile, e *Organization) { n.Edges.OwnerOrg = e }); err != nil {
 			return nil, err
 		}
 	}
 	return nodes, nil
 }
 
-func (_q *TranslationProfileQuery) loadOwnerUser(ctx context.Context, query *UserQuery, nodes []*TranslationProfile, init func(*TranslationProfile), assign func(*TranslationProfile, *User)) error {
+func (_q *ExecutionProfileQuery) loadOwnerUser(ctx context.Context, query *UserQuery, nodes []*ExecutionProfile, init func(*ExecutionProfile), assign func(*ExecutionProfile, *User)) error {
 	ids := make([]int, 0, len(nodes))
-	nodeids := make(map[int][]*TranslationProfile)
+	nodeids := make(map[int][]*ExecutionProfile)
 	for i := range nodes {
 		if nodes[i].OwnerUserID == nil {
 			continue
@@ -476,9 +476,9 @@ func (_q *TranslationProfileQuery) loadOwnerUser(ctx context.Context, query *Use
 	}
 	return nil
 }
-func (_q *TranslationProfileQuery) loadOwnerOrg(ctx context.Context, query *OrganizationQuery, nodes []*TranslationProfile, init func(*TranslationProfile), assign func(*TranslationProfile, *Organization)) error {
+func (_q *ExecutionProfileQuery) loadOwnerOrg(ctx context.Context, query *OrganizationQuery, nodes []*ExecutionProfile, init func(*ExecutionProfile), assign func(*ExecutionProfile, *Organization)) error {
 	ids := make([]int, 0, len(nodes))
-	nodeids := make(map[int][]*TranslationProfile)
+	nodeids := make(map[int][]*ExecutionProfile)
 	for i := range nodes {
 		if nodes[i].OwnerOrgID == nil {
 			continue
@@ -509,7 +509,7 @@ func (_q *TranslationProfileQuery) loadOwnerOrg(ctx context.Context, query *Orga
 	return nil
 }
 
-func (_q *TranslationProfileQuery) sqlCount(ctx context.Context) (int, error) {
+func (_q *ExecutionProfileQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := _q.querySpec()
 	_spec.Node.Columns = _q.ctx.Fields
 	if len(_q.ctx.Fields) > 0 {
@@ -518,8 +518,8 @@ func (_q *TranslationProfileQuery) sqlCount(ctx context.Context) (int, error) {
 	return sqlgraph.CountNodes(ctx, _q.driver, _spec)
 }
 
-func (_q *TranslationProfileQuery) querySpec() *sqlgraph.QuerySpec {
-	_spec := sqlgraph.NewQuerySpec(translationprofile.Table, translationprofile.Columns, sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt))
+func (_q *ExecutionProfileQuery) querySpec() *sqlgraph.QuerySpec {
+	_spec := sqlgraph.NewQuerySpec(executionprofile.Table, executionprofile.Columns, sqlgraph.NewFieldSpec(executionprofile.FieldID, field.TypeInt))
 	_spec.From = _q.sql
 	if unique := _q.ctx.Unique; unique != nil {
 		_spec.Unique = *unique
@@ -528,17 +528,17 @@ func (_q *TranslationProfileQuery) querySpec() *sqlgraph.QuerySpec {
 	}
 	if fields := _q.ctx.Fields; len(fields) > 0 {
 		_spec.Node.Columns = make([]string, 0, len(fields))
-		_spec.Node.Columns = append(_spec.Node.Columns, translationprofile.FieldID)
+		_spec.Node.Columns = append(_spec.Node.Columns, executionprofile.FieldID)
 		for i := range fields {
-			if fields[i] != translationprofile.FieldID {
+			if fields[i] != executionprofile.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
 		}
 		if _q.withOwnerUser != nil {
-			_spec.Node.AddColumnOnce(translationprofile.FieldOwnerUserID)
+			_spec.Node.AddColumnOnce(executionprofile.FieldOwnerUserID)
 		}
 		if _q.withOwnerOrg != nil {
-			_spec.Node.AddColumnOnce(translationprofile.FieldOwnerOrgID)
+			_spec.Node.AddColumnOnce(executionprofile.FieldOwnerOrgID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {
@@ -564,12 +564,12 @@ func (_q *TranslationProfileQuery) querySpec() *sqlgraph.QuerySpec {
 	return _spec
 }
 
-func (_q *TranslationProfileQuery) sqlQuery(ctx context.Context) *sql.Selector {
+func (_q *ExecutionProfileQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	builder := sql.Dialect(_q.driver.Dialect())
-	t1 := builder.Table(translationprofile.Table)
+	t1 := builder.Table(executionprofile.Table)
 	columns := _q.ctx.Fields
 	if len(columns) == 0 {
-		columns = translationprofile.Columns
+		columns = executionprofile.Columns
 	}
 	selector := builder.Select(t1.Columns(columns...)...).From(t1)
 	if _q.sql != nil {
@@ -596,28 +596,28 @@ func (_q *TranslationProfileQuery) sqlQuery(ctx context.Context) *sql.Selector {
 	return selector
 }
 
-// TranslationProfileGroupBy is the group-by builder for TranslationProfile entities.
-type TranslationProfileGroupBy struct {
+// ExecutionProfileGroupBy is the group-by builder for ExecutionProfile entities.
+type ExecutionProfileGroupBy struct {
 	selector
-	build *TranslationProfileQuery
+	build *ExecutionProfileQuery
 }
 
 // Aggregate adds the given aggregation functions to the group-by query.
-func (_g *TranslationProfileGroupBy) Aggregate(fns ...AggregateFunc) *TranslationProfileGroupBy {
+func (_g *ExecutionProfileGroupBy) Aggregate(fns ...AggregateFunc) *ExecutionProfileGroupBy {
 	_g.fns = append(_g.fns, fns...)
 	return _g
 }
 
 // Scan applies the selector query and scans the result into the given value.
-func (_g *TranslationProfileGroupBy) Scan(ctx context.Context, v any) error {
+func (_g *ExecutionProfileGroupBy) Scan(ctx context.Context, v any) error {
 	ctx = setContextOp(ctx, _g.build.ctx, ent.OpQueryGroupBy)
 	if err := _g.build.prepareQuery(ctx); err != nil {
 		return err
 	}
-	return scanWithInterceptors[*TranslationProfileQuery, *TranslationProfileGroupBy](ctx, _g.build, _g, _g.build.inters, v)
+	return scanWithInterceptors[*ExecutionProfileQuery, *ExecutionProfileGroupBy](ctx, _g.build, _g, _g.build.inters, v)
 }
 
-func (_g *TranslationProfileGroupBy) sqlScan(ctx context.Context, root *TranslationProfileQuery, v any) error {
+func (_g *ExecutionProfileGroupBy) sqlScan(ctx context.Context, root *ExecutionProfileQuery, v any) error {
 	selector := root.sqlQuery(ctx).Select()
 	aggregation := make([]string, 0, len(_g.fns))
 	for _, fn := range _g.fns {
@@ -644,28 +644,28 @@ func (_g *TranslationProfileGroupBy) sqlScan(ctx context.Context, root *Translat
 	return sql.ScanSlice(rows, v)
 }
 
-// TranslationProfileSelect is the builder for selecting fields of TranslationProfile entities.
-type TranslationProfileSelect struct {
-	*TranslationProfileQuery
+// ExecutionProfileSelect is the builder for selecting fields of ExecutionProfile entities.
+type ExecutionProfileSelect struct {
+	*ExecutionProfileQuery
 	selector
 }
 
 // Aggregate adds the given aggregation functions to the selector query.
-func (_s *TranslationProfileSelect) Aggregate(fns ...AggregateFunc) *TranslationProfileSelect {
+func (_s *ExecutionProfileSelect) Aggregate(fns ...AggregateFunc) *ExecutionProfileSelect {
 	_s.fns = append(_s.fns, fns...)
 	return _s
 }
 
 // Scan applies the selector query and scans the result into the given value.
-func (_s *TranslationProfileSelect) Scan(ctx context.Context, v any) error {
+func (_s *ExecutionProfileSelect) Scan(ctx context.Context, v any) error {
 	ctx = setContextOp(ctx, _s.ctx, ent.OpQuerySelect)
 	if err := _s.prepareQuery(ctx); err != nil {
 		return err
 	}
-	return scanWithInterceptors[*TranslationProfileQuery, *TranslationProfileSelect](ctx, _s.TranslationProfileQuery, _s, _s.inters, v)
+	return scanWithInterceptors[*ExecutionProfileQuery, *ExecutionProfileSelect](ctx, _s.ExecutionProfileQuery, _s, _s.inters, v)
 }
 
-func (_s *TranslationProfileSelect) sqlScan(ctx context.Context, root *TranslationProfileQuery, v any) error {
+func (_s *ExecutionProfileSelect) sqlScan(ctx context.Context, root *ExecutionProfileQuery, v any) error {
 	selector := root.sqlQuery(ctx)
 	aggregation := make([]string, 0, len(_s.fns))
 	for _, fn := range _s.fns {

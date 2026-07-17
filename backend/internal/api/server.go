@@ -39,8 +39,8 @@ type Server struct {
 	glossarySyncSvc              *service.GlossarySyncService
 	translationPromptTemplateSvc *service.TranslationPromptTemplateService
 	bootstrapPromptTemplateSvc   *service.BootstrapPromptTemplateService
-	translationProfileSvc        *service.TranslationProfileService
-	translationJobSvc            *service.JobService
+	executionProfileSvc          *service.ExecutionProfileService
+	jobSvc                       *service.JobService
 	executionPlanSvc             *service.ExecutionPlanService
 	reviewSvc                    *service.ReviewService
 	segmentSvc                   *service.SegmentService
@@ -116,13 +116,13 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 	s.glossarySvc = service.NewGlossaryService(client, s.projectSvc)
 	s.translationPromptTemplateSvc = service.NewTranslationPromptTemplateService(client)
 	s.bootstrapPromptTemplateSvc = service.NewBootstrapPromptTemplateService(client)
-	s.translationProfileSvc = service.NewTranslationProfileService(client)
+	s.executionProfileSvc = service.NewExecutionProfileService(client)
 	jobStore, err := filestore.NewLocal(filepath.Join(cfg.DataDir, "jobs"))
 	if err != nil {
 		return nil, err
 	}
 	s.jobStore = jobStore
-	s.translationJobSvc = service.NewJobService(client, s.projectSvc, s.executionPlanSvc, s.backendSvc, s.translationPromptTemplateSvc, s.bootstrapPromptTemplateSvc, s.translationProfileSvc, jobStore, s.eventBroker)
+	s.jobSvc = service.NewJobService(client, s.projectSvc, s.executionPlanSvc, s.backendSvc, s.translationPromptTemplateSvc, s.bootstrapPromptTemplateSvc, s.executionProfileSvc, jobStore, s.eventBroker)
 	s.executionPlanHandler = NewHandlerExecutionPlan(s.executionPlanSvc, s)
 	s.reviewSvc = service.NewReviewService(client, s.projectSvc)
 	s.segmentSvc = service.NewSegmentService(client, s.projectSvc)
@@ -139,7 +139,7 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 
 	// 创建 Runner
 	translationRunner := worker.NewJobRunner(
-		logger, client, s.translationJobSvc, jobStore,
+		logger, client, s.jobSvc, jobStore,
 		translationQueue, s.eventBroker, limiterPool, s.resMutex,
 	)
 	syncTaskRunner := worker.NewSyncTaskRunner(

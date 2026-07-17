@@ -97,12 +97,6 @@ func (_c *ProjectCreate) SetConfig(v map[string]interface{}) *ProjectCreate {
 	return _c
 }
 
-// SetDefaultTranslationConfig sets the "default_translation_config" field.
-func (_c *ProjectCreate) SetDefaultTranslationConfig(v map[string]interface{}) *ProjectCreate {
-	_c.mutation.SetDefaultTranslationConfig(v)
-	return _c
-}
-
 // SetGlossaryEnabled sets the "glossary_enabled" field.
 func (_c *ProjectCreate) SetGlossaryEnabled(v bool) *ProjectCreate {
 	_c.mutation.SetGlossaryEnabled(v)
@@ -307,10 +301,6 @@ func (_c *ProjectCreate) defaults() {
 		v := project.DefaultConfig()
 		_c.mutation.SetConfig(v)
 	}
-	if _, ok := _c.mutation.DefaultTranslationConfig(); !ok {
-		v := project.DefaultDefaultTranslationConfig()
-		_c.mutation.SetDefaultTranslationConfig(v)
-	}
 	if _, ok := _c.mutation.GlossaryEnabled(); !ok {
 		v := project.DefaultGlossaryEnabled
 		_c.mutation.SetGlossaryEnabled(v)
@@ -353,9 +343,6 @@ func (_c *ProjectCreate) check() error {
 	}
 	if _, ok := _c.mutation.Config(); !ok {
 		return &ValidationError{Name: "config", err: errors.New(`ent: missing required field "Project.config"`)}
-	}
-	if _, ok := _c.mutation.DefaultTranslationConfig(); !ok {
-		return &ValidationError{Name: "default_translation_config", err: errors.New(`ent: missing required field "Project.default_translation_config"`)}
 	}
 	if _, ok := _c.mutation.GlossaryEnabled(); !ok {
 		return &ValidationError{Name: "glossary_enabled", err: errors.New(`ent: missing required field "Project.glossary_enabled"`)}
@@ -407,10 +394,6 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Config(); ok {
 		_spec.SetField(project.FieldConfig, field.TypeJSON, value)
 		_node.Config = value
-	}
-	if value, ok := _c.mutation.DefaultTranslationConfig(); ok {
-		_spec.SetField(project.FieldDefaultTranslationConfig, field.TypeJSON, value)
-		_node.DefaultTranslationConfig = value
 	}
 	if value, ok := _c.mutation.GlossaryEnabled(); ok {
 		_spec.SetField(project.FieldGlossaryEnabled, field.TypeBool, value)

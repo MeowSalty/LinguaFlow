@@ -1,64 +1,163 @@
-JobCreateRequest:
+CreateJobRequest:
   type: object
+  required: [execution_plan_id]
   properties:
-    source_lang:
-      type: string
-    target_lang:
-      type: string
-  additionalProperties: false
-
-JobCreateResponse:
-  type: object
-  required: [job_id, status, sub_jobs, created_at]
-  properties:
-    job_id:
+    execution_plan_id:
       type: integer
-    status:
-      type: string
-    sub_jobs:
+      description: 执行计划模板 ID
+    resource_ids:
       type: array
       items:
-        $ref: '#/SubJobSummary'
-    created_at:
+        type: integer
+        minimum: 1
+    segment_ids:
+      type: array
+      items:
+        type: integer
+        minimum: 1
+    segment_group_keys:
+      type: array
+      items:
+        type: string
+      description: |
+        按章节分组键选择 segments（仅适用于 EPUB 等多章节资源）。
+        传入 meta.epub_file 值（如 ["OEBPS/chapter1.xhtml"]），后端自动解析为对应的 segment_ids。
+        与 segment_ids 互斥，优先级：segment_group_keys > segment_ids > resource_ids。
+    auto_approve:
+      type: boolean
+      default: false
+      description: 翻译完成后是否自动审批通过所有段落
+    overwrite_mode:
       type: string
-      format: date-time
+      enum: [skip_translated, overwrite_unapproved, overwrite_all]
+      default: skip_translated
+      description: |
+        段落覆盖策略。
+        - skip_translated: 跳过已有翻译的段落（仅翻译 pending/rejected）
+        - overwrite_unapproved: 覆盖所有非 approved 的段落（包括已翻译、已编辑和已拒绝的）
+        - overwrite_all: 覆盖所有段落，包括已审核通过的
+        对 segment_ids 选择方式无效（用户已精确指定段落）。
+    execution_config:
+      type: object
+      additionalProperties: true
+  additionalProperties: false
 
-Job:
+JobProgress:
   type: object
-  required: [id, project_id, status, sub_job_count, completed_sub_jobs, failed_sub_jobs, source_lang, target_lang, sub_jobs]
+  required: [total_resources, completed_resources, failed_resources, total_segments, completed_segments, skipped_segments]
+  properties:
+    total_resources:
+      type: integer
+    completed_resources:
+      type: integer
+    failed_resources:
+      type: integer
+    total_segments:
+      type: integer
+      description: 总段落数（创建时选中的 segment 数）
+    completed_segments:
+      type: integer
+    skipped_segments:
+      type: integer
+      description: 被系统跳过的段落数（已翻译、空文本、纯占位符等）
+    queue_position:
+      type: integer
+      nullable: true
+      description: 在队列中的位置（1-based），null 表示不在队列中
+    queue_size:
+      type: integer
+      nullable: true
+      description: 当前队列中的任务总数
+
+JobResource:
+  type: object
+  required: [id, resource_id, status, segment_count, completed_segments, skipped_segments, created_at, updated_at]
   properties:
     id:
       type: integer
-    project_id:
+    resource_id:
       type: integer
     status:
       type: string
-    sub_job_count:
+      enum: [pending, running, completed, failed, cancelled]
+    segment_count:
       type: integer
-    completed_sub_jobs:
+    completed_segments:
       type: integer
-    failed_sub_jobs:
+    skipped_segments:
       type: integer
-    source_lang:
-      type: string
-    target_lang:
-      type: string
-    input_path:
-      type: string
+      description: 被系统跳过的段落数
     output_path:
       type: string
     error_message:
       type: string
+    resource:
+      $ref: './resource.yaml#/Resource'
     created_at:
       type: string
       format: date-time
     updated_at:
       type: string
       format: date-time
-    sub_jobs:
+    current_stage:
+      type: string
+      description: 当前执行阶段名称
+    stage_total:
+      type: integer
+      description: 当前阶段的总段落数
+    stage_completed:
+      type: integer
+      description: 当前阶段已完成的段落数
+    started_at:
+      type: string
+      format: date-time
+      description: 资源开始执行的时间
+
+Job:
+  type: object
+  required: [id, project_id, execution_plan_id, status, trigger_type, progress, created_at, updated_at]
+  properties:
+    id:
+      type: integer
+    project_id:
+      type: integer
+    created_by:
+      type: object
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+    execution_plan_id:
+      type: integer
+    status:
+      type: string
+      enum: [pending, running, completed, failed, cancelled]
+    trigger_type:
+      type: string
+      enum: [manual, file_update, glossary_change, web_edit]
+    execution_config:
+      type: object
+      additionalProperties: true
+      description: 执行配置快照（已脱敏，不含 API 密钥）
+    error_message:
+      type: string
+    progress:
+      $ref: '#/JobProgress'
+    job_resources:
       type: array
       items:
-        $ref: '#/SubJob'
+        $ref: '#/JobResource'
+    started_at:
+      type: string
+      format: date-time
+      description: 任务开始执行的时间
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
 
 JobListResponse:
   type: object
@@ -68,53 +167,8 @@ JobListResponse:
       type: array
       items:
         $ref: '#/Job'
-
-SubJobSummary:
-  type: object
-  required: [id, filename, status]
-  properties:
-    id:
-      type: integer
-    filename:
+    next_cursor:
       type: string
-    status:
-      type: string
-
-SubJob:
-  type: object
-  required: [id, status, input_filename, input_format, input_path, output_path, segment_count]
-  properties:
-    id:
-      type: integer
-    status:
-      type: string
-    input_filename:
-      type: string
-    input_format:
-      type: string
-    input_path:
-      type: string
-    output_path:
-      type: string
-    segment_count:
-      type: integer
-    error_message:
-      type: string
-    created_at:
-      type: string
-      format: date-time
-    updated_at:
-      type: string
-      format: date-time
-
-SubJobListResponse:
-  type: object
-  required: [items]
-  properties:
-    items:
-      type: array
-      items:
-        $ref: '#/SubJob'
 
 Segment:
   type: object

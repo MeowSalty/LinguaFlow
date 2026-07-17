@@ -15,11 +15,11 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 )
@@ -216,19 +216,19 @@ func (_u *OrganizationUpdate) AddBootstrapPromptTemplates(v ...*BootstrapPromptT
 	return _u.AddBootstrapPromptTemplateIDs(ids...)
 }
 
-// AddTranslationProfileIDs adds the "translation_profiles" edge to the TranslationProfile entity by IDs.
-func (_u *OrganizationUpdate) AddTranslationProfileIDs(ids ...int) *OrganizationUpdate {
-	_u.mutation.AddTranslationProfileIDs(ids...)
+// AddExecutionProfileIDs adds the "execution_profiles" edge to the ExecutionProfile entity by IDs.
+func (_u *OrganizationUpdate) AddExecutionProfileIDs(ids ...int) *OrganizationUpdate {
+	_u.mutation.AddExecutionProfileIDs(ids...)
 	return _u
 }
 
-// AddTranslationProfiles adds the "translation_profiles" edges to the TranslationProfile entity.
-func (_u *OrganizationUpdate) AddTranslationProfiles(v ...*TranslationProfile) *OrganizationUpdate {
+// AddExecutionProfiles adds the "execution_profiles" edges to the ExecutionProfile entity.
+func (_u *OrganizationUpdate) AddExecutionProfiles(v ...*ExecutionProfile) *OrganizationUpdate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.AddTranslationProfileIDs(ids...)
+	return _u.AddExecutionProfileIDs(ids...)
 }
 
 // AddExecutionPlanTemplateIDs adds the "execution_plan_templates" edge to the ExecutionPlanTemplate entity by IDs.
@@ -398,25 +398,25 @@ func (_u *OrganizationUpdate) RemoveBootstrapPromptTemplates(v ...*BootstrapProm
 	return _u.RemoveBootstrapPromptTemplateIDs(ids...)
 }
 
-// ClearTranslationProfiles clears all "translation_profiles" edges to the TranslationProfile entity.
-func (_u *OrganizationUpdate) ClearTranslationProfiles() *OrganizationUpdate {
-	_u.mutation.ClearTranslationProfiles()
+// ClearExecutionProfiles clears all "execution_profiles" edges to the ExecutionProfile entity.
+func (_u *OrganizationUpdate) ClearExecutionProfiles() *OrganizationUpdate {
+	_u.mutation.ClearExecutionProfiles()
 	return _u
 }
 
-// RemoveTranslationProfileIDs removes the "translation_profiles" edge to TranslationProfile entities by IDs.
-func (_u *OrganizationUpdate) RemoveTranslationProfileIDs(ids ...int) *OrganizationUpdate {
-	_u.mutation.RemoveTranslationProfileIDs(ids...)
+// RemoveExecutionProfileIDs removes the "execution_profiles" edge to ExecutionProfile entities by IDs.
+func (_u *OrganizationUpdate) RemoveExecutionProfileIDs(ids ...int) *OrganizationUpdate {
+	_u.mutation.RemoveExecutionProfileIDs(ids...)
 	return _u
 }
 
-// RemoveTranslationProfiles removes "translation_profiles" edges to TranslationProfile entities.
-func (_u *OrganizationUpdate) RemoveTranslationProfiles(v ...*TranslationProfile) *OrganizationUpdate {
+// RemoveExecutionProfiles removes "execution_profiles" edges to ExecutionProfile entities.
+func (_u *OrganizationUpdate) RemoveExecutionProfiles(v ...*ExecutionProfile) *OrganizationUpdate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.RemoveTranslationProfileIDs(ids...)
+	return _u.RemoveExecutionProfileIDs(ids...)
 }
 
 // ClearExecutionPlanTemplates clears all "execution_plan_templates" edges to the ExecutionPlanTemplate entity.
@@ -839,28 +839,28 @@ func (_u *OrganizationUpdate) sqlSave(ctx context.Context) (_node int, err error
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if _u.mutation.TranslationProfilesCleared() {
+	if _u.mutation.ExecutionProfilesCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   organization.TranslationProfilesTable,
-			Columns: []string{organization.TranslationProfilesColumn},
+			Table:   organization.ExecutionProfilesTable,
+			Columns: []string{organization.ExecutionProfilesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(executionprofile.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.RemovedTranslationProfilesIDs(); len(nodes) > 0 && !_u.mutation.TranslationProfilesCleared() {
+	if nodes := _u.mutation.RemovedExecutionProfilesIDs(); len(nodes) > 0 && !_u.mutation.ExecutionProfilesCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   organization.TranslationProfilesTable,
-			Columns: []string{organization.TranslationProfilesColumn},
+			Table:   organization.ExecutionProfilesTable,
+			Columns: []string{organization.ExecutionProfilesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(executionprofile.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -868,15 +868,15 @@ func (_u *OrganizationUpdate) sqlSave(ctx context.Context) (_node int, err error
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.TranslationProfilesIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.ExecutionProfilesIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   organization.TranslationProfilesTable,
-			Columns: []string{organization.TranslationProfilesColumn},
+			Table:   organization.ExecutionProfilesTable,
+			Columns: []string{organization.ExecutionProfilesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(executionprofile.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -1128,19 +1128,19 @@ func (_u *OrganizationUpdateOne) AddBootstrapPromptTemplates(v ...*BootstrapProm
 	return _u.AddBootstrapPromptTemplateIDs(ids...)
 }
 
-// AddTranslationProfileIDs adds the "translation_profiles" edge to the TranslationProfile entity by IDs.
-func (_u *OrganizationUpdateOne) AddTranslationProfileIDs(ids ...int) *OrganizationUpdateOne {
-	_u.mutation.AddTranslationProfileIDs(ids...)
+// AddExecutionProfileIDs adds the "execution_profiles" edge to the ExecutionProfile entity by IDs.
+func (_u *OrganizationUpdateOne) AddExecutionProfileIDs(ids ...int) *OrganizationUpdateOne {
+	_u.mutation.AddExecutionProfileIDs(ids...)
 	return _u
 }
 
-// AddTranslationProfiles adds the "translation_profiles" edges to the TranslationProfile entity.
-func (_u *OrganizationUpdateOne) AddTranslationProfiles(v ...*TranslationProfile) *OrganizationUpdateOne {
+// AddExecutionProfiles adds the "execution_profiles" edges to the ExecutionProfile entity.
+func (_u *OrganizationUpdateOne) AddExecutionProfiles(v ...*ExecutionProfile) *OrganizationUpdateOne {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.AddTranslationProfileIDs(ids...)
+	return _u.AddExecutionProfileIDs(ids...)
 }
 
 // AddExecutionPlanTemplateIDs adds the "execution_plan_templates" edge to the ExecutionPlanTemplate entity by IDs.
@@ -1310,25 +1310,25 @@ func (_u *OrganizationUpdateOne) RemoveBootstrapPromptTemplates(v ...*BootstrapP
 	return _u.RemoveBootstrapPromptTemplateIDs(ids...)
 }
 
-// ClearTranslationProfiles clears all "translation_profiles" edges to the TranslationProfile entity.
-func (_u *OrganizationUpdateOne) ClearTranslationProfiles() *OrganizationUpdateOne {
-	_u.mutation.ClearTranslationProfiles()
+// ClearExecutionProfiles clears all "execution_profiles" edges to the ExecutionProfile entity.
+func (_u *OrganizationUpdateOne) ClearExecutionProfiles() *OrganizationUpdateOne {
+	_u.mutation.ClearExecutionProfiles()
 	return _u
 }
 
-// RemoveTranslationProfileIDs removes the "translation_profiles" edge to TranslationProfile entities by IDs.
-func (_u *OrganizationUpdateOne) RemoveTranslationProfileIDs(ids ...int) *OrganizationUpdateOne {
-	_u.mutation.RemoveTranslationProfileIDs(ids...)
+// RemoveExecutionProfileIDs removes the "execution_profiles" edge to ExecutionProfile entities by IDs.
+func (_u *OrganizationUpdateOne) RemoveExecutionProfileIDs(ids ...int) *OrganizationUpdateOne {
+	_u.mutation.RemoveExecutionProfileIDs(ids...)
 	return _u
 }
 
-// RemoveTranslationProfiles removes "translation_profiles" edges to TranslationProfile entities.
-func (_u *OrganizationUpdateOne) RemoveTranslationProfiles(v ...*TranslationProfile) *OrganizationUpdateOne {
+// RemoveExecutionProfiles removes "execution_profiles" edges to ExecutionProfile entities.
+func (_u *OrganizationUpdateOne) RemoveExecutionProfiles(v ...*ExecutionProfile) *OrganizationUpdateOne {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.RemoveTranslationProfileIDs(ids...)
+	return _u.RemoveExecutionProfileIDs(ids...)
 }
 
 // ClearExecutionPlanTemplates clears all "execution_plan_templates" edges to the ExecutionPlanTemplate entity.
@@ -1781,28 +1781,28 @@ func (_u *OrganizationUpdateOne) sqlSave(ctx context.Context) (_node *Organizati
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if _u.mutation.TranslationProfilesCleared() {
+	if _u.mutation.ExecutionProfilesCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   organization.TranslationProfilesTable,
-			Columns: []string{organization.TranslationProfilesColumn},
+			Table:   organization.ExecutionProfilesTable,
+			Columns: []string{organization.ExecutionProfilesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(executionprofile.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.RemovedTranslationProfilesIDs(); len(nodes) > 0 && !_u.mutation.TranslationProfilesCleared() {
+	if nodes := _u.mutation.RemovedExecutionProfilesIDs(); len(nodes) > 0 && !_u.mutation.ExecutionProfilesCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   organization.TranslationProfilesTable,
-			Columns: []string{organization.TranslationProfilesColumn},
+			Table:   organization.ExecutionProfilesTable,
+			Columns: []string{organization.ExecutionProfilesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(executionprofile.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -1810,15 +1810,15 @@ func (_u *OrganizationUpdateOne) sqlSave(ctx context.Context) (_node *Organizati
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.TranslationProfilesIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.ExecutionProfilesIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   organization.TranslationProfilesTable,
-			Columns: []string{organization.TranslationProfilesColumn},
+			Table:   organization.ExecutionProfilesTable,
+			Columns: []string{organization.ExecutionProfilesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(executionprofile.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

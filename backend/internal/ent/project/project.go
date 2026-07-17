@@ -26,8 +26,6 @@ const (
 	FieldOwnerOrgID = "owner_org_id"
 	// FieldConfig holds the string denoting the config field in the database.
 	FieldConfig = "config"
-	// FieldDefaultTranslationConfig holds the string denoting the default_translation_config field in the database.
-	FieldDefaultTranslationConfig = "default_translation_config"
 	// FieldGlossaryEnabled holds the string denoting the glossary_enabled field in the database.
 	FieldGlossaryEnabled = "glossary_enabled"
 	// FieldSourceLang holds the string denoting the source_lang field in the database.
@@ -128,7 +126,6 @@ var Columns = []string{
 	FieldOwnerUserID,
 	FieldOwnerOrgID,
 	FieldConfig,
-	FieldDefaultTranslationConfig,
 	FieldGlossaryEnabled,
 	FieldSourceLang,
 	FieldTargetLang,
@@ -159,8 +156,6 @@ var (
 	OwnerOrgIDValidator func(int) error
 	// DefaultConfig holds the default value on creation for the "config" field.
 	DefaultConfig func() map[string]interface{}
-	// DefaultDefaultTranslationConfig holds the default value on creation for the "default_translation_config" field.
-	DefaultDefaultTranslationConfig func() map[string]interface{}
 	// DefaultGlossaryEnabled holds the default value on creation for the "glossary_enabled" field.
 	DefaultGlossaryEnabled bool
 	// DefaultSourceLang holds the default value on creation for the "source_lang" field.

@@ -14,13 +14,13 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
@@ -271,19 +271,19 @@ func (_c *UserCreate) AddBootstrapPromptTemplates(v ...*BootstrapPromptTemplate)
 	return _c.AddBootstrapPromptTemplateIDs(ids...)
 }
 
-// AddTranslationProfileIDs adds the "translation_profiles" edge to the TranslationProfile entity by IDs.
-func (_c *UserCreate) AddTranslationProfileIDs(ids ...int) *UserCreate {
-	_c.mutation.AddTranslationProfileIDs(ids...)
+// AddExecutionProfileIDs adds the "execution_profiles" edge to the ExecutionProfile entity by IDs.
+func (_c *UserCreate) AddExecutionProfileIDs(ids ...int) *UserCreate {
+	_c.mutation.AddExecutionProfileIDs(ids...)
 	return _c
 }
 
-// AddTranslationProfiles adds the "translation_profiles" edges to the TranslationProfile entity.
-func (_c *UserCreate) AddTranslationProfiles(v ...*TranslationProfile) *UserCreate {
+// AddExecutionProfiles adds the "execution_profiles" edges to the ExecutionProfile entity.
+func (_c *UserCreate) AddExecutionProfiles(v ...*ExecutionProfile) *UserCreate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _c.AddTranslationProfileIDs(ids...)
+	return _c.AddExecutionProfileIDs(ids...)
 }
 
 // AddExecutionPlanTemplateIDs adds the "execution_plan_templates" edge to the ExecutionPlanTemplate entity by IDs.
@@ -625,15 +625,15 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
-	if nodes := _c.mutation.TranslationProfilesIDs(); len(nodes) > 0 {
+	if nodes := _c.mutation.ExecutionProfilesIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.TranslationProfilesTable,
-			Columns: []string{user.TranslationProfilesColumn},
+			Table:   user.ExecutionProfilesTable,
+			Columns: []string{user.ExecutionProfilesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(executionprofile.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

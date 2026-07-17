@@ -10,27 +10,27 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
-// TranslationProfileCreate is the builder for creating a TranslationProfile entity.
-type TranslationProfileCreate struct {
+// ExecutionProfileCreate is the builder for creating a ExecutionProfile entity.
+type ExecutionProfileCreate struct {
 	config
-	mutation *TranslationProfileMutation
+	mutation *ExecutionProfileMutation
 	hooks    []Hook
 }
 
 // SetCreatedAt sets the "created_at" field.
-func (_c *TranslationProfileCreate) SetCreatedAt(v time.Time) *TranslationProfileCreate {
+func (_c *ExecutionProfileCreate) SetCreatedAt(v time.Time) *ExecutionProfileCreate {
 	_c.mutation.SetCreatedAt(v)
 	return _c
 }
 
 // SetNillableCreatedAt sets the "created_at" field if the given value is not nil.
-func (_c *TranslationProfileCreate) SetNillableCreatedAt(v *time.Time) *TranslationProfileCreate {
+func (_c *ExecutionProfileCreate) SetNillableCreatedAt(v *time.Time) *ExecutionProfileCreate {
 	if v != nil {
 		_c.SetCreatedAt(*v)
 	}
@@ -38,13 +38,13 @@ func (_c *TranslationProfileCreate) SetNillableCreatedAt(v *time.Time) *Translat
 }
 
 // SetUpdatedAt sets the "updated_at" field.
-func (_c *TranslationProfileCreate) SetUpdatedAt(v time.Time) *TranslationProfileCreate {
+func (_c *ExecutionProfileCreate) SetUpdatedAt(v time.Time) *ExecutionProfileCreate {
 	_c.mutation.SetUpdatedAt(v)
 	return _c
 }
 
 // SetNillableUpdatedAt sets the "updated_at" field if the given value is not nil.
-func (_c *TranslationProfileCreate) SetNillableUpdatedAt(v *time.Time) *TranslationProfileCreate {
+func (_c *ExecutionProfileCreate) SetNillableUpdatedAt(v *time.Time) *ExecutionProfileCreate {
 	if v != nil {
 		_c.SetUpdatedAt(*v)
 	}
@@ -52,19 +52,19 @@ func (_c *TranslationProfileCreate) SetNillableUpdatedAt(v *time.Time) *Translat
 }
 
 // SetName sets the "name" field.
-func (_c *TranslationProfileCreate) SetName(v string) *TranslationProfileCreate {
+func (_c *ExecutionProfileCreate) SetName(v string) *ExecutionProfileCreate {
 	_c.mutation.SetName(v)
 	return _c
 }
 
 // SetDescription sets the "description" field.
-func (_c *TranslationProfileCreate) SetDescription(v string) *TranslationProfileCreate {
+func (_c *ExecutionProfileCreate) SetDescription(v string) *ExecutionProfileCreate {
 	_c.mutation.SetDescription(v)
 	return _c
 }
 
 // SetNillableDescription sets the "description" field if the given value is not nil.
-func (_c *TranslationProfileCreate) SetNillableDescription(v *string) *TranslationProfileCreate {
+func (_c *ExecutionProfileCreate) SetNillableDescription(v *string) *ExecutionProfileCreate {
 	if v != nil {
 		_c.SetDescription(*v)
 	}
@@ -72,13 +72,13 @@ func (_c *TranslationProfileCreate) SetNillableDescription(v *string) *Translati
 }
 
 // SetScope sets the "scope" field.
-func (_c *TranslationProfileCreate) SetScope(v string) *TranslationProfileCreate {
+func (_c *ExecutionProfileCreate) SetScope(v string) *ExecutionProfileCreate {
 	_c.mutation.SetScope(v)
 	return _c
 }
 
 // SetNillableScope sets the "scope" field if the given value is not nil.
-func (_c *TranslationProfileCreate) SetNillableScope(v *string) *TranslationProfileCreate {
+func (_c *ExecutionProfileCreate) SetNillableScope(v *string) *ExecutionProfileCreate {
 	if v != nil {
 		_c.SetScope(*v)
 	}
@@ -86,13 +86,13 @@ func (_c *TranslationProfileCreate) SetNillableScope(v *string) *TranslationProf
 }
 
 // SetOwnerUserID sets the "owner_user_id" field.
-func (_c *TranslationProfileCreate) SetOwnerUserID(v int) *TranslationProfileCreate {
+func (_c *ExecutionProfileCreate) SetOwnerUserID(v int) *ExecutionProfileCreate {
 	_c.mutation.SetOwnerUserID(v)
 	return _c
 }
 
 // SetNillableOwnerUserID sets the "owner_user_id" field if the given value is not nil.
-func (_c *TranslationProfileCreate) SetNillableOwnerUserID(v *int) *TranslationProfileCreate {
+func (_c *ExecutionProfileCreate) SetNillableOwnerUserID(v *int) *ExecutionProfileCreate {
 	if v != nil {
 		_c.SetOwnerUserID(*v)
 	}
@@ -100,13 +100,13 @@ func (_c *TranslationProfileCreate) SetNillableOwnerUserID(v *int) *TranslationP
 }
 
 // SetOwnerOrgID sets the "owner_org_id" field.
-func (_c *TranslationProfileCreate) SetOwnerOrgID(v int) *TranslationProfileCreate {
+func (_c *ExecutionProfileCreate) SetOwnerOrgID(v int) *ExecutionProfileCreate {
 	_c.mutation.SetOwnerOrgID(v)
 	return _c
 }
 
 // SetNillableOwnerOrgID sets the "owner_org_id" field if the given value is not nil.
-func (_c *TranslationProfileCreate) SetNillableOwnerOrgID(v *int) *TranslationProfileCreate {
+func (_c *ExecutionProfileCreate) SetNillableOwnerOrgID(v *int) *ExecutionProfileCreate {
 	if v != nil {
 		_c.SetOwnerOrgID(*v)
 	}
@@ -114,13 +114,13 @@ func (_c *TranslationProfileCreate) SetNillableOwnerOrgID(v *int) *TranslationPr
 }
 
 // SetConfig sets the "config" field.
-func (_c *TranslationProfileCreate) SetConfig(v schema.TranslationProfileConfigData) *TranslationProfileCreate {
+func (_c *ExecutionProfileCreate) SetConfig(v schema.ExecutionProfileConfigData) *ExecutionProfileCreate {
 	_c.mutation.SetConfig(v)
 	return _c
 }
 
 // SetNillableConfig sets the "config" field if the given value is not nil.
-func (_c *TranslationProfileCreate) SetNillableConfig(v *schema.TranslationProfileConfigData) *TranslationProfileCreate {
+func (_c *ExecutionProfileCreate) SetNillableConfig(v *schema.ExecutionProfileConfigData) *ExecutionProfileCreate {
 	if v != nil {
 		_c.SetConfig(*v)
 	}
@@ -128,28 +128,28 @@ func (_c *TranslationProfileCreate) SetNillableConfig(v *schema.TranslationProfi
 }
 
 // SetOwnerUser sets the "owner_user" edge to the User entity.
-func (_c *TranslationProfileCreate) SetOwnerUser(v *User) *TranslationProfileCreate {
+func (_c *ExecutionProfileCreate) SetOwnerUser(v *User) *ExecutionProfileCreate {
 	return _c.SetOwnerUserID(v.ID)
 }
 
 // SetOwnerOrg sets the "owner_org" edge to the Organization entity.
-func (_c *TranslationProfileCreate) SetOwnerOrg(v *Organization) *TranslationProfileCreate {
+func (_c *ExecutionProfileCreate) SetOwnerOrg(v *Organization) *ExecutionProfileCreate {
 	return _c.SetOwnerOrgID(v.ID)
 }
 
-// Mutation returns the TranslationProfileMutation object of the builder.
-func (_c *TranslationProfileCreate) Mutation() *TranslationProfileMutation {
+// Mutation returns the ExecutionProfileMutation object of the builder.
+func (_c *ExecutionProfileCreate) Mutation() *ExecutionProfileMutation {
 	return _c.mutation
 }
 
-// Save creates the TranslationProfile in the database.
-func (_c *TranslationProfileCreate) Save(ctx context.Context) (*TranslationProfile, error) {
+// Save creates the ExecutionProfile in the database.
+func (_c *ExecutionProfileCreate) Save(ctx context.Context) (*ExecutionProfile, error) {
 	_c.defaults()
 	return withHooks(ctx, _c.sqlSave, _c.mutation, _c.hooks)
 }
 
 // SaveX calls Save and panics if Save returns an error.
-func (_c *TranslationProfileCreate) SaveX(ctx context.Context) *TranslationProfile {
+func (_c *ExecutionProfileCreate) SaveX(ctx context.Context) *ExecutionProfile {
 	v, err := _c.Save(ctx)
 	if err != nil {
 		panic(err)
@@ -158,81 +158,81 @@ func (_c *TranslationProfileCreate) SaveX(ctx context.Context) *TranslationProfi
 }
 
 // Exec executes the query.
-func (_c *TranslationProfileCreate) Exec(ctx context.Context) error {
+func (_c *ExecutionProfileCreate) Exec(ctx context.Context) error {
 	_, err := _c.Save(ctx)
 	return err
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (_c *TranslationProfileCreate) ExecX(ctx context.Context) {
+func (_c *ExecutionProfileCreate) ExecX(ctx context.Context) {
 	if err := _c.Exec(ctx); err != nil {
 		panic(err)
 	}
 }
 
 // defaults sets the default values of the builder before save.
-func (_c *TranslationProfileCreate) defaults() {
+func (_c *ExecutionProfileCreate) defaults() {
 	if _, ok := _c.mutation.CreatedAt(); !ok {
-		v := translationprofile.DefaultCreatedAt()
+		v := executionprofile.DefaultCreatedAt()
 		_c.mutation.SetCreatedAt(v)
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
-		v := translationprofile.DefaultUpdatedAt()
+		v := executionprofile.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
 	if _, ok := _c.mutation.Description(); !ok {
-		v := translationprofile.DefaultDescription
+		v := executionprofile.DefaultDescription
 		_c.mutation.SetDescription(v)
 	}
 	if _, ok := _c.mutation.Scope(); !ok {
-		v := translationprofile.DefaultScope
+		v := executionprofile.DefaultScope
 		_c.mutation.SetScope(v)
 	}
 	if _, ok := _c.mutation.Config(); !ok {
-		v := translationprofile.DefaultConfig
+		v := executionprofile.DefaultConfig
 		_c.mutation.SetConfig(v)
 	}
 }
 
 // check runs all checks and user-defined validators on the builder.
-func (_c *TranslationProfileCreate) check() error {
+func (_c *ExecutionProfileCreate) check() error {
 	if _, ok := _c.mutation.CreatedAt(); !ok {
-		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "TranslationProfile.created_at"`)}
+		return &ValidationError{Name: "created_at", err: errors.New(`ent: missing required field "ExecutionProfile.created_at"`)}
 	}
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
-		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "TranslationProfile.updated_at"`)}
+		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "ExecutionProfile.updated_at"`)}
 	}
 	if _, ok := _c.mutation.Name(); !ok {
-		return &ValidationError{Name: "name", err: errors.New(`ent: missing required field "TranslationProfile.name"`)}
+		return &ValidationError{Name: "name", err: errors.New(`ent: missing required field "ExecutionProfile.name"`)}
 	}
 	if v, ok := _c.mutation.Name(); ok {
-		if err := translationprofile.NameValidator(v); err != nil {
-			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "TranslationProfile.name": %w`, err)}
+		if err := executionprofile.NameValidator(v); err != nil {
+			return &ValidationError{Name: "name", err: fmt.Errorf(`ent: validator failed for field "ExecutionProfile.name": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Description(); !ok {
-		return &ValidationError{Name: "description", err: errors.New(`ent: missing required field "TranslationProfile.description"`)}
+		return &ValidationError{Name: "description", err: errors.New(`ent: missing required field "ExecutionProfile.description"`)}
 	}
 	if _, ok := _c.mutation.Scope(); !ok {
-		return &ValidationError{Name: "scope", err: errors.New(`ent: missing required field "TranslationProfile.scope"`)}
+		return &ValidationError{Name: "scope", err: errors.New(`ent: missing required field "ExecutionProfile.scope"`)}
 	}
 	if v, ok := _c.mutation.OwnerUserID(); ok {
-		if err := translationprofile.OwnerUserIDValidator(v); err != nil {
-			return &ValidationError{Name: "owner_user_id", err: fmt.Errorf(`ent: validator failed for field "TranslationProfile.owner_user_id": %w`, err)}
+		if err := executionprofile.OwnerUserIDValidator(v); err != nil {
+			return &ValidationError{Name: "owner_user_id", err: fmt.Errorf(`ent: validator failed for field "ExecutionProfile.owner_user_id": %w`, err)}
 		}
 	}
 	if v, ok := _c.mutation.OwnerOrgID(); ok {
-		if err := translationprofile.OwnerOrgIDValidator(v); err != nil {
-			return &ValidationError{Name: "owner_org_id", err: fmt.Errorf(`ent: validator failed for field "TranslationProfile.owner_org_id": %w`, err)}
+		if err := executionprofile.OwnerOrgIDValidator(v); err != nil {
+			return &ValidationError{Name: "owner_org_id", err: fmt.Errorf(`ent: validator failed for field "ExecutionProfile.owner_org_id": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Config(); !ok {
-		return &ValidationError{Name: "config", err: errors.New(`ent: missing required field "TranslationProfile.config"`)}
+		return &ValidationError{Name: "config", err: errors.New(`ent: missing required field "ExecutionProfile.config"`)}
 	}
 	return nil
 }
 
-func (_c *TranslationProfileCreate) sqlSave(ctx context.Context) (*TranslationProfile, error) {
+func (_c *ExecutionProfileCreate) sqlSave(ctx context.Context) (*ExecutionProfile, error) {
 	if err := _c.check(); err != nil {
 		return nil, err
 	}
@@ -250,41 +250,41 @@ func (_c *TranslationProfileCreate) sqlSave(ctx context.Context) (*TranslationPr
 	return _node, nil
 }
 
-func (_c *TranslationProfileCreate) createSpec() (*TranslationProfile, *sqlgraph.CreateSpec) {
+func (_c *ExecutionProfileCreate) createSpec() (*ExecutionProfile, *sqlgraph.CreateSpec) {
 	var (
-		_node = &TranslationProfile{config: _c.config}
-		_spec = sqlgraph.NewCreateSpec(translationprofile.Table, sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt))
+		_node = &ExecutionProfile{config: _c.config}
+		_spec = sqlgraph.NewCreateSpec(executionprofile.Table, sqlgraph.NewFieldSpec(executionprofile.FieldID, field.TypeInt))
 	)
 	if value, ok := _c.mutation.CreatedAt(); ok {
-		_spec.SetField(translationprofile.FieldCreatedAt, field.TypeTime, value)
+		_spec.SetField(executionprofile.FieldCreatedAt, field.TypeTime, value)
 		_node.CreatedAt = value
 	}
 	if value, ok := _c.mutation.UpdatedAt(); ok {
-		_spec.SetField(translationprofile.FieldUpdatedAt, field.TypeTime, value)
+		_spec.SetField(executionprofile.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
 	}
 	if value, ok := _c.mutation.Name(); ok {
-		_spec.SetField(translationprofile.FieldName, field.TypeString, value)
+		_spec.SetField(executionprofile.FieldName, field.TypeString, value)
 		_node.Name = value
 	}
 	if value, ok := _c.mutation.Description(); ok {
-		_spec.SetField(translationprofile.FieldDescription, field.TypeString, value)
+		_spec.SetField(executionprofile.FieldDescription, field.TypeString, value)
 		_node.Description = value
 	}
 	if value, ok := _c.mutation.Scope(); ok {
-		_spec.SetField(translationprofile.FieldScope, field.TypeString, value)
+		_spec.SetField(executionprofile.FieldScope, field.TypeString, value)
 		_node.Scope = value
 	}
 	if value, ok := _c.mutation.Config(); ok {
-		_spec.SetField(translationprofile.FieldConfig, field.TypeJSON, value)
+		_spec.SetField(executionprofile.FieldConfig, field.TypeJSON, value)
 		_node.Config = value
 	}
 	if nodes := _c.mutation.OwnerUserIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   translationprofile.OwnerUserTable,
-			Columns: []string{translationprofile.OwnerUserColumn},
+			Table:   executionprofile.OwnerUserTable,
+			Columns: []string{executionprofile.OwnerUserColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(user.FieldID, field.TypeInt),
@@ -300,8 +300,8 @@ func (_c *TranslationProfileCreate) createSpec() (*TranslationProfile, *sqlgraph
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   translationprofile.OwnerOrgTable,
-			Columns: []string{translationprofile.OwnerOrgColumn},
+			Table:   executionprofile.OwnerOrgTable,
+			Columns: []string{executionprofile.OwnerOrgColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
@@ -316,27 +316,27 @@ func (_c *TranslationProfileCreate) createSpec() (*TranslationProfile, *sqlgraph
 	return _node, _spec
 }
 
-// TranslationProfileCreateBulk is the builder for creating many TranslationProfile entities in bulk.
-type TranslationProfileCreateBulk struct {
+// ExecutionProfileCreateBulk is the builder for creating many ExecutionProfile entities in bulk.
+type ExecutionProfileCreateBulk struct {
 	config
 	err      error
-	builders []*TranslationProfileCreate
+	builders []*ExecutionProfileCreate
 }
 
-// Save creates the TranslationProfile entities in the database.
-func (_c *TranslationProfileCreateBulk) Save(ctx context.Context) ([]*TranslationProfile, error) {
+// Save creates the ExecutionProfile entities in the database.
+func (_c *ExecutionProfileCreateBulk) Save(ctx context.Context) ([]*ExecutionProfile, error) {
 	if _c.err != nil {
 		return nil, _c.err
 	}
 	specs := make([]*sqlgraph.CreateSpec, len(_c.builders))
-	nodes := make([]*TranslationProfile, len(_c.builders))
+	nodes := make([]*ExecutionProfile, len(_c.builders))
 	mutators := make([]Mutator, len(_c.builders))
 	for i := range _c.builders {
 		func(i int, root context.Context) {
 			builder := _c.builders[i]
 			builder.defaults()
 			var mut Mutator = MutateFunc(func(ctx context.Context, m Mutation) (Value, error) {
-				mutation, ok := m.(*TranslationProfileMutation)
+				mutation, ok := m.(*ExecutionProfileMutation)
 				if !ok {
 					return nil, fmt.Errorf("unexpected mutation type %T", m)
 				}
@@ -383,7 +383,7 @@ func (_c *TranslationProfileCreateBulk) Save(ctx context.Context) ([]*Translatio
 }
 
 // SaveX is like Save, but panics if an error occurs.
-func (_c *TranslationProfileCreateBulk) SaveX(ctx context.Context) []*TranslationProfile {
+func (_c *ExecutionProfileCreateBulk) SaveX(ctx context.Context) []*ExecutionProfile {
 	v, err := _c.Save(ctx)
 	if err != nil {
 		panic(err)
@@ -392,13 +392,13 @@ func (_c *TranslationProfileCreateBulk) SaveX(ctx context.Context) []*Translatio
 }
 
 // Exec executes the query.
-func (_c *TranslationProfileCreateBulk) Exec(ctx context.Context) error {
+func (_c *ExecutionProfileCreateBulk) Exec(ctx context.Context) error {
 	_, err := _c.Save(ctx)
 	return err
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (_c *TranslationProfileCreateBulk) ExecX(ctx context.Context) {
+func (_c *ExecutionProfileCreateBulk) ExecX(ctx context.Context) {
 	if err := _c.Exec(ctx); err != nil {
 		panic(err)
 	}

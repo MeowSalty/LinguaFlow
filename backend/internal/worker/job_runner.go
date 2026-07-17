@@ -25,7 +25,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
-// JobRunner 翻译任务的执行器，实现 TaskRunner 接口。
+// JobRunner 任务执行器，实现 TaskRunner 接口。
 type JobRunner struct {
 	logger      *slog.Logger
 	client      *ent.Client
@@ -41,7 +41,7 @@ type JobRunner struct {
 	activeJobs map[int]context.CancelFunc
 }
 
-// NewJobRunner 创建一个新的翻译任务执行器。
+// NewJobRunner 创建一个新的任务执行器。
 func NewJobRunner(
 	logger *slog.Logger,
 	client *ent.Client,
@@ -94,7 +94,7 @@ func (r *JobRunner) Run(ctx context.Context) error {
 			return err
 		}
 		if err := r.processJob(ctx, jobID); err != nil {
-			r.logger.Error("translation worker: process job failed", "job_id", jobID, "err", err)
+			r.logger.Error("job worker: process job failed", "job_id", jobID, "err", err)
 		}
 		r.queue.Done(jobID)
 	}
@@ -106,7 +106,7 @@ func (r *JobRunner) Cancel(taskID int) {
 	cancel, ok := r.activeJobs[taskID]
 	r.mu.Unlock()
 	if ok {
-		r.logger.Info("cancelling running translation job", "job_id", taskID)
+		r.logger.Info("cancelling running job", "job_id", taskID)
 		cancel()
 	}
 }
@@ -164,7 +164,7 @@ func (r *JobRunner) processJob(ctx context.Context, jobID int) error {
 				break
 			}
 			if err := r.processJobResource(jobCtx, exec, item); err != nil {
-				r.logger.Warn("translation job resource failed", "job_id", jobID, "job_resource_id", item.ID, "err", err)
+				r.logger.Warn("job resource failed", "job_id", jobID, "job_resource_id", item.ID, "err", err)
 			}
 		}
 	}
@@ -207,9 +207,9 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 		defer release()
 	}
 
-	snapshot, err := r.jobs.GetTranslationSnapshot(ctx, job.ID)
+	snapshot, err := r.jobs.GetExecutionSnapshot(ctx, job.ID)
 	if err != nil {
-		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, fmt.Errorf("get translation snapshot: %w", err))
+		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, fmt.Errorf("get execution snapshot: %w", err))
 		return nil
 	}
 
@@ -492,16 +492,16 @@ func (r *JobRunner) loadSegments(ctx context.Context, resourceID int, selectedID
 	return selectedRows, allRows, nil
 }
 
-// recordUsage 记录翻译用量到数据库。
+// recordUsage 记录任务用量到数据库。
 func (r *JobRunner) recordUsage(ctx context.Context, exec *service.JobExecution, segmentCount int, inputTokens, outputTokens int64) error {
 	usage := r.client.UsageRecord.Create().
 		SetProjectID(exec.Project.ID).
-		SetSource("translation_job").
+		SetSource("job").
 		SetSegmentCount(segmentCount).
 		SetAPICalls(segmentCount).
 		SetInputTokens(clampInt64ToInt(inputTokens)).
 		SetOutputTokens(clampInt64ToInt(outputTokens)).
-		SetNote(fmt.Sprintf("translation_job:%d", exec.Job.ID))
+		SetNote(fmt.Sprintf("job:%d", exec.Job.ID))
 	if exec.ActorUserID > 0 {
 		usage.SetUserID(exec.ActorUserID)
 	}

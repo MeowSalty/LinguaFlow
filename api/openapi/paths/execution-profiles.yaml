@@ -1,21 +1,21 @@
-translationProfiles:
+executionProfiles:
   get:
-    operationId: ListTranslationProfiles
-    summary: 列出当前用户的翻译配置
+    operationId: ListExecutionProfiles
+    summary: 列出当前用户的执行策略配置
     security:
       - bearerAuth: []
     responses:
       '200':
-        description: 翻译配置列表
+        description: 执行策略配置列表
         content:
           application/json:
             schema:
-              $ref: '../components/schemas/translation-profile.yaml#/TranslationProfileListResponse'
+              $ref: '../components/schemas/execution-profile.yaml#/ExecutionProfileListResponse'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
   post:
-    operationId: CreateTranslationProfile
-    summary: 创建翻译配置
+    operationId: CreateExecutionProfile
+    summary: 创建执行策略配置
     security:
       - bearerAuth: []
     requestBody:
@@ -23,37 +23,37 @@ translationProfiles:
       content:
         application/json:
           schema:
-            $ref: '../components/schemas/translation-profile.yaml#/CreateTranslationProfileRequest'
+              $ref: '../components/schemas/execution-profile.yaml#/CreateExecutionProfileRequest'
     responses:
       '201':
         description: 创建成功
         content:
           application/json:
             schema:
-              $ref: '../components/schemas/translation-profile.yaml#/TranslationProfile'
+              $ref: '../components/schemas/execution-profile.yaml#/ExecutionProfile'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
 
-translationProfileById:
+executionProfileById:
   parameters:
-    - $ref: '../base.yaml#/components/parameters/TranslationProfileId'
+    - $ref: '../base.yaml#/components/parameters/ExecutionProfileId'
   get:
-    operationId: GetTranslationProfile
-    summary: 获取翻译配置详情
+    operationId: GetExecutionProfile
+    summary: 获取执行策略配置详情
     security:
       - bearerAuth: []
     responses:
       '200':
-        description: 翻译配置详情
+        description: 执行策略配置详情
         content:
           application/json:
             schema:
-              $ref: '../components/schemas/translation-profile.yaml#/TranslationProfile'
+              $ref: '../components/schemas/execution-profile.yaml#/ExecutionProfile'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
   put:
-    operationId: UpdateTranslationProfile
-    summary: 更新翻译配置
+    operationId: UpdateExecutionProfile
+    summary: 更新执行策略配置
     security:
       - bearerAuth: []
     requestBody:
@@ -61,19 +61,19 @@ translationProfileById:
       content:
         application/json:
           schema:
-            $ref: '../components/schemas/translation-profile.yaml#/UpdateTranslationProfileRequest'
+              $ref: '../components/schemas/execution-profile.yaml#/UpdateExecutionProfileRequest'
     responses:
       '200':
         description: 更新成功
         content:
           application/json:
             schema:
-              $ref: '../components/schemas/translation-profile.yaml#/TranslationProfile'
+              $ref: '../components/schemas/execution-profile.yaml#/ExecutionProfile'
       default:
         $ref: '../base.yaml#/components/responses/Problem'
   delete:
-    operationId: DeleteTranslationProfile
-    summary: 删除翻译配置
+    operationId: DeleteExecutionProfile
+    summary: 删除执行策略配置
     security:
       - bearerAuth: []
     responses:

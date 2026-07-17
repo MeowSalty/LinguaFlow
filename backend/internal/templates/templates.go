@@ -66,8 +66,8 @@ const (
 	BuiltinTranslationPromptTemplateID = -1
 	// BuiltinBootstrapPromptTemplateID 内置术语抽取提示词模板的虚拟 ID。
 	BuiltinBootstrapPromptTemplateID = -1
-	// BuiltinTranslationProfileID 内置翻译策略的虚拟 ID。
-	BuiltinTranslationProfileID = -1
+	// BuiltinExecutionProfileID 内置执行策略的虚拟 ID。
+	BuiltinExecutionProfileID = -1
 )
 
 // IsBuiltinID 报告 id 是否为内置虚拟实体的负数 ID。
@@ -158,10 +158,10 @@ func BuiltinBootstrapPromptTemplate(id int) *ent.BootstrapPromptTemplate {
 	return nil
 }
 
-// ── 内置 TranslationProfile 虚拟实体 ───────────────────────
+// ── 内置 ExecutionProfile 虚拟实体 ───────────────────────────
 
-var builtinProfileConfig schema.TranslationProfileConfigData
-var builtinTranslationProfile *ent.TranslationProfile
+var builtinProfileConfig schema.ExecutionProfileConfigData
+var builtinExecutionProfile *ent.ExecutionProfile
 
 func init() {
 	if err := yaml.Unmarshal(EmbeddedProfileConfig(), &builtinProfileConfig); err != nil {
@@ -171,8 +171,8 @@ func init() {
 
 func init() {
 	meta := parseBuiltinConfig()
-	builtinTranslationProfile = &ent.TranslationProfile{
-		ID:          BuiltinTranslationProfileID,
+	builtinExecutionProfile = &ent.ExecutionProfile{
+		ID:          BuiltinExecutionProfileID,
 		Name:        meta.TranslationProfile.Name,
 		Description: meta.TranslationProfile.Description,
 		Scope:       "system",
@@ -180,15 +180,15 @@ func init() {
 	}
 }
 
-// BuiltinTranslationProfiles 返回所有内置翻译策略（当前仅一个）。
-func BuiltinTranslationProfiles() []*ent.TranslationProfile {
-	return []*ent.TranslationProfile{builtinTranslationProfile}
+// BuiltinExecutionProfiles 返回所有内置执行策略（当前仅一个）。
+func BuiltinExecutionProfiles() []*ent.ExecutionProfile {
+	return []*ent.ExecutionProfile{builtinExecutionProfile}
 }
 
-// BuiltinTranslationProfile 根据 id 返回内置翻译策略，id 不匹配时返回 nil。
-func BuiltinTranslationProfile(id int) *ent.TranslationProfile {
-	if id == BuiltinTranslationProfileID {
-		return builtinTranslationProfile
+// BuiltinExecutionProfile 根据 id 返回内置执行策略，id 不匹配时返回 nil。
+func BuiltinExecutionProfile(id int) *ent.ExecutionProfile {
+	if id == BuiltinExecutionProfileID {
+		return builtinExecutionProfile
 	}
 	return nil
 }

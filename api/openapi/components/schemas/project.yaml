@@ -13,13 +13,10 @@ Project:
     config:
       type: object
       additionalProperties: true
-    default_translation_config:
-      type: object
-      additionalProperties: true
     glossary_enabled:
       type: boolean
       default: false
-      description: 翻译过程中是否启用术语表
+      description: 是否启用术语表
     source_lang:
       type: string
     target_lang:
@@ -49,13 +46,10 @@ CreateProjectRequest:
     config:
       type: object
       additionalProperties: true
-    default_translation_config:
-      type: object
-      additionalProperties: true
     glossary_enabled:
       type: boolean
       default: false
-      description: 翻译过程中是否启用术语表
+      description: 是否启用术语表
     source_lang:
       type: string
     target_lang:
@@ -70,15 +64,11 @@ UpdateProjectRequest:
     config:
       type: object
       additionalProperties: true
-    default_translation_config:
-      type: object
-      additionalProperties: true
     glossary_enabled:
       type: boolean
-      description: 翻译过程中是否启用术语表
+      description: 是否启用术语表
     source_lang:
       type: string
     target_lang:
       type: string
   additionalProperties: false
-

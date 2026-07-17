@@ -1,10 +1,10 @@
 package schema
 
 // 注意：此文件仅包含数据结构体定义，不包含独立的 ent.Schema。
-// TranslationProfileConfigData 作为 field.JSON 内联到 TranslationProfile 主表。
+// ExecutionProfileConfigData 作为 field.JSON 内联到 ExecutionProfile 主表。
 
-// TranslationProfileConfigData 翻译配置模板的 JSON 存储结构。
-type TranslationProfileConfigData struct {
+// ExecutionProfileConfigData 执行策略配置的 JSON 存储结构。
+type ExecutionProfileConfigData struct {
 	Protect     ProfileProtectConfig     `json:"protect"     yaml:"protect"`
 	Postprocess ProfilePostprocessConfig `json:"postprocess" yaml:"postprocess"`
 	Repair      ProfileRepairConfig      `json:"repair"      yaml:"repair"`
@@ -64,7 +64,7 @@ type ProfileContextConfig struct {
 	MaxChars int  `json:"max_chars" yaml:"max_chars"`
 }
 
-// ProfileQAConfig 翻译质量检测配置。
+// ProfileQAConfig 质量检测配置。
 type ProfileQAConfig struct {
 	Enabled        bool    `json:"enabled"          yaml:"enabled"`
 	AutoReject     bool    `json:"auto_reject"      yaml:"auto_reject"`
@@ -73,9 +73,9 @@ type ProfileQAConfig struct {
 	LengthRatioMax float64 `json:"length_ratio_max" yaml:"length_ratio_max"`
 }
 
-// DefaultProfileConfig 返回默认的翻译配置。
-func DefaultProfileConfig() TranslationProfileConfigData {
-	return TranslationProfileConfigData{
+// DefaultProfileConfig 返回默认的执行策略配置。
+func DefaultProfileConfig() ExecutionProfileConfigData {
+	return ExecutionProfileConfigData{
 		Protect: ProfileProtectConfig{
 			Enabled: true,
 			Rules:   []string{"code", "link", "placeholder", "xml"},
@@ -116,7 +116,7 @@ func DefaultProfileConfig() TranslationProfileConfigData {
 
 // NormalizeContext 填充 Context 字段的默认值。
 // 用于处理从数据库反序列化时缺少 context 字段的旧记录。
-func (c *TranslationProfileConfigData) NormalizeContext() {
+func (c *ExecutionProfileConfigData) NormalizeContext() {
 	if c.Context.Before < 1 {
 		c.Context.Before = 1
 	}
@@ -133,7 +133,7 @@ func (c *TranslationProfileConfigData) NormalizeContext() {
 // 用于处理从数据库反序列化时缺少 preserve_kinds 字段的旧记录。
 // nil 表示未设置（旧记录），回退到默认全集；
 // 非 nil 空切片表示用户显式选择不保留任何注音，不做覆盖。
-func (c *TranslationProfileConfigData) NormalizePreserveKinds() {
+func (c *ExecutionProfileConfigData) NormalizePreserveKinds() {
 	if c.Ruby.PreserveKinds == nil {
 		c.Ruby.PreserveKinds = []string{"phonetic", "semantic", "creative"}
 	}

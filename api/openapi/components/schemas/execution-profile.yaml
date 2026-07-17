@@ -1,4 +1,4 @@
-TranslationProfileScope:
+ExecutionProfileScope:
   type: string
   enum: [user, org, system]
 
@@ -142,7 +142,7 @@ ProfileQAConfig:
       default: 0
       description: "译文/原文最长长度比，0 表示不检测"
 
-TranslationProfileConfig:
+ExecutionProfileConfig:
   type: object
   required: [protect, postprocess, repair, glossary, context]
   properties:
@@ -161,7 +161,7 @@ TranslationProfileConfig:
     qa:
       $ref: '#/ProfileQAConfig'
 
-TranslationProfile:
+ExecutionProfile:
   type: object
   required: [id, name, description, scope, config]
   properties:
@@ -172,13 +172,13 @@ TranslationProfile:
     description:
       type: string
     scope:
-      $ref: '#/TranslationProfileScope'
+      $ref: '#/ExecutionProfileScope'
     owner_user_id:
       type: integer
     owner_org_id:
       type: integer
     config:
-      $ref: '#/TranslationProfileConfig'
+      $ref: '#/ExecutionProfileConfig'
     created_at:
       type: string
       format: date-time
@@ -186,16 +186,16 @@ TranslationProfile:
       type: string
       format: date-time
 
-TranslationProfileListResponse:
+ExecutionProfileListResponse:
   type: object
   required: [items]
   properties:
     items:
       type: array
       items:
-        $ref: '#/TranslationProfile'
+        $ref: '#/ExecutionProfile'
 
-CreateTranslationProfileRequest:
+CreateExecutionProfileRequest:
   type: object
   required: [name]
   properties:
@@ -204,10 +204,10 @@ CreateTranslationProfileRequest:
     description:
       type: string
     config:
-      $ref: '#/TranslationProfileConfig'
+      $ref: '#/ExecutionProfileConfig'
   additionalProperties: false
 
-UpdateTranslationProfileRequest:
+UpdateExecutionProfileRequest:
   type: object
   properties:
     name:
@@ -215,5 +215,5 @@ UpdateTranslationProfileRequest:
     description:
       type: string
     config:
-      $ref: '#/TranslationProfileConfig'
+      $ref: '#/ExecutionProfileConfig'
   additionalProperties: false

@@ -35,12 +35,12 @@ type adminUserListResponse struct {
 }
 
 type systemStatsResponse struct {
-	TotalUsers           int `json:"total_users"`
-	ActiveUsers          int `json:"active_users"`
-	TotalProjects        int `json:"total_projects"`
-	TotalOrganizations   int `json:"total_organizations"`
-	TotalTranslationJobs int `json:"total_translation_jobs"`
-	TotalResources       int `json:"total_resources"`
+	TotalUsers         int `json:"total_users"`
+	ActiveUsers        int `json:"active_users"`
+	TotalProjects      int `json:"total_projects"`
+	TotalOrganizations int `json:"total_organizations"`
+	TotalJobs          int `json:"total_jobs"`
+	TotalResources     int `json:"total_resources"`
 }
 
 type adminAuditLogItem struct {
@@ -206,12 +206,12 @@ func (s *Server) handleAdminGetStats(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, systemStatsResponse{
-		TotalUsers:           stats.TotalUsers,
-		ActiveUsers:          stats.ActiveUsers,
-		TotalProjects:        stats.TotalProjects,
-		TotalOrganizations:   stats.TotalOrganizations,
-		TotalTranslationJobs: stats.TotalTranslationJobs,
-		TotalResources:       stats.TotalResources,
+		TotalUsers:         stats.TotalUsers,
+		ActiveUsers:        stats.ActiveUsers,
+		TotalProjects:      stats.TotalProjects,
+		TotalOrganizations: stats.TotalOrganizations,
+		TotalJobs:          stats.TotalJobs,
+		TotalResources:     stats.TotalResources,
 	})
 }
 

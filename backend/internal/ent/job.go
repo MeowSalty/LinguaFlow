@@ -32,8 +32,8 @@ type Job struct {
 	TriggerType string `json:"trigger_type,omitempty"`
 	// 引用的执行计划模板 ID（必填）
 	ExecutionPlanID int `json:"execution_plan_id,omitempty"`
-	// 翻译配置快照，创建时从项目配置复制并可覆盖
-	TranslationConfig map[string]interface{} `json:"translation_config,omitempty"`
+	// 执行配置快照，创建时从项目配置复制并可覆盖
+	ExecutionConfig map[string]interface{} `json:"execution_config,omitempty"`
 	// 关联的资源文件数
 	ResourceCount int `json:"resource_count,omitempty"`
 	// 已完成的资源数
@@ -44,7 +44,7 @@ type Job struct {
 	TotalSegments int `json:"total_segments,omitempty"`
 	// 被系统跳过的段落数（聚合自 JobResource）
 	SkippedSegments int `json:"skipped_segments,omitempty"`
-	// 实际需要翻译的段落数（ReconcileJob 从各资源的 stage_total 聚合）
+	// 实际需要处理的段落数（ReconcileJob 从各资源的 stage_total 聚合）
 	StageTotal int `json:"stage_total,omitempty"`
 	// 已完成段落数
 	CompletedSegments int `json:"completed_segments,omitempty"`
@@ -119,7 +119,7 @@ func (*Job) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case job.FieldTranslationConfig:
+		case job.FieldExecutionConfig:
 			values[i] = new([]byte)
 		case job.FieldID, job.FieldProjectID, job.FieldExecutionPlanID, job.FieldResourceCount, job.FieldCompletedResources, job.FieldFailedResources, job.FieldTotalSegments, job.FieldSkippedSegments, job.FieldStageTotal, job.FieldCompletedSegments:
 			values[i] = new(sql.NullInt64)
@@ -186,12 +186,12 @@ func (_m *Job) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.ExecutionPlanID = int(value.Int64)
 			}
-		case job.FieldTranslationConfig:
+		case job.FieldExecutionConfig:
 			if value, ok := values[i].(*[]byte); !ok {
-				return fmt.Errorf("unexpected type %T for field translation_config", values[i])
+				return fmt.Errorf("unexpected type %T for field execution_config", values[i])
 			} else if value != nil && len(*value) > 0 {
-				if err := json.Unmarshal(*value, &_m.TranslationConfig); err != nil {
-					return fmt.Errorf("unmarshal field translation_config: %w", err)
+				if err := json.Unmarshal(*value, &_m.ExecutionConfig); err != nil {
+					return fmt.Errorf("unmarshal field execution_config: %w", err)
 				}
 			}
 		case job.FieldResourceCount:
@@ -331,8 +331,8 @@ func (_m *Job) String() string {
 	builder.WriteString("execution_plan_id=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ExecutionPlanID))
 	builder.WriteString(", ")
-	builder.WriteString("translation_config=")
-	builder.WriteString(fmt.Sprintf("%v", _m.TranslationConfig))
+	builder.WriteString("execution_config=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ExecutionConfig))
 	builder.WriteString(", ")
 	builder.WriteString("resource_count=")
 	builder.WriteString(fmt.Sprintf("%v", _m.ResourceCount))

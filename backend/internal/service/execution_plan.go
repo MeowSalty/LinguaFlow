@@ -211,7 +211,7 @@ func (s *ExecutionPlanService) Update(ctx context.Context, userID, planID int, i
 }
 
 // Delete 删除执行计划模板。
-// 如果有 TranslationJob 引用了该模板，拒绝删除。
+// 如果有 Job 引用了该模板，拒绝删除。
 func (s *ExecutionPlanService) Delete(ctx context.Context, userID, planID int) error {
 	plan, err := s.GetByID(ctx, userID, planID)
 	if err != nil {

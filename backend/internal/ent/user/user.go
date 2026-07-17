@@ -50,8 +50,8 @@ const (
 	EdgeTranslationPromptTemplates = "translation_prompt_templates"
 	// EdgeBootstrapPromptTemplates holds the string denoting the bootstrap_prompt_templates edge name in mutations.
 	EdgeBootstrapPromptTemplates = "bootstrap_prompt_templates"
-	// EdgeTranslationProfiles holds the string denoting the translation_profiles edge name in mutations.
-	EdgeTranslationProfiles = "translation_profiles"
+	// EdgeExecutionProfiles holds the string denoting the execution_profiles edge name in mutations.
+	EdgeExecutionProfiles = "execution_profiles"
 	// EdgeExecutionPlanTemplates holds the string denoting the execution_plan_templates edge name in mutations.
 	EdgeExecutionPlanTemplates = "execution_plan_templates"
 	// EdgeSyncTasks holds the string denoting the sync_tasks edge name in mutations.
@@ -128,13 +128,13 @@ const (
 	BootstrapPromptTemplatesInverseTable = "bootstrap_prompt_templates"
 	// BootstrapPromptTemplatesColumn is the table column denoting the bootstrap_prompt_templates relation/edge.
 	BootstrapPromptTemplatesColumn = "owner_user_id"
-	// TranslationProfilesTable is the table that holds the translation_profiles relation/edge.
-	TranslationProfilesTable = "translation_profiles"
-	// TranslationProfilesInverseTable is the table name for the TranslationProfile entity.
-	// It exists in this package in order to avoid circular dependency with the "translationprofile" package.
-	TranslationProfilesInverseTable = "translation_profiles"
-	// TranslationProfilesColumn is the table column denoting the translation_profiles relation/edge.
-	TranslationProfilesColumn = "owner_user_id"
+	// ExecutionProfilesTable is the table that holds the execution_profiles relation/edge.
+	ExecutionProfilesTable = "execution_profiles"
+	// ExecutionProfilesInverseTable is the table name for the ExecutionProfile entity.
+	// It exists in this package in order to avoid circular dependency with the "executionprofile" package.
+	ExecutionProfilesInverseTable = "execution_profiles"
+	// ExecutionProfilesColumn is the table column denoting the execution_profiles relation/edge.
+	ExecutionProfilesColumn = "owner_user_id"
 	// ExecutionPlanTemplatesTable is the table that holds the execution_plan_templates relation/edge.
 	ExecutionPlanTemplatesTable = "execution_plan_templates"
 	// ExecutionPlanTemplatesInverseTable is the table name for the ExecutionPlanTemplate entity.
@@ -381,17 +381,17 @@ func ByBootstrapPromptTemplates(term sql.OrderTerm, terms ...sql.OrderTerm) Orde
 	}
 }
 
-// ByTranslationProfilesCount orders the results by translation_profiles count.
-func ByTranslationProfilesCount(opts ...sql.OrderTermOption) OrderOption {
+// ByExecutionProfilesCount orders the results by execution_profiles count.
+func ByExecutionProfilesCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newTranslationProfilesStep(), opts...)
+		sqlgraph.OrderByNeighborsCount(s, newExecutionProfilesStep(), opts...)
 	}
 }
 
-// ByTranslationProfiles orders the results by translation_profiles terms.
-func ByTranslationProfiles(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+// ByExecutionProfiles orders the results by execution_profiles terms.
+func ByExecutionProfiles(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newTranslationProfilesStep(), append([]sql.OrderTerm{term}, terms...)...)
+		sqlgraph.OrderByNeighborTerms(s, newExecutionProfilesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
 
@@ -492,11 +492,11 @@ func newBootstrapPromptTemplatesStep() *sqlgraph.Step {
 		sqlgraph.Edge(sqlgraph.O2M, false, BootstrapPromptTemplatesTable, BootstrapPromptTemplatesColumn),
 	)
 }
-func newTranslationProfilesStep() *sqlgraph.Step {
+func newExecutionProfilesStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(TranslationProfilesInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, TranslationProfilesTable, TranslationProfilesColumn),
+		sqlgraph.To(ExecutionProfilesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, ExecutionProfilesTable, ExecutionProfilesColumn),
 	)
 }
 func newExecutionPlanTemplatesStep() *sqlgraph.Step {

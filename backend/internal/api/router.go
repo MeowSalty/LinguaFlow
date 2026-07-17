@@ -30,7 +30,7 @@ func (s *Server) newRouter() http.Handler {
 	r.Mount("/api/v1", HandlerFromMux(s, apiV1))
 
 	// SSE 流式端点（不在 OpenAPI 规范中）
-	apiV1.Get("/jobs/{jobId}/stream", s.handleTranslationJobStream)
+	apiV1.Get("/jobs/{jobId}/stream", s.handleJobStream)
 
 	// 本地模式下挂载嵌入的前端静态资源
 	if s.isLocal() {

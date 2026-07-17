@@ -68,8 +68,8 @@ BootstrapPromptTemplateId:
   schema:
     type: integer
 
-TranslationProfileId:
-  name: translationProfileId
+ExecutionProfileId:
+  name: executionProfileId
   in: path
   required: true
   schema:

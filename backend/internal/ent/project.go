@@ -32,9 +32,7 @@ type Project struct {
 	OwnerOrgID *int `json:"owner_org_id,omitempty"`
 	// Config holds the value of the "config" field.
 	Config map[string]interface{} `json:"config,omitempty"`
-	// 默认翻译配置，创建翻译任务时作为任务配置基底
-	DefaultTranslationConfig map[string]interface{} `json:"default_translation_config,omitempty"`
-	// 翻译过程中是否启用术语表
+	// 是否启用术语表
 	GlossaryEnabled bool `json:"glossary_enabled,omitempty"`
 	// SourceLang holds the value of the "source_lang" field.
 	SourceLang string `json:"source_lang,omitempty"`
@@ -161,7 +159,7 @@ func (*Project) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case project.FieldConfig, project.FieldDefaultTranslationConfig:
+		case project.FieldConfig:
 			values[i] = new([]byte)
 		case project.FieldGlossaryEnabled:
 			values[i] = new(sql.NullBool)
@@ -230,14 +228,6 @@ func (_m *Project) assignValues(columns []string, values []any) error {
 			} else if value != nil && len(*value) > 0 {
 				if err := json.Unmarshal(*value, &_m.Config); err != nil {
 					return fmt.Errorf("unmarshal field config: %w", err)
-				}
-			}
-		case project.FieldDefaultTranslationConfig:
-			if value, ok := values[i].(*[]byte); !ok {
-				return fmt.Errorf("unexpected type %T for field default_translation_config", values[i])
-			} else if value != nil && len(*value) > 0 {
-				if err := json.Unmarshal(*value, &_m.DefaultTranslationConfig); err != nil {
-					return fmt.Errorf("unmarshal field default_translation_config: %w", err)
 				}
 			}
 		case project.FieldGlossaryEnabled:
@@ -360,9 +350,6 @@ func (_m *Project) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("config=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Config))
-	builder.WriteString(", ")
-	builder.WriteString("default_translation_config=")
-	builder.WriteString(fmt.Sprintf("%v", _m.DefaultTranslationConfig))
 	builder.WriteString(", ")
 	builder.WriteString("glossary_enabled=")
 	builder.WriteString(fmt.Sprintf("%v", _m.GlossaryEnabled))

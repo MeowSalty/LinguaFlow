@@ -52,7 +52,7 @@ AdminResetPasswordRequest:
 
 SystemStats:
   type: object
-  required: [total_users, active_users, total_projects, total_organizations, total_translation_jobs, total_resources]
+  required: [total_users, active_users, total_projects, total_organizations, total_jobs, total_resources]
   properties:
     total_users:
       type: integer
@@ -62,7 +62,7 @@ SystemStats:
       type: integer
     total_organizations:
       type: integer
-    total_translation_jobs:
+    total_jobs:
       type: integer
     total_resources:
       type: integer

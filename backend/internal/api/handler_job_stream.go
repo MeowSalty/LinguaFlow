@@ -13,7 +13,7 @@ import (
 
 var sseEventTypeReplacer = strings.NewReplacer("\r", "", "\n", "")
 
-func (s *Server) handleTranslationJobStream(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleJobStream(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := s.resolveAuthUser(r)
 	if !ok {
 		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
@@ -23,8 +23,8 @@ func (s *Server) handleTranslationJobStream(w http.ResponseWriter, r *http.Reque
 	if !ok {
 		return
 	}
-	if err := s.translationJobSvc.CheckJobAccess(r.Context(), authUser.User.ID, jobID); err != nil {
-		s.writeTranslationJobServiceError(w, r, err)
+	if err := s.jobSvc.CheckJobAccess(r.Context(), authUser.User.ID, jobID); err != nil {
+		s.writeJobServiceError(w, r, err)
 		return
 	}
 

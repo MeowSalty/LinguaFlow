@@ -165,6 +165,38 @@ var (
 			},
 		},
 	}
+	// ExecutionProfilesColumns holds the columns for the "execution_profiles" table.
+	ExecutionProfilesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "name", Type: field.TypeString},
+		{Name: "description", Type: field.TypeString, Default: ""},
+		{Name: "scope", Type: field.TypeString, Default: "user"},
+		{Name: "config", Type: field.TypeJSON},
+		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
+		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
+	}
+	// ExecutionProfilesTable holds the schema information for the "execution_profiles" table.
+	ExecutionProfilesTable = &schema.Table{
+		Name:       "execution_profiles",
+		Columns:    ExecutionProfilesColumns,
+		PrimaryKey: []*schema.Column{ExecutionProfilesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "execution_profiles_organizations_execution_profiles",
+				Columns:    []*schema.Column{ExecutionProfilesColumns[7]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "execution_profiles_users_execution_profiles",
+				Columns:    []*schema.Column{ExecutionProfilesColumns[8]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
 	// GlossaryEntriesColumns holds the columns for the "glossary_entries" table.
 	GlossaryEntriesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -206,7 +238,7 @@ var (
 		{Name: "status", Type: field.TypeString, Default: "pending"},
 		{Name: "trigger_type", Type: field.TypeString, Default: "manual"},
 		{Name: "execution_plan_id", Type: field.TypeInt},
-		{Name: "translation_config", Type: field.TypeJSON},
+		{Name: "execution_config", Type: field.TypeJSON},
 		{Name: "resource_count", Type: field.TypeInt, Default: 0},
 		{Name: "completed_resources", Type: field.TypeInt, Default: 0},
 		{Name: "failed_resources", Type: field.TypeInt, Default: 0},
@@ -344,7 +376,6 @@ var (
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "name", Type: field.TypeString},
 		{Name: "config", Type: field.TypeJSON},
-		{Name: "default_translation_config", Type: field.TypeJSON},
 		{Name: "glossary_enabled", Type: field.TypeBool, Default: false},
 		{Name: "source_lang", Type: field.TypeString, Default: "auto"},
 		{Name: "target_lang", Type: field.TypeString, Default: "zh"},
@@ -359,13 +390,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "projects_organizations_projects",
-				Columns:    []*schema.Column{ProjectsColumns[9]},
+				Columns:    []*schema.Column{ProjectsColumns[8]},
 				RefColumns: []*schema.Column{OrganizationsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "projects_users_owned_projects",
-				Columns:    []*schema.Column{ProjectsColumns[10]},
+				Columns:    []*schema.Column{ProjectsColumns[9]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -602,38 +633,6 @@ var (
 			},
 		},
 	}
-	// TranslationProfilesColumns holds the columns for the "translation_profiles" table.
-	TranslationProfilesColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "created_at", Type: field.TypeTime},
-		{Name: "updated_at", Type: field.TypeTime},
-		{Name: "name", Type: field.TypeString},
-		{Name: "description", Type: field.TypeString, Default: ""},
-		{Name: "scope", Type: field.TypeString, Default: "user"},
-		{Name: "config", Type: field.TypeJSON},
-		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
-		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
-	}
-	// TranslationProfilesTable holds the schema information for the "translation_profiles" table.
-	TranslationProfilesTable = &schema.Table{
-		Name:       "translation_profiles",
-		Columns:    TranslationProfilesColumns,
-		PrimaryKey: []*schema.Column{TranslationProfilesColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{
-			{
-				Symbol:     "translation_profiles_organizations_translation_profiles",
-				Columns:    []*schema.Column{TranslationProfilesColumns[7]},
-				RefColumns: []*schema.Column{OrganizationsColumns[0]},
-				OnDelete:   schema.SetNull,
-			},
-			{
-				Symbol:     "translation_profiles_users_translation_profiles",
-				Columns:    []*schema.Column{TranslationProfilesColumns[8]},
-				RefColumns: []*schema.Column{UsersColumns[0]},
-				OnDelete:   schema.SetNull,
-			},
-		},
-	}
 	// TranslationPromptTemplatesColumns holds the columns for the "translation_prompt_templates" table.
 	TranslationPromptTemplatesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -731,6 +730,7 @@ var (
 		BackendsTable,
 		BootstrapPromptTemplatesTable,
 		ExecutionPlanTemplatesTable,
+		ExecutionProfilesTable,
 		GlossaryEntriesTable,
 		JobsTable,
 		JobResourcesTable,
@@ -744,7 +744,6 @@ var (
 		SyncTasksTable,
 		SystemSettingsTable,
 		TmEntriesTable,
-		TranslationProfilesTable,
 		TranslationPromptTemplatesTable,
 		UsageRecordsTable,
 		UsersTable,
@@ -761,6 +760,8 @@ func init() {
 	BootstrapPromptTemplatesTable.ForeignKeys[1].RefTable = UsersTable
 	ExecutionPlanTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	ExecutionPlanTemplatesTable.ForeignKeys[1].RefTable = UsersTable
+	ExecutionProfilesTable.ForeignKeys[0].RefTable = OrganizationsTable
+	ExecutionProfilesTable.ForeignKeys[1].RefTable = UsersTable
 	GlossaryEntriesTable.ForeignKeys[0].RefTable = ProjectsTable
 	JobsTable.ForeignKeys[0].RefTable = ProjectsTable
 	JobsTable.ForeignKeys[1].RefTable = UsersTable
@@ -779,8 +780,6 @@ func init() {
 	SyncTasksTable.ForeignKeys[1].RefTable = ProjectsTable
 	SyncTasksTable.ForeignKeys[2].RefTable = UsersTable
 	TmEntriesTable.ForeignKeys[0].RefTable = ProjectsTable
-	TranslationProfilesTable.ForeignKeys[0].RefTable = OrganizationsTable
-	TranslationProfilesTable.ForeignKeys[1].RefTable = UsersTable
 	TranslationPromptTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	TranslationPromptTemplatesTable.ForeignKeys[1].RefTable = UsersTable
 	UsageRecordsTable.ForeignKeys[0].RefTable = OrganizationsTable

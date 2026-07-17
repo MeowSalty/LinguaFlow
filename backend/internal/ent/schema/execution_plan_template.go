@@ -14,7 +14,7 @@ type ExecutionRoundConfig struct {
 	Extract   *ExtractRoundConfig   `json:"extract,omitempty"   yaml:"extract,omitempty"`
 }
 
-// TranslateRoundConfig 翻译轮次配置。
+// TranslateRoundConfig 翻译轮次配置（翻译专用）。
 type TranslateRoundConfig struct {
 	PromptTemplateID int         `json:"prompt_template_id"  yaml:"prompt_template_id"` // 引用 TranslationPromptTemplate
 	ProfileID        int         `json:"profile_id"          yaml:"profile_id"`

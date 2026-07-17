@@ -16,6 +16,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
@@ -29,7 +30,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
@@ -97,6 +97,7 @@ func checkColumn(t, c string) error {
 			backend.Table:                   backend.ValidColumn,
 			bootstrapprompttemplate.Table:   bootstrapprompttemplate.ValidColumn,
 			executionplantemplate.Table:     executionplantemplate.ValidColumn,
+			executionprofile.Table:          executionprofile.ValidColumn,
 			glossaryentry.Table:             glossaryentry.ValidColumn,
 			job.Table:                       job.ValidColumn,
 			jobresource.Table:               jobresource.ValidColumn,
@@ -110,7 +111,6 @@ func checkColumn(t, c string) error {
 			synctask.Table:                  synctask.ValidColumn,
 			systemsetting.Table:             systemsetting.ValidColumn,
 			tmentry.Table:                   tmentry.ValidColumn,
-			translationprofile.Table:        translationprofile.ValidColumn,
 			translationprompttemplate.Table: translationprompttemplate.ValidColumn,
 			usagerecord.Table:               usagerecord.ValidColumn,
 			user.Table:                      user.ValidColumn,

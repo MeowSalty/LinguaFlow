@@ -20,6 +20,8 @@ type Tx struct {
 	BootstrapPromptTemplate *BootstrapPromptTemplateClient
 	// ExecutionPlanTemplate is the client for interacting with the ExecutionPlanTemplate builders.
 	ExecutionPlanTemplate *ExecutionPlanTemplateClient
+	// ExecutionProfile is the client for interacting with the ExecutionProfile builders.
+	ExecutionProfile *ExecutionProfileClient
 	// GlossaryEntry is the client for interacting with the GlossaryEntry builders.
 	GlossaryEntry *GlossaryEntryClient
 	// Job is the client for interacting with the Job builders.
@@ -46,8 +48,6 @@ type Tx struct {
 	SystemSetting *SystemSettingClient
 	// TMEntry is the client for interacting with the TMEntry builders.
 	TMEntry *TMEntryClient
-	// TranslationProfile is the client for interacting with the TranslationProfile builders.
-	TranslationProfile *TranslationProfileClient
 	// TranslationPromptTemplate is the client for interacting with the TranslationPromptTemplate builders.
 	TranslationPromptTemplate *TranslationPromptTemplateClient
 	// UsageRecord is the client for interacting with the UsageRecord builders.
@@ -189,6 +189,7 @@ func (tx *Tx) init() {
 	tx.Backend = NewBackendClient(tx.config)
 	tx.BootstrapPromptTemplate = NewBootstrapPromptTemplateClient(tx.config)
 	tx.ExecutionPlanTemplate = NewExecutionPlanTemplateClient(tx.config)
+	tx.ExecutionProfile = NewExecutionProfileClient(tx.config)
 	tx.GlossaryEntry = NewGlossaryEntryClient(tx.config)
 	tx.Job = NewJobClient(tx.config)
 	tx.JobResource = NewJobResourceClient(tx.config)
@@ -202,7 +203,6 @@ func (tx *Tx) init() {
 	tx.SyncTask = NewSyncTaskClient(tx.config)
 	tx.SystemSetting = NewSystemSettingClient(tx.config)
 	tx.TMEntry = NewTMEntryClient(tx.config)
-	tx.TranslationProfile = NewTranslationProfileClient(tx.config)
 	tx.TranslationPromptTemplate = NewTranslationPromptTemplateClient(tx.config)
 	tx.UsageRecord = NewUsageRecordClient(tx.config)
 	tx.User = NewUserClient(tx.config)
