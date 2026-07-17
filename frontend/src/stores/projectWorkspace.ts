@@ -5,7 +5,7 @@ import { storeToRefs } from 'pinia'
 import { useProjectStore } from './project'
 import { useResourceStore } from './resource'
 import { useSegmentStore } from './segment'
-import { useTranslationJobStore } from './translationJob'
+import { useJobStore } from './job'
 
 // ── 重新导出所有类型，保持向后兼容 ──
 export type {
@@ -23,13 +23,13 @@ export type {
 
 export type { SegmentStatusFilter } from './segment'
 export type { ResourceSegmentGroup } from './segment'
-export type { JobStatusFilter } from './translationJob'
+export type { JobStatusFilter } from './job'
 
 export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
   const projectStore = useProjectStore()
   const resourceStore = useResourceStore()
   const segmentStore = useSegmentStore()
-  const jobStore = useTranslationJobStore()
+  const jobStore = useJobStore()
 
   // ── 重新导出项目 Store 的响应式状态 ──
   const { project, loadingProject, projectError } = storeToRefs(projectStore)
@@ -152,7 +152,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     mergeLastUploadResult,
     uploadResources,
     downloadResource,
-    downloadTranslatedResource,
+    downloadResourceResult,
     toggleResourceSelection,
     setSelectedResourceIds,
     clearSelectedResources,
@@ -336,7 +336,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     cancelJob,
     retryJob,
     downloadResource,
-    downloadTranslatedResource,
+    downloadResourceResult,
     setActiveResource,
     // EPUB
     loadSegmentGroups,

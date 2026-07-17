@@ -8,11 +8,11 @@ import { buildSyntheticEvents, type SyntheticEvent } from '@/composables/useSynt
 
 import JobDetailContent from './JobDetailContent.vue'
 
-type TranslationJob = ApiSchemas['TranslationJob']
+type Job = ApiSchemas['Job']
 
 const props = defineProps<{
   show: boolean
-  job: TranslationJob | null
+  job: Job | null
   loading: boolean
   error?: string | null
   projectName?: string

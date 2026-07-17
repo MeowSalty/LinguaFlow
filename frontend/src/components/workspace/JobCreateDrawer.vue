@@ -22,8 +22,8 @@ import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import type { JobTargetMode } from '@/composables/useJobActions'
 
 type ExecutionPlanTemplate = ApiSchemas['ExecutionPlanTemplate']
-type CreateTranslationJobRequest = ApiSchemas['CreateTranslationJobRequest']
-type OverwriteMode = CreateTranslationJobRequest['overwrite_mode']
+type CreateJobRequest = ApiSchemas['CreateJobRequest']
+type OverwriteMode = CreateJobRequest['overwrite_mode']
 
 const { t } = useI18n()
 const executionPlanTemplatesStore = useExecutionPlanTemplatesStore()

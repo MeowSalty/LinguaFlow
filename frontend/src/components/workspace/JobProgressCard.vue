@@ -15,7 +15,7 @@ import {
 import { t } from '@/i18n'
 
 const props = defineProps<{
-  job: ApiSchemas['TranslationJob']
+  job: ApiSchemas['Job']
 }>()
 
 const completedPct = computed(() => {

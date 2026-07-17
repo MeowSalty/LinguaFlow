@@ -13,12 +13,12 @@ import {
   statusTagType,
 } from '@/composables/useWorkspaceUtils'
 
-type TranslationJob = ApiSchemas['TranslationJob']
+type Job = ApiSchemas['Job']
 
 export interface JobColumnActions {
-  openJobDetail: (job: TranslationJob) => void
-  cancelJob: (job: TranslationJob) => void
-  retryJob: (job: TranslationJob) => void
+  openJobDetail: (job: Job) => void
+  cancelJob: (job: Job) => void
+  retryJob: (job: Job) => void
 }
 
 export function useJobColumns(actions: JobColumnActions) {
@@ -35,7 +35,7 @@ export function useJobColumns(actions: JobColumnActions) {
   ])
 
   // ── 表格列定义 ──
-  const jobColumns = computed<DataTableColumns<TranslationJob>>(() => [
+  const jobColumns = computed<DataTableColumns<Job>>(() => [
     {
       title: t('workspace.job.columns.id'),
       key: 'id',

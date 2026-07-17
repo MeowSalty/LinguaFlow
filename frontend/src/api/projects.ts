@@ -380,7 +380,7 @@ export const downloadProjectResource = async (
   }
 }
 
-export const downloadTranslatedResource = async (
+export const downloadResourceResult = async (
   projectId: number,
   resourceId: number,
   client: ApiClient = apiClient,
@@ -394,11 +394,7 @@ export const downloadTranslatedResource = async (
   )
 
   if (!data) {
-    throw buildRequestFailureError(
-      t('api.errors.downloadTranslatedResourceFailed'),
-      error,
-      response,
-    )
+    throw buildRequestFailureError(t('api.errors.downloadResourceResultFailed'), error, response)
   }
 
   return {

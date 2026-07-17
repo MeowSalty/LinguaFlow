@@ -151,9 +151,9 @@ const downloadResource = async (resource: Resource): Promise<void> => {
   }
 }
 
-const downloadTranslatedResource = async (resource: Resource): Promise<void> => {
+const downloadResourceResult = async (resource: Resource): Promise<void> => {
   try {
-    const file = await workspace.downloadTranslatedResource(props.projectId, resource.id)
+    const file = await workspace.downloadResourceResult(props.projectId, resource.id)
     const url = URL.createObjectURL(file.blob)
     const anchor = document.createElement('a')
     anchor.href = url
@@ -477,7 +477,7 @@ const currentViewEvents = computed(() => {
     replace: (r: Resource) => chooseReplacementFile(r.id),
     incrementalUpdate: (r: Resource) => chooseIncrementalUpdateFile(r.id),
     download: (r: Resource) => void downloadResource(r),
-    downloadTranslated: (r: Resource) => void downloadTranslatedResource(r),
+    downloadTranslated: (r: Resource) => void downloadResourceResult(r),
     delete: (r: Resource) => void deleteResource(r),
     toggleSelect: (r: Resource) => workspace.toggleResourceSelection(r.id),
     toggleSelectAll: (): void => {

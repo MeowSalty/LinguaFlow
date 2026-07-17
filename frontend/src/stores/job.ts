@@ -3,17 +3,17 @@ import { ref } from 'vue'
 
 import {
   type ApiSchemas,
-  cancelTranslationJob as cancelTranslationJobRequest,
-  createTranslationJob as createTranslationJobRequest,
-  fetchTranslationJobs,
-  retryTranslationJob as retryTranslationJobRequest,
+  cancelJob as cancelJobRequest,
+  createJob as createJobRequest,
+  fetchJobs,
+  retryJob as retryJobRequest,
 } from '@/api/client'
 import { t } from '@/i18n'
 
-type TranslationJob = ApiSchemas['Job']
-type CreateTranslationJobPayload = ApiSchemas['CreateTranslationJobRequest']
+type Job = ApiSchemas['Job']
+type CreateJobRequest = ApiSchemas['CreateJobRequest']
 
-export type JobStatusFilter = TranslationJob['status'] | 'all'
+export type JobStatusFilter = Job['status'] | 'all'
 
 const getErrorMessage = (error: unknown, fallback: string): string =>
   error instanceof Error ? error.message : fallback
@@ -23,9 +23,9 @@ const upsertById = <T extends { id: number }>(items: T[], item: T): T[] => [
   ...items.filter((current) => current.id !== item.id),
 ]
 
-export const useTranslationJobStore = defineStore('translationJob', () => {
+export const useJobStore = defineStore('job', () => {
   // ── 任务状态 ──
-  const jobs = ref<TranslationJob[]>([])
+  const jobs = ref<Job[]>([])
   const jobsCursor = ref<string | null>(null)
   const loadingJobs = ref(false)
   const jobsError = ref<string | null>(null)
@@ -47,7 +47,7 @@ export const useTranslationJobStore = defineStore('translationJob', () => {
     jobsError.value = null
 
     try {
-      const response = await fetchTranslationJobs(projectId, {
+      const response = await fetchJobs(projectId, {
         status: jobStatusFilter.value === 'all' ? undefined : jobStatusFilter.value,
         cursor: append ? (jobsCursor.value ?? undefined) : undefined,
         limit: 50,
@@ -55,25 +55,22 @@ export const useTranslationJobStore = defineStore('translationJob', () => {
       jobs.value = append ? [...jobs.value, ...response.items] : response.items
       jobsCursor.value = response.next_cursor ?? null
     } catch (error) {
-      jobsError.value = getErrorMessage(error, t('api.errors.fetchTranslationJobsFailed'))
+      jobsError.value = getErrorMessage(error, t('api.errors.fetchJobsFailed'))
     } finally {
       loadingJobs.value = false
     }
   }
 
-  const createJob = async (
-    projectId: number,
-    payload: CreateTranslationJobPayload,
-  ): Promise<TranslationJob> => {
+  const createJob = async (projectId: number, payload: CreateJobRequest): Promise<Job> => {
     creatingJob.value = true
     actionError.value = null
 
     try {
-      const job = await createTranslationJobRequest(projectId, payload)
+      const job = await createJobRequest(projectId, payload)
       jobs.value = upsertById(jobs.value, job)
       return job
     } catch (error) {
-      actionError.value = getErrorMessage(error, t('api.errors.createTranslationJobFailed'))
+      actionError.value = getErrorMessage(error, t('api.errors.createJobFailed'))
       throw error
     } finally {
       creatingJob.value = false
@@ -85,10 +82,10 @@ export const useTranslationJobStore = defineStore('translationJob', () => {
     actionError.value = null
 
     try {
-      const job = await cancelTranslationJobRequest(jobId)
+      const job = await cancelJobRequest(jobId)
       jobs.value = jobs.value.map((item) => (item.id === job.id ? job : item))
     } catch (error) {
-      actionError.value = getErrorMessage(error, t('api.errors.cancelTranslationJobFailed'))
+      actionError.value = getErrorMessage(error, t('api.errors.cancelJobFailed'))
       throw error
     } finally {
       cancellingJobIds.value = cancellingJobIds.value.filter((id) => id !== jobId)
@@ -100,10 +97,10 @@ export const useTranslationJobStore = defineStore('translationJob', () => {
     actionError.value = null
 
     try {
-      const job = await retryTranslationJobRequest(jobId)
+      const job = await retryJobRequest(jobId)
       jobs.value = jobs.value.map((item) => (item.id === job.id ? job : item))
     } catch (error) {
-      actionError.value = getErrorMessage(error, t('api.errors.retryTranslationJobFailed'))
+      actionError.value = getErrorMessage(error, t('api.errors.retryJobFailed'))
       throw error
     } finally {
       retryingJobIds.value = retryingJobIds.value.filter((id) => id !== jobId)

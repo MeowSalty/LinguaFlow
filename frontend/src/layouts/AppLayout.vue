@@ -108,8 +108,8 @@ const templateNavOptions = computed<DropdownOption[]>(() => [
     icon: () => h(IconifyIcon, { icon: 'carbon:text-mining', class: 'text-base' }),
   },
   {
-    label: t('nav.translationProfiles'),
-    key: '/translation-profiles',
+    label: t('nav.executionProfiles'),
+    key: '/execution-profiles',
     icon: () => h(IconifyIcon, { icon: 'carbon:flow', class: 'text-base' }),
   },
   {
@@ -125,7 +125,7 @@ const isTemplateRoute = computed(() =>
   [
     '/prompt-templates',
     '/bootstrap-prompt-templates',
-    '/translation-profiles',
+    '/execution-profiles',
     '/execution-plan-templates',
   ].some((r) => route.path.startsWith(r)),
 )
@@ -191,7 +191,7 @@ const onSelectLocale = (key: string | number): void => {
             :class="{ 'text-brand-500! font-semibold': isTemplateRoute }"
           >
             <IconifyIcon icon="carbon:settings" class="text-base" />
-            {{ t('nav.translationConfig') }}
+            {{ t('nav.executionConfig') }}
           </RouterLink>
         </NDropdown>
         <RouterLink

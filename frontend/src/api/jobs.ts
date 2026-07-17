@@ -4,7 +4,7 @@ import type { ApiClient, ApiSchemas } from './client'
 import { apiClient } from './client'
 import { buildRequestFailureError } from './utils'
 
-export const fetchTranslationJobs = async (
+export const fetchJobs = async (
   projectId: number,
   params?: {
     status?: 'pending' | 'running' | 'completed' | 'failed' | 'cancelled'
@@ -19,15 +19,15 @@ export const fetchTranslationJobs = async (
   })
 
   if (!data) {
-    throw buildRequestFailureError(t('api.errors.fetchTranslationJobsFailed'), error, response)
+    throw buildRequestFailureError(t('api.errors.fetchJobsFailed'), error, response)
   }
 
   return data
 }
 
-export const createTranslationJob = async (
+export const createJob = async (
   projectId: number,
-  payload?: ApiSchemas['CreateTranslationJobRequest'],
+  payload?: ApiSchemas['CreateJobRequest'],
   client: ApiClient = apiClient,
 ): Promise<ApiSchemas['Job']> => {
   const { data, error, response } = await client.POST('/projects/{projectId}/jobs', {
@@ -36,13 +36,13 @@ export const createTranslationJob = async (
   })
 
   if (!data) {
-    throw buildRequestFailureError(t('api.errors.createTranslationJobFailed'), error, response)
+    throw buildRequestFailureError(t('api.errors.createJobFailed'), error, response)
   }
 
   return data
 }
 
-export const fetchTranslationJob = async (
+export const fetchJob = async (
   jobId: number,
   client: ApiClient = apiClient,
 ): Promise<ApiSchemas['Job']> => {
@@ -51,13 +51,13 @@ export const fetchTranslationJob = async (
   })
 
   if (!data) {
-    throw buildRequestFailureError(t('api.errors.fetchTranslationJobFailed'), error, response)
+    throw buildRequestFailureError(t('api.errors.fetchJobFailed'), error, response)
   }
 
   return data
 }
 
-export const cancelTranslationJob = async (
+export const cancelJob = async (
   jobId: number,
   client: ApiClient = apiClient,
 ): Promise<ApiSchemas['Job']> => {
@@ -66,13 +66,13 @@ export const cancelTranslationJob = async (
   })
 
   if (!data) {
-    throw buildRequestFailureError(t('api.errors.cancelTranslationJobFailed'), error, response)
+    throw buildRequestFailureError(t('api.errors.cancelJobFailed'), error, response)
   }
 
   return data
 }
 
-export const retryTranslationJob = async (
+export const retryJob = async (
   jobId: number,
   client: ApiClient = apiClient,
 ): Promise<ApiSchemas['Job']> => {
@@ -81,7 +81,7 @@ export const retryTranslationJob = async (
   })
 
   if (!data) {
-    throw buildRequestFailureError(t('api.errors.retryTranslationJobFailed'), error, response)
+    throw buildRequestFailureError(t('api.errors.retryJobFailed'), error, response)
   }
 
   return data

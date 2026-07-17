@@ -101,6 +101,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/execution-profiles': RouteRecordInfo<
+      '/execution-profiles',
+      '/execution-profiles',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/login': RouteRecordInfo<
       '/login',
       '/login',
@@ -139,13 +146,6 @@ declare module 'vue-router/auto-routes' {
     '/service': RouteRecordInfo<
       '/service',
       '/service',
-      Record<never, never>,
-      Record<never, never>,
-      | never
-    >,
-    '/translation-profiles': RouteRecordInfo<
-      '/translation-profiles',
-      '/translation-profiles',
       Record<never, never>,
       Record<never, never>,
       | never
@@ -223,6 +223,12 @@ declare module 'vue-router/auto-routes' {
       views:
         | never
     }
+    'src/pages/execution-profiles.vue': {
+      routes:
+        | '/execution-profiles'
+      views:
+        | never
+    }
     'src/pages/login.vue': {
       routes:
         | '/login'
@@ -257,12 +263,6 @@ declare module 'vue-router/auto-routes' {
     'src/pages/service.vue': {
       routes:
         | '/service'
-      views:
-        | never
-    }
-    'src/pages/translation-profiles.vue': {
-      routes:
-        | '/translation-profiles'
       views:
         | never
     }

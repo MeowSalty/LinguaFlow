@@ -39,7 +39,7 @@ const statCards = computed(() => [
   },
   {
     title: t('admin.dashboard.stats.totalJobs'),
-    value: admin.stats?.total_translation_jobs ?? 0,
+    value: admin.stats?.total_jobs ?? 0,
     icon: 'carbon:document-tasks',
     color: 'bg-cyan-500/10 text-cyan-500',
   },

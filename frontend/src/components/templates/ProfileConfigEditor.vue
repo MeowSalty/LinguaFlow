@@ -13,11 +13,11 @@ import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
 
-type TranslationProfileConfig = ApiSchemas['TranslationProfileConfig']
+type ExecutionProfileConfig = ApiSchemas['ExecutionProfileConfig']
 
 // ─── 默认值（与后端 config.Default() 对齐） ─────────────────
 
-const CONFIG_DEFAULTS: TranslationProfileConfig = {
+const CONFIG_DEFAULTS: ExecutionProfileConfig = {
   protect: {
     enabled: true,
     rules: ['code', 'link', 'placeholder', 'xml'],
@@ -60,7 +60,7 @@ function deepClone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj))
 }
 
-function mergeConfig(source?: Partial<TranslationProfileConfig>): TranslationProfileConfig {
+function mergeConfig(source?: Partial<ExecutionProfileConfig>): ExecutionProfileConfig {
   if (!source) return deepClone(CONFIG_DEFAULTS)
   return {
     protect: {
@@ -92,21 +92,21 @@ function mergeConfig(source?: Partial<TranslationProfileConfig>): TranslationPro
 
 const props = withDefaults(
   defineProps<{
-    config: TranslationProfileConfig
+    config: ExecutionProfileConfig
     disabled?: boolean
   }>(),
   { disabled: false },
 )
 
 const emit = defineEmits<{
-  'update:config': [value: TranslationProfileConfig]
+  'update:config': [value: ExecutionProfileConfig]
 }>()
 
 // ─── 内部 model ─────────────────────────────────────────────
 
 const { t } = useI18n()
 
-const configModel = ref<TranslationProfileConfig>(mergeConfig(props.config))
+const configModel = ref<ExecutionProfileConfig>(mergeConfig(props.config))
 
 // 上次 emit 的 JSON（用于去重）
 let lastConfigJson = JSON.stringify(props.config ?? {})

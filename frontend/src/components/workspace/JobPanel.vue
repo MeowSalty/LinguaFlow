@@ -9,7 +9,7 @@ import { useJobPolling } from '@/composables/useJobPolling'
 import { useGlobalJobTrackerStore } from '@/stores/globalJobTracker'
 import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 
-type TranslationJob = ApiSchemas['TranslationJob']
+type Job = ApiSchemas['Job']
 
 const { t } = useI18n()
 const workspace = useProjectWorkspaceStore()
@@ -20,9 +20,9 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  detail: [job: TranslationJob]
-  cancel: [job: TranslationJob]
-  retry: [job: TranslationJob]
+  detail: [job: Job]
+  cancel: [job: Job]
+  retry: [job: Job]
 }>()
 
 const { jobColumns, jobStatusOptions } = useJobColumns({
@@ -102,9 +102,9 @@ const { isPolling } = useJobPolling({ projectId: projectIdRef, enabled: pollingE
       :columns="jobColumns"
       :data="workspace.jobs"
       :loading="workspace.loadingJobs"
-      :row-key="(row: TranslationJob) => row.id"
+      :row-key="(row: Job) => row.id"
       :row-props="
-        (row: TranslationJob) => ({
+        (row: Job) => ({
           class: 'cursor-pointer',
           onClick: () => emit('detail', row),
         })
