@@ -20,6 +20,11 @@ bootstrap_prompt_template:
   name: "通用术语抽取提示词"
   description: "默认术语抽取提示词模板"
 
+prune_prompt_template:
+  id: -1
+  name: "通用术语精简提示词"
+  description: "默认术语精简提示词模板"
+
 translation_profile:
   id: -1
   name: "通用策略"

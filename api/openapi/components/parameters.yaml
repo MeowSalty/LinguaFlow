@@ -68,6 +68,13 @@ BootstrapPromptTemplateId:
   schema:
     type: integer
 
+PrunePromptTemplateId:
+  name: prunePromptTemplateId
+  in: path
+  required: true
+  schema:
+    type: integer
+
 ExecutionProfileId:
   name: executionProfileId
   in: path

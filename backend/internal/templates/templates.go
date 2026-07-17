@@ -50,6 +50,15 @@ func EmbeddedBootstrapTemplate() string {
 	return strings.TrimRight(string(data), "\n")
 }
 
+// EmbeddedPruneTemplate 返回嵌入的 prune 术语精简提示词模板内容。
+func EmbeddedPruneTemplate() string {
+	data, err := fs.ReadFile(builtinFS, "default/prompts/default_prune.tmpl")
+	if err != nil {
+		panic(fmt.Sprintf("embedded prompts/default_prune.tmpl not found: %v", err))
+	}
+	return strings.TrimRight(string(data), "\n")
+}
+
 // EmbeddedProfileConfig 返回嵌入的默认翻译策略配置字节。
 func EmbeddedProfileConfig() []byte {
 	data, err := fs.ReadFile(builtinFS, "default/profiles/default.yaml")
@@ -66,6 +75,8 @@ const (
 	BuiltinTranslationPromptTemplateID = -1
 	// BuiltinBootstrapPromptTemplateID 内置术语抽取提示词模板的虚拟 ID。
 	BuiltinBootstrapPromptTemplateID = -1
+	// BuiltinPrunePromptTemplateID 内置术语精简提示词模板的虚拟 ID。
+	BuiltinPrunePromptTemplateID = -1
 	// BuiltinExecutionProfileID 内置执行策略的虚拟 ID。
 	BuiltinExecutionProfileID = -1
 )
@@ -86,6 +97,7 @@ type builtinMeta struct {
 type builtinConfig struct {
 	TranslationPromptTemplate builtinMeta `yaml:"translation_prompt_template"`
 	BootstrapPromptTemplate   builtinMeta `yaml:"bootstrap_prompt_template"`
+	PrunePromptTemplate       builtinMeta `yaml:"prune_prompt_template"`
 	TranslationProfile        builtinMeta `yaml:"translation_profile"`
 }
 
@@ -154,6 +166,34 @@ func BuiltinBootstrapPromptTemplates() []*ent.BootstrapPromptTemplate {
 func BuiltinBootstrapPromptTemplate(id int) *ent.BootstrapPromptTemplate {
 	if id == BuiltinBootstrapPromptTemplateID {
 		return builtinBootstrapPromptTemplate
+	}
+	return nil
+}
+
+// ── 内置 PrunePromptTemplate 虚拟实体 ───────────────────────
+
+var builtinPrunePromptTemplate *ent.PrunePromptTemplate
+
+func init() {
+	meta := parseBuiltinConfig()
+	builtinPrunePromptTemplate = &ent.PrunePromptTemplate{
+		ID:          BuiltinPrunePromptTemplateID,
+		Name:        meta.PrunePromptTemplate.Name,
+		Description: meta.PrunePromptTemplate.Description,
+		Scope:       "system",
+		Content:     EmbeddedPruneTemplate(),
+	}
+}
+
+// BuiltinPrunePromptTemplates 返回所有内置术语精简提示词模板（当前仅一个）。
+func BuiltinPrunePromptTemplates() []*ent.PrunePromptTemplate {
+	return []*ent.PrunePromptTemplate{builtinPrunePromptTemplate}
+}
+
+// BuiltinPrunePromptTemplate 根据 id 返回内置术语精简提示词模板，id 不匹配时返回 nil。
+func BuiltinPrunePromptTemplate(id int) *ent.PrunePromptTemplate {
+	if id == BuiltinPrunePromptTemplateID {
+		return builtinPrunePromptTemplate
 	}
 	return nil
 }

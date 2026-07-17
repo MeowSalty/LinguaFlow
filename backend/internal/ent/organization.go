@@ -51,13 +51,15 @@ type OrganizationEdges struct {
 	TranslationPromptTemplates []*TranslationPromptTemplate `json:"translation_prompt_templates,omitempty"`
 	// BootstrapPromptTemplates holds the value of the bootstrap_prompt_templates edge.
 	BootstrapPromptTemplates []*BootstrapPromptTemplate `json:"bootstrap_prompt_templates,omitempty"`
+	// PrunePromptTemplates holds the value of the prune_prompt_templates edge.
+	PrunePromptTemplates []*PrunePromptTemplate `json:"prune_prompt_templates,omitempty"`
 	// ExecutionProfiles holds the value of the execution_profiles edge.
 	ExecutionProfiles []*ExecutionProfile `json:"execution_profiles,omitempty"`
 	// ExecutionPlanTemplates holds the value of the execution_plan_templates edge.
 	ExecutionPlanTemplates []*ExecutionPlanTemplate `json:"execution_plan_templates,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [9]bool
+	loadedTypes [10]bool
 }
 
 // ProjectsOrErr returns the Projects value or an error if the edge
@@ -123,10 +125,19 @@ func (e OrganizationEdges) BootstrapPromptTemplatesOrErr() ([]*BootstrapPromptTe
 	return nil, &NotLoadedError{edge: "bootstrap_prompt_templates"}
 }
 
+// PrunePromptTemplatesOrErr returns the PrunePromptTemplates value or an error if the edge
+// was not loaded in eager-loading.
+func (e OrganizationEdges) PrunePromptTemplatesOrErr() ([]*PrunePromptTemplate, error) {
+	if e.loadedTypes[7] {
+		return e.PrunePromptTemplates, nil
+	}
+	return nil, &NotLoadedError{edge: "prune_prompt_templates"}
+}
+
 // ExecutionProfilesOrErr returns the ExecutionProfiles value or an error if the edge
 // was not loaded in eager-loading.
 func (e OrganizationEdges) ExecutionProfilesOrErr() ([]*ExecutionProfile, error) {
-	if e.loadedTypes[7] {
+	if e.loadedTypes[8] {
 		return e.ExecutionProfiles, nil
 	}
 	return nil, &NotLoadedError{edge: "execution_profiles"}
@@ -135,7 +146,7 @@ func (e OrganizationEdges) ExecutionProfilesOrErr() ([]*ExecutionProfile, error)
 // ExecutionPlanTemplatesOrErr returns the ExecutionPlanTemplates value or an error if the edge
 // was not loaded in eager-loading.
 func (e OrganizationEdges) ExecutionPlanTemplatesOrErr() ([]*ExecutionPlanTemplate, error) {
-	if e.loadedTypes[8] {
+	if e.loadedTypes[9] {
 		return e.ExecutionPlanTemplates, nil
 	}
 	return nil, &NotLoadedError{edge: "execution_plan_templates"}
@@ -255,6 +266,11 @@ func (_m *Organization) QueryTranslationPromptTemplates() *TranslationPromptTemp
 // QueryBootstrapPromptTemplates queries the "bootstrap_prompt_templates" edge of the Organization entity.
 func (_m *Organization) QueryBootstrapPromptTemplates() *BootstrapPromptTemplateQuery {
 	return NewOrganizationClient(_m.config).QueryBootstrapPromptTemplates(_m)
+}
+
+// QueryPrunePromptTemplates queries the "prune_prompt_templates" edge of the Organization entity.
+func (_m *Organization) QueryPrunePromptTemplates() *PrunePromptTemplateQuery {
+	return NewOrganizationClient(_m.config).QueryPrunePromptTemplates(_m)
 }
 
 // QueryExecutionProfiles queries the "execution_profiles" edge of the Organization entity.

@@ -85,6 +85,10 @@ paths:
     $ref: './paths/glossary.yaml#/glossarySyncTaskStatus'
   /projects/{projectId}/sync-tasks/{taskId}/cancel:
     $ref: './paths/glossary.yaml#/glossarySyncTaskCancel'
+  /projects/{projectId}/glossary/prune:
+    $ref: './paths/glossary.yaml#/glossaryPrune'
+  /projects/{projectId}/glossary/prune/apply:
+    $ref: './paths/glossary.yaml#/glossaryPruneApply'
   /projects/{projectId}/jobs:
     $ref: './paths/jobs.yaml#/projectJobs'
   /jobs/{jobId}:
@@ -105,6 +109,10 @@ paths:
     $ref: './paths/bootstrap-prompt-templates.yaml#/bootstrapPromptTemplates'
   /bootstrap-prompt-templates/{bootstrapPromptTemplateId}:
     $ref: './paths/bootstrap-prompt-templates.yaml#/bootstrapPromptTemplateById'
+  /prune-prompt-templates:
+    $ref: './paths/prune-prompt-templates.yaml#/prunePromptTemplates'
+  /prune-prompt-templates/{prunePromptTemplateId}:
+    $ref: './paths/prune-prompt-templates.yaml#/prunePromptTemplateById'
   /execution-profiles:
     $ref: './paths/execution-profiles.yaml#/executionProfiles'
   /execution-profiles/{executionProfileId}:
@@ -148,6 +156,8 @@ components:
       $ref: './components/parameters.yaml#/TranslationPromptTemplateId'
     BootstrapPromptTemplateId:
       $ref: './components/parameters.yaml#/BootstrapPromptTemplateId'
+    PrunePromptTemplateId:
+      $ref: './components/parameters.yaml#/PrunePromptTemplateId'
     ExecutionProfileId:
       $ref: './components/parameters.yaml#/ExecutionProfileId'
     ExecutionPlanTemplateId:
@@ -294,6 +304,18 @@ components:
       $ref: './components/schemas/glossary.yaml#/GlossarySyncTaskStatusResponse'
     GlossarySyncTaskCancelResponse:
       $ref: './components/schemas/glossary.yaml#/GlossarySyncTaskCancelResponse'
+    GlossaryPruneRequest:
+      $ref: './components/schemas/glossary.yaml#/GlossaryPruneRequest'
+    GlossaryPruneSuggestion:
+      $ref: './components/schemas/glossary.yaml#/GlossaryPruneSuggestion'
+    GlossaryPrunePreview:
+      $ref: './components/schemas/glossary.yaml#/GlossaryPrunePreview'
+    GlossaryPruneDiagnostics:
+      $ref: './components/schemas/glossary.yaml#/GlossaryPruneDiagnostics'
+    GlossaryPruneApplyRequest:
+      $ref: './components/schemas/glossary.yaml#/GlossaryPruneApplyRequest'
+    GlossaryPruneApplyResult:
+      $ref: './components/schemas/glossary.yaml#/GlossaryPruneApplyResult'
     TranslationPromptTemplate:
       $ref: './components/schemas/prompt-template.yaml#/TranslationPromptTemplate'
     TranslationPromptTemplateListResponse:
@@ -310,6 +332,14 @@ components:
       $ref: './components/schemas/bootstrap-prompt-template.yaml#/CreateBootstrapPromptTemplateRequest'
     UpdateBootstrapPromptTemplateRequest:
       $ref: './components/schemas/bootstrap-prompt-template.yaml#/UpdateBootstrapPromptTemplateRequest'
+    PrunePromptTemplate:
+      $ref: './components/schemas/prune-prompt-template.yaml#/PrunePromptTemplate'
+    PrunePromptTemplateListResponse:
+      $ref: './components/schemas/prune-prompt-template.yaml#/PrunePromptTemplateListResponse'
+    CreatePrunePromptTemplateRequest:
+      $ref: './components/schemas/prune-prompt-template.yaml#/CreatePrunePromptTemplateRequest'
+    UpdatePrunePromptTemplateRequest:
+      $ref: './components/schemas/prune-prompt-template.yaml#/UpdatePrunePromptTemplateRequest'
     ExecutionProfile:
       $ref: './components/schemas/execution-profile.yaml#/ExecutionProfile'
     ExecutionProfileListResponse:

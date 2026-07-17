@@ -318,6 +318,42 @@ func (s *Server) DeleteBootstrapPromptTemplate(w http.ResponseWriter, r *http.Re
 	s.requireAuth(http.HandlerFunc(s.handleDeleteBootstrapPromptTemplate)).ServeHTTP(w, r)
 }
 
+// ---- 术语精简提示词模板适配器 ----
+
+func (s *Server) ListPrunePromptTemplates(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleListPrunePromptTemplates)).ServeHTTP(w, r)
+}
+
+func (s *Server) CreatePrunePromptTemplate(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleCreatePrunePromptTemplate)).ServeHTTP(w, r)
+}
+
+func (s *Server) GetPrunePromptTemplate(w http.ResponseWriter, r *http.Request, _ PrunePromptTemplateId) {
+	s.requireAuth(http.HandlerFunc(s.handleGetPrunePromptTemplate)).ServeHTTP(w, r)
+}
+
+func (s *Server) UpdatePrunePromptTemplate(w http.ResponseWriter, r *http.Request, _ PrunePromptTemplateId) {
+	s.requireAuth(http.HandlerFunc(s.handleUpdatePrunePromptTemplate)).ServeHTTP(w, r)
+}
+
+func (s *Server) DeletePrunePromptTemplate(w http.ResponseWriter, r *http.Request, _ PrunePromptTemplateId) {
+	s.requireAuth(http.HandlerFunc(s.handleDeletePrunePromptTemplate)).ServeHTTP(w, r)
+}
+
+// ---- 术语精简适配器 ----
+
+func (s *Server) PreviewGlossaryPrune(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
+	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.handlePreviewGlossaryPrune(w, r, projectId)
+	})).ServeHTTP(w, r)
+}
+
+func (s *Server) ApplyGlossaryPrune(w http.ResponseWriter, r *http.Request, projectId ProjectId) {
+	s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.handleApplyGlossaryPrune(w, r, projectId)
+	})).ServeHTTP(w, r)
+}
+
 // ---- 执行策略配置适配器 ----
 
 func (s *Server) ListExecutionProfiles(w http.ResponseWriter, r *http.Request) {

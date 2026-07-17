@@ -40,6 +40,8 @@ const (
 	EdgeTranslationPromptTemplates = "translation_prompt_templates"
 	// EdgeBootstrapPromptTemplates holds the string denoting the bootstrap_prompt_templates edge name in mutations.
 	EdgeBootstrapPromptTemplates = "bootstrap_prompt_templates"
+	// EdgePrunePromptTemplates holds the string denoting the prune_prompt_templates edge name in mutations.
+	EdgePrunePromptTemplates = "prune_prompt_templates"
 	// EdgeExecutionProfiles holds the string denoting the execution_profiles edge name in mutations.
 	EdgeExecutionProfiles = "execution_profiles"
 	// EdgeExecutionPlanTemplates holds the string denoting the execution_plan_templates edge name in mutations.
@@ -95,6 +97,13 @@ const (
 	BootstrapPromptTemplatesInverseTable = "bootstrap_prompt_templates"
 	// BootstrapPromptTemplatesColumn is the table column denoting the bootstrap_prompt_templates relation/edge.
 	BootstrapPromptTemplatesColumn = "owner_org_id"
+	// PrunePromptTemplatesTable is the table that holds the prune_prompt_templates relation/edge.
+	PrunePromptTemplatesTable = "prune_prompt_templates"
+	// PrunePromptTemplatesInverseTable is the table name for the PrunePromptTemplate entity.
+	// It exists in this package in order to avoid circular dependency with the "pruneprompttemplate" package.
+	PrunePromptTemplatesInverseTable = "prune_prompt_templates"
+	// PrunePromptTemplatesColumn is the table column denoting the prune_prompt_templates relation/edge.
+	PrunePromptTemplatesColumn = "owner_org_id"
 	// ExecutionProfilesTable is the table that holds the execution_profiles relation/edge.
 	ExecutionProfilesTable = "execution_profiles"
 	// ExecutionProfilesInverseTable is the table name for the ExecutionProfile entity.
@@ -281,6 +290,20 @@ func ByBootstrapPromptTemplates(term sql.OrderTerm, terms ...sql.OrderTerm) Orde
 	}
 }
 
+// ByPrunePromptTemplatesCount orders the results by prune_prompt_templates count.
+func ByPrunePromptTemplatesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newPrunePromptTemplatesStep(), opts...)
+	}
+}
+
+// ByPrunePromptTemplates orders the results by prune_prompt_templates terms.
+func ByPrunePromptTemplates(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newPrunePromptTemplatesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
 // ByExecutionProfilesCount orders the results by execution_profiles count.
 func ByExecutionProfilesCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
@@ -355,6 +378,13 @@ func newBootstrapPromptTemplatesStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(BootstrapPromptTemplatesInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, BootstrapPromptTemplatesTable, BootstrapPromptTemplatesColumn),
+	)
+}
+func newPrunePromptTemplatesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(PrunePromptTemplatesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, PrunePromptTemplatesTable, PrunePromptTemplatesColumn),
 	)
 }
 func newExecutionProfilesStep() *sqlgraph.Step {

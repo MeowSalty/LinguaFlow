@@ -1,0 +1,83 @@
+prunePromptTemplates:
+  get:
+    operationId: ListPrunePromptTemplates
+    summary: 列出当前用户的术语精简提示词模板
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 术语精简提示词模板列表
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/prune-prompt-template.yaml#/PrunePromptTemplateListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  post:
+    operationId: CreatePrunePromptTemplate
+    summary: 创建术语精简提示词模板
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/prune-prompt-template.yaml#/CreatePrunePromptTemplateRequest'
+    responses:
+      '201':
+        description: 创建成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/prune-prompt-template.yaml#/PrunePromptTemplate'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+prunePromptTemplateById:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/PrunePromptTemplateId'
+  get:
+    operationId: GetPrunePromptTemplate
+    summary: 获取术语精简提示词模板详情
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 术语精简提示词模板详情
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/prune-prompt-template.yaml#/PrunePromptTemplate'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  put:
+    operationId: UpdatePrunePromptTemplate
+    summary: 更新术语精简提示词模板
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/prune-prompt-template.yaml#/UpdatePrunePromptTemplateRequest'
+    responses:
+      '200':
+        description: 更新成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/prune-prompt-template.yaml#/PrunePromptTemplate'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  delete:
+    operationId: DeletePrunePromptTemplate
+    summary: 删除术语精简提示词模板
+    security:
+      - bearerAuth: []
+    responses:
+      '204':
+        description: 删除成功
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

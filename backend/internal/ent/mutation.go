@@ -23,6 +23,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/pruneprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
@@ -57,6 +58,7 @@ const (
 	TypeOrgMembership             = "OrgMembership"
 	TypeOrganization              = "Organization"
 	TypeProject                   = "Project"
+	TypePrunePromptTemplate       = "PrunePromptTemplate"
 	TypeRefreshToken              = "RefreshToken"
 	TypeResource                  = "Resource"
 	TypeSSEEvent                  = "SSEEvent"
@@ -9100,6 +9102,9 @@ type OrganizationMutation struct {
 	bootstrap_prompt_templates          map[int]struct{}
 	removedbootstrap_prompt_templates   map[int]struct{}
 	clearedbootstrap_prompt_templates   bool
+	prune_prompt_templates              map[int]struct{}
+	removedprune_prompt_templates       map[int]struct{}
+	clearedprune_prompt_templates       bool
 	execution_profiles                  map[int]struct{}
 	removedexecution_profiles           map[int]struct{}
 	clearedexecution_profiles           bool
@@ -9829,6 +9834,60 @@ func (m *OrganizationMutation) ResetBootstrapPromptTemplates() {
 	m.removedbootstrap_prompt_templates = nil
 }
 
+// AddPrunePromptTemplateIDs adds the "prune_prompt_templates" edge to the PrunePromptTemplate entity by ids.
+func (m *OrganizationMutation) AddPrunePromptTemplateIDs(ids ...int) {
+	if m.prune_prompt_templates == nil {
+		m.prune_prompt_templates = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.prune_prompt_templates[ids[i]] = struct{}{}
+	}
+}
+
+// ClearPrunePromptTemplates clears the "prune_prompt_templates" edge to the PrunePromptTemplate entity.
+func (m *OrganizationMutation) ClearPrunePromptTemplates() {
+	m.clearedprune_prompt_templates = true
+}
+
+// PrunePromptTemplatesCleared reports if the "prune_prompt_templates" edge to the PrunePromptTemplate entity was cleared.
+func (m *OrganizationMutation) PrunePromptTemplatesCleared() bool {
+	return m.clearedprune_prompt_templates
+}
+
+// RemovePrunePromptTemplateIDs removes the "prune_prompt_templates" edge to the PrunePromptTemplate entity by IDs.
+func (m *OrganizationMutation) RemovePrunePromptTemplateIDs(ids ...int) {
+	if m.removedprune_prompt_templates == nil {
+		m.removedprune_prompt_templates = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.prune_prompt_templates, ids[i])
+		m.removedprune_prompt_templates[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedPrunePromptTemplates returns the removed IDs of the "prune_prompt_templates" edge to the PrunePromptTemplate entity.
+func (m *OrganizationMutation) RemovedPrunePromptTemplatesIDs() (ids []int) {
+	for id := range m.removedprune_prompt_templates {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// PrunePromptTemplatesIDs returns the "prune_prompt_templates" edge IDs in the mutation.
+func (m *OrganizationMutation) PrunePromptTemplatesIDs() (ids []int) {
+	for id := range m.prune_prompt_templates {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetPrunePromptTemplates resets all changes to the "prune_prompt_templates" edge.
+func (m *OrganizationMutation) ResetPrunePromptTemplates() {
+	m.prune_prompt_templates = nil
+	m.clearedprune_prompt_templates = false
+	m.removedprune_prompt_templates = nil
+}
+
 // AddExecutionProfileIDs adds the "execution_profiles" edge to the ExecutionProfile entity by ids.
 func (m *OrganizationMutation) AddExecutionProfileIDs(ids ...int) {
 	if m.execution_profiles == nil {
@@ -10170,7 +10229,7 @@ func (m *OrganizationMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *OrganizationMutation) AddedEdges() []string {
-	edges := make([]string, 0, 9)
+	edges := make([]string, 0, 10)
 	if m.projects != nil {
 		edges = append(edges, organization.EdgeProjects)
 	}
@@ -10191,6 +10250,9 @@ func (m *OrganizationMutation) AddedEdges() []string {
 	}
 	if m.bootstrap_prompt_templates != nil {
 		edges = append(edges, organization.EdgeBootstrapPromptTemplates)
+	}
+	if m.prune_prompt_templates != nil {
+		edges = append(edges, organization.EdgePrunePromptTemplates)
 	}
 	if m.execution_profiles != nil {
 		edges = append(edges, organization.EdgeExecutionProfiles)
@@ -10247,6 +10309,12 @@ func (m *OrganizationMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case organization.EdgePrunePromptTemplates:
+		ids := make([]ent.Value, 0, len(m.prune_prompt_templates))
+		for id := range m.prune_prompt_templates {
+			ids = append(ids, id)
+		}
+		return ids
 	case organization.EdgeExecutionProfiles:
 		ids := make([]ent.Value, 0, len(m.execution_profiles))
 		for id := range m.execution_profiles {
@@ -10265,7 +10333,7 @@ func (m *OrganizationMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *OrganizationMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 9)
+	edges := make([]string, 0, 10)
 	if m.removedprojects != nil {
 		edges = append(edges, organization.EdgeProjects)
 	}
@@ -10286,6 +10354,9 @@ func (m *OrganizationMutation) RemovedEdges() []string {
 	}
 	if m.removedbootstrap_prompt_templates != nil {
 		edges = append(edges, organization.EdgeBootstrapPromptTemplates)
+	}
+	if m.removedprune_prompt_templates != nil {
+		edges = append(edges, organization.EdgePrunePromptTemplates)
 	}
 	if m.removedexecution_profiles != nil {
 		edges = append(edges, organization.EdgeExecutionProfiles)
@@ -10342,6 +10413,12 @@ func (m *OrganizationMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case organization.EdgePrunePromptTemplates:
+		ids := make([]ent.Value, 0, len(m.removedprune_prompt_templates))
+		for id := range m.removedprune_prompt_templates {
+			ids = append(ids, id)
+		}
+		return ids
 	case organization.EdgeExecutionProfiles:
 		ids := make([]ent.Value, 0, len(m.removedexecution_profiles))
 		for id := range m.removedexecution_profiles {
@@ -10360,7 +10437,7 @@ func (m *OrganizationMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *OrganizationMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 9)
+	edges := make([]string, 0, 10)
 	if m.clearedprojects {
 		edges = append(edges, organization.EdgeProjects)
 	}
@@ -10381,6 +10458,9 @@ func (m *OrganizationMutation) ClearedEdges() []string {
 	}
 	if m.clearedbootstrap_prompt_templates {
 		edges = append(edges, organization.EdgeBootstrapPromptTemplates)
+	}
+	if m.clearedprune_prompt_templates {
+		edges = append(edges, organization.EdgePrunePromptTemplates)
 	}
 	if m.clearedexecution_profiles {
 		edges = append(edges, organization.EdgeExecutionProfiles)
@@ -10409,6 +10489,8 @@ func (m *OrganizationMutation) EdgeCleared(name string) bool {
 		return m.clearedtranslation_prompt_templates
 	case organization.EdgeBootstrapPromptTemplates:
 		return m.clearedbootstrap_prompt_templates
+	case organization.EdgePrunePromptTemplates:
+		return m.clearedprune_prompt_templates
 	case organization.EdgeExecutionProfiles:
 		return m.clearedexecution_profiles
 	case organization.EdgeExecutionPlanTemplates:
@@ -10449,6 +10531,9 @@ func (m *OrganizationMutation) ResetEdge(name string) error {
 		return nil
 	case organization.EdgeBootstrapPromptTemplates:
 		m.ResetBootstrapPromptTemplates()
+		return nil
+	case organization.EdgePrunePromptTemplates:
+		m.ResetPrunePromptTemplates()
 		return nil
 	case organization.EdgeExecutionProfiles:
 		m.ResetExecutionProfiles()
@@ -11943,6 +12028,854 @@ func (m *ProjectMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown Project edge %s", name)
+}
+
+// PrunePromptTemplateMutation represents an operation that mutates the PrunePromptTemplate nodes in the graph.
+type PrunePromptTemplateMutation struct {
+	config
+	op                Op
+	typ               string
+	id                *int
+	created_at        *time.Time
+	updated_at        *time.Time
+	name              *string
+	description       *string
+	scope             *string
+	content           *string
+	clearedFields     map[string]struct{}
+	owner_user        *int
+	clearedowner_user bool
+	owner_org         *int
+	clearedowner_org  bool
+	done              bool
+	oldValue          func(context.Context) (*PrunePromptTemplate, error)
+	predicates        []predicate.PrunePromptTemplate
+}
+
+var _ ent.Mutation = (*PrunePromptTemplateMutation)(nil)
+
+// pruneprompttemplateOption allows management of the mutation configuration using functional options.
+type pruneprompttemplateOption func(*PrunePromptTemplateMutation)
+
+// newPrunePromptTemplateMutation creates new mutation for the PrunePromptTemplate entity.
+func newPrunePromptTemplateMutation(c config, op Op, opts ...pruneprompttemplateOption) *PrunePromptTemplateMutation {
+	m := &PrunePromptTemplateMutation{
+		config:        c,
+		op:            op,
+		typ:           TypePrunePromptTemplate,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withPrunePromptTemplateID sets the ID field of the mutation.
+func withPrunePromptTemplateID(id int) pruneprompttemplateOption {
+	return func(m *PrunePromptTemplateMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *PrunePromptTemplate
+		)
+		m.oldValue = func(ctx context.Context) (*PrunePromptTemplate, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().PrunePromptTemplate.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withPrunePromptTemplate sets the old PrunePromptTemplate of the mutation.
+func withPrunePromptTemplate(node *PrunePromptTemplate) pruneprompttemplateOption {
+	return func(m *PrunePromptTemplateMutation) {
+		m.oldValue = func(context.Context) (*PrunePromptTemplate, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m PrunePromptTemplateMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m PrunePromptTemplateMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *PrunePromptTemplateMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *PrunePromptTemplateMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().PrunePromptTemplate.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *PrunePromptTemplateMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *PrunePromptTemplateMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the PrunePromptTemplate entity.
+// If the PrunePromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PrunePromptTemplateMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *PrunePromptTemplateMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *PrunePromptTemplateMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *PrunePromptTemplateMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the PrunePromptTemplate entity.
+// If the PrunePromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PrunePromptTemplateMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *PrunePromptTemplateMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetName sets the "name" field.
+func (m *PrunePromptTemplateMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *PrunePromptTemplateMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the PrunePromptTemplate entity.
+// If the PrunePromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PrunePromptTemplateMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *PrunePromptTemplateMutation) ResetName() {
+	m.name = nil
+}
+
+// SetDescription sets the "description" field.
+func (m *PrunePromptTemplateMutation) SetDescription(s string) {
+	m.description = &s
+}
+
+// Description returns the value of the "description" field in the mutation.
+func (m *PrunePromptTemplateMutation) Description() (r string, exists bool) {
+	v := m.description
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDescription returns the old "description" field's value of the PrunePromptTemplate entity.
+// If the PrunePromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PrunePromptTemplateMutation) OldDescription(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDescription is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDescription requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDescription: %w", err)
+	}
+	return oldValue.Description, nil
+}
+
+// ResetDescription resets all changes to the "description" field.
+func (m *PrunePromptTemplateMutation) ResetDescription() {
+	m.description = nil
+}
+
+// SetScope sets the "scope" field.
+func (m *PrunePromptTemplateMutation) SetScope(s string) {
+	m.scope = &s
+}
+
+// Scope returns the value of the "scope" field in the mutation.
+func (m *PrunePromptTemplateMutation) Scope() (r string, exists bool) {
+	v := m.scope
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldScope returns the old "scope" field's value of the PrunePromptTemplate entity.
+// If the PrunePromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PrunePromptTemplateMutation) OldScope(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldScope is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldScope requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldScope: %w", err)
+	}
+	return oldValue.Scope, nil
+}
+
+// ResetScope resets all changes to the "scope" field.
+func (m *PrunePromptTemplateMutation) ResetScope() {
+	m.scope = nil
+}
+
+// SetOwnerUserID sets the "owner_user_id" field.
+func (m *PrunePromptTemplateMutation) SetOwnerUserID(i int) {
+	m.owner_user = &i
+}
+
+// OwnerUserID returns the value of the "owner_user_id" field in the mutation.
+func (m *PrunePromptTemplateMutation) OwnerUserID() (r int, exists bool) {
+	v := m.owner_user
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOwnerUserID returns the old "owner_user_id" field's value of the PrunePromptTemplate entity.
+// If the PrunePromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PrunePromptTemplateMutation) OldOwnerUserID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOwnerUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOwnerUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOwnerUserID: %w", err)
+	}
+	return oldValue.OwnerUserID, nil
+}
+
+// ClearOwnerUserID clears the value of the "owner_user_id" field.
+func (m *PrunePromptTemplateMutation) ClearOwnerUserID() {
+	m.owner_user = nil
+	m.clearedFields[pruneprompttemplate.FieldOwnerUserID] = struct{}{}
+}
+
+// OwnerUserIDCleared returns if the "owner_user_id" field was cleared in this mutation.
+func (m *PrunePromptTemplateMutation) OwnerUserIDCleared() bool {
+	_, ok := m.clearedFields[pruneprompttemplate.FieldOwnerUserID]
+	return ok
+}
+
+// ResetOwnerUserID resets all changes to the "owner_user_id" field.
+func (m *PrunePromptTemplateMutation) ResetOwnerUserID() {
+	m.owner_user = nil
+	delete(m.clearedFields, pruneprompttemplate.FieldOwnerUserID)
+}
+
+// SetOwnerOrgID sets the "owner_org_id" field.
+func (m *PrunePromptTemplateMutation) SetOwnerOrgID(i int) {
+	m.owner_org = &i
+}
+
+// OwnerOrgID returns the value of the "owner_org_id" field in the mutation.
+func (m *PrunePromptTemplateMutation) OwnerOrgID() (r int, exists bool) {
+	v := m.owner_org
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOwnerOrgID returns the old "owner_org_id" field's value of the PrunePromptTemplate entity.
+// If the PrunePromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PrunePromptTemplateMutation) OldOwnerOrgID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOwnerOrgID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOwnerOrgID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOwnerOrgID: %w", err)
+	}
+	return oldValue.OwnerOrgID, nil
+}
+
+// ClearOwnerOrgID clears the value of the "owner_org_id" field.
+func (m *PrunePromptTemplateMutation) ClearOwnerOrgID() {
+	m.owner_org = nil
+	m.clearedFields[pruneprompttemplate.FieldOwnerOrgID] = struct{}{}
+}
+
+// OwnerOrgIDCleared returns if the "owner_org_id" field was cleared in this mutation.
+func (m *PrunePromptTemplateMutation) OwnerOrgIDCleared() bool {
+	_, ok := m.clearedFields[pruneprompttemplate.FieldOwnerOrgID]
+	return ok
+}
+
+// ResetOwnerOrgID resets all changes to the "owner_org_id" field.
+func (m *PrunePromptTemplateMutation) ResetOwnerOrgID() {
+	m.owner_org = nil
+	delete(m.clearedFields, pruneprompttemplate.FieldOwnerOrgID)
+}
+
+// SetContent sets the "content" field.
+func (m *PrunePromptTemplateMutation) SetContent(s string) {
+	m.content = &s
+}
+
+// Content returns the value of the "content" field in the mutation.
+func (m *PrunePromptTemplateMutation) Content() (r string, exists bool) {
+	v := m.content
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldContent returns the old "content" field's value of the PrunePromptTemplate entity.
+// If the PrunePromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *PrunePromptTemplateMutation) OldContent(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldContent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldContent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldContent: %w", err)
+	}
+	return oldValue.Content, nil
+}
+
+// ResetContent resets all changes to the "content" field.
+func (m *PrunePromptTemplateMutation) ResetContent() {
+	m.content = nil
+}
+
+// ClearOwnerUser clears the "owner_user" edge to the User entity.
+func (m *PrunePromptTemplateMutation) ClearOwnerUser() {
+	m.clearedowner_user = true
+	m.clearedFields[pruneprompttemplate.FieldOwnerUserID] = struct{}{}
+}
+
+// OwnerUserCleared reports if the "owner_user" edge to the User entity was cleared.
+func (m *PrunePromptTemplateMutation) OwnerUserCleared() bool {
+	return m.OwnerUserIDCleared() || m.clearedowner_user
+}
+
+// OwnerUserIDs returns the "owner_user" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// OwnerUserID instead. It exists only for internal usage by the builders.
+func (m *PrunePromptTemplateMutation) OwnerUserIDs() (ids []int) {
+	if id := m.owner_user; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetOwnerUser resets all changes to the "owner_user" edge.
+func (m *PrunePromptTemplateMutation) ResetOwnerUser() {
+	m.owner_user = nil
+	m.clearedowner_user = false
+}
+
+// ClearOwnerOrg clears the "owner_org" edge to the Organization entity.
+func (m *PrunePromptTemplateMutation) ClearOwnerOrg() {
+	m.clearedowner_org = true
+	m.clearedFields[pruneprompttemplate.FieldOwnerOrgID] = struct{}{}
+}
+
+// OwnerOrgCleared reports if the "owner_org" edge to the Organization entity was cleared.
+func (m *PrunePromptTemplateMutation) OwnerOrgCleared() bool {
+	return m.OwnerOrgIDCleared() || m.clearedowner_org
+}
+
+// OwnerOrgIDs returns the "owner_org" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// OwnerOrgID instead. It exists only for internal usage by the builders.
+func (m *PrunePromptTemplateMutation) OwnerOrgIDs() (ids []int) {
+	if id := m.owner_org; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetOwnerOrg resets all changes to the "owner_org" edge.
+func (m *PrunePromptTemplateMutation) ResetOwnerOrg() {
+	m.owner_org = nil
+	m.clearedowner_org = false
+}
+
+// Where appends a list predicates to the PrunePromptTemplateMutation builder.
+func (m *PrunePromptTemplateMutation) Where(ps ...predicate.PrunePromptTemplate) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the PrunePromptTemplateMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *PrunePromptTemplateMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.PrunePromptTemplate, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *PrunePromptTemplateMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *PrunePromptTemplateMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (PrunePromptTemplate).
+func (m *PrunePromptTemplateMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *PrunePromptTemplateMutation) Fields() []string {
+	fields := make([]string, 0, 8)
+	if m.created_at != nil {
+		fields = append(fields, pruneprompttemplate.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, pruneprompttemplate.FieldUpdatedAt)
+	}
+	if m.name != nil {
+		fields = append(fields, pruneprompttemplate.FieldName)
+	}
+	if m.description != nil {
+		fields = append(fields, pruneprompttemplate.FieldDescription)
+	}
+	if m.scope != nil {
+		fields = append(fields, pruneprompttemplate.FieldScope)
+	}
+	if m.owner_user != nil {
+		fields = append(fields, pruneprompttemplate.FieldOwnerUserID)
+	}
+	if m.owner_org != nil {
+		fields = append(fields, pruneprompttemplate.FieldOwnerOrgID)
+	}
+	if m.content != nil {
+		fields = append(fields, pruneprompttemplate.FieldContent)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *PrunePromptTemplateMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case pruneprompttemplate.FieldCreatedAt:
+		return m.CreatedAt()
+	case pruneprompttemplate.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case pruneprompttemplate.FieldName:
+		return m.Name()
+	case pruneprompttemplate.FieldDescription:
+		return m.Description()
+	case pruneprompttemplate.FieldScope:
+		return m.Scope()
+	case pruneprompttemplate.FieldOwnerUserID:
+		return m.OwnerUserID()
+	case pruneprompttemplate.FieldOwnerOrgID:
+		return m.OwnerOrgID()
+	case pruneprompttemplate.FieldContent:
+		return m.Content()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *PrunePromptTemplateMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case pruneprompttemplate.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case pruneprompttemplate.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case pruneprompttemplate.FieldName:
+		return m.OldName(ctx)
+	case pruneprompttemplate.FieldDescription:
+		return m.OldDescription(ctx)
+	case pruneprompttemplate.FieldScope:
+		return m.OldScope(ctx)
+	case pruneprompttemplate.FieldOwnerUserID:
+		return m.OldOwnerUserID(ctx)
+	case pruneprompttemplate.FieldOwnerOrgID:
+		return m.OldOwnerOrgID(ctx)
+	case pruneprompttemplate.FieldContent:
+		return m.OldContent(ctx)
+	}
+	return nil, fmt.Errorf("unknown PrunePromptTemplate field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *PrunePromptTemplateMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case pruneprompttemplate.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case pruneprompttemplate.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case pruneprompttemplate.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
+	case pruneprompttemplate.FieldDescription:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDescription(v)
+		return nil
+	case pruneprompttemplate.FieldScope:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetScope(v)
+		return nil
+	case pruneprompttemplate.FieldOwnerUserID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOwnerUserID(v)
+		return nil
+	case pruneprompttemplate.FieldOwnerOrgID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOwnerOrgID(v)
+		return nil
+	case pruneprompttemplate.FieldContent:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetContent(v)
+		return nil
+	}
+	return fmt.Errorf("unknown PrunePromptTemplate field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *PrunePromptTemplateMutation) AddedFields() []string {
+	var fields []string
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *PrunePromptTemplateMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *PrunePromptTemplateMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown PrunePromptTemplate numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *PrunePromptTemplateMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(pruneprompttemplate.FieldOwnerUserID) {
+		fields = append(fields, pruneprompttemplate.FieldOwnerUserID)
+	}
+	if m.FieldCleared(pruneprompttemplate.FieldOwnerOrgID) {
+		fields = append(fields, pruneprompttemplate.FieldOwnerOrgID)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *PrunePromptTemplateMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *PrunePromptTemplateMutation) ClearField(name string) error {
+	switch name {
+	case pruneprompttemplate.FieldOwnerUserID:
+		m.ClearOwnerUserID()
+		return nil
+	case pruneprompttemplate.FieldOwnerOrgID:
+		m.ClearOwnerOrgID()
+		return nil
+	}
+	return fmt.Errorf("unknown PrunePromptTemplate nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *PrunePromptTemplateMutation) ResetField(name string) error {
+	switch name {
+	case pruneprompttemplate.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case pruneprompttemplate.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case pruneprompttemplate.FieldName:
+		m.ResetName()
+		return nil
+	case pruneprompttemplate.FieldDescription:
+		m.ResetDescription()
+		return nil
+	case pruneprompttemplate.FieldScope:
+		m.ResetScope()
+		return nil
+	case pruneprompttemplate.FieldOwnerUserID:
+		m.ResetOwnerUserID()
+		return nil
+	case pruneprompttemplate.FieldOwnerOrgID:
+		m.ResetOwnerOrgID()
+		return nil
+	case pruneprompttemplate.FieldContent:
+		m.ResetContent()
+		return nil
+	}
+	return fmt.Errorf("unknown PrunePromptTemplate field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *PrunePromptTemplateMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.owner_user != nil {
+		edges = append(edges, pruneprompttemplate.EdgeOwnerUser)
+	}
+	if m.owner_org != nil {
+		edges = append(edges, pruneprompttemplate.EdgeOwnerOrg)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *PrunePromptTemplateMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case pruneprompttemplate.EdgeOwnerUser:
+		if id := m.owner_user; id != nil {
+			return []ent.Value{*id}
+		}
+	case pruneprompttemplate.EdgeOwnerOrg:
+		if id := m.owner_org; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *PrunePromptTemplateMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *PrunePromptTemplateMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *PrunePromptTemplateMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.clearedowner_user {
+		edges = append(edges, pruneprompttemplate.EdgeOwnerUser)
+	}
+	if m.clearedowner_org {
+		edges = append(edges, pruneprompttemplate.EdgeOwnerOrg)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *PrunePromptTemplateMutation) EdgeCleared(name string) bool {
+	switch name {
+	case pruneprompttemplate.EdgeOwnerUser:
+		return m.clearedowner_user
+	case pruneprompttemplate.EdgeOwnerOrg:
+		return m.clearedowner_org
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *PrunePromptTemplateMutation) ClearEdge(name string) error {
+	switch name {
+	case pruneprompttemplate.EdgeOwnerUser:
+		m.ClearOwnerUser()
+		return nil
+	case pruneprompttemplate.EdgeOwnerOrg:
+		m.ClearOwnerOrg()
+		return nil
+	}
+	return fmt.Errorf("unknown PrunePromptTemplate unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *PrunePromptTemplateMutation) ResetEdge(name string) error {
+	switch name {
+	case pruneprompttemplate.EdgeOwnerUser:
+		m.ResetOwnerUser()
+		return nil
+	case pruneprompttemplate.EdgeOwnerOrg:
+		m.ResetOwnerOrg()
+		return nil
+	}
+	return fmt.Errorf("unknown PrunePromptTemplate edge %s", name)
 }
 
 // RefreshTokenMutation represents an operation that mutates the RefreshToken nodes in the graph.
@@ -20233,6 +21166,9 @@ type UserMutation struct {
 	bootstrap_prompt_templates          map[int]struct{}
 	removedbootstrap_prompt_templates   map[int]struct{}
 	clearedbootstrap_prompt_templates   bool
+	prune_prompt_templates              map[int]struct{}
+	removedprune_prompt_templates       map[int]struct{}
+	clearedprune_prompt_templates       bool
 	execution_profiles                  map[int]struct{}
 	removedexecution_profiles           map[int]struct{}
 	clearedexecution_profiles           bool
@@ -21186,6 +22122,60 @@ func (m *UserMutation) ResetBootstrapPromptTemplates() {
 	m.removedbootstrap_prompt_templates = nil
 }
 
+// AddPrunePromptTemplateIDs adds the "prune_prompt_templates" edge to the PrunePromptTemplate entity by ids.
+func (m *UserMutation) AddPrunePromptTemplateIDs(ids ...int) {
+	if m.prune_prompt_templates == nil {
+		m.prune_prompt_templates = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.prune_prompt_templates[ids[i]] = struct{}{}
+	}
+}
+
+// ClearPrunePromptTemplates clears the "prune_prompt_templates" edge to the PrunePromptTemplate entity.
+func (m *UserMutation) ClearPrunePromptTemplates() {
+	m.clearedprune_prompt_templates = true
+}
+
+// PrunePromptTemplatesCleared reports if the "prune_prompt_templates" edge to the PrunePromptTemplate entity was cleared.
+func (m *UserMutation) PrunePromptTemplatesCleared() bool {
+	return m.clearedprune_prompt_templates
+}
+
+// RemovePrunePromptTemplateIDs removes the "prune_prompt_templates" edge to the PrunePromptTemplate entity by IDs.
+func (m *UserMutation) RemovePrunePromptTemplateIDs(ids ...int) {
+	if m.removedprune_prompt_templates == nil {
+		m.removedprune_prompt_templates = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.prune_prompt_templates, ids[i])
+		m.removedprune_prompt_templates[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedPrunePromptTemplates returns the removed IDs of the "prune_prompt_templates" edge to the PrunePromptTemplate entity.
+func (m *UserMutation) RemovedPrunePromptTemplatesIDs() (ids []int) {
+	for id := range m.removedprune_prompt_templates {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// PrunePromptTemplatesIDs returns the "prune_prompt_templates" edge IDs in the mutation.
+func (m *UserMutation) PrunePromptTemplatesIDs() (ids []int) {
+	for id := range m.prune_prompt_templates {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetPrunePromptTemplates resets all changes to the "prune_prompt_templates" edge.
+func (m *UserMutation) ResetPrunePromptTemplates() {
+	m.prune_prompt_templates = nil
+	m.clearedprune_prompt_templates = false
+	m.removedprune_prompt_templates = nil
+}
+
 // AddExecutionProfileIDs adds the "execution_profiles" edge to the ExecutionProfile entity by ids.
 func (m *UserMutation) AddExecutionProfileIDs(ids ...int) {
 	if m.execution_profiles == nil {
@@ -21609,7 +22599,7 @@ func (m *UserMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *UserMutation) AddedEdges() []string {
-	edges := make([]string, 0, 13)
+	edges := make([]string, 0, 14)
 	if m.created_jobs != nil {
 		edges = append(edges, user.EdgeCreatedJobs)
 	}
@@ -21639,6 +22629,9 @@ func (m *UserMutation) AddedEdges() []string {
 	}
 	if m.bootstrap_prompt_templates != nil {
 		edges = append(edges, user.EdgeBootstrapPromptTemplates)
+	}
+	if m.prune_prompt_templates != nil {
+		edges = append(edges, user.EdgePrunePromptTemplates)
 	}
 	if m.execution_profiles != nil {
 		edges = append(edges, user.EdgeExecutionProfiles)
@@ -21716,6 +22709,12 @@ func (m *UserMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case user.EdgePrunePromptTemplates:
+		ids := make([]ent.Value, 0, len(m.prune_prompt_templates))
+		for id := range m.prune_prompt_templates {
+			ids = append(ids, id)
+		}
+		return ids
 	case user.EdgeExecutionProfiles:
 		ids := make([]ent.Value, 0, len(m.execution_profiles))
 		for id := range m.execution_profiles {
@@ -21740,7 +22739,7 @@ func (m *UserMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *UserMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 13)
+	edges := make([]string, 0, 14)
 	if m.removedcreated_jobs != nil {
 		edges = append(edges, user.EdgeCreatedJobs)
 	}
@@ -21770,6 +22769,9 @@ func (m *UserMutation) RemovedEdges() []string {
 	}
 	if m.removedbootstrap_prompt_templates != nil {
 		edges = append(edges, user.EdgeBootstrapPromptTemplates)
+	}
+	if m.removedprune_prompt_templates != nil {
+		edges = append(edges, user.EdgePrunePromptTemplates)
 	}
 	if m.removedexecution_profiles != nil {
 		edges = append(edges, user.EdgeExecutionProfiles)
@@ -21847,6 +22849,12 @@ func (m *UserMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
+	case user.EdgePrunePromptTemplates:
+		ids := make([]ent.Value, 0, len(m.removedprune_prompt_templates))
+		for id := range m.removedprune_prompt_templates {
+			ids = append(ids, id)
+		}
+		return ids
 	case user.EdgeExecutionProfiles:
 		ids := make([]ent.Value, 0, len(m.removedexecution_profiles))
 		for id := range m.removedexecution_profiles {
@@ -21871,7 +22879,7 @@ func (m *UserMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *UserMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 13)
+	edges := make([]string, 0, 14)
 	if m.clearedcreated_jobs {
 		edges = append(edges, user.EdgeCreatedJobs)
 	}
@@ -21901,6 +22909,9 @@ func (m *UserMutation) ClearedEdges() []string {
 	}
 	if m.clearedbootstrap_prompt_templates {
 		edges = append(edges, user.EdgeBootstrapPromptTemplates)
+	}
+	if m.clearedprune_prompt_templates {
+		edges = append(edges, user.EdgePrunePromptTemplates)
 	}
 	if m.clearedexecution_profiles {
 		edges = append(edges, user.EdgeExecutionProfiles)
@@ -21938,6 +22949,8 @@ func (m *UserMutation) EdgeCleared(name string) bool {
 		return m.clearedtranslation_prompt_templates
 	case user.EdgeBootstrapPromptTemplates:
 		return m.clearedbootstrap_prompt_templates
+	case user.EdgePrunePromptTemplates:
+		return m.clearedprune_prompt_templates
 	case user.EdgeExecutionProfiles:
 		return m.clearedexecution_profiles
 	case user.EdgeExecutionPlanTemplates:
@@ -21989,6 +23002,9 @@ func (m *UserMutation) ResetEdge(name string) error {
 		return nil
 	case user.EdgeBootstrapPromptTemplates:
 		m.ResetBootstrapPromptTemplates()
+		return nil
+	case user.EdgePrunePromptTemplates:
+		m.ResetPrunePromptTemplates()
 		return nil
 	case user.EdgeExecutionProfiles:
 		m.ResetExecutionProfiles()

@@ -16,6 +16,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/pruneprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
@@ -470,6 +471,45 @@ func init() {
 	projectDescTargetLang := projectFields[6].Descriptor()
 	// project.DefaultTargetLang holds the default value on creation for the target_lang field.
 	project.DefaultTargetLang = projectDescTargetLang.Default.(string)
+	pruneprompttemplateMixin := schema.PrunePromptTemplate{}.Mixin()
+	pruneprompttemplateMixinFields0 := pruneprompttemplateMixin[0].Fields()
+	_ = pruneprompttemplateMixinFields0
+	pruneprompttemplateFields := schema.PrunePromptTemplate{}.Fields()
+	_ = pruneprompttemplateFields
+	// pruneprompttemplateDescCreatedAt is the schema descriptor for created_at field.
+	pruneprompttemplateDescCreatedAt := pruneprompttemplateMixinFields0[0].Descriptor()
+	// pruneprompttemplate.DefaultCreatedAt holds the default value on creation for the created_at field.
+	pruneprompttemplate.DefaultCreatedAt = pruneprompttemplateDescCreatedAt.Default.(func() time.Time)
+	// pruneprompttemplateDescUpdatedAt is the schema descriptor for updated_at field.
+	pruneprompttemplateDescUpdatedAt := pruneprompttemplateMixinFields0[1].Descriptor()
+	// pruneprompttemplate.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	pruneprompttemplate.DefaultUpdatedAt = pruneprompttemplateDescUpdatedAt.Default.(func() time.Time)
+	// pruneprompttemplate.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	pruneprompttemplate.UpdateDefaultUpdatedAt = pruneprompttemplateDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// pruneprompttemplateDescName is the schema descriptor for name field.
+	pruneprompttemplateDescName := pruneprompttemplateFields[0].Descriptor()
+	// pruneprompttemplate.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	pruneprompttemplate.NameValidator = pruneprompttemplateDescName.Validators[0].(func(string) error)
+	// pruneprompttemplateDescDescription is the schema descriptor for description field.
+	pruneprompttemplateDescDescription := pruneprompttemplateFields[1].Descriptor()
+	// pruneprompttemplate.DefaultDescription holds the default value on creation for the description field.
+	pruneprompttemplate.DefaultDescription = pruneprompttemplateDescDescription.Default.(string)
+	// pruneprompttemplateDescScope is the schema descriptor for scope field.
+	pruneprompttemplateDescScope := pruneprompttemplateFields[2].Descriptor()
+	// pruneprompttemplate.DefaultScope holds the default value on creation for the scope field.
+	pruneprompttemplate.DefaultScope = pruneprompttemplateDescScope.Default.(string)
+	// pruneprompttemplateDescOwnerUserID is the schema descriptor for owner_user_id field.
+	pruneprompttemplateDescOwnerUserID := pruneprompttemplateFields[3].Descriptor()
+	// pruneprompttemplate.OwnerUserIDValidator is a validator for the "owner_user_id" field. It is called by the builders before save.
+	pruneprompttemplate.OwnerUserIDValidator = pruneprompttemplateDescOwnerUserID.Validators[0].(func(int) error)
+	// pruneprompttemplateDescOwnerOrgID is the schema descriptor for owner_org_id field.
+	pruneprompttemplateDescOwnerOrgID := pruneprompttemplateFields[4].Descriptor()
+	// pruneprompttemplate.OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
+	pruneprompttemplate.OwnerOrgIDValidator = pruneprompttemplateDescOwnerOrgID.Validators[0].(func(int) error)
+	// pruneprompttemplateDescContent is the schema descriptor for content field.
+	pruneprompttemplateDescContent := pruneprompttemplateFields[5].Descriptor()
+	// pruneprompttemplate.DefaultContent holds the default value on creation for the content field.
+	pruneprompttemplate.DefaultContent = pruneprompttemplateDescContent.Default.(string)
 	refreshtokenMixin := schema.RefreshToken{}.Mixin()
 	refreshtokenMixinFields0 := refreshtokenMixin[0].Fields()
 	_ = refreshtokenMixinFields0

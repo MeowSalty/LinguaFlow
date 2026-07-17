@@ -26,6 +26,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/pruneprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
@@ -65,6 +66,8 @@ type Client struct {
 	Organization *OrganizationClient
 	// Project is the client for interacting with the Project builders.
 	Project *ProjectClient
+	// PrunePromptTemplate is the client for interacting with the PrunePromptTemplate builders.
+	PrunePromptTemplate *PrunePromptTemplateClient
 	// RefreshToken is the client for interacting with the RefreshToken builders.
 	RefreshToken *RefreshTokenClient
 	// Resource is the client for interacting with the Resource builders.
@@ -107,6 +110,7 @@ func (c *Client) init() {
 	c.OrgMembership = NewOrgMembershipClient(c.config)
 	c.Organization = NewOrganizationClient(c.config)
 	c.Project = NewProjectClient(c.config)
+	c.PrunePromptTemplate = NewPrunePromptTemplateClient(c.config)
 	c.RefreshToken = NewRefreshTokenClient(c.config)
 	c.Resource = NewResourceClient(c.config)
 	c.SSEEvent = NewSSEEventClient(c.config)
@@ -220,6 +224,7 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 		OrgMembership:             NewOrgMembershipClient(cfg),
 		Organization:              NewOrganizationClient(cfg),
 		Project:                   NewProjectClient(cfg),
+		PrunePromptTemplate:       NewPrunePromptTemplateClient(cfg),
 		RefreshToken:              NewRefreshTokenClient(cfg),
 		Resource:                  NewResourceClient(cfg),
 		SSEEvent:                  NewSSEEventClient(cfg),
@@ -260,6 +265,7 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 		OrgMembership:             NewOrgMembershipClient(cfg),
 		Organization:              NewOrganizationClient(cfg),
 		Project:                   NewProjectClient(cfg),
+		PrunePromptTemplate:       NewPrunePromptTemplateClient(cfg),
 		RefreshToken:              NewRefreshTokenClient(cfg),
 		Resource:                  NewResourceClient(cfg),
 		SSEEvent:                  NewSSEEventClient(cfg),
@@ -301,9 +307,9 @@ func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
 		c.ActivityLog, c.Backend, c.BootstrapPromptTemplate, c.ExecutionPlanTemplate,
 		c.ExecutionProfile, c.GlossaryEntry, c.Job, c.JobResource, c.OrgMembership,
-		c.Organization, c.Project, c.RefreshToken, c.Resource, c.SSEEvent, c.Segment,
-		c.SyncTask, c.SystemSetting, c.TMEntry, c.TranslationPromptTemplate,
-		c.UsageRecord, c.User,
+		c.Organization, c.Project, c.PrunePromptTemplate, c.RefreshToken, c.Resource,
+		c.SSEEvent, c.Segment, c.SyncTask, c.SystemSetting, c.TMEntry,
+		c.TranslationPromptTemplate, c.UsageRecord, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -315,9 +321,9 @@ func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
 		c.ActivityLog, c.Backend, c.BootstrapPromptTemplate, c.ExecutionPlanTemplate,
 		c.ExecutionProfile, c.GlossaryEntry, c.Job, c.JobResource, c.OrgMembership,
-		c.Organization, c.Project, c.RefreshToken, c.Resource, c.SSEEvent, c.Segment,
-		c.SyncTask, c.SystemSetting, c.TMEntry, c.TranslationPromptTemplate,
-		c.UsageRecord, c.User,
+		c.Organization, c.Project, c.PrunePromptTemplate, c.RefreshToken, c.Resource,
+		c.SSEEvent, c.Segment, c.SyncTask, c.SystemSetting, c.TMEntry,
+		c.TranslationPromptTemplate, c.UsageRecord, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -348,6 +354,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Organization.mutate(ctx, m)
 	case *ProjectMutation:
 		return c.Project.mutate(ctx, m)
+	case *PrunePromptTemplateMutation:
+		return c.PrunePromptTemplate.mutate(ctx, m)
 	case *RefreshTokenMutation:
 		return c.RefreshToken.mutate(ctx, m)
 	case *ResourceMutation:
@@ -2126,6 +2134,22 @@ func (c *OrganizationClient) QueryBootstrapPromptTemplates(_m *Organization) *Bo
 	return query
 }
 
+// QueryPrunePromptTemplates queries the prune_prompt_templates edge of a Organization.
+func (c *OrganizationClient) QueryPrunePromptTemplates(_m *Organization) *PrunePromptTemplateQuery {
+	query := (&PrunePromptTemplateClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(organization.Table, organization.FieldID, id),
+			sqlgraph.To(pruneprompttemplate.Table, pruneprompttemplate.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, organization.PrunePromptTemplatesTable, organization.PrunePromptTemplatesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // QueryExecutionProfiles queries the execution_profiles edge of a Organization.
 func (c *OrganizationClient) QueryExecutionProfiles(_m *Organization) *ExecutionProfileQuery {
 	query := (&ExecutionProfileClient{config: c.config}).Query()
@@ -2457,6 +2481,171 @@ func (c *ProjectClient) mutate(ctx context.Context, m *ProjectMutation) (Value, 
 		return (&ProjectDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown Project mutation op: %q", m.Op())
+	}
+}
+
+// PrunePromptTemplateClient is a client for the PrunePromptTemplate schema.
+type PrunePromptTemplateClient struct {
+	config
+}
+
+// NewPrunePromptTemplateClient returns a client for the PrunePromptTemplate from the given config.
+func NewPrunePromptTemplateClient(c config) *PrunePromptTemplateClient {
+	return &PrunePromptTemplateClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `pruneprompttemplate.Hooks(f(g(h())))`.
+func (c *PrunePromptTemplateClient) Use(hooks ...Hook) {
+	c.hooks.PrunePromptTemplate = append(c.hooks.PrunePromptTemplate, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `pruneprompttemplate.Intercept(f(g(h())))`.
+func (c *PrunePromptTemplateClient) Intercept(interceptors ...Interceptor) {
+	c.inters.PrunePromptTemplate = append(c.inters.PrunePromptTemplate, interceptors...)
+}
+
+// Create returns a builder for creating a PrunePromptTemplate entity.
+func (c *PrunePromptTemplateClient) Create() *PrunePromptTemplateCreate {
+	mutation := newPrunePromptTemplateMutation(c.config, OpCreate)
+	return &PrunePromptTemplateCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of PrunePromptTemplate entities.
+func (c *PrunePromptTemplateClient) CreateBulk(builders ...*PrunePromptTemplateCreate) *PrunePromptTemplateCreateBulk {
+	return &PrunePromptTemplateCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *PrunePromptTemplateClient) MapCreateBulk(slice any, setFunc func(*PrunePromptTemplateCreate, int)) *PrunePromptTemplateCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &PrunePromptTemplateCreateBulk{err: fmt.Errorf("calling to PrunePromptTemplateClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*PrunePromptTemplateCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &PrunePromptTemplateCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for PrunePromptTemplate.
+func (c *PrunePromptTemplateClient) Update() *PrunePromptTemplateUpdate {
+	mutation := newPrunePromptTemplateMutation(c.config, OpUpdate)
+	return &PrunePromptTemplateUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *PrunePromptTemplateClient) UpdateOne(_m *PrunePromptTemplate) *PrunePromptTemplateUpdateOne {
+	mutation := newPrunePromptTemplateMutation(c.config, OpUpdateOne, withPrunePromptTemplate(_m))
+	return &PrunePromptTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *PrunePromptTemplateClient) UpdateOneID(id int) *PrunePromptTemplateUpdateOne {
+	mutation := newPrunePromptTemplateMutation(c.config, OpUpdateOne, withPrunePromptTemplateID(id))
+	return &PrunePromptTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for PrunePromptTemplate.
+func (c *PrunePromptTemplateClient) Delete() *PrunePromptTemplateDelete {
+	mutation := newPrunePromptTemplateMutation(c.config, OpDelete)
+	return &PrunePromptTemplateDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *PrunePromptTemplateClient) DeleteOne(_m *PrunePromptTemplate) *PrunePromptTemplateDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *PrunePromptTemplateClient) DeleteOneID(id int) *PrunePromptTemplateDeleteOne {
+	builder := c.Delete().Where(pruneprompttemplate.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &PrunePromptTemplateDeleteOne{builder}
+}
+
+// Query returns a query builder for PrunePromptTemplate.
+func (c *PrunePromptTemplateClient) Query() *PrunePromptTemplateQuery {
+	return &PrunePromptTemplateQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypePrunePromptTemplate},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a PrunePromptTemplate entity by its id.
+func (c *PrunePromptTemplateClient) Get(ctx context.Context, id int) (*PrunePromptTemplate, error) {
+	return c.Query().Where(pruneprompttemplate.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *PrunePromptTemplateClient) GetX(ctx context.Context, id int) *PrunePromptTemplate {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryOwnerUser queries the owner_user edge of a PrunePromptTemplate.
+func (c *PrunePromptTemplateClient) QueryOwnerUser(_m *PrunePromptTemplate) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(pruneprompttemplate.Table, pruneprompttemplate.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, pruneprompttemplate.OwnerUserTable, pruneprompttemplate.OwnerUserColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryOwnerOrg queries the owner_org edge of a PrunePromptTemplate.
+func (c *PrunePromptTemplateClient) QueryOwnerOrg(_m *PrunePromptTemplate) *OrganizationQuery {
+	query := (&OrganizationClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(pruneprompttemplate.Table, pruneprompttemplate.FieldID, id),
+			sqlgraph.To(organization.Table, organization.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, pruneprompttemplate.OwnerOrgTable, pruneprompttemplate.OwnerOrgColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *PrunePromptTemplateClient) Hooks() []Hook {
+	return c.hooks.PrunePromptTemplate
+}
+
+// Interceptors returns the client interceptors.
+func (c *PrunePromptTemplateClient) Interceptors() []Interceptor {
+	return c.inters.PrunePromptTemplate
+}
+
+func (c *PrunePromptTemplateClient) mutate(ctx context.Context, m *PrunePromptTemplateMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&PrunePromptTemplateCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&PrunePromptTemplateUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&PrunePromptTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&PrunePromptTemplateDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown PrunePromptTemplate mutation op: %q", m.Op())
 	}
 }
 
@@ -4181,6 +4370,22 @@ func (c *UserClient) QueryBootstrapPromptTemplates(_m *User) *BootstrapPromptTem
 	return query
 }
 
+// QueryPrunePromptTemplates queries the prune_prompt_templates edge of a User.
+func (c *UserClient) QueryPrunePromptTemplates(_m *User) *PrunePromptTemplateQuery {
+	query := (&PrunePromptTemplateClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(pruneprompttemplate.Table, pruneprompttemplate.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.PrunePromptTemplatesTable, user.PrunePromptTemplatesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
 // QueryExecutionProfiles queries the execution_profiles edge of a User.
 func (c *UserClient) QueryExecutionProfiles(_m *User) *ExecutionProfileQuery {
 	query := (&ExecutionProfileClient{config: c.config}).Query()
@@ -4259,13 +4464,15 @@ type (
 	hooks struct {
 		ActivityLog, Backend, BootstrapPromptTemplate, ExecutionPlanTemplate,
 		ExecutionProfile, GlossaryEntry, Job, JobResource, OrgMembership, Organization,
-		Project, RefreshToken, Resource, SSEEvent, Segment, SyncTask, SystemSetting,
-		TMEntry, TranslationPromptTemplate, UsageRecord, User []ent.Hook
+		Project, PrunePromptTemplate, RefreshToken, Resource, SSEEvent, Segment,
+		SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate, UsageRecord,
+		User []ent.Hook
 	}
 	inters struct {
 		ActivityLog, Backend, BootstrapPromptTemplate, ExecutionPlanTemplate,
 		ExecutionProfile, GlossaryEntry, Job, JobResource, OrgMembership, Organization,
-		Project, RefreshToken, Resource, SSEEvent, Segment, SyncTask, SystemSetting,
-		TMEntry, TranslationPromptTemplate, UsageRecord, User []ent.Interceptor
+		Project, PrunePromptTemplate, RefreshToken, Resource, SSEEvent, Segment,
+		SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate, UsageRecord,
+		User []ent.Interceptor
 	}
 )
