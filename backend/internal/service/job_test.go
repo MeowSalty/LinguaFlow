@@ -80,7 +80,7 @@ func TestTranslationConfigJobOverrideWinsOverProjectDefaults(t *testing.T) {
 	}
 }
 
-func TestDeriveTranslationJobStatus(t *testing.T) {
+func TestDeriveJobStatus(t *testing.T) {
 	tests := []struct {
 		name                                                  string
 		total, pending, running, completed, failed, cancelled int
@@ -94,7 +94,7 @@ func TestDeriveTranslationJobStatus(t *testing.T) {
 			completed: 0,
 			failed:    0,
 			cancelled: 0,
-			want:      TranslationJobStatusPending,
+			want:      JobStatusPending,
 		},
 		{
 			name:      "all pending returns pending",
@@ -104,7 +104,7 @@ func TestDeriveTranslationJobStatus(t *testing.T) {
 			completed: 0,
 			failed:    0,
 			cancelled: 0,
-			want:      TranslationJobStatusPending,
+			want:      JobStatusPending,
 		},
 		{
 			name:      "any running returns running",
@@ -114,7 +114,7 @@ func TestDeriveTranslationJobStatus(t *testing.T) {
 			completed: 1,
 			failed:    0,
 			cancelled: 0,
-			want:      TranslationJobStatusRunning,
+			want:      JobStatusRunning,
 		},
 		{
 			name:      "all completed returns completed (not awaiting_review)",
@@ -124,7 +124,7 @@ func TestDeriveTranslationJobStatus(t *testing.T) {
 			completed: 3,
 			failed:    0,
 			cancelled: 0,
-			want:      TranslationJobStatusCompleted,
+			want:      JobStatusCompleted,
 		},
 		{
 			name:      "all cancelled returns cancelled",
@@ -134,7 +134,7 @@ func TestDeriveTranslationJobStatus(t *testing.T) {
 			completed: 0,
 			failed:    0,
 			cancelled: 3,
-			want:      TranslationJobStatusCancelled,
+			want:      JobStatusCancelled,
 		},
 		{
 			name:      "mixed completed and failed returns failed",
@@ -144,7 +144,7 @@ func TestDeriveTranslationJobStatus(t *testing.T) {
 			completed: 2,
 			failed:    1,
 			cancelled: 0,
-			want:      TranslationJobStatusFailed,
+			want:      JobStatusFailed,
 		},
 		{
 			name:      "mixed with partial completion returns running",
@@ -154,14 +154,14 @@ func TestDeriveTranslationJobStatus(t *testing.T) {
 			completed: 2,
 			failed:    1,
 			cancelled: 0,
-			want:      TranslationJobStatusRunning,
+			want:      JobStatusRunning,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := deriveTranslationJobStatus(tt.total, tt.pending, tt.running, tt.completed, tt.failed, tt.cancelled)
+			got := deriveJobStatus(tt.total, tt.pending, tt.running, tt.completed, tt.failed, tt.cancelled)
 			if got != tt.want {
-				t.Errorf("deriveTranslationJobStatus(%d,%d,%d,%d,%d,%d) = %q, want %q",
+				t.Errorf("deriveJobStatus(%d,%d,%d,%d,%d,%d) = %q, want %q",
 					tt.total, tt.pending, tt.running, tt.completed, tt.failed, tt.cancelled, got, tt.want)
 			}
 		})

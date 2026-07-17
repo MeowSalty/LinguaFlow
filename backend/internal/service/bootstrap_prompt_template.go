@@ -166,15 +166,17 @@ func (s *BootstrapPromptTemplateService) Delete(ctx context.Context, id int) err
 		return ErrBootstrapPromptTemplateNotFound // 系统模板不可删除
 	}
 
-	// 检查是否有执行计划模板引用了该提示词模板
+	// 检查是否有执行计划模板引用了该提示词模板（通过 extract 轮次）
 	plans, err := s.client.ExecutionPlanTemplate.Query().All(ctx)
 	if err != nil {
 		return fmt.Errorf("check execution plan references: %w", err)
 	}
 	for _, plan := range plans {
-		if plan.Bootstrap.PromptTemplateID == id {
-			return fmt.Errorf("%w: %q is referenced by execution plan %q",
-				ErrBootstrapPromptTemplateInUse, pt.Name, plan.Name)
+		for _, round := range plan.Rounds {
+			if round.Mode == "extract" && round.Extract != nil && round.Extract.BootstrapTemplateID == id {
+				return fmt.Errorf("%w: %q is referenced by execution plan %q",
+					ErrBootstrapPromptTemplateInUse, pt.Name, plan.Name)
+			}
 		}
 	}
 

@@ -15,7 +15,7 @@ import (
 
 // parsePromptTemplateID 从路径参数解析 promptTemplateId。
 func (s *Server) parsePromptTemplateID(w http.ResponseWriter, r *http.Request) (int, bool) {
-	raw := chi.URLParam(r, "promptTemplateId")
+	raw := chi.URLParam(r, "translationPromptTemplateId")
 	id, err := strconv.Atoi(raw)
 	if err != nil {
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_id", "提示词模板 ID 必须为整数")
@@ -25,12 +25,12 @@ func (s *Server) parsePromptTemplateID(w http.ResponseWriter, r *http.Request) (
 }
 
 // entTranslationPromptTemplateToResponse 将翻译提示词模板转换为 API 响应。
-func entTranslationPromptTemplateToResponse(t *ent.TranslationPromptTemplate) PromptTemplate {
-	resp := PromptTemplate{
+func entTranslationPromptTemplateToResponse(t *ent.TranslationPromptTemplate) TranslationPromptTemplate {
+	resp := TranslationPromptTemplate{
 		Id:          t.ID,
 		Name:        t.Name,
 		Description: t.Description,
-		Scope:       PromptTemplateScope(t.Scope),
+		Scope:       TranslationPromptTemplateScope(t.Scope),
 	}
 	if t.SystemPromptContent != "" {
 		resp.SystemPromptContent = &t.SystemPromptContent
@@ -66,12 +66,12 @@ func (s *Server) handleListPromptTemplates(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	items := make([]PromptTemplate, 0, len(templates))
+	items := make([]TranslationPromptTemplate, 0, len(templates))
 	for _, t := range templates {
 		items = append(items, entTranslationPromptTemplateToResponse(t))
 	}
 
-	writeJSON(w, http.StatusOK, PromptTemplateListResponse{Items: items})
+	writeJSON(w, http.StatusOK, TranslationPromptTemplateListResponse{Items: items})
 }
 
 // handleCreatePromptTemplate 创建提示词模板。
@@ -82,7 +82,7 @@ func (s *Server) handleCreatePromptTemplate(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	var req CreatePromptTemplateRequest
+	var req CreateTranslationPromptTemplateRequest
 	if !s.decodeJSON(w, r, &req) {
 		return
 	}
@@ -137,7 +137,7 @@ func (s *Server) handleUpdatePromptTemplate(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	var req UpdatePromptTemplateRequest
+	var req UpdateTranslationPromptTemplateRequest
 	if !s.decodeJSON(w, r, &req) {
 		return
 	}

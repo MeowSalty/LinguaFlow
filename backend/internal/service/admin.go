@@ -280,7 +280,7 @@ func (s *AdminService) GetSystemStats(ctx context.Context) (*SystemStats, error)
 	if err != nil {
 		return nil, err
 	}
-	totalJobs, err := s.client.TranslationJob.Query().Count(ctx)
+	totalJobs, err := s.client.Job.Query().Count(ctx)
 	if err != nil {
 		return nil, err
 	}

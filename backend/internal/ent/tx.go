@@ -22,6 +22,8 @@ type Tx struct {
 	ExecutionPlanTemplate *ExecutionPlanTemplateClient
 	// GlossaryEntry is the client for interacting with the GlossaryEntry builders.
 	GlossaryEntry *GlossaryEntryClient
+	// Job is the client for interacting with the Job builders.
+	Job *JobClient
 	// JobResource is the client for interacting with the JobResource builders.
 	JobResource *JobResourceClient
 	// OrgMembership is the client for interacting with the OrgMembership builders.
@@ -44,8 +46,6 @@ type Tx struct {
 	SystemSetting *SystemSettingClient
 	// TMEntry is the client for interacting with the TMEntry builders.
 	TMEntry *TMEntryClient
-	// TranslationJob is the client for interacting with the TranslationJob builders.
-	TranslationJob *TranslationJobClient
 	// TranslationProfile is the client for interacting with the TranslationProfile builders.
 	TranslationProfile *TranslationProfileClient
 	// TranslationPromptTemplate is the client for interacting with the TranslationPromptTemplate builders.
@@ -190,6 +190,7 @@ func (tx *Tx) init() {
 	tx.BootstrapPromptTemplate = NewBootstrapPromptTemplateClient(tx.config)
 	tx.ExecutionPlanTemplate = NewExecutionPlanTemplateClient(tx.config)
 	tx.GlossaryEntry = NewGlossaryEntryClient(tx.config)
+	tx.Job = NewJobClient(tx.config)
 	tx.JobResource = NewJobResourceClient(tx.config)
 	tx.OrgMembership = NewOrgMembershipClient(tx.config)
 	tx.Organization = NewOrganizationClient(tx.config)
@@ -201,7 +202,6 @@ func (tx *Tx) init() {
 	tx.SyncTask = NewSyncTaskClient(tx.config)
 	tx.SystemSetting = NewSystemSettingClient(tx.config)
 	tx.TMEntry = NewTMEntryClient(tx.config)
-	tx.TranslationJob = NewTranslationJobClient(tx.config)
 	tx.TranslationProfile = NewTranslationProfileClient(tx.config)
 	tx.TranslationPromptTemplate = NewTranslationPromptTemplateClient(tx.config)
 	tx.UsageRecord = NewUsageRecordClient(tx.config)

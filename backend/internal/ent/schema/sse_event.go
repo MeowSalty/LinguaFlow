@@ -28,7 +28,7 @@ func (SSEEvent) Fields() []ent.Field {
 
 func (SSEEvent) Edges() []ent.Edge {
 	return []ent.Edge{
-		edge.From("job", TranslationJob.Type).
+		edge.From("job", Job.Type).
 			Ref("sse_events").
 			Field("job_id").
 			Unique().

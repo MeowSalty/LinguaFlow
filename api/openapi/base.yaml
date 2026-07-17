@@ -85,21 +85,21 @@ paths:
     $ref: './paths/glossary.yaml#/glossarySyncTaskStatus'
   /projects/{projectId}/sync-tasks/{taskId}/cancel:
     $ref: './paths/glossary.yaml#/glossarySyncTaskCancel'
-  /projects/{projectId}/translation-jobs:
+  /projects/{projectId}/jobs:
     $ref: './paths/translation-jobs.yaml#/projectTranslationJobs'
-  /translation-jobs/{translationJobId}:
+  /jobs/{jobId}:
    $ref: './paths/translation-jobs.yaml#/translationJobById'
-  /translation-jobs/{translationJobId}/cancel:
+  /jobs/{jobId}/cancel:
    $ref: './paths/translation-jobs.yaml#/translationJobCancel'
-  /translation-jobs/{translationJobId}/retry:
+  /jobs/{jobId}/retry:
    $ref: './paths/translation-jobs.yaml#/translationJobRetry'
   /execution-plan-templates:
     $ref: './paths/execution-plan-templates.yaml#/executionPlanTemplates'
   /execution-plan-templates/{executionPlanTemplateId}:
     $ref: './paths/execution-plan-templates.yaml#/executionPlanTemplateById'
-  /prompt-templates:
+  /translation-prompt-templates:
     $ref: './paths/prompt-templates.yaml#/promptTemplates'
-  /prompt-templates/{promptTemplateId}:
+  /translation-prompt-templates/{translationPromptTemplateId}:
     $ref: './paths/prompt-templates.yaml#/promptTemplateById'
   /bootstrap-prompt-templates:
     $ref: './paths/bootstrap-prompt-templates.yaml#/bootstrapPromptTemplates'
@@ -138,14 +138,14 @@ components:
       $ref: './components/parameters.yaml#/ProjectId'
     ResourceId:
       $ref: './components/parameters.yaml#/ResourceId'
-    TranslationJobId:
-      $ref: './components/parameters.yaml#/TranslationJobId'
+    JobId:
+      $ref: './components/parameters.yaml#/JobId'
     BackendId:
       $ref: './components/parameters.yaml#/BackendId'
     EntryId:
       $ref: './components/parameters.yaml#/EntryId'
-    PromptTemplateId:
-      $ref: './components/parameters.yaml#/PromptTemplateId'
+    TranslationPromptTemplateId:
+      $ref: './components/parameters.yaml#/TranslationPromptTemplateId'
     BootstrapPromptTemplateId:
       $ref: './components/parameters.yaml#/BootstrapPromptTemplateId'
     TranslationProfileId:
@@ -243,13 +243,13 @@ components:
     CreateTranslationJobRequest:
       $ref: './components/schemas/translation-job.yaml#/CreateTranslationJobRequest'
     TranslationJobResource:
-      $ref: './components/schemas/translation-job.yaml#/TranslationJobResource'
+      $ref: './components/schemas/translation-job.yaml#/JobResource'
     TranslationJob:
-      $ref: './components/schemas/translation-job.yaml#/TranslationJob'
+      $ref: './components/schemas/translation-job.yaml#/Job'
     TranslationJobProgress:
-      $ref: './components/schemas/translation-job.yaml#/TranslationJobProgress'
+      $ref: './components/schemas/translation-job.yaml#/JobProgress'
     TranslationJobListResponse:
-      $ref: './components/schemas/translation-job.yaml#/TranslationJobListResponse'
+      $ref: './components/schemas/translation-job.yaml#/JobListResponse'
     Activity:
       $ref: './components/schemas/job.yaml#/Activity'
     ActivityListResponse:
@@ -294,14 +294,14 @@ components:
       $ref: './components/schemas/glossary.yaml#/GlossarySyncTaskStatusResponse'
     GlossarySyncTaskCancelResponse:
       $ref: './components/schemas/glossary.yaml#/GlossarySyncTaskCancelResponse'
-    PromptTemplate:
-      $ref: './components/schemas/prompt-template.yaml#/PromptTemplate'
-    PromptTemplateListResponse:
-      $ref: './components/schemas/prompt-template.yaml#/PromptTemplateListResponse'
-    CreatePromptTemplateRequest:
-      $ref: './components/schemas/prompt-template.yaml#/CreatePromptTemplateRequest'
-    UpdatePromptTemplateRequest:
-      $ref: './components/schemas/prompt-template.yaml#/UpdatePromptTemplateRequest'
+    TranslationPromptTemplate:
+      $ref: './components/schemas/prompt-template.yaml#/TranslationPromptTemplate'
+    TranslationPromptTemplateListResponse:
+      $ref: './components/schemas/prompt-template.yaml#/TranslationPromptTemplateListResponse'
+    CreateTranslationPromptTemplateRequest:
+      $ref: './components/schemas/prompt-template.yaml#/CreateTranslationPromptTemplateRequest'
+    UpdateTranslationPromptTemplateRequest:
+      $ref: './components/schemas/prompt-template.yaml#/UpdateTranslationPromptTemplateRequest'
     BootstrapPromptTemplate:
       $ref: './components/schemas/bootstrap-prompt-template.yaml#/BootstrapPromptTemplate'
     BootstrapPromptTemplateListResponse:

@@ -43,7 +43,7 @@ func (Project) Edges() []ent.Edge {
 			Unique(),
 		edge.To("glossary_entries", GlossaryEntry.Type),
 		edge.To("tm_entries", TMEntry.Type),
-		edge.To("translation_jobs", TranslationJob.Type),
+		edge.To("jobs", Job.Type),
 		edge.To("activity_logs", ActivityLog.Type),
 		edge.To("usage_records", UsageRecord.Type),
 		edge.To("resources", Resource.Type),

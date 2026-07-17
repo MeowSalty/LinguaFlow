@@ -28,8 +28,6 @@ const (
 	FieldOwnerUserID = "owner_user_id"
 	// FieldOwnerOrgID holds the string denoting the owner_org_id field in the database.
 	FieldOwnerOrgID = "owner_org_id"
-	// FieldBootstrap holds the string denoting the bootstrap field in the database.
-	FieldBootstrap = "bootstrap"
 	// FieldRubyRetry holds the string denoting the ruby_retry field in the database.
 	FieldRubyRetry = "ruby_retry"
 	// FieldRounds holds the string denoting the rounds field in the database.
@@ -66,7 +64,6 @@ var Columns = []string{
 	FieldScope,
 	FieldOwnerUserID,
 	FieldOwnerOrgID,
-	FieldBootstrap,
 	FieldRubyRetry,
 	FieldRounds,
 }

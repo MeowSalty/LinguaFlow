@@ -12,10 +12,10 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 )
 
 // JobResourceUpdate is the builder for updating JobResource entities.
@@ -248,14 +248,14 @@ func (_u *JobResourceUpdate) ClearStartedAt() *JobResourceUpdate {
 	return _u
 }
 
-// SetJobID sets the "job" edge to the TranslationJob entity by ID.
+// SetJobID sets the "job" edge to the Job entity by ID.
 func (_u *JobResourceUpdate) SetJobID(id int) *JobResourceUpdate {
 	_u.mutation.SetJobID(id)
 	return _u
 }
 
-// SetJob sets the "job" edge to the TranslationJob entity.
-func (_u *JobResourceUpdate) SetJob(v *TranslationJob) *JobResourceUpdate {
+// SetJob sets the "job" edge to the Job entity.
+func (_u *JobResourceUpdate) SetJob(v *Job) *JobResourceUpdate {
 	return _u.SetJobID(v.ID)
 }
 
@@ -275,7 +275,7 @@ func (_u *JobResourceUpdate) Mutation() *JobResourceMutation {
 	return _u.mutation
 }
 
-// ClearJob clears the "job" edge to the TranslationJob entity.
+// ClearJob clears the "job" edge to the Job entity.
 func (_u *JobResourceUpdate) ClearJob() *JobResourceUpdate {
 	_u.mutation.ClearJob()
 	return _u
@@ -447,7 +447,7 @@ func (_u *JobResourceUpdate) sqlSave(ctx context.Context) (_node int, err error)
 			Columns: []string{jobresource.JobColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
@@ -460,7 +460,7 @@ func (_u *JobResourceUpdate) sqlSave(ctx context.Context) (_node int, err error)
 			Columns: []string{jobresource.JobColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -734,14 +734,14 @@ func (_u *JobResourceUpdateOne) ClearStartedAt() *JobResourceUpdateOne {
 	return _u
 }
 
-// SetJobID sets the "job" edge to the TranslationJob entity by ID.
+// SetJobID sets the "job" edge to the Job entity by ID.
 func (_u *JobResourceUpdateOne) SetJobID(id int) *JobResourceUpdateOne {
 	_u.mutation.SetJobID(id)
 	return _u
 }
 
-// SetJob sets the "job" edge to the TranslationJob entity.
-func (_u *JobResourceUpdateOne) SetJob(v *TranslationJob) *JobResourceUpdateOne {
+// SetJob sets the "job" edge to the Job entity.
+func (_u *JobResourceUpdateOne) SetJob(v *Job) *JobResourceUpdateOne {
 	return _u.SetJobID(v.ID)
 }
 
@@ -761,7 +761,7 @@ func (_u *JobResourceUpdateOne) Mutation() *JobResourceMutation {
 	return _u.mutation
 }
 
-// ClearJob clears the "job" edge to the TranslationJob entity.
+// ClearJob clears the "job" edge to the Job entity.
 func (_u *JobResourceUpdateOne) ClearJob() *JobResourceUpdateOne {
 	_u.mutation.ClearJob()
 	return _u
@@ -963,7 +963,7 @@ func (_u *JobResourceUpdateOne) sqlSave(ctx context.Context) (_node *JobResource
 			Columns: []string{jobresource.JobColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
@@ -976,7 +976,7 @@ func (_u *JobResourceUpdateOne) sqlSave(ctx context.Context) (_node *JobResource
 			Columns: []string{jobresource.JobColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

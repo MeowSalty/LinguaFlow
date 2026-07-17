@@ -10,13 +10,13 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
-// TranslationJob is the model entity for the TranslationJob schema.
-type TranslationJob struct {
+// Job is the model entity for the Job schema.
+type Job struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID int `json:"id,omitempty"`
@@ -53,14 +53,14 @@ type TranslationJob struct {
 	// 任务开始执行的时间，MarkJobRunning 时写入
 	StartedAt *time.Time `json:"started_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
-	// The values are being populated by the TranslationJobQuery when eager-loading is set.
-	Edges                         TranslationJobEdges `json:"edges"`
-	user_created_translation_jobs *int
-	selectValues                  sql.SelectValues
+	// The values are being populated by the JobQuery when eager-loading is set.
+	Edges             JobEdges `json:"edges"`
+	user_created_jobs *int
+	selectValues      sql.SelectValues
 }
 
-// TranslationJobEdges holds the relations/edges for other nodes in the graph.
-type TranslationJobEdges struct {
+// JobEdges holds the relations/edges for other nodes in the graph.
+type JobEdges struct {
 	// Project holds the value of the project edge.
 	Project *Project `json:"project,omitempty"`
 	// CreatedBy holds the value of the created_by edge.
@@ -76,7 +76,7 @@ type TranslationJobEdges struct {
 
 // ProjectOrErr returns the Project value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
-func (e TranslationJobEdges) ProjectOrErr() (*Project, error) {
+func (e JobEdges) ProjectOrErr() (*Project, error) {
 	if e.Project != nil {
 		return e.Project, nil
 	} else if e.loadedTypes[0] {
@@ -87,7 +87,7 @@ func (e TranslationJobEdges) ProjectOrErr() (*Project, error) {
 
 // CreatedByOrErr returns the CreatedBy value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
-func (e TranslationJobEdges) CreatedByOrErr() (*User, error) {
+func (e JobEdges) CreatedByOrErr() (*User, error) {
 	if e.CreatedBy != nil {
 		return e.CreatedBy, nil
 	} else if e.loadedTypes[1] {
@@ -98,7 +98,7 @@ func (e TranslationJobEdges) CreatedByOrErr() (*User, error) {
 
 // JobResourcesOrErr returns the JobResources value or an error if the edge
 // was not loaded in eager-loading.
-func (e TranslationJobEdges) JobResourcesOrErr() ([]*JobResource, error) {
+func (e JobEdges) JobResourcesOrErr() ([]*JobResource, error) {
 	if e.loadedTypes[2] {
 		return e.JobResources, nil
 	}
@@ -107,7 +107,7 @@ func (e TranslationJobEdges) JobResourcesOrErr() ([]*JobResource, error) {
 
 // SseEventsOrErr returns the SseEvents value or an error if the edge
 // was not loaded in eager-loading.
-func (e TranslationJobEdges) SseEventsOrErr() ([]*SSEEvent, error) {
+func (e JobEdges) SseEventsOrErr() ([]*SSEEvent, error) {
 	if e.loadedTypes[3] {
 		return e.SseEvents, nil
 	}
@@ -115,19 +115,19 @@ func (e TranslationJobEdges) SseEventsOrErr() ([]*SSEEvent, error) {
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
-func (*TranslationJob) scanValues(columns []string) ([]any, error) {
+func (*Job) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case translationjob.FieldTranslationConfig:
+		case job.FieldTranslationConfig:
 			values[i] = new([]byte)
-		case translationjob.FieldID, translationjob.FieldProjectID, translationjob.FieldExecutionPlanID, translationjob.FieldResourceCount, translationjob.FieldCompletedResources, translationjob.FieldFailedResources, translationjob.FieldTotalSegments, translationjob.FieldSkippedSegments, translationjob.FieldStageTotal, translationjob.FieldCompletedSegments:
+		case job.FieldID, job.FieldProjectID, job.FieldExecutionPlanID, job.FieldResourceCount, job.FieldCompletedResources, job.FieldFailedResources, job.FieldTotalSegments, job.FieldSkippedSegments, job.FieldStageTotal, job.FieldCompletedSegments:
 			values[i] = new(sql.NullInt64)
-		case translationjob.FieldStatus, translationjob.FieldTriggerType, translationjob.FieldErrorMessage:
+		case job.FieldStatus, job.FieldTriggerType, job.FieldErrorMessage:
 			values[i] = new(sql.NullString)
-		case translationjob.FieldCreatedAt, translationjob.FieldUpdatedAt, translationjob.FieldStartedAt:
+		case job.FieldCreatedAt, job.FieldUpdatedAt, job.FieldStartedAt:
 			values[i] = new(sql.NullTime)
-		case translationjob.ForeignKeys[0]: // user_created_translation_jobs
+		case job.ForeignKeys[0]: // user_created_jobs
 			values[i] = new(sql.NullInt64)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -137,56 +137,56 @@ func (*TranslationJob) scanValues(columns []string) ([]any, error) {
 }
 
 // assignValues assigns the values that were returned from sql.Rows (after scanning)
-// to the TranslationJob fields.
-func (_m *TranslationJob) assignValues(columns []string, values []any) error {
+// to the Job fields.
+func (_m *Job) assignValues(columns []string, values []any) error {
 	if m, n := len(values), len(columns); m < n {
 		return fmt.Errorf("mismatch number of scan values: %d != %d", m, n)
 	}
 	for i := range columns {
 		switch columns[i] {
-		case translationjob.FieldID:
+		case job.FieldID:
 			value, ok := values[i].(*sql.NullInt64)
 			if !ok {
 				return fmt.Errorf("unexpected type %T for field id", value)
 			}
 			_m.ID = int(value.Int64)
-		case translationjob.FieldCreatedAt:
+		case job.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field created_at", values[i])
 			} else if value.Valid {
 				_m.CreatedAt = value.Time
 			}
-		case translationjob.FieldUpdatedAt:
+		case job.FieldUpdatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
 			}
-		case translationjob.FieldProjectID:
+		case job.FieldProjectID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field project_id", values[i])
 			} else if value.Valid {
 				_m.ProjectID = int(value.Int64)
 			}
-		case translationjob.FieldStatus:
+		case job.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field status", values[i])
 			} else if value.Valid {
 				_m.Status = value.String
 			}
-		case translationjob.FieldTriggerType:
+		case job.FieldTriggerType:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field trigger_type", values[i])
 			} else if value.Valid {
 				_m.TriggerType = value.String
 			}
-		case translationjob.FieldExecutionPlanID:
+		case job.FieldExecutionPlanID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field execution_plan_id", values[i])
 			} else if value.Valid {
 				_m.ExecutionPlanID = int(value.Int64)
 			}
-		case translationjob.FieldTranslationConfig:
+		case job.FieldTranslationConfig:
 			if value, ok := values[i].(*[]byte); !ok {
 				return fmt.Errorf("unexpected type %T for field translation_config", values[i])
 			} else if value != nil && len(*value) > 0 {
@@ -194,68 +194,68 @@ func (_m *TranslationJob) assignValues(columns []string, values []any) error {
 					return fmt.Errorf("unmarshal field translation_config: %w", err)
 				}
 			}
-		case translationjob.FieldResourceCount:
+		case job.FieldResourceCount:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field resource_count", values[i])
 			} else if value.Valid {
 				_m.ResourceCount = int(value.Int64)
 			}
-		case translationjob.FieldCompletedResources:
+		case job.FieldCompletedResources:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field completed_resources", values[i])
 			} else if value.Valid {
 				_m.CompletedResources = int(value.Int64)
 			}
-		case translationjob.FieldFailedResources:
+		case job.FieldFailedResources:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field failed_resources", values[i])
 			} else if value.Valid {
 				_m.FailedResources = int(value.Int64)
 			}
-		case translationjob.FieldTotalSegments:
+		case job.FieldTotalSegments:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field total_segments", values[i])
 			} else if value.Valid {
 				_m.TotalSegments = int(value.Int64)
 			}
-		case translationjob.FieldSkippedSegments:
+		case job.FieldSkippedSegments:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field skipped_segments", values[i])
 			} else if value.Valid {
 				_m.SkippedSegments = int(value.Int64)
 			}
-		case translationjob.FieldStageTotal:
+		case job.FieldStageTotal:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field stage_total", values[i])
 			} else if value.Valid {
 				_m.StageTotal = int(value.Int64)
 			}
-		case translationjob.FieldCompletedSegments:
+		case job.FieldCompletedSegments:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field completed_segments", values[i])
 			} else if value.Valid {
 				_m.CompletedSegments = int(value.Int64)
 			}
-		case translationjob.FieldErrorMessage:
+		case job.FieldErrorMessage:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field error_message", values[i])
 			} else if value.Valid {
 				_m.ErrorMessage = new(string)
 				*_m.ErrorMessage = value.String
 			}
-		case translationjob.FieldStartedAt:
+		case job.FieldStartedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field started_at", values[i])
 			} else if value.Valid {
 				_m.StartedAt = new(time.Time)
 				*_m.StartedAt = value.Time
 			}
-		case translationjob.ForeignKeys[0]:
+		case job.ForeignKeys[0]:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for edge-field user_created_translation_jobs", value)
+				return fmt.Errorf("unexpected type %T for edge-field user_created_jobs", value)
 			} else if value.Valid {
-				_m.user_created_translation_jobs = new(int)
-				*_m.user_created_translation_jobs = int(value.Int64)
+				_m.user_created_jobs = new(int)
+				*_m.user_created_jobs = int(value.Int64)
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -264,54 +264,54 @@ func (_m *TranslationJob) assignValues(columns []string, values []any) error {
 	return nil
 }
 
-// Value returns the ent.Value that was dynamically selected and assigned to the TranslationJob.
+// Value returns the ent.Value that was dynamically selected and assigned to the Job.
 // This includes values selected through modifiers, order, etc.
-func (_m *TranslationJob) Value(name string) (ent.Value, error) {
+func (_m *Job) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
 }
 
-// QueryProject queries the "project" edge of the TranslationJob entity.
-func (_m *TranslationJob) QueryProject() *ProjectQuery {
-	return NewTranslationJobClient(_m.config).QueryProject(_m)
+// QueryProject queries the "project" edge of the Job entity.
+func (_m *Job) QueryProject() *ProjectQuery {
+	return NewJobClient(_m.config).QueryProject(_m)
 }
 
-// QueryCreatedBy queries the "created_by" edge of the TranslationJob entity.
-func (_m *TranslationJob) QueryCreatedBy() *UserQuery {
-	return NewTranslationJobClient(_m.config).QueryCreatedBy(_m)
+// QueryCreatedBy queries the "created_by" edge of the Job entity.
+func (_m *Job) QueryCreatedBy() *UserQuery {
+	return NewJobClient(_m.config).QueryCreatedBy(_m)
 }
 
-// QueryJobResources queries the "job_resources" edge of the TranslationJob entity.
-func (_m *TranslationJob) QueryJobResources() *JobResourceQuery {
-	return NewTranslationJobClient(_m.config).QueryJobResources(_m)
+// QueryJobResources queries the "job_resources" edge of the Job entity.
+func (_m *Job) QueryJobResources() *JobResourceQuery {
+	return NewJobClient(_m.config).QueryJobResources(_m)
 }
 
-// QuerySseEvents queries the "sse_events" edge of the TranslationJob entity.
-func (_m *TranslationJob) QuerySseEvents() *SSEEventQuery {
-	return NewTranslationJobClient(_m.config).QuerySseEvents(_m)
+// QuerySseEvents queries the "sse_events" edge of the Job entity.
+func (_m *Job) QuerySseEvents() *SSEEventQuery {
+	return NewJobClient(_m.config).QuerySseEvents(_m)
 }
 
-// Update returns a builder for updating this TranslationJob.
-// Note that you need to call TranslationJob.Unwrap() before calling this method if this TranslationJob
+// Update returns a builder for updating this Job.
+// Note that you need to call Job.Unwrap() before calling this method if this Job
 // was returned from a transaction, and the transaction was committed or rolled back.
-func (_m *TranslationJob) Update() *TranslationJobUpdateOne {
-	return NewTranslationJobClient(_m.config).UpdateOne(_m)
+func (_m *Job) Update() *JobUpdateOne {
+	return NewJobClient(_m.config).UpdateOne(_m)
 }
 
-// Unwrap unwraps the TranslationJob entity that was returned from a transaction after it was closed,
+// Unwrap unwraps the Job entity that was returned from a transaction after it was closed,
 // so that all future queries will be executed through the driver which created the transaction.
-func (_m *TranslationJob) Unwrap() *TranslationJob {
+func (_m *Job) Unwrap() *Job {
 	_tx, ok := _m.config.driver.(*txDriver)
 	if !ok {
-		panic("ent: TranslationJob is not a transactional entity")
+		panic("ent: Job is not a transactional entity")
 	}
 	_m.config.driver = _tx.drv
 	return _m
 }
 
 // String implements the fmt.Stringer.
-func (_m *TranslationJob) String() string {
+func (_m *Job) String() string {
 	var builder strings.Builder
-	builder.WriteString("TranslationJob(")
+	builder.WriteString("Job(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))
@@ -368,5 +368,5 @@ func (_m *TranslationJob) String() string {
 	return builder.String()
 }
 
-// TranslationJobs is a parsable slice of TranslationJob.
-type TranslationJobs []*TranslationJob
+// Jobs is a parsable slice of Job.
+type Jobs []*Job

@@ -31,11 +31,10 @@ type TranslateDefaults struct {
 
 // GlossaryConfig 是术语表的运行时配置。
 type GlossaryConfig struct {
-	Enabled    bool
-	Path       string
-	Save       bool
-	Bootstrap  config.BootstrapConfig
-	Standalone config.StandaloneBootstrapConfig
+	Enabled   bool
+	Path      string
+	Save      bool
+	Bootstrap config.BootstrapConfig
 }
 
 // RubyConfig 是 Ruby 注音保护的运行时配置。

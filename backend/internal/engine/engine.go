@@ -9,37 +9,23 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
 // Engine 封装一次进程内的翻译能力。它持有 rounds / Renderer 等可复用组件。
 type Engine struct {
-	cfg                 *Config
-	logger              *slog.Logger
-	reporter            progress.Reporter
-	rounds              []pipeline.Round
-	bootstrapBackends   []backend.Backend
-	rubyRetryBackends   []backend.Backend
-	standaloneBootstrap bool
-	standaloneCfg       *StandaloneBootstrapParams
-	renderer            *prompt.Renderer
-	bootstrapRenderer   *prompt.BootstrapRenderer
-	glossary            glossary.Glossary
-	tm                  tm.TranslationMemory
-	rubyRestorer        *ruby.Restorer
-	saveGlossary        bool
-	glossaryPath        string
-}
-
-// StandaloneBootstrapParams 是独立自举的运行时参数。
-type StandaloneBootstrapParams struct {
-	TemplateContent      string
-	BatchSize            int
-	Concurrency          int
-	MaxTermsPer1000Chars float64
-	MinSourceLen         int
+	cfg               *Config
+	logger            *slog.Logger
+	reporter          progress.Reporter
+	rounds            []pipeline.Round
+	bootstrapBackends []backend.Backend
+	rubyRetryBackends []backend.Backend
+	glossary          glossary.Glossary
+	tm                tm.TranslationMemory
+	rubyRestorer      *ruby.Restorer
+	saveGlossary      bool
+	glossaryPath      string
 }
 
 // NewWithOptions 按 Options 构造 Engine。rounds 必须非空，每轮 backends 必须非空。
@@ -71,12 +57,42 @@ func NewWithOptions(opts Options) (*Engine, error) {
 	if translationMemory == nil {
 		translationMemory = tm.Nop{}
 	}
-	rounds := buildStagesRounds(opts.Rounds, opts.Config)
+
+	roundConfigs := buildRoundConfigs(opts.Rounds, opts.Config)
 	bootstrapBackends := opts.BootstrapBackends
 	if len(bootstrapBackends) == 0 {
 		bootstrapBackends = []backend.Backend{opts.Rounds[0].Backend}
 	}
 	rubyRetryBackends := opts.RubyRetryBackends
+
+	inlineBootstrap := opts.Config.Glossary.Enabled && opts.Config.Glossary.Bootstrap.Enabled
+	maxTermsPer1000 := opts.Config.Glossary.Bootstrap.MaxTermsPer1000Chars
+	minSourceLen := opts.Config.Glossary.Bootstrap.MinSourceLen
+	inlineConflictStr := opts.Config.Glossary.Bootstrap.InlineConflictStrategy
+
+	var rubyRestorer *ruby.Restorer
+	if opts.Config.Ruby.Enabled {
+		rubyRestorer = ruby.NewRestorer()
+	}
+
+	rounds, err := buildPipelineRounds(
+		roundConfigs,
+		glos,
+		translationMemory,
+		rubyRestorer,
+		rubyRetryBackends,
+		opts.Config.Repair,
+		inlineBootstrap,
+		maxTermsPer1000,
+		minSourceLen,
+		inlineConflictStr,
+		opts.Logger,
+		opts.Reporter,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("engine: build rounds: %w", err)
+	}
+
 	e := &Engine{
 		cfg:               opts.Config,
 		logger:            opts.Logger,
@@ -86,29 +102,9 @@ func NewWithOptions(opts Options) (*Engine, error) {
 		rubyRetryBackends: rubyRetryBackends,
 		glossary:          glos,
 		tm:                translationMemory,
+		rubyRestorer:      rubyRestorer,
 		saveGlossary:      opts.Config.Glossary.Save,
 		glossaryPath:      opts.Config.Glossary.Path,
-	}
-	if opts.Config.Glossary.Standalone.Enabled {
-		if opts.Config.Glossary.Standalone.TemplateContent == "" {
-			return nil, fmt.Errorf("engine: standalone bootstrap template content is required when enabled")
-		}
-		e.standaloneBootstrap = true
-		e.standaloneCfg = &StandaloneBootstrapParams{
-			TemplateContent:      opts.Config.Glossary.Standalone.TemplateContent,
-			BatchSize:            opts.Config.Glossary.Standalone.BatchSize,
-			Concurrency:          opts.Config.Glossary.Standalone.Concurrency,
-			MaxTermsPer1000Chars: opts.Config.Glossary.Standalone.MaxTermsPer1000Chars,
-			MinSourceLen:         opts.Config.Glossary.Standalone.MinSourceLen,
-		}
-		br, err := prompt.NewBootstrapRenderer(opts.Config.Glossary.Standalone.TemplateContent)
-		if err != nil {
-			return nil, fmt.Errorf("engine: build bootstrap renderer: %w", err)
-		}
-		e.bootstrapRenderer = br
-	}
-	if opts.Config.Ruby.Enabled {
-		e.rubyRestorer = ruby.NewRestorer()
 	}
 	return e, nil
 }
@@ -118,7 +114,17 @@ func (e *Engine) Close() error {
 	seen := make(map[backend.Backend]struct{})
 	var firstErr error
 	for _, r := range e.rounds {
-		b := r.Backend
+		var b backend.Backend
+		if th, ok := r.Handler.(*pipeline.TranslateHandler); ok {
+			b = th.Backend
+		} else if eh, ok := r.Handler.(*pipeline.ExtractHandler); ok {
+			if len(eh.Backends) > 0 {
+				b = eh.Backends[0]
+			}
+		}
+		if b == nil {
+			continue
+		}
 		if _, ok := seen[b]; ok {
 			continue
 		}
@@ -140,7 +146,6 @@ func (e *Engine) Close() error {
 }
 
 // maybeSaveGlossary 在 bootstrap.save=true 且 glossary 实现 Saver 时回写到磁盘。
-// FileGlossary 还会通过 Dirty() 跳过无变化情况，避免无意义的文件写。
 func (e *Engine) maybeSaveGlossary(ctx context.Context) {
 	if !e.saveGlossary {
 		return

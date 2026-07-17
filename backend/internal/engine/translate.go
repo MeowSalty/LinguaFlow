@@ -9,15 +9,15 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 )
 
-// TranslateRound 执行单轮翻译。
-func (e *Engine) TranslateRound(ctx context.Context, roundIdx int, doc *pipeline.Document, opts ...TranslateOption) (pipeline.TranslateResult, error) {
+// ExecuteRound 执行单轮（翻译或抽取）。
+func (e *Engine) ExecuteRound(ctx context.Context, roundIdx int, doc *pipeline.Document, opts ...ExecuteOption) (pipeline.TranslateResult, error) {
 	start := time.Now()
 
 	if roundIdx >= len(e.rounds) {
 		return pipeline.TranslateResult{}, fmt.Errorf("engine: round %d out of range", roundIdx)
 	}
 
-	cfg := &translateConfig{}
+	cfg := &executeConfig{}
 	for _, opt := range opts {
 		opt(cfg)
 	}
@@ -30,14 +30,7 @@ func (e *Engine) TranslateRound(ctx context.Context, roundIdx int, doc *pipeline
 	}
 
 	round := e.rounds[roundIdx]
-
-	// Bootstrap 仅首轮
-	if roundIdx == 0 && e.standaloneBootstrap && e.standaloneCfg != nil && e.bootstrapRenderer != nil {
-		bootstrapStage := e.buildBootstrapStage()
-		if err := bootstrapStage.Run(ctx, doc); err != nil {
-			e.logger.Warn("bootstrap failed, continuing without incremental terms", "err", err)
-		}
-	}
+	handler := round.Handler
 
 	// Prepare document
 	e.PrepareDocument(doc, nil)
@@ -45,54 +38,40 @@ func (e *Engine) TranslateRound(ctx context.Context, roundIdx int, doc *pipeline
 		applySegmentSelection(doc, cfg.segmentFilter)
 	}
 
-	e.logger.Info("translate round start",
+	e.logger.Info("execute round start",
 		"round", roundIdx,
 		"name", round.Name,
+		"mode", handler.ModeName(),
 		"segments", len(doc.Segments),
 		"source_lang", doc.SourceLang,
 		"target_lang", doc.TargetLang)
 
-	inlineBootstrap := e.cfg.Glossary.Enabled && e.cfg.Glossary.Bootstrap.Enabled
-	repairOpts := e.cfg.Repair
-
-	executor := &pipeline.RoundExecutor{
-		Round:                  round,
-		Renderer:               round.Renderer,
-		Glossary:               e.glossary,
-		TM:                     e.tm,
-		Logger:                 e.logger,
-		Reporter:               e.reporter,
-		RubyRestorer:           e.rubyRestorer,
-		RubyRetryBackends:      e.rubyRetryBackends,
-		InlineBootstrap:        inlineBootstrap,
-		MaxTermsPer1000Chars:   e.cfg.Glossary.Bootstrap.MaxTermsPer1000Chars,
-		MinBootstrapSourceLen:  e.cfg.Glossary.Bootstrap.MinSourceLen,
-		InlineConflictStrategy: e.cfg.Glossary.Bootstrap.InlineConflictStrategy,
-		Repair:                 repairOpts,
-		Context:                pipeline.DefaultContextConfig(),
-		BatchHandler:           cfg.batchHandler,
-	}
-
-	if err := executor.Run(ctx, doc); err != nil {
+	// 运行轮次
+	result, err := pipeline.RunRound(ctx, round, doc, cfg.batchHandler, e.logger, e.reporter)
+	if err != nil {
 		return pipeline.TranslateResult{}, err
 	}
 
-	result := buildTranslateResult(doc)
-	result.InputTokens = atomic.LoadInt64(&doc.InputTokens)
-	result.OutputTokens = atomic.LoadInt64(&doc.OutputTokens)
+	// 构建结果
+	roundResult := buildRoundResult(doc)
+	roundResult.InputTokens = atomic.LoadInt64(&doc.InputTokens)
+	roundResult.OutputTokens = atomic.LoadInt64(&doc.OutputTokens)
 
-	e.logger.Info("translate round done",
+	e.logger.Info("execute round done",
 		"round", roundIdx,
 		"name", round.Name,
+		"mode", handler.ModeName(),
 		"segments", len(doc.Segments),
-		"unresolved", result.UnresolvedCount,
+		"unresolved", roundResult.UnresolvedCount,
 		"duration", time.Since(start).Round(time.Millisecond))
 
-	return result, nil
+	_ = result // RunRound 的 Unresolved 已通过 Finalize 写入 doc.Vars
+
+	return roundResult, nil
 }
 
-// buildTranslateResult 从实际段落状态构建翻译结果。
-func buildTranslateResult(doc *pipeline.Document) pipeline.TranslateResult {
+// buildRoundResult 从实际段落状态构建翻译结果。
+func buildRoundResult(doc *pipeline.Document) pipeline.TranslateResult {
 	failedSet := pipeline.ParseFailedIndices(doc.Vars)
 	skippedCount := 0
 	if v, ok := doc.Vars["_skipped_count"].(int); ok {
@@ -119,23 +98,4 @@ func buildTranslateResult(doc *pipeline.Document) pipeline.TranslateResult {
 		}
 	}
 	return result
-}
-
-// buildBootstrapStage constructs the Bootstrap stage.
-func (e *Engine) buildBootstrapStage() *pipeline.Bootstrap {
-	retry := e.cfg.TranslateDefaults.Retry
-	repairOpts := e.cfg.Repair
-	return &pipeline.Bootstrap{
-		Backends:             e.bootstrapBackends,
-		Renderer:             e.bootstrapRenderer,
-		Glossary:             e.glossary,
-		Retry:                retry,
-		Concurrency:          e.standaloneCfg.Concurrency,
-		BatchSize:            e.standaloneCfg.BatchSize,
-		MaxTermsPer1000Chars: e.standaloneCfg.MaxTermsPer1000Chars,
-		MinSourceLen:         e.standaloneCfg.MinSourceLen,
-		Logger:               e.logger,
-		Reporter:             e.reporter,
-		Repair:               repairOpts,
-	}
 }

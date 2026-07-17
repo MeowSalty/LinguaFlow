@@ -3,57 +3,27 @@ package pipeline
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"math"
+	"math/rand"
 	"sort"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
-	"unicode"
+	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
 const (
 	RoundModeTranslate = "translate"
+	RoundModeExtract   = "extract"
 )
 
 // PostprocessConfig 是 pipeline 级别的后处理配置。
 type PostprocessConfig struct {
 	TrimSpaces bool
-}
-
-// Round 描述一轮翻译的执行配置（纯数据，无后端名称引用）。
-type Round struct {
-	Name             string
-	Backend          backend.Backend
-	BatchSize        int
-	MaxWordsPerBatch int
-	Concurrency      int
-	FallbackShrink   float64
-	Retry            backend.RetryPolicy
-
-	Renderer *prompt.Renderer
-	Repair   *repair.Options
-
-	ResponseMode string
-
-	Mode              string
-	Protector         protect.Protector
-	RubyEnabled       bool
-	RubyPreserveKinds []string
-	RubyMode          string
-	Context           *ContextConfig
-	Postprocess       *PostprocessConfig
 }
 
 // batchJob 描述一个待处理的批次任务。
@@ -64,280 +34,47 @@ type batchJob struct {
 
 // batchResult 描述一个批次的处理结果。
 type batchResult struct {
-	unresolved []int     // 需要下一轮处理
-	missing    []int     // 需要 round 级重新分批
-	retry      *batchJob // 需要重新入队（缩批或退避后重试）
+	unresolved     []int        // 需要下一轮处理
+	missing        []int        // 需要 round 级重新分批
+	retry          *batchJob    // 需要重新入队（缩批或退避后重试）
+	callbackResult *BatchResult // 可选，供 BatchHandler 回调使用
 }
 
-// RoundExecutor 对每个 Segment 调用 Backend，执行单轮翻译。
-type RoundExecutor struct {
-	Round    Round
-	Renderer *prompt.Renderer
-	Glossary glossary.Glossary
-	TM       tm.TranslationMemory
-	Logger   *slog.Logger
-	Reporter progress.Reporter
-
-	RubyRestorer      *ruby.Restorer
-	RubyRetryBackends []backend.Backend
-
-	InlineBootstrap        bool
-	MaxTermsPer1000Chars   float64
-	MinBootstrapSourceLen  int
-	InlineConflictStrategy string
-
-	Repair  repair.Options
-	Context ContextConfig // 全局兜底
-
-	BatchHandler func(ctx context.Context, result BatchResult) error
+// RunRoundResult 是 RunRound 的返回结果。
+type RunRoundResult struct {
+	// Unresolved 是所有批次处理后仍未解决的索引。
+	Unresolved []int
 }
 
-// reporter 返回非 nil 的 progress.Reporter；Reporter 字段为空时回退 Nop。
-func (s *RoundExecutor) reporter() progress.Reporter {
-	if s.Reporter == nil {
-		return progress.Nop{}
-	}
-	return s.Reporter
-}
-
-func (s *RoundExecutor) Run(ctx context.Context, doc *Document) error {
-	logger := s.Logger
+// RunRound 是通用的并发批次执行引擎。完全不知道段落、翻译等概念。
+// handler 负责分批策略和批次处理，RunRound 只负责并发调度和重试。
+func RunRound(
+	ctx context.Context,
+	round Round,
+	doc *Document,
+	batchHandler func(ctx context.Context, result BatchResult) error,
+	logger *slog.Logger,
+	reporter progress.Reporter,
+) (RunRoundResult, error) {
 	if logger == nil {
 		logger = slog.Default()
 	}
-	if s.Renderer == nil {
-		return errors.New("round_executor: renderer is nil")
+	if reporter == nil {
+		reporter = progress.Nop{}
 	}
 
-	round := s.Round
-	mode := round.Mode
-	if mode == "" {
-		mode = RoundModeTranslate
+	handler := round.Handler
+
+	batches, err := handler.BuildBatches(ctx, doc)
+	if err != nil {
+		return RunRoundResult{}, err
+	}
+	if len(batches) == 0 {
+		return RunRoundResult{}, nil
 	}
 
-	// 1. 收集 pending（Translate=true 的段落）
-	var pending []int
-	skippedCount := 0
-	for i := range doc.Segments {
-		seg := &doc.Segments[i]
-		if seg.Skip {
-			seg.Target = seg.Source
-			skippedCount++
-			continue
-		}
-		if !seg.Translate {
-			continue
-		}
-		if strings.TrimSpace(seg.Source) == "" || isDecorativeSeparator(seg) {
-			seg.Target = seg.Source
-			skippedCount++
-			continue
-		}
-		pending = append(pending, i)
-	}
-
-	if len(pending) == 0 {
-		return nil
-	}
-
-	// 2. Protect（仅 translate 模式）
-	switch mode {
-	case RoundModeTranslate:
-		if round.Protector != nil {
-			filtered := pending[:0]
-			for _, idx := range pending {
-				seg := &doc.Segments[idx]
-				if seg.OriginalSource == "" {
-					seg.OriginalSource = seg.Source
-				}
-				if err := round.Protector.Protect(seg); err != nil {
-					return fmt.Errorf("protect segment %d: %w", idx, err)
-				}
-				if isPlaceholderOnly(seg) {
-					seg.Target = seg.OriginalSource
-					skippedCount++
-					continue
-				}
-				filtered = append(filtered, idx)
-			}
-			pending = filtered
-		}
-	default:
-		return fmt.Errorf("unsupported round mode: %s", mode)
-	}
-
-	// 存储跳过计数（Protect 之后，确保包含所有跳过），供 buildTranslateResult 使用
-	if doc.Vars == nil {
-		doc.Vars = map[string]any{}
-	}
-	if prev, ok := doc.Vars["_skipped_count"].(int); ok {
-		if skippedCount > prev {
-			doc.Vars["_skipped_count"] = skippedCount
-		}
-	} else {
-		doc.Vars["_skipped_count"] = skippedCount
-	}
-
-	if len(pending) == 0 {
-		return nil
-	}
-
-	rep := s.reporter()
-	rep.StageStart(mode, len(pending))
-	defer rep.StageDone()
-
-	// 3. 上下文窗口
-	ctxConfig := s.Context
-	if round.Context != nil {
-		ctxConfig = *round.Context
-	}
-	ctxWindow := max(ctxConfig.Before, ctxConfig.After)
-	if !ctxConfig.Enabled {
-		ctxWindow = 0
-	}
-
-	// 4. 分批
-	constraint := BatchConstraint{
-		MaxSegments: round.BatchSize,
-		MaxWords:    round.MaxWordsPerBatch,
-	}
-	if constraint.MaxSegments <= 0 && constraint.MaxWords <= 0 {
-		constraint.MaxSegments = 1
-	}
-	batches := BuildContextAwareBatches(doc, pending, constraint, ctxWindow, ctxConfig.Enabled)
-	logger.Info("round start",
-		"name", round.Name,
-		"pending", len(pending), "batches", len(batches),
-		"batch_size", round.BatchSize, "max_words_per_batch", round.MaxWordsPerBatch,
-		"concurrency", round.Concurrency,
-		"context_enabled", ctxConfig.Enabled, "context_window", ctxWindow)
-
-	// 5. 执行
-	nextPending, missingSegs, roundErr := s.runRound(ctx, doc, batches, round, logger, ctxWindow)
-	if roundErr != nil {
-		return roundErr
-	}
-
-	// 6. 缺失段重新分批
-	if len(missingSegs) > 0 && ctx.Err() == nil {
-		sort.Ints(missingSegs)
-		logger.Info("retrying missing segments", "missing", len(missingSegs))
-		retryBatches := BuildContextAwareBatches(doc, missingSegs, constraint, ctxWindow, ctxConfig.Enabled)
-		retryPending, retryMissing, retryErr := s.runRound(ctx, doc, retryBatches, round, logger, ctxWindow)
-		if retryErr != nil {
-			return retryErr
-		}
-		nextPending = append(nextPending, retryPending...)
-		nextPending = append(nextPending, retryMissing...)
-	}
-
-	sort.Ints(nextPending)
-	logger.Info("round done",
-		"name", round.Name,
-		"resolved", len(pending)-len(nextPending),
-		"pending_next", len(nextPending))
-
-	if len(nextPending) > 0 {
-		failedIndices := make([]string, 0, len(nextPending))
-		for _, idx := range nextPending {
-			failedIndices = append(failedIndices, strconv.Itoa(idx))
-		}
-		if doc.Vars == nil {
-			doc.Vars = map[string]any{}
-		}
-		doc.Vars["_translate_failed_indices"] = strings.Join(failedIndices, ",")
-		logger.Warn("translate round exhausted", "count", len(nextPending))
-	} else {
-		if doc.Vars != nil {
-			delete(doc.Vars, "_translate_failed_indices")
-		}
-	}
-	return nil
-}
-
-// expandBatchWithContext 为批次扩展上下文段落。
-func expandBatchWithContext(doc *Document, idxs []int, totalSegments, ctxWindow int) []int {
-	if ctxWindow <= 0 || len(idxs) == 0 {
-		return idxs
-	}
-	batchSet := make(map[int]struct{}, len(idxs))
-	for _, idx := range idxs {
-		batchSet[idx] = struct{}{}
-	}
-	firstIdx, lastIdx := idxs[0], idxs[len(idxs)-1]
-	expandFrom := max(firstIdx-ctxWindow, 0)
-	expandTo := min(lastIdx+ctxWindow, totalSegments-1)
-	expanded := make([]int, 0, expandTo-expandFrom+1)
-	for i := expandFrom; i <= expandTo; i++ {
-		if _, inBatch := batchSet[i]; inBatch {
-			expanded = append(expanded, i)
-			continue
-		}
-		seg := &doc.Segments[i]
-		if seg.Skip {
-			continue
-		}
-		if isPlaceholderOnly(seg) || isDecorativeSeparator(seg) || strings.TrimSpace(seg.Source) == "" {
-			continue
-		}
-		expanded = append(expanded, i)
-	}
-	return expanded
-}
-
-func buildContextSet(expandedIdxs []int, batchSet map[int]struct{}) map[int]struct{} {
-	ctxSet := make(map[int]struct{})
-	for _, idx := range expandedIdxs {
-		if _, inBatch := batchSet[idx]; !inBatch {
-			ctxSet[idx] = struct{}{}
-		}
-	}
-	return ctxSet
-}
-
-func buildBatchResult(doc *Document, idxs []int, contextSet map[int]struct{}) BatchResult {
-	translated := make([]TranslatedSegment, 0, len(idxs))
-	for _, idx := range idxs {
-		seg := doc.Segments[idx]
-		if isContext(contextSet, idx) {
-			continue
-		}
-		source := seg.OriginalSource
-		if source == "" {
-			source = seg.Source
-		}
-		translated = append(translated, TranslatedSegment{
-			Index:      idx,
-			ID:         seg.ID,
-			SourceText: source,
-			TargetText: seg.Target,
-			Failed:     seg.Target == "",
-			Meta:       seg.Meta,
-		})
-	}
-	return BatchResult{Segments: translated}
-}
-
-func (s *RoundExecutor) resolveRoundRenderer(round Round) *prompt.Renderer {
-	if round.Renderer != nil {
-		return round.Renderer
-	}
-	return s.Renderer
-}
-
-func (s *RoundExecutor) resolveRoundRepair(round Round) repair.Options {
-	if round.Repair != nil {
-		return *round.Repair
-	}
-	return s.Repair
-}
-
-func (s *RoundExecutor) callOnce(ctx context.Context, b backend.Backend, req backend.Request) (*backend.Response, error) {
-	return b.Translate(ctx, req)
-}
-
-func (s *RoundExecutor) runRound(ctx context.Context, doc *Document, batches [][]int,
-	round Round, logger *slog.Logger, contextWindow int) (nextPending []int, missingSegs []int, err error) {
+	reporter.StageStart(handler.ModeName(), len(batches))
+	defer reporter.StageDone()
 
 	totalAttempts := round.Retry.MaxAttempts + 1
 	jobs := make(chan batchJob, round.Concurrency*2)
@@ -348,6 +85,10 @@ func (s *RoundExecutor) runRound(ctx context.Context, doc *Document, batches [][
 	var handlerErr atomic.Value
 	var pendingMu sync.Mutex
 
+	var nextPending []int
+	var missingSegs []int
+
+	// 启动 worker pool
 	var wg sync.WaitGroup
 	for w := 0; w < round.Concurrency; w++ {
 		wg.Add(1)
@@ -356,28 +97,23 @@ func (s *RoundExecutor) runRound(ctx context.Context, doc *Document, batches [][
 			for job := range jobs {
 				if runCtx.Err() != nil {
 					pendingMu.Lock()
-					nextPending = append(nextPending, filterPendingIdxs(job.idxs, nil)...)
+					nextPending = append(nextPending, job.idxs...)
 					pendingMu.Unlock()
 					continue
 				}
 
-				batchSet := make(map[int]struct{}, len(job.idxs))
-				for _, idx := range job.idxs {
-					batchSet[idx] = struct{}{}
-				}
+				result := handler.ProcessBatch(runCtx, doc, job.idxs, job.attempt, logger)
 
-				expandedIdxs := expandBatchWithContext(doc, job.idxs, len(doc.Segments), contextWindow)
-				contextSet := buildContextSet(expandedIdxs, batchSet)
-
-				result := s.processBatchAttempt(runCtx, doc, job, round, logger, contextSet, expandedIdxs)
-
-				if s.BatchHandler != nil {
-					handlerBatchResult := buildBatchResult(doc, expandedIdxs, contextSet)
-					if herr := s.BatchHandler(runCtx, handlerBatchResult); herr != nil {
+				// 调用 BatchHandler 回调
+				if batchHandler != nil && result.callbackResult != nil {
+					if herr := batchHandler(runCtx, *result.callbackResult); herr != nil {
 						logger.Error("batch handler error, terminating round", "err", herr)
 						handlerErr.Store(herr)
 						runCancel()
-						results <- batchResult{unresolved: filterPendingIdxs(job.idxs, contextSet)}
+						pendingMu.Lock()
+						nextPending = append(nextPending, job.idxs...)
+						pendingMu.Unlock()
+						results <- batchResult{}
 						continue
 					}
 				}
@@ -387,6 +123,7 @@ func (s *RoundExecutor) runRound(ctx context.Context, doc *Document, batches [][
 		}()
 	}
 
+	// 提交批次任务
 	done := make(chan struct{})
 	var submitWg sync.WaitGroup
 	submitWg.Add(1)
@@ -401,6 +138,7 @@ func (s *RoundExecutor) runRound(ctx context.Context, doc *Document, batches [][
 		}
 	}()
 
+	// 收集结果
 	active := len(batches)
 	for active > 0 {
 		select {
@@ -420,6 +158,7 @@ func (s *RoundExecutor) runRound(ctx context.Context, doc *Document, batches [][
 					missingSegs = append(missingSegs, result.missing...)
 					active--
 				case jobs <- *result.retry:
+					missingSegs = append(missingSegs, result.missing...)
 				}
 			} else {
 				if result.retry != nil {
@@ -439,113 +178,186 @@ cleanup:
 	close(jobs)
 	wg.Wait()
 	if v := handlerErr.Load(); v != nil {
-		return nextPending, missingSegs, v.(error)
+		return RunRoundResult{}, v.(error)
 	}
-	return nextPending, missingSegs, nil
-}
 
-func CountWords(text string) int {
-	count := 0
-	inWord := false
-	for _, r := range text {
-		if isCJK(r) {
-			count++
-			inWord = false
-		} else if unicode.IsSpace(r) {
-			inWord = false
-		} else {
-			if !inWord {
-				count++
-				inWord = true
-			}
+	// 缺失段重新分批（round 级重试）
+	if len(missingSegs) > 0 && ctx.Err() == nil {
+		sort.Ints(missingSegs)
+		// 去重
+		missingSegs = uniqueInts(missingSegs)
+		logger.Info("retrying missing segments", "missing", len(missingSegs))
+
+		retryBatches := [][]int{missingSegs}
+		retryResult, retryErr := runMissingRetry(runCtx, handler, doc, retryBatches, totalAttempts, logger, batchHandler)
+		if retryErr != nil {
+			return RunRoundResult{}, retryErr
 		}
+		nextPending = append(nextPending, retryResult...)
 	}
-	return count
+
+	// 调用 handler.Finalize
+	if err := handler.Finalize(ctx, doc, nextPending); err != nil {
+		return RunRoundResult{}, err
+	}
+
+	return RunRoundResult{Unresolved: nextPending}, nil
 }
 
-func isCJK(r rune) bool {
-	return unicode.Is(unicode.Han, r) ||
-		unicode.Is(unicode.Hiragana, r) ||
-		unicode.Is(unicode.Katakana, r) ||
-		unicode.Is(unicode.Hangul, r)
-}
+// runMissingRetry 对缺失段进行 round 级重试。
+func runMissingRetry(
+	ctx context.Context,
+	handler RoundHandler,
+	doc *Document,
+	batches [][]int,
+	totalAttempts int,
+	logger *slog.Logger,
+	batchHandler func(ctx context.Context, result BatchResult) error,
+) ([]int, error) {
+	jobs := make(chan batchJob, len(batches)*2)
+	results := make(chan batchResult, len(batches)*2)
 
-func (s *RoundExecutor) calcMaxBootstrapTerms(segments []string) int {
-	coeff := s.MaxTermsPer1000Chars
-	if coeff <= 0 {
-		coeff = 3.0
-	}
-	totalWords := 0
-	for _, seg := range segments {
-		totalWords += CountWords(seg)
-	}
-	maxTerms := int(math.Ceil(float64(totalWords) / 1000.0 * coeff))
-	return max(maxTerms, 1)
-}
-
-func headSnippet(s string, n int) string {
-	if len(s) <= n {
-		return s
-	}
-	return s[:n] + "…"
-}
-
-func isDecorativeSeparator(seg *Segment) bool {
-	text := strings.TrimSpace(seg.Source)
-	if text == "" {
-		return false
-	}
-	text = strings.ReplaceAll(text, " ", "")
-	text = strings.ReplaceAll(text, "\t", "")
-	text = strings.ReplaceAll(text, "\n", "")
-	text = strings.ReplaceAll(text, "\r", "")
-	if text == "" {
-		return false
-	}
-	for _, r := range text {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			return false
-		}
-	}
-	return true
-}
-
-func isPlaceholderOnly(seg *Segment) bool {
-	if len(seg.Protected) == 0 {
-		return false
-	}
-	text := seg.Source
-	for key := range seg.Protected {
-		text = strings.ReplaceAll(text, key, "")
-	}
-	return strings.TrimSpace(text) == ""
-}
-
-func extractRubyAnnotationsFromDoc(doc *Document, idxs []int, idMap map[int]string) map[string][]prompt.RubyAnnotation {
-	result := make(map[string][]prompt.RubyAnnotation)
-	for _, idx := range idxs {
-		seg := doc.Segments[idx]
-		raw, ok := seg.Meta["ruby_annotations"]
-		if !ok {
-			continue
-		}
-		annots, ok := raw.([]ruby.Annotation)
-		if !ok {
-			continue
-		}
-		converted := make([]prompt.RubyAnnotation, len(annots))
-		for i, a := range annots {
-			converted[i] = prompt.RubyAnnotation{Base: a.Base, Text: a.Text}
-		}
-		if len(converted) > 0 {
-			key := seg.ID
-			if idMap != nil {
-				if mapped, ok := idMap[idx]; ok {
-					key = mapped
+	var wg sync.WaitGroup
+	for w := 0; w < min(4, len(batches)); w++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for job := range jobs {
+				if ctx.Err() != nil {
+					results <- batchResult{unresolved: job.idxs}
+					continue
 				}
+				result := handler.ProcessBatch(ctx, doc, job.idxs, job.attempt, logger)
+				if batchHandler != nil && result.callbackResult != nil {
+					if herr := batchHandler(ctx, *result.callbackResult); herr != nil {
+						logger.Error("batch handler error in missing retry", "err", herr)
+						results <- batchResult{unresolved: job.idxs}
+						continue
+					}
+				}
+				results <- result
 			}
-			result[key] = converted
+		}()
+	}
+
+	go func() {
+		for _, batch := range batches {
+			jobs <- batchJob{idxs: batch, attempt: 0}
+		}
+	}()
+
+	var nextPending []int
+	active := len(batches)
+	for active > 0 {
+		select {
+		case <-ctx.Done():
+			close(jobs)
+			wg.Wait()
+			return nextPending, ctx.Err()
+		case result := <-results:
+			nextPending = append(nextPending, result.unresolved...)
+			if result.retry != nil && result.retry.attempt < totalAttempts {
+				jobs <- *result.retry
+			} else {
+				if result.retry != nil {
+					nextPending = append(nextPending, result.retry.idxs...)
+				}
+				active--
+			}
 		}
 	}
-	return result
+	close(jobs)
+	wg.Wait()
+	return nextPending, nil
+}
+
+// uniqueInts 对已排序的 int 切片去重。
+func uniqueInts(sorted []int) []int {
+	if len(sorted) <= 1 {
+		return sorted
+	}
+	j := 0
+	for i := 1; i < len(sorted); i++ {
+		if sorted[i] != sorted[j] {
+			j++
+			sorted[j] = sorted[i]
+		}
+	}
+	return sorted[:j+1]
+}
+
+// pendingSegmentIDStrings 将索引切片转为字符串切片。
+func pendingSegmentIDStrings(pendingIdxs []int) []string {
+	segIDs := make([]string, len(pendingIdxs))
+	for i, idx := range pendingIdxs {
+		segIDs[i] = strconv.Itoa(idx)
+	}
+	return segIDs
+}
+
+// httpStatusFromErr 从错误中提取 HTTP 状态码。
+func httpStatusFromErr(err error) int {
+	var hsErr backend.HTTPStatusError
+	if errors.As(err, &hsErr) {
+		return hsErr.HTTPStatus()
+	}
+	return 0
+}
+
+// isFatalBackendError 判断是否为不可恢复的致命错误。
+func isFatalBackendError(err error) bool {
+	var hsErr backend.HTTPStatusError
+	if errors.As(err, &hsErr) {
+		code := hsErr.HTTPStatus()
+		return code == 401 || code == 403
+	}
+	return false
+}
+
+// isRetryableByBackoff 判断错误是否为 429/503 限流错误。
+func isRetryableByBackoff(err error) bool {
+	var hsErr backend.HTTPStatusError
+	if errors.As(err, &hsErr) {
+		code := hsErr.HTTPStatus()
+		return code == 429 || code == 503
+	}
+	return false
+}
+
+// backoffDuration 计算退避等待时间。
+func backoffDuration(attempt int, retry backend.RetryPolicy, lastErr error) time.Duration {
+	wait := retry.Backoff << attempt
+	if wait < minRateLimitBackoff {
+		wait = minRateLimitBackoff
+	}
+
+	var raErr backend.RetryAfterError
+	if errors.As(lastErr, &raErr) && raErr.HTTPStatus() == 429 {
+		if ra := raErr.GetRetryAfter(); ra > wait {
+			wait = ra
+		}
+	}
+
+	if retry.Jitter {
+		wait += time.Duration(rand.Int63n(int64(wait) + 1))
+	}
+	return wait
+}
+
+// minRateLimitBackoff 是 429 错误的最小退避时间。
+const minRateLimitBackoff = 5 * time.Second
+
+// shrinkTo 计算缩批后的大小。
+func shrinkTo(idxs []int, shrink float64) int {
+	if shrink <= 0 || shrink >= 1 || math.IsNaN(shrink) || math.IsInf(shrink, 0) {
+		return 1
+	}
+	next := int(math.Floor(float64(len(idxs)) * shrink))
+	if next >= len(idxs) {
+		next = len(idxs) - 1
+	}
+	if next < 1 {
+		return 1
+	}
+	return next
 }

@@ -44,7 +44,7 @@ func (JobResource) Fields() []ent.Field {
 
 func (JobResource) Edges() []ent.Edge {
 	return []ent.Edge{
-		edge.From("job", TranslationJob.Type).
+		edge.From("job", Job.Type).
 			Ref("job_resources").
 			Unique().
 			Required(),

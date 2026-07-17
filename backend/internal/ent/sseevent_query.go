@@ -11,9 +11,9 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 )
 
 // SSEEventQuery is the builder for querying SSEEvent entities.
@@ -23,7 +23,7 @@ type SSEEventQuery struct {
 	order      []sseevent.OrderOption
 	inters     []Interceptor
 	predicates []predicate.SSEEvent
-	withJob    *TranslationJobQuery
+	withJob    *JobQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -61,8 +61,8 @@ func (_q *SSEEventQuery) Order(o ...sseevent.OrderOption) *SSEEventQuery {
 }
 
 // QueryJob chains the current query on the "job" edge.
-func (_q *SSEEventQuery) QueryJob() *TranslationJobQuery {
-	query := (&TranslationJobClient{config: _q.config}).Query()
+func (_q *SSEEventQuery) QueryJob() *JobQuery {
+	query := (&JobClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
 			return nil, err
@@ -73,7 +73,7 @@ func (_q *SSEEventQuery) QueryJob() *TranslationJobQuery {
 		}
 		step := sqlgraph.NewStep(
 			sqlgraph.From(sseevent.Table, sseevent.FieldID, selector),
-			sqlgraph.To(translationjob.Table, translationjob.FieldID),
+			sqlgraph.To(job.Table, job.FieldID),
 			sqlgraph.Edge(sqlgraph.M2O, true, sseevent.JobTable, sseevent.JobColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
@@ -283,8 +283,8 @@ func (_q *SSEEventQuery) Clone() *SSEEventQuery {
 
 // WithJob tells the query-builder to eager-load the nodes that are connected to
 // the "job" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *SSEEventQuery) WithJob(opts ...func(*TranslationJobQuery)) *SSEEventQuery {
-	query := (&TranslationJobClient{config: _q.config}).Query()
+func (_q *SSEEventQuery) WithJob(opts ...func(*JobQuery)) *SSEEventQuery {
+	query := (&JobClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
@@ -394,14 +394,14 @@ func (_q *SSEEventQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*SSE
 	}
 	if query := _q.withJob; query != nil {
 		if err := _q.loadJob(ctx, query, nodes, nil,
-			func(n *SSEEvent, e *TranslationJob) { n.Edges.Job = e }); err != nil {
+			func(n *SSEEvent, e *Job) { n.Edges.Job = e }); err != nil {
 			return nil, err
 		}
 	}
 	return nodes, nil
 }
 
-func (_q *SSEEventQuery) loadJob(ctx context.Context, query *TranslationJobQuery, nodes []*SSEEvent, init func(*SSEEvent), assign func(*SSEEvent, *TranslationJob)) error {
+func (_q *SSEEventQuery) loadJob(ctx context.Context, query *JobQuery, nodes []*SSEEvent, init func(*SSEEvent), assign func(*SSEEvent, *Job)) error {
 	ids := make([]int, 0, len(nodes))
 	nodeids := make(map[int][]*SSEEvent)
 	for i := range nodes {
@@ -414,7 +414,7 @@ func (_q *SSEEventQuery) loadJob(ctx context.Context, query *TranslationJobQuery
 	if len(ids) == 0 {
 		return nil
 	}
-	query.Where(translationjob.IDIn(ids...))
+	query.Where(job.IDIn(ids...))
 	neighbors, err := query.All(ctx)
 	if err != nil {
 		return err

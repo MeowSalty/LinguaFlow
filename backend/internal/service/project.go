@@ -8,6 +8,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -18,7 +19,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
@@ -190,9 +190,9 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 		}
 	}()
 
-	// 收集项目关联的 TranslationJob IDs（用于删除 JobResource）
-	tjIDs, err := tx.TranslationJob.Query().
-		Where(translationjob.ProjectIDEQ(projectID)).
+	// 收集项目关联的 Job IDs（用于删除 JobResource）
+	tjIDs, err := tx.Job.Query().
+		Where(job.ProjectIDEQ(projectID)).
 		IDs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("query translation job IDs: %w", err)
@@ -208,7 +208,7 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 	if len(tjIDs) > 0 || len(resIDs) > 0 {
 		var preds []predicate.JobResource
 		if len(tjIDs) > 0 {
-			preds = append(preds, jobresource.HasJobWith(translationjob.IDIn(tjIDs...)))
+			preds = append(preds, jobresource.HasJobWith(job.IDIn(tjIDs...)))
 		}
 		if len(resIDs) > 0 {
 			preds = append(preds, jobresource.HasResourceWith(resource.IDIn(resIDs...)))
@@ -231,10 +231,10 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 		}
 	}
 
-	// Step 2: 删除 TranslationJob
+	// Step 2: 删除 Job
 	if len(tjIDs) > 0 {
-		_, err = tx.TranslationJob.Delete().
-			Where(translationjob.IDIn(tjIDs...)).
+		_, err = tx.Job.Delete().
+			Where(job.IDIn(tjIDs...)).
 			Exec(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("delete translation jobs: %w", err)

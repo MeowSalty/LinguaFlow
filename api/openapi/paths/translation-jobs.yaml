@@ -53,7 +53,7 @@ projectTranslationJobs:
 
 translationJobById:
   parameters:
-    - $ref: '../base.yaml#/components/parameters/TranslationJobId'
+    - $ref: '../base.yaml#/components/parameters/JobId'
   get:
     operationId: GetTranslationJob
     summary: 获取翻译任务详情
@@ -71,7 +71,7 @@ translationJobById:
 
 translationJobCancel:
   parameters:
-    - $ref: '../base.yaml#/components/parameters/TranslationJobId'
+    - $ref: '../base.yaml#/components/parameters/JobId'
   post:
     operationId: CancelTranslationJob
     summary: 取消翻译任务
@@ -89,7 +89,7 @@ translationJobCancel:
 
 translationJobRetry:
   parameters:
-    - $ref: '../base.yaml#/components/parameters/TranslationJobId'
+    - $ref: '../base.yaml#/components/parameters/JobId'
   post:
     operationId: RetryTranslationJob
     summary: 重试失败的资源翻译

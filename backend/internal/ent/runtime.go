@@ -10,6 +10,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -22,7 +23,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
@@ -212,6 +212,83 @@ func init() {
 	glossaryentryDescProjectID := glossaryentryFields[5].Descriptor()
 	// glossaryentry.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
 	glossaryentry.ProjectIDValidator = glossaryentryDescProjectID.Validators[0].(func(int) error)
+	jobMixin := schema.Job{}.Mixin()
+	jobMixinFields0 := jobMixin[0].Fields()
+	_ = jobMixinFields0
+	jobFields := schema.Job{}.Fields()
+	_ = jobFields
+	// jobDescCreatedAt is the schema descriptor for created_at field.
+	jobDescCreatedAt := jobMixinFields0[0].Descriptor()
+	// job.DefaultCreatedAt holds the default value on creation for the created_at field.
+	job.DefaultCreatedAt = jobDescCreatedAt.Default.(func() time.Time)
+	// jobDescUpdatedAt is the schema descriptor for updated_at field.
+	jobDescUpdatedAt := jobMixinFields0[1].Descriptor()
+	// job.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	job.DefaultUpdatedAt = jobDescUpdatedAt.Default.(func() time.Time)
+	// job.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	job.UpdateDefaultUpdatedAt = jobDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// jobDescProjectID is the schema descriptor for project_id field.
+	jobDescProjectID := jobFields[0].Descriptor()
+	// job.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
+	job.ProjectIDValidator = jobDescProjectID.Validators[0].(func(int) error)
+	// jobDescStatus is the schema descriptor for status field.
+	jobDescStatus := jobFields[1].Descriptor()
+	// job.DefaultStatus holds the default value on creation for the status field.
+	job.DefaultStatus = jobDescStatus.Default.(string)
+	// jobDescTriggerType is the schema descriptor for trigger_type field.
+	jobDescTriggerType := jobFields[2].Descriptor()
+	// job.DefaultTriggerType holds the default value on creation for the trigger_type field.
+	job.DefaultTriggerType = jobDescTriggerType.Default.(string)
+	// jobDescExecutionPlanID is the schema descriptor for execution_plan_id field.
+	jobDescExecutionPlanID := jobFields[3].Descriptor()
+	// job.ExecutionPlanIDValidator is a validator for the "execution_plan_id" field. It is called by the builders before save.
+	job.ExecutionPlanIDValidator = jobDescExecutionPlanID.Validators[0].(func(int) error)
+	// jobDescTranslationConfig is the schema descriptor for translation_config field.
+	jobDescTranslationConfig := jobFields[4].Descriptor()
+	// job.DefaultTranslationConfig holds the default value on creation for the translation_config field.
+	job.DefaultTranslationConfig = jobDescTranslationConfig.Default.(func() map[string]interface{})
+	// jobDescResourceCount is the schema descriptor for resource_count field.
+	jobDescResourceCount := jobFields[5].Descriptor()
+	// job.DefaultResourceCount holds the default value on creation for the resource_count field.
+	job.DefaultResourceCount = jobDescResourceCount.Default.(int)
+	// job.ResourceCountValidator is a validator for the "resource_count" field. It is called by the builders before save.
+	job.ResourceCountValidator = jobDescResourceCount.Validators[0].(func(int) error)
+	// jobDescCompletedResources is the schema descriptor for completed_resources field.
+	jobDescCompletedResources := jobFields[6].Descriptor()
+	// job.DefaultCompletedResources holds the default value on creation for the completed_resources field.
+	job.DefaultCompletedResources = jobDescCompletedResources.Default.(int)
+	// job.CompletedResourcesValidator is a validator for the "completed_resources" field. It is called by the builders before save.
+	job.CompletedResourcesValidator = jobDescCompletedResources.Validators[0].(func(int) error)
+	// jobDescFailedResources is the schema descriptor for failed_resources field.
+	jobDescFailedResources := jobFields[7].Descriptor()
+	// job.DefaultFailedResources holds the default value on creation for the failed_resources field.
+	job.DefaultFailedResources = jobDescFailedResources.Default.(int)
+	// job.FailedResourcesValidator is a validator for the "failed_resources" field. It is called by the builders before save.
+	job.FailedResourcesValidator = jobDescFailedResources.Validators[0].(func(int) error)
+	// jobDescTotalSegments is the schema descriptor for total_segments field.
+	jobDescTotalSegments := jobFields[8].Descriptor()
+	// job.DefaultTotalSegments holds the default value on creation for the total_segments field.
+	job.DefaultTotalSegments = jobDescTotalSegments.Default.(int)
+	// job.TotalSegmentsValidator is a validator for the "total_segments" field. It is called by the builders before save.
+	job.TotalSegmentsValidator = jobDescTotalSegments.Validators[0].(func(int) error)
+	// jobDescSkippedSegments is the schema descriptor for skipped_segments field.
+	jobDescSkippedSegments := jobFields[9].Descriptor()
+	// job.DefaultSkippedSegments holds the default value on creation for the skipped_segments field.
+	job.DefaultSkippedSegments = jobDescSkippedSegments.Default.(int)
+	// job.SkippedSegmentsValidator is a validator for the "skipped_segments" field. It is called by the builders before save.
+	job.SkippedSegmentsValidator = jobDescSkippedSegments.Validators[0].(func(int) error)
+	// jobDescStageTotal is the schema descriptor for stage_total field.
+	jobDescStageTotal := jobFields[10].Descriptor()
+	// job.DefaultStageTotal holds the default value on creation for the stage_total field.
+	job.DefaultStageTotal = jobDescStageTotal.Default.(int)
+	// job.StageTotalValidator is a validator for the "stage_total" field. It is called by the builders before save.
+	job.StageTotalValidator = jobDescStageTotal.Validators[0].(func(int) error)
+	// jobDescCompletedSegments is the schema descriptor for completed_segments field.
+	jobDescCompletedSegments := jobFields[11].Descriptor()
+	// job.DefaultCompletedSegments holds the default value on creation for the completed_segments field.
+	job.DefaultCompletedSegments = jobDescCompletedSegments.Default.(int)
+	// job.CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.
+	job.CompletedSegmentsValidator = jobDescCompletedSegments.Validators[0].(func(int) error)
 	jobresourceMixin := schema.JobResource{}.Mixin()
 	jobresourceMixinFields0 := jobresourceMixin[0].Fields()
 	_ = jobresourceMixinFields0
@@ -574,83 +651,6 @@ func init() {
 	tmentryDescProjectID := tmentryFields[7].Descriptor()
 	// tmentry.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
 	tmentry.ProjectIDValidator = tmentryDescProjectID.Validators[0].(func(int) error)
-	translationjobMixin := schema.TranslationJob{}.Mixin()
-	translationjobMixinFields0 := translationjobMixin[0].Fields()
-	_ = translationjobMixinFields0
-	translationjobFields := schema.TranslationJob{}.Fields()
-	_ = translationjobFields
-	// translationjobDescCreatedAt is the schema descriptor for created_at field.
-	translationjobDescCreatedAt := translationjobMixinFields0[0].Descriptor()
-	// translationjob.DefaultCreatedAt holds the default value on creation for the created_at field.
-	translationjob.DefaultCreatedAt = translationjobDescCreatedAt.Default.(func() time.Time)
-	// translationjobDescUpdatedAt is the schema descriptor for updated_at field.
-	translationjobDescUpdatedAt := translationjobMixinFields0[1].Descriptor()
-	// translationjob.DefaultUpdatedAt holds the default value on creation for the updated_at field.
-	translationjob.DefaultUpdatedAt = translationjobDescUpdatedAt.Default.(func() time.Time)
-	// translationjob.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
-	translationjob.UpdateDefaultUpdatedAt = translationjobDescUpdatedAt.UpdateDefault.(func() time.Time)
-	// translationjobDescProjectID is the schema descriptor for project_id field.
-	translationjobDescProjectID := translationjobFields[0].Descriptor()
-	// translationjob.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
-	translationjob.ProjectIDValidator = translationjobDescProjectID.Validators[0].(func(int) error)
-	// translationjobDescStatus is the schema descriptor for status field.
-	translationjobDescStatus := translationjobFields[1].Descriptor()
-	// translationjob.DefaultStatus holds the default value on creation for the status field.
-	translationjob.DefaultStatus = translationjobDescStatus.Default.(string)
-	// translationjobDescTriggerType is the schema descriptor for trigger_type field.
-	translationjobDescTriggerType := translationjobFields[2].Descriptor()
-	// translationjob.DefaultTriggerType holds the default value on creation for the trigger_type field.
-	translationjob.DefaultTriggerType = translationjobDescTriggerType.Default.(string)
-	// translationjobDescExecutionPlanID is the schema descriptor for execution_plan_id field.
-	translationjobDescExecutionPlanID := translationjobFields[3].Descriptor()
-	// translationjob.ExecutionPlanIDValidator is a validator for the "execution_plan_id" field. It is called by the builders before save.
-	translationjob.ExecutionPlanIDValidator = translationjobDescExecutionPlanID.Validators[0].(func(int) error)
-	// translationjobDescTranslationConfig is the schema descriptor for translation_config field.
-	translationjobDescTranslationConfig := translationjobFields[4].Descriptor()
-	// translationjob.DefaultTranslationConfig holds the default value on creation for the translation_config field.
-	translationjob.DefaultTranslationConfig = translationjobDescTranslationConfig.Default.(func() map[string]interface{})
-	// translationjobDescResourceCount is the schema descriptor for resource_count field.
-	translationjobDescResourceCount := translationjobFields[5].Descriptor()
-	// translationjob.DefaultResourceCount holds the default value on creation for the resource_count field.
-	translationjob.DefaultResourceCount = translationjobDescResourceCount.Default.(int)
-	// translationjob.ResourceCountValidator is a validator for the "resource_count" field. It is called by the builders before save.
-	translationjob.ResourceCountValidator = translationjobDescResourceCount.Validators[0].(func(int) error)
-	// translationjobDescCompletedResources is the schema descriptor for completed_resources field.
-	translationjobDescCompletedResources := translationjobFields[6].Descriptor()
-	// translationjob.DefaultCompletedResources holds the default value on creation for the completed_resources field.
-	translationjob.DefaultCompletedResources = translationjobDescCompletedResources.Default.(int)
-	// translationjob.CompletedResourcesValidator is a validator for the "completed_resources" field. It is called by the builders before save.
-	translationjob.CompletedResourcesValidator = translationjobDescCompletedResources.Validators[0].(func(int) error)
-	// translationjobDescFailedResources is the schema descriptor for failed_resources field.
-	translationjobDescFailedResources := translationjobFields[7].Descriptor()
-	// translationjob.DefaultFailedResources holds the default value on creation for the failed_resources field.
-	translationjob.DefaultFailedResources = translationjobDescFailedResources.Default.(int)
-	// translationjob.FailedResourcesValidator is a validator for the "failed_resources" field. It is called by the builders before save.
-	translationjob.FailedResourcesValidator = translationjobDescFailedResources.Validators[0].(func(int) error)
-	// translationjobDescTotalSegments is the schema descriptor for total_segments field.
-	translationjobDescTotalSegments := translationjobFields[8].Descriptor()
-	// translationjob.DefaultTotalSegments holds the default value on creation for the total_segments field.
-	translationjob.DefaultTotalSegments = translationjobDescTotalSegments.Default.(int)
-	// translationjob.TotalSegmentsValidator is a validator for the "total_segments" field. It is called by the builders before save.
-	translationjob.TotalSegmentsValidator = translationjobDescTotalSegments.Validators[0].(func(int) error)
-	// translationjobDescSkippedSegments is the schema descriptor for skipped_segments field.
-	translationjobDescSkippedSegments := translationjobFields[9].Descriptor()
-	// translationjob.DefaultSkippedSegments holds the default value on creation for the skipped_segments field.
-	translationjob.DefaultSkippedSegments = translationjobDescSkippedSegments.Default.(int)
-	// translationjob.SkippedSegmentsValidator is a validator for the "skipped_segments" field. It is called by the builders before save.
-	translationjob.SkippedSegmentsValidator = translationjobDescSkippedSegments.Validators[0].(func(int) error)
-	// translationjobDescStageTotal is the schema descriptor for stage_total field.
-	translationjobDescStageTotal := translationjobFields[10].Descriptor()
-	// translationjob.DefaultStageTotal holds the default value on creation for the stage_total field.
-	translationjob.DefaultStageTotal = translationjobDescStageTotal.Default.(int)
-	// translationjob.StageTotalValidator is a validator for the "stage_total" field. It is called by the builders before save.
-	translationjob.StageTotalValidator = translationjobDescStageTotal.Validators[0].(func(int) error)
-	// translationjobDescCompletedSegments is the schema descriptor for completed_segments field.
-	translationjobDescCompletedSegments := translationjobFields[11].Descriptor()
-	// translationjob.DefaultCompletedSegments holds the default value on creation for the completed_segments field.
-	translationjob.DefaultCompletedSegments = translationjobDescCompletedSegments.Default.(int)
-	// translationjob.CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.
-	translationjob.CompletedSegmentsValidator = translationjobDescCompletedSegments.Validators[0].(func(int) error)
 	translationprofileMixin := schema.TranslationProfile{}.Mixin()
 	translationprofileMixinFields0 := translationprofileMixin[0].Fields()
 	_ = translationprofileMixinFields0

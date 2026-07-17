@@ -10,8 +10,8 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 )
 
 // SSEEvent is the model entity for the SSEEvent schema.
@@ -44,7 +44,7 @@ type SSEEvent struct {
 // SSEEventEdges holds the relations/edges for other nodes in the graph.
 type SSEEventEdges struct {
 	// Job holds the value of the job edge.
-	Job *TranslationJob `json:"job,omitempty"`
+	Job *Job `json:"job,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
 	loadedTypes [1]bool
@@ -52,11 +52,11 @@ type SSEEventEdges struct {
 
 // JobOrErr returns the Job value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
-func (e SSEEventEdges) JobOrErr() (*TranslationJob, error) {
+func (e SSEEventEdges) JobOrErr() (*Job, error) {
 	if e.Job != nil {
 		return e.Job, nil
 	} else if e.loadedTypes[0] {
-		return nil, &NotFoundError{label: translationjob.Label}
+		return nil, &NotFoundError{label: job.Label}
 	}
 	return nil, &NotLoadedError{edge: "job"}
 }
@@ -159,7 +159,7 @@ func (_m *SSEEvent) Value(name string) (ent.Value, error) {
 }
 
 // QueryJob queries the "job" edge of the SSEEvent entity.
-func (_m *SSEEvent) QueryJob() *TranslationJobQuery {
+func (_m *SSEEvent) QueryJob() *JobQuery {
 	return NewSSEEventClient(_m.config).QueryJob(_m)
 }
 

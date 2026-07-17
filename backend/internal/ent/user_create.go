@@ -14,12 +14,12 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
@@ -121,19 +121,19 @@ func (_c *UserCreate) SetNillableActive(v *bool) *UserCreate {
 	return _c
 }
 
-// AddCreatedTranslationJobIDs adds the "created_translation_jobs" edge to the TranslationJob entity by IDs.
-func (_c *UserCreate) AddCreatedTranslationJobIDs(ids ...int) *UserCreate {
-	_c.mutation.AddCreatedTranslationJobIDs(ids...)
+// AddCreatedJobIDs adds the "created_jobs" edge to the Job entity by IDs.
+func (_c *UserCreate) AddCreatedJobIDs(ids ...int) *UserCreate {
+	_c.mutation.AddCreatedJobIDs(ids...)
 	return _c
 }
 
-// AddCreatedTranslationJobs adds the "created_translation_jobs" edges to the TranslationJob entity.
-func (_c *UserCreate) AddCreatedTranslationJobs(v ...*TranslationJob) *UserCreate {
+// AddCreatedJobs adds the "created_jobs" edges to the Job entity.
+func (_c *UserCreate) AddCreatedJobs(v ...*Job) *UserCreate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _c.AddCreatedTranslationJobIDs(ids...)
+	return _c.AddCreatedJobIDs(ids...)
 }
 
 // AddReviewedSegmentIDs adds the "reviewed_segments" edge to the Segment entity by IDs.
@@ -465,15 +465,15 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		_spec.SetField(user.FieldActive, field.TypeBool, value)
 		_node.Active = value
 	}
-	if nodes := _c.mutation.CreatedTranslationJobsIDs(); len(nodes) > 0 {
+	if nodes := _c.mutation.CreatedJobsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.CreatedTranslationJobsTable,
-			Columns: []string{user.CreatedTranslationJobsColumn},
+			Table:   user.CreatedJobsTable,
+			Columns: []string{user.CreatedJobsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

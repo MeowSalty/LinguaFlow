@@ -18,7 +18,7 @@ import (
 
 // buildEngineFromSnapshot 从任务快照构建引擎实例。
 // 后端实例由快照中的 Type + Options 直接构建，不依赖名称查找。
-func (r *TranslationRunner) buildEngineFromSnapshot(
+func (r *JobRunner) buildEngineFromSnapshot(
 	ctx context.Context,
 	snapshot *service.JobExecutionSnapshot,
 	resources engine.RuntimeResources,
@@ -44,48 +44,30 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 			b = backend.NewRateLimitedBackend(b, limiter)
 		}
 
-		// 为每轮构建独立的 Renderer（使用该轮自己的 prompt 模板）
-		roundRenderer, err := prompt.NewRenderer(rs.Prompt.Content)
-		if err != nil {
-			return nil, fmt.Errorf("round %q build renderer: %w", rs.Name, err)
-		}
-
-		var protectRules []string
-		if rs.Strategy.Protect.Enabled {
-			protectRules = rs.Strategy.Protect.Rules
-		}
-		var roundPostprocess *pipeline.PostprocessConfig
-		if rs.Strategy.Postprocess.Enabled {
-			roundPostprocess = &pipeline.PostprocessConfig{
-				TrimSpaces: rs.Strategy.Postprocess.TrimSpaces,
+		switch rs.Mode {
+		case "translate":
+			if rs.Translate == nil {
+				return nil, fmt.Errorf("round %q: mode=translate but translate config is nil", rs.Name)
 			}
+			round, err := r.buildTranslateRound(rs, b)
+			if err != nil {
+				return nil, err
+			}
+			rounds = append(rounds, round)
+
+		case "extract":
+			if rs.Extract == nil {
+				return nil, fmt.Errorf("round %q: mode=extract but extract config is nil", rs.Name)
+			}
+			round, err := r.buildExtractRound(rs, b)
+			if err != nil {
+				return nil, err
+			}
+			rounds = append(rounds, round)
+
+		default:
+			return nil, fmt.Errorf("round %q: unsupported mode %q", rs.Name, rs.Mode)
 		}
-		rounds = append(rounds, engine.Round{
-			Backend:          b,
-			Name:             rs.Name,
-			BatchSize:        rs.BatchSize,
-			MaxWordsPerBatch: rs.MaxWordsPerBatch,
-			Concurrency:      rs.Concurrency,
-			FallbackShrink:   rs.FallbackShrink,
-			Retry: backend.RetryPolicy{
-				MaxAttempts: rs.Retry.MaxAttempts,
-				Backoff:     time.Duration(rs.Retry.BackoffMs) * time.Millisecond,
-				Jitter:      rs.Retry.Jitter,
-			},
-			Renderer:          roundRenderer,
-			ResponseMode:      responseModeFromBackendOptions(rs.Backend.Options),
-			Mode:              pipeline.RoundModeTranslate,
-			ProtectRules:      protectRules,
-			RubyEnabled:       rs.Strategy.Ruby.Enabled,
-			RubyPreserveKinds: rs.Strategy.Ruby.PreserveKinds,
-			Context: &pipeline.ContextConfig{
-				Enabled:  rs.Strategy.Context.Enabled,
-				Before:   rs.Strategy.Context.Before,
-				After:    rs.Strategy.Context.After,
-				MaxChars: rs.Strategy.Context.MaxChars,
-			},
-			Postprocess: roundPostprocess,
-		})
 	}
 
 	// 构建策略配置（不含后端信息）
@@ -111,35 +93,93 @@ func (r *TranslationRunner) buildEngineFromSnapshot(
 		rubyRetryBackends = []backend.Backend{rrBackend}
 	}
 
-	// 构建独立自举后端
-	var bootstrapBackends []backend.Backend
-	if snapshot.Bootstrap != nil && snapshot.Bootstrap.Enabled {
-		bsCfg := backend.Config{
-			Name:    snapshot.Bootstrap.Backend.Name,
-			Type:    snapshot.Bootstrap.Backend.Type,
-			Enabled: true,
-			Options: snapshot.Bootstrap.Backend.Options,
-		}
-		bsBackend, err := backend.Build(bsCfg)
-		if err != nil {
-			return nil, fmt.Errorf("bootstrap backend: %w", err)
-		}
-		if r.limiterPool != nil && snapshot.Bootstrap.Backend.RateLimitPerMinute > 0 {
-			limiter := r.limiterPool.Get(snapshot.Bootstrap.Backend.ID, snapshot.Bootstrap.Backend.RateLimitPerMinute)
-			bsBackend = backend.NewRateLimitedBackend(bsBackend, limiter)
-		}
-		bootstrapBackends = []backend.Backend{bsBackend}
-	}
-
 	return engine.NewWithOptions(engine.Options{
 		Rounds:            rounds,
-		BootstrapBackends: bootstrapBackends,
 		RubyRetryBackends: rubyRetryBackends,
 		Config:            cfg,
 		Logger:            r.logger,
 		Resources:         resources,
 		Reporter:          reporter,
 	})
+}
+
+// buildTranslateRound 从快照构建翻译轮次配置。
+func (r *JobRunner) buildTranslateRound(rs service.JobRoundSnapshot, b backend.Backend) (engine.Round, error) {
+	t := rs.Translate
+
+	// 为每轮构建独立的 Renderer（使用该轮自己的 prompt 模板）
+	roundRenderer, err := prompt.NewRenderer(t.Prompt.Content)
+	if err != nil {
+		return engine.Round{}, fmt.Errorf("round %q build renderer: %w", rs.Name, err)
+	}
+
+	var protectRules []string
+	if t.Strategy.Protect.Enabled {
+		protectRules = t.Strategy.Protect.Rules
+	}
+	var roundPostprocess *pipeline.PostprocessConfig
+	if t.Strategy.Postprocess.Enabled {
+		roundPostprocess = &pipeline.PostprocessConfig{
+			TrimSpaces: t.Strategy.Postprocess.TrimSpaces,
+		}
+	}
+
+	return engine.Round{
+		Backend:          b,
+		Name:             rs.Name,
+		BatchSize:        t.BatchSize,
+		MaxWordsPerBatch: t.MaxWordsPerBatch,
+		Concurrency:      t.Concurrency,
+		FallbackShrink:   t.FallbackShrink,
+		Retry: backend.RetryPolicy{
+			MaxAttempts: t.Retry.MaxAttempts,
+			Backoff:     time.Duration(t.Retry.BackoffMs) * time.Millisecond,
+			Jitter:      t.Retry.Jitter,
+		},
+		Renderer:          roundRenderer,
+		ResponseMode:      responseModeFromBackendOptions(rs.Backend.Options),
+		Mode:              pipeline.RoundModeTranslate,
+		ProtectRules:      protectRules,
+		RubyEnabled:       t.Strategy.Ruby.Enabled,
+		RubyPreserveKinds: t.Strategy.Ruby.PreserveKinds,
+		Context: &pipeline.ContextConfig{
+			Enabled:  t.Strategy.Context.Enabled,
+			Before:   t.Strategy.Context.Before,
+			After:    t.Strategy.Context.After,
+			MaxChars: t.Strategy.Context.MaxChars,
+		},
+		Postprocess: roundPostprocess,
+	}, nil
+}
+
+// buildExtractRound 从快照构建抽取轮次配置。
+func (r *JobRunner) buildExtractRound(rs service.JobRoundSnapshot, b backend.Backend) (engine.Round, error) {
+	e := rs.Extract
+
+	// 构建 BootstrapRenderer
+	renderer, err := prompt.NewBootstrapRenderer(e.TemplateContent)
+	if err != nil {
+		return engine.Round{}, fmt.Errorf("round %q build bootstrap renderer: %w", rs.Name, err)
+	}
+
+	retry := backend.RetryPolicy{
+		MaxAttempts: 3,
+		Backoff:     1000,
+		Jitter:      true,
+	}
+
+	return engine.Round{
+		Backend:     b,
+		Name:        rs.Name,
+		BatchSize:   e.BatchSize,
+		Concurrency: e.Concurrency,
+		Retry:       retry,
+		Mode:        pipeline.RoundModeExtract,
+
+		ExtractRenderer:             renderer,
+		ExtractMaxTermsPer1000Chars: e.MaxTermsPer1000Chars,
+		ExtractMinSourceLen:         e.MinSourceLen,
+	}, nil
 }
 
 // buildEngineConfig 从快照构建引擎运行时配置。
@@ -150,8 +190,12 @@ func buildEngineConfig(snapshot *service.JobExecutionSnapshot) *engine.Config {
 		TMEnabled:  snapshot.TMEnabled,
 	}
 
-	if len(snapshot.Rounds) > 0 {
-		s := snapshot.Rounds[0].Strategy
+	// 从第一个翻译轮次读取策略配置
+	for _, rs := range snapshot.Rounds {
+		if rs.Mode != "translate" || rs.Translate == nil {
+			continue
+		}
+		s := rs.Translate.Strategy
 		rc := repair.Config{
 			Enabled:              s.Repair.Enabled,
 			JSONStructural:       s.Repair.JSONStructural,
@@ -182,24 +226,13 @@ func buildEngineConfig(snapshot *service.JobExecutionSnapshot) *engine.Config {
 			LengthRatioMin: s.QA.LengthRatioMin,
 			LengthRatioMax: s.QA.LengthRatioMax,
 		}
-	}
-
-	if snapshot.Bootstrap != nil {
-		cfg.Glossary.Standalone = config.StandaloneBootstrapConfig{
-			Enabled:              snapshot.Bootstrap.Enabled,
-			TemplateContent:      snapshot.Bootstrap.TemplateContent,
-			BatchSize:            snapshot.Bootstrap.BatchSize,
-			Concurrency:          snapshot.Bootstrap.Concurrency,
-			MaxTermsPer1000Chars: snapshot.Bootstrap.MaxTermsPer1000Chars,
-			MinSourceLen:         snapshot.Bootstrap.MinSourceLen,
-		}
+		break
 	}
 
 	return cfg
 }
 
 // responseModeFromBackendOptions 从后端 Options map 中读取 response_format 值。
-// 用于设置 engine.Round.ResponseMode，使 pipeline 能区分 json/text 模式。
 func responseModeFromBackendOptions(opts map[string]any) string {
 	if v, ok := opts["response_format"].(string); ok {
 		return v

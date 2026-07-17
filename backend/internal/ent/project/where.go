@@ -532,21 +532,21 @@ func HasTmEntriesWith(preds ...predicate.TMEntry) predicate.Project {
 	})
 }
 
-// HasTranslationJobs applies the HasEdge predicate on the "translation_jobs" edge.
-func HasTranslationJobs() predicate.Project {
+// HasJobs applies the HasEdge predicate on the "jobs" edge.
+func HasJobs() predicate.Project {
 	return predicate.Project(func(s *sql.Selector) {
 		step := sqlgraph.NewStep(
 			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, TranslationJobsTable, TranslationJobsColumn),
+			sqlgraph.Edge(sqlgraph.O2M, false, JobsTable, JobsColumn),
 		)
 		sqlgraph.HasNeighbors(s, step)
 	})
 }
 
-// HasTranslationJobsWith applies the HasEdge predicate on the "translation_jobs" edge with a given conditions (other predicates).
-func HasTranslationJobsWith(preds ...predicate.TranslationJob) predicate.Project {
+// HasJobsWith applies the HasEdge predicate on the "jobs" edge with a given conditions (other predicates).
+func HasJobsWith(preds ...predicate.Job) predicate.Project {
 	return predicate.Project(func(s *sql.Selector) {
-		step := newTranslationJobsStep()
+		step := newJobsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

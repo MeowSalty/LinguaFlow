@@ -8,30 +8,30 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 )
 
-// TranslationJobDelete is the builder for deleting a TranslationJob entity.
-type TranslationJobDelete struct {
+// JobDelete is the builder for deleting a Job entity.
+type JobDelete struct {
 	config
 	hooks    []Hook
-	mutation *TranslationJobMutation
+	mutation *JobMutation
 }
 
-// Where appends a list predicates to the TranslationJobDelete builder.
-func (_d *TranslationJobDelete) Where(ps ...predicate.TranslationJob) *TranslationJobDelete {
+// Where appends a list predicates to the JobDelete builder.
+func (_d *JobDelete) Where(ps ...predicate.Job) *JobDelete {
 	_d.mutation.Where(ps...)
 	return _d
 }
 
 // Exec executes the deletion query and returns how many vertices were deleted.
-func (_d *TranslationJobDelete) Exec(ctx context.Context) (int, error) {
+func (_d *JobDelete) Exec(ctx context.Context) (int, error) {
 	return withHooks(ctx, _d.sqlExec, _d.mutation, _d.hooks)
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (_d *TranslationJobDelete) ExecX(ctx context.Context) int {
+func (_d *JobDelete) ExecX(ctx context.Context) int {
 	n, err := _d.Exec(ctx)
 	if err != nil {
 		panic(err)
@@ -39,8 +39,8 @@ func (_d *TranslationJobDelete) ExecX(ctx context.Context) int {
 	return n
 }
 
-func (_d *TranslationJobDelete) sqlExec(ctx context.Context) (int, error) {
-	_spec := sqlgraph.NewDeleteSpec(translationjob.Table, sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt))
+func (_d *JobDelete) sqlExec(ctx context.Context) (int, error) {
+	_spec := sqlgraph.NewDeleteSpec(job.Table, sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt))
 	if ps := _d.mutation.predicates; len(ps) > 0 {
 		_spec.Predicate = func(selector *sql.Selector) {
 			for i := range ps {
@@ -56,32 +56,32 @@ func (_d *TranslationJobDelete) sqlExec(ctx context.Context) (int, error) {
 	return affected, err
 }
 
-// TranslationJobDeleteOne is the builder for deleting a single TranslationJob entity.
-type TranslationJobDeleteOne struct {
-	_d *TranslationJobDelete
+// JobDeleteOne is the builder for deleting a single Job entity.
+type JobDeleteOne struct {
+	_d *JobDelete
 }
 
-// Where appends a list predicates to the TranslationJobDelete builder.
-func (_d *TranslationJobDeleteOne) Where(ps ...predicate.TranslationJob) *TranslationJobDeleteOne {
+// Where appends a list predicates to the JobDelete builder.
+func (_d *JobDeleteOne) Where(ps ...predicate.Job) *JobDeleteOne {
 	_d._d.mutation.Where(ps...)
 	return _d
 }
 
 // Exec executes the deletion query.
-func (_d *TranslationJobDeleteOne) Exec(ctx context.Context) error {
+func (_d *JobDeleteOne) Exec(ctx context.Context) error {
 	n, err := _d._d.Exec(ctx)
 	switch {
 	case err != nil:
 		return err
 	case n == 0:
-		return &NotFoundError{translationjob.Label}
+		return &NotFoundError{job.Label}
 	default:
 		return nil
 	}
 }
 
 // ExecX is like Exec, but panics if an error occurs.
-func (_d *TranslationJobDeleteOne) ExecX(ctx context.Context) {
+func (_d *JobDeleteOne) ExecX(ctx context.Context) {
 	if err := _d.Exec(ctx); err != nil {
 		panic(err)
 	}

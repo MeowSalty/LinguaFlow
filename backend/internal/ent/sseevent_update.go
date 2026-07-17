@@ -10,9 +10,9 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 )
 
 // SSEEventUpdate is the builder for updating SSEEvent entities.
@@ -137,8 +137,8 @@ func (_u *SSEEventUpdate) ClearMetadata() *SSEEventUpdate {
 	return _u
 }
 
-// SetJob sets the "job" edge to the TranslationJob entity.
-func (_u *SSEEventUpdate) SetJob(v *TranslationJob) *SSEEventUpdate {
+// SetJob sets the "job" edge to the Job entity.
+func (_u *SSEEventUpdate) SetJob(v *Job) *SSEEventUpdate {
 	return _u.SetJobID(v.ID)
 }
 
@@ -147,7 +147,7 @@ func (_u *SSEEventUpdate) Mutation() *SSEEventMutation {
 	return _u.mutation
 }
 
-// ClearJob clears the "job" edge to the TranslationJob entity.
+// ClearJob clears the "job" edge to the Job entity.
 func (_u *SSEEventUpdate) ClearJob() *SSEEventUpdate {
 	_u.mutation.ClearJob()
 	return _u
@@ -245,7 +245,7 @@ func (_u *SSEEventUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			Columns: []string{sseevent.JobColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
@@ -258,7 +258,7 @@ func (_u *SSEEventUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 			Columns: []string{sseevent.JobColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -395,8 +395,8 @@ func (_u *SSEEventUpdateOne) ClearMetadata() *SSEEventUpdateOne {
 	return _u
 }
 
-// SetJob sets the "job" edge to the TranslationJob entity.
-func (_u *SSEEventUpdateOne) SetJob(v *TranslationJob) *SSEEventUpdateOne {
+// SetJob sets the "job" edge to the Job entity.
+func (_u *SSEEventUpdateOne) SetJob(v *Job) *SSEEventUpdateOne {
 	return _u.SetJobID(v.ID)
 }
 
@@ -405,7 +405,7 @@ func (_u *SSEEventUpdateOne) Mutation() *SSEEventMutation {
 	return _u.mutation
 }
 
-// ClearJob clears the "job" edge to the TranslationJob entity.
+// ClearJob clears the "job" edge to the Job entity.
 func (_u *SSEEventUpdateOne) ClearJob() *SSEEventUpdateOne {
 	_u.mutation.ClearJob()
 	return _u
@@ -533,7 +533,7 @@ func (_u *SSEEventUpdateOne) sqlSave(ctx context.Context) (_node *SSEEvent, err 
 			Columns: []string{sseevent.JobColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
@@ -546,7 +546,7 @@ func (_u *SSEEventUpdateOne) sqlSave(ctx context.Context) (_node *SSEEvent, err 
 			Columns: []string{sseevent.JobColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

@@ -4,10 +4,10 @@ import (
 	"context"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
@@ -52,10 +52,10 @@ func (s *StatsService) Summary(ctx context.Context, actorUserID int) (*UsageStat
 		stats.OutputTokens += row.OutputTokens
 		stats.SegmentCount += row.SegmentCount
 	}
-	stats.CompletedJobs, err = s.client.TranslationJob.Query().
+	stats.CompletedJobs, err = s.client.Job.Query().
 		Where(
-			translationjob.StatusEQ(TranslationJobStatusCompleted),
-			translationjob.HasProjectWith(project.Or(
+			job.StatusEQ(JobStatusCompleted),
+			job.HasProjectWith(project.Or(
 				project.OwnerUserIDEQ(actorUserID),
 				project.HasOwnerOrgWith(organization.HasMembershipsWith(orgmembership.HasUserWith(user.IDEQ(actorUserID)))),
 			)),
@@ -64,10 +64,10 @@ func (s *StatsService) Summary(ctx context.Context, actorUserID int) (*UsageStat
 	if err != nil {
 		return nil, err
 	}
-	stats.FailedJobs, err = s.client.TranslationJob.Query().
+	stats.FailedJobs, err = s.client.Job.Query().
 		Where(
-			translationjob.StatusEQ(TranslationJobStatusFailed),
-			translationjob.HasProjectWith(project.Or(
+			job.StatusEQ(JobStatusFailed),
+			job.HasProjectWith(project.Or(
 				project.OwnerUserIDEQ(actorUserID),
 				project.HasOwnerOrgWith(organization.HasMembershipsWith(orgmembership.HasUserWith(user.IDEQ(actorUserID)))),
 			)),

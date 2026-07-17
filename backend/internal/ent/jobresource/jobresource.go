@@ -48,11 +48,11 @@ const (
 	Table = "job_resources"
 	// JobTable is the table that holds the job relation/edge.
 	JobTable = "job_resources"
-	// JobInverseTable is the table name for the TranslationJob entity.
-	// It exists in this package in order to avoid circular dependency with the "translationjob" package.
-	JobInverseTable = "translation_jobs"
+	// JobInverseTable is the table name for the Job entity.
+	// It exists in this package in order to avoid circular dependency with the "job" package.
+	JobInverseTable = "jobs"
 	// JobColumn is the table column denoting the job relation/edge.
-	JobColumn = "translation_job_job_resources"
+	JobColumn = "job_job_resources"
 	// ResourceTable is the table that holds the resource relation/edge.
 	ResourceTable = "job_resources"
 	// ResourceInverseTable is the table name for the Resource entity.
@@ -83,8 +83,8 @@ var Columns = []string{
 // ForeignKeys holds the SQL foreign-keys that are owned by the "job_resources"
 // table and are not defined as standalone fields in the schema.
 var ForeignKeys = []string{
+	"job_job_resources",
 	"resource_job_resources",
-	"translation_job_job_resources",
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).

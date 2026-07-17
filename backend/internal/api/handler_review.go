@@ -58,7 +58,7 @@ type retranslateResponse struct {
 
 func (s *Server) writeReviewServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
-	case errors.Is(err, service.ErrSegmentNotFound), errors.Is(err, service.ErrResourceNotFound), errors.Is(err, service.ErrTranslationJobNotFound):
+	case errors.Is(err, service.ErrSegmentNotFound), errors.Is(err, service.ErrResourceNotFound), errors.Is(err, service.ErrJobNotFound):
 		s.writeProblem(w, r, http.StatusNotFound, "not_found", "资源不存在")
 	case errors.Is(err, service.ErrForbidden):
 		s.writeProblem(w, r, http.StatusForbidden, "forbidden", "没有权限执行该操作")
