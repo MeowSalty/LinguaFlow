@@ -235,3 +235,58 @@ glossarySyncTaskCancel:
         description: 任务已完成或已失败，无法取消
       default:
         $ref: '../base.yaml#/components/responses/Problem'
+
+glossaryPrune:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+  post:
+    operationId: PreviewGlossaryPrune
+    summary: 预览术语表精简建议
+    description: |
+      调用 LLM 分析项目现有术语表，返回精简建议（删除/更新分类）。
+      此为无状态同步 API，不修改任何数据。
+      响应时间取决于 LLM 后端，客户端断开连接时自动取消 LLM 调用。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/glossary.yaml#/GlossaryPruneRequest'
+    responses:
+      '200':
+        description: 精简建议预览
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/glossary.yaml#/GlossaryPrunePreview'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+glossaryPruneApply:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+  post:
+    operationId: ApplyGlossaryPrune
+    summary: 应用术语表精简变更
+    description: |
+      应用用户从 Preview 中选中的变更。
+      逐条处理，单条失败不中断其余，返回 deleted/updated/failed 计数。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/glossary.yaml#/GlossaryPruneApplyRequest'
+    responses:
+      '200':
+        description: 应用结果
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/glossary.yaml#/GlossaryPruneApplyResult'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

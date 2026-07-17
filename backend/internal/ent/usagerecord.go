@@ -9,7 +9,6 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
@@ -40,7 +39,6 @@ type UsageRecord struct {
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the UsageRecordQuery when eager-loading is set.
 	Edges                      UsageRecordEdges `json:"edges"`
-	job_usage_records          *int
 	organization_usage_records *int
 	project_usage_records      *int
 	user_usage_records         *int
@@ -55,11 +53,9 @@ type UsageRecordEdges struct {
 	Organization *Organization `json:"organization,omitempty"`
 	// Project holds the value of the project edge.
 	Project *Project `json:"project,omitempty"`
-	// Job holds the value of the job edge.
-	Job *Job `json:"job,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [4]bool
+	loadedTypes [3]bool
 }
 
 // UserOrErr returns the User value or an error if the edge
@@ -95,17 +91,6 @@ func (e UsageRecordEdges) ProjectOrErr() (*Project, error) {
 	return nil, &NotLoadedError{edge: "project"}
 }
 
-// JobOrErr returns the Job value or an error if the edge
-// was not loaded in eager-loading, or loaded but was not found.
-func (e UsageRecordEdges) JobOrErr() (*Job, error) {
-	if e.Job != nil {
-		return e.Job, nil
-	} else if e.loadedTypes[3] {
-		return nil, &NotFoundError{label: job.Label}
-	}
-	return nil, &NotLoadedError{edge: "job"}
-}
-
 // scanValues returns the types for scanning values from sql.Rows.
 func (*UsageRecord) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
@@ -117,13 +102,11 @@ func (*UsageRecord) scanValues(columns []string) ([]any, error) {
 			values[i] = new(sql.NullString)
 		case usagerecord.FieldCreatedAt, usagerecord.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
-		case usagerecord.ForeignKeys[0]: // job_usage_records
+		case usagerecord.ForeignKeys[0]: // organization_usage_records
 			values[i] = new(sql.NullInt64)
-		case usagerecord.ForeignKeys[1]: // organization_usage_records
+		case usagerecord.ForeignKeys[1]: // project_usage_records
 			values[i] = new(sql.NullInt64)
-		case usagerecord.ForeignKeys[2]: // project_usage_records
-			values[i] = new(sql.NullInt64)
-		case usagerecord.ForeignKeys[3]: // user_usage_records
+		case usagerecord.ForeignKeys[2]: // user_usage_records
 			values[i] = new(sql.NullInt64)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -196,26 +179,19 @@ func (_m *UsageRecord) assignValues(columns []string, values []any) error {
 			}
 		case usagerecord.ForeignKeys[0]:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for edge-field job_usage_records", value)
-			} else if value.Valid {
-				_m.job_usage_records = new(int)
-				*_m.job_usage_records = int(value.Int64)
-			}
-		case usagerecord.ForeignKeys[1]:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for edge-field organization_usage_records", value)
 			} else if value.Valid {
 				_m.organization_usage_records = new(int)
 				*_m.organization_usage_records = int(value.Int64)
 			}
-		case usagerecord.ForeignKeys[2]:
+		case usagerecord.ForeignKeys[1]:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for edge-field project_usage_records", value)
 			} else if value.Valid {
 				_m.project_usage_records = new(int)
 				*_m.project_usage_records = int(value.Int64)
 			}
-		case usagerecord.ForeignKeys[3]:
+		case usagerecord.ForeignKeys[2]:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for edge-field user_usage_records", value)
 			} else if value.Valid {
@@ -248,11 +224,6 @@ func (_m *UsageRecord) QueryOrganization() *OrganizationQuery {
 // QueryProject queries the "project" edge of the UsageRecord entity.
 func (_m *UsageRecord) QueryProject() *ProjectQuery {
 	return NewUsageRecordClient(_m.config).QueryProject(_m)
-}
-
-// QueryJob queries the "job" edge of the UsageRecord entity.
-func (_m *UsageRecord) QueryJob() *JobQuery {
-	return NewUsageRecordClient(_m.config).QueryJob(_m)
 }
 
 // Update returns a builder for updating this UsageRecord.

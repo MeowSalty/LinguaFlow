@@ -298,6 +298,48 @@ func TestNormalizePlaceholders_EmptyKnownKeys(t *testing.T) {
 	}
 }
 
+// S3: LLM 剥离全部尾部下划线（零尾部下划线）时应能归一。
+// 典型场景：__LF_000002 后跟 <ruby>（LLM 剥离了 __LF_000002__ 的尾部 __）
+func TestNormalizePlaceholders_ZeroTrailingUnderscores(t *testing.T) {
+	known := map[string]string{
+		"__LF_000001__": "</span>",
+		"__LF_000002__": "<ruby>",
+	}
+	in := "text__LF_000001<ruby>椎名__LF_000002"
+	got, fixed := NormalizePlaceholders(in, known)
+	want := "text__LF_000001__<ruby>椎名__LF_000002__"
+	if got != want {
+		t.Errorf("text:\n got: %q\nwant: %q", got, want)
+	}
+	if len(fixed) != 2 {
+		t.Errorf("expected 2 normalized, got %d: %v", len(fixed), fixed)
+	}
+}
+
+// S4: LLM 剥离一个尾部下划线时应能归一。
+func TestNormalizePlaceholders_SingleTrailingUnderscore(t *testing.T) {
+	known := map[string]string{"__LF_000003__": "</rt>"}
+	in := "hello__LF_000003_world"
+	got, fixed := NormalizePlaceholders(in, known)
+	want := "hello__LF_000003__world"
+	if got != want {
+		t.Errorf("text: %q, want: %q", got, want)
+	}
+	if len(fixed) != 1 {
+		t.Errorf("fixed: %v", fixed)
+	}
+}
+
+// S5: 零尾部下划线但未知 key 不应被修改。
+func TestNormalizePlaceholders_ZeroTrailingUnknownKey(t *testing.T) {
+	known := map[string]string{"__LF_000001__": "X"}
+	in := "text__LF_999999"
+	got, _ := NormalizePlaceholders(in, known)
+	if got != in {
+		t.Errorf("should not rewrite unknown, got %q", got)
+	}
+}
+
 // ---- bootstrap ----
 
 func TestTryRepairBootstrap_HappyPath(t *testing.T) {
@@ -393,4 +435,30 @@ func contains(ss []string, s string) bool {
 		}
 	}
 	return false
+}
+
+func TestTryRepair_NestedRubyOutput(t *testing.T) {
+	in := `{"translations":{"1":{"translation":"『才没有那回事啦』","ruby_output":[]},"2":{"translation":"包裹着她身体的体温也渐渐离去。","ruby_output":[{"base":"身体","text":"からだ","kind":"phonetic"}]}}}`
+	r := TryRepair(in, []string{"1", "2"}, allOpts)
+	if r.Fatal {
+		t.Fatalf("unexpected fatal: %v (repaired=%v)", r.ParseErr, r.Repaired)
+	}
+	if r.Trans["1"] != "『才没有那回事啦』" {
+		t.Errorf("wrong trans[1]: %q", r.Trans["1"])
+	}
+	if r.Trans["2"] != "包裹着她身体的体温也渐渐离去。" {
+		t.Errorf("wrong trans[2]: %q", r.Trans["2"])
+	}
+	if len(r.RubyOutput) != 1 {
+		t.Fatalf("expected 1 segment with ruby, got %d", len(r.RubyOutput))
+	}
+	if len(r.RubyOutput["2"]) != 1 {
+		t.Fatalf("expected 1 ruby entry for segment 2, got %d", len(r.RubyOutput["2"]))
+	}
+	if r.RubyOutput["2"][0].Base != "身体" || r.RubyOutput["2"][0].Text != "からだ" || r.RubyOutput["2"][0].Kind != "phonetic" {
+		t.Errorf("wrong ruby entry: %+v", r.RubyOutput["2"][0])
+	}
+	if !contains(r.Repaired, "schema.ruby-nested-extract") {
+		t.Errorf("expected schema.ruby-nested-extract in repairs, got %v", r.Repaired)
+	}
 }

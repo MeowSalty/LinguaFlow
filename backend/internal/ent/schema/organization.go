@@ -27,10 +27,13 @@ func (Organization) Edges() []ent.Edge {
 	return []ent.Edge{
 		edge.To("projects", Project.Type),
 		edge.To("memberships", OrgMembership.Type),
-		edge.To("org_backends", OrgBackend.Type),
-		edge.To("glossary_entries", GlossaryEntry.Type),
-		edge.To("tm_entries", TMEntry.Type),
+		edge.To("backends", Backend.Type),
 		edge.To("activity_logs", ActivityLog.Type),
 		edge.To("usage_records", UsageRecord.Type),
+		edge.To("translation_prompt_templates", TranslationPromptTemplate.Type),
+		edge.To("bootstrap_prompt_templates", BootstrapPromptTemplate.Type),
+		edge.To("prune_prompt_templates", PrunePromptTemplate.Type),
+		edge.To("execution_profiles", ExecutionProfile.Type),
+		edge.To("execution_plan_templates", ExecutionPlanTemplate.Type),
 	}
 }

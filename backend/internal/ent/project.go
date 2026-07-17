@@ -30,10 +30,10 @@ type Project struct {
 	OwnerUserID *int `json:"owner_user_id,omitempty"`
 	// OwnerOrgID holds the value of the "owner_org_id" field.
 	OwnerOrgID *int `json:"owner_org_id,omitempty"`
-	// ResourceScope holds the value of the "resource_scope" field.
-	ResourceScope string `json:"resource_scope,omitempty"`
 	// Config holds the value of the "config" field.
 	Config map[string]interface{} `json:"config,omitempty"`
+	// 是否启用术语表
+	GlossaryEnabled bool `json:"glossary_enabled,omitempty"`
 	// SourceLang holds the value of the "source_lang" field.
 	SourceLang string `json:"source_lang,omitempty"`
 	// TargetLang holds the value of the "target_lang" field.
@@ -50,10 +50,6 @@ type ProjectEdges struct {
 	OwnerUser *User `json:"owner_user,omitempty"`
 	// OwnerOrg holds the value of the owner_org edge.
 	OwnerOrg *Organization `json:"owner_org,omitempty"`
-	// ProjectBackends holds the value of the project_backends edge.
-	ProjectBackends []*ProjectBackend `json:"project_backends,omitempty"`
-	// StageBackendOverrides holds the value of the stage_backend_overrides edge.
-	StageBackendOverrides []*StageBackendOverride `json:"stage_backend_overrides,omitempty"`
 	// GlossaryEntries holds the value of the glossary_entries edge.
 	GlossaryEntries []*GlossaryEntry `json:"glossary_entries,omitempty"`
 	// TmEntries holds the value of the tm_entries edge.
@@ -64,6 +60,10 @@ type ProjectEdges struct {
 	ActivityLogs []*ActivityLog `json:"activity_logs,omitempty"`
 	// UsageRecords holds the value of the usage_records edge.
 	UsageRecords []*UsageRecord `json:"usage_records,omitempty"`
+	// Resources holds the value of the resources edge.
+	Resources []*Resource `json:"resources,omitempty"`
+	// SyncTasks holds the value of the sync_tasks edge.
+	SyncTasks []*SyncTask `json:"sync_tasks,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
 	loadedTypes [9]bool
@@ -91,28 +91,10 @@ func (e ProjectEdges) OwnerOrgOrErr() (*Organization, error) {
 	return nil, &NotLoadedError{edge: "owner_org"}
 }
 
-// ProjectBackendsOrErr returns the ProjectBackends value or an error if the edge
-// was not loaded in eager-loading.
-func (e ProjectEdges) ProjectBackendsOrErr() ([]*ProjectBackend, error) {
-	if e.loadedTypes[2] {
-		return e.ProjectBackends, nil
-	}
-	return nil, &NotLoadedError{edge: "project_backends"}
-}
-
-// StageBackendOverridesOrErr returns the StageBackendOverrides value or an error if the edge
-// was not loaded in eager-loading.
-func (e ProjectEdges) StageBackendOverridesOrErr() ([]*StageBackendOverride, error) {
-	if e.loadedTypes[3] {
-		return e.StageBackendOverrides, nil
-	}
-	return nil, &NotLoadedError{edge: "stage_backend_overrides"}
-}
-
 // GlossaryEntriesOrErr returns the GlossaryEntries value or an error if the edge
 // was not loaded in eager-loading.
 func (e ProjectEdges) GlossaryEntriesOrErr() ([]*GlossaryEntry, error) {
-	if e.loadedTypes[4] {
+	if e.loadedTypes[2] {
 		return e.GlossaryEntries, nil
 	}
 	return nil, &NotLoadedError{edge: "glossary_entries"}
@@ -121,7 +103,7 @@ func (e ProjectEdges) GlossaryEntriesOrErr() ([]*GlossaryEntry, error) {
 // TmEntriesOrErr returns the TmEntries value or an error if the edge
 // was not loaded in eager-loading.
 func (e ProjectEdges) TmEntriesOrErr() ([]*TMEntry, error) {
-	if e.loadedTypes[5] {
+	if e.loadedTypes[3] {
 		return e.TmEntries, nil
 	}
 	return nil, &NotLoadedError{edge: "tm_entries"}
@@ -130,7 +112,7 @@ func (e ProjectEdges) TmEntriesOrErr() ([]*TMEntry, error) {
 // JobsOrErr returns the Jobs value or an error if the edge
 // was not loaded in eager-loading.
 func (e ProjectEdges) JobsOrErr() ([]*Job, error) {
-	if e.loadedTypes[6] {
+	if e.loadedTypes[4] {
 		return e.Jobs, nil
 	}
 	return nil, &NotLoadedError{edge: "jobs"}
@@ -139,7 +121,7 @@ func (e ProjectEdges) JobsOrErr() ([]*Job, error) {
 // ActivityLogsOrErr returns the ActivityLogs value or an error if the edge
 // was not loaded in eager-loading.
 func (e ProjectEdges) ActivityLogsOrErr() ([]*ActivityLog, error) {
-	if e.loadedTypes[7] {
+	if e.loadedTypes[5] {
 		return e.ActivityLogs, nil
 	}
 	return nil, &NotLoadedError{edge: "activity_logs"}
@@ -148,10 +130,28 @@ func (e ProjectEdges) ActivityLogsOrErr() ([]*ActivityLog, error) {
 // UsageRecordsOrErr returns the UsageRecords value or an error if the edge
 // was not loaded in eager-loading.
 func (e ProjectEdges) UsageRecordsOrErr() ([]*UsageRecord, error) {
-	if e.loadedTypes[8] {
+	if e.loadedTypes[6] {
 		return e.UsageRecords, nil
 	}
 	return nil, &NotLoadedError{edge: "usage_records"}
+}
+
+// ResourcesOrErr returns the Resources value or an error if the edge
+// was not loaded in eager-loading.
+func (e ProjectEdges) ResourcesOrErr() ([]*Resource, error) {
+	if e.loadedTypes[7] {
+		return e.Resources, nil
+	}
+	return nil, &NotLoadedError{edge: "resources"}
+}
+
+// SyncTasksOrErr returns the SyncTasks value or an error if the edge
+// was not loaded in eager-loading.
+func (e ProjectEdges) SyncTasksOrErr() ([]*SyncTask, error) {
+	if e.loadedTypes[8] {
+		return e.SyncTasks, nil
+	}
+	return nil, &NotLoadedError{edge: "sync_tasks"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -161,9 +161,11 @@ func (*Project) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case project.FieldConfig:
 			values[i] = new([]byte)
+		case project.FieldGlossaryEnabled:
+			values[i] = new(sql.NullBool)
 		case project.FieldID, project.FieldOwnerUserID, project.FieldOwnerOrgID:
 			values[i] = new(sql.NullInt64)
-		case project.FieldName, project.FieldResourceScope, project.FieldSourceLang, project.FieldTargetLang:
+		case project.FieldName, project.FieldSourceLang, project.FieldTargetLang:
 			values[i] = new(sql.NullString)
 		case project.FieldCreatedAt, project.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -220,12 +222,6 @@ func (_m *Project) assignValues(columns []string, values []any) error {
 				_m.OwnerOrgID = new(int)
 				*_m.OwnerOrgID = int(value.Int64)
 			}
-		case project.FieldResourceScope:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field resource_scope", values[i])
-			} else if value.Valid {
-				_m.ResourceScope = value.String
-			}
 		case project.FieldConfig:
 			if value, ok := values[i].(*[]byte); !ok {
 				return fmt.Errorf("unexpected type %T for field config", values[i])
@@ -233,6 +229,12 @@ func (_m *Project) assignValues(columns []string, values []any) error {
 				if err := json.Unmarshal(*value, &_m.Config); err != nil {
 					return fmt.Errorf("unmarshal field config: %w", err)
 				}
+			}
+		case project.FieldGlossaryEnabled:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field glossary_enabled", values[i])
+			} else if value.Valid {
+				_m.GlossaryEnabled = value.Bool
 			}
 		case project.FieldSourceLang:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -269,16 +271,6 @@ func (_m *Project) QueryOwnerOrg() *OrganizationQuery {
 	return NewProjectClient(_m.config).QueryOwnerOrg(_m)
 }
 
-// QueryProjectBackends queries the "project_backends" edge of the Project entity.
-func (_m *Project) QueryProjectBackends() *ProjectBackendQuery {
-	return NewProjectClient(_m.config).QueryProjectBackends(_m)
-}
-
-// QueryStageBackendOverrides queries the "stage_backend_overrides" edge of the Project entity.
-func (_m *Project) QueryStageBackendOverrides() *StageBackendOverrideQuery {
-	return NewProjectClient(_m.config).QueryStageBackendOverrides(_m)
-}
-
 // QueryGlossaryEntries queries the "glossary_entries" edge of the Project entity.
 func (_m *Project) QueryGlossaryEntries() *GlossaryEntryQuery {
 	return NewProjectClient(_m.config).QueryGlossaryEntries(_m)
@@ -302,6 +294,16 @@ func (_m *Project) QueryActivityLogs() *ActivityLogQuery {
 // QueryUsageRecords queries the "usage_records" edge of the Project entity.
 func (_m *Project) QueryUsageRecords() *UsageRecordQuery {
 	return NewProjectClient(_m.config).QueryUsageRecords(_m)
+}
+
+// QueryResources queries the "resources" edge of the Project entity.
+func (_m *Project) QueryResources() *ResourceQuery {
+	return NewProjectClient(_m.config).QueryResources(_m)
+}
+
+// QuerySyncTasks queries the "sync_tasks" edge of the Project entity.
+func (_m *Project) QuerySyncTasks() *SyncTaskQuery {
+	return NewProjectClient(_m.config).QuerySyncTasks(_m)
 }
 
 // Update returns a builder for updating this Project.
@@ -346,11 +348,11 @@ func (_m *Project) String() string {
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteString(", ")
-	builder.WriteString("resource_scope=")
-	builder.WriteString(_m.ResourceScope)
-	builder.WriteString(", ")
 	builder.WriteString("config=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Config))
+	builder.WriteString(", ")
+	builder.WriteString("glossary_enabled=")
+	builder.WriteString(fmt.Sprintf("%v", _m.GlossaryEnabled))
 	builder.WriteString(", ")
 	builder.WriteString("source_lang=")
 	builder.WriteString(_m.SourceLang)

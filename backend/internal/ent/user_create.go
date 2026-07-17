@@ -11,14 +11,20 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/pruneprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
 )
 
 // UserCreate is the builder for creating a User entity.
@@ -116,19 +122,19 @@ func (_c *UserCreate) SetNillableActive(v *bool) *UserCreate {
 	return _c
 }
 
-// AddJobIDs adds the "jobs" edge to the Job entity by IDs.
-func (_c *UserCreate) AddJobIDs(ids ...int) *UserCreate {
-	_c.mutation.AddJobIDs(ids...)
+// AddCreatedJobIDs adds the "created_jobs" edge to the Job entity by IDs.
+func (_c *UserCreate) AddCreatedJobIDs(ids ...int) *UserCreate {
+	_c.mutation.AddCreatedJobIDs(ids...)
 	return _c
 }
 
-// AddJobs adds the "jobs" edges to the Job entity.
-func (_c *UserCreate) AddJobs(v ...*Job) *UserCreate {
+// AddCreatedJobs adds the "created_jobs" edges to the Job entity.
+func (_c *UserCreate) AddCreatedJobs(v ...*Job) *UserCreate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _c.AddJobIDs(ids...)
+	return _c.AddCreatedJobIDs(ids...)
 }
 
 // AddReviewedSegmentIDs adds the "reviewed_segments" edge to the Segment entity by IDs.
@@ -176,19 +182,19 @@ func (_c *UserCreate) AddMemberships(v ...*OrgMembership) *UserCreate {
 	return _c.AddMembershipIDs(ids...)
 }
 
-// AddUserBackendIDs adds the "user_backends" edge to the UserBackend entity by IDs.
-func (_c *UserCreate) AddUserBackendIDs(ids ...int) *UserCreate {
-	_c.mutation.AddUserBackendIDs(ids...)
+// AddBackendIDs adds the "backends" edge to the Backend entity by IDs.
+func (_c *UserCreate) AddBackendIDs(ids ...int) *UserCreate {
+	_c.mutation.AddBackendIDs(ids...)
 	return _c
 }
 
-// AddUserBackends adds the "user_backends" edges to the UserBackend entity.
-func (_c *UserCreate) AddUserBackends(v ...*UserBackend) *UserCreate {
+// AddBackends adds the "backends" edges to the Backend entity.
+func (_c *UserCreate) AddBackends(v ...*Backend) *UserCreate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _c.AddUserBackendIDs(ids...)
+	return _c.AddBackendIDs(ids...)
 }
 
 // AddOwnedProjectIDs adds the "owned_projects" edge to the Project entity by IDs.
@@ -234,6 +240,96 @@ func (_c *UserCreate) AddUsageRecords(v ...*UsageRecord) *UserCreate {
 		ids[i] = v[i].ID
 	}
 	return _c.AddUsageRecordIDs(ids...)
+}
+
+// AddTranslationPromptTemplateIDs adds the "translation_prompt_templates" edge to the TranslationPromptTemplate entity by IDs.
+func (_c *UserCreate) AddTranslationPromptTemplateIDs(ids ...int) *UserCreate {
+	_c.mutation.AddTranslationPromptTemplateIDs(ids...)
+	return _c
+}
+
+// AddTranslationPromptTemplates adds the "translation_prompt_templates" edges to the TranslationPromptTemplate entity.
+func (_c *UserCreate) AddTranslationPromptTemplates(v ...*TranslationPromptTemplate) *UserCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddTranslationPromptTemplateIDs(ids...)
+}
+
+// AddBootstrapPromptTemplateIDs adds the "bootstrap_prompt_templates" edge to the BootstrapPromptTemplate entity by IDs.
+func (_c *UserCreate) AddBootstrapPromptTemplateIDs(ids ...int) *UserCreate {
+	_c.mutation.AddBootstrapPromptTemplateIDs(ids...)
+	return _c
+}
+
+// AddBootstrapPromptTemplates adds the "bootstrap_prompt_templates" edges to the BootstrapPromptTemplate entity.
+func (_c *UserCreate) AddBootstrapPromptTemplates(v ...*BootstrapPromptTemplate) *UserCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddBootstrapPromptTemplateIDs(ids...)
+}
+
+// AddPrunePromptTemplateIDs adds the "prune_prompt_templates" edge to the PrunePromptTemplate entity by IDs.
+func (_c *UserCreate) AddPrunePromptTemplateIDs(ids ...int) *UserCreate {
+	_c.mutation.AddPrunePromptTemplateIDs(ids...)
+	return _c
+}
+
+// AddPrunePromptTemplates adds the "prune_prompt_templates" edges to the PrunePromptTemplate entity.
+func (_c *UserCreate) AddPrunePromptTemplates(v ...*PrunePromptTemplate) *UserCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddPrunePromptTemplateIDs(ids...)
+}
+
+// AddExecutionProfileIDs adds the "execution_profiles" edge to the ExecutionProfile entity by IDs.
+func (_c *UserCreate) AddExecutionProfileIDs(ids ...int) *UserCreate {
+	_c.mutation.AddExecutionProfileIDs(ids...)
+	return _c
+}
+
+// AddExecutionProfiles adds the "execution_profiles" edges to the ExecutionProfile entity.
+func (_c *UserCreate) AddExecutionProfiles(v ...*ExecutionProfile) *UserCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddExecutionProfileIDs(ids...)
+}
+
+// AddExecutionPlanTemplateIDs adds the "execution_plan_templates" edge to the ExecutionPlanTemplate entity by IDs.
+func (_c *UserCreate) AddExecutionPlanTemplateIDs(ids ...int) *UserCreate {
+	_c.mutation.AddExecutionPlanTemplateIDs(ids...)
+	return _c
+}
+
+// AddExecutionPlanTemplates adds the "execution_plan_templates" edges to the ExecutionPlanTemplate entity.
+func (_c *UserCreate) AddExecutionPlanTemplates(v ...*ExecutionPlanTemplate) *UserCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddExecutionPlanTemplateIDs(ids...)
+}
+
+// AddSyncTaskIDs adds the "sync_tasks" edge to the SyncTask entity by IDs.
+func (_c *UserCreate) AddSyncTaskIDs(ids ...int) *UserCreate {
+	_c.mutation.AddSyncTaskIDs(ids...)
+	return _c
+}
+
+// AddSyncTasks adds the "sync_tasks" edges to the SyncTask entity.
+func (_c *UserCreate) AddSyncTasks(v ...*SyncTask) *UserCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddSyncTaskIDs(ids...)
 }
 
 // Mutation returns the UserMutation object of the builder.
@@ -385,12 +481,12 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		_spec.SetField(user.FieldActive, field.TypeBool, value)
 		_node.Active = value
 	}
-	if nodes := _c.mutation.JobsIDs(); len(nodes) > 0 {
+	if nodes := _c.mutation.CreatedJobsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.JobsTable,
-			Columns: []string{user.JobsColumn},
+			Table:   user.CreatedJobsTable,
+			Columns: []string{user.CreatedJobsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
@@ -449,15 +545,15 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
-	if nodes := _c.mutation.UserBackendsIDs(); len(nodes) > 0 {
+	if nodes := _c.mutation.BackendsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.UserBackendsTable,
-			Columns: []string{user.UserBackendsColumn},
+			Table:   user.BackendsTable,
+			Columns: []string{user.BackendsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(userbackend.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(backend.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -506,6 +602,102 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.TranslationPromptTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.TranslationPromptTemplatesTable,
+			Columns: []string{user.TranslationPromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(translationprompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.BootstrapPromptTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.BootstrapPromptTemplatesTable,
+			Columns: []string{user.BootstrapPromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(bootstrapprompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.PrunePromptTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PrunePromptTemplatesTable,
+			Columns: []string{user.PrunePromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(pruneprompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.ExecutionProfilesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExecutionProfilesTable,
+			Columns: []string{user.ExecutionProfilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionprofile.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.ExecutionPlanTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExecutionPlanTemplatesTable,
+			Columns: []string{user.ExecutionPlanTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionplantemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.SyncTasksIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.SyncTasksTable,
+			Columns: []string{user.SyncTasksColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

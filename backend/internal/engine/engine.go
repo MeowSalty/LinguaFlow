@@ -4,258 +4,150 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
-	"os"
-	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/output"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline/stages"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/protect"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ruby"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/tm"
 )
 
-// Engine 封装一次进程内的翻译能力。它持有 Selector / Renderer 等可复用组件。
+// Engine 封装一次进程内的翻译能力。它持有 rounds / Renderer 等可复用组件。
 type Engine struct {
-	cfg               *config.Config
+	cfg               *Config
 	logger            *slog.Logger
 	reporter          progress.Reporter
-	selector          backend.Selector
-	renderer          *prompt.Renderer
-	bootstrapRenderer *prompt.BootstrapRenderer
+	rounds            []pipeline.Round
+	bootstrapBackends []backend.Backend
+	rubyRetryBackends []backend.Backend
 	glossary          glossary.Glossary
 	tm                tm.TranslationMemory
+	rubyRestorer      *ruby.Restorer
+	saveGlossary      bool
+	glossaryPath      string
 }
 
-type RuntimeResources struct {
-	Glossary glossary.Glossary
-	TM       tm.TranslationMemory
-}
-
-type SegmentResult struct {
-	Index      int
-	SourceText string
-	TargetText string
-}
-
-type TranslateResult struct {
-	SegmentCount int
-	Segments     []SegmentResult
-}
-
-// New 按配置构造 Engine。reporter 可为 nil（fallback 为 progress.Nop）。
-// 失败时返回 (nil, error)。
-func New(cfg *config.Config, logger *slog.Logger, reporter progress.Reporter) (*Engine, error) {
-	return NewWithRuntime(cfg, logger, reporter, RuntimeResources{})
-}
-
-func NewWithRuntime(cfg *config.Config, logger *slog.Logger, reporter progress.Reporter, resources RuntimeResources) (*Engine, error) {
-	if logger == nil {
-		logger = slog.Default()
+// NewWithOptions 按 Options 构造 Engine。rounds 必须非空，每轮 backends 必须非空。
+func NewWithOptions(opts Options) (*Engine, error) {
+	if opts.Logger == nil {
+		opts.Logger = slog.Default()
 	}
-	if reporter == nil {
-		reporter = progress.Nop{}
+	if opts.Reporter == nil {
+		opts.Reporter = progress.Nop{}
 	}
-	sel, err := backend.NewSelector(cfg.Backends)
-	if err != nil {
-		return nil, err
+	if len(opts.Rounds) == 0 {
+		return nil, fmt.Errorf("engine: no rounds provided")
 	}
-	rend, err := prompt.NewRenderer(cfg.Prompt)
-	if err != nil {
-		_ = sel.Close()
-		return nil, err
+	// 校验每轮都有后端
+	for i, r := range opts.Rounds {
+		if r.Backend == nil {
+			return nil, fmt.Errorf("engine: round %d has no backend", i)
+		}
 	}
-	glos := resources.Glossary
+	glos := opts.Resources.Glossary
 	if glos == nil {
-		glos, err = glossary.New(cfg.Glossary)
+		var err error
+		glos, err = glossary.New(opts.Config.Glossary.Enabled, opts.Config.Glossary.Path)
 		if err != nil {
-			_ = sel.Close()
 			return nil, fmt.Errorf("engine: build glossary: %w", err)
 		}
 	}
-	translationMemory := resources.TM
+	translationMemory := opts.Resources.TM
 	if translationMemory == nil {
 		translationMemory = tm.Nop{}
 	}
-	e := &Engine{
-		cfg:      cfg,
-		logger:   logger,
-		reporter: reporter,
-		selector: sel,
-		renderer: rend,
-		glossary: glos,
-		tm:       translationMemory,
+
+	roundConfigs := buildRoundConfigs(opts.Rounds, opts.Config)
+	bootstrapBackends := opts.BootstrapBackends
+	if len(bootstrapBackends) == 0 {
+		bootstrapBackends = []backend.Backend{opts.Rounds[0].Backend}
 	}
-	// 仅在 bootstrap=pre 模式时编译模板；inline 模式由 translate stage 复用主模板的条件块。
-	if cfg.Glossary.Enabled && cfg.Glossary.Bootstrap.Mode == config.BootstrapModePre {
-		br, err := prompt.NewBootstrapRenderer()
-		if err != nil {
-			_ = sel.Close()
-			return nil, fmt.Errorf("engine: build bootstrap renderer: %w", err)
-		}
-		e.bootstrapRenderer = br
+	rubyRetryBackends := opts.RubyRetryBackends
+
+	inlineBootstrap := opts.Config.Glossary.Enabled && opts.Config.Glossary.Bootstrap.Enabled
+	maxTermsPer1000 := opts.Config.Glossary.Bootstrap.MaxTermsPer1000Chars
+	minSourceLen := opts.Config.Glossary.Bootstrap.MinSourceLen
+	inlineConflictStr := opts.Config.Glossary.Bootstrap.InlineConflictStrategy
+
+	var rubyRestorer *ruby.Restorer
+	if opts.Config.Ruby.Enabled {
+		rubyRestorer = ruby.NewRestorer()
+	}
+
+	rounds, err := buildPipelineRounds(
+		roundConfigs,
+		glos,
+		translationMemory,
+		rubyRestorer,
+		rubyRetryBackends,
+		opts.Config.Repair,
+		inlineBootstrap,
+		maxTermsPer1000,
+		minSourceLen,
+		inlineConflictStr,
+		opts.Logger,
+		opts.Reporter,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("engine: build rounds: %w", err)
+	}
+
+	e := &Engine{
+		cfg:               opts.Config,
+		logger:            opts.Logger,
+		reporter:          opts.Reporter,
+		rounds:            rounds,
+		bootstrapBackends: bootstrapBackends,
+		rubyRetryBackends: rubyRetryBackends,
+		glossary:          glos,
+		tm:                translationMemory,
+		rubyRestorer:      rubyRestorer,
+		saveGlossary:      opts.Config.Glossary.Save,
+		glossaryPath:      opts.Config.Glossary.Path,
 	}
 	return e, nil
 }
 
 // Close 释放后端连接。
-func (e *Engine) Close() error { return e.selector.Close() }
-
-// Translate 执行一次翻译任务。
-func (e *Engine) Translate(ctx context.Context, job TranslateJob) error {
-	_, err := e.TranslateWithResult(ctx, job)
-	return err
-}
-
-func (e *Engine) TranslateWithResult(ctx context.Context, job TranslateJob) (TranslateResult, error) {
-	start := time.Now()
-	var result TranslateResult
-
-	p, err := parser.DetectByExt(job.InputPath)
-	if err != nil {
-		return result, err
-	}
-
-	f, err := os.Open(job.InputPath)
-	if err != nil {
-		return result, fmt.Errorf("engine: open input: %w", err)
-	}
-	doc, parseErr := p.Parse(ctx, f)
-	_ = f.Close()
-	if parseErr != nil {
-		return result, fmt.Errorf("engine: parse: %w", parseErr)
-	}
-	result.SegmentCount = len(doc.Segments)
-
-	// 语言：CLI flag 优先，再用 config 默认
-	doc.SourceLang = firstNonEmpty(job.SourceLang, e.cfg.SourceLang)
-	doc.TargetLang = firstNonEmpty(job.TargetLang, e.cfg.TargetLang)
-	if doc.Vars == nil {
-		doc.Vars = map[string]any{}
-	}
-	for k, v := range e.cfg.Prompt.Vars {
-		if _, exists := doc.Vars[k]; !exists {
-			doc.Vars[k] = v
+func (e *Engine) Close() error {
+	seen := make(map[backend.Backend]struct{})
+	var firstErr error
+	for _, r := range e.rounds {
+		var b backend.Backend
+		if th, ok := r.Handler.(*pipeline.TranslateHandler); ok {
+			b = th.Backend
+		} else if eh, ok := r.Handler.(*pipeline.ExtractHandler); ok {
+			if len(eh.Backends) > 0 {
+				b = eh.Backends[0]
+			}
+		}
+		if b == nil {
+			continue
+		}
+		if _, ok := seen[b]; ok {
+			continue
+		}
+		seen[b] = struct{}{}
+		if err := b.Close(); err != nil && firstErr == nil {
+			firstErr = err
 		}
 	}
-
-	e.logger.Info("parsed document",
-		"path", job.InputPath,
-		"format", doc.Format,
-		"segments", len(doc.Segments),
-		"source_lang", doc.SourceLang,
-		"target_lang", doc.TargetLang)
-
-	pipe := e.buildPipeline()
-	e.logger.Info("pipeline start", "stages", stageNames(pipe.Stages()))
-	if err := pipe.Run(ctx, doc); err != nil {
-		return result, err
-	}
-	result.Segments = make([]SegmentResult, 0, len(doc.Segments))
-	for i, seg := range doc.Segments {
-		source := seg.OriginalSource
-		if source == "" {
-			source = seg.Source
+	for _, b := range e.bootstrapBackends {
+		if _, ok := seen[b]; ok {
+			continue
 		}
-		result.Segments = append(result.Segments, SegmentResult{
-			Index:      i,
-			SourceText: source,
-			TargetText: seg.Target,
-		})
+		seen[b] = struct{}{}
+		if err := b.Close(); err != nil && firstErr == nil {
+			firstErr = err
+		}
 	}
-
-	w := output.New(e.cfg.Output, p, job.OutputPath)
-	if err := w.Write(ctx, doc); err != nil {
-		return result, err
-	}
-
-	// 自举完成后按配置回写术语表。失败仅 warn——译文已写出。
-	e.maybeSaveGlossary(ctx)
-
-	e.logger.Info("output written",
-		"path", job.OutputPath,
-		"segments", len(doc.Segments),
-		"duration", time.Since(start).Round(time.Millisecond))
-	return result, nil
-}
-
-func (e *Engine) buildPipeline() *pipeline.Pipeline {
-	pc := e.cfg.Pipeline
-
-	protector := protect.FromRules(pc.Protect.Rules)
-	limiter := backend.NewRateLimiter(pc.Translate.RateLimitPerSec)
-	retry := backend.RetryPolicy{
-		MaxAttempts: pc.Translate.Retry.MaxAttempts,
-		Backoff:     pc.Translate.Retry.Backoff,
-	}
-
-	var s []pipeline.Stage
-	if pc.Split.Enabled {
-		s = append(s, stages.NewSplit(pc.Split.MaxChars))
-	}
-	if pc.Protect.Enabled {
-		s = append(s, stages.NewProtect(protector))
-	}
-
-	bootstrapMode := e.cfg.Glossary.Bootstrap.Mode
-	inlineBootstrap := e.cfg.Glossary.Enabled && bootstrapMode == config.BootstrapModeInline
-	repairOpts := toRepairOptions(pc.Translate.Repair)
-
-	if e.cfg.Glossary.Enabled && bootstrapMode == config.BootstrapModePre && e.bootstrapRenderer != nil {
-		s = append(s, &stages.Bootstrap{
-			Selector:         e.selector,
-			Renderer:         e.bootstrapRenderer,
-			Glossary:         e.glossary,
-			Limiter:          limiter,
-			Retry:            retry,
-			Concurrency:      pc.Translate.Concurrency,
-			BatchSize:        pc.Translate.BatchSize,
-			BackendMode:      e.cfg.Glossary.Bootstrap.BackendMode,
-			BackendOrder:     e.cfg.Glossary.Bootstrap.BackendOrder,
-			MaxTermsPerBatch: e.cfg.Glossary.Bootstrap.MaxTermsPerBatch,
-			MinSourceLen:     e.cfg.Glossary.Bootstrap.MinSourceLen,
-			Logger:           e.logger,
-			Reporter:         e.reporter,
-			Repair:           repairOpts,
-		})
-	}
-	s = append(s, &stages.Translate{
-		Selector:                  e.selector,
-		Renderer:                  e.renderer,
-		Glossary:                  e.glossary,
-		TM:                        e.tm,
-		Limiter:                   limiter,
-		Retry:                     retry,
-		Concurrency:               pc.Translate.Concurrency,
-		BatchSize:                 pc.Translate.BatchSize,
-		FallbackShrink:            pc.Translate.FallbackShrink,
-		BackendMode:               e.cfg.Pipeline.Translate.BackendMode,
-		BackendOrder:              e.cfg.Pipeline.Translate.BackendOrder,
-		Plan:                      e.cfg.Pipeline.Translate.Plan,
-		Logger:                    e.logger,
-		Reporter:                  e.reporter,
-		InlineBootstrap:           inlineBootstrap,
-		MaxBootstrapTermsPerBatch: e.cfg.Glossary.Bootstrap.MaxTermsPerBatch,
-		MinBootstrapSourceLen:     e.cfg.Glossary.Bootstrap.MinSourceLen,
-		InlineConflictStrategy:    e.cfg.Glossary.Bootstrap.InlineConflictStrategy,
-		Repair:                    repairOpts,
-	})
-	if pc.Protect.Enabled {
-		s = append(s, stages.NewUnprotect(protector))
-	}
-	return pipeline.New(e.logger, s...)
+	return firstErr
 }
 
 // maybeSaveGlossary 在 bootstrap.save=true 且 glossary 实现 Saver 时回写到磁盘。
-// FileGlossary 还会通过 Dirty() 跳过无变化情况，避免无意义的文件写。
 func (e *Engine) maybeSaveGlossary(ctx context.Context) {
-	if !e.cfg.Glossary.Enabled || !e.cfg.Glossary.Bootstrap.Save {
+	if !e.saveGlossary {
 		return
 	}
 	type dirtyChecker interface{ Dirty() bool }
@@ -271,16 +163,14 @@ func (e *Engine) maybeSaveGlossary(ctx context.Context) {
 		e.logger.Warn("glossary save failed", "err", err)
 		return
 	}
-	e.logger.Info("glossary saved", "path", e.cfg.Glossary.Path)
+	e.logger.Info("glossary saved", "path", e.glossaryPath)
 }
 
-func stageNames(ss []pipeline.Stage) []string {
-	out := make([]string, len(ss))
-	for i, s := range ss {
-		out[i] = s.Name()
-	}
-	return out
-}
+// Rounds 返回引擎的轮次配置。
+func (e *Engine) Rounds() []pipeline.Round { return e.rounds }
+
+// SaveGlossary 保存术语表到磁盘。
+func (e *Engine) SaveGlossary(ctx context.Context) { e.maybeSaveGlossary(ctx) }
 
 func firstNonEmpty(xs ...string) string {
 	for _, x := range xs {
@@ -291,16 +181,26 @@ func firstNonEmpty(xs ...string) string {
 	return ""
 }
 
-// toRepairOptions 把 config 层的 RepairConfig 翻成 repair 包消费的 Options。
-// config.RepairConfig.normalize() 已在 Validate 阶段处理 Enabled=false 的短路与
-// PartialThreshold 边界，这里只做字段映射。
-func toRepairOptions(c config.RepairConfig) repair.Options {
-	return repair.Options{
-		JSONStructural:       c.JSONStructural,
-		SchemaAliases:        c.SchemaAliases,
-		Partial:              c.Partial,
-		PartialThreshold:     c.PartialThreshold,
-		PlaceholderNormalize: c.PlaceholderNormalize,
-		PromptUpgrade:        c.PromptUpgrade,
+func selectedSegmentIndexSet(indexes []int) map[int]struct{} {
+	if len(indexes) == 0 {
+		return nil
+	}
+	selected := make(map[int]struct{}, len(indexes))
+	for _, idx := range indexes {
+		if idx >= 0 {
+			selected[idx] = struct{}{}
+		}
+	}
+	return selected
+}
+
+func applySegmentSelection(doc *pipeline.Document, selected map[int]struct{}) {
+	if doc == nil || len(selected) == 0 {
+		return
+	}
+	for i := range doc.Segments {
+		if _, ok := selected[i]; !ok {
+			doc.Segments[i].Translate = false
+		}
 	}
 }

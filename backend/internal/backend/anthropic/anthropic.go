@@ -21,6 +21,7 @@ const TypeName = "anthropic"
 const (
 	respFmtJSONSchema = "json_schema"
 	respFmtJSONObject = "json_object"
+	respFmtText       = "text"
 	respFmtNone       = "none"
 )
 
@@ -35,11 +36,12 @@ type Backend struct {
 	name              string
 	client            sdk.Client
 	model             string
-	temperature       float64
 	maxTokens         int64
 	timeout           time.Duration
 	responseFormat    string
 	enablePromptCache bool
+	temperature       *float64
+	topP              *float64
 }
 
 func (b *Backend) Name() string {
@@ -54,10 +56,6 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 	if model == "" {
 		model = b.model
 	}
-	temp := req.Temperature
-	if temp == 0 {
-		temp = b.temperature
-	}
 	maxTok := req.MaxTokens
 	if maxTok == 0 {
 		maxTok = b.maxTokens
@@ -68,15 +66,9 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 		rf = b.responseFormat
 	}
 	switch rf {
-	case respFmtJSONSchema, respFmtJSONObject, respFmtNone, "":
+	case respFmtJSONSchema, respFmtJSONObject, respFmtText, respFmtNone, "":
 	default:
 		return nil, fmt.Errorf("anthropic: unknown response_format %q", rf)
-	}
-
-	if b.timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, b.timeout)
-		defer cancel()
 	}
 
 	sysText := req.System
@@ -98,8 +90,15 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 			sdk.NewUserMessage(sdk.NewTextBlock(req.User)),
 		},
 	}
-	if temp != 0 {
-		params.Temperature = sdk.Float(temp)
+	if req.Temperature != nil {
+		params.Temperature = sdk.Float(*req.Temperature)
+	} else if b.temperature != nil {
+		params.Temperature = sdk.Float(*b.temperature)
+	}
+	if req.TopP != nil {
+		params.TopP = sdk.Float(*req.TopP)
+	} else if b.topP != nil {
+		params.TopP = sdk.Float(*b.topP)
 	}
 
 	useToolPath := rf == respFmtJSONSchema && req.JSONSchema != nil
@@ -116,9 +115,13 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 		}
 	}
 
-	msg, err := b.client.Messages.New(ctx, params)
+	callOpts := []option.RequestOption{}
+	if b.timeout > 0 {
+		callOpts = append(callOpts, option.WithRequestTimeout(b.timeout))
+	}
+	msg, err := b.client.Messages.New(ctx, params, callOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("anthropic: messages: %w", err)
+		return nil, wrapAnthropicError(err)
 	}
 
 	// 截断会让 tool_use 的 JSON 残缺，显式失败以触发上层 shrinkOrFallback
@@ -143,6 +146,16 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 }
 
 func (b *Backend) Close() error { return nil }
+
+// wrapAnthropicError 将 Anthropic SDK 错误包装为 backend.StatusError。
+// 与 OpenAI 类似，apierror.Error 在 internal 包中。
+func wrapAnthropicError(err error) error {
+	if code, ok := backend.ExtractHTTPStatusCode(err.Error()); ok {
+		return fmt.Errorf("anthropic: messages: %w",
+			&backend.StatusError{StatusCode: code, Err: err})
+	}
+	return fmt.Errorf("anthropic: messages: %w", err)
+}
 
 // extractResponseText 把响应内容拼成可供上层 parseBatchResponse 解析的字符串。
 // useToolPath=true 时优先在 content 中找 emit_translations 的 tool_use 块，
@@ -211,7 +224,6 @@ func buildToolInputSchema(schema map[string]any) sdk.ToolInputSchemaParam {
 //   - api_key (必填)
 //   - base_url (留空走 SDK 默认)
 //   - model (默认 claude-sonnet-4-5)
-//   - temperature (默认 0.2)
 //   - max_tokens (默认 8192,Anthropic 必填)
 //   - timeout (默认 60s,duration 字符串)
 //   - response_format (json_schema|json_object|none，默认 json_schema)
@@ -227,22 +239,25 @@ func factory(opts map[string]any) (backend.Backend, error) {
 	}
 	rf := backend.StringOpt(opts, "response_format", respFmtJSONSchema)
 	switch rf {
-	case respFmtJSONSchema, respFmtJSONObject, respFmtNone:
+	case respFmtJSONSchema, respFmtJSONObject, respFmtText, respFmtNone:
 	default:
-		return nil, fmt.Errorf("anthropic: invalid response_format %q (want json_schema|json_object|none)", rf)
+		return nil, fmt.Errorf("anthropic: invalid response_format %q (want json_schema|json_object|text|none)", rf)
 	}
 	b := &Backend{
 		client:            sdk.NewClient(clientOpts...),
 		model:             backend.StringOpt(opts, "model", defaultModel),
-		temperature:       backend.Float64Opt(opts, "temperature", 0.2),
 		maxTokens:         backend.Int64Opt(opts, "max_tokens", defaultMaxTokens),
 		responseFormat:    rf,
 		enablePromptCache: backend.BoolOpt(opts, "enable_prompt_cache", true),
 	}
-	if t, err := backend.DurationOpt(opts, "timeout", 60*time.Second); err == nil {
-		b.timeout = t
-	} else {
-		return nil, err
+	if t := backend.Int64Opt(opts, "timeout", 60); t > 0 {
+		b.timeout = time.Duration(t) * time.Second
+	}
+	if v, ok := opts["temperature"].(float64); ok {
+		b.temperature = &v
+	}
+	if v, ok := opts["top_p"].(float64); ok {
+		b.topP = &v
 	}
 	return b, nil
 }

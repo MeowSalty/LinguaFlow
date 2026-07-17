@@ -10,19 +10,21 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/schollz/progressbar/v3"
 )
 
 // Reporter 接收翻译流水线发出的进度事件。所有方法必须并发安全。
 //
 // 生命周期：StageStart → 任意多次 SegmentDone → StageDone，可反复出现。
-// total <= 0 表示该阶段无段级进度（如 split / protect / unprotect），
+// total <= 0 表示该阶段无段级进度（如 protect / unprotect），
 // 实现可选择只展示阶段开始/结束，跳过段计数。
 //
 // Close 释放底层资源（如终端进度条），幂等。
 type Reporter interface {
 	StageStart(name string, total int)
 	SegmentDone()
+	BatchComplete() // 批次完成时调用，触发缓冲区 flush
 	StageDone()
 	Close() error
 }
@@ -32,8 +34,36 @@ type Nop struct{}
 
 func (Nop) StageStart(string, int) {}
 func (Nop) SegmentDone()           {}
+func (Nop) BatchComplete()         {}
 func (Nop) StageDone()             {}
 func (Nop) Close() error           { return nil }
+
+// BatchEvent describes the result of a single batch translation attempt.
+type BatchEvent struct {
+	Stage           string                  `json:"stage"`
+	SegmentIDs      []string                `json:"segment_ids"`
+	SegmentCount    int                     `json:"segment_count"`
+	BackendName     string                  `json:"backend_name"`
+	Status          string                  `json:"status"` // "success" | "partial" | "failed"
+	DurationMs      int64                   `json:"duration_ms"`
+	InputTokens     int64                   `json:"input_tokens"`
+	OutputTokens    int64                   `json:"output_tokens"`
+	SentContent     string                  `json:"sent_content"`
+	ReceivedContent string                  `json:"received_content"`
+	UsedGlossary    []prompt.GlossaryEntry  `json:"used_glossary,omitempty"`
+	AddedGlossary   []prompt.BootstrapEntry `json:"added_glossary,omitempty"`
+	ErrorType       string                  `json:"error_type,omitempty"` // "backend_error" | "parse_error" | "placeholder_error" | ""
+	ErrorMessage    string                  `json:"error_message,omitempty"`
+	HTTPStatus      int                     `json:"http_status,omitempty"`
+	TriedBackends   []string                `json:"tried_backends,omitempty"`
+	ShrinkAttempted bool                    `json:"shrink_attempted,omitempty"`
+}
+
+// BatchObserver is an optional interface that a Reporter may implement
+// to receive batch-level events from the translation pipeline.
+type BatchObserver interface {
+	OnBatchEvent(event BatchEvent)
+}
 
 // defaultRefreshEvery 是 refreshLoop 周期重绘的默认间隔。
 // 选 250ms：> progressbar 内部 80ms throttle，且足够让 elapsed time 看起来连续。
@@ -110,6 +140,8 @@ func (r *terminalReporter) SegmentDone() {
 	}
 	_ = bar.Add(1)
 }
+
+func (r *terminalReporter) BatchComplete() {}
 
 func (r *terminalReporter) StageDone() {
 	r.mu.Lock()
@@ -236,6 +268,8 @@ func (r *logReporter) StageDone() {
 		r.logger.Info("stage done", "stage", r.stage)
 	}
 }
+
+func (r *logReporter) BatchComplete() {}
 
 func (r *logReporter) Close() error { return nil }
 

@@ -30,8 +30,8 @@ ResourceId:
     type: integer
     minimum: 1
 
-TranslationJobId:
-  name: translationJobId
+JobId:
+  name: jobId
   in: path
   required: true
   schema:
@@ -54,8 +54,8 @@ EntryId:
     type: integer
     minimum: 1
 
-PromptTemplateId:
-  name: promptTemplateId
+TranslationPromptTemplateId:
+  name: translationPromptTemplateId
   in: path
   required: true
   schema:
@@ -68,8 +68,15 @@ BootstrapPromptTemplateId:
   schema:
     type: integer
 
-TranslationProfileId:
-  name: translationProfileId
+PrunePromptTemplateId:
+  name: prunePromptTemplateId
+  in: path
+  required: true
+  schema:
+    type: integer
+
+ExecutionProfileId:
+  name: executionProfileId
   in: path
   required: true
   schema:

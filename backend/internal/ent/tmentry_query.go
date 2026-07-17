@@ -11,7 +11,6 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
@@ -20,12 +19,11 @@ import (
 // TMEntryQuery is the builder for querying TMEntry entities.
 type TMEntryQuery struct {
 	config
-	ctx              *QueryContext
-	order            []tmentry.OrderOption
-	inters           []Interceptor
-	predicates       []predicate.TMEntry
-	withProject      *ProjectQuery
-	withOrganization *OrganizationQuery
+	ctx         *QueryContext
+	order       []tmentry.OrderOption
+	inters      []Interceptor
+	predicates  []predicate.TMEntry
+	withProject *ProjectQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -77,28 +75,6 @@ func (_q *TMEntryQuery) QueryProject() *ProjectQuery {
 			sqlgraph.From(tmentry.Table, tmentry.FieldID, selector),
 			sqlgraph.To(project.Table, project.FieldID),
 			sqlgraph.Edge(sqlgraph.M2O, true, tmentry.ProjectTable, tmentry.ProjectColumn),
-		)
-		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
-		return fromU, nil
-	}
-	return query
-}
-
-// QueryOrganization chains the current query on the "organization" edge.
-func (_q *TMEntryQuery) QueryOrganization() *OrganizationQuery {
-	query := (&OrganizationClient{config: _q.config}).Query()
-	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
-		if err := _q.prepareQuery(ctx); err != nil {
-			return nil, err
-		}
-		selector := _q.sqlQuery(ctx)
-		if err := selector.Err(); err != nil {
-			return nil, err
-		}
-		step := sqlgraph.NewStep(
-			sqlgraph.From(tmentry.Table, tmentry.FieldID, selector),
-			sqlgraph.To(organization.Table, organization.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, tmentry.OrganizationTable, tmentry.OrganizationColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -293,13 +269,12 @@ func (_q *TMEntryQuery) Clone() *TMEntryQuery {
 		return nil
 	}
 	return &TMEntryQuery{
-		config:           _q.config,
-		ctx:              _q.ctx.Clone(),
-		order:            append([]tmentry.OrderOption{}, _q.order...),
-		inters:           append([]Interceptor{}, _q.inters...),
-		predicates:       append([]predicate.TMEntry{}, _q.predicates...),
-		withProject:      _q.withProject.Clone(),
-		withOrganization: _q.withOrganization.Clone(),
+		config:      _q.config,
+		ctx:         _q.ctx.Clone(),
+		order:       append([]tmentry.OrderOption{}, _q.order...),
+		inters:      append([]Interceptor{}, _q.inters...),
+		predicates:  append([]predicate.TMEntry{}, _q.predicates...),
+		withProject: _q.withProject.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -314,17 +289,6 @@ func (_q *TMEntryQuery) WithProject(opts ...func(*ProjectQuery)) *TMEntryQuery {
 		opt(query)
 	}
 	_q.withProject = query
-	return _q
-}
-
-// WithOrganization tells the query-builder to eager-load the nodes that are connected to
-// the "organization" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *TMEntryQuery) WithOrganization(opts ...func(*OrganizationQuery)) *TMEntryQuery {
-	query := (&OrganizationClient{config: _q.config}).Query()
-	for _, opt := range opts {
-		opt(query)
-	}
-	_q.withOrganization = query
 	return _q
 }
 
@@ -406,9 +370,8 @@ func (_q *TMEntryQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*TMEn
 	var (
 		nodes       = []*TMEntry{}
 		_spec       = _q.querySpec()
-		loadedTypes = [2]bool{
+		loadedTypes = [1]bool{
 			_q.withProject != nil,
-			_q.withOrganization != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -432,12 +395,6 @@ func (_q *TMEntryQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*TMEn
 	if query := _q.withProject; query != nil {
 		if err := _q.loadProject(ctx, query, nodes, nil,
 			func(n *TMEntry, e *Project) { n.Edges.Project = e }); err != nil {
-			return nil, err
-		}
-	}
-	if query := _q.withOrganization; query != nil {
-		if err := _q.loadOrganization(ctx, query, nodes, nil,
-			func(n *TMEntry, e *Organization) { n.Edges.Organization = e }); err != nil {
 			return nil, err
 		}
 	}
@@ -476,38 +433,6 @@ func (_q *TMEntryQuery) loadProject(ctx context.Context, query *ProjectQuery, no
 	}
 	return nil
 }
-func (_q *TMEntryQuery) loadOrganization(ctx context.Context, query *OrganizationQuery, nodes []*TMEntry, init func(*TMEntry), assign func(*TMEntry, *Organization)) error {
-	ids := make([]int, 0, len(nodes))
-	nodeids := make(map[int][]*TMEntry)
-	for i := range nodes {
-		if nodes[i].OrganizationID == nil {
-			continue
-		}
-		fk := *nodes[i].OrganizationID
-		if _, ok := nodeids[fk]; !ok {
-			ids = append(ids, fk)
-		}
-		nodeids[fk] = append(nodeids[fk], nodes[i])
-	}
-	if len(ids) == 0 {
-		return nil
-	}
-	query.Where(organization.IDIn(ids...))
-	neighbors, err := query.All(ctx)
-	if err != nil {
-		return err
-	}
-	for _, n := range neighbors {
-		nodes, ok := nodeids[n.ID]
-		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "organization_id" returned %v`, n.ID)
-		}
-		for i := range nodes {
-			assign(nodes[i], n)
-		}
-	}
-	return nil
-}
 
 func (_q *TMEntryQuery) sqlCount(ctx context.Context) (int, error) {
 	_spec := _q.querySpec()
@@ -536,9 +461,6 @@ func (_q *TMEntryQuery) querySpec() *sqlgraph.QuerySpec {
 		}
 		if _q.withProject != nil {
 			_spec.Node.AddColumnOnce(tmentry.FieldProjectID)
-		}
-		if _q.withOrganization != nil {
-			_spec.Node.AddColumnOnce(tmentry.FieldOrganizationID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {

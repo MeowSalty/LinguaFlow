@@ -21,6 +21,7 @@ const TypeName = "openai"
 const (
 	respFmtJSONSchema = "json_schema"
 	respFmtJSONObject = "json_object"
+	respFmtText       = "text"
 	respFmtNone       = "none"
 )
 
@@ -28,10 +29,11 @@ type Backend struct {
 	name           string
 	client         openaigo.Client
 	model          string
-	temperature    float64
 	maxTokens      int64
 	timeout        time.Duration
 	responseFormat string // backend 默认的响应格式：json_schema | json_object | none
+	temperature    *float64
+	topP           *float64
 }
 
 // Name 由 BackendConfig.Name 注入；这里使用 type/model 作 fallback。
@@ -47,19 +49,9 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 	if model == "" {
 		model = b.model
 	}
-	temp := req.Temperature
-	if temp == 0 {
-		temp = b.temperature
-	}
 	maxTok := req.MaxTokens
 	if maxTok == 0 {
 		maxTok = b.maxTokens
-	}
-
-	if b.timeout > 0 {
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, b.timeout)
-		defer cancel()
 	}
 
 	params := openaigo.ChatCompletionNewParams{
@@ -69,8 +61,15 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 			openaigo.UserMessage(req.User),
 		},
 	}
-	if temp != 0 {
-		params.Temperature = openaigo.Float(temp)
+	if req.Temperature != nil {
+		params.Temperature = openaigo.Float(*req.Temperature)
+	} else if b.temperature != nil {
+		params.Temperature = openaigo.Float(*b.temperature)
+	}
+	if req.TopP != nil {
+		params.TopP = openaigo.Float(*req.TopP)
+	} else if b.topP != nil {
+		params.TopP = openaigo.Float(*b.topP)
 	}
 	if maxTok > 0 {
 		params.MaxTokens = openaigo.Int(maxTok)
@@ -95,15 +94,19 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 		params.ResponseFormat = openaigo.ChatCompletionNewParamsResponseFormatUnion{
 			OfJSONObject: &shared.ResponseFormatJSONObjectParam{},
 		}
-	case respFmtNone, "":
+	case respFmtText, respFmtNone, "":
 		// 不设置 ResponseFormat，让网关用默认。
 	default:
 		return nil, fmt.Errorf("openai: unknown response_format %q", rf)
 	}
 
-	resp, err := b.client.Chat.Completions.New(ctx, params)
+	callOpts := []option.RequestOption{}
+	if b.timeout > 0 {
+		callOpts = append(callOpts, option.WithRequestTimeout(b.timeout))
+	}
+	resp, err := b.client.Chat.Completions.New(ctx, params, callOpts...)
 	if err != nil {
-		return nil, fmt.Errorf("openai: chat completion: %w", err)
+		return nil, wrapOpenAIError(err)
 	}
 	if len(resp.Choices) == 0 {
 		return nil, errors.New("openai: empty choices")
@@ -121,8 +124,20 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 
 func (b *Backend) Close() error { return nil }
 
+// wrapOpenAIError 将 OpenAI SDK 错误包装为 backend.StatusError。
+// OpenAI SDK 的 apierror.Error 在 internal 包中，无法直接类型断言。
+// 使用字符串解析提取 HTTP 状态码作为兜底方案。
+// 错误格式：POST "/v1/chat/completions": 401 Unauthorized {...}
+func wrapOpenAIError(err error) error {
+	if code, ok := backend.ExtractHTTPStatusCode(err.Error()); ok {
+		return fmt.Errorf("openai: chat completion: %w",
+			&backend.StatusError{StatusCode: code, Err: err})
+	}
+	return fmt.Errorf("openai: chat completion: %w", err)
+}
+
 // factory 从 BackendConfig.Options 构造实例。
-// 期望的键：api_key, base_url, model, temperature, max_tokens, timeout（duration 字符串）,
+// 期望的键：api_key, base_url, model, max_tokens, timeout（duration 字符串）,
 // response_format（json_schema | json_object | none，默认 json_schema）。
 func factory(opts map[string]any) (backend.Backend, error) {
 	apiKey, _ := opts["api_key"].(string)
@@ -135,21 +150,24 @@ func factory(opts map[string]any) (backend.Backend, error) {
 	}
 	rf := backend.StringOpt(opts, "response_format", respFmtJSONSchema)
 	switch rf {
-	case respFmtJSONSchema, respFmtJSONObject, respFmtNone:
+	case respFmtJSONSchema, respFmtJSONObject, respFmtText, respFmtNone:
 	default:
-		return nil, fmt.Errorf("openai: invalid response_format %q (want json_schema|json_object|none)", rf)
+		return nil, fmt.Errorf("openai: invalid response_format %q (want json_schema|json_object|text|none)", rf)
 	}
 	b := &Backend{
 		client:         openaigo.NewClient(clientOpts...),
 		model:          backend.StringOpt(opts, "model", "gpt-4o-mini"),
-		temperature:    backend.Float64Opt(opts, "temperature", 0.2),
 		maxTokens:      backend.Int64Opt(opts, "max_tokens", 0),
 		responseFormat: rf,
 	}
-	if t, err := backend.DurationOpt(opts, "timeout", 60*time.Second); err == nil {
-		b.timeout = t
-	} else {
-		return nil, err
+	if t := backend.Int64Opt(opts, "timeout", 60); t > 0 {
+		b.timeout = time.Duration(t) * time.Second
+	}
+	if v, ok := opts["temperature"].(float64); ok {
+		b.temperature = &v
+	}
+	if v, ok := opts["top_p"].(float64); ok {
+		b.topP = &v
 	}
 	return b, nil
 }

@@ -11,8 +11,7 @@ import (
 )
 
 type Scope struct {
-	ProjectID      *int
-	OrganizationID *int
+	ProjectID int
 }
 
 type SQLite struct {
@@ -34,15 +33,7 @@ func ScopeFromProject(project *ent.Project) (Scope, error) {
 	if project == nil {
 		return Scope{}, fmt.Errorf("tm: nil project")
 	}
-	if project.ResourceScope == "organization" {
-		if project.OwnerOrgID == nil {
-			return Scope{}, fmt.Errorf("tm: organization-scoped project missing owner_org_id")
-		}
-		orgID := *project.OwnerOrgID
-		return Scope{OrganizationID: &orgID}, nil
-	}
-	projectID := project.ID
-	return Scope{ProjectID: &projectID}, nil
+	return Scope{ProjectID: project.ID}, nil
 }
 
 func (s *SQLite) Search(ctx context.Context, src, srcLang, tgtLang string) ([]Match, error) {
@@ -110,13 +101,8 @@ func (s *SQLite) createEntry(ctx context.Context, src, tgt, srcLang, tgtLang str
 		SetSourceText(src).
 		SetTargetText(tgt).
 		SetSourceLang(srcLang).
-		SetTargetLang(tgtLang)
-	if s.scope.ProjectID != nil {
-		create.SetProjectID(*s.scope.ProjectID)
-	}
-	if s.scope.OrganizationID != nil {
-		create.SetOrganizationID(*s.scope.OrganizationID)
-	}
+		SetTargetLang(tgtLang).
+		SetProjectID(s.scope.ProjectID)
 	if _, err := create.Save(ctx); err != nil {
 		if ent.IsConstraintError(err) {
 			return nil
@@ -140,14 +126,8 @@ func (s *SQLite) baseQuery(src, srcLang, tgtLang string) (*ent.TMEntryQuery, err
 }
 
 func (s Scope) key() (string, error) {
-	if s.ProjectID != nil && s.OrganizationID != nil {
-		return "", fmt.Errorf("tm: ambiguous scope")
+	if s.ProjectID == 0 {
+		return "", fmt.Errorf("tm: empty scope")
 	}
-	if s.ProjectID != nil {
-		return fmt.Sprintf("project:%d", *s.ProjectID), nil
-	}
-	if s.OrganizationID != nil {
-		return fmt.Sprintf("organization:%d", *s.OrganizationID), nil
-	}
-	return "", fmt.Errorf("tm: empty scope")
+	return fmt.Sprintf("project:%d", s.ProjectID), nil
 }

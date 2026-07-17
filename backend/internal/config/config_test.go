@@ -1,89 +1,74 @@
 package config
 
 import (
+	"strings"
 	"testing"
 	"time"
 )
 
-func TestValidateTranslatePlan_InheritsDefaults(t *testing.T) {
-	cfg := Default()
-	cfg.Pipeline.Translate.BatchSize = 40
-	cfg.Pipeline.Translate.Concurrency = 4
-	cfg.Pipeline.Translate.BackendMode = BackendModeRestrict
-	cfg.Pipeline.Translate.BackendOrder = []string{"openai-default"}
-	cfg.Pipeline.Translate.Plan = []TranslateRoundConfig{{Name: "bulk"}}
-
-	if err := cfg.Validate(); err != nil {
-		t.Fatalf("validate: %v", err)
-	}
-	round := cfg.Pipeline.Translate.Plan[0]
-	if round.BatchSize != 40 {
-		t.Fatalf("batch_size=%d want 40", round.BatchSize)
-	}
-	if round.Concurrency != 4 {
-		t.Fatalf("concurrency=%d want 4", round.Concurrency)
-	}
-	if round.BackendMode != BackendModeRestrict {
-		t.Fatalf("backend_mode=%q want %q", round.BackendMode, BackendModeRestrict)
-	}
-	if len(round.BackendOrder) != 1 || round.BackendOrder[0] != "openai-default" {
-		t.Fatalf("backend_order=%v want [openai-default]", round.BackendOrder)
-	}
-}
-
-func TestValidateTranslatePlan_InvalidBackendOrder(t *testing.T) {
-	cfg := Default()
-	cfg.Pipeline.Translate.Plan = []TranslateRoundConfig{{
-		Name:         "bulk",
-		BackendMode:  BackendModeRestrict,
-		BackendOrder: []string{"missing-backend"},
-	}}
-
-	if err := cfg.Validate(); err == nil {
-		t.Fatal("expected validate error for invalid plan backend_order")
-	}
-}
-
 func TestValidateServerConfig_Defaults(t *testing.T) {
-	cfg := Default()
-	cfg.Server.Host = ""
-	cfg.Server.Port = 0
-	cfg.Server.DataDir = ""
-	cfg.Server.JWTSecret = ""
-	cfg.Server.JWTIssuer = ""
-	cfg.Server.JWTExpiry = 0
-	cfg.Server.RefreshExpiry = 0
-	cfg.Server.ShutdownTimeout = 0
-	cfg.Server.CORS.AllowedOrigins = nil
+	cfg := DefaultServerConfig()
+	cfg.Host = ""
+	cfg.Port = 0
+	cfg.DataDir = ""
+	cfg.JWTSecret = ""
+	cfg.JWTIssuer = ""
+	cfg.JWTExpiry = 0
+	cfg.RefreshExpiry = 0
+	cfg.ShutdownTimeout = 0
+	cfg.CORS.AllowedOrigins = nil
 
-	if err := cfg.Validate(); err != nil {
+	if err := ValidateServerConfig(cfg); err != nil {
 		t.Fatalf("validate: %v", err)
 	}
-	if cfg.Server.Host != "0.0.0.0" {
-		t.Fatalf("host=%q want 0.0.0.0", cfg.Server.Host)
+	if cfg.Host != "0.0.0.0" {
+		t.Fatalf("host=%q want 0.0.0.0", cfg.Host)
 	}
-	if cfg.Server.Port != 8080 {
-		t.Fatalf("port=%d want 8080", cfg.Server.Port)
+	if cfg.Port != 8080 {
+		t.Fatalf("port=%d want 8080", cfg.Port)
 	}
-	if cfg.Server.DataDir != "./data" {
-		t.Fatalf("data_dir=%q want ./data", cfg.Server.DataDir)
+	if cfg.DataDir != "./data" {
+		t.Fatalf("data_dir=%q want ./data", cfg.DataDir)
 	}
-	if cfg.Server.JWTSecret == "" {
+	if cfg.JWTSecret == "" {
 		t.Fatal("jwt_secret should be defaulted")
 	}
-	if cfg.Server.JWTIssuer != "linguaflow" {
-		t.Fatalf("jwt_issuer=%q want linguaflow", cfg.Server.JWTIssuer)
+	if cfg.JWTIssuer != "linguaflow" {
+		t.Fatalf("jwt_issuer=%q want linguaflow", cfg.JWTIssuer)
 	}
-	if cfg.Server.JWTExpiry != time.Hour {
-		t.Fatalf("jwt_expiry=%v want 1h", cfg.Server.JWTExpiry)
+	if cfg.JWTExpiry != 15*time.Minute {
+		t.Fatalf("jwt_expiry=%v want 15m", cfg.JWTExpiry)
 	}
-	if cfg.Server.RefreshExpiry != 30*24*time.Hour {
-		t.Fatalf("refresh_token_expiry=%v want 720h", cfg.Server.RefreshExpiry)
+	if cfg.RefreshExpiry != 30*24*time.Hour {
+		t.Fatalf("refresh_token_expiry=%v want 720h", cfg.RefreshExpiry)
 	}
-	if cfg.Server.ShutdownTimeout <= 0 {
-		t.Fatalf("shutdown_timeout=%v want > 0", cfg.Server.ShutdownTimeout)
+	if cfg.ShutdownTimeout <= 0 {
+		t.Fatalf("shutdown_timeout=%v want > 0", cfg.ShutdownTimeout)
 	}
-	if len(cfg.Server.CORS.AllowedOrigins) != 1 || cfg.Server.CORS.AllowedOrigins[0] != "*" {
-		t.Fatalf("allowed_origins=%v want [*]", cfg.Server.CORS.AllowedOrigins)
+	if len(cfg.CORS.AllowedOrigins) != 1 || cfg.CORS.AllowedOrigins[0] != "*" {
+		t.Fatalf("allowed_origins=%v want [*]", cfg.CORS.AllowedOrigins)
+	}
+}
+
+func TestValidateServerConfig_InvalidMode(t *testing.T) {
+	cfg := DefaultServerConfig()
+	cfg.Mode = "invalid"
+	err := ValidateServerConfig(cfg)
+	if err == nil {
+		t.Fatal("expected error for invalid mode")
+	}
+	if !strings.Contains(err.Error(), "server.mode must be one of") {
+		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+func TestValidateServerConfig_LocalMode(t *testing.T) {
+	cfg := DefaultServerConfig()
+	cfg.Mode = ModeLocal
+	if err := ValidateServerConfig(cfg); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Mode != ModeLocal {
+		t.Fatalf("mode=%q want %q", cfg.Mode, ModeLocal)
 	}
 }

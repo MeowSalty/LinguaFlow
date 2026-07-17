@@ -24,32 +24,39 @@ type Job struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
-	// Status holds the value of the "status" field.
+	// 所属项目 ID
+	ProjectID int `json:"project_id,omitempty"`
+	// pending, running, completed, failed, cancelled
 	Status string `json:"status,omitempty"`
-	// SubJobCount holds the value of the "sub_job_count" field.
-	SubJobCount int `json:"sub_job_count,omitempty"`
-	// CompletedSubJobs holds the value of the "completed_sub_jobs" field.
-	CompletedSubJobs int `json:"completed_sub_jobs,omitempty"`
-	// FailedSubJobs holds the value of the "failed_sub_jobs" field.
-	FailedSubJobs int `json:"failed_sub_jobs,omitempty"`
-	// SourceLang holds the value of the "source_lang" field.
-	SourceLang string `json:"source_lang,omitempty"`
-	// TargetLang holds the value of the "target_lang" field.
-	TargetLang string `json:"target_lang,omitempty"`
-	// Config holds the value of the "config" field.
-	Config map[string]interface{} `json:"config,omitempty"`
-	// InputPath holds the value of the "input_path" field.
-	InputPath string `json:"input_path,omitempty"`
-	// OutputPath holds the value of the "output_path" field.
-	OutputPath string `json:"output_path,omitempty"`
-	// ErrorMessage holds the value of the "error_message" field.
+	// 触发类型：manual, file_update, glossary_change, web_edit
+	TriggerType string `json:"trigger_type,omitempty"`
+	// 引用的执行计划模板 ID（必填）
+	ExecutionPlanID int `json:"execution_plan_id,omitempty"`
+	// 执行配置快照，创建时从项目配置复制并可覆盖
+	ExecutionConfig map[string]interface{} `json:"execution_config,omitempty"`
+	// 关联的资源文件数
+	ResourceCount int `json:"resource_count,omitempty"`
+	// 已完成的资源数
+	CompletedResources int `json:"completed_resources,omitempty"`
+	// 失败的资源数
+	FailedResources int `json:"failed_resources,omitempty"`
+	// 总段落数（创建时选中的 segment 数）
+	TotalSegments int `json:"total_segments,omitempty"`
+	// 被系统跳过的段落数（聚合自 JobResource）
+	SkippedSegments int `json:"skipped_segments,omitempty"`
+	// 实际需要处理的段落数（ReconcileJob 从各资源的 stage_total 聚合）
+	StageTotal int `json:"stage_total,omitempty"`
+	// 已完成段落数
+	CompletedSegments int `json:"completed_segments,omitempty"`
+	// 任务级错误信息
 	ErrorMessage *string `json:"error_message,omitempty"`
+	// 任务开始执行的时间，MarkJobRunning 时写入
+	StartedAt *time.Time `json:"started_at,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the JobQuery when eager-loading is set.
-	Edges        JobEdges `json:"edges"`
-	project_jobs *int
-	user_jobs    *int
-	selectValues sql.SelectValues
+	Edges             JobEdges `json:"edges"`
+	user_created_jobs *int
+	selectValues      sql.SelectValues
 }
 
 // JobEdges holds the relations/edges for other nodes in the graph.
@@ -58,15 +65,13 @@ type JobEdges struct {
 	Project *Project `json:"project,omitempty"`
 	// CreatedBy holds the value of the created_by edge.
 	CreatedBy *User `json:"created_by,omitempty"`
-	// SubJobs holds the value of the sub_jobs edge.
-	SubJobs []*SubJob `json:"sub_jobs,omitempty"`
-	// ActivityLogs holds the value of the activity_logs edge.
-	ActivityLogs []*ActivityLog `json:"activity_logs,omitempty"`
-	// UsageRecords holds the value of the usage_records edge.
-	UsageRecords []*UsageRecord `json:"usage_records,omitempty"`
+	// JobResources holds the value of the job_resources edge.
+	JobResources []*JobResource `json:"job_resources,omitempty"`
+	// SseEvents holds the value of the sse_events edge.
+	SseEvents []*SSEEvent `json:"sse_events,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [5]bool
+	loadedTypes [4]bool
 }
 
 // ProjectOrErr returns the Project value or an error if the edge
@@ -91,31 +96,22 @@ func (e JobEdges) CreatedByOrErr() (*User, error) {
 	return nil, &NotLoadedError{edge: "created_by"}
 }
 
-// SubJobsOrErr returns the SubJobs value or an error if the edge
+// JobResourcesOrErr returns the JobResources value or an error if the edge
 // was not loaded in eager-loading.
-func (e JobEdges) SubJobsOrErr() ([]*SubJob, error) {
+func (e JobEdges) JobResourcesOrErr() ([]*JobResource, error) {
 	if e.loadedTypes[2] {
-		return e.SubJobs, nil
+		return e.JobResources, nil
 	}
-	return nil, &NotLoadedError{edge: "sub_jobs"}
+	return nil, &NotLoadedError{edge: "job_resources"}
 }
 
-// ActivityLogsOrErr returns the ActivityLogs value or an error if the edge
+// SseEventsOrErr returns the SseEvents value or an error if the edge
 // was not loaded in eager-loading.
-func (e JobEdges) ActivityLogsOrErr() ([]*ActivityLog, error) {
+func (e JobEdges) SseEventsOrErr() ([]*SSEEvent, error) {
 	if e.loadedTypes[3] {
-		return e.ActivityLogs, nil
+		return e.SseEvents, nil
 	}
-	return nil, &NotLoadedError{edge: "activity_logs"}
-}
-
-// UsageRecordsOrErr returns the UsageRecords value or an error if the edge
-// was not loaded in eager-loading.
-func (e JobEdges) UsageRecordsOrErr() ([]*UsageRecord, error) {
-	if e.loadedTypes[4] {
-		return e.UsageRecords, nil
-	}
-	return nil, &NotLoadedError{edge: "usage_records"}
+	return nil, &NotLoadedError{edge: "sse_events"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -123,17 +119,15 @@ func (*Job) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case job.FieldConfig:
+		case job.FieldExecutionConfig:
 			values[i] = new([]byte)
-		case job.FieldID, job.FieldSubJobCount, job.FieldCompletedSubJobs, job.FieldFailedSubJobs:
+		case job.FieldID, job.FieldProjectID, job.FieldExecutionPlanID, job.FieldResourceCount, job.FieldCompletedResources, job.FieldFailedResources, job.FieldTotalSegments, job.FieldSkippedSegments, job.FieldStageTotal, job.FieldCompletedSegments:
 			values[i] = new(sql.NullInt64)
-		case job.FieldStatus, job.FieldSourceLang, job.FieldTargetLang, job.FieldInputPath, job.FieldOutputPath, job.FieldErrorMessage:
+		case job.FieldStatus, job.FieldTriggerType, job.FieldErrorMessage:
 			values[i] = new(sql.NullString)
-		case job.FieldCreatedAt, job.FieldUpdatedAt:
+		case job.FieldCreatedAt, job.FieldUpdatedAt, job.FieldStartedAt:
 			values[i] = new(sql.NullTime)
-		case job.ForeignKeys[0]: // project_jobs
-			values[i] = new(sql.NullInt64)
-		case job.ForeignKeys[1]: // user_jobs
+		case job.ForeignKeys[0]: // user_created_jobs
 			values[i] = new(sql.NullInt64)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -168,61 +162,79 @@ func (_m *Job) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
 			}
+		case job.FieldProjectID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field project_id", values[i])
+			} else if value.Valid {
+				_m.ProjectID = int(value.Int64)
+			}
 		case job.FieldStatus:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field status", values[i])
 			} else if value.Valid {
 				_m.Status = value.String
 			}
-		case job.FieldSubJobCount:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field sub_job_count", values[i])
-			} else if value.Valid {
-				_m.SubJobCount = int(value.Int64)
-			}
-		case job.FieldCompletedSubJobs:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field completed_sub_jobs", values[i])
-			} else if value.Valid {
-				_m.CompletedSubJobs = int(value.Int64)
-			}
-		case job.FieldFailedSubJobs:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field failed_sub_jobs", values[i])
-			} else if value.Valid {
-				_m.FailedSubJobs = int(value.Int64)
-			}
-		case job.FieldSourceLang:
+		case job.FieldTriggerType:
 			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field source_lang", values[i])
+				return fmt.Errorf("unexpected type %T for field trigger_type", values[i])
 			} else if value.Valid {
-				_m.SourceLang = value.String
+				_m.TriggerType = value.String
 			}
-		case job.FieldTargetLang:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field target_lang", values[i])
+		case job.FieldExecutionPlanID:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field execution_plan_id", values[i])
 			} else if value.Valid {
-				_m.TargetLang = value.String
+				_m.ExecutionPlanID = int(value.Int64)
 			}
-		case job.FieldConfig:
+		case job.FieldExecutionConfig:
 			if value, ok := values[i].(*[]byte); !ok {
-				return fmt.Errorf("unexpected type %T for field config", values[i])
+				return fmt.Errorf("unexpected type %T for field execution_config", values[i])
 			} else if value != nil && len(*value) > 0 {
-				if err := json.Unmarshal(*value, &_m.Config); err != nil {
-					return fmt.Errorf("unmarshal field config: %w", err)
+				if err := json.Unmarshal(*value, &_m.ExecutionConfig); err != nil {
+					return fmt.Errorf("unmarshal field execution_config: %w", err)
 				}
 			}
-		case job.FieldInputPath:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field input_path", values[i])
+		case job.FieldResourceCount:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field resource_count", values[i])
 			} else if value.Valid {
-				_m.InputPath = value.String
+				_m.ResourceCount = int(value.Int64)
 			}
-		case job.FieldOutputPath:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field output_path", values[i])
+		case job.FieldCompletedResources:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field completed_resources", values[i])
 			} else if value.Valid {
-				_m.OutputPath = value.String
+				_m.CompletedResources = int(value.Int64)
+			}
+		case job.FieldFailedResources:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field failed_resources", values[i])
+			} else if value.Valid {
+				_m.FailedResources = int(value.Int64)
+			}
+		case job.FieldTotalSegments:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field total_segments", values[i])
+			} else if value.Valid {
+				_m.TotalSegments = int(value.Int64)
+			}
+		case job.FieldSkippedSegments:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field skipped_segments", values[i])
+			} else if value.Valid {
+				_m.SkippedSegments = int(value.Int64)
+			}
+		case job.FieldStageTotal:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field stage_total", values[i])
+			} else if value.Valid {
+				_m.StageTotal = int(value.Int64)
+			}
+		case job.FieldCompletedSegments:
+			if value, ok := values[i].(*sql.NullInt64); !ok {
+				return fmt.Errorf("unexpected type %T for field completed_segments", values[i])
+			} else if value.Valid {
+				_m.CompletedSegments = int(value.Int64)
 			}
 		case job.FieldErrorMessage:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -231,19 +243,19 @@ func (_m *Job) assignValues(columns []string, values []any) error {
 				_m.ErrorMessage = new(string)
 				*_m.ErrorMessage = value.String
 			}
+		case job.FieldStartedAt:
+			if value, ok := values[i].(*sql.NullTime); !ok {
+				return fmt.Errorf("unexpected type %T for field started_at", values[i])
+			} else if value.Valid {
+				_m.StartedAt = new(time.Time)
+				*_m.StartedAt = value.Time
+			}
 		case job.ForeignKeys[0]:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for edge-field project_jobs", value)
+				return fmt.Errorf("unexpected type %T for edge-field user_created_jobs", value)
 			} else if value.Valid {
-				_m.project_jobs = new(int)
-				*_m.project_jobs = int(value.Int64)
-			}
-		case job.ForeignKeys[1]:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for edge-field user_jobs", value)
-			} else if value.Valid {
-				_m.user_jobs = new(int)
-				*_m.user_jobs = int(value.Int64)
+				_m.user_created_jobs = new(int)
+				*_m.user_created_jobs = int(value.Int64)
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -268,19 +280,14 @@ func (_m *Job) QueryCreatedBy() *UserQuery {
 	return NewJobClient(_m.config).QueryCreatedBy(_m)
 }
 
-// QuerySubJobs queries the "sub_jobs" edge of the Job entity.
-func (_m *Job) QuerySubJobs() *SubJobQuery {
-	return NewJobClient(_m.config).QuerySubJobs(_m)
+// QueryJobResources queries the "job_resources" edge of the Job entity.
+func (_m *Job) QueryJobResources() *JobResourceQuery {
+	return NewJobClient(_m.config).QueryJobResources(_m)
 }
 
-// QueryActivityLogs queries the "activity_logs" edge of the Job entity.
-func (_m *Job) QueryActivityLogs() *ActivityLogQuery {
-	return NewJobClient(_m.config).QueryActivityLogs(_m)
-}
-
-// QueryUsageRecords queries the "usage_records" edge of the Job entity.
-func (_m *Job) QueryUsageRecords() *UsageRecordQuery {
-	return NewJobClient(_m.config).QueryUsageRecords(_m)
+// QuerySseEvents queries the "sse_events" edge of the Job entity.
+func (_m *Job) QuerySseEvents() *SSEEventQuery {
+	return NewJobClient(_m.config).QuerySseEvents(_m)
 }
 
 // Update returns a builder for updating this Job.
@@ -312,36 +319,50 @@ func (_m *Job) String() string {
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
 	builder.WriteString(", ")
+	builder.WriteString("project_id=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ProjectID))
+	builder.WriteString(", ")
 	builder.WriteString("status=")
 	builder.WriteString(_m.Status)
 	builder.WriteString(", ")
-	builder.WriteString("sub_job_count=")
-	builder.WriteString(fmt.Sprintf("%v", _m.SubJobCount))
+	builder.WriteString("trigger_type=")
+	builder.WriteString(_m.TriggerType)
 	builder.WriteString(", ")
-	builder.WriteString("completed_sub_jobs=")
-	builder.WriteString(fmt.Sprintf("%v", _m.CompletedSubJobs))
+	builder.WriteString("execution_plan_id=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ExecutionPlanID))
 	builder.WriteString(", ")
-	builder.WriteString("failed_sub_jobs=")
-	builder.WriteString(fmt.Sprintf("%v", _m.FailedSubJobs))
+	builder.WriteString("execution_config=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ExecutionConfig))
 	builder.WriteString(", ")
-	builder.WriteString("source_lang=")
-	builder.WriteString(_m.SourceLang)
+	builder.WriteString("resource_count=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ResourceCount))
 	builder.WriteString(", ")
-	builder.WriteString("target_lang=")
-	builder.WriteString(_m.TargetLang)
+	builder.WriteString("completed_resources=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CompletedResources))
 	builder.WriteString(", ")
-	builder.WriteString("config=")
-	builder.WriteString(fmt.Sprintf("%v", _m.Config))
+	builder.WriteString("failed_resources=")
+	builder.WriteString(fmt.Sprintf("%v", _m.FailedResources))
 	builder.WriteString(", ")
-	builder.WriteString("input_path=")
-	builder.WriteString(_m.InputPath)
+	builder.WriteString("total_segments=")
+	builder.WriteString(fmt.Sprintf("%v", _m.TotalSegments))
 	builder.WriteString(", ")
-	builder.WriteString("output_path=")
-	builder.WriteString(_m.OutputPath)
+	builder.WriteString("skipped_segments=")
+	builder.WriteString(fmt.Sprintf("%v", _m.SkippedSegments))
+	builder.WriteString(", ")
+	builder.WriteString("stage_total=")
+	builder.WriteString(fmt.Sprintf("%v", _m.StageTotal))
+	builder.WriteString(", ")
+	builder.WriteString("completed_segments=")
+	builder.WriteString(fmt.Sprintf("%v", _m.CompletedSegments))
 	builder.WriteString(", ")
 	if v := _m.ErrorMessage; v != nil {
 		builder.WriteString("error_message=")
 		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.StartedAt; v != nil {
+		builder.WriteString("started_at=")
+		builder.WriteString(v.Format(time.ANSIC))
 	}
 	builder.WriteByte(')')
 	return builder.String()

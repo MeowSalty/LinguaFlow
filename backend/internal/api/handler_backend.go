@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"errors"
 	"net/http"
 
@@ -10,52 +11,62 @@ import (
 )
 
 type createBackendRequest struct {
-	Name     string         `json:"name"`
-	Type     string         `json:"type"`
-	Priority int            `json:"priority"`
-	Options  map[string]any `json:"options"`
+	Name               string         `json:"name"`
+	Type               string         `json:"type"`
+	Options            BackendOptions `json:"options"`
+	RateLimitPerMinute *int           `json:"rate_limit_per_minute"`
 }
 
 type updateBackendRequest struct {
-	Name     string         `json:"name"`
-	Type     string         `json:"type"`
-	Priority int            `json:"priority"`
-	Options  map[string]any `json:"options"`
+	Name               string         `json:"name"`
+	Type               string         `json:"type"`
+	Options            BackendOptions `json:"options"`
+	RateLimitPerMinute *int           `json:"rate_limit_per_minute"`
+}
+
+// backendOptionsToMap 将 BackendOptions 转换为 service 层需要的 map[string]any 格式。
+func backendOptionsToMap(opts BackendOptions) (map[string]any, error) {
+	if len(opts.union) == 0 {
+		return nil, nil
+	}
+	var m map[string]any
+	if err := json.Unmarshal(opts.union, &m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 type backendResponse struct {
-	ID             int            `json:"id"`
-	Source         string         `json:"source"`
-	Name           string         `json:"name"`
-	Type           string         `json:"type"`
-	Priority       int            `json:"priority"`
-	Options        map[string]any `json:"options,omitempty"`
-	OptionsVisible bool           `json:"options_visible"`
-	OwnerUserID    *int           `json:"owner_user_id,omitempty"`
-	OwnerOrgID     *int           `json:"owner_org_id,omitempty"`
+	ID                 int            `json:"id"`
+	Scope              string         `json:"scope"`
+	Name               string         `json:"name"`
+	Type               string         `json:"type"`
+	Options            map[string]any `json:"options,omitempty"`
+	RateLimitPerMinute int            `json:"rate_limit_per_minute"`
+	OwnerUserID        *int           `json:"owner_user_id,omitempty"`
+	OwnerOrgID         *int           `json:"owner_org_id,omitempty"`
 }
 
-func toBackendResponse(record *service.BackendRecord) backendResponse {
+func toBackendResponse(record *service.BackendRecord, showOptions bool) backendResponse {
 	resp := backendResponse{
-		ID:             record.ID,
-		Source:         record.Source,
-		Name:           record.Name,
-		Type:           record.Type,
-		Priority:       record.Priority,
-		OptionsVisible: record.OptionsVisible,
-		OwnerUserID:    record.OwnerUserID,
-		OwnerOrgID:     record.OwnerOrgID,
+		ID:                 record.ID,
+		Scope:              record.Scope,
+		Name:               record.Name,
+		Type:               record.Type,
+		RateLimitPerMinute: record.RateLimitPerMinute,
+		OwnerUserID:        record.OwnerUserID,
+		OwnerOrgID:         record.OwnerOrgID,
 	}
-	if record.OptionsVisible && record.Options != nil {
+	if showOptions && record.Options != nil {
 		resp.Options = record.Options
 	}
 	return resp
 }
 
-func toBackendListResponse(records []*service.BackendRecord) map[string]any {
+func toBackendListResponse(records []*service.BackendRecord, showOptions bool) map[string]any {
 	items := make([]backendResponse, 0, len(records))
 	for _, r := range records {
-		items = append(items, toBackendResponse(r))
+		items = append(items, toBackendResponse(r, showOptions))
 	}
 	return map[string]any{"items": items}
 }
@@ -63,79 +74,100 @@ func toBackendListResponse(records []*service.BackendRecord) map[string]any {
 func (s *Server) handleCreateUserBackend(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 	var req createBackendRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
-	record, err := s.backendSvc.CreateUserBackend(r.Context(), authUser.User.ID, service.BackendInput{
-		Name:     req.Name,
-		Type:     req.Type,
-		Priority: req.Priority,
-		Options:  req.Options,
-	})
+	optionsMap, err := backendOptionsToMap(req.Options)
 	if err != nil {
-		writeBackendServiceError(w, err)
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "options 格式无效")
 		return
 	}
-	writeJSON(w, http.StatusCreated, toBackendResponse(record))
+	userID := authUser.User.ID
+	input := service.CreateBackendInput{
+		Scope:       service.ScopeUser,
+		OwnerUserID: &userID,
+		BackendInput: service.BackendInput{
+			Name:    req.Name,
+			Type:    req.Type,
+			Options: optionsMap,
+		},
+	}
+	if req.RateLimitPerMinute != nil {
+		input.RateLimitPerMinute = *req.RateLimitPerMinute
+	}
+	record, err := s.backendSvc.Create(r.Context(), input)
+	if err != nil {
+		s.writeBackendServiceError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, toBackendResponse(record, true))
 }
 
 func (s *Server) handleListUserBackends(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	records, err := s.backendSvc.ListUserBackends(r.Context(), authUser.User.ID)
+	records, err := s.backendSvc.List(r.Context(), service.ScopeUser, authUser.User.ID)
 	if err != nil {
-		writeBackendServiceError(w, err)
+		s.writeBackendServiceError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toBackendListResponse(records))
+	writeJSON(w, http.StatusOK, toBackendListResponse(records, true))
 }
 
 func (s *Server) handleUpdateUserBackend(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	backendID, ok := parseIntParam(w, chi.URLParam(r, "backendId"), "backendId")
+	backendID, ok := s.parseIntParam(w, r, chi.URLParam(r, "backendId"), "backendId")
 	if !ok {
 		return
 	}
 	var req updateBackendRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
-	record, err := s.backendSvc.UpdateUserBackend(r.Context(), authUser.User.ID, backendID, service.BackendInput{
-		Name:     req.Name,
-		Type:     req.Type,
-		Priority: req.Priority,
-		Options:  req.Options,
-	})
+	optionsMap, err := backendOptionsToMap(req.Options)
 	if err != nil {
-		writeBackendServiceError(w, err)
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "options 格式无效")
 		return
 	}
-	writeJSON(w, http.StatusOK, toBackendResponse(record))
+	input := service.BackendInput{
+		Name:    req.Name,
+		Type:    req.Type,
+		Options: optionsMap,
+	}
+	if req.RateLimitPerMinute != nil {
+		input.RateLimitPerMinute = *req.RateLimitPerMinute
+	}
+	record, err := s.backendSvc.Update(r.Context(), authUser.User.ID, backendID, input)
+	if err != nil {
+		s.writeBackendServiceError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toBackendResponse(record, true))
 }
 
 func (s *Server) handleDeleteUserBackend(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	backendID, ok := parseIntParam(w, chi.URLParam(r, "backendId"), "backendId")
+	backendID, ok := s.parseIntParam(w, r, chi.URLParam(r, "backendId"), "backendId")
 	if !ok {
 		return
 	}
-	if err := s.backendSvc.DeleteUserBackend(r.Context(), authUser.User.ID, backendID); err != nil {
-		writeBackendServiceError(w, err)
+	if err := s.backendSvc.Delete(r.Context(), authUser.User.ID, backendID); err != nil {
+		s.writeBackendServiceError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -144,115 +176,141 @@ func (s *Server) handleDeleteUserBackend(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleCreateOrgBackend(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	orgID, ok := parseIntParam(w, chi.URLParam(r, "orgId"), "orgId")
+	orgID, ok := s.parseIntParam(w, r, chi.URLParam(r, "orgId"), "orgId")
 	if !ok {
 		return
 	}
+	// handler 层负责验证组织管理员权限
+	if _, err := s.userService.RequireMembership(r.Context(), authUser.User.ID, orgID, service.OrgRoleAdmin); err != nil {
+		s.writeBackendServiceError(w, r, err)
+		return
+	}
 	var req createBackendRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
-	record, err := s.backendSvc.CreateOrgBackend(r.Context(), authUser.User.ID, orgID, service.BackendInput{
-		Name:     req.Name,
-		Type:     req.Type,
-		Priority: req.Priority,
-		Options:  req.Options,
-	})
+	optionsMap, err := backendOptionsToMap(req.Options)
 	if err != nil {
-		writeBackendServiceError(w, err)
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "options 格式无效")
 		return
 	}
-	writeJSON(w, http.StatusCreated, toBackendResponse(record))
+	input := service.CreateBackendInput{
+		Scope:      service.ScopeOrg,
+		OwnerOrgID: &orgID,
+		BackendInput: service.BackendInput{
+			Name:    req.Name,
+			Type:    req.Type,
+			Options: optionsMap,
+		},
+	}
+	if req.RateLimitPerMinute != nil {
+		input.RateLimitPerMinute = *req.RateLimitPerMinute
+	}
+	record, err := s.backendSvc.Create(r.Context(), input)
+	if err != nil {
+		s.writeBackendServiceError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, toBackendResponse(record, true))
 }
 
 func (s *Server) handleListOrgBackends(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	orgID, ok := parseIntParam(w, chi.URLParam(r, "orgId"), "orgId")
+	orgID, ok := s.parseIntParam(w, r, chi.URLParam(r, "orgId"), "orgId")
 	if !ok {
 		return
 	}
-	records, err := s.backendSvc.ListOrgBackends(r.Context(), authUser.User.ID, orgID)
+	// handler 层负责验证组织成员权限，并根据角色决定是否返回 options
+	membership, err := s.userService.RequireMembership(r.Context(), authUser.User.ID, orgID, service.OrgRoleMember)
 	if err != nil {
-		writeBackendServiceError(w, err)
+		s.writeBackendServiceError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toBackendListResponse(records))
+	showOptions := membership.Role == service.OrgRoleAdmin || membership.Role == service.OrgRoleOwner
+	records, err := s.backendSvc.List(r.Context(), service.ScopeOrg, orgID)
+	if err != nil {
+		s.writeBackendServiceError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toBackendListResponse(records, showOptions))
 }
 
 func (s *Server) handleUpdateOrgBackend(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	orgID, ok := parseIntParam(w, chi.URLParam(r, "orgId"), "orgId")
-	if !ok {
-		return
-	}
-	backendID, ok := parseIntParam(w, chi.URLParam(r, "backendId"), "backendId")
+	backendID, ok := s.parseIntParam(w, r, chi.URLParam(r, "backendId"), "backendId")
 	if !ok {
 		return
 	}
 	var req updateBackendRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
-	record, err := s.backendSvc.UpdateOrgBackend(r.Context(), authUser.User.ID, orgID, backendID, service.BackendInput{
-		Name:     req.Name,
-		Type:     req.Type,
-		Priority: req.Priority,
-		Options:  req.Options,
-	})
+	optionsMap, err := backendOptionsToMap(req.Options)
 	if err != nil {
-		writeBackendServiceError(w, err)
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "options 格式无效")
 		return
 	}
-	writeJSON(w, http.StatusOK, toBackendResponse(record))
+	// Update 内部通过 requireOwnership 验证 org 管理员权限
+	input := service.BackendInput{
+		Name:    req.Name,
+		Type:    req.Type,
+		Options: optionsMap,
+	}
+	if req.RateLimitPerMinute != nil {
+		input.RateLimitPerMinute = *req.RateLimitPerMinute
+	}
+	record, err := s.backendSvc.Update(r.Context(), authUser.User.ID, backendID, input)
+	if err != nil {
+		s.writeBackendServiceError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toBackendResponse(record, true))
 }
 
 func (s *Server) handleDeleteOrgBackend(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	orgID, ok := parseIntParam(w, chi.URLParam(r, "orgId"), "orgId")
+	backendID, ok := s.parseIntParam(w, r, chi.URLParam(r, "backendId"), "backendId")
 	if !ok {
 		return
 	}
-	backendID, ok := parseIntParam(w, chi.URLParam(r, "backendId"), "backendId")
-	if !ok {
-		return
-	}
-	if err := s.backendSvc.DeleteOrgBackend(r.Context(), authUser.User.ID, orgID, backendID); err != nil {
-		writeBackendServiceError(w, err)
+	// Delete 内部通过 requireOwnership 验证 org 管理员权限
+	if err := s.backendSvc.Delete(r.Context(), authUser.User.ID, backendID); err != nil {
+		s.writeBackendServiceError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func writeBackendServiceError(w http.ResponseWriter, err error) {
+func (s *Server) writeBackendServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, service.ErrForbidden):
-		writeProblem(w, http.StatusForbidden, "forbidden", "没有权限执行该操作")
+		s.writeProblem(w, r, http.StatusForbidden, "forbidden", "没有权限执行该操作")
 	case errors.Is(err, service.ErrBackendNotFound):
-		writeProblem(w, http.StatusNotFound, "not_found", "后端不存在")
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "后端不存在")
 	case errors.Is(err, service.ErrBackendExists):
-		writeProblem(w, http.StatusConflict, "conflict", "后端已存在")
+		s.writeProblem(w, r, http.StatusConflict, "conflict", "后端已存在")
 	case errors.Is(err, service.ErrBackendTypeInvalid):
-		writeProblem(w, http.StatusBadRequest, "invalid_input", "后端类型无效")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "后端类型无效")
 	case errors.Is(err, service.ErrBackendSourceInvalid):
-		writeProblem(w, http.StatusBadRequest, "invalid_input", "后端来源无效")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "后端来源无效")
 	case errors.Is(err, service.ErrInvalidInput):
-		writeProblem(w, http.StatusBadRequest, "invalid_input", "请求参数不合法")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请求参数不合法")
 	default:
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 	}
 }

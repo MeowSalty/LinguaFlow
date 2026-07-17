@@ -212,3 +212,141 @@ GlossarySyncExecuteResourceResult:
       type: integer
     skipped_count:
       type: integer
+
+GlossaryPruneRequest:
+  type: object
+  required: [backend_id]
+  properties:
+    backend_id:
+      type: integer
+      description: 用于精简分析的后端 ID
+    template_id:
+      type: integer
+      description: 精简提示词模板 ID，省略或为 0 时使用内置默认模板
+  additionalProperties: false
+
+GlossaryPruneSuggestion:
+  type: object
+  required: [entry_id, action, source, old_target, new_target, old_notes, new_notes, target_changed, notes_changed]
+  properties:
+    entry_id:
+      type: integer
+    action:
+      type: string
+      enum: [delete, update]
+    source:
+      type: string
+    old_target:
+      type: string
+    new_target:
+      type: string
+    old_notes:
+      type: string
+    new_notes:
+      type: string
+    target_changed:
+      type: boolean
+    notes_changed:
+      type: boolean
+
+GlossaryPruneDiagnostics:
+  type: object
+  properties:
+    backend_name:
+      type: string
+    template_name:
+      type: string
+    duration_ms:
+      type: integer
+    prompt_tokens:
+      type: integer
+    completion_tokens:
+      type: integer
+    system_prompt:
+      type: string
+      description: 发送给 LLM 的 system prompt 内容（截断至 128KB）。
+    user_message:
+      type: string
+      description: 发送给 LLM 的 user message 内容（截断至 128KB）。
+    system_truncated:
+      type: boolean
+    user_truncated:
+      type: boolean
+    system_length:
+      type: integer
+    user_length:
+      type: integer
+    received_content:
+      type: string
+      description: LLM 返回的原始响应内容（截断至 128KB）。
+    received_truncated:
+      type: boolean
+    received_length:
+      type: integer
+    entry_count:
+      type: integer
+    parsed_count:
+      type: integer
+    repaired_ops:
+      type: array
+      items:
+        type: string
+    error_type:
+      type: string
+    error_message:
+      type: string
+    http_status:
+      type: integer
+
+GlossaryPrunePreview:
+  type: object
+  required: [suggestions, total, to_delete, to_update, to_keep, diagnostics]
+  properties:
+    suggestions:
+      type: array
+      items:
+        $ref: '#/GlossaryPruneSuggestion'
+    total:
+      type: integer
+    to_delete:
+      type: integer
+    to_update:
+      type: integer
+    to_keep:
+      type: integer
+    diagnostics:
+      $ref: '#/GlossaryPruneDiagnostics'
+
+GlossaryPruneApplyRequest:
+  type: object
+  required: [changes]
+  properties:
+    changes:
+      type: array
+      items:
+        type: object
+        required: [entry_id, action]
+        properties:
+          entry_id:
+            type: integer
+          action:
+            type: string
+            enum: [delete, update]
+          target:
+            type: string
+            description: 新 target（仅 action=update 时使用）
+          notes:
+            type: string
+            description: 新 notes（仅 action=update 时使用）
+  additionalProperties: false
+
+GlossaryPruneApplyResult:
+  type: object
+  required: [deleted, updated, failed]
+  properties:
+    deleted:
+      type: integer
+    updated:
+      type: integer
+    failed:
+      type: integer

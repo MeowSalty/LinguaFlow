@@ -10,9 +10,10 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
 
 // SegmentCreate is the builder for creating a Segment entity.
@@ -77,13 +78,13 @@ func (_c *SegmentCreate) SetNillableTargetText(v *string) *SegmentCreate {
 }
 
 // SetStatus sets the "status" field.
-func (_c *SegmentCreate) SetStatus(v string) *SegmentCreate {
+func (_c *SegmentCreate) SetStatus(v segment.Status) *SegmentCreate {
 	_c.mutation.SetStatus(v)
 	return _c
 }
 
 // SetNillableStatus sets the "status" field if the given value is not nil.
-func (_c *SegmentCreate) SetNillableStatus(v *string) *SegmentCreate {
+func (_c *SegmentCreate) SetNillableStatus(v *segment.Status) *SegmentCreate {
 	if v != nil {
 		_c.SetStatus(*v)
 	}
@@ -104,15 +105,43 @@ func (_c *SegmentCreate) SetNillableReviewComment(v *string) *SegmentCreate {
 	return _c
 }
 
-// SetSubJobID sets the "sub_job" edge to the SubJob entity by ID.
-func (_c *SegmentCreate) SetSubJobID(id int) *SegmentCreate {
-	_c.mutation.SetSubJobID(id)
+// SetResourceID sets the "resource_id" field.
+func (_c *SegmentCreate) SetResourceID(v int) *SegmentCreate {
+	_c.mutation.SetResourceID(v)
 	return _c
 }
 
-// SetSubJob sets the "sub_job" edge to the SubJob entity.
-func (_c *SegmentCreate) SetSubJob(v *SubJob) *SegmentCreate {
-	return _c.SetSubJobID(v.ID)
+// SetNillableResourceID sets the "resource_id" field if the given value is not nil.
+func (_c *SegmentCreate) SetNillableResourceID(v *int) *SegmentCreate {
+	if v != nil {
+		_c.SetResourceID(*v)
+	}
+	return _c
+}
+
+// SetMeta sets the "meta" field.
+func (_c *SegmentCreate) SetMeta(v string) *SegmentCreate {
+	_c.mutation.SetMeta(v)
+	return _c
+}
+
+// SetNillableMeta sets the "meta" field if the given value is not nil.
+func (_c *SegmentCreate) SetNillableMeta(v *string) *SegmentCreate {
+	if v != nil {
+		_c.SetMeta(*v)
+	}
+	return _c
+}
+
+// SetQualityIssues sets the "quality_issues" field.
+func (_c *SegmentCreate) SetQualityIssues(v []qa.QualityIssue) *SegmentCreate {
+	_c.mutation.SetQualityIssues(v)
+	return _c
+}
+
+// SetResource sets the "resource" edge to the Resource entity.
+func (_c *SegmentCreate) SetResource(v *Resource) *SegmentCreate {
+	return _c.SetResourceID(v.ID)
 }
 
 // SetReviewedByID sets the "reviewed_by" edge to the User entity by ID.
@@ -210,8 +239,15 @@ func (_c *SegmentCreate) check() error {
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "Segment.status"`)}
 	}
-	if len(_c.mutation.SubJobIDs()) == 0 {
-		return &ValidationError{Name: "sub_job", err: errors.New(`ent: missing required edge "Segment.sub_job"`)}
+	if v, ok := _c.mutation.Status(); ok {
+		if err := segment.StatusValidator(v); err != nil {
+			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "Segment.status": %w`, err)}
+		}
+	}
+	if v, ok := _c.mutation.ResourceID(); ok {
+		if err := segment.ResourceIDValidator(v); err != nil {
+			return &ValidationError{Name: "resource_id", err: fmt.Errorf(`ent: validator failed for field "Segment.resource_id": %w`, err)}
+		}
 	}
 	return nil
 }
@@ -260,28 +296,36 @@ func (_c *SegmentCreate) createSpec() (*Segment, *sqlgraph.CreateSpec) {
 		_node.TargetText = &value
 	}
 	if value, ok := _c.mutation.Status(); ok {
-		_spec.SetField(segment.FieldStatus, field.TypeString, value)
+		_spec.SetField(segment.FieldStatus, field.TypeEnum, value)
 		_node.Status = value
 	}
 	if value, ok := _c.mutation.ReviewComment(); ok {
 		_spec.SetField(segment.FieldReviewComment, field.TypeString, value)
 		_node.ReviewComment = &value
 	}
-	if nodes := _c.mutation.SubJobIDs(); len(nodes) > 0 {
+	if value, ok := _c.mutation.Meta(); ok {
+		_spec.SetField(segment.FieldMeta, field.TypeString, value)
+		_node.Meta = &value
+	}
+	if value, ok := _c.mutation.QualityIssues(); ok {
+		_spec.SetField(segment.FieldQualityIssues, field.TypeJSON, value)
+		_node.QualityIssues = value
+	}
+	if nodes := _c.mutation.ResourceIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.M2O,
 			Inverse: true,
-			Table:   segment.SubJobTable,
-			Columns: []string{segment.SubJobColumn},
+			Table:   segment.ResourceTable,
+			Columns: []string{segment.ResourceColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(subjob.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(resource.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
-		_node.sub_job_segments = &nodes[0]
+		_node.ResourceID = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	if nodes := _c.mutation.ReviewedByIDs(); len(nodes) > 0 {

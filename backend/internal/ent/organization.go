@@ -41,19 +41,25 @@ type OrganizationEdges struct {
 	Projects []*Project `json:"projects,omitempty"`
 	// Memberships holds the value of the memberships edge.
 	Memberships []*OrgMembership `json:"memberships,omitempty"`
-	// OrgBackends holds the value of the org_backends edge.
-	OrgBackends []*OrgBackend `json:"org_backends,omitempty"`
-	// GlossaryEntries holds the value of the glossary_entries edge.
-	GlossaryEntries []*GlossaryEntry `json:"glossary_entries,omitempty"`
-	// TmEntries holds the value of the tm_entries edge.
-	TmEntries []*TMEntry `json:"tm_entries,omitempty"`
+	// Backends holds the value of the backends edge.
+	Backends []*Backend `json:"backends,omitempty"`
 	// ActivityLogs holds the value of the activity_logs edge.
 	ActivityLogs []*ActivityLog `json:"activity_logs,omitempty"`
 	// UsageRecords holds the value of the usage_records edge.
 	UsageRecords []*UsageRecord `json:"usage_records,omitempty"`
+	// TranslationPromptTemplates holds the value of the translation_prompt_templates edge.
+	TranslationPromptTemplates []*TranslationPromptTemplate `json:"translation_prompt_templates,omitempty"`
+	// BootstrapPromptTemplates holds the value of the bootstrap_prompt_templates edge.
+	BootstrapPromptTemplates []*BootstrapPromptTemplate `json:"bootstrap_prompt_templates,omitempty"`
+	// PrunePromptTemplates holds the value of the prune_prompt_templates edge.
+	PrunePromptTemplates []*PrunePromptTemplate `json:"prune_prompt_templates,omitempty"`
+	// ExecutionProfiles holds the value of the execution_profiles edge.
+	ExecutionProfiles []*ExecutionProfile `json:"execution_profiles,omitempty"`
+	// ExecutionPlanTemplates holds the value of the execution_plan_templates edge.
+	ExecutionPlanTemplates []*ExecutionPlanTemplate `json:"execution_plan_templates,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [7]bool
+	loadedTypes [10]bool
 }
 
 // ProjectsOrErr returns the Projects value or an error if the edge
@@ -74,37 +80,19 @@ func (e OrganizationEdges) MembershipsOrErr() ([]*OrgMembership, error) {
 	return nil, &NotLoadedError{edge: "memberships"}
 }
 
-// OrgBackendsOrErr returns the OrgBackends value or an error if the edge
+// BackendsOrErr returns the Backends value or an error if the edge
 // was not loaded in eager-loading.
-func (e OrganizationEdges) OrgBackendsOrErr() ([]*OrgBackend, error) {
+func (e OrganizationEdges) BackendsOrErr() ([]*Backend, error) {
 	if e.loadedTypes[2] {
-		return e.OrgBackends, nil
+		return e.Backends, nil
 	}
-	return nil, &NotLoadedError{edge: "org_backends"}
-}
-
-// GlossaryEntriesOrErr returns the GlossaryEntries value or an error if the edge
-// was not loaded in eager-loading.
-func (e OrganizationEdges) GlossaryEntriesOrErr() ([]*GlossaryEntry, error) {
-	if e.loadedTypes[3] {
-		return e.GlossaryEntries, nil
-	}
-	return nil, &NotLoadedError{edge: "glossary_entries"}
-}
-
-// TmEntriesOrErr returns the TmEntries value or an error if the edge
-// was not loaded in eager-loading.
-func (e OrganizationEdges) TmEntriesOrErr() ([]*TMEntry, error) {
-	if e.loadedTypes[4] {
-		return e.TmEntries, nil
-	}
-	return nil, &NotLoadedError{edge: "tm_entries"}
+	return nil, &NotLoadedError{edge: "backends"}
 }
 
 // ActivityLogsOrErr returns the ActivityLogs value or an error if the edge
 // was not loaded in eager-loading.
 func (e OrganizationEdges) ActivityLogsOrErr() ([]*ActivityLog, error) {
-	if e.loadedTypes[5] {
+	if e.loadedTypes[3] {
 		return e.ActivityLogs, nil
 	}
 	return nil, &NotLoadedError{edge: "activity_logs"}
@@ -113,10 +101,55 @@ func (e OrganizationEdges) ActivityLogsOrErr() ([]*ActivityLog, error) {
 // UsageRecordsOrErr returns the UsageRecords value or an error if the edge
 // was not loaded in eager-loading.
 func (e OrganizationEdges) UsageRecordsOrErr() ([]*UsageRecord, error) {
-	if e.loadedTypes[6] {
+	if e.loadedTypes[4] {
 		return e.UsageRecords, nil
 	}
 	return nil, &NotLoadedError{edge: "usage_records"}
+}
+
+// TranslationPromptTemplatesOrErr returns the TranslationPromptTemplates value or an error if the edge
+// was not loaded in eager-loading.
+func (e OrganizationEdges) TranslationPromptTemplatesOrErr() ([]*TranslationPromptTemplate, error) {
+	if e.loadedTypes[5] {
+		return e.TranslationPromptTemplates, nil
+	}
+	return nil, &NotLoadedError{edge: "translation_prompt_templates"}
+}
+
+// BootstrapPromptTemplatesOrErr returns the BootstrapPromptTemplates value or an error if the edge
+// was not loaded in eager-loading.
+func (e OrganizationEdges) BootstrapPromptTemplatesOrErr() ([]*BootstrapPromptTemplate, error) {
+	if e.loadedTypes[6] {
+		return e.BootstrapPromptTemplates, nil
+	}
+	return nil, &NotLoadedError{edge: "bootstrap_prompt_templates"}
+}
+
+// PrunePromptTemplatesOrErr returns the PrunePromptTemplates value or an error if the edge
+// was not loaded in eager-loading.
+func (e OrganizationEdges) PrunePromptTemplatesOrErr() ([]*PrunePromptTemplate, error) {
+	if e.loadedTypes[7] {
+		return e.PrunePromptTemplates, nil
+	}
+	return nil, &NotLoadedError{edge: "prune_prompt_templates"}
+}
+
+// ExecutionProfilesOrErr returns the ExecutionProfiles value or an error if the edge
+// was not loaded in eager-loading.
+func (e OrganizationEdges) ExecutionProfilesOrErr() ([]*ExecutionProfile, error) {
+	if e.loadedTypes[8] {
+		return e.ExecutionProfiles, nil
+	}
+	return nil, &NotLoadedError{edge: "execution_profiles"}
+}
+
+// ExecutionPlanTemplatesOrErr returns the ExecutionPlanTemplates value or an error if the edge
+// was not loaded in eager-loading.
+func (e OrganizationEdges) ExecutionPlanTemplatesOrErr() ([]*ExecutionPlanTemplate, error) {
+	if e.loadedTypes[9] {
+		return e.ExecutionPlanTemplates, nil
+	}
+	return nil, &NotLoadedError{edge: "execution_plan_templates"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -210,19 +243,9 @@ func (_m *Organization) QueryMemberships() *OrgMembershipQuery {
 	return NewOrganizationClient(_m.config).QueryMemberships(_m)
 }
 
-// QueryOrgBackends queries the "org_backends" edge of the Organization entity.
-func (_m *Organization) QueryOrgBackends() *OrgBackendQuery {
-	return NewOrganizationClient(_m.config).QueryOrgBackends(_m)
-}
-
-// QueryGlossaryEntries queries the "glossary_entries" edge of the Organization entity.
-func (_m *Organization) QueryGlossaryEntries() *GlossaryEntryQuery {
-	return NewOrganizationClient(_m.config).QueryGlossaryEntries(_m)
-}
-
-// QueryTmEntries queries the "tm_entries" edge of the Organization entity.
-func (_m *Organization) QueryTmEntries() *TMEntryQuery {
-	return NewOrganizationClient(_m.config).QueryTmEntries(_m)
+// QueryBackends queries the "backends" edge of the Organization entity.
+func (_m *Organization) QueryBackends() *BackendQuery {
+	return NewOrganizationClient(_m.config).QueryBackends(_m)
 }
 
 // QueryActivityLogs queries the "activity_logs" edge of the Organization entity.
@@ -233,6 +256,31 @@ func (_m *Organization) QueryActivityLogs() *ActivityLogQuery {
 // QueryUsageRecords queries the "usage_records" edge of the Organization entity.
 func (_m *Organization) QueryUsageRecords() *UsageRecordQuery {
 	return NewOrganizationClient(_m.config).QueryUsageRecords(_m)
+}
+
+// QueryTranslationPromptTemplates queries the "translation_prompt_templates" edge of the Organization entity.
+func (_m *Organization) QueryTranslationPromptTemplates() *TranslationPromptTemplateQuery {
+	return NewOrganizationClient(_m.config).QueryTranslationPromptTemplates(_m)
+}
+
+// QueryBootstrapPromptTemplates queries the "bootstrap_prompt_templates" edge of the Organization entity.
+func (_m *Organization) QueryBootstrapPromptTemplates() *BootstrapPromptTemplateQuery {
+	return NewOrganizationClient(_m.config).QueryBootstrapPromptTemplates(_m)
+}
+
+// QueryPrunePromptTemplates queries the "prune_prompt_templates" edge of the Organization entity.
+func (_m *Organization) QueryPrunePromptTemplates() *PrunePromptTemplateQuery {
+	return NewOrganizationClient(_m.config).QueryPrunePromptTemplates(_m)
+}
+
+// QueryExecutionProfiles queries the "execution_profiles" edge of the Organization entity.
+func (_m *Organization) QueryExecutionProfiles() *ExecutionProfileQuery {
+	return NewOrganizationClient(_m.config).QueryExecutionProfiles(_m)
+}
+
+// QueryExecutionPlanTemplates queries the "execution_plan_templates" edge of the Organization entity.
+func (_m *Organization) QueryExecutionPlanTemplates() *ExecutionPlanTemplateQuery {
+	return NewOrganizationClient(_m.config).QueryExecutionPlanTemplates(_m)
 }
 
 // Update returns a builder for updating this Organization.

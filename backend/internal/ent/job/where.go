@@ -65,49 +65,69 @@ func UpdatedAt(v time.Time) predicate.Job {
 	return predicate.Job(sql.FieldEQ(FieldUpdatedAt, v))
 }
 
+// ProjectID applies equality check predicate on the "project_id" field. It's identical to ProjectIDEQ.
+func ProjectID(v int) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldProjectID, v))
+}
+
 // Status applies equality check predicate on the "status" field. It's identical to StatusEQ.
 func Status(v string) predicate.Job {
 	return predicate.Job(sql.FieldEQ(FieldStatus, v))
 }
 
-// SubJobCount applies equality check predicate on the "sub_job_count" field. It's identical to SubJobCountEQ.
-func SubJobCount(v int) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldSubJobCount, v))
+// TriggerType applies equality check predicate on the "trigger_type" field. It's identical to TriggerTypeEQ.
+func TriggerType(v string) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldTriggerType, v))
 }
 
-// CompletedSubJobs applies equality check predicate on the "completed_sub_jobs" field. It's identical to CompletedSubJobsEQ.
-func CompletedSubJobs(v int) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldCompletedSubJobs, v))
+// ExecutionPlanID applies equality check predicate on the "execution_plan_id" field. It's identical to ExecutionPlanIDEQ.
+func ExecutionPlanID(v int) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldExecutionPlanID, v))
 }
 
-// FailedSubJobs applies equality check predicate on the "failed_sub_jobs" field. It's identical to FailedSubJobsEQ.
-func FailedSubJobs(v int) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldFailedSubJobs, v))
+// ResourceCount applies equality check predicate on the "resource_count" field. It's identical to ResourceCountEQ.
+func ResourceCount(v int) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldResourceCount, v))
 }
 
-// SourceLang applies equality check predicate on the "source_lang" field. It's identical to SourceLangEQ.
-func SourceLang(v string) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldSourceLang, v))
+// CompletedResources applies equality check predicate on the "completed_resources" field. It's identical to CompletedResourcesEQ.
+func CompletedResources(v int) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldCompletedResources, v))
 }
 
-// TargetLang applies equality check predicate on the "target_lang" field. It's identical to TargetLangEQ.
-func TargetLang(v string) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldTargetLang, v))
+// FailedResources applies equality check predicate on the "failed_resources" field. It's identical to FailedResourcesEQ.
+func FailedResources(v int) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldFailedResources, v))
 }
 
-// InputPath applies equality check predicate on the "input_path" field. It's identical to InputPathEQ.
-func InputPath(v string) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldInputPath, v))
+// TotalSegments applies equality check predicate on the "total_segments" field. It's identical to TotalSegmentsEQ.
+func TotalSegments(v int) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldTotalSegments, v))
 }
 
-// OutputPath applies equality check predicate on the "output_path" field. It's identical to OutputPathEQ.
-func OutputPath(v string) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldOutputPath, v))
+// SkippedSegments applies equality check predicate on the "skipped_segments" field. It's identical to SkippedSegmentsEQ.
+func SkippedSegments(v int) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldSkippedSegments, v))
+}
+
+// StageTotal applies equality check predicate on the "stage_total" field. It's identical to StageTotalEQ.
+func StageTotal(v int) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldStageTotal, v))
+}
+
+// CompletedSegments applies equality check predicate on the "completed_segments" field. It's identical to CompletedSegmentsEQ.
+func CompletedSegments(v int) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldCompletedSegments, v))
 }
 
 // ErrorMessage applies equality check predicate on the "error_message" field. It's identical to ErrorMessageEQ.
 func ErrorMessage(v string) predicate.Job {
 	return predicate.Job(sql.FieldEQ(FieldErrorMessage, v))
+}
+
+// StartedAt applies equality check predicate on the "started_at" field. It's identical to StartedAtEQ.
+func StartedAt(v time.Time) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldStartedAt, v))
 }
 
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
@@ -190,6 +210,26 @@ func UpdatedAtLTE(v time.Time) predicate.Job {
 	return predicate.Job(sql.FieldLTE(FieldUpdatedAt, v))
 }
 
+// ProjectIDEQ applies the EQ predicate on the "project_id" field.
+func ProjectIDEQ(v int) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldProjectID, v))
+}
+
+// ProjectIDNEQ applies the NEQ predicate on the "project_id" field.
+func ProjectIDNEQ(v int) predicate.Job {
+	return predicate.Job(sql.FieldNEQ(FieldProjectID, v))
+}
+
+// ProjectIDIn applies the In predicate on the "project_id" field.
+func ProjectIDIn(vs ...int) predicate.Job {
+	return predicate.Job(sql.FieldIn(FieldProjectID, vs...))
+}
+
+// ProjectIDNotIn applies the NotIn predicate on the "project_id" field.
+func ProjectIDNotIn(vs ...int) predicate.Job {
+	return predicate.Job(sql.FieldNotIn(FieldProjectID, vs...))
+}
+
 // StatusEQ applies the EQ predicate on the "status" field.
 func StatusEQ(v string) predicate.Job {
 	return predicate.Job(sql.FieldEQ(FieldStatus, v))
@@ -255,404 +295,389 @@ func StatusContainsFold(v string) predicate.Job {
 	return predicate.Job(sql.FieldContainsFold(FieldStatus, v))
 }
 
-// SubJobCountEQ applies the EQ predicate on the "sub_job_count" field.
-func SubJobCountEQ(v int) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldSubJobCount, v))
+// TriggerTypeEQ applies the EQ predicate on the "trigger_type" field.
+func TriggerTypeEQ(v string) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldTriggerType, v))
 }
 
-// SubJobCountNEQ applies the NEQ predicate on the "sub_job_count" field.
-func SubJobCountNEQ(v int) predicate.Job {
-	return predicate.Job(sql.FieldNEQ(FieldSubJobCount, v))
+// TriggerTypeNEQ applies the NEQ predicate on the "trigger_type" field.
+func TriggerTypeNEQ(v string) predicate.Job {
+	return predicate.Job(sql.FieldNEQ(FieldTriggerType, v))
 }
 
-// SubJobCountIn applies the In predicate on the "sub_job_count" field.
-func SubJobCountIn(vs ...int) predicate.Job {
-	return predicate.Job(sql.FieldIn(FieldSubJobCount, vs...))
+// TriggerTypeIn applies the In predicate on the "trigger_type" field.
+func TriggerTypeIn(vs ...string) predicate.Job {
+	return predicate.Job(sql.FieldIn(FieldTriggerType, vs...))
 }
 
-// SubJobCountNotIn applies the NotIn predicate on the "sub_job_count" field.
-func SubJobCountNotIn(vs ...int) predicate.Job {
-	return predicate.Job(sql.FieldNotIn(FieldSubJobCount, vs...))
+// TriggerTypeNotIn applies the NotIn predicate on the "trigger_type" field.
+func TriggerTypeNotIn(vs ...string) predicate.Job {
+	return predicate.Job(sql.FieldNotIn(FieldTriggerType, vs...))
 }
 
-// SubJobCountGT applies the GT predicate on the "sub_job_count" field.
-func SubJobCountGT(v int) predicate.Job {
-	return predicate.Job(sql.FieldGT(FieldSubJobCount, v))
+// TriggerTypeGT applies the GT predicate on the "trigger_type" field.
+func TriggerTypeGT(v string) predicate.Job {
+	return predicate.Job(sql.FieldGT(FieldTriggerType, v))
 }
 
-// SubJobCountGTE applies the GTE predicate on the "sub_job_count" field.
-func SubJobCountGTE(v int) predicate.Job {
-	return predicate.Job(sql.FieldGTE(FieldSubJobCount, v))
+// TriggerTypeGTE applies the GTE predicate on the "trigger_type" field.
+func TriggerTypeGTE(v string) predicate.Job {
+	return predicate.Job(sql.FieldGTE(FieldTriggerType, v))
 }
 
-// SubJobCountLT applies the LT predicate on the "sub_job_count" field.
-func SubJobCountLT(v int) predicate.Job {
-	return predicate.Job(sql.FieldLT(FieldSubJobCount, v))
+// TriggerTypeLT applies the LT predicate on the "trigger_type" field.
+func TriggerTypeLT(v string) predicate.Job {
+	return predicate.Job(sql.FieldLT(FieldTriggerType, v))
 }
 
-// SubJobCountLTE applies the LTE predicate on the "sub_job_count" field.
-func SubJobCountLTE(v int) predicate.Job {
-	return predicate.Job(sql.FieldLTE(FieldSubJobCount, v))
+// TriggerTypeLTE applies the LTE predicate on the "trigger_type" field.
+func TriggerTypeLTE(v string) predicate.Job {
+	return predicate.Job(sql.FieldLTE(FieldTriggerType, v))
 }
 
-// CompletedSubJobsEQ applies the EQ predicate on the "completed_sub_jobs" field.
-func CompletedSubJobsEQ(v int) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldCompletedSubJobs, v))
+// TriggerTypeContains applies the Contains predicate on the "trigger_type" field.
+func TriggerTypeContains(v string) predicate.Job {
+	return predicate.Job(sql.FieldContains(FieldTriggerType, v))
 }
 
-// CompletedSubJobsNEQ applies the NEQ predicate on the "completed_sub_jobs" field.
-func CompletedSubJobsNEQ(v int) predicate.Job {
-	return predicate.Job(sql.FieldNEQ(FieldCompletedSubJobs, v))
+// TriggerTypeHasPrefix applies the HasPrefix predicate on the "trigger_type" field.
+func TriggerTypeHasPrefix(v string) predicate.Job {
+	return predicate.Job(sql.FieldHasPrefix(FieldTriggerType, v))
 }
 
-// CompletedSubJobsIn applies the In predicate on the "completed_sub_jobs" field.
-func CompletedSubJobsIn(vs ...int) predicate.Job {
-	return predicate.Job(sql.FieldIn(FieldCompletedSubJobs, vs...))
+// TriggerTypeHasSuffix applies the HasSuffix predicate on the "trigger_type" field.
+func TriggerTypeHasSuffix(v string) predicate.Job {
+	return predicate.Job(sql.FieldHasSuffix(FieldTriggerType, v))
 }
 
-// CompletedSubJobsNotIn applies the NotIn predicate on the "completed_sub_jobs" field.
-func CompletedSubJobsNotIn(vs ...int) predicate.Job {
-	return predicate.Job(sql.FieldNotIn(FieldCompletedSubJobs, vs...))
+// TriggerTypeEqualFold applies the EqualFold predicate on the "trigger_type" field.
+func TriggerTypeEqualFold(v string) predicate.Job {
+	return predicate.Job(sql.FieldEqualFold(FieldTriggerType, v))
 }
 
-// CompletedSubJobsGT applies the GT predicate on the "completed_sub_jobs" field.
-func CompletedSubJobsGT(v int) predicate.Job {
-	return predicate.Job(sql.FieldGT(FieldCompletedSubJobs, v))
+// TriggerTypeContainsFold applies the ContainsFold predicate on the "trigger_type" field.
+func TriggerTypeContainsFold(v string) predicate.Job {
+	return predicate.Job(sql.FieldContainsFold(FieldTriggerType, v))
 }
 
-// CompletedSubJobsGTE applies the GTE predicate on the "completed_sub_jobs" field.
-func CompletedSubJobsGTE(v int) predicate.Job {
-	return predicate.Job(sql.FieldGTE(FieldCompletedSubJobs, v))
+// ExecutionPlanIDEQ applies the EQ predicate on the "execution_plan_id" field.
+func ExecutionPlanIDEQ(v int) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldExecutionPlanID, v))
 }
 
-// CompletedSubJobsLT applies the LT predicate on the "completed_sub_jobs" field.
-func CompletedSubJobsLT(v int) predicate.Job {
-	return predicate.Job(sql.FieldLT(FieldCompletedSubJobs, v))
+// ExecutionPlanIDNEQ applies the NEQ predicate on the "execution_plan_id" field.
+func ExecutionPlanIDNEQ(v int) predicate.Job {
+	return predicate.Job(sql.FieldNEQ(FieldExecutionPlanID, v))
 }
 
-// CompletedSubJobsLTE applies the LTE predicate on the "completed_sub_jobs" field.
-func CompletedSubJobsLTE(v int) predicate.Job {
-	return predicate.Job(sql.FieldLTE(FieldCompletedSubJobs, v))
+// ExecutionPlanIDIn applies the In predicate on the "execution_plan_id" field.
+func ExecutionPlanIDIn(vs ...int) predicate.Job {
+	return predicate.Job(sql.FieldIn(FieldExecutionPlanID, vs...))
 }
 
-// FailedSubJobsEQ applies the EQ predicate on the "failed_sub_jobs" field.
-func FailedSubJobsEQ(v int) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldFailedSubJobs, v))
+// ExecutionPlanIDNotIn applies the NotIn predicate on the "execution_plan_id" field.
+func ExecutionPlanIDNotIn(vs ...int) predicate.Job {
+	return predicate.Job(sql.FieldNotIn(FieldExecutionPlanID, vs...))
 }
 
-// FailedSubJobsNEQ applies the NEQ predicate on the "failed_sub_jobs" field.
-func FailedSubJobsNEQ(v int) predicate.Job {
-	return predicate.Job(sql.FieldNEQ(FieldFailedSubJobs, v))
+// ExecutionPlanIDGT applies the GT predicate on the "execution_plan_id" field.
+func ExecutionPlanIDGT(v int) predicate.Job {
+	return predicate.Job(sql.FieldGT(FieldExecutionPlanID, v))
 }
 
-// FailedSubJobsIn applies the In predicate on the "failed_sub_jobs" field.
-func FailedSubJobsIn(vs ...int) predicate.Job {
-	return predicate.Job(sql.FieldIn(FieldFailedSubJobs, vs...))
+// ExecutionPlanIDGTE applies the GTE predicate on the "execution_plan_id" field.
+func ExecutionPlanIDGTE(v int) predicate.Job {
+	return predicate.Job(sql.FieldGTE(FieldExecutionPlanID, v))
 }
 
-// FailedSubJobsNotIn applies the NotIn predicate on the "failed_sub_jobs" field.
-func FailedSubJobsNotIn(vs ...int) predicate.Job {
-	return predicate.Job(sql.FieldNotIn(FieldFailedSubJobs, vs...))
+// ExecutionPlanIDLT applies the LT predicate on the "execution_plan_id" field.
+func ExecutionPlanIDLT(v int) predicate.Job {
+	return predicate.Job(sql.FieldLT(FieldExecutionPlanID, v))
 }
 
-// FailedSubJobsGT applies the GT predicate on the "failed_sub_jobs" field.
-func FailedSubJobsGT(v int) predicate.Job {
-	return predicate.Job(sql.FieldGT(FieldFailedSubJobs, v))
+// ExecutionPlanIDLTE applies the LTE predicate on the "execution_plan_id" field.
+func ExecutionPlanIDLTE(v int) predicate.Job {
+	return predicate.Job(sql.FieldLTE(FieldExecutionPlanID, v))
 }
 
-// FailedSubJobsGTE applies the GTE predicate on the "failed_sub_jobs" field.
-func FailedSubJobsGTE(v int) predicate.Job {
-	return predicate.Job(sql.FieldGTE(FieldFailedSubJobs, v))
+// ResourceCountEQ applies the EQ predicate on the "resource_count" field.
+func ResourceCountEQ(v int) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldResourceCount, v))
 }
 
-// FailedSubJobsLT applies the LT predicate on the "failed_sub_jobs" field.
-func FailedSubJobsLT(v int) predicate.Job {
-	return predicate.Job(sql.FieldLT(FieldFailedSubJobs, v))
+// ResourceCountNEQ applies the NEQ predicate on the "resource_count" field.
+func ResourceCountNEQ(v int) predicate.Job {
+	return predicate.Job(sql.FieldNEQ(FieldResourceCount, v))
 }
 
-// FailedSubJobsLTE applies the LTE predicate on the "failed_sub_jobs" field.
-func FailedSubJobsLTE(v int) predicate.Job {
-	return predicate.Job(sql.FieldLTE(FieldFailedSubJobs, v))
+// ResourceCountIn applies the In predicate on the "resource_count" field.
+func ResourceCountIn(vs ...int) predicate.Job {
+	return predicate.Job(sql.FieldIn(FieldResourceCount, vs...))
 }
 
-// SourceLangEQ applies the EQ predicate on the "source_lang" field.
-func SourceLangEQ(v string) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldSourceLang, v))
+// ResourceCountNotIn applies the NotIn predicate on the "resource_count" field.
+func ResourceCountNotIn(vs ...int) predicate.Job {
+	return predicate.Job(sql.FieldNotIn(FieldResourceCount, vs...))
 }
 
-// SourceLangNEQ applies the NEQ predicate on the "source_lang" field.
-func SourceLangNEQ(v string) predicate.Job {
-	return predicate.Job(sql.FieldNEQ(FieldSourceLang, v))
+// ResourceCountGT applies the GT predicate on the "resource_count" field.
+func ResourceCountGT(v int) predicate.Job {
+	return predicate.Job(sql.FieldGT(FieldResourceCount, v))
 }
 
-// SourceLangIn applies the In predicate on the "source_lang" field.
-func SourceLangIn(vs ...string) predicate.Job {
-	return predicate.Job(sql.FieldIn(FieldSourceLang, vs...))
+// ResourceCountGTE applies the GTE predicate on the "resource_count" field.
+func ResourceCountGTE(v int) predicate.Job {
+	return predicate.Job(sql.FieldGTE(FieldResourceCount, v))
 }
 
-// SourceLangNotIn applies the NotIn predicate on the "source_lang" field.
-func SourceLangNotIn(vs ...string) predicate.Job {
-	return predicate.Job(sql.FieldNotIn(FieldSourceLang, vs...))
+// ResourceCountLT applies the LT predicate on the "resource_count" field.
+func ResourceCountLT(v int) predicate.Job {
+	return predicate.Job(sql.FieldLT(FieldResourceCount, v))
 }
 
-// SourceLangGT applies the GT predicate on the "source_lang" field.
-func SourceLangGT(v string) predicate.Job {
-	return predicate.Job(sql.FieldGT(FieldSourceLang, v))
+// ResourceCountLTE applies the LTE predicate on the "resource_count" field.
+func ResourceCountLTE(v int) predicate.Job {
+	return predicate.Job(sql.FieldLTE(FieldResourceCount, v))
 }
 
-// SourceLangGTE applies the GTE predicate on the "source_lang" field.
-func SourceLangGTE(v string) predicate.Job {
-	return predicate.Job(sql.FieldGTE(FieldSourceLang, v))
+// CompletedResourcesEQ applies the EQ predicate on the "completed_resources" field.
+func CompletedResourcesEQ(v int) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldCompletedResources, v))
 }
 
-// SourceLangLT applies the LT predicate on the "source_lang" field.
-func SourceLangLT(v string) predicate.Job {
-	return predicate.Job(sql.FieldLT(FieldSourceLang, v))
+// CompletedResourcesNEQ applies the NEQ predicate on the "completed_resources" field.
+func CompletedResourcesNEQ(v int) predicate.Job {
+	return predicate.Job(sql.FieldNEQ(FieldCompletedResources, v))
 }
 
-// SourceLangLTE applies the LTE predicate on the "source_lang" field.
-func SourceLangLTE(v string) predicate.Job {
-	return predicate.Job(sql.FieldLTE(FieldSourceLang, v))
+// CompletedResourcesIn applies the In predicate on the "completed_resources" field.
+func CompletedResourcesIn(vs ...int) predicate.Job {
+	return predicate.Job(sql.FieldIn(FieldCompletedResources, vs...))
 }
 
-// SourceLangContains applies the Contains predicate on the "source_lang" field.
-func SourceLangContains(v string) predicate.Job {
-	return predicate.Job(sql.FieldContains(FieldSourceLang, v))
+// CompletedResourcesNotIn applies the NotIn predicate on the "completed_resources" field.
+func CompletedResourcesNotIn(vs ...int) predicate.Job {
+	return predicate.Job(sql.FieldNotIn(FieldCompletedResources, vs...))
 }
 
-// SourceLangHasPrefix applies the HasPrefix predicate on the "source_lang" field.
-func SourceLangHasPrefix(v string) predicate.Job {
-	return predicate.Job(sql.FieldHasPrefix(FieldSourceLang, v))
+// CompletedResourcesGT applies the GT predicate on the "completed_resources" field.
+func CompletedResourcesGT(v int) predicate.Job {
+	return predicate.Job(sql.FieldGT(FieldCompletedResources, v))
 }
 
-// SourceLangHasSuffix applies the HasSuffix predicate on the "source_lang" field.
-func SourceLangHasSuffix(v string) predicate.Job {
-	return predicate.Job(sql.FieldHasSuffix(FieldSourceLang, v))
+// CompletedResourcesGTE applies the GTE predicate on the "completed_resources" field.
+func CompletedResourcesGTE(v int) predicate.Job {
+	return predicate.Job(sql.FieldGTE(FieldCompletedResources, v))
 }
 
-// SourceLangEqualFold applies the EqualFold predicate on the "source_lang" field.
-func SourceLangEqualFold(v string) predicate.Job {
-	return predicate.Job(sql.FieldEqualFold(FieldSourceLang, v))
+// CompletedResourcesLT applies the LT predicate on the "completed_resources" field.
+func CompletedResourcesLT(v int) predicate.Job {
+	return predicate.Job(sql.FieldLT(FieldCompletedResources, v))
 }
 
-// SourceLangContainsFold applies the ContainsFold predicate on the "source_lang" field.
-func SourceLangContainsFold(v string) predicate.Job {
-	return predicate.Job(sql.FieldContainsFold(FieldSourceLang, v))
+// CompletedResourcesLTE applies the LTE predicate on the "completed_resources" field.
+func CompletedResourcesLTE(v int) predicate.Job {
+	return predicate.Job(sql.FieldLTE(FieldCompletedResources, v))
 }
 
-// TargetLangEQ applies the EQ predicate on the "target_lang" field.
-func TargetLangEQ(v string) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldTargetLang, v))
+// FailedResourcesEQ applies the EQ predicate on the "failed_resources" field.
+func FailedResourcesEQ(v int) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldFailedResources, v))
 }
 
-// TargetLangNEQ applies the NEQ predicate on the "target_lang" field.
-func TargetLangNEQ(v string) predicate.Job {
-	return predicate.Job(sql.FieldNEQ(FieldTargetLang, v))
+// FailedResourcesNEQ applies the NEQ predicate on the "failed_resources" field.
+func FailedResourcesNEQ(v int) predicate.Job {
+	return predicate.Job(sql.FieldNEQ(FieldFailedResources, v))
 }
 
-// TargetLangIn applies the In predicate on the "target_lang" field.
-func TargetLangIn(vs ...string) predicate.Job {
-	return predicate.Job(sql.FieldIn(FieldTargetLang, vs...))
+// FailedResourcesIn applies the In predicate on the "failed_resources" field.
+func FailedResourcesIn(vs ...int) predicate.Job {
+	return predicate.Job(sql.FieldIn(FieldFailedResources, vs...))
 }
 
-// TargetLangNotIn applies the NotIn predicate on the "target_lang" field.
-func TargetLangNotIn(vs ...string) predicate.Job {
-	return predicate.Job(sql.FieldNotIn(FieldTargetLang, vs...))
+// FailedResourcesNotIn applies the NotIn predicate on the "failed_resources" field.
+func FailedResourcesNotIn(vs ...int) predicate.Job {
+	return predicate.Job(sql.FieldNotIn(FieldFailedResources, vs...))
 }
 
-// TargetLangGT applies the GT predicate on the "target_lang" field.
-func TargetLangGT(v string) predicate.Job {
-	return predicate.Job(sql.FieldGT(FieldTargetLang, v))
+// FailedResourcesGT applies the GT predicate on the "failed_resources" field.
+func FailedResourcesGT(v int) predicate.Job {
+	return predicate.Job(sql.FieldGT(FieldFailedResources, v))
 }
 
-// TargetLangGTE applies the GTE predicate on the "target_lang" field.
-func TargetLangGTE(v string) predicate.Job {
-	return predicate.Job(sql.FieldGTE(FieldTargetLang, v))
+// FailedResourcesGTE applies the GTE predicate on the "failed_resources" field.
+func FailedResourcesGTE(v int) predicate.Job {
+	return predicate.Job(sql.FieldGTE(FieldFailedResources, v))
 }
 
-// TargetLangLT applies the LT predicate on the "target_lang" field.
-func TargetLangLT(v string) predicate.Job {
-	return predicate.Job(sql.FieldLT(FieldTargetLang, v))
+// FailedResourcesLT applies the LT predicate on the "failed_resources" field.
+func FailedResourcesLT(v int) predicate.Job {
+	return predicate.Job(sql.FieldLT(FieldFailedResources, v))
 }
 
-// TargetLangLTE applies the LTE predicate on the "target_lang" field.
-func TargetLangLTE(v string) predicate.Job {
-	return predicate.Job(sql.FieldLTE(FieldTargetLang, v))
+// FailedResourcesLTE applies the LTE predicate on the "failed_resources" field.
+func FailedResourcesLTE(v int) predicate.Job {
+	return predicate.Job(sql.FieldLTE(FieldFailedResources, v))
 }
 
-// TargetLangContains applies the Contains predicate on the "target_lang" field.
-func TargetLangContains(v string) predicate.Job {
-	return predicate.Job(sql.FieldContains(FieldTargetLang, v))
+// TotalSegmentsEQ applies the EQ predicate on the "total_segments" field.
+func TotalSegmentsEQ(v int) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldTotalSegments, v))
 }
 
-// TargetLangHasPrefix applies the HasPrefix predicate on the "target_lang" field.
-func TargetLangHasPrefix(v string) predicate.Job {
-	return predicate.Job(sql.FieldHasPrefix(FieldTargetLang, v))
+// TotalSegmentsNEQ applies the NEQ predicate on the "total_segments" field.
+func TotalSegmentsNEQ(v int) predicate.Job {
+	return predicate.Job(sql.FieldNEQ(FieldTotalSegments, v))
 }
 
-// TargetLangHasSuffix applies the HasSuffix predicate on the "target_lang" field.
-func TargetLangHasSuffix(v string) predicate.Job {
-	return predicate.Job(sql.FieldHasSuffix(FieldTargetLang, v))
+// TotalSegmentsIn applies the In predicate on the "total_segments" field.
+func TotalSegmentsIn(vs ...int) predicate.Job {
+	return predicate.Job(sql.FieldIn(FieldTotalSegments, vs...))
 }
 
-// TargetLangEqualFold applies the EqualFold predicate on the "target_lang" field.
-func TargetLangEqualFold(v string) predicate.Job {
-	return predicate.Job(sql.FieldEqualFold(FieldTargetLang, v))
+// TotalSegmentsNotIn applies the NotIn predicate on the "total_segments" field.
+func TotalSegmentsNotIn(vs ...int) predicate.Job {
+	return predicate.Job(sql.FieldNotIn(FieldTotalSegments, vs...))
 }
 
-// TargetLangContainsFold applies the ContainsFold predicate on the "target_lang" field.
-func TargetLangContainsFold(v string) predicate.Job {
-	return predicate.Job(sql.FieldContainsFold(FieldTargetLang, v))
+// TotalSegmentsGT applies the GT predicate on the "total_segments" field.
+func TotalSegmentsGT(v int) predicate.Job {
+	return predicate.Job(sql.FieldGT(FieldTotalSegments, v))
 }
 
-// InputPathEQ applies the EQ predicate on the "input_path" field.
-func InputPathEQ(v string) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldInputPath, v))
+// TotalSegmentsGTE applies the GTE predicate on the "total_segments" field.
+func TotalSegmentsGTE(v int) predicate.Job {
+	return predicate.Job(sql.FieldGTE(FieldTotalSegments, v))
 }
 
-// InputPathNEQ applies the NEQ predicate on the "input_path" field.
-func InputPathNEQ(v string) predicate.Job {
-	return predicate.Job(sql.FieldNEQ(FieldInputPath, v))
+// TotalSegmentsLT applies the LT predicate on the "total_segments" field.
+func TotalSegmentsLT(v int) predicate.Job {
+	return predicate.Job(sql.FieldLT(FieldTotalSegments, v))
 }
 
-// InputPathIn applies the In predicate on the "input_path" field.
-func InputPathIn(vs ...string) predicate.Job {
-	return predicate.Job(sql.FieldIn(FieldInputPath, vs...))
+// TotalSegmentsLTE applies the LTE predicate on the "total_segments" field.
+func TotalSegmentsLTE(v int) predicate.Job {
+	return predicate.Job(sql.FieldLTE(FieldTotalSegments, v))
 }
 
-// InputPathNotIn applies the NotIn predicate on the "input_path" field.
-func InputPathNotIn(vs ...string) predicate.Job {
-	return predicate.Job(sql.FieldNotIn(FieldInputPath, vs...))
+// SkippedSegmentsEQ applies the EQ predicate on the "skipped_segments" field.
+func SkippedSegmentsEQ(v int) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldSkippedSegments, v))
 }
 
-// InputPathGT applies the GT predicate on the "input_path" field.
-func InputPathGT(v string) predicate.Job {
-	return predicate.Job(sql.FieldGT(FieldInputPath, v))
+// SkippedSegmentsNEQ applies the NEQ predicate on the "skipped_segments" field.
+func SkippedSegmentsNEQ(v int) predicate.Job {
+	return predicate.Job(sql.FieldNEQ(FieldSkippedSegments, v))
 }
 
-// InputPathGTE applies the GTE predicate on the "input_path" field.
-func InputPathGTE(v string) predicate.Job {
-	return predicate.Job(sql.FieldGTE(FieldInputPath, v))
+// SkippedSegmentsIn applies the In predicate on the "skipped_segments" field.
+func SkippedSegmentsIn(vs ...int) predicate.Job {
+	return predicate.Job(sql.FieldIn(FieldSkippedSegments, vs...))
 }
 
-// InputPathLT applies the LT predicate on the "input_path" field.
-func InputPathLT(v string) predicate.Job {
-	return predicate.Job(sql.FieldLT(FieldInputPath, v))
+// SkippedSegmentsNotIn applies the NotIn predicate on the "skipped_segments" field.
+func SkippedSegmentsNotIn(vs ...int) predicate.Job {
+	return predicate.Job(sql.FieldNotIn(FieldSkippedSegments, vs...))
 }
 
-// InputPathLTE applies the LTE predicate on the "input_path" field.
-func InputPathLTE(v string) predicate.Job {
-	return predicate.Job(sql.FieldLTE(FieldInputPath, v))
+// SkippedSegmentsGT applies the GT predicate on the "skipped_segments" field.
+func SkippedSegmentsGT(v int) predicate.Job {
+	return predicate.Job(sql.FieldGT(FieldSkippedSegments, v))
 }
 
-// InputPathContains applies the Contains predicate on the "input_path" field.
-func InputPathContains(v string) predicate.Job {
-	return predicate.Job(sql.FieldContains(FieldInputPath, v))
+// SkippedSegmentsGTE applies the GTE predicate on the "skipped_segments" field.
+func SkippedSegmentsGTE(v int) predicate.Job {
+	return predicate.Job(sql.FieldGTE(FieldSkippedSegments, v))
 }
 
-// InputPathHasPrefix applies the HasPrefix predicate on the "input_path" field.
-func InputPathHasPrefix(v string) predicate.Job {
-	return predicate.Job(sql.FieldHasPrefix(FieldInputPath, v))
+// SkippedSegmentsLT applies the LT predicate on the "skipped_segments" field.
+func SkippedSegmentsLT(v int) predicate.Job {
+	return predicate.Job(sql.FieldLT(FieldSkippedSegments, v))
 }
 
-// InputPathHasSuffix applies the HasSuffix predicate on the "input_path" field.
-func InputPathHasSuffix(v string) predicate.Job {
-	return predicate.Job(sql.FieldHasSuffix(FieldInputPath, v))
+// SkippedSegmentsLTE applies the LTE predicate on the "skipped_segments" field.
+func SkippedSegmentsLTE(v int) predicate.Job {
+	return predicate.Job(sql.FieldLTE(FieldSkippedSegments, v))
 }
 
-// InputPathIsNil applies the IsNil predicate on the "input_path" field.
-func InputPathIsNil() predicate.Job {
-	return predicate.Job(sql.FieldIsNull(FieldInputPath))
+// StageTotalEQ applies the EQ predicate on the "stage_total" field.
+func StageTotalEQ(v int) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldStageTotal, v))
 }
 
-// InputPathNotNil applies the NotNil predicate on the "input_path" field.
-func InputPathNotNil() predicate.Job {
-	return predicate.Job(sql.FieldNotNull(FieldInputPath))
+// StageTotalNEQ applies the NEQ predicate on the "stage_total" field.
+func StageTotalNEQ(v int) predicate.Job {
+	return predicate.Job(sql.FieldNEQ(FieldStageTotal, v))
 }
 
-// InputPathEqualFold applies the EqualFold predicate on the "input_path" field.
-func InputPathEqualFold(v string) predicate.Job {
-	return predicate.Job(sql.FieldEqualFold(FieldInputPath, v))
+// StageTotalIn applies the In predicate on the "stage_total" field.
+func StageTotalIn(vs ...int) predicate.Job {
+	return predicate.Job(sql.FieldIn(FieldStageTotal, vs...))
 }
 
-// InputPathContainsFold applies the ContainsFold predicate on the "input_path" field.
-func InputPathContainsFold(v string) predicate.Job {
-	return predicate.Job(sql.FieldContainsFold(FieldInputPath, v))
+// StageTotalNotIn applies the NotIn predicate on the "stage_total" field.
+func StageTotalNotIn(vs ...int) predicate.Job {
+	return predicate.Job(sql.FieldNotIn(FieldStageTotal, vs...))
 }
 
-// OutputPathEQ applies the EQ predicate on the "output_path" field.
-func OutputPathEQ(v string) predicate.Job {
-	return predicate.Job(sql.FieldEQ(FieldOutputPath, v))
+// StageTotalGT applies the GT predicate on the "stage_total" field.
+func StageTotalGT(v int) predicate.Job {
+	return predicate.Job(sql.FieldGT(FieldStageTotal, v))
 }
 
-// OutputPathNEQ applies the NEQ predicate on the "output_path" field.
-func OutputPathNEQ(v string) predicate.Job {
-	return predicate.Job(sql.FieldNEQ(FieldOutputPath, v))
+// StageTotalGTE applies the GTE predicate on the "stage_total" field.
+func StageTotalGTE(v int) predicate.Job {
+	return predicate.Job(sql.FieldGTE(FieldStageTotal, v))
 }
 
-// OutputPathIn applies the In predicate on the "output_path" field.
-func OutputPathIn(vs ...string) predicate.Job {
-	return predicate.Job(sql.FieldIn(FieldOutputPath, vs...))
+// StageTotalLT applies the LT predicate on the "stage_total" field.
+func StageTotalLT(v int) predicate.Job {
+	return predicate.Job(sql.FieldLT(FieldStageTotal, v))
 }
 
-// OutputPathNotIn applies the NotIn predicate on the "output_path" field.
-func OutputPathNotIn(vs ...string) predicate.Job {
-	return predicate.Job(sql.FieldNotIn(FieldOutputPath, vs...))
+// StageTotalLTE applies the LTE predicate on the "stage_total" field.
+func StageTotalLTE(v int) predicate.Job {
+	return predicate.Job(sql.FieldLTE(FieldStageTotal, v))
 }
 
-// OutputPathGT applies the GT predicate on the "output_path" field.
-func OutputPathGT(v string) predicate.Job {
-	return predicate.Job(sql.FieldGT(FieldOutputPath, v))
+// CompletedSegmentsEQ applies the EQ predicate on the "completed_segments" field.
+func CompletedSegmentsEQ(v int) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldCompletedSegments, v))
 }
 
-// OutputPathGTE applies the GTE predicate on the "output_path" field.
-func OutputPathGTE(v string) predicate.Job {
-	return predicate.Job(sql.FieldGTE(FieldOutputPath, v))
+// CompletedSegmentsNEQ applies the NEQ predicate on the "completed_segments" field.
+func CompletedSegmentsNEQ(v int) predicate.Job {
+	return predicate.Job(sql.FieldNEQ(FieldCompletedSegments, v))
 }
 
-// OutputPathLT applies the LT predicate on the "output_path" field.
-func OutputPathLT(v string) predicate.Job {
-	return predicate.Job(sql.FieldLT(FieldOutputPath, v))
+// CompletedSegmentsIn applies the In predicate on the "completed_segments" field.
+func CompletedSegmentsIn(vs ...int) predicate.Job {
+	return predicate.Job(sql.FieldIn(FieldCompletedSegments, vs...))
 }
 
-// OutputPathLTE applies the LTE predicate on the "output_path" field.
-func OutputPathLTE(v string) predicate.Job {
-	return predicate.Job(sql.FieldLTE(FieldOutputPath, v))
+// CompletedSegmentsNotIn applies the NotIn predicate on the "completed_segments" field.
+func CompletedSegmentsNotIn(vs ...int) predicate.Job {
+	return predicate.Job(sql.FieldNotIn(FieldCompletedSegments, vs...))
 }
 
-// OutputPathContains applies the Contains predicate on the "output_path" field.
-func OutputPathContains(v string) predicate.Job {
-	return predicate.Job(sql.FieldContains(FieldOutputPath, v))
+// CompletedSegmentsGT applies the GT predicate on the "completed_segments" field.
+func CompletedSegmentsGT(v int) predicate.Job {
+	return predicate.Job(sql.FieldGT(FieldCompletedSegments, v))
 }
 
-// OutputPathHasPrefix applies the HasPrefix predicate on the "output_path" field.
-func OutputPathHasPrefix(v string) predicate.Job {
-	return predicate.Job(sql.FieldHasPrefix(FieldOutputPath, v))
+// CompletedSegmentsGTE applies the GTE predicate on the "completed_segments" field.
+func CompletedSegmentsGTE(v int) predicate.Job {
+	return predicate.Job(sql.FieldGTE(FieldCompletedSegments, v))
 }
 
-// OutputPathHasSuffix applies the HasSuffix predicate on the "output_path" field.
-func OutputPathHasSuffix(v string) predicate.Job {
-	return predicate.Job(sql.FieldHasSuffix(FieldOutputPath, v))
+// CompletedSegmentsLT applies the LT predicate on the "completed_segments" field.
+func CompletedSegmentsLT(v int) predicate.Job {
+	return predicate.Job(sql.FieldLT(FieldCompletedSegments, v))
 }
 
-// OutputPathIsNil applies the IsNil predicate on the "output_path" field.
-func OutputPathIsNil() predicate.Job {
-	return predicate.Job(sql.FieldIsNull(FieldOutputPath))
-}
-
-// OutputPathNotNil applies the NotNil predicate on the "output_path" field.
-func OutputPathNotNil() predicate.Job {
-	return predicate.Job(sql.FieldNotNull(FieldOutputPath))
-}
-
-// OutputPathEqualFold applies the EqualFold predicate on the "output_path" field.
-func OutputPathEqualFold(v string) predicate.Job {
-	return predicate.Job(sql.FieldEqualFold(FieldOutputPath, v))
-}
-
-// OutputPathContainsFold applies the ContainsFold predicate on the "output_path" field.
-func OutputPathContainsFold(v string) predicate.Job {
-	return predicate.Job(sql.FieldContainsFold(FieldOutputPath, v))
+// CompletedSegmentsLTE applies the LTE predicate on the "completed_segments" field.
+func CompletedSegmentsLTE(v int) predicate.Job {
+	return predicate.Job(sql.FieldLTE(FieldCompletedSegments, v))
 }
 
 // ErrorMessageEQ applies the EQ predicate on the "error_message" field.
@@ -730,6 +755,56 @@ func ErrorMessageContainsFold(v string) predicate.Job {
 	return predicate.Job(sql.FieldContainsFold(FieldErrorMessage, v))
 }
 
+// StartedAtEQ applies the EQ predicate on the "started_at" field.
+func StartedAtEQ(v time.Time) predicate.Job {
+	return predicate.Job(sql.FieldEQ(FieldStartedAt, v))
+}
+
+// StartedAtNEQ applies the NEQ predicate on the "started_at" field.
+func StartedAtNEQ(v time.Time) predicate.Job {
+	return predicate.Job(sql.FieldNEQ(FieldStartedAt, v))
+}
+
+// StartedAtIn applies the In predicate on the "started_at" field.
+func StartedAtIn(vs ...time.Time) predicate.Job {
+	return predicate.Job(sql.FieldIn(FieldStartedAt, vs...))
+}
+
+// StartedAtNotIn applies the NotIn predicate on the "started_at" field.
+func StartedAtNotIn(vs ...time.Time) predicate.Job {
+	return predicate.Job(sql.FieldNotIn(FieldStartedAt, vs...))
+}
+
+// StartedAtGT applies the GT predicate on the "started_at" field.
+func StartedAtGT(v time.Time) predicate.Job {
+	return predicate.Job(sql.FieldGT(FieldStartedAt, v))
+}
+
+// StartedAtGTE applies the GTE predicate on the "started_at" field.
+func StartedAtGTE(v time.Time) predicate.Job {
+	return predicate.Job(sql.FieldGTE(FieldStartedAt, v))
+}
+
+// StartedAtLT applies the LT predicate on the "started_at" field.
+func StartedAtLT(v time.Time) predicate.Job {
+	return predicate.Job(sql.FieldLT(FieldStartedAt, v))
+}
+
+// StartedAtLTE applies the LTE predicate on the "started_at" field.
+func StartedAtLTE(v time.Time) predicate.Job {
+	return predicate.Job(sql.FieldLTE(FieldStartedAt, v))
+}
+
+// StartedAtIsNil applies the IsNil predicate on the "started_at" field.
+func StartedAtIsNil() predicate.Job {
+	return predicate.Job(sql.FieldIsNull(FieldStartedAt))
+}
+
+// StartedAtNotNil applies the NotNil predicate on the "started_at" field.
+func StartedAtNotNil() predicate.Job {
+	return predicate.Job(sql.FieldNotNull(FieldStartedAt))
+}
+
 // HasProject applies the HasEdge predicate on the "project" edge.
 func HasProject() predicate.Job {
 	return predicate.Job(func(s *sql.Selector) {
@@ -776,21 +851,21 @@ func HasCreatedByWith(preds ...predicate.User) predicate.Job {
 	})
 }
 
-// HasSubJobs applies the HasEdge predicate on the "sub_jobs" edge.
-func HasSubJobs() predicate.Job {
+// HasJobResources applies the HasEdge predicate on the "job_resources" edge.
+func HasJobResources() predicate.Job {
 	return predicate.Job(func(s *sql.Selector) {
 		step := sqlgraph.NewStep(
 			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, SubJobsTable, SubJobsColumn),
+			sqlgraph.Edge(sqlgraph.O2M, false, JobResourcesTable, JobResourcesColumn),
 		)
 		sqlgraph.HasNeighbors(s, step)
 	})
 }
 
-// HasSubJobsWith applies the HasEdge predicate on the "sub_jobs" edge with a given conditions (other predicates).
-func HasSubJobsWith(preds ...predicate.SubJob) predicate.Job {
+// HasJobResourcesWith applies the HasEdge predicate on the "job_resources" edge with a given conditions (other predicates).
+func HasJobResourcesWith(preds ...predicate.JobResource) predicate.Job {
 	return predicate.Job(func(s *sql.Selector) {
-		step := newSubJobsStep()
+		step := newJobResourcesStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)
@@ -799,44 +874,21 @@ func HasSubJobsWith(preds ...predicate.SubJob) predicate.Job {
 	})
 }
 
-// HasActivityLogs applies the HasEdge predicate on the "activity_logs" edge.
-func HasActivityLogs() predicate.Job {
+// HasSseEvents applies the HasEdge predicate on the "sse_events" edge.
+func HasSseEvents() predicate.Job {
 	return predicate.Job(func(s *sql.Selector) {
 		step := sqlgraph.NewStep(
 			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, ActivityLogsTable, ActivityLogsColumn),
+			sqlgraph.Edge(sqlgraph.O2M, false, SseEventsTable, SseEventsColumn),
 		)
 		sqlgraph.HasNeighbors(s, step)
 	})
 }
 
-// HasActivityLogsWith applies the HasEdge predicate on the "activity_logs" edge with a given conditions (other predicates).
-func HasActivityLogsWith(preds ...predicate.ActivityLog) predicate.Job {
+// HasSseEventsWith applies the HasEdge predicate on the "sse_events" edge with a given conditions (other predicates).
+func HasSseEventsWith(preds ...predicate.SSEEvent) predicate.Job {
 	return predicate.Job(func(s *sql.Selector) {
-		step := newActivityLogsStep()
-		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
-			for _, p := range preds {
-				p(s)
-			}
-		})
-	})
-}
-
-// HasUsageRecords applies the HasEdge predicate on the "usage_records" edge.
-func HasUsageRecords() predicate.Job {
-	return predicate.Job(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, UsageRecordsTable, UsageRecordsColumn),
-		)
-		sqlgraph.HasNeighbors(s, step)
-	})
-}
-
-// HasUsageRecordsWith applies the HasEdge predicate on the "usage_records" edge with a given conditions (other predicates).
-func HasUsageRecordsWith(preds ...predicate.UsageRecord) predicate.Job {
-	return predicate.Job(func(s *sql.Selector) {
-		step := newUsageRecordsStep()
+		step := newSseEventsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

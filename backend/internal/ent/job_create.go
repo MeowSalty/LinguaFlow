@@ -10,11 +10,10 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
@@ -53,6 +52,12 @@ func (_c *JobCreate) SetNillableUpdatedAt(v *time.Time) *JobCreate {
 	return _c
 }
 
+// SetProjectID sets the "project_id" field.
+func (_c *JobCreate) SetProjectID(v int) *JobCreate {
+	_c.mutation.SetProjectID(v)
+	return _c
+}
+
 // SetStatus sets the "status" field.
 func (_c *JobCreate) SetStatus(v string) *JobCreate {
 	_c.mutation.SetStatus(v)
@@ -67,106 +72,126 @@ func (_c *JobCreate) SetNillableStatus(v *string) *JobCreate {
 	return _c
 }
 
-// SetSubJobCount sets the "sub_job_count" field.
-func (_c *JobCreate) SetSubJobCount(v int) *JobCreate {
-	_c.mutation.SetSubJobCount(v)
+// SetTriggerType sets the "trigger_type" field.
+func (_c *JobCreate) SetTriggerType(v string) *JobCreate {
+	_c.mutation.SetTriggerType(v)
 	return _c
 }
 
-// SetNillableSubJobCount sets the "sub_job_count" field if the given value is not nil.
-func (_c *JobCreate) SetNillableSubJobCount(v *int) *JobCreate {
+// SetNillableTriggerType sets the "trigger_type" field if the given value is not nil.
+func (_c *JobCreate) SetNillableTriggerType(v *string) *JobCreate {
 	if v != nil {
-		_c.SetSubJobCount(*v)
+		_c.SetTriggerType(*v)
 	}
 	return _c
 }
 
-// SetCompletedSubJobs sets the "completed_sub_jobs" field.
-func (_c *JobCreate) SetCompletedSubJobs(v int) *JobCreate {
-	_c.mutation.SetCompletedSubJobs(v)
+// SetExecutionPlanID sets the "execution_plan_id" field.
+func (_c *JobCreate) SetExecutionPlanID(v int) *JobCreate {
+	_c.mutation.SetExecutionPlanID(v)
 	return _c
 }
 
-// SetNillableCompletedSubJobs sets the "completed_sub_jobs" field if the given value is not nil.
-func (_c *JobCreate) SetNillableCompletedSubJobs(v *int) *JobCreate {
+// SetExecutionConfig sets the "execution_config" field.
+func (_c *JobCreate) SetExecutionConfig(v map[string]interface{}) *JobCreate {
+	_c.mutation.SetExecutionConfig(v)
+	return _c
+}
+
+// SetResourceCount sets the "resource_count" field.
+func (_c *JobCreate) SetResourceCount(v int) *JobCreate {
+	_c.mutation.SetResourceCount(v)
+	return _c
+}
+
+// SetNillableResourceCount sets the "resource_count" field if the given value is not nil.
+func (_c *JobCreate) SetNillableResourceCount(v *int) *JobCreate {
 	if v != nil {
-		_c.SetCompletedSubJobs(*v)
+		_c.SetResourceCount(*v)
 	}
 	return _c
 }
 
-// SetFailedSubJobs sets the "failed_sub_jobs" field.
-func (_c *JobCreate) SetFailedSubJobs(v int) *JobCreate {
-	_c.mutation.SetFailedSubJobs(v)
+// SetCompletedResources sets the "completed_resources" field.
+func (_c *JobCreate) SetCompletedResources(v int) *JobCreate {
+	_c.mutation.SetCompletedResources(v)
 	return _c
 }
 
-// SetNillableFailedSubJobs sets the "failed_sub_jobs" field if the given value is not nil.
-func (_c *JobCreate) SetNillableFailedSubJobs(v *int) *JobCreate {
+// SetNillableCompletedResources sets the "completed_resources" field if the given value is not nil.
+func (_c *JobCreate) SetNillableCompletedResources(v *int) *JobCreate {
 	if v != nil {
-		_c.SetFailedSubJobs(*v)
+		_c.SetCompletedResources(*v)
 	}
 	return _c
 }
 
-// SetSourceLang sets the "source_lang" field.
-func (_c *JobCreate) SetSourceLang(v string) *JobCreate {
-	_c.mutation.SetSourceLang(v)
+// SetFailedResources sets the "failed_resources" field.
+func (_c *JobCreate) SetFailedResources(v int) *JobCreate {
+	_c.mutation.SetFailedResources(v)
 	return _c
 }
 
-// SetNillableSourceLang sets the "source_lang" field if the given value is not nil.
-func (_c *JobCreate) SetNillableSourceLang(v *string) *JobCreate {
+// SetNillableFailedResources sets the "failed_resources" field if the given value is not nil.
+func (_c *JobCreate) SetNillableFailedResources(v *int) *JobCreate {
 	if v != nil {
-		_c.SetSourceLang(*v)
+		_c.SetFailedResources(*v)
 	}
 	return _c
 }
 
-// SetTargetLang sets the "target_lang" field.
-func (_c *JobCreate) SetTargetLang(v string) *JobCreate {
-	_c.mutation.SetTargetLang(v)
+// SetTotalSegments sets the "total_segments" field.
+func (_c *JobCreate) SetTotalSegments(v int) *JobCreate {
+	_c.mutation.SetTotalSegments(v)
 	return _c
 }
 
-// SetNillableTargetLang sets the "target_lang" field if the given value is not nil.
-func (_c *JobCreate) SetNillableTargetLang(v *string) *JobCreate {
+// SetNillableTotalSegments sets the "total_segments" field if the given value is not nil.
+func (_c *JobCreate) SetNillableTotalSegments(v *int) *JobCreate {
 	if v != nil {
-		_c.SetTargetLang(*v)
+		_c.SetTotalSegments(*v)
 	}
 	return _c
 }
 
-// SetConfig sets the "config" field.
-func (_c *JobCreate) SetConfig(v map[string]interface{}) *JobCreate {
-	_c.mutation.SetConfig(v)
+// SetSkippedSegments sets the "skipped_segments" field.
+func (_c *JobCreate) SetSkippedSegments(v int) *JobCreate {
+	_c.mutation.SetSkippedSegments(v)
 	return _c
 }
 
-// SetInputPath sets the "input_path" field.
-func (_c *JobCreate) SetInputPath(v string) *JobCreate {
-	_c.mutation.SetInputPath(v)
-	return _c
-}
-
-// SetNillableInputPath sets the "input_path" field if the given value is not nil.
-func (_c *JobCreate) SetNillableInputPath(v *string) *JobCreate {
+// SetNillableSkippedSegments sets the "skipped_segments" field if the given value is not nil.
+func (_c *JobCreate) SetNillableSkippedSegments(v *int) *JobCreate {
 	if v != nil {
-		_c.SetInputPath(*v)
+		_c.SetSkippedSegments(*v)
 	}
 	return _c
 }
 
-// SetOutputPath sets the "output_path" field.
-func (_c *JobCreate) SetOutputPath(v string) *JobCreate {
-	_c.mutation.SetOutputPath(v)
+// SetStageTotal sets the "stage_total" field.
+func (_c *JobCreate) SetStageTotal(v int) *JobCreate {
+	_c.mutation.SetStageTotal(v)
 	return _c
 }
 
-// SetNillableOutputPath sets the "output_path" field if the given value is not nil.
-func (_c *JobCreate) SetNillableOutputPath(v *string) *JobCreate {
+// SetNillableStageTotal sets the "stage_total" field if the given value is not nil.
+func (_c *JobCreate) SetNillableStageTotal(v *int) *JobCreate {
 	if v != nil {
-		_c.SetOutputPath(*v)
+		_c.SetStageTotal(*v)
+	}
+	return _c
+}
+
+// SetCompletedSegments sets the "completed_segments" field.
+func (_c *JobCreate) SetCompletedSegments(v int) *JobCreate {
+	_c.mutation.SetCompletedSegments(v)
+	return _c
+}
+
+// SetNillableCompletedSegments sets the "completed_segments" field if the given value is not nil.
+func (_c *JobCreate) SetNillableCompletedSegments(v *int) *JobCreate {
+	if v != nil {
+		_c.SetCompletedSegments(*v)
 	}
 	return _c
 }
@@ -185,9 +210,17 @@ func (_c *JobCreate) SetNillableErrorMessage(v *string) *JobCreate {
 	return _c
 }
 
-// SetProjectID sets the "project" edge to the Project entity by ID.
-func (_c *JobCreate) SetProjectID(id int) *JobCreate {
-	_c.mutation.SetProjectID(id)
+// SetStartedAt sets the "started_at" field.
+func (_c *JobCreate) SetStartedAt(v time.Time) *JobCreate {
+	_c.mutation.SetStartedAt(v)
+	return _c
+}
+
+// SetNillableStartedAt sets the "started_at" field if the given value is not nil.
+func (_c *JobCreate) SetNillableStartedAt(v *time.Time) *JobCreate {
+	if v != nil {
+		_c.SetStartedAt(*v)
+	}
 	return _c
 }
 
@@ -215,49 +248,34 @@ func (_c *JobCreate) SetCreatedBy(v *User) *JobCreate {
 	return _c.SetCreatedByID(v.ID)
 }
 
-// AddSubJobIDs adds the "sub_jobs" edge to the SubJob entity by IDs.
-func (_c *JobCreate) AddSubJobIDs(ids ...int) *JobCreate {
-	_c.mutation.AddSubJobIDs(ids...)
+// AddJobResourceIDs adds the "job_resources" edge to the JobResource entity by IDs.
+func (_c *JobCreate) AddJobResourceIDs(ids ...int) *JobCreate {
+	_c.mutation.AddJobResourceIDs(ids...)
 	return _c
 }
 
-// AddSubJobs adds the "sub_jobs" edges to the SubJob entity.
-func (_c *JobCreate) AddSubJobs(v ...*SubJob) *JobCreate {
+// AddJobResources adds the "job_resources" edges to the JobResource entity.
+func (_c *JobCreate) AddJobResources(v ...*JobResource) *JobCreate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _c.AddSubJobIDs(ids...)
+	return _c.AddJobResourceIDs(ids...)
 }
 
-// AddActivityLogIDs adds the "activity_logs" edge to the ActivityLog entity by IDs.
-func (_c *JobCreate) AddActivityLogIDs(ids ...int) *JobCreate {
-	_c.mutation.AddActivityLogIDs(ids...)
+// AddSseEventIDs adds the "sse_events" edge to the SSEEvent entity by IDs.
+func (_c *JobCreate) AddSseEventIDs(ids ...int) *JobCreate {
+	_c.mutation.AddSseEventIDs(ids...)
 	return _c
 }
 
-// AddActivityLogs adds the "activity_logs" edges to the ActivityLog entity.
-func (_c *JobCreate) AddActivityLogs(v ...*ActivityLog) *JobCreate {
+// AddSseEvents adds the "sse_events" edges to the SSEEvent entity.
+func (_c *JobCreate) AddSseEvents(v ...*SSEEvent) *JobCreate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _c.AddActivityLogIDs(ids...)
-}
-
-// AddUsageRecordIDs adds the "usage_records" edge to the UsageRecord entity by IDs.
-func (_c *JobCreate) AddUsageRecordIDs(ids ...int) *JobCreate {
-	_c.mutation.AddUsageRecordIDs(ids...)
-	return _c
-}
-
-// AddUsageRecords adds the "usage_records" edges to the UsageRecord entity.
-func (_c *JobCreate) AddUsageRecords(v ...*UsageRecord) *JobCreate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _c.AddUsageRecordIDs(ids...)
+	return _c.AddSseEventIDs(ids...)
 }
 
 // Mutation returns the JobMutation object of the builder.
@@ -307,29 +325,41 @@ func (_c *JobCreate) defaults() {
 		v := job.DefaultStatus
 		_c.mutation.SetStatus(v)
 	}
-	if _, ok := _c.mutation.SubJobCount(); !ok {
-		v := job.DefaultSubJobCount
-		_c.mutation.SetSubJobCount(v)
+	if _, ok := _c.mutation.TriggerType(); !ok {
+		v := job.DefaultTriggerType
+		_c.mutation.SetTriggerType(v)
 	}
-	if _, ok := _c.mutation.CompletedSubJobs(); !ok {
-		v := job.DefaultCompletedSubJobs
-		_c.mutation.SetCompletedSubJobs(v)
+	if _, ok := _c.mutation.ExecutionConfig(); !ok {
+		v := job.DefaultExecutionConfig()
+		_c.mutation.SetExecutionConfig(v)
 	}
-	if _, ok := _c.mutation.FailedSubJobs(); !ok {
-		v := job.DefaultFailedSubJobs
-		_c.mutation.SetFailedSubJobs(v)
+	if _, ok := _c.mutation.ResourceCount(); !ok {
+		v := job.DefaultResourceCount
+		_c.mutation.SetResourceCount(v)
 	}
-	if _, ok := _c.mutation.SourceLang(); !ok {
-		v := job.DefaultSourceLang
-		_c.mutation.SetSourceLang(v)
+	if _, ok := _c.mutation.CompletedResources(); !ok {
+		v := job.DefaultCompletedResources
+		_c.mutation.SetCompletedResources(v)
 	}
-	if _, ok := _c.mutation.TargetLang(); !ok {
-		v := job.DefaultTargetLang
-		_c.mutation.SetTargetLang(v)
+	if _, ok := _c.mutation.FailedResources(); !ok {
+		v := job.DefaultFailedResources
+		_c.mutation.SetFailedResources(v)
 	}
-	if _, ok := _c.mutation.Config(); !ok {
-		v := job.DefaultConfig()
-		_c.mutation.SetConfig(v)
+	if _, ok := _c.mutation.TotalSegments(); !ok {
+		v := job.DefaultTotalSegments
+		_c.mutation.SetTotalSegments(v)
+	}
+	if _, ok := _c.mutation.SkippedSegments(); !ok {
+		v := job.DefaultSkippedSegments
+		_c.mutation.SetSkippedSegments(v)
+	}
+	if _, ok := _c.mutation.StageTotal(); !ok {
+		v := job.DefaultStageTotal
+		_c.mutation.SetStageTotal(v)
+	}
+	if _, ok := _c.mutation.CompletedSegments(); !ok {
+		v := job.DefaultCompletedSegments
+		_c.mutation.SetCompletedSegments(v)
 	}
 }
 
@@ -341,41 +371,86 @@ func (_c *JobCreate) check() error {
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "Job.updated_at"`)}
 	}
+	if _, ok := _c.mutation.ProjectID(); !ok {
+		return &ValidationError{Name: "project_id", err: errors.New(`ent: missing required field "Job.project_id"`)}
+	}
+	if v, ok := _c.mutation.ProjectID(); ok {
+		if err := job.ProjectIDValidator(v); err != nil {
+			return &ValidationError{Name: "project_id", err: fmt.Errorf(`ent: validator failed for field "Job.project_id": %w`, err)}
+		}
+	}
 	if _, ok := _c.mutation.Status(); !ok {
 		return &ValidationError{Name: "status", err: errors.New(`ent: missing required field "Job.status"`)}
 	}
-	if _, ok := _c.mutation.SubJobCount(); !ok {
-		return &ValidationError{Name: "sub_job_count", err: errors.New(`ent: missing required field "Job.sub_job_count"`)}
+	if _, ok := _c.mutation.TriggerType(); !ok {
+		return &ValidationError{Name: "trigger_type", err: errors.New(`ent: missing required field "Job.trigger_type"`)}
 	}
-	if v, ok := _c.mutation.SubJobCount(); ok {
-		if err := job.SubJobCountValidator(v); err != nil {
-			return &ValidationError{Name: "sub_job_count", err: fmt.Errorf(`ent: validator failed for field "Job.sub_job_count": %w`, err)}
+	if _, ok := _c.mutation.ExecutionPlanID(); !ok {
+		return &ValidationError{Name: "execution_plan_id", err: errors.New(`ent: missing required field "Job.execution_plan_id"`)}
+	}
+	if v, ok := _c.mutation.ExecutionPlanID(); ok {
+		if err := job.ExecutionPlanIDValidator(v); err != nil {
+			return &ValidationError{Name: "execution_plan_id", err: fmt.Errorf(`ent: validator failed for field "Job.execution_plan_id": %w`, err)}
 		}
 	}
-	if _, ok := _c.mutation.CompletedSubJobs(); !ok {
-		return &ValidationError{Name: "completed_sub_jobs", err: errors.New(`ent: missing required field "Job.completed_sub_jobs"`)}
+	if _, ok := _c.mutation.ExecutionConfig(); !ok {
+		return &ValidationError{Name: "execution_config", err: errors.New(`ent: missing required field "Job.execution_config"`)}
 	}
-	if v, ok := _c.mutation.CompletedSubJobs(); ok {
-		if err := job.CompletedSubJobsValidator(v); err != nil {
-			return &ValidationError{Name: "completed_sub_jobs", err: fmt.Errorf(`ent: validator failed for field "Job.completed_sub_jobs": %w`, err)}
+	if _, ok := _c.mutation.ResourceCount(); !ok {
+		return &ValidationError{Name: "resource_count", err: errors.New(`ent: missing required field "Job.resource_count"`)}
+	}
+	if v, ok := _c.mutation.ResourceCount(); ok {
+		if err := job.ResourceCountValidator(v); err != nil {
+			return &ValidationError{Name: "resource_count", err: fmt.Errorf(`ent: validator failed for field "Job.resource_count": %w`, err)}
 		}
 	}
-	if _, ok := _c.mutation.FailedSubJobs(); !ok {
-		return &ValidationError{Name: "failed_sub_jobs", err: errors.New(`ent: missing required field "Job.failed_sub_jobs"`)}
+	if _, ok := _c.mutation.CompletedResources(); !ok {
+		return &ValidationError{Name: "completed_resources", err: errors.New(`ent: missing required field "Job.completed_resources"`)}
 	}
-	if v, ok := _c.mutation.FailedSubJobs(); ok {
-		if err := job.FailedSubJobsValidator(v); err != nil {
-			return &ValidationError{Name: "failed_sub_jobs", err: fmt.Errorf(`ent: validator failed for field "Job.failed_sub_jobs": %w`, err)}
+	if v, ok := _c.mutation.CompletedResources(); ok {
+		if err := job.CompletedResourcesValidator(v); err != nil {
+			return &ValidationError{Name: "completed_resources", err: fmt.Errorf(`ent: validator failed for field "Job.completed_resources": %w`, err)}
 		}
 	}
-	if _, ok := _c.mutation.SourceLang(); !ok {
-		return &ValidationError{Name: "source_lang", err: errors.New(`ent: missing required field "Job.source_lang"`)}
+	if _, ok := _c.mutation.FailedResources(); !ok {
+		return &ValidationError{Name: "failed_resources", err: errors.New(`ent: missing required field "Job.failed_resources"`)}
 	}
-	if _, ok := _c.mutation.TargetLang(); !ok {
-		return &ValidationError{Name: "target_lang", err: errors.New(`ent: missing required field "Job.target_lang"`)}
+	if v, ok := _c.mutation.FailedResources(); ok {
+		if err := job.FailedResourcesValidator(v); err != nil {
+			return &ValidationError{Name: "failed_resources", err: fmt.Errorf(`ent: validator failed for field "Job.failed_resources": %w`, err)}
+		}
 	}
-	if _, ok := _c.mutation.Config(); !ok {
-		return &ValidationError{Name: "config", err: errors.New(`ent: missing required field "Job.config"`)}
+	if _, ok := _c.mutation.TotalSegments(); !ok {
+		return &ValidationError{Name: "total_segments", err: errors.New(`ent: missing required field "Job.total_segments"`)}
+	}
+	if v, ok := _c.mutation.TotalSegments(); ok {
+		if err := job.TotalSegmentsValidator(v); err != nil {
+			return &ValidationError{Name: "total_segments", err: fmt.Errorf(`ent: validator failed for field "Job.total_segments": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.SkippedSegments(); !ok {
+		return &ValidationError{Name: "skipped_segments", err: errors.New(`ent: missing required field "Job.skipped_segments"`)}
+	}
+	if v, ok := _c.mutation.SkippedSegments(); ok {
+		if err := job.SkippedSegmentsValidator(v); err != nil {
+			return &ValidationError{Name: "skipped_segments", err: fmt.Errorf(`ent: validator failed for field "Job.skipped_segments": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.StageTotal(); !ok {
+		return &ValidationError{Name: "stage_total", err: errors.New(`ent: missing required field "Job.stage_total"`)}
+	}
+	if v, ok := _c.mutation.StageTotal(); ok {
+		if err := job.StageTotalValidator(v); err != nil {
+			return &ValidationError{Name: "stage_total", err: fmt.Errorf(`ent: validator failed for field "Job.stage_total": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.CompletedSegments(); !ok {
+		return &ValidationError{Name: "completed_segments", err: errors.New(`ent: missing required field "Job.completed_segments"`)}
+	}
+	if v, ok := _c.mutation.CompletedSegments(); ok {
+		if err := job.CompletedSegmentsValidator(v); err != nil {
+			return &ValidationError{Name: "completed_segments", err: fmt.Errorf(`ent: validator failed for field "Job.completed_segments": %w`, err)}
+		}
 	}
 	if len(_c.mutation.ProjectIDs()) == 0 {
 		return &ValidationError{Name: "project", err: errors.New(`ent: missing required edge "Job.project"`)}
@@ -418,41 +493,53 @@ func (_c *JobCreate) createSpec() (*Job, *sqlgraph.CreateSpec) {
 		_spec.SetField(job.FieldStatus, field.TypeString, value)
 		_node.Status = value
 	}
-	if value, ok := _c.mutation.SubJobCount(); ok {
-		_spec.SetField(job.FieldSubJobCount, field.TypeInt, value)
-		_node.SubJobCount = value
+	if value, ok := _c.mutation.TriggerType(); ok {
+		_spec.SetField(job.FieldTriggerType, field.TypeString, value)
+		_node.TriggerType = value
 	}
-	if value, ok := _c.mutation.CompletedSubJobs(); ok {
-		_spec.SetField(job.FieldCompletedSubJobs, field.TypeInt, value)
-		_node.CompletedSubJobs = value
+	if value, ok := _c.mutation.ExecutionPlanID(); ok {
+		_spec.SetField(job.FieldExecutionPlanID, field.TypeInt, value)
+		_node.ExecutionPlanID = value
 	}
-	if value, ok := _c.mutation.FailedSubJobs(); ok {
-		_spec.SetField(job.FieldFailedSubJobs, field.TypeInt, value)
-		_node.FailedSubJobs = value
+	if value, ok := _c.mutation.ExecutionConfig(); ok {
+		_spec.SetField(job.FieldExecutionConfig, field.TypeJSON, value)
+		_node.ExecutionConfig = value
 	}
-	if value, ok := _c.mutation.SourceLang(); ok {
-		_spec.SetField(job.FieldSourceLang, field.TypeString, value)
-		_node.SourceLang = value
+	if value, ok := _c.mutation.ResourceCount(); ok {
+		_spec.SetField(job.FieldResourceCount, field.TypeInt, value)
+		_node.ResourceCount = value
 	}
-	if value, ok := _c.mutation.TargetLang(); ok {
-		_spec.SetField(job.FieldTargetLang, field.TypeString, value)
-		_node.TargetLang = value
+	if value, ok := _c.mutation.CompletedResources(); ok {
+		_spec.SetField(job.FieldCompletedResources, field.TypeInt, value)
+		_node.CompletedResources = value
 	}
-	if value, ok := _c.mutation.Config(); ok {
-		_spec.SetField(job.FieldConfig, field.TypeJSON, value)
-		_node.Config = value
+	if value, ok := _c.mutation.FailedResources(); ok {
+		_spec.SetField(job.FieldFailedResources, field.TypeInt, value)
+		_node.FailedResources = value
 	}
-	if value, ok := _c.mutation.InputPath(); ok {
-		_spec.SetField(job.FieldInputPath, field.TypeString, value)
-		_node.InputPath = value
+	if value, ok := _c.mutation.TotalSegments(); ok {
+		_spec.SetField(job.FieldTotalSegments, field.TypeInt, value)
+		_node.TotalSegments = value
 	}
-	if value, ok := _c.mutation.OutputPath(); ok {
-		_spec.SetField(job.FieldOutputPath, field.TypeString, value)
-		_node.OutputPath = value
+	if value, ok := _c.mutation.SkippedSegments(); ok {
+		_spec.SetField(job.FieldSkippedSegments, field.TypeInt, value)
+		_node.SkippedSegments = value
+	}
+	if value, ok := _c.mutation.StageTotal(); ok {
+		_spec.SetField(job.FieldStageTotal, field.TypeInt, value)
+		_node.StageTotal = value
+	}
+	if value, ok := _c.mutation.CompletedSegments(); ok {
+		_spec.SetField(job.FieldCompletedSegments, field.TypeInt, value)
+		_node.CompletedSegments = value
 	}
 	if value, ok := _c.mutation.ErrorMessage(); ok {
 		_spec.SetField(job.FieldErrorMessage, field.TypeString, value)
 		_node.ErrorMessage = &value
+	}
+	if value, ok := _c.mutation.StartedAt(); ok {
+		_spec.SetField(job.FieldStartedAt, field.TypeTime, value)
+		_node.StartedAt = &value
 	}
 	if nodes := _c.mutation.ProjectIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
@@ -468,7 +555,7 @@ func (_c *JobCreate) createSpec() (*Job, *sqlgraph.CreateSpec) {
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
-		_node.project_jobs = &nodes[0]
+		_node.ProjectID = nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	if nodes := _c.mutation.CreatedByIDs(); len(nodes) > 0 {
@@ -485,18 +572,18 @@ func (_c *JobCreate) createSpec() (*Job, *sqlgraph.CreateSpec) {
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
-		_node.user_jobs = &nodes[0]
+		_node.user_created_jobs = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
-	if nodes := _c.mutation.SubJobsIDs(); len(nodes) > 0 {
+	if nodes := _c.mutation.JobResourcesIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   job.SubJobsTable,
-			Columns: []string{job.SubJobsColumn},
+			Table:   job.JobResourcesTable,
+			Columns: []string{job.JobResourcesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(subjob.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(jobresource.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -504,31 +591,15 @@ func (_c *JobCreate) createSpec() (*Job, *sqlgraph.CreateSpec) {
 		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
-	if nodes := _c.mutation.ActivityLogsIDs(); len(nodes) > 0 {
+	if nodes := _c.mutation.SseEventsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   job.ActivityLogsTable,
-			Columns: []string{job.ActivityLogsColumn},
+			Table:   job.SseEventsTable,
+			Columns: []string{job.SseEventsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(activitylog.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges = append(_spec.Edges, edge)
-	}
-	if nodes := _c.mutation.UsageRecordsIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   job.UsageRecordsTable,
-			Columns: []string{job.UsageRecordsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(sseevent.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

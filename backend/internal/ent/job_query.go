@@ -12,12 +12,11 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
@@ -30,9 +29,8 @@ type JobQuery struct {
 	predicates       []predicate.Job
 	withProject      *ProjectQuery
 	withCreatedBy    *UserQuery
-	withSubJobs      *SubJobQuery
-	withActivityLogs *ActivityLogQuery
-	withUsageRecords *UsageRecordQuery
+	withJobResources *JobResourceQuery
+	withSseEvents    *SSEEventQuery
 	withFKs          bool
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
@@ -114,9 +112,9 @@ func (_q *JobQuery) QueryCreatedBy() *UserQuery {
 	return query
 }
 
-// QuerySubJobs chains the current query on the "sub_jobs" edge.
-func (_q *JobQuery) QuerySubJobs() *SubJobQuery {
-	query := (&SubJobClient{config: _q.config}).Query()
+// QueryJobResources chains the current query on the "job_resources" edge.
+func (_q *JobQuery) QueryJobResources() *JobResourceQuery {
+	query := (&JobResourceClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
 			return nil, err
@@ -127,8 +125,8 @@ func (_q *JobQuery) QuerySubJobs() *SubJobQuery {
 		}
 		step := sqlgraph.NewStep(
 			sqlgraph.From(job.Table, job.FieldID, selector),
-			sqlgraph.To(subjob.Table, subjob.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, job.SubJobsTable, job.SubJobsColumn),
+			sqlgraph.To(jobresource.Table, jobresource.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, job.JobResourcesTable, job.JobResourcesColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -136,9 +134,9 @@ func (_q *JobQuery) QuerySubJobs() *SubJobQuery {
 	return query
 }
 
-// QueryActivityLogs chains the current query on the "activity_logs" edge.
-func (_q *JobQuery) QueryActivityLogs() *ActivityLogQuery {
-	query := (&ActivityLogClient{config: _q.config}).Query()
+// QuerySseEvents chains the current query on the "sse_events" edge.
+func (_q *JobQuery) QuerySseEvents() *SSEEventQuery {
+	query := (&SSEEventClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
 			return nil, err
@@ -149,30 +147,8 @@ func (_q *JobQuery) QueryActivityLogs() *ActivityLogQuery {
 		}
 		step := sqlgraph.NewStep(
 			sqlgraph.From(job.Table, job.FieldID, selector),
-			sqlgraph.To(activitylog.Table, activitylog.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, job.ActivityLogsTable, job.ActivityLogsColumn),
-		)
-		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
-		return fromU, nil
-	}
-	return query
-}
-
-// QueryUsageRecords chains the current query on the "usage_records" edge.
-func (_q *JobQuery) QueryUsageRecords() *UsageRecordQuery {
-	query := (&UsageRecordClient{config: _q.config}).Query()
-	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
-		if err := _q.prepareQuery(ctx); err != nil {
-			return nil, err
-		}
-		selector := _q.sqlQuery(ctx)
-		if err := selector.Err(); err != nil {
-			return nil, err
-		}
-		step := sqlgraph.NewStep(
-			sqlgraph.From(job.Table, job.FieldID, selector),
-			sqlgraph.To(usagerecord.Table, usagerecord.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, job.UsageRecordsTable, job.UsageRecordsColumn),
+			sqlgraph.To(sseevent.Table, sseevent.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, job.SseEventsTable, job.SseEventsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -374,9 +350,8 @@ func (_q *JobQuery) Clone() *JobQuery {
 		predicates:       append([]predicate.Job{}, _q.predicates...),
 		withProject:      _q.withProject.Clone(),
 		withCreatedBy:    _q.withCreatedBy.Clone(),
-		withSubJobs:      _q.withSubJobs.Clone(),
-		withActivityLogs: _q.withActivityLogs.Clone(),
-		withUsageRecords: _q.withUsageRecords.Clone(),
+		withJobResources: _q.withJobResources.Clone(),
+		withSseEvents:    _q.withSseEvents.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -405,36 +380,25 @@ func (_q *JobQuery) WithCreatedBy(opts ...func(*UserQuery)) *JobQuery {
 	return _q
 }
 
-// WithSubJobs tells the query-builder to eager-load the nodes that are connected to
-// the "sub_jobs" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *JobQuery) WithSubJobs(opts ...func(*SubJobQuery)) *JobQuery {
-	query := (&SubJobClient{config: _q.config}).Query()
+// WithJobResources tells the query-builder to eager-load the nodes that are connected to
+// the "job_resources" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *JobQuery) WithJobResources(opts ...func(*JobResourceQuery)) *JobQuery {
+	query := (&JobResourceClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
-	_q.withSubJobs = query
+	_q.withJobResources = query
 	return _q
 }
 
-// WithActivityLogs tells the query-builder to eager-load the nodes that are connected to
-// the "activity_logs" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *JobQuery) WithActivityLogs(opts ...func(*ActivityLogQuery)) *JobQuery {
-	query := (&ActivityLogClient{config: _q.config}).Query()
+// WithSseEvents tells the query-builder to eager-load the nodes that are connected to
+// the "sse_events" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *JobQuery) WithSseEvents(opts ...func(*SSEEventQuery)) *JobQuery {
+	query := (&SSEEventClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
-	_q.withActivityLogs = query
-	return _q
-}
-
-// WithUsageRecords tells the query-builder to eager-load the nodes that are connected to
-// the "usage_records" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *JobQuery) WithUsageRecords(opts ...func(*UsageRecordQuery)) *JobQuery {
-	query := (&UsageRecordClient{config: _q.config}).Query()
-	for _, opt := range opts {
-		opt(query)
-	}
-	_q.withUsageRecords = query
+	_q.withSseEvents = query
 	return _q
 }
 
@@ -517,15 +481,14 @@ func (_q *JobQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Job, err
 		nodes       = []*Job{}
 		withFKs     = _q.withFKs
 		_spec       = _q.querySpec()
-		loadedTypes = [5]bool{
+		loadedTypes = [4]bool{
 			_q.withProject != nil,
 			_q.withCreatedBy != nil,
-			_q.withSubJobs != nil,
-			_q.withActivityLogs != nil,
-			_q.withUsageRecords != nil,
+			_q.withJobResources != nil,
+			_q.withSseEvents != nil,
 		}
 	)
-	if _q.withProject != nil || _q.withCreatedBy != nil {
+	if _q.withCreatedBy != nil {
 		withFKs = true
 	}
 	if withFKs {
@@ -561,24 +524,17 @@ func (_q *JobQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*Job, err
 			return nil, err
 		}
 	}
-	if query := _q.withSubJobs; query != nil {
-		if err := _q.loadSubJobs(ctx, query, nodes,
-			func(n *Job) { n.Edges.SubJobs = []*SubJob{} },
-			func(n *Job, e *SubJob) { n.Edges.SubJobs = append(n.Edges.SubJobs, e) }); err != nil {
+	if query := _q.withJobResources; query != nil {
+		if err := _q.loadJobResources(ctx, query, nodes,
+			func(n *Job) { n.Edges.JobResources = []*JobResource{} },
+			func(n *Job, e *JobResource) { n.Edges.JobResources = append(n.Edges.JobResources, e) }); err != nil {
 			return nil, err
 		}
 	}
-	if query := _q.withActivityLogs; query != nil {
-		if err := _q.loadActivityLogs(ctx, query, nodes,
-			func(n *Job) { n.Edges.ActivityLogs = []*ActivityLog{} },
-			func(n *Job, e *ActivityLog) { n.Edges.ActivityLogs = append(n.Edges.ActivityLogs, e) }); err != nil {
-			return nil, err
-		}
-	}
-	if query := _q.withUsageRecords; query != nil {
-		if err := _q.loadUsageRecords(ctx, query, nodes,
-			func(n *Job) { n.Edges.UsageRecords = []*UsageRecord{} },
-			func(n *Job, e *UsageRecord) { n.Edges.UsageRecords = append(n.Edges.UsageRecords, e) }); err != nil {
+	if query := _q.withSseEvents; query != nil {
+		if err := _q.loadSseEvents(ctx, query, nodes,
+			func(n *Job) { n.Edges.SseEvents = []*SSEEvent{} },
+			func(n *Job, e *SSEEvent) { n.Edges.SseEvents = append(n.Edges.SseEvents, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -589,10 +545,7 @@ func (_q *JobQuery) loadProject(ctx context.Context, query *ProjectQuery, nodes 
 	ids := make([]int, 0, len(nodes))
 	nodeids := make(map[int][]*Job)
 	for i := range nodes {
-		if nodes[i].project_jobs == nil {
-			continue
-		}
-		fk := *nodes[i].project_jobs
+		fk := nodes[i].ProjectID
 		if _, ok := nodeids[fk]; !ok {
 			ids = append(ids, fk)
 		}
@@ -609,7 +562,7 @@ func (_q *JobQuery) loadProject(ctx context.Context, query *ProjectQuery, nodes 
 	for _, n := range neighbors {
 		nodes, ok := nodeids[n.ID]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "project_jobs" returned %v`, n.ID)
+			return fmt.Errorf(`unexpected foreign-key "project_id" returned %v`, n.ID)
 		}
 		for i := range nodes {
 			assign(nodes[i], n)
@@ -621,10 +574,10 @@ func (_q *JobQuery) loadCreatedBy(ctx context.Context, query *UserQuery, nodes [
 	ids := make([]int, 0, len(nodes))
 	nodeids := make(map[int][]*Job)
 	for i := range nodes {
-		if nodes[i].user_jobs == nil {
+		if nodes[i].user_created_jobs == nil {
 			continue
 		}
-		fk := *nodes[i].user_jobs
+		fk := *nodes[i].user_created_jobs
 		if _, ok := nodeids[fk]; !ok {
 			ids = append(ids, fk)
 		}
@@ -641,7 +594,7 @@ func (_q *JobQuery) loadCreatedBy(ctx context.Context, query *UserQuery, nodes [
 	for _, n := range neighbors {
 		nodes, ok := nodeids[n.ID]
 		if !ok {
-			return fmt.Errorf(`unexpected foreign-key "user_jobs" returned %v`, n.ID)
+			return fmt.Errorf(`unexpected foreign-key "user_created_jobs" returned %v`, n.ID)
 		}
 		for i := range nodes {
 			assign(nodes[i], n)
@@ -649,7 +602,7 @@ func (_q *JobQuery) loadCreatedBy(ctx context.Context, query *UserQuery, nodes [
 	}
 	return nil
 }
-func (_q *JobQuery) loadSubJobs(ctx context.Context, query *SubJobQuery, nodes []*Job, init func(*Job), assign func(*Job, *SubJob)) error {
+func (_q *JobQuery) loadJobResources(ctx context.Context, query *JobResourceQuery, nodes []*Job, init func(*Job), assign func(*Job, *JobResource)) error {
 	fks := make([]driver.Value, 0, len(nodes))
 	nodeids := make(map[int]*Job)
 	for i := range nodes {
@@ -660,27 +613,27 @@ func (_q *JobQuery) loadSubJobs(ctx context.Context, query *SubJobQuery, nodes [
 		}
 	}
 	query.withFKs = true
-	query.Where(predicate.SubJob(func(s *sql.Selector) {
-		s.Where(sql.InValues(s.C(job.SubJobsColumn), fks...))
+	query.Where(predicate.JobResource(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(job.JobResourcesColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
 		return err
 	}
 	for _, n := range neighbors {
-		fk := n.job_sub_jobs
+		fk := n.job_job_resources
 		if fk == nil {
-			return fmt.Errorf(`foreign-key "job_sub_jobs" is nil for node %v`, n.ID)
+			return fmt.Errorf(`foreign-key "job_job_resources" is nil for node %v`, n.ID)
 		}
 		node, ok := nodeids[*fk]
 		if !ok {
-			return fmt.Errorf(`unexpected referenced foreign-key "job_sub_jobs" returned %v for node %v`, *fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "job_job_resources" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}
 	return nil
 }
-func (_q *JobQuery) loadActivityLogs(ctx context.Context, query *ActivityLogQuery, nodes []*Job, init func(*Job), assign func(*Job, *ActivityLog)) error {
+func (_q *JobQuery) loadSseEvents(ctx context.Context, query *SSEEventQuery, nodes []*Job, init func(*Job), assign func(*Job, *SSEEvent)) error {
 	fks := make([]driver.Value, 0, len(nodes))
 	nodeids := make(map[int]*Job)
 	for i := range nodes {
@@ -690,53 +643,21 @@ func (_q *JobQuery) loadActivityLogs(ctx context.Context, query *ActivityLogQuer
 			init(nodes[i])
 		}
 	}
-	query.withFKs = true
-	query.Where(predicate.ActivityLog(func(s *sql.Selector) {
-		s.Where(sql.InValues(s.C(job.ActivityLogsColumn), fks...))
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(sseevent.FieldJobID)
+	}
+	query.Where(predicate.SSEEvent(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(job.SseEventsColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
 		return err
 	}
 	for _, n := range neighbors {
-		fk := n.job_activity_logs
-		if fk == nil {
-			return fmt.Errorf(`foreign-key "job_activity_logs" is nil for node %v`, n.ID)
-		}
-		node, ok := nodeids[*fk]
+		fk := n.JobID
+		node, ok := nodeids[fk]
 		if !ok {
-			return fmt.Errorf(`unexpected referenced foreign-key "job_activity_logs" returned %v for node %v`, *fk, n.ID)
-		}
-		assign(node, n)
-	}
-	return nil
-}
-func (_q *JobQuery) loadUsageRecords(ctx context.Context, query *UsageRecordQuery, nodes []*Job, init func(*Job), assign func(*Job, *UsageRecord)) error {
-	fks := make([]driver.Value, 0, len(nodes))
-	nodeids := make(map[int]*Job)
-	for i := range nodes {
-		fks = append(fks, nodes[i].ID)
-		nodeids[nodes[i].ID] = nodes[i]
-		if init != nil {
-			init(nodes[i])
-		}
-	}
-	query.withFKs = true
-	query.Where(predicate.UsageRecord(func(s *sql.Selector) {
-		s.Where(sql.InValues(s.C(job.UsageRecordsColumn), fks...))
-	}))
-	neighbors, err := query.All(ctx)
-	if err != nil {
-		return err
-	}
-	for _, n := range neighbors {
-		fk := n.job_usage_records
-		if fk == nil {
-			return fmt.Errorf(`foreign-key "job_usage_records" is nil for node %v`, n.ID)
-		}
-		node, ok := nodeids[*fk]
-		if !ok {
-			return fmt.Errorf(`unexpected referenced foreign-key "job_usage_records" returned %v for node %v`, *fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "job_id" returned %v for node %v`, fk, n.ID)
 		}
 		assign(node, n)
 	}
@@ -767,6 +688,9 @@ func (_q *JobQuery) querySpec() *sqlgraph.QuerySpec {
 			if fields[i] != job.FieldID {
 				_spec.Node.Columns = append(_spec.Node.Columns, fields[i])
 			}
+		}
+		if _q.withProject != nil {
+			_spec.Node.AddColumnOnce(job.FieldProjectID)
 		}
 	}
 	if ps := _q.predicates; len(ps) > 0 {

@@ -53,16 +53,16 @@ func toGlossaryListResponse(entries []*ent.GlossaryEntry) map[string]any {
 func (s *Server) handleListGlossaryEntries(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
 	entries, err := s.glossarySvc.ListEntries(r.Context(), authUser.User.ID, projectID)
 	if err != nil {
-		writeGlossaryServiceError(w, err)
+		s.writeGlossaryServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toGlossaryListResponse(entries))
@@ -71,15 +71,15 @@ func (s *Server) handleListGlossaryEntries(w http.ResponseWriter, r *http.Reques
 func (s *Server) handleCreateGlossaryEntry(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
 	var req createGlossaryEntryRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	entry, err := s.glossarySvc.CreateEntry(r.Context(), authUser.User.ID, projectID, service.GlossaryEntryInput{
@@ -89,7 +89,7 @@ func (s *Server) handleCreateGlossaryEntry(w http.ResponseWriter, r *http.Reques
 		Notes:         req.Notes,
 	})
 	if err != nil {
-		writeGlossaryServiceError(w, err)
+		s.writeGlossaryServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, toGlossaryEntryResponse(entry))
@@ -98,50 +98,60 @@ func (s *Server) handleCreateGlossaryEntry(w http.ResponseWriter, r *http.Reques
 func (s *Server) handleUpdateGlossaryEntry(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
-	entryID, ok := parseIntParam(w, chi.URLParam(r, "entryId"), "entryId")
+	entryID, ok := s.parseIntParam(w, r, chi.URLParam(r, "entryId"), "entryId")
 	if !ok {
 		return
 	}
 	var req updateGlossaryEntryRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
-	entry, err := s.glossarySvc.UpdateEntry(r.Context(), authUser.User.ID, projectID, entryID, service.GlossaryEntryInput{
+	result, err := s.glossarySvc.UpdateEntry(r.Context(), authUser.User.ID, projectID, entryID, service.GlossaryEntryInput{
 		Source:        req.Source,
 		Target:        req.Target,
 		CaseSensitive: req.CaseSensitive,
 		Notes:         req.Notes,
 	})
 	if err != nil {
-		writeGlossaryServiceError(w, err)
+		s.writeGlossaryServiceError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toGlossaryEntryResponse(entry))
+	entry := result.Entry
+	writeJSON(w, http.StatusOK, map[string]any{
+		"id":             entry.ID,
+		"source":         entry.Source,
+		"target":         entry.Target,
+		"case_sensitive": entry.CaseSensitive,
+		"notes":          entry.Notes,
+		"created_at":     entry.CreatedAt,
+		"updated_at":     entry.UpdatedAt,
+		"target_changed": result.TargetChanged,
+	})
 }
 
 func (s *Server) handleDeleteGlossaryEntry(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
-	entryID, ok := parseIntParam(w, chi.URLParam(r, "entryId"), "entryId")
+	entryID, ok := s.parseIntParam(w, r, chi.URLParam(r, "entryId"), "entryId")
 	if !ok {
 		return
 	}
 	if err := s.glossarySvc.DeleteEntry(r.Context(), authUser.User.ID, projectID, entryID); err != nil {
-		writeGlossaryServiceError(w, err)
+		s.writeGlossaryServiceError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -150,26 +160,26 @@ func (s *Server) handleDeleteGlossaryEntry(w http.ResponseWriter, r *http.Reques
 func (s *Server) handleImportGlossaryCSV(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		writeProblem(w, http.StatusBadRequest, "invalid_multipart", "上传表单解析失败")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_multipart", "上传表单解析失败")
 		return
 	}
 	file, _, err := r.FormFile("file")
 	if err != nil {
-		writeProblem(w, http.StatusBadRequest, "invalid_input", "缺少文件")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "缺少文件")
 		return
 	}
 	defer file.Close()
 	result, err := s.glossarySvc.ImportCSV(r.Context(), authUser.User.ID, projectID, file)
 	if err != nil {
-		writeGlossaryServiceError(w, err)
+		s.writeGlossaryServiceError(w, r, err)
 		return
 	}
 	type skippedItem struct {
@@ -193,10 +203,10 @@ func (s *Server) handleImportGlossaryCSV(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleExportGlossaryCSV(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
@@ -208,19 +218,19 @@ func (s *Server) handleExportGlossaryCSV(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-func writeGlossaryServiceError(w http.ResponseWriter, err error) {
+func (s *Server) writeGlossaryServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, service.ErrForbidden):
-		writeProblem(w, http.StatusForbidden, "forbidden", "没有权限执行该操作")
+		s.writeProblem(w, r, http.StatusForbidden, "forbidden", "没有权限执行该操作")
 	case errors.Is(err, service.ErrProjectNotFound):
-		writeProblem(w, http.StatusNotFound, "not_found", "项目不存在")
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "项目不存在")
 	case errors.Is(err, service.ErrGlossaryEntryNotFound):
-		writeProblem(w, http.StatusNotFound, "not_found", "术语条目不存在")
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "术语条目不存在")
 	case errors.Is(err, service.ErrGlossaryEntryExists):
-		writeProblem(w, http.StatusConflict, "conflict", "术语条目已存在")
+		s.writeProblem(w, r, http.StatusConflict, "conflict", "术语条目已存在")
 	case errors.Is(err, service.ErrInvalidInput):
-		writeProblem(w, http.StatusBadRequest, "invalid_input", "请求参数不合法")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请求参数不合法")
 	default:
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 	}
 }

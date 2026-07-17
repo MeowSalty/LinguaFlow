@@ -3,7 +3,7 @@ package protect
 import (
 	"regexp"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/model"
 )
 
 // CodeProtector 保护 Markdown 代码：围栏块（``` 或 ~~~）和行内代码（`...`）。
@@ -21,7 +21,7 @@ var (
 // 行内代码：单个或多个反引号包裹
 var inlineCodeRe = regexp.MustCompile("`+[^`\n]+`+")
 
-func (p *CodeProtector) Protect(seg *pipeline.Segment) error {
+func (p *CodeProtector) Protect(seg *model.Segment) error {
 	s := seg.Source
 	for _, re := range []*regexp.Regexp{fencedBacktickRe, fencedTildeRe, inlineCodeRe} {
 		s = re.ReplaceAllStringFunc(s, func(match string) string {
@@ -34,7 +34,7 @@ func (p *CodeProtector) Protect(seg *pipeline.Segment) error {
 	return nil
 }
 
-func (p *CodeProtector) Unprotect(seg *pipeline.Segment) error {
+func (p *CodeProtector) Unprotect(seg *model.Segment) error {
 	seg.Target = restoreAll(seg.Target, seg.Protected)
 	return nil
 }

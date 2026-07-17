@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/inconshreveable/mousetrap"
 	"github.com/spf13/cobra"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/logging"
@@ -40,6 +41,15 @@ func newRoot() (*cobra.Command, *appCtx) {
 			rt.logger = logging.New(os.Stderr, lvl, rt.logFormat)
 			slog.SetDefault(rt.logger)
 		},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if mousetrap.StartedByExplorer() {
+				return runLocal(cmd.Context(), rt, localOptions{
+					host: "127.0.0.1",
+					port: 18080,
+				})
+			}
+			return cmd.Help()
+		},
 	}
 	root.PersistentFlags().StringVarP(&rt.configPath, "config", "c", "", "配置文件路径（默认仅用内置默认值）")
 	root.PersistentFlags().StringVar(&rt.logLevel, "log-level", "info", "日志级别 debug|info|warn|error")
@@ -48,6 +58,7 @@ func newRoot() (*cobra.Command, *appCtx) {
 	root.PersistentFlags().StringVar(&rt.progressMode, "progress", "auto", "进度反馈 auto|bar|log|none")
 
 	root.AddCommand(newServeCmd(rt))
+	root.AddCommand(newLocalCmd(rt))
 	root.AddCommand(newTranslateCmd(rt))
 	root.AddCommand(newInitCmd())
 	root.AddCommand(newVersionCmd())
@@ -56,6 +67,9 @@ func newRoot() (*cobra.Command, *appCtx) {
 
 // Execute 是 main.go 的唯一入口。
 func Execute() int {
+	// 禁用 cobra 的 mousetrap 拦截，允许双击启动时正常执行。
+	cobra.MousetrapHelpText = ""
+
 	root, _ := newRoot()
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()

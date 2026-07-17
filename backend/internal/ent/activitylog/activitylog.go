@@ -34,8 +34,6 @@ const (
 	EdgeOrganization = "organization"
 	// EdgeProject holds the string denoting the project edge name in mutations.
 	EdgeProject = "project"
-	// EdgeJob holds the string denoting the job edge name in mutations.
-	EdgeJob = "job"
 	// Table holds the table name of the activitylog in the database.
 	Table = "activity_logs"
 	// ActorTable is the table that holds the actor relation/edge.
@@ -59,13 +57,6 @@ const (
 	ProjectInverseTable = "projects"
 	// ProjectColumn is the table column denoting the project relation/edge.
 	ProjectColumn = "project_activity_logs"
-	// JobTable is the table that holds the job relation/edge.
-	JobTable = "activity_logs"
-	// JobInverseTable is the table name for the Job entity.
-	// It exists in this package in order to avoid circular dependency with the "job" package.
-	JobInverseTable = "jobs"
-	// JobColumn is the table column denoting the job relation/edge.
-	JobColumn = "job_activity_logs"
 )
 
 // Columns holds all SQL columns for activitylog fields.
@@ -83,7 +74,6 @@ var Columns = []string{
 // ForeignKeys holds the SQL foreign-keys that are owned by the "activity_logs"
 // table and are not defined as standalone fields in the schema.
 var ForeignKeys = []string{
-	"job_activity_logs",
 	"organization_activity_logs",
 	"project_activity_logs",
 	"user_activity_logs",
@@ -179,13 +169,6 @@ func ByProjectField(field string, opts ...sql.OrderTermOption) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newProjectStep(), sql.OrderByField(field, opts...))
 	}
 }
-
-// ByJobField orders the results by job field.
-func ByJobField(field string, opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newJobStep(), sql.OrderByField(field, opts...))
-	}
-}
 func newActorStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -205,12 +188,5 @@ func newProjectStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(ProjectInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.M2O, true, ProjectTable, ProjectColumn),
-	)
-}
-func newJobStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(JobInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.M2O, true, JobTable, JobColumn),
 	)
 }

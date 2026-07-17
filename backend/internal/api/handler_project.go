@@ -1,6 +1,7 @@
 package api
 
 import (
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -10,43 +11,43 @@ import (
 )
 
 type createProjectRequest struct {
-	Name          string         `json:"name"`
-	OwnerOrgID    *int           `json:"owner_org_id"`
-	ResourceScope string         `json:"resource_scope"`
-	Config        map[string]any `json:"config"`
-	SourceLang    string         `json:"source_lang"`
-	TargetLang    string         `json:"target_lang"`
+	Name string `json:"name"`
+	// OwnerOrgID 已移除 — 组织项目通过专用路由创建
+	Config          map[string]any `json:"config"`
+	GlossaryEnabled *bool          `json:"glossary_enabled"`
+	SourceLang      string         `json:"source_lang"`
+	TargetLang      string         `json:"target_lang"`
 }
 
 type updateProjectRequest struct {
-	Name          string         `json:"name"`
-	ResourceScope string         `json:"resource_scope"`
-	Config        map[string]any `json:"config"`
-	SourceLang    string         `json:"source_lang"`
-	TargetLang    string         `json:"target_lang"`
+	Name            string         `json:"name"`
+	Config          map[string]any `json:"config"`
+	GlossaryEnabled *bool          `json:"glossary_enabled"`
+	SourceLang      string         `json:"source_lang"`
+	TargetLang      string         `json:"target_lang"`
 }
 
 type projectResponse struct {
-	ID            int            `json:"id"`
-	Name          string         `json:"name"`
-	ResourceScope string         `json:"resource_scope"`
-	OwnerUserID   *int           `json:"owner_user_id,omitempty"`
-	OwnerOrgID    *int           `json:"owner_org_id,omitempty"`
-	Config        map[string]any `json:"config,omitempty"`
-	SourceLang    string         `json:"source_lang"`
-	TargetLang    string         `json:"target_lang"`
+	ID              int            `json:"id"`
+	Name            string         `json:"name"`
+	OwnerUserID     *int           `json:"owner_user_id,omitempty"`
+	OwnerOrgID      *int           `json:"owner_org_id,omitempty"`
+	Config          map[string]any `json:"config,omitempty"`
+	GlossaryEnabled bool           `json:"glossary_enabled"`
+	SourceLang      string         `json:"source_lang"`
+	TargetLang      string         `json:"target_lang"`
 }
 
 func toProjectResponse(p *ent.Project) projectResponse {
 	return projectResponse{
-		ID:            p.ID,
-		Name:          p.Name,
-		ResourceScope: p.ResourceScope,
-		OwnerUserID:   p.OwnerUserID,
-		OwnerOrgID:    p.OwnerOrgID,
-		Config:        p.Config,
-		SourceLang:    p.SourceLang,
-		TargetLang:    p.TargetLang,
+		ID:              p.ID,
+		Name:            p.Name,
+		OwnerUserID:     p.OwnerUserID,
+		OwnerOrgID:      p.OwnerOrgID,
+		Config:          p.Config,
+		GlossaryEnabled: p.GlossaryEnabled,
+		SourceLang:      p.SourceLang,
+		TargetLang:      p.TargetLang,
 	}
 }
 
@@ -58,70 +59,95 @@ func toProjectListResponse(projects []*ent.Project) map[string]any {
 	return map[string]any{"items": items}
 }
 
-func toBackendBindingResponse(bindings []service.ProjectBackendBinding) []map[string]any {
-	out := make([]map[string]any, 0, len(bindings))
-	for _, b := range bindings {
-		item := map[string]any{
-			"order_index": b.OrderIndex,
-			"source":      b.Source,
-			"backend_id":  b.BackendID,
-			"name":        b.Name,
-			"type":        b.Type,
-			"priority":    b.Priority,
-		}
-		if b.Options != nil {
-			item["options"] = b.Options
-		}
-		out = append(out, item)
-	}
-	return out
-}
-
-func toStageOverrideResponse(v *service.StageBackendOverrideView) map[string]any {
-	resp := map[string]any{
-		"stage":        v.Stage,
-		"backend_mode": v.BackendMode,
-	}
-	if len(v.BackendOrder) > 0 {
-		resp["backend_order"] = v.BackendOrder
-	}
-	return resp
-}
-
 func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 	var req createProjectRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	p, err := s.projectSvc.CreateProject(r.Context(), authUser.User.ID, service.CreateProjectInput{
-		Name:          req.Name,
-		OwnerOrgID:    req.OwnerOrgID,
-		ResourceScope: req.ResourceScope,
-		Config:        req.Config,
-		SourceLang:    req.SourceLang,
-		TargetLang:    req.TargetLang,
+		Name:            req.Name,
+		Config:          req.Config,
+		GlossaryEnabled: req.GlossaryEnabled,
+		SourceLang:      req.SourceLang,
+		TargetLang:      req.TargetLang,
 	})
 	if err != nil {
-		writeProjectServiceError(w, err)
+		s.writeProjectServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, toProjectResponse(p))
 }
 
+func (s *Server) handleCreateOrgProject(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+	orgID, ok := s.parseIntParam(w, r, chi.URLParam(r, "orgId"), "orgId")
+	if !ok {
+		return
+	}
+	// handler 层负责验证组织管理员权限
+	if _, err := s.userService.RequireMembership(r.Context(), authUser.User.ID, orgID, service.OrgRoleAdmin); err != nil {
+		s.writeProjectServiceError(w, r, err)
+		return
+	}
+	var req createProjectRequest
+	if !s.decodeJSON(w, r, &req) {
+		return
+	}
+	p, err := s.projectSvc.CreateOrgProject(r.Context(), authUser.User.ID, orgID, service.CreateProjectInput{
+		Name:            req.Name,
+		Config:          req.Config,
+		GlossaryEnabled: req.GlossaryEnabled,
+		SourceLang:      req.SourceLang,
+		TargetLang:      req.TargetLang,
+	})
+	if err != nil {
+		s.writeProjectServiceError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, toProjectResponse(p))
+}
+
+func (s *Server) handleListOrgProjects(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+	orgID, ok := s.parseIntParam(w, r, chi.URLParam(r, "orgId"), "orgId")
+	if !ok {
+		return
+	}
+	// handler 层负责验证组织成员权限
+	if _, err := s.userService.RequireMembership(r.Context(), authUser.User.ID, orgID, service.OrgRoleMember); err != nil {
+		s.writeProjectServiceError(w, r, err)
+		return
+	}
+	projects, err := s.projectSvc.ListOrgProjects(r.Context(), authUser.User.ID, orgID)
+	if err != nil {
+		s.writeProjectServiceError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, toProjectListResponse(projects))
+}
+
 func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 	projects, err := s.projectSvc.ListProjectsForUser(r.Context(), authUser.User.ID)
 	if err != nil {
-		writeProjectServiceError(w, err)
+		s.writeProjectServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toProjectListResponse(projects))
@@ -130,16 +156,16 @@ func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
 	p, err := s.projectSvc.GetProject(r.Context(), authUser.User.ID, projectID)
 	if err != nil {
-		writeProjectServiceError(w, err)
+		s.writeProjectServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toProjectResponse(p))
@@ -148,26 +174,26 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
 	var req updateProjectRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	p, err := s.projectSvc.UpdateProject(r.Context(), authUser.User.ID, projectID, service.UpdateProjectInput{
-		Name:          req.Name,
-		ResourceScope: req.ResourceScope,
-		Config:        req.Config,
-		SourceLang:    req.SourceLang,
-		TargetLang:    req.TargetLang,
+		Name:            req.Name,
+		Config:          req.Config,
+		GlossaryEnabled: req.GlossaryEnabled,
+		SourceLang:      req.SourceLang,
+		TargetLang:      req.TargetLang,
 	})
 	if err != nil {
-		writeProjectServiceError(w, err)
+		s.writeProjectServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toProjectResponse(p))
@@ -176,131 +202,25 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
-	if err := s.projectSvc.DeleteProject(r.Context(), authUser.User.ID, projectID); err != nil {
-		writeProjectServiceError(w, err)
+	storagePaths, err := s.projectSvc.DeleteProject(r.Context(), authUser.User.ID, projectID)
+	if err != nil {
+		s.writeProjectServiceError(w, r, err)
 		return
+	}
+	// 事务成功后清理物理文件
+	for _, p := range storagePaths {
+		if fileErr := s.jobStore.Delete(p); fileErr != nil {
+			// 文件删除失败仅记录警告，不影响响应
+			slog.Warn("failed to delete resource file after project deletion",
+				"path", p, "error", fileErr)
+		}
 	}
 	w.WriteHeader(http.StatusNoContent)
-}
-
-func (s *Server) handleGetProjectBackends(w http.ResponseWriter, r *http.Request) {
-	authUser, ok := authUserFromContext(r.Context())
-	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
-		return
-	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
-	if !ok {
-		return
-	}
-	settings, err := s.projectSvc.GetBackendSettings(r.Context(), authUser.User.ID, projectID)
-	if err != nil {
-		writeProjectServiceError(w, err)
-		return
-	}
-	resp := map[string]any{
-		"backends": toBackendBindingResponse(settings.Backends),
-	}
-	if len(settings.StageOverrides) > 0 {
-		overrides := make(map[string]any, len(settings.StageOverrides))
-		for k, v := range settings.StageOverrides {
-			overrides[k] = toStageOverrideResponse(&v)
-		}
-		resp["stage_overrides"] = overrides
-	}
-	writeJSON(w, http.StatusOK, resp)
-}
-
-type setBackendOrderRequest struct {
-	Bindings []struct {
-		Source    string `json:"source"`
-		BackendID int    `json:"backend_id"`
-	} `json:"bindings"`
-}
-
-func (s *Server) handleSetProjectBackendOrder(w http.ResponseWriter, r *http.Request) {
-	authUser, ok := authUserFromContext(r.Context())
-	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
-		return
-	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
-	if !ok {
-		return
-	}
-	var req setBackendOrderRequest
-	if !decodeJSON(w, r, &req) {
-		return
-	}
-	bindings := make([]service.ProjectBackendBindingInput, 0, len(req.Bindings))
-	for _, b := range req.Bindings {
-		bindings = append(bindings, service.ProjectBackendBindingInput{
-			Source:    b.Source,
-			BackendID: b.BackendID,
-		})
-	}
-	result, err := s.projectSvc.SetBackendOrder(r.Context(), authUser.User.ID, projectID, bindings)
-	if err != nil {
-		writeProjectServiceError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, toBackendBindingResponse(result))
-}
-
-type setStageOverrideRequest struct {
-	Stage        string   `json:"stage"`
-	BackendMode  string   `json:"backend_mode"`
-	BackendOrder []string `json:"backend_order"`
-}
-
-func (s *Server) handleSetStageBackendOverride(w http.ResponseWriter, r *http.Request) {
-	authUser, ok := authUserFromContext(r.Context())
-	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
-		return
-	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
-	if !ok {
-		return
-	}
-	var req setStageOverrideRequest
-	if !decodeJSON(w, r, &req) {
-		return
-	}
-	view, err := s.projectSvc.SetStageBackendOverride(r.Context(), authUser.User.ID, projectID, service.StageBackendOverrideInput{
-		Stage:        req.Stage,
-		BackendMode:  req.BackendMode,
-		BackendOrder: req.BackendOrder,
-	})
-	if err != nil {
-		writeProjectServiceError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, toStageOverrideResponse(view))
-}
-
-func (s *Server) handleGetStagePlan(w http.ResponseWriter, r *http.Request) {
-	authUser, ok := authUserFromContext(r.Context())
-	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
-		return
-	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
-	if !ok {
-		return
-	}
-	stage := chi.URLParam(r, "stage")
-	bindings, err := s.projectSvc.ResolveStagePlan(r.Context(), authUser.User.ID, projectID, stage)
-	if err != nil {
-		writeProjectServiceError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, toBackendBindingResponse(bindings))
 }

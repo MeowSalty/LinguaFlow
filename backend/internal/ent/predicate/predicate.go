@@ -9,14 +9,26 @@ import (
 // ActivityLog is the predicate function for activitylog builders.
 type ActivityLog func(*sql.Selector)
 
+// Backend is the predicate function for backend builders.
+type Backend func(*sql.Selector)
+
+// BootstrapPromptTemplate is the predicate function for bootstrapprompttemplate builders.
+type BootstrapPromptTemplate func(*sql.Selector)
+
+// ExecutionPlanTemplate is the predicate function for executionplantemplate builders.
+type ExecutionPlanTemplate func(*sql.Selector)
+
+// ExecutionProfile is the predicate function for executionprofile builders.
+type ExecutionProfile func(*sql.Selector)
+
 // GlossaryEntry is the predicate function for glossaryentry builders.
 type GlossaryEntry func(*sql.Selector)
 
 // Job is the predicate function for job builders.
 type Job func(*sql.Selector)
 
-// OrgBackend is the predicate function for orgbackend builders.
-type OrgBackend func(*sql.Selector)
+// JobResource is the predicate function for jobresource builders.
+type JobResource func(*sql.Selector)
 
 // OrgMembership is the predicate function for orgmembership builders.
 type OrgMembership func(*sql.Selector)
@@ -27,29 +39,35 @@ type Organization func(*sql.Selector)
 // Project is the predicate function for project builders.
 type Project func(*sql.Selector)
 
-// ProjectBackend is the predicate function for projectbackend builders.
-type ProjectBackend func(*sql.Selector)
+// PrunePromptTemplate is the predicate function for pruneprompttemplate builders.
+type PrunePromptTemplate func(*sql.Selector)
 
 // RefreshToken is the predicate function for refreshtoken builders.
 type RefreshToken func(*sql.Selector)
 
+// Resource is the predicate function for resource builders.
+type Resource func(*sql.Selector)
+
+// SSEEvent is the predicate function for sseevent builders.
+type SSEEvent func(*sql.Selector)
+
 // Segment is the predicate function for segment builders.
 type Segment func(*sql.Selector)
 
-// StageBackendOverride is the predicate function for stagebackendoverride builders.
-type StageBackendOverride func(*sql.Selector)
+// SyncTask is the predicate function for synctask builders.
+type SyncTask func(*sql.Selector)
 
-// SubJob is the predicate function for subjob builders.
-type SubJob func(*sql.Selector)
+// SystemSetting is the predicate function for systemsetting builders.
+type SystemSetting func(*sql.Selector)
 
 // TMEntry is the predicate function for tmentry builders.
 type TMEntry func(*sql.Selector)
+
+// TranslationPromptTemplate is the predicate function for translationprompttemplate builders.
+type TranslationPromptTemplate func(*sql.Selector)
 
 // UsageRecord is the predicate function for usagerecord builders.
 type UsageRecord func(*sql.Selector)
 
 // User is the predicate function for user builders.
 type User func(*sql.Selector)
-
-// UserBackend is the predicate function for userbackend builders.
-type UserBackend func(*sql.Selector)

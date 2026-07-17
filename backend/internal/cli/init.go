@@ -4,10 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 
 	"github.com/spf13/cobra"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
 
 func newInitCmd() *cobra.Command {
@@ -17,7 +18,7 @@ func newInitCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "init",
-		Short: "在当前目录生成带注释的 linguaflow.yaml",
+		Short: "在当前目录生成 linguaflow.yaml",
 		RunE: func(_ *cobra.Command, _ []string) error {
 			if path == "" {
 				path = "linguaflow.yaml"
@@ -27,10 +28,35 @@ func newInitCmd() *cobra.Command {
 			} else if err != nil && !errors.Is(err, os.ErrNotExist) {
 				return err
 			}
-			if err := os.WriteFile(path, config.DefaultYAML, 0o644); err != nil {
+
+			// 1. 写入主配置文件（带注释，含 file 引用）
+			if err := os.WriteFile(path, templates.DefaultConfigYAML(), 0o644); err != nil {
 				return fmt.Errorf("写入失败：%w", err)
 			}
 			fmt.Printf("已写入 %s\n", path)
+
+			// 2. 写入提示词模板
+			promptDir := filepath.Join(filepath.Dir(path), "prompts")
+			if err := os.MkdirAll(promptDir, 0o755); err != nil {
+				return fmt.Errorf("创建 prompts 目录失败：%w", err)
+			}
+			promptPath := filepath.Join(promptDir, "default_translation.tmpl")
+			if err := os.WriteFile(promptPath, []byte(templates.EmbeddedPromptTemplate()), 0o644); err != nil {
+				return fmt.Errorf("写入提示词模板失败：%w", err)
+			}
+			fmt.Printf("已写入 %s\n", promptPath)
+
+			// 3. 写入翻译策略
+			profileDir := filepath.Join(filepath.Dir(path), "profiles")
+			if err := os.MkdirAll(profileDir, 0o755); err != nil {
+				return fmt.Errorf("创建 profiles 目录失败：%w", err)
+			}
+			profilePath := filepath.Join(profileDir, "default.yaml")
+			if err := os.WriteFile(profilePath, templates.EmbeddedProfileConfig(), 0o644); err != nil {
+				return fmt.Errorf("写入翻译策略失败：%w", err)
+			}
+			fmt.Printf("已写入 %s\n", profilePath)
+
 			return nil
 		},
 	}

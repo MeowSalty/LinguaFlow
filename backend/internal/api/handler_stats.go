@@ -37,12 +37,12 @@ type activityListResponse struct {
 func (s *Server) handleStatsSummary(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 	stats, err := s.statsSvc.Summary(r.Context(), authUser.User.ID)
 	if err != nil {
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toUsageStatsResponse(stats))
@@ -51,16 +51,16 @@ func (s *Server) handleStatsSummary(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleListActivity(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	pageReq, ok := parseCursorPagination(w, r, 50, 100)
+	pageReq, ok := s.parseCursorPagination(w, r, 50, 100)
 	if !ok {
 		return
 	}
 	page, err := s.auditSvc.ListActivity(r.Context(), authUser.User.ID, pageReq.AfterID, pageReq.Limit)
 	if err != nil {
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 		return
 	}
 	items := make([]activityResponse, 0, len(page.Items))

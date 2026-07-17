@@ -3,7 +3,7 @@ package protect
 import (
 	"regexp"
 
-	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/model"
 )
 
 // PlaceholderProtector 保护程序员常用的占位语法：
@@ -23,7 +23,7 @@ var (
 	shellVarRe = regexp.MustCompile(`\$(?:\{[A-Za-z_][A-Za-z0-9_]*\}|[A-Za-z][A-Za-z0-9_]*)`)
 )
 
-func (p *PlaceholderProtector) Protect(seg *pipeline.Segment) error {
+func (p *PlaceholderProtector) Protect(seg *model.Segment) error {
 	s := seg.Source
 	for _, re := range []*regexp.Regexp{doubleBraceRe, singleBraceRe, printfVerbRe, shellVarRe} {
 		s = re.ReplaceAllStringFunc(s, func(match string) string {
@@ -36,7 +36,7 @@ func (p *PlaceholderProtector) Protect(seg *pipeline.Segment) error {
 	return nil
 }
 
-func (p *PlaceholderProtector) Unprotect(seg *pipeline.Segment) error {
+func (p *PlaceholderProtector) Unprotect(seg *model.Segment) error {
 	seg.Target = restoreAll(seg.Target, seg.Protected)
 	return nil
 }

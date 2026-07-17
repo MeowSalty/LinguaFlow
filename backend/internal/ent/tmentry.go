@@ -9,7 +9,6 @@ import (
 
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 )
@@ -39,8 +38,6 @@ type TMEntry struct {
 	UsageCount int `json:"usage_count,omitempty"`
 	// ProjectID holds the value of the "project_id" field.
 	ProjectID *int `json:"project_id,omitempty"`
-	// OrganizationID holds the value of the "organization_id" field.
-	OrganizationID *int `json:"organization_id,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the TMEntryQuery when eager-loading is set.
 	Edges        TMEntryEdges `json:"edges"`
@@ -51,11 +48,9 @@ type TMEntry struct {
 type TMEntryEdges struct {
 	// Project holds the value of the project edge.
 	Project *Project `json:"project,omitempty"`
-	// Organization holds the value of the organization edge.
-	Organization *Organization `json:"organization,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [2]bool
+	loadedTypes [1]bool
 }
 
 // ProjectOrErr returns the Project value or an error if the edge
@@ -69,23 +64,12 @@ func (e TMEntryEdges) ProjectOrErr() (*Project, error) {
 	return nil, &NotLoadedError{edge: "project"}
 }
 
-// OrganizationOrErr returns the Organization value or an error if the edge
-// was not loaded in eager-loading, or loaded but was not found.
-func (e TMEntryEdges) OrganizationOrErr() (*Organization, error) {
-	if e.Organization != nil {
-		return e.Organization, nil
-	} else if e.loadedTypes[1] {
-		return nil, &NotFoundError{label: organization.Label}
-	}
-	return nil, &NotLoadedError{edge: "organization"}
-}
-
 // scanValues returns the types for scanning values from sql.Rows.
 func (*TMEntry) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case tmentry.FieldID, tmentry.FieldUsageCount, tmentry.FieldProjectID, tmentry.FieldOrganizationID:
+		case tmentry.FieldID, tmentry.FieldUsageCount, tmentry.FieldProjectID:
 			values[i] = new(sql.NullInt64)
 		case tmentry.FieldScopeKey, tmentry.FieldSourceHash, tmentry.FieldSourceText, tmentry.FieldTargetText, tmentry.FieldSourceLang, tmentry.FieldTargetLang:
 			values[i] = new(sql.NullString)
@@ -173,13 +157,6 @@ func (_m *TMEntry) assignValues(columns []string, values []any) error {
 				_m.ProjectID = new(int)
 				*_m.ProjectID = int(value.Int64)
 			}
-		case tmentry.FieldOrganizationID:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field organization_id", values[i])
-			} else if value.Valid {
-				_m.OrganizationID = new(int)
-				*_m.OrganizationID = int(value.Int64)
-			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
 		}
@@ -196,11 +173,6 @@ func (_m *TMEntry) Value(name string) (ent.Value, error) {
 // QueryProject queries the "project" edge of the TMEntry entity.
 func (_m *TMEntry) QueryProject() *ProjectQuery {
 	return NewTMEntryClient(_m.config).QueryProject(_m)
-}
-
-// QueryOrganization queries the "organization" edge of the TMEntry entity.
-func (_m *TMEntry) QueryOrganization() *OrganizationQuery {
-	return NewTMEntryClient(_m.config).QueryOrganization(_m)
 }
 
 // Update returns a builder for updating this TMEntry.
@@ -255,11 +227,6 @@ func (_m *TMEntry) String() string {
 	builder.WriteString(", ")
 	if v := _m.ProjectID; v != nil {
 		builder.WriteString("project_id=")
-		builder.WriteString(fmt.Sprintf("%v", *v))
-	}
-	builder.WriteString(", ")
-	if v := _m.OrganizationID; v != nil {
-		builder.WriteString("organization_id=")
 		builder.WriteString(fmt.Sprintf("%v", *v))
 	}
 	builder.WriteByte(')')

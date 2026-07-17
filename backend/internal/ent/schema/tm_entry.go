@@ -25,7 +25,6 @@ func (TMEntry) Fields() []ent.Field {
 		field.String("target_lang").NotEmpty(),
 		field.Int("usage_count").Default(0).NonNegative(),
 		field.Int("project_id").Optional().Nillable().Positive(),
-		field.Int("organization_id").Optional().Nillable().Positive(),
 	}
 }
 
@@ -34,10 +33,6 @@ func (TMEntry) Edges() []ent.Edge {
 		edge.From("project", Project.Type).
 			Ref("tm_entries").
 			Field("project_id").
-			Unique(),
-		edge.From("organization", Organization.Type).
-			Ref("tm_entries").
-			Field("organization_id").
 			Unique(),
 	}
 }

@@ -36,8 +36,5 @@ func (ActivityLog) Edges() []ent.Edge {
 		edge.From("project", Project.Type).
 			Ref("activity_logs").
 			Unique(),
-		edge.From("job", Job.Type).
-			Ref("activity_logs").
-			Unique(),
 	}
 }

@@ -2,8 +2,11 @@ package api
 
 import (
 	"encoding/json"
+	"io/fs"
 	"net/http"
+	"strings"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/web"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -25,6 +28,32 @@ func (s *Server) newRouter() http.Handler {
 
 	apiV1 := chi.NewRouter()
 	r.Mount("/api/v1", HandlerFromMux(s, apiV1))
+
+	// SSE 流式端点（不在 OpenAPI 规范中）
+	apiV1.Get("/jobs/{jobId}/stream", s.handleJobStream)
+
+	// 本地模式下挂载嵌入的前端静态资源
+	if s.isLocal() {
+		distSub, err := fs.Sub(web.DistFS, "dist")
+		if err == nil {
+			fileServer := http.FileServer(http.FS(distSub))
+			r.Get("/*", func(w http.ResponseWriter, r *http.Request) {
+				path := r.URL.Path
+				// 尝试直接提供静态文件
+				f, err := distSub.Open(strings.TrimPrefix(path, "/"))
+				if err == nil {
+					f.Close()
+					fileServer.ServeHTTP(w, r)
+					return
+				}
+				// SPA 回退：非文件路径返回 index.html
+				r2 := r.Clone(r.Context())
+				r2.URL.Path = "/"
+				fileServer.ServeHTTP(w, r2)
+			})
+		}
+	}
+
 	return r
 }
 
@@ -33,7 +62,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) handlePing(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, healthResponse{Status: "ok", Service: s.config.Server.ServiceName})
+	writeJSON(w, http.StatusOK, healthResponse{Status: "ok", Service: s.serverCfg.ServiceName})
 }
 
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {

@@ -1228,12 +1228,65 @@ paths:
           description: 任务已完成或已失败，无法取消
         default:
           $ref: '#/components/responses/Problem'
-  /projects/{projectId}/translation-jobs:
+  /projects/{projectId}/glossary/prune:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      operationId: PreviewGlossaryPrune
+      summary: 预览术语表精简建议
+      description: |
+        调用 LLM 分析项目现有术语表，返回精简建议（删除/更新分类）。
+        此为无状态同步 API，不修改任何数据。
+        响应时间取决于 LLM 后端，客户端断开连接时自动取消 LLM 调用。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GlossaryPruneRequest'
+      responses:
+        '200':
+          description: 精简建议预览
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossaryPrunePreview'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/glossary/prune/apply:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      operationId: ApplyGlossaryPrune
+      summary: 应用术语表精简变更
+      description: |
+        应用用户从 Preview 中选中的变更。
+        逐条处理，单条失败不中断其余，返回 deleted/updated/failed 计数。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GlossaryPruneApplyRequest'
+      responses:
+        '200':
+          description: 应用结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossaryPruneApplyResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/jobs:
     parameters:
       - $ref: '#/components/parameters/ProjectId'
     get:
-      operationId: ListTranslationJobs
-      summary: 列出项目翻译任务
+      operationId: ListJobs
+      summary: 列出项目任务
       security:
         - bearerAuth: []
       parameters:
@@ -1262,16 +1315,16 @@ paths:
         - $ref: '#/components/parameters/Limit'
       responses:
         '200':
-          description: 翻译任务列表
+          description: 任务列表
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TranslationJobListResponse'
+                $ref: '#/components/schemas/JobListResponse'
         default:
           $ref: '#/components/responses/Problem'
     post:
-      operationId: CreateTranslationJob
-      summary: 创建翻译任务
+      operationId: CreateJob
+      summary: 创建任务
       security:
         - bearerAuth: []
       requestBody:
@@ -1279,22 +1332,22 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateTranslationJobRequest'
+              $ref: '#/components/schemas/CreateJobRequest'
       responses:
         '202':
           description: 任务已创建
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TranslationJob'
+                $ref: '#/components/schemas/Job'
         default:
           $ref: '#/components/responses/Problem'
-  /translation-jobs/{translationJobId}:
+  /jobs/{jobId}:
     parameters:
-      - $ref: '#/components/parameters/TranslationJobId'
+      - $ref: '#/components/parameters/JobId'
     get:
-      operationId: GetTranslationJob
-      summary: 获取翻译任务详情
+      operationId: GetJob
+      summary: 获取任务详情
       security:
         - bearerAuth: []
       responses:
@@ -1303,15 +1356,15 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TranslationJob'
+                $ref: '#/components/schemas/Job'
         default:
           $ref: '#/components/responses/Problem'
-  /translation-jobs/{translationJobId}/cancel:
+  /jobs/{jobId}/cancel:
     parameters:
-      - $ref: '#/components/parameters/TranslationJobId'
+      - $ref: '#/components/parameters/JobId'
     post:
-      operationId: CancelTranslationJob
-      summary: 取消翻译任务
+      operationId: CancelJob
+      summary: 取消任务
       security:
         - bearerAuth: []
       responses:
@@ -1320,15 +1373,15 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TranslationJob'
+                $ref: '#/components/schemas/Job'
         default:
           $ref: '#/components/responses/Problem'
-  /translation-jobs/{translationJobId}/retry:
+  /jobs/{jobId}/retry:
     parameters:
-      - $ref: '#/components/parameters/TranslationJobId'
+      - $ref: '#/components/parameters/JobId'
     post:
-      operationId: RetryTranslationJob
-      summary: 重试失败的资源翻译
+      operationId: RetryJob
+      summary: 重试失败的资源
       security:
         - bearerAuth: []
       responses:
@@ -1337,7 +1390,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TranslationJob'
+                $ref: '#/components/schemas/Job'
         default:
           $ref: '#/components/responses/Problem'
   /execution-plan-templates:
@@ -1422,24 +1475,24 @@ paths:
           description: 删除成功
         default:
           $ref: '#/components/responses/Problem'
-  /prompt-templates:
+  /translation-prompt-templates:
     get:
       operationId: ListPromptTemplates
-      summary: 列出当前用户的提示词模板
+      summary: 列出当前用户的翻译提示词模板
       security:
         - bearerAuth: []
       responses:
         '200':
-          description: 提示词模板列表
+          description: 翻译提示词模板列表
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PromptTemplateListResponse'
+                $ref: '#/components/schemas/TranslationPromptTemplateListResponse'
         default:
           $ref: '#/components/responses/Problem'
     post:
       operationId: CreatePromptTemplate
-      summary: 创建提示词模板
+      summary: 创建翻译提示词模板
       security:
         - bearerAuth: []
       requestBody:
@@ -1447,36 +1500,36 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreatePromptTemplateRequest'
+              $ref: '#/components/schemas/CreateTranslationPromptTemplateRequest'
       responses:
         '201':
           description: 创建成功
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PromptTemplate'
+                $ref: '#/components/schemas/TranslationPromptTemplate'
         default:
           $ref: '#/components/responses/Problem'
-  /prompt-templates/{promptTemplateId}:
+  /translation-prompt-templates/{translationPromptTemplateId}:
     parameters:
-      - $ref: '#/components/parameters/PromptTemplateId'
+      - $ref: '#/components/parameters/TranslationPromptTemplateId'
     get:
       operationId: GetPromptTemplate
-      summary: 获取提示词模板详情
+      summary: 获取翻译提示词模板详情
       security:
         - bearerAuth: []
       responses:
         '200':
-          description: 提示词模板详情
+          description: 翻译提示词模板详情
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PromptTemplate'
+                $ref: '#/components/schemas/TranslationPromptTemplate'
         default:
           $ref: '#/components/responses/Problem'
     put:
       operationId: UpdatePromptTemplate
-      summary: 更新提示词模板
+      summary: 更新翻译提示词模板
       security:
         - bearerAuth: []
       requestBody:
@@ -1484,19 +1537,19 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdatePromptTemplateRequest'
+              $ref: '#/components/schemas/UpdateTranslationPromptTemplateRequest'
       responses:
         '200':
           description: 更新成功
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PromptTemplate'
+                $ref: '#/components/schemas/TranslationPromptTemplate'
         default:
           $ref: '#/components/responses/Problem'
     delete:
       operationId: DeletePromptTemplate
-      summary: 删除提示词模板
+      summary: 删除翻译提示词模板
       security:
         - bearerAuth: []
       responses:
@@ -1586,24 +1639,24 @@ paths:
           description: 删除成功
         default:
           $ref: '#/components/responses/Problem'
-  /translation-profiles:
+  /prune-prompt-templates:
     get:
-      operationId: ListTranslationProfiles
-      summary: 列出当前用户的翻译配置
+      operationId: ListPrunePromptTemplates
+      summary: 列出当前用户的术语精简提示词模板
       security:
         - bearerAuth: []
       responses:
         '200':
-          description: 翻译配置列表
+          description: 术语精简提示词模板列表
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TranslationProfileListResponse'
+                $ref: '#/components/schemas/PrunePromptTemplateListResponse'
         default:
           $ref: '#/components/responses/Problem'
     post:
-      operationId: CreateTranslationProfile
-      summary: 创建翻译配置
+      operationId: CreatePrunePromptTemplate
+      summary: 创建术语精简提示词模板
       security:
         - bearerAuth: []
       requestBody:
@@ -1611,36 +1664,36 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/CreateTranslationProfileRequest'
+              $ref: '#/components/schemas/CreatePrunePromptTemplateRequest'
       responses:
         '201':
           description: 创建成功
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TranslationProfile'
+                $ref: '#/components/schemas/PrunePromptTemplate'
         default:
           $ref: '#/components/responses/Problem'
-  /translation-profiles/{translationProfileId}:
+  /prune-prompt-templates/{prunePromptTemplateId}:
     parameters:
-      - $ref: '#/components/parameters/TranslationProfileId'
+      - $ref: '#/components/parameters/PrunePromptTemplateId'
     get:
-      operationId: GetTranslationProfile
-      summary: 获取翻译配置详情
+      operationId: GetPrunePromptTemplate
+      summary: 获取术语精简提示词模板详情
       security:
         - bearerAuth: []
       responses:
         '200':
-          description: 翻译配置详情
+          description: 术语精简提示词模板详情
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TranslationProfile'
+                $ref: '#/components/schemas/PrunePromptTemplate'
         default:
           $ref: '#/components/responses/Problem'
     put:
-      operationId: UpdateTranslationProfile
-      summary: 更新翻译配置
+      operationId: UpdatePrunePromptTemplate
+      summary: 更新术语精简提示词模板
       security:
         - bearerAuth: []
       requestBody:
@@ -1648,19 +1701,101 @@ paths:
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/UpdateTranslationProfileRequest'
+              $ref: '#/components/schemas/UpdatePrunePromptTemplateRequest'
       responses:
         '200':
           description: 更新成功
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TranslationProfile'
+                $ref: '#/components/schemas/PrunePromptTemplate'
         default:
           $ref: '#/components/responses/Problem'
     delete:
-      operationId: DeleteTranslationProfile
-      summary: 删除翻译配置
+      operationId: DeletePrunePromptTemplate
+      summary: 删除术语精简提示词模板
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
+  /execution-profiles:
+    get:
+      operationId: ListExecutionProfiles
+      summary: 列出当前用户的执行策略配置
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 执行策略配置列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionProfileListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateExecutionProfile
+      summary: 创建执行策略配置
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExecutionProfileRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionProfile'
+        default:
+          $ref: '#/components/responses/Problem'
+  /execution-profiles/{executionProfileId}:
+    parameters:
+      - $ref: '#/components/parameters/ExecutionProfileId'
+    get:
+      operationId: GetExecutionProfile
+      summary: 获取执行策略配置详情
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 执行策略配置详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionProfile'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: UpdateExecutionProfile
+      summary: 更新执行策略配置
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateExecutionProfileRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionProfile'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteExecutionProfile
+      summary: 删除执行策略配置
       security:
         - bearerAuth: []
       responses:
@@ -1927,8 +2062,8 @@ components:
       schema:
         type: integer
         minimum: 1
-    TranslationJobId:
-      name: translationJobId
+    JobId:
+      name: jobId
       in: path
       required: true
       schema:
@@ -1948,8 +2083,8 @@ components:
       schema:
         type: integer
         minimum: 1
-    PromptTemplateId:
-      name: promptTemplateId
+    TranslationPromptTemplateId:
+      name: translationPromptTemplateId
       in: path
       required: true
       schema:
@@ -1960,8 +2095,14 @@ components:
       required: true
       schema:
         type: integer
-    TranslationProfileId:
-      name: translationProfileId
+    PrunePromptTemplateId:
+      name: prunePromptTemplateId
+      in: path
+      required: true
+      schema:
+        type: integer
+    ExecutionProfileId:
+      name: executionProfileId
       in: path
       required: true
       schema:
@@ -2593,7 +2734,7 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/ResourceSegmentGroup'
-    CreateTranslationJobRequest:
+    CreateJobRequest:
       type: object
       required:
         - execution_plan_id
@@ -2619,28 +2760,27 @@ components:
             按章节分组键选择 segments（仅适用于 EPUB 等多章节资源）。
             传入 meta.epub_file 值（如 ["OEBPS/chapter1.xhtml"]），后端自动解析为对应的 segment_ids。
             与 segment_ids 互斥，优先级：segment_group_keys > segment_ids > resource_ids。
+        segment_filter:
+          type: string
+          enum:
+            - pending_only
+            - skip_approved
+            - all
+          description: |
+            覆盖执行模板中翻译轮次的段落过滤策略（仅对翻译轮次生效）。
+            - pending_only: 仅处理 pending 和 rejected 状态的段落
+            - skip_approved: 处理除 approved 外的所有状态
+            - all: 处理所有状态的段落
+            省略时使用执行模板中的配置。
         auto_approve:
           type: boolean
           default: false
           description: 翻译完成后是否自动审批通过所有段落
-        overwrite_mode:
-          type: string
-          enum:
-            - skip_translated
-            - overwrite_unapproved
-            - overwrite_all
-          default: skip_translated
-          description: |
-            段落覆盖策略。
-            - skip_translated: 跳过已有翻译的段落（仅翻译 pending/rejected）
-            - overwrite_unapproved: 覆盖所有非 approved 的段落（包括已翻译、已编辑和已拒绝的）
-            - overwrite_all: 覆盖所有段落，包括已审核通过的
-            对 segment_ids 选择方式无效（用户已精确指定段落）。
-        translation_config:
+        execution_config:
           type: object
           additionalProperties: true
       additionalProperties: false
-    TranslationJobResource:
+    JobResource:
       type: object
       required:
         - id
@@ -2696,7 +2836,7 @@ components:
           type: string
           format: date-time
           description: 资源开始执行的时间
-    TranslationJob:
+    Job:
       type: object
       required:
         - id
@@ -2736,18 +2876,18 @@ components:
             - file_update
             - glossary_change
             - web_edit
-        translation_config:
+        execution_config:
           type: object
           additionalProperties: true
-          description: 翻译执行配置快照（已脱敏，不含 API 密钥）
+          description: 执行配置快照（已脱敏，不含 API 密钥）
         error_message:
           type: string
         progress:
-          $ref: '#/components/schemas/TranslationJobProgress'
+          $ref: '#/components/schemas/JobProgress'
         job_resources:
           type: array
           items:
-            $ref: '#/components/schemas/TranslationJobResource'
+            $ref: '#/components/schemas/JobResource'
         started_at:
           type: string
           format: date-time
@@ -2758,7 +2898,7 @@ components:
         updated_at:
           type: string
           format: date-time
-    TranslationJobProgress:
+    JobProgress:
       type: object
       required:
         - total_resources
@@ -2790,7 +2930,7 @@ components:
           type: integer
           nullable: true
           description: 当前队列中的任务总数
-    TranslationJobListResponse:
+    JobListResponse:
       type: object
       required:
         - items
@@ -2798,7 +2938,7 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/TranslationJob'
+            $ref: '#/components/schemas/Job'
         next_cursor:
           type: string
     Activity:
@@ -2950,13 +3090,10 @@ components:
         config:
           type: object
           additionalProperties: true
-        default_translation_config:
-          type: object
-          additionalProperties: true
         glossary_enabled:
           type: boolean
           default: false
-          description: 翻译过程中是否启用术语表
+          description: 是否启用术语表
         source_lang:
           type: string
         target_lang:
@@ -2986,13 +3123,10 @@ components:
         config:
           type: object
           additionalProperties: true
-        default_translation_config:
-          type: object
-          additionalProperties: true
         glossary_enabled:
           type: boolean
           default: false
-          description: 翻译过程中是否启用术语表
+          description: 是否启用术语表
         source_lang:
           type: string
         target_lang:
@@ -3006,12 +3140,9 @@ components:
         config:
           type: object
           additionalProperties: true
-        default_translation_config:
-          type: object
-          additionalProperties: true
         glossary_enabled:
           type: boolean
-          description: 翻译过程中是否启用术语表
+          description: 是否启用术语表
         source_lang:
           type: string
         target_lang:
@@ -3233,7 +3364,165 @@ components:
           type: string
           enum:
             - cancelled
-    PromptTemplate:
+    GlossaryPruneRequest:
+      type: object
+      required:
+        - backend_id
+      properties:
+        backend_id:
+          type: integer
+          description: 用于精简分析的后端 ID
+        template_id:
+          type: integer
+          description: 精简提示词模板 ID，省略或为 0 时使用内置默认模板
+      additionalProperties: false
+    GlossaryPruneSuggestion:
+      type: object
+      required:
+        - entry_id
+        - action
+        - source
+        - old_target
+        - new_target
+        - old_notes
+        - new_notes
+        - target_changed
+        - notes_changed
+      properties:
+        entry_id:
+          type: integer
+        action:
+          type: string
+          enum:
+            - delete
+            - update
+        source:
+          type: string
+        old_target:
+          type: string
+        new_target:
+          type: string
+        old_notes:
+          type: string
+        new_notes:
+          type: string
+        target_changed:
+          type: boolean
+        notes_changed:
+          type: boolean
+    GlossaryPrunePreview:
+      type: object
+      required:
+        - suggestions
+        - total
+        - to_delete
+        - to_update
+        - to_keep
+        - diagnostics
+      properties:
+        suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/GlossaryPruneSuggestion'
+        total:
+          type: integer
+        to_delete:
+          type: integer
+        to_update:
+          type: integer
+        to_keep:
+          type: integer
+        diagnostics:
+          $ref: '#/components/schemas/GlossaryPruneDiagnostics'
+    GlossaryPruneDiagnostics:
+      type: object
+      properties:
+        backend_name:
+          type: string
+        template_name:
+          type: string
+        duration_ms:
+          type: integer
+        prompt_tokens:
+          type: integer
+        completion_tokens:
+          type: integer
+        system_prompt:
+          type: string
+          description: 发送给 LLM 的 system prompt 内容（截断至 128KB）。
+        user_message:
+          type: string
+          description: 发送给 LLM 的 user message 内容（截断至 128KB）。
+        system_truncated:
+          type: boolean
+        user_truncated:
+          type: boolean
+        system_length:
+          type: integer
+        user_length:
+          type: integer
+        received_content:
+          type: string
+          description: LLM 返回的原始响应内容（截断至 128KB）。
+        received_truncated:
+          type: boolean
+        received_length:
+          type: integer
+        entry_count:
+          type: integer
+        parsed_count:
+          type: integer
+        repaired_ops:
+          type: array
+          items:
+            type: string
+        error_type:
+          type: string
+        error_message:
+          type: string
+        http_status:
+          type: integer
+    GlossaryPruneApplyRequest:
+      type: object
+      required:
+        - changes
+      properties:
+        changes:
+          type: array
+          items:
+            type: object
+            required:
+              - entry_id
+              - action
+            properties:
+              entry_id:
+                type: integer
+              action:
+                type: string
+                enum:
+                  - delete
+                  - update
+              target:
+                type: string
+                description: 新 target（仅 action=update 时使用）
+              notes:
+                type: string
+                description: 新 notes（仅 action=update 时使用）
+      additionalProperties: false
+    GlossaryPruneApplyResult:
+      type: object
+      required:
+        - deleted
+        - updated
+        - failed
+      properties:
+        deleted:
+          type: integer
+        updated:
+          type: integer
+        failed:
+          type: integer
+    TranslationPromptTemplate:
       type: object
       required:
         - id
@@ -3248,7 +3537,7 @@ components:
         description:
           type: string
         scope:
-          $ref: '#/components/schemas/PromptTemplateScope'
+          $ref: '#/components/schemas/TranslationPromptTemplateScope'
         owner_user_id:
           type: integer
         owner_org_id:
@@ -3262,7 +3551,7 @@ components:
         updated_at:
           type: string
           format: date-time
-    PromptTemplateListResponse:
+    TranslationPromptTemplateListResponse:
       type: object
       required:
         - items
@@ -3270,8 +3559,8 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/PromptTemplate'
-    CreatePromptTemplateRequest:
+            $ref: '#/components/schemas/TranslationPromptTemplate'
+    CreateTranslationPromptTemplateRequest:
       type: object
       required:
         - name
@@ -3284,7 +3573,7 @@ components:
           type: string
           description: 翻译提示词内容。
       additionalProperties: false
-    UpdatePromptTemplateRequest:
+    UpdateTranslationPromptTemplateRequest:
       type: object
       properties:
         name:
@@ -3345,7 +3634,7 @@ components:
         content:
           type: string
           description: 术语抽取提示词内容。
-      additionalProperties: false
+      additionalProperties: false     
     UpdateBootstrapPromptTemplateRequest:
       type: object
       properties:
@@ -3357,7 +3646,69 @@ components:
           type: string
           description: 术语抽取提示词内容。
       additionalProperties: false
-    TranslationProfile:
+    PrunePromptTemplate:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - scope
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        scope:
+          $ref: '#/components/schemas/PrunePromptTemplateScope'
+        owner_user_id:
+          type: integer
+        owner_org_id:
+          type: integer
+        content:
+          type: string
+          description: 术语精简提示词内容。
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    PrunePromptTemplateListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrunePromptTemplate'
+    CreatePrunePromptTemplateRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        content:
+          type: string
+          description: 术语精简提示词内容。
+      additionalProperties: false
+    UpdatePrunePromptTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        content:
+          type: string
+          description: 术语精简提示词内容。
+      additionalProperties: false
+    ExecutionProfile:
       type: object
       required:
         - id
@@ -3373,20 +3724,20 @@ components:
         description:
           type: string
         scope:
-          $ref: '#/components/schemas/TranslationProfileScope'
+          $ref: '#/components/schemas/ExecutionProfileScope'
         owner_user_id:
           type: integer
         owner_org_id:
           type: integer
         config:
-          $ref: '#/components/schemas/TranslationProfileConfig'
+          $ref: '#/components/schemas/ExecutionProfileConfig'
         created_at:
           type: string
           format: date-time
         updated_at:
           type: string
           format: date-time
-    TranslationProfileListResponse:
+    ExecutionProfileListResponse:
       type: object
       required:
         - items
@@ -3394,8 +3745,8 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/TranslationProfile'
-    CreateTranslationProfileRequest:
+            $ref: '#/components/schemas/ExecutionProfile'
+    CreateExecutionProfileRequest:
       type: object
       required:
         - name
@@ -3405,9 +3756,9 @@ components:
         description:
           type: string
         config:
-          $ref: '#/components/schemas/TranslationProfileConfig'
+          $ref: '#/components/schemas/ExecutionProfileConfig'
       additionalProperties: false
-    UpdateTranslationProfileRequest:
+    UpdateExecutionProfileRequest:
       type: object
       properties:
         name:
@@ -3415,7 +3766,7 @@ components:
         description:
           type: string
         config:
-          $ref: '#/components/schemas/TranslationProfileConfig'
+          $ref: '#/components/schemas/ExecutionProfileConfig'
       additionalProperties: false
     ExecutionPlanTemplate:
       type: object
@@ -3437,8 +3788,6 @@ components:
           type: integer
         owner_org_id:
           type: integer
-        bootstrap:
-          $ref: '#/components/schemas/ExecutionPlanBootstrapConfig'
         ruby_retry:
           $ref: '#/components/schemas/ExecutionPlanRubyRetryConfig'
         rounds:
@@ -3517,7 +3866,7 @@ components:
         - active_users
         - total_projects
         - total_organizations
-        - total_translation_jobs
+        - total_jobs
         - total_resources
       properties:
         total_users:
@@ -3528,7 +3877,7 @@ components:
           type: integer
         total_organizations:
           type: integer
-        total_translation_jobs:
+        total_jobs:
           type: integer
         total_resources:
           type: integer
@@ -3577,8 +3926,6 @@ components:
           type: string
         description:
           type: string
-        bootstrap:
-          $ref: '#/components/schemas/ExecutionPlanBootstrapConfig'
         ruby_retry:
           $ref: '#/components/schemas/ExecutionPlanRubyRetryConfig'
         rounds:
@@ -3594,8 +3941,6 @@ components:
           type: string
         description:
           type: string
-        bootstrap:
-          $ref: '#/components/schemas/ExecutionPlanBootstrapConfig'
         ruby_retry:
           $ref: '#/components/schemas/ExecutionPlanRubyRetryConfig'
         rounds:
@@ -3849,45 +4194,6 @@ components:
         - user
         - org
         - system
-    ExecutionPlanBootstrapConfig:
-      type: object
-      required:
-        - enabled
-        - backend_id
-        - prompt_template_id
-        - batch_size
-        - concurrency
-      properties:
-        enabled:
-          type: boolean
-          default: false
-          description: 是否启用独立自举
-        backend_id:
-          type: integer
-          description: 自举使用的后端 ID
-        prompt_template_id:
-          type: integer
-          description: 自举使用的提示词模板 ID
-        batch_size:
-          type: integer
-          minimum: 1
-          default: 20
-          description: 每批发送给 LLM 的源文段数
-        concurrency:
-          type: integer
-          minimum: 1
-          default: 2
-          description: 自举并发数
-        max_terms_per_1000_chars:
-          type: number
-          minimum: 0
-          default: 25
-          description: 每 1000 字词的术语抽取上限系数，实际限制 = totalWords/1000*coeff
-        min_source_len:
-          type: integer
-          minimum: 1
-          default: 2
-          description: 术语源文最短字符数
     ExecutionPlanRubyRetryConfig:
       type: object
       required:
@@ -3900,6 +4206,21 @@ components:
         backend_id:
           type: integer
           description: 注音对齐使用的后端 ID；为空或 0 时使用翻译主后端
+    TranslateSegmentFilterConfig:
+      type: object
+      description: 翻译轮次段落过滤配置，决定处理哪些翻译状态的段落。
+      properties:
+        status_filter:
+          type: string
+          enum:
+            - pending_only
+            - skip_approved
+            - all
+          default: pending_only
+          description: |
+            - pending_only: 仅处理 pending 和 rejected 状态的段落（默认，等同旧 skip_translated）
+            - skip_approved: 处理除 approved 外的所有状态（等同旧 overwrite_unapproved）
+            - all: 处理所有状态的段落（等同旧 overwrite_all）
     RetryConfig:
       type: object
       properties:
@@ -3914,26 +4235,15 @@ components:
         jitter:
           type: boolean
           default: true
-    ExecutionRoundConfig:
+    TranslateRoundConfig:
       type: object
-      required:
-        - backend_id
-        - prompt_template_id
-        - profile_id
-        - concurrency
       properties:
-        name:
-          type: string
-          description: 轮次名称（可选，空值自动生成 round-N）
-        backend_id:
-          type: integer
-          description: 后端 ID（Backend 单表全局唯一）
         prompt_template_id:
           type: integer
-          description: 提示词模板 ID（PromptTemplate 单表全局唯一）
+          description: 翻译提示词模板 ID
         profile_id:
           type: integer
-          description: 策略模板 ID（TranslationProfile 单表全局唯一）
+          description: 策略模板 ID（ExecutionProfile 单表全局唯一）
         batch_size:
           type: integer
           minimum: 0
@@ -3942,18 +4252,70 @@ components:
           type: integer
           minimum: 0
           description: 字词数上限；0=不限制，与 batch_size 至少填一项
-        concurrency:
-          type: integer
-          minimum: 1
         fallback_shrink:
           type: number
           minimum: 0
           exclusiveMinimum: true
           maximum: 1
           exclusiveMaximum: true
+        segment_filter:
+          $ref: '#/components/schemas/TranslateSegmentFilterConfig'
+          description: 段落过滤配置；省略时默认 pending_only
         retry:
           $ref: '#/components/schemas/RetryConfig'
-    PromptTemplateScope:
+    ExtractRoundConfig:
+      type: object
+      properties:
+        template_id:
+          type: integer
+          description: 术语抽取提示词模板 ID（BootstrapPromptTemplate）
+        batch_size:
+          type: integer
+          minimum: 0
+          default: 20
+          description: 段落数上限；0=不限制，与 max_words_per_batch 至少填一项；两者都为 0 时不分批，全部一次发送
+        max_words_per_batch:
+          type: integer
+          minimum: 0
+          description: 字词数上限；0=不限制，与 batch_size 至少填一项；两者都为 0 时不分批，全部一次发送
+        max_terms_per_1000_chars:
+          type: number
+          minimum: 0
+          default: 25
+          description: 每 1000 字词的术语抽取上限系数
+        min_source_len:
+          type: integer
+          minimum: 1
+          default: 2
+          description: 术语源文最短字符数
+        retry:
+          $ref: '#/components/schemas/RetryConfig'
+    ExecutionRoundConfig:
+      type: object
+      required:
+        - mode
+        - backend_id
+        - concurrency
+      properties:
+        mode:
+          type: string
+          enum:
+            - translate
+            - extract
+          description: 轮次模式：translate=翻译，extract=术语抽取
+        backend_id:
+          type: integer
+          description: 后端 ID（Backend 单表全局唯一）
+        concurrency:
+          type: integer
+          minimum: 1
+        translate:
+          $ref: '#/components/schemas/TranslateRoundConfig'
+          description: 翻译模式配置（mode=translate 时必填）
+        extract:
+          $ref: '#/components/schemas/ExtractRoundConfig'
+          description: 术语抽取模式配置（mode=extract 时必填）
+    TranslationPromptTemplateScope:
       type: string
       enum:
         - user
@@ -3965,7 +4327,13 @@ components:
         - user
         - org
         - system
-    TranslationProfileScope:
+    PrunePromptTemplateScope:
+      type: string
+      enum:
+        - user
+        - org
+        - system
+    ExecutionProfileScope:
       type: string
       enum:
         - user
@@ -4138,7 +4506,7 @@ components:
           minimum: 0
           default: 0
           description: 译文/原文最长长度比，0 表示不检测
-    TranslationProfileConfig:
+    ExecutionProfileConfig:
       type: object
       required:
         - protect

@@ -36,8 +36,5 @@ func (UsageRecord) Edges() []ent.Edge {
 		edge.From("project", Project.Type).
 			Ref("usage_records").
 			Unique(),
-		edge.From("job", Job.Type).
-			Ref("usage_records").
-			Unique(),
 	}
 }

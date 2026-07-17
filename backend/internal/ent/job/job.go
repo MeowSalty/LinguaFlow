@@ -18,36 +18,42 @@ const (
 	FieldCreatedAt = "created_at"
 	// FieldUpdatedAt holds the string denoting the updated_at field in the database.
 	FieldUpdatedAt = "updated_at"
+	// FieldProjectID holds the string denoting the project_id field in the database.
+	FieldProjectID = "project_id"
 	// FieldStatus holds the string denoting the status field in the database.
 	FieldStatus = "status"
-	// FieldSubJobCount holds the string denoting the sub_job_count field in the database.
-	FieldSubJobCount = "sub_job_count"
-	// FieldCompletedSubJobs holds the string denoting the completed_sub_jobs field in the database.
-	FieldCompletedSubJobs = "completed_sub_jobs"
-	// FieldFailedSubJobs holds the string denoting the failed_sub_jobs field in the database.
-	FieldFailedSubJobs = "failed_sub_jobs"
-	// FieldSourceLang holds the string denoting the source_lang field in the database.
-	FieldSourceLang = "source_lang"
-	// FieldTargetLang holds the string denoting the target_lang field in the database.
-	FieldTargetLang = "target_lang"
-	// FieldConfig holds the string denoting the config field in the database.
-	FieldConfig = "config"
-	// FieldInputPath holds the string denoting the input_path field in the database.
-	FieldInputPath = "input_path"
-	// FieldOutputPath holds the string denoting the output_path field in the database.
-	FieldOutputPath = "output_path"
+	// FieldTriggerType holds the string denoting the trigger_type field in the database.
+	FieldTriggerType = "trigger_type"
+	// FieldExecutionPlanID holds the string denoting the execution_plan_id field in the database.
+	FieldExecutionPlanID = "execution_plan_id"
+	// FieldExecutionConfig holds the string denoting the execution_config field in the database.
+	FieldExecutionConfig = "execution_config"
+	// FieldResourceCount holds the string denoting the resource_count field in the database.
+	FieldResourceCount = "resource_count"
+	// FieldCompletedResources holds the string denoting the completed_resources field in the database.
+	FieldCompletedResources = "completed_resources"
+	// FieldFailedResources holds the string denoting the failed_resources field in the database.
+	FieldFailedResources = "failed_resources"
+	// FieldTotalSegments holds the string denoting the total_segments field in the database.
+	FieldTotalSegments = "total_segments"
+	// FieldSkippedSegments holds the string denoting the skipped_segments field in the database.
+	FieldSkippedSegments = "skipped_segments"
+	// FieldStageTotal holds the string denoting the stage_total field in the database.
+	FieldStageTotal = "stage_total"
+	// FieldCompletedSegments holds the string denoting the completed_segments field in the database.
+	FieldCompletedSegments = "completed_segments"
 	// FieldErrorMessage holds the string denoting the error_message field in the database.
 	FieldErrorMessage = "error_message"
+	// FieldStartedAt holds the string denoting the started_at field in the database.
+	FieldStartedAt = "started_at"
 	// EdgeProject holds the string denoting the project edge name in mutations.
 	EdgeProject = "project"
 	// EdgeCreatedBy holds the string denoting the created_by edge name in mutations.
 	EdgeCreatedBy = "created_by"
-	// EdgeSubJobs holds the string denoting the sub_jobs edge name in mutations.
-	EdgeSubJobs = "sub_jobs"
-	// EdgeActivityLogs holds the string denoting the activity_logs edge name in mutations.
-	EdgeActivityLogs = "activity_logs"
-	// EdgeUsageRecords holds the string denoting the usage_records edge name in mutations.
-	EdgeUsageRecords = "usage_records"
+	// EdgeJobResources holds the string denoting the job_resources edge name in mutations.
+	EdgeJobResources = "job_resources"
+	// EdgeSseEvents holds the string denoting the sse_events edge name in mutations.
+	EdgeSseEvents = "sse_events"
 	// Table holds the table name of the job in the database.
 	Table = "jobs"
 	// ProjectTable is the table that holds the project relation/edge.
@@ -56,35 +62,28 @@ const (
 	// It exists in this package in order to avoid circular dependency with the "project" package.
 	ProjectInverseTable = "projects"
 	// ProjectColumn is the table column denoting the project relation/edge.
-	ProjectColumn = "project_jobs"
+	ProjectColumn = "project_id"
 	// CreatedByTable is the table that holds the created_by relation/edge.
 	CreatedByTable = "jobs"
 	// CreatedByInverseTable is the table name for the User entity.
 	// It exists in this package in order to avoid circular dependency with the "user" package.
 	CreatedByInverseTable = "users"
 	// CreatedByColumn is the table column denoting the created_by relation/edge.
-	CreatedByColumn = "user_jobs"
-	// SubJobsTable is the table that holds the sub_jobs relation/edge.
-	SubJobsTable = "sub_jobs"
-	// SubJobsInverseTable is the table name for the SubJob entity.
-	// It exists in this package in order to avoid circular dependency with the "subjob" package.
-	SubJobsInverseTable = "sub_jobs"
-	// SubJobsColumn is the table column denoting the sub_jobs relation/edge.
-	SubJobsColumn = "job_sub_jobs"
-	// ActivityLogsTable is the table that holds the activity_logs relation/edge.
-	ActivityLogsTable = "activity_logs"
-	// ActivityLogsInverseTable is the table name for the ActivityLog entity.
-	// It exists in this package in order to avoid circular dependency with the "activitylog" package.
-	ActivityLogsInverseTable = "activity_logs"
-	// ActivityLogsColumn is the table column denoting the activity_logs relation/edge.
-	ActivityLogsColumn = "job_activity_logs"
-	// UsageRecordsTable is the table that holds the usage_records relation/edge.
-	UsageRecordsTable = "usage_records"
-	// UsageRecordsInverseTable is the table name for the UsageRecord entity.
-	// It exists in this package in order to avoid circular dependency with the "usagerecord" package.
-	UsageRecordsInverseTable = "usage_records"
-	// UsageRecordsColumn is the table column denoting the usage_records relation/edge.
-	UsageRecordsColumn = "job_usage_records"
+	CreatedByColumn = "user_created_jobs"
+	// JobResourcesTable is the table that holds the job_resources relation/edge.
+	JobResourcesTable = "job_resources"
+	// JobResourcesInverseTable is the table name for the JobResource entity.
+	// It exists in this package in order to avoid circular dependency with the "jobresource" package.
+	JobResourcesInverseTable = "job_resources"
+	// JobResourcesColumn is the table column denoting the job_resources relation/edge.
+	JobResourcesColumn = "job_job_resources"
+	// SseEventsTable is the table that holds the sse_events relation/edge.
+	SseEventsTable = "sse_events"
+	// SseEventsInverseTable is the table name for the SSEEvent entity.
+	// It exists in this package in order to avoid circular dependency with the "sseevent" package.
+	SseEventsInverseTable = "sse_events"
+	// SseEventsColumn is the table column denoting the sse_events relation/edge.
+	SseEventsColumn = "job_id"
 )
 
 // Columns holds all SQL columns for job fields.
@@ -92,23 +91,26 @@ var Columns = []string{
 	FieldID,
 	FieldCreatedAt,
 	FieldUpdatedAt,
+	FieldProjectID,
 	FieldStatus,
-	FieldSubJobCount,
-	FieldCompletedSubJobs,
-	FieldFailedSubJobs,
-	FieldSourceLang,
-	FieldTargetLang,
-	FieldConfig,
-	FieldInputPath,
-	FieldOutputPath,
+	FieldTriggerType,
+	FieldExecutionPlanID,
+	FieldExecutionConfig,
+	FieldResourceCount,
+	FieldCompletedResources,
+	FieldFailedResources,
+	FieldTotalSegments,
+	FieldSkippedSegments,
+	FieldStageTotal,
+	FieldCompletedSegments,
 	FieldErrorMessage,
+	FieldStartedAt,
 }
 
 // ForeignKeys holds the SQL foreign-keys that are owned by the "jobs"
 // table and are not defined as standalone fields in the schema.
 var ForeignKeys = []string{
-	"project_jobs",
-	"user_jobs",
+	"user_created_jobs",
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -133,26 +135,44 @@ var (
 	DefaultUpdatedAt func() time.Time
 	// UpdateDefaultUpdatedAt holds the default value on update for the "updated_at" field.
 	UpdateDefaultUpdatedAt func() time.Time
+	// ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
+	ProjectIDValidator func(int) error
 	// DefaultStatus holds the default value on creation for the "status" field.
 	DefaultStatus string
-	// DefaultSubJobCount holds the default value on creation for the "sub_job_count" field.
-	DefaultSubJobCount int
-	// SubJobCountValidator is a validator for the "sub_job_count" field. It is called by the builders before save.
-	SubJobCountValidator func(int) error
-	// DefaultCompletedSubJobs holds the default value on creation for the "completed_sub_jobs" field.
-	DefaultCompletedSubJobs int
-	// CompletedSubJobsValidator is a validator for the "completed_sub_jobs" field. It is called by the builders before save.
-	CompletedSubJobsValidator func(int) error
-	// DefaultFailedSubJobs holds the default value on creation for the "failed_sub_jobs" field.
-	DefaultFailedSubJobs int
-	// FailedSubJobsValidator is a validator for the "failed_sub_jobs" field. It is called by the builders before save.
-	FailedSubJobsValidator func(int) error
-	// DefaultSourceLang holds the default value on creation for the "source_lang" field.
-	DefaultSourceLang string
-	// DefaultTargetLang holds the default value on creation for the "target_lang" field.
-	DefaultTargetLang string
-	// DefaultConfig holds the default value on creation for the "config" field.
-	DefaultConfig func() map[string]interface{}
+	// DefaultTriggerType holds the default value on creation for the "trigger_type" field.
+	DefaultTriggerType string
+	// ExecutionPlanIDValidator is a validator for the "execution_plan_id" field. It is called by the builders before save.
+	ExecutionPlanIDValidator func(int) error
+	// DefaultExecutionConfig holds the default value on creation for the "execution_config" field.
+	DefaultExecutionConfig func() map[string]interface{}
+	// DefaultResourceCount holds the default value on creation for the "resource_count" field.
+	DefaultResourceCount int
+	// ResourceCountValidator is a validator for the "resource_count" field. It is called by the builders before save.
+	ResourceCountValidator func(int) error
+	// DefaultCompletedResources holds the default value on creation for the "completed_resources" field.
+	DefaultCompletedResources int
+	// CompletedResourcesValidator is a validator for the "completed_resources" field. It is called by the builders before save.
+	CompletedResourcesValidator func(int) error
+	// DefaultFailedResources holds the default value on creation for the "failed_resources" field.
+	DefaultFailedResources int
+	// FailedResourcesValidator is a validator for the "failed_resources" field. It is called by the builders before save.
+	FailedResourcesValidator func(int) error
+	// DefaultTotalSegments holds the default value on creation for the "total_segments" field.
+	DefaultTotalSegments int
+	// TotalSegmentsValidator is a validator for the "total_segments" field. It is called by the builders before save.
+	TotalSegmentsValidator func(int) error
+	// DefaultSkippedSegments holds the default value on creation for the "skipped_segments" field.
+	DefaultSkippedSegments int
+	// SkippedSegmentsValidator is a validator for the "skipped_segments" field. It is called by the builders before save.
+	SkippedSegmentsValidator func(int) error
+	// DefaultStageTotal holds the default value on creation for the "stage_total" field.
+	DefaultStageTotal int
+	// StageTotalValidator is a validator for the "stage_total" field. It is called by the builders before save.
+	StageTotalValidator func(int) error
+	// DefaultCompletedSegments holds the default value on creation for the "completed_segments" field.
+	DefaultCompletedSegments int
+	// CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.
+	CompletedSegmentsValidator func(int) error
 )
 
 // OrderOption defines the ordering options for the Job queries.
@@ -173,49 +193,69 @@ func ByUpdatedAt(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldUpdatedAt, opts...).ToFunc()
 }
 
+// ByProjectID orders the results by the project_id field.
+func ByProjectID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldProjectID, opts...).ToFunc()
+}
+
 // ByStatus orders the results by the status field.
 func ByStatus(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldStatus, opts...).ToFunc()
 }
 
-// BySubJobCount orders the results by the sub_job_count field.
-func BySubJobCount(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldSubJobCount, opts...).ToFunc()
+// ByTriggerType orders the results by the trigger_type field.
+func ByTriggerType(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTriggerType, opts...).ToFunc()
 }
 
-// ByCompletedSubJobs orders the results by the completed_sub_jobs field.
-func ByCompletedSubJobs(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldCompletedSubJobs, opts...).ToFunc()
+// ByExecutionPlanID orders the results by the execution_plan_id field.
+func ByExecutionPlanID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldExecutionPlanID, opts...).ToFunc()
 }
 
-// ByFailedSubJobs orders the results by the failed_sub_jobs field.
-func ByFailedSubJobs(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldFailedSubJobs, opts...).ToFunc()
+// ByResourceCount orders the results by the resource_count field.
+func ByResourceCount(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldResourceCount, opts...).ToFunc()
 }
 
-// BySourceLang orders the results by the source_lang field.
-func BySourceLang(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldSourceLang, opts...).ToFunc()
+// ByCompletedResources orders the results by the completed_resources field.
+func ByCompletedResources(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCompletedResources, opts...).ToFunc()
 }
 
-// ByTargetLang orders the results by the target_lang field.
-func ByTargetLang(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldTargetLang, opts...).ToFunc()
+// ByFailedResources orders the results by the failed_resources field.
+func ByFailedResources(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldFailedResources, opts...).ToFunc()
 }
 
-// ByInputPath orders the results by the input_path field.
-func ByInputPath(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldInputPath, opts...).ToFunc()
+// ByTotalSegments orders the results by the total_segments field.
+func ByTotalSegments(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldTotalSegments, opts...).ToFunc()
 }
 
-// ByOutputPath orders the results by the output_path field.
-func ByOutputPath(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldOutputPath, opts...).ToFunc()
+// BySkippedSegments orders the results by the skipped_segments field.
+func BySkippedSegments(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSkippedSegments, opts...).ToFunc()
+}
+
+// ByStageTotal orders the results by the stage_total field.
+func ByStageTotal(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStageTotal, opts...).ToFunc()
+}
+
+// ByCompletedSegments orders the results by the completed_segments field.
+func ByCompletedSegments(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldCompletedSegments, opts...).ToFunc()
 }
 
 // ByErrorMessage orders the results by the error_message field.
 func ByErrorMessage(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldErrorMessage, opts...).ToFunc()
+}
+
+// ByStartedAt orders the results by the started_at field.
+func ByStartedAt(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldStartedAt, opts...).ToFunc()
 }
 
 // ByProjectField orders the results by project field.
@@ -232,45 +272,31 @@ func ByCreatedByField(field string, opts ...sql.OrderTermOption) OrderOption {
 	}
 }
 
-// BySubJobsCount orders the results by sub_jobs count.
-func BySubJobsCount(opts ...sql.OrderTermOption) OrderOption {
+// ByJobResourcesCount orders the results by job_resources count.
+func ByJobResourcesCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newSubJobsStep(), opts...)
+		sqlgraph.OrderByNeighborsCount(s, newJobResourcesStep(), opts...)
 	}
 }
 
-// BySubJobs orders the results by sub_jobs terms.
-func BySubJobs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+// ByJobResources orders the results by job_resources terms.
+func ByJobResources(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newSubJobsStep(), append([]sql.OrderTerm{term}, terms...)...)
+		sqlgraph.OrderByNeighborTerms(s, newJobResourcesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
 
-// ByActivityLogsCount orders the results by activity_logs count.
-func ByActivityLogsCount(opts ...sql.OrderTermOption) OrderOption {
+// BySseEventsCount orders the results by sse_events count.
+func BySseEventsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newActivityLogsStep(), opts...)
+		sqlgraph.OrderByNeighborsCount(s, newSseEventsStep(), opts...)
 	}
 }
 
-// ByActivityLogs orders the results by activity_logs terms.
-func ByActivityLogs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+// BySseEvents orders the results by sse_events terms.
+func BySseEvents(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newActivityLogsStep(), append([]sql.OrderTerm{term}, terms...)...)
-	}
-}
-
-// ByUsageRecordsCount orders the results by usage_records count.
-func ByUsageRecordsCount(opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newUsageRecordsStep(), opts...)
-	}
-}
-
-// ByUsageRecords orders the results by usage_records terms.
-func ByUsageRecords(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newUsageRecordsStep(), append([]sql.OrderTerm{term}, terms...)...)
+		sqlgraph.OrderByNeighborTerms(s, newSseEventsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
 func newProjectStep() *sqlgraph.Step {
@@ -287,24 +313,17 @@ func newCreatedByStep() *sqlgraph.Step {
 		sqlgraph.Edge(sqlgraph.M2O, true, CreatedByTable, CreatedByColumn),
 	)
 }
-func newSubJobsStep() *sqlgraph.Step {
+func newJobResourcesStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(SubJobsInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, SubJobsTable, SubJobsColumn),
+		sqlgraph.To(JobResourcesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, JobResourcesTable, JobResourcesColumn),
 	)
 }
-func newActivityLogsStep() *sqlgraph.Step {
+func newSseEventsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(ActivityLogsInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, ActivityLogsTable, ActivityLogsColumn),
-	)
-}
-func newUsageRecordsStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(UsageRecordsInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, UsageRecordsTable, UsageRecordsColumn),
+		sqlgraph.To(SseEventsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, SseEventsTable, SseEventsColumn),
 	)
 }

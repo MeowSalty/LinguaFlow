@@ -1,0 +1,71 @@
+backend:
+  name: openai-default
+  type: openai
+  options:
+    api_key: ${OPENAI_API_KEY}
+    base_url: https://api.openai.com/v1
+    model: gpt-4o-mini
+    temperature: 0.2
+    max_tokens: 0
+    timeout: 60s
+    response_format: json_schema
+
+translation_prompt_template:
+  id: -1
+  name: "通用翻译提示词"
+  description: "默认翻译提示词模板，适用于一般文档翻译"
+
+bootstrap_prompt_template:
+  id: -1
+  name: "通用术语抽取提示词"
+  description: "默认术语抽取提示词模板"
+
+prune_prompt_template:
+  id: -1
+  name: "通用术语精简提示词"
+  description: "默认术语精简提示词模板"
+
+translation_profile:
+  id: -1
+  name: "通用策略"
+  description: "默认策略配置，适用于一般文档翻译"
+  config:
+    protect:
+      enabled: true
+      rules: [code, link, placeholder, xml]
+    ruby:
+      enabled: true
+      preserve_kinds: [creative]
+    postprocess:
+      enabled: true
+      trim_spaces: true
+    repair:
+      enabled: true
+      json_structural: true
+      schema_aliases: true
+      partial: true
+      partial_threshold: 0.5
+      placeholder_normalize: true
+      prompt_upgrade: true
+    glossary:
+      enabled: false
+      bootstrap:
+        max_terms_per_1000_chars: 3.0
+        min_source_len: 2
+        inline_conflict_strategy: "rewrite-local"
+
+execution_plan:
+  name: "默认执行计划"
+  description: "单轮翻译执行计划"
+  rounds:
+    - name: "主翻译"
+      backend: openai-default
+      prompt_template: -1
+      profile: -1
+      batch_size: 1
+      concurrency: 4
+      fallback_shrink: 0.5
+      retry:
+        max_attempts: 3
+        backoff_ms: 2000
+        jitter: true

@@ -3,6 +3,7 @@
 package segment
 
 import (
+	"fmt"
 	"time"
 
 	"entgo.io/ent/dialect/sql"
@@ -28,19 +29,25 @@ const (
 	FieldStatus = "status"
 	// FieldReviewComment holds the string denoting the review_comment field in the database.
 	FieldReviewComment = "review_comment"
-	// EdgeSubJob holds the string denoting the sub_job edge name in mutations.
-	EdgeSubJob = "sub_job"
+	// FieldResourceID holds the string denoting the resource_id field in the database.
+	FieldResourceID = "resource_id"
+	// FieldMeta holds the string denoting the meta field in the database.
+	FieldMeta = "meta"
+	// FieldQualityIssues holds the string denoting the quality_issues field in the database.
+	FieldQualityIssues = "quality_issues"
+	// EdgeResource holds the string denoting the resource edge name in mutations.
+	EdgeResource = "resource"
 	// EdgeReviewedBy holds the string denoting the reviewed_by edge name in mutations.
 	EdgeReviewedBy = "reviewed_by"
 	// Table holds the table name of the segment in the database.
 	Table = "segments"
-	// SubJobTable is the table that holds the sub_job relation/edge.
-	SubJobTable = "segments"
-	// SubJobInverseTable is the table name for the SubJob entity.
-	// It exists in this package in order to avoid circular dependency with the "subjob" package.
-	SubJobInverseTable = "sub_jobs"
-	// SubJobColumn is the table column denoting the sub_job relation/edge.
-	SubJobColumn = "sub_job_segments"
+	// ResourceTable is the table that holds the resource relation/edge.
+	ResourceTable = "segments"
+	// ResourceInverseTable is the table name for the Resource entity.
+	// It exists in this package in order to avoid circular dependency with the "resource" package.
+	ResourceInverseTable = "resources"
+	// ResourceColumn is the table column denoting the resource relation/edge.
+	ResourceColumn = "resource_id"
 	// ReviewedByTable is the table that holds the reviewed_by relation/edge.
 	ReviewedByTable = "segments"
 	// ReviewedByInverseTable is the table name for the User entity.
@@ -60,12 +67,14 @@ var Columns = []string{
 	FieldTargetText,
 	FieldStatus,
 	FieldReviewComment,
+	FieldResourceID,
+	FieldMeta,
+	FieldQualityIssues,
 }
 
 // ForeignKeys holds the SQL foreign-keys that are owned by the "segments"
 // table and are not defined as standalone fields in the schema.
 var ForeignKeys = []string{
-	"sub_job_segments",
 	"user_reviewed_segments",
 }
 
@@ -95,9 +104,38 @@ var (
 	SegmentIndexValidator func(int) error
 	// SourceTextValidator is a validator for the "source_text" field. It is called by the builders before save.
 	SourceTextValidator func(string) error
-	// DefaultStatus holds the default value on creation for the "status" field.
-	DefaultStatus string
+	// ResourceIDValidator is a validator for the "resource_id" field. It is called by the builders before save.
+	ResourceIDValidator func(int) error
 )
+
+// Status defines the type for the "status" enum field.
+type Status string
+
+// StatusPending is the default value of the Status enum.
+const DefaultStatus = StatusPending
+
+// Status values.
+const (
+	StatusPending    Status = "pending"
+	StatusTranslated Status = "translated"
+	StatusEdited     Status = "edited"
+	StatusApproved   Status = "approved"
+	StatusRejected   Status = "rejected"
+)
+
+func (s Status) String() string {
+	return string(s)
+}
+
+// StatusValidator is a validator for the "status" field enum values. It is called by the builders before save.
+func StatusValidator(s Status) error {
+	switch s {
+	case StatusPending, StatusTranslated, StatusEdited, StatusApproved, StatusRejected:
+		return nil
+	default:
+		return fmt.Errorf("segment: invalid enum value for status field: %q", s)
+	}
+}
 
 // OrderOption defines the ordering options for the Segment queries.
 type OrderOption func(*sql.Selector)
@@ -142,10 +180,20 @@ func ByReviewComment(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldReviewComment, opts...).ToFunc()
 }
 
-// BySubJobField orders the results by sub_job field.
-func BySubJobField(field string, opts ...sql.OrderTermOption) OrderOption {
+// ByResourceID orders the results by the resource_id field.
+func ByResourceID(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldResourceID, opts...).ToFunc()
+}
+
+// ByMeta orders the results by the meta field.
+func ByMeta(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMeta, opts...).ToFunc()
+}
+
+// ByResourceField orders the results by resource field.
+func ByResourceField(field string, opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newSubJobStep(), sql.OrderByField(field, opts...))
+		sqlgraph.OrderByNeighborTerms(s, newResourceStep(), sql.OrderByField(field, opts...))
 	}
 }
 
@@ -155,11 +203,11 @@ func ByReviewedByField(field string, opts ...sql.OrderTermOption) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newReviewedByStep(), sql.OrderByField(field, opts...))
 	}
 }
-func newSubJobStep() *sqlgraph.Step {
+func newResourceStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(SubJobInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.M2O, true, SubJobTable, SubJobColumn),
+		sqlgraph.To(ResourceInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.M2O, true, ResourceTable, ResourceColumn),
 	)
 }
 func newReviewedByStep() *sqlgraph.Step {

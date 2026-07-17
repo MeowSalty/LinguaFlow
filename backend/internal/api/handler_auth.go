@@ -47,7 +47,7 @@ type authSessionResponse struct {
 
 func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 	var req authRequestRegister
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	session, err := s.authService.Register(r.Context(), service.RegisterInput{
@@ -57,7 +57,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 		DisplayName: req.DisplayName,
 	})
 	if err != nil {
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, newAuthSessionResponse(session))
@@ -65,7 +65,7 @@ func (s *Server) handleRegister(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var req authRequestLogin
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	session, err := s.authService.Login(r.Context(), service.LoginInput{
@@ -73,7 +73,7 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 		Password: req.Password,
 	})
 	if err != nil {
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, newAuthSessionResponse(session))
@@ -81,12 +81,12 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 	var req authRequestRefresh
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	session, err := s.authService.Refresh(r.Context(), req.RefreshToken)
 	if err != nil {
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, newAuthSessionResponse(session))
@@ -94,15 +94,15 @@ func (s *Server) handleRefresh(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	var req authRequestLogout
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	if _, ok := authUserFromContext(r.Context()); !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 	if err := s.authService.Logout(r.Context(), req.RefreshToken); err != nil {
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

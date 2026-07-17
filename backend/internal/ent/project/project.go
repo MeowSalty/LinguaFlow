@@ -24,10 +24,10 @@ const (
 	FieldOwnerUserID = "owner_user_id"
 	// FieldOwnerOrgID holds the string denoting the owner_org_id field in the database.
 	FieldOwnerOrgID = "owner_org_id"
-	// FieldResourceScope holds the string denoting the resource_scope field in the database.
-	FieldResourceScope = "resource_scope"
 	// FieldConfig holds the string denoting the config field in the database.
 	FieldConfig = "config"
+	// FieldGlossaryEnabled holds the string denoting the glossary_enabled field in the database.
+	FieldGlossaryEnabled = "glossary_enabled"
 	// FieldSourceLang holds the string denoting the source_lang field in the database.
 	FieldSourceLang = "source_lang"
 	// FieldTargetLang holds the string denoting the target_lang field in the database.
@@ -36,10 +36,6 @@ const (
 	EdgeOwnerUser = "owner_user"
 	// EdgeOwnerOrg holds the string denoting the owner_org edge name in mutations.
 	EdgeOwnerOrg = "owner_org"
-	// EdgeProjectBackends holds the string denoting the project_backends edge name in mutations.
-	EdgeProjectBackends = "project_backends"
-	// EdgeStageBackendOverrides holds the string denoting the stage_backend_overrides edge name in mutations.
-	EdgeStageBackendOverrides = "stage_backend_overrides"
 	// EdgeGlossaryEntries holds the string denoting the glossary_entries edge name in mutations.
 	EdgeGlossaryEntries = "glossary_entries"
 	// EdgeTmEntries holds the string denoting the tm_entries edge name in mutations.
@@ -50,6 +46,10 @@ const (
 	EdgeActivityLogs = "activity_logs"
 	// EdgeUsageRecords holds the string denoting the usage_records edge name in mutations.
 	EdgeUsageRecords = "usage_records"
+	// EdgeResources holds the string denoting the resources edge name in mutations.
+	EdgeResources = "resources"
+	// EdgeSyncTasks holds the string denoting the sync_tasks edge name in mutations.
+	EdgeSyncTasks = "sync_tasks"
 	// Table holds the table name of the project in the database.
 	Table = "projects"
 	// OwnerUserTable is the table that holds the owner_user relation/edge.
@@ -66,20 +66,6 @@ const (
 	OwnerOrgInverseTable = "organizations"
 	// OwnerOrgColumn is the table column denoting the owner_org relation/edge.
 	OwnerOrgColumn = "owner_org_id"
-	// ProjectBackendsTable is the table that holds the project_backends relation/edge.
-	ProjectBackendsTable = "project_backends"
-	// ProjectBackendsInverseTable is the table name for the ProjectBackend entity.
-	// It exists in this package in order to avoid circular dependency with the "projectbackend" package.
-	ProjectBackendsInverseTable = "project_backends"
-	// ProjectBackendsColumn is the table column denoting the project_backends relation/edge.
-	ProjectBackendsColumn = "project_project_backends"
-	// StageBackendOverridesTable is the table that holds the stage_backend_overrides relation/edge.
-	StageBackendOverridesTable = "stage_backend_overrides"
-	// StageBackendOverridesInverseTable is the table name for the StageBackendOverride entity.
-	// It exists in this package in order to avoid circular dependency with the "stagebackendoverride" package.
-	StageBackendOverridesInverseTable = "stage_backend_overrides"
-	// StageBackendOverridesColumn is the table column denoting the stage_backend_overrides relation/edge.
-	StageBackendOverridesColumn = "project_stage_backend_overrides"
 	// GlossaryEntriesTable is the table that holds the glossary_entries relation/edge.
 	GlossaryEntriesTable = "glossary_entries"
 	// GlossaryEntriesInverseTable is the table name for the GlossaryEntry entity.
@@ -100,7 +86,7 @@ const (
 	// It exists in this package in order to avoid circular dependency with the "job" package.
 	JobsInverseTable = "jobs"
 	// JobsColumn is the table column denoting the jobs relation/edge.
-	JobsColumn = "project_jobs"
+	JobsColumn = "project_id"
 	// ActivityLogsTable is the table that holds the activity_logs relation/edge.
 	ActivityLogsTable = "activity_logs"
 	// ActivityLogsInverseTable is the table name for the ActivityLog entity.
@@ -115,6 +101,20 @@ const (
 	UsageRecordsInverseTable = "usage_records"
 	// UsageRecordsColumn is the table column denoting the usage_records relation/edge.
 	UsageRecordsColumn = "project_usage_records"
+	// ResourcesTable is the table that holds the resources relation/edge.
+	ResourcesTable = "resources"
+	// ResourcesInverseTable is the table name for the Resource entity.
+	// It exists in this package in order to avoid circular dependency with the "resource" package.
+	ResourcesInverseTable = "resources"
+	// ResourcesColumn is the table column denoting the resources relation/edge.
+	ResourcesColumn = "project_id"
+	// SyncTasksTable is the table that holds the sync_tasks relation/edge.
+	SyncTasksTable = "sync_tasks"
+	// SyncTasksInverseTable is the table name for the SyncTask entity.
+	// It exists in this package in order to avoid circular dependency with the "synctask" package.
+	SyncTasksInverseTable = "sync_tasks"
+	// SyncTasksColumn is the table column denoting the sync_tasks relation/edge.
+	SyncTasksColumn = "project_id"
 )
 
 // Columns holds all SQL columns for project fields.
@@ -125,8 +125,8 @@ var Columns = []string{
 	FieldName,
 	FieldOwnerUserID,
 	FieldOwnerOrgID,
-	FieldResourceScope,
 	FieldConfig,
+	FieldGlossaryEnabled,
 	FieldSourceLang,
 	FieldTargetLang,
 }
@@ -154,10 +154,10 @@ var (
 	OwnerUserIDValidator func(int) error
 	// OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
 	OwnerOrgIDValidator func(int) error
-	// DefaultResourceScope holds the default value on creation for the "resource_scope" field.
-	DefaultResourceScope string
 	// DefaultConfig holds the default value on creation for the "config" field.
 	DefaultConfig func() map[string]interface{}
+	// DefaultGlossaryEnabled holds the default value on creation for the "glossary_enabled" field.
+	DefaultGlossaryEnabled bool
 	// DefaultSourceLang holds the default value on creation for the "source_lang" field.
 	DefaultSourceLang string
 	// DefaultTargetLang holds the default value on creation for the "target_lang" field.
@@ -197,9 +197,9 @@ func ByOwnerOrgID(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldOwnerOrgID, opts...).ToFunc()
 }
 
-// ByResourceScope orders the results by the resource_scope field.
-func ByResourceScope(opts ...sql.OrderTermOption) OrderOption {
-	return sql.OrderByField(FieldResourceScope, opts...).ToFunc()
+// ByGlossaryEnabled orders the results by the glossary_enabled field.
+func ByGlossaryEnabled(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldGlossaryEnabled, opts...).ToFunc()
 }
 
 // BySourceLang orders the results by the source_lang field.
@@ -223,34 +223,6 @@ func ByOwnerUserField(field string, opts ...sql.OrderTermOption) OrderOption {
 func ByOwnerOrgField(field string, opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
 		sqlgraph.OrderByNeighborTerms(s, newOwnerOrgStep(), sql.OrderByField(field, opts...))
-	}
-}
-
-// ByProjectBackendsCount orders the results by project_backends count.
-func ByProjectBackendsCount(opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newProjectBackendsStep(), opts...)
-	}
-}
-
-// ByProjectBackends orders the results by project_backends terms.
-func ByProjectBackends(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newProjectBackendsStep(), append([]sql.OrderTerm{term}, terms...)...)
-	}
-}
-
-// ByStageBackendOverridesCount orders the results by stage_backend_overrides count.
-func ByStageBackendOverridesCount(opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newStageBackendOverridesStep(), opts...)
-	}
-}
-
-// ByStageBackendOverrides orders the results by stage_backend_overrides terms.
-func ByStageBackendOverrides(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newStageBackendOverridesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
 
@@ -323,6 +295,34 @@ func ByUsageRecords(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newUsageRecordsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByResourcesCount orders the results by resources count.
+func ByResourcesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newResourcesStep(), opts...)
+	}
+}
+
+// ByResources orders the results by resources terms.
+func ByResources(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newResourcesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// BySyncTasksCount orders the results by sync_tasks count.
+func BySyncTasksCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newSyncTasksStep(), opts...)
+	}
+}
+
+// BySyncTasks orders the results by sync_tasks terms.
+func BySyncTasks(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newSyncTasksStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newOwnerUserStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -335,20 +335,6 @@ func newOwnerOrgStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(OwnerOrgInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.M2O, true, OwnerOrgTable, OwnerOrgColumn),
-	)
-}
-func newProjectBackendsStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(ProjectBackendsInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, ProjectBackendsTable, ProjectBackendsColumn),
-	)
-}
-func newStageBackendOverridesStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(StageBackendOverridesInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, StageBackendOverridesTable, StageBackendOverridesColumn),
 	)
 }
 func newGlossaryEntriesStep() *sqlgraph.Step {
@@ -384,5 +370,19 @@ func newUsageRecordsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(UsageRecordsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, UsageRecordsTable, UsageRecordsColumn),
+	)
+}
+func newResourcesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(ResourcesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, ResourcesTable, ResourcesColumn),
+	)
+}
+func newSyncTasksStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(SyncTasksInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, SyncTasksTable, SyncTasksColumn),
 	)
 }

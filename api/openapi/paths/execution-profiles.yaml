@@ -1,0 +1,83 @@
+executionProfiles:
+  get:
+    operationId: ListExecutionProfiles
+    summary: 列出当前用户的执行策略配置
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 执行策略配置列表
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/execution-profile.yaml#/ExecutionProfileListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  post:
+    operationId: CreateExecutionProfile
+    summary: 创建执行策略配置
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+              $ref: '../components/schemas/execution-profile.yaml#/CreateExecutionProfileRequest'
+    responses:
+      '201':
+        description: 创建成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/execution-profile.yaml#/ExecutionProfile'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+executionProfileById:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ExecutionProfileId'
+  get:
+    operationId: GetExecutionProfile
+    summary: 获取执行策略配置详情
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 执行策略配置详情
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/execution-profile.yaml#/ExecutionProfile'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  put:
+    operationId: UpdateExecutionProfile
+    summary: 更新执行策略配置
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+              $ref: '../components/schemas/execution-profile.yaml#/UpdateExecutionProfileRequest'
+    responses:
+      '200':
+        description: 更新成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/execution-profile.yaml#/ExecutionProfile'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  delete:
+    operationId: DeleteExecutionProfile
+    summary: 删除执行策略配置
+    security:
+      - bearerAuth: []
+    responses:
+      '204':
+        description: 删除成功
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

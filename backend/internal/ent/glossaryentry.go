@@ -10,7 +10,6 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 )
 
@@ -23,8 +22,6 @@ type GlossaryEntry struct {
 	CreatedAt time.Time `json:"created_at,omitempty"`
 	// UpdatedAt holds the value of the "updated_at" field.
 	UpdatedAt time.Time `json:"updated_at,omitempty"`
-	// ScopeKey holds the value of the "scope_key" field.
-	ScopeKey string `json:"scope_key,omitempty"`
 	// SourceKey holds the value of the "source_key" field.
 	SourceKey string `json:"source_key,omitempty"`
 	// Source holds the value of the "source" field.
@@ -36,9 +33,7 @@ type GlossaryEntry struct {
 	// Notes holds the value of the "notes" field.
 	Notes string `json:"notes,omitempty"`
 	// ProjectID holds the value of the "project_id" field.
-	ProjectID *int `json:"project_id,omitempty"`
-	// OrganizationID holds the value of the "organization_id" field.
-	OrganizationID *int `json:"organization_id,omitempty"`
+	ProjectID int `json:"project_id,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
 	// The values are being populated by the GlossaryEntryQuery when eager-loading is set.
 	Edges        GlossaryEntryEdges `json:"edges"`
@@ -49,8 +44,8 @@ type GlossaryEntry struct {
 type GlossaryEntryEdges struct {
 	// Project holds the value of the project edge.
 	Project *Project `json:"project,omitempty"`
-	// Organization holds the value of the organization edge.
-	Organization *Organization `json:"organization,omitempty"`
+	// SyncTasks holds the value of the sync_tasks edge.
+	SyncTasks []*SyncTask `json:"sync_tasks,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
 	loadedTypes [2]bool
@@ -67,15 +62,13 @@ func (e GlossaryEntryEdges) ProjectOrErr() (*Project, error) {
 	return nil, &NotLoadedError{edge: "project"}
 }
 
-// OrganizationOrErr returns the Organization value or an error if the edge
-// was not loaded in eager-loading, or loaded but was not found.
-func (e GlossaryEntryEdges) OrganizationOrErr() (*Organization, error) {
-	if e.Organization != nil {
-		return e.Organization, nil
-	} else if e.loadedTypes[1] {
-		return nil, &NotFoundError{label: organization.Label}
+// SyncTasksOrErr returns the SyncTasks value or an error if the edge
+// was not loaded in eager-loading.
+func (e GlossaryEntryEdges) SyncTasksOrErr() ([]*SyncTask, error) {
+	if e.loadedTypes[1] {
+		return e.SyncTasks, nil
 	}
-	return nil, &NotLoadedError{edge: "organization"}
+	return nil, &NotLoadedError{edge: "sync_tasks"}
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
@@ -85,9 +78,9 @@ func (*GlossaryEntry) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case glossaryentry.FieldCaseSensitive:
 			values[i] = new(sql.NullBool)
-		case glossaryentry.FieldID, glossaryentry.FieldProjectID, glossaryentry.FieldOrganizationID:
+		case glossaryentry.FieldID, glossaryentry.FieldProjectID:
 			values[i] = new(sql.NullInt64)
-		case glossaryentry.FieldScopeKey, glossaryentry.FieldSourceKey, glossaryentry.FieldSource, glossaryentry.FieldTarget, glossaryentry.FieldNotes:
+		case glossaryentry.FieldSourceKey, glossaryentry.FieldSource, glossaryentry.FieldTarget, glossaryentry.FieldNotes:
 			values[i] = new(sql.NullString)
 		case glossaryentry.FieldCreatedAt, glossaryentry.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
@@ -124,12 +117,6 @@ func (_m *GlossaryEntry) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
 			}
-		case glossaryentry.FieldScopeKey:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field scope_key", values[i])
-			} else if value.Valid {
-				_m.ScopeKey = value.String
-			}
 		case glossaryentry.FieldSourceKey:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field source_key", values[i])
@@ -164,15 +151,7 @@ func (_m *GlossaryEntry) assignValues(columns []string, values []any) error {
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field project_id", values[i])
 			} else if value.Valid {
-				_m.ProjectID = new(int)
-				*_m.ProjectID = int(value.Int64)
-			}
-		case glossaryentry.FieldOrganizationID:
-			if value, ok := values[i].(*sql.NullInt64); !ok {
-				return fmt.Errorf("unexpected type %T for field organization_id", values[i])
-			} else if value.Valid {
-				_m.OrganizationID = new(int)
-				*_m.OrganizationID = int(value.Int64)
+				_m.ProjectID = int(value.Int64)
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -192,9 +171,9 @@ func (_m *GlossaryEntry) QueryProject() *ProjectQuery {
 	return NewGlossaryEntryClient(_m.config).QueryProject(_m)
 }
 
-// QueryOrganization queries the "organization" edge of the GlossaryEntry entity.
-func (_m *GlossaryEntry) QueryOrganization() *OrganizationQuery {
-	return NewGlossaryEntryClient(_m.config).QueryOrganization(_m)
+// QuerySyncTasks queries the "sync_tasks" edge of the GlossaryEntry entity.
+func (_m *GlossaryEntry) QuerySyncTasks() *SyncTaskQuery {
+	return NewGlossaryEntryClient(_m.config).QuerySyncTasks(_m)
 }
 
 // Update returns a builder for updating this GlossaryEntry.
@@ -226,9 +205,6 @@ func (_m *GlossaryEntry) String() string {
 	builder.WriteString("updated_at=")
 	builder.WriteString(_m.UpdatedAt.Format(time.ANSIC))
 	builder.WriteString(", ")
-	builder.WriteString("scope_key=")
-	builder.WriteString(_m.ScopeKey)
-	builder.WriteString(", ")
 	builder.WriteString("source_key=")
 	builder.WriteString(_m.SourceKey)
 	builder.WriteString(", ")
@@ -244,15 +220,8 @@ func (_m *GlossaryEntry) String() string {
 	builder.WriteString("notes=")
 	builder.WriteString(_m.Notes)
 	builder.WriteString(", ")
-	if v := _m.ProjectID; v != nil {
-		builder.WriteString("project_id=")
-		builder.WriteString(fmt.Sprintf("%v", *v))
-	}
-	builder.WriteString(", ")
-	if v := _m.OrganizationID; v != nil {
-		builder.WriteString("organization_id=")
-		builder.WriteString(fmt.Sprintf("%v", *v))
-	}
+	builder.WriteString("project_id=")
+	builder.WriteString(fmt.Sprintf("%v", _m.ProjectID))
 	builder.WriteByte(')')
 	return builder.String()
 }

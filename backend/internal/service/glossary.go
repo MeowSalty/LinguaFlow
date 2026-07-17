@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bufio"
 	"context"
 	"encoding/csv"
 	"errors"
@@ -11,6 +12,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 )
 
 var (
@@ -43,10 +45,10 @@ type GlossaryImportResult struct {
 	Skipped []GlossaryImportSkipped
 }
 
-type glossaryScope struct {
-	projectID      *int
-	organizationID *int
-	key            string
+// GlossaryEntryUpdateResult 包含更新结果和变更信息
+type GlossaryEntryUpdateResult struct {
+	Entry         *ent.GlossaryEntry
+	TargetChanged bool
 }
 
 func NewGlossaryService(client *ent.Client, projects *ProjectService) *GlossaryService {
@@ -54,51 +56,22 @@ func NewGlossaryService(client *ent.Client, projects *ProjectService) *GlossaryS
 }
 
 func (s *GlossaryService) ListEntries(ctx context.Context, actorUserID, projectID int) ([]*ent.GlossaryEntry, error) {
-	projectRow, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, false)
-	if err != nil {
-		return nil, err
-	}
-	scope, err := glossaryScopeFromProject(projectRow)
-	if err != nil {
+	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, false); err != nil {
 		return nil, err
 	}
 	return s.client.GlossaryEntry.Query().
-		Where(glossaryentry.ScopeKeyEQ(scope.key)).
+		Where(glossaryentry.ProjectIDEQ(projectID)).
 		Order(ent.Asc(glossaryentry.FieldSourceKey), ent.Asc(glossaryentry.FieldID)).
 		All(ctx)
 }
 
-func (s *GlossaryService) CreateEntry(ctx context.Context, actorUserID, projectID int, input GlossaryEntryInput) (*ent.GlossaryEntry, error) {
-	projectRow, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true)
-	if err != nil {
+// GetEntry 获取单个术语条目，验证项目归属。
+func (s *GlossaryService) GetEntry(ctx context.Context, actorUserID, projectID, entryID int) (*ent.GlossaryEntry, error) {
+	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, false); err != nil {
 		return nil, err
 	}
-	scope, err := glossaryScopeFromProject(projectRow)
-	if err != nil {
-		return nil, err
-	}
-	normalized, err := normalizeGlossaryEntryInput(input)
-	if err != nil {
-		return nil, err
-	}
-	return createGlossaryEntry(ctx, s.client, scope, normalized)
-}
-
-func (s *GlossaryService) UpdateEntry(ctx context.Context, actorUserID, projectID, entryID int, input GlossaryEntryInput) (*ent.GlossaryEntry, error) {
-	projectRow, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true)
-	if err != nil {
-		return nil, err
-	}
-	scope, err := glossaryScopeFromProject(projectRow)
-	if err != nil {
-		return nil, err
-	}
-	normalized, err := normalizeGlossaryEntryInput(input)
-	if err != nil {
-		return nil, err
-	}
-	target, err := s.client.GlossaryEntry.Query().
-		Where(glossaryentry.IDEQ(entryID), glossaryentry.ScopeKeyEQ(scope.key)).
+	entry, err := s.client.GlossaryEntry.Query().
+		Where(glossaryentry.IDEQ(entryID), glossaryentry.ProjectIDEQ(projectID)).
 		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -106,7 +79,39 @@ func (s *GlossaryService) UpdateEntry(ctx context.Context, actorUserID, projectI
 		}
 		return nil, err
 	}
-	updated, err := s.client.GlossaryEntry.UpdateOneID(target.ID).
+	return entry, nil
+}
+
+func (s *GlossaryService) CreateEntry(ctx context.Context, actorUserID, projectID int, input GlossaryEntryInput) (*ent.GlossaryEntry, error) {
+	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true); err != nil {
+		return nil, err
+	}
+	normalized, err := normalizeGlossaryEntryInput(input)
+	if err != nil {
+		return nil, err
+	}
+	return createGlossaryEntry(ctx, s.client, projectID, normalized)
+}
+
+func (s *GlossaryService) UpdateEntry(ctx context.Context, actorUserID, projectID, entryID int, input GlossaryEntryInput) (*GlossaryEntryUpdateResult, error) {
+	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true); err != nil {
+		return nil, err
+	}
+	normalized, err := normalizeGlossaryEntryInput(input)
+	if err != nil {
+		return nil, err
+	}
+	oldEntry, err := s.client.GlossaryEntry.Query().
+		Where(glossaryentry.IDEQ(entryID), glossaryentry.ProjectIDEQ(projectID)).
+		Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, ErrGlossaryEntryNotFound
+		}
+		return nil, err
+	}
+	oldTarget := oldEntry.Target
+	updated, err := s.client.GlossaryEntry.UpdateOneID(oldEntry.ID).
 		SetSource(normalized.Source).
 		SetSourceKey(glossarySourceKey(normalized.Source)).
 		SetTarget(normalized.Target).
@@ -119,20 +124,25 @@ func (s *GlossaryService) UpdateEntry(ctx context.Context, actorUserID, projectI
 		}
 		return nil, err
 	}
-	return updated, nil
+	targetChanged := oldTarget != normalized.Target
+	return &GlossaryEntryUpdateResult{
+		Entry:         updated,
+		TargetChanged: targetChanged,
+	}, nil
 }
 
 func (s *GlossaryService) DeleteEntry(ctx context.Context, actorUserID, projectID, entryID int) error {
-	projectRow, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true)
-	if err != nil {
+	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true); err != nil {
 		return err
 	}
-	scope, err := glossaryScopeFromProject(projectRow)
-	if err != nil {
-		return err
+	// 先删除关联的 SyncTask 记录，避免外键约束 NoAction 导致删除失败
+	if _, err := s.client.SyncTask.Delete().
+		Where(synctask.EntryIDEQ(entryID)).
+		Exec(ctx); err != nil {
+		return fmt.Errorf("delete sync tasks for entry %d: %w", entryID, err)
 	}
 	deleted, err := s.client.GlossaryEntry.Delete().
-		Where(glossaryentry.IDEQ(entryID), glossaryentry.ScopeKeyEQ(scope.key)).
+		Where(glossaryentry.IDEQ(entryID), glossaryentry.ProjectIDEQ(projectID)).
 		Exec(ctx)
 	if err != nil {
 		return err
@@ -144,15 +154,15 @@ func (s *GlossaryService) DeleteEntry(ctx context.Context, actorUserID, projectI
 }
 
 func (s *GlossaryService) ImportCSV(ctx context.Context, actorUserID, projectID int, r io.Reader) (*GlossaryImportResult, error) {
-	projectRow, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true)
-	if err != nil {
+	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true); err != nil {
 		return nil, err
 	}
-	scope, err := glossaryScopeFromProject(projectRow)
-	if err != nil {
-		return nil, err
+	// Strip UTF-8 BOM if present
+	br := bufio.NewReader(r)
+	if b, err := br.Peek(3); err == nil && b[0] == 0xEF && b[1] == 0xBB && b[2] == 0xBF {
+		_, _ = br.Discard(3)
 	}
-	reader := csv.NewReader(r)
+	reader := csv.NewReader(br)
 	reader.FieldsPerRecord = -1
 	reader.TrimLeadingSpace = true
 	result := &GlossaryImportResult{}
@@ -190,7 +200,7 @@ func (s *GlossaryService) ImportCSV(ctx context.Context, actorUserID, projectID 
 			result.Skipped = append(result.Skipped, GlossaryImportSkipped{Line: lineNo, Source: input.Source, Reason: "invalid_entry"})
 			continue
 		}
-		if _, err := createGlossaryEntry(ctx, s.client, scope, normalized); err != nil {
+		if _, err := createGlossaryEntry(ctx, s.client, projectID, normalized); err != nil {
 			switch {
 			case errors.Is(err, ErrGlossaryEntryExists):
 				result.Skipped = append(result.Skipped, GlossaryImportSkipped{Line: lineNo, Source: normalized.Source, Reason: "duplicate"})
@@ -229,21 +239,15 @@ func (s *GlossaryService) ExportCSV(ctx context.Context, actorUserID, projectID 
 	return writer.Error()
 }
 
-func createGlossaryEntry(ctx context.Context, client *ent.Client, scope glossaryScope, input GlossaryEntryInput) (*ent.GlossaryEntry, error) {
-	create := client.GlossaryEntry.Create().
-		SetScopeKey(scope.key).
+func createGlossaryEntry(ctx context.Context, client *ent.Client, projectID int, input GlossaryEntryInput) (*ent.GlossaryEntry, error) {
+	created, err := client.GlossaryEntry.Create().
+		SetProjectID(projectID).
 		SetSourceKey(glossarySourceKey(input.Source)).
 		SetSource(input.Source).
 		SetTarget(input.Target).
 		SetCaseSensitive(input.CaseSensitive).
-		SetNotes(input.Notes)
-	if scope.projectID != nil {
-		create.SetProjectID(*scope.projectID)
-	}
-	if scope.organizationID != nil {
-		create.SetOrganizationID(*scope.organizationID)
-	}
-	created, err := create.Save(ctx)
+		SetNotes(input.Notes).
+		Save(ctx)
 	if err != nil {
 		if ent.IsConstraintError(err) {
 			return nil, ErrGlossaryEntryExists
@@ -251,21 +255,6 @@ func createGlossaryEntry(ctx context.Context, client *ent.Client, scope glossary
 		return nil, err
 	}
 	return created, nil
-}
-
-func glossaryScopeFromProject(projectRow *ent.Project) (glossaryScope, error) {
-	if projectRow == nil {
-		return glossaryScope{}, ErrProjectNotFound
-	}
-	if projectRow.ResourceScope == ProjectResourceScopeOrganization {
-		if projectRow.OwnerOrgID == nil {
-			return glossaryScope{}, ErrProjectOwnerConflict
-		}
-		orgID := *projectRow.OwnerOrgID
-		return glossaryScope{organizationID: &orgID, key: fmt.Sprintf("organization:%d", orgID)}, nil
-	}
-	projectID := projectRow.ID
-	return glossaryScope{projectID: &projectID, key: fmt.Sprintf("project:%d", projectID)}, nil
 }
 
 func normalizeGlossaryEntryInput(input GlossaryEntryInput) (GlossaryEntryInput, error) {

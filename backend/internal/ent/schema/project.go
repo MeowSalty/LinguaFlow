@@ -19,9 +19,10 @@ func (Project) Fields() []ent.Field {
 		field.String("name").NotEmpty(),
 		field.Int("owner_user_id").Optional().Nillable().Positive(),
 		field.Int("owner_org_id").Optional().Nillable().Positive(),
-		field.String("resource_scope").Default("project"),
 		field.JSON("config", map[string]any{}).
 			Default(func() map[string]any { return map[string]any{} }),
+		field.Bool("glossary_enabled").Default(false).
+			Comment("是否启用术语表"),
 		field.String("source_lang").Default("auto"),
 		field.String("target_lang").Default("zh"),
 	}
@@ -37,12 +38,12 @@ func (Project) Edges() []ent.Edge {
 			Ref("projects").
 			Field("owner_org_id").
 			Unique(),
-		edge.To("project_backends", ProjectBackend.Type),
-		edge.To("stage_backend_overrides", StageBackendOverride.Type),
 		edge.To("glossary_entries", GlossaryEntry.Type),
 		edge.To("tm_entries", TMEntry.Type),
 		edge.To("jobs", Job.Type),
 		edge.To("activity_logs", ActivityLog.Type),
 		edge.To("usage_records", UsageRecord.Type),
+		edge.To("resources", Resource.Type),
+		edge.To("sync_tasks", SyncTask.Type),
 	}
 }

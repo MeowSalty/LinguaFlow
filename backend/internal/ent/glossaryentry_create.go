@@ -11,8 +11,8 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 )
 
 // GlossaryEntryCreate is the builder for creating a GlossaryEntry entity.
@@ -47,12 +47,6 @@ func (_c *GlossaryEntryCreate) SetNillableUpdatedAt(v *time.Time) *GlossaryEntry
 	if v != nil {
 		_c.SetUpdatedAt(*v)
 	}
-	return _c
-}
-
-// SetScopeKey sets the "scope_key" field.
-func (_c *GlossaryEntryCreate) SetScopeKey(v string) *GlossaryEntryCreate {
-	_c.mutation.SetScopeKey(v)
 	return _c
 }
 
@@ -108,36 +102,24 @@ func (_c *GlossaryEntryCreate) SetProjectID(v int) *GlossaryEntryCreate {
 	return _c
 }
 
-// SetNillableProjectID sets the "project_id" field if the given value is not nil.
-func (_c *GlossaryEntryCreate) SetNillableProjectID(v *int) *GlossaryEntryCreate {
-	if v != nil {
-		_c.SetProjectID(*v)
-	}
-	return _c
-}
-
-// SetOrganizationID sets the "organization_id" field.
-func (_c *GlossaryEntryCreate) SetOrganizationID(v int) *GlossaryEntryCreate {
-	_c.mutation.SetOrganizationID(v)
-	return _c
-}
-
-// SetNillableOrganizationID sets the "organization_id" field if the given value is not nil.
-func (_c *GlossaryEntryCreate) SetNillableOrganizationID(v *int) *GlossaryEntryCreate {
-	if v != nil {
-		_c.SetOrganizationID(*v)
-	}
-	return _c
-}
-
 // SetProject sets the "project" edge to the Project entity.
 func (_c *GlossaryEntryCreate) SetProject(v *Project) *GlossaryEntryCreate {
 	return _c.SetProjectID(v.ID)
 }
 
-// SetOrganization sets the "organization" edge to the Organization entity.
-func (_c *GlossaryEntryCreate) SetOrganization(v *Organization) *GlossaryEntryCreate {
-	return _c.SetOrganizationID(v.ID)
+// AddSyncTaskIDs adds the "sync_tasks" edge to the SyncTask entity by IDs.
+func (_c *GlossaryEntryCreate) AddSyncTaskIDs(ids ...int) *GlossaryEntryCreate {
+	_c.mutation.AddSyncTaskIDs(ids...)
+	return _c
+}
+
+// AddSyncTasks adds the "sync_tasks" edges to the SyncTask entity.
+func (_c *GlossaryEntryCreate) AddSyncTasks(v ...*SyncTask) *GlossaryEntryCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddSyncTaskIDs(ids...)
 }
 
 // Mutation returns the GlossaryEntryMutation object of the builder.
@@ -197,14 +179,6 @@ func (_c *GlossaryEntryCreate) check() error {
 	if _, ok := _c.mutation.UpdatedAt(); !ok {
 		return &ValidationError{Name: "updated_at", err: errors.New(`ent: missing required field "GlossaryEntry.updated_at"`)}
 	}
-	if _, ok := _c.mutation.ScopeKey(); !ok {
-		return &ValidationError{Name: "scope_key", err: errors.New(`ent: missing required field "GlossaryEntry.scope_key"`)}
-	}
-	if v, ok := _c.mutation.ScopeKey(); ok {
-		if err := glossaryentry.ScopeKeyValidator(v); err != nil {
-			return &ValidationError{Name: "scope_key", err: fmt.Errorf(`ent: validator failed for field "GlossaryEntry.scope_key": %w`, err)}
-		}
-	}
 	if _, ok := _c.mutation.SourceKey(); !ok {
 		return &ValidationError{Name: "source_key", err: errors.New(`ent: missing required field "GlossaryEntry.source_key"`)}
 	}
@@ -232,15 +206,16 @@ func (_c *GlossaryEntryCreate) check() error {
 	if _, ok := _c.mutation.CaseSensitive(); !ok {
 		return &ValidationError{Name: "case_sensitive", err: errors.New(`ent: missing required field "GlossaryEntry.case_sensitive"`)}
 	}
+	if _, ok := _c.mutation.ProjectID(); !ok {
+		return &ValidationError{Name: "project_id", err: errors.New(`ent: missing required field "GlossaryEntry.project_id"`)}
+	}
 	if v, ok := _c.mutation.ProjectID(); ok {
 		if err := glossaryentry.ProjectIDValidator(v); err != nil {
 			return &ValidationError{Name: "project_id", err: fmt.Errorf(`ent: validator failed for field "GlossaryEntry.project_id": %w`, err)}
 		}
 	}
-	if v, ok := _c.mutation.OrganizationID(); ok {
-		if err := glossaryentry.OrganizationIDValidator(v); err != nil {
-			return &ValidationError{Name: "organization_id", err: fmt.Errorf(`ent: validator failed for field "GlossaryEntry.organization_id": %w`, err)}
-		}
+	if len(_c.mutation.ProjectIDs()) == 0 {
+		return &ValidationError{Name: "project", err: errors.New(`ent: missing required edge "GlossaryEntry.project"`)}
 	}
 	return nil
 }
@@ -276,10 +251,6 @@ func (_c *GlossaryEntryCreate) createSpec() (*GlossaryEntry, *sqlgraph.CreateSpe
 		_spec.SetField(glossaryentry.FieldUpdatedAt, field.TypeTime, value)
 		_node.UpdatedAt = value
 	}
-	if value, ok := _c.mutation.ScopeKey(); ok {
-		_spec.SetField(glossaryentry.FieldScopeKey, field.TypeString, value)
-		_node.ScopeKey = value
-	}
 	if value, ok := _c.mutation.SourceKey(); ok {
 		_spec.SetField(glossaryentry.FieldSourceKey, field.TypeString, value)
 		_node.SourceKey = value
@@ -314,24 +285,23 @@ func (_c *GlossaryEntryCreate) createSpec() (*GlossaryEntry, *sqlgraph.CreateSpe
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
-		_node.ProjectID = &nodes[0]
+		_node.ProjectID = nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
-	if nodes := _c.mutation.OrganizationIDs(); len(nodes) > 0 {
+	if nodes := _c.mutation.SyncTasksIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.M2O,
-			Inverse: true,
-			Table:   glossaryentry.OrganizationTable,
-			Columns: []string{glossaryentry.OrganizationColumn},
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   glossaryentry.SyncTasksTable,
+			Columns: []string{glossaryentry.SyncTasksColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(organization.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
-		_node.OrganizationID = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	return _node, _spec

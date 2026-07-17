@@ -1,11 +1,10 @@
 // Package jsonp 实现 JSON / YAML / TOML 结构化格式的解析与渲染。
 //
-// 解析策略
+// 位置替换策略
 //
-//	将文档解析为 map[string]any / []any 通用树，递归收集所有字符串叶子节点
-//	作为可翻译的 Segment。路径信息（如 "config.title" 或 "items[0].name"）
-//	保存在 Segment.Meta["path"] 中，Render 时通过路径将译文回写到树中。
-//	原始树结构存储在 doc.Vars["_tree"] 中以供 Render 使用。
+//	Parse 时递归收集所有字符串叶子节点作为 Segment，路径信息保存在 Meta["path"]。
+//	Render 时从原始文件重新解析为树，按 path 替换字符串值，再重新序列化。
+//	这样可以避免 Parse 时序列化信息丢失（如 YAML 注释），也不再需要 Vars["_tree"]。
 //
 // 已知限制
 //
@@ -70,14 +69,11 @@ func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error)
 	return &pipeline.Document{
 		Segments: segments,
 		Format:   format,
-		Vars: map[string]any{
-			"_tree": root,
-		},
 	}, nil
 }
 
-// Render 将翻译后的 Segment 回写到树结构并序列化为原始格式。
-func (*Parser) Render(_ context.Context, doc *pipeline.Document, w io.Writer) error {
+// Render 从 original 重新解析树结构，按 path 替换字符串值，再序列化输出。
+func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Reader, w io.Writer) error {
 	// 构建路径 → 译文 的查找表
 	lookup := make(map[string]string, len(doc.Segments))
 	for _, seg := range doc.Segments {
@@ -92,19 +88,38 @@ func (*Parser) Render(_ context.Context, doc *pipeline.Document, w io.Writer) er
 		lookup[path] = target
 	}
 
-	// 从 Vars 取回原始树
-	rawTree, ok := doc.Vars["_tree"]
-	if !ok {
-		return fmt.Errorf("jsonp: missing _tree in document vars")
+	// 从 original 读取并重新解析
+	data, err := io.ReadAll(original)
+	if err != nil {
+		return fmt.Errorf("jsonp: read original: %w", err)
+	}
+	content := strings.TrimSpace(string(data))
+	if content == "" {
+		return nil
 	}
 
-	// 构建翻译后的新树（不修改原始树）
-	translated := buildTranslatedTree(rawTree, "", lookup)
+	format := detectFormat(content)
+	var root any
+	switch format {
+	case "json":
+		if err := json.Unmarshal([]byte(content), &root); err != nil {
+			return fmt.Errorf("jsonp: json parse original: %w", err)
+		}
+	case "yaml":
+		if err := yaml.Unmarshal([]byte(content), &root); err != nil {
+			return fmt.Errorf("jsonp: yaml parse original: %w", err)
+		}
+	default:
+		return fmt.Errorf("jsonp: unsupported format %q for render", format)
+	}
+
+	// 构建翻译后的新树
+	translated := buildTranslatedTree(root, "", lookup)
 
 	bw := bufio.NewWriter(w)
 	defer func() { _ = bw.Flush() }()
 
-	switch doc.Format {
+	switch format {
 	case "json":
 		enc := json.NewEncoder(bw)
 		enc.SetIndent("", "  ")
@@ -118,8 +133,6 @@ func (*Parser) Render(_ context.Context, doc *pipeline.Document, w io.Writer) er
 		if err := enc.Encode(translated); err != nil {
 			return fmt.Errorf("jsonp: yaml encode: %w", err)
 		}
-	default:
-		return fmt.Errorf("jsonp: unsupported format %q for render", doc.Format)
 	}
 
 	return bw.Flush()

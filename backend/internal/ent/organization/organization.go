@@ -30,16 +30,22 @@ const (
 	EdgeProjects = "projects"
 	// EdgeMemberships holds the string denoting the memberships edge name in mutations.
 	EdgeMemberships = "memberships"
-	// EdgeOrgBackends holds the string denoting the org_backends edge name in mutations.
-	EdgeOrgBackends = "org_backends"
-	// EdgeGlossaryEntries holds the string denoting the glossary_entries edge name in mutations.
-	EdgeGlossaryEntries = "glossary_entries"
-	// EdgeTmEntries holds the string denoting the tm_entries edge name in mutations.
-	EdgeTmEntries = "tm_entries"
+	// EdgeBackends holds the string denoting the backends edge name in mutations.
+	EdgeBackends = "backends"
 	// EdgeActivityLogs holds the string denoting the activity_logs edge name in mutations.
 	EdgeActivityLogs = "activity_logs"
 	// EdgeUsageRecords holds the string denoting the usage_records edge name in mutations.
 	EdgeUsageRecords = "usage_records"
+	// EdgeTranslationPromptTemplates holds the string denoting the translation_prompt_templates edge name in mutations.
+	EdgeTranslationPromptTemplates = "translation_prompt_templates"
+	// EdgeBootstrapPromptTemplates holds the string denoting the bootstrap_prompt_templates edge name in mutations.
+	EdgeBootstrapPromptTemplates = "bootstrap_prompt_templates"
+	// EdgePrunePromptTemplates holds the string denoting the prune_prompt_templates edge name in mutations.
+	EdgePrunePromptTemplates = "prune_prompt_templates"
+	// EdgeExecutionProfiles holds the string denoting the execution_profiles edge name in mutations.
+	EdgeExecutionProfiles = "execution_profiles"
+	// EdgeExecutionPlanTemplates holds the string denoting the execution_plan_templates edge name in mutations.
+	EdgeExecutionPlanTemplates = "execution_plan_templates"
 	// Table holds the table name of the organization in the database.
 	Table = "organizations"
 	// ProjectsTable is the table that holds the projects relation/edge.
@@ -56,27 +62,13 @@ const (
 	MembershipsInverseTable = "org_memberships"
 	// MembershipsColumn is the table column denoting the memberships relation/edge.
 	MembershipsColumn = "organization_memberships"
-	// OrgBackendsTable is the table that holds the org_backends relation/edge.
-	OrgBackendsTable = "org_backends"
-	// OrgBackendsInverseTable is the table name for the OrgBackend entity.
-	// It exists in this package in order to avoid circular dependency with the "orgbackend" package.
-	OrgBackendsInverseTable = "org_backends"
-	// OrgBackendsColumn is the table column denoting the org_backends relation/edge.
-	OrgBackendsColumn = "organization_org_backends"
-	// GlossaryEntriesTable is the table that holds the glossary_entries relation/edge.
-	GlossaryEntriesTable = "glossary_entries"
-	// GlossaryEntriesInverseTable is the table name for the GlossaryEntry entity.
-	// It exists in this package in order to avoid circular dependency with the "glossaryentry" package.
-	GlossaryEntriesInverseTable = "glossary_entries"
-	// GlossaryEntriesColumn is the table column denoting the glossary_entries relation/edge.
-	GlossaryEntriesColumn = "organization_id"
-	// TmEntriesTable is the table that holds the tm_entries relation/edge.
-	TmEntriesTable = "tm_entries"
-	// TmEntriesInverseTable is the table name for the TMEntry entity.
-	// It exists in this package in order to avoid circular dependency with the "tmentry" package.
-	TmEntriesInverseTable = "tm_entries"
-	// TmEntriesColumn is the table column denoting the tm_entries relation/edge.
-	TmEntriesColumn = "organization_id"
+	// BackendsTable is the table that holds the backends relation/edge.
+	BackendsTable = "backends"
+	// BackendsInverseTable is the table name for the Backend entity.
+	// It exists in this package in order to avoid circular dependency with the "backend" package.
+	BackendsInverseTable = "backends"
+	// BackendsColumn is the table column denoting the backends relation/edge.
+	BackendsColumn = "owner_org_id"
 	// ActivityLogsTable is the table that holds the activity_logs relation/edge.
 	ActivityLogsTable = "activity_logs"
 	// ActivityLogsInverseTable is the table name for the ActivityLog entity.
@@ -91,6 +83,41 @@ const (
 	UsageRecordsInverseTable = "usage_records"
 	// UsageRecordsColumn is the table column denoting the usage_records relation/edge.
 	UsageRecordsColumn = "organization_usage_records"
+	// TranslationPromptTemplatesTable is the table that holds the translation_prompt_templates relation/edge.
+	TranslationPromptTemplatesTable = "translation_prompt_templates"
+	// TranslationPromptTemplatesInverseTable is the table name for the TranslationPromptTemplate entity.
+	// It exists in this package in order to avoid circular dependency with the "translationprompttemplate" package.
+	TranslationPromptTemplatesInverseTable = "translation_prompt_templates"
+	// TranslationPromptTemplatesColumn is the table column denoting the translation_prompt_templates relation/edge.
+	TranslationPromptTemplatesColumn = "owner_org_id"
+	// BootstrapPromptTemplatesTable is the table that holds the bootstrap_prompt_templates relation/edge.
+	BootstrapPromptTemplatesTable = "bootstrap_prompt_templates"
+	// BootstrapPromptTemplatesInverseTable is the table name for the BootstrapPromptTemplate entity.
+	// It exists in this package in order to avoid circular dependency with the "bootstrapprompttemplate" package.
+	BootstrapPromptTemplatesInverseTable = "bootstrap_prompt_templates"
+	// BootstrapPromptTemplatesColumn is the table column denoting the bootstrap_prompt_templates relation/edge.
+	BootstrapPromptTemplatesColumn = "owner_org_id"
+	// PrunePromptTemplatesTable is the table that holds the prune_prompt_templates relation/edge.
+	PrunePromptTemplatesTable = "prune_prompt_templates"
+	// PrunePromptTemplatesInverseTable is the table name for the PrunePromptTemplate entity.
+	// It exists in this package in order to avoid circular dependency with the "pruneprompttemplate" package.
+	PrunePromptTemplatesInverseTable = "prune_prompt_templates"
+	// PrunePromptTemplatesColumn is the table column denoting the prune_prompt_templates relation/edge.
+	PrunePromptTemplatesColumn = "owner_org_id"
+	// ExecutionProfilesTable is the table that holds the execution_profiles relation/edge.
+	ExecutionProfilesTable = "execution_profiles"
+	// ExecutionProfilesInverseTable is the table name for the ExecutionProfile entity.
+	// It exists in this package in order to avoid circular dependency with the "executionprofile" package.
+	ExecutionProfilesInverseTable = "execution_profiles"
+	// ExecutionProfilesColumn is the table column denoting the execution_profiles relation/edge.
+	ExecutionProfilesColumn = "owner_org_id"
+	// ExecutionPlanTemplatesTable is the table that holds the execution_plan_templates relation/edge.
+	ExecutionPlanTemplatesTable = "execution_plan_templates"
+	// ExecutionPlanTemplatesInverseTable is the table name for the ExecutionPlanTemplate entity.
+	// It exists in this package in order to avoid circular dependency with the "executionplantemplate" package.
+	ExecutionPlanTemplatesInverseTable = "execution_plan_templates"
+	// ExecutionPlanTemplatesColumn is the table column denoting the execution_plan_templates relation/edge.
+	ExecutionPlanTemplatesColumn = "owner_org_id"
 )
 
 // Columns holds all SQL columns for organization fields.
@@ -193,45 +220,17 @@ func ByMemberships(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
-// ByOrgBackendsCount orders the results by org_backends count.
-func ByOrgBackendsCount(opts ...sql.OrderTermOption) OrderOption {
+// ByBackendsCount orders the results by backends count.
+func ByBackendsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newOrgBackendsStep(), opts...)
+		sqlgraph.OrderByNeighborsCount(s, newBackendsStep(), opts...)
 	}
 }
 
-// ByOrgBackends orders the results by org_backends terms.
-func ByOrgBackends(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+// ByBackends orders the results by backends terms.
+func ByBackends(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newOrgBackendsStep(), append([]sql.OrderTerm{term}, terms...)...)
-	}
-}
-
-// ByGlossaryEntriesCount orders the results by glossary_entries count.
-func ByGlossaryEntriesCount(opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newGlossaryEntriesStep(), opts...)
-	}
-}
-
-// ByGlossaryEntries orders the results by glossary_entries terms.
-func ByGlossaryEntries(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newGlossaryEntriesStep(), append([]sql.OrderTerm{term}, terms...)...)
-	}
-}
-
-// ByTmEntriesCount orders the results by tm_entries count.
-func ByTmEntriesCount(opts ...sql.OrderTermOption) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newTmEntriesStep(), opts...)
-	}
-}
-
-// ByTmEntries orders the results by tm_entries terms.
-func ByTmEntries(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
-	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newTmEntriesStep(), append([]sql.OrderTerm{term}, terms...)...)
+		sqlgraph.OrderByNeighborTerms(s, newBackendsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
 
@@ -262,6 +261,76 @@ func ByUsageRecords(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newUsageRecordsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
+
+// ByTranslationPromptTemplatesCount orders the results by translation_prompt_templates count.
+func ByTranslationPromptTemplatesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newTranslationPromptTemplatesStep(), opts...)
+	}
+}
+
+// ByTranslationPromptTemplates orders the results by translation_prompt_templates terms.
+func ByTranslationPromptTemplates(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newTranslationPromptTemplatesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByBootstrapPromptTemplatesCount orders the results by bootstrap_prompt_templates count.
+func ByBootstrapPromptTemplatesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newBootstrapPromptTemplatesStep(), opts...)
+	}
+}
+
+// ByBootstrapPromptTemplates orders the results by bootstrap_prompt_templates terms.
+func ByBootstrapPromptTemplates(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newBootstrapPromptTemplatesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByPrunePromptTemplatesCount orders the results by prune_prompt_templates count.
+func ByPrunePromptTemplatesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newPrunePromptTemplatesStep(), opts...)
+	}
+}
+
+// ByPrunePromptTemplates orders the results by prune_prompt_templates terms.
+func ByPrunePromptTemplates(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newPrunePromptTemplatesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByExecutionProfilesCount orders the results by execution_profiles count.
+func ByExecutionProfilesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newExecutionProfilesStep(), opts...)
+	}
+}
+
+// ByExecutionProfiles orders the results by execution_profiles terms.
+func ByExecutionProfiles(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newExecutionProfilesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByExecutionPlanTemplatesCount orders the results by execution_plan_templates count.
+func ByExecutionPlanTemplatesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newExecutionPlanTemplatesStep(), opts...)
+	}
+}
+
+// ByExecutionPlanTemplates orders the results by execution_plan_templates terms.
+func ByExecutionPlanTemplates(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newExecutionPlanTemplatesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
 func newProjectsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
@@ -276,25 +345,11 @@ func newMembershipsStep() *sqlgraph.Step {
 		sqlgraph.Edge(sqlgraph.O2M, false, MembershipsTable, MembershipsColumn),
 	)
 }
-func newOrgBackendsStep() *sqlgraph.Step {
+func newBackendsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(OrgBackendsInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, OrgBackendsTable, OrgBackendsColumn),
-	)
-}
-func newGlossaryEntriesStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(GlossaryEntriesInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, GlossaryEntriesTable, GlossaryEntriesColumn),
-	)
-}
-func newTmEntriesStep() *sqlgraph.Step {
-	return sqlgraph.NewStep(
-		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(TmEntriesInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, TmEntriesTable, TmEntriesColumn),
+		sqlgraph.To(BackendsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, BackendsTable, BackendsColumn),
 	)
 }
 func newActivityLogsStep() *sqlgraph.Step {
@@ -309,5 +364,40 @@ func newUsageRecordsStep() *sqlgraph.Step {
 		sqlgraph.From(Table, FieldID),
 		sqlgraph.To(UsageRecordsInverseTable, FieldID),
 		sqlgraph.Edge(sqlgraph.O2M, false, UsageRecordsTable, UsageRecordsColumn),
+	)
+}
+func newTranslationPromptTemplatesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(TranslationPromptTemplatesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, TranslationPromptTemplatesTable, TranslationPromptTemplatesColumn),
+	)
+}
+func newBootstrapPromptTemplatesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(BootstrapPromptTemplatesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, BootstrapPromptTemplatesTable, BootstrapPromptTemplatesColumn),
+	)
+}
+func newPrunePromptTemplatesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(PrunePromptTemplatesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, PrunePromptTemplatesTable, PrunePromptTemplatesColumn),
+	)
+}
+func newExecutionProfilesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(ExecutionProfilesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, ExecutionProfilesTable, ExecutionProfilesColumn),
+	)
+}
+func newExecutionPlanTemplatesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(ExecutionPlanTemplatesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, ExecutionPlanTemplatesTable, ExecutionPlanTemplatesColumn),
 	)
 }

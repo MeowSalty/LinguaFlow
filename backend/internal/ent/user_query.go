@@ -13,32 +13,44 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/pruneprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
 )
 
 // UserQuery is the builder for querying User entities.
 type UserQuery struct {
 	config
-	ctx                  *QueryContext
-	order                []user.OrderOption
-	inters               []Interceptor
-	predicates           []predicate.User
-	withJobs             *JobQuery
-	withReviewedSegments *SegmentQuery
-	withRefreshTokens    *RefreshTokenQuery
-	withMemberships      *OrgMembershipQuery
-	withUserBackends     *UserBackendQuery
-	withOwnedProjects    *ProjectQuery
-	withActivityLogs     *ActivityLogQuery
-	withUsageRecords     *UsageRecordQuery
+	ctx                            *QueryContext
+	order                          []user.OrderOption
+	inters                         []Interceptor
+	predicates                     []predicate.User
+	withCreatedJobs                *JobQuery
+	withReviewedSegments           *SegmentQuery
+	withRefreshTokens              *RefreshTokenQuery
+	withMemberships                *OrgMembershipQuery
+	withBackends                   *BackendQuery
+	withOwnedProjects              *ProjectQuery
+	withActivityLogs               *ActivityLogQuery
+	withUsageRecords               *UsageRecordQuery
+	withTranslationPromptTemplates *TranslationPromptTemplateQuery
+	withBootstrapPromptTemplates   *BootstrapPromptTemplateQuery
+	withPrunePromptTemplates       *PrunePromptTemplateQuery
+	withExecutionProfiles          *ExecutionProfileQuery
+	withExecutionPlanTemplates     *ExecutionPlanTemplateQuery
+	withSyncTasks                  *SyncTaskQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -75,8 +87,8 @@ func (_q *UserQuery) Order(o ...user.OrderOption) *UserQuery {
 	return _q
 }
 
-// QueryJobs chains the current query on the "jobs" edge.
-func (_q *UserQuery) QueryJobs() *JobQuery {
+// QueryCreatedJobs chains the current query on the "created_jobs" edge.
+func (_q *UserQuery) QueryCreatedJobs() *JobQuery {
 	query := (&JobClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
@@ -89,7 +101,7 @@ func (_q *UserQuery) QueryJobs() *JobQuery {
 		step := sqlgraph.NewStep(
 			sqlgraph.From(user.Table, user.FieldID, selector),
 			sqlgraph.To(job.Table, job.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, user.JobsTable, user.JobsColumn),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.CreatedJobsTable, user.CreatedJobsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -163,9 +175,9 @@ func (_q *UserQuery) QueryMemberships() *OrgMembershipQuery {
 	return query
 }
 
-// QueryUserBackends chains the current query on the "user_backends" edge.
-func (_q *UserQuery) QueryUserBackends() *UserBackendQuery {
-	query := (&UserBackendClient{config: _q.config}).Query()
+// QueryBackends chains the current query on the "backends" edge.
+func (_q *UserQuery) QueryBackends() *BackendQuery {
+	query := (&BackendClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
 			return nil, err
@@ -176,8 +188,8 @@ func (_q *UserQuery) QueryUserBackends() *UserBackendQuery {
 		}
 		step := sqlgraph.NewStep(
 			sqlgraph.From(user.Table, user.FieldID, selector),
-			sqlgraph.To(userbackend.Table, userbackend.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, user.UserBackendsTable, user.UserBackendsColumn),
+			sqlgraph.To(backend.Table, backend.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.BackendsTable, user.BackendsColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -244,6 +256,138 @@ func (_q *UserQuery) QueryUsageRecords() *UsageRecordQuery {
 			sqlgraph.From(user.Table, user.FieldID, selector),
 			sqlgraph.To(usagerecord.Table, usagerecord.FieldID),
 			sqlgraph.Edge(sqlgraph.O2M, false, user.UsageRecordsTable, user.UsageRecordsColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryTranslationPromptTemplates chains the current query on the "translation_prompt_templates" edge.
+func (_q *UserQuery) QueryTranslationPromptTemplates() *TranslationPromptTemplateQuery {
+	query := (&TranslationPromptTemplateClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(translationprompttemplate.Table, translationprompttemplate.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.TranslationPromptTemplatesTable, user.TranslationPromptTemplatesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryBootstrapPromptTemplates chains the current query on the "bootstrap_prompt_templates" edge.
+func (_q *UserQuery) QueryBootstrapPromptTemplates() *BootstrapPromptTemplateQuery {
+	query := (&BootstrapPromptTemplateClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(bootstrapprompttemplate.Table, bootstrapprompttemplate.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.BootstrapPromptTemplatesTable, user.BootstrapPromptTemplatesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryPrunePromptTemplates chains the current query on the "prune_prompt_templates" edge.
+func (_q *UserQuery) QueryPrunePromptTemplates() *PrunePromptTemplateQuery {
+	query := (&PrunePromptTemplateClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(pruneprompttemplate.Table, pruneprompttemplate.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.PrunePromptTemplatesTable, user.PrunePromptTemplatesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryExecutionProfiles chains the current query on the "execution_profiles" edge.
+func (_q *UserQuery) QueryExecutionProfiles() *ExecutionProfileQuery {
+	query := (&ExecutionProfileClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(executionprofile.Table, executionprofile.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.ExecutionProfilesTable, user.ExecutionProfilesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryExecutionPlanTemplates chains the current query on the "execution_plan_templates" edge.
+func (_q *UserQuery) QueryExecutionPlanTemplates() *ExecutionPlanTemplateQuery {
+	query := (&ExecutionPlanTemplateClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(executionplantemplate.Table, executionplantemplate.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.ExecutionPlanTemplatesTable, user.ExecutionPlanTemplatesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QuerySyncTasks chains the current query on the "sync_tasks" edge.
+func (_q *UserQuery) QuerySyncTasks() *SyncTaskQuery {
+	query := (&SyncTaskClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(synctask.Table, synctask.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.SyncTasksTable, user.SyncTasksColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -438,33 +582,39 @@ func (_q *UserQuery) Clone() *UserQuery {
 		return nil
 	}
 	return &UserQuery{
-		config:               _q.config,
-		ctx:                  _q.ctx.Clone(),
-		order:                append([]user.OrderOption{}, _q.order...),
-		inters:               append([]Interceptor{}, _q.inters...),
-		predicates:           append([]predicate.User{}, _q.predicates...),
-		withJobs:             _q.withJobs.Clone(),
-		withReviewedSegments: _q.withReviewedSegments.Clone(),
-		withRefreshTokens:    _q.withRefreshTokens.Clone(),
-		withMemberships:      _q.withMemberships.Clone(),
-		withUserBackends:     _q.withUserBackends.Clone(),
-		withOwnedProjects:    _q.withOwnedProjects.Clone(),
-		withActivityLogs:     _q.withActivityLogs.Clone(),
-		withUsageRecords:     _q.withUsageRecords.Clone(),
+		config:                         _q.config,
+		ctx:                            _q.ctx.Clone(),
+		order:                          append([]user.OrderOption{}, _q.order...),
+		inters:                         append([]Interceptor{}, _q.inters...),
+		predicates:                     append([]predicate.User{}, _q.predicates...),
+		withCreatedJobs:                _q.withCreatedJobs.Clone(),
+		withReviewedSegments:           _q.withReviewedSegments.Clone(),
+		withRefreshTokens:              _q.withRefreshTokens.Clone(),
+		withMemberships:                _q.withMemberships.Clone(),
+		withBackends:                   _q.withBackends.Clone(),
+		withOwnedProjects:              _q.withOwnedProjects.Clone(),
+		withActivityLogs:               _q.withActivityLogs.Clone(),
+		withUsageRecords:               _q.withUsageRecords.Clone(),
+		withTranslationPromptTemplates: _q.withTranslationPromptTemplates.Clone(),
+		withBootstrapPromptTemplates:   _q.withBootstrapPromptTemplates.Clone(),
+		withPrunePromptTemplates:       _q.withPrunePromptTemplates.Clone(),
+		withExecutionProfiles:          _q.withExecutionProfiles.Clone(),
+		withExecutionPlanTemplates:     _q.withExecutionPlanTemplates.Clone(),
+		withSyncTasks:                  _q.withSyncTasks.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
 	}
 }
 
-// WithJobs tells the query-builder to eager-load the nodes that are connected to
-// the "jobs" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *UserQuery) WithJobs(opts ...func(*JobQuery)) *UserQuery {
+// WithCreatedJobs tells the query-builder to eager-load the nodes that are connected to
+// the "created_jobs" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithCreatedJobs(opts ...func(*JobQuery)) *UserQuery {
 	query := (&JobClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
-	_q.withJobs = query
+	_q.withCreatedJobs = query
 	return _q
 }
 
@@ -501,14 +651,14 @@ func (_q *UserQuery) WithMemberships(opts ...func(*OrgMembershipQuery)) *UserQue
 	return _q
 }
 
-// WithUserBackends tells the query-builder to eager-load the nodes that are connected to
-// the "user_backends" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *UserQuery) WithUserBackends(opts ...func(*UserBackendQuery)) *UserQuery {
-	query := (&UserBackendClient{config: _q.config}).Query()
+// WithBackends tells the query-builder to eager-load the nodes that are connected to
+// the "backends" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithBackends(opts ...func(*BackendQuery)) *UserQuery {
+	query := (&BackendClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
-	_q.withUserBackends = query
+	_q.withBackends = query
 	return _q
 }
 
@@ -542,6 +692,72 @@ func (_q *UserQuery) WithUsageRecords(opts ...func(*UsageRecordQuery)) *UserQuer
 		opt(query)
 	}
 	_q.withUsageRecords = query
+	return _q
+}
+
+// WithTranslationPromptTemplates tells the query-builder to eager-load the nodes that are connected to
+// the "translation_prompt_templates" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithTranslationPromptTemplates(opts ...func(*TranslationPromptTemplateQuery)) *UserQuery {
+	query := (&TranslationPromptTemplateClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withTranslationPromptTemplates = query
+	return _q
+}
+
+// WithBootstrapPromptTemplates tells the query-builder to eager-load the nodes that are connected to
+// the "bootstrap_prompt_templates" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithBootstrapPromptTemplates(opts ...func(*BootstrapPromptTemplateQuery)) *UserQuery {
+	query := (&BootstrapPromptTemplateClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withBootstrapPromptTemplates = query
+	return _q
+}
+
+// WithPrunePromptTemplates tells the query-builder to eager-load the nodes that are connected to
+// the "prune_prompt_templates" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithPrunePromptTemplates(opts ...func(*PrunePromptTemplateQuery)) *UserQuery {
+	query := (&PrunePromptTemplateClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withPrunePromptTemplates = query
+	return _q
+}
+
+// WithExecutionProfiles tells the query-builder to eager-load the nodes that are connected to
+// the "execution_profiles" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithExecutionProfiles(opts ...func(*ExecutionProfileQuery)) *UserQuery {
+	query := (&ExecutionProfileClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withExecutionProfiles = query
+	return _q
+}
+
+// WithExecutionPlanTemplates tells the query-builder to eager-load the nodes that are connected to
+// the "execution_plan_templates" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithExecutionPlanTemplates(opts ...func(*ExecutionPlanTemplateQuery)) *UserQuery {
+	query := (&ExecutionPlanTemplateClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withExecutionPlanTemplates = query
+	return _q
+}
+
+// WithSyncTasks tells the query-builder to eager-load the nodes that are connected to
+// the "sync_tasks" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithSyncTasks(opts ...func(*SyncTaskQuery)) *UserQuery {
+	query := (&SyncTaskClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withSyncTasks = query
 	return _q
 }
 
@@ -623,15 +839,21 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	var (
 		nodes       = []*User{}
 		_spec       = _q.querySpec()
-		loadedTypes = [8]bool{
-			_q.withJobs != nil,
+		loadedTypes = [14]bool{
+			_q.withCreatedJobs != nil,
 			_q.withReviewedSegments != nil,
 			_q.withRefreshTokens != nil,
 			_q.withMemberships != nil,
-			_q.withUserBackends != nil,
+			_q.withBackends != nil,
 			_q.withOwnedProjects != nil,
 			_q.withActivityLogs != nil,
 			_q.withUsageRecords != nil,
+			_q.withTranslationPromptTemplates != nil,
+			_q.withBootstrapPromptTemplates != nil,
+			_q.withPrunePromptTemplates != nil,
+			_q.withExecutionProfiles != nil,
+			_q.withExecutionPlanTemplates != nil,
+			_q.withSyncTasks != nil,
 		}
 	)
 	_spec.ScanValues = func(columns []string) ([]any, error) {
@@ -652,10 +874,10 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	if len(nodes) == 0 {
 		return nodes, nil
 	}
-	if query := _q.withJobs; query != nil {
-		if err := _q.loadJobs(ctx, query, nodes,
-			func(n *User) { n.Edges.Jobs = []*Job{} },
-			func(n *User, e *Job) { n.Edges.Jobs = append(n.Edges.Jobs, e) }); err != nil {
+	if query := _q.withCreatedJobs; query != nil {
+		if err := _q.loadCreatedJobs(ctx, query, nodes,
+			func(n *User) { n.Edges.CreatedJobs = []*Job{} },
+			func(n *User, e *Job) { n.Edges.CreatedJobs = append(n.Edges.CreatedJobs, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -680,10 +902,10 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 			return nil, err
 		}
 	}
-	if query := _q.withUserBackends; query != nil {
-		if err := _q.loadUserBackends(ctx, query, nodes,
-			func(n *User) { n.Edges.UserBackends = []*UserBackend{} },
-			func(n *User, e *UserBackend) { n.Edges.UserBackends = append(n.Edges.UserBackends, e) }); err != nil {
+	if query := _q.withBackends; query != nil {
+		if err := _q.loadBackends(ctx, query, nodes,
+			func(n *User) { n.Edges.Backends = []*Backend{} },
+			func(n *User, e *Backend) { n.Edges.Backends = append(n.Edges.Backends, e) }); err != nil {
 			return nil, err
 		}
 	}
@@ -708,10 +930,60 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 			return nil, err
 		}
 	}
+	if query := _q.withTranslationPromptTemplates; query != nil {
+		if err := _q.loadTranslationPromptTemplates(ctx, query, nodes,
+			func(n *User) { n.Edges.TranslationPromptTemplates = []*TranslationPromptTemplate{} },
+			func(n *User, e *TranslationPromptTemplate) {
+				n.Edges.TranslationPromptTemplates = append(n.Edges.TranslationPromptTemplates, e)
+			}); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withBootstrapPromptTemplates; query != nil {
+		if err := _q.loadBootstrapPromptTemplates(ctx, query, nodes,
+			func(n *User) { n.Edges.BootstrapPromptTemplates = []*BootstrapPromptTemplate{} },
+			func(n *User, e *BootstrapPromptTemplate) {
+				n.Edges.BootstrapPromptTemplates = append(n.Edges.BootstrapPromptTemplates, e)
+			}); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withPrunePromptTemplates; query != nil {
+		if err := _q.loadPrunePromptTemplates(ctx, query, nodes,
+			func(n *User) { n.Edges.PrunePromptTemplates = []*PrunePromptTemplate{} },
+			func(n *User, e *PrunePromptTemplate) {
+				n.Edges.PrunePromptTemplates = append(n.Edges.PrunePromptTemplates, e)
+			}); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withExecutionProfiles; query != nil {
+		if err := _q.loadExecutionProfiles(ctx, query, nodes,
+			func(n *User) { n.Edges.ExecutionProfiles = []*ExecutionProfile{} },
+			func(n *User, e *ExecutionProfile) { n.Edges.ExecutionProfiles = append(n.Edges.ExecutionProfiles, e) }); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withExecutionPlanTemplates; query != nil {
+		if err := _q.loadExecutionPlanTemplates(ctx, query, nodes,
+			func(n *User) { n.Edges.ExecutionPlanTemplates = []*ExecutionPlanTemplate{} },
+			func(n *User, e *ExecutionPlanTemplate) {
+				n.Edges.ExecutionPlanTemplates = append(n.Edges.ExecutionPlanTemplates, e)
+			}); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withSyncTasks; query != nil {
+		if err := _q.loadSyncTasks(ctx, query, nodes,
+			func(n *User) { n.Edges.SyncTasks = []*SyncTask{} },
+			func(n *User, e *SyncTask) { n.Edges.SyncTasks = append(n.Edges.SyncTasks, e) }); err != nil {
+			return nil, err
+		}
+	}
 	return nodes, nil
 }
 
-func (_q *UserQuery) loadJobs(ctx context.Context, query *JobQuery, nodes []*User, init func(*User), assign func(*User, *Job)) error {
+func (_q *UserQuery) loadCreatedJobs(ctx context.Context, query *JobQuery, nodes []*User, init func(*User), assign func(*User, *Job)) error {
 	fks := make([]driver.Value, 0, len(nodes))
 	nodeids := make(map[int]*User)
 	for i := range nodes {
@@ -723,20 +995,20 @@ func (_q *UserQuery) loadJobs(ctx context.Context, query *JobQuery, nodes []*Use
 	}
 	query.withFKs = true
 	query.Where(predicate.Job(func(s *sql.Selector) {
-		s.Where(sql.InValues(s.C(user.JobsColumn), fks...))
+		s.Where(sql.InValues(s.C(user.CreatedJobsColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
 		return err
 	}
 	for _, n := range neighbors {
-		fk := n.user_jobs
+		fk := n.user_created_jobs
 		if fk == nil {
-			return fmt.Errorf(`foreign-key "user_jobs" is nil for node %v`, n.ID)
+			return fmt.Errorf(`foreign-key "user_created_jobs" is nil for node %v`, n.ID)
 		}
 		node, ok := nodeids[*fk]
 		if !ok {
-			return fmt.Errorf(`unexpected referenced foreign-key "user_jobs" returned %v for node %v`, *fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "user_created_jobs" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}
@@ -835,7 +1107,7 @@ func (_q *UserQuery) loadMemberships(ctx context.Context, query *OrgMembershipQu
 	}
 	return nil
 }
-func (_q *UserQuery) loadUserBackends(ctx context.Context, query *UserBackendQuery, nodes []*User, init func(*User), assign func(*User, *UserBackend)) error {
+func (_q *UserQuery) loadBackends(ctx context.Context, query *BackendQuery, nodes []*User, init func(*User), assign func(*User, *Backend)) error {
 	fks := make([]driver.Value, 0, len(nodes))
 	nodeids := make(map[int]*User)
 	for i := range nodes {
@@ -845,22 +1117,24 @@ func (_q *UserQuery) loadUserBackends(ctx context.Context, query *UserBackendQue
 			init(nodes[i])
 		}
 	}
-	query.withFKs = true
-	query.Where(predicate.UserBackend(func(s *sql.Selector) {
-		s.Where(sql.InValues(s.C(user.UserBackendsColumn), fks...))
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(backend.FieldOwnerUserID)
+	}
+	query.Where(predicate.Backend(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.BackendsColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {
 		return err
 	}
 	for _, n := range neighbors {
-		fk := n.user_user_backends
+		fk := n.OwnerUserID
 		if fk == nil {
-			return fmt.Errorf(`foreign-key "user_user_backends" is nil for node %v`, n.ID)
+			return fmt.Errorf(`foreign-key "owner_user_id" is nil for node %v`, n.ID)
 		}
 		node, ok := nodeids[*fk]
 		if !ok {
-			return fmt.Errorf(`unexpected referenced foreign-key "user_user_backends" returned %v for node %v`, *fk, n.ID)
+			return fmt.Errorf(`unexpected referenced foreign-key "owner_user_id" returned %v for node %v`, *fk, n.ID)
 		}
 		assign(node, n)
 	}
@@ -956,6 +1230,201 @@ func (_q *UserQuery) loadUsageRecords(ctx context.Context, query *UsageRecordQue
 		node, ok := nodeids[*fk]
 		if !ok {
 			return fmt.Errorf(`unexpected referenced foreign-key "user_usage_records" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadTranslationPromptTemplates(ctx context.Context, query *TranslationPromptTemplateQuery, nodes []*User, init func(*User), assign func(*User, *TranslationPromptTemplate)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(translationprompttemplate.FieldOwnerUserID)
+	}
+	query.Where(predicate.TranslationPromptTemplate(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.TranslationPromptTemplatesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.OwnerUserID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "owner_user_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "owner_user_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadBootstrapPromptTemplates(ctx context.Context, query *BootstrapPromptTemplateQuery, nodes []*User, init func(*User), assign func(*User, *BootstrapPromptTemplate)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(bootstrapprompttemplate.FieldOwnerUserID)
+	}
+	query.Where(predicate.BootstrapPromptTemplate(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.BootstrapPromptTemplatesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.OwnerUserID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "owner_user_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "owner_user_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadPrunePromptTemplates(ctx context.Context, query *PrunePromptTemplateQuery, nodes []*User, init func(*User), assign func(*User, *PrunePromptTemplate)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(pruneprompttemplate.FieldOwnerUserID)
+	}
+	query.Where(predicate.PrunePromptTemplate(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.PrunePromptTemplatesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.OwnerUserID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "owner_user_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "owner_user_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadExecutionProfiles(ctx context.Context, query *ExecutionProfileQuery, nodes []*User, init func(*User), assign func(*User, *ExecutionProfile)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(executionprofile.FieldOwnerUserID)
+	}
+	query.Where(predicate.ExecutionProfile(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.ExecutionProfilesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.OwnerUserID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "owner_user_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "owner_user_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadExecutionPlanTemplates(ctx context.Context, query *ExecutionPlanTemplateQuery, nodes []*User, init func(*User), assign func(*User, *ExecutionPlanTemplate)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(executionplantemplate.FieldOwnerUserID)
+	}
+	query.Where(predicate.ExecutionPlanTemplate(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.ExecutionPlanTemplatesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.OwnerUserID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "owner_user_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "owner_user_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadSyncTasks(ctx context.Context, query *SyncTaskQuery, nodes []*User, init func(*User), assign func(*User, *SyncTask)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(synctask.FieldActorUserID)
+	}
+	query.Where(predicate.SyncTask(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.SyncTasksColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.ActorUserID
+		node, ok := nodeids[fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "actor_user_id" returned %v for node %v`, fk, n.ID)
 		}
 		assign(node, n)
 	}

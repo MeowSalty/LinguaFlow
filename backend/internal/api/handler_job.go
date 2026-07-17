@@ -1,434 +1,349 @@
 package api
 
 import (
-	"archive/zip"
-	"context"
-	"fmt"
-	"io"
+	"encoding/json"
+	"errors"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/worker"
 )
 
-const maxUploadedFiles = 32
+type createJobRequest struct {
+	ExecutionPlanID  int      `json:"execution_plan_id"`
+	ResourceIDs      []int    `json:"resource_ids"`
+	SegmentIDs       []int    `json:"segment_ids"`
+	SegmentGroupKeys []string `json:"segment_group_keys"`
+	SegmentFilter    string   `json:"segment_filter"`
+	AutoApprove      bool     `json:"auto_approve"`
+}
 
-type jobCreateResponse struct {
-	JobID     int                 `json:"job_id"`
-	Status    string              `json:"status"`
-	SubJobs   []subJobSummaryItem `json:"sub_jobs"`
-	CreatedAt string              `json:"created_at"`
+type jobResourceResponse struct {
+	ID                int               `json:"id"`
+	ResourceID        int               `json:"resource_id"`
+	Status            string            `json:"status"`
+	SegmentCount      int               `json:"segment_count"`
+	CompletedSegments int               `json:"completed_segments"`
+	SkippedSegments   int               `json:"skipped_segments"`
+	OutputPath        string            `json:"output_path,omitempty"`
+	ErrorMessage      *string           `json:"error_message,omitempty"`
+	Resource          *resourceResponse `json:"resource,omitempty"`
+	CurrentStage      string            `json:"current_stage,omitempty"`
+	StageTotal        int               `json:"stage_total,omitempty"`
+	StageCompleted    int               `json:"stage_completed,omitempty"`
+	StartedAt         *string           `json:"started_at,omitempty"`
+	CreatedAt         string            `json:"created_at"`
+	UpdatedAt         string            `json:"updated_at"`
+}
+
+type userBriefResponse struct {
+	ID       int    `json:"id"`
+	Username string `json:"username"`
+}
+
+type jobProgressResponse struct {
+	TotalResources     int  `json:"total_resources"`
+	CompletedResources int  `json:"completed_resources"`
+	FailedResources    int  `json:"failed_resources"`
+	TotalSegments      int  `json:"total_segments"`
+	CompletedSegments  int  `json:"completed_segments"`
+	SkippedSegments    int  `json:"skipped_segments"`
+	QueuePosition      *int `json:"queue_position,omitempty"`
+	QueueSize          *int `json:"queue_size,omitempty"`
 }
 
 type jobResponse struct {
-	ID               int          `json:"id"`
-	ProjectID        int          `json:"project_id"`
-	Status           string       `json:"status"`
-	SubJobCount      int          `json:"sub_job_count"`
-	CompletedSubJobs int          `json:"completed_sub_jobs"`
-	FailedSubJobs    int          `json:"failed_sub_jobs"`
-	SourceLang       string       `json:"source_lang"`
-	TargetLang       string       `json:"target_lang"`
-	InputPath        string       `json:"input_path,omitempty"`
-	OutputPath       string       `json:"output_path,omitempty"`
-	ErrorMessage     *string      `json:"error_message,omitempty"`
-	CreatedAt        string       `json:"created_at"`
-	UpdatedAt        string       `json:"updated_at"`
-	SubJobs          []subJobItem `json:"sub_jobs"`
+	ID              int                   `json:"id"`
+	ProjectID       int                   `json:"project_id"`
+	CreatedBy       *userBriefResponse    `json:"created_by,omitempty"`
+	Status          string                `json:"status"`
+	TriggerType     string                `json:"trigger_type"`
+	ExecutionPlanID int                   `json:"execution_plan_id"`
+	ExecutionConfig map[string]any        `json:"execution_config,omitempty"`
+	ErrorMessage    *string               `json:"error_message,omitempty"`
+	Progress        jobProgressResponse   `json:"progress"`
+	StartedAt       *string               `json:"started_at,omitempty"`
+	CreatedAt       string                `json:"created_at"`
+	UpdatedAt       string                `json:"updated_at"`
+	JobResources    []jobResourceResponse `json:"job_resources,omitempty"`
 }
 
-type subJobSummaryItem struct {
-	ID       int    `json:"id"`
-	Filename string `json:"filename"`
-	Status   string `json:"status"`
+// queueInfoForJob returns queue position info for a job, or nil if queue is
+// unavailable or the job is not currently queued.
+func (s *Server) queueInfoForJob(jobID int) *worker.QueueInfo {
+	if s.dispatcher == nil {
+		return nil
+	}
+	info := s.dispatcher.QueuePosition("translation", jobID)
+	if info == nil || info.Position < 0 {
+		return nil
+	}
+	return info
 }
 
-type subJobItem struct {
-	ID            int     `json:"id"`
-	Status        string  `json:"status"`
-	InputFilename string  `json:"input_filename"`
-	InputFormat   string  `json:"input_format"`
-	InputPath     string  `json:"input_path"`
-	OutputPath    string  `json:"output_path,omitempty"`
-	SegmentCount  int     `json:"segment_count"`
-	ErrorMessage  *string `json:"error_message,omitempty"`
-	CreatedAt     string  `json:"created_at"`
-	UpdatedAt     string  `json:"updated_at"`
-}
-
-func (s *Server) handleCreateProjectJob(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleCreateJob(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
-	projectRow, err := s.projectSvc.GetProject(r.Context(), authUser.User.ID, projectID)
+	var req createJobRequest
+	if r.Body != nil && strings.TrimSpace(r.Header.Get("Content-Length")) != "0" {
+		if !s.decodeJSON(w, r, &req) {
+			return
+		}
+	}
+	created, err := s.jobSvc.CreateManualJob(r.Context(), authUser.User.ID, projectID, service.CreateJobInput{
+		ResourceIDs:      req.ResourceIDs,
+		SegmentIDs:       req.SegmentIDs,
+		SegmentGroupKeys: req.SegmentGroupKeys,
+		SegmentFilter:    req.SegmentFilter,
+		ExecutionPlanID:  req.ExecutionPlanID,
+		AutoApprove:      req.AutoApprove,
+	})
 	if err != nil {
-		writeProjectServiceError(w, err)
+		s.writeJobServiceError(w, r, err)
 		return
 	}
-	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		writeProblem(w, http.StatusBadRequest, "invalid_multipart", "上传表单解析失败")
-		return
-	}
-	files := r.MultipartForm.File["files"]
-	if len(files) == 0 {
-		writeProblem(w, http.StatusBadRequest, "invalid_input", "至少上传一个文件")
-		return
-	}
-	if len(files) > maxUploadedFiles {
-		writeProblem(w, http.StatusBadRequest, "invalid_input", "上传文件数量超出限制")
-		return
-	}
-	sourceLang := strings.TrimSpace(r.FormValue("source_lang"))
-	targetLang := strings.TrimSpace(r.FormValue("target_lang"))
-	if sourceLang == "" {
-		sourceLang = projectRow.SourceLang
-	}
-	if targetLang == "" {
-		targetLang = projectRow.TargetLang
-	}
-	tx, err := s.entClient.Tx(r.Context())
-	if err != nil {
-		writeServiceError(w, err)
-		return
-	}
-	committed := false
-	defer func() {
-		if !committed {
-			_ = tx.Rollback()
-		}
-	}()
-	createdJob, err := tx.Job.Create().
-		SetProjectID(projectID).
-		SetCreatedByID(authUser.User.ID).
-		SetStatus(service.JobStatusPending).
-		SetSourceLang(firstNonEmptyString(sourceLang, "auto")).
-		SetTargetLang(firstNonEmptyString(targetLang, firstNonEmptyString(projectRow.TargetLang, "zh"))).
-		SetSubJobCount(len(files)).
-		Save(r.Context())
-	if err != nil {
-		writeServiceError(w, err)
-		return
-	}
-	summaries := make([]subJobSummaryItem, 0, len(files))
-	var firstInputPath string
-	for _, header := range files {
-		opened, openErr := header.Open()
-		if openErr != nil {
-			writeProblem(w, http.StatusBadRequest, "invalid_upload", "无法读取上传文件")
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "job.create", ResourceType: "job", ResourceID: created.ID, Message: "创建任务"})
+	if s.dispatcher != nil {
+		if err := s.dispatcher.Enqueue(r.Context(), "translation", created.ID); err != nil {
+			s.writeServiceError(w, r, err)
 			return
 		}
-		sub, createErr := tx.SubJob.Create().
-			SetJobID(createdJob.ID).
-			SetStatus(service.SubJobStatusPending).
-			SetInputFilename(header.Filename).
-			SetInputFormat(strings.TrimPrefix(strings.ToLower(filepath.Ext(header.Filename)), ".")).
-			Save(r.Context())
-		if createErr != nil {
-			_ = opened.Close()
-			writeServiceError(w, createErr)
-			return
-		}
-		ref, saveErr := s.jobStore.SaveUpload(r.Context(), createdJob.ID, sub.ID, header.Filename, opened)
-		_ = opened.Close()
-		if saveErr != nil {
-			writeServiceError(w, saveErr)
-			return
-		}
-		outputRef, outputErr := s.jobStore.PrepareOutput(createdJob.ID, sub.ID, header.Filename)
-		if outputErr != nil {
-			writeServiceError(w, outputErr)
-			return
-		}
-		if err := tx.SubJob.UpdateOneID(sub.ID).
-			SetInputPath(ref.RelativePath).
-			SetOutputPath(outputRef.RelativePath).
-			Exec(r.Context()); err != nil {
-			writeServiceError(w, err)
-			return
-		}
-		if firstInputPath == "" {
-			firstInputPath = ref.RelativePath
-		}
-		summaries = append(summaries, subJobSummaryItem{ID: sub.ID, Filename: header.Filename, Status: service.SubJobStatusPending})
 	}
-	if err := tx.Job.UpdateOneID(createdJob.ID).SetInputPath(firstInputPath).Exec(r.Context()); err != nil {
-		writeServiceError(w, err)
-		return
-	}
-	if err := tx.Commit(); err != nil {
-		writeServiceError(w, err)
-		return
-	}
-	committed = true
-	if err := s.jobQueue.Enqueue(r.Context(), createdJob.ID); err != nil {
-		writeServiceError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusAccepted, jobCreateResponse{JobID: createdJob.ID, Status: service.JobStatusPending, SubJobs: summaries, CreatedAt: createdJob.CreatedAt.Format(timeRFC3339)})
+	writeJSON(w, http.StatusAccepted, toJobDetailResponse(created, s.queueInfoForJob(created.ID)))
 }
 
-func (s *Server) handleGetJob(w http.ResponseWriter, r *http.Request) {
-	jobRow, ok := s.loadAuthorizedJob(w, r)
+func (s *Server) handleListJobs(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
-	writeJSON(w, http.StatusOK, toJobResponse(jobRow))
-}
-
-func (s *Server) handleListJobSubJobs(w http.ResponseWriter, r *http.Request) {
-	jobRow, ok := s.loadAuthorizedJob(w, r)
+	pageReq, ok := s.parseCursorPagination(w, r, 50, 100)
 	if !ok {
 		return
 	}
-	items := make([]subJobItem, 0, len(jobRow.Edges.SubJobs))
-	for _, item := range jobRow.Edges.SubJobs {
-		items = append(items, toSubJobItem(item))
+	jobs, err := s.jobSvc.ListJobs(r.Context(), authUser.User.ID, projectID, service.JobListOptions{
+		Status:      strings.TrimSpace(r.URL.Query().Get("status")),
+		TriggerType: strings.TrimSpace(r.URL.Query().Get("trigger_type")),
+		AfterID:     pageReq.AfterID,
+		Limit:       pageReq.Limit,
+	})
+	if err != nil {
+		s.writeJobServiceError(w, r, err)
+		return
+	}
+	items := make([]jobResponse, 0, len(jobs))
+	for _, job := range jobs {
+		items = append(items, toJobListResponse(job, s.queueInfoForJob(job.ID)))
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"items": items})
 }
 
-func (s *Server) handleGetJobSubJob(w http.ResponseWriter, r *http.Request) {
-	jobRow, ok := s.loadAuthorizedJob(w, r)
+func (s *Server) handleGetJob(w http.ResponseWriter, r *http.Request) {
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+	jobID, ok := s.parseIntParam(w, r, chi.URLParam(r, "jobId"), "jobId")
 	if !ok {
 		return
 	}
-	subJobID, ok := parseIntParam(w, chi.URLParam(r, "subJobId"), "subJobId")
-	if !ok {
+	job, err := s.jobSvc.GetJob(r.Context(), authUser.User.ID, jobID)
+	if err != nil {
+		s.writeJobServiceError(w, r, err)
 		return
 	}
-	for _, item := range jobRow.Edges.SubJobs {
-		if item.ID == subJobID {
-			writeJSON(w, http.StatusOK, toSubJobItem(item))
-			return
-		}
-	}
-	writeProblem(w, http.StatusNotFound, "not_found", "子任务不存在")
+	writeJSON(w, http.StatusOK, toJobDetailResponse(job, s.queueInfoForJob(jobID)))
 }
 
 func (s *Server) handleCancelJob(w http.ResponseWriter, r *http.Request) {
-	jobRow, ok := s.loadAuthorizedJob(w, r)
+	authUser, ok := authUserFromContext(r.Context())
+	if !ok {
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+	jobID, ok := s.parseIntParam(w, r, chi.URLParam(r, "jobId"), "jobId")
 	if !ok {
 		return
 	}
-	if err := s.entClient.SubJob.Update().
-		Where(subjob.HasJobWith(job.IDEQ(jobRow.ID)), subjob.StatusIn(service.SubJobStatusPending, service.SubJobStatusRunning)).
-		SetStatus(service.SubJobStatusCancelled).
-		Exec(r.Context()); err != nil {
-		writeServiceError(w, err)
-		return
-	}
-	if err := s.entClient.Job.UpdateOneID(jobRow.ID).SetStatus(service.JobStatusCancelled).Exec(r.Context()); err != nil {
-		writeServiceError(w, err)
-		return
-	}
-	reloaded, err := s.queryJobForResponse(r.Context(), jobRow.ID)
+	job, err := s.jobSvc.CancelJob(r.Context(), authUser.User.ID, jobID)
 	if err != nil {
-		writeServiceError(w, err)
+		s.writeJobServiceError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, toJobResponse(reloaded))
+	// 通知正在运行的 worker 立即停止
+	if s.dispatcher != nil {
+		s.dispatcher.CancelTask("translation", jobID)
+	}
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "job.cancel", ResourceType: "job", ResourceID: job.ID, Message: "取消任务"})
+	writeJSON(w, http.StatusOK, toJobDetailResponse(job, s.queueInfoForJob(job.ID)))
 }
 
 func (s *Server) handleRetryJob(w http.ResponseWriter, r *http.Request) {
-	jobRow, ok := s.loadAuthorizedJob(w, r)
-	if !ok {
-		return
-	}
-	if err := s.entClient.SubJob.Update().
-		Where(subjob.HasJobWith(job.IDEQ(jobRow.ID)), subjob.StatusEQ(service.SubJobStatusFailed)).
-		SetStatus(service.SubJobStatusPending).
-		ClearErrorMessage().
-		Exec(r.Context()); err != nil {
-		writeServiceError(w, err)
-		return
-	}
-	if err := s.entClient.Job.UpdateOneID(jobRow.ID).
-		SetStatus(service.JobStatusPending).
-		SetFailedSubJobs(0).
-		ClearErrorMessage().
-		Exec(r.Context()); err != nil {
-		writeServiceError(w, err)
-		return
-	}
-	if err := s.jobQueue.Enqueue(r.Context(), jobRow.ID); err != nil {
-		writeServiceError(w, err)
-		return
-	}
-	reloaded, err := s.queryJobForResponse(r.Context(), jobRow.ID)
-	if err != nil {
-		writeServiceError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, toJobResponse(reloaded))
-}
-
-func (s *Server) handleDownloadJobResult(w http.ResponseWriter, r *http.Request) {
-	jobRow, ok := s.loadAuthorizedJob(w, r)
-	if !ok {
-		return
-	}
-	ready := make([]*ent.SubJob, 0, len(jobRow.Edges.SubJobs))
-	for _, item := range jobRow.Edges.SubJobs {
-		if item.Status == service.SubJobStatusCompleted && strings.TrimSpace(item.OutputPath) != "" {
-			ready = append(ready, item)
-		}
-	}
-	if len(ready) == 0 {
-		writeProblem(w, http.StatusConflict, "result_not_ready", "当前没有可下载输出")
-		return
-	}
-	if len(ready) == 1 {
-		s.downloadSingleOutput(w, r, ready[0])
-		return
-	}
-	s.downloadZipOutputs(w, r, jobRow.ID, ready)
-}
-
-func (s *Server) loadAuthorizedJob(w http.ResponseWriter, r *http.Request) (*ent.Job, bool) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
-		return nil, false
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
 	}
-	jobID, ok := parseIntParam(w, chi.URLParam(r, "jobId"), "jobId")
+	jobID, ok := s.parseIntParam(w, r, chi.URLParam(r, "jobId"), "jobId")
 	if !ok {
-		return nil, false
-	}
-	jobRow, err := s.queryJobForResponse(r.Context(), jobID)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			writeProblem(w, http.StatusNotFound, "not_found", "任务不存在")
-			return nil, false
-		}
-		writeServiceError(w, err)
-		return nil, false
-	}
-	projectRow, err := jobRow.Edges.ProjectOrErr()
-	if err != nil {
-		writeServiceError(w, err)
-		return nil, false
-	}
-	if _, err := s.projectSvc.GetProject(r.Context(), authUser.User.ID, projectRow.ID); err != nil {
-		writeProjectServiceError(w, err)
-		return nil, false
-	}
-	return jobRow, true
-}
-
-func (s *Server) queryJobForResponse(ctx context.Context, jobID int) (*ent.Job, error) {
-	return s.entClient.Job.Query().
-		Where(job.IDEQ(jobID)).
-		WithProject().
-		WithSubJobs(func(q *ent.SubJobQuery) {
-			q.Order(ent.Asc(subjob.FieldID))
-		}).
-		Only(ctx)
-}
-
-func (s *Server) downloadSingleOutput(w http.ResponseWriter, _ *http.Request, item *ent.SubJob) {
-	absolutePath, err := s.jobStore.Absolute(item.OutputPath)
-	if err != nil {
-		writeServiceError(w, err)
 		return
 	}
-	file, err := os.Open(absolutePath)
+	job, err := s.jobSvc.RetryJob(r.Context(), authUser.User.ID, jobID)
 	if err != nil {
-		writeServiceError(w, err)
+		s.writeJobServiceError(w, r, err)
 		return
 	}
-	defer file.Close()
-	filename := filepath.Base(absolutePath)
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
-	_, _ = io.Copy(w, file)
+	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "job.retry", ResourceType: "job", ResourceID: job.ID, Message: "重试任务"})
+	if s.dispatcher != nil {
+		if err := s.dispatcher.Enqueue(r.Context(), "translation", job.ID); err != nil {
+			s.writeServiceError(w, r, err)
+			return
+		}
+	}
+	writeJSON(w, http.StatusOK, toJobDetailResponse(job, s.queueInfoForJob(job.ID)))
 }
 
-func (s *Server) downloadZipOutputs(w http.ResponseWriter, _ *http.Request, jobID int, items []*ent.SubJob) {
-	w.Header().Set("Content-Type", "application/zip")
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%q", fmt.Sprintf("job-%d-results.zip", jobID)))
-	zw := zip.NewWriter(w)
-	defer zw.Close()
-	for _, item := range items {
-		absolutePath, err := s.jobStore.Absolute(item.OutputPath)
-		if err != nil {
-			continue
-		}
-		file, err := os.Open(absolutePath)
-		if err != nil {
-			continue
-		}
-		entry, err := zw.Create(filepath.Base(absolutePath))
-		if err != nil {
-			_ = file.Close()
-			continue
-		}
-		_, _ = io.Copy(entry, file)
-		_ = file.Close()
+func sanitizeExecutionConfig(config map[string]any) map[string]any {
+	if config == nil {
+		return nil
 	}
+	raw, err := json.Marshal(config)
+	if err != nil {
+		return nil
+	}
+	var sanitized map[string]any
+	if err := json.Unmarshal(raw, &sanitized); err != nil {
+		return nil
+	}
+	if rounds, ok := sanitized["rounds"].([]any); ok {
+		for _, r := range rounds {
+			if round, ok := r.(map[string]any); ok {
+				maskBackendOptions(round)
+			}
+		}
+	}
+	if bootstrap, ok := sanitized["bootstrap"].(map[string]any); ok {
+		maskBackendOptions(bootstrap)
+	}
+	if rubyRetry, ok := sanitized["ruby_retry"].(map[string]any); ok {
+		maskBackendOptions(rubyRetry)
+	}
+	return sanitized
 }
 
-func toJobResponse(entity *ent.Job) jobResponse {
-	items := make([]subJobItem, 0, len(entity.Edges.SubJobs))
-	for _, item := range entity.Edges.SubJobs {
-		items = append(items, toSubJobItem(item))
-	}
-	projectID := 0
-	if entity.Edges.Project != nil {
-		projectID = entity.Edges.Project.ID
-	}
-	return jobResponse{
-		ID:               entity.ID,
-		ProjectID:        projectID,
-		Status:           entity.Status,
-		SubJobCount:      entity.SubJobCount,
-		CompletedSubJobs: entity.CompletedSubJobs,
-		FailedSubJobs:    entity.FailedSubJobs,
-		SourceLang:       entity.SourceLang,
-		TargetLang:       entity.TargetLang,
-		InputPath:        entity.InputPath,
-		OutputPath:       entity.OutputPath,
-		ErrorMessage:     entity.ErrorMessage,
-		CreatedAt:        entity.CreatedAt.Format(timeRFC3339),
-		UpdatedAt:        entity.UpdatedAt.Format(timeRFC3339),
-		SubJobs:          items,
+func maskBackendOptions(node map[string]any) {
+	if backend, ok := node["backend"].(map[string]any); ok {
+		if opts, ok := backend["options"].(map[string]any); ok {
+			if _, hasKey := opts["api_key"]; hasKey {
+				opts["api_key"] = "***"
+			}
+		}
 	}
 }
 
-func toSubJobItem(entity *ent.SubJob) subJobItem {
-	return subJobItem{
-		ID:            entity.ID,
-		Status:        entity.Status,
-		InputFilename: entity.InputFilename,
-		InputFormat:   entity.InputFormat,
-		InputPath:     entity.InputPath,
-		OutputPath:    entity.OutputPath,
-		SegmentCount:  entity.SegmentCount,
-		ErrorMessage:  entity.ErrorMessage,
-		CreatedAt:     entity.CreatedAt.Format(timeRFC3339),
-		UpdatedAt:     entity.UpdatedAt.Format(timeRFC3339),
+func toJobListResponse(row *ent.Job, queueInfo *worker.QueueInfo) jobResponse {
+	resp := jobResponse{
+		ID:              row.ID,
+		ProjectID:       row.ProjectID,
+		Status:          row.Status,
+		TriggerType:     row.TriggerType,
+		ExecutionPlanID: row.ExecutionPlanID,
+		ErrorMessage:    row.ErrorMessage,
+		StartedAt:       timePtrToString(row.StartedAt),
+		CreatedAt:       row.CreatedAt.Format(timeRFC3339),
+		UpdatedAt:       row.UpdatedAt.Format(timeRFC3339),
 	}
+	if row.Edges.CreatedBy != nil {
+		resp.CreatedBy = &userBriefResponse{ID: row.Edges.CreatedBy.ID, Username: row.Edges.CreatedBy.Username}
+	}
+	resp.Progress = buildProgressResponse(row, queueInfo)
+	return resp
 }
 
-const timeRFC3339 = "2006-01-02T15:04:05Z07:00"
-
-func firstNonEmptyString(values ...string) string {
-	for _, value := range values {
-		if strings.TrimSpace(value) != "" {
-			return strings.TrimSpace(value)
+func toJobDetailResponse(row *ent.Job, queueInfo *worker.QueueInfo) jobResponse {
+	resp := toJobListResponse(row, queueInfo)
+	resp.ExecutionConfig = sanitizeExecutionConfig(row.ExecutionConfig)
+	if len(row.Edges.JobResources) > 0 {
+		resp.JobResources = make([]jobResourceResponse, 0, len(row.Edges.JobResources))
+		for _, item := range row.Edges.JobResources {
+			resp.JobResources = append(resp.JobResources, toJobResourceResponse(item))
 		}
 	}
-	return ""
+	return resp
+}
+
+func buildProgressResponse(row *ent.Job, queueInfo *worker.QueueInfo) jobProgressResponse {
+	progress := jobProgressResponse{
+		TotalResources:     row.ResourceCount,
+		CompletedResources: row.CompletedResources,
+		FailedResources:    row.FailedResources,
+		TotalSegments:      row.TotalSegments,
+		CompletedSegments:  row.CompletedSegments,
+		SkippedSegments:    row.SkippedSegments,
+	}
+	if queueInfo != nil {
+		progress.QueuePosition = &queueInfo.Position
+		progress.QueueSize = &queueInfo.Size
+	}
+	return progress
+}
+
+func toJobResourceResponse(row *ent.JobResource) jobResourceResponse {
+	resp := jobResourceResponse{
+		ID:                row.ID,
+		Status:            row.Status,
+		SegmentCount:      row.SegmentCount,
+		CompletedSegments: row.CompletedSegments,
+		SkippedSegments:   row.SkippedSegments,
+		OutputPath:        row.OutputPath,
+		ErrorMessage:      row.ErrorMessage,
+		CurrentStage:      row.CurrentStage,
+		StageTotal:        row.StageTotal,
+		StageCompleted:    row.StageCompleted,
+		StartedAt:         timePtrToString(row.StartedAt),
+		CreatedAt:         row.CreatedAt.Format(timeRFC3339),
+		UpdatedAt:         row.UpdatedAt.Format(timeRFC3339),
+	}
+	if row.Edges.Resource != nil {
+		resp.ResourceID = row.Edges.Resource.ID
+		resourceResp := toResourceResponse(row.Edges.Resource, 0, 0)
+		resp.Resource = &resourceResp
+	}
+	return resp
+}
+
+func (s *Server) writeJobServiceError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, service.ErrJobNotFound):
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "任务不存在")
+	case errors.Is(err, service.ErrJobEmpty):
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "没有可处理的待处理段落")
+	case errors.Is(err, service.ErrProjectNotFound):
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "项目不存在")
+	case errors.Is(err, service.ErrResourceNotFound), errors.Is(err, service.ErrSegmentNotFound):
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "资源不存在")
+	case errors.Is(err, service.ErrForbidden):
+		s.writeProblem(w, r, http.StatusForbidden, "forbidden", "没有权限执行该操作")
+	case errors.Is(err, service.ErrInvalidInput):
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", err.Error())
+	default:
+		s.writeProjectServiceError(w, r, err)
+	}
 }

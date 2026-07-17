@@ -105,11 +105,6 @@ func ProjectID(v int) predicate.TMEntry {
 	return predicate.TMEntry(sql.FieldEQ(FieldProjectID, v))
 }
 
-// OrganizationID applies equality check predicate on the "organization_id" field. It's identical to OrganizationIDEQ.
-func OrganizationID(v int) predicate.TMEntry {
-	return predicate.TMEntry(sql.FieldEQ(FieldOrganizationID, v))
-}
-
 // CreatedAtEQ applies the EQ predicate on the "created_at" field.
 func CreatedAtEQ(v time.Time) predicate.TMEntry {
 	return predicate.TMEntry(sql.FieldEQ(FieldCreatedAt, v))
@@ -650,36 +645,6 @@ func ProjectIDNotNil() predicate.TMEntry {
 	return predicate.TMEntry(sql.FieldNotNull(FieldProjectID))
 }
 
-// OrganizationIDEQ applies the EQ predicate on the "organization_id" field.
-func OrganizationIDEQ(v int) predicate.TMEntry {
-	return predicate.TMEntry(sql.FieldEQ(FieldOrganizationID, v))
-}
-
-// OrganizationIDNEQ applies the NEQ predicate on the "organization_id" field.
-func OrganizationIDNEQ(v int) predicate.TMEntry {
-	return predicate.TMEntry(sql.FieldNEQ(FieldOrganizationID, v))
-}
-
-// OrganizationIDIn applies the In predicate on the "organization_id" field.
-func OrganizationIDIn(vs ...int) predicate.TMEntry {
-	return predicate.TMEntry(sql.FieldIn(FieldOrganizationID, vs...))
-}
-
-// OrganizationIDNotIn applies the NotIn predicate on the "organization_id" field.
-func OrganizationIDNotIn(vs ...int) predicate.TMEntry {
-	return predicate.TMEntry(sql.FieldNotIn(FieldOrganizationID, vs...))
-}
-
-// OrganizationIDIsNil applies the IsNil predicate on the "organization_id" field.
-func OrganizationIDIsNil() predicate.TMEntry {
-	return predicate.TMEntry(sql.FieldIsNull(FieldOrganizationID))
-}
-
-// OrganizationIDNotNil applies the NotNil predicate on the "organization_id" field.
-func OrganizationIDNotNil() predicate.TMEntry {
-	return predicate.TMEntry(sql.FieldNotNull(FieldOrganizationID))
-}
-
 // HasProject applies the HasEdge predicate on the "project" edge.
 func HasProject() predicate.TMEntry {
 	return predicate.TMEntry(func(s *sql.Selector) {
@@ -695,29 +660,6 @@ func HasProject() predicate.TMEntry {
 func HasProjectWith(preds ...predicate.Project) predicate.TMEntry {
 	return predicate.TMEntry(func(s *sql.Selector) {
 		step := newProjectStep()
-		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
-			for _, p := range preds {
-				p(s)
-			}
-		})
-	})
-}
-
-// HasOrganization applies the HasEdge predicate on the "organization" edge.
-func HasOrganization() predicate.TMEntry {
-	return predicate.TMEntry(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, OrganizationTable, OrganizationColumn),
-		)
-		sqlgraph.HasNeighbors(s, step)
-	})
-}
-
-// HasOrganizationWith applies the HasEdge predicate on the "organization" edge with a given conditions (other predicates).
-func HasOrganizationWith(preds ...predicate.Organization) predicate.TMEntry {
-	return predicate.TMEntry(func(s *sql.Selector) {
-		step := newOrganizationStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

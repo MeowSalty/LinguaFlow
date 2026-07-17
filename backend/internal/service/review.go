@@ -6,17 +6,16 @@ import (
 	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
 )
 
 const (
-	SegmentStatusPending    = "pending"
-	SegmentStatusTranslated = "translated"
-	SegmentStatusEdited     = "edited"
-	SegmentStatusApproved   = "approved"
-	SegmentStatusRejected   = "rejected"
+	SegmentStatusPending    = segment.StatusPending
+	SegmentStatusTranslated = segment.StatusTranslated
+	SegmentStatusEdited     = segment.StatusEdited
+	SegmentStatusApproved   = segment.StatusApproved
+	SegmentStatusRejected   = segment.StatusRejected
 )
 
 var (
@@ -25,6 +24,7 @@ var (
 	ErrRetranslateNoReject = errors.New("no rejected segments to retranslate")
 )
 
+// ReviewService 审核服务，通过 Resource 路径做权限校验。
 type ReviewService struct {
 	client   *ent.Client
 	projects *ProjectService
@@ -39,6 +39,12 @@ type SegmentDecisionInput struct {
 	Comment string
 }
 
+type BatchReviewInput struct {
+	SegmentIDs []int
+	Action     string // "approve" or "reject"
+	Comment    string
+}
+
 type SegmentPage struct {
 	Items      []*ent.Segment
 	NextCursor int
@@ -48,48 +54,19 @@ func NewReviewService(client *ent.Client, projects *ProjectService) *ReviewServi
 	return &ReviewService{client: client, projects: projects}
 }
 
-func (s *ReviewService) ListJobSegments(ctx context.Context, actorUserID, jobID, afterID, limit int) (*SegmentPage, error) {
-	if _, err := s.authorizeJob(ctx, actorUserID, jobID, false); err != nil {
-		return nil, err
-	}
-	if limit <= 0 || limit > 100 {
-		limit = 50
-	}
-	predicates := []func(*ent.SegmentQuery){
-		func(q *ent.SegmentQuery) {
-			q.Where(segment.HasSubJobWith(subjob.HasJobWith(job.IDEQ(jobID))))
-		},
-	}
-	if afterID > 0 {
-		predicates = append(predicates, func(q *ent.SegmentQuery) { q.Where(segment.IDGT(afterID)) })
-	}
-	query := s.client.Segment.Query()
-	for _, apply := range predicates {
-		apply(query)
-	}
-	rows, err := query.Order(ent.Asc(segment.FieldID)).Limit(limit + 1).WithReviewedBy().WithSubJob().All(ctx)
-	if err != nil {
-		return nil, err
-	}
-	page := &SegmentPage{Items: rows}
-	if len(rows) > limit {
-		page.NextCursor = rows[limit-1].ID
-		page.Items = rows[:limit]
-	}
-	return page, nil
-}
-
-func (s *ReviewService) EditSegment(ctx context.Context, actorUserID, segmentID int, input SegmentEditInput) (*ent.Segment, error) {
+// EditSegment 编辑段落的译文。
+func (s *ReviewService) EditSegment(ctx context.Context, actorUserID, projectID, resourceID, segmentID int, input SegmentEditInput) (*ent.Segment, error) {
 	if strings.TrimSpace(input.TargetText) == "" {
 		return nil, ErrInvalidInput
 	}
-	if _, err := s.authorizeSegment(ctx, actorUserID, segmentID, true); err != nil {
+	if _, err := s.authorizeSegment(ctx, actorUserID, projectID, resourceID, segmentID, true); err != nil {
 		return nil, err
 	}
 	update := s.client.Segment.UpdateOneID(segmentID).
 		SetTargetText(input.TargetText).
 		SetStatus(SegmentStatusEdited).
-		SetReviewedByID(actorUserID)
+		SetReviewedByID(actorUserID).
+		ClearQualityIssues()
 	if strings.TrimSpace(input.Comment) == "" {
 		update.ClearReviewComment()
 	} else {
@@ -102,13 +79,23 @@ func (s *ReviewService) EditSegment(ctx context.Context, actorUserID, segmentID 
 		}
 		return nil, err
 	}
-	_ = s.reconcileJobReviewStatus(ctx, updated)
-	return s.client.Segment.Query().Where(segment.IDEQ(updated.ID)).WithReviewedBy().WithSubJob().Only(ctx)
+	return s.client.Segment.Query().Where(segment.IDEQ(updated.ID)).WithReviewedBy().WithResource().Only(ctx)
 }
 
-func (s *ReviewService) ApproveSegment(ctx context.Context, actorUserID, segmentID int, input SegmentDecisionInput) (*ent.Segment, error) {
-	if _, err := s.authorizeSegment(ctx, actorUserID, segmentID, true); err != nil {
+// ApproveSegment 审批通过单个段落。
+func (s *ReviewService) ApproveSegment(ctx context.Context, actorUserID, projectID, resourceID, segmentID int, input SegmentDecisionInput) (*ent.Segment, error) {
+	if _, err := s.authorizeSegment(ctx, actorUserID, projectID, resourceID, segmentID, true); err != nil {
 		return nil, err
+	}
+	current, err := s.client.Segment.Query().Where(segment.IDEQ(segmentID)).Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, ErrSegmentNotFound
+		}
+		return nil, err
+	}
+	if current.Status != SegmentStatusTranslated && current.Status != SegmentStatusEdited && current.Status != SegmentStatusRejected {
+		return nil, ErrInvalidReviewState
 	}
 	update := s.client.Segment.UpdateOneID(segmentID).
 		SetStatus(SegmentStatusApproved).
@@ -125,13 +112,23 @@ func (s *ReviewService) ApproveSegment(ctx context.Context, actorUserID, segment
 		}
 		return nil, err
 	}
-	_ = s.reconcileJobReviewStatus(ctx, updated)
-	return s.client.Segment.Query().Where(segment.IDEQ(updated.ID)).WithReviewedBy().WithSubJob().Only(ctx)
+	return s.client.Segment.Query().Where(segment.IDEQ(updated.ID)).WithReviewedBy().WithResource().Only(ctx)
 }
 
-func (s *ReviewService) RejectSegment(ctx context.Context, actorUserID, segmentID int, input SegmentDecisionInput) (*ent.Segment, error) {
-	if _, err := s.authorizeSegment(ctx, actorUserID, segmentID, true); err != nil {
+// RejectSegment 审批拒绝单个段落。
+func (s *ReviewService) RejectSegment(ctx context.Context, actorUserID, projectID, resourceID, segmentID int, input SegmentDecisionInput) (*ent.Segment, error) {
+	if _, err := s.authorizeSegment(ctx, actorUserID, projectID, resourceID, segmentID, true); err != nil {
 		return nil, err
+	}
+	current, err := s.client.Segment.Query().Where(segment.IDEQ(segmentID)).Only(ctx)
+	if err != nil {
+		if ent.IsNotFound(err) {
+			return nil, ErrSegmentNotFound
+		}
+		return nil, err
+	}
+	if current.Status != SegmentStatusTranslated && current.Status != SegmentStatusEdited {
+		return nil, ErrInvalidReviewState
 	}
 	update := s.client.Segment.UpdateOneID(segmentID).
 		SetStatus(SegmentStatusRejected).
@@ -148,57 +145,135 @@ func (s *ReviewService) RejectSegment(ctx context.Context, actorUserID, segmentI
 		}
 		return nil, err
 	}
-	_ = s.reconcileJobReviewStatus(ctx, updated)
-	return s.client.Segment.Query().Where(segment.IDEQ(updated.ID)).WithReviewedBy().WithSubJob().Only(ctx)
+	return s.client.Segment.Query().Where(segment.IDEQ(updated.ID)).WithReviewedBy().WithResource().Only(ctx)
 }
 
-func (s *ReviewService) ApproveJob(ctx context.Context, actorUserID, jobID int) (*ent.Job, error) {
-	if _, err := s.authorizeJob(ctx, actorUserID, jobID, true); err != nil {
+// BatchReview 批量审核段落。
+func (s *ReviewService) BatchReview(ctx context.Context, actorUserID, projectID, resourceID int, input BatchReviewInput) ([]*ent.Segment, error) {
+	if len(input.SegmentIDs) == 0 {
+		return nil, ErrInvalidInput
+	}
+	if input.Action != "approve" && input.Action != "reject" {
+		return nil, ErrInvalidInput
+	}
+	// 验证权限
+	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true); err != nil {
 		return nil, err
 	}
-	if err := s.client.Segment.Update().
-		Where(segment.HasSubJobWith(subjob.HasJobWith(job.IDEQ(jobID))), segment.StatusNEQ(SegmentStatusRejected)).
+	// 验证所有段落属于该资源
+	rows, err := s.client.Segment.Query().
+		Where(segment.IDIn(input.SegmentIDs...), segment.ResourceIDEQ(resourceID)).
+		All(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) != len(input.SegmentIDs) {
+		return nil, ErrSegmentNotFound
+	}
+
+	targetStatus := SegmentStatusApproved
+	if input.Action == "reject" {
+		targetStatus = SegmentStatusRejected
+	}
+
+	comment := strings.TrimSpace(input.Comment)
+	for _, row := range rows {
+		// 对于 approve：允许 translated, edited, rejected 状态
+		// 对于 reject：允许 translated, edited 状态
+		if input.Action == "approve" {
+			if row.Status != SegmentStatusTranslated && row.Status != SegmentStatusEdited && row.Status != SegmentStatusRejected {
+				continue
+			}
+		} else {
+			if row.Status != SegmentStatusTranslated && row.Status != SegmentStatusEdited {
+				continue
+			}
+		}
+		update := s.client.Segment.UpdateOneID(row.ID).
+			SetStatus(targetStatus).
+			SetReviewedByID(actorUserID)
+		if comment == "" {
+			update.ClearReviewComment()
+		} else {
+			update.SetReviewComment(comment)
+		}
+		if _, err := update.Save(ctx); err != nil {
+			return nil, err
+		}
+	}
+	// 返回更新后的段落
+	return s.client.Segment.Query().
+		Where(segment.IDIn(input.SegmentIDs...)).
+		WithReviewedBy().
+		WithResource().
+		All(ctx)
+}
+
+// ApproveAllResource 批准资源中所有已翻译/已编辑的段落。
+func (s *ReviewService) ApproveAllResource(ctx context.Context, actorUserID, projectID, resourceID int) (int, error) {
+	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true); err != nil {
+		return 0, err
+	}
+	// 验证资源存在且属于项目
+	if _, err := s.client.Resource.Query().Where(resource.IDEQ(resourceID), resource.ProjectIDEQ(projectID)).Only(ctx); err != nil {
+		if ent.IsNotFound(err) {
+			return 0, ErrResourceNotFound
+		}
+		return 0, err
+	}
+	count, err := s.client.Segment.Update().
+		Where(
+			segment.ResourceIDEQ(resourceID),
+			segment.StatusIn(SegmentStatusTranslated, SegmentStatusEdited, SegmentStatusRejected),
+		).
 		SetStatus(SegmentStatusApproved).
 		SetReviewedByID(actorUserID).
-		Exec(ctx); err != nil {
-		return nil, err
+		ClearReviewComment().
+		Save(ctx)
+	if err != nil {
+		return 0, err
 	}
-	if err := s.reconcileJobByID(ctx, jobID); err != nil {
-		return nil, err
-	}
-	return s.client.Job.Query().Where(job.IDEQ(jobID)).WithSubJobs().Only(ctx)
+	return count, nil
 }
 
-func (s *ReviewService) RetranslateRejected(ctx context.Context, actorUserID, jobID int) error {
-	if _, err := s.authorizeJob(ctx, actorUserID, jobID, true); err != nil {
-		return err
+// RetranslateRejected 将资源中被拒绝的段落重置为 pending，以便重新翻译。
+func (s *ReviewService) RetranslateRejected(ctx context.Context, actorUserID, projectID, resourceID int) (int, error) {
+	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, true); err != nil {
+		return 0, err
+	}
+	// 验证资源存在且属于项目
+	if _, err := s.client.Resource.Query().Where(resource.IDEQ(resourceID), resource.ProjectIDEQ(projectID)).Only(ctx); err != nil {
+		if ent.IsNotFound(err) {
+			return 0, ErrResourceNotFound
+		}
+		return 0, err
 	}
 	count, err := s.client.Segment.Query().
-		Where(segment.HasSubJobWith(subjob.HasJobWith(job.IDEQ(jobID))), segment.StatusEQ(SegmentStatusRejected)).
+		Where(segment.ResourceIDEQ(resourceID), segment.StatusEQ(SegmentStatusRejected)).
 		Count(ctx)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if count == 0 {
-		return ErrRetranslateNoReject
+		return 0, ErrRetranslateNoReject
 	}
-	if err := s.client.SubJob.Update().
-		Where(subjob.HasJobWith(job.IDEQ(jobID)), subjob.HasSegmentsWith(segment.StatusEQ(SegmentStatusRejected))).
-		SetStatus(SubJobStatusPending).
-		ClearErrorMessage().
+	if err := s.client.Segment.Update().
+		Where(segment.ResourceIDEQ(resourceID), segment.StatusEQ(SegmentStatusRejected)).
+		SetStatus(SegmentStatusPending).
+		ClearReviewedBy().
+		ClearReviewComment().
+		ClearQualityIssues().
 		Exec(ctx); err != nil {
-		return err
+		return 0, err
 	}
-	return s.client.Job.UpdateOneID(jobID).
-		SetStatus(JobStatusPending).
-		ClearErrorMessage().
-		Exec(ctx)
+	return count, nil
 }
 
-func (s *ReviewService) authorizeSegment(ctx context.Context, actorUserID, segmentID int, write bool) (*ent.Segment, error) {
+// authorizeSegment 通过 Segment → Resource → Project 路径校验访问权限。
+func (s *ReviewService) authorizeSegment(ctx context.Context, actorUserID, projectID, resourceID, segmentID int, write bool) (*ent.Segment, error) {
 	row, err := s.client.Segment.Query().
-		Where(segment.IDEQ(segmentID)).
-		WithSubJob(func(q *ent.SubJobQuery) { q.WithJob(func(jq *ent.JobQuery) { jq.WithProject() }) }).
+		Where(segment.IDEQ(segmentID), segment.ResourceIDEQ(resourceID)).
+		WithResource().
 		Only(ctx)
 	if err != nil {
 		if ent.IsNotFound(err) {
@@ -206,75 +281,22 @@ func (s *ReviewService) authorizeSegment(ctx context.Context, actorUserID, segme
 		}
 		return nil, err
 	}
-	sub, err := row.Edges.SubJobOrErr()
+	res, err := row.Edges.ResourceOrErr()
 	if err != nil {
 		return nil, err
 	}
-	jobRow, err := sub.Edges.JobOrErr()
+	if res.ID != resourceID {
+		return nil, ErrSegmentNotFound
+	}
+	projectRow, err := s.client.Resource.Query().Where(resource.IDEQ(resourceID)).WithProject().Only(ctx)
 	if err != nil {
 		return nil, err
 	}
-	projectRow, err := jobRow.Edges.ProjectOrErr()
-	if err != nil {
-		return nil, err
+	if projectRow.Edges.Project != nil && projectRow.Edges.Project.ID != projectID {
+		return nil, ErrSegmentNotFound
 	}
-	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectRow.ID, write); err != nil {
-		return nil, err
-	}
-	return row, nil
-}
-
-func (s *ReviewService) authorizeJob(ctx context.Context, actorUserID, jobID int, write bool) (*ent.Job, error) {
-	row, err := s.client.Job.Query().Where(job.IDEQ(jobID)).WithProject().Only(ctx)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return nil, ErrJobNotFound
-		}
-		return nil, err
-	}
-	projectRow, err := row.Edges.ProjectOrErr()
-	if err != nil {
-		return nil, err
-	}
-	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectRow.ID, write); err != nil {
+	if _, err := s.projects.requireProjectAccess(ctx, actorUserID, projectID, write); err != nil {
 		return nil, err
 	}
 	return row, nil
-}
-
-func (s *ReviewService) reconcileJobReviewStatus(ctx context.Context, row *ent.Segment) error {
-	loaded, err := s.client.Segment.Query().
-		Where(segment.IDEQ(row.ID)).
-		WithSubJob(func(q *ent.SubJobQuery) { q.WithJob() }).
-		Only(ctx)
-	if err != nil {
-		return err
-	}
-	sub, err := loaded.Edges.SubJobOrErr()
-	if err != nil {
-		return err
-	}
-	jobRow, err := sub.Edges.JobOrErr()
-	if err != nil {
-		return err
-	}
-	return s.reconcileJobByID(ctx, jobRow.ID)
-}
-
-func (s *ReviewService) reconcileJobByID(ctx context.Context, jobID int) error {
-	total, err := s.client.Segment.Query().Where(segment.HasSubJobWith(subjob.HasJobWith(job.IDEQ(jobID)))).Count(ctx)
-	if err != nil {
-		return err
-	}
-	if total == 0 {
-		return nil
-	}
-	approved, err := s.client.Segment.Query().Where(segment.HasSubJobWith(subjob.HasJobWith(job.IDEQ(jobID))), segment.StatusEQ(SegmentStatusApproved)).Count(ctx)
-	if err != nil {
-		return err
-	}
-	if approved == total {
-		return s.client.Job.UpdateOneID(jobID).SetStatus(JobStatusCompleted).Exec(ctx)
-	}
-	return s.client.Job.UpdateOneID(jobID).SetStatus(JobStatusAwaitingReview).Exec(ctx)
 }

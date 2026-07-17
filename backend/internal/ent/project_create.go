@@ -15,8 +15,8 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/projectbackend"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
@@ -91,23 +91,23 @@ func (_c *ProjectCreate) SetNillableOwnerOrgID(v *int) *ProjectCreate {
 	return _c
 }
 
-// SetResourceScope sets the "resource_scope" field.
-func (_c *ProjectCreate) SetResourceScope(v string) *ProjectCreate {
-	_c.mutation.SetResourceScope(v)
-	return _c
-}
-
-// SetNillableResourceScope sets the "resource_scope" field if the given value is not nil.
-func (_c *ProjectCreate) SetNillableResourceScope(v *string) *ProjectCreate {
-	if v != nil {
-		_c.SetResourceScope(*v)
-	}
-	return _c
-}
-
 // SetConfig sets the "config" field.
 func (_c *ProjectCreate) SetConfig(v map[string]interface{}) *ProjectCreate {
 	_c.mutation.SetConfig(v)
+	return _c
+}
+
+// SetGlossaryEnabled sets the "glossary_enabled" field.
+func (_c *ProjectCreate) SetGlossaryEnabled(v bool) *ProjectCreate {
+	_c.mutation.SetGlossaryEnabled(v)
+	return _c
+}
+
+// SetNillableGlossaryEnabled sets the "glossary_enabled" field if the given value is not nil.
+func (_c *ProjectCreate) SetNillableGlossaryEnabled(v *bool) *ProjectCreate {
+	if v != nil {
+		_c.SetGlossaryEnabled(*v)
+	}
 	return _c
 }
 
@@ -147,36 +147,6 @@ func (_c *ProjectCreate) SetOwnerUser(v *User) *ProjectCreate {
 // SetOwnerOrg sets the "owner_org" edge to the Organization entity.
 func (_c *ProjectCreate) SetOwnerOrg(v *Organization) *ProjectCreate {
 	return _c.SetOwnerOrgID(v.ID)
-}
-
-// AddProjectBackendIDs adds the "project_backends" edge to the ProjectBackend entity by IDs.
-func (_c *ProjectCreate) AddProjectBackendIDs(ids ...int) *ProjectCreate {
-	_c.mutation.AddProjectBackendIDs(ids...)
-	return _c
-}
-
-// AddProjectBackends adds the "project_backends" edges to the ProjectBackend entity.
-func (_c *ProjectCreate) AddProjectBackends(v ...*ProjectBackend) *ProjectCreate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _c.AddProjectBackendIDs(ids...)
-}
-
-// AddStageBackendOverrideIDs adds the "stage_backend_overrides" edge to the StageBackendOverride entity by IDs.
-func (_c *ProjectCreate) AddStageBackendOverrideIDs(ids ...int) *ProjectCreate {
-	_c.mutation.AddStageBackendOverrideIDs(ids...)
-	return _c
-}
-
-// AddStageBackendOverrides adds the "stage_backend_overrides" edges to the StageBackendOverride entity.
-func (_c *ProjectCreate) AddStageBackendOverrides(v ...*StageBackendOverride) *ProjectCreate {
-	ids := make([]int, len(v))
-	for i := range v {
-		ids[i] = v[i].ID
-	}
-	return _c.AddStageBackendOverrideIDs(ids...)
 }
 
 // AddGlossaryEntryIDs adds the "glossary_entries" edge to the GlossaryEntry entity by IDs.
@@ -254,6 +224,36 @@ func (_c *ProjectCreate) AddUsageRecords(v ...*UsageRecord) *ProjectCreate {
 	return _c.AddUsageRecordIDs(ids...)
 }
 
+// AddResourceIDs adds the "resources" edge to the Resource entity by IDs.
+func (_c *ProjectCreate) AddResourceIDs(ids ...int) *ProjectCreate {
+	_c.mutation.AddResourceIDs(ids...)
+	return _c
+}
+
+// AddResources adds the "resources" edges to the Resource entity.
+func (_c *ProjectCreate) AddResources(v ...*Resource) *ProjectCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddResourceIDs(ids...)
+}
+
+// AddSyncTaskIDs adds the "sync_tasks" edge to the SyncTask entity by IDs.
+func (_c *ProjectCreate) AddSyncTaskIDs(ids ...int) *ProjectCreate {
+	_c.mutation.AddSyncTaskIDs(ids...)
+	return _c
+}
+
+// AddSyncTasks adds the "sync_tasks" edges to the SyncTask entity.
+func (_c *ProjectCreate) AddSyncTasks(v ...*SyncTask) *ProjectCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddSyncTaskIDs(ids...)
+}
+
 // Mutation returns the ProjectMutation object of the builder.
 func (_c *ProjectCreate) Mutation() *ProjectMutation {
 	return _c.mutation
@@ -297,13 +297,13 @@ func (_c *ProjectCreate) defaults() {
 		v := project.DefaultUpdatedAt()
 		_c.mutation.SetUpdatedAt(v)
 	}
-	if _, ok := _c.mutation.ResourceScope(); !ok {
-		v := project.DefaultResourceScope
-		_c.mutation.SetResourceScope(v)
-	}
 	if _, ok := _c.mutation.Config(); !ok {
 		v := project.DefaultConfig()
 		_c.mutation.SetConfig(v)
+	}
+	if _, ok := _c.mutation.GlossaryEnabled(); !ok {
+		v := project.DefaultGlossaryEnabled
+		_c.mutation.SetGlossaryEnabled(v)
 	}
 	if _, ok := _c.mutation.SourceLang(); !ok {
 		v := project.DefaultSourceLang
@@ -341,11 +341,11 @@ func (_c *ProjectCreate) check() error {
 			return &ValidationError{Name: "owner_org_id", err: fmt.Errorf(`ent: validator failed for field "Project.owner_org_id": %w`, err)}
 		}
 	}
-	if _, ok := _c.mutation.ResourceScope(); !ok {
-		return &ValidationError{Name: "resource_scope", err: errors.New(`ent: missing required field "Project.resource_scope"`)}
-	}
 	if _, ok := _c.mutation.Config(); !ok {
 		return &ValidationError{Name: "config", err: errors.New(`ent: missing required field "Project.config"`)}
+	}
+	if _, ok := _c.mutation.GlossaryEnabled(); !ok {
+		return &ValidationError{Name: "glossary_enabled", err: errors.New(`ent: missing required field "Project.glossary_enabled"`)}
 	}
 	if _, ok := _c.mutation.SourceLang(); !ok {
 		return &ValidationError{Name: "source_lang", err: errors.New(`ent: missing required field "Project.source_lang"`)}
@@ -391,13 +391,13 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 		_spec.SetField(project.FieldName, field.TypeString, value)
 		_node.Name = value
 	}
-	if value, ok := _c.mutation.ResourceScope(); ok {
-		_spec.SetField(project.FieldResourceScope, field.TypeString, value)
-		_node.ResourceScope = value
-	}
 	if value, ok := _c.mutation.Config(); ok {
 		_spec.SetField(project.FieldConfig, field.TypeJSON, value)
 		_node.Config = value
+	}
+	if value, ok := _c.mutation.GlossaryEnabled(); ok {
+		_spec.SetField(project.FieldGlossaryEnabled, field.TypeBool, value)
+		_node.GlossaryEnabled = value
 	}
 	if value, ok := _c.mutation.SourceLang(); ok {
 		_spec.SetField(project.FieldSourceLang, field.TypeString, value)
@@ -439,38 +439,6 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
 		_node.OwnerOrgID = &nodes[0]
-		_spec.Edges = append(_spec.Edges, edge)
-	}
-	if nodes := _c.mutation.ProjectBackendsIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   project.ProjectBackendsTable,
-			Columns: []string{project.ProjectBackendsColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(projectbackend.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
-		_spec.Edges = append(_spec.Edges, edge)
-	}
-	if nodes := _c.mutation.StageBackendOverridesIDs(); len(nodes) > 0 {
-		edge := &sqlgraph.EdgeSpec{
-			Rel:     sqlgraph.O2M,
-			Inverse: false,
-			Table:   project.StageBackendOverridesTable,
-			Columns: []string{project.StageBackendOverridesColumn},
-			Bidi:    false,
-			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(stagebackendoverride.FieldID, field.TypeInt),
-			},
-		}
-		for _, k := range nodes {
-			edge.Target.Nodes = append(edge.Target.Nodes, k)
-		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	if nodes := _c.mutation.GlossaryEntriesIDs(); len(nodes) > 0 {
@@ -546,6 +514,38 @@ func (_c *ProjectCreate) createSpec() (*Project, *sqlgraph.CreateSpec) {
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
 				IDSpec: sqlgraph.NewFieldSpec(usagerecord.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.ResourcesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.ResourcesTable,
+			Columns: []string{project.ResourcesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(resource.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.SyncTasksIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   project.SyncTasksTable,
+			Columns: []string{project.SyncTasksColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(synctask.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

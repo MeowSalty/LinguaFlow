@@ -491,67 +491,21 @@ func HasMembershipsWith(preds ...predicate.OrgMembership) predicate.Organization
 	})
 }
 
-// HasOrgBackends applies the HasEdge predicate on the "org_backends" edge.
-func HasOrgBackends() predicate.Organization {
+// HasBackends applies the HasEdge predicate on the "backends" edge.
+func HasBackends() predicate.Organization {
 	return predicate.Organization(func(s *sql.Selector) {
 		step := sqlgraph.NewStep(
 			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, OrgBackendsTable, OrgBackendsColumn),
+			sqlgraph.Edge(sqlgraph.O2M, false, BackendsTable, BackendsColumn),
 		)
 		sqlgraph.HasNeighbors(s, step)
 	})
 }
 
-// HasOrgBackendsWith applies the HasEdge predicate on the "org_backends" edge with a given conditions (other predicates).
-func HasOrgBackendsWith(preds ...predicate.OrgBackend) predicate.Organization {
+// HasBackendsWith applies the HasEdge predicate on the "backends" edge with a given conditions (other predicates).
+func HasBackendsWith(preds ...predicate.Backend) predicate.Organization {
 	return predicate.Organization(func(s *sql.Selector) {
-		step := newOrgBackendsStep()
-		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
-			for _, p := range preds {
-				p(s)
-			}
-		})
-	})
-}
-
-// HasGlossaryEntries applies the HasEdge predicate on the "glossary_entries" edge.
-func HasGlossaryEntries() predicate.Organization {
-	return predicate.Organization(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, GlossaryEntriesTable, GlossaryEntriesColumn),
-		)
-		sqlgraph.HasNeighbors(s, step)
-	})
-}
-
-// HasGlossaryEntriesWith applies the HasEdge predicate on the "glossary_entries" edge with a given conditions (other predicates).
-func HasGlossaryEntriesWith(preds ...predicate.GlossaryEntry) predicate.Organization {
-	return predicate.Organization(func(s *sql.Selector) {
-		step := newGlossaryEntriesStep()
-		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
-			for _, p := range preds {
-				p(s)
-			}
-		})
-	})
-}
-
-// HasTmEntries applies the HasEdge predicate on the "tm_entries" edge.
-func HasTmEntries() predicate.Organization {
-	return predicate.Organization(func(s *sql.Selector) {
-		step := sqlgraph.NewStep(
-			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, TmEntriesTable, TmEntriesColumn),
-		)
-		sqlgraph.HasNeighbors(s, step)
-	})
-}
-
-// HasTmEntriesWith applies the HasEdge predicate on the "tm_entries" edge with a given conditions (other predicates).
-func HasTmEntriesWith(preds ...predicate.TMEntry) predicate.Organization {
-	return predicate.Organization(func(s *sql.Selector) {
-		step := newTmEntriesStep()
+		step := newBackendsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)
@@ -598,6 +552,121 @@ func HasUsageRecords() predicate.Organization {
 func HasUsageRecordsWith(preds ...predicate.UsageRecord) predicate.Organization {
 	return predicate.Organization(func(s *sql.Selector) {
 		step := newUsageRecordsStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasTranslationPromptTemplates applies the HasEdge predicate on the "translation_prompt_templates" edge.
+func HasTranslationPromptTemplates() predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, TranslationPromptTemplatesTable, TranslationPromptTemplatesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasTranslationPromptTemplatesWith applies the HasEdge predicate on the "translation_prompt_templates" edge with a given conditions (other predicates).
+func HasTranslationPromptTemplatesWith(preds ...predicate.TranslationPromptTemplate) predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := newTranslationPromptTemplatesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasBootstrapPromptTemplates applies the HasEdge predicate on the "bootstrap_prompt_templates" edge.
+func HasBootstrapPromptTemplates() predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, BootstrapPromptTemplatesTable, BootstrapPromptTemplatesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasBootstrapPromptTemplatesWith applies the HasEdge predicate on the "bootstrap_prompt_templates" edge with a given conditions (other predicates).
+func HasBootstrapPromptTemplatesWith(preds ...predicate.BootstrapPromptTemplate) predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := newBootstrapPromptTemplatesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasPrunePromptTemplates applies the HasEdge predicate on the "prune_prompt_templates" edge.
+func HasPrunePromptTemplates() predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, PrunePromptTemplatesTable, PrunePromptTemplatesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasPrunePromptTemplatesWith applies the HasEdge predicate on the "prune_prompt_templates" edge with a given conditions (other predicates).
+func HasPrunePromptTemplatesWith(preds ...predicate.PrunePromptTemplate) predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := newPrunePromptTemplatesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasExecutionProfiles applies the HasEdge predicate on the "execution_profiles" edge.
+func HasExecutionProfiles() predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, ExecutionProfilesTable, ExecutionProfilesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasExecutionProfilesWith applies the HasEdge predicate on the "execution_profiles" edge with a given conditions (other predicates).
+func HasExecutionProfilesWith(preds ...predicate.ExecutionProfile) predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := newExecutionProfilesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasExecutionPlanTemplates applies the HasEdge predicate on the "execution_plan_templates" edge.
+func HasExecutionPlanTemplates() predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, ExecutionPlanTemplatesTable, ExecutionPlanTemplatesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasExecutionPlanTemplatesWith applies the HasEdge predicate on the "execution_plan_templates" edge with a given conditions (other predicates).
+func HasExecutionPlanTemplatesWith(preds ...predicate.ExecutionPlanTemplate) predicate.Organization {
+	return predicate.Organization(func(s *sql.Selector) {
+		step := newExecutionPlanTemplatesStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

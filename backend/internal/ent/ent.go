@@ -13,21 +13,27 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgbackend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/projectbackend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/pruneprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/stagebackendoverride"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/subjob"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/userbackend"
 )
 
 // ent aliases to avoid import conflicts in user's code.
@@ -88,22 +94,28 @@ var (
 func checkColumn(t, c string) error {
 	initCheck.Do(func() {
 		columnCheck = sql.NewColumnCheck(map[string]func(string) bool{
-			activitylog.Table:          activitylog.ValidColumn,
-			glossaryentry.Table:        glossaryentry.ValidColumn,
-			job.Table:                  job.ValidColumn,
-			orgbackend.Table:           orgbackend.ValidColumn,
-			orgmembership.Table:        orgmembership.ValidColumn,
-			organization.Table:         organization.ValidColumn,
-			project.Table:              project.ValidColumn,
-			projectbackend.Table:       projectbackend.ValidColumn,
-			refreshtoken.Table:         refreshtoken.ValidColumn,
-			segment.Table:              segment.ValidColumn,
-			stagebackendoverride.Table: stagebackendoverride.ValidColumn,
-			subjob.Table:               subjob.ValidColumn,
-			tmentry.Table:              tmentry.ValidColumn,
-			usagerecord.Table:          usagerecord.ValidColumn,
-			user.Table:                 user.ValidColumn,
-			userbackend.Table:          userbackend.ValidColumn,
+			activitylog.Table:               activitylog.ValidColumn,
+			backend.Table:                   backend.ValidColumn,
+			bootstrapprompttemplate.Table:   bootstrapprompttemplate.ValidColumn,
+			executionplantemplate.Table:     executionplantemplate.ValidColumn,
+			executionprofile.Table:          executionprofile.ValidColumn,
+			glossaryentry.Table:             glossaryentry.ValidColumn,
+			job.Table:                       job.ValidColumn,
+			jobresource.Table:               jobresource.ValidColumn,
+			orgmembership.Table:             orgmembership.ValidColumn,
+			organization.Table:              organization.ValidColumn,
+			project.Table:                   project.ValidColumn,
+			pruneprompttemplate.Table:       pruneprompttemplate.ValidColumn,
+			refreshtoken.Table:              refreshtoken.ValidColumn,
+			resource.Table:                  resource.ValidColumn,
+			sseevent.Table:                  sseevent.ValidColumn,
+			segment.Table:                   segment.ValidColumn,
+			synctask.Table:                  synctask.ValidColumn,
+			systemsetting.Table:             systemsetting.ValidColumn,
+			tmentry.Table:                   tmentry.ValidColumn,
+			translationprompttemplate.Table: translationprompttemplate.ValidColumn,
+			usagerecord.Table:               usagerecord.ValidColumn,
+			user.Table:                      user.ValidColumn,
 		})
 	})
 	return columnCheck(t, c)
