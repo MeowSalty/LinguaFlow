@@ -108,6 +108,11 @@ const templateNavOptions = computed<DropdownOption[]>(() => [
     icon: () => h(IconifyIcon, { icon: 'carbon:text-mining', class: 'text-base' }),
   },
   {
+    label: t('nav.prunePromptTemplates'),
+    key: '/prune-prompt-templates',
+    icon: () => h(IconifyIcon, { icon: 'carbon:clean', class: 'text-base' }),
+  },
+  {
     label: t('nav.executionProfiles'),
     key: '/execution-profiles',
     icon: () => h(IconifyIcon, { icon: 'carbon:flow', class: 'text-base' }),
@@ -125,6 +130,7 @@ const isTemplateRoute = computed(() =>
   [
     '/prompt-templates',
     '/bootstrap-prompt-templates',
+    '/prune-prompt-templates',
     '/execution-profiles',
     '/execution-plan-templates',
   ].some((r) => route.path.startsWith(r)),

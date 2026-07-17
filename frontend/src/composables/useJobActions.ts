@@ -11,14 +11,14 @@ import { t } from '@/i18n'
 type Segment = ApiSchemas['Segment']
 type Job = ApiSchemas['Job']
 type CreateJobRequest = ApiSchemas['CreateJobRequest']
-type OverwriteMode = CreateJobRequest['overwrite_mode']
+type SegmentFilter = NonNullable<CreateJobRequest['segment_filter']>
 
 export type JobTargetMode = 'resources' | 'segments'
 
 export interface JobFormModel {
   execution_plan_id: number | null
   auto_approve: boolean
-  overwrite_mode: OverwriteMode
+  segment_filter: SegmentFilter | undefined
 }
 
 export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () => Promise<void>) {
@@ -37,7 +37,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
   const jobForm = reactive<JobFormModel>({
     execution_plan_id: null,
     auto_approve: false,
-    overwrite_mode: 'skip_translated',
+    segment_filter: undefined,
   })
 
   // ── 计算属性 ──
@@ -85,6 +85,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobTargetResourceIds.value = [...workspace.selectedResourceIds]
     jobTargetSegmentIds.value = []
     jobForm.execution_plan_id = null
+    jobForm.segment_filter = undefined
     jobDrawerVisible.value = true
   }
 
@@ -105,6 +106,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
       jobTargetGroupKeys: [...jobTargetGroupKeys.value],
     })
     jobForm.execution_plan_id = null
+    jobForm.segment_filter = undefined
     jobDrawerVisible.value = true
   }
 
@@ -118,6 +120,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobTargetResourceIds.value = [workspace.activeResourceId]
     jobTargetSegmentIds.value = segment ? [segment.id] : workspace.segments.map((item) => item.id)
     jobForm.execution_plan_id = null
+    jobForm.segment_filter = undefined
     jobDrawerVisible.value = true
   }
 
@@ -136,6 +139,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobTargetResourceIds.value = [workspace.activeResourceId]
     jobTargetSegmentIds.value = segmentIds
     jobForm.execution_plan_id = null
+    jobForm.segment_filter = undefined
     jobDrawerVisible.value = true
   }
 
@@ -146,7 +150,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobTargetGroupKeys.value = []
     jobForm.execution_plan_id = null
     jobForm.auto_approve = false
-    jobForm.overwrite_mode = 'skip_translated'
+    jobForm.segment_filter = undefined
   }
 
   const submitJob = async (): Promise<void> => {
@@ -158,7 +162,10 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
       execution_plan_id: jobForm.execution_plan_id,
       resource_ids: jobTargetResourceIds.value,
       auto_approve: jobForm.auto_approve,
-      overwrite_mode: jobForm.overwrite_mode,
+    }
+
+    if (jobForm.segment_filter) {
+      payload.segment_filter = jobForm.segment_filter
     }
 
     if (jobTargetGroupKeys.value.length > 0) {

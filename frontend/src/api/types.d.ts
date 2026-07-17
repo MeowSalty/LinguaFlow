@@ -842,6 +842,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/projects/{projectId}/glossary/prune": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 预览术语表精简建议
+         * @description 调用 LLM 分析项目现有术语表，返回精简建议（删除/更新分类）。
+         *     此为无状态同步 API，不修改任何数据。
+         *     响应时间取决于 LLM 后端，客户端断开连接时自动取消 LLM 调用。
+         */
+        post: operations["PreviewGlossaryPrune"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/projects/{projectId}/glossary/prune/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 应用术语表精简变更
+         * @description 应用用户从 Preview 中选中的变更。
+         *     逐条处理，单条失败不中断其余，返回 deleted/updated/failed 计数。
+         */
+        post: operations["ApplyGlossaryPrune"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/projects/{projectId}/jobs": {
         parameters: {
             query?: never;
@@ -1031,6 +1078,45 @@ export interface paths {
         post?: never;
         /** 删除术语抽取提示词模板 */
         delete: operations["DeleteBootstrapPromptTemplate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/prune-prompt-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出当前用户的术语精简提示词模板 */
+        get: operations["ListPrunePromptTemplates"];
+        put?: never;
+        /** 创建术语精简提示词模板 */
+        post: operations["CreatePrunePromptTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/prune-prompt-templates/{prunePromptTemplateId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                prunePromptTemplateId: components["parameters"]["PrunePromptTemplateId"];
+            };
+            cookie?: never;
+        };
+        /** 获取术语精简提示词模板详情 */
+        get: operations["GetPrunePromptTemplate"];
+        /** 更新术语精简提示词模板 */
+        put: operations["UpdatePrunePromptTemplate"];
+        post?: never;
+        /** 删除术语精简提示词模板 */
+        delete: operations["DeletePrunePromptTemplate"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1490,20 +1576,19 @@ export interface components {
              */
             segment_group_keys?: string[];
             /**
+             * @description 覆盖执行模板中翻译轮次的段落过滤策略（仅对翻译轮次生效）。
+             *     - pending_only: 仅处理 pending 和 rejected 状态的段落
+             *     - skip_approved: 处理除 approved 外的所有状态
+             *     - all: 处理所有状态的段落
+             *     省略时使用执行模板中的配置。
+             * @enum {string}
+             */
+            segment_filter?: "pending_only" | "skip_approved" | "all";
+            /**
              * @description 翻译完成后是否自动审批通过所有段落
              * @default false
              */
             auto_approve: boolean;
-            /**
-             * @description 段落覆盖策略。
-             *     - skip_translated: 跳过已有翻译的段落（仅翻译 pending/rejected）
-             *     - overwrite_unapproved: 覆盖所有非 approved 的段落（包括已翻译、已编辑和已拒绝的）
-             *     - overwrite_all: 覆盖所有段落，包括已审核通过的
-             *     对 segment_ids 选择方式无效（用户已精确指定段落）。
-             * @default skip_translated
-             * @enum {string}
-             */
-            overwrite_mode: "skip_translated" | "overwrite_unapproved" | "overwrite_all";
             execution_config?: {
                 [key: string]: unknown;
             };
@@ -1780,6 +1865,73 @@ export interface components {
             /** @enum {string} */
             status: "cancelled";
         };
+        GlossaryPruneRequest: {
+            /** @description 用于精简分析的后端 ID */
+            backend_id: number;
+            /** @description 精简提示词模板 ID，省略或为 0 时使用内置默认模板 */
+            template_id?: number;
+        };
+        GlossaryPruneSuggestion: {
+            entry_id: number;
+            /** @enum {string} */
+            action: "delete" | "update";
+            source: string;
+            old_target: string;
+            new_target: string;
+            old_notes: string;
+            new_notes: string;
+            target_changed: boolean;
+            notes_changed: boolean;
+        };
+        GlossaryPrunePreview: {
+            suggestions: components["schemas"]["GlossaryPruneSuggestion"][];
+            total: number;
+            to_delete: number;
+            to_update: number;
+            to_keep: number;
+            diagnostics: components["schemas"]["GlossaryPruneDiagnostics"];
+        };
+        GlossaryPruneDiagnostics: {
+            backend_name?: string;
+            template_name?: string;
+            duration_ms?: number;
+            prompt_tokens?: number;
+            completion_tokens?: number;
+            /** @description 发送给 LLM 的 system prompt 内容（截断至 128KB）。 */
+            system_prompt?: string;
+            /** @description 发送给 LLM 的 user message 内容（截断至 128KB）。 */
+            user_message?: string;
+            system_truncated?: boolean;
+            user_truncated?: boolean;
+            system_length?: number;
+            user_length?: number;
+            /** @description LLM 返回的原始响应内容（截断至 128KB）。 */
+            received_content?: string;
+            received_truncated?: boolean;
+            received_length?: number;
+            entry_count?: number;
+            parsed_count?: number;
+            repaired_ops?: string[];
+            error_type?: string;
+            error_message?: string;
+            http_status?: number;
+        };
+        GlossaryPruneApplyRequest: {
+            changes: {
+                entry_id: number;
+                /** @enum {string} */
+                action: "delete" | "update";
+                /** @description 新 target（仅 action=update 时使用） */
+                target?: string;
+                /** @description 新 notes（仅 action=update 时使用） */
+                notes?: string;
+            }[];
+        };
+        GlossaryPruneApplyResult: {
+            deleted: number;
+            updated: number;
+            failed: number;
+        };
         TranslationPromptTemplate: {
             id: number;
             name: string;
@@ -1836,6 +1988,35 @@ export interface components {
             name?: string;
             description?: string;
             /** @description 术语抽取提示词内容。 */
+            content?: string;
+        };
+        PrunePromptTemplate: {
+            id: number;
+            name: string;
+            description: string;
+            scope: components["schemas"]["PrunePromptTemplateScope"];
+            owner_user_id?: number;
+            owner_org_id?: number;
+            /** @description 术语精简提示词内容。 */
+            content?: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        PrunePromptTemplateListResponse: {
+            items: components["schemas"]["PrunePromptTemplate"][];
+        };
+        CreatePrunePromptTemplateRequest: {
+            name: string;
+            description?: string;
+            /** @description 术语精简提示词内容。 */
+            content?: string;
+        };
+        UpdatePrunePromptTemplateRequest: {
+            name?: string;
+            description?: string;
+            /** @description 术语精简提示词内容。 */
             content?: string;
         };
         ExecutionProfile: {
@@ -2128,6 +2309,17 @@ export interface components {
             /** @description 注音对齐使用的后端 ID；为空或 0 时使用翻译主后端 */
             backend_id?: number;
         };
+        /** @description 翻译轮次段落过滤配置，决定处理哪些翻译状态的段落。 */
+        TranslateSegmentFilterConfig: {
+            /**
+             * @description - pending_only: 仅处理 pending 和 rejected 状态的段落（默认，等同旧 skip_translated）
+             *     - skip_approved: 处理除 approved 外的所有状态（等同旧 overwrite_unapproved）
+             *     - all: 处理所有状态的段落（等同旧 overwrite_all）
+             * @default pending_only
+             * @enum {string}
+             */
+            status_filter: "pending_only" | "skip_approved" | "all";
+        };
         RetryConfig: {
             /** @default 3 */
             max_attempts: number;
@@ -2146,6 +2338,8 @@ export interface components {
             /** @description 字词数上限；0=不限制，与 batch_size 至少填一项 */
             max_words_per_batch?: number;
             fallback_shrink?: number;
+            /** @description 段落过滤配置；省略时默认 pending_only */
+            segment_filter?: components["schemas"]["TranslateSegmentFilterConfig"];
             retry?: components["schemas"]["RetryConfig"];
         };
         ExtractRoundConfig: {
@@ -2188,6 +2382,8 @@ export interface components {
         TranslationPromptTemplateScope: "user" | "org" | "system";
         /** @enum {string} */
         BootstrapPromptTemplateScope: "user" | "org" | "system";
+        /** @enum {string} */
+        PrunePromptTemplateScope: "user" | "org" | "system";
         /** @enum {string} */
         ExecutionProfileScope: "user" | "org" | "system";
         ProfileProtectConfig: {
@@ -2325,6 +2521,7 @@ export interface components {
         EntryId: number;
         TranslationPromptTemplateId: number;
         BootstrapPromptTemplateId: number;
+        PrunePromptTemplateId: number;
         ExecutionProfileId: number;
         ExecutionPlanTemplateId: number;
         SegmentId: number;
@@ -3833,6 +4030,60 @@ export interface operations {
             default: components["responses"]["Problem"];
         };
     };
+    PreviewGlossaryPrune: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GlossaryPruneRequest"];
+            };
+        };
+        responses: {
+            /** @description 精简建议预览 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlossaryPrunePreview"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ApplyGlossaryPrune: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                projectId: components["parameters"]["ProjectId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["GlossaryPruneApplyRequest"];
+            };
+        };
+        responses: {
+            /** @description 应用结果 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["GlossaryPruneApplyResult"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
     ListJobs: {
         parameters: {
             query?: {
@@ -4293,6 +4544,123 @@ export interface operations {
             header?: never;
             path: {
                 bootstrapPromptTemplateId: components["parameters"]["BootstrapPromptTemplateId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 删除成功 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListPrunePromptTemplates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 术语精简提示词模板列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrunePromptTemplateListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreatePrunePromptTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreatePrunePromptTemplateRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrunePromptTemplate"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetPrunePromptTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                prunePromptTemplateId: components["parameters"]["PrunePromptTemplateId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 术语精简提示词模板详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrunePromptTemplate"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdatePrunePromptTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                prunePromptTemplateId: components["parameters"]["PrunePromptTemplateId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdatePrunePromptTemplateRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PrunePromptTemplate"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeletePrunePromptTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                prunePromptTemplateId: components["parameters"]["PrunePromptTemplateId"];
             };
             cookie?: never;
         };

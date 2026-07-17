@@ -14,6 +14,10 @@ type SyncExecuteRequest = ApiSchemas['GlossarySyncExecuteRequest']
 type SyncExecuteResponse = ApiSchemas['GlossarySyncExecuteResponse']
 type SyncTaskStatusResponse = ApiSchemas['GlossarySyncTaskStatusResponse']
 type SyncTaskCancelResponse = ApiSchemas['GlossarySyncTaskCancelResponse']
+type GlossaryPruneRequest = ApiSchemas['GlossaryPruneRequest']
+type GlossaryPrunePreview = ApiSchemas['GlossaryPrunePreview']
+type GlossaryPruneApplyRequest = ApiSchemas['GlossaryPruneApplyRequest']
+type GlossaryPruneApplyResult = ApiSchemas['GlossaryPruneApplyResult']
 
 export const fetchGlossaryEntries = async (
   projectId: number,
@@ -206,6 +210,43 @@ export const cancelGlossarySyncTask = async (
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.glossarySyncCancelFailed'), error, response)
+  }
+
+  return data
+}
+
+export const previewGlossaryPrune = async (
+  projectId: number,
+  payload: GlossaryPruneRequest,
+  client: ApiClient = apiClient,
+): Promise<GlossaryPrunePreview> => {
+  const { data, error, response } = await client.POST('/projects/{projectId}/glossary/prune', {
+    params: { path: { projectId } },
+    body: payload,
+  })
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.glossaryPrunePreviewFailed'), error, response)
+  }
+
+  return data
+}
+
+export const applyGlossaryPrune = async (
+  projectId: number,
+  payload: GlossaryPruneApplyRequest,
+  client: ApiClient = apiClient,
+): Promise<GlossaryPruneApplyResult> => {
+  const { data, error, response } = await client.POST(
+    '/projects/{projectId}/glossary/prune/apply',
+    {
+      params: { path: { projectId } },
+      body: payload,
+    },
+  )
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.glossaryPruneApplyFailed'), error, response)
   }
 
   return data

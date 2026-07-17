@@ -136,6 +136,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/prune-prompt-templates': RouteRecordInfo<
+      '/prune-prompt-templates',
+      '/prune-prompt-templates',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/register': RouteRecordInfo<
       '/register',
       '/register',
@@ -251,6 +258,12 @@ declare module 'vue-router/auto-routes' {
     'src/pages/prompt-templates.vue': {
       routes:
         | '/prompt-templates'
+      views:
+        | never
+    }
+    'src/pages/prune-prompt-templates.vue': {
+      routes:
+        | '/prune-prompt-templates'
       views:
         | never
     }
