@@ -77,11 +77,22 @@ type Data struct {
 
 	InlineBootstrap   bool // 是否在 system prompt 中追加 inline 抽取指令（mode=inline 时由 translate stage 设为 true）
 	MaxBootstrapTerms int  // inline 模式每批返回上限；仅在 InlineBootstrap=true 时有效
-	StrictSchema      bool // 当后端使用 json_schema 强制输出时为 true；模板据此精简协议描述以节省 token
+	StrictSchema      bool // 后端以 json_schema 强制结构时为 true；模板可省略完整 JSON 形状示例
 	TextMode          bool // 纯文本模式：user message 使用纯文本编号格式而非 JSON envelope
 
 	RubyAnnotations map[string][]RubyAnnotation // segment ID → 标注列表
 	RubyMode        string                      // "json" | "section" | ""
+}
+
+// StrictSchemaFromResponseMode 根据后端 options.response_format 判断是否由 API 强制 JSON Schema。
+// 空字符串沿用各 backend 默认（json_schema）；json_object/text/none 为 false。
+func StrictSchemaFromResponseMode(mode string) bool {
+	switch mode {
+	case "", "json_schema":
+		return true
+	default:
+		return false
+	}
 }
 
 // HasRuby 判断当前数据中是否存在 Ruby 标注信息。

@@ -170,7 +170,8 @@ func (r *JobRunner) buildExtractRound(rs service.JobRoundSnapshot, b backend.Bac
 			Backoff:     time.Duration(e.Retry.BackoffMs) * time.Millisecond,
 			Jitter:      e.Retry.Jitter,
 		},
-		Mode: pipeline.RoundModeExtract,
+		Mode:         pipeline.RoundModeExtract,
+		ResponseMode: responseModeFromBackendOptions(rs.Backend.Options),
 
 		ExtractRenderer:             renderer,
 		ExtractMaxTermsPer1000Chars: e.MaxTermsPer1000Chars,

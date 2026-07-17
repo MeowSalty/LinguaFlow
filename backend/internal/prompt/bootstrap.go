@@ -11,11 +11,13 @@ import (
 
 // BootstrapData 是 bootstrap stage 渲染时的数据模型。
 type BootstrapData struct {
-	SourceLang string
-	TargetLang string
-	Texts      []string
-	Existing   []string
-	MaxTerms   int
+	SourceLang   string
+	TargetLang   string
+	Texts        []string
+	Existing     []string
+	MaxTerms     int
+	TextMode     bool // 纯文本模式：user message 使用纯文本格式而非 JSON envelope
+	StrictSchema bool // 后端以 json_schema 强制结构时为 true；模板可省略完整 JSON 形状示例
 }
 
 // BootstrapRenderer 持有已编译的 bootstrap system 模板。user 由 Render 直接 JSON 序列化。
@@ -45,7 +47,7 @@ type bootstrapEnvelope struct {
 	Texts      []string `json:"texts"`
 }
 
-// Render 返回 (system, user, err)。user 永远是合法 JSON。
+// Render 返回 (system, user, err)。TextMode 时 user 为纯文本格式，否则为 JSON。
 func (r *BootstrapRenderer) Render(d BootstrapData) (string, string, error) {
 	if d.MaxTerms < 1 {
 		d.MaxTerms = 20
@@ -53,6 +55,9 @@ func (r *BootstrapRenderer) Render(d BootstrapData) (string, string, error) {
 	var sysBuf bytes.Buffer
 	if err := r.system.Execute(&sysBuf, d); err != nil {
 		return "", "", fmt.Errorf("prompt: execute bootstrap system: %w", err)
+	}
+	if d.TextMode {
+		return sysBuf.String(), buildBootstrapTextUser(d), nil
 	}
 	env := bootstrapEnvelope{
 		Task:       "extract_terms",
@@ -66,6 +71,50 @@ func (r *BootstrapRenderer) Render(d BootstrapData) (string, string, error) {
 		return "", "", fmt.Errorf("prompt: marshal bootstrap envelope: %w", err)
 	}
 	return sysBuf.String(), string(userBytes), nil
+}
+
+// buildBootstrapTextUser 构建 text 模式的 bootstrap user message。
+//
+//	source_lang: ...
+//	target_lang: ...
+//	max_terms: N
+//
+//	[existing]
+//	term1
+//	...
+//
+//	[texts]
+//	---
+//	<text0>
+//	---
+//	<text1>
+func buildBootstrapTextUser(d BootstrapData) string {
+	var sb strings.Builder
+	sb.WriteString("source_lang: ")
+	sb.WriteString(d.SourceLang)
+	sb.WriteByte('\n')
+	sb.WriteString("target_lang: ")
+	sb.WriteString(d.TargetLang)
+	sb.WriteByte('\n')
+	sb.WriteString("max_terms: ")
+	sb.WriteString(fmt.Sprintf("%d", d.MaxTerms))
+	sb.WriteByte('\n')
+
+	if len(d.Existing) > 0 {
+		sb.WriteString("\n[existing]\n")
+		for _, e := range d.Existing {
+			sb.WriteString(e)
+			sb.WriteByte('\n')
+		}
+	}
+
+	sb.WriteString("\n[texts]\n")
+	for _, t := range d.Texts {
+		sb.WriteString("---\n")
+		sb.WriteString(t)
+		sb.WriteByte('\n')
+	}
+	return sb.String()
 }
 
 // BootstrapEntry 是 LLM 抽取出的一条候选术语。与 glossary.Entry 解耦，避免循环依赖。

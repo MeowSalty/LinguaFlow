@@ -124,6 +124,7 @@ func buildRoundConfigs(in []Round, cfg *Config) []RoundConfig {
 				MinSourceLen:         r.ExtractMinSourceLen,
 				MaxWordsPerBatch:     r.ExtractMaxWordsPerBatch,
 				Repair:               r.ExtractRepair,
+				ResponseMode:         r.ResponseMode,
 			}
 
 		default:
@@ -299,6 +300,7 @@ func buildExtractPipelineRound(
 		MaxTermsPer1000Chars: e.MaxTermsPer1000Chars,
 		MinSourceLen:         e.MinSourceLen,
 		Repair:               e.Repair,
+		ResponseMode:         e.ResponseMode,
 		Logger:               logger,
 		Reporter:             reporter,
 	}

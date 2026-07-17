@@ -120,3 +120,93 @@ func TestParseBootstrapResponse_NoJSON(t *testing.T) {
 		t.Fatal("expected error")
 	}
 }
+
+func TestBootstrapRenderer_TextModeUserFormat(t *testing.T) {
+	r, err := NewBootstrapRenderer(defaultTestBootstrapTmpl)
+	if err != nil {
+		t.Fatalf("renderer: %v", err)
+	}
+	sys, usr, err := r.Render(BootstrapData{
+		SourceLang: "en", TargetLang: "zh",
+		Texts:    []string{"Call Gemini API", "Use OAuth2"},
+		Existing: []string{"already-have"},
+		MaxTerms: 5,
+		TextMode: true,
+	})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if !strings.Contains(sys, "extract domain-specific terms") {
+		t.Errorf("system prompt missing core instruction:\n%s", sys)
+	}
+	// user 应为纯文本，非 JSON
+	if strings.HasPrefix(strings.TrimSpace(usr), "{") {
+		t.Fatalf("text mode user should not be JSON:\n%s", usr)
+	}
+	if !strings.Contains(usr, "source_lang: en") {
+		t.Errorf("missing source_lang:\n%s", usr)
+	}
+	if !strings.Contains(usr, "target_lang: zh") {
+		t.Errorf("missing target_lang:\n%s", usr)
+	}
+	if !strings.Contains(usr, "max_terms: 5") {
+		t.Errorf("missing max_terms:\n%s", usr)
+	}
+	if !strings.Contains(usr, "[existing]\nalready-have") {
+		t.Errorf("missing existing section:\n%s", usr)
+	}
+	if !strings.Contains(usr, "[texts]\n---\nCall Gemini API\n---\nUse OAuth2") {
+		t.Errorf("missing texts section:\n%s", usr)
+	}
+}
+
+func TestBootstrapRenderer_StrictSchemaOmitsShape(t *testing.T) {
+	const tmpl = `协议
+{{- if not .StrictSchema}}
+SHAPE:{"glossary":[]}
+{{- end}}
+`
+	r, err := NewBootstrapRenderer(tmpl)
+	if err != nil {
+		t.Fatalf("renderer: %v", err)
+	}
+	sysStrict, _, err := r.Render(BootstrapData{
+		SourceLang: "en", TargetLang: "zh", Texts: []string{"x"}, MaxTerms: 3, StrictSchema: true,
+	})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if strings.Contains(sysStrict, "SHAPE:") {
+		t.Errorf("strict should omit shape:\n%s", sysStrict)
+	}
+	sysLoose, _, err := r.Render(BootstrapData{
+		SourceLang: "en", TargetLang: "zh", Texts: []string{"x"}, MaxTerms: 3, StrictSchema: false,
+	})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if !strings.Contains(sysLoose, "SHAPE:") {
+		t.Errorf("loose should include shape:\n%s", sysLoose)
+	}
+}
+
+func TestBootstrapRenderer_JSONPathUnchanged(t *testing.T) {
+	r, err := NewBootstrapRenderer(defaultTestBootstrapTmpl)
+	if err != nil {
+		t.Fatalf("renderer: %v", err)
+	}
+	_, usr, err := r.Render(BootstrapData{
+		SourceLang: "en", TargetLang: "zh",
+		Texts: []string{"hello"},
+	})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	var env map[string]any
+	if err := json.Unmarshal([]byte(usr), &env); err != nil {
+		t.Fatalf("json path should produce JSON: %v\n%s", err, usr)
+	}
+	if env["task"] != "extract_terms" {
+		t.Errorf("task = %v", env["task"])
+	}
+}

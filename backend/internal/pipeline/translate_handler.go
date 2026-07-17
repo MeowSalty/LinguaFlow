@@ -442,7 +442,7 @@ func (h *TranslateHandler) buildRequest(
 		Vars:              doc.Vars,
 		InlineBootstrap:   h.InlineBootstrap,
 		MaxBootstrapTerms: h.calcMaxBootstrapTerms(batchSources),
-		StrictSchema:      !isTextMode,
+		StrictSchema:      prompt.StrictSchemaFromResponseMode(h.ResponseMode),
 		TextMode:          isTextMode,
 		RubyAnnotations:   rubyAnns,
 		RubyMode:          h.RubyMode,
