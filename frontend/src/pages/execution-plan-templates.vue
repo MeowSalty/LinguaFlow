@@ -196,7 +196,6 @@ const buildPayload = (): CreateRequest => {
     rounds: formModel.rounds.map((round) => {
       const base = {
         mode: round.mode,
-        name: round.name?.trim() || undefined,
         backend_id: round.backend_id,
         concurrency: round.concurrency,
       }
@@ -219,6 +218,7 @@ const buildPayload = (): CreateRequest => {
           extract: {
             template_id: round.extract.template_id,
             batch_size: round.extract.batch_size,
+            max_words_per_batch: round.extract.max_words_per_batch,
             max_terms_per_1000_chars: round.extract.max_terms_per_1000_chars,
             min_source_len: round.extract.min_source_len,
           },
@@ -499,19 +499,12 @@ watch(
                   {{ idx + 1 }}
                 </span>
                 <span class="truncate">
-                  {{ round.name || `round-${idx + 1}` }}
-                </span>
-                <NTag
-                  size="tiny"
-                  :type="round.mode === 'translate' ? 'info' : 'warning'"
-                  :bordered="false"
-                >
                   {{
                     round.mode === 'translate'
                       ? t('executionPlanEditor.round.modeTranslate')
                       : t('executionPlanEditor.round.modeExtract')
                   }}
-                </NTag>
+                </span>
               </div>
               <div v-if="item.rounds.length > 3" class="text-xs text-lf-text-subtle">
                 +{{ item.rounds.length - 3 }} {{ t('executionPlanTemplates.card.moreRounds') }}

@@ -6,7 +6,6 @@ import {
   NCollapseItem,
   NGrid,
   NGi,
-  NInput,
   NInputNumber,
   NSelect,
   NSwitch,
@@ -42,8 +41,10 @@ const DEFAULT_TRANSLATE: TranslateRoundConfig = {
 const DEFAULT_EXTRACT: ExtractRoundConfig = {
   template_id: 0,
   batch_size: 20,
+  max_words_per_batch: 0,
   max_terms_per_1000_chars: 25.0,
   min_source_len: 2,
+  retry: { ...DEFAULT_RETRY },
 }
 
 const DEFAULT_ROUND: RoundModel = {
@@ -85,9 +86,15 @@ function mergeExtract(source?: Partial<ExtractRoundConfig>): ExtractRoundConfig 
   return {
     template_id: source.template_id ?? DEFAULT_EXTRACT.template_id,
     batch_size: source.batch_size ?? DEFAULT_EXTRACT.batch_size,
+    max_words_per_batch: source.max_words_per_batch ?? DEFAULT_EXTRACT.max_words_per_batch,
     max_terms_per_1000_chars:
       source.max_terms_per_1000_chars ?? DEFAULT_EXTRACT.max_terms_per_1000_chars,
     min_source_len: source.min_source_len ?? DEFAULT_EXTRACT.min_source_len,
+    retry: {
+      max_attempts: source.retry?.max_attempts ?? DEFAULT_RETRY.max_attempts,
+      backoff_ms: source.retry?.backoff_ms ?? DEFAULT_RETRY.backoff_ms,
+      jitter: source.retry?.jitter ?? DEFAULT_RETRY.jitter,
+    },
   }
 }
 
@@ -96,11 +103,26 @@ function mergeRound(source?: Partial<ExecutionRoundConfig>): RoundModel {
   const mode = source.mode ?? 'translate'
   return {
     mode,
-    name: source.name,
     backend_id: source.backend_id ?? DEFAULT_ROUND.backend_id,
     concurrency: source.concurrency ?? DEFAULT_ROUND.concurrency,
     translate: mode === 'translate' ? mergeTranslate(source.translate) : undefined,
     extract: mode === 'extract' ? mergeExtract(source.extract) : undefined,
+  }
+}
+
+function isNoBatch(batchSize?: number, maxWords?: number): boolean {
+  return (!batchSize || batchSize === 0) && (!maxWords || maxWords === 0)
+}
+
+function setNoBatch(
+  target: { batch_size?: number; max_words_per_batch?: number },
+  noBatch: boolean,
+): void {
+  if (noBatch) {
+    target.batch_size = 0
+    if ('max_words_per_batch' in target) target.max_words_per_batch = 0
+  } else {
+    target.batch_size = target.batch_size === 0 ? 20 : target.batch_size
   }
 }
 
@@ -279,19 +301,12 @@ const emitUpdate = (): void => {
             {{ index + 1 }}
           </span>
           <span class="text-sm font-semibold">
-            {{ round.name || `round-${index + 1}` }}
-          </span>
-          <NTag
-            size="small"
-            :type="round.mode === 'translate' ? 'info' : 'warning'"
-            :bordered="false"
-          >
             {{
               round.mode === 'translate'
                 ? t('executionPlanEditor.round.modeTranslate')
                 : t('executionPlanEditor.round.modeExtract')
             }}
-          </NTag>
+          </span>
         </div>
       </template>
 
@@ -325,38 +340,25 @@ const emitUpdate = (): void => {
         </div>
       </template>
 
-      <!-- 轮次名称 + 模式选择 -->
-      <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-        <div>
-          <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('executionPlanEditor.round.name') }}
-          </div>
-          <NInput
-            v-model:value="round.name"
-            :placeholder="t('executionPlanEditor.round.namePlaceholder', { n: index + 1 })"
-            size="small"
-            :disabled="disabled"
+      <!-- 模式选择 -->
+      <div>
+        <div class="mb-1 text-xs text-lf-text-subtle">
+          {{ t('executionPlanEditor.round.mode') }}
+          <span class="text-red-400">*</span>
+        </div>
+        <NRadioGroup
+          :value="round.mode"
+          size="small"
+          :disabled="disabled"
+          @update:value="(v: 'translate' | 'extract') => switchRoundMode(round, v)"
+        >
+          <NRadioButton
+            v-for="opt in modeOptions"
+            :key="opt.value"
+            :value="opt.value"
+            :label="opt.label"
           />
-        </div>
-        <div>
-          <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('executionPlanEditor.round.mode') }}
-            <span class="text-red-400">*</span>
-          </div>
-          <NRadioGroup
-            :value="round.mode"
-            size="small"
-            :disabled="disabled"
-            @update:value="(v: 'translate' | 'extract') => switchRoundMode(round, v)"
-          >
-            <NRadioButton
-              v-for="opt in modeOptions"
-              :key="opt.value"
-              :value="opt.value"
-              :label="opt.label"
-            />
-          </NRadioGroup>
-        </div>
+        </NRadioGroup>
       </div>
 
       <!-- 公共字段：后端 + 并发 -->
@@ -535,36 +537,6 @@ const emitUpdate = (): void => {
               clearable
             />
           </div>
-        </div>
-
-        <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-          <div>
-            <div class="mb-1 text-xs text-lf-text-subtle">
-              {{ t('executionPlanEditor.round.extractBatchSize') }}
-            </div>
-            <NInputNumber
-              v-model:value="round.extract.batch_size"
-              :min="1"
-              :max="10000"
-              size="small"
-              :disabled="disabled"
-              class="w-full"
-            />
-          </div>
-          <div>
-            <div class="mb-1 text-xs text-lf-text-subtle">
-              {{ t('executionPlanEditor.round.extractMaxTerms') }}
-            </div>
-            <NInputNumber
-              v-model:value="round.extract.max_terms_per_1000_chars"
-              :min="0"
-              :max="1000"
-              :step="0.1"
-              size="small"
-              :disabled="disabled"
-              class="w-full"
-            />
-          </div>
           <div>
             <div class="mb-1 text-xs text-lf-text-subtle">
               {{ t('executionPlanEditor.round.extractMinSourceLen') }}
@@ -579,6 +551,123 @@ const emitUpdate = (): void => {
             />
           </div>
         </div>
+
+        <div class="mt-3">
+          <div class="mb-2 flex items-center gap-2">
+            <NSwitch
+              :value="isNoBatch(round.extract.batch_size, round.extract.max_words_per_batch)"
+              size="small"
+              :disabled="disabled"
+              @update:value="(v: boolean) => setNoBatch(round.extract!, v)"
+            />
+            <span class="text-xs text-lf-text-subtle">
+              {{ t('executionPlanEditor.round.noBatch') }}
+            </span>
+          </div>
+          <div
+            class="grid grid-cols-1 gap-3 md:grid-cols-2"
+            :class="{
+              'opacity-50 pointer-events-none': isNoBatch(
+                round.extract.batch_size,
+                round.extract.max_words_per_batch,
+              ),
+            }"
+          >
+            <div>
+              <div class="mb-1 text-xs text-lf-text-subtle">
+                {{ t('executionPlanEditor.round.extractBatchSize') }}
+              </div>
+              <NInputNumber
+                v-model:value="round.extract.batch_size"
+                :min="0"
+                :max="10000"
+                size="small"
+                :disabled="disabled"
+                class="w-full"
+              />
+              <div class="mt-1 text-[11px] text-lf-text-subtle">
+                {{ t('executionPlanEditor.round.extractBatchSizeHint') }}
+              </div>
+            </div>
+            <div>
+              <div class="mb-1 text-xs text-lf-text-subtle">
+                {{ t('executionPlanEditor.round.extractMaxWordsPerBatch') }}
+              </div>
+              <NInputNumber
+                v-model:value="round.extract.max_words_per_batch"
+                :min="0"
+                :max="100000"
+                size="small"
+                :disabled="disabled"
+                class="w-full"
+              />
+              <div class="mt-1 text-[11px] text-lf-text-subtle">
+                {{ t('executionPlanEditor.round.extractMaxWordsPerBatchHint') }}
+              </div>
+            </div>
+          </div>
+          <div class="mt-3">
+            <div class="mb-1 text-xs text-lf-text-subtle">
+              {{ t('executionPlanEditor.round.extractMaxTerms') }}
+            </div>
+            <NInputNumber
+              v-model:value="round.extract.max_terms_per_1000_chars"
+              :min="0"
+              :max="1000"
+              :step="0.1"
+              size="small"
+              :disabled="disabled"
+              class="w-full"
+            />
+          </div>
+        </div>
+
+        <!-- 高级配置（可折叠） -->
+        <NCollapse class="mt-3">
+          <NCollapseItem :title="t('executionPlanEditor.round.advancedConfig')">
+            <NGrid :cols="2" :x-gap="12" :y-gap="10">
+              <NGi>
+                <div class="mb-1 text-xs text-lf-text-subtle">
+                  {{ t('executionPlanEditor.round.retryMaxAttempts') }}
+                </div>
+                <NInputNumber
+                  v-if="round.extract.retry"
+                  v-model:value="round.extract.retry.max_attempts"
+                  :min="0"
+                  :max="10"
+                  size="small"
+                  :disabled="disabled"
+                  class="w-full"
+                />
+              </NGi>
+              <NGi>
+                <div class="mb-1 text-xs text-lf-text-subtle">
+                  {{ t('executionPlanEditor.round.retryBackoffMs') }}
+                </div>
+                <NInputNumber
+                  v-if="round.extract.retry"
+                  v-model:value="round.extract.retry.backoff_ms"
+                  :min="0"
+                  :max="60000"
+                  :step="100"
+                  size="small"
+                  :disabled="disabled"
+                  class="w-full"
+                />
+              </NGi>
+            </NGrid>
+            <div v-if="round.extract.retry" class="mt-2 flex items-center gap-2">
+              <NSwitch
+                v-model:value="round.extract.retry.jitter"
+                size="small"
+                :disabled="disabled"
+              />
+              <span class="text-xs text-lf-text-subtle">
+                {{ t('executionPlanEditor.round.retryJitter') }}
+              </span>
+            </div>
+          </NCollapseItem>
+        </NCollapse>
       </template>
     </NCard>
 

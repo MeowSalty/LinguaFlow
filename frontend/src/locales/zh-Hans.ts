@@ -567,6 +567,7 @@ const messages = {
       // 阶段名称
       stage: {
         bootstrap: '术语提取',
+        extract: '术语提取',
         translate: '翻译',
         review: '审校',
         finalize: '收尾',
@@ -1241,8 +1242,6 @@ const messages = {
       backendPlaceholder: '留空则使用翻译主后端',
     },
     round: {
-      name: '轮次名称',
-      namePlaceholder: '留空自动生成 round-{n}',
       mode: '轮次模式',
       modeTranslate: '翻译',
       modeExtract: '术语抽取',
@@ -1265,7 +1264,11 @@ const messages = {
       retryJitter: '启用抖动',
       extractTemplate: '术语抽取模板',
       extractTemplatePlaceholder: '选择术语抽取模板',
-      extractBatchSize: '每批源文段数',
+      noBatch: '不分批，全部一次发送',
+      extractBatchSize: '段落数上限',
+      extractBatchSizeHint: '0=不限制，与字词数上限至少填一项',
+      extractMaxWordsPerBatch: '字词数上限',
+      extractMaxWordsPerBatchHint: '0=不限制，与段落数上限至少填一项',
       extractMaxTerms: '每千字术语抽取系数',
       extractMinSourceLen: '术语最短源文长度',
     },

@@ -2165,10 +2165,12 @@ export interface components {
             /** @description 术语抽取提示词模板 ID（BootstrapPromptTemplate） */
             template_id?: number;
             /**
-             * @description 每批发送给 LLM 的源文段数
+             * @description 段落数上限；0=不限制，与 max_words_per_batch 至少填一项；两者都为 0 时不分批，全部一次发送
              * @default 20
              */
             batch_size: number;
+            /** @description 字词数上限；0=不限制，与 batch_size 至少填一项；两者都为 0 时不分批，全部一次发送 */
+            max_words_per_batch?: number;
             /**
              * @description 每 1000 字词的术语抽取上限系数
              * @default 25
@@ -2179,6 +2181,7 @@ export interface components {
              * @default 2
              */
             min_source_len: number;
+            retry?: components["schemas"]["RetryConfig"];
         };
         ExecutionRoundConfig: {
             /**
@@ -2186,8 +2189,6 @@ export interface components {
              * @enum {string}
              */
             mode: "translate" | "extract";
-            /** @description 轮次名称（可选，空值自动生成 round-N） */
-            name?: string;
             /** @description 后端 ID（Backend 单表全局唯一） */
             backend_id: number;
             concurrency: number;
