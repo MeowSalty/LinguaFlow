@@ -1,7 +1,6 @@
 package engine
 
 import (
-	"fmt"
 	"log/slog"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -29,7 +28,6 @@ type Options struct {
 // Round 描述一轮翻译的执行配置（Engine 级别）。
 type Round struct {
 	Backend          backend.Backend
-	Name             string
 	BatchSize        int
 	MaxWordsPerBatch int
 	Concurrency      int
@@ -50,6 +48,7 @@ type Round struct {
 	ExtractRenderer             *prompt.BootstrapRenderer
 	ExtractMaxTermsPer1000Chars float64
 	ExtractMinSourceLen         int
+	ExtractMaxWordsPerBatch     int
 	ExtractRepair               repair.Options
 }
 
@@ -57,13 +56,6 @@ type Round struct {
 type RuntimeResources struct {
 	Glossary glossary.Glossary
 	TM       tm.TranslationMemory
-}
-
-func resolveName(name string, idx int) string {
-	if name != "" {
-		return name
-	}
-	return fmt.Sprintf("round-%d", idx+1)
 }
 
 func resolveDefault(val, global, fallback int) int {
@@ -90,7 +82,7 @@ func buildRoundConfigs(in []Round, cfg *Config) []RoundConfig {
 	}
 	globalRetry := cfg.TranslateDefaults.Retry
 	out := make([]RoundConfig, 0, len(in))
-	for i, r := range in {
+	for _, r := range in {
 		retry := r.Retry
 		if retry.MaxAttempts == 0 {
 			retry = globalRetry
@@ -107,7 +99,6 @@ func buildRoundConfigs(in []Round, cfg *Config) []RoundConfig {
 		}
 
 		rc := RoundConfig{
-			Name:             resolveName(r.Name, i),
 			Backend:          r.Backend,
 			BatchSize:        resolveDefault(r.BatchSize, cfg.TranslateDefaults.BatchSize, 1),
 			MaxWordsPerBatch: r.MaxWordsPerBatch,
@@ -148,6 +139,7 @@ func buildRoundConfigs(in []Round, cfg *Config) []RoundConfig {
 				Renderer:             r.ExtractRenderer,
 				MaxTermsPer1000Chars: r.ExtractMaxTermsPer1000Chars,
 				MinSourceLen:         r.ExtractMinSourceLen,
+				MaxWordsPerBatch:     r.ExtractMaxWordsPerBatch,
 				Repair:               r.ExtractRepair,
 			}
 
@@ -296,7 +288,6 @@ func buildTranslatePipelineRound(
 	}
 
 	return pipeline.Round{
-		Name:        rc.Name,
 		Concurrency: rc.Concurrency,
 		Retry:       rc.Retry,
 		Context:     rc.Context,
@@ -321,6 +312,7 @@ func buildExtractPipelineRound(
 		Glossary:             glossaryRes,
 		Retry:                rc.Retry,
 		BatchSize:            rc.BatchSize,
+		MaxWordsPerBatch:     e.MaxWordsPerBatch,
 		MaxTermsPer1000Chars: e.MaxTermsPer1000Chars,
 		MinSourceLen:         e.MinSourceLen,
 		Repair:               e.Repair,
@@ -329,7 +321,6 @@ func buildExtractPipelineRound(
 	}
 
 	return pipeline.Round{
-		Name:        rc.Name,
 		Concurrency: rc.Concurrency,
 		Retry:       rc.Retry,
 		Context:     rc.Context,

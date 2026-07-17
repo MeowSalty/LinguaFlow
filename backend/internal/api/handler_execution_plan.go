@@ -42,10 +42,6 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 		Mode:      ExecutionRoundConfigMode(rc.Mode),
 		BackendId: rc.BackendID,
 	}
-	if rc.Name != "" {
-		name := rc.Name
-		apiRC.Name = &name
-	}
 	if rc.Mode == "translate" && rc.Translate != nil {
 		t := rc.Translate
 		apiRC.Concurrency = t.Concurrency
@@ -91,6 +87,8 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 			msl := e.MinSourceLen
 			extractCfg.MinSourceLen = &msl
 		}
+		retry := toRetryConfigAPI(e.Retry)
+		extractCfg.Retry = &retry
 		apiRC.Extract = &extractCfg
 	}
 	return apiRC
@@ -177,9 +175,6 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 			Mode:      string(ar.Mode),
 			BackendID: ar.BackendId,
 		}
-		if ar.Name != nil {
-			rc.Name = *ar.Name
-		}
 		if ar.Mode == Translate && ar.Translate != nil {
 			t := ar.Translate
 			translateCfg := &schema.TranslateRoundConfig{
@@ -229,6 +224,17 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 			}
 			if e.MinSourceLen != nil {
 				extractCfg.MinSourceLen = *e.MinSourceLen
+			}
+			if e.Retry != nil {
+				if e.Retry.MaxAttempts != nil {
+					extractCfg.Retry.MaxAttempts = *e.Retry.MaxAttempts
+				}
+				if e.Retry.BackoffMs != nil {
+					extractCfg.Retry.BackoffMs = *e.Retry.BackoffMs
+				}
+				if e.Retry.Jitter != nil {
+					extractCfg.Retry.Jitter = *e.Retry.Jitter
+				}
 			}
 			rc.Extract = extractCfg
 		}

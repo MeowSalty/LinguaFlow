@@ -91,8 +91,7 @@ type CLIConfigExecution struct {
 
 // CLIConfigRound 单轮执行配置。
 type CLIConfigRound struct {
-	Mode      string                   `yaml:"mode"` // "translate" | "extract"
-	Name      string                   `yaml:"name"`
+	Mode      string                   `yaml:"mode"`    // "translate" | "extract"
 	Backend   string                   `yaml:"backend"` // 引用 backends key
 	Translate *CLIConfigTranslateRound `yaml:"translate,omitempty"`
 	Extract   *CLIConfigExtractRound   `yaml:"extract,omitempty"`
@@ -111,11 +110,13 @@ type CLIConfigTranslateRound struct {
 
 // CLIConfigExtractRound 术语抽取轮次配置。
 type CLIConfigExtractRound struct {
-	Template             string  `yaml:"template"` // 引用 bootstrap_prompt_templates key
-	BatchSize            int     `yaml:"batch_size"`
-	Concurrency          int     `yaml:"concurrency"`
-	MaxTermsPer1000Chars float64 `yaml:"max_terms_per_1000_chars"`
-	MinSourceLen         int     `yaml:"min_source_len"`
+	Template             string      `yaml:"template"` // 引用 bootstrap_prompt_templates key
+	BatchSize            int         `yaml:"batch_size"`
+	MaxWordsPerBatch     int         `yaml:"max_words_per_batch"`
+	Concurrency          int         `yaml:"concurrency"`
+	MaxTermsPer1000Chars float64     `yaml:"max_terms_per_1000_chars"`
+	MinSourceLen         int         `yaml:"min_source_len"`
+	Retry                RetryConfig `yaml:"retry"`
 }
 
 // ---------------------------------------------------------------------------
@@ -478,7 +479,6 @@ func defaultCLIConfig() *CLIConfig {
 		Execution: CLIConfigExecution{
 			Rounds: []CLIConfigRound{{
 				Mode:    "translate",
-				Name:    "主翻译",
 				Backend: "openai-default",
 				Translate: &CLIConfigTranslateRound{
 					Prompt:         "default",

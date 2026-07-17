@@ -135,7 +135,6 @@ type ExecutionPlanRubyRetrySnapshot struct {
 // JobRoundSnapshot 单轮的完整执行快照。
 type JobRoundSnapshot struct {
 	Mode      string                     `json:"mode"` // "translate" | "extract"
-	Name      string                     `json:"name"`
 	Backend   BackendSnapshot            `json:"backend"`
 	Translate *JobTranslateRoundSnapshot `json:"translate,omitempty"`
 	Extract   *JobExtractRoundSnapshot   `json:"extract,omitempty"`
@@ -154,11 +153,13 @@ type JobTranslateRoundSnapshot struct {
 
 // JobExtractRoundSnapshot 术语抽取轮次快照。
 type JobExtractRoundSnapshot struct {
-	TemplateContent      string  `json:"template_content"` // 从 BootstrapPromptTemplate.Content 快照
-	BatchSize            int     `json:"batch_size"`
-	Concurrency          int     `json:"concurrency"`
-	MaxTermsPer1000Chars float64 `json:"max_terms_per_1000_chars"`
-	MinSourceLen         int     `json:"min_source_len"`
+	TemplateContent      string             `json:"template_content"` // 从 BootstrapPromptTemplate.Content 快照
+	BatchSize            int                `json:"batch_size"`
+	MaxWordsPerBatch     int                `json:"max_words_per_batch"`
+	Concurrency          int                `json:"concurrency"`
+	MaxTermsPer1000Chars float64            `json:"max_terms_per_1000_chars"`
+	MinSourceLen         int                `json:"min_source_len"`
+	Retry                schema.RetryConfig `json:"retry"`
 }
 
 // BackendSnapshot 后端配置快照。
@@ -363,7 +364,6 @@ func (s *JobService) validateAndSnapshot(
 
 			snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
 				Mode:    "translate",
-				Name:    round.Name,
 				Backend: *backendSnap,
 				Translate: &JobTranslateRoundSnapshot{
 					Prompt:           *promptSnap,
@@ -395,14 +395,15 @@ func (s *JobService) validateAndSnapshot(
 			snapshot.GlossaryEnabled = true
 			snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
 				Mode:    "extract",
-				Name:    round.Name,
 				Backend: *backendSnap,
 				Extract: &JobExtractRoundSnapshot{
 					TemplateContent:      bootstrapSnap.Content,
 					BatchSize:            e.BatchSize,
+					MaxWordsPerBatch:     e.MaxWordsPerBatch,
 					Concurrency:          e.Concurrency,
 					MaxTermsPer1000Chars: e.MaxTermsPer1000Chars,
 					MinSourceLen:         e.MinSourceLen,
+					Retry:                e.Retry,
 				},
 			})
 

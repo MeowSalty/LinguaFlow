@@ -9,7 +9,6 @@ import (
 // ExecutionRoundConfig 单轮执行配置。
 type ExecutionRoundConfig struct {
 	Mode      string                `json:"mode"               yaml:"mode"` // "translate" | "extract"
-	Name      string                `json:"name"               yaml:"name"`
 	BackendID int                   `json:"backend_id"         yaml:"backend_id"`
 	Translate *TranslateRoundConfig `json:"translate,omitempty" yaml:"translate,omitempty"`
 	Extract   *ExtractRoundConfig   `json:"extract,omitempty"   yaml:"extract,omitempty"`
@@ -28,11 +27,13 @@ type TranslateRoundConfig struct {
 
 // ExtractRoundConfig 术语抽取轮次配置。
 type ExtractRoundConfig struct {
-	BootstrapTemplateID  int     `json:"bootstrap_template_id"   yaml:"bootstrap_template_id"` // 引用 BootstrapPromptTemplate
-	BatchSize            int     `json:"batch_size"              yaml:"batch_size"`
-	Concurrency          int     `json:"concurrency"             yaml:"concurrency"`
-	MaxTermsPer1000Chars float64 `json:"max_terms_per_1000_chars" yaml:"max_terms_per_1000_chars"`
-	MinSourceLen         int     `json:"min_source_len"          yaml:"min_source_len"`
+	BootstrapTemplateID  int         `json:"bootstrap_template_id"   yaml:"bootstrap_template_id"` // 引用 BootstrapPromptTemplate
+	BatchSize            int         `json:"batch_size"              yaml:"batch_size"`
+	MaxWordsPerBatch     int         `json:"max_words_per_batch"     yaml:"max_words_per_batch"`
+	Concurrency          int         `json:"concurrency"             yaml:"concurrency"`
+	MaxTermsPer1000Chars float64     `json:"max_terms_per_1000_chars" yaml:"max_terms_per_1000_chars"`
+	MinSourceLen         int         `json:"min_source_len"          yaml:"min_source_len"`
+	Retry                RetryConfig `json:"retry"                   yaml:"retry"`
 }
 
 // ExecutionPlanRubyRetryConfig 注音对齐重试配置。

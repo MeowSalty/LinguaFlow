@@ -237,7 +237,6 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 			}
 
 			rounds = append(rounds, engine.Round{
-				Name:              r.Name,
 				Backend:           b,
 				BatchSize:         t.BatchSize,
 				MaxWordsPerBatch:  t.MaxWordsPerBatch,
@@ -269,23 +268,17 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 				}
 			}
 
-			retry := backend.RetryPolicy{
-				MaxAttempts: 3,
-				Backoff:     1000,
-				Jitter:      true,
-			}
-
 			rounds = append(rounds, engine.Round{
-				Name:        r.Name,
 				Backend:     b,
 				BatchSize:   e.BatchSize,
 				Concurrency: e.Concurrency,
-				Retry:       retry,
+				Retry:       toBackendRetryPolicy(e.Retry),
 				Mode:        pipeline.RoundModeExtract,
 
 				ExtractRenderer:             extractRenderer,
 				ExtractMaxTermsPer1000Chars: e.MaxTermsPer1000Chars,
 				ExtractMinSourceLen:         e.MinSourceLen,
+				ExtractMaxWordsPerBatch:     e.MaxWordsPerBatch,
 			})
 
 		default:
