@@ -48,6 +48,20 @@ jobs:
   test:
     name: 自动化测试
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: linguaflow
+          POSTGRES_PASSWORD: linguaflow-test
+          POSTGRES_DB: linguaflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U linguaflow -d linguaflow_test"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
 
@@ -57,6 +71,8 @@ jobs:
           cache-dependency-path: backend/go.sum
 
       - name: 运行测试（含竞态检测）
+        env:
+          LINGUAFLOW_TEST_POSTGRES_DSN: postgres://linguaflow:linguaflow-test@localhost:5432/linguaflow_test?sslmode=disable
         run: go test -race -coverprofile=coverage.out -covermode=atomic ./...
         working-directory: backend
 
