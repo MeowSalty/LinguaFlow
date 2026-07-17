@@ -7,7 +7,7 @@ import (
 )
 
 // defaultTestSystemTmpl 是测试用的最小系统模板。
-// 内容与 templates/default/prompts/default.tmpl 的关键子集保持一致。
+// 内容与 templates/default/prompts/default_translation.tmpl 的关键子集保持一致。
 const defaultTestSystemTmpl = `你是 LinguaFlow，一个专业的翻译引擎。
 将用户的文本从 {{.SourceLang}} 翻译为 {{.TargetLang}}。
 协议：

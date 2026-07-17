@@ -40,7 +40,7 @@ func newInitCmd() *cobra.Command {
 			if err := os.MkdirAll(promptDir, 0o755); err != nil {
 				return fmt.Errorf("创建 prompts 目录失败：%w", err)
 			}
-			promptPath := filepath.Join(promptDir, "default.tmpl")
+			promptPath := filepath.Join(promptDir, "default_translation.tmpl")
 			if err := os.WriteFile(promptPath, []byte(templates.EmbeddedPromptTemplate()), 0o644); err != nil {
 				return fmt.Errorf("写入提示词模板失败：%w", err)
 			}

@@ -34,18 +34,18 @@ func DefaultConfigYAML() []byte {
 
 // EmbeddedPromptTemplate 返回嵌入的默认翻译提示词模板内容。
 func EmbeddedPromptTemplate() string {
-	data, err := fs.ReadFile(builtinFS, "default/prompts/default.tmpl")
+	data, err := fs.ReadFile(builtinFS, "default/prompts/default_translation.tmpl")
 	if err != nil {
-		panic(fmt.Sprintf("embedded prompts/default.tmpl not found: %v", err))
+		panic(fmt.Sprintf("embedded prompts/default_translation.tmpl not found: %v", err))
 	}
 	return strings.TrimRight(string(data), "\n")
 }
 
 // EmbeddedBootstrapTemplate 返回嵌入的 bootstrap 术语抽取提示词模板内容。
 func EmbeddedBootstrapTemplate() string {
-	data, err := fs.ReadFile(builtinFS, "default/prompts/bootstrap_system.tmpl")
+	data, err := fs.ReadFile(builtinFS, "default/prompts/default_bootstrap.tmpl")
 	if err != nil {
-		panic(fmt.Sprintf("embedded prompts/bootstrap_system.tmpl not found: %v", err))
+		panic(fmt.Sprintf("embedded prompts/default_bootstrap.tmpl not found: %v", err))
 	}
 	return strings.TrimRight(string(data), "\n")
 }

@@ -73,7 +73,11 @@ func RunRound(
 		return RunRoundResult{}, nil
 	}
 
-	reporter.StageStart(handler.ModeName(), len(batches))
+	totalSegments := 0
+	for _, batch := range batches {
+		totalSegments += len(batch)
+	}
+	reporter.StageStart(handler.ModeName(), totalSegments)
 	defer reporter.StageDone()
 
 	totalAttempts := round.Retry.MaxAttempts + 1

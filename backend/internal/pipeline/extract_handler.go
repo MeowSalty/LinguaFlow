@@ -2,10 +2,13 @@ package pipeline
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"math"
+	"strconv"
 	"strings"
 	"sync/atomic"
+	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
@@ -29,11 +32,21 @@ type ExtractHandler struct {
 
 	Logger   *slog.Logger
 	Reporter progress.Reporter
+
+	totalBatches  atomic.Int64
+	failedBatches atomic.Int64
 }
 
 func (h *ExtractHandler) ModeName() string { return "extract" }
 
-func (h *ExtractHandler) Finalize(_ context.Context, _ *Document, _ []int) error { return nil }
+func (h *ExtractHandler) Finalize(_ context.Context, _ *Document, _ []int) error {
+	total := h.totalBatches.Load()
+	failed := h.failedBatches.Load()
+	if total > 0 && failed == total {
+		return fmt.Errorf("extract: all %d batch(es) failed", total)
+	}
+	return nil
+}
 
 func (h *ExtractHandler) logger() *slog.Logger {
 	if h.Logger == nil {
@@ -47,6 +60,19 @@ func (h *ExtractHandler) reporter() progress.Reporter {
 		return progress.Nop{}
 	}
 	return h.Reporter
+}
+
+// emitBatchOutcome 发送批次事件到 Reporter。
+func (h *ExtractHandler) emitBatchOutcome(evt progress.BatchEvent) {
+	rep := h.Reporter
+	if rep == nil {
+		return
+	}
+	obs, ok := rep.(progress.BatchObserver)
+	if !ok {
+		return
+	}
+	obs.OnBatchEvent(evt)
 }
 
 // BuildBatches 收集待抽取的段落索引，按 BatchConstraint 分批。
@@ -116,7 +142,9 @@ func (h *ExtractHandler) BuildBatches(_ context.Context, doc *Document) ([][]int
 // 从索引取文本 → collectExisting → render → call LLM → parse → glossary.Add。
 // 失败时返回空 batchResult（尽力而为，不阻断）。
 func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []int, _ int, logger *slog.Logger) batchResult {
+	h.totalBatches.Add(1)
 	rep := h.reporter()
+	start := time.Now()
 
 	// 从索引取文本（优先用 OriginalSource）
 	texts := make([]string, 0, len(idxs))
@@ -140,7 +168,19 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 	})
 	if err != nil {
 		logger.Warn("extract render failed", "err", err)
-		rep.SegmentDone()
+		h.emitBatchOutcome(progress.BatchEvent{
+			Stage:        "extract",
+			SegmentIDs:   segmentIDStrings(idxs),
+			SegmentCount: len(idxs),
+			Status:       "failed",
+			DurationMs:   time.Since(start).Milliseconds(),
+			ErrorType:    "render_error",
+			ErrorMessage: err.Error(),
+		})
+		for range idxs {
+			rep.SegmentDone()
+		}
+		h.failedBatches.Add(1)
 		return batchResult{}
 	}
 
@@ -205,14 +245,46 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			"completion_tokens", resp.Usage.CompletionTokens)
 		atomic.AddInt64(&doc.InputTokens, resp.Usage.PromptTokens)
 		atomic.AddInt64(&doc.OutputTokens, resp.Usage.CompletionTokens)
-		rep.SegmentDone()
+
+		status := "success"
+		if addErr != nil || len(res.Skipped) > 0 {
+			status = "partial"
+		}
+		h.emitBatchOutcome(progress.BatchEvent{
+			Stage:           "extract",
+			SegmentIDs:      segmentIDStrings(idxs),
+			SegmentCount:    len(idxs),
+			BackendName:     b.Name(),
+			Status:          status,
+			DurationMs:      time.Since(start).Milliseconds(),
+			InputTokens:     resp.Usage.PromptTokens,
+			OutputTokens:    resp.Usage.CompletionTokens,
+			ReceivedContent: resp.Text,
+			AddedGlossary:   toBootstrapEntries(res.Added),
+		})
+
+		for range idxs {
+			rep.SegmentDone()
+		}
 		return batchResult{}
 	}
 
 	if lastErr != nil {
 		logger.Warn("extract batch failed (all backends exhausted)", "err", lastErr)
 	}
-	rep.SegmentDone()
+	h.emitBatchOutcome(progress.BatchEvent{
+		Stage:        "extract",
+		SegmentIDs:   segmentIDStrings(idxs),
+		SegmentCount: len(idxs),
+		Status:       "failed",
+		DurationMs:   time.Since(start).Milliseconds(),
+		ErrorType:    "backend_error",
+		ErrorMessage: lastErr.Error(),
+	})
+	for range idxs {
+		rep.SegmentDone()
+	}
+	h.failedBatches.Add(1)
 	return batchResult{}
 }
 
@@ -252,4 +324,29 @@ func (h *ExtractHandler) calcMaxTerms(texts []string) int {
 	}
 	maxTerms := int(math.Ceil(float64(totalWords) / 1000.0 * coeff))
 	return max(maxTerms, 1)
+}
+
+// segmentIDStrings 将段落索引切片转为字符串切片。
+func segmentIDStrings(idxs []int) []string {
+	out := make([]string, len(idxs))
+	for i, idx := range idxs {
+		out[i] = strconv.Itoa(idx)
+	}
+	return out
+}
+
+// toBootstrapEntries 将 glossary.Entry 转换为 prompt.BootstrapEntry。
+func toBootstrapEntries(entries []glossary.Entry) []prompt.BootstrapEntry {
+	if len(entries) == 0 {
+		return nil
+	}
+	out := make([]prompt.BootstrapEntry, len(entries))
+	for i, e := range entries {
+		out[i] = prompt.BootstrapEntry{
+			Source: e.Source,
+			Target: e.Target,
+			Notes:  e.Notes,
+		}
+	}
+	return out
 }

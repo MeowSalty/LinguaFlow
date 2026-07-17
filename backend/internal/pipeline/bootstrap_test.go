@@ -184,6 +184,43 @@ func TestExtractHandler_BatchFailureDoesNotAbortStage(t *testing.T) {
 	}
 }
 
+func TestExtractHandler_AllBatchesFailed(t *testing.T) {
+	doc := &Document{
+		SourceLang: "en", TargetLang: "zh",
+		Segments: []Segment{
+			{ID: "0", Source: "first batch text", Translate: true},
+			{ID: "1", Source: "second batch text", Translate: true},
+		},
+	}
+	// BatchSize=1 ⇒ 两批；全部返回错误。
+	fb := &fakeBackend{
+		name: "fake",
+		errs: []error{errors.New("failure 1"), errors.New("failure 2")},
+	}
+	g := glossary.NewMemory()
+
+	h := &ExtractHandler{
+		Backends:             []backend.Backend{fb},
+		Renderer:             newBootstrapRenderer(t),
+		Glossary:             g,
+		BatchSize:            1,
+		MaxTermsPer1000Chars: 25.0,
+		MinSourceLen:         2,
+		Retry:                backend.RetryPolicy{MaxAttempts: 1},
+		Logger:               discardLogger(),
+	}
+
+	round := Round{
+		Concurrency: 1,
+		Handler:     h,
+	}
+
+	_, err := RunRound(context.Background(), round, doc, nil, discardLogger(), nil)
+	if err == nil {
+		t.Fatal("expected error when all batches fail, got nil")
+	}
+}
+
 func TestExtractHandler_NoSegments(t *testing.T) {
 	doc := &Document{
 		SourceLang: "en", TargetLang: "zh",
