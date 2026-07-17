@@ -30,11 +30,11 @@ type updatePromptTemplateRequest struct {
 // ---- 辅助函数 ----
 
 // parsePromptTemplateID 从路径参数解析 promptTemplateId。
-func parsePromptTemplateID(w http.ResponseWriter, r *http.Request) (int, bool) {
+func (s *Server) parsePromptTemplateID(w http.ResponseWriter, r *http.Request) (int, bool) {
 	raw := chi.URLParam(r, "promptTemplateId")
 	id, err := strconv.Atoi(raw)
 	if err != nil {
-		writeProblem(w, http.StatusBadRequest, "invalid_id", "提示词模板 ID 必须为整数")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_id", "提示词模板 ID 必须为整数")
 		return 0, false
 	}
 	return id, true
@@ -75,13 +75,13 @@ func entPromptTemplateToResponse(t *ent.PromptTemplate) PromptTemplate {
 func (s *Server) handleListPromptTemplates(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 
 	templates, err := s.promptTemplateSvc.ListByUser(r.Context(), authUser.User.ID)
 	if err != nil {
-		writeProblem(w, http.StatusInternalServerError, "internal_error", "查询提示词模板失败")
+		s.writeServiceError(w, r, err)
 		return
 	}
 
@@ -97,16 +97,16 @@ func (s *Server) handleListPromptTemplates(w http.ResponseWriter, r *http.Reques
 func (s *Server) handleCreatePromptTemplate(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 
 	var req CreatePromptTemplateRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	if req.Name == "" {
-		writeProblem(w, http.StatusBadRequest, "validation_error", "提示词模板名称不能为空")
+		s.writeProblem(w, r, http.StatusBadRequest, "validation_error", "提示词模板名称不能为空")
 		return
 	}
 
@@ -127,7 +127,7 @@ func (s *Server) handleCreatePromptTemplate(w http.ResponseWriter, r *http.Reque
 
 	pt, err := s.promptTemplateSvc.Create(r.Context(), input)
 	if err != nil {
-		writeProblem(w, http.StatusInternalServerError, "internal_error", "创建提示词模板失败")
+		s.writeServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, entPromptTemplateToResponse(pt))
@@ -135,7 +135,7 @@ func (s *Server) handleCreatePromptTemplate(w http.ResponseWriter, r *http.Reque
 
 // handleGetPromptTemplate 获取提示词模板详情。
 func (s *Server) handleGetPromptTemplate(w http.ResponseWriter, r *http.Request) {
-	id, ok := parsePromptTemplateID(w, r)
+	id, ok := s.parsePromptTemplateID(w, r)
 	if !ok {
 		return
 	}
@@ -143,10 +143,10 @@ func (s *Server) handleGetPromptTemplate(w http.ResponseWriter, r *http.Request)
 	pt, err := s.promptTemplateSvc.GetByID(r.Context(), id)
 	if err != nil {
 		if err == service.ErrPromptTemplateNotFound {
-			writeProblem(w, http.StatusNotFound, "not_found", "提示词模板不存在")
+			s.writeProblem(w, r, http.StatusNotFound, "not_found", "提示词模板不存在")
 			return
 		}
-		writeProblem(w, http.StatusInternalServerError, "internal_error", "查询提示词模板失败")
+		s.writeServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, entPromptTemplateToResponse(pt))
@@ -154,13 +154,13 @@ func (s *Server) handleGetPromptTemplate(w http.ResponseWriter, r *http.Request)
 
 // handleUpdatePromptTemplate 更新提示词模板。
 func (s *Server) handleUpdatePromptTemplate(w http.ResponseWriter, r *http.Request) {
-	id, ok := parsePromptTemplateID(w, r)
+	id, ok := s.parsePromptTemplateID(w, r)
 	if !ok {
 		return
 	}
 
 	var req UpdatePromptTemplateRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 
@@ -174,10 +174,10 @@ func (s *Server) handleUpdatePromptTemplate(w http.ResponseWriter, r *http.Reque
 	pt, err := s.promptTemplateSvc.Update(r.Context(), id, input)
 	if err != nil {
 		if err == service.ErrPromptTemplateNotFound {
-			writeProblem(w, http.StatusNotFound, "not_found", "提示词模板不存在")
+			s.writeProblem(w, r, http.StatusNotFound, "not_found", "提示词模板不存在")
 			return
 		}
-		writeProblem(w, http.StatusInternalServerError, "internal_error", "更新提示词模板失败")
+		s.writeServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, entPromptTemplateToResponse(pt))
@@ -185,7 +185,7 @@ func (s *Server) handleUpdatePromptTemplate(w http.ResponseWriter, r *http.Reque
 
 // handleDeletePromptTemplate 删除提示词模板。
 func (s *Server) handleDeletePromptTemplate(w http.ResponseWriter, r *http.Request) {
-	id, ok := parsePromptTemplateID(w, r)
+	id, ok := s.parsePromptTemplateID(w, r)
 	if !ok {
 		return
 	}
@@ -193,14 +193,14 @@ func (s *Server) handleDeletePromptTemplate(w http.ResponseWriter, r *http.Reque
 	err := s.promptTemplateSvc.Delete(r.Context(), id)
 	if err != nil {
 		if err == service.ErrPromptTemplateNotFound {
-			writeProblem(w, http.StatusNotFound, "not_found", "提示词模板不存在")
+			s.writeProblem(w, r, http.StatusNotFound, "not_found", "提示词模板不存在")
 			return
 		}
 		if errors.Is(err, service.ErrPromptTemplateInUse) {
-			writeProblem(w, http.StatusConflict, "conflict", err.Error())
+			s.writeProblem(w, r, http.StatusConflict, "conflict", err.Error())
 			return
 		}
-		writeProblem(w, http.StatusInternalServerError, "internal_error", "删除提示词模板失败")
+		s.writeServiceError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

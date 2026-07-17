@@ -66,11 +66,11 @@ func toProjectListResponse(projects []*ent.Project) map[string]any {
 func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 	var req createProjectRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	p, err := s.projectSvc.CreateProject(r.Context(), authUser.User.ID, service.CreateProjectInput{
@@ -82,7 +82,7 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 		TargetLang:               req.TargetLang,
 	})
 	if err != nil {
-		writeProjectServiceError(w, err)
+		s.writeProjectServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, toProjectResponse(p))
@@ -91,20 +91,20 @@ func (s *Server) handleCreateProject(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCreateOrgProject(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	orgID, ok := parseIntParam(w, chi.URLParam(r, "orgId"), "orgId")
+	orgID, ok := s.parseIntParam(w, r, chi.URLParam(r, "orgId"), "orgId")
 	if !ok {
 		return
 	}
 	// handler 层负责验证组织管理员权限
 	if _, err := s.userService.RequireMembership(r.Context(), authUser.User.ID, orgID, service.OrgRoleAdmin); err != nil {
-		writeProjectServiceError(w, err)
+		s.writeProjectServiceError(w, r, err)
 		return
 	}
 	var req createProjectRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	p, err := s.projectSvc.CreateOrgProject(r.Context(), authUser.User.ID, orgID, service.CreateProjectInput{
@@ -116,7 +116,7 @@ func (s *Server) handleCreateOrgProject(w http.ResponseWriter, r *http.Request) 
 		TargetLang:               req.TargetLang,
 	})
 	if err != nil {
-		writeProjectServiceError(w, err)
+		s.writeProjectServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, toProjectResponse(p))
@@ -125,21 +125,21 @@ func (s *Server) handleCreateOrgProject(w http.ResponseWriter, r *http.Request) 
 func (s *Server) handleListOrgProjects(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	orgID, ok := parseIntParam(w, chi.URLParam(r, "orgId"), "orgId")
+	orgID, ok := s.parseIntParam(w, r, chi.URLParam(r, "orgId"), "orgId")
 	if !ok {
 		return
 	}
 	// handler 层负责验证组织成员权限
 	if _, err := s.userService.RequireMembership(r.Context(), authUser.User.ID, orgID, service.OrgRoleMember); err != nil {
-		writeProjectServiceError(w, err)
+		s.writeProjectServiceError(w, r, err)
 		return
 	}
 	projects, err := s.projectSvc.ListOrgProjects(r.Context(), authUser.User.ID, orgID)
 	if err != nil {
-		writeProjectServiceError(w, err)
+		s.writeProjectServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toProjectListResponse(projects))
@@ -148,12 +148,12 @@ func (s *Server) handleListOrgProjects(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 	projects, err := s.projectSvc.ListProjectsForUser(r.Context(), authUser.User.ID)
 	if err != nil {
-		writeProjectServiceError(w, err)
+		s.writeProjectServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toProjectListResponse(projects))
@@ -162,16 +162,16 @@ func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
 	p, err := s.projectSvc.GetProject(r.Context(), authUser.User.ID, projectID)
 	if err != nil {
-		writeProjectServiceError(w, err)
+		s.writeProjectServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toProjectResponse(p))
@@ -180,15 +180,15 @@ func (s *Server) handleGetProject(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
 	var req updateProjectRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	p, err := s.projectSvc.UpdateProject(r.Context(), authUser.User.ID, projectID, service.UpdateProjectInput{
@@ -200,7 +200,7 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 		TargetLang:               req.TargetLang,
 	})
 	if err != nil {
-		writeProjectServiceError(w, err)
+		s.writeProjectServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toProjectResponse(p))
@@ -209,16 +209,16 @@ func (s *Server) handleUpdateProject(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeleteProject(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
 	storagePaths, err := s.projectSvc.DeleteProject(r.Context(), authUser.User.ID, projectID)
 	if err != nil {
-		writeProjectServiceError(w, err)
+		s.writeProjectServiceError(w, r, err)
 		return
 	}
 	// 事务成功后清理物理文件

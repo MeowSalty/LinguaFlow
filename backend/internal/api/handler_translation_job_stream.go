@@ -16,21 +16,21 @@ var sseEventTypeReplacer = strings.NewReplacer("\r", "", "\n", "")
 func (s *Server) handleTranslationJobStream(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := s.resolveAuthUser(r)
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	jobID, ok := parseIntParam(w, chi.URLParam(r, "translationJobId"), "translationJobId")
+	jobID, ok := s.parseIntParam(w, r, chi.URLParam(r, "translationJobId"), "translationJobId")
 	if !ok {
 		return
 	}
 	if err := s.translationJobSvc.CheckJobAccess(r.Context(), authUser.User.ID, jobID); err != nil {
-		writeTranslationJobServiceError(w, err)
+		s.writeTranslationJobServiceError(w, r, err)
 		return
 	}
 
 	flusher, ok := w.(http.Flusher)
 	if !ok {
-		writeProblem(w, http.StatusInternalServerError, "internal_error", "streaming not supported")
+		s.writeProblem(w, r, http.StatusInternalServerError, "internal_error", "streaming not supported")
 		return
 	}
 

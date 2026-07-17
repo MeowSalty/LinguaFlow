@@ -15,21 +15,22 @@ import (
 // HandlerExecutionPlan 执行计划模板 handler。
 type HandlerExecutionPlan struct {
 	executionPlans *service.ExecutionPlanService
+	server         *Server
 }
 
 // NewHandlerExecutionPlan 创建执行计划模板 handler。
-func NewHandlerExecutionPlan(executionPlans *service.ExecutionPlanService) *HandlerExecutionPlan {
-	return &HandlerExecutionPlan{executionPlans: executionPlans}
+func NewHandlerExecutionPlan(executionPlans *service.ExecutionPlanService, server *Server) *HandlerExecutionPlan {
+	return &HandlerExecutionPlan{executionPlans: executionPlans, server: server}
 }
 
 // ---- 辅助函数 ----
 
 // parseExecutionPlanTemplateID 从路径参数解析 executionPlanTemplateId。
-func parseExecutionPlanTemplateID(w http.ResponseWriter, r *http.Request) (int, bool) {
+func (s *Server) parseExecutionPlanTemplateID(w http.ResponseWriter, r *http.Request) (int, bool) {
 	raw := chi.URLParam(r, "executionPlanTemplateId")
 	id, err := strconv.Atoi(raw)
 	if err != nil {
-		writeProblem(w, http.StatusBadRequest, "invalid_id", "执行计划模板 ID 必须为整数")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_id", "执行计划模板 ID 必须为整数")
 		return 0, false
 	}
 	return id, true
@@ -226,7 +227,7 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 func (h *HandlerExecutionPlan) handleList(w http.ResponseWriter, r *http.Request, userID int) {
 	templates, err := h.executionPlans.ListByUser(r.Context(), userID)
 	if err != nil {
-		writeProblem(w, http.StatusInternalServerError, "internal_error", "查询执行计划模板失败")
+		h.server.writeProblem(w, r, http.StatusInternalServerError, "internal_error", "查询执行计划模板失败")
 		return
 	}
 	items := make([]ExecutionPlanTemplate, 0, len(templates))
@@ -239,11 +240,11 @@ func (h *HandlerExecutionPlan) handleList(w http.ResponseWriter, r *http.Request
 // handleCreate 创建执行计划模板。
 func (h *HandlerExecutionPlan) handleCreate(w http.ResponseWriter, r *http.Request, userID int) {
 	var req CreateExecutionPlanTemplateRequest
-	if !decodeJSON(w, r, &req) {
+	if !h.server.decodeJSON(w, r, &req) {
 		return
 	}
 	if req.Name == "" {
-		writeProblem(w, http.StatusBadRequest, "validation_error", "执行计划模板名称不能为空")
+		h.server.writeProblem(w, r, http.StatusBadRequest, "validation_error", "执行计划模板名称不能为空")
 		return
 	}
 
@@ -261,7 +262,7 @@ func (h *HandlerExecutionPlan) handleCreate(w http.ResponseWriter, r *http.Reque
 
 	pt, err := h.executionPlans.Create(r.Context(), input)
 	if err != nil {
-		writeExecutionPlanServiceError(w, err)
+		h.server.writeExecutionPlanServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, toExecutionPlanTemplateResponse(pt))
@@ -271,7 +272,7 @@ func (h *HandlerExecutionPlan) handleCreate(w http.ResponseWriter, r *http.Reque
 func (h *HandlerExecutionPlan) handleGet(w http.ResponseWriter, r *http.Request, userID, planID int) {
 	pt, err := h.executionPlans.GetByID(r.Context(), userID, planID)
 	if err != nil {
-		writeExecutionPlanServiceError(w, err)
+		h.server.writeExecutionPlanServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toExecutionPlanTemplateResponse(pt))
@@ -280,7 +281,7 @@ func (h *HandlerExecutionPlan) handleGet(w http.ResponseWriter, r *http.Request,
 // handleUpdate 更新执行计划模板。
 func (h *HandlerExecutionPlan) handleUpdate(w http.ResponseWriter, r *http.Request, userID, planID int) {
 	var req UpdateExecutionPlanTemplateRequest
-	if !decodeJSON(w, r, &req) {
+	if !h.server.decodeJSON(w, r, &req) {
 		return
 	}
 
@@ -303,7 +304,7 @@ func (h *HandlerExecutionPlan) handleUpdate(w http.ResponseWriter, r *http.Reque
 
 	pt, err := h.executionPlans.Update(r.Context(), userID, planID, input)
 	if err != nil {
-		writeExecutionPlanServiceError(w, err)
+		h.server.writeExecutionPlanServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toExecutionPlanTemplateResponse(pt))
@@ -313,28 +314,28 @@ func (h *HandlerExecutionPlan) handleUpdate(w http.ResponseWriter, r *http.Reque
 func (h *HandlerExecutionPlan) handleDelete(w http.ResponseWriter, r *http.Request, userID, planID int) {
 	err := h.executionPlans.Delete(r.Context(), userID, planID)
 	if err != nil {
-		writeExecutionPlanServiceError(w, err)
+		h.server.writeExecutionPlanServiceError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // writeExecutionPlanServiceError 将 service 层错误转换为 HTTP 响应。
-func writeExecutionPlanServiceError(w http.ResponseWriter, err error) {
+func (s *Server) writeExecutionPlanServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, service.ErrExecutionPlanNotFound):
-		writeProblem(w, http.StatusNotFound, "not_found", "执行计划模板不存在")
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "执行计划模板不存在")
 	case errors.Is(err, service.ErrExecutionPlanScopeInvalid):
-		writeProblem(w, http.StatusBadRequest, "invalid_scope", "无效的 scope")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_scope", "无效的 scope")
 	case errors.Is(err, service.ErrExecutionPlanConfigInvalid):
-		writeProblem(w, http.StatusBadRequest, "invalid_config", err.Error())
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_config", err.Error())
 	case errors.Is(err, service.ErrExecutionPlanInUse):
-		writeProblem(w, http.StatusConflict, "in_use", "该模板正在被翻译任务引用，无法删除")
+		s.writeProblem(w, r, http.StatusConflict, "in_use", "该模板正在被翻译任务引用，无法删除")
 	case errors.Is(err, service.ErrForbidden):
-		writeProblem(w, http.StatusForbidden, "forbidden", "没有权限执行该操作")
+		s.writeProblem(w, r, http.StatusForbidden, "forbidden", "没有权限执行该操作")
 	case errors.Is(err, service.ErrInvalidInput):
-		writeProblem(w, http.StatusBadRequest, "invalid_input", err.Error())
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", err.Error())
 	default:
-		writeProblem(w, http.StatusInternalServerError, "internal_error", "服务器内部错误")
+		s.writeServiceError(w, r, err)
 	}
 }

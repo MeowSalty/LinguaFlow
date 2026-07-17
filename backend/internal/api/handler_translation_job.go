@@ -88,16 +88,16 @@ func (s *Server) queueInfoForJob(jobID int) *worker.QueueInfo {
 func (s *Server) handleCreateTranslationJob(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
 	var req createTranslationJobRequest
 	if r.Body != nil && strings.TrimSpace(r.Header.Get("Content-Length")) != "0" {
-		if !decodeJSON(w, r, &req) {
+		if !s.decodeJSON(w, r, &req) {
 			return
 		}
 	}
@@ -110,13 +110,13 @@ func (s *Server) handleCreateTranslationJob(w http.ResponseWriter, r *http.Reque
 		OverwriteMode:    req.OverwriteMode,
 	})
 	if err != nil {
-		writeTranslationJobServiceError(w, err)
+		s.writeTranslationJobServiceError(w, r, err)
 		return
 	}
 	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "translation_job.create", ResourceType: "translation_job", ResourceID: created.ID, Message: "创建翻译任务"})
 	if s.dispatcher != nil {
 		if err := s.dispatcher.Enqueue(r.Context(), "translation", created.ID); err != nil {
-			writeServiceError(w, err)
+			s.writeServiceError(w, r, err)
 			return
 		}
 	}
@@ -126,14 +126,14 @@ func (s *Server) handleCreateTranslationJob(w http.ResponseWriter, r *http.Reque
 func (s *Server) handleListTranslationJobs(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
-	pageReq, ok := parseCursorPagination(w, r, 50, 100)
+	pageReq, ok := s.parseCursorPagination(w, r, 50, 100)
 	if !ok {
 		return
 	}
@@ -144,7 +144,7 @@ func (s *Server) handleListTranslationJobs(w http.ResponseWriter, r *http.Reques
 		Limit:       pageReq.Limit,
 	})
 	if err != nil {
-		writeTranslationJobServiceError(w, err)
+		s.writeTranslationJobServiceError(w, r, err)
 		return
 	}
 	items := make([]translationJobResponse, 0, len(jobs))
@@ -157,16 +157,16 @@ func (s *Server) handleListTranslationJobs(w http.ResponseWriter, r *http.Reques
 func (s *Server) handleGetTranslationJob(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	jobID, ok := parseIntParam(w, chi.URLParam(r, "translationJobId"), "translationJobId")
+	jobID, ok := s.parseIntParam(w, r, chi.URLParam(r, "translationJobId"), "translationJobId")
 	if !ok {
 		return
 	}
 	job, err := s.translationJobSvc.GetJob(r.Context(), authUser.User.ID, jobID)
 	if err != nil {
-		writeTranslationJobServiceError(w, err)
+		s.writeTranslationJobServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toTranslationJobDetailResponse(job, s.queueInfoForJob(jobID)))
@@ -175,16 +175,16 @@ func (s *Server) handleGetTranslationJob(w http.ResponseWriter, r *http.Request)
 func (s *Server) handleCancelTranslationJob(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	jobID, ok := parseIntParam(w, chi.URLParam(r, "translationJobId"), "translationJobId")
+	jobID, ok := s.parseIntParam(w, r, chi.URLParam(r, "translationJobId"), "translationJobId")
 	if !ok {
 		return
 	}
 	job, err := s.translationJobSvc.CancelJob(r.Context(), authUser.User.ID, jobID)
 	if err != nil {
-		writeTranslationJobServiceError(w, err)
+		s.writeTranslationJobServiceError(w, r, err)
 		return
 	}
 	// 通知正在运行的 worker 立即停止
@@ -198,22 +198,22 @@ func (s *Server) handleCancelTranslationJob(w http.ResponseWriter, r *http.Reque
 func (s *Server) handleRetryTranslationJob(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	jobID, ok := parseIntParam(w, chi.URLParam(r, "translationJobId"), "translationJobId")
+	jobID, ok := s.parseIntParam(w, r, chi.URLParam(r, "translationJobId"), "translationJobId")
 	if !ok {
 		return
 	}
 	job, err := s.translationJobSvc.RetryJob(r.Context(), authUser.User.ID, jobID)
 	if err != nil {
-		writeTranslationJobServiceError(w, err)
+		s.writeTranslationJobServiceError(w, r, err)
 		return
 	}
 	_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "translation_job.retry", ResourceType: "translation_job", ResourceID: job.ID, Message: "重试翻译任务"})
 	if s.dispatcher != nil {
 		if err := s.dispatcher.Enqueue(r.Context(), "translation", job.ID); err != nil {
-			writeServiceError(w, err)
+			s.writeServiceError(w, r, err)
 			return
 		}
 	}
@@ -329,19 +329,21 @@ func toTranslationJobResourceResponse(row *ent.JobResource) translationJobResour
 	return resp
 }
 
-func writeTranslationJobServiceError(w http.ResponseWriter, err error) {
+func (s *Server) writeTranslationJobServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, service.ErrTranslationJobNotFound):
-		writeProblem(w, http.StatusNotFound, "not_found", "翻译任务不存在")
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "翻译任务不存在")
 	case errors.Is(err, service.ErrTranslationJobEmpty):
-		writeProblem(w, http.StatusBadRequest, "invalid_input", "没有可翻译的待处理段落")
-	case errors.Is(err, service.ErrResourceNotFound), errors.Is(err, service.ErrSegmentNotFound), errors.Is(err, service.ErrProjectNotFound):
-		writeProblem(w, http.StatusNotFound, "not_found", "资源不存在")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "没有可翻译的待处理段落")
+	case errors.Is(err, service.ErrProjectNotFound):
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "项目不存在")
+	case errors.Is(err, service.ErrResourceNotFound), errors.Is(err, service.ErrSegmentNotFound):
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "资源不存在")
 	case errors.Is(err, service.ErrForbidden):
-		writeProblem(w, http.StatusForbidden, "forbidden", "没有权限执行该操作")
+		s.writeProblem(w, r, http.StatusForbidden, "forbidden", "没有权限执行该操作")
 	case errors.Is(err, service.ErrInvalidInput):
-		writeProblem(w, http.StatusBadRequest, "invalid_input", err.Error())
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", err.Error())
 	default:
-		writeProjectServiceError(w, err)
+		s.writeProjectServiceError(w, r, err)
 	}
 }

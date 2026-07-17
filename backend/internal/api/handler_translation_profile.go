@@ -33,11 +33,11 @@ func fromAPIPreserveKinds(kinds []ProfileRubyConfigPreserveKinds) []string {
 }
 
 // parseTranslationProfileID 从路径参数解析 translationProfileId。
-func parseTranslationProfileID(w http.ResponseWriter, r *http.Request) (int, bool) {
+func (s *Server) parseTranslationProfileID(w http.ResponseWriter, r *http.Request) (int, bool) {
 	raw := chi.URLParam(r, "translationProfileId")
 	id, err := strconv.Atoi(raw)
 	if err != nil {
-		writeProblem(w, http.StatusBadRequest, "invalid_id", "翻译配置 ID 必须为整数")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_id", "翻译配置 ID 必须为整数")
 		return 0, false
 	}
 	return id, true
@@ -266,13 +266,13 @@ func mergeProfileConfig(existing *schema.TranslationProfileConfigData, incoming 
 func (s *Server) handleListTranslationProfiles(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 
 	profiles, err := s.translationProfileSvc.ListByUser(r.Context(), authUser.User.ID)
 	if err != nil {
-		writeProblem(w, http.StatusInternalServerError, "internal_error", "查询翻译配置失败")
+		s.writeServiceError(w, r, err)
 		return
 	}
 
@@ -288,16 +288,16 @@ func (s *Server) handleListTranslationProfiles(w http.ResponseWriter, r *http.Re
 func (s *Server) handleCreateTranslationProfile(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 
 	var req CreateTranslationProfileRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	if req.Name == "" {
-		writeProblem(w, http.StatusBadRequest, "validation_error", "翻译配置名称不能为空")
+		s.writeProblem(w, r, http.StatusBadRequest, "validation_error", "翻译配置名称不能为空")
 		return
 	}
 
@@ -316,10 +316,10 @@ func (s *Server) handleCreateTranslationProfile(w http.ResponseWriter, r *http.R
 	tp, err := s.translationProfileSvc.Create(r.Context(), input)
 	if err != nil {
 		if errors.Is(err, service.ErrTranslationProfileConfigInvalid) {
-			writeProblem(w, http.StatusBadRequest, "validation_error", err.Error())
+			s.writeProblem(w, r, http.StatusBadRequest, "validation_error", err.Error())
 			return
 		}
-		writeProblem(w, http.StatusInternalServerError, "internal_error", "创建翻译配置失败")
+		s.writeServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, entTranslationProfileToResponse(tp))
@@ -327,7 +327,7 @@ func (s *Server) handleCreateTranslationProfile(w http.ResponseWriter, r *http.R
 
 // handleGetTranslationProfile 获取翻译配置详情。
 func (s *Server) handleGetTranslationProfile(w http.ResponseWriter, r *http.Request) {
-	id, ok := parseTranslationProfileID(w, r)
+	id, ok := s.parseTranslationProfileID(w, r)
 	if !ok {
 		return
 	}
@@ -335,10 +335,10 @@ func (s *Server) handleGetTranslationProfile(w http.ResponseWriter, r *http.Requ
 	tp, err := s.translationProfileSvc.GetByID(r.Context(), id)
 	if err != nil {
 		if err == service.ErrTranslationProfileNotFound {
-			writeProblem(w, http.StatusNotFound, "not_found", "翻译配置不存在")
+			s.writeProblem(w, r, http.StatusNotFound, "not_found", "翻译配置不存在")
 			return
 		}
-		writeProblem(w, http.StatusInternalServerError, "internal_error", "查询翻译配置失败")
+		s.writeServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, entTranslationProfileToResponse(tp))
@@ -346,13 +346,13 @@ func (s *Server) handleGetTranslationProfile(w http.ResponseWriter, r *http.Requ
 
 // handleUpdateTranslationProfile 更新翻译配置。
 func (s *Server) handleUpdateTranslationProfile(w http.ResponseWriter, r *http.Request) {
-	id, ok := parseTranslationProfileID(w, r)
+	id, ok := s.parseTranslationProfileID(w, r)
 	if !ok {
 		return
 	}
 
 	var req UpdateTranslationProfileRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 
@@ -365,10 +365,10 @@ func (s *Server) handleUpdateTranslationProfile(w http.ResponseWriter, r *http.R
 		existing, err := s.translationProfileSvc.GetByID(r.Context(), id)
 		if err != nil {
 			if err == service.ErrTranslationProfileNotFound {
-				writeProblem(w, http.StatusNotFound, "not_found", "翻译配置不存在")
+				s.writeProblem(w, r, http.StatusNotFound, "not_found", "翻译配置不存在")
 				return
 			}
-			writeProblem(w, http.StatusInternalServerError, "internal_error", "查询翻译配置失败")
+			s.writeServiceError(w, r, err)
 			return
 		}
 		input.Config = mergeProfileConfig(&existing.Config, req.Config)
@@ -377,14 +377,14 @@ func (s *Server) handleUpdateTranslationProfile(w http.ResponseWriter, r *http.R
 	tp, err := s.translationProfileSvc.Update(r.Context(), id, input)
 	if err != nil {
 		if err == service.ErrTranslationProfileNotFound {
-			writeProblem(w, http.StatusNotFound, "not_found", "翻译配置不存在")
+			s.writeProblem(w, r, http.StatusNotFound, "not_found", "翻译配置不存在")
 			return
 		}
 		if errors.Is(err, service.ErrTranslationProfileConfigInvalid) {
-			writeProblem(w, http.StatusBadRequest, "validation_error", err.Error())
+			s.writeProblem(w, r, http.StatusBadRequest, "validation_error", err.Error())
 			return
 		}
-		writeProblem(w, http.StatusInternalServerError, "internal_error", "更新翻译配置失败")
+		s.writeServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, entTranslationProfileToResponse(tp))
@@ -392,7 +392,7 @@ func (s *Server) handleUpdateTranslationProfile(w http.ResponseWriter, r *http.R
 
 // handleDeleteTranslationProfile 删除翻译配置。
 func (s *Server) handleDeleteTranslationProfile(w http.ResponseWriter, r *http.Request) {
-	id, ok := parseTranslationProfileID(w, r)
+	id, ok := s.parseTranslationProfileID(w, r)
 	if !ok {
 		return
 	}
@@ -400,10 +400,10 @@ func (s *Server) handleDeleteTranslationProfile(w http.ResponseWriter, r *http.R
 	err := s.translationProfileSvc.Delete(r.Context(), id)
 	if err != nil {
 		if err == service.ErrTranslationProfileNotFound {
-			writeProblem(w, http.StatusNotFound, "not_found", "翻译配置不存在")
+			s.writeProblem(w, r, http.StatusNotFound, "not_found", "翻译配置不存在")
 			return
 		}
-		writeProblem(w, http.StatusInternalServerError, "internal_error", "删除翻译配置失败")
+		s.writeServiceError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

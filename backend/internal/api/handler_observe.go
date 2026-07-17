@@ -10,27 +10,27 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	translationJobCount, err := s.entClient.TranslationJob.Query().Count(ctx)
 	if err != nil {
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 		return
 	}
 	resourceCount, err := s.entClient.Resource.Query().Count(ctx)
 	if err != nil {
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 		return
 	}
 	segmentCount, err := s.entClient.Segment.Query().Count(ctx)
 	if err != nil {
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 		return
 	}
 	usageCount, err := s.entClient.UsageRecord.Query().Count(ctx)
 	if err != nil {
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 		return
 	}
 	activityCount, err := s.entClient.ActivityLog.Query().Count(ctx)
 	if err != nil {
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 		return
 	}
 
@@ -52,17 +52,17 @@ func (s *Server) handleMetrics(w http.ResponseWriter, r *http.Request) {
 	_, _ = fmt.Fprintf(w, "linguaflow_activity_logs_total %d\n", activityCount)
 }
 
-func (s *Server) handleOpenAPISpec(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleOpenAPISpec(w http.ResponseWriter, r *http.Request) {
 	spec, err := GetSwagger()
 	if err != nil {
-		writeProblem(w, http.StatusInternalServerError, "openapi_error", "OpenAPI 规范加载失败")
+		s.writeProblem(w, r, http.StatusInternalServerError, "openapi_error", "OpenAPI 规范加载失败")
 		return
 	}
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	_ = json.NewEncoder(w).Encode(spec)
 }
 
-func (s *Server) handleDocs(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleDocs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	_, _ = w.Write([]byte(`<!doctype html>
 <html lang="zh-CN">

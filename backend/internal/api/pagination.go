@@ -11,7 +11,7 @@ type cursorPageRequest struct {
 	Limit   int
 }
 
-func parseCursorPagination(w http.ResponseWriter, r *http.Request, defaultLimit, maxLimit int) (cursorPageRequest, bool) {
+func (s *Server) parseCursorPagination(w http.ResponseWriter, r *http.Request, defaultLimit, maxLimit int) (cursorPageRequest, bool) {
 	if defaultLimit <= 0 {
 		defaultLimit = 50
 	}
@@ -22,7 +22,7 @@ func parseCursorPagination(w http.ResponseWriter, r *http.Request, defaultLimit,
 	if raw := strings.TrimSpace(r.URL.Query().Get("limit")); raw != "" {
 		v, err := strconv.Atoi(raw)
 		if err != nil || v <= 0 || v > maxLimit {
-			writeProblem(w, http.StatusBadRequest, "invalid_query_parameter", "limit 必须是有效正整数且不超过上限")
+			s.writeProblem(w, r, http.StatusBadRequest, "invalid_query_parameter", "limit 必须是有效正整数且不超过上限")
 			return cursorPageRequest{}, false
 		}
 		limit = v
@@ -31,7 +31,7 @@ func parseCursorPagination(w http.ResponseWriter, r *http.Request, defaultLimit,
 	if raw := strings.TrimSpace(r.URL.Query().Get("cursor")); raw != "" {
 		v, err := strconv.Atoi(raw)
 		if err != nil || v < 0 {
-			writeProblem(w, http.StatusBadRequest, "invalid_query_parameter", "cursor 必须是有效非负整数")
+			s.writeProblem(w, r, http.StatusBadRequest, "invalid_query_parameter", "cursor 必须是有效非负整数")
 			return cursorPageRequest{}, false
 		}
 		afterID = v

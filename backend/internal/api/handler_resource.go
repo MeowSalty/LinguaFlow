@@ -98,32 +98,32 @@ func toResourceListResponse(resources []service.ResourceWithProgress) map[string
 func (s *Server) handleUploadProjectResources(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
 
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		writeProblem(w, http.StatusBadRequest, "invalid_multipart", "上传表单解析失败")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_multipart", "上传表单解析失败")
 		return
 	}
 
 	files := r.MultipartForm.File["files"]
 	if len(files) == 0 {
-		writeProblem(w, http.StatusBadRequest, "invalid_input", "至少上传一个文件")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "至少上传一个文件")
 		return
 	}
 	if len(files) > maxResourceUploadFiles {
-		writeProblem(w, http.StatusBadRequest, "invalid_input", fmt.Sprintf("上传文件数量超出限制（最多 %d 个）", maxResourceUploadFiles))
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", fmt.Sprintf("上传文件数量超出限制（最多 %d 个）", maxResourceUploadFiles))
 		return
 	}
 
 	paths := r.MultipartForm.Value["paths"]
 	if len(paths) > 0 && len(paths) != len(files) {
-		writeProblem(w, http.StatusBadRequest, "invalid_input", "paths 数量必须与 files 数量一致")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "paths 数量必须与 files 数量一致")
 		return
 	}
 
@@ -135,7 +135,7 @@ func (s *Server) handleUploadProjectResources(w http.ResponseWriter, r *http.Req
 		}
 		opened, err := header.Open()
 		if err != nil {
-			writeProblem(w, http.StatusBadRequest, "invalid_upload", "无法读取上传文件")
+			s.writeProblem(w, r, http.StatusBadRequest, "invalid_upload", "无法读取上传文件")
 			return
 		}
 		uploaded = append(uploaded, service.UploadedFile{
@@ -220,26 +220,26 @@ func (s *Server) handleUploadProjectResources(w http.ResponseWriter, r *http.Req
 func (s *Server) handlePrecheckProjectResources(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
 
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		writeProblem(w, http.StatusBadRequest, "invalid_multipart", "表单解析失败")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_multipart", "表单解析失败")
 		return
 	}
 
 	paths := r.MultipartForm.Value["paths"]
 	if len(paths) == 0 {
-		writeProblem(w, http.StatusBadRequest, "invalid_input", "至少提供一个路径")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "至少提供一个路径")
 		return
 	}
 	if len(paths) > maxResourceUploadFiles {
-		writeProblem(w, http.StatusBadRequest, "invalid_input", fmt.Sprintf("路径数量超出限制（最多 %d 个）", maxResourceUploadFiles))
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", fmt.Sprintf("路径数量超出限制（最多 %d 个）", maxResourceUploadFiles))
 		return
 	}
 
@@ -296,10 +296,10 @@ type resourceTreeNodeResponse struct {
 func (s *Server) handleListProjectResources(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
@@ -323,10 +323,10 @@ func (s *Server) handleListProjectResources(w http.ResponseWriter, r *http.Reque
 func (s *Server) handleGetProjectResourceTree(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
@@ -396,14 +396,14 @@ func sortResourceTreeChildren(node *resourceTreeNodeResponse) {
 func (s *Server) handleGetResource(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
-	resourceID, ok := parseIntParam(w, chi.URLParam(r, "resourceId"), "resourceId")
+	resourceID, ok := s.parseIntParam(w, r, chi.URLParam(r, "resourceId"), "resourceId")
 	if !ok {
 		return
 	}
@@ -421,33 +421,33 @@ func (s *Server) handleGetResource(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUpdateResource(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
-	resourceID, ok := parseIntParam(w, chi.URLParam(r, "resourceId"), "resourceId")
+	resourceID, ok := s.parseIntParam(w, r, chi.URLParam(r, "resourceId"), "resourceId")
 	if !ok {
 		return
 	}
 
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		writeProblem(w, http.StatusBadRequest, "invalid_multipart", "上传表单解析失败")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_multipart", "上传表单解析失败")
 		return
 	}
 
 	fileHeader, fileFieldOK := r.MultipartForm.File["file"]
 	if !fileFieldOK || len(fileHeader) == 0 {
-		writeProblem(w, http.StatusBadRequest, "invalid_input", "请上传一个文件")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请上传一个文件")
 		return
 	}
 
 	header := fileHeader[0]
 	opened, openErr := header.Open()
 	if openErr != nil {
-		writeProblem(w, http.StatusBadRequest, "invalid_upload", "无法读取上传文件")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_upload", "无法读取上传文件")
 		return
 	}
 	defer opened.Close()
@@ -475,14 +475,14 @@ func (s *Server) handleUpdateResource(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeleteResource(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
-	resourceID, ok := parseIntParam(w, chi.URLParam(r, "resourceId"), "resourceId")
+	resourceID, ok := s.parseIntParam(w, r, chi.URLParam(r, "resourceId"), "resourceId")
 	if !ok {
 		return
 	}
@@ -499,14 +499,14 @@ func (s *Server) handleDeleteResource(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDownloadResourceFile(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
-	resourceID, ok := parseIntParam(w, chi.URLParam(r, "resourceId"), "resourceId")
+	resourceID, ok := s.parseIntParam(w, r, chi.URLParam(r, "resourceId"), "resourceId")
 	if !ok {
 		return
 	}
@@ -518,13 +518,13 @@ func (s *Server) handleDownloadResourceFile(w http.ResponseWriter, r *http.Reque
 	}
 
 	if res.Resource.StoragePath == "" {
-		writeProblem(w, http.StatusNotFound, "file_not_found", "资源文件不存在")
+		s.writeProblem(w, r, http.StatusNotFound, "file_not_found", "资源文件不存在")
 		return
 	}
 
 	absolutePath, absErr := s.resourceSvc.Absolute(res.Resource.StoragePath)
 	if absErr != nil {
-		writeServiceError(w, absErr)
+		s.writeServiceError(w, r, absErr)
 		return
 	}
 
@@ -537,21 +537,21 @@ func (s *Server) handleDownloadResourceFile(w http.ResponseWriter, r *http.Reque
 func (s *Server) handleIncrementalUpdateResource(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
-	resourceID, ok := parseIntParam(w, chi.URLParam(r, "resourceId"), "resourceId")
+	resourceID, ok := s.parseIntParam(w, r, chi.URLParam(r, "resourceId"), "resourceId")
 	if !ok {
 		return
 	}
 
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		s.logResourceMultipartDebug(r, "parse incremental update multipart form failed", "err", err)
-		writeProblem(w, http.StatusBadRequest, "invalid_multipart", "上传表单解析失败")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_multipart", "上传表单解析失败")
 		return
 	}
 
@@ -560,7 +560,7 @@ func (s *Server) handleIncrementalUpdateResource(w http.ResponseWriter, r *http.
 	fileHeader, fileFieldOK := r.MultipartForm.File["file"]
 	if !fileFieldOK || len(fileHeader) == 0 {
 		s.logResourceMultipartDebug(r, "incremental update multipart form missing file field", "file_field_exists", fileFieldOK, "file_field_count", len(fileHeader))
-		writeProblem(w, http.StatusBadRequest, "invalid_input", "请上传一个文件")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请上传一个文件")
 		return
 	}
 
@@ -569,7 +569,7 @@ func (s *Server) handleIncrementalUpdateResource(w http.ResponseWriter, r *http.
 	opened, openErr := header.Open()
 	if openErr != nil {
 		s.logResourceMultipartDebug(r, "open incremental update uploaded file failed", "filename", header.Filename, "size", header.Size, "err", openErr)
-		writeProblem(w, http.StatusBadRequest, "invalid_upload", "无法读取上传文件")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_upload", "无法读取上传文件")
 		return
 	}
 	defer opened.Close()
@@ -672,27 +672,21 @@ func (s *Server) writeResourceServiceError(w http.ResponseWriter, r *http.Reques
 	case err == nil:
 		return
 	case errors.Is(err, service.ErrProjectNotFound):
-		writeProblem(w, http.StatusNotFound, "not_found", "项目不存在")
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "项目不存在")
 	case errors.Is(err, service.ErrResourceNotFound):
-		writeProblem(w, http.StatusNotFound, "not_found", "资源不存在")
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "资源不存在")
 	case errors.Is(err, service.ErrResourceAlreadyExists):
-		writeProblem(w, http.StatusConflict, "conflict", "项目中已存在同路径资源")
+		s.writeProblem(w, r, http.StatusConflict, "conflict", "项目中已存在同路径资源")
 	case errors.Is(err, service.ErrResourcePathInvalid):
-		writeProblem(w, http.StatusBadRequest, "invalid_resource_path", "资源路径不合法")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_resource_path", "资源路径不合法")
 	case errors.Is(err, service.ErrForbidden):
-		writeProblem(w, http.StatusForbidden, "forbidden", "没有权限执行该操作")
+		s.writeProblem(w, r, http.StatusForbidden, "forbidden", "没有权限执行该操作")
 	case errors.Is(err, service.ErrUnsupportedFormat):
-		writeProblem(w, http.StatusBadRequest, "unsupported_format", err.Error())
+		s.writeProblem(w, r, http.StatusBadRequest, "unsupported_format", err.Error())
 	case errors.Is(err, service.ErrParseFailed):
-		writeProblem(w, http.StatusBadRequest, "parse_failed", err.Error())
+		s.writeProblem(w, r, http.StatusBadRequest, "parse_failed", err.Error())
 	default:
-		s.logger.Error("resource service error",
-			"request_id", chimiddleware.GetReqID(r.Context()),
-			"method", r.Method,
-			"path", r.URL.Path,
-			"err", err,
-		)
-		writeProblem(w, http.StatusInternalServerError, "internal_error", "服务器内部错误")
+		s.writeServiceError(w, r, err)
 	}
 }
 
@@ -723,14 +717,14 @@ func safeZipResourceEntryName(res *ent.Resource) string {
 func (s *Server) handleDownloadTranslatedResourceFile(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	projectID, ok := parseIntParam(w, chi.URLParam(r, "projectId"), "projectId")
+	projectID, ok := s.parseIntParam(w, r, chi.URLParam(r, "projectId"), "projectId")
 	if !ok {
 		return
 	}
-	resourceID, ok := parseIntParam(w, chi.URLParam(r, "resourceId"), "resourceId")
+	resourceID, ok := s.parseIntParam(w, r, chi.URLParam(r, "resourceId"), "resourceId")
 	if !ok {
 		return
 	}
@@ -753,9 +747,9 @@ func (s *Server) handleDownloadTranslatedResourceFile(w http.ResponseWriter, r *
 		w.Header().Del("Content-Type")
 		switch {
 		case errors.Is(err, service.ErrNoTranslatedSegments):
-			writeProblem(w, http.StatusConflict, "no_translated_segments", "资源没有已翻译的段落")
+			s.writeProblem(w, r, http.StatusConflict, "no_translated_segments", "资源没有已翻译的段落")
 		case errors.Is(err, service.ErrResourceNotFound):
-			writeProblem(w, http.StatusNotFound, "not_found", "资源不存在")
+			s.writeProblem(w, r, http.StatusNotFound, "not_found", "资源不存在")
 		default:
 			s.writeResourceServiceError(w, r, err)
 		}
