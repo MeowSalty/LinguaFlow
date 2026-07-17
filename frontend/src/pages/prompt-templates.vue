@@ -32,7 +32,6 @@ interface FormModel {
   name: string
   description: string
   system_prompt_content: string
-  bootstrap_prompt_content: string
 }
 
 // ── Store & 依赖 ──────────────────────────────────────────────
@@ -53,7 +52,6 @@ const formModel = reactive<FormModel>({
   name: '',
   description: '',
   system_prompt_content: '',
-  bootstrap_prompt_content: '',
 })
 
 // ── 计算属性 ──────────────────────────────────────────────────
@@ -91,7 +89,6 @@ const resetForm = (): void => {
   formModel.name = ''
   formModel.description = ''
   formModel.system_prompt_content = ''
-  formModel.bootstrap_prompt_content = ''
   editingItem.value = null
 }
 
@@ -105,7 +102,6 @@ const openEditDrawer = (item: PromptTemplate): void => {
   formModel.name = item.name
   formModel.description = item.description ?? ''
   formModel.system_prompt_content = item.system_prompt_content ?? ''
-  formModel.bootstrap_prompt_content = item.bootstrap_prompt_content ?? ''
   drawerVisible.value = true
 }
 
@@ -116,9 +112,6 @@ const buildPayload = (): CreateRequest => {
   }
   if (formModel.system_prompt_content.trim()) {
     payload.system_prompt_content = formModel.system_prompt_content.trim()
-  }
-  if (formModel.bootstrap_prompt_content.trim()) {
-    payload.bootstrap_prompt_content = formModel.bootstrap_prompt_content.trim()
   }
   return payload
 }
@@ -363,15 +356,6 @@ watch(
             {{ t('promptTemplates.card.noPromptContent') }}
           </p>
 
-          <!-- Bootstrap 提示词预览 -->
-          <div
-            v-if="item.bootstrap_prompt_content"
-            class="rounded-lg bg-lf-code-bg px-3 py-2 font-mono text-xs leading-5 text-lf-text-muted line-clamp-3"
-          >
-            <span class="text-brand-500 font-semibold">[Bootstrap]</span>
-            {{ item.bootstrap_prompt_content }}
-          </div>
-
           <!-- 底部：时间 + 操作 -->
           <div class="mt-auto border-t border-lf-border-soft pt-4">
             <div class="flex items-center justify-between gap-3">
@@ -455,18 +439,6 @@ watch(
               v-model="formModel.system_prompt_content"
               :disabled="isSystemScope"
               :rows="6"
-            />
-          </NFormItem>
-
-          <NFormItem
-            :label="t('promptTemplates.form.bootstrapPromptContent')"
-            path="bootstrap_prompt_content"
-          >
-            <PromptTemplateEditor
-              v-model="formModel.bootstrap_prompt_content"
-              :disabled="isSystemScope"
-              :rows="6"
-              variable-set="bootstrap"
             />
           </NFormItem>
         </NForm>

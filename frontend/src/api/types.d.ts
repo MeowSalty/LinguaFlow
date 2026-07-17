@@ -997,6 +997,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/bootstrap-prompt-templates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** 列出当前用户的术语抽取提示词模板 */
+        get: operations["ListBootstrapPromptTemplates"];
+        put?: never;
+        /** 创建术语抽取提示词模板 */
+        post: operations["CreateBootstrapPromptTemplate"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/bootstrap-prompt-templates/{bootstrapPromptTemplateId}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bootstrapPromptTemplateId: components["parameters"]["BootstrapPromptTemplateId"];
+            };
+            cookie?: never;
+        };
+        /** 获取术语抽取提示词模板详情 */
+        get: operations["GetBootstrapPromptTemplate"];
+        /** 更新术语抽取提示词模板 */
+        put: operations["UpdateBootstrapPromptTemplate"];
+        post?: never;
+        /** 删除术语抽取提示词模板 */
+        delete: operations["DeleteBootstrapPromptTemplate"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/translation-profiles": {
         parameters: {
             query?: never;
@@ -1759,8 +1798,6 @@ export interface components {
             owner_org_id?: number;
             /** @description 翻译提示词内容。 */
             system_prompt_content?: string;
-            /** @description Bootstrap 术语抽取提示词内容。启用 glossary.bootstrap 时必填。 */
-            bootstrap_prompt_content?: string;
             /** Format: date-time */
             created_at?: string;
             /** Format: date-time */
@@ -1774,16 +1811,41 @@ export interface components {
             description?: string;
             /** @description 翻译提示词内容。 */
             system_prompt_content?: string;
-            /** @description Bootstrap 术语抽取提示词内容。 */
-            bootstrap_prompt_content?: string;
         };
         UpdatePromptTemplateRequest: {
             name?: string;
             description?: string;
             /** @description 翻译提示词内容。 */
             system_prompt_content?: string;
-            /** @description Bootstrap 术语抽取提示词内容。 */
-            bootstrap_prompt_content?: string;
+        };
+        BootstrapPromptTemplate: {
+            id: number;
+            name: string;
+            description: string;
+            scope: components["schemas"]["BootstrapPromptTemplateScope"];
+            owner_user_id?: number;
+            owner_org_id?: number;
+            /** @description 术语抽取提示词内容。 */
+            content?: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        BootstrapPromptTemplateListResponse: {
+            items: components["schemas"]["BootstrapPromptTemplate"][];
+        };
+        CreateBootstrapPromptTemplateRequest: {
+            name: string;
+            description?: string;
+            /** @description 术语抽取提示词内容。 */
+            content?: string;
+        };
+        UpdateBootstrapPromptTemplateRequest: {
+            name?: string;
+            description?: string;
+            /** @description 术语抽取提示词内容。 */
+            content?: string;
         };
         TranslationProfile: {
             id: number;
@@ -2077,7 +2139,7 @@ export interface components {
             enabled: boolean;
             /** @description 自举使用的后端 ID */
             backend_id: number;
-            /** @description 自举使用的提示词模板 ID（仅用其 bootstrap_prompt_content） */
+            /** @description 自举使用的提示词模板 ID */
             prompt_template_id: number;
             /**
              * @description 每批发送给 LLM 的源文段数
@@ -2136,6 +2198,8 @@ export interface components {
         };
         /** @enum {string} */
         PromptTemplateScope: "user" | "org" | "system";
+        /** @enum {string} */
+        BootstrapPromptTemplateScope: "user" | "org" | "system";
         /** @enum {string} */
         TranslationProfileScope: "user" | "org" | "system";
         ProfileProtectConfig: {
@@ -2272,6 +2336,7 @@ export interface components {
         BackendId: number;
         EntryId: number;
         PromptTemplateId: number;
+        BootstrapPromptTemplateId: number;
         TranslationProfileId: number;
         ExecutionPlanTemplateId: number;
         SegmentId: number;
@@ -4123,6 +4188,123 @@ export interface operations {
             header?: never;
             path: {
                 promptTemplateId: components["parameters"]["PromptTemplateId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 删除成功 */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListBootstrapPromptTemplates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 术语抽取提示词模板列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BootstrapPromptTemplateListResponse"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    CreateBootstrapPromptTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CreateBootstrapPromptTemplateRequest"];
+            };
+        };
+        responses: {
+            /** @description 创建成功 */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BootstrapPromptTemplate"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    GetBootstrapPromptTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bootstrapPromptTemplateId: components["parameters"]["BootstrapPromptTemplateId"];
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description 术语抽取提示词模板详情 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BootstrapPromptTemplate"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    UpdateBootstrapPromptTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bootstrapPromptTemplateId: components["parameters"]["BootstrapPromptTemplateId"];
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateBootstrapPromptTemplateRequest"];
+            };
+        };
+        responses: {
+            /** @description 更新成功 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BootstrapPromptTemplate"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    DeleteBootstrapPromptTemplate: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                bootstrapPromptTemplateId: components["parameters"]["BootstrapPromptTemplateId"];
             };
             cookie?: never;
         };

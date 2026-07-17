@@ -109,14 +109,10 @@ paths:
     $ref: './paths/bootstrap-prompt-templates.yaml#/bootstrapPromptTemplates'
   /bootstrap-prompt-templates/{bootstrapPromptTemplateId}:
     $ref: './paths/bootstrap-prompt-templates.yaml#/bootstrapPromptTemplateById'
-  /prune-prompt-templates:
-    $ref: './paths/prune-prompt-templates.yaml#/prunePromptTemplates'
-  /prune-prompt-templates/{prunePromptTemplateId}:
-    $ref: './paths/prune-prompt-templates.yaml#/prunePromptTemplateById'
-  /execution-profiles:
-    $ref: './paths/execution-profiles.yaml#/executionProfiles'
-  /execution-profiles/{executionProfileId}:
-    $ref: './paths/execution-profiles.yaml#/executionProfileById'
+  /translation-profiles:
+    $ref: './paths/translation-profiles.yaml#/translationProfiles'
+  /translation-profiles/{translationProfileId}:
+    $ref: './paths/translation-profiles.yaml#/translationProfileById'
   /admin/users:
     $ref: './paths/admin.yaml#/adminUsers'
   /admin/users/{userId}:

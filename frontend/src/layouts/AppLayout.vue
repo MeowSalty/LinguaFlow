@@ -103,6 +103,11 @@ const templateNavOptions = computed<DropdownOption[]>(() => [
     icon: () => h(IconifyIcon, { icon: 'carbon:prompt-template', class: 'text-base' }),
   },
   {
+    label: t('nav.bootstrapPromptTemplates'),
+    key: '/bootstrap-prompt-templates',
+    icon: () => h(IconifyIcon, { icon: 'carbon:text-extract', class: 'text-base' }),
+  },
+  {
     label: t('nav.translationProfiles'),
     key: '/translation-profiles',
     icon: () => h(IconifyIcon, { icon: 'carbon:flow', class: 'text-base' }),
@@ -117,9 +122,12 @@ const templateNavOptions = computed<DropdownOption[]>(() => [
 const isAdmin = computed(() => auth.user?.role === 'admin')
 
 const isTemplateRoute = computed(() =>
-  ['/prompt-templates', '/translation-profiles', '/execution-plan-templates'].some((r) =>
-    route.path.startsWith(r),
-  ),
+  [
+    '/prompt-templates',
+    '/bootstrap-prompt-templates',
+    '/translation-profiles',
+    '/execution-plan-templates',
+  ].some((r) => route.path.startsWith(r)),
 )
 
 const isAdminRoute = computed(() => route.path.startsWith('/admin'))

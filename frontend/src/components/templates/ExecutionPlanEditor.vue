@@ -117,6 +117,7 @@ const props = withDefaults(
     rubyRetry?: ExecutionPlanRubyRetryConfig
     backends: SelectOption[]
     promptTemplates: SelectOption[]
+    bootstrapPromptTemplates: SelectOption[]
     translationProfiles: SelectOption[]
     disabled?: boolean
   }>(),
@@ -272,7 +273,7 @@ const emitUpdate = (): void => {
             </div>
             <NSelect
               v-model:value="bootstrapModel.prompt_template_id"
-              :options="promptTemplates"
+              :options="bootstrapPromptTemplates"
               size="small"
               :disabled="disabled || !bootstrapModel.enabled"
               :placeholder="t('executionPlanEditor.bootstrap.promptTemplatePlaceholder')"
