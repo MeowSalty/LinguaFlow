@@ -24,9 +24,17 @@ func newServeCmd(rt *appCtx) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "serve",
 		Short: "启动 LinguaFlow Web Service",
+		Long: `启动 LinguaFlow Web Service。
+
+数据库通过环境变量配置：
+  LINGUAFLOW_DATABASE_DRIVER                 sqlite（默认）或 postgres
+  LINGUAFLOW_DATABASE_DSN                    PostgreSQL 必填；SQLite 为空时使用 data_dir/linguaflow.db
+  LINGUAFLOW_DATABASE_MAX_OPEN_CONNS         最大打开连接数
+  LINGUAFLOW_DATABASE_MAX_IDLE_CONNS         最大空闲连接数
+  LINGUAFLOW_DATABASE_CONN_MAX_LIFETIME      连接最大寿命（Go duration）`,
 		Example: `  linguaflow serve
   linguaflow serve --host 127.0.0.1 --port 18080
-  linguaflow serve -c ./linguaflow.yaml --data-dir ./data`,
+  LINGUAFLOW_DATABASE_DRIVER=postgres LINGUAFLOW_DATABASE_DSN='postgres://localhost:5432/linguaflow?sslmode=disable' linguaflow serve`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			opts.autoMigrateSet = cmd.Flags().Changed("auto-migrate")
 			return runServe(cmd.Context(), rt, opts)

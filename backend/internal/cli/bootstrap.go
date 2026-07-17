@@ -3,21 +3,19 @@ package cli
 import (
 	"context"
 	"crypto/rand"
-	"database/sql"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"os"
 	"strings"
 
-	"entgo.io/ent/dialect"
-	entsql "entgo.io/ent/dialect/sql"
 	"golang.org/x/crypto/bcrypt"
-	_ "modernc.org/sqlite"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/api"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/database"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
@@ -32,38 +30,45 @@ type BootOptions struct {
 // bootstrapServer 加载配置、打开数据库、运行迁移、创建监听器，
 // 返回准备就绪的 *api.Server 和监听器。调用方负责调用 server.Run(ctx, ln)。
 func bootstrapServer(ctx context.Context, opts BootOptions) (*api.Server, net.Listener, func() error, error) {
-	cfg, err := config.LoadServerConfig()
+	cfg, err := config.LoadServerConfig(opts.Mode)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 
-	cfg.Mode = opts.Mode
 	if opts.Overrides != nil {
 		opts.Overrides(cfg)
+	}
+	if err := config.ValidateServerConfig(cfg); err != nil {
+		return nil, nil, nil, err
 	}
 
 	if err := os.MkdirAll(cfg.DataDir, 0o755); err != nil {
 		return nil, nil, nil, fmt.Errorf("create server data dir %s: %w", cfg.DataDir, err)
 	}
 
-	dbPath := cfg.DatabasePath()
-	dbDSN := cfg.DatabaseDSN()
-	db, err := sql.Open("sqlite", dbDSN)
+	db, client, err := database.Open(ctx, cfg)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("open sqlite database %s: %w", dbPath, err)
+		return nil, nil, nil, err
 	}
-	if err := db.PingContext(ctx); err != nil {
-		_ = db.Close()
-		return nil, nil, nil, fmt.Errorf("ping sqlite database %s: %w", dbPath, err)
+	cleanup := func() error {
+		clientErr := client.Close()
+		dbErr := db.Close()
+		if clientErr != nil {
+			return clientErr
+		}
+		return dbErr
 	}
-
-	driver := entsql.OpenDB(dialect.SQLite, db)
-	client := ent.NewClient(ent.Driver(driver))
 
 	if cfg.AutoMigrate {
-		if err := client.Schema.Create(ctx); err != nil {
-			_ = client.Close()
-			_ = db.Close()
+		unlockMigration, err := database.AcquireMigrationLock(ctx, db, cfg.Database.Driver)
+		if err != nil {
+			_ = cleanup()
+			return nil, nil, nil, err
+		}
+		migrationErr := client.Schema.Create(ctx)
+		unlockErr := unlockMigration()
+		if err := errors.Join(migrationErr, unlockErr); err != nil {
+			_ = cleanup()
 			return nil, nil, nil, fmt.Errorf("run ent schema migration: %w", err)
 		}
 	}
@@ -72,22 +77,19 @@ func bootstrapServer(ctx context.Context, opts BootOptions) (*api.Server, net.Li
 	if cfg.IsLocal() {
 		localUser, err = ensureLocalUser(ctx, client)
 		if err != nil {
-			_ = client.Close()
-			_ = db.Close()
+			_ = cleanup()
 			return nil, nil, nil, fmt.Errorf("ensure local user: %w", err)
 		}
 	}
 
 	if err := ensureAdminUser(ctx, client, opts.Logger); err != nil {
-		_ = client.Close()
-		_ = db.Close()
+		_ = cleanup()
 		return nil, nil, nil, fmt.Errorf("ensure admin user: %w", err)
 	}
 
 	ln, err := net.Listen("tcp", cfg.Address())
 	if err != nil {
-		_ = client.Close()
-		_ = db.Close()
+		_ = cleanup()
 		return nil, nil, nil, fmt.Errorf("listen on %s: %w", cfg.Address(), err)
 	}
 
@@ -95,24 +97,27 @@ func bootstrapServer(ctx context.Context, opts BootOptions) (*api.Server, net.Li
 	actualPort := ln.Addr().(*net.TCPAddr).Port
 	cfg.Port = actualPort
 
-	opts.Logger.Info("server bootstrapped",
+	logArgs := []any{
 		"mode", cfg.Mode,
 		"addr", ln.Addr().String(),
-		"database_path", dbPath,
-		"auto_migrate", cfg.AutoMigrate)
+		"database_driver", cfg.Database.Driver,
+		"database_max_open_conns", cfg.Database.MaxOpenConns,
+		"database_max_idle_conns", cfg.Database.MaxIdleConns,
+		"database_conn_max_lifetime", cfg.Database.ConnMaxLifetime,
+		"auto_migrate", cfg.AutoMigrate,
+	}
+	if cfg.Database.Driver == config.DatabaseDriverSQLite && cfg.Database.DSN == "" {
+		logArgs = append(logArgs, "database_path", cfg.DatabasePath())
+	}
+	opts.Logger.Info("server bootstrapped", logArgs...)
 
 	server, err := api.NewServer(cfg, opts.Logger, db, client, cfg.Mode, localUser)
 	if err != nil {
 		_ = ln.Close()
-		_ = client.Close()
-		_ = db.Close()
+		_ = cleanup()
 		return nil, nil, nil, err
 	}
 
-	cleanup := func() error {
-		_ = client.Close()
-		return db.Close()
-	}
 	return server, ln, cleanup, nil
 }
 

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -174,6 +175,7 @@ type ServerConfig struct {
 	JWTExpiry       time.Duration      `yaml:"jwt_expiry"`
 	RefreshExpiry   time.Duration      `yaml:"refresh_token_expiry"`
 	ShutdownTimeout time.Duration      `yaml:"shutdown_timeout"`
+	Database        DatabaseConfig     `yaml:"database"`
 	Workers         WorkerConfig       `yaml:"workers"`
 	CORS            CORSConfig         `yaml:"cors"`
 	Registration    RegistrationConfig `yaml:"registration"`
@@ -191,7 +193,36 @@ type RegistrationConfig struct {
 const (
 	ModeServer = "server"
 	ModeLocal  = "local"
+
+	DatabaseDriverSQLite   = "sqlite"
+	DatabaseDriverPostgres = "postgres"
 )
+
+// DatabaseConfig 定义数据库驱动、连接串和 database/sql 连接池参数。
+type DatabaseConfig struct {
+	Driver          string        `yaml:"driver"`
+	DSN             string        `yaml:"dsn"`
+	MaxOpenConns    int           `yaml:"max_open_conns"`
+	MaxIdleConns    int           `yaml:"max_idle_conns"`
+	ConnMaxLifetime time.Duration `yaml:"conn_max_lifetime"`
+}
+
+func defaultDatabaseConfig(driver string) DatabaseConfig {
+	switch driver {
+	case DatabaseDriverPostgres:
+		return DatabaseConfig{
+			Driver:          DatabaseDriverPostgres,
+			MaxOpenConns:    25,
+			MaxIdleConns:    5,
+			ConnMaxLifetime: 30 * time.Minute,
+		}
+	default:
+		return DatabaseConfig{
+			Driver:       DatabaseDriverSQLite,
+			MaxIdleConns: 2,
+		}
+	}
+}
 
 func (c ServerConfig) IsLocal() bool {
 	return c.Mode == ModeLocal
@@ -210,11 +241,28 @@ func (c ServerConfig) DatabasePath() string {
 }
 
 func (c ServerConfig) DatabaseDSN() string {
+	if c.Database.DSN != "" {
+		if c.Database.Driver == DatabaseDriverSQLite {
+			return sqliteDSNWithForeignKeys(c.Database.DSN)
+		}
+		return c.Database.DSN
+	}
 	return c.DatabasePath() +
 		"?_pragma=foreign_keys(1)" +
 		"&_pragma=journal_mode(WAL)" +
 		"&_pragma=busy_timeout(5000)" +
 		"&_pragma=synchronous(NORMAL)"
+}
+
+func sqliteDSNWithForeignKeys(dsn string) string {
+	separator := "?"
+	if strings.Contains(dsn, "?") {
+		separator = "&"
+	}
+	if strings.HasSuffix(dsn, "?") || strings.HasSuffix(dsn, "&") {
+		separator = ""
+	}
+	return dsn + separator + "_pragma=foreign_keys(1)"
 }
 
 // DefaultServerConfig 返回内置默认服务器配置。loader 在解析 yaml 前以此为基底合并。
@@ -230,6 +278,7 @@ func DefaultServerConfig() *ServerConfig {
 		JWTExpiry:       15 * time.Minute,
 		RefreshExpiry:   30 * 24 * time.Hour,
 		ShutdownTimeout: 10 * time.Second,
+		Database:        defaultDatabaseConfig(DatabaseDriverSQLite),
 		Workers:         DefaultWorkerConfig(),
 		CORS: CORSConfig{
 			AllowedOrigins: []string{"*"},
@@ -254,7 +303,7 @@ func ValidateServerConfig(c *ServerConfig) error {
 	if c.Host == "" {
 		c.Host = "0.0.0.0"
 	}
-	if c.Port < 1 || c.Port > 65535 {
+	if c.Port < 0 || c.Port > 65535 || (c.Port == 0 && !c.IsLocal()) {
 		c.Port = 8080
 	}
 	if c.DataDir == "" {
@@ -274,6 +323,28 @@ func ValidateServerConfig(c *ServerConfig) error {
 	}
 	if c.ShutdownTimeout <= 0 {
 		c.ShutdownTimeout = 10 * time.Second
+	}
+	switch c.Database.Driver {
+	case DatabaseDriverSQLite:
+		// SQLite DSN 为空时由 DatabaseDSN 根据 data_dir 生成。
+	case DatabaseDriverPostgres:
+		if strings.TrimSpace(c.Database.DSN) == "" {
+			return fmt.Errorf("server.database.dsn is required for postgres")
+		}
+	default:
+		return fmt.Errorf("server.database.driver must be one of %s|%s, got %q", DatabaseDriverSQLite, DatabaseDriverPostgres, c.Database.Driver)
+	}
+	if c.Database.MaxOpenConns < 0 {
+		return fmt.Errorf("server.database.max_open_conns must not be negative")
+	}
+	if c.Database.MaxIdleConns < 0 {
+		return fmt.Errorf("server.database.max_idle_conns must not be negative")
+	}
+	if c.Database.MaxOpenConns > 0 && c.Database.MaxIdleConns > c.Database.MaxOpenConns {
+		return fmt.Errorf("server.database.max_idle_conns must not exceed max_open_conns")
+	}
+	if c.Database.ConnMaxLifetime < 0 {
+		return fmt.Errorf("server.database.conn_max_lifetime must not be negative")
 	}
 	if len(c.CORS.AllowedOrigins) == 0 {
 		c.CORS.AllowedOrigins = []string{"*"}
