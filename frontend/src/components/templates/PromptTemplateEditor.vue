@@ -30,9 +30,13 @@ const editorRef = ref<InstanceType<typeof HighlightTextarea> | null>(null)
 const systemVariables = [
   { key: 'SourceLang', label: '源语言' },
   { key: 'TargetLang', label: '目标语言' },
+  { key: 'Protocol', label: '协议 text|json_loose|json_strict' },
   { key: 'SourceContent', label: '源内容' },
   { key: 'TargetContent', label: '目标内容' },
   { key: 'GlossaryTerms', label: '术语表' },
+  { key: 'InlineBootstrap', label: '是否内联术语抽取' },
+  { key: 'MaxBootstrapTerms', label: '内联术语上限' },
+  { key: 'RubyMode', label: '注音模式 json|section|inline' },
   { key: 'FileFormat', label: '文件格式' },
   { key: 'FileName', label: '文件名' },
   { key: 'OriginalText', label: '原始文本' },
@@ -42,12 +46,14 @@ const systemVariables = [
 const bootstrapVariables = [
   { key: 'SourceLang', label: '源语言' },
   { key: 'TargetLang', label: '目标语言' },
+  { key: 'Protocol', label: '协议 text|json_loose|json_strict' },
   { key: 'MaxTerms', label: '最大术语数' },
 ] as const
 
 const pruneVariables = [
   { key: 'SourceLang', label: '源语言' },
   { key: 'TargetLang', label: '目标语言' },
+  { key: 'Protocol', label: '协议 text|json_loose|json_strict' },
   { key: 'Entries', label: '完整术语条目集合' },
 ] as const
 
