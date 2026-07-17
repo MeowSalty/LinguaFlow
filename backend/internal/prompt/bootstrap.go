@@ -16,6 +16,8 @@ type BootstrapData struct {
 	Texts      []string
 	Existing   []string
 	MaxTerms   int
+	// Protocol 控制 system/user 协议与解析通道；由 ProtocolFromResponseMode 推导。
+	Protocol Protocol
 }
 
 // BootstrapRenderer 持有已编译的 bootstrap system 模板。user 由 Render 直接 JSON 序列化。
@@ -45,14 +47,20 @@ type bootstrapEnvelope struct {
 	Texts      []string `json:"texts"`
 }
 
-// Render 返回 (system, user, err)。user 永远是合法 JSON。
+// Render 返回 (system, user, err)。ProtocolText 时 user 为纯文本格式，否则为 JSON。
 func (r *BootstrapRenderer) Render(d BootstrapData) (string, string, error) {
 	if d.MaxTerms < 1 {
 		d.MaxTerms = 20
 	}
+	if d.Protocol == "" {
+		d.Protocol = ProtocolJSONStrict
+	}
 	var sysBuf bytes.Buffer
 	if err := r.system.Execute(&sysBuf, d); err != nil {
 		return "", "", fmt.Errorf("prompt: execute bootstrap system: %w", err)
+	}
+	if d.Protocol.IsText() {
+		return sysBuf.String(), buildBootstrapTextUser(d), nil
 	}
 	env := bootstrapEnvelope{
 		Task:       "extract_terms",
@@ -66,6 +74,50 @@ func (r *BootstrapRenderer) Render(d BootstrapData) (string, string, error) {
 		return "", "", fmt.Errorf("prompt: marshal bootstrap envelope: %w", err)
 	}
 	return sysBuf.String(), string(userBytes), nil
+}
+
+// buildBootstrapTextUser 构建 text 模式的 bootstrap user message。
+//
+//	source_lang: ...
+//	target_lang: ...
+//	max_terms: N
+//
+//	[existing]
+//	term1
+//	...
+//
+//	[texts]
+//	---
+//	<text0>
+//	---
+//	<text1>
+func buildBootstrapTextUser(d BootstrapData) string {
+	var sb strings.Builder
+	sb.WriteString("source_lang: ")
+	sb.WriteString(d.SourceLang)
+	sb.WriteByte('\n')
+	sb.WriteString("target_lang: ")
+	sb.WriteString(d.TargetLang)
+	sb.WriteByte('\n')
+	sb.WriteString("max_terms: ")
+	sb.WriteString(fmt.Sprintf("%d", d.MaxTerms))
+	sb.WriteByte('\n')
+
+	if len(d.Existing) > 0 {
+		sb.WriteString("\n[existing]\n")
+		for _, e := range d.Existing {
+			sb.WriteString(e)
+			sb.WriteByte('\n')
+		}
+	}
+
+	sb.WriteString("\n[texts]\n")
+	for _, t := range d.Texts {
+		sb.WriteString("---\n")
+		sb.WriteString(t)
+		sb.WriteByte('\n')
+	}
+	return sb.String()
 }
 
 // BootstrapEntry 是 LLM 抽取出的一条候选术语。与 glossary.Entry 解耦，避免循环依赖。

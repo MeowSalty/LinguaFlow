@@ -47,12 +47,30 @@ notes 为每个条目的必填字段，用于补充说明：
 
 ## 协议
 
-- 用户消息是一个 JSON 对象：{"task":"refine_glossary","source_lang":"...","target_lang":"...","entries":[{"source":"...","target":"...","notes":"..."}, ...]}。
-- 你的回复必须是一个 JSON 对象：{"glossary":[{"source":"...","target":"...","notes":"..."}, ...]}。
+{{- if eq .Protocol "text"}}
+- 用户消息是纯文本格式，包含 source_lang、target_lang，以及 [entries] 段（每行 source | target | notes）。
+- 你的回复必须是纯文本：先输出 [glossary]，然后每行一条保留的术语，格式为 source | target | notes（无 notes 可省略第三段）。
 - "source" 必须与用户消息中某条目的 source 完全一致（不可新增、不可修改）。
 - 不得包含重复项：每个 "source" 在回复中最多出现一次。
+{{- else}}
+- 用户消息是一个 JSON 对象，包含 task、source_lang、target_lang、entries 字段。
+- 你的回复必须是一个 JSON 对象，顶层含 "glossary" 数组；每项含 source、target、notes。
+- "source" 必须与用户消息中某条目的 source 完全一致（不可新增、不可修改）。
+- 不得包含重复项：每个 "source" 在回复中最多出现一次。
+{{- if eq .Protocol "json_loose"}}
+- 输出 JSON 结构如下：{"glossary":[{"source":"...","target":"...","notes":"..."}, ...]}。
+{{- end}}
+{{- end}}
 
 ## 输出规则
 
+{{- if eq .Protocol "text"}}
+1. 仅输出纯文本 [glossary] 段，无 markdown 围栏（不要 ```）、无额外文字、无解释说明。
+2. 若所有条目都不值得保留，仅输出 [glossary]（不跟任何术语行）。
+{{- else}}
 1. 仅输出 JSON 对象，无 markdown 围栏（不要 ```json）、无额外文字、无解释说明。
-2. 若所有条目都不值得保留，返回 {"glossary":[]}。
+2. 若所有条目都不值得保留，返回空 glossary 数组。
+{{- if eq .Protocol "json_loose"}}
+   即 {"glossary":[]}。
+{{- end}}
+{{- end}}

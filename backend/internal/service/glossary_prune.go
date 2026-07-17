@@ -218,6 +218,19 @@ func (s *GlossaryPruneService) Preview(ctx context.Context, actorUserID, project
 		return nil, fmt.Errorf("prune: create renderer: %w", err)
 	}
 
+	backendRecord, err := s.backends.GetByID(ctx, backendID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validateBackendForProject(ctx, projectRow, backendRecord); err != nil {
+		return nil, err
+	}
+
+	// response_format → Protocol（text / json_loose / json_strict）
+	responseMode := responseModeFromBackendOptions(backendRecord.Options)
+	proto := prompt.ProtocolFromResponseMode(responseMode)
+	isTextMode := proto.IsText()
+
 	pruneEntries := make([]prompt.PruneEntry, 0, len(entries))
 	for _, e := range entries {
 		pruneEntries = append(pruneEntries, prompt.PruneEntry{
@@ -231,17 +244,10 @@ func (s *GlossaryPruneService) Preview(ctx context.Context, actorUserID, project
 		SourceLang: projectRow.SourceLang,
 		TargetLang: projectRow.TargetLang,
 		Entries:    pruneEntries,
+		Protocol:   proto,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("prune: render prompt: %w", err)
-	}
-
-	backendRecord, err := s.backends.GetByID(ctx, backendID)
-	if err != nil {
-		return nil, err
-	}
-	if err := s.validateBackendForProject(ctx, projectRow, backendRecord); err != nil {
-		return nil, err
 	}
 
 	b, err := backend.Build(backend.Config{
@@ -268,12 +274,15 @@ func (s *GlossaryPruneService) Preview(ctx context.Context, actorUserID, project
 		"backend_name", backendRecord.Name,
 		"template_name", tmpl.Name)
 
-	// system 和 user 分开输出用于诊断（与 SSE 一致：sent_content 仅含 user）
+	// 非 text：只挂 JSONSchema，不强制 ResponseFormat；text：ResponseFormat=none
 	req := backend.Request{
-		System:         sys,
-		User:           usr,
-		ResponseFormat: "json_schema",
-		JSONSchema:     prompt.BootstrapSchema(),
+		System: sys,
+		User:   usr,
+	}
+	if isTextMode {
+		req.ResponseFormat = "none"
+	} else {
+		req.JSONSchema = prompt.BootstrapSchema()
 	}
 
 	s.logger.Debug("prune prompt sent",
@@ -301,7 +310,8 @@ func (s *GlossaryPruneService) Preview(ctx context.Context, actorUserID, project
 	}
 
 	repairOpts := defaultPruneRepairOptions()
-	refined, parseRepaired, perr := repair.TryRepairBootstrap(resp.Text, repairOpts)
+	// requireHeaderForEmpty：避免乱输出被当成空 glossary → 建议全删
+	refined, parseRepaired, perr := repair.ParseBootstrapByMode(resp.Text, isTextMode, repairOpts, true)
 	if perr != nil {
 		s.logger.Warn("prune parse failed",
 			"resp_len", len(resp.Text),
@@ -522,6 +532,17 @@ func (s *GlossaryPruneService) applyUpdate(ctx context.Context, actorUserID, pro
 		Notes:         notes,
 	})
 	return err
+}
+
+// responseModeFromBackendOptions 从后端 Options map 中读取 response_format 值。
+func responseModeFromBackendOptions(opts map[string]any) string {
+	if opts == nil {
+		return ""
+	}
+	if v, ok := opts["response_format"].(string); ok {
+		return v
+	}
+	return ""
 }
 
 // headSnippetLocal 截取字符串前 n 个字符（与 pipeline.headSnippet 同逻辑）。

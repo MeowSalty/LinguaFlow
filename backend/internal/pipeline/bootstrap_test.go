@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -297,6 +298,169 @@ func TestExtractHandler_SendAll_BothZero(t *testing.T) {
 	// Should be exactly 1 LLM call (single batch)
 	if got := fb.idx.Load(); got != 1 {
 		t.Errorf("expected 1 backend call (send-all mode), got %d", got)
+	}
+}
+
+func TestExtractHandler_JSONRequestShape(t *testing.T) {
+	doc := &Document{
+		SourceLang: "en", TargetLang: "zh",
+		Segments: []Segment{
+			{ID: "0", Source: "Call the Gemini API.", Translate: true},
+		},
+	}
+	fb := &fakeBackend{
+		name: "fake",
+		responses: []string{
+			`{"glossary":[{"source":"Gemini","target":"哈基米","notes":""}]}`,
+		},
+	}
+	g := glossary.NewMemory()
+
+	h := &ExtractHandler{
+		Backends:             []backend.Backend{fb},
+		Renderer:             newBootstrapRenderer(t),
+		Glossary:             g,
+		BatchSize:            10,
+		MaxTermsPer1000Chars: 25.0,
+		MinSourceLen:         2,
+		// ResponseMode 为空 / 非 text → JSON 路径
+		Logger: discardLogger(),
+	}
+
+	round := Round{Concurrency: 1, Handler: h}
+	if _, err := RunRound(context.Background(), round, doc, nil, discardLogger(), nil); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(fb.requests) != 1 {
+		t.Fatalf("want 1 request, got %d", len(fb.requests))
+	}
+	req := fb.requests[0]
+	if req.ResponseFormat != "" {
+		t.Errorf("ResponseFormat should be empty (backend default), got %q", req.ResponseFormat)
+	}
+	if req.JSONSchema == nil {
+		t.Error("JSONSchema should be set for non-text mode")
+	}
+	if g.Len() != 1 {
+		t.Errorf("want 1 entry, got %d", g.Len())
+	}
+}
+
+func TestExtractHandler_TextModeRequestAndParse(t *testing.T) {
+	doc := &Document{
+		SourceLang: "en", TargetLang: "zh",
+		Segments: []Segment{
+			{ID: "0", Source: "Call the Gemini API.", Translate: true},
+		},
+	}
+	fb := &fakeBackend{
+		name: "fake",
+		responses: []string{
+			"[glossary]\nGemini | 哈基米 | company\nAPI | 接口\n",
+		},
+	}
+	g := glossary.NewMemory()
+
+	h := &ExtractHandler{
+		Backends:             []backend.Backend{fb},
+		Renderer:             newBootstrapRenderer(t),
+		Glossary:             g,
+		BatchSize:            10,
+		MaxTermsPer1000Chars: 25.0,
+		MinSourceLen:         2,
+		ResponseMode:         "text",
+		Logger:               discardLogger(),
+	}
+
+	round := Round{Concurrency: 1, Handler: h}
+	if _, err := RunRound(context.Background(), round, doc, nil, discardLogger(), nil); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(fb.requests) != 1 {
+		t.Fatalf("want 1 request, got %d", len(fb.requests))
+	}
+	req := fb.requests[0]
+	if req.ResponseFormat != "none" {
+		t.Errorf("ResponseFormat want none, got %q", req.ResponseFormat)
+	}
+	if req.JSONSchema != nil {
+		t.Error("JSONSchema should be nil in text mode")
+	}
+	// user 应为 text 格式
+	if !strings.Contains(req.User, "[texts]") {
+		t.Errorf("text mode user should contain [texts]:\n%s", req.User)
+	}
+	if g.Len() != 2 {
+		t.Errorf("want 2 entries, got %d (entries=%v)", g.Len(), g.SnapshotSources())
+	}
+}
+
+func TestExtractHandler_TextModeEmptyGlossary(t *testing.T) {
+	doc := &Document{
+		SourceLang: "en", TargetLang: "zh",
+		Segments: []Segment{
+			{ID: "0", Source: "just some common words here", Translate: true},
+		},
+	}
+	fb := &fakeBackend{
+		name:      "fake",
+		responses: []string{"[glossary]\n"},
+	}
+	g := glossary.NewMemory()
+
+	h := &ExtractHandler{
+		Backends:             []backend.Backend{fb},
+		Renderer:             newBootstrapRenderer(t),
+		Glossary:             g,
+		BatchSize:            10,
+		MaxTermsPer1000Chars: 25.0,
+		MinSourceLen:         2,
+		ResponseMode:         "text",
+		Logger:               discardLogger(),
+	}
+
+	round := Round{Concurrency: 1, Handler: h}
+	if _, err := RunRound(context.Background(), round, doc, nil, discardLogger(), nil); err != nil {
+		t.Fatalf("empty glossary should succeed, got: %v", err)
+	}
+	if g.Len() != 0 {
+		t.Errorf("want 0 entries, got %d", g.Len())
+	}
+}
+
+func TestExtractHandler_TextModeJSONFallback(t *testing.T) {
+	doc := &Document{
+		SourceLang: "en", TargetLang: "zh",
+		Segments: []Segment{
+			{ID: "0", Source: "Call the Gemini API.", Translate: true},
+		},
+	}
+	// text 模式但模型仍返回 JSON
+	fb := &fakeBackend{
+		name: "fake",
+		responses: []string{
+			`{"glossary":[{"source":"Gemini","target":"哈基米","notes":""}]}`,
+		},
+	}
+	g := glossary.NewMemory()
+
+	h := &ExtractHandler{
+		Backends:             []backend.Backend{fb},
+		Renderer:             newBootstrapRenderer(t),
+		Glossary:             g,
+		BatchSize:            10,
+		MaxTermsPer1000Chars: 25.0,
+		MinSourceLen:         2,
+		ResponseMode:         "text",
+		Logger:               discardLogger(),
+	}
+
+	round := Round{Concurrency: 1, Handler: h}
+	if _, err := RunRound(context.Background(), round, doc, nil, discardLogger(), nil); err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if g.Len() != 1 {
+		t.Errorf("JSON fallback should add 1 entry, got %d", g.Len())
 	}
 }
 

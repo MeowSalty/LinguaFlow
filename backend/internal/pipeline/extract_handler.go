@@ -29,6 +29,7 @@ type ExtractHandler struct {
 	MaxTermsPer1000Chars float64
 	MinSourceLen         int
 	Repair               repair.Options
+	ResponseMode         string // 与后端 options.response_format 对齐；"text" 走纯文本协议
 
 	Logger   *slog.Logger
 	Reporter progress.Reporter
@@ -159,12 +160,15 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 
 	existing := h.collectExisting(ctx, texts, doc, logger)
 
+	proto := prompt.ProtocolFromResponseMode(h.ResponseMode)
+	isTextMode := proto.IsText()
 	sys, usr, err := h.Renderer.Render(prompt.BootstrapData{
 		SourceLang: doc.SourceLang,
 		TargetLang: doc.TargetLang,
 		Texts:      texts,
 		Existing:   existing,
 		MaxTerms:   h.calcMaxTerms(texts),
+		Protocol:   proto,
 	})
 	if err != nil {
 		logger.Warn("extract render failed", "err", err)
@@ -184,11 +188,16 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 		return batchResult{}
 	}
 
+	// 非 text：只挂 JSONSchema，不强制 ResponseFormat，由 backend 默认决定是否用 schema。
+	// text：强制 ResponseFormat=none，不挂 schema。
 	req := backend.Request{
-		System:         sys,
-		User:           usr,
-		ResponseFormat: "json_schema",
-		JSONSchema:     prompt.BootstrapSchema(),
+		System: sys,
+		User:   usr,
+	}
+	if isTextMode {
+		req.ResponseFormat = "none"
+	} else {
+		req.JSONSchema = prompt.BootstrapSchema()
 	}
 
 	var lastErr error
@@ -205,7 +214,7 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 			continue
 		}
 
-		parsed, parseRepaired, perr := repair.TryRepairBootstrap(resp.Text, h.Repair)
+		parsed, parseRepaired, perr := repair.ParseBootstrapByMode(resp.Text, isTextMode, h.Repair, false)
 		if perr != nil {
 			logger.Warn("extract parse failed",
 				"backend", b.Name(), "err", perr,

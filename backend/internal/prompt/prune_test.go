@@ -79,6 +79,78 @@ func TestPruneRenderer_EmptyContent(t *testing.T) {
 	}
 }
 
+func TestPruneRenderer_StrictSchemaOmitsShape(t *testing.T) {
+	const tmpl = `协议
+{{- if eq .Protocol "json_loose"}}
+SHAPE:{"glossary":[]}
+{{- end}}
+`
+	r, err := NewPruneRenderer(tmpl)
+	if err != nil {
+		t.Fatalf("renderer: %v", err)
+	}
+	sysStrict, _, err := r.Render(PruneData{
+		SourceLang: "en", TargetLang: "zh", Protocol: ProtocolJSONStrict,
+	})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if strings.Contains(sysStrict, "SHAPE:") {
+		t.Errorf("strict should omit shape:\n%s", sysStrict)
+	}
+	sysLoose, _, err := r.Render(PruneData{
+		SourceLang: "en", TargetLang: "zh", Protocol: ProtocolJSONLoose,
+	})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if !strings.Contains(sysLoose, "SHAPE:") {
+		t.Errorf("loose should include shape:\n%s", sysLoose)
+	}
+}
+
+func TestPruneRenderer_TextModeUserFormat(t *testing.T) {
+	r, err := NewPruneRenderer(defaultTestPruneTmpl)
+	if err != nil {
+		t.Fatalf("renderer: %v", err)
+	}
+	sys, usr, err := r.Render(PruneData{
+		SourceLang: "en", TargetLang: "zh",
+		Entries: []PruneEntry{
+			{Source: "Gemini", Target: "哈基米", Notes: "company"},
+			{Source: "API", Target: "接口", Notes: ""},
+		},
+		Protocol: ProtocolText,
+	})
+	if err != nil {
+		t.Fatalf("render: %v", err)
+	}
+	if !strings.Contains(sys, "refine terms") {
+		t.Errorf("system prompt missing core instruction:\n%s", sys)
+	}
+	if strings.HasPrefix(strings.TrimSpace(usr), "{") {
+		t.Fatalf("text mode user should not be JSON:\n%s", usr)
+	}
+	if !strings.Contains(usr, "source_lang: en") {
+		t.Errorf("missing source_lang:\n%s", usr)
+	}
+	if !strings.Contains(usr, "target_lang: zh") {
+		t.Errorf("missing target_lang:\n%s", usr)
+	}
+	if !strings.Contains(usr, "[entries]\n") {
+		t.Errorf("missing entries section:\n%s", usr)
+	}
+	if !strings.Contains(usr, "Gemini | 哈基米 | company") {
+		t.Errorf("missing entry with notes:\n%s", usr)
+	}
+	if !strings.Contains(usr, "API | 接口\n") && !strings.HasSuffix(usr, "API | 接口") {
+		// notes 为空时不输出第三段
+		if !strings.Contains(usr, "API | 接口") {
+			t.Errorf("missing entry without notes:\n%s", usr)
+		}
+	}
+}
+
 func TestPruneRenderer_LargeEntries(t *testing.T) {
 	r, err := NewPruneRenderer(defaultTestPruneTmpl)
 	if err != nil {

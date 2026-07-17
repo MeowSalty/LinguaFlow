@@ -41,4 +41,5 @@ type ExtractRoundConfig struct {
 	MinSourceLen         int
 	MaxWordsPerBatch     int
 	Repair               repair.Options
+	ResponseMode         string
 }

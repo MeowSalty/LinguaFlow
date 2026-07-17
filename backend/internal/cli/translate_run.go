@@ -269,11 +269,12 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 			}
 
 			rounds = append(rounds, engine.Round{
-				Backend:     b,
-				BatchSize:   e.BatchSize,
-				Concurrency: e.Concurrency,
-				Retry:       toBackendRetryPolicy(e.Retry),
-				Mode:        pipeline.RoundModeExtract,
+				Backend:      b,
+				BatchSize:    e.BatchSize,
+				Concurrency:  e.Concurrency,
+				Retry:        toBackendRetryPolicy(e.Retry),
+				Mode:         pipeline.RoundModeExtract,
+				ResponseMode: responseModeFromOptions(bCfg.Options),
 
 				ExtractRenderer:             extractRenderer,
 				ExtractMaxTermsPer1000Chars: e.MaxTermsPer1000Chars,

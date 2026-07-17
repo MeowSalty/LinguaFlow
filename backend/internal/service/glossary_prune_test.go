@@ -15,6 +15,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 )
 
 // testClient 创建内存 SQLite ent 客户端并自动迁移。
@@ -155,6 +156,86 @@ func TestComputePruneDiff_CaseInsensitiveMatch(t *testing.T) {
 	preview := computePruneDiff(existing, refined)
 	if preview.ToKeep != 1 || preview.ToUpdate != 0 || preview.ToDelete != 0 {
 		t.Errorf("case-insensitive match should keep: %+v", preview)
+	}
+}
+
+func TestParsePruneResponse_TextMode(t *testing.T) {
+	opt := defaultPruneRepairOptions()
+	entries, _, err := repair.ParseBootstrapByMode("[glossary]\nA | B | note\n", true, opt, true)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Source != "A" {
+		t.Errorf("entries: %#v", entries)
+	}
+}
+
+func TestParsePruneResponse_TextModeJSONFallback(t *testing.T) {
+	opt := defaultPruneRepairOptions()
+	in := `{"glossary":[{"source":"x","target":"y","notes":""}]}`
+	entries, ops, err := repair.ParseBootstrapByMode(in, true, opt, true)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if len(entries) != 1 || entries[0].Source != "x" {
+		t.Errorf("entries: %#v", entries)
+	}
+	found := false
+	for _, op := range ops {
+		if op == "text.fallback-json" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected text.fallback-json in ops, got %v", ops)
+	}
+}
+
+func TestParsePruneResponse_JSONMode(t *testing.T) {
+	opt := defaultPruneRepairOptions()
+	in := `{"glossary":[{"source":"x","target":"y","notes":""}]}`
+	entries, _, err := repair.ParseBootstrapByMode(in, false, opt, true)
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if len(entries) != 1 {
+		t.Errorf("entries: %#v", entries)
+	}
+}
+
+func TestParsePruneResponse_TextModeGarbageIsError(t *testing.T) {
+	opt := defaultPruneRepairOptions()
+	// 无 [glossary] 头且无可解析行：不得当成空列表（否则 Preview 会建议全删）
+	_, _, err := repair.ParseBootstrapByMode("totally not a glossary response", true, opt, true)
+	if !errors.Is(err, repair.ErrBootstrapTextEmpty) {
+		t.Fatalf("want ErrBootstrapTextEmpty, got %v", err)
+	}
+}
+
+func TestParsePruneResponse_TextModeExplicitEmptyOK(t *testing.T) {
+	opt := defaultPruneRepairOptions()
+	entries, _, err := repair.ParseBootstrapByMode("[glossary]\n", true, opt, true)
+	if err != nil {
+		t.Fatalf("explicit empty should succeed: %v", err)
+	}
+	if len(entries) != 0 {
+		t.Errorf("want empty, got %#v", entries)
+	}
+}
+
+func TestResponseModeFromBackendOptions(t *testing.T) {
+	if got := responseModeFromBackendOptions(nil); got != "" {
+		t.Errorf("nil opts: %q", got)
+	}
+	if got := responseModeFromBackendOptions(map[string]any{"response_format": "text"}); got != "text" {
+		t.Errorf("text: %q", got)
+	}
+	if got := responseModeFromBackendOptions(map[string]any{"response_format": "json_object"}); got != "json_object" {
+		t.Errorf("json_object: %q", got)
+	}
+	if got := responseModeFromBackendOptions(map[string]any{"other": "x"}); got != "" {
+		t.Errorf("missing: %q", got)
 	}
 }
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"text/template"
 )
 
@@ -12,6 +13,8 @@ type PruneData struct {
 	SourceLang string
 	TargetLang string
 	Entries    []PruneEntry
+	// Protocol 控制 system/user 协议与解析通道；由 ProtocolFromResponseMode 推导。
+	Protocol Protocol
 }
 
 // PruneEntry 是术语精简输入的单条术语，与 bootstrap 的 BootstrapEntry 结构相同。
@@ -47,11 +50,17 @@ type pruneEnvelope struct {
 	Entries    []PruneEntry `json:"entries"`
 }
 
-// Render 返回 (system, user, err)。user 永远是合法 JSON。
+// Render 返回 (system, user, err)。ProtocolText 时 user 为纯文本格式，否则为 JSON。
 func (r *PruneRenderer) Render(d PruneData) (string, string, error) {
+	if d.Protocol == "" {
+		d.Protocol = ProtocolJSONStrict
+	}
 	var sysBuf bytes.Buffer
 	if err := r.system.Execute(&sysBuf, d); err != nil {
 		return "", "", fmt.Errorf("prompt: execute prune system: %w", err)
+	}
+	if d.Protocol.IsText() {
+		return sysBuf.String(), buildPruneTextUser(d), nil
 	}
 	env := pruneEnvelope{
 		Task:       "refine_glossary",
@@ -67,4 +76,34 @@ func (r *PruneRenderer) Render(d PruneData) (string, string, error) {
 		return "", "", fmt.Errorf("prompt: marshal prune envelope: %w", err)
 	}
 	return sysBuf.String(), string(userBytes), nil
+}
+
+// buildPruneTextUser 构建 text 模式的 prune user message。
+//
+//	source_lang: ...
+//	target_lang: ...
+//
+//	[entries]
+//	source | target | notes
+//	...
+func buildPruneTextUser(d PruneData) string {
+	var sb strings.Builder
+	sb.WriteString("source_lang: ")
+	sb.WriteString(d.SourceLang)
+	sb.WriteByte('\n')
+	sb.WriteString("target_lang: ")
+	sb.WriteString(d.TargetLang)
+	sb.WriteByte('\n')
+	sb.WriteString("\n[entries]\n")
+	for _, e := range d.Entries {
+		sb.WriteString(e.Source)
+		sb.WriteString(" | ")
+		sb.WriteString(e.Target)
+		if e.Notes != "" {
+			sb.WriteString(" | ")
+			sb.WriteString(e.Notes)
+		}
+		sb.WriteByte('\n')
+	}
+	return sb.String()
 }
