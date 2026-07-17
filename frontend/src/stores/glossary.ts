@@ -25,6 +25,14 @@ type SyncImpactResponse = ApiSchemas['GlossarySyncImpactResponse']
 type SyncExecuteRequest = ApiSchemas['GlossarySyncExecuteRequest']
 type SyncTaskStatusResponse = ApiSchemas['GlossarySyncTaskStatusResponse']
 
+/** 批量同步队列项（精简术语等多条 target 变更时使用） */
+export type GlossarySyncQueueItem = {
+  entryId: number
+  source: string
+  oldTarget: string
+  newTarget: string
+}
+
 export const useGlossaryStore = defineStore('glossary', () => {
   const items = ref<GlossaryEntry[]>([])
 
@@ -53,6 +61,14 @@ export const useGlossaryStore = defineStore('glossary', () => {
   const syncSource = ref('') // 术语源文（用于展示）
   const syncOldTarget = ref('') // 旧译文
   const syncNewTarget = ref('') // 新译文
+
+  // 批量同步队列
+  const syncQueue = ref<GlossarySyncQueueItem[]>([])
+  const syncQueueTotal = ref(0)
+  const syncQueueCurrent = ref(0) // 当前处理到第几项（1-based，用于展示）
+  const syncQueueSyncedAny = ref(false) // 队列中是否至少有一次成功同步
+  const syncAdvancing = ref(false) // 队列推进中（防连点重入）
+  let syncImpactGeneration = 0 // impact 请求代数，丢弃过期响应
 
   // 影响分析
   const syncImpactLoading = ref(false) // 影响分析加载中
@@ -237,9 +253,36 @@ export const useGlossaryStore = defineStore('glossary', () => {
 
   // ── 同步方法 ──
 
+  /** 重置当前条目的同步执行态（不影响队列元数据） */
+  const resetCurrentSyncState = (
+    entryId: number,
+    source: string,
+    oldTarget: string,
+    newTarget: string,
+  ): void => {
+    syncImpactGeneration += 1
+    syncStep.value = 'impact'
+    syncEntryId.value = entryId
+    syncSource.value = source
+    syncOldTarget.value = oldTarget
+    syncNewTarget.value = newTarget
+    syncImpactData.value = null
+    syncImpactLoading.value = false
+    syncImpactError.value = null
+    syncSelectedResourceIds.value = []
+    syncResult.value = null
+    syncError.value = null
+    syncTaskId.value = null
+    syncStatusUrl.value = null
+    syncTaskStatus.value = 'pending'
+    syncProcessed.value = 0
+    syncTotal.value = 0
+    syncPollingFailCount.value = 0
+  }
+
   /**
    * 打开同步对话框并自动触发影响分析。
-   * 由 GlossaryDrawer 保存成功后调用。
+   * 由 GlossaryDrawer 保存成功后调用（单条，会清空队列）。
    */
   const openSyncDialog = async (
     projectId: number,
@@ -248,42 +291,116 @@ export const useGlossaryStore = defineStore('glossary', () => {
     oldTarget: string,
     newTarget: string,
   ): Promise<void> => {
-    syncDialogVisible.value = true
-    syncStep.value = 'impact'
-    syncEntryId.value = entryId
-    syncSource.value = source
-    syncOldTarget.value = oldTarget
-    syncNewTarget.value = newTarget
-    syncImpactData.value = null
-    syncSelectedResourceIds.value = []
-    syncResult.value = null
-    syncError.value = null
-    syncTaskId.value = null
-    syncStatusUrl.value = null
-    syncPollingFailCount.value = 0
+    stopSyncPolling()
+    syncAdvancing.value = false
+    syncQueue.value = []
+    syncQueueTotal.value = 0
+    syncQueueCurrent.value = 0
+    syncQueueSyncedAny.value = false
 
+    syncDialogVisible.value = true
+    resetCurrentSyncState(entryId, source, oldTarget, newTarget)
     await loadSyncImpact(projectId)
+  }
+
+  /**
+   * 打开批量同步队列：按序对多条术语译文变更做影响分析 / 同步。
+   * 精简术语 apply 后若存在 target_changed 时调用。
+   */
+  const openSyncQueue = async (
+    projectId: number,
+    items: GlossarySyncQueueItem[],
+  ): Promise<void> => {
+    if (items.length === 0) return
+
+    stopSyncPolling()
+    syncAdvancing.value = false
+    syncQueue.value = [...items]
+    syncQueueTotal.value = items.length
+    syncQueueCurrent.value = 0
+    syncQueueSyncedAny.value = false
+    syncDialogVisible.value = true
+
+    await openNextSyncFromQueue(projectId)
+  }
+
+  const openNextSyncFromQueue = async (projectId: number): Promise<boolean> => {
+    const next = syncQueue.value.shift()
+    if (!next) return false
+
+    stopSyncPolling()
+    syncQueueCurrent.value = syncQueueTotal.value - syncQueue.value.length
+    resetCurrentSyncState(next.entryId, next.source, next.oldTarget, next.newTarget)
+    syncDialogVisible.value = true
+    await loadSyncImpact(projectId)
+    return true
+  }
+
+  /**
+   * 结束当前术语的同步交互，若队列中还有下一项则自动打开。
+   * 队列耗尽时仅关闭对话框，完整清理由对话框 watch 负责（以便读取同步成功标记）。
+   * @returns advanced — 已打开下一项；done — 队列结束；busy — 正在推进中已忽略
+   */
+  const finishCurrentSyncAndAdvance = async (
+    projectId: number,
+  ): Promise<'advanced' | 'done' | 'busy'> => {
+    if (syncAdvancing.value || syncImpactLoading.value) {
+      return 'busy'
+    }
+
+    if (syncStep.value === 'result') {
+      syncQueueSyncedAny.value = true
+    }
+
+    stopSyncPolling()
+    syncAdvancing.value = true
+
+    try {
+      if (syncQueue.value.length > 0) {
+        await openNextSyncFromQueue(projectId)
+        return 'advanced'
+      }
+
+      // 仅隐藏对话框，保留 syncStep / syncQueueSyncedAny 供关闭监听读取
+      syncDialogVisible.value = false
+      return 'done'
+    } finally {
+      syncAdvancing.value = false
+    }
   }
 
   const loadSyncImpact = async (projectId: number): Promise<void> => {
     if (!syncEntryId.value) return
 
+    const entryId = syncEntryId.value
+    const oldTarget = syncOldTarget.value
+    const newTarget = syncNewTarget.value
+    const generation = ++syncImpactGeneration
+
     syncImpactLoading.value = true
     syncImpactError.value = null
 
     try {
-      const data = await analyzeGlossarySyncImpact(projectId, syncEntryId.value, {
-        old_target: syncOldTarget.value,
-        new_target: syncNewTarget.value,
+      const data = await analyzeGlossarySyncImpact(projectId, entryId, {
+        old_target: oldTarget,
+        new_target: newTarget,
       })
+      if (generation !== syncImpactGeneration || syncEntryId.value !== entryId) {
+        return
+      }
       syncImpactData.value = data
       // 默认全选所有资源
       syncSelectedResourceIds.value = data.resources.map((r) => r.resource_id)
     } catch (err) {
+      if (generation !== syncImpactGeneration || syncEntryId.value !== entryId) {
+        return
+      }
       syncImpactError.value =
         err instanceof Error ? err.message : t('workspace.glossary.sync.impactLoadFailed')
     } finally {
-      syncImpactLoading.value = false
+      if (generation === syncImpactGeneration) {
+        syncImpactLoading.value = false
+      }
     }
   }
 
@@ -413,6 +530,12 @@ export const useGlossaryStore = defineStore('glossary', () => {
     syncPollingFailCount.value = 0
     syncResult.value = null
     syncError.value = null
+    syncQueue.value = []
+    syncQueueTotal.value = 0
+    syncQueueCurrent.value = 0
+    syncQueueSyncedAny.value = false
+    syncAdvancing.value = false
+    syncImpactGeneration += 1
   }
 
   const reset = (): void => {
@@ -461,6 +584,10 @@ export const useGlossaryStore = defineStore('glossary', () => {
     syncSource,
     syncOldTarget,
     syncNewTarget,
+    syncQueueTotal,
+    syncQueueCurrent,
+    syncQueueSyncedAny,
+    syncAdvancing,
     syncImpactLoading,
     syncImpactError,
     syncImpactData,
@@ -477,6 +604,8 @@ export const useGlossaryStore = defineStore('glossary', () => {
     syncSelectedResourceCount,
     // 同步方法
     openSyncDialog,
+    openSyncQueue,
+    finishCurrentSyncAndAdvance,
     loadSyncImpact,
     submitSync,
     startSyncPolling,

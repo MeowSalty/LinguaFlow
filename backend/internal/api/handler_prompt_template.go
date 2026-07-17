@@ -11,48 +11,29 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
 
-// ---- 请求/响应辅助结构体 ----
-
-type createPromptTemplateRequest struct {
-	Name                   string  `json:"name"`
-	Description            *string `json:"description,omitempty"`
-	SystemPromptContent    *string `json:"system_prompt_content,omitempty"`
-	BootstrapPromptContent *string `json:"bootstrap_prompt_content,omitempty"`
-}
-
-type updatePromptTemplateRequest struct {
-	Name                   *string `json:"name,omitempty"`
-	Description            *string `json:"description,omitempty"`
-	SystemPromptContent    *string `json:"system_prompt_content,omitempty"`
-	BootstrapPromptContent *string `json:"bootstrap_prompt_content,omitempty"`
-}
-
 // ---- 辅助函数 ----
 
 // parsePromptTemplateID 从路径参数解析 promptTemplateId。
-func parsePromptTemplateID(w http.ResponseWriter, r *http.Request) (int, bool) {
-	raw := chi.URLParam(r, "promptTemplateId")
+func (s *Server) parsePromptTemplateID(w http.ResponseWriter, r *http.Request) (int, bool) {
+	raw := chi.URLParam(r, "translationPromptTemplateId")
 	id, err := strconv.Atoi(raw)
 	if err != nil {
-		writeProblem(w, http.StatusBadRequest, "invalid_id", "提示词模板 ID 必须为整数")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_id", "提示词模板 ID 必须为整数")
 		return 0, false
 	}
 	return id, true
 }
 
-// entPromptTemplateToResponse 将数据库提示词模板转换为 API 响应。
-func entPromptTemplateToResponse(t *ent.PromptTemplate) PromptTemplate {
-	resp := PromptTemplate{
+// entTranslationPromptTemplateToResponse 将翻译提示词模板转换为 API 响应。
+func entTranslationPromptTemplateToResponse(t *ent.TranslationPromptTemplate) TranslationPromptTemplate {
+	resp := TranslationPromptTemplate{
 		Id:          t.ID,
 		Name:        t.Name,
 		Description: t.Description,
-		Scope:       PromptTemplateScope(t.Scope),
+		Scope:       TranslationPromptTemplateScope(t.Scope),
 	}
 	if t.SystemPromptContent != "" {
 		resp.SystemPromptContent = &t.SystemPromptContent
-	}
-	if t.BootstrapPromptContent != "" {
-		resp.BootstrapPromptContent = &t.BootstrapPromptContent
 	}
 	if t.OwnerUserID != nil {
 		resp.OwnerUserId = t.OwnerUserID
@@ -75,42 +56,42 @@ func entPromptTemplateToResponse(t *ent.PromptTemplate) PromptTemplate {
 func (s *Server) handleListPromptTemplates(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 
-	templates, err := s.promptTemplateSvc.ListByUser(r.Context(), authUser.User.ID)
+	templates, err := s.translationPromptTemplateSvc.ListByUser(r.Context(), authUser.User.ID)
 	if err != nil {
-		writeProblem(w, http.StatusInternalServerError, "internal_error", "查询提示词模板失败")
+		s.writeServiceError(w, r, err)
 		return
 	}
 
-	items := make([]PromptTemplate, 0, len(templates))
+	items := make([]TranslationPromptTemplate, 0, len(templates))
 	for _, t := range templates {
-		items = append(items, entPromptTemplateToResponse(t))
+		items = append(items, entTranslationPromptTemplateToResponse(t))
 	}
 
-	writeJSON(w, http.StatusOK, PromptTemplateListResponse{Items: items})
+	writeJSON(w, http.StatusOK, TranslationPromptTemplateListResponse{Items: items})
 }
 
 // handleCreatePromptTemplate 创建提示词模板。
 func (s *Server) handleCreatePromptTemplate(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 
-	var req CreatePromptTemplateRequest
-	if !decodeJSON(w, r, &req) {
+	var req CreateTranslationPromptTemplateRequest
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	if req.Name == "" {
-		writeProblem(w, http.StatusBadRequest, "validation_error", "提示词模板名称不能为空")
+		s.writeProblem(w, r, http.StatusBadRequest, "validation_error", "提示词模板名称不能为空")
 		return
 	}
 
-	input := service.CreatePromptTemplateInput{
+	input := service.CreateTranslationPromptTemplateInput{
 		Name:        req.Name,
 		Scope:       "user",
 		OwnerUserID: &authUser.User.ID,
@@ -121,86 +102,82 @@ func (s *Server) handleCreatePromptTemplate(w http.ResponseWriter, r *http.Reque
 	if req.SystemPromptContent != nil {
 		input.SystemPromptContent = *req.SystemPromptContent
 	}
-	if req.BootstrapPromptContent != nil {
-		input.BootstrapPromptContent = *req.BootstrapPromptContent
-	}
 
-	pt, err := s.promptTemplateSvc.Create(r.Context(), input)
+	pt, err := s.translationPromptTemplateSvc.Create(r.Context(), input)
 	if err != nil {
-		writeProblem(w, http.StatusInternalServerError, "internal_error", "创建提示词模板失败")
+		s.writeServiceError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, entPromptTemplateToResponse(pt))
+	writeJSON(w, http.StatusCreated, entTranslationPromptTemplateToResponse(pt))
 }
 
 // handleGetPromptTemplate 获取提示词模板详情。
 func (s *Server) handleGetPromptTemplate(w http.ResponseWriter, r *http.Request) {
-	id, ok := parsePromptTemplateID(w, r)
+	id, ok := s.parsePromptTemplateID(w, r)
 	if !ok {
 		return
 	}
 
-	pt, err := s.promptTemplateSvc.GetByID(r.Context(), id)
+	pt, err := s.translationPromptTemplateSvc.GetByID(r.Context(), id)
 	if err != nil {
-		if err == service.ErrPromptTemplateNotFound {
-			writeProblem(w, http.StatusNotFound, "not_found", "提示词模板不存在")
+		if err == service.ErrTranslationPromptTemplateNotFound {
+			s.writeProblem(w, r, http.StatusNotFound, "not_found", "提示词模板不存在")
 			return
 		}
-		writeProblem(w, http.StatusInternalServerError, "internal_error", "查询提示词模板失败")
+		s.writeServiceError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, entPromptTemplateToResponse(pt))
+	writeJSON(w, http.StatusOK, entTranslationPromptTemplateToResponse(pt))
 }
 
 // handleUpdatePromptTemplate 更新提示词模板。
 func (s *Server) handleUpdatePromptTemplate(w http.ResponseWriter, r *http.Request) {
-	id, ok := parsePromptTemplateID(w, r)
+	id, ok := s.parsePromptTemplateID(w, r)
 	if !ok {
 		return
 	}
 
-	var req UpdatePromptTemplateRequest
-	if !decodeJSON(w, r, &req) {
+	var req UpdateTranslationPromptTemplateRequest
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 
-	input := service.UpdatePromptTemplateInput{
-		Name:                   req.Name,
-		Description:            req.Description,
-		SystemPromptContent:    req.SystemPromptContent,
-		BootstrapPromptContent: req.BootstrapPromptContent,
+	input := service.UpdateTranslationPromptTemplateInput{
+		Name:                req.Name,
+		Description:         req.Description,
+		SystemPromptContent: req.SystemPromptContent,
 	}
 
-	pt, err := s.promptTemplateSvc.Update(r.Context(), id, input)
+	pt, err := s.translationPromptTemplateSvc.Update(r.Context(), id, input)
 	if err != nil {
-		if err == service.ErrPromptTemplateNotFound {
-			writeProblem(w, http.StatusNotFound, "not_found", "提示词模板不存在")
+		if err == service.ErrTranslationPromptTemplateNotFound {
+			s.writeProblem(w, r, http.StatusNotFound, "not_found", "提示词模板不存在")
 			return
 		}
-		writeProblem(w, http.StatusInternalServerError, "internal_error", "更新提示词模板失败")
+		s.writeServiceError(w, r, err)
 		return
 	}
-	writeJSON(w, http.StatusOK, entPromptTemplateToResponse(pt))
+	writeJSON(w, http.StatusOK, entTranslationPromptTemplateToResponse(pt))
 }
 
 // handleDeletePromptTemplate 删除提示词模板。
 func (s *Server) handleDeletePromptTemplate(w http.ResponseWriter, r *http.Request) {
-	id, ok := parsePromptTemplateID(w, r)
+	id, ok := s.parsePromptTemplateID(w, r)
 	if !ok {
 		return
 	}
 
-	err := s.promptTemplateSvc.Delete(r.Context(), id)
+	err := s.translationPromptTemplateSvc.Delete(r.Context(), id)
 	if err != nil {
-		if err == service.ErrPromptTemplateNotFound {
-			writeProblem(w, http.StatusNotFound, "not_found", "提示词模板不存在")
+		if err == service.ErrTranslationPromptTemplateNotFound {
+			s.writeProblem(w, r, http.StatusNotFound, "not_found", "提示词模板不存在")
 			return
 		}
-		if errors.Is(err, service.ErrPromptTemplateInUse) {
-			writeProblem(w, http.StatusConflict, "conflict", err.Error())
+		if errors.Is(err, service.ErrTranslationPromptTemplateInUse) {
+			s.writeProblem(w, r, http.StatusConflict, "conflict", err.Error())
 			return
 		}
-		writeProblem(w, http.StatusInternalServerError, "internal_error", "删除提示词模板失败")
+		s.writeServiceError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

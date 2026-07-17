@@ -20,17 +20,14 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"os"
 	"strings"
 	"text/template"
-
-	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 )
 
 // SingleID 是单段模式下 envelope 内唯一段的 id。translate stage 用它回写。
 const SingleID = "0"
 
-// RubyMode 的合法取值定义在 config 包中（RubyModeJSON / RubyModeInline / RubyModeSection）。
+// RubyMode 的合法取值定义在本包中（RubyModeJSON / RubyModeInline / RubyModeSection）。
 
 // RubyAnnotation 用于在提示词中展示 Ruby 标注信息。
 type RubyAnnotation struct {
@@ -80,12 +77,57 @@ type Data struct {
 
 	InlineBootstrap   bool // 是否在 system prompt 中追加 inline 抽取指令（mode=inline 时由 translate stage 设为 true）
 	MaxBootstrapTerms int  // inline 模式每批返回上限；仅在 InlineBootstrap=true 时有效
-	StrictSchema      bool // 当后端使用 json_schema 强制输出时为 true；模板据此精简协议描述以节省 token
-	TextMode          bool // 纯文本模式：user message 使用纯文本编号格式而非 JSON envelope
+	// Protocol 控制 system/user 协议与解析通道；由 ProtocolFromResponseMode 从 response_format 推导。
+	Protocol Protocol
 
 	RubyAnnotations map[string][]RubyAnnotation // segment ID → 标注列表
 	RubyMode        string                      // "json" | "section" | ""
 }
+
+// Protocol 是提示词与解析共用的 I/O 协议（三态，非后端 response_format 四值一一对应）。
+// 模板中可用 eq .Protocol "text"|"json_loose"|"json_strict"。
+type Protocol string
+
+const (
+	// ProtocolText：纯文本 user 与文本解析。
+	// 对应 response_format=text；请求侧强制 ResponseFormat=none。
+	ProtocolText Protocol = "text"
+
+	// ProtocolJSONLoose：JSON user/解析，且 system 中写入完整 JSON 形状示例。
+	// 对应 API 不强制 schema 的配置：response_format=json_object 或 none。
+	// none 与 json_object 在提示词层同属本态（API 侧 none 更松，仅不声明 format）。
+	ProtocolJSONLoose Protocol = "json_loose"
+
+	// ProtocolJSONStrict：JSON user/解析，省略完整形状示例（结构由 API json_schema 强制）。
+	// 对应 response_format=json_schema，以及空字符串（各 backend 默认 json_schema）。
+	ProtocolJSONStrict Protocol = "json_strict"
+)
+
+// ProtocolFromResponseMode 将后端 options.response_format 映射为提示词/解析协议。
+// 未知值按 json_loose 处理（需在 prompt 中写清形状，避免误当 schema 已约束）。
+func ProtocolFromResponseMode(mode string) Protocol {
+	switch mode {
+	case "text":
+		return ProtocolText
+	case "", "json_schema":
+		return ProtocolJSONStrict
+	case "json_object", "none":
+		return ProtocolJSONLoose
+	default:
+		return ProtocolJSONLoose
+	}
+}
+
+// IsText 是否为纯文本协议。
+func (p Protocol) IsText() bool { return p == ProtocolText }
+
+// IsJSON 是否为 JSON 协议（loose 或 strict）。
+func (p Protocol) IsJSON() bool {
+	return p == ProtocolJSONLoose || p == ProtocolJSONStrict
+}
+
+// OmitsJSONShape 是否可省略 system 中的完整 JSON 形状示例（仅 json_strict）。
+func (p Protocol) OmitsJSONShape() bool { return p == ProtocolJSONStrict }
 
 // HasRuby 判断当前数据中是否存在 Ruby 标注信息。
 func (d Data) HasRuby() bool {
@@ -98,7 +140,7 @@ func (d Data) HasRuby() bool {
 }
 
 // Renderer 持有已编译的 system 模板。
-// user 消息由 Render 根据 TextMode 标志直接构建，无需模板。
+// user 消息由 Render 根据 Protocol 直接构建，无需模板。
 type Renderer struct {
 	system *template.Template
 }
@@ -110,22 +152,13 @@ var templateFuncs = template.FuncMap{
 	},
 }
 
-// NewRenderer 按配置创建 Renderer。
-// 优先级：SystemTemplateContent（内联内容）> SystemTemplate（文件路径）。
-// 缺少配置时直接报错，不再使用内置默认值。
-func NewRenderer(cfg config.PromptConfig) (*Renderer, error) {
-	if cfg.SystemTemplateContent == "" && cfg.SystemTemplate == "" {
-		return nil, fmt.Errorf("prompt: system_template_content and system_template are both empty; configure a prompt template in your config file")
+// NewRenderer 按 systemPrompt 内容创建 Renderer。
+// systemPrompt 不能为空。
+func NewRenderer(systemPrompt string) (*Renderer, error) {
+	if systemPrompt == "" {
+		return nil, fmt.Errorf("prompt: system prompt content is empty; configure a prompt template in your config file")
 	}
-	sys := cfg.SystemTemplateContent
-	if cfg.SystemTemplate != "" {
-		b, err := os.ReadFile(cfg.SystemTemplate)
-		if err != nil {
-			return nil, fmt.Errorf("prompt: read system template: %w", err)
-		}
-		sys = string(b)
-	}
-	systemT, err := template.New("system").Funcs(templateFuncs).Parse(sys)
+	systemT, err := template.New("system").Funcs(templateFuncs).Parse(systemPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("prompt: parse system template: %w", err)
 	}
@@ -141,8 +174,11 @@ type userEnvelope struct {
 	RubyAnnotations map[string][]RubyAnnotation `json:"ruby_annotations,omitempty"`
 }
 
-// Render 返回 (system, user, err)。TextMode 时 user 为纯文本编号格式，否则为 JSON。
+// Render 返回 (system, user, err)。ProtocolText 时 user 为纯文本编号格式，否则为 JSON。
 func (r *Renderer) Render(d Data) (string, string, error) {
+	if d.Protocol == "" {
+		d.Protocol = ProtocolJSONStrict // 与 backend 默认 json_schema 对齐
+	}
 	segs := d.Segments
 	if len(segs) == 0 {
 		segs = []SegmentInput{{ID: SingleID, Source: d.Source, Translate: true}}
@@ -154,10 +190,10 @@ func (r *Renderer) Render(d Data) (string, string, error) {
 	}
 
 	sys := sysBuf.String()
-	if d.TextMode {
+	if d.Protocol.IsText() {
 		mode := d.RubyMode
 		if mode == "" {
-			mode = config.RubyModeSection
+			mode = RubyModeSection
 		}
 		return sys, buildTextUser(segs, d.RubyAnnotations, mode), nil
 	}
@@ -205,7 +241,7 @@ func buildTextUser(segs []SegmentInput, rubyAnnotations map[string][]RubyAnnotat
 			sb.WriteString("[")
 			sb.WriteString(s.ID)
 			sb.WriteString("] ")
-			if rubyInputMode == config.RubyModeInline && len(rubyAnnotations) > 0 {
+			if rubyInputMode == RubyModeInline && len(rubyAnnotations) > 0 {
 				sb.WriteString(inlineRubyInSource(s.Source, rubyAnnotations[s.ID]))
 			} else {
 				sb.WriteString(s.Source)
@@ -216,7 +252,7 @@ func buildTextUser(segs []SegmentInput, rubyAnnotations map[string][]RubyAnnotat
 		}
 	}
 
-	if rubyInputMode == config.RubyModeSection && len(rubyAnnotations) > 0 {
+	if rubyInputMode == RubyModeSection && len(rubyAnnotations) > 0 {
 		sb.WriteString("\n[ruby]")
 		for _, s := range segs {
 			if !s.Translate {

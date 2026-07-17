@@ -6,10 +6,11 @@ import {
   NCollapseItem,
   NGrid,
   NGi,
-  NInput,
   NInputNumber,
   NSelect,
   NSwitch,
+  NRadioGroup,
+  NRadioButton,
 } from 'naive-ui'
 import type { SelectOption } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
@@ -17,36 +18,41 @@ import { useI18n } from 'vue-i18n'
 import type { ApiSchemas } from '@/api/client'
 
 type ExecutionRoundConfig = ApiSchemas['ExecutionRoundConfig']
-type RetryConfig = NonNullable<ExecutionRoundConfig['retry']>
-type ExecutionPlanBootstrapConfig = ApiSchemas['ExecutionPlanBootstrapConfig']
+type TranslateRoundConfig = NonNullable<ExecutionRoundConfig['translate']>
+type ExtractRoundConfig = NonNullable<ExecutionRoundConfig['extract']>
+type RetryConfig = NonNullable<TranslateRoundConfig['retry']>
 type ExecutionPlanRubyRetryConfig = ApiSchemas['ExecutionPlanRubyRetryConfig']
 
-/** 内部轮次模型：确保 retry 始终存在（API schema 中 retry 是可选的） */
-type RoundModel = Omit<ExecutionRoundConfig, 'retry'> & { retry: RetryConfig }
+type RoundModel = ExecutionRoundConfig
 
 // ─── 默认值 ──────────────────────────────────────────────────
 
 const DEFAULT_RETRY: RetryConfig = { max_attempts: 3, backoff_ms: 2000, jitter: true }
 
-const DEFAULT_ROUND: RoundModel = {
-  backend_id: 0,
+const DEFAULT_TRANSLATE: TranslateRoundConfig = {
   prompt_template_id: 0,
   profile_id: 0,
   batch_size: 10,
   max_words_per_batch: 0,
-  concurrency: 3,
   fallback_shrink: undefined,
+  segment_filter: { status_filter: 'pending_only' },
   retry: { ...DEFAULT_RETRY },
 }
 
-const DEFAULT_BOOTSTRAP: ExecutionPlanBootstrapConfig = {
-  enabled: false,
-  backend_id: 0,
-  prompt_template_id: 0,
+const DEFAULT_EXTRACT: ExtractRoundConfig = {
+  template_id: 0,
   batch_size: 20,
-  concurrency: 2,
-  max_terms_per_batch: 20,
+  max_words_per_batch: 0,
+  max_terms_per_1000_chars: 25.0,
   min_source_len: 2,
+  retry: { ...DEFAULT_RETRY },
+}
+
+const DEFAULT_ROUND: RoundModel = {
+  mode: 'translate',
+  backend_id: 0,
+  concurrency: 3,
+  translate: { ...DEFAULT_TRANSLATE },
 }
 
 const DEFAULT_RUBY_RETRY: ExecutionPlanRubyRetryConfig = {
@@ -60,18 +66,17 @@ function deepClone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj))
 }
 
-/** 确保轮次所有字段都有默认值（处理 API 返回的可选字段） */
-function mergeRound(source?: Partial<ExecutionRoundConfig>): RoundModel {
-  if (!source) return deepClone(DEFAULT_ROUND)
+function mergeTranslate(source?: Partial<TranslateRoundConfig>): TranslateRoundConfig {
+  if (!source) return deepClone(DEFAULT_TRANSLATE)
   return {
-    name: source.name,
-    backend_id: source.backend_id ?? DEFAULT_ROUND.backend_id,
-    prompt_template_id: source.prompt_template_id ?? DEFAULT_ROUND.prompt_template_id,
-    profile_id: source.profile_id ?? DEFAULT_ROUND.profile_id,
-    batch_size: source.batch_size ?? DEFAULT_ROUND.batch_size,
-    max_words_per_batch: source.max_words_per_batch ?? DEFAULT_ROUND.max_words_per_batch,
-    concurrency: source.concurrency ?? DEFAULT_ROUND.concurrency,
-    fallback_shrink: source.fallback_shrink ?? DEFAULT_ROUND.fallback_shrink,
+    prompt_template_id: source.prompt_template_id ?? DEFAULT_TRANSLATE.prompt_template_id,
+    profile_id: source.profile_id ?? DEFAULT_TRANSLATE.profile_id,
+    batch_size: source.batch_size ?? DEFAULT_TRANSLATE.batch_size,
+    max_words_per_batch: source.max_words_per_batch ?? DEFAULT_TRANSLATE.max_words_per_batch,
+    fallback_shrink: source.fallback_shrink ?? DEFAULT_TRANSLATE.fallback_shrink,
+    segment_filter: {
+      status_filter: source.segment_filter?.status_filter ?? 'pending_only',
+    },
     retry: {
       max_attempts: source.retry?.max_attempts ?? DEFAULT_RETRY.max_attempts,
       backoff_ms: source.retry?.backoff_ms ?? DEFAULT_RETRY.backoff_ms,
@@ -80,23 +85,51 @@ function mergeRound(source?: Partial<ExecutionRoundConfig>): RoundModel {
   }
 }
 
-/** 确保 bootstrap 所有字段都有默认值 */
-function mergeBootstrap(
-  source?: Partial<ExecutionPlanBootstrapConfig>,
-): ExecutionPlanBootstrapConfig {
-  if (!source) return deepClone(DEFAULT_BOOTSTRAP)
+function mergeExtract(source?: Partial<ExtractRoundConfig>): ExtractRoundConfig {
+  if (!source) return deepClone(DEFAULT_EXTRACT)
   return {
-    enabled: source.enabled ?? DEFAULT_BOOTSTRAP.enabled,
-    backend_id: source.backend_id ?? DEFAULT_BOOTSTRAP.backend_id,
-    prompt_template_id: source.prompt_template_id ?? DEFAULT_BOOTSTRAP.prompt_template_id,
-    batch_size: source.batch_size ?? DEFAULT_BOOTSTRAP.batch_size,
-    concurrency: source.concurrency ?? DEFAULT_BOOTSTRAP.concurrency,
-    max_terms_per_batch: source.max_terms_per_batch ?? DEFAULT_BOOTSTRAP.max_terms_per_batch,
-    min_source_len: source.min_source_len ?? DEFAULT_BOOTSTRAP.min_source_len,
+    template_id: source.template_id ?? DEFAULT_EXTRACT.template_id,
+    batch_size: source.batch_size ?? DEFAULT_EXTRACT.batch_size,
+    max_words_per_batch: source.max_words_per_batch ?? DEFAULT_EXTRACT.max_words_per_batch,
+    max_terms_per_1000_chars:
+      source.max_terms_per_1000_chars ?? DEFAULT_EXTRACT.max_terms_per_1000_chars,
+    min_source_len: source.min_source_len ?? DEFAULT_EXTRACT.min_source_len,
+    retry: {
+      max_attempts: source.retry?.max_attempts ?? DEFAULT_RETRY.max_attempts,
+      backoff_ms: source.retry?.backoff_ms ?? DEFAULT_RETRY.backoff_ms,
+      jitter: source.retry?.jitter ?? DEFAULT_RETRY.jitter,
+    },
   }
 }
 
-/** 确保 ruby_retry 所有字段都有默认值 */
+function mergeRound(source?: Partial<ExecutionRoundConfig>): RoundModel {
+  if (!source) return deepClone(DEFAULT_ROUND)
+  const mode = source.mode ?? 'translate'
+  return {
+    mode,
+    backend_id: source.backend_id ?? DEFAULT_ROUND.backend_id,
+    concurrency: source.concurrency ?? DEFAULT_ROUND.concurrency,
+    translate: mode === 'translate' ? mergeTranslate(source.translate) : undefined,
+    extract: mode === 'extract' ? mergeExtract(source.extract) : undefined,
+  }
+}
+
+function isNoBatch(batchSize?: number, maxWords?: number): boolean {
+  return (!batchSize || batchSize === 0) && (!maxWords || maxWords === 0)
+}
+
+function setNoBatch(
+  target: { batch_size?: number; max_words_per_batch?: number },
+  noBatch: boolean,
+): void {
+  if (noBatch) {
+    target.batch_size = 0
+    if ('max_words_per_batch' in target) target.max_words_per_batch = 0
+  } else {
+    target.batch_size = target.batch_size === 0 ? 20 : target.batch_size
+  }
+}
+
 function mergeRubyRetry(
   source?: Partial<ExecutionPlanRubyRetryConfig>,
 ): ExecutionPlanRubyRetryConfig {
@@ -112,11 +145,11 @@ function mergeRubyRetry(
 const props = withDefaults(
   defineProps<{
     rounds: ExecutionRoundConfig[]
-    bootstrap?: ExecutionPlanBootstrapConfig
     rubyRetry?: ExecutionPlanRubyRetryConfig
     backends: SelectOption[]
     promptTemplates: SelectOption[]
-    translationProfiles: SelectOption[]
+    bootstrapPromptTemplates: SelectOption[]
+    executionProfiles: SelectOption[]
     disabled?: boolean
   }>(),
   { disabled: false },
@@ -124,7 +157,6 @@ const props = withDefaults(
 
 const emit = defineEmits<{
   'update:rounds': [value: ExecutionRoundConfig[]]
-  'update:bootstrap': [value: ExecutionPlanBootstrapConfig]
   'update:rubyRetry': [value: ExecutionPlanRubyRetryConfig]
 }>()
 
@@ -133,15 +165,11 @@ const emit = defineEmits<{
 const { t } = useI18n()
 
 const roundsModel = ref<RoundModel[]>(props.rounds.map((r) => mergeRound(r)))
-const bootstrapModel = ref<ExecutionPlanBootstrapConfig>(mergeBootstrap(props.bootstrap))
 const rubyRetryModel = ref<ExecutionPlanRubyRetryConfig>(mergeRubyRetry(props.rubyRetry))
 
-// 上次 emit 的 JSON（用于去重）
 let lastRoundsJson = JSON.stringify(props.rounds ?? [])
-let lastBootstrapJson = JSON.stringify(props.bootstrap ?? {})
 let lastRubyRetryJson = JSON.stringify(props.rubyRetry ?? {})
 
-// 监听外部 rounds 变化
 watch(
   () => props.rounds,
   (newVal) => {
@@ -152,7 +180,6 @@ watch(
   { deep: true },
 )
 
-// 监听内部 rounds 变化并 emit
 watch(
   roundsModel,
   (newVal) => {
@@ -164,30 +191,6 @@ watch(
   { deep: true },
 )
 
-// 监听外部 bootstrap 变化
-watch(
-  () => props.bootstrap,
-  (newVal) => {
-    const json = JSON.stringify(newVal ?? {})
-    if (json === lastBootstrapJson) return
-    bootstrapModel.value = mergeBootstrap(newVal)
-  },
-  { deep: true },
-)
-
-// 监听内部 bootstrap 变化并 emit
-watch(
-  bootstrapModel,
-  (newVal) => {
-    const json = JSON.stringify(newVal)
-    if (json === lastBootstrapJson) return
-    lastBootstrapJson = json
-    emit('update:bootstrap', deepClone(newVal))
-  },
-  { deep: true },
-)
-
-// 监听外部 rubyRetry 变化
 watch(
   () => props.rubyRetry,
   (newVal) => {
@@ -198,7 +201,6 @@ watch(
   { deep: true },
 )
 
-// 监听内部 rubyRetry 变化并 emit
 watch(
   rubyRetryModel,
   (newVal) => {
@@ -211,6 +213,29 @@ watch(
 )
 
 // ─── 操作方法 ────────────────────────────────────────────────
+
+const modeOptions = computed(() => [
+  { label: t('executionPlanEditor.round.modeTranslate'), value: 'translate' },
+  { label: t('executionPlanEditor.round.modeExtract'), value: 'extract' },
+])
+
+const segmentFilterOptions = computed(() => [
+  { label: t('executionPlanEditor.round.segmentFilterPendingOnly'), value: 'pending_only' },
+  { label: t('executionPlanEditor.round.segmentFilterSkipApproved'), value: 'skip_approved' },
+  { label: t('executionPlanEditor.round.segmentFilterAll'), value: 'all' },
+])
+
+const switchRoundMode = (round: RoundModel, mode: 'translate' | 'extract'): void => {
+  if (round.mode === mode) return
+  round.mode = mode
+  if (mode === 'translate') {
+    round.translate = deepClone(DEFAULT_TRANSLATE)
+    round.extract = undefined
+  } else {
+    round.extract = deepClone(DEFAULT_EXTRACT)
+    round.translate = undefined
+  }
+}
 
 const addRound = (): void => {
   roundsModel.value.push(deepClone(DEFAULT_ROUND))
@@ -239,107 +264,10 @@ const emitUpdate = (): void => {
 
 <template>
   <div class="flex flex-col gap-4">
-    <!-- Bootstrap 自举配置 -->
-    <NCard size="small" :bordered="true">
-      <template #header>
-        <span class="text-sm font-semibold">🚀 {{ t('executionPlanEditor.bootstrap.title') }}</span>
-      </template>
-      <div class="flex items-center justify-between mb-3">
-        <span class="text-sm">{{ t('executionPlanEditor.bootstrap.enabled') }}</span>
-        <NSwitch v-model:value="bootstrapModel.enabled" size="small" :disabled="disabled" />
-      </div>
-      <div :class="{ 'opacity-50 pointer-events-none': !bootstrapModel.enabled }">
-        <!-- 后端 + 提示词模板选择 -->
-        <div class="grid grid-cols-1 gap-3 md:grid-cols-2">
-          <div>
-            <div class="mb-1 text-xs text-lf-text-subtle">
-              {{ t('executionPlanEditor.bootstrap.backend') }}
-              <span class="text-red-400">*</span>
-            </div>
-            <NSelect
-              v-model:value="bootstrapModel.backend_id"
-              :options="backends"
-              size="small"
-              :disabled="disabled || !bootstrapModel.enabled"
-              :placeholder="t('executionPlanEditor.bootstrap.backendPlaceholder')"
-            />
-          </div>
-          <div>
-            <div class="mb-1 text-xs text-lf-text-subtle">
-              {{ t('executionPlanEditor.bootstrap.promptTemplate') }}
-              <span class="text-red-400">*</span>
-            </div>
-            <NSelect
-              v-model:value="bootstrapModel.prompt_template_id"
-              :options="promptTemplates"
-              size="small"
-              :disabled="disabled || !bootstrapModel.enabled"
-              :placeholder="t('executionPlanEditor.bootstrap.promptTemplatePlaceholder')"
-            />
-          </div>
-        </div>
-        <!-- 执行参数 -->
-        <NGrid :cols="4" :x-gap="12" :y-gap="10" class="mt-3">
-          <NGi>
-            <div class="mb-1 text-xs text-lf-text-subtle">
-              {{ t('executionPlanEditor.bootstrap.batchSize') }}
-            </div>
-            <NInputNumber
-              v-model:value="bootstrapModel.batch_size"
-              :min="1"
-              :max="10000"
-              size="small"
-              :disabled="disabled || !bootstrapModel.enabled"
-              class="w-full"
-            />
-          </NGi>
-          <NGi>
-            <div class="mb-1 text-xs text-lf-text-subtle">
-              {{ t('executionPlanEditor.bootstrap.concurrency') }}
-            </div>
-            <NInputNumber
-              v-model:value="bootstrapModel.concurrency"
-              :min="1"
-              :max="100"
-              size="small"
-              :disabled="disabled || !bootstrapModel.enabled"
-              class="w-full"
-            />
-          </NGi>
-          <NGi>
-            <div class="mb-1 text-xs text-lf-text-subtle">
-              {{ t('executionPlanEditor.bootstrap.maxTermsPerBatch') }}
-            </div>
-            <NInputNumber
-              v-model:value="bootstrapModel.max_terms_per_batch"
-              :min="1"
-              :max="1000"
-              size="small"
-              :disabled="disabled || !bootstrapModel.enabled"
-              class="w-full"
-            />
-          </NGi>
-          <NGi>
-            <div class="mb-1 text-xs text-lf-text-subtle">
-              {{ t('executionPlanEditor.bootstrap.minSourceLen') }}
-            </div>
-            <NInputNumber
-              v-model:value="bootstrapModel.min_source_len"
-              :min="1"
-              :max="100"
-              size="small"
-              :disabled="disabled || !bootstrapModel.enabled"
-              class="w-full"
-            />
-          </NGi>
-        </NGrid>
-      </div>
-    </NCard>
-
     <!-- Ruby Retry 注音对齐重试配置 -->
     <NCard size="small" :bordered="true">
       <template #header>
-        <span class="text-sm font-semibold">🔁 {{ t('executionPlanEditor.rubyRetry.title') }}</span>
+        <span class="text-sm font-semibold">{{ t('executionPlanEditor.rubyRetry.title') }}</span>
       </template>
       <div class="flex items-center justify-between mb-3">
         <span class="text-sm">{{ t('executionPlanEditor.rubyRetry.enabled') }}</span>
@@ -373,12 +301,21 @@ const emitUpdate = (): void => {
       <template #header>
         <div class="flex items-center gap-2">
           <span
-            class="inline-flex h-6 w-6 items-center justify-center rounded-full bg-lf-brand-soft text-xs font-bold text-brand-600"
+            class="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold"
+            :class="
+              round.mode === 'translate'
+                ? 'bg-lf-brand-soft text-brand-600'
+                : 'bg-amber-50 text-amber-600'
+            "
           >
             {{ index + 1 }}
           </span>
           <span class="text-sm font-semibold">
-            {{ round.name || `round-${index + 1}` }}
+            {{
+              round.mode === 'translate'
+                ? t('executionPlanEditor.round.modeTranslate')
+                : t('executionPlanEditor.round.modeExtract')
+            }}
           </span>
         </div>
       </template>
@@ -413,19 +350,29 @@ const emitUpdate = (): void => {
         </div>
       </template>
 
-      <!-- 轮次名称 -->
-      <div class="mb-1 text-xs text-lf-text-subtle">
-        {{ t('executionPlanEditor.round.name') }}
+      <!-- 模式选择 -->
+      <div>
+        <div class="mb-1 text-xs text-lf-text-subtle">
+          {{ t('executionPlanEditor.round.mode') }}
+          <span class="text-red-400">*</span>
+        </div>
+        <NRadioGroup
+          :value="round.mode"
+          size="small"
+          :disabled="disabled"
+          @update:value="(v: 'translate' | 'extract') => switchRoundMode(round, v)"
+        >
+          <NRadioButton
+            v-for="opt in modeOptions"
+            :key="opt.value"
+            :value="opt.value"
+            :label="opt.label"
+          />
+        </NRadioGroup>
       </div>
-      <NInput
-        v-model:value="round.name"
-        :placeholder="t('executionPlanEditor.round.namePlaceholder', { n: index + 1 })"
-        size="small"
-        :disabled="disabled"
-      />
 
-      <!-- 资源选择 -->
-      <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+      <!-- 公共字段：后端 + 并发 -->
+      <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
         <div>
           <div class="mb-1 text-xs text-lf-text-subtle">
             {{ t('executionPlanEditor.round.backend') }}
@@ -438,68 +385,6 @@ const emitUpdate = (): void => {
             :disabled="disabled"
             :placeholder="t('executionPlanEditor.round.backendPlaceholder')"
           />
-        </div>
-        <div>
-          <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('executionPlanEditor.round.promptTemplate') }}
-            <span class="text-red-400">*</span>
-          </div>
-          <NSelect
-            v-model:value="round.prompt_template_id"
-            :options="promptTemplates"
-            size="small"
-            :disabled="disabled"
-            :placeholder="t('executionPlanEditor.round.promptTemplatePlaceholder')"
-          />
-        </div>
-        <div>
-          <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('executionPlanEditor.round.translationProfile') }}
-            <span class="text-red-400">*</span>
-          </div>
-          <NSelect
-            v-model:value="round.profile_id"
-            :options="translationProfiles"
-            size="small"
-            :disabled="disabled"
-            :placeholder="t('executionPlanEditor.round.profilePlaceholder')"
-          />
-        </div>
-      </div>
-
-      <!-- 执行参数 -->
-      <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div>
-          <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('executionPlanEditor.round.batchSize') }}
-          </div>
-          <NInputNumber
-            v-model:value="round.batch_size"
-            :min="0"
-            :max="10000"
-            size="small"
-            :disabled="disabled"
-            class="w-full"
-          />
-          <div class="mt-1 text-[11px] text-lf-text-subtle">
-            {{ t('executionPlanEditor.round.batchSizeHint') }}
-          </div>
-        </div>
-        <div>
-          <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('executionPlanEditor.round.maxWordsPerBatch') }}
-          </div>
-          <NInputNumber
-            v-model:value="round.max_words_per_batch"
-            :min="0"
-            :max="100000"
-            size="small"
-            :disabled="disabled"
-            class="w-full"
-          />
-          <div class="mt-1 text-[11px] text-lf-text-subtle">
-            {{ t('executionPlanEditor.round.maxWordsPerBatchHint') }}
-          </div>
         </div>
         <div>
           <div class="mb-1 text-xs text-lf-text-subtle">
@@ -516,64 +401,301 @@ const emitUpdate = (): void => {
           />
         </div>
       </div>
-      <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div>
-          <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('executionPlanEditor.round.fallbackShrink') }}
+
+      <!-- 翻译模式配置 -->
+      <template v-if="round.mode === 'translate' && round.translate">
+        <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div>
+            <div class="mb-1 text-xs text-lf-text-subtle">
+              {{ t('executionPlanEditor.round.promptTemplate') }}
+            </div>
+            <NSelect
+              v-model:value="round.translate.prompt_template_id"
+              :options="promptTemplates"
+              size="small"
+              :disabled="disabled"
+              :placeholder="t('executionPlanEditor.round.promptTemplatePlaceholder')"
+              clearable
+            />
           </div>
-          <NInputNumber
-            v-model:value="round.fallback_shrink"
-            :min="0.01"
-            :max="0.99"
-            :step="0.1"
-            :placeholder="t('executionPlanEditor.round.fallbackShrinkPlaceholder')"
+          <div>
+            <div class="mb-1 text-xs text-lf-text-subtle">
+              {{ t('executionPlanEditor.round.translationProfile') }}
+            </div>
+            <NSelect
+              v-model:value="round.translate.profile_id"
+              :options="executionProfiles"
+              size="small"
+              :disabled="disabled"
+              :placeholder="t('executionPlanEditor.round.profilePlaceholder')"
+              clearable
+            />
+          </div>
+        </div>
+
+        <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+          <div>
+            <div class="mb-1 text-xs text-lf-text-subtle">
+              {{ t('executionPlanEditor.round.batchSize') }}
+            </div>
+            <NInputNumber
+              v-model:value="round.translate.batch_size"
+              :min="0"
+              :max="10000"
+              size="small"
+              :disabled="disabled"
+              class="w-full"
+            />
+            <div class="mt-1 text-[11px] text-lf-text-subtle">
+              {{ t('executionPlanEditor.round.batchSizeHint') }}
+            </div>
+          </div>
+          <div>
+            <div class="mb-1 text-xs text-lf-text-subtle">
+              {{ t('executionPlanEditor.round.maxWordsPerBatch') }}
+            </div>
+            <NInputNumber
+              v-model:value="round.translate.max_words_per_batch"
+              :min="0"
+              :max="100000"
+              size="small"
+              :disabled="disabled"
+              class="w-full"
+            />
+            <div class="mt-1 text-[11px] text-lf-text-subtle">
+              {{ t('executionPlanEditor.round.maxWordsPerBatchHint') }}
+            </div>
+          </div>
+          <div>
+            <div class="mb-1 text-xs text-lf-text-subtle">
+              {{ t('executionPlanEditor.round.fallbackShrink') }}
+            </div>
+            <NInputNumber
+              v-model:value="round.translate.fallback_shrink"
+              :min="0.01"
+              :max="0.99"
+              :step="0.1"
+              :placeholder="t('executionPlanEditor.round.fallbackShrinkPlaceholder')"
+              size="small"
+              :disabled="disabled"
+              class="w-full"
+            />
+          </div>
+        </div>
+
+        <!-- 段落过滤配置 -->
+        <div class="mt-3">
+          <div class="mb-1 text-xs text-lf-text-subtle">
+            {{ t('executionPlanEditor.round.segmentFilter') }}
+          </div>
+          <NSelect
+            v-if="round.translate.segment_filter"
+            v-model:value="round.translate.segment_filter.status_filter"
+            :options="segmentFilterOptions"
             size="small"
             :disabled="disabled"
-            class="w-full"
           />
+          <div class="mt-1 text-[11px] text-lf-text-subtle">
+            {{ t('executionPlanEditor.round.segmentFilterHint') }}
+          </div>
         </div>
-      </div>
 
-      <!-- 高级配置（可折叠） -->
-      <NCollapse class="mt-3">
-        <NCollapseItem :title="t('executionPlanEditor.round.advancedConfig')">
-          <NGrid :cols="2" :x-gap="12" :y-gap="10">
-            <NGi>
-              <div class="mb-1 text-xs text-lf-text-subtle">
-                {{ t('executionPlanEditor.round.retryMaxAttempts') }}
-              </div>
-              <NInputNumber
-                v-model:value="round.retry.max_attempts"
-                :min="0"
-                :max="10"
+        <!-- 高级配置（可折叠） -->
+        <NCollapse class="mt-3">
+          <NCollapseItem :title="t('executionPlanEditor.round.advancedConfig')">
+            <NGrid :cols="2" :x-gap="12" :y-gap="10">
+              <NGi>
+                <div class="mb-1 text-xs text-lf-text-subtle">
+                  {{ t('executionPlanEditor.round.retryMaxAttempts') }}
+                </div>
+                <NInputNumber
+                  v-if="round.translate.retry"
+                  v-model:value="round.translate.retry.max_attempts"
+                  :min="0"
+                  :max="10"
+                  size="small"
+                  :disabled="disabled"
+                  class="w-full"
+                />
+              </NGi>
+              <NGi>
+                <div class="mb-1 text-xs text-lf-text-subtle">
+                  {{ t('executionPlanEditor.round.retryBackoffMs') }}
+                </div>
+                <NInputNumber
+                  v-if="round.translate.retry"
+                  v-model:value="round.translate.retry.backoff_ms"
+                  :min="0"
+                  :max="60000"
+                  :step="100"
+                  size="small"
+                  :disabled="disabled"
+                  class="w-full"
+                />
+              </NGi>
+            </NGrid>
+            <div v-if="round.translate.retry" class="mt-2 flex items-center gap-2">
+              <NSwitch
+                v-model:value="round.translate.retry.jitter"
                 size="small"
                 :disabled="disabled"
-                class="w-full"
               />
-            </NGi>
-            <NGi>
-              <div class="mb-1 text-xs text-lf-text-subtle">
-                {{ t('executionPlanEditor.round.retryBackoffMs') }}
-              </div>
-              <NInputNumber
-                v-model:value="round.retry.backoff_ms"
-                :min="0"
-                :max="60000"
-                :step="100"
-                size="small"
-                :disabled="disabled"
-                class="w-full"
-              />
-            </NGi>
-          </NGrid>
-          <div class="mt-2 flex items-center gap-2">
-            <NSwitch v-model:value="round.retry.jitter" size="small" :disabled="disabled" />
+              <span class="text-xs text-lf-text-subtle">
+                {{ t('executionPlanEditor.round.retryJitter') }}
+              </span>
+            </div>
+          </NCollapseItem>
+        </NCollapse>
+      </template>
+
+      <!-- 术语抽取模式配置 -->
+      <template v-if="round.mode === 'extract' && round.extract">
+        <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div>
+            <div class="mb-1 text-xs text-lf-text-subtle">
+              {{ t('executionPlanEditor.round.extractTemplate') }}
+            </div>
+            <NSelect
+              v-model:value="round.extract.template_id"
+              :options="bootstrapPromptTemplates"
+              size="small"
+              :disabled="disabled"
+              :placeholder="t('executionPlanEditor.round.extractTemplatePlaceholder')"
+              clearable
+            />
+          </div>
+          <div>
+            <div class="mb-1 text-xs text-lf-text-subtle">
+              {{ t('executionPlanEditor.round.extractMinSourceLen') }}
+            </div>
+            <NInputNumber
+              v-model:value="round.extract.min_source_len"
+              :min="1"
+              :max="100"
+              size="small"
+              :disabled="disabled"
+              class="w-full"
+            />
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <div class="mb-2 flex items-center gap-2">
+            <NSwitch
+              :value="isNoBatch(round.extract.batch_size, round.extract.max_words_per_batch)"
+              size="small"
+              :disabled="disabled"
+              @update:value="(v: boolean) => setNoBatch(round.extract!, v)"
+            />
             <span class="text-xs text-lf-text-subtle">
-              {{ t('executionPlanEditor.round.retryJitter') }}
+              {{ t('executionPlanEditor.round.noBatch') }}
             </span>
           </div>
-        </NCollapseItem>
-      </NCollapse>
+          <div
+            class="grid grid-cols-1 gap-3 md:grid-cols-2"
+            :class="{
+              'opacity-50 pointer-events-none': isNoBatch(
+                round.extract.batch_size,
+                round.extract.max_words_per_batch,
+              ),
+            }"
+          >
+            <div>
+              <div class="mb-1 text-xs text-lf-text-subtle">
+                {{ t('executionPlanEditor.round.extractBatchSize') }}
+              </div>
+              <NInputNumber
+                v-model:value="round.extract.batch_size"
+                :min="0"
+                :max="10000"
+                size="small"
+                :disabled="disabled"
+                class="w-full"
+              />
+              <div class="mt-1 text-[11px] text-lf-text-subtle">
+                {{ t('executionPlanEditor.round.extractBatchSizeHint') }}
+              </div>
+            </div>
+            <div>
+              <div class="mb-1 text-xs text-lf-text-subtle">
+                {{ t('executionPlanEditor.round.extractMaxWordsPerBatch') }}
+              </div>
+              <NInputNumber
+                v-model:value="round.extract.max_words_per_batch"
+                :min="0"
+                :max="100000"
+                size="small"
+                :disabled="disabled"
+                class="w-full"
+              />
+              <div class="mt-1 text-[11px] text-lf-text-subtle">
+                {{ t('executionPlanEditor.round.extractMaxWordsPerBatchHint') }}
+              </div>
+            </div>
+          </div>
+          <div class="mt-3">
+            <div class="mb-1 text-xs text-lf-text-subtle">
+              {{ t('executionPlanEditor.round.extractMaxTerms') }}
+            </div>
+            <NInputNumber
+              v-model:value="round.extract.max_terms_per_1000_chars"
+              :min="0"
+              :max="1000"
+              :step="0.1"
+              size="small"
+              :disabled="disabled"
+              class="w-full"
+            />
+          </div>
+        </div>
+
+        <!-- 高级配置（可折叠） -->
+        <NCollapse class="mt-3">
+          <NCollapseItem :title="t('executionPlanEditor.round.advancedConfig')">
+            <NGrid :cols="2" :x-gap="12" :y-gap="10">
+              <NGi>
+                <div class="mb-1 text-xs text-lf-text-subtle">
+                  {{ t('executionPlanEditor.round.retryMaxAttempts') }}
+                </div>
+                <NInputNumber
+                  v-if="round.extract.retry"
+                  v-model:value="round.extract.retry.max_attempts"
+                  :min="0"
+                  :max="10"
+                  size="small"
+                  :disabled="disabled"
+                  class="w-full"
+                />
+              </NGi>
+              <NGi>
+                <div class="mb-1 text-xs text-lf-text-subtle">
+                  {{ t('executionPlanEditor.round.retryBackoffMs') }}
+                </div>
+                <NInputNumber
+                  v-if="round.extract.retry"
+                  v-model:value="round.extract.retry.backoff_ms"
+                  :min="0"
+                  :max="60000"
+                  :step="100"
+                  size="small"
+                  :disabled="disabled"
+                  class="w-full"
+                />
+              </NGi>
+            </NGrid>
+            <div v-if="round.extract.retry" class="mt-2 flex items-center gap-2">
+              <NSwitch
+                v-model:value="round.extract.retry.jitter"
+                size="small"
+                :disabled="disabled"
+              />
+              <span class="text-xs text-lf-text-subtle">
+                {{ t('executionPlanEditor.round.retryJitter') }}
+              </span>
+            </div>
+          </NCollapseItem>
+        </NCollapse>
+      </template>
     </NCard>
 
     <!-- 添加轮次按钮 -->

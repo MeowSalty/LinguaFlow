@@ -26,8 +26,6 @@ const (
 	FieldOwnerOrgID = "owner_org_id"
 	// FieldConfig holds the string denoting the config field in the database.
 	FieldConfig = "config"
-	// FieldDefaultTranslationConfig holds the string denoting the default_translation_config field in the database.
-	FieldDefaultTranslationConfig = "default_translation_config"
 	// FieldGlossaryEnabled holds the string denoting the glossary_enabled field in the database.
 	FieldGlossaryEnabled = "glossary_enabled"
 	// FieldSourceLang holds the string denoting the source_lang field in the database.
@@ -42,8 +40,8 @@ const (
 	EdgeGlossaryEntries = "glossary_entries"
 	// EdgeTmEntries holds the string denoting the tm_entries edge name in mutations.
 	EdgeTmEntries = "tm_entries"
-	// EdgeTranslationJobs holds the string denoting the translation_jobs edge name in mutations.
-	EdgeTranslationJobs = "translation_jobs"
+	// EdgeJobs holds the string denoting the jobs edge name in mutations.
+	EdgeJobs = "jobs"
 	// EdgeActivityLogs holds the string denoting the activity_logs edge name in mutations.
 	EdgeActivityLogs = "activity_logs"
 	// EdgeUsageRecords holds the string denoting the usage_records edge name in mutations.
@@ -82,13 +80,13 @@ const (
 	TmEntriesInverseTable = "tm_entries"
 	// TmEntriesColumn is the table column denoting the tm_entries relation/edge.
 	TmEntriesColumn = "project_id"
-	// TranslationJobsTable is the table that holds the translation_jobs relation/edge.
-	TranslationJobsTable = "translation_jobs"
-	// TranslationJobsInverseTable is the table name for the TranslationJob entity.
-	// It exists in this package in order to avoid circular dependency with the "translationjob" package.
-	TranslationJobsInverseTable = "translation_jobs"
-	// TranslationJobsColumn is the table column denoting the translation_jobs relation/edge.
-	TranslationJobsColumn = "project_translation_jobs"
+	// JobsTable is the table that holds the jobs relation/edge.
+	JobsTable = "jobs"
+	// JobsInverseTable is the table name for the Job entity.
+	// It exists in this package in order to avoid circular dependency with the "job" package.
+	JobsInverseTable = "jobs"
+	// JobsColumn is the table column denoting the jobs relation/edge.
+	JobsColumn = "project_id"
 	// ActivityLogsTable is the table that holds the activity_logs relation/edge.
 	ActivityLogsTable = "activity_logs"
 	// ActivityLogsInverseTable is the table name for the ActivityLog entity.
@@ -128,7 +126,6 @@ var Columns = []string{
 	FieldOwnerUserID,
 	FieldOwnerOrgID,
 	FieldConfig,
-	FieldDefaultTranslationConfig,
 	FieldGlossaryEnabled,
 	FieldSourceLang,
 	FieldTargetLang,
@@ -159,8 +156,6 @@ var (
 	OwnerOrgIDValidator func(int) error
 	// DefaultConfig holds the default value on creation for the "config" field.
 	DefaultConfig func() map[string]interface{}
-	// DefaultDefaultTranslationConfig holds the default value on creation for the "default_translation_config" field.
-	DefaultDefaultTranslationConfig func() map[string]interface{}
 	// DefaultGlossaryEnabled holds the default value on creation for the "glossary_enabled" field.
 	DefaultGlossaryEnabled bool
 	// DefaultSourceLang holds the default value on creation for the "source_lang" field.
@@ -259,17 +254,17 @@ func ByTmEntries(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
-// ByTranslationJobsCount orders the results by translation_jobs count.
-func ByTranslationJobsCount(opts ...sql.OrderTermOption) OrderOption {
+// ByJobsCount orders the results by jobs count.
+func ByJobsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newTranslationJobsStep(), opts...)
+		sqlgraph.OrderByNeighborsCount(s, newJobsStep(), opts...)
 	}
 }
 
-// ByTranslationJobs orders the results by translation_jobs terms.
-func ByTranslationJobs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+// ByJobs orders the results by jobs terms.
+func ByJobs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newTranslationJobsStep(), append([]sql.OrderTerm{term}, terms...)...)
+		sqlgraph.OrderByNeighborTerms(s, newJobsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
 
@@ -356,11 +351,11 @@ func newTmEntriesStep() *sqlgraph.Step {
 		sqlgraph.Edge(sqlgraph.O2M, false, TmEntriesTable, TmEntriesColumn),
 	)
 }
-func newTranslationJobsStep() *sqlgraph.Step {
+func newJobsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(TranslationJobsInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, TranslationJobsTable, TranslationJobsColumn),
+		sqlgraph.To(JobsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, JobsTable, JobsColumn),
 	)
 }
 func newActivityLogsStep() *sqlgraph.Step {

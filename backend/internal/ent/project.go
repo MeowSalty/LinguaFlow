@@ -32,9 +32,7 @@ type Project struct {
 	OwnerOrgID *int `json:"owner_org_id,omitempty"`
 	// Config holds the value of the "config" field.
 	Config map[string]interface{} `json:"config,omitempty"`
-	// 默认翻译配置，创建翻译任务时作为任务配置基底
-	DefaultTranslationConfig map[string]interface{} `json:"default_translation_config,omitempty"`
-	// 翻译过程中是否启用术语表
+	// 是否启用术语表
 	GlossaryEnabled bool `json:"glossary_enabled,omitempty"`
 	// SourceLang holds the value of the "source_lang" field.
 	SourceLang string `json:"source_lang,omitempty"`
@@ -56,8 +54,8 @@ type ProjectEdges struct {
 	GlossaryEntries []*GlossaryEntry `json:"glossary_entries,omitempty"`
 	// TmEntries holds the value of the tm_entries edge.
 	TmEntries []*TMEntry `json:"tm_entries,omitempty"`
-	// TranslationJobs holds the value of the translation_jobs edge.
-	TranslationJobs []*TranslationJob `json:"translation_jobs,omitempty"`
+	// Jobs holds the value of the jobs edge.
+	Jobs []*Job `json:"jobs,omitempty"`
 	// ActivityLogs holds the value of the activity_logs edge.
 	ActivityLogs []*ActivityLog `json:"activity_logs,omitempty"`
 	// UsageRecords holds the value of the usage_records edge.
@@ -111,13 +109,13 @@ func (e ProjectEdges) TmEntriesOrErr() ([]*TMEntry, error) {
 	return nil, &NotLoadedError{edge: "tm_entries"}
 }
 
-// TranslationJobsOrErr returns the TranslationJobs value or an error if the edge
+// JobsOrErr returns the Jobs value or an error if the edge
 // was not loaded in eager-loading.
-func (e ProjectEdges) TranslationJobsOrErr() ([]*TranslationJob, error) {
+func (e ProjectEdges) JobsOrErr() ([]*Job, error) {
 	if e.loadedTypes[4] {
-		return e.TranslationJobs, nil
+		return e.Jobs, nil
 	}
-	return nil, &NotLoadedError{edge: "translation_jobs"}
+	return nil, &NotLoadedError{edge: "jobs"}
 }
 
 // ActivityLogsOrErr returns the ActivityLogs value or an error if the edge
@@ -161,7 +159,7 @@ func (*Project) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case project.FieldConfig, project.FieldDefaultTranslationConfig:
+		case project.FieldConfig:
 			values[i] = new([]byte)
 		case project.FieldGlossaryEnabled:
 			values[i] = new(sql.NullBool)
@@ -232,14 +230,6 @@ func (_m *Project) assignValues(columns []string, values []any) error {
 					return fmt.Errorf("unmarshal field config: %w", err)
 				}
 			}
-		case project.FieldDefaultTranslationConfig:
-			if value, ok := values[i].(*[]byte); !ok {
-				return fmt.Errorf("unexpected type %T for field default_translation_config", values[i])
-			} else if value != nil && len(*value) > 0 {
-				if err := json.Unmarshal(*value, &_m.DefaultTranslationConfig); err != nil {
-					return fmt.Errorf("unmarshal field default_translation_config: %w", err)
-				}
-			}
 		case project.FieldGlossaryEnabled:
 			if value, ok := values[i].(*sql.NullBool); !ok {
 				return fmt.Errorf("unexpected type %T for field glossary_enabled", values[i])
@@ -291,9 +281,9 @@ func (_m *Project) QueryTmEntries() *TMEntryQuery {
 	return NewProjectClient(_m.config).QueryTmEntries(_m)
 }
 
-// QueryTranslationJobs queries the "translation_jobs" edge of the Project entity.
-func (_m *Project) QueryTranslationJobs() *TranslationJobQuery {
-	return NewProjectClient(_m.config).QueryTranslationJobs(_m)
+// QueryJobs queries the "jobs" edge of the Project entity.
+func (_m *Project) QueryJobs() *JobQuery {
+	return NewProjectClient(_m.config).QueryJobs(_m)
 }
 
 // QueryActivityLogs queries the "activity_logs" edge of the Project entity.
@@ -360,9 +350,6 @@ func (_m *Project) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("config=")
 	builder.WriteString(fmt.Sprintf("%v", _m.Config))
-	builder.WriteString(", ")
-	builder.WriteString("default_translation_config=")
-	builder.WriteString(fmt.Sprintf("%v", _m.DefaultTranslationConfig))
 	builder.WriteString(", ")
 	builder.WriteString("glossary_enabled=")
 	builder.WriteString(fmt.Sprintf("%v", _m.GlossaryEnabled))

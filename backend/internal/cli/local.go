@@ -18,6 +18,7 @@ type localOptions struct {
 	port      int
 	dataDir   string
 	noBrowser bool
+	jwtSecret string
 }
 
 func newLocalCmd(rt *appCtx) *cobra.Command {
@@ -36,6 +37,7 @@ func newLocalCmd(rt *appCtx) *cobra.Command {
 	cmd.Flags().IntVar(&opts.port, "port", 18080, "监听端口（0=随机空闲端口）")
 	cmd.Flags().StringVar(&opts.dataDir, "data-dir", "", "数据目录（默认 UserConfigDir/LinguaFlow）")
 	cmd.Flags().BoolVar(&opts.noBrowser, "no-browser", false, "不自动打开浏览器")
+	cmd.Flags().StringVar(&opts.jwtSecret, "jwt-secret", "", "覆盖 LINGUAFLOW_JWT_SECRET")
 	return cmd
 }
 
@@ -52,13 +54,15 @@ func runLocal(ctx context.Context, rt *appCtx, opts localOptions) error {
 	port := resolvePort(opts.host, opts.port)
 
 	server, ln, cleanup, err := bootstrapServer(ctx, BootOptions{
-		ConfigPath: rt.configPath,
-		Logger:     rt.logger,
-		Mode:       config.ModeLocal,
-		Overrides: func(cfg *config.Config) {
-			cfg.Server.Host = opts.host
-			cfg.Server.Port = port
-			cfg.Server.DataDir = dataDir
+		Logger: rt.logger,
+		Mode:   config.ModeLocal,
+		Overrides: func(cfg *config.ServerConfig) {
+			cfg.Host = opts.host
+			cfg.Port = port
+			cfg.DataDir = dataDir
+			if opts.jwtSecret != "" {
+				cfg.JWTSecret = opts.jwtSecret
+			}
 		},
 	})
 	if err != nil {

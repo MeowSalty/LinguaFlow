@@ -11,7 +11,7 @@ const props = withDefaults(
     modelValue: string
     disabled?: boolean
     rows?: number
-    variableSet?: 'system' | 'bootstrap'
+    variableSet?: 'system' | 'bootstrap' | 'prune'
   }>(),
   { disabled: false, rows: 6, variableSet: 'system' },
 )
@@ -30,9 +30,13 @@ const editorRef = ref<InstanceType<typeof HighlightTextarea> | null>(null)
 const systemVariables = [
   { key: 'SourceLang', label: '源语言' },
   { key: 'TargetLang', label: '目标语言' },
+  { key: 'Protocol', label: '协议 text|json_loose|json_strict' },
   { key: 'SourceContent', label: '源内容' },
   { key: 'TargetContent', label: '目标内容' },
   { key: 'GlossaryTerms', label: '术语表' },
+  { key: 'InlineBootstrap', label: '是否内联术语抽取' },
+  { key: 'MaxBootstrapTerms', label: '内联术语上限' },
+  { key: 'RubyMode', label: '注音模式 json|section|inline' },
   { key: 'FileFormat', label: '文件格式' },
   { key: 'FileName', label: '文件名' },
   { key: 'OriginalText', label: '原始文本' },
@@ -42,11 +46,38 @@ const systemVariables = [
 const bootstrapVariables = [
   { key: 'SourceLang', label: '源语言' },
   { key: 'TargetLang', label: '目标语言' },
+  { key: 'Protocol', label: '协议 text|json_loose|json_strict' },
   { key: 'MaxTerms', label: '最大术语数' },
 ] as const
 
-const builtinVariables = computed(() =>
-  props.variableSet === 'bootstrap' ? bootstrapVariables : systemVariables,
+const pruneVariables = [
+  { key: 'SourceLang', label: '源语言' },
+  { key: 'TargetLang', label: '目标语言' },
+  { key: 'Protocol', label: '协议 text|json_loose|json_strict' },
+  { key: 'Entries', label: '完整术语条目集合' },
+] as const
+
+const builtinVariables = computed(() => {
+  switch (props.variableSet) {
+    case 'bootstrap':
+      return bootstrapVariables
+    case 'prune':
+      return pruneVariables
+    default:
+      return systemVariables
+  }
+})
+
+const placeholder = computed(() =>
+  props.variableSet === 'prune'
+    ? t('prunePromptTemplates.form.contentPlaceholder')
+    : t('promptTemplates.form.contentPlaceholder'),
+)
+
+const insertLabel = computed(() =>
+  props.variableSet === 'prune'
+    ? t('prunePromptTemplates.form.insertBuiltinVar')
+    : t('promptTemplates.form.insertBuiltinVar'),
 )
 
 // ─── 方法 ────────────────────────────────────────────────────
@@ -66,14 +97,14 @@ const insertVariable = (varName: string): void => {
     <HighlightTextarea
       ref="editorRef"
       :value="modelValue"
-      :placeholder="t('promptTemplates.form.contentPlaceholder')"
+      :placeholder="placeholder"
       :rows="rows"
       :disabled="disabled"
       @update:value="emit('update:modelValue', $event)"
     />
     <div class="mt-2 flex flex-wrap items-center gap-1.5">
       <span class="text-xs text-lf-text-muted">
-        {{ t('promptTemplates.form.insertBuiltinVar') }}
+        {{ insertLabel }}
       </span>
       <NButton
         v-for="v in builtinVariables"

@@ -1,8 +1,8 @@
-PromptTemplateScope:
+TranslationPromptTemplateScope:
   type: string
   enum: [user, org, system]
 
-PromptTemplate:
+TranslationPromptTemplate:
   type: object
   required: [id, name, description, scope]
   properties:
@@ -13,7 +13,7 @@ PromptTemplate:
     description:
       type: string
     scope:
-      $ref: '#/PromptTemplateScope'
+      $ref: '#/TranslationPromptTemplateScope'
     owner_user_id:
       type: integer
     owner_org_id:
@@ -21,9 +21,6 @@ PromptTemplate:
     system_prompt_content:
       type: string
       description: 翻译提示词内容。
-    bootstrap_prompt_content:
-      type: string
-      description: Bootstrap 术语抽取提示词内容。启用 glossary.bootstrap 时必填。
     created_at:
       type: string
       format: date-time
@@ -31,16 +28,16 @@ PromptTemplate:
       type: string
       format: date-time
 
-PromptTemplateListResponse:
+TranslationPromptTemplateListResponse:
   type: object
   required: [items]
   properties:
     items:
       type: array
       items:
-        $ref: '#/PromptTemplate'
+        $ref: '#/TranslationPromptTemplate'
 
-CreatePromptTemplateRequest:
+CreateTranslationPromptTemplateRequest:
   type: object
   required: [name]
   properties:
@@ -51,12 +48,9 @@ CreatePromptTemplateRequest:
     system_prompt_content:
       type: string
       description: 翻译提示词内容。
-    bootstrap_prompt_content:
-      type: string
-      description: Bootstrap 术语抽取提示词内容。
   additionalProperties: false
 
-UpdatePromptTemplateRequest:
+UpdateTranslationPromptTemplateRequest:
   type: object
   properties:
     name:
@@ -66,7 +60,4 @@ UpdatePromptTemplateRequest:
     system_prompt_content:
       type: string
       description: 翻译提示词内容。
-    bootstrap_prompt_content:
-      type: string
-      description: Bootstrap 术语抽取提示词内容。
   additionalProperties: false

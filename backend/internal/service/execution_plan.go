@@ -8,11 +8,11 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
@@ -42,7 +42,6 @@ type CreateExecutionPlanTemplateInput struct {
 	Scope       string                              `json:"scope"` // user / org
 	OwnerUserID *int                                `json:"owner_user_id,omitempty"`
 	OwnerOrgID  *int                                `json:"owner_org_id,omitempty"`
-	Bootstrap   schema.ExecutionPlanBootstrapConfig `json:"bootstrap"`
 	RubyRetry   schema.ExecutionPlanRubyRetryConfig `json:"ruby_retry"`
 	Rounds      []schema.ExecutionRoundConfig       `json:"rounds"`
 }
@@ -51,7 +50,6 @@ type CreateExecutionPlanTemplateInput struct {
 type UpdateExecutionPlanTemplateInput struct {
 	Name        *string                              `json:"name,omitempty"`
 	Description *string                              `json:"description,omitempty"`
-	Bootstrap   *schema.ExecutionPlanBootstrapConfig `json:"bootstrap,omitempty"`
 	RubyRetry   *schema.ExecutionPlanRubyRetryConfig `json:"ruby_retry,omitempty"`
 	Rounds      []schema.ExecutionRoundConfig        `json:"rounds,omitempty"`
 }
@@ -143,7 +141,6 @@ func (s *ExecutionPlanService) Create(ctx context.Context, input CreateExecution
 		SetName(name).
 		SetDescription(strings.TrimSpace(input.Description)).
 		SetScope(input.Scope).
-		SetBootstrap(input.Bootstrap).
 		SetRubyRetry(input.RubyRetry).
 		SetRounds(input.Rounds)
 
@@ -196,9 +193,6 @@ func (s *ExecutionPlanService) Update(ctx context.Context, userID, planID int, i
 	if input.Description != nil {
 		update.SetDescription(strings.TrimSpace(*input.Description))
 	}
-	if input.Bootstrap != nil {
-		update.SetBootstrap(*input.Bootstrap)
-	}
 	if input.RubyRetry != nil {
 		update.SetRubyRetry(*input.RubyRetry)
 	}
@@ -217,7 +211,7 @@ func (s *ExecutionPlanService) Update(ctx context.Context, userID, planID int, i
 }
 
 // Delete 删除执行计划模板。
-// 如果有 TranslationJob 引用了该模板，拒绝删除。
+// 如果有 Job 引用了该模板，拒绝删除。
 func (s *ExecutionPlanService) Delete(ctx context.Context, userID, planID int) error {
 	plan, err := s.GetByID(ctx, userID, planID)
 	if err != nil {
@@ -229,8 +223,8 @@ func (s *ExecutionPlanService) Delete(ctx context.Context, userID, planID int) e
 	}
 
 	// 检查是否有任务引用
-	count, err := s.client.TranslationJob.Query().
-		Where(translationjob.ExecutionPlanIDEQ(plan.ID)).
+	count, err := s.client.Job.Query().
+		Where(job.ExecutionPlanIDEQ(plan.ID)).
 		Count(ctx)
 	if err != nil {
 		return fmt.Errorf("check job references: %w", err)
@@ -268,38 +262,64 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 		return fmt.Errorf("%w: rounds must not be empty", ErrExecutionPlanConfigInvalid)
 	}
 	for i, round := range rounds {
-		if strings.TrimSpace(round.Name) == "" {
-			return fmt.Errorf("%w: rounds[%d].name must not be empty", ErrExecutionPlanConfigInvalid, i)
-		}
 		if round.BackendID <= 0 {
 			return fmt.Errorf("%w: rounds[%d].backend_id must be positive", ErrExecutionPlanConfigInvalid, i)
 		}
-		if round.PromptTemplateID == 0 {
-			return fmt.Errorf("%w: rounds[%d].prompt_template_id must not be zero", ErrExecutionPlanConfigInvalid, i)
-		}
-		if round.PromptTemplateID < 0 && !templates.IsBuiltinID(round.PromptTemplateID) {
-			return fmt.Errorf("%w: rounds[%d].prompt_template_id %d is not a valid builtin template", ErrExecutionPlanConfigInvalid, i, round.PromptTemplateID)
-		}
-		if round.ProfileID == 0 {
-			return fmt.Errorf("%w: rounds[%d].profile_id must not be zero", ErrExecutionPlanConfigInvalid, i)
-		}
-		if round.ProfileID < 0 && !templates.IsBuiltinID(round.ProfileID) {
-			return fmt.Errorf("%w: rounds[%d].profile_id %d is not a valid builtin template", ErrExecutionPlanConfigInvalid, i, round.ProfileID)
-		}
-		if round.BatchSize < 0 {
-			return fmt.Errorf("%w: rounds[%d].batch_size must be >= 0", ErrExecutionPlanConfigInvalid, i)
-		}
-		if round.MaxWordsPerBatch < 0 {
-			return fmt.Errorf("%w: rounds[%d].max_words_per_batch must be >= 0", ErrExecutionPlanConfigInvalid, i)
-		}
-		if round.BatchSize <= 0 && round.MaxWordsPerBatch <= 0 {
-			return fmt.Errorf("%w: rounds[%d].batch_size and max_words_per_batch cannot both be 0", ErrExecutionPlanConfigInvalid, i)
-		}
-		if round.Concurrency < 1 {
-			return fmt.Errorf("%w: rounds[%d].concurrency must be >= 1", ErrExecutionPlanConfigInvalid, i)
-		}
-		if round.FallbackShrink < 0 || round.FallbackShrink >= 1 {
-			return fmt.Errorf("%w: rounds[%d].fallback_shrink must be in [0, 1)", ErrExecutionPlanConfigInvalid, i)
+		switch round.Mode {
+		case "translate":
+			if round.Translate == nil {
+				return fmt.Errorf("%w: rounds[%d].translate config required when mode=translate", ErrExecutionPlanConfigInvalid, i)
+			}
+			t := round.Translate
+			if t.PromptTemplateID == 0 {
+				return fmt.Errorf("%w: rounds[%d].translate.prompt_template_id must not be zero", ErrExecutionPlanConfigInvalid, i)
+			}
+			if t.PromptTemplateID < 0 && t.PromptTemplateID != templates.BuiltinTranslationPromptTemplateID {
+				return fmt.Errorf("%w: rounds[%d].translate.prompt_template_id %d is not a valid builtin translation template", ErrExecutionPlanConfigInvalid, i, t.PromptTemplateID)
+			}
+			if t.ProfileID == 0 {
+				return fmt.Errorf("%w: rounds[%d].translate.profile_id must not be zero", ErrExecutionPlanConfigInvalid, i)
+			}
+			if t.ProfileID < 0 && !templates.IsBuiltinID(t.ProfileID) {
+				return fmt.Errorf("%w: rounds[%d].translate.profile_id %d is not a valid builtin template", ErrExecutionPlanConfigInvalid, i, t.ProfileID)
+			}
+			if t.BatchSize < 0 {
+				return fmt.Errorf("%w: rounds[%d].translate.batch_size must be >= 0", ErrExecutionPlanConfigInvalid, i)
+			}
+			if t.MaxWordsPerBatch < 0 {
+				return fmt.Errorf("%w: rounds[%d].translate.max_words_per_batch must be >= 0", ErrExecutionPlanConfigInvalid, i)
+			}
+			if t.BatchSize <= 0 && t.MaxWordsPerBatch <= 0 {
+				return fmt.Errorf("%w: rounds[%d].translate.batch_size and max_words_per_batch cannot both be 0", ErrExecutionPlanConfigInvalid, i)
+			}
+			if t.Concurrency < 1 {
+				return fmt.Errorf("%w: rounds[%d].translate.concurrency must be >= 1", ErrExecutionPlanConfigInvalid, i)
+			}
+			if t.FallbackShrink < 0 || t.FallbackShrink >= 1 {
+				return fmt.Errorf("%w: rounds[%d].translate.fallback_shrink must be in [0, 1)", ErrExecutionPlanConfigInvalid, i)
+			}
+		case "extract":
+			if round.Extract == nil {
+				return fmt.Errorf("%w: rounds[%d].extract config required when mode=extract", ErrExecutionPlanConfigInvalid, i)
+			}
+			e := round.Extract
+			if e.BootstrapTemplateID == 0 {
+				return fmt.Errorf("%w: rounds[%d].extract.bootstrap_template_id must not be zero", ErrExecutionPlanConfigInvalid, i)
+			}
+			if e.BootstrapTemplateID < 0 && e.BootstrapTemplateID != templates.BuiltinBootstrapPromptTemplateID {
+				return fmt.Errorf("%w: rounds[%d].extract.bootstrap_template_id %d is not a valid builtin bootstrap template", ErrExecutionPlanConfigInvalid, i, e.BootstrapTemplateID)
+			}
+			if e.BatchSize < 0 {
+				return fmt.Errorf("%w: rounds[%d].extract.batch_size must be >= 0", ErrExecutionPlanConfigInvalid, i)
+			}
+			if e.MaxWordsPerBatch < 0 {
+				return fmt.Errorf("%w: rounds[%d].extract.max_words_per_batch must be >= 0", ErrExecutionPlanConfigInvalid, i)
+			}
+			if e.Concurrency < 1 {
+				return fmt.Errorf("%w: rounds[%d].extract.concurrency must be >= 1", ErrExecutionPlanConfigInvalid, i)
+			}
+		default:
+			return fmt.Errorf("%w: rounds[%d].mode must be 'translate' or 'extract'", ErrExecutionPlanConfigInvalid, i)
 		}
 	}
 	return nil

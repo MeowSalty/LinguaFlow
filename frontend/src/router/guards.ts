@@ -1,5 +1,6 @@
 import type { Router } from 'vue-router'
 
+import { setUnauthorizedHandler } from '@/api/client'
 import { useAuthStore } from '@/stores/auth'
 import { useServiceStore } from '@/stores/service'
 
@@ -7,6 +8,16 @@ const PUBLIC_PATHS = new Set(['/login', '/register', '/service'])
 const AUTH_ENTRY_PATHS = new Set(['/login', '/register'])
 
 export const installRouterGuards = (router: Router): void => {
+  const service = useServiceStore()
+  const auth = useAuthStore()
+
+  setUnauthorizedHandler(() => {
+    auth.clearSession()
+    if (!service.isLocal && router.currentRoute.value.path !== '/login') {
+      router.push('/login')
+    }
+  })
+
   router.beforeEach((to) => {
     const service = useServiceStore()
     const auth = useAuthStore()

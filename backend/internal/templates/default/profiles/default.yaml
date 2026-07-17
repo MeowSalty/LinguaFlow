@@ -2,12 +2,6 @@
 # 由 `linguaflow init` 生成，可在 linguaflow.yaml 的 translation_profiles 中通过 file 引用。
 # 字段说明参见 linguaflow.yaml 中的注释。
 
-# ── 段落拆分 ──
-split:
-  enabled: true
-  strategy: paragraph
-  max_chars: 1200
-
 # ── 内容保护 ──
 # rules 控制普通 protector（占位符机制）。
 protect:

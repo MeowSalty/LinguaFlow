@@ -33,6 +33,18 @@ func (f BackendFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.BackendMutation", m)
 }
 
+// The BootstrapPromptTemplateFunc type is an adapter to allow the use of ordinary
+// function as BootstrapPromptTemplate mutator.
+type BootstrapPromptTemplateFunc func(context.Context, *ent.BootstrapPromptTemplateMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f BootstrapPromptTemplateFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.BootstrapPromptTemplateMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.BootstrapPromptTemplateMutation", m)
+}
+
 // The ExecutionPlanTemplateFunc type is an adapter to allow the use of ordinary
 // function as ExecutionPlanTemplate mutator.
 type ExecutionPlanTemplateFunc func(context.Context, *ent.ExecutionPlanTemplateMutation) (ent.Value, error)
@@ -45,6 +57,18 @@ func (f ExecutionPlanTemplateFunc) Mutate(ctx context.Context, m ent.Mutation) (
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ExecutionPlanTemplateMutation", m)
 }
 
+// The ExecutionProfileFunc type is an adapter to allow the use of ordinary
+// function as ExecutionProfile mutator.
+type ExecutionProfileFunc func(context.Context, *ent.ExecutionProfileMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f ExecutionProfileFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.ExecutionProfileMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ExecutionProfileMutation", m)
+}
+
 // The GlossaryEntryFunc type is an adapter to allow the use of ordinary
 // function as GlossaryEntry mutator.
 type GlossaryEntryFunc func(context.Context, *ent.GlossaryEntryMutation) (ent.Value, error)
@@ -55,6 +79,18 @@ func (f GlossaryEntryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Valu
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.GlossaryEntryMutation", m)
+}
+
+// The JobFunc type is an adapter to allow the use of ordinary
+// function as Job mutator.
+type JobFunc func(context.Context, *ent.JobMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f JobFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.JobMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.JobMutation", m)
 }
 
 // The JobResourceFunc type is an adapter to allow the use of ordinary
@@ -105,16 +141,16 @@ func (f ProjectFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ProjectMutation", m)
 }
 
-// The PromptTemplateFunc type is an adapter to allow the use of ordinary
-// function as PromptTemplate mutator.
-type PromptTemplateFunc func(context.Context, *ent.PromptTemplateMutation) (ent.Value, error)
+// The PrunePromptTemplateFunc type is an adapter to allow the use of ordinary
+// function as PrunePromptTemplate mutator.
+type PrunePromptTemplateFunc func(context.Context, *ent.PrunePromptTemplateMutation) (ent.Value, error)
 
 // Mutate calls f(ctx, m).
-func (f PromptTemplateFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	if mv, ok := m.(*ent.PromptTemplateMutation); ok {
+func (f PrunePromptTemplateFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.PrunePromptTemplateMutation); ok {
 		return f(ctx, mv)
 	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PromptTemplateMutation", m)
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.PrunePromptTemplateMutation", m)
 }
 
 // The RefreshTokenFunc type is an adapter to allow the use of ordinary
@@ -139,6 +175,18 @@ func (f ResourceFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, er
 		return f(ctx, mv)
 	}
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.ResourceMutation", m)
+}
+
+// The SSEEventFunc type is an adapter to allow the use of ordinary
+// function as SSEEvent mutator.
+type SSEEventFunc func(context.Context, *ent.SSEEventMutation) (ent.Value, error)
+
+// Mutate calls f(ctx, m).
+func (f SSEEventFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.SSEEventMutation); ok {
+		return f(ctx, mv)
+	}
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.SSEEventMutation", m)
 }
 
 // The SegmentFunc type is an adapter to allow the use of ordinary
@@ -189,28 +237,16 @@ func (f TMEntryFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, err
 	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.TMEntryMutation", m)
 }
 
-// The TranslationJobFunc type is an adapter to allow the use of ordinary
-// function as TranslationJob mutator.
-type TranslationJobFunc func(context.Context, *ent.TranslationJobMutation) (ent.Value, error)
+// The TranslationPromptTemplateFunc type is an adapter to allow the use of ordinary
+// function as TranslationPromptTemplate mutator.
+type TranslationPromptTemplateFunc func(context.Context, *ent.TranslationPromptTemplateMutation) (ent.Value, error)
 
 // Mutate calls f(ctx, m).
-func (f TranslationJobFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	if mv, ok := m.(*ent.TranslationJobMutation); ok {
+func (f TranslationPromptTemplateFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
+	if mv, ok := m.(*ent.TranslationPromptTemplateMutation); ok {
 		return f(ctx, mv)
 	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.TranslationJobMutation", m)
-}
-
-// The TranslationProfileFunc type is an adapter to allow the use of ordinary
-// function as TranslationProfile mutator.
-type TranslationProfileFunc func(context.Context, *ent.TranslationProfileMutation) (ent.Value, error)
-
-// Mutate calls f(ctx, m).
-func (f TranslationProfileFunc) Mutate(ctx context.Context, m ent.Mutation) (ent.Value, error) {
-	if mv, ok := m.(*ent.TranslationProfileMutation); ok {
-		return f(ctx, mv)
-	}
-	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.TranslationProfileMutation", m)
+	return nil, fmt.Errorf("unexpected mutation type %T. expect *ent.TranslationPromptTemplateMutation", m)
 }
 
 // The UsageRecordFunc type is an adapter to allow the use of ordinary

@@ -3,7 +3,6 @@ package api
 import (
 	"errors"
 	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi/v5"
 
@@ -59,12 +58,12 @@ type orgMembershipResponse struct {
 func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 	account, err := s.userService.GetMe(r.Context(), authUser.User.ID)
 	if err != nil {
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toUserResponse(account))
@@ -73,11 +72,11 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 	var req updateMeRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	updated, err := s.userService.UpdateMe(r.Context(), authUser.User.ID, service.UpdateProfileInput{
@@ -85,7 +84,7 @@ func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 		Email:       req.Email,
 	})
 	if err != nil {
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toUserResponse(updated))
@@ -94,15 +93,15 @@ func (s *Server) handleUpdateMe(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 	var req changePasswordRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	if err := s.userService.ChangeMyPassword(r.Context(), authUser.User.ID, req.CurrentPassword, req.NewPassword); err != nil {
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
@@ -111,12 +110,12 @@ func (s *Server) handleChangePassword(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleListOrgs(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 	orgs, err := s.userService.ListOrganizationsForUser(r.Context(), authUser.User.ID)
 	if err != nil {
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 		return
 	}
 	resp := make([]organizationResponse, 0, len(orgs))
@@ -129,11 +128,11 @@ func (s *Server) handleListOrgs(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCreateOrg(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
 	var req organizationRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	org, err := s.userService.CreateOrganization(r.Context(), authUser.User.ID, service.CreateOrganizationInput{
@@ -143,7 +142,7 @@ func (s *Server) handleCreateOrg(w http.ResponseWriter, r *http.Request) {
 		Description: req.Description,
 	})
 	if err != nil {
-		writeUserServiceError(w, err)
+		s.writeUserServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, toOrganizationResponse(org))
@@ -152,16 +151,16 @@ func (s *Server) handleCreateOrg(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleGetOrg(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	orgID, ok := parseIntParam(w, chi.URLParam(r, "orgId"), "orgId")
+	orgID, ok := s.parseIntParam(w, r, chi.URLParam(r, "orgId"), "orgId")
 	if !ok {
 		return
 	}
 	org, err := s.userService.GetOrganization(r.Context(), authUser.User.ID, orgID)
 	if err != nil {
-		writeUserServiceError(w, err)
+		s.writeUserServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toOrganizationResponse(org))
@@ -170,15 +169,15 @@ func (s *Server) handleGetOrg(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUpdateOrg(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	orgID, ok := parseIntParam(w, chi.URLParam(r, "orgId"), "orgId")
+	orgID, ok := s.parseIntParam(w, r, chi.URLParam(r, "orgId"), "orgId")
 	if !ok {
 		return
 	}
 	var req organizationRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	org, err := s.userService.UpdateOrganization(r.Context(), authUser.User.ID, orgID, service.CreateOrganizationInput{
@@ -188,7 +187,7 @@ func (s *Server) handleUpdateOrg(w http.ResponseWriter, r *http.Request) {
 		Description: req.Description,
 	})
 	if err != nil {
-		writeUserServiceError(w, err)
+		s.writeUserServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toOrganizationResponse(org))
@@ -197,16 +196,16 @@ func (s *Server) handleUpdateOrg(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleListOrgMembers(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	orgID, ok := parseIntParam(w, chi.URLParam(r, "orgId"), "orgId")
+	orgID, ok := s.parseIntParam(w, r, chi.URLParam(r, "orgId"), "orgId")
 	if !ok {
 		return
 	}
 	members, err := s.userService.ListMembers(r.Context(), authUser.User.ID, orgID)
 	if err != nil {
-		writeUserServiceError(w, err)
+		s.writeUserServiceError(w, r, err)
 		return
 	}
 	resp := make([]orgMembershipResponse, 0, len(members))
@@ -219,15 +218,15 @@ func (s *Server) handleListOrgMembers(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleAddOrgMember(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	orgID, ok := parseIntParam(w, chi.URLParam(r, "orgId"), "orgId")
+	orgID, ok := s.parseIntParam(w, r, chi.URLParam(r, "orgId"), "orgId")
 	if !ok {
 		return
 	}
 	var req orgMemberRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	membership, err := s.userService.AddMember(r.Context(), authUser.User.ID, orgID, service.AddOrgMemberInput{
@@ -235,7 +234,7 @@ func (s *Server) handleAddOrgMember(w http.ResponseWriter, r *http.Request) {
 		Role:     req.Role,
 	})
 	if err != nil {
-		writeUserServiceError(w, err)
+		s.writeUserServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, toOrgMembershipResponse(membership))
@@ -244,24 +243,24 @@ func (s *Server) handleAddOrgMember(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleUpdateOrgMember(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	orgID, ok := parseIntParam(w, chi.URLParam(r, "orgId"), "orgId")
+	orgID, ok := s.parseIntParam(w, r, chi.URLParam(r, "orgId"), "orgId")
 	if !ok {
 		return
 	}
-	memberUserID, ok := parseIntParam(w, chi.URLParam(r, "userId"), "userId")
+	memberUserID, ok := s.parseIntParam(w, r, chi.URLParam(r, "userId"), "userId")
 	if !ok {
 		return
 	}
 	var req orgMemberRequest
-	if !decodeJSON(w, r, &req) {
+	if !s.decodeJSON(w, r, &req) {
 		return
 	}
 	membership, err := s.userService.UpdateMemberRole(r.Context(), authUser.User.ID, orgID, memberUserID, service.UpdateOrgMemberRoleInput{Role: req.Role})
 	if err != nil {
-		writeUserServiceError(w, err)
+		s.writeUserServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toOrgMembershipResponse(membership))
@@ -270,43 +269,34 @@ func (s *Server) handleUpdateOrgMember(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleDeleteOrgMember(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
-		writeProblem(w, http.StatusUnauthorized, "unauthorized", "认证失败")
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
 		return
 	}
-	orgID, ok := parseIntParam(w, chi.URLParam(r, "orgId"), "orgId")
+	orgID, ok := s.parseIntParam(w, r, chi.URLParam(r, "orgId"), "orgId")
 	if !ok {
 		return
 	}
-	memberUserID, ok := parseIntParam(w, chi.URLParam(r, "userId"), "userId")
+	memberUserID, ok := s.parseIntParam(w, r, chi.URLParam(r, "userId"), "userId")
 	if !ok {
 		return
 	}
 	if err := s.userService.RemoveMember(r.Context(), authUser.User.ID, orgID, memberUserID); err != nil {
-		writeUserServiceError(w, err)
+		s.writeUserServiceError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func parseIntParam(w http.ResponseWriter, raw string, name string) (int, bool) {
-	v, err := strconv.Atoi(raw)
-	if err != nil || v <= 0 {
-		writeProblem(w, http.StatusBadRequest, "invalid_path_parameter", name+" 必须是正整数")
-		return 0, false
-	}
-	return v, true
-}
-
-func writeUserServiceError(w http.ResponseWriter, err error) {
+func (s *Server) writeUserServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, service.ErrForbidden):
-		writeProblem(w, http.StatusForbidden, "forbidden", "没有权限执行该操作")
+		s.writeProblem(w, r, http.StatusForbidden, "forbidden", "没有权限执行该操作")
 	case errors.Is(err, service.ErrOrganizationNotFound), errors.Is(err, service.ErrMembershipNotFound):
-		writeProblem(w, http.StatusNotFound, "not_found", "资源不存在")
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "资源不存在")
 	case errors.Is(err, service.ErrOrganizationExists), errors.Is(err, service.ErrOwnerRequired), errors.Is(err, service.ErrUserExists):
-		writeProblem(w, http.StatusConflict, "conflict", err.Error())
+		s.writeProblem(w, r, http.StatusConflict, "conflict", err.Error())
 	default:
-		writeServiceError(w, err)
+		s.writeServiceError(w, r, err)
 	}
 }
 

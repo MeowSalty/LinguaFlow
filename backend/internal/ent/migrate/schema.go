@@ -100,6 +100,38 @@ var (
 			},
 		},
 	}
+	// BootstrapPromptTemplatesColumns holds the columns for the "bootstrap_prompt_templates" table.
+	BootstrapPromptTemplatesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "name", Type: field.TypeString},
+		{Name: "description", Type: field.TypeString, Default: ""},
+		{Name: "scope", Type: field.TypeString, Default: "user"},
+		{Name: "content", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
+		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
+	}
+	// BootstrapPromptTemplatesTable holds the schema information for the "bootstrap_prompt_templates" table.
+	BootstrapPromptTemplatesTable = &schema.Table{
+		Name:       "bootstrap_prompt_templates",
+		Columns:    BootstrapPromptTemplatesColumns,
+		PrimaryKey: []*schema.Column{BootstrapPromptTemplatesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "bootstrap_prompt_templates_organizations_bootstrap_prompt_templates",
+				Columns:    []*schema.Column{BootstrapPromptTemplatesColumns[7]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "bootstrap_prompt_templates_users_bootstrap_prompt_templates",
+				Columns:    []*schema.Column{BootstrapPromptTemplatesColumns[8]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
 	// ExecutionPlanTemplatesColumns holds the columns for the "execution_plan_templates" table.
 	ExecutionPlanTemplatesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -108,7 +140,6 @@ var (
 		{Name: "name", Type: field.TypeString},
 		{Name: "description", Type: field.TypeString, Default: ""},
 		{Name: "scope", Type: field.TypeString, Default: "user"},
-		{Name: "bootstrap", Type: field.TypeJSON, Nullable: true},
 		{Name: "ruby_retry", Type: field.TypeJSON, Nullable: true},
 		{Name: "rounds", Type: field.TypeJSON},
 		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
@@ -122,13 +153,45 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "execution_plan_templates_organizations_execution_plan_templates",
-				Columns:    []*schema.Column{ExecutionPlanTemplatesColumns[9]},
+				Columns:    []*schema.Column{ExecutionPlanTemplatesColumns[8]},
 				RefColumns: []*schema.Column{OrganizationsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "execution_plan_templates_users_execution_plan_templates",
-				Columns:    []*schema.Column{ExecutionPlanTemplatesColumns[10]},
+				Columns:    []*schema.Column{ExecutionPlanTemplatesColumns[9]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+	}
+	// ExecutionProfilesColumns holds the columns for the "execution_profiles" table.
+	ExecutionProfilesColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "name", Type: field.TypeString},
+		{Name: "description", Type: field.TypeString, Default: ""},
+		{Name: "scope", Type: field.TypeString, Default: "user"},
+		{Name: "config", Type: field.TypeJSON},
+		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
+		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
+	}
+	// ExecutionProfilesTable holds the schema information for the "execution_profiles" table.
+	ExecutionProfilesTable = &schema.Table{
+		Name:       "execution_profiles",
+		Columns:    ExecutionProfilesColumns,
+		PrimaryKey: []*schema.Column{ExecutionProfilesColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "execution_profiles_organizations_execution_profiles",
+				Columns:    []*schema.Column{ExecutionProfilesColumns[7]},
+				RefColumns: []*schema.Column{OrganizationsColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+			{
+				Symbol:     "execution_profiles_users_execution_profiles",
+				Columns:    []*schema.Column{ExecutionProfilesColumns[8]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -167,6 +230,54 @@ var (
 			},
 		},
 	}
+	// JobsColumns holds the columns for the "jobs" table.
+	JobsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "updated_at", Type: field.TypeTime},
+		{Name: "status", Type: field.TypeString, Default: "pending"},
+		{Name: "trigger_type", Type: field.TypeString, Default: "manual"},
+		{Name: "execution_plan_id", Type: field.TypeInt},
+		{Name: "execution_config", Type: field.TypeJSON},
+		{Name: "resource_count", Type: field.TypeInt, Default: 0},
+		{Name: "completed_resources", Type: field.TypeInt, Default: 0},
+		{Name: "failed_resources", Type: field.TypeInt, Default: 0},
+		{Name: "total_segments", Type: field.TypeInt, Default: 0},
+		{Name: "skipped_segments", Type: field.TypeInt, Default: 0},
+		{Name: "stage_total", Type: field.TypeInt, Default: 0},
+		{Name: "completed_segments", Type: field.TypeInt, Default: 0},
+		{Name: "error_message", Type: field.TypeString, Nullable: true},
+		{Name: "started_at", Type: field.TypeTime, Nullable: true},
+		{Name: "project_id", Type: field.TypeInt},
+		{Name: "user_created_jobs", Type: field.TypeInt, Nullable: true},
+	}
+	// JobsTable holds the schema information for the "jobs" table.
+	JobsTable = &schema.Table{
+		Name:       "jobs",
+		Columns:    JobsColumns,
+		PrimaryKey: []*schema.Column{JobsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "jobs_projects_jobs",
+				Columns:    []*schema.Column{JobsColumns[16]},
+				RefColumns: []*schema.Column{ProjectsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+			{
+				Symbol:     "jobs_users_created_jobs",
+				Columns:    []*schema.Column{JobsColumns[17]},
+				RefColumns: []*schema.Column{UsersColumns[0]},
+				OnDelete:   schema.SetNull,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "job_project_id_id",
+				Unique:  false,
+				Columns: []*schema.Column{JobsColumns[16], JobsColumns[0]},
+			},
+		},
+	}
 	// JobResourcesColumns holds the columns for the "job_resources" table.
 	JobResourcesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -176,14 +287,15 @@ var (
 		{Name: "segment_ids", Type: field.TypeJSON},
 		{Name: "segment_count", Type: field.TypeInt, Default: 0},
 		{Name: "completed_segments", Type: field.TypeInt, Default: 0},
+		{Name: "skipped_segments", Type: field.TypeInt, Default: 0},
 		{Name: "output_path", Type: field.TypeString, Nullable: true},
 		{Name: "error_message", Type: field.TypeString, Nullable: true},
 		{Name: "current_stage", Type: field.TypeString, Nullable: true, Default: ""},
 		{Name: "stage_total", Type: field.TypeInt, Default: 0},
 		{Name: "stage_completed", Type: field.TypeInt, Default: 0},
 		{Name: "started_at", Type: field.TypeTime, Nullable: true},
+		{Name: "job_job_resources", Type: field.TypeInt},
 		{Name: "resource_job_resources", Type: field.TypeInt},
-		{Name: "translation_job_job_resources", Type: field.TypeInt},
 	}
 	// JobResourcesTable holds the schema information for the "job_resources" table.
 	JobResourcesTable = &schema.Table{
@@ -192,15 +304,15 @@ var (
 		PrimaryKey: []*schema.Column{JobResourcesColumns[0]},
 		ForeignKeys: []*schema.ForeignKey{
 			{
-				Symbol:     "job_resources_resources_job_resources",
-				Columns:    []*schema.Column{JobResourcesColumns[13]},
-				RefColumns: []*schema.Column{ResourcesColumns[0]},
+				Symbol:     "job_resources_jobs_job_resources",
+				Columns:    []*schema.Column{JobResourcesColumns[14]},
+				RefColumns: []*schema.Column{JobsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
-				Symbol:     "job_resources_translation_jobs_job_resources",
-				Columns:    []*schema.Column{JobResourcesColumns[14]},
-				RefColumns: []*schema.Column{TranslationJobsColumns[0]},
+				Symbol:     "job_resources_resources_job_resources",
+				Columns:    []*schema.Column{JobResourcesColumns[15]},
+				RefColumns: []*schema.Column{ResourcesColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 		},
@@ -264,7 +376,6 @@ var (
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "name", Type: field.TypeString},
 		{Name: "config", Type: field.TypeJSON},
-		{Name: "default_translation_config", Type: field.TypeJSON},
 		{Name: "glossary_enabled", Type: field.TypeBool, Default: false},
 		{Name: "source_lang", Type: field.TypeString, Default: "auto"},
 		{Name: "target_lang", Type: field.TypeString, Default: "zh"},
@@ -279,46 +390,45 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "projects_organizations_projects",
-				Columns:    []*schema.Column{ProjectsColumns[9]},
+				Columns:    []*schema.Column{ProjectsColumns[8]},
 				RefColumns: []*schema.Column{OrganizationsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "projects_users_owned_projects",
-				Columns:    []*schema.Column{ProjectsColumns[10]},
+				Columns:    []*schema.Column{ProjectsColumns[9]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 		},
 	}
-	// PromptTemplatesColumns holds the columns for the "prompt_templates" table.
-	PromptTemplatesColumns = []*schema.Column{
+	// PrunePromptTemplatesColumns holds the columns for the "prune_prompt_templates" table.
+	PrunePromptTemplatesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "name", Type: field.TypeString},
 		{Name: "description", Type: field.TypeString, Default: ""},
 		{Name: "scope", Type: field.TypeString, Default: "user"},
-		{Name: "system_prompt_content", Type: field.TypeString, Size: 2147483647, Default: ""},
-		{Name: "bootstrap_prompt_content", Type: field.TypeString, Size: 2147483647, Default: ""},
+		{Name: "content", Type: field.TypeString, Size: 2147483647, Default: ""},
 		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
 		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
 	}
-	// PromptTemplatesTable holds the schema information for the "prompt_templates" table.
-	PromptTemplatesTable = &schema.Table{
-		Name:       "prompt_templates",
-		Columns:    PromptTemplatesColumns,
-		PrimaryKey: []*schema.Column{PromptTemplatesColumns[0]},
+	// PrunePromptTemplatesTable holds the schema information for the "prune_prompt_templates" table.
+	PrunePromptTemplatesTable = &schema.Table{
+		Name:       "prune_prompt_templates",
+		Columns:    PrunePromptTemplatesColumns,
+		PrimaryKey: []*schema.Column{PrunePromptTemplatesColumns[0]},
 		ForeignKeys: []*schema.ForeignKey{
 			{
-				Symbol:     "prompt_templates_organizations_prompt_templates",
-				Columns:    []*schema.Column{PromptTemplatesColumns[8]},
+				Symbol:     "prune_prompt_templates_organizations_prune_prompt_templates",
+				Columns:    []*schema.Column{PrunePromptTemplatesColumns[7]},
 				RefColumns: []*schema.Column{OrganizationsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
-				Symbol:     "prompt_templates_users_prompt_templates",
-				Columns:    []*schema.Column{PromptTemplatesColumns[9]},
+				Symbol:     "prune_prompt_templates_users_prune_prompt_templates",
+				Columns:    []*schema.Column{PrunePromptTemplatesColumns[8]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -380,6 +490,39 @@ var (
 			},
 		},
 	}
+	// SseEventsColumns holds the columns for the "sse_events" table.
+	SseEventsColumns = []*schema.Column{
+		{Name: "id", Type: field.TypeInt, Increment: true},
+		{Name: "seq", Type: field.TypeInt64},
+		{Name: "type", Type: field.TypeString},
+		{Name: "level", Type: field.TypeString},
+		{Name: "stage", Type: field.TypeString, Nullable: true},
+		{Name: "message", Type: field.TypeString},
+		{Name: "metadata", Type: field.TypeJSON, Nullable: true},
+		{Name: "created_at", Type: field.TypeTime},
+		{Name: "job_id", Type: field.TypeInt},
+	}
+	// SseEventsTable holds the schema information for the "sse_events" table.
+	SseEventsTable = &schema.Table{
+		Name:       "sse_events",
+		Columns:    SseEventsColumns,
+		PrimaryKey: []*schema.Column{SseEventsColumns[0]},
+		ForeignKeys: []*schema.ForeignKey{
+			{
+				Symbol:     "sse_events_jobs_sse_events",
+				Columns:    []*schema.Column{SseEventsColumns[8]},
+				RefColumns: []*schema.Column{JobsColumns[0]},
+				OnDelete:   schema.NoAction,
+			},
+		},
+		Indexes: []*schema.Index{
+			{
+				Name:    "sseevent_job_id_seq",
+				Unique:  false,
+				Columns: []*schema.Column{SseEventsColumns[8], SseEventsColumns[1]},
+			},
+		},
+	}
 	// SegmentsColumns holds the columns for the "segments" table.
 	SegmentsColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
@@ -391,6 +534,7 @@ var (
 		{Name: "status", Type: field.TypeEnum, Enums: []string{"pending", "translated", "edited", "approved", "rejected"}, Default: "pending"},
 		{Name: "review_comment", Type: field.TypeString, Nullable: true},
 		{Name: "meta", Type: field.TypeString, Nullable: true, Size: 2147483647},
+		{Name: "quality_issues", Type: field.TypeJSON, Nullable: true},
 		{Name: "resource_id", Type: field.TypeInt, Nullable: true},
 		{Name: "user_reviewed_segments", Type: field.TypeInt, Nullable: true},
 	}
@@ -402,13 +546,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "segments_resources_segments",
-				Columns:    []*schema.Column{SegmentsColumns[9]},
+				Columns:    []*schema.Column{SegmentsColumns[10]},
 				RefColumns: []*schema.Column{ResourcesColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
 				Symbol:     "segments_users_reviewed_segments",
-				Columns:    []*schema.Column{SegmentsColumns[10]},
+				Columns:    []*schema.Column{SegmentsColumns[11]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -521,73 +665,33 @@ var (
 			},
 		},
 	}
-	// TranslationJobsColumns holds the columns for the "translation_jobs" table.
-	TranslationJobsColumns = []*schema.Column{
-		{Name: "id", Type: field.TypeInt, Increment: true},
-		{Name: "created_at", Type: field.TypeTime},
-		{Name: "updated_at", Type: field.TypeTime},
-		{Name: "status", Type: field.TypeString, Default: "pending"},
-		{Name: "trigger_type", Type: field.TypeString, Default: "manual"},
-		{Name: "execution_plan_id", Type: field.TypeInt},
-		{Name: "translation_config", Type: field.TypeJSON},
-		{Name: "resource_count", Type: field.TypeInt, Default: 0},
-		{Name: "completed_resources", Type: field.TypeInt, Default: 0},
-		{Name: "failed_resources", Type: field.TypeInt, Default: 0},
-		{Name: "total_segments", Type: field.TypeInt, Default: 0},
-		{Name: "stage_total", Type: field.TypeInt, Default: 0},
-		{Name: "completed_segments", Type: field.TypeInt, Default: 0},
-		{Name: "error_message", Type: field.TypeString, Nullable: true},
-		{Name: "started_at", Type: field.TypeTime, Nullable: true},
-		{Name: "project_translation_jobs", Type: field.TypeInt},
-		{Name: "user_created_translation_jobs", Type: field.TypeInt, Nullable: true},
-	}
-	// TranslationJobsTable holds the schema information for the "translation_jobs" table.
-	TranslationJobsTable = &schema.Table{
-		Name:       "translation_jobs",
-		Columns:    TranslationJobsColumns,
-		PrimaryKey: []*schema.Column{TranslationJobsColumns[0]},
-		ForeignKeys: []*schema.ForeignKey{
-			{
-				Symbol:     "translation_jobs_projects_translation_jobs",
-				Columns:    []*schema.Column{TranslationJobsColumns[15]},
-				RefColumns: []*schema.Column{ProjectsColumns[0]},
-				OnDelete:   schema.NoAction,
-			},
-			{
-				Symbol:     "translation_jobs_users_created_translation_jobs",
-				Columns:    []*schema.Column{TranslationJobsColumns[16]},
-				RefColumns: []*schema.Column{UsersColumns[0]},
-				OnDelete:   schema.SetNull,
-			},
-		},
-	}
-	// TranslationProfilesColumns holds the columns for the "translation_profiles" table.
-	TranslationProfilesColumns = []*schema.Column{
+	// TranslationPromptTemplatesColumns holds the columns for the "translation_prompt_templates" table.
+	TranslationPromptTemplatesColumns = []*schema.Column{
 		{Name: "id", Type: field.TypeInt, Increment: true},
 		{Name: "created_at", Type: field.TypeTime},
 		{Name: "updated_at", Type: field.TypeTime},
 		{Name: "name", Type: field.TypeString},
 		{Name: "description", Type: field.TypeString, Default: ""},
 		{Name: "scope", Type: field.TypeString, Default: "user"},
-		{Name: "config", Type: field.TypeJSON},
+		{Name: "system_prompt_content", Type: field.TypeString, Size: 2147483647, Default: ""},
 		{Name: "owner_org_id", Type: field.TypeInt, Nullable: true},
 		{Name: "owner_user_id", Type: field.TypeInt, Nullable: true},
 	}
-	// TranslationProfilesTable holds the schema information for the "translation_profiles" table.
-	TranslationProfilesTable = &schema.Table{
-		Name:       "translation_profiles",
-		Columns:    TranslationProfilesColumns,
-		PrimaryKey: []*schema.Column{TranslationProfilesColumns[0]},
+	// TranslationPromptTemplatesTable holds the schema information for the "translation_prompt_templates" table.
+	TranslationPromptTemplatesTable = &schema.Table{
+		Name:       "translation_prompt_templates",
+		Columns:    TranslationPromptTemplatesColumns,
+		PrimaryKey: []*schema.Column{TranslationPromptTemplatesColumns[0]},
 		ForeignKeys: []*schema.ForeignKey{
 			{
-				Symbol:     "translation_profiles_organizations_translation_profiles",
-				Columns:    []*schema.Column{TranslationProfilesColumns[7]},
+				Symbol:     "translation_prompt_templates_organizations_translation_prompt_templates",
+				Columns:    []*schema.Column{TranslationPromptTemplatesColumns[7]},
 				RefColumns: []*schema.Column{OrganizationsColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
 			{
-				Symbol:     "translation_profiles_users_translation_profiles",
-				Columns:    []*schema.Column{TranslationProfilesColumns[8]},
+				Symbol:     "translation_prompt_templates_users_translation_prompt_templates",
+				Columns:    []*schema.Column{TranslationPromptTemplatesColumns[8]},
 				RefColumns: []*schema.Column{UsersColumns[0]},
 				OnDelete:   schema.SetNull,
 			},
@@ -656,21 +760,24 @@ var (
 	Tables = []*schema.Table{
 		ActivityLogsTable,
 		BackendsTable,
+		BootstrapPromptTemplatesTable,
 		ExecutionPlanTemplatesTable,
+		ExecutionProfilesTable,
 		GlossaryEntriesTable,
+		JobsTable,
 		JobResourcesTable,
 		OrgMembershipsTable,
 		OrganizationsTable,
 		ProjectsTable,
-		PromptTemplatesTable,
+		PrunePromptTemplatesTable,
 		RefreshTokensTable,
 		ResourcesTable,
+		SseEventsTable,
 		SegmentsTable,
 		SyncTasksTable,
 		SystemSettingsTable,
 		TmEntriesTable,
-		TranslationJobsTable,
-		TranslationProfilesTable,
+		TranslationPromptTemplatesTable,
 		UsageRecordsTable,
 		UsersTable,
 	}
@@ -682,29 +789,34 @@ func init() {
 	ActivityLogsTable.ForeignKeys[2].RefTable = UsersTable
 	BackendsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	BackendsTable.ForeignKeys[1].RefTable = UsersTable
+	BootstrapPromptTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
+	BootstrapPromptTemplatesTable.ForeignKeys[1].RefTable = UsersTable
 	ExecutionPlanTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
 	ExecutionPlanTemplatesTable.ForeignKeys[1].RefTable = UsersTable
+	ExecutionProfilesTable.ForeignKeys[0].RefTable = OrganizationsTable
+	ExecutionProfilesTable.ForeignKeys[1].RefTable = UsersTable
 	GlossaryEntriesTable.ForeignKeys[0].RefTable = ProjectsTable
-	JobResourcesTable.ForeignKeys[0].RefTable = ResourcesTable
-	JobResourcesTable.ForeignKeys[1].RefTable = TranslationJobsTable
+	JobsTable.ForeignKeys[0].RefTable = ProjectsTable
+	JobsTable.ForeignKeys[1].RefTable = UsersTable
+	JobResourcesTable.ForeignKeys[0].RefTable = JobsTable
+	JobResourcesTable.ForeignKeys[1].RefTable = ResourcesTable
 	OrgMembershipsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	OrgMembershipsTable.ForeignKeys[1].RefTable = UsersTable
 	ProjectsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	ProjectsTable.ForeignKeys[1].RefTable = UsersTable
-	PromptTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
-	PromptTemplatesTable.ForeignKeys[1].RefTable = UsersTable
+	PrunePromptTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
+	PrunePromptTemplatesTable.ForeignKeys[1].RefTable = UsersTable
 	RefreshTokensTable.ForeignKeys[0].RefTable = UsersTable
 	ResourcesTable.ForeignKeys[0].RefTable = ProjectsTable
+	SseEventsTable.ForeignKeys[0].RefTable = JobsTable
 	SegmentsTable.ForeignKeys[0].RefTable = ResourcesTable
 	SegmentsTable.ForeignKeys[1].RefTable = UsersTable
 	SyncTasksTable.ForeignKeys[0].RefTable = GlossaryEntriesTable
 	SyncTasksTable.ForeignKeys[1].RefTable = ProjectsTable
 	SyncTasksTable.ForeignKeys[2].RefTable = UsersTable
 	TmEntriesTable.ForeignKeys[0].RefTable = ProjectsTable
-	TranslationJobsTable.ForeignKeys[0].RefTable = ProjectsTable
-	TranslationJobsTable.ForeignKeys[1].RefTable = UsersTable
-	TranslationProfilesTable.ForeignKeys[0].RefTable = OrganizationsTable
-	TranslationProfilesTable.ForeignKeys[1].RefTable = UsersTable
+	TranslationPromptTemplatesTable.ForeignKeys[0].RefTable = OrganizationsTable
+	TranslationPromptTemplatesTable.ForeignKeys[1].RefTable = UsersTable
 	UsageRecordsTable.ForeignKeys[0].RefTable = OrganizationsTable
 	UsageRecordsTable.ForeignKeys[1].RefTable = ProjectsTable
 	UsageRecordsTable.ForeignKeys[2].RefTable = UsersTable

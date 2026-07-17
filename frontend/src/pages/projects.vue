@@ -1,14 +1,9 @@
 <script setup lang="ts">
-import {
-  useMessage,
-  type DropdownOption,
-  type FormInst,
-  type FormRules,
-  type SelectOption,
-} from 'naive-ui'
+import { useMessage, type DropdownOption, type FormInst, type FormRules } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
+import { useLanguageOptions } from '@/composables/useLanguageOptions'
 import { useProjectsStore } from '@/stores/projects'
 
 type Project = ApiSchemas['Project']
@@ -25,10 +20,13 @@ const route = useRoute()
 const router = useRouter()
 const projects = useProjectsStore()
 const message = useMessage()
-const { t } = useI18n()
+const { t, d } = useI18n()
+const { targetLanguageOptions, sourceLanguageOptions } = useLanguageOptions()
 const formRef = ref<FormInst | null>(null)
 const drawerVisible = ref(false)
 const editingProject = ref<Project | null>(null)
+const deleteConfirmVisible = ref(false)
+const deletingProject = ref<Project | null>(null)
 
 const formModel = reactive<ProjectFormModel>({
   name: '',
@@ -37,23 +35,6 @@ const formModel = reactive<ProjectFormModel>({
   owner_type: 'personal',
   glossary_enabled: false,
 })
-
-const targetLanguageOptions = computed<SelectOption[]>(() => [
-  { label: t('projects.languages.zhHans'), value: 'zh-Hans' },
-  { label: t('projects.languages.zhHant'), value: 'zh-Hant' },
-  { label: t('projects.languages.enUS'), value: 'en-US' },
-  { label: t('projects.languages.enGB'), value: 'en-GB' },
-  { label: t('projects.languages.ja'), value: 'ja' },
-  { label: t('projects.languages.ko'), value: 'ko' },
-  { label: t('projects.languages.fr'), value: 'fr' },
-  { label: t('projects.languages.de'), value: 'de' },
-  { label: t('projects.languages.es'), value: 'es' },
-])
-
-const sourceLanguageOptions = computed<SelectOption[]>(() => [
-  { label: t('projects.languages.auto'), value: 'auto' },
-  ...targetLanguageOptions.value,
-])
 
 const hasActiveFilters = computed(() => projects.searchQuery.trim().length > 0)
 
@@ -97,7 +78,7 @@ const rules = computed<FormRules>(() => ({
 const resetForm = (): void => {
   formModel.name = ''
   formModel.source_lang = 'auto'
-  formModel.target_lang = 'en-US'
+  formModel.target_lang = 'zh-Hans'
   formModel.owner_type = 'personal'
   formModel.glossary_enabled = false
 }
@@ -124,40 +105,27 @@ const closeCreateDrawer = (): void => {
   resetForm()
 }
 
-const formatDate = (value?: string): string => {
-  if (!value) {
-    return t('projects.card.noDate')
-  }
-
-  return new Intl.DateTimeFormat('zh-Hans', {
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(value))
-}
-
 const formatRelativeTime = (dateStr: string | null): string => {
-  if (!dateStr) return '暂无更新'
+  if (!dateStr) return t('projects.card.noDate')
 
   const now = Date.now()
   const date = new Date(dateStr).getTime()
   const diffMs = now - date
 
-  if (diffMs < 0) return '刚刚'
+  if (diffMs < 0) return t('dashboard.activity.relativeTime.justNow')
 
   const diffSeconds = Math.floor(diffMs / 1000)
   const diffMinutes = Math.floor(diffSeconds / 60)
   const diffHours = Math.floor(diffMinutes / 60)
   const diffDays = Math.floor(diffHours / 24)
 
-  if (diffSeconds < 60) return '刚刚'
-  if (diffMinutes < 60) return `${diffMinutes} 分钟前`
-  if (diffHours < 24) return `${diffHours} 小时前`
-  if (diffDays < 7) return `${diffDays} 天前`
+  if (diffSeconds < 60) return t('dashboard.activity.relativeTime.justNow')
+  if (diffMinutes < 60)
+    return t('dashboard.activity.relativeTime.minutesAgo', { count: diffMinutes })
+  if (diffHours < 24) return t('dashboard.activity.relativeTime.hoursAgo', { count: diffHours })
+  if (diffDays < 30) return t('dashboard.activity.relativeTime.daysAgo', { count: diffDays })
 
-  return formatDate(dateStr)
+  return d(new Date(dateStr), 'short')
 }
 
 const buildProjectPayload = (): ApiSchemas['CreateProjectRequest'] => {
@@ -205,24 +173,36 @@ const openProjectWorkspace = (project: Project, tab?: string): void => {
   })
 }
 
-const deleteSelectedProject = async (project: Project): Promise<void> => {
+const openDeleteConfirm = (project: Project): void => {
+  deletingProject.value = project
+  deleteConfirmVisible.value = true
+}
+
+const closeDeleteConfirm = (): void => {
+  deleteConfirmVisible.value = false
+  deletingProject.value = null
+}
+
+const confirmDelete = async (): Promise<void> => {
+  if (!deletingProject.value) return
   try {
-    await projects.deleteProject(project.id)
+    await projects.deleteProject(deletingProject.value.id)
     message.success(t('projects.messages.deleteSuccess'))
+    closeDeleteConfirm()
   } catch (error) {
     console.error(error)
     message.error(projects.deleteError || t('projects.messages.deleteFailed'))
   }
 }
 
-const cardDropdownOptions: DropdownOption[] = [
-  { label: '查看详情', key: 'details' },
-  { label: '编辑', key: 'edit' },
-  { label: '任务', key: 'jobs' },
-  { label: '术语表', key: 'glossary' },
+const cardDropdownOptions = computed<DropdownOption[]>(() => [
+  { label: t('projects.actions.details'), key: 'details' },
+  { label: t('projects.actions.edit'), key: 'edit' },
+  { label: t('projects.actions.jobs'), key: 'jobs' },
+  { label: t('projects.actions.glossary'), key: 'glossary' },
   { type: 'divider', key: 'd1' },
-  { label: '删除', key: 'delete', props: { style: 'color: #e53e3e' } },
-]
+  { label: t('projects.actions.delete'), key: 'delete', props: { style: 'color: #e53e3e' } },
+])
 
 const handleCardDropdownSelect = (project: Project, key: string | number): void => {
   switch (key) {
@@ -239,7 +219,7 @@ const handleCardDropdownSelect = (project: Project, key: string | number): void 
       openProjectWorkspace(project, 'glossary')
       break
     case 'delete':
-      void deleteSelectedProject(project)
+      openDeleteConfirm(project)
       break
   }
 }
@@ -261,6 +241,16 @@ onMounted(() => {
     openCreateDrawer()
   }
 })
+
+watch(
+  () => projects.error,
+  (err) => {
+    if (err) {
+      message.error(err, { duration: 0, closable: true })
+      projects.error = null
+    }
+  },
+)
 </script>
 
 <template>
@@ -294,42 +284,34 @@ onMounted(() => {
       </div>
     </NCard>
 
-    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('projects.stats.total') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ projects.projectCount }}
-        </div>
-      </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('projects.stats.languagePairs') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ projects.languagePairCount }}
-        </div>
-      </NCard>
-    </div>
-
     <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <NInput
-          v-model:value="projects.searchQuery"
-          clearable
-          class="lg:max-w-sm"
-          :placeholder="t('projects.filters.searchPlaceholder')"
-        />
-        <NButton v-if="hasActiveFilters" quaternary @click="projects.resetFilters">
-          {{ t('projects.filters.reset') }}
-        </NButton>
+        <div class="flex items-center gap-4 text-sm">
+          <span class="text-lf-text-muted">
+            {{ t('projects.stats.total') }}
+            <span class="ml-1 font-semibold text-lf-text-strong">{{ projects.projectCount }}</span>
+          </span>
+          <span class="h-3.5 w-px bg-lf-border-soft" />
+          <span class="text-lf-text-muted">
+            {{ t('projects.stats.languagePairs') }}
+            <span class="ml-1 font-semibold text-lf-text-strong">{{
+              projects.languagePairCount
+            }}</span>
+          </span>
+        </div>
+        <div class="flex items-center gap-2">
+          <NInput
+            v-model:value="projects.searchQuery"
+            clearable
+            class="lg:max-w-xs"
+            :placeholder="t('projects.filters.searchPlaceholder')"
+          />
+          <NButton v-if="hasActiveFilters" quaternary @click="projects.resetFilters">
+            {{ t('projects.filters.reset') }}
+          </NButton>
+        </div>
       </div>
     </NCard>
-
-    <NAlert v-if="projects.error" type="error" :bordered="false">
-      {{ projects.error }}
-    </NAlert>
 
     <div v-if="projects.loading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
       <NCard v-for="index in 6" :key="index" :bordered="false" class="shadow-sm shadow-lf-shadow">
@@ -357,51 +339,72 @@ onMounted(() => {
         v-for="project in projects.filteredItems"
         :key="project.id"
         class="group relative cursor-pointer overflow-hidden rounded-2xl border border-lf-border-soft bg-lf-surface p-5 shadow-sm shadow-lf-shadow transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-lf-shadow-strong"
+        :class="{ 'pointer-events-none opacity-60': projects.isDeletingProject(project.id) }"
         @click="openProjectWorkspace(project)"
       >
         <div class="flex h-full flex-col gap-3">
-          <!-- 标题行：项目名称 -->
-          <div class="flex items-start justify-between gap-3">
+          <div class="flex items-center gap-2">
             <h2
               class="min-w-0 flex-1 truncate text-base font-semibold text-lf-text-strong"
-              :title="`Project #${project.id}`"
+              :title="project.name"
             >
               {{ project.name }}
             </h2>
+
+            <NTooltip trigger="hover">
+              <template #trigger>
+                <IconCarbonBook
+                  class="h-3.5 w-3.5 shrink-0 transition-colors"
+                  :class="project.glossary_enabled ? 'text-brand-500' : 'text-lf-text-subtle/40'"
+                />
+              </template>
+              {{
+                project.glossary_enabled
+                  ? t('projects.form.glossaryEnabled')
+                  : t('projects.form.glossaryDisabled')
+              }}
+            </NTooltip>
+
+            <div
+              class="shrink-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+              @click.stop
+            >
+              <NDropdown
+                trigger="click"
+                :options="cardDropdownOptions"
+                placement="bottom-end"
+                @select="(key: string | number) => handleCardDropdownSelect(project, key)"
+              >
+                <NButton quaternary circle size="tiny">
+                  <template #icon>
+                    <NIcon size="14">
+                      <IconCarbonOverflowMenuHorizontal />
+                    </NIcon>
+                  </template>
+                </NButton>
+              </NDropdown>
+            </div>
           </div>
 
-          <!-- 第二行：语言方向 + 更新时间 -->
-          <p class="text-xs text-lf-text-muted">
-            {{ project.source_lang || 'auto' }} → {{ project.target_lang }}
-            <span class="mx-1.5">·</span>
-            {{ formatRelativeTime(project.updated_at ?? project.created_at ?? null) }}
-          </p>
+          <div class="flex items-center gap-1.5 text-xs text-lf-text-muted">
+            <IconCarbonLanguage class="h-3.5 w-3.5 shrink-0 text-lf-text-subtle" />
+            <span>{{ project.source_lang || 'auto' }} → {{ project.target_lang }}</span>
+            <span class="mx-1">·</span>
+            <IconCarbonTime class="h-3.5 w-3.5 shrink-0 text-lf-text-subtle" />
+            <span>{{ formatRelativeTime(project.updated_at ?? project.created_at ?? null) }}</span>
+          </div>
         </div>
 
-        <!-- 悬显更多菜单 -->
-        <div
-          class="absolute right-3 top-3 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
-          @click.stop
-        >
-          <NDropdown
-            trigger="click"
-            :options="cardDropdownOptions"
-            placement="bottom-end"
-            @select="(key: string | number) => handleCardDropdownSelect(project, key)"
-          >
-            <NButton quaternary circle size="small">
-              <template #icon>
-                <NIcon size="16">
-                  <IconCarbonOverflowMenuHorizontal />
-                </NIcon>
-              </template>
-            </NButton>
-          </NDropdown>
-        </div>
+        <NSpin
+          v-if="projects.isDeletingProject(project.id)"
+          :show="true"
+          class="absolute inset-0 flex items-center justify-center bg-lf-surface/80"
+          size="medium"
+        />
       </div>
     </div>
 
-    <NDrawer v-model:show="drawerVisible" :width="480" placement="right">
+    <NDrawer v-model:show="drawerVisible" :width="420" placement="right">
       <NDrawerContent :title="drawerTitle" closable>
         <div class="mb-6 rounded-2xl bg-lf-surface-muted p-4 text-sm leading-6 text-lf-text-muted">
           {{ drawerDescription }}
@@ -469,5 +472,18 @@ onMounted(() => {
         </template>
       </NDrawerContent>
     </NDrawer>
+
+    <NModal
+      v-model:show="deleteConfirmVisible"
+      preset="dialog"
+      type="warning"
+      :title="t('projects.actions.confirmDelete')"
+      :content="t('projects.delete.confirm', { name: deletingProject?.name ?? '' })"
+      :positive-text="t('projects.actions.delete')"
+      :negative-text="t('projects.actions.cancel')"
+      :loading="projects.deletingProjectIds.length > 0"
+      @positive-click="confirmDelete"
+      @negative-click="closeDeleteConfirm"
+    />
   </div>
 </template>

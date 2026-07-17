@@ -20,7 +20,7 @@ func (s *Server) requireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		user, ok := s.resolveAuthUser(r)
 		if !ok {
-			writeProblem(w, http.StatusUnauthorized, "unauthorized", "缺少 Bearer Token")
+			s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "缺少 Bearer Token")
 			return
 		}
 		ctx := context.WithValue(r.Context(), authContextKey{}, user)
@@ -32,7 +32,7 @@ func (s *Server) requireAdmin(next http.Handler) http.Handler {
 	return s.requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authUser, ok := authUserFromContext(r.Context())
 		if !ok || authUser.User.Role != service.SystemRoleAdmin {
-			writeProblem(w, http.StatusForbidden, "forbidden", "需要管理员权限")
+			s.writeProblem(w, r, http.StatusForbidden, "forbidden", "需要管理员权限")
 			return
 		}
 		next.ServeHTTP(w, r)

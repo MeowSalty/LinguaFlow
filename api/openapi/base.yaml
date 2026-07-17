@@ -85,26 +85,38 @@ paths:
     $ref: './paths/glossary.yaml#/glossarySyncTaskStatus'
   /projects/{projectId}/sync-tasks/{taskId}/cancel:
     $ref: './paths/glossary.yaml#/glossarySyncTaskCancel'
-  /projects/{projectId}/translation-jobs:
-    $ref: './paths/translation-jobs.yaml#/projectTranslationJobs'
-  /translation-jobs/{translationJobId}:
-   $ref: './paths/translation-jobs.yaml#/translationJobById'
-  /translation-jobs/{translationJobId}/cancel:
-   $ref: './paths/translation-jobs.yaml#/translationJobCancel'
-  /translation-jobs/{translationJobId}/retry:
-   $ref: './paths/translation-jobs.yaml#/translationJobRetry'
+  /projects/{projectId}/glossary/prune:
+    $ref: './paths/glossary.yaml#/glossaryPrune'
+  /projects/{projectId}/glossary/prune/apply:
+    $ref: './paths/glossary.yaml#/glossaryPruneApply'
+  /projects/{projectId}/jobs:
+    $ref: './paths/jobs.yaml#/projectJobs'
+  /jobs/{jobId}:
+   $ref: './paths/jobs.yaml#/jobById'
+  /jobs/{jobId}/cancel:
+   $ref: './paths/jobs.yaml#/jobCancel'
+  /jobs/{jobId}/retry:
+   $ref: './paths/jobs.yaml#/jobRetry'
   /execution-plan-templates:
     $ref: './paths/execution-plan-templates.yaml#/executionPlanTemplates'
   /execution-plan-templates/{executionPlanTemplateId}:
     $ref: './paths/execution-plan-templates.yaml#/executionPlanTemplateById'
-  /prompt-templates:
+  /translation-prompt-templates:
     $ref: './paths/prompt-templates.yaml#/promptTemplates'
-  /prompt-templates/{promptTemplateId}:
+  /translation-prompt-templates/{translationPromptTemplateId}:
     $ref: './paths/prompt-templates.yaml#/promptTemplateById'
-  /translation-profiles:
-    $ref: './paths/translation-profiles.yaml#/translationProfiles'
-  /translation-profiles/{translationProfileId}:
-    $ref: './paths/translation-profiles.yaml#/translationProfileById'
+  /bootstrap-prompt-templates:
+    $ref: './paths/bootstrap-prompt-templates.yaml#/bootstrapPromptTemplates'
+  /bootstrap-prompt-templates/{bootstrapPromptTemplateId}:
+    $ref: './paths/bootstrap-prompt-templates.yaml#/bootstrapPromptTemplateById'
+  /prune-prompt-templates:
+    $ref: './paths/prune-prompt-templates.yaml#/prunePromptTemplates'
+  /prune-prompt-templates/{prunePromptTemplateId}:
+    $ref: './paths/prune-prompt-templates.yaml#/prunePromptTemplateById'
+  /execution-profiles:
+    $ref: './paths/execution-profiles.yaml#/executionProfiles'
+  /execution-profiles/{executionProfileId}:
+    $ref: './paths/execution-profiles.yaml#/executionProfileById'
   /admin/users:
     $ref: './paths/admin.yaml#/adminUsers'
   /admin/users/{userId}:
@@ -134,16 +146,20 @@ components:
       $ref: './components/parameters.yaml#/ProjectId'
     ResourceId:
       $ref: './components/parameters.yaml#/ResourceId'
-    TranslationJobId:
-      $ref: './components/parameters.yaml#/TranslationJobId'
+    JobId:
+      $ref: './components/parameters.yaml#/JobId'
     BackendId:
       $ref: './components/parameters.yaml#/BackendId'
     EntryId:
       $ref: './components/parameters.yaml#/EntryId'
-    PromptTemplateId:
-      $ref: './components/parameters.yaml#/PromptTemplateId'
-    TranslationProfileId:
-      $ref: './components/parameters.yaml#/TranslationProfileId'
+    TranslationPromptTemplateId:
+      $ref: './components/parameters.yaml#/TranslationPromptTemplateId'
+    BootstrapPromptTemplateId:
+      $ref: './components/parameters.yaml#/BootstrapPromptTemplateId'
+    PrunePromptTemplateId:
+      $ref: './components/parameters.yaml#/PrunePromptTemplateId'
+    ExecutionProfileId:
+      $ref: './components/parameters.yaml#/ExecutionProfileId'
     ExecutionPlanTemplateId:
       $ref: './components/parameters.yaml#/ExecutionPlanTemplateId'
     SegmentId:
@@ -194,6 +210,8 @@ components:
       $ref: './components/schemas/organization.yaml#/UpdateOrganizationMemberRequest'
     Segment:
       $ref: './components/schemas/job.yaml#/Segment'
+    QualityIssue:
+      $ref: './components/schemas/job.yaml#/QualityIssue'
     UsageStats:
       $ref: './components/schemas/job.yaml#/UsageStats'
     Resource:
@@ -232,14 +250,16 @@ components:
       $ref: './components/schemas/resource.yaml#/ResourceSegmentGroup'
     ResourceSegmentGroupListResponse:
       $ref: './components/schemas/resource.yaml#/ResourceSegmentGroupListResponse'
-    CreateTranslationJobRequest:
-      $ref: './components/schemas/translation-job.yaml#/CreateTranslationJobRequest'
-    TranslationJobResource:
-      $ref: './components/schemas/translation-job.yaml#/TranslationJobResource'
-    TranslationJob:
-      $ref: './components/schemas/translation-job.yaml#/TranslationJob'
-    TranslationJobListResponse:
-      $ref: './components/schemas/translation-job.yaml#/TranslationJobListResponse'
+    CreateJobRequest:
+      $ref: './components/schemas/job.yaml#/CreateJobRequest'
+    JobResource:
+      $ref: './components/schemas/job.yaml#/JobResource'
+    Job:
+      $ref: './components/schemas/job.yaml#/Job'
+    JobProgress:
+      $ref: './components/schemas/job.yaml#/JobProgress'
+    JobListResponse:
+      $ref: './components/schemas/job.yaml#/JobListResponse'
     Activity:
       $ref: './components/schemas/job.yaml#/Activity'
     ActivityListResponse:
@@ -284,22 +304,50 @@ components:
       $ref: './components/schemas/glossary.yaml#/GlossarySyncTaskStatusResponse'
     GlossarySyncTaskCancelResponse:
       $ref: './components/schemas/glossary.yaml#/GlossarySyncTaskCancelResponse'
-    PromptTemplate:
-      $ref: './components/schemas/prompt-template.yaml#/PromptTemplate'
-    PromptTemplateListResponse:
-      $ref: './components/schemas/prompt-template.yaml#/PromptTemplateListResponse'
-    CreatePromptTemplateRequest:
-      $ref: './components/schemas/prompt-template.yaml#/CreatePromptTemplateRequest'
-    UpdatePromptTemplateRequest:
-      $ref: './components/schemas/prompt-template.yaml#/UpdatePromptTemplateRequest'
-    TranslationProfile:
-      $ref: './components/schemas/translation-profile.yaml#/TranslationProfile'
-    TranslationProfileListResponse:
-      $ref: './components/schemas/translation-profile.yaml#/TranslationProfileListResponse'
-    CreateTranslationProfileRequest:
-      $ref: './components/schemas/translation-profile.yaml#/CreateTranslationProfileRequest'
-    UpdateTranslationProfileRequest:
-      $ref: './components/schemas/translation-profile.yaml#/UpdateTranslationProfileRequest'
+    GlossaryPruneRequest:
+      $ref: './components/schemas/glossary.yaml#/GlossaryPruneRequest'
+    GlossaryPruneSuggestion:
+      $ref: './components/schemas/glossary.yaml#/GlossaryPruneSuggestion'
+    GlossaryPrunePreview:
+      $ref: './components/schemas/glossary.yaml#/GlossaryPrunePreview'
+    GlossaryPruneDiagnostics:
+      $ref: './components/schemas/glossary.yaml#/GlossaryPruneDiagnostics'
+    GlossaryPruneApplyRequest:
+      $ref: './components/schemas/glossary.yaml#/GlossaryPruneApplyRequest'
+    GlossaryPruneApplyResult:
+      $ref: './components/schemas/glossary.yaml#/GlossaryPruneApplyResult'
+    TranslationPromptTemplate:
+      $ref: './components/schemas/prompt-template.yaml#/TranslationPromptTemplate'
+    TranslationPromptTemplateListResponse:
+      $ref: './components/schemas/prompt-template.yaml#/TranslationPromptTemplateListResponse'
+    CreateTranslationPromptTemplateRequest:
+      $ref: './components/schemas/prompt-template.yaml#/CreateTranslationPromptTemplateRequest'
+    UpdateTranslationPromptTemplateRequest:
+      $ref: './components/schemas/prompt-template.yaml#/UpdateTranslationPromptTemplateRequest'
+    BootstrapPromptTemplate:
+      $ref: './components/schemas/bootstrap-prompt-template.yaml#/BootstrapPromptTemplate'
+    BootstrapPromptTemplateListResponse:
+      $ref: './components/schemas/bootstrap-prompt-template.yaml#/BootstrapPromptTemplateListResponse'
+    CreateBootstrapPromptTemplateRequest:
+      $ref: './components/schemas/bootstrap-prompt-template.yaml#/CreateBootstrapPromptTemplateRequest'
+    UpdateBootstrapPromptTemplateRequest:
+      $ref: './components/schemas/bootstrap-prompt-template.yaml#/UpdateBootstrapPromptTemplateRequest'
+    PrunePromptTemplate:
+      $ref: './components/schemas/prune-prompt-template.yaml#/PrunePromptTemplate'
+    PrunePromptTemplateListResponse:
+      $ref: './components/schemas/prune-prompt-template.yaml#/PrunePromptTemplateListResponse'
+    CreatePrunePromptTemplateRequest:
+      $ref: './components/schemas/prune-prompt-template.yaml#/CreatePrunePromptTemplateRequest'
+    UpdatePrunePromptTemplateRequest:
+      $ref: './components/schemas/prune-prompt-template.yaml#/UpdatePrunePromptTemplateRequest'
+    ExecutionProfile:
+      $ref: './components/schemas/execution-profile.yaml#/ExecutionProfile'
+    ExecutionProfileListResponse:
+      $ref: './components/schemas/execution-profile.yaml#/ExecutionProfileListResponse'
+    CreateExecutionProfileRequest:
+      $ref: './components/schemas/execution-profile.yaml#/CreateExecutionProfileRequest'
+    UpdateExecutionProfileRequest:
+      $ref: './components/schemas/execution-profile.yaml#/UpdateExecutionProfileRequest'
     ExecutionPlanTemplate:
       $ref: './components/schemas/execution-plan-template.yaml#/ExecutionPlanTemplate'
     AdminUserListResponse:

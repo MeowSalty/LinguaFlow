@@ -23,6 +23,7 @@ var (
 const (
 	SettingRegistrationEnabled = "registration_enabled"
 	SettingDefaultUserRole     = "default_user_role"
+	SettingAutoAdmin           = "auto_admin"
 )
 
 type AdminService struct {
@@ -58,12 +59,12 @@ type AdminUpdateUserInput struct {
 }
 
 type SystemStats struct {
-	TotalUsers           int `json:"total_users"`
-	ActiveUsers          int `json:"active_users"`
-	TotalProjects        int `json:"total_projects"`
-	TotalOrganizations   int `json:"total_organizations"`
-	TotalTranslationJobs int `json:"total_translation_jobs"`
-	TotalResources       int `json:"total_resources"`
+	TotalUsers         int `json:"total_users"`
+	ActiveUsers        int `json:"active_users"`
+	TotalProjects      int `json:"total_projects"`
+	TotalOrganizations int `json:"total_organizations"`
+	TotalJobs          int `json:"total_jobs"`
+	TotalResources     int `json:"total_resources"`
 }
 
 type ListAuditLogsParams struct {
@@ -279,7 +280,7 @@ func (s *AdminService) GetSystemStats(ctx context.Context) (*SystemStats, error)
 	if err != nil {
 		return nil, err
 	}
-	totalJobs, err := s.client.TranslationJob.Query().Count(ctx)
+	totalJobs, err := s.client.Job.Query().Count(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -289,12 +290,12 @@ func (s *AdminService) GetSystemStats(ctx context.Context) (*SystemStats, error)
 	}
 
 	return &SystemStats{
-		TotalUsers:           totalUsers,
-		ActiveUsers:          activeUsers,
-		TotalProjects:        totalProjects,
-		TotalOrganizations:   totalOrgs,
-		TotalTranslationJobs: totalJobs,
-		TotalResources:       totalResources,
+		TotalUsers:         totalUsers,
+		ActiveUsers:        activeUsers,
+		TotalProjects:      totalProjects,
+		TotalOrganizations: totalOrgs,
+		TotalJobs:          totalJobs,
+		TotalResources:     totalResources,
 	}, nil
 }
 
@@ -420,12 +421,19 @@ func (s *AdminService) IsRegistrationEnabled(ctx context.Context) bool {
 	return val == "true"
 }
 
-// ShouldAutoAdmin reads the auto_admin flag from the database.
+// ShouldAutoAdmin reads the auto_admin setting from the database.
 // Returns true if no admin exists and the setting is "true" or missing.
 func (s *AdminService) ShouldAutoAdmin(ctx context.Context) bool {
 	hasAdmin, err := s.HasAnyAdmin(ctx)
 	if err != nil || hasAdmin {
 		return false
 	}
-	return true
+	val, err := s.GetSetting(ctx, SettingAutoAdmin)
+	if err != nil {
+		return true // Fail open: auto-promote on error.
+	}
+	if val == "" {
+		return true // Default: enabled.
+	}
+	return val == "true"
 }

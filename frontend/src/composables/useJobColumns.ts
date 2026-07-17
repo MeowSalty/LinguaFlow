@@ -10,16 +10,15 @@ import {
   getJobProgress,
   getJobStatusLabel,
   getJobTriggerLabel,
-  getStageLabel,
   statusTagType,
 } from '@/composables/useWorkspaceUtils'
 
-type TranslationJob = ApiSchemas['TranslationJob']
+type Job = ApiSchemas['Job']
 
 export interface JobColumnActions {
-  openJobDetail: (job: TranslationJob) => void
-  cancelJob: (job: TranslationJob) => void
-  retryJob: (job: TranslationJob) => void
+  openJobDetail: (job: Job) => void
+  cancelJob: (job: Job) => void
+  retryJob: (job: Job) => void
 }
 
 export function useJobColumns(actions: JobColumnActions) {
@@ -36,7 +35,7 @@ export function useJobColumns(actions: JobColumnActions) {
   ])
 
   // ── 表格列定义 ──
-  const jobColumns = computed<DataTableColumns<TranslationJob>>(() => [
+  const jobColumns = computed<DataTableColumns<Job>>(() => [
     {
       title: t('workspace.job.columns.id'),
       key: 'id',
@@ -72,23 +71,7 @@ export function useJobColumns(actions: JobColumnActions) {
       render: (row) => {
         const percent = getJobProgress(row)
 
-        const stageText = row.current_stage ? getStageLabel(row.current_stage) : null
-
         return h('div', { class: 'flex items-center gap-2 w-full' }, [
-          // 阶段标签（如有）
-          stageText
-            ? h(
-                NTag,
-                {
-                  size: 'tiny',
-                  bordered: false,
-                  type: 'info',
-                  round: true,
-                  style: { flexShrink: 0 },
-                },
-                { default: () => stageText },
-              )
-            : null,
           // 进度条（flex-1 占据剩余空间，但整体列宽已固定为 220）
           h(NProgress, {
             type: 'line',
@@ -121,13 +104,23 @@ export function useJobColumns(actions: JobColumnActions) {
       title: t('workspace.job.columns.resources'),
       key: 'resource_count',
       width: 130,
-      render: (row) => `${row.completed_resources}/${row.resource_count}`,
+      render: (row) => `${row.progress.completed_resources}/${row.progress.total_resources}`,
     },
     {
       title: t('workspace.job.columns.segments'),
       key: 'total_segments',
       width: 130,
-      render: (row) => `${row.completed_segments}/${row.total_segments}`,
+      render: (row) => {
+        const skipped = row.progress.skipped_segments
+        if (skipped > 0) {
+          return h('span', { class: 'text-xs' }, [
+            h('span', {}, `${row.progress.completed_segments}`),
+            h('span', { class: 'text-lf-text-muted' }, ` +${skipped} `),
+            h('span', { class: 'text-lf-text-muted' }, `/ ${row.progress.total_segments}`),
+          ])
+        }
+        return `${row.progress.completed_segments}/${row.progress.total_segments}`
+      },
     },
     {
       title: t('workspace.job.columns.trigger'),

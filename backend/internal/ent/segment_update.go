@@ -10,11 +10,13 @@ import (
 
 	"entgo.io/ent/dialect/sql"
 	"entgo.io/ent/dialect/sql/sqlgraph"
+	"entgo.io/ent/dialect/sql/sqljson"
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
 
 // SegmentUpdate is the builder for updating Segment entities.
@@ -165,6 +167,24 @@ func (_u *SegmentUpdate) ClearMeta() *SegmentUpdate {
 	return _u
 }
 
+// SetQualityIssues sets the "quality_issues" field.
+func (_u *SegmentUpdate) SetQualityIssues(v []qa.QualityIssue) *SegmentUpdate {
+	_u.mutation.SetQualityIssues(v)
+	return _u
+}
+
+// AppendQualityIssues appends value to the "quality_issues" field.
+func (_u *SegmentUpdate) AppendQualityIssues(v []qa.QualityIssue) *SegmentUpdate {
+	_u.mutation.AppendQualityIssues(v)
+	return _u
+}
+
+// ClearQualityIssues clears the value of the "quality_issues" field.
+func (_u *SegmentUpdate) ClearQualityIssues() *SegmentUpdate {
+	_u.mutation.ClearQualityIssues()
+	return _u
+}
+
 // SetResource sets the "resource" edge to the Resource entity.
 func (_u *SegmentUpdate) SetResource(v *Resource) *SegmentUpdate {
 	return _u.SetResourceID(v.ID)
@@ -311,6 +331,17 @@ func (_u *SegmentUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if _u.mutation.MetaCleared() {
 		_spec.ClearField(segment.FieldMeta, field.TypeString)
+	}
+	if value, ok := _u.mutation.QualityIssues(); ok {
+		_spec.SetField(segment.FieldQualityIssues, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedQualityIssues(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, segment.FieldQualityIssues, value)
+		})
+	}
+	if _u.mutation.QualityIssuesCleared() {
+		_spec.ClearField(segment.FieldQualityIssues, field.TypeJSON)
 	}
 	if _u.mutation.ResourceCleared() {
 		edge := &sqlgraph.EdgeSpec{
@@ -525,6 +556,24 @@ func (_u *SegmentUpdateOne) ClearMeta() *SegmentUpdateOne {
 	return _u
 }
 
+// SetQualityIssues sets the "quality_issues" field.
+func (_u *SegmentUpdateOne) SetQualityIssues(v []qa.QualityIssue) *SegmentUpdateOne {
+	_u.mutation.SetQualityIssues(v)
+	return _u
+}
+
+// AppendQualityIssues appends value to the "quality_issues" field.
+func (_u *SegmentUpdateOne) AppendQualityIssues(v []qa.QualityIssue) *SegmentUpdateOne {
+	_u.mutation.AppendQualityIssues(v)
+	return _u
+}
+
+// ClearQualityIssues clears the value of the "quality_issues" field.
+func (_u *SegmentUpdateOne) ClearQualityIssues() *SegmentUpdateOne {
+	_u.mutation.ClearQualityIssues()
+	return _u
+}
+
 // SetResource sets the "resource" edge to the Resource entity.
 func (_u *SegmentUpdateOne) SetResource(v *Resource) *SegmentUpdateOne {
 	return _u.SetResourceID(v.ID)
@@ -701,6 +750,17 @@ func (_u *SegmentUpdateOne) sqlSave(ctx context.Context) (_node *Segment, err er
 	}
 	if _u.mutation.MetaCleared() {
 		_spec.ClearField(segment.FieldMeta, field.TypeString)
+	}
+	if value, ok := _u.mutation.QualityIssues(); ok {
+		_spec.SetField(segment.FieldQualityIssues, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedQualityIssues(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, segment.FieldQualityIssues, value)
+		})
+	}
+	if _u.mutation.QualityIssuesCleared() {
+		_spec.ClearField(segment.FieldQualityIssues, field.TypeJSON)
 	}
 	if _u.mutation.ResourceCleared() {
 		edge := &sqlgraph.EdgeSpec{

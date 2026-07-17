@@ -7,7 +7,8 @@ import (
 )
 
 func TestBrokerSubscribePublish(t *testing.T) {
-	b := NewBroker()
+	store := NewRingBufferStore(DefaultRingBufferConfig())
+	b := NewBroker(store)
 
 	ch := b.Subscribe(1)
 	defer b.Unsubscribe(1, ch)
@@ -31,7 +32,8 @@ func TestBrokerSubscribePublish(t *testing.T) {
 }
 
 func TestBrokerUnsubscribe(t *testing.T) {
-	b := NewBroker()
+	store := NewRingBufferStore(DefaultRingBufferConfig())
+	b := NewBroker(store)
 
 	ch := b.Subscribe(1)
 	b.Unsubscribe(1, ch)
@@ -44,7 +46,8 @@ func TestBrokerUnsubscribe(t *testing.T) {
 }
 
 func TestBrokerMultipleSubscribers(t *testing.T) {
-	b := NewBroker()
+	store := NewRingBufferStore(DefaultRingBufferConfig())
+	b := NewBroker(store)
 
 	ch1 := b.Subscribe(1)
 	ch2 := b.Subscribe(1)
@@ -67,7 +70,8 @@ func TestBrokerMultipleSubscribers(t *testing.T) {
 }
 
 func TestBrokerIsolation(t *testing.T) {
-	b := NewBroker()
+	store := NewRingBufferStore(DefaultRingBufferConfig())
+	b := NewBroker(store)
 
 	ch1 := b.Subscribe(1)
 	ch2 := b.Subscribe(2)
@@ -95,7 +99,8 @@ func TestBrokerIsolation(t *testing.T) {
 }
 
 func TestBrokerNonBlockingPublish(t *testing.T) {
-	b := NewBroker()
+	store := NewRingBufferStore(DefaultRingBufferConfig())
+	b := NewBroker(store)
 
 	ch := b.Subscribe(1)
 	defer b.Unsubscribe(1, ch)
@@ -121,7 +126,8 @@ func TestBrokerNonBlockingPublish(t *testing.T) {
 }
 
 func TestBrokerConcurrentPublish(t *testing.T) {
-	b := NewBroker()
+	store := NewRingBufferStore(DefaultRingBufferConfig())
+	b := NewBroker(store)
 
 	var wg sync.WaitGroup
 	for i := 0; i < 10; i++ {

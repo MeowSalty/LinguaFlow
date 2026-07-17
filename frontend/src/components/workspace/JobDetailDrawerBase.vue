@@ -8,11 +8,11 @@ import { buildSyntheticEvents, type SyntheticEvent } from '@/composables/useSynt
 
 import JobDetailContent from './JobDetailContent.vue'
 
-type TranslationJob = ApiSchemas['TranslationJob']
+type Job = ApiSchemas['Job']
 
 const props = defineProps<{
   show: boolean
-  job: TranslationJob | null
+  job: Job | null
   loading: boolean
   error?: string | null
   projectName?: string
@@ -28,15 +28,9 @@ const tracker = useGlobalJobTrackerStore()
 
 const jobId = computed(() => props.job?.id ?? null)
 
-const events = computed(() => {
-  const id = jobId.value
-  return id != null ? tracker.getJobEvents(id) : []
-})
+const events = computed(() => tracker.getJobEvents())
 
-const connected = computed(() => {
-  const id = jobId.value
-  return id != null ? tracker.isJobSSEConnected(id) : false
-})
+const connected = computed(() => tracker.isJobSSEConnected())
 
 const syntheticEvents = ref<SyntheticEvent[]>([])
 
@@ -47,8 +41,7 @@ const refreshSyntheticEvents = (): void => {
 }
 
 const clearEventsAndCache = (): void => {
-  const id = jobId.value
-  if (id != null) tracker.clearJobEvents(id)
+  tracker.clearJobEvents()
 }
 
 watch(

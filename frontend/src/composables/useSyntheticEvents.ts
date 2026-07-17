@@ -2,14 +2,14 @@ import type { ApiSchemas } from '@/api/client'
 import type { SSEEvent } from '@/composables/sseShared'
 import { t } from '@/i18n'
 
-type TranslationJob = ApiSchemas['TranslationJob']
-type TranslationJobResource = ApiSchemas['TranslationJobResource']
+type Job = ApiSchemas['Job']
+type JobResource = ApiSchemas['JobResource']
 
 export interface SyntheticEvent extends SSEEvent {
   synthetic: true
 }
 
-export function buildSyntheticEvents(job: TranslationJob): SyntheticEvent[] {
+export function buildSyntheticEvents(job: Job): SyntheticEvent[] {
   const events: SyntheticEvent[] = []
   const jobId = job.id
 
@@ -26,6 +26,7 @@ export function buildSyntheticEvents(job: TranslationJob): SyntheticEvent[] {
     message,
     stage,
     created_at: timestamp,
+    seq: 0,
     synthetic: true,
   })
 
@@ -69,7 +70,7 @@ export function buildSyntheticEvents(job: TranslationJob): SyntheticEvent[] {
     )
   }
 
-  const resources: TranslationJobResource[] = job.job_resources ?? []
+  const resources: JobResource[] = job.job_resources ?? []
   for (const resource of resources) {
     const resourceLabel = resource.resource?.name || `#${resource.resource_id}`
 

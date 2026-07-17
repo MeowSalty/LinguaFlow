@@ -52,21 +52,21 @@ func AuthConfigFromServer(cfg config.ServerConfig) AuthConfig {
 }
 
 type AuthService struct {
-	client       *ent.Client
-	cfg          AuthConfig
-	now          func() time.Time
-	rand         io.Reader
-	registration *RegistrationConfig
-	adminSvc     *AdminService
+	client   *ent.Client
+	cfg      AuthConfig
+	now      func() time.Time
+	rand     io.Reader
+	adminSvc *AdminService
 }
 
-func (s *AuthService) SetAdminService(adminSvc *AdminService) {
-	s.adminSvc = adminSvc
-}
-
-type RegistrationConfig struct {
-	Enabled   bool
-	AutoAdmin bool
+func NewAuthService(client *ent.Client, cfg AuthConfig, adminSvc *AdminService) *AuthService {
+	return &AuthService{
+		client:   client,
+		cfg:      cfg,
+		now:      time.Now,
+		rand:     crand.Reader,
+		adminSvc: adminSvc,
+	}
 }
 
 type AccessTokenClaims struct {
@@ -96,24 +96,11 @@ type Session struct {
 	User             *ent.User
 }
 
-func NewAuthService(client *ent.Client, cfg AuthConfig, registration *RegistrationConfig) *AuthService {
-	return &AuthService{
-		client:       client,
-		cfg:          cfg,
-		now:          time.Now,
-		rand:         crand.Reader,
-		registration: registration,
-	}
-}
-
 func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*Session, error) {
-	// Database-first: check registration_enabled from system_settings table.
-	// Falls back to YAML config if admin service is not yet initialized.
-	if s.adminSvc != nil {
-		if !s.adminSvc.IsRegistrationEnabled(ctx) {
-			return nil, ErrRegistrationClosed
-		}
-	} else if s.registration != nil && !s.registration.Enabled {
+	if s.adminSvc == nil {
+		return nil, fmt.Errorf("auth service not initialized: admin service is required")
+	}
+	if !s.adminSvc.IsRegistrationEnabled(ctx) {
 		return nil, ErrRegistrationClosed
 	}
 
@@ -130,20 +117,9 @@ func (s *AuthService) Register(ctx context.Context, input RegisterInput) (*Sessi
 		return nil, fmt.Errorf("hash password: %w", err)
 	}
 
-	// Auto-admin: first registered user becomes admin if no admin exists.
 	role := SystemRoleUser
-	if s.adminSvc != nil {
-		if s.adminSvc.ShouldAutoAdmin(ctx) {
-			role = SystemRoleAdmin
-		}
-	} else if s.registration != nil && s.registration.AutoAdmin {
-		adminCount, err := s.client.User.Query().Where(user.RoleEQ(SystemRoleAdmin)).Count(ctx)
-		if err != nil {
-			return nil, err
-		}
-		if adminCount == 0 {
-			role = SystemRoleAdmin
-		}
+	if s.adminSvc.ShouldAutoAdmin(ctx) {
+		role = SystemRoleAdmin
 	}
 
 	createdUser, err := s.client.User.Create().

@@ -16,7 +16,6 @@ import {
   useMessage,
   type FormInst,
   type FormRules,
-  type SelectOption,
 } from 'naive-ui'
 import { ref, computed, reactive, watch, onMounted, onBeforeUnmount, provide } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -34,12 +33,12 @@ import GlossarySyncDialog from '@/components/workspace/GlossarySyncDialog.vue'
 import SegmentPanel from '@/components/workspace/SegmentPanel.vue'
 import JobPanel from '@/components/workspace/JobPanel.vue'
 import JobCreateDrawer from '@/components/workspace/JobCreateDrawer.vue'
-import JobDetailDrawer from '@/components/workspace/JobDetailDrawer.vue'
 import ConflictDialog from '@/components/workspace/ConflictDialog.vue'
 import IncrementalResultModal from '@/components/workspace/IncrementalResultModal.vue'
 import { useGlossaryManagement, GlossaryMgmtKey } from '@/composables/useGlossaryManagement'
 import { useJobActions } from '@/composables/useJobActions'
 import { useConflictHandling } from '@/composables/useConflictHandling'
+import { useLanguageOptions } from '@/composables/useLanguageOptions'
 import { formatDate } from '@/composables/useWorkspaceUtils'
 import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import { useGlossaryStore } from '@/stores/glossary'
@@ -98,22 +97,7 @@ const editFormModel = reactive({
   glossary_enabled: false,
 })
 
-const targetLanguageOptions = computed<SelectOption[]>(() => [
-  { label: t('projects.languages.zhHans'), value: 'zh-Hans' },
-  { label: t('projects.languages.zhHant'), value: 'zh-Hant' },
-  { label: t('projects.languages.enUS'), value: 'en-US' },
-  { label: t('projects.languages.enGB'), value: 'en-GB' },
-  { label: t('projects.languages.ja'), value: 'ja' },
-  { label: t('projects.languages.ko'), value: 'ko' },
-  { label: t('projects.languages.fr'), value: 'fr' },
-  { label: t('projects.languages.de'), value: 'de' },
-  { label: t('projects.languages.es'), value: 'es' },
-])
-
-const sourceLanguageOptions = computed<SelectOption[]>(() => [
-  { label: t('projects.languages.auto'), value: 'auto' },
-  ...targetLanguageOptions.value,
-])
+const { targetLanguageOptions, sourceLanguageOptions } = useLanguageOptions()
 
 const editFormRules = computed<FormRules>(() => ({
   name: [
@@ -545,7 +529,6 @@ onMounted(() => {
         <NTabPane name="jobs" :tab="t('workspace.tabs.jobs')">
           <JobPanel
             :project-id="projectId"
-            :detail-drawer-visible="jobMgmt.jobDetailDrawerVisible.value"
             @detail="(job) => jobMgmt.openJobDetail(job)"
             @cancel="(job) => jobMgmt.cancelJob(job)"
             @retry="(job) => jobMgmt.retryJob(job)"
@@ -568,7 +551,7 @@ onMounted(() => {
       :target-group-keys="jobMgmt.jobTargetGroupKeys.value"
       :execution-plan-id="jobMgmt.jobForm.execution_plan_id"
       :auto-approve="jobMgmt.jobForm.auto_approve"
-      :overwrite-mode="jobMgmt.jobForm.overwrite_mode"
+      :segment-filter="jobMgmt.jobForm.segment_filter"
       :form-rules="jobMgmt.jobFormRules.value"
       :execution-plan-options="jobMgmt.executionPlanOptions.value"
       :submitting="workspace.creatingJob"
@@ -576,13 +559,10 @@ onMounted(() => {
       :selected-plan-template="jobMgmt.selectedPlanTemplate.value"
       @update:execution-plan-id="(val) => (jobMgmt.jobForm.execution_plan_id = val)"
       @update:auto-approve="(val) => (jobMgmt.jobForm.auto_approve = val)"
-      @update:overwrite-mode="(val) => (jobMgmt.jobForm.overwrite_mode = val)"
+      @update:segment-filter="(val) => (jobMgmt.jobForm.segment_filter = val)"
       @submit="jobMgmt.submitJob()"
       @close="jobMgmt.closeJobDrawer()"
     />
-
-    <!-- 任务详情抽屉 -->
-    <JobDetailDrawer v-model:show="jobMgmt.jobDetailDrawerVisible.value" />
 
     <!-- 冲突对话框 -->
     <ConflictDialog

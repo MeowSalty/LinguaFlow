@@ -1,6 +1,6 @@
 import { computed, ref, watch, onMounted, onUnmounted, type Ref } from 'vue'
 
-import { useTranslationJobStore } from '@/stores/translationJob'
+import { useJobStore } from '@/stores/job'
 
 // ── 轮询间隔策略 ──
 
@@ -13,9 +13,6 @@ const LIST_POLLING_INTERVALS: Record<string, number | null> = {
   cancelled: null,
 }
 
-/** 详情/事件轮询固定间隔 */
-const DETAIL_POLLING_INTERVAL = 10_000
-
 // ── 接口定义 ──
 
 interface UseJobPollingOptions {
@@ -25,8 +22,6 @@ interface UseJobPollingOptions {
   enabled?: Ref<boolean>
   /** 任务列表轮询间隔覆盖（毫秒） */
   listInterval?: number
-  /** 详情/事件轮询间隔覆盖（毫秒） */
-  detailInterval?: number
 }
 
 interface UseJobPollingReturn {
@@ -40,32 +35,22 @@ interface UseJobPollingReturn {
   stop: () => void
 }
 
-// ── 终态集合 ──
-const TERMINAL_STATUSES = new Set(['completed', 'failed', 'cancelled'])
-
 // ── Composable ──
 
 export function useJobPolling({
   projectId,
   enabled = ref(true),
   listInterval,
-  detailInterval = DETAIL_POLLING_INTERVAL,
 }: UseJobPollingOptions): UseJobPollingReturn {
-  const jobStore = useTranslationJobStore()
+  const jobStore = useJobStore()
 
   const isPolling = ref(false)
   let listTimer: ReturnType<typeof setInterval> | null = null
-  let detailTimer: ReturnType<typeof setInterval> | null = null
 
   // ── 活跃任务检测 ──
   const hasActiveJobs = computed(() =>
     jobStore.jobs.some((j) => j.status === 'running' || j.status === 'pending'),
   )
-
-  const hasActiveSelectedJob = computed(() => {
-    const job = jobStore.selectedJob
-    return job != null && !TERMINAL_STATUSES.has(job.status)
-  })
 
   /**
    * 根据当前任务列表中的最高优先级状态，
@@ -114,31 +99,6 @@ export function useJobPolling({
     }, interval)
   }
 
-  // ── 详情轮询 ──
-
-  const pollDetail = (): void => {
-    const selected = jobStore.selectedJob
-    if (!selected || TERMINAL_STATUSES.has(selected.status)) return
-    void jobStore.loadJobDetail(selected.id)
-  }
-
-  const clearDetailTimer = (): void => {
-    if (detailTimer) {
-      clearInterval(detailTimer)
-      detailTimer = null
-    }
-  }
-
-  const startDetailTimer = (): void => {
-    if (detailTimer || !hasActiveSelectedJob.value) return
-    detailTimer = setInterval(() => {
-      pollDetail()
-      if (!hasActiveSelectedJob.value) {
-        clearDetailTimer()
-      }
-    }, detailInterval)
-  }
-
   // ── 统一控制 ──
 
   const start = (): void => {
@@ -147,13 +107,11 @@ export function useJobPolling({
 
     isPolling.value = true
     startListTimer()
-    startDetailTimer()
   }
 
   const stop = (): void => {
     isPolling.value = false
     clearListTimer()
-    clearDetailTimer()
   }
 
   // ── 页面可见性处理 ──
@@ -162,9 +120,6 @@ export function useJobPolling({
       stop()
     } else if (hasActiveJobs.value) {
       if (enabled.value) pollList()
-      if (hasActiveSelectedJob.value) {
-        pollDetail()
-      }
       start()
     }
   }
@@ -189,23 +144,11 @@ export function useJobPolling({
     }
   })
 
-  // ── 监听 selectedJob 变化：控制详情/事件轮询 ──
-  watch(hasActiveSelectedJob, (active) => {
-    if (active) {
-      startDetailTimer()
-    } else {
-      clearDetailTimer()
-    }
-  })
-
   // ── 生命周期 ──
   onMounted(() => {
     document.addEventListener('visibilitychange', handleVisibility)
     if (hasActiveJobs.value) {
       if (enabled.value) pollList()
-      if (hasActiveSelectedJob.value) {
-        pollDetail()
-      }
       start()
     }
   })

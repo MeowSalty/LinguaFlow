@@ -22,20 +22,31 @@ func (r *recordingBatchObserver) OnBatchEvent(e progress.BatchEvent) {
 	r.events = append(r.events, e)
 }
 
-func TestProcessBatchAttempt_BackendErrorEmitsBatch(t *testing.T) {
+func TestTranslateHandler_ProcessBatch_BackendErrorEmitsBatch(t *testing.T) {
 	doc := newTestDoc(1)
 	rep := &recordingBatchObserver{}
 	err429 := &backend.StatusError{StatusCode: 429, Err: errors.New("too many requests")}
 	fb := &fakeBackend{name: "fake", errs: []error{err429}}
-	s := &Translate{
-		Rounds:   defaultTestRound(fb, 1, 1),
-		Renderer: newTestRenderer(t),
-		Logger:   quietLogger(),
-		Reporter: rep,
-		Repair:   defaultRepairOpts(),
+
+	h := &TranslateHandler{
+		Backend:   fb,
+		BatchSize: 1,
+		Renderer:  newTestRenderer(t),
+		Reporter:  rep,
+		Repair:    defaultRepairOpts(),
+		Logger:    quietLogger(),
 	}
-	job := batchJob{idxs: []int{0}, attempt: 0}
-	result := s.processBatchAttempt(context.Background(), doc, job, s.Rounds[0], quietLogger(), nil, job.idxs)
+
+	// BuildBatches to get the batch structure
+	batches, err := h.BuildBatches(context.Background(), doc)
+	if err != nil {
+		t.Fatalf("build batches: %v", err)
+	}
+	if len(batches) == 0 {
+		t.Fatal("expected at least one batch")
+	}
+
+	result := h.ProcessBatch(context.Background(), doc, batches[0], 0, quietLogger())
 
 	// 429 error triggers retry (not unresolved)
 	if result.retry == nil {

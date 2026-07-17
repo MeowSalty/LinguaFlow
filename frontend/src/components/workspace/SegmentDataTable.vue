@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { DataTableRowKey } from 'naive-ui'
 import { NButton, NDataTable, NEmpty, NSpin } from 'naive-ui'
-import { ref, toRef, computed } from 'vue'
+import { ref, toRef, computed, watch, nextTick, onMounted, onUnmounted } from 'vue'
 
 import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
@@ -37,11 +37,12 @@ const emit = defineEmits<{
   startInlineEdit: [segment: Segment]
   cancelInlineEdit: []
   saveInlineEdit: [segment: Segment]
+  saveAndEditNext: [segment: Segment]
   openInlineComment: [segment: Segment]
   saveInlineComment: [segment: Segment]
   closeInlineComment: []
   'update:inlineCommentText': [value: string]
-  'update:inlineEditForm': [field: 'source_text' | 'target_text', value: string]
+  'update:inlineEditForm': [field: 'source_text' | 'target_text' | 'comment', value: string]
 }>()
 
 // ── 响应式配置 ──
@@ -54,6 +55,31 @@ const config = computed<SegmentTableConfig>(() => ({
 
 const configRef = toRef(config)
 
+// ── 原文 HTML 源码切换 ──
+const showSourceHtml = ref(false)
+
+const toggleSourceHtml = (): void => {
+  showSourceHtml.value = !showSourceHtml.value
+}
+
+watch(
+  () => props.inlineEditingSegmentId,
+  (newId) => {
+    showSourceHtml.value = false
+    if (newId !== null) {
+      const idx = props.segments.findIndex((s) => s.id === newId)
+      if (idx >= 0) {
+        focusedRowIndex.value = idx
+      }
+      nextTick(() => {
+        const editingRow = document.querySelector('.segment-row--editing')
+        const textarea = editingRow?.querySelector('textarea') as HTMLTextAreaElement | null
+        textarea?.focus()
+      })
+    }
+  },
+)
+
 // ── 依赖注入（委托 emit） ──
 const deps: SegmentColumnDeps = {
   inlineEditingSegmentId: toRef(props, 'inlineEditingSegmentId'),
@@ -62,10 +88,17 @@ const deps: SegmentColumnDeps = {
   inlineCommentText: toRef(props, 'inlineCommentText'),
   editingSegmentIds: toRef(props, 'editingSegmentIds'),
 
+  showSourceHtml,
+  toggleSourceHtml,
+
   startInlineEdit: (segment) => emit('startInlineEdit', segment),
   cancelInlineEdit: () => emit('cancelInlineEdit'),
   saveInlineEdit: (segment) => {
     emit('saveInlineEdit', segment)
+    return Promise.resolve()
+  },
+  saveAndEditNext: (segment) => {
+    emit('saveAndEditNext', segment)
     return Promise.resolve()
   },
   openInlineComment: (segment) => emit('openInlineComment', segment),
@@ -79,8 +112,14 @@ const deps: SegmentColumnDeps = {
   onTranslate: (segment) => emit('translate', segment),
 }
 
-// ── 列定义 ──
 const columns = useSegmentColumns(configRef, deps)
+
+const scrollX = computed(() => {
+  const base = 50 + 280 + 280 + 110 + 160 // index + source + target + status + actions
+  const selection = props.showSelection ? 48 : 0
+  const updatedAt = props.showUpdatedAt ? 90 : 0
+  return selection + base + updatedAt
+})
 
 // ── 行选择 ──
 const selectedSegmentIds = ref<DataTableRowKey[]>([])
@@ -88,6 +127,97 @@ const selectedSegmentIds = ref<DataTableRowKey[]>([])
 const handleSelectionChange = (keys: DataTableRowKey[]): void => {
   selectedSegmentIds.value = keys
   emit('selectionChange', keys as number[])
+}
+
+// ── 键盘导航 ──
+const focusedRowIndex = ref<number>(-1)
+
+const HEADER_HEIGHT = 64
+
+const scrollFocusedRowIntoView = (): void => {
+  setTimeout(() => {
+    const rowEl = document.querySelector('.segment-row--focused') as HTMLElement | null
+    if (!rowEl) return
+    const rect = rowEl.getBoundingClientRect()
+    if (rect.top < HEADER_HEIGHT) {
+      window.scrollBy({ top: rect.top - HEADER_HEIGHT - 8, behavior: 'smooth' })
+    } else if (rect.bottom > window.innerHeight) {
+      window.scrollBy({ top: rect.bottom - window.innerHeight + 20, behavior: 'smooth' })
+    }
+  }, 50)
+}
+
+const rowClassName = (row: Segment): string => {
+  const classes: string[] = []
+  if (row.id === props.inlineEditingSegmentId) {
+    classes.push('segment-row--editing')
+  } else if (row.status === 'approved') {
+    classes.push('segment-row--approved')
+  } else if (row.status === 'translated' || row.status === 'edited') {
+    classes.push('segment-row--translated')
+  } else if (row.status === 'rejected') {
+    classes.push('segment-row--rejected')
+  }
+  if (props.segments.indexOf(row) === focusedRowIndex.value) {
+    classes.push('segment-row--focused')
+  }
+  return classes.join(' ')
+}
+
+const handleKeyDown = (e: KeyboardEvent): void => {
+  const target = e.target as HTMLElement
+  const isInInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'
+
+  if (e.key === 'Escape') {
+    if (props.inlineEditingSegmentId !== null) {
+      e.preventDefault()
+      emit('cancelInlineEdit')
+    }
+    return
+  }
+
+  if (isInInput) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey) && props.inlineEditingSegmentId !== null) {
+      e.preventDefault()
+      const editingSegment = props.segments.find((s) => s.id === props.inlineEditingSegmentId)
+      if (editingSegment) {
+        emit('saveAndEditNext', editingSegment)
+      }
+    }
+    return
+  }
+
+  if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    if (focusedRowIndex.value < props.segments.length - 1) {
+      focusedRowIndex.value++
+      scrollFocusedRowIntoView()
+    }
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    if (focusedRowIndex.value > 0) {
+      focusedRowIndex.value--
+      scrollFocusedRowIntoView()
+    }
+  } else if (e.key === 'Enter' && !e.ctrlKey && !e.metaKey) {
+    if (focusedRowIndex.value >= 0 && focusedRowIndex.value < props.segments.length) {
+      e.preventDefault()
+      const segment = props.segments[focusedRowIndex.value]
+      if (segment) emit('startInlineEdit', segment)
+    }
+  }
+}
+
+onMounted(() => {
+  document.addEventListener('keydown', handleKeyDown)
+})
+
+onUnmounted(() => {
+  document.removeEventListener('keydown', handleKeyDown)
+})
+
+const handleRowClick = (_event: MouseEvent, row: Segment): void => {
+  focusedRowIndex.value = props.segments.indexOf(row)
 }
 
 // ── 暴露给父组件 ──
@@ -109,7 +239,9 @@ defineExpose({
         :data="segments"
         :loading="loading"
         :row-key="(row: Segment) => row.id"
-        :scroll-x="1040"
+        :scroll-x="scrollX"
+        :row-class-name="rowClassName"
+        :row-props="(row: Segment) => ({ onClick: (e: MouseEvent) => handleRowClick(e, row) })"
         :checked-row-keys="selectedSegmentIds"
         @update:checked-row-keys="handleSelectionChange"
       />
@@ -133,17 +265,18 @@ defineExpose({
           :show-comment="showComment"
           :is-editing="inlineEditingSegmentId === segment.id"
           :edit-form="inlineEditForm"
-          :is-comment-open="inlineCommentVisible === segment.id"
-          :comment-text="inlineCommentText"
           :is-saving="editingSegmentIds.includes(segment.id)"
+          :is-comment-visible="inlineCommentVisible === segment.id"
+          :comment-text="inlineCommentText"
           @start-edit="emit('startInlineEdit', segment)"
           @cancel-edit="emit('cancelInlineEdit')"
           @save-edit="emit('saveInlineEdit', segment)"
+          @save-and-next="emit('saveAndEditNext', segment)"
           @open-comment="emit('openInlineComment', segment)"
           @save-comment="emit('saveInlineComment', segment)"
           @close-comment="emit('closeInlineComment')"
-          @update-comment-text="(val: string) => emit('update:inlineCommentText', val)"
           @update-edit-field="(field, val) => emit('update:inlineEditForm', field, val)"
+          @update-comment-text="(val) => emit('update:inlineCommentText', val)"
           @translate="emit('translate', segment)"
         />
       </template>

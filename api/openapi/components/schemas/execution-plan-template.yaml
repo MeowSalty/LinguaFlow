@@ -13,22 +13,28 @@ RetryConfig:
       type: boolean
       default: true
 
-ExecutionRoundConfig:
+TranslateSegmentFilterConfig:
   type: object
-  required: [backend_id, prompt_template_id, profile_id, concurrency]
+  description: 翻译轮次段落过滤配置，决定处理哪些翻译状态的段落。
   properties:
-    name:
+    status_filter:
       type: string
-      description: 轮次名称（可选，空值自动生成 round-N）
-    backend_id:
-      type: integer
-      description: 后端 ID（Backend 单表全局唯一）
+      enum: [pending_only, skip_approved, all]
+      default: pending_only
+      description: |
+        - pending_only: 仅处理 pending 和 rejected 状态的段落（默认，等同旧 skip_translated）
+        - skip_approved: 处理除 approved 外的所有状态（等同旧 overwrite_unapproved）
+        - all: 处理所有状态的段落（等同旧 overwrite_all）
+
+TranslateRoundConfig:
+  type: object
+  properties:
     prompt_template_id:
       type: integer
-      description: 提示词模板 ID（PromptTemplate 单表全局唯一）
+      description: 翻译提示词模板 ID
     profile_id:
       type: integer
-      description: 策略模板 ID（TranslationProfile 单表全局唯一）
+      description: 策略模板 ID（ExecutionProfile 单表全局唯一）
     batch_size:
       type: integer
       minimum: 0
@@ -37,56 +43,70 @@ ExecutionRoundConfig:
       type: integer
       minimum: 0
       description: 字词数上限；0=不限制，与 batch_size 至少填一项
-    concurrency:
-      type: integer
-      minimum: 1
     fallback_shrink:
       type: number
       minimum: 0
       exclusiveMinimum: true
       maximum: 1
       exclusiveMaximum: true
+    segment_filter:
+      $ref: '#/TranslateSegmentFilterConfig'
+      description: 段落过滤配置；省略时默认 pending_only
     retry:
       $ref: '#/RetryConfig'
 
-ExecutionPlanTemplateScope:
-  type: string
-  enum: [user, org, system]
-
-ExecutionPlanBootstrapConfig:
+ExtractRoundConfig:
   type: object
-  required: [enabled, backend_id, prompt_template_id, batch_size, concurrency]
   properties:
-    enabled:
-      type: boolean
-      default: false
-      description: 是否启用独立自举
-    backend_id:
+    template_id:
       type: integer
-      description: 自举使用的后端 ID
-    prompt_template_id:
-      type: integer
-      description: 自举使用的提示词模板 ID（仅用其 bootstrap_prompt_content）
+      description: 术语抽取提示词模板 ID（BootstrapPromptTemplate）
     batch_size:
       type: integer
-      minimum: 1
+      minimum: 0
       default: 20
-      description: 每批发送给 LLM 的源文段数
-    concurrency:
+      description: 段落数上限；0=不限制，与 max_words_per_batch 至少填一项；两者都为 0 时不分批，全部一次发送
+    max_words_per_batch:
       type: integer
-      minimum: 1
-      default: 2
-      description: 自举并发数
-    max_terms_per_batch:
-      type: integer
-      minimum: 1
-      default: 20
-      description: 每批最多抽取的术语数
+      minimum: 0
+      description: 字词数上限；0=不限制，与 batch_size 至少填一项；两者都为 0 时不分批，全部一次发送
+    max_terms_per_1000_chars:
+      type: number
+      minimum: 0
+      default: 25.0
+      description: 每 1000 字词的术语抽取上限系数
     min_source_len:
       type: integer
       minimum: 1
       default: 2
       description: 术语源文最短字符数
+    retry:
+      $ref: '#/RetryConfig'
+
+ExecutionRoundConfig:
+  type: object
+  required: [mode, backend_id, concurrency]
+  properties:
+    mode:
+      type: string
+      enum: [translate, extract]
+      description: 轮次模式：translate=翻译，extract=术语抽取
+    backend_id:
+      type: integer
+      description: 后端 ID（Backend 单表全局唯一）
+    concurrency:
+      type: integer
+      minimum: 1
+    translate:
+      $ref: '#/TranslateRoundConfig'
+      description: 翻译模式配置（mode=translate 时必填）
+    extract:
+      $ref: '#/ExtractRoundConfig'
+      description: 术语抽取模式配置（mode=extract 时必填）
+
+ExecutionPlanTemplateScope:
+  type: string
+  enum: [user, org, system]
 
 ExecutionPlanRubyRetryConfig:
   type: object
@@ -116,8 +136,6 @@ ExecutionPlanTemplate:
       type: integer
     owner_org_id:
       type: integer
-    bootstrap:
-      $ref: '#/ExecutionPlanBootstrapConfig'
     ruby_retry:
       $ref: '#/ExecutionPlanRubyRetryConfig'
     rounds:
@@ -149,8 +167,6 @@ CreateExecutionPlanTemplateRequest:
       type: string
     description:
       type: string
-    bootstrap:
-      $ref: '#/ExecutionPlanBootstrapConfig'
     ruby_retry:
       $ref: '#/ExecutionPlanRubyRetryConfig'
     rounds:
@@ -167,8 +183,6 @@ UpdateExecutionPlanTemplateRequest:
       type: string
     description:
       type: string
-    bootstrap:
-      $ref: '#/ExecutionPlanBootstrapConfig'
     ruby_retry:
       $ref: '#/ExecutionPlanRubyRetryConfig'
     rounds:

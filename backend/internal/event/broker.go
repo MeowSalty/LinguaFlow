@@ -1,6 +1,7 @@
 package event
 
 import (
+	"log/slog"
 	"sync"
 	"time"
 )
@@ -14,18 +15,22 @@ type Event struct {
 	Message   string         `json:"message"`
 	Metadata  map[string]any `json:"metadata,omitempty"`
 	CreatedAt time.Time      `json:"created_at"`
+	Seq       int64          `json:"seq"`
 }
 
 // Broker is an in-process pub/sub hub for translation job events.
 // Each job ID has its own set of subscriber channels.
 type Broker struct {
+	store       EventStore
 	mu          sync.RWMutex
 	subscribers map[int]map[chan Event]struct{}
 }
 
 // NewBroker creates a new Broker instance.
-func NewBroker() *Broker {
+// If store is nil, events are broadcast without persistence (no replay support).
+func NewBroker(store EventStore) *Broker {
 	return &Broker{
+		store:       store,
 		subscribers: make(map[int]map[chan Event]struct{}),
 	}
 }
@@ -57,8 +62,19 @@ func (b *Broker) Unsubscribe(jobID int, ch chan Event) {
 }
 
 // Publish sends an event to all subscribers of the given job ID.
+// If a store is configured, the event is persisted first and assigned a global Seq.
+// If persistence fails, the event is still broadcast in degraded mode (memory-only).
 // Non-blocking: if a subscriber's buffer is full, the event is dropped for that subscriber.
 func (b *Broker) Publish(jobID int, evt Event) {
+	if b.store != nil {
+		seq, err := b.store.Append(jobID, evt)
+		if err != nil {
+			slog.Warn("broker: store append failed, event broadcasted in degraded mode",
+				"job_id", jobID, "error", err)
+		}
+		evt.Seq = seq
+	}
+
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	if subs, ok := b.subscribers[jobID]; ok {
@@ -68,5 +84,22 @@ func (b *Broker) Publish(jobID int, evt Event) {
 			default:
 			}
 		}
+	}
+}
+
+// Replay returns persisted events with seq > afterSeq for the given job.
+// Returns nil if no store is configured or no events are available.
+func (b *Broker) Replay(jobID int, afterSeq int64) []Event {
+	if b.store == nil {
+		return nil
+	}
+	return b.store.Replay(jobID, afterSeq)
+}
+
+// Purge removes all persisted events for the given job from the underlying store.
+// Should be called when a job reaches a terminal state to prevent unbounded memory growth.
+func (b *Broker) Purge(jobID int) {
+	if b.store != nil {
+		b.store.Purge(jobID)
 	}
 }

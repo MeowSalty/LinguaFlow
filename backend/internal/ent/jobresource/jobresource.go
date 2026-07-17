@@ -26,6 +26,8 @@ const (
 	FieldSegmentCount = "segment_count"
 	// FieldCompletedSegments holds the string denoting the completed_segments field in the database.
 	FieldCompletedSegments = "completed_segments"
+	// FieldSkippedSegments holds the string denoting the skipped_segments field in the database.
+	FieldSkippedSegments = "skipped_segments"
 	// FieldOutputPath holds the string denoting the output_path field in the database.
 	FieldOutputPath = "output_path"
 	// FieldErrorMessage holds the string denoting the error_message field in the database.
@@ -46,11 +48,11 @@ const (
 	Table = "job_resources"
 	// JobTable is the table that holds the job relation/edge.
 	JobTable = "job_resources"
-	// JobInverseTable is the table name for the TranslationJob entity.
-	// It exists in this package in order to avoid circular dependency with the "translationjob" package.
-	JobInverseTable = "translation_jobs"
+	// JobInverseTable is the table name for the Job entity.
+	// It exists in this package in order to avoid circular dependency with the "job" package.
+	JobInverseTable = "jobs"
 	// JobColumn is the table column denoting the job relation/edge.
-	JobColumn = "translation_job_job_resources"
+	JobColumn = "job_job_resources"
 	// ResourceTable is the table that holds the resource relation/edge.
 	ResourceTable = "job_resources"
 	// ResourceInverseTable is the table name for the Resource entity.
@@ -69,6 +71,7 @@ var Columns = []string{
 	FieldSegmentIds,
 	FieldSegmentCount,
 	FieldCompletedSegments,
+	FieldSkippedSegments,
 	FieldOutputPath,
 	FieldErrorMessage,
 	FieldCurrentStage,
@@ -80,8 +83,8 @@ var Columns = []string{
 // ForeignKeys holds the SQL foreign-keys that are owned by the "job_resources"
 // table and are not defined as standalone fields in the schema.
 var ForeignKeys = []string{
+	"job_job_resources",
 	"resource_job_resources",
-	"translation_job_job_resources",
 }
 
 // ValidColumn reports if the column name is valid (part of the table columns).
@@ -118,6 +121,10 @@ var (
 	DefaultCompletedSegments int
 	// CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.
 	CompletedSegmentsValidator func(int) error
+	// DefaultSkippedSegments holds the default value on creation for the "skipped_segments" field.
+	DefaultSkippedSegments int
+	// SkippedSegmentsValidator is a validator for the "skipped_segments" field. It is called by the builders before save.
+	SkippedSegmentsValidator func(int) error
 	// DefaultCurrentStage holds the default value on creation for the "current_stage" field.
 	DefaultCurrentStage string
 	// DefaultStageTotal holds the default value on creation for the "stage_total" field.
@@ -161,6 +168,11 @@ func BySegmentCount(opts ...sql.OrderTermOption) OrderOption {
 // ByCompletedSegments orders the results by the completed_segments field.
 func ByCompletedSegments(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCompletedSegments, opts...).ToFunc()
+}
+
+// BySkippedSegments orders the results by the skipped_segments field.
+func BySkippedSegments(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldSkippedSegments, opts...).ToFunc()
 }
 
 // ByOutputPath orders the results by the output_path field.

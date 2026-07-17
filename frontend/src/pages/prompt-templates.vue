@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import {
-  NAlert,
   NButton,
   NCard,
   NDrawer,
@@ -24,16 +23,15 @@ import type { ApiSchemas } from '@/api/client'
 import PromptTemplateEditor from '@/components/templates/PromptTemplateEditor.vue'
 import { usePromptTemplatesStore } from '@/stores/promptTemplates'
 
-type PromptTemplate = ApiSchemas['PromptTemplate']
-type CreateRequest = ApiSchemas['CreatePromptTemplateRequest']
-type UpdateRequest = ApiSchemas['UpdatePromptTemplateRequest']
-type Scope = PromptTemplate['scope']
+type TranslationPromptTemplate = ApiSchemas['TranslationPromptTemplate']
+type CreateRequest = ApiSchemas['CreateTranslationPromptTemplateRequest']
+type UpdateRequest = ApiSchemas['UpdateTranslationPromptTemplateRequest']
+type Scope = TranslationPromptTemplate['scope']
 
 interface FormModel {
   name: string
   description: string
   system_prompt_content: string
-  bootstrap_prompt_content: string
 }
 
 // ── Store & 依赖 ──────────────────────────────────────────────
@@ -46,15 +44,14 @@ const { t } = useI18n()
 
 const formRef = ref<FormInst | null>(null)
 const drawerVisible = ref(false)
-const editingItem = ref<PromptTemplate | null>(null)
+const editingItem = ref<TranslationPromptTemplate | null>(null)
 const deleteModalVisible = ref(false)
-const deletingItem = ref<PromptTemplate | null>(null)
+const deletingItem = ref<TranslationPromptTemplate | null>(null)
 
 const formModel = reactive<FormModel>({
   name: '',
   description: '',
   system_prompt_content: '',
-  bootstrap_prompt_content: '',
 })
 
 // ── 计算属性 ──────────────────────────────────────────────────
@@ -92,7 +89,6 @@ const resetForm = (): void => {
   formModel.name = ''
   formModel.description = ''
   formModel.system_prompt_content = ''
-  formModel.bootstrap_prompt_content = ''
   editingItem.value = null
 }
 
@@ -101,12 +97,11 @@ const openCreateDrawer = (): void => {
   drawerVisible.value = true
 }
 
-const openEditDrawer = (item: PromptTemplate): void => {
+const openEditDrawer = (item: TranslationPromptTemplate): void => {
   editingItem.value = item
   formModel.name = item.name
   formModel.description = item.description ?? ''
   formModel.system_prompt_content = item.system_prompt_content ?? ''
-  formModel.bootstrap_prompt_content = item.bootstrap_prompt_content ?? ''
   drawerVisible.value = true
 }
 
@@ -117,9 +112,6 @@ const buildPayload = (): CreateRequest => {
   }
   if (formModel.system_prompt_content.trim()) {
     payload.system_prompt_content = formModel.system_prompt_content.trim()
-  }
-  if (formModel.bootstrap_prompt_content.trim()) {
-    payload.bootstrap_prompt_content = formModel.bootstrap_prompt_content.trim()
   }
   return payload
 }
@@ -148,7 +140,7 @@ const onSubmit = async (): Promise<void> => {
   }
 }
 
-const confirmDelete = (item: PromptTemplate): void => {
+const confirmDelete = (item: TranslationPromptTemplate): void => {
   if (item.scope === 'system') {
     message.warning(t('promptTemplates.messages.systemDeleteForbidden'))
     return
@@ -193,6 +185,16 @@ const formatDate = (dateStr: string | undefined): string => {
 onMounted(() => {
   store.loadTemplates()
 })
+
+watch(
+  () => store.error,
+  (err) => {
+    if (err) {
+      message.error(err, { duration: 0, closable: true })
+      store.error = null
+    }
+  },
+)
 </script>
 
 <template>
@@ -284,11 +286,6 @@ onMounted(() => {
       </div>
     </NCard>
 
-    <!-- 错误提示 -->
-    <NAlert v-if="store.error" type="error" :bordered="false">
-      {{ store.error }}
-    </NAlert>
-
     <!-- 加载骨架屏 -->
     <div v-if="store.loading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
       <NCard v-for="index in 6" :key="index" :bordered="false" class="shadow-sm shadow-lf-shadow">
@@ -358,15 +355,6 @@ onMounted(() => {
           <p v-else class="text-xs italic text-lf-text-subtle">
             {{ t('promptTemplates.card.noPromptContent') }}
           </p>
-
-          <!-- Bootstrap 提示词预览 -->
-          <div
-            v-if="item.bootstrap_prompt_content"
-            class="rounded-lg bg-lf-code-bg px-3 py-2 font-mono text-xs leading-5 text-lf-text-muted line-clamp-3"
-          >
-            <span class="text-brand-500 font-semibold">[Bootstrap]</span>
-            {{ item.bootstrap_prompt_content }}
-          </div>
 
           <!-- 底部：时间 + 操作 -->
           <div class="mt-auto border-t border-lf-border-soft pt-4">
@@ -451,18 +439,6 @@ onMounted(() => {
               v-model="formModel.system_prompt_content"
               :disabled="isSystemScope"
               :rows="6"
-            />
-          </NFormItem>
-
-          <NFormItem
-            :label="t('promptTemplates.form.bootstrapPromptContent')"
-            path="bootstrap_prompt_content"
-          >
-            <PromptTemplateEditor
-              v-model="formModel.bootstrap_prompt_content"
-              :disabled="isSystemScope"
-              :rows="6"
-              variable-set="bootstrap"
             />
           </NFormItem>
         </NForm>

@@ -13,7 +13,10 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/config"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/engine"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 )
 
 type translateOptions struct {
@@ -23,8 +26,8 @@ type translateOptions struct {
 	to            string
 	glossaryPath  string
 	bootstrapMode string
-	profile       string // 覆盖执行轮次使用的翻译策略
-	prompt        string // 覆盖执行轮次使用的提示词模板
+	profile       string
+	prompt        string
 }
 
 func runTranslate(cmd *cobra.Command, rt *appCtx, opts translateOptions) error {
@@ -40,13 +43,11 @@ func runTranslate(cmd *cobra.Command, rt *appCtx, opts translateOptions) error {
 		return err
 	}
 
-	// 加载新格式配置
 	cliCfg, err := config.LoadCLIConfig(rt.configPath)
 	if err != nil {
 		return err
 	}
 
-	// 应用 CLI flag 覆盖
 	if err := applyTranslateFlags(cliCfg, opts); err != nil {
 		return err
 	}
@@ -57,10 +58,12 @@ func runTranslate(cmd *cobra.Command, rt *appCtx, opts translateOptions) error {
 	}
 	defer func() { _ = reporter.Close() }()
 
-	// 从 CLIConfig 构造 engine.Options
 	engOpts, err := buildEngineFromCLIConfig(cliCfg)
 	if err != nil {
 		return err
+	}
+	if engOpts.Config.QA.Enabled {
+		rt.logger.Warn("QA is configured but not yet supported in CLI mode; QA settings will be ignored")
 	}
 	engOpts.Logger = rt.logger
 	engOpts.Reporter = reporter
@@ -95,159 +98,217 @@ func runTranslate(cmd *cobra.Command, rt *appCtx, opts translateOptions) error {
 }
 
 // buildEngineFromCLIConfig 从 CLIConfig 构造 engine.Options。
-//
-// 全局 Config（split/protect/postprocess 等文档级配置）取第一轮的 profile 作为默认。
-// 每个 round 独立解析后端引用、提示词模板和翻译策略。
 func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error) {
 	if len(cliCfg.Execution.Rounds) == 0 {
 		return nil, fmt.Errorf("execution.rounds 不能为空")
 	}
 
-	// ── 1. 取第一轮的 profile 和 prompt 作为全局默认 ──
-	firstRound := cliCfg.Execution.Rounds[0]
-	firstProfile := resolveProfile(cliCfg, firstRound.Profile)
-
-	// 全局 Prompt 配置：翻译模板必填，不再回退到内置默认值
-	firstPromptContent := resolvePromptContent(cliCfg, firstRound.Prompt)
-	if firstPromptContent == "" {
-		return nil, fmt.Errorf("prompt_templates %q has no content (translation prompt is required)", firstRound.Prompt)
+	// 找到第一个 translate 轮次作为主翻译配置
+	var firstTranslateRound *config.CLIConfigTranslateRound
+	for _, r := range cliCfg.Execution.Rounds {
+		if r.Mode == "translate" && r.Translate != nil {
+			firstTranslateRound = r.Translate
+			break
+		}
+	}
+	if firstTranslateRound == nil {
+		return nil, fmt.Errorf("execution.rounds 中必须至少有一个 translate 轮次")
 	}
 
-	cfg := &config.Config{
-		Version:    cliCfg.Version,
+	firstProfile := resolveProfile(cliCfg, firstTranslateRound.Profile)
+
+	firstPromptContent := resolvePromptContent(cliCfg, firstTranslateRound.Prompt)
+	if firstPromptContent == "" {
+		return nil, fmt.Errorf("prompt_templates %q has no content (translation prompt is required)", firstTranslateRound.Prompt)
+	}
+
+	cfg := &engine.Config{
 		SourceLang: cliCfg.SourceLang,
 		TargetLang: cliCfg.TargetLang,
-		Pipeline: config.PipelineConfig{
-			Split:       firstProfile.Split,
-			Protect:     firstProfile.Protect,
-			Postprocess: firstProfile.Postprocess,
-			Translate: config.TranslateConfig{
-				BatchSize:        firstRound.BatchSize,
-				MaxWordsPerBatch: firstRound.MaxWordsPerBatch,
-				Concurrency:      firstRound.Concurrency,
-				FallbackShrink:   firstRound.FallbackShrink,
-				Retry:            firstRound.Retry,
-				Repair:           firstProfile.Repair,
-			},
+		TranslateDefaults: engine.TranslateDefaults{
+			BatchSize:        firstTranslateRound.BatchSize,
+			MaxWordsPerBatch: firstTranslateRound.MaxWordsPerBatch,
+			Concurrency:      firstTranslateRound.Concurrency,
+			FallbackShrink:   firstTranslateRound.FallbackShrink,
+			Retry:            toBackendRetryPolicy(firstTranslateRound.Retry),
 		},
-		Prompt: config.PromptConfig{
-			SystemTemplateContent: firstPromptContent,
+		Repair: repair.Config{
+			Enabled:              firstProfile.Repair.Enabled,
+			JSONStructural:       firstProfile.Repair.JSONStructural,
+			SchemaAliases:        firstProfile.Repair.SchemaAliases,
+			Partial:              firstProfile.Repair.Partial,
+			PartialThreshold:     firstProfile.Repair.PartialThreshold,
+			PlaceholderNormalize: firstProfile.Repair.PlaceholderNormalize,
+			PromptUpgrade:        firstProfile.Repair.PromptUpgrade,
+		}.ToOptions(),
+		Ruby: engine.RubyConfig{
+			Enabled:       firstProfile.Ruby.Enabled,
+			PreserveKinds: firstProfile.Ruby.PreserveKinds,
 		},
-		Glossary: config.GlossaryConfig{
-			Enabled:    cliCfg.Glossary.Enabled,
-			Path:       cliCfg.Glossary.Path,
-			Save:       cliCfg.Glossary.Save,
-			Bootstrap:  firstProfile.Bootstrap,
-			Standalone: cliCfg.Execution.Bootstrap,
+		Glossary: engine.GlossaryConfig{
+			Enabled:   cliCfg.Glossary.Enabled,
+			Path:      cliCfg.Glossary.Path,
+			Save:      cliCfg.Glossary.Save,
+			Bootstrap: firstProfile.Bootstrap,
 		},
-		TranslationMemory: cliCfg.TranslationMemory,
-		Plugins:           cliCfg.Plugins,
-		Output:            cliCfg.Output,
-		Log:               cliCfg.Log,
+		TMEnabled: cliCfg.TranslationMemory.Enabled,
+		QA: qa.Config{
+			Enabled:        firstProfile.QA.Enabled,
+			AutoReject:     firstProfile.QA.AutoReject,
+			LengthMethod:   qa.LengthMethod(firstProfile.QA.LengthMethod),
+			LengthRatioMin: firstProfile.QA.LengthRatioMin,
+			LengthRatioMax: firstProfile.QA.LengthRatioMax,
+		},
 	}
 
-	// ── 1b. 解析独立自举模板引用 ──
-	if cliCfg.Execution.Bootstrap.Enabled && cliCfg.Execution.Bootstrap.Template != "" {
-		pt, ok := cliCfg.PromptTemplates[cliCfg.Execution.Bootstrap.Template]
-		if !ok {
-			return nil, fmt.Errorf("prompt_templates %q not found (referenced by execution.bootstrap.template)", cliCfg.Execution.Bootstrap.Template)
-		}
-		bootstrapContent := pt.BootstrapContent
-		if bootstrapContent == "" && pt.BootstrapFile != "" {
-			data, err := os.ReadFile(pt.BootstrapFile)
-			if err != nil {
-				return nil, fmt.Errorf("read bootstrap file %q: %w", pt.BootstrapFile, err)
-			}
-			bootstrapContent = string(data)
-		}
-		if bootstrapContent == "" {
-			return nil, fmt.Errorf("prompt_templates %q has no bootstrap_content (required when execution.bootstrap.enabled is true)",
-				cliCfg.Execution.Bootstrap.Template)
-		}
-		cfg.Glossary.Standalone.TemplateContent = bootstrapContent
-	}
-
-	// ── 2. 构造每轮配置 ──
 	var rounds []engine.Round
-	for _, r := range cliCfg.Execution.Rounds {
-		// 解析后端引用
+	for i, r := range cliCfg.Execution.Rounds {
 		bCfg, ok := cliCfg.Backends[r.Backend]
 		if !ok {
 			return nil, fmt.Errorf("backend %q not found in backends", r.Backend)
 		}
-		backends, err := engine.BuildBackends([]config.BackendConfig{{
+		b, err := backend.Build(backend.Config{
 			Name:               r.Backend,
 			Type:               bCfg.Type,
 			Enabled:            bCfg.Enabled,
 			RateLimitPerMinute: bCfg.RateLimitPerMinute,
 			Options:            bCfg.Options,
-		}})
+		})
 		if err != nil {
 			return nil, fmt.Errorf("build backend %q: %w", r.Backend, err)
 		}
 
-		// CLI 场景：用 per-backend limiter 包装
 		if bCfg.RateLimitPerMinute > 0 {
 			limiter := backend.NewRateLimiterPerMinute(bCfg.RateLimitPerMinute)
-			for i, b := range backends {
-				backends[i] = backend.NewRateLimitedBackend(b, limiter)
-			}
+			b = backend.NewRateLimitedBackend(b, limiter)
 		}
 
-		// 解析提示词引用，构造轮次级 Renderer
-		var renderer *prompt.Renderer
-		if promptContent := resolvePromptContent(cliCfg, r.Prompt); promptContent != "" {
-			renderer, err = prompt.NewRenderer(config.PromptConfig{
-				SystemTemplateContent: promptContent,
+		switch r.Mode {
+		case "translate":
+			if r.Translate == nil {
+				return nil, fmt.Errorf("execution.rounds[%d]: mode=translate requires translate config", i)
+			}
+			t := r.Translate
+
+			var roundRenderer *prompt.Renderer
+			if promptContent := resolvePromptContent(cliCfg, t.Prompt); promptContent != "" {
+				roundRenderer, err = prompt.NewRenderer(promptContent)
+				if err != nil {
+					return nil, fmt.Errorf("build renderer for prompt %q: %w", t.Prompt, err)
+				}
+			}
+
+			var roundRepair *repair.Config
+			var roundContext *pipeline.ContextConfig
+			var roundPostprocess *pipeline.PostprocessConfig
+			var roundRuby engine.RubyConfig
+			var roundProtectRules []string
+			if profileCfg, ok := cliCfg.TranslationProfiles[t.Profile]; ok {
+				rc := repair.Config{
+					Enabled:              profileCfg.Repair.Enabled,
+					JSONStructural:       profileCfg.Repair.JSONStructural,
+					SchemaAliases:        profileCfg.Repair.SchemaAliases,
+					Partial:              profileCfg.Repair.Partial,
+					PartialThreshold:     profileCfg.Repair.PartialThreshold,
+					PlaceholderNormalize: profileCfg.Repair.PlaceholderNormalize,
+					PromptUpgrade:        profileCfg.Repair.PromptUpgrade,
+				}
+				roundRepair = &rc
+				ctx := pipeline.ContextConfig{
+					Enabled:  profileCfg.Context.Enabled,
+					Before:   profileCfg.Context.Before,
+					After:    profileCfg.Context.After,
+					MaxChars: profileCfg.Context.MaxChars,
+				}
+				roundContext = &ctx
+				if profileCfg.Postprocess.Enabled {
+					pp := pipeline.PostprocessConfig{
+						TrimSpaces: profileCfg.Postprocess.TrimSpaces,
+					}
+					roundPostprocess = &pp
+				}
+				roundRuby = engine.RubyConfig{
+					Enabled:       profileCfg.Ruby.Enabled,
+					PreserveKinds: profileCfg.Ruby.PreserveKinds,
+				}
+				if profileCfg.Protect.Enabled {
+					roundProtectRules = profileCfg.Protect.Rules
+				}
+			}
+
+			rounds = append(rounds, engine.Round{
+				Backend:           b,
+				BatchSize:         t.BatchSize,
+				MaxWordsPerBatch:  t.MaxWordsPerBatch,
+				Concurrency:       t.Concurrency,
+				FallbackShrink:    t.FallbackShrink,
+				Retry:             toBackendRetryPolicy(t.Retry),
+				Renderer:          roundRenderer,
+				Repair:            roundRepair,
+				ResponseMode:      responseModeFromOptions(bCfg.Options),
+				Mode:              pipeline.RoundModeTranslate,
+				ProtectRules:      roundProtectRules,
+				RubyEnabled:       roundRuby.Enabled,
+				RubyPreserveKinds: roundRuby.PreserveKinds,
+				Context:           roundContext,
+				Postprocess:       roundPostprocess,
 			})
-			if err != nil {
-				return nil, fmt.Errorf("build renderer for prompt %q: %w", r.Prompt, err)
+
+		case "extract":
+			if r.Extract == nil {
+				return nil, fmt.Errorf("execution.rounds[%d]: mode=extract requires extract config", i)
 			}
-		}
+			e := r.Extract
 
-		// 解析策略引用，构造轮次级 Repair
-		var roundRepair *config.RepairConfig
-		if profileCfg, ok := cliCfg.TranslationProfiles[r.Profile]; ok {
-			rc := profileCfg.Repair
-			roundRepair = &rc
-		}
+			var extractRenderer *prompt.BootstrapRenderer
+			if pt, ok := cliCfg.PromptTemplates[e.Template]; ok && pt.Content != "" {
+				extractRenderer, err = prompt.NewBootstrapRenderer(pt.Content)
+				if err != nil {
+					return nil, fmt.Errorf("build bootstrap renderer for template %q: %w", e.Template, err)
+				}
+			}
 
-		rounds = append(rounds, engine.Round{
-			Name:             r.Name,
-			Backend:          backends[0],
-			BatchSize:        r.BatchSize,
-			MaxWordsPerBatch: r.MaxWordsPerBatch,
-			Concurrency:      r.Concurrency,
-			FallbackShrink:   r.FallbackShrink,
-			Retry: backend.RetryPolicy{
-				MaxAttempts: r.Retry.MaxAttempts,
-				Backoff:     time.Duration(r.Retry.BackoffMs) * time.Millisecond,
-				Jitter:      r.Retry.Jitter,
-			},
-			Renderer:     renderer,
-			Repair:       roundRepair,
-			ResponseMode: responseModeFromOptions(bCfg.Options),
-		})
+			rounds = append(rounds, engine.Round{
+				Backend:      b,
+				BatchSize:    e.BatchSize,
+				Concurrency:  e.Concurrency,
+				Retry:        toBackendRetryPolicy(e.Retry),
+				Mode:         pipeline.RoundModeExtract,
+				ResponseMode: responseModeFromOptions(bCfg.Options),
+
+				ExtractRenderer:             extractRenderer,
+				ExtractMaxTermsPer1000Chars: e.MaxTermsPer1000Chars,
+				ExtractMinSourceLen:         e.MinSourceLen,
+				ExtractMaxWordsPerBatch:     e.MaxWordsPerBatch,
+			})
+
+		default:
+			return nil, fmt.Errorf("execution.rounds[%d]: unsupported mode %q", i, r.Mode)
+		}
 	}
 
-	// 解析注音对齐重试后端
 	var rubyRetryBackends []backend.Backend
-	if retryName := cfg.Pipeline.Ruby.RetryBackend; retryName != "" {
+	retryName := firstProfile.Ruby.RetryBackend
+	if retryName != "" {
 		bCfg, ok := cliCfg.Backends[retryName]
 		if !ok {
 			return nil, fmt.Errorf("ruby retry backend %q not found in backends", retryName)
 		}
-		b, bErr := engine.BuildBackends([]config.BackendConfig{{
+		b, bErr := backend.Build(backend.Config{
 			Name:               retryName,
 			Type:               bCfg.Type,
 			Enabled:            bCfg.Enabled,
 			RateLimitPerMinute: bCfg.RateLimitPerMinute,
 			Options:            bCfg.Options,
-		}})
+		})
 		if bErr != nil {
 			return nil, fmt.Errorf("build ruby retry backend %q: %w", retryName, bErr)
 		}
-		rubyRetryBackends = b
+		if bCfg.RateLimitPerMinute > 0 {
+			limiter := backend.NewRateLimiterPerMinute(bCfg.RateLimitPerMinute)
+			b = backend.NewRateLimitedBackend(b, limiter)
+		}
+		rubyRetryBackends = []backend.Backend{b}
 	}
 
 	return &engine.Options{
@@ -257,8 +318,6 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 	}, nil
 }
 
-// resolveProfile 从 CLIConfig 的 translation_profiles map 中查找策略。
-// 未找到时返回零值。
 func resolveProfile(cliCfg *config.CLIConfig, name string) config.CLIConfigTranslationProfile {
 	if p, ok := cliCfg.TranslationProfiles[name]; ok {
 		return p
@@ -266,8 +325,6 @@ func resolveProfile(cliCfg *config.CLIConfig, name string) config.CLIConfigTrans
 	return config.CLIConfigTranslationProfile{}
 }
 
-// resolvePromptContent 从 CLIConfig 的 prompt_templates map 中查找提示词内容。
-// 未找到时返回空串（使用内置默认值）。
 func resolvePromptContent(cliCfg *config.CLIConfig, name string) string {
 	if pt, ok := cliCfg.PromptTemplates[name]; ok {
 		return pt.Content
@@ -275,16 +332,13 @@ func resolvePromptContent(cliCfg *config.CLIConfig, name string) string {
 	return ""
 }
 
-// translateSingleFile 使用新的统一 Engine.Translate() API 翻译单个文件。
-// 流程：解析文件 → 构建 Document → eng.Translate() → 渲染输出。
+// translateSingleFile 使用 TranslateRound 轮次循环翻译单个文件。
 func translateSingleFile(ctx context.Context, eng *engine.Engine, fj FileJob, sourceLang, targetLang string) error {
-	// 1. 检测格式
 	p, err := parser.DetectByExt(fj.InputPath)
 	if err != nil {
 		return err
 	}
 
-	// 2. 解析文件
 	reader, err := os.Open(fj.InputPath)
 	if err != nil {
 		return fmt.Errorf("cli: open source: %w", err)
@@ -295,7 +349,6 @@ func translateSingleFile(ctx context.Context, eng *engine.Engine, fj FileJob, so
 		return fmt.Errorf("cli: parse: %w", parseErr)
 	}
 
-	// 3. 应用语言覆盖
 	if sourceLang != "" {
 		doc.SourceLang = sourceLang
 	}
@@ -303,38 +356,95 @@ func translateSingleFile(ctx context.Context, eng *engine.Engine, fj FileJob, so
 		doc.TargetLang = targetLang
 	}
 
-	// 4. 翻译（使用新的统一 API）
-	if _, err := eng.Translate(ctx, doc); err != nil {
-		return fmt.Errorf("cli: translate: %w", err)
+	// 轮次循环
+	for roundIdx := range eng.Rounds() {
+		segmentIndexes := collectPendingOrFailed(doc, roundIdx)
+		if len(segmentIndexes) == 0 {
+			break
+		}
+		if roundIdx > 0 {
+			restoreFailedSegments(doc, segmentIndexes)
+		}
+
+		_, err := eng.ExecuteRound(ctx, roundIdx, doc, engine.WithSegmentFilter(segmentIndexes))
+		if err != nil {
+			return fmt.Errorf("cli: translate round %d: %w", roundIdx, err)
+		}
 	}
 
-	// 5. 重新打开原始文件用于渲染
 	original, err := os.Open(fj.InputPath)
 	if err != nil {
 		return fmt.Errorf("cli: reopen source: %w", err)
 	}
 	defer func() { _ = original.Close() }()
 
-	// 6. 创建输出 writer
 	writer, err := createAtomicWriter(fj.OutputPath)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = writer.Close() }()
 
-	// 7. 渲染
 	if err := p.Render(ctx, doc, original, writer); err != nil {
 		return fmt.Errorf("cli: render: %w", err)
 	}
 
+	eng.SaveGlossary(ctx)
 	return nil
 }
 
-// responseModeFromOptions 从后端 Options map 中读取 response_format 值。
-// 用于设置 engine.Round.ResponseMode，使 pipeline 能区分 json/text 模式。
+// collectPendingOrFailed 收集待翻译或前一轮失败的段落索引。
+func collectPendingOrFailed(doc *pipeline.Document, roundIdx int) []int {
+	if roundIdx == 0 {
+		// 首轮：收集所有 pending 段落
+		var indexes []int
+		for i, seg := range doc.Segments {
+			if seg.Skip || !seg.Translate {
+				continue
+			}
+			if seg.Target == "" {
+				indexes = append(indexes, i)
+			}
+		}
+		return indexes
+	}
+	// 后续轮次：收集失败段落（Target 为空）
+	failedSet := pipeline.ParseFailedIndices(doc.Vars)
+	var indexes []int
+	for idx := range failedSet {
+		indexes = append(indexes, idx)
+	}
+	return indexes
+}
+
+// restoreFailedSegments 还原失败段落的 Source 为 OriginalSource。
+// CLI 每轮共享 Document，translate 模式 Protect 修改 seg.Source，
+// 下一轮需要还原以重新执行 Protect。
+func restoreFailedSegments(doc *pipeline.Document, indexes []int) {
+	for _, idx := range indexes {
+		if idx < 0 || idx >= len(doc.Segments) {
+			continue
+		}
+		seg := &doc.Segments[idx]
+		if seg.OriginalSource != "" {
+			seg.Source = seg.OriginalSource
+		}
+		seg.Protected = nil
+		seg.Target = ""
+	}
+}
+
 func responseModeFromOptions(opts map[string]any) string {
 	if v, ok := opts["response_format"].(string); ok {
 		return v
 	}
 	return ""
+}
+
+// toBackendRetryPolicy 将 config.RetryConfig 转换为 backend.RetryPolicy。
+func toBackendRetryPolicy(cfg config.RetryConfig) backend.RetryPolicy {
+	return backend.RetryPolicy{
+		MaxAttempts: cfg.MaxAttempts,
+		Backoff:     time.Duration(cfg.BackoffMs) * time.Millisecond,
+		Jitter:      cfg.Jitter,
+	}
 }

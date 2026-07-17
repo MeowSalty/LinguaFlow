@@ -113,20 +113,6 @@ func (_c *ExecutionPlanTemplateCreate) SetNillableOwnerOrgID(v *int) *ExecutionP
 	return _c
 }
 
-// SetBootstrap sets the "bootstrap" field.
-func (_c *ExecutionPlanTemplateCreate) SetBootstrap(v schema.ExecutionPlanBootstrapConfig) *ExecutionPlanTemplateCreate {
-	_c.mutation.SetBootstrap(v)
-	return _c
-}
-
-// SetNillableBootstrap sets the "bootstrap" field if the given value is not nil.
-func (_c *ExecutionPlanTemplateCreate) SetNillableBootstrap(v *schema.ExecutionPlanBootstrapConfig) *ExecutionPlanTemplateCreate {
-	if v != nil {
-		_c.SetBootstrap(*v)
-	}
-	return _c
-}
-
 // SetRubyRetry sets the "ruby_retry" field.
 func (_c *ExecutionPlanTemplateCreate) SetRubyRetry(v schema.ExecutionPlanRubyRetryConfig) *ExecutionPlanTemplateCreate {
 	_c.mutation.SetRubyRetry(v)
@@ -290,10 +276,6 @@ func (_c *ExecutionPlanTemplateCreate) createSpec() (*ExecutionPlanTemplate, *sq
 	if value, ok := _c.mutation.Scope(); ok {
 		_spec.SetField(executionplantemplate.FieldScope, field.TypeString, value)
 		_node.Scope = value
-	}
-	if value, ok := _c.mutation.Bootstrap(); ok {
-		_spec.SetField(executionplantemplate.FieldBootstrap, field.TypeJSON, value)
-		_node.Bootstrap = value
 	}
 	if value, ok := _c.mutation.RubyRetry(); ok {
 		_spec.SetField(executionplantemplate.FieldRubyRetry, field.TypeJSON, value)

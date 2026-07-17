@@ -13,16 +13,18 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/pruneprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
@@ -136,19 +138,19 @@ func (_u *UserUpdate) SetNillableActive(v *bool) *UserUpdate {
 	return _u
 }
 
-// AddCreatedTranslationJobIDs adds the "created_translation_jobs" edge to the TranslationJob entity by IDs.
-func (_u *UserUpdate) AddCreatedTranslationJobIDs(ids ...int) *UserUpdate {
-	_u.mutation.AddCreatedTranslationJobIDs(ids...)
+// AddCreatedJobIDs adds the "created_jobs" edge to the Job entity by IDs.
+func (_u *UserUpdate) AddCreatedJobIDs(ids ...int) *UserUpdate {
+	_u.mutation.AddCreatedJobIDs(ids...)
 	return _u
 }
 
-// AddCreatedTranslationJobs adds the "created_translation_jobs" edges to the TranslationJob entity.
-func (_u *UserUpdate) AddCreatedTranslationJobs(v ...*TranslationJob) *UserUpdate {
+// AddCreatedJobs adds the "created_jobs" edges to the Job entity.
+func (_u *UserUpdate) AddCreatedJobs(v ...*Job) *UserUpdate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.AddCreatedTranslationJobIDs(ids...)
+	return _u.AddCreatedJobIDs(ids...)
 }
 
 // AddReviewedSegmentIDs adds the "reviewed_segments" edge to the Segment entity by IDs.
@@ -256,34 +258,64 @@ func (_u *UserUpdate) AddUsageRecords(v ...*UsageRecord) *UserUpdate {
 	return _u.AddUsageRecordIDs(ids...)
 }
 
-// AddPromptTemplateIDs adds the "prompt_templates" edge to the PromptTemplate entity by IDs.
-func (_u *UserUpdate) AddPromptTemplateIDs(ids ...int) *UserUpdate {
-	_u.mutation.AddPromptTemplateIDs(ids...)
+// AddTranslationPromptTemplateIDs adds the "translation_prompt_templates" edge to the TranslationPromptTemplate entity by IDs.
+func (_u *UserUpdate) AddTranslationPromptTemplateIDs(ids ...int) *UserUpdate {
+	_u.mutation.AddTranslationPromptTemplateIDs(ids...)
 	return _u
 }
 
-// AddPromptTemplates adds the "prompt_templates" edges to the PromptTemplate entity.
-func (_u *UserUpdate) AddPromptTemplates(v ...*PromptTemplate) *UserUpdate {
+// AddTranslationPromptTemplates adds the "translation_prompt_templates" edges to the TranslationPromptTemplate entity.
+func (_u *UserUpdate) AddTranslationPromptTemplates(v ...*TranslationPromptTemplate) *UserUpdate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.AddPromptTemplateIDs(ids...)
+	return _u.AddTranslationPromptTemplateIDs(ids...)
 }
 
-// AddTranslationProfileIDs adds the "translation_profiles" edge to the TranslationProfile entity by IDs.
-func (_u *UserUpdate) AddTranslationProfileIDs(ids ...int) *UserUpdate {
-	_u.mutation.AddTranslationProfileIDs(ids...)
+// AddBootstrapPromptTemplateIDs adds the "bootstrap_prompt_templates" edge to the BootstrapPromptTemplate entity by IDs.
+func (_u *UserUpdate) AddBootstrapPromptTemplateIDs(ids ...int) *UserUpdate {
+	_u.mutation.AddBootstrapPromptTemplateIDs(ids...)
 	return _u
 }
 
-// AddTranslationProfiles adds the "translation_profiles" edges to the TranslationProfile entity.
-func (_u *UserUpdate) AddTranslationProfiles(v ...*TranslationProfile) *UserUpdate {
+// AddBootstrapPromptTemplates adds the "bootstrap_prompt_templates" edges to the BootstrapPromptTemplate entity.
+func (_u *UserUpdate) AddBootstrapPromptTemplates(v ...*BootstrapPromptTemplate) *UserUpdate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.AddTranslationProfileIDs(ids...)
+	return _u.AddBootstrapPromptTemplateIDs(ids...)
+}
+
+// AddPrunePromptTemplateIDs adds the "prune_prompt_templates" edge to the PrunePromptTemplate entity by IDs.
+func (_u *UserUpdate) AddPrunePromptTemplateIDs(ids ...int) *UserUpdate {
+	_u.mutation.AddPrunePromptTemplateIDs(ids...)
+	return _u
+}
+
+// AddPrunePromptTemplates adds the "prune_prompt_templates" edges to the PrunePromptTemplate entity.
+func (_u *UserUpdate) AddPrunePromptTemplates(v ...*PrunePromptTemplate) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddPrunePromptTemplateIDs(ids...)
+}
+
+// AddExecutionProfileIDs adds the "execution_profiles" edge to the ExecutionProfile entity by IDs.
+func (_u *UserUpdate) AddExecutionProfileIDs(ids ...int) *UserUpdate {
+	_u.mutation.AddExecutionProfileIDs(ids...)
+	return _u
+}
+
+// AddExecutionProfiles adds the "execution_profiles" edges to the ExecutionProfile entity.
+func (_u *UserUpdate) AddExecutionProfiles(v ...*ExecutionProfile) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddExecutionProfileIDs(ids...)
 }
 
 // AddExecutionPlanTemplateIDs adds the "execution_plan_templates" edge to the ExecutionPlanTemplate entity by IDs.
@@ -321,25 +353,25 @@ func (_u *UserUpdate) Mutation() *UserMutation {
 	return _u.mutation
 }
 
-// ClearCreatedTranslationJobs clears all "created_translation_jobs" edges to the TranslationJob entity.
-func (_u *UserUpdate) ClearCreatedTranslationJobs() *UserUpdate {
-	_u.mutation.ClearCreatedTranslationJobs()
+// ClearCreatedJobs clears all "created_jobs" edges to the Job entity.
+func (_u *UserUpdate) ClearCreatedJobs() *UserUpdate {
+	_u.mutation.ClearCreatedJobs()
 	return _u
 }
 
-// RemoveCreatedTranslationJobIDs removes the "created_translation_jobs" edge to TranslationJob entities by IDs.
-func (_u *UserUpdate) RemoveCreatedTranslationJobIDs(ids ...int) *UserUpdate {
-	_u.mutation.RemoveCreatedTranslationJobIDs(ids...)
+// RemoveCreatedJobIDs removes the "created_jobs" edge to Job entities by IDs.
+func (_u *UserUpdate) RemoveCreatedJobIDs(ids ...int) *UserUpdate {
+	_u.mutation.RemoveCreatedJobIDs(ids...)
 	return _u
 }
 
-// RemoveCreatedTranslationJobs removes "created_translation_jobs" edges to TranslationJob entities.
-func (_u *UserUpdate) RemoveCreatedTranslationJobs(v ...*TranslationJob) *UserUpdate {
+// RemoveCreatedJobs removes "created_jobs" edges to Job entities.
+func (_u *UserUpdate) RemoveCreatedJobs(v ...*Job) *UserUpdate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.RemoveCreatedTranslationJobIDs(ids...)
+	return _u.RemoveCreatedJobIDs(ids...)
 }
 
 // ClearReviewedSegments clears all "reviewed_segments" edges to the Segment entity.
@@ -489,46 +521,88 @@ func (_u *UserUpdate) RemoveUsageRecords(v ...*UsageRecord) *UserUpdate {
 	return _u.RemoveUsageRecordIDs(ids...)
 }
 
-// ClearPromptTemplates clears all "prompt_templates" edges to the PromptTemplate entity.
-func (_u *UserUpdate) ClearPromptTemplates() *UserUpdate {
-	_u.mutation.ClearPromptTemplates()
+// ClearTranslationPromptTemplates clears all "translation_prompt_templates" edges to the TranslationPromptTemplate entity.
+func (_u *UserUpdate) ClearTranslationPromptTemplates() *UserUpdate {
+	_u.mutation.ClearTranslationPromptTemplates()
 	return _u
 }
 
-// RemovePromptTemplateIDs removes the "prompt_templates" edge to PromptTemplate entities by IDs.
-func (_u *UserUpdate) RemovePromptTemplateIDs(ids ...int) *UserUpdate {
-	_u.mutation.RemovePromptTemplateIDs(ids...)
+// RemoveTranslationPromptTemplateIDs removes the "translation_prompt_templates" edge to TranslationPromptTemplate entities by IDs.
+func (_u *UserUpdate) RemoveTranslationPromptTemplateIDs(ids ...int) *UserUpdate {
+	_u.mutation.RemoveTranslationPromptTemplateIDs(ids...)
 	return _u
 }
 
-// RemovePromptTemplates removes "prompt_templates" edges to PromptTemplate entities.
-func (_u *UserUpdate) RemovePromptTemplates(v ...*PromptTemplate) *UserUpdate {
+// RemoveTranslationPromptTemplates removes "translation_prompt_templates" edges to TranslationPromptTemplate entities.
+func (_u *UserUpdate) RemoveTranslationPromptTemplates(v ...*TranslationPromptTemplate) *UserUpdate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.RemovePromptTemplateIDs(ids...)
+	return _u.RemoveTranslationPromptTemplateIDs(ids...)
 }
 
-// ClearTranslationProfiles clears all "translation_profiles" edges to the TranslationProfile entity.
-func (_u *UserUpdate) ClearTranslationProfiles() *UserUpdate {
-	_u.mutation.ClearTranslationProfiles()
+// ClearBootstrapPromptTemplates clears all "bootstrap_prompt_templates" edges to the BootstrapPromptTemplate entity.
+func (_u *UserUpdate) ClearBootstrapPromptTemplates() *UserUpdate {
+	_u.mutation.ClearBootstrapPromptTemplates()
 	return _u
 }
 
-// RemoveTranslationProfileIDs removes the "translation_profiles" edge to TranslationProfile entities by IDs.
-func (_u *UserUpdate) RemoveTranslationProfileIDs(ids ...int) *UserUpdate {
-	_u.mutation.RemoveTranslationProfileIDs(ids...)
+// RemoveBootstrapPromptTemplateIDs removes the "bootstrap_prompt_templates" edge to BootstrapPromptTemplate entities by IDs.
+func (_u *UserUpdate) RemoveBootstrapPromptTemplateIDs(ids ...int) *UserUpdate {
+	_u.mutation.RemoveBootstrapPromptTemplateIDs(ids...)
 	return _u
 }
 
-// RemoveTranslationProfiles removes "translation_profiles" edges to TranslationProfile entities.
-func (_u *UserUpdate) RemoveTranslationProfiles(v ...*TranslationProfile) *UserUpdate {
+// RemoveBootstrapPromptTemplates removes "bootstrap_prompt_templates" edges to BootstrapPromptTemplate entities.
+func (_u *UserUpdate) RemoveBootstrapPromptTemplates(v ...*BootstrapPromptTemplate) *UserUpdate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.RemoveTranslationProfileIDs(ids...)
+	return _u.RemoveBootstrapPromptTemplateIDs(ids...)
+}
+
+// ClearPrunePromptTemplates clears all "prune_prompt_templates" edges to the PrunePromptTemplate entity.
+func (_u *UserUpdate) ClearPrunePromptTemplates() *UserUpdate {
+	_u.mutation.ClearPrunePromptTemplates()
+	return _u
+}
+
+// RemovePrunePromptTemplateIDs removes the "prune_prompt_templates" edge to PrunePromptTemplate entities by IDs.
+func (_u *UserUpdate) RemovePrunePromptTemplateIDs(ids ...int) *UserUpdate {
+	_u.mutation.RemovePrunePromptTemplateIDs(ids...)
+	return _u
+}
+
+// RemovePrunePromptTemplates removes "prune_prompt_templates" edges to PrunePromptTemplate entities.
+func (_u *UserUpdate) RemovePrunePromptTemplates(v ...*PrunePromptTemplate) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemovePrunePromptTemplateIDs(ids...)
+}
+
+// ClearExecutionProfiles clears all "execution_profiles" edges to the ExecutionProfile entity.
+func (_u *UserUpdate) ClearExecutionProfiles() *UserUpdate {
+	_u.mutation.ClearExecutionProfiles()
+	return _u
+}
+
+// RemoveExecutionProfileIDs removes the "execution_profiles" edge to ExecutionProfile entities by IDs.
+func (_u *UserUpdate) RemoveExecutionProfileIDs(ids ...int) *UserUpdate {
+	_u.mutation.RemoveExecutionProfileIDs(ids...)
+	return _u
+}
+
+// RemoveExecutionProfiles removes "execution_profiles" edges to ExecutionProfile entities.
+func (_u *UserUpdate) RemoveExecutionProfiles(v ...*ExecutionProfile) *UserUpdate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveExecutionProfileIDs(ids...)
 }
 
 // ClearExecutionPlanTemplates clears all "execution_plan_templates" edges to the ExecutionPlanTemplate entity.
@@ -665,28 +739,28 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	if value, ok := _u.mutation.Active(); ok {
 		_spec.SetField(user.FieldActive, field.TypeBool, value)
 	}
-	if _u.mutation.CreatedTranslationJobsCleared() {
+	if _u.mutation.CreatedJobsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.CreatedTranslationJobsTable,
-			Columns: []string{user.CreatedTranslationJobsColumn},
+			Table:   user.CreatedJobsTable,
+			Columns: []string{user.CreatedJobsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.RemovedCreatedTranslationJobsIDs(); len(nodes) > 0 && !_u.mutation.CreatedTranslationJobsCleared() {
+	if nodes := _u.mutation.RemovedCreatedJobsIDs(); len(nodes) > 0 && !_u.mutation.CreatedJobsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.CreatedTranslationJobsTable,
-			Columns: []string{user.CreatedTranslationJobsColumn},
+			Table:   user.CreatedJobsTable,
+			Columns: []string{user.CreatedJobsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -694,15 +768,15 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.CreatedTranslationJobsIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.CreatedJobsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.CreatedTranslationJobsTable,
-			Columns: []string{user.CreatedTranslationJobsColumn},
+			Table:   user.CreatedJobsTable,
+			Columns: []string{user.CreatedJobsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -1025,28 +1099,28 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if _u.mutation.PromptTemplatesCleared() {
+	if _u.mutation.TranslationPromptTemplatesCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.PromptTemplatesTable,
-			Columns: []string{user.PromptTemplatesColumn},
+			Table:   user.TranslationPromptTemplatesTable,
+			Columns: []string{user.TranslationPromptTemplatesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(prompttemplate.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(translationprompttemplate.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.RemovedPromptTemplatesIDs(); len(nodes) > 0 && !_u.mutation.PromptTemplatesCleared() {
+	if nodes := _u.mutation.RemovedTranslationPromptTemplatesIDs(); len(nodes) > 0 && !_u.mutation.TranslationPromptTemplatesCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.PromptTemplatesTable,
-			Columns: []string{user.PromptTemplatesColumn},
+			Table:   user.TranslationPromptTemplatesTable,
+			Columns: []string{user.TranslationPromptTemplatesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(prompttemplate.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(translationprompttemplate.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -1054,15 +1128,15 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.PromptTemplatesIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.TranslationPromptTemplatesIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.PromptTemplatesTable,
-			Columns: []string{user.PromptTemplatesColumn},
+			Table:   user.TranslationPromptTemplatesTable,
+			Columns: []string{user.TranslationPromptTemplatesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(prompttemplate.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(translationprompttemplate.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -1070,28 +1144,28 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if _u.mutation.TranslationProfilesCleared() {
+	if _u.mutation.BootstrapPromptTemplatesCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.TranslationProfilesTable,
-			Columns: []string{user.TranslationProfilesColumn},
+			Table:   user.BootstrapPromptTemplatesTable,
+			Columns: []string{user.BootstrapPromptTemplatesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(bootstrapprompttemplate.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.RemovedTranslationProfilesIDs(); len(nodes) > 0 && !_u.mutation.TranslationProfilesCleared() {
+	if nodes := _u.mutation.RemovedBootstrapPromptTemplatesIDs(); len(nodes) > 0 && !_u.mutation.BootstrapPromptTemplatesCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.TranslationProfilesTable,
-			Columns: []string{user.TranslationProfilesColumn},
+			Table:   user.BootstrapPromptTemplatesTable,
+			Columns: []string{user.BootstrapPromptTemplatesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(bootstrapprompttemplate.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -1099,15 +1173,105 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.TranslationProfilesIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.BootstrapPromptTemplatesIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.TranslationProfilesTable,
-			Columns: []string{user.TranslationProfilesColumn},
+			Table:   user.BootstrapPromptTemplatesTable,
+			Columns: []string{user.BootstrapPromptTemplatesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(bootstrapprompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.PrunePromptTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PrunePromptTemplatesTable,
+			Columns: []string{user.PrunePromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(pruneprompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedPrunePromptTemplatesIDs(); len(nodes) > 0 && !_u.mutation.PrunePromptTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PrunePromptTemplatesTable,
+			Columns: []string{user.PrunePromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(pruneprompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.PrunePromptTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PrunePromptTemplatesTable,
+			Columns: []string{user.PrunePromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(pruneprompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ExecutionProfilesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExecutionProfilesTable,
+			Columns: []string{user.ExecutionProfilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionprofile.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedExecutionProfilesIDs(); len(nodes) > 0 && !_u.mutation.ExecutionProfilesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExecutionProfilesTable,
+			Columns: []string{user.ExecutionProfilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionprofile.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ExecutionProfilesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExecutionProfilesTable,
+			Columns: []string{user.ExecutionProfilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionprofile.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -1321,19 +1485,19 @@ func (_u *UserUpdateOne) SetNillableActive(v *bool) *UserUpdateOne {
 	return _u
 }
 
-// AddCreatedTranslationJobIDs adds the "created_translation_jobs" edge to the TranslationJob entity by IDs.
-func (_u *UserUpdateOne) AddCreatedTranslationJobIDs(ids ...int) *UserUpdateOne {
-	_u.mutation.AddCreatedTranslationJobIDs(ids...)
+// AddCreatedJobIDs adds the "created_jobs" edge to the Job entity by IDs.
+func (_u *UserUpdateOne) AddCreatedJobIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.AddCreatedJobIDs(ids...)
 	return _u
 }
 
-// AddCreatedTranslationJobs adds the "created_translation_jobs" edges to the TranslationJob entity.
-func (_u *UserUpdateOne) AddCreatedTranslationJobs(v ...*TranslationJob) *UserUpdateOne {
+// AddCreatedJobs adds the "created_jobs" edges to the Job entity.
+func (_u *UserUpdateOne) AddCreatedJobs(v ...*Job) *UserUpdateOne {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.AddCreatedTranslationJobIDs(ids...)
+	return _u.AddCreatedJobIDs(ids...)
 }
 
 // AddReviewedSegmentIDs adds the "reviewed_segments" edge to the Segment entity by IDs.
@@ -1441,34 +1605,64 @@ func (_u *UserUpdateOne) AddUsageRecords(v ...*UsageRecord) *UserUpdateOne {
 	return _u.AddUsageRecordIDs(ids...)
 }
 
-// AddPromptTemplateIDs adds the "prompt_templates" edge to the PromptTemplate entity by IDs.
-func (_u *UserUpdateOne) AddPromptTemplateIDs(ids ...int) *UserUpdateOne {
-	_u.mutation.AddPromptTemplateIDs(ids...)
+// AddTranslationPromptTemplateIDs adds the "translation_prompt_templates" edge to the TranslationPromptTemplate entity by IDs.
+func (_u *UserUpdateOne) AddTranslationPromptTemplateIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.AddTranslationPromptTemplateIDs(ids...)
 	return _u
 }
 
-// AddPromptTemplates adds the "prompt_templates" edges to the PromptTemplate entity.
-func (_u *UserUpdateOne) AddPromptTemplates(v ...*PromptTemplate) *UserUpdateOne {
+// AddTranslationPromptTemplates adds the "translation_prompt_templates" edges to the TranslationPromptTemplate entity.
+func (_u *UserUpdateOne) AddTranslationPromptTemplates(v ...*TranslationPromptTemplate) *UserUpdateOne {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.AddPromptTemplateIDs(ids...)
+	return _u.AddTranslationPromptTemplateIDs(ids...)
 }
 
-// AddTranslationProfileIDs adds the "translation_profiles" edge to the TranslationProfile entity by IDs.
-func (_u *UserUpdateOne) AddTranslationProfileIDs(ids ...int) *UserUpdateOne {
-	_u.mutation.AddTranslationProfileIDs(ids...)
+// AddBootstrapPromptTemplateIDs adds the "bootstrap_prompt_templates" edge to the BootstrapPromptTemplate entity by IDs.
+func (_u *UserUpdateOne) AddBootstrapPromptTemplateIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.AddBootstrapPromptTemplateIDs(ids...)
 	return _u
 }
 
-// AddTranslationProfiles adds the "translation_profiles" edges to the TranslationProfile entity.
-func (_u *UserUpdateOne) AddTranslationProfiles(v ...*TranslationProfile) *UserUpdateOne {
+// AddBootstrapPromptTemplates adds the "bootstrap_prompt_templates" edges to the BootstrapPromptTemplate entity.
+func (_u *UserUpdateOne) AddBootstrapPromptTemplates(v ...*BootstrapPromptTemplate) *UserUpdateOne {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.AddTranslationProfileIDs(ids...)
+	return _u.AddBootstrapPromptTemplateIDs(ids...)
+}
+
+// AddPrunePromptTemplateIDs adds the "prune_prompt_templates" edge to the PrunePromptTemplate entity by IDs.
+func (_u *UserUpdateOne) AddPrunePromptTemplateIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.AddPrunePromptTemplateIDs(ids...)
+	return _u
+}
+
+// AddPrunePromptTemplates adds the "prune_prompt_templates" edges to the PrunePromptTemplate entity.
+func (_u *UserUpdateOne) AddPrunePromptTemplates(v ...*PrunePromptTemplate) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddPrunePromptTemplateIDs(ids...)
+}
+
+// AddExecutionProfileIDs adds the "execution_profiles" edge to the ExecutionProfile entity by IDs.
+func (_u *UserUpdateOne) AddExecutionProfileIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.AddExecutionProfileIDs(ids...)
+	return _u
+}
+
+// AddExecutionProfiles adds the "execution_profiles" edges to the ExecutionProfile entity.
+func (_u *UserUpdateOne) AddExecutionProfiles(v ...*ExecutionProfile) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.AddExecutionProfileIDs(ids...)
 }
 
 // AddExecutionPlanTemplateIDs adds the "execution_plan_templates" edge to the ExecutionPlanTemplate entity by IDs.
@@ -1506,25 +1700,25 @@ func (_u *UserUpdateOne) Mutation() *UserMutation {
 	return _u.mutation
 }
 
-// ClearCreatedTranslationJobs clears all "created_translation_jobs" edges to the TranslationJob entity.
-func (_u *UserUpdateOne) ClearCreatedTranslationJobs() *UserUpdateOne {
-	_u.mutation.ClearCreatedTranslationJobs()
+// ClearCreatedJobs clears all "created_jobs" edges to the Job entity.
+func (_u *UserUpdateOne) ClearCreatedJobs() *UserUpdateOne {
+	_u.mutation.ClearCreatedJobs()
 	return _u
 }
 
-// RemoveCreatedTranslationJobIDs removes the "created_translation_jobs" edge to TranslationJob entities by IDs.
-func (_u *UserUpdateOne) RemoveCreatedTranslationJobIDs(ids ...int) *UserUpdateOne {
-	_u.mutation.RemoveCreatedTranslationJobIDs(ids...)
+// RemoveCreatedJobIDs removes the "created_jobs" edge to Job entities by IDs.
+func (_u *UserUpdateOne) RemoveCreatedJobIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.RemoveCreatedJobIDs(ids...)
 	return _u
 }
 
-// RemoveCreatedTranslationJobs removes "created_translation_jobs" edges to TranslationJob entities.
-func (_u *UserUpdateOne) RemoveCreatedTranslationJobs(v ...*TranslationJob) *UserUpdateOne {
+// RemoveCreatedJobs removes "created_jobs" edges to Job entities.
+func (_u *UserUpdateOne) RemoveCreatedJobs(v ...*Job) *UserUpdateOne {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.RemoveCreatedTranslationJobIDs(ids...)
+	return _u.RemoveCreatedJobIDs(ids...)
 }
 
 // ClearReviewedSegments clears all "reviewed_segments" edges to the Segment entity.
@@ -1674,46 +1868,88 @@ func (_u *UserUpdateOne) RemoveUsageRecords(v ...*UsageRecord) *UserUpdateOne {
 	return _u.RemoveUsageRecordIDs(ids...)
 }
 
-// ClearPromptTemplates clears all "prompt_templates" edges to the PromptTemplate entity.
-func (_u *UserUpdateOne) ClearPromptTemplates() *UserUpdateOne {
-	_u.mutation.ClearPromptTemplates()
+// ClearTranslationPromptTemplates clears all "translation_prompt_templates" edges to the TranslationPromptTemplate entity.
+func (_u *UserUpdateOne) ClearTranslationPromptTemplates() *UserUpdateOne {
+	_u.mutation.ClearTranslationPromptTemplates()
 	return _u
 }
 
-// RemovePromptTemplateIDs removes the "prompt_templates" edge to PromptTemplate entities by IDs.
-func (_u *UserUpdateOne) RemovePromptTemplateIDs(ids ...int) *UserUpdateOne {
-	_u.mutation.RemovePromptTemplateIDs(ids...)
+// RemoveTranslationPromptTemplateIDs removes the "translation_prompt_templates" edge to TranslationPromptTemplate entities by IDs.
+func (_u *UserUpdateOne) RemoveTranslationPromptTemplateIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.RemoveTranslationPromptTemplateIDs(ids...)
 	return _u
 }
 
-// RemovePromptTemplates removes "prompt_templates" edges to PromptTemplate entities.
-func (_u *UserUpdateOne) RemovePromptTemplates(v ...*PromptTemplate) *UserUpdateOne {
+// RemoveTranslationPromptTemplates removes "translation_prompt_templates" edges to TranslationPromptTemplate entities.
+func (_u *UserUpdateOne) RemoveTranslationPromptTemplates(v ...*TranslationPromptTemplate) *UserUpdateOne {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.RemovePromptTemplateIDs(ids...)
+	return _u.RemoveTranslationPromptTemplateIDs(ids...)
 }
 
-// ClearTranslationProfiles clears all "translation_profiles" edges to the TranslationProfile entity.
-func (_u *UserUpdateOne) ClearTranslationProfiles() *UserUpdateOne {
-	_u.mutation.ClearTranslationProfiles()
+// ClearBootstrapPromptTemplates clears all "bootstrap_prompt_templates" edges to the BootstrapPromptTemplate entity.
+func (_u *UserUpdateOne) ClearBootstrapPromptTemplates() *UserUpdateOne {
+	_u.mutation.ClearBootstrapPromptTemplates()
 	return _u
 }
 
-// RemoveTranslationProfileIDs removes the "translation_profiles" edge to TranslationProfile entities by IDs.
-func (_u *UserUpdateOne) RemoveTranslationProfileIDs(ids ...int) *UserUpdateOne {
-	_u.mutation.RemoveTranslationProfileIDs(ids...)
+// RemoveBootstrapPromptTemplateIDs removes the "bootstrap_prompt_templates" edge to BootstrapPromptTemplate entities by IDs.
+func (_u *UserUpdateOne) RemoveBootstrapPromptTemplateIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.RemoveBootstrapPromptTemplateIDs(ids...)
 	return _u
 }
 
-// RemoveTranslationProfiles removes "translation_profiles" edges to TranslationProfile entities.
-func (_u *UserUpdateOne) RemoveTranslationProfiles(v ...*TranslationProfile) *UserUpdateOne {
+// RemoveBootstrapPromptTemplates removes "bootstrap_prompt_templates" edges to BootstrapPromptTemplate entities.
+func (_u *UserUpdateOne) RemoveBootstrapPromptTemplates(v ...*BootstrapPromptTemplate) *UserUpdateOne {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _u.RemoveTranslationProfileIDs(ids...)
+	return _u.RemoveBootstrapPromptTemplateIDs(ids...)
+}
+
+// ClearPrunePromptTemplates clears all "prune_prompt_templates" edges to the PrunePromptTemplate entity.
+func (_u *UserUpdateOne) ClearPrunePromptTemplates() *UserUpdateOne {
+	_u.mutation.ClearPrunePromptTemplates()
+	return _u
+}
+
+// RemovePrunePromptTemplateIDs removes the "prune_prompt_templates" edge to PrunePromptTemplate entities by IDs.
+func (_u *UserUpdateOne) RemovePrunePromptTemplateIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.RemovePrunePromptTemplateIDs(ids...)
+	return _u
+}
+
+// RemovePrunePromptTemplates removes "prune_prompt_templates" edges to PrunePromptTemplate entities.
+func (_u *UserUpdateOne) RemovePrunePromptTemplates(v ...*PrunePromptTemplate) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemovePrunePromptTemplateIDs(ids...)
+}
+
+// ClearExecutionProfiles clears all "execution_profiles" edges to the ExecutionProfile entity.
+func (_u *UserUpdateOne) ClearExecutionProfiles() *UserUpdateOne {
+	_u.mutation.ClearExecutionProfiles()
+	return _u
+}
+
+// RemoveExecutionProfileIDs removes the "execution_profiles" edge to ExecutionProfile entities by IDs.
+func (_u *UserUpdateOne) RemoveExecutionProfileIDs(ids ...int) *UserUpdateOne {
+	_u.mutation.RemoveExecutionProfileIDs(ids...)
+	return _u
+}
+
+// RemoveExecutionProfiles removes "execution_profiles" edges to ExecutionProfile entities.
+func (_u *UserUpdateOne) RemoveExecutionProfiles(v ...*ExecutionProfile) *UserUpdateOne {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _u.RemoveExecutionProfileIDs(ids...)
 }
 
 // ClearExecutionPlanTemplates clears all "execution_plan_templates" edges to the ExecutionPlanTemplate entity.
@@ -1880,28 +2116,28 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	if value, ok := _u.mutation.Active(); ok {
 		_spec.SetField(user.FieldActive, field.TypeBool, value)
 	}
-	if _u.mutation.CreatedTranslationJobsCleared() {
+	if _u.mutation.CreatedJobsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.CreatedTranslationJobsTable,
-			Columns: []string{user.CreatedTranslationJobsColumn},
+			Table:   user.CreatedJobsTable,
+			Columns: []string{user.CreatedJobsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.RemovedCreatedTranslationJobsIDs(); len(nodes) > 0 && !_u.mutation.CreatedTranslationJobsCleared() {
+	if nodes := _u.mutation.RemovedCreatedJobsIDs(); len(nodes) > 0 && !_u.mutation.CreatedJobsCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.CreatedTranslationJobsTable,
-			Columns: []string{user.CreatedTranslationJobsColumn},
+			Table:   user.CreatedJobsTable,
+			Columns: []string{user.CreatedJobsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -1909,15 +2145,15 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.CreatedTranslationJobsIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.CreatedJobsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.CreatedTranslationJobsTable,
-			Columns: []string{user.CreatedTranslationJobsColumn},
+			Table:   user.CreatedJobsTable,
+			Columns: []string{user.CreatedJobsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -2240,28 +2476,28 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if _u.mutation.PromptTemplatesCleared() {
+	if _u.mutation.TranslationPromptTemplatesCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.PromptTemplatesTable,
-			Columns: []string{user.PromptTemplatesColumn},
+			Table:   user.TranslationPromptTemplatesTable,
+			Columns: []string{user.TranslationPromptTemplatesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(prompttemplate.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(translationprompttemplate.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.RemovedPromptTemplatesIDs(); len(nodes) > 0 && !_u.mutation.PromptTemplatesCleared() {
+	if nodes := _u.mutation.RemovedTranslationPromptTemplatesIDs(); len(nodes) > 0 && !_u.mutation.TranslationPromptTemplatesCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.PromptTemplatesTable,
-			Columns: []string{user.PromptTemplatesColumn},
+			Table:   user.TranslationPromptTemplatesTable,
+			Columns: []string{user.TranslationPromptTemplatesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(prompttemplate.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(translationprompttemplate.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -2269,15 +2505,15 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.PromptTemplatesIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.TranslationPromptTemplatesIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.PromptTemplatesTable,
-			Columns: []string{user.PromptTemplatesColumn},
+			Table:   user.TranslationPromptTemplatesTable,
+			Columns: []string{user.TranslationPromptTemplatesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(prompttemplate.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(translationprompttemplate.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -2285,28 +2521,28 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 		}
 		_spec.Edges.Add = append(_spec.Edges.Add, edge)
 	}
-	if _u.mutation.TranslationProfilesCleared() {
+	if _u.mutation.BootstrapPromptTemplatesCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.TranslationProfilesTable,
-			Columns: []string{user.TranslationProfilesColumn},
+			Table:   user.BootstrapPromptTemplatesTable,
+			Columns: []string{user.BootstrapPromptTemplatesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(bootstrapprompttemplate.FieldID, field.TypeInt),
 			},
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.RemovedTranslationProfilesIDs(); len(nodes) > 0 && !_u.mutation.TranslationProfilesCleared() {
+	if nodes := _u.mutation.RemovedBootstrapPromptTemplatesIDs(); len(nodes) > 0 && !_u.mutation.BootstrapPromptTemplatesCleared() {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.TranslationProfilesTable,
-			Columns: []string{user.TranslationProfilesColumn},
+			Table:   user.BootstrapPromptTemplatesTable,
+			Columns: []string{user.BootstrapPromptTemplatesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(bootstrapprompttemplate.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -2314,15 +2550,105 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 		}
 		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
 	}
-	if nodes := _u.mutation.TranslationProfilesIDs(); len(nodes) > 0 {
+	if nodes := _u.mutation.BootstrapPromptTemplatesIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.TranslationProfilesTable,
-			Columns: []string{user.TranslationProfilesColumn},
+			Table:   user.BootstrapPromptTemplatesTable,
+			Columns: []string{user.BootstrapPromptTemplatesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(bootstrapprompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.PrunePromptTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PrunePromptTemplatesTable,
+			Columns: []string{user.PrunePromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(pruneprompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedPrunePromptTemplatesIDs(); len(nodes) > 0 && !_u.mutation.PrunePromptTemplatesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PrunePromptTemplatesTable,
+			Columns: []string{user.PrunePromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(pruneprompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.PrunePromptTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PrunePromptTemplatesTable,
+			Columns: []string{user.PrunePromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(pruneprompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Add = append(_spec.Edges.Add, edge)
+	}
+	if _u.mutation.ExecutionProfilesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExecutionProfilesTable,
+			Columns: []string{user.ExecutionProfilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionprofile.FieldID, field.TypeInt),
+			},
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.RemovedExecutionProfilesIDs(); len(nodes) > 0 && !_u.mutation.ExecutionProfilesCleared() {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExecutionProfilesTable,
+			Columns: []string{user.ExecutionProfilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionprofile.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges.Clear = append(_spec.Edges.Clear, edge)
+	}
+	if nodes := _u.mutation.ExecutionProfilesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExecutionProfilesTable,
+			Columns: []string{user.ExecutionProfilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionprofile.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

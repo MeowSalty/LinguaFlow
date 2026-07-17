@@ -520,21 +520,21 @@ func ActiveNEQ(v bool) predicate.User {
 	return predicate.User(sql.FieldNEQ(FieldActive, v))
 }
 
-// HasCreatedTranslationJobs applies the HasEdge predicate on the "created_translation_jobs" edge.
-func HasCreatedTranslationJobs() predicate.User {
+// HasCreatedJobs applies the HasEdge predicate on the "created_jobs" edge.
+func HasCreatedJobs() predicate.User {
 	return predicate.User(func(s *sql.Selector) {
 		step := sqlgraph.NewStep(
 			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, CreatedTranslationJobsTable, CreatedTranslationJobsColumn),
+			sqlgraph.Edge(sqlgraph.O2M, false, CreatedJobsTable, CreatedJobsColumn),
 		)
 		sqlgraph.HasNeighbors(s, step)
 	})
 }
 
-// HasCreatedTranslationJobsWith applies the HasEdge predicate on the "created_translation_jobs" edge with a given conditions (other predicates).
-func HasCreatedTranslationJobsWith(preds ...predicate.TranslationJob) predicate.User {
+// HasCreatedJobsWith applies the HasEdge predicate on the "created_jobs" edge with a given conditions (other predicates).
+func HasCreatedJobsWith(preds ...predicate.Job) predicate.User {
 	return predicate.User(func(s *sql.Selector) {
-		step := newCreatedTranslationJobsStep()
+		step := newCreatedJobsStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)
@@ -704,21 +704,21 @@ func HasUsageRecordsWith(preds ...predicate.UsageRecord) predicate.User {
 	})
 }
 
-// HasPromptTemplates applies the HasEdge predicate on the "prompt_templates" edge.
-func HasPromptTemplates() predicate.User {
+// HasTranslationPromptTemplates applies the HasEdge predicate on the "translation_prompt_templates" edge.
+func HasTranslationPromptTemplates() predicate.User {
 	return predicate.User(func(s *sql.Selector) {
 		step := sqlgraph.NewStep(
 			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, PromptTemplatesTable, PromptTemplatesColumn),
+			sqlgraph.Edge(sqlgraph.O2M, false, TranslationPromptTemplatesTable, TranslationPromptTemplatesColumn),
 		)
 		sqlgraph.HasNeighbors(s, step)
 	})
 }
 
-// HasPromptTemplatesWith applies the HasEdge predicate on the "prompt_templates" edge with a given conditions (other predicates).
-func HasPromptTemplatesWith(preds ...predicate.PromptTemplate) predicate.User {
+// HasTranslationPromptTemplatesWith applies the HasEdge predicate on the "translation_prompt_templates" edge with a given conditions (other predicates).
+func HasTranslationPromptTemplatesWith(preds ...predicate.TranslationPromptTemplate) predicate.User {
 	return predicate.User(func(s *sql.Selector) {
-		step := newPromptTemplatesStep()
+		step := newTranslationPromptTemplatesStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)
@@ -727,21 +727,67 @@ func HasPromptTemplatesWith(preds ...predicate.PromptTemplate) predicate.User {
 	})
 }
 
-// HasTranslationProfiles applies the HasEdge predicate on the "translation_profiles" edge.
-func HasTranslationProfiles() predicate.User {
+// HasBootstrapPromptTemplates applies the HasEdge predicate on the "bootstrap_prompt_templates" edge.
+func HasBootstrapPromptTemplates() predicate.User {
 	return predicate.User(func(s *sql.Selector) {
 		step := sqlgraph.NewStep(
 			sqlgraph.From(Table, FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, TranslationProfilesTable, TranslationProfilesColumn),
+			sqlgraph.Edge(sqlgraph.O2M, false, BootstrapPromptTemplatesTable, BootstrapPromptTemplatesColumn),
 		)
 		sqlgraph.HasNeighbors(s, step)
 	})
 }
 
-// HasTranslationProfilesWith applies the HasEdge predicate on the "translation_profiles" edge with a given conditions (other predicates).
-func HasTranslationProfilesWith(preds ...predicate.TranslationProfile) predicate.User {
+// HasBootstrapPromptTemplatesWith applies the HasEdge predicate on the "bootstrap_prompt_templates" edge with a given conditions (other predicates).
+func HasBootstrapPromptTemplatesWith(preds ...predicate.BootstrapPromptTemplate) predicate.User {
 	return predicate.User(func(s *sql.Selector) {
-		step := newTranslationProfilesStep()
+		step := newBootstrapPromptTemplatesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasPrunePromptTemplates applies the HasEdge predicate on the "prune_prompt_templates" edge.
+func HasPrunePromptTemplates() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, PrunePromptTemplatesTable, PrunePromptTemplatesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasPrunePromptTemplatesWith applies the HasEdge predicate on the "prune_prompt_templates" edge with a given conditions (other predicates).
+func HasPrunePromptTemplatesWith(preds ...predicate.PrunePromptTemplate) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newPrunePromptTemplatesStep()
+		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
+			for _, p := range preds {
+				p(s)
+			}
+		})
+	})
+}
+
+// HasExecutionProfiles applies the HasEdge predicate on the "execution_profiles" edge.
+func HasExecutionProfiles() predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := sqlgraph.NewStep(
+			sqlgraph.From(Table, FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, ExecutionProfilesTable, ExecutionProfilesColumn),
+		)
+		sqlgraph.HasNeighbors(s, step)
+	})
+}
+
+// HasExecutionProfilesWith applies the HasEdge predicate on the "execution_profiles" edge with a given conditions (other predicates).
+func HasExecutionProfilesWith(preds ...predicate.ExecutionProfile) predicate.User {
+	return predicate.User(func(s *sql.Selector) {
+		step := newExecutionProfilesStep()
 		sqlgraph.HasNeighborsWith(s, step, func(s *sql.Selector) {
 			for _, p := range preds {
 				p(s)

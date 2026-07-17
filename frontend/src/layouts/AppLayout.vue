@@ -103,8 +103,18 @@ const templateNavOptions = computed<DropdownOption[]>(() => [
     icon: () => h(IconifyIcon, { icon: 'carbon:prompt-template', class: 'text-base' }),
   },
   {
-    label: t('nav.translationProfiles'),
-    key: '/translation-profiles',
+    label: t('nav.bootstrapPromptTemplates'),
+    key: '/bootstrap-prompt-templates',
+    icon: () => h(IconifyIcon, { icon: 'carbon:text-mining', class: 'text-base' }),
+  },
+  {
+    label: t('nav.prunePromptTemplates'),
+    key: '/prune-prompt-templates',
+    icon: () => h(IconifyIcon, { icon: 'carbon:clean', class: 'text-base' }),
+  },
+  {
+    label: t('nav.executionProfiles'),
+    key: '/execution-profiles',
     icon: () => h(IconifyIcon, { icon: 'carbon:flow', class: 'text-base' }),
   },
   {
@@ -117,9 +127,13 @@ const templateNavOptions = computed<DropdownOption[]>(() => [
 const isAdmin = computed(() => auth.user?.role === 'admin')
 
 const isTemplateRoute = computed(() =>
-  ['/prompt-templates', '/translation-profiles', '/execution-plan-templates'].some((r) =>
-    route.path.startsWith(r),
-  ),
+  [
+    '/prompt-templates',
+    '/bootstrap-prompt-templates',
+    '/prune-prompt-templates',
+    '/execution-profiles',
+    '/execution-plan-templates',
+  ].some((r) => route.path.startsWith(r)),
 )
 
 const isAdminRoute = computed(() => route.path.startsWith('/admin'))
@@ -180,10 +194,10 @@ const onSelectLocale = (key: string | number): void => {
           <RouterLink
             to="/prompt-templates"
             class="flex items-center gap-1.5 text-lf-text-muted no-underline transition-colors hover:text-brand-500"
-            :class="{ '!text-brand-500 font-semibold': isTemplateRoute }"
+            :class="{ 'text-brand-500! font-semibold': isTemplateRoute }"
           >
             <IconifyIcon icon="carbon:settings" class="text-base" />
-            {{ t('nav.translationConfig') }}
+            {{ t('nav.executionConfig') }}
           </RouterLink>
         </NDropdown>
         <RouterLink
@@ -206,7 +220,7 @@ const onSelectLocale = (key: string | number): void => {
           v-if="isAdmin"
           to="/admin"
           class="flex items-center gap-1.5 text-lf-text-muted no-underline transition-colors hover:text-brand-500"
-          :class="{ '!text-brand-500 font-semibold': isAdminRoute }"
+          :class="{ 'text-brand-500! font-semibold': isAdminRoute }"
         >
           <IconifyIcon icon="carbon:security" class="text-base" />
           {{ t('nav.admin') }}

@@ -45,9 +45,44 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/admin/': RouteRecordInfo<
+      '/admin/',
+      '/admin',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/admin/audit-logs': RouteRecordInfo<
+      '/admin/audit-logs',
+      '/admin/audit-logs',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/admin/settings': RouteRecordInfo<
+      '/admin/settings',
+      '/admin/settings',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/admin/users': RouteRecordInfo<
+      '/admin/users',
+      '/admin/users',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/backends': RouteRecordInfo<
       '/backends',
       '/backends',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/bootstrap-prompt-templates': RouteRecordInfo<
+      '/bootstrap-prompt-templates',
+      '/bootstrap-prompt-templates',
       Record<never, never>,
       Record<never, never>,
       | never
@@ -62,6 +97,13 @@ declare module 'vue-router/auto-routes' {
     '/execution-plan-templates': RouteRecordInfo<
       '/execution-plan-templates',
       '/execution-plan-templates',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
+    '/execution-profiles': RouteRecordInfo<
+      '/execution-profiles',
+      '/execution-profiles',
       Record<never, never>,
       Record<never, never>,
       | never
@@ -94,6 +136,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/prune-prompt-templates': RouteRecordInfo<
+      '/prune-prompt-templates',
+      '/prune-prompt-templates',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
     '/register': RouteRecordInfo<
       '/register',
       '/register',
@@ -104,13 +153,6 @@ declare module 'vue-router/auto-routes' {
     '/service': RouteRecordInfo<
       '/service',
       '/service',
-      Record<never, never>,
-      Record<never, never>,
-      | never
-    >,
-    '/translation-profiles': RouteRecordInfo<
-      '/translation-profiles',
-      '/translation-profiles',
       Record<never, never>,
       Record<never, never>,
       | never
@@ -140,9 +182,39 @@ declare module 'vue-router/auto-routes' {
       views:
         | never
     }
+    'src/pages/admin/index.vue': {
+      routes:
+        | '/admin/'
+      views:
+        | never
+    }
+    'src/pages/admin/audit-logs.vue': {
+      routes:
+        | '/admin/audit-logs'
+      views:
+        | never
+    }
+    'src/pages/admin/settings.vue': {
+      routes:
+        | '/admin/settings'
+      views:
+        | never
+    }
+    'src/pages/admin/users.vue': {
+      routes:
+        | '/admin/users'
+      views:
+        | never
+    }
     'src/pages/backends.vue': {
       routes:
         | '/backends'
+      views:
+        | never
+    }
+    'src/pages/bootstrap-prompt-templates.vue': {
+      routes:
+        | '/bootstrap-prompt-templates'
       views:
         | never
     }
@@ -155,6 +227,12 @@ declare module 'vue-router/auto-routes' {
     'src/pages/execution-plan-templates.vue': {
       routes:
         | '/execution-plan-templates'
+      views:
+        | never
+    }
+    'src/pages/execution-profiles.vue': {
+      routes:
+        | '/execution-profiles'
       views:
         | never
     }
@@ -183,6 +261,12 @@ declare module 'vue-router/auto-routes' {
       views:
         | never
     }
+    'src/pages/prune-prompt-templates.vue': {
+      routes:
+        | '/prune-prompt-templates'
+      views:
+        | never
+    }
     'src/pages/register.vue': {
       routes:
         | '/register'
@@ -192,12 +276,6 @@ declare module 'vue-router/auto-routes' {
     'src/pages/service.vue': {
       routes:
         | '/service'
-      views:
-        | never
-    }
-    'src/pages/translation-profiles.vue': {
-      routes:
-        | '/translation-profiles'
       views:
         | never
     }

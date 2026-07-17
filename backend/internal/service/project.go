@@ -8,6 +8,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
@@ -15,9 +16,9 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
@@ -32,23 +33,21 @@ type ProjectService struct {
 }
 
 type CreateProjectInput struct {
-	Name                     string
-	OwnerUserID              *int
-	OwnerOrgID               *int
-	Config                   map[string]any
-	DefaultTranslationConfig map[string]any
-	GlossaryEnabled          *bool
-	SourceLang               string
-	TargetLang               string
+	Name            string
+	OwnerUserID     *int
+	OwnerOrgID      *int
+	Config          map[string]any
+	GlossaryEnabled *bool
+	SourceLang      string
+	TargetLang      string
 }
 
 type UpdateProjectInput struct {
-	Name                     string
-	Config                   map[string]any
-	DefaultTranslationConfig map[string]any
-	GlossaryEnabled          *bool
-	SourceLang               string
-	TargetLang               string
+	Name            string
+	Config          map[string]any
+	GlossaryEnabled *bool
+	SourceLang      string
+	TargetLang      string
 }
 
 func NewProjectService(client *ent.Client, users *UserService) *ProjectService {
@@ -63,7 +62,6 @@ func (s *ProjectService) CreateProject(ctx context.Context, actorUserID int, inp
 	create := s.client.Project.Create().
 		SetName(normalized.Name).
 		SetConfig(cloneMap(normalized.Config)).
-		SetDefaultTranslationConfig(cloneMap(normalized.DefaultTranslationConfig)).
 		SetGlossaryEnabled(normalized.GlossaryEnabled != nil && *normalized.GlossaryEnabled).
 		SetSourceLang(normalized.SourceLang).
 		SetTargetLang(normalized.TargetLang)
@@ -91,7 +89,6 @@ func (s *ProjectService) CreateOrgProject(ctx context.Context, actorUserID, orgI
 		SetName(name).
 		SetOwnerOrgID(orgID).
 		SetConfig(cloneMap(input.Config)).
-		SetDefaultTranslationConfig(cloneMap(input.DefaultTranslationConfig)).
 		SetGlossaryEnabled(input.GlossaryEnabled != nil && *input.GlossaryEnabled).
 		SetSourceLang(normalizeLangOrDefault(input.SourceLang, "auto")).
 		SetTargetLang(normalizeLangOrDefault(input.TargetLang, "zh"))
@@ -141,7 +138,6 @@ func (s *ProjectService) UpdateProject(ctx context.Context, actorUserID, project
 	updated, err := s.client.Project.UpdateOneID(projectID).
 		SetName(normalized.Name).
 		SetConfig(cloneMap(normalized.Config)).
-		SetDefaultTranslationConfig(cloneMap(normalized.DefaultTranslationConfig)).
 		SetGlossaryEnabled(glossaryEnabled != nil && *glossaryEnabled).
 		SetSourceLang(normalized.SourceLang).
 		SetTargetLang(normalized.TargetLang).
@@ -189,9 +185,9 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 		}
 	}()
 
-	// 收集项目关联的 TranslationJob IDs（用于删除 JobResource）
-	tjIDs, err := tx.TranslationJob.Query().
-		Where(translationjob.HasProjectWith(project.IDEQ(projectID))).
+	// 收集项目关联的 Job IDs（用于删除 JobResource）
+	tjIDs, err := tx.Job.Query().
+		Where(job.ProjectIDEQ(projectID)).
 		IDs(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("query translation job IDs: %w", err)
@@ -207,7 +203,7 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 	if len(tjIDs) > 0 || len(resIDs) > 0 {
 		var preds []predicate.JobResource
 		if len(tjIDs) > 0 {
-			preds = append(preds, jobresource.HasJobWith(translationjob.IDIn(tjIDs...)))
+			preds = append(preds, jobresource.HasJobWith(job.IDIn(tjIDs...)))
 		}
 		if len(resIDs) > 0 {
 			preds = append(preds, jobresource.HasResourceWith(resource.IDIn(resIDs...)))
@@ -220,10 +216,20 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 		}
 	}
 
-	// Step 2: 删除 TranslationJob
+	// Step 1.5: 删除 SSEEvent（依赖 Job）
 	if len(tjIDs) > 0 {
-		_, err = tx.TranslationJob.Delete().
-			Where(translationjob.IDIn(tjIDs...)).
+		_, err = tx.SSEEvent.Delete().
+			Where(sseevent.JobIDIn(tjIDs...)).
+			Exec(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("delete sse events: %w", err)
+		}
+	}
+
+	// Step 2: 删除 Job
+	if len(tjIDs) > 0 {
+		_, err = tx.Job.Delete().
+			Where(job.IDIn(tjIDs...)).
 			Exec(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("delete translation jobs: %w", err)
@@ -260,7 +266,7 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 
 	// Step 7: 删除 GlossaryEntry
 	_, err = tx.GlossaryEntry.Delete().
-		Where(glossaryentry.HasProjectWith(project.IDEQ(projectID))).
+		Where(glossaryentry.ProjectIDEQ(projectID)).
 		Exec(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("delete glossary entries: %w", err)
@@ -268,7 +274,7 @@ func (s *ProjectService) cascadeDeleteProject(ctx context.Context, projectID int
 
 	// Step 8: 删除 TMEntry
 	_, err = tx.TMEntry.Delete().
-		Where(tmentry.HasProjectWith(project.IDEQ(projectID))).
+		Where(tmentry.ProjectIDEQ(projectID)).
 		Exec(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("delete tm entries: %w", err)
@@ -328,13 +334,12 @@ func (s *ProjectService) normalizeCreateInput(ctx context.Context, actorUserID i
 		return CreateProjectInput{}, ErrForbidden // 不应通过此路径创建组织项目
 	}
 	return CreateProjectInput{
-		Name:                     name,
-		OwnerUserID:              ownerUserID,
-		Config:                   cloneMap(input.Config),
-		DefaultTranslationConfig: cloneMap(input.DefaultTranslationConfig),
-		GlossaryEnabled:          input.GlossaryEnabled,
-		SourceLang:               normalizeLangOrDefault(input.SourceLang, "auto"),
-		TargetLang:               normalizeLangOrDefault(input.TargetLang, "zh"),
+		Name:            name,
+		OwnerUserID:     ownerUserID,
+		Config:          cloneMap(input.Config),
+		GlossaryEnabled: input.GlossaryEnabled,
+		SourceLang:      normalizeLangOrDefault(input.SourceLang, "auto"),
+		TargetLang:      normalizeLangOrDefault(input.TargetLang, "zh"),
 	}, nil
 }
 
@@ -347,22 +352,17 @@ func (s *ProjectService) normalizeUpdateInput(current *ent.Project, input Update
 	if len(configValue) == 0 {
 		configValue = cloneMap(current.Config)
 	}
-	defaultTranslationConfig := cloneMap(input.DefaultTranslationConfig)
-	if len(defaultTranslationConfig) == 0 {
-		defaultTranslationConfig = cloneMap(current.DefaultTranslationConfig)
-	}
 	glossaryEnabled := input.GlossaryEnabled
 	if glossaryEnabled == nil {
 		currentVal := current.GlossaryEnabled
 		glossaryEnabled = &currentVal
 	}
 	return UpdateProjectInput{
-		Name:                     name,
-		Config:                   configValue,
-		DefaultTranslationConfig: defaultTranslationConfig,
-		GlossaryEnabled:          glossaryEnabled,
-		SourceLang:               normalizeLangOrDefault(input.SourceLang, current.SourceLang),
-		TargetLang:               normalizeLangOrDefault(input.TargetLang, current.TargetLang),
+		Name:            name,
+		Config:          configValue,
+		GlossaryEnabled: glossaryEnabled,
+		SourceLang:      normalizeLangOrDefault(input.SourceLang, current.SourceLang),
+		TargetLang:      normalizeLangOrDefault(input.TargetLang, current.TargetLang),
 	}, nil
 }
 

@@ -11,6 +11,7 @@ import {
   loginWithPassword,
   logout as logoutApi,
   registerAndLogin,
+  setLocalMode,
   setUnauthorizedHandler,
 } from '@/api/client'
 import type { ServiceMode } from '@/stores/service'
@@ -118,6 +119,8 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   const bootstrapForMode = async (mode: ServiceMode): Promise<void> => {
+    setLocalMode(mode === 'local')
+
     if (mode === 'local') {
       setUnauthorizedHandler(handleUnauthorizedLocal)
       clearAuthTokens()
@@ -141,6 +144,11 @@ export const useAuthStore = defineStore('auth', () => {
     await bootstrapServer()
   }
 
+  const clearSession = (): void => {
+    clearAuthTokens()
+    clearSessionState()
+  }
+
   return {
     user,
     accessToken,
@@ -153,5 +161,6 @@ export const useAuthStore = defineStore('auth', () => {
     fetchCurrentUser,
     bootstrap,
     bootstrapForMode,
+    clearSession,
   }
 })

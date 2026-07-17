@@ -12,15 +12,17 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/pruneprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
@@ -120,19 +122,19 @@ func (_c *UserCreate) SetNillableActive(v *bool) *UserCreate {
 	return _c
 }
 
-// AddCreatedTranslationJobIDs adds the "created_translation_jobs" edge to the TranslationJob entity by IDs.
-func (_c *UserCreate) AddCreatedTranslationJobIDs(ids ...int) *UserCreate {
-	_c.mutation.AddCreatedTranslationJobIDs(ids...)
+// AddCreatedJobIDs adds the "created_jobs" edge to the Job entity by IDs.
+func (_c *UserCreate) AddCreatedJobIDs(ids ...int) *UserCreate {
+	_c.mutation.AddCreatedJobIDs(ids...)
 	return _c
 }
 
-// AddCreatedTranslationJobs adds the "created_translation_jobs" edges to the TranslationJob entity.
-func (_c *UserCreate) AddCreatedTranslationJobs(v ...*TranslationJob) *UserCreate {
+// AddCreatedJobs adds the "created_jobs" edges to the Job entity.
+func (_c *UserCreate) AddCreatedJobs(v ...*Job) *UserCreate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _c.AddCreatedTranslationJobIDs(ids...)
+	return _c.AddCreatedJobIDs(ids...)
 }
 
 // AddReviewedSegmentIDs adds the "reviewed_segments" edge to the Segment entity by IDs.
@@ -240,34 +242,64 @@ func (_c *UserCreate) AddUsageRecords(v ...*UsageRecord) *UserCreate {
 	return _c.AddUsageRecordIDs(ids...)
 }
 
-// AddPromptTemplateIDs adds the "prompt_templates" edge to the PromptTemplate entity by IDs.
-func (_c *UserCreate) AddPromptTemplateIDs(ids ...int) *UserCreate {
-	_c.mutation.AddPromptTemplateIDs(ids...)
+// AddTranslationPromptTemplateIDs adds the "translation_prompt_templates" edge to the TranslationPromptTemplate entity by IDs.
+func (_c *UserCreate) AddTranslationPromptTemplateIDs(ids ...int) *UserCreate {
+	_c.mutation.AddTranslationPromptTemplateIDs(ids...)
 	return _c
 }
 
-// AddPromptTemplates adds the "prompt_templates" edges to the PromptTemplate entity.
-func (_c *UserCreate) AddPromptTemplates(v ...*PromptTemplate) *UserCreate {
+// AddTranslationPromptTemplates adds the "translation_prompt_templates" edges to the TranslationPromptTemplate entity.
+func (_c *UserCreate) AddTranslationPromptTemplates(v ...*TranslationPromptTemplate) *UserCreate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _c.AddPromptTemplateIDs(ids...)
+	return _c.AddTranslationPromptTemplateIDs(ids...)
 }
 
-// AddTranslationProfileIDs adds the "translation_profiles" edge to the TranslationProfile entity by IDs.
-func (_c *UserCreate) AddTranslationProfileIDs(ids ...int) *UserCreate {
-	_c.mutation.AddTranslationProfileIDs(ids...)
+// AddBootstrapPromptTemplateIDs adds the "bootstrap_prompt_templates" edge to the BootstrapPromptTemplate entity by IDs.
+func (_c *UserCreate) AddBootstrapPromptTemplateIDs(ids ...int) *UserCreate {
+	_c.mutation.AddBootstrapPromptTemplateIDs(ids...)
 	return _c
 }
 
-// AddTranslationProfiles adds the "translation_profiles" edges to the TranslationProfile entity.
-func (_c *UserCreate) AddTranslationProfiles(v ...*TranslationProfile) *UserCreate {
+// AddBootstrapPromptTemplates adds the "bootstrap_prompt_templates" edges to the BootstrapPromptTemplate entity.
+func (_c *UserCreate) AddBootstrapPromptTemplates(v ...*BootstrapPromptTemplate) *UserCreate {
 	ids := make([]int, len(v))
 	for i := range v {
 		ids[i] = v[i].ID
 	}
-	return _c.AddTranslationProfileIDs(ids...)
+	return _c.AddBootstrapPromptTemplateIDs(ids...)
+}
+
+// AddPrunePromptTemplateIDs adds the "prune_prompt_templates" edge to the PrunePromptTemplate entity by IDs.
+func (_c *UserCreate) AddPrunePromptTemplateIDs(ids ...int) *UserCreate {
+	_c.mutation.AddPrunePromptTemplateIDs(ids...)
+	return _c
+}
+
+// AddPrunePromptTemplates adds the "prune_prompt_templates" edges to the PrunePromptTemplate entity.
+func (_c *UserCreate) AddPrunePromptTemplates(v ...*PrunePromptTemplate) *UserCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddPrunePromptTemplateIDs(ids...)
+}
+
+// AddExecutionProfileIDs adds the "execution_profiles" edge to the ExecutionProfile entity by IDs.
+func (_c *UserCreate) AddExecutionProfileIDs(ids ...int) *UserCreate {
+	_c.mutation.AddExecutionProfileIDs(ids...)
+	return _c
+}
+
+// AddExecutionProfiles adds the "execution_profiles" edges to the ExecutionProfile entity.
+func (_c *UserCreate) AddExecutionProfiles(v ...*ExecutionProfile) *UserCreate {
+	ids := make([]int, len(v))
+	for i := range v {
+		ids[i] = v[i].ID
+	}
+	return _c.AddExecutionProfileIDs(ids...)
 }
 
 // AddExecutionPlanTemplateIDs adds the "execution_plan_templates" edge to the ExecutionPlanTemplate entity by IDs.
@@ -449,15 +481,15 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		_spec.SetField(user.FieldActive, field.TypeBool, value)
 		_node.Active = value
 	}
-	if nodes := _c.mutation.CreatedTranslationJobsIDs(); len(nodes) > 0 {
+	if nodes := _c.mutation.CreatedJobsIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.CreatedTranslationJobsTable,
-			Columns: []string{user.CreatedTranslationJobsColumn},
+			Table:   user.CreatedJobsTable,
+			Columns: []string{user.CreatedJobsColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -577,15 +609,15 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
-	if nodes := _c.mutation.PromptTemplatesIDs(); len(nodes) > 0 {
+	if nodes := _c.mutation.TranslationPromptTemplatesIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.PromptTemplatesTable,
-			Columns: []string{user.PromptTemplatesColumn},
+			Table:   user.TranslationPromptTemplatesTable,
+			Columns: []string{user.TranslationPromptTemplatesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(prompttemplate.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(translationprompttemplate.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
@@ -593,15 +625,47 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 		}
 		_spec.Edges = append(_spec.Edges, edge)
 	}
-	if nodes := _c.mutation.TranslationProfilesIDs(); len(nodes) > 0 {
+	if nodes := _c.mutation.BootstrapPromptTemplatesIDs(); len(nodes) > 0 {
 		edge := &sqlgraph.EdgeSpec{
 			Rel:     sqlgraph.O2M,
 			Inverse: false,
-			Table:   user.TranslationProfilesTable,
-			Columns: []string{user.TranslationProfilesColumn},
+			Table:   user.BootstrapPromptTemplatesTable,
+			Columns: []string{user.BootstrapPromptTemplatesColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationprofile.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(bootstrapprompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.PrunePromptTemplatesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.PrunePromptTemplatesTable,
+			Columns: []string{user.PrunePromptTemplatesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(pruneprompttemplate.FieldID, field.TypeInt),
+			},
+		}
+		for _, k := range nodes {
+			edge.Target.Nodes = append(edge.Target.Nodes, k)
+		}
+		_spec.Edges = append(_spec.Edges, edge)
+	}
+	if nodes := _c.mutation.ExecutionProfilesIDs(); len(nodes) > 0 {
+		edge := &sqlgraph.EdgeSpec{
+			Rel:     sqlgraph.O2M,
+			Inverse: false,
+			Table:   user.ExecutionProfilesTable,
+			Columns: []string{user.ExecutionProfilesColumn},
+			Bidi:    false,
+			Target: &sqlgraph.EdgeTarget{
+				IDSpec: sqlgraph.NewFieldSpec(executionprofile.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {

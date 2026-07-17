@@ -27,7 +27,7 @@ func (User) Fields() []ent.Field {
 
 func (User) Edges() []ent.Edge {
 	return []ent.Edge{
-		edge.To("created_translation_jobs", TranslationJob.Type),
+		edge.To("created_jobs", Job.Type),
 		edge.To("reviewed_segments", Segment.Type),
 		edge.To("refresh_tokens", RefreshToken.Type),
 		edge.To("memberships", OrgMembership.Type),
@@ -35,8 +35,10 @@ func (User) Edges() []ent.Edge {
 		edge.To("owned_projects", Project.Type),
 		edge.To("activity_logs", ActivityLog.Type),
 		edge.To("usage_records", UsageRecord.Type),
-		edge.To("prompt_templates", PromptTemplate.Type),
-		edge.To("translation_profiles", TranslationProfile.Type),
+		edge.To("translation_prompt_templates", TranslationPromptTemplate.Type),
+		edge.To("bootstrap_prompt_templates", BootstrapPromptTemplate.Type),
+		edge.To("prune_prompt_templates", PrunePromptTemplate.Type),
+		edge.To("execution_profiles", ExecutionProfile.Type),
 		edge.To("execution_plan_templates", ExecutionPlanTemplate.Type),
 		edge.To("sync_tasks", SyncTask.Type),
 	}

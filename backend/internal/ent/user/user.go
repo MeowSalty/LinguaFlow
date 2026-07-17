@@ -30,8 +30,8 @@ const (
 	FieldRole = "role"
 	// FieldActive holds the string denoting the active field in the database.
 	FieldActive = "active"
-	// EdgeCreatedTranslationJobs holds the string denoting the created_translation_jobs edge name in mutations.
-	EdgeCreatedTranslationJobs = "created_translation_jobs"
+	// EdgeCreatedJobs holds the string denoting the created_jobs edge name in mutations.
+	EdgeCreatedJobs = "created_jobs"
 	// EdgeReviewedSegments holds the string denoting the reviewed_segments edge name in mutations.
 	EdgeReviewedSegments = "reviewed_segments"
 	// EdgeRefreshTokens holds the string denoting the refresh_tokens edge name in mutations.
@@ -46,23 +46,27 @@ const (
 	EdgeActivityLogs = "activity_logs"
 	// EdgeUsageRecords holds the string denoting the usage_records edge name in mutations.
 	EdgeUsageRecords = "usage_records"
-	// EdgePromptTemplates holds the string denoting the prompt_templates edge name in mutations.
-	EdgePromptTemplates = "prompt_templates"
-	// EdgeTranslationProfiles holds the string denoting the translation_profiles edge name in mutations.
-	EdgeTranslationProfiles = "translation_profiles"
+	// EdgeTranslationPromptTemplates holds the string denoting the translation_prompt_templates edge name in mutations.
+	EdgeTranslationPromptTemplates = "translation_prompt_templates"
+	// EdgeBootstrapPromptTemplates holds the string denoting the bootstrap_prompt_templates edge name in mutations.
+	EdgeBootstrapPromptTemplates = "bootstrap_prompt_templates"
+	// EdgePrunePromptTemplates holds the string denoting the prune_prompt_templates edge name in mutations.
+	EdgePrunePromptTemplates = "prune_prompt_templates"
+	// EdgeExecutionProfiles holds the string denoting the execution_profiles edge name in mutations.
+	EdgeExecutionProfiles = "execution_profiles"
 	// EdgeExecutionPlanTemplates holds the string denoting the execution_plan_templates edge name in mutations.
 	EdgeExecutionPlanTemplates = "execution_plan_templates"
 	// EdgeSyncTasks holds the string denoting the sync_tasks edge name in mutations.
 	EdgeSyncTasks = "sync_tasks"
 	// Table holds the table name of the user in the database.
 	Table = "users"
-	// CreatedTranslationJobsTable is the table that holds the created_translation_jobs relation/edge.
-	CreatedTranslationJobsTable = "translation_jobs"
-	// CreatedTranslationJobsInverseTable is the table name for the TranslationJob entity.
-	// It exists in this package in order to avoid circular dependency with the "translationjob" package.
-	CreatedTranslationJobsInverseTable = "translation_jobs"
-	// CreatedTranslationJobsColumn is the table column denoting the created_translation_jobs relation/edge.
-	CreatedTranslationJobsColumn = "user_created_translation_jobs"
+	// CreatedJobsTable is the table that holds the created_jobs relation/edge.
+	CreatedJobsTable = "jobs"
+	// CreatedJobsInverseTable is the table name for the Job entity.
+	// It exists in this package in order to avoid circular dependency with the "job" package.
+	CreatedJobsInverseTable = "jobs"
+	// CreatedJobsColumn is the table column denoting the created_jobs relation/edge.
+	CreatedJobsColumn = "user_created_jobs"
 	// ReviewedSegmentsTable is the table that holds the reviewed_segments relation/edge.
 	ReviewedSegmentsTable = "segments"
 	// ReviewedSegmentsInverseTable is the table name for the Segment entity.
@@ -112,20 +116,34 @@ const (
 	UsageRecordsInverseTable = "usage_records"
 	// UsageRecordsColumn is the table column denoting the usage_records relation/edge.
 	UsageRecordsColumn = "user_usage_records"
-	// PromptTemplatesTable is the table that holds the prompt_templates relation/edge.
-	PromptTemplatesTable = "prompt_templates"
-	// PromptTemplatesInverseTable is the table name for the PromptTemplate entity.
-	// It exists in this package in order to avoid circular dependency with the "prompttemplate" package.
-	PromptTemplatesInverseTable = "prompt_templates"
-	// PromptTemplatesColumn is the table column denoting the prompt_templates relation/edge.
-	PromptTemplatesColumn = "owner_user_id"
-	// TranslationProfilesTable is the table that holds the translation_profiles relation/edge.
-	TranslationProfilesTable = "translation_profiles"
-	// TranslationProfilesInverseTable is the table name for the TranslationProfile entity.
-	// It exists in this package in order to avoid circular dependency with the "translationprofile" package.
-	TranslationProfilesInverseTable = "translation_profiles"
-	// TranslationProfilesColumn is the table column denoting the translation_profiles relation/edge.
-	TranslationProfilesColumn = "owner_user_id"
+	// TranslationPromptTemplatesTable is the table that holds the translation_prompt_templates relation/edge.
+	TranslationPromptTemplatesTable = "translation_prompt_templates"
+	// TranslationPromptTemplatesInverseTable is the table name for the TranslationPromptTemplate entity.
+	// It exists in this package in order to avoid circular dependency with the "translationprompttemplate" package.
+	TranslationPromptTemplatesInverseTable = "translation_prompt_templates"
+	// TranslationPromptTemplatesColumn is the table column denoting the translation_prompt_templates relation/edge.
+	TranslationPromptTemplatesColumn = "owner_user_id"
+	// BootstrapPromptTemplatesTable is the table that holds the bootstrap_prompt_templates relation/edge.
+	BootstrapPromptTemplatesTable = "bootstrap_prompt_templates"
+	// BootstrapPromptTemplatesInverseTable is the table name for the BootstrapPromptTemplate entity.
+	// It exists in this package in order to avoid circular dependency with the "bootstrapprompttemplate" package.
+	BootstrapPromptTemplatesInverseTable = "bootstrap_prompt_templates"
+	// BootstrapPromptTemplatesColumn is the table column denoting the bootstrap_prompt_templates relation/edge.
+	BootstrapPromptTemplatesColumn = "owner_user_id"
+	// PrunePromptTemplatesTable is the table that holds the prune_prompt_templates relation/edge.
+	PrunePromptTemplatesTable = "prune_prompt_templates"
+	// PrunePromptTemplatesInverseTable is the table name for the PrunePromptTemplate entity.
+	// It exists in this package in order to avoid circular dependency with the "pruneprompttemplate" package.
+	PrunePromptTemplatesInverseTable = "prune_prompt_templates"
+	// PrunePromptTemplatesColumn is the table column denoting the prune_prompt_templates relation/edge.
+	PrunePromptTemplatesColumn = "owner_user_id"
+	// ExecutionProfilesTable is the table that holds the execution_profiles relation/edge.
+	ExecutionProfilesTable = "execution_profiles"
+	// ExecutionProfilesInverseTable is the table name for the ExecutionProfile entity.
+	// It exists in this package in order to avoid circular dependency with the "executionprofile" package.
+	ExecutionProfilesInverseTable = "execution_profiles"
+	// ExecutionProfilesColumn is the table column denoting the execution_profiles relation/edge.
+	ExecutionProfilesColumn = "owner_user_id"
 	// ExecutionPlanTemplatesTable is the table that holds the execution_plan_templates relation/edge.
 	ExecutionPlanTemplatesTable = "execution_plan_templates"
 	// ExecutionPlanTemplatesInverseTable is the table name for the ExecutionPlanTemplate entity.
@@ -232,17 +250,17 @@ func ByActive(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldActive, opts...).ToFunc()
 }
 
-// ByCreatedTranslationJobsCount orders the results by created_translation_jobs count.
-func ByCreatedTranslationJobsCount(opts ...sql.OrderTermOption) OrderOption {
+// ByCreatedJobsCount orders the results by created_jobs count.
+func ByCreatedJobsCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newCreatedTranslationJobsStep(), opts...)
+		sqlgraph.OrderByNeighborsCount(s, newCreatedJobsStep(), opts...)
 	}
 }
 
-// ByCreatedTranslationJobs orders the results by created_translation_jobs terms.
-func ByCreatedTranslationJobs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+// ByCreatedJobs orders the results by created_jobs terms.
+func ByCreatedJobs(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newCreatedTranslationJobsStep(), append([]sql.OrderTerm{term}, terms...)...)
+		sqlgraph.OrderByNeighborTerms(s, newCreatedJobsStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
 
@@ -344,31 +362,59 @@ func ByUsageRecords(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
-// ByPromptTemplatesCount orders the results by prompt_templates count.
-func ByPromptTemplatesCount(opts ...sql.OrderTermOption) OrderOption {
+// ByTranslationPromptTemplatesCount orders the results by translation_prompt_templates count.
+func ByTranslationPromptTemplatesCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newPromptTemplatesStep(), opts...)
+		sqlgraph.OrderByNeighborsCount(s, newTranslationPromptTemplatesStep(), opts...)
 	}
 }
 
-// ByPromptTemplates orders the results by prompt_templates terms.
-func ByPromptTemplates(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+// ByTranslationPromptTemplates orders the results by translation_prompt_templates terms.
+func ByTranslationPromptTemplates(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newPromptTemplatesStep(), append([]sql.OrderTerm{term}, terms...)...)
+		sqlgraph.OrderByNeighborTerms(s, newTranslationPromptTemplatesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
 
-// ByTranslationProfilesCount orders the results by translation_profiles count.
-func ByTranslationProfilesCount(opts ...sql.OrderTermOption) OrderOption {
+// ByBootstrapPromptTemplatesCount orders the results by bootstrap_prompt_templates count.
+func ByBootstrapPromptTemplatesCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newTranslationProfilesStep(), opts...)
+		sqlgraph.OrderByNeighborsCount(s, newBootstrapPromptTemplatesStep(), opts...)
 	}
 }
 
-// ByTranslationProfiles orders the results by translation_profiles terms.
-func ByTranslationProfiles(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+// ByBootstrapPromptTemplates orders the results by bootstrap_prompt_templates terms.
+func ByBootstrapPromptTemplates(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newTranslationProfilesStep(), append([]sql.OrderTerm{term}, terms...)...)
+		sqlgraph.OrderByNeighborTerms(s, newBootstrapPromptTemplatesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByPrunePromptTemplatesCount orders the results by prune_prompt_templates count.
+func ByPrunePromptTemplatesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newPrunePromptTemplatesStep(), opts...)
+	}
+}
+
+// ByPrunePromptTemplates orders the results by prune_prompt_templates terms.
+func ByPrunePromptTemplates(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newPrunePromptTemplatesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByExecutionProfilesCount orders the results by execution_profiles count.
+func ByExecutionProfilesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newExecutionProfilesStep(), opts...)
+	}
+}
+
+// ByExecutionProfiles orders the results by execution_profiles terms.
+func ByExecutionProfiles(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newExecutionProfilesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
 
@@ -399,11 +445,11 @@ func BySyncTasks(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 		sqlgraph.OrderByNeighborTerms(s, newSyncTasksStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
-func newCreatedTranslationJobsStep() *sqlgraph.Step {
+func newCreatedJobsStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(CreatedTranslationJobsInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, CreatedTranslationJobsTable, CreatedTranslationJobsColumn),
+		sqlgraph.To(CreatedJobsInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, CreatedJobsTable, CreatedJobsColumn),
 	)
 }
 func newReviewedSegmentsStep() *sqlgraph.Step {
@@ -455,18 +501,32 @@ func newUsageRecordsStep() *sqlgraph.Step {
 		sqlgraph.Edge(sqlgraph.O2M, false, UsageRecordsTable, UsageRecordsColumn),
 	)
 }
-func newPromptTemplatesStep() *sqlgraph.Step {
+func newTranslationPromptTemplatesStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(PromptTemplatesInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, PromptTemplatesTable, PromptTemplatesColumn),
+		sqlgraph.To(TranslationPromptTemplatesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, TranslationPromptTemplatesTable, TranslationPromptTemplatesColumn),
 	)
 }
-func newTranslationProfilesStep() *sqlgraph.Step {
+func newBootstrapPromptTemplatesStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(TranslationProfilesInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, TranslationProfilesTable, TranslationProfilesColumn),
+		sqlgraph.To(BootstrapPromptTemplatesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, BootstrapPromptTemplatesTable, BootstrapPromptTemplatesColumn),
+	)
+}
+func newPrunePromptTemplatesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(PrunePromptTemplatesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, PrunePromptTemplatesTable, PrunePromptTemplatesColumn),
+	)
+}
+func newExecutionProfilesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(ExecutionProfilesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, ExecutionProfilesTable, ExecutionProfilesColumn),
 	)
 }
 func newExecutionPlanTemplatesStep() *sqlgraph.Step {

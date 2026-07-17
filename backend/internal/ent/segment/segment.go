@@ -33,6 +33,8 @@ const (
 	FieldResourceID = "resource_id"
 	// FieldMeta holds the string denoting the meta field in the database.
 	FieldMeta = "meta"
+	// FieldQualityIssues holds the string denoting the quality_issues field in the database.
+	FieldQualityIssues = "quality_issues"
 	// EdgeResource holds the string denoting the resource edge name in mutations.
 	EdgeResource = "resource"
 	// EdgeReviewedBy holds the string denoting the reviewed_by edge name in mutations.
@@ -67,6 +69,7 @@ var Columns = []string{
 	FieldReviewComment,
 	FieldResourceID,
 	FieldMeta,
+	FieldQualityIssues,
 }
 
 // ForeignKeys holds the SQL foreign-keys that are owned by the "segments"

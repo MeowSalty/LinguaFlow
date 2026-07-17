@@ -9,16 +9,16 @@ import { useProjectWorkspaceStore } from '@/stores/projectWorkspace'
 import { t } from '@/i18n'
 
 type Segment = ApiSchemas['Segment']
-type TranslationJob = ApiSchemas['TranslationJob']
-type CreateTranslationJobPayload = ApiSchemas['CreateTranslationJobRequest']
-type OverwriteMode = CreateTranslationJobPayload['overwrite_mode']
+type Job = ApiSchemas['Job']
+type CreateJobRequest = ApiSchemas['CreateJobRequest']
+type SegmentFilter = NonNullable<CreateJobRequest['segment_filter']>
 
 export type JobTargetMode = 'resources' | 'segments'
 
 export interface JobFormModel {
   execution_plan_id: number | null
   auto_approve: boolean
-  overwrite_mode: OverwriteMode
+  segment_filter: SegmentFilter | undefined
 }
 
 export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () => Promise<void>) {
@@ -29,7 +29,6 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
   // ── 状态 ──
   const jobDrawerVisible = ref(false)
   const jobFormRef = ref<FormInst | null>(null)
-  const jobDetailDrawerVisible = ref(false)
   const jobTargetMode = ref<JobTargetMode>('resources')
   const jobTargetResourceIds = ref<number[]>([])
   const jobTargetSegmentIds = ref<number[]>([])
@@ -38,7 +37,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
   const jobForm = reactive<JobFormModel>({
     execution_plan_id: null,
     auto_approve: false,
-    overwrite_mode: 'skip_translated',
+    segment_filter: undefined,
   })
 
   // ── 计算属性 ──
@@ -86,6 +85,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobTargetResourceIds.value = [...workspace.selectedResourceIds]
     jobTargetSegmentIds.value = []
     jobForm.execution_plan_id = null
+    jobForm.segment_filter = undefined
     jobDrawerVisible.value = true
   }
 
@@ -106,6 +106,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
       jobTargetGroupKeys: [...jobTargetGroupKeys.value],
     })
     jobForm.execution_plan_id = null
+    jobForm.segment_filter = undefined
     jobDrawerVisible.value = true
   }
 
@@ -119,6 +120,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobTargetResourceIds.value = [workspace.activeResourceId]
     jobTargetSegmentIds.value = segment ? [segment.id] : workspace.segments.map((item) => item.id)
     jobForm.execution_plan_id = null
+    jobForm.segment_filter = undefined
     jobDrawerVisible.value = true
   }
 
@@ -137,6 +139,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobTargetResourceIds.value = [workspace.activeResourceId]
     jobTargetSegmentIds.value = segmentIds
     jobForm.execution_plan_id = null
+    jobForm.segment_filter = undefined
     jobDrawerVisible.value = true
   }
 
@@ -147,7 +150,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     jobTargetGroupKeys.value = []
     jobForm.execution_plan_id = null
     jobForm.auto_approve = false
-    jobForm.overwrite_mode = 'skip_translated'
+    jobForm.segment_filter = undefined
   }
 
   const submitJob = async (): Promise<void> => {
@@ -155,11 +158,14 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
       return
     }
 
-    const payload: CreateTranslationJobPayload = {
+    const payload: CreateJobRequest = {
       execution_plan_id: jobForm.execution_plan_id,
       resource_ids: jobTargetResourceIds.value,
       auto_approve: jobForm.auto_approve,
-      overwrite_mode: jobForm.overwrite_mode,
+    }
+
+    if (jobForm.segment_filter) {
+      payload.segment_filter = jobForm.segment_filter
     }
 
     if (jobTargetGroupKeys.value.length > 0) {
@@ -196,7 +202,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     }
   }
 
-  const cancelJob = async (job: TranslationJob): Promise<void> => {
+  const cancelJob = async (job: Job): Promise<void> => {
     try {
       await workspace.cancelJob(job.id)
       message.success(t('workspace.messages.jobCancelled'))
@@ -206,7 +212,7 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     }
   }
 
-  const retryJob = async (job: TranslationJob): Promise<void> => {
+  const retryJob = async (job: Job): Promise<void> => {
     try {
       await workspace.retryJob(job.id)
       message.success(t('workspace.messages.jobRetried'))
@@ -216,23 +222,16 @@ export function useJobActions(projectId: Ref<number | null>, onJobCreated?: () =
     }
   }
 
-  const openJobDetail = async (job: TranslationJob): Promise<void> => {
-    jobDetailDrawerVisible.value = true
-    workspace.selectedJob = job
-
-    try {
-      await workspace.loadJobDetail(job.id)
-    } catch (error) {
-      console.error(error)
-      message.error(workspace.jobDetailError || t('workspace.messages.jobDetailFailed'))
-    }
+  const openJobDetail = async (job: Job): Promise<void> => {
+    const globalTracker = useGlobalJobTrackerStore()
+    globalTracker.trackJob(job, workspace.project?.name)
+    await globalTracker.openDetail(job.id)
   }
 
   return {
     // 状态
     jobDrawerVisible,
     jobFormRef,
-    jobDetailDrawerVisible,
     jobTargetMode,
     jobTargetResourceIds,
     jobTargetSegmentIds,

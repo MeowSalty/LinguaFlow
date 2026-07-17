@@ -17,21 +17,24 @@ import (
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/pruneprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
@@ -45,10 +48,16 @@ type Client struct {
 	ActivityLog *ActivityLogClient
 	// Backend is the client for interacting with the Backend builders.
 	Backend *BackendClient
+	// BootstrapPromptTemplate is the client for interacting with the BootstrapPromptTemplate builders.
+	BootstrapPromptTemplate *BootstrapPromptTemplateClient
 	// ExecutionPlanTemplate is the client for interacting with the ExecutionPlanTemplate builders.
 	ExecutionPlanTemplate *ExecutionPlanTemplateClient
+	// ExecutionProfile is the client for interacting with the ExecutionProfile builders.
+	ExecutionProfile *ExecutionProfileClient
 	// GlossaryEntry is the client for interacting with the GlossaryEntry builders.
 	GlossaryEntry *GlossaryEntryClient
+	// Job is the client for interacting with the Job builders.
+	Job *JobClient
 	// JobResource is the client for interacting with the JobResource builders.
 	JobResource *JobResourceClient
 	// OrgMembership is the client for interacting with the OrgMembership builders.
@@ -57,12 +66,14 @@ type Client struct {
 	Organization *OrganizationClient
 	// Project is the client for interacting with the Project builders.
 	Project *ProjectClient
-	// PromptTemplate is the client for interacting with the PromptTemplate builders.
-	PromptTemplate *PromptTemplateClient
+	// PrunePromptTemplate is the client for interacting with the PrunePromptTemplate builders.
+	PrunePromptTemplate *PrunePromptTemplateClient
 	// RefreshToken is the client for interacting with the RefreshToken builders.
 	RefreshToken *RefreshTokenClient
 	// Resource is the client for interacting with the Resource builders.
 	Resource *ResourceClient
+	// SSEEvent is the client for interacting with the SSEEvent builders.
+	SSEEvent *SSEEventClient
 	// Segment is the client for interacting with the Segment builders.
 	Segment *SegmentClient
 	// SyncTask is the client for interacting with the SyncTask builders.
@@ -71,10 +82,8 @@ type Client struct {
 	SystemSetting *SystemSettingClient
 	// TMEntry is the client for interacting with the TMEntry builders.
 	TMEntry *TMEntryClient
-	// TranslationJob is the client for interacting with the TranslationJob builders.
-	TranslationJob *TranslationJobClient
-	// TranslationProfile is the client for interacting with the TranslationProfile builders.
-	TranslationProfile *TranslationProfileClient
+	// TranslationPromptTemplate is the client for interacting with the TranslationPromptTemplate builders.
+	TranslationPromptTemplate *TranslationPromptTemplateClient
 	// UsageRecord is the client for interacting with the UsageRecord builders.
 	UsageRecord *UsageRecordClient
 	// User is the client for interacting with the User builders.
@@ -92,21 +101,24 @@ func (c *Client) init() {
 	c.Schema = migrate.NewSchema(c.driver)
 	c.ActivityLog = NewActivityLogClient(c.config)
 	c.Backend = NewBackendClient(c.config)
+	c.BootstrapPromptTemplate = NewBootstrapPromptTemplateClient(c.config)
 	c.ExecutionPlanTemplate = NewExecutionPlanTemplateClient(c.config)
+	c.ExecutionProfile = NewExecutionProfileClient(c.config)
 	c.GlossaryEntry = NewGlossaryEntryClient(c.config)
+	c.Job = NewJobClient(c.config)
 	c.JobResource = NewJobResourceClient(c.config)
 	c.OrgMembership = NewOrgMembershipClient(c.config)
 	c.Organization = NewOrganizationClient(c.config)
 	c.Project = NewProjectClient(c.config)
-	c.PromptTemplate = NewPromptTemplateClient(c.config)
+	c.PrunePromptTemplate = NewPrunePromptTemplateClient(c.config)
 	c.RefreshToken = NewRefreshTokenClient(c.config)
 	c.Resource = NewResourceClient(c.config)
+	c.SSEEvent = NewSSEEventClient(c.config)
 	c.Segment = NewSegmentClient(c.config)
 	c.SyncTask = NewSyncTaskClient(c.config)
 	c.SystemSetting = NewSystemSettingClient(c.config)
 	c.TMEntry = NewTMEntryClient(c.config)
-	c.TranslationJob = NewTranslationJobClient(c.config)
-	c.TranslationProfile = NewTranslationProfileClient(c.config)
+	c.TranslationPromptTemplate = NewTranslationPromptTemplateClient(c.config)
 	c.UsageRecord = NewUsageRecordClient(c.config)
 	c.User = NewUserClient(c.config)
 }
@@ -199,27 +211,30 @@ func (c *Client) Tx(ctx context.Context) (*Tx, error) {
 	cfg := c.config
 	cfg.driver = tx
 	return &Tx{
-		ctx:                   ctx,
-		config:                cfg,
-		ActivityLog:           NewActivityLogClient(cfg),
-		Backend:               NewBackendClient(cfg),
-		ExecutionPlanTemplate: NewExecutionPlanTemplateClient(cfg),
-		GlossaryEntry:         NewGlossaryEntryClient(cfg),
-		JobResource:           NewJobResourceClient(cfg),
-		OrgMembership:         NewOrgMembershipClient(cfg),
-		Organization:          NewOrganizationClient(cfg),
-		Project:               NewProjectClient(cfg),
-		PromptTemplate:        NewPromptTemplateClient(cfg),
-		RefreshToken:          NewRefreshTokenClient(cfg),
-		Resource:              NewResourceClient(cfg),
-		Segment:               NewSegmentClient(cfg),
-		SyncTask:              NewSyncTaskClient(cfg),
-		SystemSetting:         NewSystemSettingClient(cfg),
-		TMEntry:               NewTMEntryClient(cfg),
-		TranslationJob:        NewTranslationJobClient(cfg),
-		TranslationProfile:    NewTranslationProfileClient(cfg),
-		UsageRecord:           NewUsageRecordClient(cfg),
-		User:                  NewUserClient(cfg),
+		ctx:                       ctx,
+		config:                    cfg,
+		ActivityLog:               NewActivityLogClient(cfg),
+		Backend:                   NewBackendClient(cfg),
+		BootstrapPromptTemplate:   NewBootstrapPromptTemplateClient(cfg),
+		ExecutionPlanTemplate:     NewExecutionPlanTemplateClient(cfg),
+		ExecutionProfile:          NewExecutionProfileClient(cfg),
+		GlossaryEntry:             NewGlossaryEntryClient(cfg),
+		Job:                       NewJobClient(cfg),
+		JobResource:               NewJobResourceClient(cfg),
+		OrgMembership:             NewOrgMembershipClient(cfg),
+		Organization:              NewOrganizationClient(cfg),
+		Project:                   NewProjectClient(cfg),
+		PrunePromptTemplate:       NewPrunePromptTemplateClient(cfg),
+		RefreshToken:              NewRefreshTokenClient(cfg),
+		Resource:                  NewResourceClient(cfg),
+		SSEEvent:                  NewSSEEventClient(cfg),
+		Segment:                   NewSegmentClient(cfg),
+		SyncTask:                  NewSyncTaskClient(cfg),
+		SystemSetting:             NewSystemSettingClient(cfg),
+		TMEntry:                   NewTMEntryClient(cfg),
+		TranslationPromptTemplate: NewTranslationPromptTemplateClient(cfg),
+		UsageRecord:               NewUsageRecordClient(cfg),
+		User:                      NewUserClient(cfg),
 	}, nil
 }
 
@@ -237,27 +252,30 @@ func (c *Client) BeginTx(ctx context.Context, opts *sql.TxOptions) (*Tx, error) 
 	cfg := c.config
 	cfg.driver = &txDriver{tx: tx, drv: c.driver}
 	return &Tx{
-		ctx:                   ctx,
-		config:                cfg,
-		ActivityLog:           NewActivityLogClient(cfg),
-		Backend:               NewBackendClient(cfg),
-		ExecutionPlanTemplate: NewExecutionPlanTemplateClient(cfg),
-		GlossaryEntry:         NewGlossaryEntryClient(cfg),
-		JobResource:           NewJobResourceClient(cfg),
-		OrgMembership:         NewOrgMembershipClient(cfg),
-		Organization:          NewOrganizationClient(cfg),
-		Project:               NewProjectClient(cfg),
-		PromptTemplate:        NewPromptTemplateClient(cfg),
-		RefreshToken:          NewRefreshTokenClient(cfg),
-		Resource:              NewResourceClient(cfg),
-		Segment:               NewSegmentClient(cfg),
-		SyncTask:              NewSyncTaskClient(cfg),
-		SystemSetting:         NewSystemSettingClient(cfg),
-		TMEntry:               NewTMEntryClient(cfg),
-		TranslationJob:        NewTranslationJobClient(cfg),
-		TranslationProfile:    NewTranslationProfileClient(cfg),
-		UsageRecord:           NewUsageRecordClient(cfg),
-		User:                  NewUserClient(cfg),
+		ctx:                       ctx,
+		config:                    cfg,
+		ActivityLog:               NewActivityLogClient(cfg),
+		Backend:                   NewBackendClient(cfg),
+		BootstrapPromptTemplate:   NewBootstrapPromptTemplateClient(cfg),
+		ExecutionPlanTemplate:     NewExecutionPlanTemplateClient(cfg),
+		ExecutionProfile:          NewExecutionProfileClient(cfg),
+		GlossaryEntry:             NewGlossaryEntryClient(cfg),
+		Job:                       NewJobClient(cfg),
+		JobResource:               NewJobResourceClient(cfg),
+		OrgMembership:             NewOrgMembershipClient(cfg),
+		Organization:              NewOrganizationClient(cfg),
+		Project:                   NewProjectClient(cfg),
+		PrunePromptTemplate:       NewPrunePromptTemplateClient(cfg),
+		RefreshToken:              NewRefreshTokenClient(cfg),
+		Resource:                  NewResourceClient(cfg),
+		SSEEvent:                  NewSSEEventClient(cfg),
+		Segment:                   NewSegmentClient(cfg),
+		SyncTask:                  NewSyncTaskClient(cfg),
+		SystemSetting:             NewSystemSettingClient(cfg),
+		TMEntry:                   NewTMEntryClient(cfg),
+		TranslationPromptTemplate: NewTranslationPromptTemplateClient(cfg),
+		UsageRecord:               NewUsageRecordClient(cfg),
+		User:                      NewUserClient(cfg),
 	}, nil
 }
 
@@ -287,10 +305,11 @@ func (c *Client) Close() error {
 // In order to add hooks to a specific client, call: `client.Node.Use(...)`.
 func (c *Client) Use(hooks ...Hook) {
 	for _, n := range []interface{ Use(...Hook) }{
-		c.ActivityLog, c.Backend, c.ExecutionPlanTemplate, c.GlossaryEntry,
-		c.JobResource, c.OrgMembership, c.Organization, c.Project, c.PromptTemplate,
-		c.RefreshToken, c.Resource, c.Segment, c.SyncTask, c.SystemSetting, c.TMEntry,
-		c.TranslationJob, c.TranslationProfile, c.UsageRecord, c.User,
+		c.ActivityLog, c.Backend, c.BootstrapPromptTemplate, c.ExecutionPlanTemplate,
+		c.ExecutionProfile, c.GlossaryEntry, c.Job, c.JobResource, c.OrgMembership,
+		c.Organization, c.Project, c.PrunePromptTemplate, c.RefreshToken, c.Resource,
+		c.SSEEvent, c.Segment, c.SyncTask, c.SystemSetting, c.TMEntry,
+		c.TranslationPromptTemplate, c.UsageRecord, c.User,
 	} {
 		n.Use(hooks...)
 	}
@@ -300,10 +319,11 @@ func (c *Client) Use(hooks ...Hook) {
 // In order to add interceptors to a specific client, call: `client.Node.Intercept(...)`.
 func (c *Client) Intercept(interceptors ...Interceptor) {
 	for _, n := range []interface{ Intercept(...Interceptor) }{
-		c.ActivityLog, c.Backend, c.ExecutionPlanTemplate, c.GlossaryEntry,
-		c.JobResource, c.OrgMembership, c.Organization, c.Project, c.PromptTemplate,
-		c.RefreshToken, c.Resource, c.Segment, c.SyncTask, c.SystemSetting, c.TMEntry,
-		c.TranslationJob, c.TranslationProfile, c.UsageRecord, c.User,
+		c.ActivityLog, c.Backend, c.BootstrapPromptTemplate, c.ExecutionPlanTemplate,
+		c.ExecutionProfile, c.GlossaryEntry, c.Job, c.JobResource, c.OrgMembership,
+		c.Organization, c.Project, c.PrunePromptTemplate, c.RefreshToken, c.Resource,
+		c.SSEEvent, c.Segment, c.SyncTask, c.SystemSetting, c.TMEntry,
+		c.TranslationPromptTemplate, c.UsageRecord, c.User,
 	} {
 		n.Intercept(interceptors...)
 	}
@@ -316,10 +336,16 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.ActivityLog.mutate(ctx, m)
 	case *BackendMutation:
 		return c.Backend.mutate(ctx, m)
+	case *BootstrapPromptTemplateMutation:
+		return c.BootstrapPromptTemplate.mutate(ctx, m)
 	case *ExecutionPlanTemplateMutation:
 		return c.ExecutionPlanTemplate.mutate(ctx, m)
+	case *ExecutionProfileMutation:
+		return c.ExecutionProfile.mutate(ctx, m)
 	case *GlossaryEntryMutation:
 		return c.GlossaryEntry.mutate(ctx, m)
+	case *JobMutation:
+		return c.Job.mutate(ctx, m)
 	case *JobResourceMutation:
 		return c.JobResource.mutate(ctx, m)
 	case *OrgMembershipMutation:
@@ -328,12 +354,14 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.Organization.mutate(ctx, m)
 	case *ProjectMutation:
 		return c.Project.mutate(ctx, m)
-	case *PromptTemplateMutation:
-		return c.PromptTemplate.mutate(ctx, m)
+	case *PrunePromptTemplateMutation:
+		return c.PrunePromptTemplate.mutate(ctx, m)
 	case *RefreshTokenMutation:
 		return c.RefreshToken.mutate(ctx, m)
 	case *ResourceMutation:
 		return c.Resource.mutate(ctx, m)
+	case *SSEEventMutation:
+		return c.SSEEvent.mutate(ctx, m)
 	case *SegmentMutation:
 		return c.Segment.mutate(ctx, m)
 	case *SyncTaskMutation:
@@ -342,10 +370,8 @@ func (c *Client) Mutate(ctx context.Context, m Mutation) (Value, error) {
 		return c.SystemSetting.mutate(ctx, m)
 	case *TMEntryMutation:
 		return c.TMEntry.mutate(ctx, m)
-	case *TranslationJobMutation:
-		return c.TranslationJob.mutate(ctx, m)
-	case *TranslationProfileMutation:
-		return c.TranslationProfile.mutate(ctx, m)
+	case *TranslationPromptTemplateMutation:
+		return c.TranslationPromptTemplate.mutate(ctx, m)
 	case *UsageRecordMutation:
 		return c.UsageRecord.mutate(ctx, m)
 	case *UserMutation:
@@ -701,6 +727,171 @@ func (c *BackendClient) mutate(ctx context.Context, m *BackendMutation) (Value, 
 	}
 }
 
+// BootstrapPromptTemplateClient is a client for the BootstrapPromptTemplate schema.
+type BootstrapPromptTemplateClient struct {
+	config
+}
+
+// NewBootstrapPromptTemplateClient returns a client for the BootstrapPromptTemplate from the given config.
+func NewBootstrapPromptTemplateClient(c config) *BootstrapPromptTemplateClient {
+	return &BootstrapPromptTemplateClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `bootstrapprompttemplate.Hooks(f(g(h())))`.
+func (c *BootstrapPromptTemplateClient) Use(hooks ...Hook) {
+	c.hooks.BootstrapPromptTemplate = append(c.hooks.BootstrapPromptTemplate, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `bootstrapprompttemplate.Intercept(f(g(h())))`.
+func (c *BootstrapPromptTemplateClient) Intercept(interceptors ...Interceptor) {
+	c.inters.BootstrapPromptTemplate = append(c.inters.BootstrapPromptTemplate, interceptors...)
+}
+
+// Create returns a builder for creating a BootstrapPromptTemplate entity.
+func (c *BootstrapPromptTemplateClient) Create() *BootstrapPromptTemplateCreate {
+	mutation := newBootstrapPromptTemplateMutation(c.config, OpCreate)
+	return &BootstrapPromptTemplateCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of BootstrapPromptTemplate entities.
+func (c *BootstrapPromptTemplateClient) CreateBulk(builders ...*BootstrapPromptTemplateCreate) *BootstrapPromptTemplateCreateBulk {
+	return &BootstrapPromptTemplateCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *BootstrapPromptTemplateClient) MapCreateBulk(slice any, setFunc func(*BootstrapPromptTemplateCreate, int)) *BootstrapPromptTemplateCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &BootstrapPromptTemplateCreateBulk{err: fmt.Errorf("calling to BootstrapPromptTemplateClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*BootstrapPromptTemplateCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &BootstrapPromptTemplateCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for BootstrapPromptTemplate.
+func (c *BootstrapPromptTemplateClient) Update() *BootstrapPromptTemplateUpdate {
+	mutation := newBootstrapPromptTemplateMutation(c.config, OpUpdate)
+	return &BootstrapPromptTemplateUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *BootstrapPromptTemplateClient) UpdateOne(_m *BootstrapPromptTemplate) *BootstrapPromptTemplateUpdateOne {
+	mutation := newBootstrapPromptTemplateMutation(c.config, OpUpdateOne, withBootstrapPromptTemplate(_m))
+	return &BootstrapPromptTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *BootstrapPromptTemplateClient) UpdateOneID(id int) *BootstrapPromptTemplateUpdateOne {
+	mutation := newBootstrapPromptTemplateMutation(c.config, OpUpdateOne, withBootstrapPromptTemplateID(id))
+	return &BootstrapPromptTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for BootstrapPromptTemplate.
+func (c *BootstrapPromptTemplateClient) Delete() *BootstrapPromptTemplateDelete {
+	mutation := newBootstrapPromptTemplateMutation(c.config, OpDelete)
+	return &BootstrapPromptTemplateDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *BootstrapPromptTemplateClient) DeleteOne(_m *BootstrapPromptTemplate) *BootstrapPromptTemplateDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *BootstrapPromptTemplateClient) DeleteOneID(id int) *BootstrapPromptTemplateDeleteOne {
+	builder := c.Delete().Where(bootstrapprompttemplate.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &BootstrapPromptTemplateDeleteOne{builder}
+}
+
+// Query returns a query builder for BootstrapPromptTemplate.
+func (c *BootstrapPromptTemplateClient) Query() *BootstrapPromptTemplateQuery {
+	return &BootstrapPromptTemplateQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeBootstrapPromptTemplate},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a BootstrapPromptTemplate entity by its id.
+func (c *BootstrapPromptTemplateClient) Get(ctx context.Context, id int) (*BootstrapPromptTemplate, error) {
+	return c.Query().Where(bootstrapprompttemplate.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *BootstrapPromptTemplateClient) GetX(ctx context.Context, id int) *BootstrapPromptTemplate {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryOwnerUser queries the owner_user edge of a BootstrapPromptTemplate.
+func (c *BootstrapPromptTemplateClient) QueryOwnerUser(_m *BootstrapPromptTemplate) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(bootstrapprompttemplate.Table, bootstrapprompttemplate.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, bootstrapprompttemplate.OwnerUserTable, bootstrapprompttemplate.OwnerUserColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryOwnerOrg queries the owner_org edge of a BootstrapPromptTemplate.
+func (c *BootstrapPromptTemplateClient) QueryOwnerOrg(_m *BootstrapPromptTemplate) *OrganizationQuery {
+	query := (&OrganizationClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(bootstrapprompttemplate.Table, bootstrapprompttemplate.FieldID, id),
+			sqlgraph.To(organization.Table, organization.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, bootstrapprompttemplate.OwnerOrgTable, bootstrapprompttemplate.OwnerOrgColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *BootstrapPromptTemplateClient) Hooks() []Hook {
+	return c.hooks.BootstrapPromptTemplate
+}
+
+// Interceptors returns the client interceptors.
+func (c *BootstrapPromptTemplateClient) Interceptors() []Interceptor {
+	return c.inters.BootstrapPromptTemplate
+}
+
+func (c *BootstrapPromptTemplateClient) mutate(ctx context.Context, m *BootstrapPromptTemplateMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&BootstrapPromptTemplateCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&BootstrapPromptTemplateUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&BootstrapPromptTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&BootstrapPromptTemplateDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown BootstrapPromptTemplate mutation op: %q", m.Op())
+	}
+}
+
 // ExecutionPlanTemplateClient is a client for the ExecutionPlanTemplate schema.
 type ExecutionPlanTemplateClient struct {
 	config
@@ -863,6 +1054,171 @@ func (c *ExecutionPlanTemplateClient) mutate(ctx context.Context, m *ExecutionPl
 		return (&ExecutionPlanTemplateDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown ExecutionPlanTemplate mutation op: %q", m.Op())
+	}
+}
+
+// ExecutionProfileClient is a client for the ExecutionProfile schema.
+type ExecutionProfileClient struct {
+	config
+}
+
+// NewExecutionProfileClient returns a client for the ExecutionProfile from the given config.
+func NewExecutionProfileClient(c config) *ExecutionProfileClient {
+	return &ExecutionProfileClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `executionprofile.Hooks(f(g(h())))`.
+func (c *ExecutionProfileClient) Use(hooks ...Hook) {
+	c.hooks.ExecutionProfile = append(c.hooks.ExecutionProfile, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `executionprofile.Intercept(f(g(h())))`.
+func (c *ExecutionProfileClient) Intercept(interceptors ...Interceptor) {
+	c.inters.ExecutionProfile = append(c.inters.ExecutionProfile, interceptors...)
+}
+
+// Create returns a builder for creating a ExecutionProfile entity.
+func (c *ExecutionProfileClient) Create() *ExecutionProfileCreate {
+	mutation := newExecutionProfileMutation(c.config, OpCreate)
+	return &ExecutionProfileCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of ExecutionProfile entities.
+func (c *ExecutionProfileClient) CreateBulk(builders ...*ExecutionProfileCreate) *ExecutionProfileCreateBulk {
+	return &ExecutionProfileCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *ExecutionProfileClient) MapCreateBulk(slice any, setFunc func(*ExecutionProfileCreate, int)) *ExecutionProfileCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &ExecutionProfileCreateBulk{err: fmt.Errorf("calling to ExecutionProfileClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*ExecutionProfileCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &ExecutionProfileCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for ExecutionProfile.
+func (c *ExecutionProfileClient) Update() *ExecutionProfileUpdate {
+	mutation := newExecutionProfileMutation(c.config, OpUpdate)
+	return &ExecutionProfileUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *ExecutionProfileClient) UpdateOne(_m *ExecutionProfile) *ExecutionProfileUpdateOne {
+	mutation := newExecutionProfileMutation(c.config, OpUpdateOne, withExecutionProfile(_m))
+	return &ExecutionProfileUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *ExecutionProfileClient) UpdateOneID(id int) *ExecutionProfileUpdateOne {
+	mutation := newExecutionProfileMutation(c.config, OpUpdateOne, withExecutionProfileID(id))
+	return &ExecutionProfileUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for ExecutionProfile.
+func (c *ExecutionProfileClient) Delete() *ExecutionProfileDelete {
+	mutation := newExecutionProfileMutation(c.config, OpDelete)
+	return &ExecutionProfileDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *ExecutionProfileClient) DeleteOne(_m *ExecutionProfile) *ExecutionProfileDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *ExecutionProfileClient) DeleteOneID(id int) *ExecutionProfileDeleteOne {
+	builder := c.Delete().Where(executionprofile.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &ExecutionProfileDeleteOne{builder}
+}
+
+// Query returns a query builder for ExecutionProfile.
+func (c *ExecutionProfileClient) Query() *ExecutionProfileQuery {
+	return &ExecutionProfileQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeExecutionProfile},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a ExecutionProfile entity by its id.
+func (c *ExecutionProfileClient) Get(ctx context.Context, id int) (*ExecutionProfile, error) {
+	return c.Query().Where(executionprofile.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *ExecutionProfileClient) GetX(ctx context.Context, id int) *ExecutionProfile {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryOwnerUser queries the owner_user edge of a ExecutionProfile.
+func (c *ExecutionProfileClient) QueryOwnerUser(_m *ExecutionProfile) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(executionprofile.Table, executionprofile.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, executionprofile.OwnerUserTable, executionprofile.OwnerUserColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryOwnerOrg queries the owner_org edge of a ExecutionProfile.
+func (c *ExecutionProfileClient) QueryOwnerOrg(_m *ExecutionProfile) *OrganizationQuery {
+	query := (&OrganizationClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(executionprofile.Table, executionprofile.FieldID, id),
+			sqlgraph.To(organization.Table, organization.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, executionprofile.OwnerOrgTable, executionprofile.OwnerOrgColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *ExecutionProfileClient) Hooks() []Hook {
+	return c.hooks.ExecutionProfile
+}
+
+// Interceptors returns the client interceptors.
+func (c *ExecutionProfileClient) Interceptors() []Interceptor {
+	return c.inters.ExecutionProfile
+}
+
+func (c *ExecutionProfileClient) mutate(ctx context.Context, m *ExecutionProfileMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&ExecutionProfileCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&ExecutionProfileUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&ExecutionProfileUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&ExecutionProfileDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown ExecutionProfile mutation op: %q", m.Op())
 	}
 }
 
@@ -1031,6 +1387,203 @@ func (c *GlossaryEntryClient) mutate(ctx context.Context, m *GlossaryEntryMutati
 	}
 }
 
+// JobClient is a client for the Job schema.
+type JobClient struct {
+	config
+}
+
+// NewJobClient returns a client for the Job from the given config.
+func NewJobClient(c config) *JobClient {
+	return &JobClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `job.Hooks(f(g(h())))`.
+func (c *JobClient) Use(hooks ...Hook) {
+	c.hooks.Job = append(c.hooks.Job, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `job.Intercept(f(g(h())))`.
+func (c *JobClient) Intercept(interceptors ...Interceptor) {
+	c.inters.Job = append(c.inters.Job, interceptors...)
+}
+
+// Create returns a builder for creating a Job entity.
+func (c *JobClient) Create() *JobCreate {
+	mutation := newJobMutation(c.config, OpCreate)
+	return &JobCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of Job entities.
+func (c *JobClient) CreateBulk(builders ...*JobCreate) *JobCreateBulk {
+	return &JobCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *JobClient) MapCreateBulk(slice any, setFunc func(*JobCreate, int)) *JobCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &JobCreateBulk{err: fmt.Errorf("calling to JobClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*JobCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &JobCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for Job.
+func (c *JobClient) Update() *JobUpdate {
+	mutation := newJobMutation(c.config, OpUpdate)
+	return &JobUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *JobClient) UpdateOne(_m *Job) *JobUpdateOne {
+	mutation := newJobMutation(c.config, OpUpdateOne, withJob(_m))
+	return &JobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *JobClient) UpdateOneID(id int) *JobUpdateOne {
+	mutation := newJobMutation(c.config, OpUpdateOne, withJobID(id))
+	return &JobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for Job.
+func (c *JobClient) Delete() *JobDelete {
+	mutation := newJobMutation(c.config, OpDelete)
+	return &JobDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *JobClient) DeleteOne(_m *Job) *JobDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *JobClient) DeleteOneID(id int) *JobDeleteOne {
+	builder := c.Delete().Where(job.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &JobDeleteOne{builder}
+}
+
+// Query returns a query builder for Job.
+func (c *JobClient) Query() *JobQuery {
+	return &JobQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeJob},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a Job entity by its id.
+func (c *JobClient) Get(ctx context.Context, id int) (*Job, error) {
+	return c.Query().Where(job.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *JobClient) GetX(ctx context.Context, id int) *Job {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryProject queries the project edge of a Job.
+func (c *JobClient) QueryProject(_m *Job) *ProjectQuery {
+	query := (&ProjectClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(job.Table, job.FieldID, id),
+			sqlgraph.To(project.Table, project.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, job.ProjectTable, job.ProjectColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryCreatedBy queries the created_by edge of a Job.
+func (c *JobClient) QueryCreatedBy(_m *Job) *UserQuery {
+	query := (&UserClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(job.Table, job.FieldID, id),
+			sqlgraph.To(user.Table, user.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, job.CreatedByTable, job.CreatedByColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryJobResources queries the job_resources edge of a Job.
+func (c *JobClient) QueryJobResources(_m *Job) *JobResourceQuery {
+	query := (&JobResourceClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(job.Table, job.FieldID, id),
+			sqlgraph.To(jobresource.Table, jobresource.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, job.JobResourcesTable, job.JobResourcesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QuerySseEvents queries the sse_events edge of a Job.
+func (c *JobClient) QuerySseEvents(_m *Job) *SSEEventQuery {
+	query := (&SSEEventClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(job.Table, job.FieldID, id),
+			sqlgraph.To(sseevent.Table, sseevent.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, job.SseEventsTable, job.SseEventsColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *JobClient) Hooks() []Hook {
+	return c.hooks.Job
+}
+
+// Interceptors returns the client interceptors.
+func (c *JobClient) Interceptors() []Interceptor {
+	return c.inters.Job
+}
+
+func (c *JobClient) mutate(ctx context.Context, m *JobMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&JobCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&JobUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&JobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&JobDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown Job mutation op: %q", m.Op())
+	}
+}
+
 // JobResourceClient is a client for the JobResource schema.
 type JobResourceClient struct {
 	config
@@ -1140,13 +1693,13 @@ func (c *JobResourceClient) GetX(ctx context.Context, id int) *JobResource {
 }
 
 // QueryJob queries the job edge of a JobResource.
-func (c *JobResourceClient) QueryJob(_m *JobResource) *TranslationJobQuery {
-	query := (&TranslationJobClient{config: c.config}).Query()
+func (c *JobResourceClient) QueryJob(_m *JobResource) *JobQuery {
+	query := (&JobClient{config: c.config}).Query()
 	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
 		id := _m.ID
 		step := sqlgraph.NewStep(
 			sqlgraph.From(jobresource.Table, jobresource.FieldID, id),
-			sqlgraph.To(translationjob.Table, translationjob.FieldID),
+			sqlgraph.To(job.Table, job.FieldID),
 			sqlgraph.Edge(sqlgraph.M2O, true, jobresource.JobTable, jobresource.JobColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
@@ -1549,15 +2102,15 @@ func (c *OrganizationClient) QueryUsageRecords(_m *Organization) *UsageRecordQue
 	return query
 }
 
-// QueryPromptTemplates queries the prompt_templates edge of a Organization.
-func (c *OrganizationClient) QueryPromptTemplates(_m *Organization) *PromptTemplateQuery {
-	query := (&PromptTemplateClient{config: c.config}).Query()
+// QueryTranslationPromptTemplates queries the translation_prompt_templates edge of a Organization.
+func (c *OrganizationClient) QueryTranslationPromptTemplates(_m *Organization) *TranslationPromptTemplateQuery {
+	query := (&TranslationPromptTemplateClient{config: c.config}).Query()
 	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
 		id := _m.ID
 		step := sqlgraph.NewStep(
 			sqlgraph.From(organization.Table, organization.FieldID, id),
-			sqlgraph.To(prompttemplate.Table, prompttemplate.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, organization.PromptTemplatesTable, organization.PromptTemplatesColumn),
+			sqlgraph.To(translationprompttemplate.Table, translationprompttemplate.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, organization.TranslationPromptTemplatesTable, organization.TranslationPromptTemplatesColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -1565,15 +2118,47 @@ func (c *OrganizationClient) QueryPromptTemplates(_m *Organization) *PromptTempl
 	return query
 }
 
-// QueryTranslationProfiles queries the translation_profiles edge of a Organization.
-func (c *OrganizationClient) QueryTranslationProfiles(_m *Organization) *TranslationProfileQuery {
-	query := (&TranslationProfileClient{config: c.config}).Query()
+// QueryBootstrapPromptTemplates queries the bootstrap_prompt_templates edge of a Organization.
+func (c *OrganizationClient) QueryBootstrapPromptTemplates(_m *Organization) *BootstrapPromptTemplateQuery {
+	query := (&BootstrapPromptTemplateClient{config: c.config}).Query()
 	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
 		id := _m.ID
 		step := sqlgraph.NewStep(
 			sqlgraph.From(organization.Table, organization.FieldID, id),
-			sqlgraph.To(translationprofile.Table, translationprofile.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, organization.TranslationProfilesTable, organization.TranslationProfilesColumn),
+			sqlgraph.To(bootstrapprompttemplate.Table, bootstrapprompttemplate.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, organization.BootstrapPromptTemplatesTable, organization.BootstrapPromptTemplatesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryPrunePromptTemplates queries the prune_prompt_templates edge of a Organization.
+func (c *OrganizationClient) QueryPrunePromptTemplates(_m *Organization) *PrunePromptTemplateQuery {
+	query := (&PrunePromptTemplateClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(organization.Table, organization.FieldID, id),
+			sqlgraph.To(pruneprompttemplate.Table, pruneprompttemplate.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, organization.PrunePromptTemplatesTable, organization.PrunePromptTemplatesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryExecutionProfiles queries the execution_profiles edge of a Organization.
+func (c *OrganizationClient) QueryExecutionProfiles(_m *Organization) *ExecutionProfileQuery {
+	query := (&ExecutionProfileClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(organization.Table, organization.FieldID, id),
+			sqlgraph.To(executionprofile.Table, executionprofile.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, organization.ExecutionProfilesTable, organization.ExecutionProfilesColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -1794,15 +2379,15 @@ func (c *ProjectClient) QueryTmEntries(_m *Project) *TMEntryQuery {
 	return query
 }
 
-// QueryTranslationJobs queries the translation_jobs edge of a Project.
-func (c *ProjectClient) QueryTranslationJobs(_m *Project) *TranslationJobQuery {
-	query := (&TranslationJobClient{config: c.config}).Query()
+// QueryJobs queries the jobs edge of a Project.
+func (c *ProjectClient) QueryJobs(_m *Project) *JobQuery {
+	query := (&JobClient{config: c.config}).Query()
 	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
 		id := _m.ID
 		step := sqlgraph.NewStep(
 			sqlgraph.From(project.Table, project.FieldID, id),
-			sqlgraph.To(translationjob.Table, translationjob.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, project.TranslationJobsTable, project.TranslationJobsColumn),
+			sqlgraph.To(job.Table, job.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, project.JobsTable, project.JobsColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -1899,107 +2484,107 @@ func (c *ProjectClient) mutate(ctx context.Context, m *ProjectMutation) (Value, 
 	}
 }
 
-// PromptTemplateClient is a client for the PromptTemplate schema.
-type PromptTemplateClient struct {
+// PrunePromptTemplateClient is a client for the PrunePromptTemplate schema.
+type PrunePromptTemplateClient struct {
 	config
 }
 
-// NewPromptTemplateClient returns a client for the PromptTemplate from the given config.
-func NewPromptTemplateClient(c config) *PromptTemplateClient {
-	return &PromptTemplateClient{config: c}
+// NewPrunePromptTemplateClient returns a client for the PrunePromptTemplate from the given config.
+func NewPrunePromptTemplateClient(c config) *PrunePromptTemplateClient {
+	return &PrunePromptTemplateClient{config: c}
 }
 
 // Use adds a list of mutation hooks to the hooks stack.
-// A call to `Use(f, g, h)` equals to `prompttemplate.Hooks(f(g(h())))`.
-func (c *PromptTemplateClient) Use(hooks ...Hook) {
-	c.hooks.PromptTemplate = append(c.hooks.PromptTemplate, hooks...)
+// A call to `Use(f, g, h)` equals to `pruneprompttemplate.Hooks(f(g(h())))`.
+func (c *PrunePromptTemplateClient) Use(hooks ...Hook) {
+	c.hooks.PrunePromptTemplate = append(c.hooks.PrunePromptTemplate, hooks...)
 }
 
 // Intercept adds a list of query interceptors to the interceptors stack.
-// A call to `Intercept(f, g, h)` equals to `prompttemplate.Intercept(f(g(h())))`.
-func (c *PromptTemplateClient) Intercept(interceptors ...Interceptor) {
-	c.inters.PromptTemplate = append(c.inters.PromptTemplate, interceptors...)
+// A call to `Intercept(f, g, h)` equals to `pruneprompttemplate.Intercept(f(g(h())))`.
+func (c *PrunePromptTemplateClient) Intercept(interceptors ...Interceptor) {
+	c.inters.PrunePromptTemplate = append(c.inters.PrunePromptTemplate, interceptors...)
 }
 
-// Create returns a builder for creating a PromptTemplate entity.
-func (c *PromptTemplateClient) Create() *PromptTemplateCreate {
-	mutation := newPromptTemplateMutation(c.config, OpCreate)
-	return &PromptTemplateCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// Create returns a builder for creating a PrunePromptTemplate entity.
+func (c *PrunePromptTemplateClient) Create() *PrunePromptTemplateCreate {
+	mutation := newPrunePromptTemplateMutation(c.config, OpCreate)
+	return &PrunePromptTemplateCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
-// CreateBulk returns a builder for creating a bulk of PromptTemplate entities.
-func (c *PromptTemplateClient) CreateBulk(builders ...*PromptTemplateCreate) *PromptTemplateCreateBulk {
-	return &PromptTemplateCreateBulk{config: c.config, builders: builders}
+// CreateBulk returns a builder for creating a bulk of PrunePromptTemplate entities.
+func (c *PrunePromptTemplateClient) CreateBulk(builders ...*PrunePromptTemplateCreate) *PrunePromptTemplateCreateBulk {
+	return &PrunePromptTemplateCreateBulk{config: c.config, builders: builders}
 }
 
 // MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
 // a builder and applies setFunc on it.
-func (c *PromptTemplateClient) MapCreateBulk(slice any, setFunc func(*PromptTemplateCreate, int)) *PromptTemplateCreateBulk {
+func (c *PrunePromptTemplateClient) MapCreateBulk(slice any, setFunc func(*PrunePromptTemplateCreate, int)) *PrunePromptTemplateCreateBulk {
 	rv := reflect.ValueOf(slice)
 	if rv.Kind() != reflect.Slice {
-		return &PromptTemplateCreateBulk{err: fmt.Errorf("calling to PromptTemplateClient.MapCreateBulk with wrong type %T, need slice", slice)}
+		return &PrunePromptTemplateCreateBulk{err: fmt.Errorf("calling to PrunePromptTemplateClient.MapCreateBulk with wrong type %T, need slice", slice)}
 	}
-	builders := make([]*PromptTemplateCreate, rv.Len())
+	builders := make([]*PrunePromptTemplateCreate, rv.Len())
 	for i := 0; i < rv.Len(); i++ {
 		builders[i] = c.Create()
 		setFunc(builders[i], i)
 	}
-	return &PromptTemplateCreateBulk{config: c.config, builders: builders}
+	return &PrunePromptTemplateCreateBulk{config: c.config, builders: builders}
 }
 
-// Update returns an update builder for PromptTemplate.
-func (c *PromptTemplateClient) Update() *PromptTemplateUpdate {
-	mutation := newPromptTemplateMutation(c.config, OpUpdate)
-	return &PromptTemplateUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// Update returns an update builder for PrunePromptTemplate.
+func (c *PrunePromptTemplateClient) Update() *PrunePromptTemplateUpdate {
+	mutation := newPrunePromptTemplateMutation(c.config, OpUpdate)
+	return &PrunePromptTemplateUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
 // UpdateOne returns an update builder for the given entity.
-func (c *PromptTemplateClient) UpdateOne(_m *PromptTemplate) *PromptTemplateUpdateOne {
-	mutation := newPromptTemplateMutation(c.config, OpUpdateOne, withPromptTemplate(_m))
-	return &PromptTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+func (c *PrunePromptTemplateClient) UpdateOne(_m *PrunePromptTemplate) *PrunePromptTemplateUpdateOne {
+	mutation := newPrunePromptTemplateMutation(c.config, OpUpdateOne, withPrunePromptTemplate(_m))
+	return &PrunePromptTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
 // UpdateOneID returns an update builder for the given id.
-func (c *PromptTemplateClient) UpdateOneID(id int) *PromptTemplateUpdateOne {
-	mutation := newPromptTemplateMutation(c.config, OpUpdateOne, withPromptTemplateID(id))
-	return &PromptTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+func (c *PrunePromptTemplateClient) UpdateOneID(id int) *PrunePromptTemplateUpdateOne {
+	mutation := newPrunePromptTemplateMutation(c.config, OpUpdateOne, withPrunePromptTemplateID(id))
+	return &PrunePromptTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
-// Delete returns a delete builder for PromptTemplate.
-func (c *PromptTemplateClient) Delete() *PromptTemplateDelete {
-	mutation := newPromptTemplateMutation(c.config, OpDelete)
-	return &PromptTemplateDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// Delete returns a delete builder for PrunePromptTemplate.
+func (c *PrunePromptTemplateClient) Delete() *PrunePromptTemplateDelete {
+	mutation := newPrunePromptTemplateMutation(c.config, OpDelete)
+	return &PrunePromptTemplateDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
 // DeleteOne returns a builder for deleting the given entity.
-func (c *PromptTemplateClient) DeleteOne(_m *PromptTemplate) *PromptTemplateDeleteOne {
+func (c *PrunePromptTemplateClient) DeleteOne(_m *PrunePromptTemplate) *PrunePromptTemplateDeleteOne {
 	return c.DeleteOneID(_m.ID)
 }
 
 // DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *PromptTemplateClient) DeleteOneID(id int) *PromptTemplateDeleteOne {
-	builder := c.Delete().Where(prompttemplate.ID(id))
+func (c *PrunePromptTemplateClient) DeleteOneID(id int) *PrunePromptTemplateDeleteOne {
+	builder := c.Delete().Where(pruneprompttemplate.ID(id))
 	builder.mutation.id = &id
 	builder.mutation.op = OpDeleteOne
-	return &PromptTemplateDeleteOne{builder}
+	return &PrunePromptTemplateDeleteOne{builder}
 }
 
-// Query returns a query builder for PromptTemplate.
-func (c *PromptTemplateClient) Query() *PromptTemplateQuery {
-	return &PromptTemplateQuery{
+// Query returns a query builder for PrunePromptTemplate.
+func (c *PrunePromptTemplateClient) Query() *PrunePromptTemplateQuery {
+	return &PrunePromptTemplateQuery{
 		config: c.config,
-		ctx:    &QueryContext{Type: TypePromptTemplate},
+		ctx:    &QueryContext{Type: TypePrunePromptTemplate},
 		inters: c.Interceptors(),
 	}
 }
 
-// Get returns a PromptTemplate entity by its id.
-func (c *PromptTemplateClient) Get(ctx context.Context, id int) (*PromptTemplate, error) {
-	return c.Query().Where(prompttemplate.ID(id)).Only(ctx)
+// Get returns a PrunePromptTemplate entity by its id.
+func (c *PrunePromptTemplateClient) Get(ctx context.Context, id int) (*PrunePromptTemplate, error) {
+	return c.Query().Where(pruneprompttemplate.ID(id)).Only(ctx)
 }
 
 // GetX is like Get, but panics if an error occurs.
-func (c *PromptTemplateClient) GetX(ctx context.Context, id int) *PromptTemplate {
+func (c *PrunePromptTemplateClient) GetX(ctx context.Context, id int) *PrunePromptTemplate {
 	obj, err := c.Get(ctx, id)
 	if err != nil {
 		panic(err)
@@ -2007,15 +2592,15 @@ func (c *PromptTemplateClient) GetX(ctx context.Context, id int) *PromptTemplate
 	return obj
 }
 
-// QueryOwnerUser queries the owner_user edge of a PromptTemplate.
-func (c *PromptTemplateClient) QueryOwnerUser(_m *PromptTemplate) *UserQuery {
+// QueryOwnerUser queries the owner_user edge of a PrunePromptTemplate.
+func (c *PrunePromptTemplateClient) QueryOwnerUser(_m *PrunePromptTemplate) *UserQuery {
 	query := (&UserClient{config: c.config}).Query()
 	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
 		id := _m.ID
 		step := sqlgraph.NewStep(
-			sqlgraph.From(prompttemplate.Table, prompttemplate.FieldID, id),
+			sqlgraph.From(pruneprompttemplate.Table, pruneprompttemplate.FieldID, id),
 			sqlgraph.To(user.Table, user.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, prompttemplate.OwnerUserTable, prompttemplate.OwnerUserColumn),
+			sqlgraph.Edge(sqlgraph.M2O, true, pruneprompttemplate.OwnerUserTable, pruneprompttemplate.OwnerUserColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -2023,15 +2608,15 @@ func (c *PromptTemplateClient) QueryOwnerUser(_m *PromptTemplate) *UserQuery {
 	return query
 }
 
-// QueryOwnerOrg queries the owner_org edge of a PromptTemplate.
-func (c *PromptTemplateClient) QueryOwnerOrg(_m *PromptTemplate) *OrganizationQuery {
+// QueryOwnerOrg queries the owner_org edge of a PrunePromptTemplate.
+func (c *PrunePromptTemplateClient) QueryOwnerOrg(_m *PrunePromptTemplate) *OrganizationQuery {
 	query := (&OrganizationClient{config: c.config}).Query()
 	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
 		id := _m.ID
 		step := sqlgraph.NewStep(
-			sqlgraph.From(prompttemplate.Table, prompttemplate.FieldID, id),
+			sqlgraph.From(pruneprompttemplate.Table, pruneprompttemplate.FieldID, id),
 			sqlgraph.To(organization.Table, organization.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, prompttemplate.OwnerOrgTable, prompttemplate.OwnerOrgColumn),
+			sqlgraph.Edge(sqlgraph.M2O, true, pruneprompttemplate.OwnerOrgTable, pruneprompttemplate.OwnerOrgColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -2040,27 +2625,27 @@ func (c *PromptTemplateClient) QueryOwnerOrg(_m *PromptTemplate) *OrganizationQu
 }
 
 // Hooks returns the client hooks.
-func (c *PromptTemplateClient) Hooks() []Hook {
-	return c.hooks.PromptTemplate
+func (c *PrunePromptTemplateClient) Hooks() []Hook {
+	return c.hooks.PrunePromptTemplate
 }
 
 // Interceptors returns the client interceptors.
-func (c *PromptTemplateClient) Interceptors() []Interceptor {
-	return c.inters.PromptTemplate
+func (c *PrunePromptTemplateClient) Interceptors() []Interceptor {
+	return c.inters.PrunePromptTemplate
 }
 
-func (c *PromptTemplateClient) mutate(ctx context.Context, m *PromptTemplateMutation) (Value, error) {
+func (c *PrunePromptTemplateClient) mutate(ctx context.Context, m *PrunePromptTemplateMutation) (Value, error) {
 	switch m.Op() {
 	case OpCreate:
-		return (&PromptTemplateCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+		return (&PrunePromptTemplateCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
 	case OpUpdate:
-		return (&PromptTemplateUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+		return (&PrunePromptTemplateUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
 	case OpUpdateOne:
-		return (&PromptTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+		return (&PrunePromptTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
 	case OpDelete, OpDeleteOne:
-		return (&PromptTemplateDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+		return (&PrunePromptTemplateDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
-		return nil, fmt.Errorf("ent: unknown PromptTemplate mutation op: %q", m.Op())
+		return nil, fmt.Errorf("ent: unknown PrunePromptTemplate mutation op: %q", m.Op())
 	}
 }
 
@@ -2391,6 +2976,155 @@ func (c *ResourceClient) mutate(ctx context.Context, m *ResourceMutation) (Value
 		return (&ResourceDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
 		return nil, fmt.Errorf("ent: unknown Resource mutation op: %q", m.Op())
+	}
+}
+
+// SSEEventClient is a client for the SSEEvent schema.
+type SSEEventClient struct {
+	config
+}
+
+// NewSSEEventClient returns a client for the SSEEvent from the given config.
+func NewSSEEventClient(c config) *SSEEventClient {
+	return &SSEEventClient{config: c}
+}
+
+// Use adds a list of mutation hooks to the hooks stack.
+// A call to `Use(f, g, h)` equals to `sseevent.Hooks(f(g(h())))`.
+func (c *SSEEventClient) Use(hooks ...Hook) {
+	c.hooks.SSEEvent = append(c.hooks.SSEEvent, hooks...)
+}
+
+// Intercept adds a list of query interceptors to the interceptors stack.
+// A call to `Intercept(f, g, h)` equals to `sseevent.Intercept(f(g(h())))`.
+func (c *SSEEventClient) Intercept(interceptors ...Interceptor) {
+	c.inters.SSEEvent = append(c.inters.SSEEvent, interceptors...)
+}
+
+// Create returns a builder for creating a SSEEvent entity.
+func (c *SSEEventClient) Create() *SSEEventCreate {
+	mutation := newSSEEventMutation(c.config, OpCreate)
+	return &SSEEventCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// CreateBulk returns a builder for creating a bulk of SSEEvent entities.
+func (c *SSEEventClient) CreateBulk(builders ...*SSEEventCreate) *SSEEventCreateBulk {
+	return &SSEEventCreateBulk{config: c.config, builders: builders}
+}
+
+// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
+// a builder and applies setFunc on it.
+func (c *SSEEventClient) MapCreateBulk(slice any, setFunc func(*SSEEventCreate, int)) *SSEEventCreateBulk {
+	rv := reflect.ValueOf(slice)
+	if rv.Kind() != reflect.Slice {
+		return &SSEEventCreateBulk{err: fmt.Errorf("calling to SSEEventClient.MapCreateBulk with wrong type %T, need slice", slice)}
+	}
+	builders := make([]*SSEEventCreate, rv.Len())
+	for i := 0; i < rv.Len(); i++ {
+		builders[i] = c.Create()
+		setFunc(builders[i], i)
+	}
+	return &SSEEventCreateBulk{config: c.config, builders: builders}
+}
+
+// Update returns an update builder for SSEEvent.
+func (c *SSEEventClient) Update() *SSEEventUpdate {
+	mutation := newSSEEventMutation(c.config, OpUpdate)
+	return &SSEEventUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOne returns an update builder for the given entity.
+func (c *SSEEventClient) UpdateOne(_m *SSEEvent) *SSEEventUpdateOne {
+	mutation := newSSEEventMutation(c.config, OpUpdateOne, withSSEEvent(_m))
+	return &SSEEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// UpdateOneID returns an update builder for the given id.
+func (c *SSEEventClient) UpdateOneID(id int) *SSEEventUpdateOne {
+	mutation := newSSEEventMutation(c.config, OpUpdateOne, withSSEEventID(id))
+	return &SSEEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// Delete returns a delete builder for SSEEvent.
+func (c *SSEEventClient) Delete() *SSEEventDelete {
+	mutation := newSSEEventMutation(c.config, OpDelete)
+	return &SSEEventDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+}
+
+// DeleteOne returns a builder for deleting the given entity.
+func (c *SSEEventClient) DeleteOne(_m *SSEEvent) *SSEEventDeleteOne {
+	return c.DeleteOneID(_m.ID)
+}
+
+// DeleteOneID returns a builder for deleting the given entity by its id.
+func (c *SSEEventClient) DeleteOneID(id int) *SSEEventDeleteOne {
+	builder := c.Delete().Where(sseevent.ID(id))
+	builder.mutation.id = &id
+	builder.mutation.op = OpDeleteOne
+	return &SSEEventDeleteOne{builder}
+}
+
+// Query returns a query builder for SSEEvent.
+func (c *SSEEventClient) Query() *SSEEventQuery {
+	return &SSEEventQuery{
+		config: c.config,
+		ctx:    &QueryContext{Type: TypeSSEEvent},
+		inters: c.Interceptors(),
+	}
+}
+
+// Get returns a SSEEvent entity by its id.
+func (c *SSEEventClient) Get(ctx context.Context, id int) (*SSEEvent, error) {
+	return c.Query().Where(sseevent.ID(id)).Only(ctx)
+}
+
+// GetX is like Get, but panics if an error occurs.
+func (c *SSEEventClient) GetX(ctx context.Context, id int) *SSEEvent {
+	obj, err := c.Get(ctx, id)
+	if err != nil {
+		panic(err)
+	}
+	return obj
+}
+
+// QueryJob queries the job edge of a SSEEvent.
+func (c *SSEEventClient) QueryJob(_m *SSEEvent) *JobQuery {
+	query := (&JobClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(sseevent.Table, sseevent.FieldID, id),
+			sqlgraph.To(job.Table, job.FieldID),
+			sqlgraph.Edge(sqlgraph.M2O, true, sseevent.JobTable, sseevent.JobColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// Hooks returns the client hooks.
+func (c *SSEEventClient) Hooks() []Hook {
+	return c.hooks.SSEEvent
+}
+
+// Interceptors returns the client interceptors.
+func (c *SSEEventClient) Interceptors() []Interceptor {
+	return c.inters.SSEEvent
+}
+
+func (c *SSEEventClient) mutate(ctx context.Context, m *SSEEventMutation) (Value, error) {
+	switch m.Op() {
+	case OpCreate:
+		return (&SSEEventCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdate:
+		return (&SSEEventUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpUpdateOne:
+		return (&SSEEventUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+	case OpDelete, OpDeleteOne:
+		return (&SSEEventDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+	default:
+		return nil, fmt.Errorf("ent: unknown SSEEvent mutation op: %q", m.Op())
 	}
 }
 
@@ -3022,107 +3756,107 @@ func (c *TMEntryClient) mutate(ctx context.Context, m *TMEntryMutation) (Value, 
 	}
 }
 
-// TranslationJobClient is a client for the TranslationJob schema.
-type TranslationJobClient struct {
+// TranslationPromptTemplateClient is a client for the TranslationPromptTemplate schema.
+type TranslationPromptTemplateClient struct {
 	config
 }
 
-// NewTranslationJobClient returns a client for the TranslationJob from the given config.
-func NewTranslationJobClient(c config) *TranslationJobClient {
-	return &TranslationJobClient{config: c}
+// NewTranslationPromptTemplateClient returns a client for the TranslationPromptTemplate from the given config.
+func NewTranslationPromptTemplateClient(c config) *TranslationPromptTemplateClient {
+	return &TranslationPromptTemplateClient{config: c}
 }
 
 // Use adds a list of mutation hooks to the hooks stack.
-// A call to `Use(f, g, h)` equals to `translationjob.Hooks(f(g(h())))`.
-func (c *TranslationJobClient) Use(hooks ...Hook) {
-	c.hooks.TranslationJob = append(c.hooks.TranslationJob, hooks...)
+// A call to `Use(f, g, h)` equals to `translationprompttemplate.Hooks(f(g(h())))`.
+func (c *TranslationPromptTemplateClient) Use(hooks ...Hook) {
+	c.hooks.TranslationPromptTemplate = append(c.hooks.TranslationPromptTemplate, hooks...)
 }
 
 // Intercept adds a list of query interceptors to the interceptors stack.
-// A call to `Intercept(f, g, h)` equals to `translationjob.Intercept(f(g(h())))`.
-func (c *TranslationJobClient) Intercept(interceptors ...Interceptor) {
-	c.inters.TranslationJob = append(c.inters.TranslationJob, interceptors...)
+// A call to `Intercept(f, g, h)` equals to `translationprompttemplate.Intercept(f(g(h())))`.
+func (c *TranslationPromptTemplateClient) Intercept(interceptors ...Interceptor) {
+	c.inters.TranslationPromptTemplate = append(c.inters.TranslationPromptTemplate, interceptors...)
 }
 
-// Create returns a builder for creating a TranslationJob entity.
-func (c *TranslationJobClient) Create() *TranslationJobCreate {
-	mutation := newTranslationJobMutation(c.config, OpCreate)
-	return &TranslationJobCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// Create returns a builder for creating a TranslationPromptTemplate entity.
+func (c *TranslationPromptTemplateClient) Create() *TranslationPromptTemplateCreate {
+	mutation := newTranslationPromptTemplateMutation(c.config, OpCreate)
+	return &TranslationPromptTemplateCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
-// CreateBulk returns a builder for creating a bulk of TranslationJob entities.
-func (c *TranslationJobClient) CreateBulk(builders ...*TranslationJobCreate) *TranslationJobCreateBulk {
-	return &TranslationJobCreateBulk{config: c.config, builders: builders}
+// CreateBulk returns a builder for creating a bulk of TranslationPromptTemplate entities.
+func (c *TranslationPromptTemplateClient) CreateBulk(builders ...*TranslationPromptTemplateCreate) *TranslationPromptTemplateCreateBulk {
+	return &TranslationPromptTemplateCreateBulk{config: c.config, builders: builders}
 }
 
 // MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
 // a builder and applies setFunc on it.
-func (c *TranslationJobClient) MapCreateBulk(slice any, setFunc func(*TranslationJobCreate, int)) *TranslationJobCreateBulk {
+func (c *TranslationPromptTemplateClient) MapCreateBulk(slice any, setFunc func(*TranslationPromptTemplateCreate, int)) *TranslationPromptTemplateCreateBulk {
 	rv := reflect.ValueOf(slice)
 	if rv.Kind() != reflect.Slice {
-		return &TranslationJobCreateBulk{err: fmt.Errorf("calling to TranslationJobClient.MapCreateBulk with wrong type %T, need slice", slice)}
+		return &TranslationPromptTemplateCreateBulk{err: fmt.Errorf("calling to TranslationPromptTemplateClient.MapCreateBulk with wrong type %T, need slice", slice)}
 	}
-	builders := make([]*TranslationJobCreate, rv.Len())
+	builders := make([]*TranslationPromptTemplateCreate, rv.Len())
 	for i := 0; i < rv.Len(); i++ {
 		builders[i] = c.Create()
 		setFunc(builders[i], i)
 	}
-	return &TranslationJobCreateBulk{config: c.config, builders: builders}
+	return &TranslationPromptTemplateCreateBulk{config: c.config, builders: builders}
 }
 
-// Update returns an update builder for TranslationJob.
-func (c *TranslationJobClient) Update() *TranslationJobUpdate {
-	mutation := newTranslationJobMutation(c.config, OpUpdate)
-	return &TranslationJobUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// Update returns an update builder for TranslationPromptTemplate.
+func (c *TranslationPromptTemplateClient) Update() *TranslationPromptTemplateUpdate {
+	mutation := newTranslationPromptTemplateMutation(c.config, OpUpdate)
+	return &TranslationPromptTemplateUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
 // UpdateOne returns an update builder for the given entity.
-func (c *TranslationJobClient) UpdateOne(_m *TranslationJob) *TranslationJobUpdateOne {
-	mutation := newTranslationJobMutation(c.config, OpUpdateOne, withTranslationJob(_m))
-	return &TranslationJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+func (c *TranslationPromptTemplateClient) UpdateOne(_m *TranslationPromptTemplate) *TranslationPromptTemplateUpdateOne {
+	mutation := newTranslationPromptTemplateMutation(c.config, OpUpdateOne, withTranslationPromptTemplate(_m))
+	return &TranslationPromptTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
 // UpdateOneID returns an update builder for the given id.
-func (c *TranslationJobClient) UpdateOneID(id int) *TranslationJobUpdateOne {
-	mutation := newTranslationJobMutation(c.config, OpUpdateOne, withTranslationJobID(id))
-	return &TranslationJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
+func (c *TranslationPromptTemplateClient) UpdateOneID(id int) *TranslationPromptTemplateUpdateOne {
+	mutation := newTranslationPromptTemplateMutation(c.config, OpUpdateOne, withTranslationPromptTemplateID(id))
+	return &TranslationPromptTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
-// Delete returns a delete builder for TranslationJob.
-func (c *TranslationJobClient) Delete() *TranslationJobDelete {
-	mutation := newTranslationJobMutation(c.config, OpDelete)
-	return &TranslationJobDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
+// Delete returns a delete builder for TranslationPromptTemplate.
+func (c *TranslationPromptTemplateClient) Delete() *TranslationPromptTemplateDelete {
+	mutation := newTranslationPromptTemplateMutation(c.config, OpDelete)
+	return &TranslationPromptTemplateDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
 }
 
 // DeleteOne returns a builder for deleting the given entity.
-func (c *TranslationJobClient) DeleteOne(_m *TranslationJob) *TranslationJobDeleteOne {
+func (c *TranslationPromptTemplateClient) DeleteOne(_m *TranslationPromptTemplate) *TranslationPromptTemplateDeleteOne {
 	return c.DeleteOneID(_m.ID)
 }
 
 // DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *TranslationJobClient) DeleteOneID(id int) *TranslationJobDeleteOne {
-	builder := c.Delete().Where(translationjob.ID(id))
+func (c *TranslationPromptTemplateClient) DeleteOneID(id int) *TranslationPromptTemplateDeleteOne {
+	builder := c.Delete().Where(translationprompttemplate.ID(id))
 	builder.mutation.id = &id
 	builder.mutation.op = OpDeleteOne
-	return &TranslationJobDeleteOne{builder}
+	return &TranslationPromptTemplateDeleteOne{builder}
 }
 
-// Query returns a query builder for TranslationJob.
-func (c *TranslationJobClient) Query() *TranslationJobQuery {
-	return &TranslationJobQuery{
+// Query returns a query builder for TranslationPromptTemplate.
+func (c *TranslationPromptTemplateClient) Query() *TranslationPromptTemplateQuery {
+	return &TranslationPromptTemplateQuery{
 		config: c.config,
-		ctx:    &QueryContext{Type: TypeTranslationJob},
+		ctx:    &QueryContext{Type: TypeTranslationPromptTemplate},
 		inters: c.Interceptors(),
 	}
 }
 
-// Get returns a TranslationJob entity by its id.
-func (c *TranslationJobClient) Get(ctx context.Context, id int) (*TranslationJob, error) {
-	return c.Query().Where(translationjob.ID(id)).Only(ctx)
+// Get returns a TranslationPromptTemplate entity by its id.
+func (c *TranslationPromptTemplateClient) Get(ctx context.Context, id int) (*TranslationPromptTemplate, error) {
+	return c.Query().Where(translationprompttemplate.ID(id)).Only(ctx)
 }
 
 // GetX is like Get, but panics if an error occurs.
-func (c *TranslationJobClient) GetX(ctx context.Context, id int) *TranslationJob {
+func (c *TranslationPromptTemplateClient) GetX(ctx context.Context, id int) *TranslationPromptTemplate {
 	obj, err := c.Get(ctx, id)
 	if err != nil {
 		panic(err)
@@ -3130,31 +3864,15 @@ func (c *TranslationJobClient) GetX(ctx context.Context, id int) *TranslationJob
 	return obj
 }
 
-// QueryProject queries the project edge of a TranslationJob.
-func (c *TranslationJobClient) QueryProject(_m *TranslationJob) *ProjectQuery {
-	query := (&ProjectClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(translationjob.Table, translationjob.FieldID, id),
-			sqlgraph.To(project.Table, project.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, translationjob.ProjectTable, translationjob.ProjectColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// QueryCreatedBy queries the created_by edge of a TranslationJob.
-func (c *TranslationJobClient) QueryCreatedBy(_m *TranslationJob) *UserQuery {
+// QueryOwnerUser queries the owner_user edge of a TranslationPromptTemplate.
+func (c *TranslationPromptTemplateClient) QueryOwnerUser(_m *TranslationPromptTemplate) *UserQuery {
 	query := (&UserClient{config: c.config}).Query()
 	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
 		id := _m.ID
 		step := sqlgraph.NewStep(
-			sqlgraph.From(translationjob.Table, translationjob.FieldID, id),
+			sqlgraph.From(translationprompttemplate.Table, translationprompttemplate.FieldID, id),
 			sqlgraph.To(user.Table, user.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, translationjob.CreatedByTable, translationjob.CreatedByColumn),
+			sqlgraph.Edge(sqlgraph.M2O, true, translationprompttemplate.OwnerUserTable, translationprompttemplate.OwnerUserColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -3162,180 +3880,15 @@ func (c *TranslationJobClient) QueryCreatedBy(_m *TranslationJob) *UserQuery {
 	return query
 }
 
-// QueryJobResources queries the job_resources edge of a TranslationJob.
-func (c *TranslationJobClient) QueryJobResources(_m *TranslationJob) *JobResourceQuery {
-	query := (&JobResourceClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(translationjob.Table, translationjob.FieldID, id),
-			sqlgraph.To(jobresource.Table, jobresource.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, translationjob.JobResourcesTable, translationjob.JobResourcesColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// Hooks returns the client hooks.
-func (c *TranslationJobClient) Hooks() []Hook {
-	return c.hooks.TranslationJob
-}
-
-// Interceptors returns the client interceptors.
-func (c *TranslationJobClient) Interceptors() []Interceptor {
-	return c.inters.TranslationJob
-}
-
-func (c *TranslationJobClient) mutate(ctx context.Context, m *TranslationJobMutation) (Value, error) {
-	switch m.Op() {
-	case OpCreate:
-		return (&TranslationJobCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdate:
-		return (&TranslationJobUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpUpdateOne:
-		return (&TranslationJobUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
-	case OpDelete, OpDeleteOne:
-		return (&TranslationJobDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
-	default:
-		return nil, fmt.Errorf("ent: unknown TranslationJob mutation op: %q", m.Op())
-	}
-}
-
-// TranslationProfileClient is a client for the TranslationProfile schema.
-type TranslationProfileClient struct {
-	config
-}
-
-// NewTranslationProfileClient returns a client for the TranslationProfile from the given config.
-func NewTranslationProfileClient(c config) *TranslationProfileClient {
-	return &TranslationProfileClient{config: c}
-}
-
-// Use adds a list of mutation hooks to the hooks stack.
-// A call to `Use(f, g, h)` equals to `translationprofile.Hooks(f(g(h())))`.
-func (c *TranslationProfileClient) Use(hooks ...Hook) {
-	c.hooks.TranslationProfile = append(c.hooks.TranslationProfile, hooks...)
-}
-
-// Intercept adds a list of query interceptors to the interceptors stack.
-// A call to `Intercept(f, g, h)` equals to `translationprofile.Intercept(f(g(h())))`.
-func (c *TranslationProfileClient) Intercept(interceptors ...Interceptor) {
-	c.inters.TranslationProfile = append(c.inters.TranslationProfile, interceptors...)
-}
-
-// Create returns a builder for creating a TranslationProfile entity.
-func (c *TranslationProfileClient) Create() *TranslationProfileCreate {
-	mutation := newTranslationProfileMutation(c.config, OpCreate)
-	return &TranslationProfileCreate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// CreateBulk returns a builder for creating a bulk of TranslationProfile entities.
-func (c *TranslationProfileClient) CreateBulk(builders ...*TranslationProfileCreate) *TranslationProfileCreateBulk {
-	return &TranslationProfileCreateBulk{config: c.config, builders: builders}
-}
-
-// MapCreateBulk creates a bulk creation builder from the given slice. For each item in the slice, the function creates
-// a builder and applies setFunc on it.
-func (c *TranslationProfileClient) MapCreateBulk(slice any, setFunc func(*TranslationProfileCreate, int)) *TranslationProfileCreateBulk {
-	rv := reflect.ValueOf(slice)
-	if rv.Kind() != reflect.Slice {
-		return &TranslationProfileCreateBulk{err: fmt.Errorf("calling to TranslationProfileClient.MapCreateBulk with wrong type %T, need slice", slice)}
-	}
-	builders := make([]*TranslationProfileCreate, rv.Len())
-	for i := 0; i < rv.Len(); i++ {
-		builders[i] = c.Create()
-		setFunc(builders[i], i)
-	}
-	return &TranslationProfileCreateBulk{config: c.config, builders: builders}
-}
-
-// Update returns an update builder for TranslationProfile.
-func (c *TranslationProfileClient) Update() *TranslationProfileUpdate {
-	mutation := newTranslationProfileMutation(c.config, OpUpdate)
-	return &TranslationProfileUpdate{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOne returns an update builder for the given entity.
-func (c *TranslationProfileClient) UpdateOne(_m *TranslationProfile) *TranslationProfileUpdateOne {
-	mutation := newTranslationProfileMutation(c.config, OpUpdateOne, withTranslationProfile(_m))
-	return &TranslationProfileUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// UpdateOneID returns an update builder for the given id.
-func (c *TranslationProfileClient) UpdateOneID(id int) *TranslationProfileUpdateOne {
-	mutation := newTranslationProfileMutation(c.config, OpUpdateOne, withTranslationProfileID(id))
-	return &TranslationProfileUpdateOne{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// Delete returns a delete builder for TranslationProfile.
-func (c *TranslationProfileClient) Delete() *TranslationProfileDelete {
-	mutation := newTranslationProfileMutation(c.config, OpDelete)
-	return &TranslationProfileDelete{config: c.config, hooks: c.Hooks(), mutation: mutation}
-}
-
-// DeleteOne returns a builder for deleting the given entity.
-func (c *TranslationProfileClient) DeleteOne(_m *TranslationProfile) *TranslationProfileDeleteOne {
-	return c.DeleteOneID(_m.ID)
-}
-
-// DeleteOneID returns a builder for deleting the given entity by its id.
-func (c *TranslationProfileClient) DeleteOneID(id int) *TranslationProfileDeleteOne {
-	builder := c.Delete().Where(translationprofile.ID(id))
-	builder.mutation.id = &id
-	builder.mutation.op = OpDeleteOne
-	return &TranslationProfileDeleteOne{builder}
-}
-
-// Query returns a query builder for TranslationProfile.
-func (c *TranslationProfileClient) Query() *TranslationProfileQuery {
-	return &TranslationProfileQuery{
-		config: c.config,
-		ctx:    &QueryContext{Type: TypeTranslationProfile},
-		inters: c.Interceptors(),
-	}
-}
-
-// Get returns a TranslationProfile entity by its id.
-func (c *TranslationProfileClient) Get(ctx context.Context, id int) (*TranslationProfile, error) {
-	return c.Query().Where(translationprofile.ID(id)).Only(ctx)
-}
-
-// GetX is like Get, but panics if an error occurs.
-func (c *TranslationProfileClient) GetX(ctx context.Context, id int) *TranslationProfile {
-	obj, err := c.Get(ctx, id)
-	if err != nil {
-		panic(err)
-	}
-	return obj
-}
-
-// QueryOwnerUser queries the owner_user edge of a TranslationProfile.
-func (c *TranslationProfileClient) QueryOwnerUser(_m *TranslationProfile) *UserQuery {
-	query := (&UserClient{config: c.config}).Query()
-	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
-		id := _m.ID
-		step := sqlgraph.NewStep(
-			sqlgraph.From(translationprofile.Table, translationprofile.FieldID, id),
-			sqlgraph.To(user.Table, user.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, translationprofile.OwnerUserTable, translationprofile.OwnerUserColumn),
-		)
-		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
-		return fromV, nil
-	}
-	return query
-}
-
-// QueryOwnerOrg queries the owner_org edge of a TranslationProfile.
-func (c *TranslationProfileClient) QueryOwnerOrg(_m *TranslationProfile) *OrganizationQuery {
+// QueryOwnerOrg queries the owner_org edge of a TranslationPromptTemplate.
+func (c *TranslationPromptTemplateClient) QueryOwnerOrg(_m *TranslationPromptTemplate) *OrganizationQuery {
 	query := (&OrganizationClient{config: c.config}).Query()
 	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
 		id := _m.ID
 		step := sqlgraph.NewStep(
-			sqlgraph.From(translationprofile.Table, translationprofile.FieldID, id),
+			sqlgraph.From(translationprompttemplate.Table, translationprompttemplate.FieldID, id),
 			sqlgraph.To(organization.Table, organization.FieldID),
-			sqlgraph.Edge(sqlgraph.M2O, true, translationprofile.OwnerOrgTable, translationprofile.OwnerOrgColumn),
+			sqlgraph.Edge(sqlgraph.M2O, true, translationprompttemplate.OwnerOrgTable, translationprompttemplate.OwnerOrgColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -3344,27 +3897,27 @@ func (c *TranslationProfileClient) QueryOwnerOrg(_m *TranslationProfile) *Organi
 }
 
 // Hooks returns the client hooks.
-func (c *TranslationProfileClient) Hooks() []Hook {
-	return c.hooks.TranslationProfile
+func (c *TranslationPromptTemplateClient) Hooks() []Hook {
+	return c.hooks.TranslationPromptTemplate
 }
 
 // Interceptors returns the client interceptors.
-func (c *TranslationProfileClient) Interceptors() []Interceptor {
-	return c.inters.TranslationProfile
+func (c *TranslationPromptTemplateClient) Interceptors() []Interceptor {
+	return c.inters.TranslationPromptTemplate
 }
 
-func (c *TranslationProfileClient) mutate(ctx context.Context, m *TranslationProfileMutation) (Value, error) {
+func (c *TranslationPromptTemplateClient) mutate(ctx context.Context, m *TranslationPromptTemplateMutation) (Value, error) {
 	switch m.Op() {
 	case OpCreate:
-		return (&TranslationProfileCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+		return (&TranslationPromptTemplateCreate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
 	case OpUpdate:
-		return (&TranslationProfileUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+		return (&TranslationPromptTemplateUpdate{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
 	case OpUpdateOne:
-		return (&TranslationProfileUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
+		return (&TranslationPromptTemplateUpdateOne{config: c.config, hooks: c.Hooks(), mutation: m}).Save(ctx)
 	case OpDelete, OpDeleteOne:
-		return (&TranslationProfileDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
+		return (&TranslationPromptTemplateDelete{config: c.config, hooks: c.Hooks(), mutation: m}).Exec(ctx)
 	default:
-		return nil, fmt.Errorf("ent: unknown TranslationProfile mutation op: %q", m.Op())
+		return nil, fmt.Errorf("ent: unknown TranslationPromptTemplate mutation op: %q", m.Op())
 	}
 }
 
@@ -3657,15 +4210,15 @@ func (c *UserClient) GetX(ctx context.Context, id int) *User {
 	return obj
 }
 
-// QueryCreatedTranslationJobs queries the created_translation_jobs edge of a User.
-func (c *UserClient) QueryCreatedTranslationJobs(_m *User) *TranslationJobQuery {
-	query := (&TranslationJobClient{config: c.config}).Query()
+// QueryCreatedJobs queries the created_jobs edge of a User.
+func (c *UserClient) QueryCreatedJobs(_m *User) *JobQuery {
+	query := (&JobClient{config: c.config}).Query()
 	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
 		id := _m.ID
 		step := sqlgraph.NewStep(
 			sqlgraph.From(user.Table, user.FieldID, id),
-			sqlgraph.To(translationjob.Table, translationjob.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, user.CreatedTranslationJobsTable, user.CreatedTranslationJobsColumn),
+			sqlgraph.To(job.Table, job.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.CreatedJobsTable, user.CreatedJobsColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -3785,15 +4338,15 @@ func (c *UserClient) QueryUsageRecords(_m *User) *UsageRecordQuery {
 	return query
 }
 
-// QueryPromptTemplates queries the prompt_templates edge of a User.
-func (c *UserClient) QueryPromptTemplates(_m *User) *PromptTemplateQuery {
-	query := (&PromptTemplateClient{config: c.config}).Query()
+// QueryTranslationPromptTemplates queries the translation_prompt_templates edge of a User.
+func (c *UserClient) QueryTranslationPromptTemplates(_m *User) *TranslationPromptTemplateQuery {
+	query := (&TranslationPromptTemplateClient{config: c.config}).Query()
 	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
 		id := _m.ID
 		step := sqlgraph.NewStep(
 			sqlgraph.From(user.Table, user.FieldID, id),
-			sqlgraph.To(prompttemplate.Table, prompttemplate.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, user.PromptTemplatesTable, user.PromptTemplatesColumn),
+			sqlgraph.To(translationprompttemplate.Table, translationprompttemplate.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.TranslationPromptTemplatesTable, user.TranslationPromptTemplatesColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -3801,15 +4354,47 @@ func (c *UserClient) QueryPromptTemplates(_m *User) *PromptTemplateQuery {
 	return query
 }
 
-// QueryTranslationProfiles queries the translation_profiles edge of a User.
-func (c *UserClient) QueryTranslationProfiles(_m *User) *TranslationProfileQuery {
-	query := (&TranslationProfileClient{config: c.config}).Query()
+// QueryBootstrapPromptTemplates queries the bootstrap_prompt_templates edge of a User.
+func (c *UserClient) QueryBootstrapPromptTemplates(_m *User) *BootstrapPromptTemplateQuery {
+	query := (&BootstrapPromptTemplateClient{config: c.config}).Query()
 	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
 		id := _m.ID
 		step := sqlgraph.NewStep(
 			sqlgraph.From(user.Table, user.FieldID, id),
-			sqlgraph.To(translationprofile.Table, translationprofile.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, user.TranslationProfilesTable, user.TranslationProfilesColumn),
+			sqlgraph.To(bootstrapprompttemplate.Table, bootstrapprompttemplate.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.BootstrapPromptTemplatesTable, user.BootstrapPromptTemplatesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryPrunePromptTemplates queries the prune_prompt_templates edge of a User.
+func (c *UserClient) QueryPrunePromptTemplates(_m *User) *PrunePromptTemplateQuery {
+	query := (&PrunePromptTemplateClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(pruneprompttemplate.Table, pruneprompttemplate.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.PrunePromptTemplatesTable, user.PrunePromptTemplatesColumn),
+		)
+		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
+		return fromV, nil
+	}
+	return query
+}
+
+// QueryExecutionProfiles queries the execution_profiles edge of a User.
+func (c *UserClient) QueryExecutionProfiles(_m *User) *ExecutionProfileQuery {
+	query := (&ExecutionProfileClient{config: c.config}).Query()
+	query.path = func(context.Context) (fromV *sql.Selector, _ error) {
+		id := _m.ID
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, id),
+			sqlgraph.To(executionprofile.Table, executionprofile.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.ExecutionProfilesTable, user.ExecutionProfilesColumn),
 		)
 		fromV = sqlgraph.Neighbors(_m.driver.Dialect(), step)
 		return fromV, nil
@@ -3877,15 +4462,17 @@ func (c *UserClient) mutate(ctx context.Context, m *UserMutation) (Value, error)
 // hooks and interceptors per client, for fast access.
 type (
 	hooks struct {
-		ActivityLog, Backend, ExecutionPlanTemplate, GlossaryEntry, JobResource,
-		OrgMembership, Organization, Project, PromptTemplate, RefreshToken, Resource,
-		Segment, SyncTask, SystemSetting, TMEntry, TranslationJob, TranslationProfile,
-		UsageRecord, User []ent.Hook
+		ActivityLog, Backend, BootstrapPromptTemplate, ExecutionPlanTemplate,
+		ExecutionProfile, GlossaryEntry, Job, JobResource, OrgMembership, Organization,
+		Project, PrunePromptTemplate, RefreshToken, Resource, SSEEvent, Segment,
+		SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate, UsageRecord,
+		User []ent.Hook
 	}
 	inters struct {
-		ActivityLog, Backend, ExecutionPlanTemplate, GlossaryEntry, JobResource,
-		OrgMembership, Organization, Project, PromptTemplate, RefreshToken, Resource,
-		Segment, SyncTask, SystemSetting, TMEntry, TranslationJob, TranslationProfile,
-		UsageRecord, User []ent.Interceptor
+		ActivityLog, Backend, BootstrapPromptTemplate, ExecutionPlanTemplate,
+		ExecutionProfile, GlossaryEntry, Job, JobResource, OrgMembership, Organization,
+		Project, PrunePromptTemplate, RefreshToken, Resource, SSEEvent, Segment,
+		SyncTask, SystemSetting, TMEntry, TranslationPromptTemplate, UsageRecord,
+		User []ent.Interceptor
 	}
 )

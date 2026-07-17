@@ -1,0 +1,106 @@
+projectJobs:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/ProjectId'
+  get:
+    operationId: ListJobs
+    summary: 列出项目任务
+    security:
+      - bearerAuth: []
+    parameters:
+      - name: status
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [pending, running, completed, failed, cancelled]
+      - name: trigger_type
+        in: query
+        required: false
+        schema:
+          type: string
+          enum: [manual, file_update, glossary_change, web_edit]
+      - $ref: '../base.yaml#/components/parameters/Cursor'
+      - $ref: '../base.yaml#/components/parameters/Limit'
+    responses:
+      '200':
+        description: 任务列表
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/JobListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  post:
+    operationId: CreateJob
+    summary: 创建任务
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: false
+      content:
+        application/json:
+          schema:
+            $ref: '../base.yaml#/components/schemas/CreateJobRequest'
+    responses:
+      '202':
+        description: 任务已创建
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/Job'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+jobById:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/JobId'
+  get:
+    operationId: GetJob
+    summary: 获取任务详情
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 任务详情
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/Job'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+jobCancel:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/JobId'
+  post:
+    operationId: CancelJob
+    summary: 取消任务
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 取消后的任务
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/Job'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+jobRetry:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/JobId'
+  post:
+    operationId: RetryJob
+    summary: 重试失败的资源
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 重试后的任务
+        content:
+          application/json:
+            schema:
+              $ref: '../base.yaml#/components/schemas/Job'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

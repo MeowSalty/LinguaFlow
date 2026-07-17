@@ -13,12 +13,11 @@ import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
 
-type TranslationProfileConfig = ApiSchemas['TranslationProfileConfig']
+type ExecutionProfileConfig = ApiSchemas['ExecutionProfileConfig']
 
 // ─── 默认值（与后端 config.Default() 对齐） ─────────────────
 
-const CONFIG_DEFAULTS: TranslationProfileConfig = {
-  split: { enabled: true, strategy: 'paragraph', max_chars: 1200 },
+const CONFIG_DEFAULTS: ExecutionProfileConfig = {
   protect: {
     enabled: true,
     rules: ['code', 'link', 'placeholder', 'xml'],
@@ -46,6 +45,13 @@ const CONFIG_DEFAULTS: TranslationProfileConfig = {
     },
   },
   context: { enabled: true, before: 1, after: 1, max_chars: 0 },
+  qa: {
+    enabled: false,
+    auto_reject: false,
+    length_method: 'char_weight',
+    length_ratio_min: 0,
+    length_ratio_max: 0,
+  },
 }
 
 // ─── 工具函数 ────────────────────────────────────────────────
@@ -54,10 +60,9 @@ function deepClone<T>(obj: T): T {
   return JSON.parse(JSON.stringify(obj))
 }
 
-function mergeConfig(source?: Partial<TranslationProfileConfig>): TranslationProfileConfig {
+function mergeConfig(source?: Partial<ExecutionProfileConfig>): ExecutionProfileConfig {
   if (!source) return deepClone(CONFIG_DEFAULTS)
   return {
-    split: { ...CONFIG_DEFAULTS.split, ...source.split },
     protect: {
       ...CONFIG_DEFAULTS.protect,
       ...source.protect,
@@ -73,6 +78,13 @@ function mergeConfig(source?: Partial<TranslationProfileConfig>): TranslationPro
       bootstrap: { ...CONFIG_DEFAULTS.glossary.bootstrap, ...source.glossary?.bootstrap },
     },
     context: { ...CONFIG_DEFAULTS.context, ...source.context },
+    qa: {
+      enabled: source.qa?.enabled ?? CONFIG_DEFAULTS.qa!.enabled,
+      auto_reject: source.qa?.auto_reject ?? CONFIG_DEFAULTS.qa!.auto_reject,
+      length_method: source.qa?.length_method ?? CONFIG_DEFAULTS.qa!.length_method,
+      length_ratio_min: source.qa?.length_ratio_min ?? CONFIG_DEFAULTS.qa!.length_ratio_min,
+      length_ratio_max: source.qa?.length_ratio_max ?? CONFIG_DEFAULTS.qa!.length_ratio_max,
+    },
   }
 }
 
@@ -80,21 +92,21 @@ function mergeConfig(source?: Partial<TranslationProfileConfig>): TranslationPro
 
 const props = withDefaults(
   defineProps<{
-    config: TranslationProfileConfig
+    config: ExecutionProfileConfig
     disabled?: boolean
   }>(),
   { disabled: false },
 )
 
 const emit = defineEmits<{
-  'update:config': [value: TranslationProfileConfig]
+  'update:config': [value: ExecutionProfileConfig]
 }>()
 
 // ─── 内部 model ─────────────────────────────────────────────
 
 const { t } = useI18n()
 
-const configModel = ref<TranslationProfileConfig>(mergeConfig(props.config))
+const configModel = ref<ExecutionProfileConfig>(mergeConfig(props.config))
 
 // 上次 emit 的 JSON（用于去重）
 let lastConfigJson = JSON.stringify(props.config ?? {})
@@ -136,13 +148,27 @@ const inlineConflictStrategyOptions = computed(() => [
   { label: 'rewrite-local', value: 'rewrite-local' },
 ])
 
-const splitStrategyOptions = computed(() => [{ label: 'paragraph', value: 'paragraph' }])
-
 const rubyPreserveKindsOptions = computed(() => [
   { label: t('profileConfigEditor.ruby.preserveKindsPhonetic'), value: 'phonetic' },
   { label: t('profileConfigEditor.ruby.preserveKindsSemantic'), value: 'semantic' },
   { label: t('profileConfigEditor.ruby.preserveKindsCreative'), value: 'creative' },
 ])
+
+const lengthMethodOptions = computed(() => [
+  { label: t('profileConfigEditor.qa.lengthMethodCharWeight'), value: 'char_weight' },
+  { label: t('profileConfigEditor.qa.lengthMethodWordCount'), value: 'word_count' },
+])
+
+const lengthRatioError = computed(() => {
+  const qa = configModel.value.qa
+  if (!qa?.enabled) return ''
+  const min = qa.length_ratio_min
+  const max = qa.length_ratio_max
+  if (min > 0 && max > 0 && min > max) {
+    return t('profileConfigEditor.qa.lengthRatioMinMaxError')
+  }
+  return ''
+})
 
 function onRubyUpdate(field: 'enabled', value: boolean): void
 function onRubyUpdate(
@@ -163,50 +189,12 @@ function onRubyUpdate(field: string, value: unknown): void {
     ruby.preserve_kinds = value as ('phonetic' | 'semantic' | 'creative')[]
   }
 }
+
+defineExpose({ lengthRatioError })
 </script>
 
 <template>
   <div class="flex flex-col gap-4">
-    <!-- 分段策略 -->
-    <NCard size="small" :bordered="true">
-      <template #header>
-        <span class="text-sm font-semibold">📐 {{ t('profileConfigEditor.split.title') }}</span>
-      </template>
-      <NGrid :cols="3" :x-gap="12" :y-gap="10">
-        <NGi>
-          <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('profileConfigEditor.split.enabled') }}
-          </div>
-          <NSwitch v-model:value="configModel.split.enabled" size="small" :disabled="disabled" />
-        </NGi>
-        <NGi>
-          <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('profileConfigEditor.split.strategy') }}
-          </div>
-          <NSelect
-            v-model:value="configModel.split.strategy"
-            :options="splitStrategyOptions"
-            size="small"
-            :disabled="disabled || !configModel.split.enabled"
-          />
-        </NGi>
-        <NGi>
-          <div class="mb-1 text-xs text-lf-text-subtle">
-            {{ t('profileConfigEditor.split.maxChars') }}
-          </div>
-          <NInputNumber
-            v-model:value="configModel.split.max_chars"
-            :min="100"
-            :max="10000"
-            :step="100"
-            size="small"
-            :disabled="disabled || !configModel.split.enabled"
-            class="w-full"
-          />
-        </NGi>
-      </NGrid>
-    </NCard>
-
     <!-- 内容保护 -->
     <NCard size="small" :bordered="true">
       <template #header>
@@ -512,6 +500,103 @@ function onRubyUpdate(field: string, value: unknown): void {
               </div>
             </NGi>
           </NGrid>
+        </div>
+      </div>
+    </NCard>
+
+    <!-- 质量检测 -->
+    <NCard size="small" :bordered="true">
+      <template #header>
+        <span class="text-sm font-semibold">🔍 {{ t('profileConfigEditor.qa.title') }}</span>
+      </template>
+      <div class="flex flex-col gap-3">
+        <div class="flex items-center justify-between">
+          <span class="text-sm">{{ t('profileConfigEditor.qa.enabled') }}</span>
+          <NSwitch v-model:value="configModel.qa!.enabled" size="small" :disabled="disabled" />
+        </div>
+        <div :class="{ 'opacity-50 pointer-events-none': !configModel.qa!.enabled }">
+          <div class="flex items-center justify-between">
+            <span class="text-xs text-lf-text-subtle">{{
+              t('profileConfigEditor.qa.autoReject')
+            }}</span>
+            <NSwitch
+              v-model:value="configModel.qa!.auto_reject"
+              size="small"
+              :disabled="disabled || !configModel.qa!.enabled"
+            />
+          </div>
+          <div class="mt-2">
+            <div class="mb-1 text-xs text-lf-text-subtle">
+              {{ t('profileConfigEditor.qa.lengthMethod') }}
+            </div>
+            <NSelect
+              v-model:value="configModel.qa!.length_method"
+              :options="lengthMethodOptions"
+              size="small"
+              :disabled="disabled || !configModel.qa!.enabled"
+            />
+          </div>
+          <NGrid :cols="2" :x-gap="12" :y-gap="10" class="mt-2">
+            <NGi>
+              <div class="mb-1 flex items-center gap-2">
+                <NCheckbox
+                  :checked="configModel.qa!.length_ratio_min > 0"
+                  :disabled="disabled || !configModel.qa!.enabled"
+                  @update:checked="
+                    (val: boolean) => {
+                      configModel.qa!.length_ratio_min = val ? 0.2 : 0
+                    }
+                  "
+                />
+                <span class="text-xs text-lf-text-subtle">
+                  {{ t('profileConfigEditor.qa.lengthRatioMin') }}
+                </span>
+              </div>
+              <NInputNumber
+                v-model:value="configModel.qa!.length_ratio_min"
+                :min="0.01"
+                :step="0.05"
+                size="tiny"
+                :disabled="
+                  disabled || !configModel.qa!.enabled || configModel.qa!.length_ratio_min === 0
+                "
+                class="w-full"
+              />
+            </NGi>
+            <NGi>
+              <div class="mb-1 flex items-center gap-2">
+                <NCheckbox
+                  :checked="configModel.qa!.length_ratio_max > 0"
+                  :disabled="disabled || !configModel.qa!.enabled"
+                  @update:checked="
+                    (val: boolean) => {
+                      configModel.qa!.length_ratio_max = val ? 3 : 0
+                    }
+                  "
+                />
+                <span class="text-xs text-lf-text-subtle">
+                  {{ t('profileConfigEditor.qa.lengthRatioMax') }}
+                </span>
+              </div>
+              <NInputNumber
+                v-model:value="configModel.qa!.length_ratio_max"
+                :min="0.01"
+                :max="10"
+                :step="0.05"
+                size="tiny"
+                :disabled="
+                  disabled || !configModel.qa!.enabled || configModel.qa!.length_ratio_max === 0
+                "
+                class="w-full"
+              />
+            </NGi>
+          </NGrid>
+          <div class="mt-1 text-xs text-lf-text-subtle">
+            {{ t('profileConfigEditor.qa.lengthRatioHint') }}
+          </div>
+          <div v-if="lengthRatioError" class="mt-1 text-xs text-red-500">
+            {{ lengthRatioError }}
+          </div>
         </div>
       </div>
     </NCard>

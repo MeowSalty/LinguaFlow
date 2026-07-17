@@ -3,8 +3,8 @@ import type { BatchEventMetadata, SSEEvent } from '@/composables/sseShared'
 import { normalizeSSELevel } from '@/composables/sseShared'
 import { t } from '@/i18n'
 
-type TranslationJob = ApiSchemas['TranslationJob']
-type TranslationJobResource = ApiSchemas['TranslationJobResource']
+type Job = ApiSchemas['Job']
+type JobResource = ApiSchemas['JobResource']
 
 /**
  * 格式化日期为中文格式 (yyyy/MM/dd HH:mm)
@@ -59,24 +59,24 @@ export const getSegmentStatusLabel = (status: string): string =>
 /**
  * 获取任务状态的显示标签
  */
-export const getJobStatusLabel = (status: TranslationJob['status']): string =>
+export const getJobStatusLabel = (status: Job['status']): string =>
   t(`workspace.job.status.${status}`)
 
 /**
  * 获取任务触发类型的显示标签
  */
-export const getJobTriggerLabel = (trigger: TranslationJob['trigger_type']): string =>
+export const getJobTriggerLabel = (trigger: Job['trigger_type']): string =>
   t(`workspace.job.trigger.${trigger}`)
 
 /**
  * 计算任务进度百分比
  */
-export const getJobProgress = (job: TranslationJob): number => {
-  if (job.total_segments <= 0) {
-    return job.status === 'completed' ? 100 : 0
-  }
+export const getJobProgress = (job: Job): number => {
+  if (job.status === 'completed') return 100
+  if (job.status === 'failed' || job.status === 'cancelled') return 0
+  if (job.progress.total_segments <= 0) return 0
 
-  return Math.round((job.completed_segments / job.total_segments) * 100)
+  return Math.round((job.progress.completed_segments / job.progress.total_segments) * 100)
 }
 
 /**
@@ -123,23 +123,26 @@ export const getStageLabel = (stage: string | undefined): string => {
 /**
  * 生成进度描述文案，整合阶段、段落计数、队列信息
  */
-export const getJobProgressText = (job: TranslationJob): string => {
+export const getJobProgressText = (job: Job): string => {
   if (job.status === 'pending') {
-    if (job.queue_position != null && job.queue_position > 1) {
-      return t('workspace.job.progress.queued', { ahead: job.queue_position - 1 })
+    if (job.progress.queue_position != null && job.progress.queue_position > 1) {
+      return t('workspace.job.progress.queued', { ahead: job.progress.queue_position - 1 })
     }
-    if (job.queue_position === 1) {
+    if (job.progress.queue_position === 1) {
       return t('workspace.job.progress.startingSoon')
     }
     return t('workspace.job.progress.waiting')
   }
 
   if (job.status === 'running') {
-    const stage = job.current_stage ? `${getStageLabel(job.current_stage)} · ` : ''
-    return t('workspace.job.progress.running', {
-      stage,
-      completed: job.completed_segments,
-      total: job.total_segments,
+    const skipped = job.progress.skipped_segments
+    const key =
+      skipped > 0 ? 'workspace.job.progress.runningWithSkipped' : 'workspace.job.progress.running'
+    return t(key, {
+      stage: '',
+      completed: job.progress.completed_segments,
+      total: job.progress.total_segments,
+      skipped,
     })
   }
 
@@ -155,15 +158,15 @@ export const getJobProgressText = (job: TranslationJob): string => {
  * 计算预估剩余秒数。
  * 返回 null 表示无法计算（未开始、无完成段落、已完成）。
  */
-export const calculateJobETA = (job: TranslationJob): number | null => {
-  if (!job.started_at || job.completed_segments < 3) return null
+export const calculateJobETA = (job: Job): number | null => {
+  if (!job.started_at || job.progress.completed_segments < 3) return null
   if (job.status !== 'running') return null
 
   const elapsed = (Date.now() - new Date(job.started_at).getTime()) / 1000
   if (elapsed <= 0) return null
 
-  const speed = job.completed_segments / elapsed
-  const remaining = job.total_segments - job.completed_segments
+  const speed = job.progress.completed_segments / elapsed
+  const remaining = job.progress.total_segments - job.progress.completed_segments
   return remaining / speed
 }
 
@@ -188,14 +191,14 @@ export const formatETA = (seconds: number | null): string => {
  * 返回 null 表示无法计算。
  * 建议在 completed_segments >= 3 后再展示。
  */
-export const calculateJobSpeed = (job: TranslationJob): number | null => {
-  if (!job.started_at || job.completed_segments < 3) return null
+export const calculateJobSpeed = (job: Job): number | null => {
+  if (!job.started_at || job.progress.completed_segments < 3) return null
   if (job.status !== 'running') return null
 
   const elapsed = (Date.now() - new Date(job.started_at).getTime()) / 1000
   if (elapsed <= 0) return null
 
-  return (job.completed_segments / elapsed) * 60 // 转为 段落/分钟
+  return (job.progress.completed_segments / elapsed) * 60 // 转为 段落/分钟
 }
 
 /** 将速度格式化为可读文案，如 "3.2 段落/分钟" */
@@ -208,7 +211,7 @@ export const formatJobSpeed = (speed: number | null): string => {
 // ── 资源级阶段进度 ──
 
 /** 获取资源的阶段进度文案，如 "翻译 18/30" */
-export const getResourceStageProgress = (resource: TranslationJobResource): string => {
+export const getResourceStageProgress = (resource: JobResource): string => {
   if (!resource.current_stage || !resource.stage_total) return ''
   const label = getStageLabel(resource.current_stage)
   return `${label} ${resource.stage_completed ?? 0}/${resource.stage_total}`

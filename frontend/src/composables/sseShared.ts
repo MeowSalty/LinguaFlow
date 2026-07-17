@@ -10,6 +10,7 @@ export interface SSEEvent {
   message: string
   metadata?: Record<string, unknown>
   created_at: string
+  seq: number
 }
 
 export interface BatchEventMetadata {
@@ -69,46 +70,5 @@ export const resolveStreamUrl = (jobId: number): string | null => {
   const storedBase = readStoredApiBaseUrl()
   const base = (storedBase || '/api/v1').replace(/\/+$/, '')
 
-  return `${base}/translation-jobs/${jobId}/stream?access_token=${encodeURIComponent(token)}`
-}
-
-const STORAGE_PREFIX = 'linguaflow:sse:'
-const MAX_CACHED_EVENTS = 1000
-
-export const readCachedSSEEvents = (jobId: number): SSEEvent[] => {
-  try {
-    const raw = localStorage.getItem(`${STORAGE_PREFIX}${jobId}`)
-    if (!raw) return []
-    const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
-  } catch {
-    return []
-  }
-}
-
-export const persistSSEEvents = (jobId: number, events: SSEEvent[]): void => {
-  const key = `${STORAGE_PREFIX}${jobId}`
-  const trimmed = events.length > MAX_CACHED_EVENTS ? events.slice(-MAX_CACHED_EVENTS) : events
-  try {
-    localStorage.setItem(key, JSON.stringify(trimmed))
-  } catch {
-    let count = Math.floor(trimmed.length * 0.9)
-    while (count > 0) {
-      try {
-        localStorage.removeItem(key)
-        localStorage.setItem(key, JSON.stringify(events.slice(-count)))
-        return
-      } catch {
-        count = Math.floor(count * 0.9)
-      }
-    }
-  }
-}
-
-export const clearSSECacheFromStorage = (jobId: number): void => {
-  try {
-    localStorage.removeItem(`${STORAGE_PREFIX}${jobId}`)
-  } catch {
-    // ignore
-  }
+  return `${base}/jobs/${jobId}/stream?access_token=${encodeURIComponent(token)}`
 }

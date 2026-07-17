@@ -1,0 +1,63 @@
+BootstrapPromptTemplateScope:
+  type: string
+  enum: [user, org, system]
+
+BootstrapPromptTemplate:
+  type: object
+  required: [id, name, description, scope]
+  properties:
+    id:
+      type: integer
+    name:
+      type: string
+    description:
+      type: string
+    scope:
+      $ref: '#/BootstrapPromptTemplateScope'
+    owner_user_id:
+      type: integer
+    owner_org_id:
+      type: integer
+    content:
+      type: string
+      description: 术语抽取提示词内容。
+    created_at:
+      type: string
+      format: date-time
+    updated_at:
+      type: string
+      format: date-time
+
+BootstrapPromptTemplateListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/BootstrapPromptTemplate'
+
+CreateBootstrapPromptTemplateRequest:
+  type: object
+  required: [name]
+  properties:
+    name:
+      type: string
+    description:
+      type: string
+    content:
+      type: string
+      description: 术语抽取提示词内容。
+  additionalProperties: false
+
+UpdateBootstrapPromptTemplateRequest:
+  type: object
+  properties:
+    name:
+      type: string
+    description:
+      type: string
+    content:
+      type: string
+      description: 术语抽取提示词内容。
+  additionalProperties: false

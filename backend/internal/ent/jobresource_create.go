@@ -10,9 +10,9 @@ import (
 
 	"entgo.io/ent/dialect/sql/sqlgraph"
 	"entgo.io/ent/schema/field"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 )
 
 // JobResourceCreate is the builder for creating a JobResource entity.
@@ -94,6 +94,20 @@ func (_c *JobResourceCreate) SetCompletedSegments(v int) *JobResourceCreate {
 func (_c *JobResourceCreate) SetNillableCompletedSegments(v *int) *JobResourceCreate {
 	if v != nil {
 		_c.SetCompletedSegments(*v)
+	}
+	return _c
+}
+
+// SetSkippedSegments sets the "skipped_segments" field.
+func (_c *JobResourceCreate) SetSkippedSegments(v int) *JobResourceCreate {
+	_c.mutation.SetSkippedSegments(v)
+	return _c
+}
+
+// SetNillableSkippedSegments sets the "skipped_segments" field if the given value is not nil.
+func (_c *JobResourceCreate) SetNillableSkippedSegments(v *int) *JobResourceCreate {
+	if v != nil {
+		_c.SetSkippedSegments(*v)
 	}
 	return _c
 }
@@ -182,14 +196,14 @@ func (_c *JobResourceCreate) SetNillableStartedAt(v *time.Time) *JobResourceCrea
 	return _c
 }
 
-// SetJobID sets the "job" edge to the TranslationJob entity by ID.
+// SetJobID sets the "job" edge to the Job entity by ID.
 func (_c *JobResourceCreate) SetJobID(id int) *JobResourceCreate {
 	_c.mutation.SetJobID(id)
 	return _c
 }
 
-// SetJob sets the "job" edge to the TranslationJob entity.
-func (_c *JobResourceCreate) SetJob(v *TranslationJob) *JobResourceCreate {
+// SetJob sets the "job" edge to the Job entity.
+func (_c *JobResourceCreate) SetJob(v *Job) *JobResourceCreate {
 	return _c.SetJobID(v.ID)
 }
 
@@ -263,6 +277,10 @@ func (_c *JobResourceCreate) defaults() {
 		v := jobresource.DefaultCompletedSegments
 		_c.mutation.SetCompletedSegments(v)
 	}
+	if _, ok := _c.mutation.SkippedSegments(); !ok {
+		v := jobresource.DefaultSkippedSegments
+		_c.mutation.SetSkippedSegments(v)
+	}
 	if _, ok := _c.mutation.CurrentStage(); !ok {
 		v := jobresource.DefaultCurrentStage
 		_c.mutation.SetCurrentStage(v)
@@ -305,6 +323,14 @@ func (_c *JobResourceCreate) check() error {
 	if v, ok := _c.mutation.CompletedSegments(); ok {
 		if err := jobresource.CompletedSegmentsValidator(v); err != nil {
 			return &ValidationError{Name: "completed_segments", err: fmt.Errorf(`ent: validator failed for field "JobResource.completed_segments": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.SkippedSegments(); !ok {
+		return &ValidationError{Name: "skipped_segments", err: errors.New(`ent: missing required field "JobResource.skipped_segments"`)}
+	}
+	if v, ok := _c.mutation.SkippedSegments(); ok {
+		if err := jobresource.SkippedSegmentsValidator(v); err != nil {
+			return &ValidationError{Name: "skipped_segments", err: fmt.Errorf(`ent: validator failed for field "JobResource.skipped_segments": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.StageTotal(); !ok {
@@ -379,6 +405,10 @@ func (_c *JobResourceCreate) createSpec() (*JobResource, *sqlgraph.CreateSpec) {
 		_spec.SetField(jobresource.FieldCompletedSegments, field.TypeInt, value)
 		_node.CompletedSegments = value
 	}
+	if value, ok := _c.mutation.SkippedSegments(); ok {
+		_spec.SetField(jobresource.FieldSkippedSegments, field.TypeInt, value)
+		_node.SkippedSegments = value
+	}
 	if value, ok := _c.mutation.OutputPath(); ok {
 		_spec.SetField(jobresource.FieldOutputPath, field.TypeString, value)
 		_node.OutputPath = value
@@ -411,13 +441,13 @@ func (_c *JobResourceCreate) createSpec() (*JobResource, *sqlgraph.CreateSpec) {
 			Columns: []string{jobresource.JobColumn},
 			Bidi:    false,
 			Target: &sqlgraph.EdgeTarget{
-				IDSpec: sqlgraph.NewFieldSpec(translationjob.FieldID, field.TypeInt),
+				IDSpec: sqlgraph.NewFieldSpec(job.FieldID, field.TypeInt),
 			},
 		}
 		for _, k := range nodes {
 			edge.Target.Nodes = append(edge.Target.Nodes, k)
 		}
-		_node.translation_job_job_resources = &nodes[0]
+		_node.job_job_resources = &nodes[0]
 		_spec.Edges = append(_spec.Edges, edge)
 	}
 	if nodes := _c.mutation.ResourceIDs(); len(nodes) > 0 {

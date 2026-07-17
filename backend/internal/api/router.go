@@ -30,7 +30,7 @@ func (s *Server) newRouter() http.Handler {
 	r.Mount("/api/v1", HandlerFromMux(s, apiV1))
 
 	// SSE 流式端点（不在 OpenAPI 规范中）
-	apiV1.Get("/translation-jobs/{translationJobId}/stream", s.handleTranslationJobStream)
+	apiV1.Get("/jobs/{jobId}/stream", s.handleJobStream)
 
 	// 本地模式下挂载嵌入的前端静态资源
 	if s.isLocal() {
@@ -62,7 +62,7 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 }
 
 func (s *Server) handlePing(w http.ResponseWriter, _ *http.Request) {
-	writeJSON(w, http.StatusOK, healthResponse{Status: "ok", Service: s.config.Server.ServiceName})
+	writeJSON(w, http.StatusOK, healthResponse{Status: "ok", Service: s.serverCfg.ServiceName})
 }
 
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {

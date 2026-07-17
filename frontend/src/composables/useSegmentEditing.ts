@@ -77,6 +77,32 @@ export function useSegmentEditing(
     }
   }
 
+  const saveAndEditNext = async (segment: Segment, segments: Segment[]): Promise<void> => {
+    if (!projectId.value || !activeResourceId.value) {
+      return
+    }
+
+    try {
+      await workspace.updateSegment(projectId.value, activeResourceId.value, segment.id, {
+        source_text: inlineEditForm.source_text,
+        target_text: inlineEditForm.target_text || undefined,
+        comment: inlineEditForm.comment || undefined,
+      })
+      message.success(t('workspace.messages.segmentSaved'))
+
+      const idx = segments.findIndex((s) => s.id === segment.id)
+      const nextSegment = idx >= 0 ? segments[idx + 1] : undefined
+      if (nextSegment) {
+        startInlineEdit(nextSegment)
+      } else {
+        cancelInlineEdit()
+      }
+    } catch (error) {
+      console.error(error)
+      message.error(workspace.actionError || t('workspace.messages.segmentSaveFailed'))
+    }
+  }
+
   const openInlineComment = (segment: Segment): void => {
     inlineCommentVisible.value = segment.id
     inlineCommentText.value = segment.review_comment ?? ''
@@ -89,8 +115,6 @@ export function useSegmentEditing(
 
     try {
       await workspace.updateSegment(projectId.value, activeResourceId.value, segment.id, {
-        source_text: segment.source_text,
-        target_text: segment.target_text || undefined,
         comment: inlineCommentText.value || undefined,
       })
       inlineCommentVisible.value = null
@@ -113,6 +137,7 @@ export function useSegmentEditing(
     startInlineEdit,
     cancelInlineEdit,
     saveInlineEdit,
+    saveAndEditNext,
     openInlineComment,
     saveInlineComment,
   }

@@ -53,6 +53,12 @@ const writeStoredApiBaseUrl = (baseUrl: string): void => {
   getDefaultTokenStorage()?.setItem('linguaflow.api_base_url', baseUrl)
 }
 
+let _isLocalMode = false
+
+export const setLocalMode = (isLocal: boolean): void => {
+  _isLocalMode = isLocal
+}
+
 type UnauthorizedHandler = () => void
 let _onUnauthorized: UnauthorizedHandler | null = null
 
@@ -100,7 +106,15 @@ export const createAuthMiddleware = (
 
     const accessToken = readAccessToken()
 
-    if (!accessToken || request.headers.has('Authorization')) {
+    if (request.headers.has('Authorization')) {
+      return undefined
+    }
+
+    if (!accessToken && !_isLocalMode) {
+      return new Response(null, { status: 401 })
+    }
+
+    if (!accessToken) {
       return undefined
     }
 
@@ -186,11 +200,13 @@ export * from './utils'
 export * from './auth'
 export * from './backends'
 export * from './projects'
-export * from './translation-jobs'
+export * from './jobs'
 export * from './misc'
 export * from './glossary'
 export * from './prompt-templates'
-export * from './translation-profiles'
+export * from './bootstrap-prompt-templates'
+export * from './prune-prompt-templates'
+export * from './execution-profiles'
 export * from './execution-plan-templates'
 export * from './system'
 export * from './admin'

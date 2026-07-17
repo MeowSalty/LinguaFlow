@@ -7,22 +7,25 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionprofile"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/job"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/pruneprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/sseevent"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/systemsetting"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
@@ -101,6 +104,45 @@ func init() {
 	backendDescRateLimitPerMinute := backendFields[6].Descriptor()
 	// backend.DefaultRateLimitPerMinute holds the default value on creation for the rate_limit_per_minute field.
 	backend.DefaultRateLimitPerMinute = backendDescRateLimitPerMinute.Default.(int)
+	bootstrapprompttemplateMixin := schema.BootstrapPromptTemplate{}.Mixin()
+	bootstrapprompttemplateMixinFields0 := bootstrapprompttemplateMixin[0].Fields()
+	_ = bootstrapprompttemplateMixinFields0
+	bootstrapprompttemplateFields := schema.BootstrapPromptTemplate{}.Fields()
+	_ = bootstrapprompttemplateFields
+	// bootstrapprompttemplateDescCreatedAt is the schema descriptor for created_at field.
+	bootstrapprompttemplateDescCreatedAt := bootstrapprompttemplateMixinFields0[0].Descriptor()
+	// bootstrapprompttemplate.DefaultCreatedAt holds the default value on creation for the created_at field.
+	bootstrapprompttemplate.DefaultCreatedAt = bootstrapprompttemplateDescCreatedAt.Default.(func() time.Time)
+	// bootstrapprompttemplateDescUpdatedAt is the schema descriptor for updated_at field.
+	bootstrapprompttemplateDescUpdatedAt := bootstrapprompttemplateMixinFields0[1].Descriptor()
+	// bootstrapprompttemplate.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	bootstrapprompttemplate.DefaultUpdatedAt = bootstrapprompttemplateDescUpdatedAt.Default.(func() time.Time)
+	// bootstrapprompttemplate.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	bootstrapprompttemplate.UpdateDefaultUpdatedAt = bootstrapprompttemplateDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// bootstrapprompttemplateDescName is the schema descriptor for name field.
+	bootstrapprompttemplateDescName := bootstrapprompttemplateFields[0].Descriptor()
+	// bootstrapprompttemplate.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	bootstrapprompttemplate.NameValidator = bootstrapprompttemplateDescName.Validators[0].(func(string) error)
+	// bootstrapprompttemplateDescDescription is the schema descriptor for description field.
+	bootstrapprompttemplateDescDescription := bootstrapprompttemplateFields[1].Descriptor()
+	// bootstrapprompttemplate.DefaultDescription holds the default value on creation for the description field.
+	bootstrapprompttemplate.DefaultDescription = bootstrapprompttemplateDescDescription.Default.(string)
+	// bootstrapprompttemplateDescScope is the schema descriptor for scope field.
+	bootstrapprompttemplateDescScope := bootstrapprompttemplateFields[2].Descriptor()
+	// bootstrapprompttemplate.DefaultScope holds the default value on creation for the scope field.
+	bootstrapprompttemplate.DefaultScope = bootstrapprompttemplateDescScope.Default.(string)
+	// bootstrapprompttemplateDescOwnerUserID is the schema descriptor for owner_user_id field.
+	bootstrapprompttemplateDescOwnerUserID := bootstrapprompttemplateFields[3].Descriptor()
+	// bootstrapprompttemplate.OwnerUserIDValidator is a validator for the "owner_user_id" field. It is called by the builders before save.
+	bootstrapprompttemplate.OwnerUserIDValidator = bootstrapprompttemplateDescOwnerUserID.Validators[0].(func(int) error)
+	// bootstrapprompttemplateDescOwnerOrgID is the schema descriptor for owner_org_id field.
+	bootstrapprompttemplateDescOwnerOrgID := bootstrapprompttemplateFields[4].Descriptor()
+	// bootstrapprompttemplate.OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
+	bootstrapprompttemplate.OwnerOrgIDValidator = bootstrapprompttemplateDescOwnerOrgID.Validators[0].(func(int) error)
+	// bootstrapprompttemplateDescContent is the schema descriptor for content field.
+	bootstrapprompttemplateDescContent := bootstrapprompttemplateFields[5].Descriptor()
+	// bootstrapprompttemplate.DefaultContent holds the default value on creation for the content field.
+	bootstrapprompttemplate.DefaultContent = bootstrapprompttemplateDescContent.Default.(string)
 	executionplantemplateMixin := schema.ExecutionPlanTemplate{}.Mixin()
 	executionplantemplateMixinFields0 := executionplantemplateMixin[0].Fields()
 	_ = executionplantemplateMixinFields0
@@ -136,6 +178,45 @@ func init() {
 	executionplantemplateDescOwnerOrgID := executionplantemplateFields[4].Descriptor()
 	// executionplantemplate.OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
 	executionplantemplate.OwnerOrgIDValidator = executionplantemplateDescOwnerOrgID.Validators[0].(func(int) error)
+	executionprofileMixin := schema.ExecutionProfile{}.Mixin()
+	executionprofileMixinFields0 := executionprofileMixin[0].Fields()
+	_ = executionprofileMixinFields0
+	executionprofileFields := schema.ExecutionProfile{}.Fields()
+	_ = executionprofileFields
+	// executionprofileDescCreatedAt is the schema descriptor for created_at field.
+	executionprofileDescCreatedAt := executionprofileMixinFields0[0].Descriptor()
+	// executionprofile.DefaultCreatedAt holds the default value on creation for the created_at field.
+	executionprofile.DefaultCreatedAt = executionprofileDescCreatedAt.Default.(func() time.Time)
+	// executionprofileDescUpdatedAt is the schema descriptor for updated_at field.
+	executionprofileDescUpdatedAt := executionprofileMixinFields0[1].Descriptor()
+	// executionprofile.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	executionprofile.DefaultUpdatedAt = executionprofileDescUpdatedAt.Default.(func() time.Time)
+	// executionprofile.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	executionprofile.UpdateDefaultUpdatedAt = executionprofileDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// executionprofileDescName is the schema descriptor for name field.
+	executionprofileDescName := executionprofileFields[0].Descriptor()
+	// executionprofile.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	executionprofile.NameValidator = executionprofileDescName.Validators[0].(func(string) error)
+	// executionprofileDescDescription is the schema descriptor for description field.
+	executionprofileDescDescription := executionprofileFields[1].Descriptor()
+	// executionprofile.DefaultDescription holds the default value on creation for the description field.
+	executionprofile.DefaultDescription = executionprofileDescDescription.Default.(string)
+	// executionprofileDescScope is the schema descriptor for scope field.
+	executionprofileDescScope := executionprofileFields[2].Descriptor()
+	// executionprofile.DefaultScope holds the default value on creation for the scope field.
+	executionprofile.DefaultScope = executionprofileDescScope.Default.(string)
+	// executionprofileDescOwnerUserID is the schema descriptor for owner_user_id field.
+	executionprofileDescOwnerUserID := executionprofileFields[3].Descriptor()
+	// executionprofile.OwnerUserIDValidator is a validator for the "owner_user_id" field. It is called by the builders before save.
+	executionprofile.OwnerUserIDValidator = executionprofileDescOwnerUserID.Validators[0].(func(int) error)
+	// executionprofileDescOwnerOrgID is the schema descriptor for owner_org_id field.
+	executionprofileDescOwnerOrgID := executionprofileFields[4].Descriptor()
+	// executionprofile.OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
+	executionprofile.OwnerOrgIDValidator = executionprofileDescOwnerOrgID.Validators[0].(func(int) error)
+	// executionprofileDescConfig is the schema descriptor for config field.
+	executionprofileDescConfig := executionprofileFields[5].Descriptor()
+	// executionprofile.DefaultConfig holds the default value on creation for the config field.
+	executionprofile.DefaultConfig = executionprofileDescConfig.Default.(schema.ExecutionProfileConfigData)
 	glossaryentryMixin := schema.GlossaryEntry{}.Mixin()
 	glossaryentryMixinFields0 := glossaryentryMixin[0].Fields()
 	_ = glossaryentryMixinFields0
@@ -171,6 +252,83 @@ func init() {
 	glossaryentryDescProjectID := glossaryentryFields[5].Descriptor()
 	// glossaryentry.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
 	glossaryentry.ProjectIDValidator = glossaryentryDescProjectID.Validators[0].(func(int) error)
+	jobMixin := schema.Job{}.Mixin()
+	jobMixinFields0 := jobMixin[0].Fields()
+	_ = jobMixinFields0
+	jobFields := schema.Job{}.Fields()
+	_ = jobFields
+	// jobDescCreatedAt is the schema descriptor for created_at field.
+	jobDescCreatedAt := jobMixinFields0[0].Descriptor()
+	// job.DefaultCreatedAt holds the default value on creation for the created_at field.
+	job.DefaultCreatedAt = jobDescCreatedAt.Default.(func() time.Time)
+	// jobDescUpdatedAt is the schema descriptor for updated_at field.
+	jobDescUpdatedAt := jobMixinFields0[1].Descriptor()
+	// job.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	job.DefaultUpdatedAt = jobDescUpdatedAt.Default.(func() time.Time)
+	// job.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	job.UpdateDefaultUpdatedAt = jobDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// jobDescProjectID is the schema descriptor for project_id field.
+	jobDescProjectID := jobFields[0].Descriptor()
+	// job.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
+	job.ProjectIDValidator = jobDescProjectID.Validators[0].(func(int) error)
+	// jobDescStatus is the schema descriptor for status field.
+	jobDescStatus := jobFields[1].Descriptor()
+	// job.DefaultStatus holds the default value on creation for the status field.
+	job.DefaultStatus = jobDescStatus.Default.(string)
+	// jobDescTriggerType is the schema descriptor for trigger_type field.
+	jobDescTriggerType := jobFields[2].Descriptor()
+	// job.DefaultTriggerType holds the default value on creation for the trigger_type field.
+	job.DefaultTriggerType = jobDescTriggerType.Default.(string)
+	// jobDescExecutionPlanID is the schema descriptor for execution_plan_id field.
+	jobDescExecutionPlanID := jobFields[3].Descriptor()
+	// job.ExecutionPlanIDValidator is a validator for the "execution_plan_id" field. It is called by the builders before save.
+	job.ExecutionPlanIDValidator = jobDescExecutionPlanID.Validators[0].(func(int) error)
+	// jobDescExecutionConfig is the schema descriptor for execution_config field.
+	jobDescExecutionConfig := jobFields[4].Descriptor()
+	// job.DefaultExecutionConfig holds the default value on creation for the execution_config field.
+	job.DefaultExecutionConfig = jobDescExecutionConfig.Default.(func() map[string]interface{})
+	// jobDescResourceCount is the schema descriptor for resource_count field.
+	jobDescResourceCount := jobFields[5].Descriptor()
+	// job.DefaultResourceCount holds the default value on creation for the resource_count field.
+	job.DefaultResourceCount = jobDescResourceCount.Default.(int)
+	// job.ResourceCountValidator is a validator for the "resource_count" field. It is called by the builders before save.
+	job.ResourceCountValidator = jobDescResourceCount.Validators[0].(func(int) error)
+	// jobDescCompletedResources is the schema descriptor for completed_resources field.
+	jobDescCompletedResources := jobFields[6].Descriptor()
+	// job.DefaultCompletedResources holds the default value on creation for the completed_resources field.
+	job.DefaultCompletedResources = jobDescCompletedResources.Default.(int)
+	// job.CompletedResourcesValidator is a validator for the "completed_resources" field. It is called by the builders before save.
+	job.CompletedResourcesValidator = jobDescCompletedResources.Validators[0].(func(int) error)
+	// jobDescFailedResources is the schema descriptor for failed_resources field.
+	jobDescFailedResources := jobFields[7].Descriptor()
+	// job.DefaultFailedResources holds the default value on creation for the failed_resources field.
+	job.DefaultFailedResources = jobDescFailedResources.Default.(int)
+	// job.FailedResourcesValidator is a validator for the "failed_resources" field. It is called by the builders before save.
+	job.FailedResourcesValidator = jobDescFailedResources.Validators[0].(func(int) error)
+	// jobDescTotalSegments is the schema descriptor for total_segments field.
+	jobDescTotalSegments := jobFields[8].Descriptor()
+	// job.DefaultTotalSegments holds the default value on creation for the total_segments field.
+	job.DefaultTotalSegments = jobDescTotalSegments.Default.(int)
+	// job.TotalSegmentsValidator is a validator for the "total_segments" field. It is called by the builders before save.
+	job.TotalSegmentsValidator = jobDescTotalSegments.Validators[0].(func(int) error)
+	// jobDescSkippedSegments is the schema descriptor for skipped_segments field.
+	jobDescSkippedSegments := jobFields[9].Descriptor()
+	// job.DefaultSkippedSegments holds the default value on creation for the skipped_segments field.
+	job.DefaultSkippedSegments = jobDescSkippedSegments.Default.(int)
+	// job.SkippedSegmentsValidator is a validator for the "skipped_segments" field. It is called by the builders before save.
+	job.SkippedSegmentsValidator = jobDescSkippedSegments.Validators[0].(func(int) error)
+	// jobDescStageTotal is the schema descriptor for stage_total field.
+	jobDescStageTotal := jobFields[10].Descriptor()
+	// job.DefaultStageTotal holds the default value on creation for the stage_total field.
+	job.DefaultStageTotal = jobDescStageTotal.Default.(int)
+	// job.StageTotalValidator is a validator for the "stage_total" field. It is called by the builders before save.
+	job.StageTotalValidator = jobDescStageTotal.Validators[0].(func(int) error)
+	// jobDescCompletedSegments is the schema descriptor for completed_segments field.
+	jobDescCompletedSegments := jobFields[11].Descriptor()
+	// job.DefaultCompletedSegments holds the default value on creation for the completed_segments field.
+	job.DefaultCompletedSegments = jobDescCompletedSegments.Default.(int)
+	// job.CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.
+	job.CompletedSegmentsValidator = jobDescCompletedSegments.Validators[0].(func(int) error)
 	jobresourceMixin := schema.JobResource{}.Mixin()
 	jobresourceMixinFields0 := jobresourceMixin[0].Fields()
 	_ = jobresourceMixinFields0
@@ -206,18 +364,24 @@ func init() {
 	jobresource.DefaultCompletedSegments = jobresourceDescCompletedSegments.Default.(int)
 	// jobresource.CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.
 	jobresource.CompletedSegmentsValidator = jobresourceDescCompletedSegments.Validators[0].(func(int) error)
+	// jobresourceDescSkippedSegments is the schema descriptor for skipped_segments field.
+	jobresourceDescSkippedSegments := jobresourceFields[4].Descriptor()
+	// jobresource.DefaultSkippedSegments holds the default value on creation for the skipped_segments field.
+	jobresource.DefaultSkippedSegments = jobresourceDescSkippedSegments.Default.(int)
+	// jobresource.SkippedSegmentsValidator is a validator for the "skipped_segments" field. It is called by the builders before save.
+	jobresource.SkippedSegmentsValidator = jobresourceDescSkippedSegments.Validators[0].(func(int) error)
 	// jobresourceDescCurrentStage is the schema descriptor for current_stage field.
-	jobresourceDescCurrentStage := jobresourceFields[6].Descriptor()
+	jobresourceDescCurrentStage := jobresourceFields[7].Descriptor()
 	// jobresource.DefaultCurrentStage holds the default value on creation for the current_stage field.
 	jobresource.DefaultCurrentStage = jobresourceDescCurrentStage.Default.(string)
 	// jobresourceDescStageTotal is the schema descriptor for stage_total field.
-	jobresourceDescStageTotal := jobresourceFields[7].Descriptor()
+	jobresourceDescStageTotal := jobresourceFields[8].Descriptor()
 	// jobresource.DefaultStageTotal holds the default value on creation for the stage_total field.
 	jobresource.DefaultStageTotal = jobresourceDescStageTotal.Default.(int)
 	// jobresource.StageTotalValidator is a validator for the "stage_total" field. It is called by the builders before save.
 	jobresource.StageTotalValidator = jobresourceDescStageTotal.Validators[0].(func(int) error)
 	// jobresourceDescStageCompleted is the schema descriptor for stage_completed field.
-	jobresourceDescStageCompleted := jobresourceFields[8].Descriptor()
+	jobresourceDescStageCompleted := jobresourceFields[9].Descriptor()
 	// jobresource.DefaultStageCompleted holds the default value on creation for the stage_completed field.
 	jobresource.DefaultStageCompleted = jobresourceDescStageCompleted.Default.(int)
 	// jobresource.StageCompletedValidator is a validator for the "stage_completed" field. It is called by the builders before save.
@@ -295,65 +459,57 @@ func init() {
 	projectDescConfig := projectFields[3].Descriptor()
 	// project.DefaultConfig holds the default value on creation for the config field.
 	project.DefaultConfig = projectDescConfig.Default.(func() map[string]interface{})
-	// projectDescDefaultTranslationConfig is the schema descriptor for default_translation_config field.
-	projectDescDefaultTranslationConfig := projectFields[4].Descriptor()
-	// project.DefaultDefaultTranslationConfig holds the default value on creation for the default_translation_config field.
-	project.DefaultDefaultTranslationConfig = projectDescDefaultTranslationConfig.Default.(func() map[string]interface{})
 	// projectDescGlossaryEnabled is the schema descriptor for glossary_enabled field.
-	projectDescGlossaryEnabled := projectFields[5].Descriptor()
+	projectDescGlossaryEnabled := projectFields[4].Descriptor()
 	// project.DefaultGlossaryEnabled holds the default value on creation for the glossary_enabled field.
 	project.DefaultGlossaryEnabled = projectDescGlossaryEnabled.Default.(bool)
 	// projectDescSourceLang is the schema descriptor for source_lang field.
-	projectDescSourceLang := projectFields[6].Descriptor()
+	projectDescSourceLang := projectFields[5].Descriptor()
 	// project.DefaultSourceLang holds the default value on creation for the source_lang field.
 	project.DefaultSourceLang = projectDescSourceLang.Default.(string)
 	// projectDescTargetLang is the schema descriptor for target_lang field.
-	projectDescTargetLang := projectFields[7].Descriptor()
+	projectDescTargetLang := projectFields[6].Descriptor()
 	// project.DefaultTargetLang holds the default value on creation for the target_lang field.
 	project.DefaultTargetLang = projectDescTargetLang.Default.(string)
-	prompttemplateMixin := schema.PromptTemplate{}.Mixin()
-	prompttemplateMixinFields0 := prompttemplateMixin[0].Fields()
-	_ = prompttemplateMixinFields0
-	prompttemplateFields := schema.PromptTemplate{}.Fields()
-	_ = prompttemplateFields
-	// prompttemplateDescCreatedAt is the schema descriptor for created_at field.
-	prompttemplateDescCreatedAt := prompttemplateMixinFields0[0].Descriptor()
-	// prompttemplate.DefaultCreatedAt holds the default value on creation for the created_at field.
-	prompttemplate.DefaultCreatedAt = prompttemplateDescCreatedAt.Default.(func() time.Time)
-	// prompttemplateDescUpdatedAt is the schema descriptor for updated_at field.
-	prompttemplateDescUpdatedAt := prompttemplateMixinFields0[1].Descriptor()
-	// prompttemplate.DefaultUpdatedAt holds the default value on creation for the updated_at field.
-	prompttemplate.DefaultUpdatedAt = prompttemplateDescUpdatedAt.Default.(func() time.Time)
-	// prompttemplate.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
-	prompttemplate.UpdateDefaultUpdatedAt = prompttemplateDescUpdatedAt.UpdateDefault.(func() time.Time)
-	// prompttemplateDescName is the schema descriptor for name field.
-	prompttemplateDescName := prompttemplateFields[0].Descriptor()
-	// prompttemplate.NameValidator is a validator for the "name" field. It is called by the builders before save.
-	prompttemplate.NameValidator = prompttemplateDescName.Validators[0].(func(string) error)
-	// prompttemplateDescDescription is the schema descriptor for description field.
-	prompttemplateDescDescription := prompttemplateFields[1].Descriptor()
-	// prompttemplate.DefaultDescription holds the default value on creation for the description field.
-	prompttemplate.DefaultDescription = prompttemplateDescDescription.Default.(string)
-	// prompttemplateDescScope is the schema descriptor for scope field.
-	prompttemplateDescScope := prompttemplateFields[2].Descriptor()
-	// prompttemplate.DefaultScope holds the default value on creation for the scope field.
-	prompttemplate.DefaultScope = prompttemplateDescScope.Default.(string)
-	// prompttemplateDescOwnerUserID is the schema descriptor for owner_user_id field.
-	prompttemplateDescOwnerUserID := prompttemplateFields[3].Descriptor()
-	// prompttemplate.OwnerUserIDValidator is a validator for the "owner_user_id" field. It is called by the builders before save.
-	prompttemplate.OwnerUserIDValidator = prompttemplateDescOwnerUserID.Validators[0].(func(int) error)
-	// prompttemplateDescOwnerOrgID is the schema descriptor for owner_org_id field.
-	prompttemplateDescOwnerOrgID := prompttemplateFields[4].Descriptor()
-	// prompttemplate.OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
-	prompttemplate.OwnerOrgIDValidator = prompttemplateDescOwnerOrgID.Validators[0].(func(int) error)
-	// prompttemplateDescSystemPromptContent is the schema descriptor for system_prompt_content field.
-	prompttemplateDescSystemPromptContent := prompttemplateFields[5].Descriptor()
-	// prompttemplate.DefaultSystemPromptContent holds the default value on creation for the system_prompt_content field.
-	prompttemplate.DefaultSystemPromptContent = prompttemplateDescSystemPromptContent.Default.(string)
-	// prompttemplateDescBootstrapPromptContent is the schema descriptor for bootstrap_prompt_content field.
-	prompttemplateDescBootstrapPromptContent := prompttemplateFields[6].Descriptor()
-	// prompttemplate.DefaultBootstrapPromptContent holds the default value on creation for the bootstrap_prompt_content field.
-	prompttemplate.DefaultBootstrapPromptContent = prompttemplateDescBootstrapPromptContent.Default.(string)
+	pruneprompttemplateMixin := schema.PrunePromptTemplate{}.Mixin()
+	pruneprompttemplateMixinFields0 := pruneprompttemplateMixin[0].Fields()
+	_ = pruneprompttemplateMixinFields0
+	pruneprompttemplateFields := schema.PrunePromptTemplate{}.Fields()
+	_ = pruneprompttemplateFields
+	// pruneprompttemplateDescCreatedAt is the schema descriptor for created_at field.
+	pruneprompttemplateDescCreatedAt := pruneprompttemplateMixinFields0[0].Descriptor()
+	// pruneprompttemplate.DefaultCreatedAt holds the default value on creation for the created_at field.
+	pruneprompttemplate.DefaultCreatedAt = pruneprompttemplateDescCreatedAt.Default.(func() time.Time)
+	// pruneprompttemplateDescUpdatedAt is the schema descriptor for updated_at field.
+	pruneprompttemplateDescUpdatedAt := pruneprompttemplateMixinFields0[1].Descriptor()
+	// pruneprompttemplate.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	pruneprompttemplate.DefaultUpdatedAt = pruneprompttemplateDescUpdatedAt.Default.(func() time.Time)
+	// pruneprompttemplate.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	pruneprompttemplate.UpdateDefaultUpdatedAt = pruneprompttemplateDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// pruneprompttemplateDescName is the schema descriptor for name field.
+	pruneprompttemplateDescName := pruneprompttemplateFields[0].Descriptor()
+	// pruneprompttemplate.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	pruneprompttemplate.NameValidator = pruneprompttemplateDescName.Validators[0].(func(string) error)
+	// pruneprompttemplateDescDescription is the schema descriptor for description field.
+	pruneprompttemplateDescDescription := pruneprompttemplateFields[1].Descriptor()
+	// pruneprompttemplate.DefaultDescription holds the default value on creation for the description field.
+	pruneprompttemplate.DefaultDescription = pruneprompttemplateDescDescription.Default.(string)
+	// pruneprompttemplateDescScope is the schema descriptor for scope field.
+	pruneprompttemplateDescScope := pruneprompttemplateFields[2].Descriptor()
+	// pruneprompttemplate.DefaultScope holds the default value on creation for the scope field.
+	pruneprompttemplate.DefaultScope = pruneprompttemplateDescScope.Default.(string)
+	// pruneprompttemplateDescOwnerUserID is the schema descriptor for owner_user_id field.
+	pruneprompttemplateDescOwnerUserID := pruneprompttemplateFields[3].Descriptor()
+	// pruneprompttemplate.OwnerUserIDValidator is a validator for the "owner_user_id" field. It is called by the builders before save.
+	pruneprompttemplate.OwnerUserIDValidator = pruneprompttemplateDescOwnerUserID.Validators[0].(func(int) error)
+	// pruneprompttemplateDescOwnerOrgID is the schema descriptor for owner_org_id field.
+	pruneprompttemplateDescOwnerOrgID := pruneprompttemplateFields[4].Descriptor()
+	// pruneprompttemplate.OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
+	pruneprompttemplate.OwnerOrgIDValidator = pruneprompttemplateDescOwnerOrgID.Validators[0].(func(int) error)
+	// pruneprompttemplateDescContent is the schema descriptor for content field.
+	pruneprompttemplateDescContent := pruneprompttemplateFields[5].Descriptor()
+	// pruneprompttemplate.DefaultContent holds the default value on creation for the content field.
+	pruneprompttemplate.DefaultContent = pruneprompttemplateDescContent.Default.(string)
 	refreshtokenMixin := schema.RefreshToken{}.Mixin()
 	refreshtokenMixinFields0 := refreshtokenMixin[0].Fields()
 	_ = refreshtokenMixinFields0
@@ -410,6 +566,20 @@ func init() {
 	resourceDescProjectID := resourceFields[4].Descriptor()
 	// resource.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
 	resource.ProjectIDValidator = resourceDescProjectID.Validators[0].(func(int) error)
+	sseeventFields := schema.SSEEvent{}.Fields()
+	_ = sseeventFields
+	// sseeventDescJobID is the schema descriptor for job_id field.
+	sseeventDescJobID := sseeventFields[0].Descriptor()
+	// sseevent.JobIDValidator is a validator for the "job_id" field. It is called by the builders before save.
+	sseevent.JobIDValidator = sseeventDescJobID.Validators[0].(func(int) error)
+	// sseeventDescSeq is the schema descriptor for seq field.
+	sseeventDescSeq := sseeventFields[1].Descriptor()
+	// sseevent.SeqValidator is a validator for the "seq" field. It is called by the builders before save.
+	sseevent.SeqValidator = sseeventDescSeq.Validators[0].(func(int64) error)
+	// sseeventDescCreatedAt is the schema descriptor for created_at field.
+	sseeventDescCreatedAt := sseeventFields[7].Descriptor()
+	// sseevent.DefaultCreatedAt holds the default value on creation for the created_at field.
+	sseevent.DefaultCreatedAt = sseeventDescCreatedAt.Default.(func() time.Time)
 	segmentMixin := schema.Segment{}.Mixin()
 	segmentMixinFields0 := segmentMixin[0].Fields()
 	_ = segmentMixinFields0
@@ -556,112 +726,45 @@ func init() {
 	tmentryDescProjectID := tmentryFields[7].Descriptor()
 	// tmentry.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
 	tmentry.ProjectIDValidator = tmentryDescProjectID.Validators[0].(func(int) error)
-	translationjobMixin := schema.TranslationJob{}.Mixin()
-	translationjobMixinFields0 := translationjobMixin[0].Fields()
-	_ = translationjobMixinFields0
-	translationjobFields := schema.TranslationJob{}.Fields()
-	_ = translationjobFields
-	// translationjobDescCreatedAt is the schema descriptor for created_at field.
-	translationjobDescCreatedAt := translationjobMixinFields0[0].Descriptor()
-	// translationjob.DefaultCreatedAt holds the default value on creation for the created_at field.
-	translationjob.DefaultCreatedAt = translationjobDescCreatedAt.Default.(func() time.Time)
-	// translationjobDescUpdatedAt is the schema descriptor for updated_at field.
-	translationjobDescUpdatedAt := translationjobMixinFields0[1].Descriptor()
-	// translationjob.DefaultUpdatedAt holds the default value on creation for the updated_at field.
-	translationjob.DefaultUpdatedAt = translationjobDescUpdatedAt.Default.(func() time.Time)
-	// translationjob.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
-	translationjob.UpdateDefaultUpdatedAt = translationjobDescUpdatedAt.UpdateDefault.(func() time.Time)
-	// translationjobDescStatus is the schema descriptor for status field.
-	translationjobDescStatus := translationjobFields[0].Descriptor()
-	// translationjob.DefaultStatus holds the default value on creation for the status field.
-	translationjob.DefaultStatus = translationjobDescStatus.Default.(string)
-	// translationjobDescTriggerType is the schema descriptor for trigger_type field.
-	translationjobDescTriggerType := translationjobFields[1].Descriptor()
-	// translationjob.DefaultTriggerType holds the default value on creation for the trigger_type field.
-	translationjob.DefaultTriggerType = translationjobDescTriggerType.Default.(string)
-	// translationjobDescExecutionPlanID is the schema descriptor for execution_plan_id field.
-	translationjobDescExecutionPlanID := translationjobFields[2].Descriptor()
-	// translationjob.ExecutionPlanIDValidator is a validator for the "execution_plan_id" field. It is called by the builders before save.
-	translationjob.ExecutionPlanIDValidator = translationjobDescExecutionPlanID.Validators[0].(func(int) error)
-	// translationjobDescTranslationConfig is the schema descriptor for translation_config field.
-	translationjobDescTranslationConfig := translationjobFields[3].Descriptor()
-	// translationjob.DefaultTranslationConfig holds the default value on creation for the translation_config field.
-	translationjob.DefaultTranslationConfig = translationjobDescTranslationConfig.Default.(func() map[string]interface{})
-	// translationjobDescResourceCount is the schema descriptor for resource_count field.
-	translationjobDescResourceCount := translationjobFields[4].Descriptor()
-	// translationjob.DefaultResourceCount holds the default value on creation for the resource_count field.
-	translationjob.DefaultResourceCount = translationjobDescResourceCount.Default.(int)
-	// translationjob.ResourceCountValidator is a validator for the "resource_count" field. It is called by the builders before save.
-	translationjob.ResourceCountValidator = translationjobDescResourceCount.Validators[0].(func(int) error)
-	// translationjobDescCompletedResources is the schema descriptor for completed_resources field.
-	translationjobDescCompletedResources := translationjobFields[5].Descriptor()
-	// translationjob.DefaultCompletedResources holds the default value on creation for the completed_resources field.
-	translationjob.DefaultCompletedResources = translationjobDescCompletedResources.Default.(int)
-	// translationjob.CompletedResourcesValidator is a validator for the "completed_resources" field. It is called by the builders before save.
-	translationjob.CompletedResourcesValidator = translationjobDescCompletedResources.Validators[0].(func(int) error)
-	// translationjobDescFailedResources is the schema descriptor for failed_resources field.
-	translationjobDescFailedResources := translationjobFields[6].Descriptor()
-	// translationjob.DefaultFailedResources holds the default value on creation for the failed_resources field.
-	translationjob.DefaultFailedResources = translationjobDescFailedResources.Default.(int)
-	// translationjob.FailedResourcesValidator is a validator for the "failed_resources" field. It is called by the builders before save.
-	translationjob.FailedResourcesValidator = translationjobDescFailedResources.Validators[0].(func(int) error)
-	// translationjobDescTotalSegments is the schema descriptor for total_segments field.
-	translationjobDescTotalSegments := translationjobFields[7].Descriptor()
-	// translationjob.DefaultTotalSegments holds the default value on creation for the total_segments field.
-	translationjob.DefaultTotalSegments = translationjobDescTotalSegments.Default.(int)
-	// translationjob.TotalSegmentsValidator is a validator for the "total_segments" field. It is called by the builders before save.
-	translationjob.TotalSegmentsValidator = translationjobDescTotalSegments.Validators[0].(func(int) error)
-	// translationjobDescStageTotal is the schema descriptor for stage_total field.
-	translationjobDescStageTotal := translationjobFields[8].Descriptor()
-	// translationjob.DefaultStageTotal holds the default value on creation for the stage_total field.
-	translationjob.DefaultStageTotal = translationjobDescStageTotal.Default.(int)
-	// translationjob.StageTotalValidator is a validator for the "stage_total" field. It is called by the builders before save.
-	translationjob.StageTotalValidator = translationjobDescStageTotal.Validators[0].(func(int) error)
-	// translationjobDescCompletedSegments is the schema descriptor for completed_segments field.
-	translationjobDescCompletedSegments := translationjobFields[9].Descriptor()
-	// translationjob.DefaultCompletedSegments holds the default value on creation for the completed_segments field.
-	translationjob.DefaultCompletedSegments = translationjobDescCompletedSegments.Default.(int)
-	// translationjob.CompletedSegmentsValidator is a validator for the "completed_segments" field. It is called by the builders before save.
-	translationjob.CompletedSegmentsValidator = translationjobDescCompletedSegments.Validators[0].(func(int) error)
-	translationprofileMixin := schema.TranslationProfile{}.Mixin()
-	translationprofileMixinFields0 := translationprofileMixin[0].Fields()
-	_ = translationprofileMixinFields0
-	translationprofileFields := schema.TranslationProfile{}.Fields()
-	_ = translationprofileFields
-	// translationprofileDescCreatedAt is the schema descriptor for created_at field.
-	translationprofileDescCreatedAt := translationprofileMixinFields0[0].Descriptor()
-	// translationprofile.DefaultCreatedAt holds the default value on creation for the created_at field.
-	translationprofile.DefaultCreatedAt = translationprofileDescCreatedAt.Default.(func() time.Time)
-	// translationprofileDescUpdatedAt is the schema descriptor for updated_at field.
-	translationprofileDescUpdatedAt := translationprofileMixinFields0[1].Descriptor()
-	// translationprofile.DefaultUpdatedAt holds the default value on creation for the updated_at field.
-	translationprofile.DefaultUpdatedAt = translationprofileDescUpdatedAt.Default.(func() time.Time)
-	// translationprofile.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
-	translationprofile.UpdateDefaultUpdatedAt = translationprofileDescUpdatedAt.UpdateDefault.(func() time.Time)
-	// translationprofileDescName is the schema descriptor for name field.
-	translationprofileDescName := translationprofileFields[0].Descriptor()
-	// translationprofile.NameValidator is a validator for the "name" field. It is called by the builders before save.
-	translationprofile.NameValidator = translationprofileDescName.Validators[0].(func(string) error)
-	// translationprofileDescDescription is the schema descriptor for description field.
-	translationprofileDescDescription := translationprofileFields[1].Descriptor()
-	// translationprofile.DefaultDescription holds the default value on creation for the description field.
-	translationprofile.DefaultDescription = translationprofileDescDescription.Default.(string)
-	// translationprofileDescScope is the schema descriptor for scope field.
-	translationprofileDescScope := translationprofileFields[2].Descriptor()
-	// translationprofile.DefaultScope holds the default value on creation for the scope field.
-	translationprofile.DefaultScope = translationprofileDescScope.Default.(string)
-	// translationprofileDescOwnerUserID is the schema descriptor for owner_user_id field.
-	translationprofileDescOwnerUserID := translationprofileFields[3].Descriptor()
-	// translationprofile.OwnerUserIDValidator is a validator for the "owner_user_id" field. It is called by the builders before save.
-	translationprofile.OwnerUserIDValidator = translationprofileDescOwnerUserID.Validators[0].(func(int) error)
-	// translationprofileDescOwnerOrgID is the schema descriptor for owner_org_id field.
-	translationprofileDescOwnerOrgID := translationprofileFields[4].Descriptor()
-	// translationprofile.OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
-	translationprofile.OwnerOrgIDValidator = translationprofileDescOwnerOrgID.Validators[0].(func(int) error)
-	// translationprofileDescConfig is the schema descriptor for config field.
-	translationprofileDescConfig := translationprofileFields[5].Descriptor()
-	// translationprofile.DefaultConfig holds the default value on creation for the config field.
-	translationprofile.DefaultConfig = translationprofileDescConfig.Default.(schema.TranslationProfileConfigData)
+	translationprompttemplateMixin := schema.TranslationPromptTemplate{}.Mixin()
+	translationprompttemplateMixinFields0 := translationprompttemplateMixin[0].Fields()
+	_ = translationprompttemplateMixinFields0
+	translationprompttemplateFields := schema.TranslationPromptTemplate{}.Fields()
+	_ = translationprompttemplateFields
+	// translationprompttemplateDescCreatedAt is the schema descriptor for created_at field.
+	translationprompttemplateDescCreatedAt := translationprompttemplateMixinFields0[0].Descriptor()
+	// translationprompttemplate.DefaultCreatedAt holds the default value on creation for the created_at field.
+	translationprompttemplate.DefaultCreatedAt = translationprompttemplateDescCreatedAt.Default.(func() time.Time)
+	// translationprompttemplateDescUpdatedAt is the schema descriptor for updated_at field.
+	translationprompttemplateDescUpdatedAt := translationprompttemplateMixinFields0[1].Descriptor()
+	// translationprompttemplate.DefaultUpdatedAt holds the default value on creation for the updated_at field.
+	translationprompttemplate.DefaultUpdatedAt = translationprompttemplateDescUpdatedAt.Default.(func() time.Time)
+	// translationprompttemplate.UpdateDefaultUpdatedAt holds the default value on update for the updated_at field.
+	translationprompttemplate.UpdateDefaultUpdatedAt = translationprompttemplateDescUpdatedAt.UpdateDefault.(func() time.Time)
+	// translationprompttemplateDescName is the schema descriptor for name field.
+	translationprompttemplateDescName := translationprompttemplateFields[0].Descriptor()
+	// translationprompttemplate.NameValidator is a validator for the "name" field. It is called by the builders before save.
+	translationprompttemplate.NameValidator = translationprompttemplateDescName.Validators[0].(func(string) error)
+	// translationprompttemplateDescDescription is the schema descriptor for description field.
+	translationprompttemplateDescDescription := translationprompttemplateFields[1].Descriptor()
+	// translationprompttemplate.DefaultDescription holds the default value on creation for the description field.
+	translationprompttemplate.DefaultDescription = translationprompttemplateDescDescription.Default.(string)
+	// translationprompttemplateDescScope is the schema descriptor for scope field.
+	translationprompttemplateDescScope := translationprompttemplateFields[2].Descriptor()
+	// translationprompttemplate.DefaultScope holds the default value on creation for the scope field.
+	translationprompttemplate.DefaultScope = translationprompttemplateDescScope.Default.(string)
+	// translationprompttemplateDescOwnerUserID is the schema descriptor for owner_user_id field.
+	translationprompttemplateDescOwnerUserID := translationprompttemplateFields[3].Descriptor()
+	// translationprompttemplate.OwnerUserIDValidator is a validator for the "owner_user_id" field. It is called by the builders before save.
+	translationprompttemplate.OwnerUserIDValidator = translationprompttemplateDescOwnerUserID.Validators[0].(func(int) error)
+	// translationprompttemplateDescOwnerOrgID is the schema descriptor for owner_org_id field.
+	translationprompttemplateDescOwnerOrgID := translationprompttemplateFields[4].Descriptor()
+	// translationprompttemplate.OwnerOrgIDValidator is a validator for the "owner_org_id" field. It is called by the builders before save.
+	translationprompttemplate.OwnerOrgIDValidator = translationprompttemplateDescOwnerOrgID.Validators[0].(func(int) error)
+	// translationprompttemplateDescSystemPromptContent is the schema descriptor for system_prompt_content field.
+	translationprompttemplateDescSystemPromptContent := translationprompttemplateFields[5].Descriptor()
+	// translationprompttemplate.DefaultSystemPromptContent holds the default value on creation for the system_prompt_content field.
+	translationprompttemplate.DefaultSystemPromptContent = translationprompttemplateDescSystemPromptContent.Default.(string)
 	usagerecordMixin := schema.UsageRecord{}.Mixin()
 	usagerecordMixinFields0 := usagerecordMixin[0].Fields()
 	_ = usagerecordMixinFields0

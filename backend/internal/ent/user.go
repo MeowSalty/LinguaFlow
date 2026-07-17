@@ -41,8 +41,8 @@ type User struct {
 
 // UserEdges holds the relations/edges for other nodes in the graph.
 type UserEdges struct {
-	// CreatedTranslationJobs holds the value of the created_translation_jobs edge.
-	CreatedTranslationJobs []*TranslationJob `json:"created_translation_jobs,omitempty"`
+	// CreatedJobs holds the value of the created_jobs edge.
+	CreatedJobs []*Job `json:"created_jobs,omitempty"`
 	// ReviewedSegments holds the value of the reviewed_segments edge.
 	ReviewedSegments []*Segment `json:"reviewed_segments,omitempty"`
 	// RefreshTokens holds the value of the refresh_tokens edge.
@@ -57,26 +57,30 @@ type UserEdges struct {
 	ActivityLogs []*ActivityLog `json:"activity_logs,omitempty"`
 	// UsageRecords holds the value of the usage_records edge.
 	UsageRecords []*UsageRecord `json:"usage_records,omitempty"`
-	// PromptTemplates holds the value of the prompt_templates edge.
-	PromptTemplates []*PromptTemplate `json:"prompt_templates,omitempty"`
-	// TranslationProfiles holds the value of the translation_profiles edge.
-	TranslationProfiles []*TranslationProfile `json:"translation_profiles,omitempty"`
+	// TranslationPromptTemplates holds the value of the translation_prompt_templates edge.
+	TranslationPromptTemplates []*TranslationPromptTemplate `json:"translation_prompt_templates,omitempty"`
+	// BootstrapPromptTemplates holds the value of the bootstrap_prompt_templates edge.
+	BootstrapPromptTemplates []*BootstrapPromptTemplate `json:"bootstrap_prompt_templates,omitempty"`
+	// PrunePromptTemplates holds the value of the prune_prompt_templates edge.
+	PrunePromptTemplates []*PrunePromptTemplate `json:"prune_prompt_templates,omitempty"`
+	// ExecutionProfiles holds the value of the execution_profiles edge.
+	ExecutionProfiles []*ExecutionProfile `json:"execution_profiles,omitempty"`
 	// ExecutionPlanTemplates holds the value of the execution_plan_templates edge.
 	ExecutionPlanTemplates []*ExecutionPlanTemplate `json:"execution_plan_templates,omitempty"`
 	// SyncTasks holds the value of the sync_tasks edge.
 	SyncTasks []*SyncTask `json:"sync_tasks,omitempty"`
 	// loadedTypes holds the information for reporting if a
 	// type was loaded (or requested) in eager-loading or not.
-	loadedTypes [12]bool
+	loadedTypes [14]bool
 }
 
-// CreatedTranslationJobsOrErr returns the CreatedTranslationJobs value or an error if the edge
+// CreatedJobsOrErr returns the CreatedJobs value or an error if the edge
 // was not loaded in eager-loading.
-func (e UserEdges) CreatedTranslationJobsOrErr() ([]*TranslationJob, error) {
+func (e UserEdges) CreatedJobsOrErr() ([]*Job, error) {
 	if e.loadedTypes[0] {
-		return e.CreatedTranslationJobs, nil
+		return e.CreatedJobs, nil
 	}
-	return nil, &NotLoadedError{edge: "created_translation_jobs"}
+	return nil, &NotLoadedError{edge: "created_jobs"}
 }
 
 // ReviewedSegmentsOrErr returns the ReviewedSegments value or an error if the edge
@@ -142,28 +146,46 @@ func (e UserEdges) UsageRecordsOrErr() ([]*UsageRecord, error) {
 	return nil, &NotLoadedError{edge: "usage_records"}
 }
 
-// PromptTemplatesOrErr returns the PromptTemplates value or an error if the edge
+// TranslationPromptTemplatesOrErr returns the TranslationPromptTemplates value or an error if the edge
 // was not loaded in eager-loading.
-func (e UserEdges) PromptTemplatesOrErr() ([]*PromptTemplate, error) {
+func (e UserEdges) TranslationPromptTemplatesOrErr() ([]*TranslationPromptTemplate, error) {
 	if e.loadedTypes[8] {
-		return e.PromptTemplates, nil
+		return e.TranslationPromptTemplates, nil
 	}
-	return nil, &NotLoadedError{edge: "prompt_templates"}
+	return nil, &NotLoadedError{edge: "translation_prompt_templates"}
 }
 
-// TranslationProfilesOrErr returns the TranslationProfiles value or an error if the edge
+// BootstrapPromptTemplatesOrErr returns the BootstrapPromptTemplates value or an error if the edge
 // was not loaded in eager-loading.
-func (e UserEdges) TranslationProfilesOrErr() ([]*TranslationProfile, error) {
+func (e UserEdges) BootstrapPromptTemplatesOrErr() ([]*BootstrapPromptTemplate, error) {
 	if e.loadedTypes[9] {
-		return e.TranslationProfiles, nil
+		return e.BootstrapPromptTemplates, nil
 	}
-	return nil, &NotLoadedError{edge: "translation_profiles"}
+	return nil, &NotLoadedError{edge: "bootstrap_prompt_templates"}
+}
+
+// PrunePromptTemplatesOrErr returns the PrunePromptTemplates value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) PrunePromptTemplatesOrErr() ([]*PrunePromptTemplate, error) {
+	if e.loadedTypes[10] {
+		return e.PrunePromptTemplates, nil
+	}
+	return nil, &NotLoadedError{edge: "prune_prompt_templates"}
+}
+
+// ExecutionProfilesOrErr returns the ExecutionProfiles value or an error if the edge
+// was not loaded in eager-loading.
+func (e UserEdges) ExecutionProfilesOrErr() ([]*ExecutionProfile, error) {
+	if e.loadedTypes[11] {
+		return e.ExecutionProfiles, nil
+	}
+	return nil, &NotLoadedError{edge: "execution_profiles"}
 }
 
 // ExecutionPlanTemplatesOrErr returns the ExecutionPlanTemplates value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) ExecutionPlanTemplatesOrErr() ([]*ExecutionPlanTemplate, error) {
-	if e.loadedTypes[10] {
+	if e.loadedTypes[12] {
 		return e.ExecutionPlanTemplates, nil
 	}
 	return nil, &NotLoadedError{edge: "execution_plan_templates"}
@@ -172,7 +194,7 @@ func (e UserEdges) ExecutionPlanTemplatesOrErr() ([]*ExecutionPlanTemplate, erro
 // SyncTasksOrErr returns the SyncTasks value or an error if the edge
 // was not loaded in eager-loading.
 func (e UserEdges) SyncTasksOrErr() ([]*SyncTask, error) {
-	if e.loadedTypes[11] {
+	if e.loadedTypes[13] {
 		return e.SyncTasks, nil
 	}
 	return nil, &NotLoadedError{edge: "sync_tasks"}
@@ -273,9 +295,9 @@ func (_m *User) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
 }
 
-// QueryCreatedTranslationJobs queries the "created_translation_jobs" edge of the User entity.
-func (_m *User) QueryCreatedTranslationJobs() *TranslationJobQuery {
-	return NewUserClient(_m.config).QueryCreatedTranslationJobs(_m)
+// QueryCreatedJobs queries the "created_jobs" edge of the User entity.
+func (_m *User) QueryCreatedJobs() *JobQuery {
+	return NewUserClient(_m.config).QueryCreatedJobs(_m)
 }
 
 // QueryReviewedSegments queries the "reviewed_segments" edge of the User entity.
@@ -313,14 +335,24 @@ func (_m *User) QueryUsageRecords() *UsageRecordQuery {
 	return NewUserClient(_m.config).QueryUsageRecords(_m)
 }
 
-// QueryPromptTemplates queries the "prompt_templates" edge of the User entity.
-func (_m *User) QueryPromptTemplates() *PromptTemplateQuery {
-	return NewUserClient(_m.config).QueryPromptTemplates(_m)
+// QueryTranslationPromptTemplates queries the "translation_prompt_templates" edge of the User entity.
+func (_m *User) QueryTranslationPromptTemplates() *TranslationPromptTemplateQuery {
+	return NewUserClient(_m.config).QueryTranslationPromptTemplates(_m)
 }
 
-// QueryTranslationProfiles queries the "translation_profiles" edge of the User entity.
-func (_m *User) QueryTranslationProfiles() *TranslationProfileQuery {
-	return NewUserClient(_m.config).QueryTranslationProfiles(_m)
+// QueryBootstrapPromptTemplates queries the "bootstrap_prompt_templates" edge of the User entity.
+func (_m *User) QueryBootstrapPromptTemplates() *BootstrapPromptTemplateQuery {
+	return NewUserClient(_m.config).QueryBootstrapPromptTemplates(_m)
+}
+
+// QueryPrunePromptTemplates queries the "prune_prompt_templates" edge of the User entity.
+func (_m *User) QueryPrunePromptTemplates() *PrunePromptTemplateQuery {
+	return NewUserClient(_m.config).QueryPrunePromptTemplates(_m)
+}
+
+// QueryExecutionProfiles queries the "execution_profiles" edge of the User entity.
+func (_m *User) QueryExecutionProfiles() *ExecutionProfileQuery {
+	return NewUserClient(_m.config).QueryExecutionProfiles(_m)
 }
 
 // QueryExecutionPlanTemplates queries the "execution_plan_templates" edge of the User entity.

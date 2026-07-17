@@ -22,15 +22,16 @@ import { useExecutionPlanTemplatesStore } from '@/stores/executionPlanTemplates'
 import type { JobTargetMode } from '@/composables/useJobActions'
 
 type ExecutionPlanTemplate = ApiSchemas['ExecutionPlanTemplate']
-type CreateTranslationJobRequest = ApiSchemas['CreateTranslationJobRequest']
-type OverwriteMode = CreateTranslationJobRequest['overwrite_mode']
+type ExecutionRoundConfig = ApiSchemas['ExecutionRoundConfig']
+type CreateJobRequest = ApiSchemas['CreateJobRequest']
+type SegmentFilter = NonNullable<CreateJobRequest['segment_filter']>
 
 const { t } = useI18n()
 const executionPlanTemplatesStore = useExecutionPlanTemplatesStore()
 
 const show = defineModel<boolean>('show', { default: false })
 
-defineProps<{
+const props = defineProps<{
   formRef: FormInst | null
   targetMode: JobTargetMode
   targetResourceIds: number[]
@@ -38,7 +39,7 @@ defineProps<{
   targetGroupKeys: string[]
   executionPlanId: number | null
   autoApprove: boolean
-  overwriteMode: OverwriteMode
+  segmentFilter: SegmentFilter | undefined
   formRules: FormRules
   executionPlanOptions: Array<{ label: string; value: number }>
   submitting: boolean
@@ -49,16 +50,45 @@ defineProps<{
 const emit = defineEmits<{
   'update:executionPlanId': [value: number | null]
   'update:autoApprove': [value: boolean]
-  'update:overwriteMode': [value: OverwriteMode]
+  'update:segmentFilter': [value: SegmentFilter | undefined]
   submit: []
   close: []
 }>()
 
-const overwriteModeOptions = [
-  { value: 'skip_translated', labelKey: 'workspace.job.overwriteMode.skipTranslated' },
-  { value: 'overwrite_unapproved', labelKey: 'workspace.job.overwriteMode.overwriteUnapproved' },
-  { value: 'overwrite_all', labelKey: 'workspace.job.overwriteMode.overwriteAll' },
+const segmentFilterOptions = [
+  { value: 'pending_only', labelKey: 'workspace.job.segmentFilter.pendingOnly' },
+  { value: 'skip_approved', labelKey: 'workspace.job.segmentFilter.skipApproved' },
+  { value: 'all', labelKey: 'workspace.job.segmentFilter.all' },
 ]
+
+const overrideSegmentFilter = computed(() => props.segmentFilter !== undefined)
+
+const handleToggleOverride = (enabled: boolean): void => {
+  emit('update:segmentFilter', enabled ? 'pending_only' : undefined)
+}
+
+const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string => {
+  const isExtract = round.mode === 'extract'
+  const batchSize = (isExtract ? round.extract?.batch_size : round.translate?.batch_size) ?? 0
+  const maxWordsPerBatch =
+    (isExtract ? round.extract?.max_words_per_batch : round.translate?.max_words_per_batch) ?? 0
+  const parts: string[] = []
+  if (batchSize > 0) {
+    parts.push(t('workspace.job.planPreviewBatchSegments', { batchSize }))
+  }
+  if (maxWordsPerBatch > 0) {
+    parts.push(t('workspace.job.planPreviewBatchWords', { maxWordsPerBatch }))
+  }
+  const batchInfo = parts.length === 0 ? t('workspace.job.planPreviewNoBatch') : parts.join(' / ')
+  return t('workspace.job.planPreviewRoundItem', {
+    index: index + 1,
+    mode: t(
+      isExtract ? 'workspace.job.planPreviewModeExtract' : 'workspace.job.planPreviewModeTranslate',
+    ),
+    batch: batchInfo,
+    concurrency: round.concurrency,
+  })
+}
 </script>
 
 <template>
@@ -112,21 +142,40 @@ const overwriteModeOptions = [
             </span>
           </div>
         </NFormItem>
-        <NFormItem :label="t('workspace.job.form.overwriteMode')" path="overwrite_mode">
-          <NRadioGroup
-            :value="overwriteMode"
-            @update:value="(val: OverwriteMode) => emit('update:overwriteMode', val)"
-          >
-            <NSpace vertical>
-              <NRadio
-                v-for="option in overwriteModeOptions"
-                :key="option.value"
-                :value="option.value"
-              >
-                {{ t(option.labelKey) }}
-              </NRadio>
-            </NSpace>
-          </NRadioGroup>
+        <NFormItem :label="t('workspace.job.form.segmentFilter')" path="segment_filter">
+          <div class="w-full">
+            <div class="flex items-center gap-3">
+              <NSwitch
+                :value="overrideSegmentFilter"
+                @update:value="(val: boolean) => handleToggleOverride(val)"
+              />
+              <span class="text-sm text-lf-text-muted">
+                {{ t('workspace.job.form.segmentFilterOverride') }}
+              </span>
+            </div>
+            <NRadioGroup
+              v-if="overrideSegmentFilter"
+              class="mt-3"
+              :value="segmentFilter"
+              @update:value="(val: SegmentFilter) => emit('update:segmentFilter', val)"
+            >
+              <NSpace vertical>
+                <NRadio
+                  v-for="option in segmentFilterOptions"
+                  :key="option.value"
+                  :value="option.value"
+                >
+                  {{ t(option.labelKey) }}
+                </NRadio>
+              </NSpace>
+            </NRadioGroup>
+            <div v-else class="mt-2 text-xs text-lf-text-subtle">
+              {{ t('workspace.job.form.segmentFilterFollowHint') }}
+            </div>
+            <div class="mt-2 text-xs text-lf-text-subtle">
+              {{ t('workspace.job.form.segmentFilterScopeHint') }}
+            </div>
+          </div>
         </NFormItem>
       </NForm>
 
@@ -158,14 +207,7 @@ const overwriteModeOptions = [
               :key="index"
               class="text-lf-text-muted"
             >
-              {{
-                t('workspace.job.planPreviewRoundItem', {
-                  index: index + 1,
-                  batchSize: round.batch_size ?? 0,
-                  maxWordsPerBatch: round.max_words_per_batch ?? 0,
-                  concurrency: round.concurrency,
-                })
-              }}
+              {{ formatRoundSummary(round, index) }}
             </li>
           </ul>
         </div>

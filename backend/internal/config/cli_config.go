@@ -35,10 +35,11 @@ type CLIConfig struct {
 	SourceLang string `yaml:"source_lang"`
 	TargetLang string `yaml:"target_lang"`
 
-	Backends            map[string]CLIConfigBackend            `yaml:"backends"`
-	PromptTemplates     map[string]CLIConfigPromptTemplate     `yaml:"prompt_templates"`
-	TranslationProfiles map[string]CLIConfigTranslationProfile `yaml:"translation_profiles"`
-	Execution           CLIConfigExecution                     `yaml:"execution"`
+	Backends                 map[string]CLIConfigBackend            `yaml:"backends"`
+	PromptTemplates          map[string]CLIConfigPromptTemplate     `yaml:"translation_prompt_templates"`
+	BootstrapPromptTemplates map[string]CLIConfigBootstrapTemplate  `yaml:"bootstrap_prompt_templates"`
+	TranslationProfiles      map[string]CLIConfigTranslationProfile `yaml:"translation_profiles"`
+	Execution                CLIConfigExecution                     `yaml:"execution"`
 
 	// Glossary 全局术语表配置，所有轮次共享。
 	Glossary          CLIConfigGlossary `yaml:"glossary"`
@@ -56,45 +57,66 @@ type CLIConfigBackend struct {
 	Options            map[string]any `yaml:"options"`
 }
 
-// CLIConfigPromptTemplate 提示词模板配置。
+// CLIConfigPromptTemplate 翻译提示词模板配置。
 type CLIConfigPromptTemplate struct {
-	Content          string `yaml:"content"`           // 翻译提示词内联内容
-	File             string `yaml:"file"`              // 翻译提示词外部文件引用（与 Content 二选一）
-	BootstrapContent string `yaml:"bootstrap_content"` // bootstrap 模板内联内容
-	BootstrapFile    string `yaml:"bootstrap_file"`    // bootstrap 模板外部文件引用（与 BootstrapContent 二选一）
+	Content string `yaml:"content"` // 翻译提示词内联内容
+	File    string `yaml:"file"`    // 翻译提示词外部文件引用（与 Content 二选一）
+}
+
+// CLIConfigBootstrapTemplate 术语抽取提示词模板配置。
+type CLIConfigBootstrapTemplate struct {
+	Content string `yaml:"content"` // 术语抽取提示词内联内容
+	File    string `yaml:"file"`    // 术语抽取提示词外部文件引用（与 Content 二选一）
 }
 
 // CLIConfigTranslationProfile 翻译策略配置。
 // 注意：不包含 Glossary 字段。术语表使用 CLIConfig 全局的 Glossary 配置。
 // 多轮共享同一份术语表，避免术语表实例化冲突。
 type CLIConfigTranslationProfile struct {
-	Split       SplitConfig       `yaml:"split"`
 	Protect     ProtectConfig     `yaml:"protect"`
 	Postprocess PostprocessConfig `yaml:"postprocess"`
 	Repair      RepairConfig      `yaml:"repair"`
 	Bootstrap   BootstrapConfig   `yaml:"bootstrap"`
 	Context     ContextConfig     `yaml:"context"`
+	Ruby        RubyConfig        `yaml:"ruby"`
+	QA          QAConfig          `yaml:"qa"`
 
 	File string `yaml:"file"` // 外部文件引用（与内联字段二选一）
 }
 
 // CLIConfigExecution 执行计划配置。
 type CLIConfigExecution struct {
-	Bootstrap StandaloneBootstrapConfig `yaml:"bootstrap"`
-	Rounds    []CLIConfigRound          `yaml:"rounds"`
+	Rounds []CLIConfigRound `yaml:"rounds"`
 }
 
 // CLIConfigRound 单轮执行配置。
 type CLIConfigRound struct {
-	Name             string      `yaml:"name"`
-	Backend          string      `yaml:"backend"` // 引用 backends key
-	Prompt           string      `yaml:"prompt"`  // 引用 prompt_templates key
+	Mode      string                   `yaml:"mode"`    // "translate" | "extract"
+	Backend   string                   `yaml:"backend"` // 引用 backends key
+	Translate *CLIConfigTranslateRound `yaml:"translate,omitempty"`
+	Extract   *CLIConfigExtractRound   `yaml:"extract,omitempty"`
+}
+
+// CLIConfigTranslateRound 翻译轮次配置。
+type CLIConfigTranslateRound struct {
+	Prompt           string      `yaml:"prompt"`  // 引用 translation_prompt_templates key
 	Profile          string      `yaml:"profile"` // 引用 translation_profiles key
 	BatchSize        int         `yaml:"batch_size"`
 	MaxWordsPerBatch int         `yaml:"max_words_per_batch"`
 	Concurrency      int         `yaml:"concurrency"`
 	FallbackShrink   float64     `yaml:"fallback_shrink"`
 	Retry            RetryConfig `yaml:"retry"`
+}
+
+// CLIConfigExtractRound 术语抽取轮次配置。
+type CLIConfigExtractRound struct {
+	Template             string      `yaml:"template"` // 引用 bootstrap_prompt_templates key
+	BatchSize            int         `yaml:"batch_size"`
+	MaxWordsPerBatch     int         `yaml:"max_words_per_batch"`
+	Concurrency          int         `yaml:"concurrency"`
+	MaxTermsPer1000Chars float64     `yaml:"max_terms_per_1000_chars"`
+	MinSourceLen         int         `yaml:"min_source_len"`
+	Retry                RetryConfig `yaml:"retry"`
 }
 
 // ---------------------------------------------------------------------------
@@ -134,6 +156,9 @@ func LoadCLIConfig(path string) (*CLIConfig, error) {
 	if cliCfg.PromptTemplates == nil {
 		cliCfg.PromptTemplates = make(map[string]CLIConfigPromptTemplate)
 	}
+	if cliCfg.BootstrapPromptTemplates == nil {
+		cliCfg.BootstrapPromptTemplates = make(map[string]CLIConfigBootstrapTemplate)
+	}
 	if cliCfg.TranslationProfiles == nil {
 		cliCfg.TranslationProfiles = make(map[string]CLIConfigTranslationProfile)
 	}
@@ -152,7 +177,72 @@ func LoadCLIConfig(path string) (*CLIConfig, error) {
 		return nil, fmt.Errorf("unsupported config version: %d", cliCfg.Version)
 	}
 
+	// ── 8. Rounds 校验 ──
+	if err := validateCLIConfigRounds(cliCfg); err != nil {
+		return nil, err
+	}
+
 	return cliCfg, nil
+}
+
+// ---------------------------------------------------------------------------
+// validateCLIConfigRounds — 执行轮次校验
+// ---------------------------------------------------------------------------
+
+// validateCLIConfigRounds 校验 execution.rounds 的合法性。
+//   - 空 Mode 规范化为 "translate"（与 pipeline/engine 层默认行为一致）。
+//   - Mode 必须为 "translate" 或 "extract"，拒绝拼写错误等无效值。
+//   - translate 轮次必须包含 Translate 子配置，extract 轮次必须包含 Extract 子配置。
+//   - BatchSize、Concurrency 等字段必须合法，不合法直接报错而非静默 fallback。
+func validateCLIConfigRounds(cfg *CLIConfig) error {
+	for i := range cfg.Execution.Rounds {
+		r := &cfg.Execution.Rounds[i]
+
+		// 空 Mode 规范化为 "translate"
+		if r.Mode == "" {
+			r.Mode = "translate"
+		}
+
+		switch r.Mode {
+		case "translate":
+			if r.Translate == nil {
+				return fmt.Errorf("execution.rounds[%d]: mode=translate requires translate config", i)
+			}
+			t := r.Translate
+			if t.BatchSize < 0 {
+				return fmt.Errorf("execution.rounds[%d].translate.batch_size must be >= 0", i)
+			}
+			if t.MaxWordsPerBatch < 0 {
+				return fmt.Errorf("execution.rounds[%d].translate.max_words_per_batch must be >= 0", i)
+			}
+			if t.BatchSize <= 0 && t.MaxWordsPerBatch <= 0 {
+				return fmt.Errorf("execution.rounds[%d].translate.batch_size and max_words_per_batch cannot both be 0", i)
+			}
+			if t.Concurrency < 1 {
+				return fmt.Errorf("execution.rounds[%d].translate.concurrency must be >= 1", i)
+			}
+			if t.FallbackShrink < 0 || t.FallbackShrink >= 1 {
+				return fmt.Errorf("execution.rounds[%d].translate.fallback_shrink must be in [0, 1)", i)
+			}
+		case "extract":
+			if r.Extract == nil {
+				return fmt.Errorf("execution.rounds[%d]: mode=extract requires extract config", i)
+			}
+			e := r.Extract
+			if e.BatchSize < 0 {
+				return fmt.Errorf("execution.rounds[%d].extract.batch_size must be >= 0", i)
+			}
+			if e.MaxWordsPerBatch < 0 {
+				return fmt.Errorf("execution.rounds[%d].extract.max_words_per_batch must be >= 0", i)
+			}
+			if e.Concurrency < 1 {
+				return fmt.Errorf("execution.rounds[%d].extract.concurrency must be >= 1", i)
+			}
+		default:
+			return fmt.Errorf("execution.rounds[%d]: invalid mode %q, must be \"translate\" or \"extract\"", i, r.Mode)
+		}
+	}
+	return nil
 }
 
 // ---------------------------------------------------------------------------
@@ -170,27 +260,30 @@ func resolveExternalReferences(cliCfg *CLIConfig, configDir string) error {
 		return fmt.Errorf("resolve config dir: %w", err)
 	}
 
-	// ── prompt_templates ──
+	// ── translation_prompt_templates ──
 	for name, pt := range cliCfg.PromptTemplates {
-		// 解析翻译提示词 file 引用
 		if pt.Content == "" && pt.File != "" {
 			content, err := readExternalFile(pt.File, absConfigDir)
 			if err != nil {
-				return fmt.Errorf("prompt_templates[%q].file: %w", name, err)
+				return fmt.Errorf("translation_prompt_templates[%q].file: %w", name, err)
 			}
 			pt.Content = content
 			pt.File = ""
 		}
-		// 解析 bootstrap 模板 file 引用
-		if pt.BootstrapContent == "" && pt.BootstrapFile != "" {
-			content, err := readExternalFile(pt.BootstrapFile, absConfigDir)
-			if err != nil {
-				return fmt.Errorf("prompt_templates[%q].bootstrap_file: %w", name, err)
-			}
-			pt.BootstrapContent = content
-			pt.BootstrapFile = ""
-		}
 		cliCfg.PromptTemplates[name] = pt
+	}
+
+	// ── bootstrap_prompt_templates ──
+	for name, bt := range cliCfg.BootstrapPromptTemplates {
+		if bt.Content == "" && bt.File != "" {
+			content, err := readExternalFile(bt.File, absConfigDir)
+			if err != nil {
+				return fmt.Errorf("bootstrap_prompt_templates[%q].file: %w", name, err)
+			}
+			bt.Content = content
+			bt.File = ""
+		}
+		cliCfg.BootstrapPromptTemplates[name] = bt
 	}
 
 	// ── translation_profiles ──
@@ -198,7 +291,7 @@ func resolveExternalReferences(cliCfg *CLIConfig, configDir string) error {
 		if tp.File == "" {
 			continue
 		}
-		// 如果已有内联配置（split/protect/postprocess/repair 任一非零值），忽略 file
+		// 如果已有内联配置（protect/postprocess/repair 任一非零值），忽略 file
 		if hasInlineProfileConfig(tp) {
 			tp.File = ""
 			cliCfg.TranslationProfiles[name] = tp
@@ -222,8 +315,7 @@ func resolveExternalReferences(cliCfg *CLIConfig, configDir string) error {
 
 // hasInlineProfileConfig 检查翻译策略是否有内联配置。
 func hasInlineProfileConfig(tp CLIConfigTranslationProfile) bool {
-	return tp.Split.Strategy != "" || tp.Split.MaxChars > 0 ||
-		len(tp.Protect.Rules) > 0 ||
+	return len(tp.Protect.Rules) > 0 ||
 		tp.Postprocess.TrimSpaces ||
 		tp.Repair.Enabled
 }
@@ -290,6 +382,9 @@ func DefaultCLIConfigFromBuiltins() *CLIConfig {
 	if cliCfg.PromptTemplates == nil {
 		cliCfg.PromptTemplates = make(map[string]CLIConfigPromptTemplate)
 	}
+	if cliCfg.BootstrapPromptTemplates == nil {
+		cliCfg.BootstrapPromptTemplates = make(map[string]CLIConfigBootstrapTemplate)
+	}
 	if cliCfg.TranslationProfiles == nil {
 		cliCfg.TranslationProfiles = make(map[string]CLIConfigTranslationProfile)
 	}
@@ -308,27 +403,30 @@ func DefaultCLIConfigFromBuiltins() *CLIConfig {
 func resolveEmbeddedReferences(cliCfg *CLIConfig) error {
 	fsys := templates.EmbeddedFS()
 
-	// ── prompt_templates ──
+	// ── translation_prompt_templates ──
 	for name, pt := range cliCfg.PromptTemplates {
-		// 解析翻译提示词 file 引用
 		if pt.Content == "" && pt.File != "" {
 			data, err := fs.ReadFile(fsys, "default/"+pt.File)
 			if err != nil {
-				return fmt.Errorf("embedded prompt_templates[%q].file %q: %w", name, pt.File, err)
+				return fmt.Errorf("embedded translation_prompt_templates[%q].file %q: %w", name, pt.File, err)
 			}
 			pt.Content = string(data)
 			pt.File = ""
 		}
-		// 解析 bootstrap 模板 file 引用
-		if pt.BootstrapContent == "" && pt.BootstrapFile != "" {
-			data, err := fs.ReadFile(fsys, "default/"+pt.BootstrapFile)
-			if err != nil {
-				return fmt.Errorf("embedded prompt_templates[%q].bootstrap_file %q: %w", name, pt.BootstrapFile, err)
-			}
-			pt.BootstrapContent = string(data)
-			pt.BootstrapFile = ""
-		}
 		cliCfg.PromptTemplates[name] = pt
+	}
+
+	// ── bootstrap_prompt_templates ──
+	for name, bt := range cliCfg.BootstrapPromptTemplates {
+		if bt.Content == "" && bt.File != "" {
+			data, err := fs.ReadFile(fsys, "default/"+bt.File)
+			if err != nil {
+				return fmt.Errorf("embedded bootstrap_prompt_templates[%q].file %q: %w", name, bt.File, err)
+			}
+			bt.Content = string(data)
+			bt.File = ""
+		}
+		cliCfg.BootstrapPromptTemplates[name] = bt
 	}
 
 	// ── translation_profiles ──
@@ -381,9 +479,11 @@ func defaultCLIConfig() *CLIConfig {
 		PromptTemplates: map[string]CLIConfigPromptTemplate{
 			"default": {}, // 空 content，使用内置默认值
 		},
+		BootstrapPromptTemplates: map[string]CLIConfigBootstrapTemplate{
+			"default": {}, // 空 content，使用内置默认值
+		},
 		TranslationProfiles: map[string]CLIConfigTranslationProfile{
 			"default": {
-				Split:       SplitConfig{Enabled: true, Strategy: "paragraph", MaxChars: 1200},
 				Protect:     ProtectConfig{Enabled: true, Rules: []string{"code", "link", "placeholder", "xml"}},
 				Postprocess: PostprocessConfig{Enabled: true, TrimSpaces: true},
 				Repair: RepairConfig{
@@ -398,27 +498,23 @@ func defaultCLIConfig() *CLIConfig {
 				Bootstrap: BootstrapConfig{
 					MaxTermsPer1000Chars:   3.0,
 					MinSourceLen:           2,
-					InlineConflictStrategy: InlineConflictRewriteLocal,
+					InlineConflictStrategy: "rewrite-local",
 				},
+				QA: QAConfig{Enabled: false},
 			},
 		},
 		Execution: CLIConfigExecution{
-			Bootstrap: StandaloneBootstrapConfig{
-				Enabled:          false,
-				BatchSize:        20,
-				Concurrency:      2,
-				MaxTermsPerBatch: 20,
-				MinSourceLen:     2,
-			},
 			Rounds: []CLIConfigRound{{
-				Name:           "主翻译",
-				Backend:        "openai-default",
-				Prompt:         "default",
-				Profile:        "default",
-				BatchSize:      1,
-				Concurrency:    4,
-				FallbackShrink: defaultFallbackShrink,
-				Retry:          RetryConfig{MaxAttempts: 3, BackoffMs: 2000, Jitter: true},
+				Mode:    "translate",
+				Backend: "openai-default",
+				Translate: &CLIConfigTranslateRound{
+					Prompt:         "default",
+					Profile:        "default",
+					BatchSize:      1,
+					Concurrency:    4,
+					FallbackShrink: 0.5,
+					Retry:          RetryConfig{MaxAttempts: 3, BackoffMs: 2000, Jitter: true},
+				},
 			}},
 		},
 		Glossary: CLIConfigGlossary{

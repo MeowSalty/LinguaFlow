@@ -15,21 +15,22 @@ import (
 // HandlerExecutionPlan 执行计划模板 handler。
 type HandlerExecutionPlan struct {
 	executionPlans *service.ExecutionPlanService
+	server         *Server
 }
 
 // NewHandlerExecutionPlan 创建执行计划模板 handler。
-func NewHandlerExecutionPlan(executionPlans *service.ExecutionPlanService) *HandlerExecutionPlan {
-	return &HandlerExecutionPlan{executionPlans: executionPlans}
+func NewHandlerExecutionPlan(executionPlans *service.ExecutionPlanService, server *Server) *HandlerExecutionPlan {
+	return &HandlerExecutionPlan{executionPlans: executionPlans, server: server}
 }
 
 // ---- 辅助函数 ----
 
 // parseExecutionPlanTemplateID 从路径参数解析 executionPlanTemplateId。
-func parseExecutionPlanTemplateID(w http.ResponseWriter, r *http.Request) (int, bool) {
+func (s *Server) parseExecutionPlanTemplateID(w http.ResponseWriter, r *http.Request) (int, bool) {
 	raw := chi.URLParam(r, "executionPlanTemplateId")
 	id, err := strconv.Atoi(raw)
 	if err != nil {
-		writeProblem(w, http.StatusBadRequest, "invalid_id", "执行计划模板 ID 必须为整数")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_id", "执行计划模板 ID 必须为整数")
 		return 0, false
 	}
 	return id, true
@@ -38,29 +39,51 @@ func parseExecutionPlanTemplateID(w http.ResponseWriter, r *http.Request) (int, 
 // toExecutionRoundConfigAPI 将 schema 层的轮次配置转换为 API 响应类型。
 func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundConfig {
 	apiRC := ExecutionRoundConfig{
-		BackendId:        rc.BackendID,
-		Concurrency:      rc.Concurrency,
-		ProfileId:        rc.ProfileID,
-		PromptTemplateId: rc.PromptTemplateID,
+		Mode:      ExecutionRoundConfigMode(rc.Mode),
+		BackendId: rc.BackendID,
 	}
-	if rc.Name != "" {
-		name := rc.Name
-		apiRC.Name = &name
+	if rc.Mode == "translate" && rc.Translate != nil {
+		t := rc.Translate
+		apiRC.Concurrency = t.Concurrency
+		translateCfg := TranslateRoundConfig{}
+		translateCfg.PromptTemplateId = &t.PromptTemplateID
+		translateCfg.ProfileId = &t.ProfileID
+		translateCfg.BatchSize = &t.BatchSize
+		translateCfg.MaxWordsPerBatch = &t.MaxWordsPerBatch
+		if t.FallbackShrink > 0 {
+			fs := float32(t.FallbackShrink)
+			translateCfg.FallbackShrink = &fs
+		}
+		if t.Retry.MaxAttempts > 0 || t.Retry.BackoffMs > 0 || t.Retry.Jitter {
+			retry := toRetryConfigAPI(t.Retry)
+			translateCfg.Retry = &retry
+		}
+		apiRC.Translate = &translateCfg
 	}
-	if rc.BatchSize > 0 {
-		bs := rc.BatchSize
-		apiRC.BatchSize = &bs
+	if rc.Mode == "extract" && rc.Extract != nil {
+		e := rc.Extract
+		apiRC.Concurrency = e.Concurrency
+		extractCfg := ExtractRoundConfig{}
+		extractCfg.TemplateId = &e.BootstrapTemplateID
+		extractCfg.BatchSize = &e.BatchSize
+		if e.MaxWordsPerBatch > 0 {
+			mwpb := e.MaxWordsPerBatch
+			extractCfg.MaxWordsPerBatch = &mwpb
+		}
+		if e.MaxTermsPer1000Chars > 0 {
+			mtpc := float32(e.MaxTermsPer1000Chars)
+			extractCfg.MaxTermsPer1000Chars = &mtpc
+		}
+		if e.MinSourceLen > 0 {
+			msl := e.MinSourceLen
+			extractCfg.MinSourceLen = &msl
+		}
+		if e.Retry.MaxAttempts > 0 || e.Retry.BackoffMs > 0 || e.Retry.Jitter {
+			retry := toRetryConfigAPI(e.Retry)
+			extractCfg.Retry = &retry
+		}
+		apiRC.Extract = &extractCfg
 	}
-	if rc.MaxWordsPerBatch > 0 {
-		mwpb := rc.MaxWordsPerBatch
-		apiRC.MaxWordsPerBatch = &mwpb
-	}
-	if rc.FallbackShrink > 0 {
-		fs := float32(rc.FallbackShrink)
-		apiRC.FallbackShrink = &fs
-	}
-	retry := toRetryConfigAPI(rc.Retry)
-	apiRC.Retry = &retry
 	return apiRC
 }
 
@@ -99,11 +122,6 @@ func toExecutionPlanTemplateResponse(t *ent.ExecutionPlanTemplate) ExecutionPlan
 	if !t.UpdatedAt.IsZero() {
 		resp.UpdatedAt = &t.UpdatedAt
 	}
-	// 独立自举配置
-	if t.Bootstrap.Enabled {
-		bs := toBootstrapConfigAPI(t.Bootstrap)
-		resp.Bootstrap = &bs
-	}
 	// 注音对齐重试配置
 	if t.RubyRetry.Enabled {
 		rr := toRubyRetryConfigAPI(t.RubyRetry)
@@ -115,45 +133,6 @@ func toExecutionPlanTemplateResponse(t *ent.ExecutionPlanTemplate) ExecutionPlan
 	}
 	resp.Rounds = rounds
 	return resp
-}
-
-// toBootstrapConfigAPI 将 schema 层的独立自举配置转换为 API 响应类型。
-func toBootstrapConfigAPI(bs schema.ExecutionPlanBootstrapConfig) ExecutionPlanBootstrapConfig {
-	result := ExecutionPlanBootstrapConfig{
-		Enabled:          bs.Enabled,
-		BackendId:        bs.BackendID,
-		PromptTemplateId: bs.PromptTemplateID,
-		BatchSize:        bs.BatchSize,
-		Concurrency:      bs.Concurrency,
-	}
-	if bs.MaxTermsPerBatch > 0 {
-		result.MaxTermsPerBatch = &bs.MaxTermsPerBatch
-	}
-	if bs.MinSourceLen > 0 {
-		result.MinSourceLen = &bs.MinSourceLen
-	}
-	return result
-}
-
-// parseBootstrapConfig 将 API 请求中的独立自举配置转换为 schema 层。
-func parseBootstrapConfig(api *ExecutionPlanBootstrapConfig) schema.ExecutionPlanBootstrapConfig {
-	if api == nil {
-		return schema.ExecutionPlanBootstrapConfig{}
-	}
-	result := schema.ExecutionPlanBootstrapConfig{
-		Enabled:          api.Enabled,
-		BackendID:        api.BackendId,
-		PromptTemplateID: api.PromptTemplateId,
-		BatchSize:        api.BatchSize,
-		Concurrency:      api.Concurrency,
-	}
-	if api.MaxTermsPerBatch != nil {
-		result.MaxTermsPerBatch = *api.MaxTermsPerBatch
-	}
-	if api.MinSourceLen != nil {
-		result.MinSourceLen = *api.MinSourceLen
-	}
-	return result
 }
 
 // toRubyRetryConfigAPI 将 schema 层的注音对齐重试配置转换为 API 响应类型。
@@ -186,33 +165,74 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 	rounds := make([]schema.ExecutionRoundConfig, 0, len(apiRounds))
 	for _, ar := range apiRounds {
 		rc := schema.ExecutionRoundConfig{
-			BackendID:        ar.BackendId,
-			Concurrency:      ar.Concurrency,
-			ProfileID:        ar.ProfileId,
-			PromptTemplateID: ar.PromptTemplateId,
+			Mode:      string(ar.Mode),
+			BackendID: ar.BackendId,
 		}
-		if ar.Name != nil {
-			rc.Name = *ar.Name
-		}
-		if ar.BatchSize != nil {
-			rc.BatchSize = *ar.BatchSize
-		}
-		if ar.MaxWordsPerBatch != nil {
-			rc.MaxWordsPerBatch = *ar.MaxWordsPerBatch
-		}
-		if ar.FallbackShrink != nil {
-			rc.FallbackShrink = float64(*ar.FallbackShrink)
-		}
-		if ar.Retry != nil {
-			if ar.Retry.MaxAttempts != nil {
-				rc.Retry.MaxAttempts = *ar.Retry.MaxAttempts
+		if ar.Mode == Translate && ar.Translate != nil {
+			t := ar.Translate
+			translateCfg := &schema.TranslateRoundConfig{
+				Concurrency: ar.Concurrency,
 			}
-			if ar.Retry.BackoffMs != nil {
-				rc.Retry.BackoffMs = *ar.Retry.BackoffMs
+			if t.PromptTemplateId != nil {
+				translateCfg.PromptTemplateID = *t.PromptTemplateId
 			}
-			if ar.Retry.Jitter != nil {
-				rc.Retry.Jitter = *ar.Retry.Jitter
+			if t.ProfileId != nil {
+				translateCfg.ProfileID = *t.ProfileId
 			}
+			if t.BatchSize != nil {
+				translateCfg.BatchSize = *t.BatchSize
+			}
+			if t.MaxWordsPerBatch != nil {
+				translateCfg.MaxWordsPerBatch = *t.MaxWordsPerBatch
+			}
+			if t.FallbackShrink != nil {
+				translateCfg.FallbackShrink = float64(*t.FallbackShrink)
+			}
+			if t.Retry != nil {
+				if t.Retry.MaxAttempts != nil {
+					translateCfg.Retry.MaxAttempts = *t.Retry.MaxAttempts
+				}
+				if t.Retry.BackoffMs != nil {
+					translateCfg.Retry.BackoffMs = *t.Retry.BackoffMs
+				}
+				if t.Retry.Jitter != nil {
+					translateCfg.Retry.Jitter = *t.Retry.Jitter
+				}
+			}
+			rc.Translate = translateCfg
+		}
+		if ar.Mode == Extract && ar.Extract != nil {
+			e := ar.Extract
+			extractCfg := &schema.ExtractRoundConfig{
+				Concurrency: ar.Concurrency,
+			}
+			if e.TemplateId != nil {
+				extractCfg.BootstrapTemplateID = *e.TemplateId
+			}
+			if e.BatchSize != nil {
+				extractCfg.BatchSize = *e.BatchSize
+			}
+			if e.MaxWordsPerBatch != nil {
+				extractCfg.MaxWordsPerBatch = *e.MaxWordsPerBatch
+			}
+			if e.MaxTermsPer1000Chars != nil {
+				extractCfg.MaxTermsPer1000Chars = float64(*e.MaxTermsPer1000Chars)
+			}
+			if e.MinSourceLen != nil {
+				extractCfg.MinSourceLen = *e.MinSourceLen
+			}
+			if e.Retry != nil {
+				if e.Retry.MaxAttempts != nil {
+					extractCfg.Retry.MaxAttempts = *e.Retry.MaxAttempts
+				}
+				if e.Retry.BackoffMs != nil {
+					extractCfg.Retry.BackoffMs = *e.Retry.BackoffMs
+				}
+				if e.Retry.Jitter != nil {
+					extractCfg.Retry.Jitter = *e.Retry.Jitter
+				}
+			}
+			rc.Extract = extractCfg
 		}
 		rounds = append(rounds, rc)
 	}
@@ -225,7 +245,7 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 func (h *HandlerExecutionPlan) handleList(w http.ResponseWriter, r *http.Request, userID int) {
 	templates, err := h.executionPlans.ListByUser(r.Context(), userID)
 	if err != nil {
-		writeProblem(w, http.StatusInternalServerError, "internal_error", "查询执行计划模板失败")
+		h.server.writeProblem(w, r, http.StatusInternalServerError, "internal_error", "查询执行计划模板失败")
 		return
 	}
 	items := make([]ExecutionPlanTemplate, 0, len(templates))
@@ -238,11 +258,11 @@ func (h *HandlerExecutionPlan) handleList(w http.ResponseWriter, r *http.Request
 // handleCreate 创建执行计划模板。
 func (h *HandlerExecutionPlan) handleCreate(w http.ResponseWriter, r *http.Request, userID int) {
 	var req CreateExecutionPlanTemplateRequest
-	if !decodeJSON(w, r, &req) {
+	if !h.server.decodeJSON(w, r, &req) {
 		return
 	}
 	if req.Name == "" {
-		writeProblem(w, http.StatusBadRequest, "validation_error", "执行计划模板名称不能为空")
+		h.server.writeProblem(w, r, http.StatusBadRequest, "validation_error", "执行计划模板名称不能为空")
 		return
 	}
 
@@ -250,7 +270,6 @@ func (h *HandlerExecutionPlan) handleCreate(w http.ResponseWriter, r *http.Reque
 		Name:        req.Name,
 		Scope:       "user",
 		OwnerUserID: &userID,
-		Bootstrap:   parseBootstrapConfig(req.Bootstrap),
 		RubyRetry:   parseRubyRetryConfig(req.RubyRetry),
 		Rounds:      toExecutionPlanRoundsAPI(req.Rounds),
 	}
@@ -260,7 +279,7 @@ func (h *HandlerExecutionPlan) handleCreate(w http.ResponseWriter, r *http.Reque
 
 	pt, err := h.executionPlans.Create(r.Context(), input)
 	if err != nil {
-		writeExecutionPlanServiceError(w, err)
+		h.server.writeExecutionPlanServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, toExecutionPlanTemplateResponse(pt))
@@ -270,7 +289,7 @@ func (h *HandlerExecutionPlan) handleCreate(w http.ResponseWriter, r *http.Reque
 func (h *HandlerExecutionPlan) handleGet(w http.ResponseWriter, r *http.Request, userID, planID int) {
 	pt, err := h.executionPlans.GetByID(r.Context(), userID, planID)
 	if err != nil {
-		writeExecutionPlanServiceError(w, err)
+		h.server.writeExecutionPlanServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toExecutionPlanTemplateResponse(pt))
@@ -279,17 +298,13 @@ func (h *HandlerExecutionPlan) handleGet(w http.ResponseWriter, r *http.Request,
 // handleUpdate 更新执行计划模板。
 func (h *HandlerExecutionPlan) handleUpdate(w http.ResponseWriter, r *http.Request, userID, planID int) {
 	var req UpdateExecutionPlanTemplateRequest
-	if !decodeJSON(w, r, &req) {
+	if !h.server.decodeJSON(w, r, &req) {
 		return
 	}
 
 	input := service.UpdateExecutionPlanTemplateInput{
 		Name:        req.Name,
 		Description: req.Description,
-	}
-	if req.Bootstrap != nil {
-		bs := parseBootstrapConfig(req.Bootstrap)
-		input.Bootstrap = &bs
 	}
 	if req.RubyRetry != nil {
 		rr := parseRubyRetryConfig(req.RubyRetry)
@@ -302,7 +317,7 @@ func (h *HandlerExecutionPlan) handleUpdate(w http.ResponseWriter, r *http.Reque
 
 	pt, err := h.executionPlans.Update(r.Context(), userID, planID, input)
 	if err != nil {
-		writeExecutionPlanServiceError(w, err)
+		h.server.writeExecutionPlanServiceError(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusOK, toExecutionPlanTemplateResponse(pt))
@@ -312,28 +327,28 @@ func (h *HandlerExecutionPlan) handleUpdate(w http.ResponseWriter, r *http.Reque
 func (h *HandlerExecutionPlan) handleDelete(w http.ResponseWriter, r *http.Request, userID, planID int) {
 	err := h.executionPlans.Delete(r.Context(), userID, planID)
 	if err != nil {
-		writeExecutionPlanServiceError(w, err)
+		h.server.writeExecutionPlanServiceError(w, r, err)
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
 // writeExecutionPlanServiceError 将 service 层错误转换为 HTTP 响应。
-func writeExecutionPlanServiceError(w http.ResponseWriter, err error) {
+func (s *Server) writeExecutionPlanServiceError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, service.ErrExecutionPlanNotFound):
-		writeProblem(w, http.StatusNotFound, "not_found", "执行计划模板不存在")
+		s.writeProblem(w, r, http.StatusNotFound, "not_found", "执行计划模板不存在")
 	case errors.Is(err, service.ErrExecutionPlanScopeInvalid):
-		writeProblem(w, http.StatusBadRequest, "invalid_scope", "无效的 scope")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_scope", "无效的 scope")
 	case errors.Is(err, service.ErrExecutionPlanConfigInvalid):
-		writeProblem(w, http.StatusBadRequest, "invalid_config", err.Error())
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_config", err.Error())
 	case errors.Is(err, service.ErrExecutionPlanInUse):
-		writeProblem(w, http.StatusConflict, "in_use", "该模板正在被翻译任务引用，无法删除")
+		s.writeProblem(w, r, http.StatusConflict, "in_use", "该模板正在被翻译任务引用，无法删除")
 	case errors.Is(err, service.ErrForbidden):
-		writeProblem(w, http.StatusForbidden, "forbidden", "没有权限执行该操作")
+		s.writeProblem(w, r, http.StatusForbidden, "forbidden", "没有权限执行该操作")
 	case errors.Is(err, service.ErrInvalidInput):
-		writeProblem(w, http.StatusBadRequest, "invalid_input", err.Error())
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", err.Error())
 	default:
-		writeProblem(w, http.StatusInternalServerError, "internal_error", "服务器内部错误")
+		s.writeServiceError(w, r, err)
 	}
 }

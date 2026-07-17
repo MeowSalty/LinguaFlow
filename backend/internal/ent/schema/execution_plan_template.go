@@ -8,26 +8,38 @@ import (
 
 // ExecutionRoundConfig 单轮执行配置。
 type ExecutionRoundConfig struct {
-	Name             string      `json:"name"               yaml:"name"`
-	BackendID        int         `json:"backend_id"         yaml:"backend_id"`
-	PromptTemplateID int         `json:"prompt_template_id" yaml:"prompt_template_id"`
-	ProfileID        int         `json:"profile_id"         yaml:"profile_id"`
-	BatchSize        int         `json:"batch_size"         yaml:"batch_size"`
-	MaxWordsPerBatch int         `json:"max_words_per_batch" yaml:"max_words_per_batch"`
-	Concurrency      int         `json:"concurrency"        yaml:"concurrency"`
-	FallbackShrink   float64     `json:"fallback_shrink"    yaml:"fallback_shrink"`
-	Retry            RetryConfig `json:"retry"              yaml:"retry"`
+	Mode      string                `json:"mode"               yaml:"mode"` // "translate" | "extract"
+	BackendID int                   `json:"backend_id"         yaml:"backend_id"`
+	Translate *TranslateRoundConfig `json:"translate,omitempty" yaml:"translate,omitempty"`
+	Extract   *ExtractRoundConfig   `json:"extract,omitempty"   yaml:"extract,omitempty"`
 }
 
-// ExecutionPlanBootstrapConfig 独立自举配置。
-type ExecutionPlanBootstrapConfig struct {
-	Enabled          bool `json:"enabled"             yaml:"enabled"`
-	BackendID        int  `json:"backend_id"          yaml:"backend_id"`
-	PromptTemplateID int  `json:"prompt_template_id"  yaml:"prompt_template_id"`
-	BatchSize        int  `json:"batch_size"          yaml:"batch_size"`
-	Concurrency      int  `json:"concurrency"         yaml:"concurrency"`
-	MaxTermsPerBatch int  `json:"max_terms_per_batch" yaml:"max_terms_per_batch"`
-	MinSourceLen     int  `json:"min_source_len"      yaml:"min_source_len"`
+// TranslateSegmentFilterConfig 翻译轮次段落过滤配置。
+type TranslateSegmentFilterConfig struct {
+	StatusFilter string `json:"status_filter" yaml:"status_filter"` // "pending_only" | "skip_approved" | "all"
+}
+
+// TranslateRoundConfig 翻译轮次配置（翻译专用）。
+type TranslateRoundConfig struct {
+	PromptTemplateID int                           `json:"prompt_template_id"  yaml:"prompt_template_id"` // 引用 TranslationPromptTemplate
+	ProfileID        int                           `json:"profile_id"          yaml:"profile_id"`
+	BatchSize        int                           `json:"batch_size"          yaml:"batch_size"`
+	MaxWordsPerBatch int                           `json:"max_words_per_batch" yaml:"max_words_per_batch"`
+	Concurrency      int                           `json:"concurrency"         yaml:"concurrency"`
+	FallbackShrink   float64                       `json:"fallback_shrink"     yaml:"fallback_shrink"`
+	SegmentFilter    *TranslateSegmentFilterConfig `json:"segment_filter,omitempty" yaml:"segment_filter,omitempty"`
+	Retry            RetryConfig                   `json:"retry"               yaml:"retry"`
+}
+
+// ExtractRoundConfig 术语抽取轮次配置。
+type ExtractRoundConfig struct {
+	BootstrapTemplateID  int         `json:"bootstrap_template_id"   yaml:"bootstrap_template_id"` // 引用 BootstrapPromptTemplate
+	BatchSize            int         `json:"batch_size"              yaml:"batch_size"`
+	MaxWordsPerBatch     int         `json:"max_words_per_batch"     yaml:"max_words_per_batch"`
+	Concurrency          int         `json:"concurrency"             yaml:"concurrency"`
+	MaxTermsPer1000Chars float64     `json:"max_terms_per_1000_chars" yaml:"max_terms_per_1000_chars"`
+	MinSourceLen         int         `json:"min_source_len"          yaml:"min_source_len"`
+	Retry                RetryConfig `json:"retry"                   yaml:"retry"`
 }
 
 // ExecutionPlanRubyRetryConfig 注音对齐重试配置。
@@ -60,9 +72,6 @@ func (ExecutionPlanTemplate) Fields() []ent.Field {
 			Comment("user / org"),
 		field.Int("owner_user_id").Optional().Nillable().Positive(),
 		field.Int("owner_org_id").Optional().Nillable().Positive(),
-		field.JSON("bootstrap", ExecutionPlanBootstrapConfig{}).
-			Optional().
-			Comment("独立自举配置"),
 		field.JSON("ruby_retry", ExecutionPlanRubyRetryConfig{}).
 			Optional().
 			Comment("注音对齐重试配置"),

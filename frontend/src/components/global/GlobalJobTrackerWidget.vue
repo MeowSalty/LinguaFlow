@@ -7,7 +7,7 @@ import { type ApiSchemas } from '@/api/client'
 import { getJobProgressText } from '@/composables/useWorkspaceUtils'
 import { useGlobalJobTrackerStore } from '@/stores/globalJobTracker'
 
-type TranslationJob = ApiSchemas['TranslationJob']
+type Job = ApiSchemas['Job']
 
 const { t } = useI18n()
 const tracker = useGlobalJobTrackerStore()
@@ -42,17 +42,18 @@ const handleClearCompleted = (): void => {
   tracker.clearCompleted()
 }
 
-const isTerminal = (status: TranslationJob['status']): boolean =>
+const isTerminal = (status: Job['status']): boolean =>
   ['completed', 'failed', 'cancelled'].includes(status)
 
-const progressPercent = (job: TranslationJob): number => {
+const progressPercent = (job: Job): number => {
   if (job.status === 'completed') return 100
   if (job.status === 'failed' || job.status === 'cancelled') return 0
-  if (job.total_segments > 0) return Math.round((job.completed_segments / job.total_segments) * 100)
+  if (job.progress.total_segments > 0)
+    return Math.round((job.progress.completed_segments / job.progress.total_segments) * 100)
   return 0
 }
 
-const progressStatus = (job: TranslationJob): 'success' | 'error' | 'default' => {
+const progressStatus = (job: Job): 'success' | 'error' | 'default' => {
   if (job.status === 'completed') return 'success'
   if (job.status === 'failed') return 'error'
   return 'default'
@@ -97,7 +98,7 @@ const progressStatus = (job: TranslationJob): 'success' | 'error' | 'default' =>
             class="group cursor-pointer border-b border-lf-border-soft/50 px-4 py-3 transition-colors hover:bg-lf-surface-muted/50"
             @click="handleOpenDetail(job.id)"
           >
-            <!-- 第一行：状态图标 + 任务ID + 项目名 + 移除按钮 -->
+            <!-- 第一行：状态图标 + 任务 ID + 项目名 + 移除按钮 -->
             <div class="flex items-center gap-2">
               <!-- 状态指示器 -->
               <span
