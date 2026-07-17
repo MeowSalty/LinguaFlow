@@ -44,16 +44,16 @@ linguaflow translate -i input.md -o output.md --to zh
 
 ### 参数说明
 
-| 参数              | 短写 | 类型     | 默认值   | 描述                                                     |
-| ----------------- | ---- | -------- | -------- | -------------------------------------------------------- |
-| `--input`         | `-i` | string[] | 必填     | 输入文件或目录路径，可传多个                             |
-| `--output`        | `-o` | string   | 必填     | 输出路径（单文件为文件路径，多文件/目录为目录路径）      |
-| `--to`            |      | string   | `"zh"`   | 目标语言代码                                             |
-| `--from`          |      | string   | `"auto"` | 源语言代码（默认自动检测）                               |
-| `--glossary-path` |      | string   | `""`     | 术语表 CSV 路径                                          |
-| `--bootstrap`     |      | string   | `""`     | 术语自举模式：`off` \| `pre` \| `inline`                 |
-| `--profile`       |      | string   | `""`     | 翻译策略名称（引用配置中 `translation_profiles` 的 key） |
-| `--prompt`        |      | string   | `""`     | 提示词模板名称（引用配置中 `prompt_templates` 的 key）   |
+| 参数              | 短写 | 类型     | 默认值   | 描述                                                   |
+| ----------------- | ---- | -------- | -------- | ------------------------------------------------------ |
+| `--input`         | `-i` | string[] | 必填     | 输入文件或目录路径，可传多个                           |
+| `--output`        | `-o` | string   | 必填     | 输出路径（单文件为文件路径，多文件/目录为目录路径）    |
+| `--to`            |      | string   | `"zh"`   | 目标语言代码                                           |
+| `--from`          |      | string   | `"auto"` | 源语言代码（默认自动检测）                             |
+| `--glossary-path` |      | string   | `""`     | 术语表 CSV 路径                                        |
+| `--bootstrap`     |      | string   | `""`     | 术语自举模式：`off` \| `pre` \| `inline`               |
+| `--profile`       |      | string   | `""`     | 执行配置名称（引用配置中 `execution_profiles` 的 key） |
+| `--prompt`        |      | string   | `""`     | 提示词模板名称（引用配置中 `prompt_templates` 的 key） |
 
 ### 示例
 
@@ -83,7 +83,7 @@ linguaflow translate -i docs.md -o out.md --to zh --glossary-path ./terms.csv
 linguaflow translate -i docs.md -o out.md --to zh --bootstrap=inline
 ```
 
-```bash [指定翻译策略]
+```bash [指定执行配置]
 linguaflow translate -i docs.md -o out.md --to zh --profile technical
 ```
 
@@ -122,7 +122,7 @@ linguaflow init [flags]
 
 - `linguaflow.yaml` — 主配置文件（含注释说明）
 - `prompts/default.tmpl` — 默认提示词模板
-- `profiles/default.yaml` — 默认翻译策略
+- `profiles/default.yaml` — 默认执行配置
 
 ## local 命令
 

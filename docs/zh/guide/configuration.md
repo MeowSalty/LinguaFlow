@@ -90,11 +90,23 @@ prompt_templates:
       {{source_text}}
     # 或引用外部文件（与 content 二选一）
     # file: prompts/default.tmpl
-    bootstrap_content: "..."
-    # bootstrap_file: prompts/bootstrap_system.tmpl
 
-# 翻译配置文件（map 结构，key 为配置名称）
-translation_profiles:
+# Bootstrap 模板（独立术语抽取提示词，map 结构，key 为模板名称）
+bootstrap_prompt_templates:
+  default:
+    content: "..."
+    # 或引用外部文件
+    # file: prompts/bootstrap.tmpl
+
+# Prune 模板（术语精简提示词，map 结构，key 为模板名称）
+prune_prompt_templates:
+  default:
+    content: "..."
+    # 或引用外部文件
+    # file: prompts/prune.tmpl
+
+# 执行配置（map 结构，key 为配置名称）
+execution_profiles:
   default:
     # 或引用外部文件（与以下内联字段二选一）
     # file: profiles/default.yaml
@@ -130,18 +142,29 @@ translation_profiles:
       before: 1
       after: 1
       max_chars: 0
+    qa:
+      enabled: true
+      length:
+        enabled: true
+        min_ratio: 0.5
+        max_ratio: 2.5
+        unit: char
+      repetition:
+        enabled: true
+      untranslated:
+        enabled: true
 
 # 执行计划
 execution:
   bootstrap:
     enabled: false
-    template: <prompt_template_key>
+    template: <bootstrap_prompt_template_key>
     batch_size: 20
     concurrency: 2
     max_terms_per_batch: 20
     min_source_len: 2
   rounds:
-    - name: "主翻译"
+    - mode: translate
       backend: <backend_key>
       prompt: <prompt_template_key>
       profile: <profile_key>
@@ -249,12 +272,18 @@ server:
 
 定义翻译指令模板，使用 map 结构，key 为模板名称。
 
-| 字段                | 类型   | 说明                                                  |
-| ------------------- | ------ | ----------------------------------------------------- |
-| `content`           | string | 模板内容（内联）                                      |
-| `file`              | string | 外部模板文件路径（与 `content` 二选一）               |
-| `bootstrap_content` | string | 术语提取模板内容（内联）                              |
-| `bootstrap_file`    | string | 术语提取模板文件路径（与 `bootstrap_content` 二选一） |
+| 字段      | 类型   | 说明                                    |
+| --------- | ------ | --------------------------------------- |
+| `content` | string | 模板内容（内联）                        |
+| `file`    | string | 外部模板文件路径（与 `content` 二选一） |
+
+#### bootstrap_prompt_templates — 术语抽取模板
+
+定义术语抽取指令模板，使用 map 结构，key 为模板名称。与翻译提示词模板结构相同。
+
+#### prune_prompt_templates — 术语精简模板
+
+定义术语精简分析指令模板，使用 map 结构，key 为模板名称。与翻译提示词模板结构相同。
 
 ::: tip 文件引用
 
@@ -263,7 +292,7 @@ server:
 - 内联内容优先于文件引用
   :::
 
-#### translation_profiles — 翻译配置文件
+#### execution_profiles — 执行配置
 
 控制翻译行为，使用 map 结构，key 为配置名称。可通过 `file` 字段引用外部文件，或内联配置以下字段：
 
@@ -333,30 +362,32 @@ server:
 
 **bootstrap — 独立术语提取**
 
-| 字段                  | 类型   | 说明                 |
-| --------------------- | ------ | -------------------- |
-| `enabled`             | bool   | 是否启用独立术语提取 |
-| `template`            | string | 使用的提示词模板     |
-| `batch_size`          | int    | 批处理大小           |
-| `concurrency`         | int    | 并发数               |
-| `max_terms_per_batch` | int    | 每批最大术语数       |
-| `min_source_len`      | int    | 最小源文本长度       |
+| 字段                  | 类型   | 说明                           |
+| --------------------- | ------ | ------------------------------ |
+| `enabled`             | bool   | 是否启用独立术语提取           |
+| `template`            | string | 使用的术语抽取模板（引用 key） |
+| `batch_size`          | int    | 批处理大小                     |
+| `concurrency`         | int    | 并发数                         |
+| `max_terms_per_batch` | int    | 每批最大术语数                 |
+| `min_source_len`      | int    | 最小源文本长度                 |
 
-**rounds — 翻译轮次**
+**rounds — 执行轮次**
 
-| 字段                  | 类型   | 说明                         |
-| --------------------- | ------ | ---------------------------- |
-| `name`                | string | 轮次名称                     |
-| `backend`             | string | 使用的 AI 后端（引用 key）   |
-| `prompt`              | string | 使用的提示词模板（引用 key） |
-| `profile`             | string | 使用的翻译配置（引用 key）   |
-| `batch_size`          | int    | 批处理大小                   |
-| `max_words_per_batch` | int    | 每批最大词数                 |
-| `concurrency`         | int    | 并发数                       |
-| `fallback_shrink`     | float  | 回退收缩比例                 |
-| `retry.max_attempts`  | int    | 最大重试次数                 |
-| `retry.backoff_ms`    | int    | 重试退避时间（毫秒）         |
-| `retry.jitter`        | bool   | 是否启用退避抖动             |
+支持两种模式的轮次：`translate`（翻译）和 `extract`（术语提取）。
+
+| 字段                  | 类型   | 说明                                                                 |
+| --------------------- | ------ | -------------------------------------------------------------------- |
+| `mode`                | string | 轮次模式：`translate` 或 `extract`                                   |
+| `backend`             | string | 使用的 AI 后端（引用 key）                                           |
+| `prompt`              | string | 使用的提示词模板（引用 key）。翻译轮次用翻译模板，提取轮次用抽取模板 |
+| `profile`             | string | 使用的执行配置（引用 key），仅翻译轮次需要                           |
+| `batch_size`          | int    | 批处理大小                                                           |
+| `max_words_per_batch` | int    | 每批最大词数                                                         |
+| `concurrency`         | int    | 并发数                                                               |
+| `fallback_shrink`     | float  | 回退收缩比例                                                         |
+| `retry.max_attempts`  | int    | 最大重试次数                                                         |
+| `retry.backoff_ms`    | int    | 重试退避时间（毫秒）                                                 |
+| `retry.jitter`        | bool   | 是否启用退避抖动                                                     |
 
 #### glossary — 术语表
 
@@ -467,7 +498,7 @@ server:
 | `--to`            |      | string   | `""`   | 目标语言（覆盖配置文件）           |
 | `--glossary-path` |      | string   | `""`   | 术语表路径，设置后强制启用         |
 | `--bootstrap`     |      | string   | `""`   | 术语提取模式：`off`/`pre`/`inline` |
-| `--profile`       |      | string   | `""`   | 翻译配置名称                       |
+| `--profile`       |      | string   | `""`   | 执行配置名称                       |
 | `--prompt`        |      | string   | `""`   | 提示词模板名称                     |
 
 ### init 子命令

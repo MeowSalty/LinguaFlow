@@ -131,17 +131,28 @@ fallback_shrink: 0.5 # 失败时批次缩小比例，默认 0.5
 
 ## 多轮翻译流水线
 
-通过执行计划，可以构建多轮翻译流水线。每轮可以使用不同的 AI 后端、提示词模板和翻译配置。
+通过执行计划，可以构建模式化多轮翻译流水线。每轮可以使用不同的 AI 后端、提示词模板和执行配置。
+
+### 轮次模式
+
+LinguaFlow 支持两种轮次模式：
+
+| 模式        | 说明                                                    |
+| ----------- | ------------------------------------------------------- |
+| `translate` | 翻译轮次 — 使用后端 + 翻译提示词模板 + 执行配置进行翻译 |
+| `extract`   | 提取轮次 — 使用后端 + 术语抽取提示词模板抽取术语        |
+
+翻译轮次是级联回退机制：每轮只处理前一轮**失败**的段落。提取轮次通常在翻译前执行，自动为项目术语表补充候选术语。
 
 ### 工作原理
 
-多轮流水线是**级联回退机制**：每轮只处理前一轮**失败**的段落，而非对成功结果进行润色。
+多轮翻译是**级联回退机制**：每轮只处理前一轮**失败**的段落，而非对成功结果进行润色。
 
 ```
-Round 1: 翻译全部段落
+Round 1 (translate): 翻译全部段落
   ├─ 成功 → 写入译文，流程结束
   └─ 失败 → 传递到 Round 2
-Round 2: 仅翻译 Round 1 失败的段落
+Round 2 (translate): 仅翻译 Round 1 失败的段落
   ├─ 成功 → 写入译文，流程结束
   └─ 失败 → 传递到 Round 3（如有）
 ```
@@ -162,32 +173,32 @@ Round 2: 仅翻译 Round 1 失败的段落
    - **仅失败的段落**（占位符校验失败或 LLM 未返回）传递到下一轮
 3. 所有轮次后仍有未翻译的段落，会记录到文档变量 `_translate_failed_indices`
 
-### 术语自举（Bootstrap）
+### 术语提取（Bootstrap）
 
-术语自举功能在翻译前自动从源文档中抽取术语表，供翻译时参考，确保术语翻译一致性。支持两种模式：
+术语提取功能在翻译前自动从源文档中抽取术语表，供翻译时参考，确保术语翻译一致性。支持两种模式：
 
-**独立自举（Pre 模式）** — 翻译前独立扫描整篇文档抽取术语，所有轮次都能使用。需额外一次 LLM 调用。
+**独立提取（Pre 模式）** — 翻译前独立扫描整篇文档抽取术语，使用独立的术语抽取提示词模板。所有翻译轮次都能使用抽取结果。需额外一次 LLM 调用。
 
-**内联自举（Inline 模式）** — 翻译时顺带抽取术语，无需额外 LLM 调用。当多个并发 Worker 对同一术语产生不同译文时，通过冲突策略处理。
+**内联提取（Inline 模式）** — 翻译时顺带抽取术语，无需额外 LLM 调用。当多个并发 Worker 对同一术语产生不同译文时，通过冲突策略处理。
 
-#### 独立自举配置
+#### 独立提取配置
 
-在执行计划中配置：
+在执行计划中配置。使用独立的术语抽取提示词模板（`/bootstrap-prompt-templates`）：
 
 ```yaml
 bootstrap:
   enabled: false # 是否启用，默认 false
-  backend_id: 1 # 自举使用的 AI 后端 ID
-  prompt_template_id: 1 # 自举提示词模板 ID（仅用其 bootstrap 提示词）
+  backend_id: 1 # 术语提取使用的 AI 后端 ID
+  prompt_template_id: 1 # 术语抽取提示词模板 ID
   batch_size: 20 # 每批源文段数，默认 20
-  concurrency: 2 # 自举并发数，默认 2
+  concurrency: 2 # 提取并发数，默认 2
   max_terms_per_batch: 20 # 每批最大术语数，默认 20
   min_source_len: 2 # 术语最短源文长度，默认 2
 ```
 
-#### 内联自举配置
+#### 内联提取配置
 
-在翻译配置中设置：
+在执行配置中设置：
 
 ```yaml
 glossary:
@@ -209,10 +220,10 @@ glossary:
 
 ```yaml
 rounds:
-  - name: "直译" # 轮次名称
+  - mode: translate # 轮次模式：translate（翻译）或 extract（术语提取）
     backend_id: 1 # AI 后端 ID
-    prompt_template_id: 1 # 提示词模板 ID
-    profile_id: 1 # 翻译配置 ID
+    prompt_template_id: 1 # 提示词模板 ID（翻译轮次用翻译模板，提取轮次用抽取模板）
+    profile_id: 1 # 执行配置 ID（仅翻译轮次）
     batch_size: 10 # 批次大小
     max_words_per_batch: 0 # 字数上限
     concurrency: 3 # 并发数
@@ -226,8 +237,9 @@ rounds:
 ### 验证规则
 
 - `rounds` 列表不能为空
-- 每轮的 `name` 不能为空
-- 每轮必须指定有效的 `backend_id`、`prompt_template_id`、`profile_id`
+- 每轮必须指定 `mode`（`translate` 或 `extract`）
+- 翻译轮次必须指定有效的 `backend_id`、`prompt_template_id`、`profile_id`
+- 提取轮次必须指定有效的 `backend_id` 和 `prompt_template_id`
 - `concurrency` 必须 ≥ 1
 - `fallback_shrink` 必须在 [0, 1) 范围内
 
@@ -261,7 +273,7 @@ rounds:
 
 ### 配置
 
-在翻译配置中设置：
+在执行配置中设置：
 
 ```yaml
 ruby:
