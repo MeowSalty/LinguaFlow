@@ -1504,6 +1504,88 @@ paths:
           description: 删除成功
         default:
           $ref: '#/components/responses/Problem'
+  /bootstrap-prompt-templates:
+    get:
+      operationId: ListBootstrapPromptTemplates
+      summary: 列出当前用户的术语抽取提示词模板
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 术语抽取提示词模板列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BootstrapPromptTemplateListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateBootstrapPromptTemplate
+      summary: 创建术语抽取提示词模板
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBootstrapPromptTemplateRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BootstrapPromptTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+  /bootstrap-prompt-templates/{bootstrapPromptTemplateId}:
+    parameters:
+      - $ref: '#/components/parameters/BootstrapPromptTemplateId'
+    get:
+      operationId: GetBootstrapPromptTemplate
+      summary: 获取术语抽取提示词模板详情
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 术语抽取提示词模板详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BootstrapPromptTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: UpdateBootstrapPromptTemplate
+      summary: 更新术语抽取提示词模板
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBootstrapPromptTemplateRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BootstrapPromptTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteBootstrapPromptTemplate
+      summary: 删除术语抽取提示词模板
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
   /translation-profiles:
     get:
       operationId: ListTranslationProfiles
@@ -1868,6 +1950,12 @@ components:
         minimum: 1
     PromptTemplateId:
       name: promptTemplateId
+      in: path
+      required: true
+      schema:
+        type: integer
+    BootstrapPromptTemplateId:
+      name: bootstrapPromptTemplateId
       in: path
       required: true
       schema:
@@ -3168,9 +3256,6 @@ components:
         system_prompt_content:
           type: string
           description: 翻译提示词内容。
-        bootstrap_prompt_content:
-          type: string
-          description: Bootstrap 术语抽取提示词内容。启用 glossary.bootstrap 时必填。
         created_at:
           type: string
           format: date-time
@@ -3198,9 +3283,6 @@ components:
         system_prompt_content:
           type: string
           description: 翻译提示词内容。
-        bootstrap_prompt_content:
-          type: string
-          description: Bootstrap 术语抽取提示词内容。
       additionalProperties: false
     UpdatePromptTemplateRequest:
       type: object
@@ -3212,9 +3294,68 @@ components:
         system_prompt_content:
           type: string
           description: 翻译提示词内容。
-        bootstrap_prompt_content:
+      additionalProperties: false
+    BootstrapPromptTemplate:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - scope
+      properties:
+        id:
+          type: integer
+        name:
           type: string
-          description: Bootstrap 术语抽取提示词内容。
+        description:
+          type: string
+        scope:
+          $ref: '#/components/schemas/BootstrapPromptTemplateScope'
+        owner_user_id:
+          type: integer
+        owner_org_id:
+          type: integer
+        content:
+          type: string
+          description: 术语抽取提示词内容。
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    BootstrapPromptTemplateListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BootstrapPromptTemplate'
+    CreateBootstrapPromptTemplateRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        content:
+          type: string
+          description: 术语抽取提示词内容。
+      additionalProperties: false
+    UpdateBootstrapPromptTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        content:
+          type: string
+          description: 术语抽取提示词内容。
       additionalProperties: false
     TranslationProfile:
       type: object
@@ -3726,7 +3867,7 @@ components:
           description: 自举使用的后端 ID
         prompt_template_id:
           type: integer
-          description: 自举使用的提示词模板 ID（仅用其 bootstrap_prompt_content）
+          description: 自举使用的提示词模板 ID
         batch_size:
           type: integer
           minimum: 1
@@ -3813,6 +3954,12 @@ components:
         retry:
           $ref: '#/components/schemas/RetryConfig'
     PromptTemplateScope:
+      type: string
+      enum:
+        - user
+        - org
+        - system
+    BootstrapPromptTemplateScope:
       type: string
       enum:
         - user

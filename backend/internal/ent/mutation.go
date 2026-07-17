@@ -13,6 +13,7 @@ import (
 	"entgo.io/ent/dialect/sql"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/glossaryentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/jobresource"
@@ -20,7 +21,6 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
@@ -31,6 +31,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/tmentry"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
@@ -45,26 +46,27 @@ const (
 	OpUpdateOne = ent.OpUpdateOne
 
 	// Node types.
-	TypeActivityLog           = "ActivityLog"
-	TypeBackend               = "Backend"
-	TypeExecutionPlanTemplate = "ExecutionPlanTemplate"
-	TypeGlossaryEntry         = "GlossaryEntry"
-	TypeJobResource           = "JobResource"
-	TypeOrgMembership         = "OrgMembership"
-	TypeOrganization          = "Organization"
-	TypeProject               = "Project"
-	TypePromptTemplate        = "PromptTemplate"
-	TypeRefreshToken          = "RefreshToken"
-	TypeResource              = "Resource"
-	TypeSSEEvent              = "SSEEvent"
-	TypeSegment               = "Segment"
-	TypeSyncTask              = "SyncTask"
-	TypeSystemSetting         = "SystemSetting"
-	TypeTMEntry               = "TMEntry"
-	TypeTranslationJob        = "TranslationJob"
-	TypeTranslationProfile    = "TranslationProfile"
-	TypeUsageRecord           = "UsageRecord"
-	TypeUser                  = "User"
+	TypeActivityLog               = "ActivityLog"
+	TypeBackend                   = "Backend"
+	TypeBootstrapPromptTemplate   = "BootstrapPromptTemplate"
+	TypeExecutionPlanTemplate     = "ExecutionPlanTemplate"
+	TypeGlossaryEntry             = "GlossaryEntry"
+	TypeJobResource               = "JobResource"
+	TypeOrgMembership             = "OrgMembership"
+	TypeOrganization              = "Organization"
+	TypeProject                   = "Project"
+	TypeRefreshToken              = "RefreshToken"
+	TypeResource                  = "Resource"
+	TypeSSEEvent                  = "SSEEvent"
+	TypeSegment                   = "Segment"
+	TypeSyncTask                  = "SyncTask"
+	TypeSystemSetting             = "SystemSetting"
+	TypeTMEntry                   = "TMEntry"
+	TypeTranslationJob            = "TranslationJob"
+	TypeTranslationProfile        = "TranslationProfile"
+	TypeTranslationPromptTemplate = "TranslationPromptTemplate"
+	TypeUsageRecord               = "UsageRecord"
+	TypeUser                      = "User"
 )
 
 // ActivityLogMutation represents an operation that mutates the ActivityLog nodes in the graph.
@@ -1913,6 +1915,854 @@ func (m *BackendMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown Backend edge %s", name)
+}
+
+// BootstrapPromptTemplateMutation represents an operation that mutates the BootstrapPromptTemplate nodes in the graph.
+type BootstrapPromptTemplateMutation struct {
+	config
+	op                Op
+	typ               string
+	id                *int
+	created_at        *time.Time
+	updated_at        *time.Time
+	name              *string
+	description       *string
+	scope             *string
+	content           *string
+	clearedFields     map[string]struct{}
+	owner_user        *int
+	clearedowner_user bool
+	owner_org         *int
+	clearedowner_org  bool
+	done              bool
+	oldValue          func(context.Context) (*BootstrapPromptTemplate, error)
+	predicates        []predicate.BootstrapPromptTemplate
+}
+
+var _ ent.Mutation = (*BootstrapPromptTemplateMutation)(nil)
+
+// bootstrapprompttemplateOption allows management of the mutation configuration using functional options.
+type bootstrapprompttemplateOption func(*BootstrapPromptTemplateMutation)
+
+// newBootstrapPromptTemplateMutation creates new mutation for the BootstrapPromptTemplate entity.
+func newBootstrapPromptTemplateMutation(c config, op Op, opts ...bootstrapprompttemplateOption) *BootstrapPromptTemplateMutation {
+	m := &BootstrapPromptTemplateMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeBootstrapPromptTemplate,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withBootstrapPromptTemplateID sets the ID field of the mutation.
+func withBootstrapPromptTemplateID(id int) bootstrapprompttemplateOption {
+	return func(m *BootstrapPromptTemplateMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *BootstrapPromptTemplate
+		)
+		m.oldValue = func(ctx context.Context) (*BootstrapPromptTemplate, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().BootstrapPromptTemplate.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withBootstrapPromptTemplate sets the old BootstrapPromptTemplate of the mutation.
+func withBootstrapPromptTemplate(node *BootstrapPromptTemplate) bootstrapprompttemplateOption {
+	return func(m *BootstrapPromptTemplateMutation) {
+		m.oldValue = func(context.Context) (*BootstrapPromptTemplate, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m BootstrapPromptTemplateMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m BootstrapPromptTemplateMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *BootstrapPromptTemplateMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *BootstrapPromptTemplateMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().BootstrapPromptTemplate.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *BootstrapPromptTemplateMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *BootstrapPromptTemplateMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the BootstrapPromptTemplate entity.
+// If the BootstrapPromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BootstrapPromptTemplateMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *BootstrapPromptTemplateMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *BootstrapPromptTemplateMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *BootstrapPromptTemplateMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the BootstrapPromptTemplate entity.
+// If the BootstrapPromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BootstrapPromptTemplateMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *BootstrapPromptTemplateMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetName sets the "name" field.
+func (m *BootstrapPromptTemplateMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *BootstrapPromptTemplateMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the BootstrapPromptTemplate entity.
+// If the BootstrapPromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BootstrapPromptTemplateMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *BootstrapPromptTemplateMutation) ResetName() {
+	m.name = nil
+}
+
+// SetDescription sets the "description" field.
+func (m *BootstrapPromptTemplateMutation) SetDescription(s string) {
+	m.description = &s
+}
+
+// Description returns the value of the "description" field in the mutation.
+func (m *BootstrapPromptTemplateMutation) Description() (r string, exists bool) {
+	v := m.description
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDescription returns the old "description" field's value of the BootstrapPromptTemplate entity.
+// If the BootstrapPromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BootstrapPromptTemplateMutation) OldDescription(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDescription is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDescription requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDescription: %w", err)
+	}
+	return oldValue.Description, nil
+}
+
+// ResetDescription resets all changes to the "description" field.
+func (m *BootstrapPromptTemplateMutation) ResetDescription() {
+	m.description = nil
+}
+
+// SetScope sets the "scope" field.
+func (m *BootstrapPromptTemplateMutation) SetScope(s string) {
+	m.scope = &s
+}
+
+// Scope returns the value of the "scope" field in the mutation.
+func (m *BootstrapPromptTemplateMutation) Scope() (r string, exists bool) {
+	v := m.scope
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldScope returns the old "scope" field's value of the BootstrapPromptTemplate entity.
+// If the BootstrapPromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BootstrapPromptTemplateMutation) OldScope(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldScope is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldScope requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldScope: %w", err)
+	}
+	return oldValue.Scope, nil
+}
+
+// ResetScope resets all changes to the "scope" field.
+func (m *BootstrapPromptTemplateMutation) ResetScope() {
+	m.scope = nil
+}
+
+// SetOwnerUserID sets the "owner_user_id" field.
+func (m *BootstrapPromptTemplateMutation) SetOwnerUserID(i int) {
+	m.owner_user = &i
+}
+
+// OwnerUserID returns the value of the "owner_user_id" field in the mutation.
+func (m *BootstrapPromptTemplateMutation) OwnerUserID() (r int, exists bool) {
+	v := m.owner_user
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOwnerUserID returns the old "owner_user_id" field's value of the BootstrapPromptTemplate entity.
+// If the BootstrapPromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BootstrapPromptTemplateMutation) OldOwnerUserID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOwnerUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOwnerUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOwnerUserID: %w", err)
+	}
+	return oldValue.OwnerUserID, nil
+}
+
+// ClearOwnerUserID clears the value of the "owner_user_id" field.
+func (m *BootstrapPromptTemplateMutation) ClearOwnerUserID() {
+	m.owner_user = nil
+	m.clearedFields[bootstrapprompttemplate.FieldOwnerUserID] = struct{}{}
+}
+
+// OwnerUserIDCleared returns if the "owner_user_id" field was cleared in this mutation.
+func (m *BootstrapPromptTemplateMutation) OwnerUserIDCleared() bool {
+	_, ok := m.clearedFields[bootstrapprompttemplate.FieldOwnerUserID]
+	return ok
+}
+
+// ResetOwnerUserID resets all changes to the "owner_user_id" field.
+func (m *BootstrapPromptTemplateMutation) ResetOwnerUserID() {
+	m.owner_user = nil
+	delete(m.clearedFields, bootstrapprompttemplate.FieldOwnerUserID)
+}
+
+// SetOwnerOrgID sets the "owner_org_id" field.
+func (m *BootstrapPromptTemplateMutation) SetOwnerOrgID(i int) {
+	m.owner_org = &i
+}
+
+// OwnerOrgID returns the value of the "owner_org_id" field in the mutation.
+func (m *BootstrapPromptTemplateMutation) OwnerOrgID() (r int, exists bool) {
+	v := m.owner_org
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOwnerOrgID returns the old "owner_org_id" field's value of the BootstrapPromptTemplate entity.
+// If the BootstrapPromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BootstrapPromptTemplateMutation) OldOwnerOrgID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOwnerOrgID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOwnerOrgID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOwnerOrgID: %w", err)
+	}
+	return oldValue.OwnerOrgID, nil
+}
+
+// ClearOwnerOrgID clears the value of the "owner_org_id" field.
+func (m *BootstrapPromptTemplateMutation) ClearOwnerOrgID() {
+	m.owner_org = nil
+	m.clearedFields[bootstrapprompttemplate.FieldOwnerOrgID] = struct{}{}
+}
+
+// OwnerOrgIDCleared returns if the "owner_org_id" field was cleared in this mutation.
+func (m *BootstrapPromptTemplateMutation) OwnerOrgIDCleared() bool {
+	_, ok := m.clearedFields[bootstrapprompttemplate.FieldOwnerOrgID]
+	return ok
+}
+
+// ResetOwnerOrgID resets all changes to the "owner_org_id" field.
+func (m *BootstrapPromptTemplateMutation) ResetOwnerOrgID() {
+	m.owner_org = nil
+	delete(m.clearedFields, bootstrapprompttemplate.FieldOwnerOrgID)
+}
+
+// SetContent sets the "content" field.
+func (m *BootstrapPromptTemplateMutation) SetContent(s string) {
+	m.content = &s
+}
+
+// Content returns the value of the "content" field in the mutation.
+func (m *BootstrapPromptTemplateMutation) Content() (r string, exists bool) {
+	v := m.content
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldContent returns the old "content" field's value of the BootstrapPromptTemplate entity.
+// If the BootstrapPromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *BootstrapPromptTemplateMutation) OldContent(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldContent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldContent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldContent: %w", err)
+	}
+	return oldValue.Content, nil
+}
+
+// ResetContent resets all changes to the "content" field.
+func (m *BootstrapPromptTemplateMutation) ResetContent() {
+	m.content = nil
+}
+
+// ClearOwnerUser clears the "owner_user" edge to the User entity.
+func (m *BootstrapPromptTemplateMutation) ClearOwnerUser() {
+	m.clearedowner_user = true
+	m.clearedFields[bootstrapprompttemplate.FieldOwnerUserID] = struct{}{}
+}
+
+// OwnerUserCleared reports if the "owner_user" edge to the User entity was cleared.
+func (m *BootstrapPromptTemplateMutation) OwnerUserCleared() bool {
+	return m.OwnerUserIDCleared() || m.clearedowner_user
+}
+
+// OwnerUserIDs returns the "owner_user" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// OwnerUserID instead. It exists only for internal usage by the builders.
+func (m *BootstrapPromptTemplateMutation) OwnerUserIDs() (ids []int) {
+	if id := m.owner_user; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetOwnerUser resets all changes to the "owner_user" edge.
+func (m *BootstrapPromptTemplateMutation) ResetOwnerUser() {
+	m.owner_user = nil
+	m.clearedowner_user = false
+}
+
+// ClearOwnerOrg clears the "owner_org" edge to the Organization entity.
+func (m *BootstrapPromptTemplateMutation) ClearOwnerOrg() {
+	m.clearedowner_org = true
+	m.clearedFields[bootstrapprompttemplate.FieldOwnerOrgID] = struct{}{}
+}
+
+// OwnerOrgCleared reports if the "owner_org" edge to the Organization entity was cleared.
+func (m *BootstrapPromptTemplateMutation) OwnerOrgCleared() bool {
+	return m.OwnerOrgIDCleared() || m.clearedowner_org
+}
+
+// OwnerOrgIDs returns the "owner_org" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// OwnerOrgID instead. It exists only for internal usage by the builders.
+func (m *BootstrapPromptTemplateMutation) OwnerOrgIDs() (ids []int) {
+	if id := m.owner_org; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetOwnerOrg resets all changes to the "owner_org" edge.
+func (m *BootstrapPromptTemplateMutation) ResetOwnerOrg() {
+	m.owner_org = nil
+	m.clearedowner_org = false
+}
+
+// Where appends a list predicates to the BootstrapPromptTemplateMutation builder.
+func (m *BootstrapPromptTemplateMutation) Where(ps ...predicate.BootstrapPromptTemplate) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the BootstrapPromptTemplateMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *BootstrapPromptTemplateMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.BootstrapPromptTemplate, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *BootstrapPromptTemplateMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *BootstrapPromptTemplateMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (BootstrapPromptTemplate).
+func (m *BootstrapPromptTemplateMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *BootstrapPromptTemplateMutation) Fields() []string {
+	fields := make([]string, 0, 8)
+	if m.created_at != nil {
+		fields = append(fields, bootstrapprompttemplate.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, bootstrapprompttemplate.FieldUpdatedAt)
+	}
+	if m.name != nil {
+		fields = append(fields, bootstrapprompttemplate.FieldName)
+	}
+	if m.description != nil {
+		fields = append(fields, bootstrapprompttemplate.FieldDescription)
+	}
+	if m.scope != nil {
+		fields = append(fields, bootstrapprompttemplate.FieldScope)
+	}
+	if m.owner_user != nil {
+		fields = append(fields, bootstrapprompttemplate.FieldOwnerUserID)
+	}
+	if m.owner_org != nil {
+		fields = append(fields, bootstrapprompttemplate.FieldOwnerOrgID)
+	}
+	if m.content != nil {
+		fields = append(fields, bootstrapprompttemplate.FieldContent)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *BootstrapPromptTemplateMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case bootstrapprompttemplate.FieldCreatedAt:
+		return m.CreatedAt()
+	case bootstrapprompttemplate.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case bootstrapprompttemplate.FieldName:
+		return m.Name()
+	case bootstrapprompttemplate.FieldDescription:
+		return m.Description()
+	case bootstrapprompttemplate.FieldScope:
+		return m.Scope()
+	case bootstrapprompttemplate.FieldOwnerUserID:
+		return m.OwnerUserID()
+	case bootstrapprompttemplate.FieldOwnerOrgID:
+		return m.OwnerOrgID()
+	case bootstrapprompttemplate.FieldContent:
+		return m.Content()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *BootstrapPromptTemplateMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case bootstrapprompttemplate.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case bootstrapprompttemplate.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case bootstrapprompttemplate.FieldName:
+		return m.OldName(ctx)
+	case bootstrapprompttemplate.FieldDescription:
+		return m.OldDescription(ctx)
+	case bootstrapprompttemplate.FieldScope:
+		return m.OldScope(ctx)
+	case bootstrapprompttemplate.FieldOwnerUserID:
+		return m.OldOwnerUserID(ctx)
+	case bootstrapprompttemplate.FieldOwnerOrgID:
+		return m.OldOwnerOrgID(ctx)
+	case bootstrapprompttemplate.FieldContent:
+		return m.OldContent(ctx)
+	}
+	return nil, fmt.Errorf("unknown BootstrapPromptTemplate field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *BootstrapPromptTemplateMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case bootstrapprompttemplate.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case bootstrapprompttemplate.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case bootstrapprompttemplate.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
+	case bootstrapprompttemplate.FieldDescription:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDescription(v)
+		return nil
+	case bootstrapprompttemplate.FieldScope:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetScope(v)
+		return nil
+	case bootstrapprompttemplate.FieldOwnerUserID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOwnerUserID(v)
+		return nil
+	case bootstrapprompttemplate.FieldOwnerOrgID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOwnerOrgID(v)
+		return nil
+	case bootstrapprompttemplate.FieldContent:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetContent(v)
+		return nil
+	}
+	return fmt.Errorf("unknown BootstrapPromptTemplate field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *BootstrapPromptTemplateMutation) AddedFields() []string {
+	var fields []string
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *BootstrapPromptTemplateMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *BootstrapPromptTemplateMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown BootstrapPromptTemplate numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *BootstrapPromptTemplateMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(bootstrapprompttemplate.FieldOwnerUserID) {
+		fields = append(fields, bootstrapprompttemplate.FieldOwnerUserID)
+	}
+	if m.FieldCleared(bootstrapprompttemplate.FieldOwnerOrgID) {
+		fields = append(fields, bootstrapprompttemplate.FieldOwnerOrgID)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *BootstrapPromptTemplateMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *BootstrapPromptTemplateMutation) ClearField(name string) error {
+	switch name {
+	case bootstrapprompttemplate.FieldOwnerUserID:
+		m.ClearOwnerUserID()
+		return nil
+	case bootstrapprompttemplate.FieldOwnerOrgID:
+		m.ClearOwnerOrgID()
+		return nil
+	}
+	return fmt.Errorf("unknown BootstrapPromptTemplate nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *BootstrapPromptTemplateMutation) ResetField(name string) error {
+	switch name {
+	case bootstrapprompttemplate.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case bootstrapprompttemplate.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case bootstrapprompttemplate.FieldName:
+		m.ResetName()
+		return nil
+	case bootstrapprompttemplate.FieldDescription:
+		m.ResetDescription()
+		return nil
+	case bootstrapprompttemplate.FieldScope:
+		m.ResetScope()
+		return nil
+	case bootstrapprompttemplate.FieldOwnerUserID:
+		m.ResetOwnerUserID()
+		return nil
+	case bootstrapprompttemplate.FieldOwnerOrgID:
+		m.ResetOwnerOrgID()
+		return nil
+	case bootstrapprompttemplate.FieldContent:
+		m.ResetContent()
+		return nil
+	}
+	return fmt.Errorf("unknown BootstrapPromptTemplate field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *BootstrapPromptTemplateMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.owner_user != nil {
+		edges = append(edges, bootstrapprompttemplate.EdgeOwnerUser)
+	}
+	if m.owner_org != nil {
+		edges = append(edges, bootstrapprompttemplate.EdgeOwnerOrg)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *BootstrapPromptTemplateMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case bootstrapprompttemplate.EdgeOwnerUser:
+		if id := m.owner_user; id != nil {
+			return []ent.Value{*id}
+		}
+	case bootstrapprompttemplate.EdgeOwnerOrg:
+		if id := m.owner_org; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *BootstrapPromptTemplateMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *BootstrapPromptTemplateMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *BootstrapPromptTemplateMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.clearedowner_user {
+		edges = append(edges, bootstrapprompttemplate.EdgeOwnerUser)
+	}
+	if m.clearedowner_org {
+		edges = append(edges, bootstrapprompttemplate.EdgeOwnerOrg)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *BootstrapPromptTemplateMutation) EdgeCleared(name string) bool {
+	switch name {
+	case bootstrapprompttemplate.EdgeOwnerUser:
+		return m.clearedowner_user
+	case bootstrapprompttemplate.EdgeOwnerOrg:
+		return m.clearedowner_org
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *BootstrapPromptTemplateMutation) ClearEdge(name string) error {
+	switch name {
+	case bootstrapprompttemplate.EdgeOwnerUser:
+		m.ClearOwnerUser()
+		return nil
+	case bootstrapprompttemplate.EdgeOwnerOrg:
+		m.ClearOwnerOrg()
+		return nil
+	}
+	return fmt.Errorf("unknown BootstrapPromptTemplate unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *BootstrapPromptTemplateMutation) ResetEdge(name string) error {
+	switch name {
+	case bootstrapprompttemplate.EdgeOwnerUser:
+		m.ResetOwnerUser()
+		return nil
+	case bootstrapprompttemplate.EdgeOwnerOrg:
+		m.ResetOwnerOrg()
+		return nil
+	}
+	return fmt.Errorf("unknown BootstrapPromptTemplate edge %s", name)
 }
 
 // ExecutionPlanTemplateMutation represents an operation that mutates the ExecutionPlanTemplate nodes in the graph.
@@ -5719,43 +6569,46 @@ func (m *OrgMembershipMutation) ResetEdge(name string) error {
 // OrganizationMutation represents an operation that mutates the Organization nodes in the graph.
 type OrganizationMutation struct {
 	config
-	op                              Op
-	typ                             string
-	id                              *int
-	created_at                      *time.Time
-	updated_at                      *time.Time
-	name                            *string
-	slug                            *string
-	display_name                    *string
-	description                     *string
-	clearedFields                   map[string]struct{}
-	projects                        map[int]struct{}
-	removedprojects                 map[int]struct{}
-	clearedprojects                 bool
-	memberships                     map[int]struct{}
-	removedmemberships              map[int]struct{}
-	clearedmemberships              bool
-	backends                        map[int]struct{}
-	removedbackends                 map[int]struct{}
-	clearedbackends                 bool
-	activity_logs                   map[int]struct{}
-	removedactivity_logs            map[int]struct{}
-	clearedactivity_logs            bool
-	usage_records                   map[int]struct{}
-	removedusage_records            map[int]struct{}
-	clearedusage_records            bool
-	prompt_templates                map[int]struct{}
-	removedprompt_templates         map[int]struct{}
-	clearedprompt_templates         bool
-	translation_profiles            map[int]struct{}
-	removedtranslation_profiles     map[int]struct{}
-	clearedtranslation_profiles     bool
-	execution_plan_templates        map[int]struct{}
-	removedexecution_plan_templates map[int]struct{}
-	clearedexecution_plan_templates bool
-	done                            bool
-	oldValue                        func(context.Context) (*Organization, error)
-	predicates                      []predicate.Organization
+	op                                  Op
+	typ                                 string
+	id                                  *int
+	created_at                          *time.Time
+	updated_at                          *time.Time
+	name                                *string
+	slug                                *string
+	display_name                        *string
+	description                         *string
+	clearedFields                       map[string]struct{}
+	projects                            map[int]struct{}
+	removedprojects                     map[int]struct{}
+	clearedprojects                     bool
+	memberships                         map[int]struct{}
+	removedmemberships                  map[int]struct{}
+	clearedmemberships                  bool
+	backends                            map[int]struct{}
+	removedbackends                     map[int]struct{}
+	clearedbackends                     bool
+	activity_logs                       map[int]struct{}
+	removedactivity_logs                map[int]struct{}
+	clearedactivity_logs                bool
+	usage_records                       map[int]struct{}
+	removedusage_records                map[int]struct{}
+	clearedusage_records                bool
+	translation_prompt_templates        map[int]struct{}
+	removedtranslation_prompt_templates map[int]struct{}
+	clearedtranslation_prompt_templates bool
+	bootstrap_prompt_templates          map[int]struct{}
+	removedbootstrap_prompt_templates   map[int]struct{}
+	clearedbootstrap_prompt_templates   bool
+	translation_profiles                map[int]struct{}
+	removedtranslation_profiles         map[int]struct{}
+	clearedtranslation_profiles         bool
+	execution_plan_templates            map[int]struct{}
+	removedexecution_plan_templates     map[int]struct{}
+	clearedexecution_plan_templates     bool
+	done                                bool
+	oldValue                            func(context.Context) (*Organization, error)
+	predicates                          []predicate.Organization
 }
 
 var _ ent.Mutation = (*OrganizationMutation)(nil)
@@ -6368,58 +7221,112 @@ func (m *OrganizationMutation) ResetUsageRecords() {
 	m.removedusage_records = nil
 }
 
-// AddPromptTemplateIDs adds the "prompt_templates" edge to the PromptTemplate entity by ids.
-func (m *OrganizationMutation) AddPromptTemplateIDs(ids ...int) {
-	if m.prompt_templates == nil {
-		m.prompt_templates = make(map[int]struct{})
+// AddTranslationPromptTemplateIDs adds the "translation_prompt_templates" edge to the TranslationPromptTemplate entity by ids.
+func (m *OrganizationMutation) AddTranslationPromptTemplateIDs(ids ...int) {
+	if m.translation_prompt_templates == nil {
+		m.translation_prompt_templates = make(map[int]struct{})
 	}
 	for i := range ids {
-		m.prompt_templates[ids[i]] = struct{}{}
+		m.translation_prompt_templates[ids[i]] = struct{}{}
 	}
 }
 
-// ClearPromptTemplates clears the "prompt_templates" edge to the PromptTemplate entity.
-func (m *OrganizationMutation) ClearPromptTemplates() {
-	m.clearedprompt_templates = true
+// ClearTranslationPromptTemplates clears the "translation_prompt_templates" edge to the TranslationPromptTemplate entity.
+func (m *OrganizationMutation) ClearTranslationPromptTemplates() {
+	m.clearedtranslation_prompt_templates = true
 }
 
-// PromptTemplatesCleared reports if the "prompt_templates" edge to the PromptTemplate entity was cleared.
-func (m *OrganizationMutation) PromptTemplatesCleared() bool {
-	return m.clearedprompt_templates
+// TranslationPromptTemplatesCleared reports if the "translation_prompt_templates" edge to the TranslationPromptTemplate entity was cleared.
+func (m *OrganizationMutation) TranslationPromptTemplatesCleared() bool {
+	return m.clearedtranslation_prompt_templates
 }
 
-// RemovePromptTemplateIDs removes the "prompt_templates" edge to the PromptTemplate entity by IDs.
-func (m *OrganizationMutation) RemovePromptTemplateIDs(ids ...int) {
-	if m.removedprompt_templates == nil {
-		m.removedprompt_templates = make(map[int]struct{})
+// RemoveTranslationPromptTemplateIDs removes the "translation_prompt_templates" edge to the TranslationPromptTemplate entity by IDs.
+func (m *OrganizationMutation) RemoveTranslationPromptTemplateIDs(ids ...int) {
+	if m.removedtranslation_prompt_templates == nil {
+		m.removedtranslation_prompt_templates = make(map[int]struct{})
 	}
 	for i := range ids {
-		delete(m.prompt_templates, ids[i])
-		m.removedprompt_templates[ids[i]] = struct{}{}
+		delete(m.translation_prompt_templates, ids[i])
+		m.removedtranslation_prompt_templates[ids[i]] = struct{}{}
 	}
 }
 
-// RemovedPromptTemplates returns the removed IDs of the "prompt_templates" edge to the PromptTemplate entity.
-func (m *OrganizationMutation) RemovedPromptTemplatesIDs() (ids []int) {
-	for id := range m.removedprompt_templates {
+// RemovedTranslationPromptTemplates returns the removed IDs of the "translation_prompt_templates" edge to the TranslationPromptTemplate entity.
+func (m *OrganizationMutation) RemovedTranslationPromptTemplatesIDs() (ids []int) {
+	for id := range m.removedtranslation_prompt_templates {
 		ids = append(ids, id)
 	}
 	return
 }
 
-// PromptTemplatesIDs returns the "prompt_templates" edge IDs in the mutation.
-func (m *OrganizationMutation) PromptTemplatesIDs() (ids []int) {
-	for id := range m.prompt_templates {
+// TranslationPromptTemplatesIDs returns the "translation_prompt_templates" edge IDs in the mutation.
+func (m *OrganizationMutation) TranslationPromptTemplatesIDs() (ids []int) {
+	for id := range m.translation_prompt_templates {
 		ids = append(ids, id)
 	}
 	return
 }
 
-// ResetPromptTemplates resets all changes to the "prompt_templates" edge.
-func (m *OrganizationMutation) ResetPromptTemplates() {
-	m.prompt_templates = nil
-	m.clearedprompt_templates = false
-	m.removedprompt_templates = nil
+// ResetTranslationPromptTemplates resets all changes to the "translation_prompt_templates" edge.
+func (m *OrganizationMutation) ResetTranslationPromptTemplates() {
+	m.translation_prompt_templates = nil
+	m.clearedtranslation_prompt_templates = false
+	m.removedtranslation_prompt_templates = nil
+}
+
+// AddBootstrapPromptTemplateIDs adds the "bootstrap_prompt_templates" edge to the BootstrapPromptTemplate entity by ids.
+func (m *OrganizationMutation) AddBootstrapPromptTemplateIDs(ids ...int) {
+	if m.bootstrap_prompt_templates == nil {
+		m.bootstrap_prompt_templates = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.bootstrap_prompt_templates[ids[i]] = struct{}{}
+	}
+}
+
+// ClearBootstrapPromptTemplates clears the "bootstrap_prompt_templates" edge to the BootstrapPromptTemplate entity.
+func (m *OrganizationMutation) ClearBootstrapPromptTemplates() {
+	m.clearedbootstrap_prompt_templates = true
+}
+
+// BootstrapPromptTemplatesCleared reports if the "bootstrap_prompt_templates" edge to the BootstrapPromptTemplate entity was cleared.
+func (m *OrganizationMutation) BootstrapPromptTemplatesCleared() bool {
+	return m.clearedbootstrap_prompt_templates
+}
+
+// RemoveBootstrapPromptTemplateIDs removes the "bootstrap_prompt_templates" edge to the BootstrapPromptTemplate entity by IDs.
+func (m *OrganizationMutation) RemoveBootstrapPromptTemplateIDs(ids ...int) {
+	if m.removedbootstrap_prompt_templates == nil {
+		m.removedbootstrap_prompt_templates = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.bootstrap_prompt_templates, ids[i])
+		m.removedbootstrap_prompt_templates[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedBootstrapPromptTemplates returns the removed IDs of the "bootstrap_prompt_templates" edge to the BootstrapPromptTemplate entity.
+func (m *OrganizationMutation) RemovedBootstrapPromptTemplatesIDs() (ids []int) {
+	for id := range m.removedbootstrap_prompt_templates {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// BootstrapPromptTemplatesIDs returns the "bootstrap_prompt_templates" edge IDs in the mutation.
+func (m *OrganizationMutation) BootstrapPromptTemplatesIDs() (ids []int) {
+	for id := range m.bootstrap_prompt_templates {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetBootstrapPromptTemplates resets all changes to the "bootstrap_prompt_templates" edge.
+func (m *OrganizationMutation) ResetBootstrapPromptTemplates() {
+	m.bootstrap_prompt_templates = nil
+	m.clearedbootstrap_prompt_templates = false
+	m.removedbootstrap_prompt_templates = nil
 }
 
 // AddTranslationProfileIDs adds the "translation_profiles" edge to the TranslationProfile entity by ids.
@@ -6763,7 +7670,7 @@ func (m *OrganizationMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *OrganizationMutation) AddedEdges() []string {
-	edges := make([]string, 0, 8)
+	edges := make([]string, 0, 9)
 	if m.projects != nil {
 		edges = append(edges, organization.EdgeProjects)
 	}
@@ -6779,8 +7686,11 @@ func (m *OrganizationMutation) AddedEdges() []string {
 	if m.usage_records != nil {
 		edges = append(edges, organization.EdgeUsageRecords)
 	}
-	if m.prompt_templates != nil {
-		edges = append(edges, organization.EdgePromptTemplates)
+	if m.translation_prompt_templates != nil {
+		edges = append(edges, organization.EdgeTranslationPromptTemplates)
+	}
+	if m.bootstrap_prompt_templates != nil {
+		edges = append(edges, organization.EdgeBootstrapPromptTemplates)
 	}
 	if m.translation_profiles != nil {
 		edges = append(edges, organization.EdgeTranslationProfiles)
@@ -6825,9 +7735,15 @@ func (m *OrganizationMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
-	case organization.EdgePromptTemplates:
-		ids := make([]ent.Value, 0, len(m.prompt_templates))
-		for id := range m.prompt_templates {
+	case organization.EdgeTranslationPromptTemplates:
+		ids := make([]ent.Value, 0, len(m.translation_prompt_templates))
+		for id := range m.translation_prompt_templates {
+			ids = append(ids, id)
+		}
+		return ids
+	case organization.EdgeBootstrapPromptTemplates:
+		ids := make([]ent.Value, 0, len(m.bootstrap_prompt_templates))
+		for id := range m.bootstrap_prompt_templates {
 			ids = append(ids, id)
 		}
 		return ids
@@ -6849,7 +7765,7 @@ func (m *OrganizationMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *OrganizationMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 8)
+	edges := make([]string, 0, 9)
 	if m.removedprojects != nil {
 		edges = append(edges, organization.EdgeProjects)
 	}
@@ -6865,8 +7781,11 @@ func (m *OrganizationMutation) RemovedEdges() []string {
 	if m.removedusage_records != nil {
 		edges = append(edges, organization.EdgeUsageRecords)
 	}
-	if m.removedprompt_templates != nil {
-		edges = append(edges, organization.EdgePromptTemplates)
+	if m.removedtranslation_prompt_templates != nil {
+		edges = append(edges, organization.EdgeTranslationPromptTemplates)
+	}
+	if m.removedbootstrap_prompt_templates != nil {
+		edges = append(edges, organization.EdgeBootstrapPromptTemplates)
 	}
 	if m.removedtranslation_profiles != nil {
 		edges = append(edges, organization.EdgeTranslationProfiles)
@@ -6911,9 +7830,15 @@ func (m *OrganizationMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
-	case organization.EdgePromptTemplates:
-		ids := make([]ent.Value, 0, len(m.removedprompt_templates))
-		for id := range m.removedprompt_templates {
+	case organization.EdgeTranslationPromptTemplates:
+		ids := make([]ent.Value, 0, len(m.removedtranslation_prompt_templates))
+		for id := range m.removedtranslation_prompt_templates {
+			ids = append(ids, id)
+		}
+		return ids
+	case organization.EdgeBootstrapPromptTemplates:
+		ids := make([]ent.Value, 0, len(m.removedbootstrap_prompt_templates))
+		for id := range m.removedbootstrap_prompt_templates {
 			ids = append(ids, id)
 		}
 		return ids
@@ -6935,7 +7860,7 @@ func (m *OrganizationMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *OrganizationMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 8)
+	edges := make([]string, 0, 9)
 	if m.clearedprojects {
 		edges = append(edges, organization.EdgeProjects)
 	}
@@ -6951,8 +7876,11 @@ func (m *OrganizationMutation) ClearedEdges() []string {
 	if m.clearedusage_records {
 		edges = append(edges, organization.EdgeUsageRecords)
 	}
-	if m.clearedprompt_templates {
-		edges = append(edges, organization.EdgePromptTemplates)
+	if m.clearedtranslation_prompt_templates {
+		edges = append(edges, organization.EdgeTranslationPromptTemplates)
+	}
+	if m.clearedbootstrap_prompt_templates {
+		edges = append(edges, organization.EdgeBootstrapPromptTemplates)
 	}
 	if m.clearedtranslation_profiles {
 		edges = append(edges, organization.EdgeTranslationProfiles)
@@ -6977,8 +7905,10 @@ func (m *OrganizationMutation) EdgeCleared(name string) bool {
 		return m.clearedactivity_logs
 	case organization.EdgeUsageRecords:
 		return m.clearedusage_records
-	case organization.EdgePromptTemplates:
-		return m.clearedprompt_templates
+	case organization.EdgeTranslationPromptTemplates:
+		return m.clearedtranslation_prompt_templates
+	case organization.EdgeBootstrapPromptTemplates:
+		return m.clearedbootstrap_prompt_templates
 	case organization.EdgeTranslationProfiles:
 		return m.clearedtranslation_profiles
 	case organization.EdgeExecutionPlanTemplates:
@@ -7014,8 +7944,11 @@ func (m *OrganizationMutation) ResetEdge(name string) error {
 	case organization.EdgeUsageRecords:
 		m.ResetUsageRecords()
 		return nil
-	case organization.EdgePromptTemplates:
-		m.ResetPromptTemplates()
+	case organization.EdgeTranslationPromptTemplates:
+		m.ResetTranslationPromptTemplates()
+		return nil
+	case organization.EdgeBootstrapPromptTemplates:
+		m.ResetBootstrapPromptTemplates()
 		return nil
 	case organization.EdgeTranslationProfiles:
 		m.ResetTranslationProfiles()
@@ -8564,908 +9497,6 @@ func (m *ProjectMutation) ResetEdge(name string) error {
 		return nil
 	}
 	return fmt.Errorf("unknown Project edge %s", name)
-}
-
-// PromptTemplateMutation represents an operation that mutates the PromptTemplate nodes in the graph.
-type PromptTemplateMutation struct {
-	config
-	op                       Op
-	typ                      string
-	id                       *int
-	created_at               *time.Time
-	updated_at               *time.Time
-	name                     *string
-	description              *string
-	scope                    *string
-	system_prompt_content    *string
-	bootstrap_prompt_content *string
-	clearedFields            map[string]struct{}
-	owner_user               *int
-	clearedowner_user        bool
-	owner_org                *int
-	clearedowner_org         bool
-	done                     bool
-	oldValue                 func(context.Context) (*PromptTemplate, error)
-	predicates               []predicate.PromptTemplate
-}
-
-var _ ent.Mutation = (*PromptTemplateMutation)(nil)
-
-// prompttemplateOption allows management of the mutation configuration using functional options.
-type prompttemplateOption func(*PromptTemplateMutation)
-
-// newPromptTemplateMutation creates new mutation for the PromptTemplate entity.
-func newPromptTemplateMutation(c config, op Op, opts ...prompttemplateOption) *PromptTemplateMutation {
-	m := &PromptTemplateMutation{
-		config:        c,
-		op:            op,
-		typ:           TypePromptTemplate,
-		clearedFields: make(map[string]struct{}),
-	}
-	for _, opt := range opts {
-		opt(m)
-	}
-	return m
-}
-
-// withPromptTemplateID sets the ID field of the mutation.
-func withPromptTemplateID(id int) prompttemplateOption {
-	return func(m *PromptTemplateMutation) {
-		var (
-			err   error
-			once  sync.Once
-			value *PromptTemplate
-		)
-		m.oldValue = func(ctx context.Context) (*PromptTemplate, error) {
-			once.Do(func() {
-				if m.done {
-					err = errors.New("querying old values post mutation is not allowed")
-				} else {
-					value, err = m.Client().PromptTemplate.Get(ctx, id)
-				}
-			})
-			return value, err
-		}
-		m.id = &id
-	}
-}
-
-// withPromptTemplate sets the old PromptTemplate of the mutation.
-func withPromptTemplate(node *PromptTemplate) prompttemplateOption {
-	return func(m *PromptTemplateMutation) {
-		m.oldValue = func(context.Context) (*PromptTemplate, error) {
-			return node, nil
-		}
-		m.id = &node.ID
-	}
-}
-
-// Client returns a new `ent.Client` from the mutation. If the mutation was
-// executed in a transaction (ent.Tx), a transactional client is returned.
-func (m PromptTemplateMutation) Client() *Client {
-	client := &Client{config: m.config}
-	client.init()
-	return client
-}
-
-// Tx returns an `ent.Tx` for mutations that were executed in transactions;
-// it returns an error otherwise.
-func (m PromptTemplateMutation) Tx() (*Tx, error) {
-	if _, ok := m.driver.(*txDriver); !ok {
-		return nil, errors.New("ent: mutation is not running in a transaction")
-	}
-	tx := &Tx{config: m.config}
-	tx.init()
-	return tx, nil
-}
-
-// ID returns the ID value in the mutation. Note that the ID is only available
-// if it was provided to the builder or after it was returned from the database.
-func (m *PromptTemplateMutation) ID() (id int, exists bool) {
-	if m.id == nil {
-		return
-	}
-	return *m.id, true
-}
-
-// IDs queries the database and returns the entity ids that match the mutation's predicate.
-// That means, if the mutation is applied within a transaction with an isolation level such
-// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
-// or updated by the mutation.
-func (m *PromptTemplateMutation) IDs(ctx context.Context) ([]int, error) {
-	switch {
-	case m.op.Is(OpUpdateOne | OpDeleteOne):
-		id, exists := m.ID()
-		if exists {
-			return []int{id}, nil
-		}
-		fallthrough
-	case m.op.Is(OpUpdate | OpDelete):
-		return m.Client().PromptTemplate.Query().Where(m.predicates...).IDs(ctx)
-	default:
-		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
-	}
-}
-
-// SetCreatedAt sets the "created_at" field.
-func (m *PromptTemplateMutation) SetCreatedAt(t time.Time) {
-	m.created_at = &t
-}
-
-// CreatedAt returns the value of the "created_at" field in the mutation.
-func (m *PromptTemplateMutation) CreatedAt() (r time.Time, exists bool) {
-	v := m.created_at
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldCreatedAt returns the old "created_at" field's value of the PromptTemplate entity.
-// If the PromptTemplate object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PromptTemplateMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
-	}
-	return oldValue.CreatedAt, nil
-}
-
-// ResetCreatedAt resets all changes to the "created_at" field.
-func (m *PromptTemplateMutation) ResetCreatedAt() {
-	m.created_at = nil
-}
-
-// SetUpdatedAt sets the "updated_at" field.
-func (m *PromptTemplateMutation) SetUpdatedAt(t time.Time) {
-	m.updated_at = &t
-}
-
-// UpdatedAt returns the value of the "updated_at" field in the mutation.
-func (m *PromptTemplateMutation) UpdatedAt() (r time.Time, exists bool) {
-	v := m.updated_at
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldUpdatedAt returns the old "updated_at" field's value of the PromptTemplate entity.
-// If the PromptTemplate object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PromptTemplateMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
-	}
-	return oldValue.UpdatedAt, nil
-}
-
-// ResetUpdatedAt resets all changes to the "updated_at" field.
-func (m *PromptTemplateMutation) ResetUpdatedAt() {
-	m.updated_at = nil
-}
-
-// SetName sets the "name" field.
-func (m *PromptTemplateMutation) SetName(s string) {
-	m.name = &s
-}
-
-// Name returns the value of the "name" field in the mutation.
-func (m *PromptTemplateMutation) Name() (r string, exists bool) {
-	v := m.name
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldName returns the old "name" field's value of the PromptTemplate entity.
-// If the PromptTemplate object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PromptTemplateMutation) OldName(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldName is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldName requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldName: %w", err)
-	}
-	return oldValue.Name, nil
-}
-
-// ResetName resets all changes to the "name" field.
-func (m *PromptTemplateMutation) ResetName() {
-	m.name = nil
-}
-
-// SetDescription sets the "description" field.
-func (m *PromptTemplateMutation) SetDescription(s string) {
-	m.description = &s
-}
-
-// Description returns the value of the "description" field in the mutation.
-func (m *PromptTemplateMutation) Description() (r string, exists bool) {
-	v := m.description
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldDescription returns the old "description" field's value of the PromptTemplate entity.
-// If the PromptTemplate object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PromptTemplateMutation) OldDescription(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldDescription is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldDescription requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldDescription: %w", err)
-	}
-	return oldValue.Description, nil
-}
-
-// ResetDescription resets all changes to the "description" field.
-func (m *PromptTemplateMutation) ResetDescription() {
-	m.description = nil
-}
-
-// SetScope sets the "scope" field.
-func (m *PromptTemplateMutation) SetScope(s string) {
-	m.scope = &s
-}
-
-// Scope returns the value of the "scope" field in the mutation.
-func (m *PromptTemplateMutation) Scope() (r string, exists bool) {
-	v := m.scope
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldScope returns the old "scope" field's value of the PromptTemplate entity.
-// If the PromptTemplate object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PromptTemplateMutation) OldScope(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldScope is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldScope requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldScope: %w", err)
-	}
-	return oldValue.Scope, nil
-}
-
-// ResetScope resets all changes to the "scope" field.
-func (m *PromptTemplateMutation) ResetScope() {
-	m.scope = nil
-}
-
-// SetOwnerUserID sets the "owner_user_id" field.
-func (m *PromptTemplateMutation) SetOwnerUserID(i int) {
-	m.owner_user = &i
-}
-
-// OwnerUserID returns the value of the "owner_user_id" field in the mutation.
-func (m *PromptTemplateMutation) OwnerUserID() (r int, exists bool) {
-	v := m.owner_user
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldOwnerUserID returns the old "owner_user_id" field's value of the PromptTemplate entity.
-// If the PromptTemplate object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PromptTemplateMutation) OldOwnerUserID(ctx context.Context) (v *int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldOwnerUserID is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldOwnerUserID requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldOwnerUserID: %w", err)
-	}
-	return oldValue.OwnerUserID, nil
-}
-
-// ClearOwnerUserID clears the value of the "owner_user_id" field.
-func (m *PromptTemplateMutation) ClearOwnerUserID() {
-	m.owner_user = nil
-	m.clearedFields[prompttemplate.FieldOwnerUserID] = struct{}{}
-}
-
-// OwnerUserIDCleared returns if the "owner_user_id" field was cleared in this mutation.
-func (m *PromptTemplateMutation) OwnerUserIDCleared() bool {
-	_, ok := m.clearedFields[prompttemplate.FieldOwnerUserID]
-	return ok
-}
-
-// ResetOwnerUserID resets all changes to the "owner_user_id" field.
-func (m *PromptTemplateMutation) ResetOwnerUserID() {
-	m.owner_user = nil
-	delete(m.clearedFields, prompttemplate.FieldOwnerUserID)
-}
-
-// SetOwnerOrgID sets the "owner_org_id" field.
-func (m *PromptTemplateMutation) SetOwnerOrgID(i int) {
-	m.owner_org = &i
-}
-
-// OwnerOrgID returns the value of the "owner_org_id" field in the mutation.
-func (m *PromptTemplateMutation) OwnerOrgID() (r int, exists bool) {
-	v := m.owner_org
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldOwnerOrgID returns the old "owner_org_id" field's value of the PromptTemplate entity.
-// If the PromptTemplate object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PromptTemplateMutation) OldOwnerOrgID(ctx context.Context) (v *int, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldOwnerOrgID is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldOwnerOrgID requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldOwnerOrgID: %w", err)
-	}
-	return oldValue.OwnerOrgID, nil
-}
-
-// ClearOwnerOrgID clears the value of the "owner_org_id" field.
-func (m *PromptTemplateMutation) ClearOwnerOrgID() {
-	m.owner_org = nil
-	m.clearedFields[prompttemplate.FieldOwnerOrgID] = struct{}{}
-}
-
-// OwnerOrgIDCleared returns if the "owner_org_id" field was cleared in this mutation.
-func (m *PromptTemplateMutation) OwnerOrgIDCleared() bool {
-	_, ok := m.clearedFields[prompttemplate.FieldOwnerOrgID]
-	return ok
-}
-
-// ResetOwnerOrgID resets all changes to the "owner_org_id" field.
-func (m *PromptTemplateMutation) ResetOwnerOrgID() {
-	m.owner_org = nil
-	delete(m.clearedFields, prompttemplate.FieldOwnerOrgID)
-}
-
-// SetSystemPromptContent sets the "system_prompt_content" field.
-func (m *PromptTemplateMutation) SetSystemPromptContent(s string) {
-	m.system_prompt_content = &s
-}
-
-// SystemPromptContent returns the value of the "system_prompt_content" field in the mutation.
-func (m *PromptTemplateMutation) SystemPromptContent() (r string, exists bool) {
-	v := m.system_prompt_content
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldSystemPromptContent returns the old "system_prompt_content" field's value of the PromptTemplate entity.
-// If the PromptTemplate object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PromptTemplateMutation) OldSystemPromptContent(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldSystemPromptContent is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldSystemPromptContent requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldSystemPromptContent: %w", err)
-	}
-	return oldValue.SystemPromptContent, nil
-}
-
-// ResetSystemPromptContent resets all changes to the "system_prompt_content" field.
-func (m *PromptTemplateMutation) ResetSystemPromptContent() {
-	m.system_prompt_content = nil
-}
-
-// SetBootstrapPromptContent sets the "bootstrap_prompt_content" field.
-func (m *PromptTemplateMutation) SetBootstrapPromptContent(s string) {
-	m.bootstrap_prompt_content = &s
-}
-
-// BootstrapPromptContent returns the value of the "bootstrap_prompt_content" field in the mutation.
-func (m *PromptTemplateMutation) BootstrapPromptContent() (r string, exists bool) {
-	v := m.bootstrap_prompt_content
-	if v == nil {
-		return
-	}
-	return *v, true
-}
-
-// OldBootstrapPromptContent returns the old "bootstrap_prompt_content" field's value of the PromptTemplate entity.
-// If the PromptTemplate object wasn't provided to the builder, the object is fetched from the database.
-// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
-func (m *PromptTemplateMutation) OldBootstrapPromptContent(ctx context.Context) (v string, err error) {
-	if !m.op.Is(OpUpdateOne) {
-		return v, errors.New("OldBootstrapPromptContent is only allowed on UpdateOne operations")
-	}
-	if m.id == nil || m.oldValue == nil {
-		return v, errors.New("OldBootstrapPromptContent requires an ID field in the mutation")
-	}
-	oldValue, err := m.oldValue(ctx)
-	if err != nil {
-		return v, fmt.Errorf("querying old value for OldBootstrapPromptContent: %w", err)
-	}
-	return oldValue.BootstrapPromptContent, nil
-}
-
-// ResetBootstrapPromptContent resets all changes to the "bootstrap_prompt_content" field.
-func (m *PromptTemplateMutation) ResetBootstrapPromptContent() {
-	m.bootstrap_prompt_content = nil
-}
-
-// ClearOwnerUser clears the "owner_user" edge to the User entity.
-func (m *PromptTemplateMutation) ClearOwnerUser() {
-	m.clearedowner_user = true
-	m.clearedFields[prompttemplate.FieldOwnerUserID] = struct{}{}
-}
-
-// OwnerUserCleared reports if the "owner_user" edge to the User entity was cleared.
-func (m *PromptTemplateMutation) OwnerUserCleared() bool {
-	return m.OwnerUserIDCleared() || m.clearedowner_user
-}
-
-// OwnerUserIDs returns the "owner_user" edge IDs in the mutation.
-// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
-// OwnerUserID instead. It exists only for internal usage by the builders.
-func (m *PromptTemplateMutation) OwnerUserIDs() (ids []int) {
-	if id := m.owner_user; id != nil {
-		ids = append(ids, *id)
-	}
-	return
-}
-
-// ResetOwnerUser resets all changes to the "owner_user" edge.
-func (m *PromptTemplateMutation) ResetOwnerUser() {
-	m.owner_user = nil
-	m.clearedowner_user = false
-}
-
-// ClearOwnerOrg clears the "owner_org" edge to the Organization entity.
-func (m *PromptTemplateMutation) ClearOwnerOrg() {
-	m.clearedowner_org = true
-	m.clearedFields[prompttemplate.FieldOwnerOrgID] = struct{}{}
-}
-
-// OwnerOrgCleared reports if the "owner_org" edge to the Organization entity was cleared.
-func (m *PromptTemplateMutation) OwnerOrgCleared() bool {
-	return m.OwnerOrgIDCleared() || m.clearedowner_org
-}
-
-// OwnerOrgIDs returns the "owner_org" edge IDs in the mutation.
-// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
-// OwnerOrgID instead. It exists only for internal usage by the builders.
-func (m *PromptTemplateMutation) OwnerOrgIDs() (ids []int) {
-	if id := m.owner_org; id != nil {
-		ids = append(ids, *id)
-	}
-	return
-}
-
-// ResetOwnerOrg resets all changes to the "owner_org" edge.
-func (m *PromptTemplateMutation) ResetOwnerOrg() {
-	m.owner_org = nil
-	m.clearedowner_org = false
-}
-
-// Where appends a list predicates to the PromptTemplateMutation builder.
-func (m *PromptTemplateMutation) Where(ps ...predicate.PromptTemplate) {
-	m.predicates = append(m.predicates, ps...)
-}
-
-// WhereP appends storage-level predicates to the PromptTemplateMutation builder. Using this method,
-// users can use type-assertion to append predicates that do not depend on any generated package.
-func (m *PromptTemplateMutation) WhereP(ps ...func(*sql.Selector)) {
-	p := make([]predicate.PromptTemplate, len(ps))
-	for i := range ps {
-		p[i] = ps[i]
-	}
-	m.Where(p...)
-}
-
-// Op returns the operation name.
-func (m *PromptTemplateMutation) Op() Op {
-	return m.op
-}
-
-// SetOp allows setting the mutation operation.
-func (m *PromptTemplateMutation) SetOp(op Op) {
-	m.op = op
-}
-
-// Type returns the node type of this mutation (PromptTemplate).
-func (m *PromptTemplateMutation) Type() string {
-	return m.typ
-}
-
-// Fields returns all fields that were changed during this mutation. Note that in
-// order to get all numeric fields that were incremented/decremented, call
-// AddedFields().
-func (m *PromptTemplateMutation) Fields() []string {
-	fields := make([]string, 0, 9)
-	if m.created_at != nil {
-		fields = append(fields, prompttemplate.FieldCreatedAt)
-	}
-	if m.updated_at != nil {
-		fields = append(fields, prompttemplate.FieldUpdatedAt)
-	}
-	if m.name != nil {
-		fields = append(fields, prompttemplate.FieldName)
-	}
-	if m.description != nil {
-		fields = append(fields, prompttemplate.FieldDescription)
-	}
-	if m.scope != nil {
-		fields = append(fields, prompttemplate.FieldScope)
-	}
-	if m.owner_user != nil {
-		fields = append(fields, prompttemplate.FieldOwnerUserID)
-	}
-	if m.owner_org != nil {
-		fields = append(fields, prompttemplate.FieldOwnerOrgID)
-	}
-	if m.system_prompt_content != nil {
-		fields = append(fields, prompttemplate.FieldSystemPromptContent)
-	}
-	if m.bootstrap_prompt_content != nil {
-		fields = append(fields, prompttemplate.FieldBootstrapPromptContent)
-	}
-	return fields
-}
-
-// Field returns the value of a field with the given name. The second boolean
-// return value indicates that this field was not set, or was not defined in the
-// schema.
-func (m *PromptTemplateMutation) Field(name string) (ent.Value, bool) {
-	switch name {
-	case prompttemplate.FieldCreatedAt:
-		return m.CreatedAt()
-	case prompttemplate.FieldUpdatedAt:
-		return m.UpdatedAt()
-	case prompttemplate.FieldName:
-		return m.Name()
-	case prompttemplate.FieldDescription:
-		return m.Description()
-	case prompttemplate.FieldScope:
-		return m.Scope()
-	case prompttemplate.FieldOwnerUserID:
-		return m.OwnerUserID()
-	case prompttemplate.FieldOwnerOrgID:
-		return m.OwnerOrgID()
-	case prompttemplate.FieldSystemPromptContent:
-		return m.SystemPromptContent()
-	case prompttemplate.FieldBootstrapPromptContent:
-		return m.BootstrapPromptContent()
-	}
-	return nil, false
-}
-
-// OldField returns the old value of the field from the database. An error is
-// returned if the mutation operation is not UpdateOne, or the query to the
-// database failed.
-func (m *PromptTemplateMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
-	switch name {
-	case prompttemplate.FieldCreatedAt:
-		return m.OldCreatedAt(ctx)
-	case prompttemplate.FieldUpdatedAt:
-		return m.OldUpdatedAt(ctx)
-	case prompttemplate.FieldName:
-		return m.OldName(ctx)
-	case prompttemplate.FieldDescription:
-		return m.OldDescription(ctx)
-	case prompttemplate.FieldScope:
-		return m.OldScope(ctx)
-	case prompttemplate.FieldOwnerUserID:
-		return m.OldOwnerUserID(ctx)
-	case prompttemplate.FieldOwnerOrgID:
-		return m.OldOwnerOrgID(ctx)
-	case prompttemplate.FieldSystemPromptContent:
-		return m.OldSystemPromptContent(ctx)
-	case prompttemplate.FieldBootstrapPromptContent:
-		return m.OldBootstrapPromptContent(ctx)
-	}
-	return nil, fmt.Errorf("unknown PromptTemplate field %s", name)
-}
-
-// SetField sets the value of a field with the given name. It returns an error if
-// the field is not defined in the schema, or if the type mismatched the field
-// type.
-func (m *PromptTemplateMutation) SetField(name string, value ent.Value) error {
-	switch name {
-	case prompttemplate.FieldCreatedAt:
-		v, ok := value.(time.Time)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetCreatedAt(v)
-		return nil
-	case prompttemplate.FieldUpdatedAt:
-		v, ok := value.(time.Time)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetUpdatedAt(v)
-		return nil
-	case prompttemplate.FieldName:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetName(v)
-		return nil
-	case prompttemplate.FieldDescription:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetDescription(v)
-		return nil
-	case prompttemplate.FieldScope:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetScope(v)
-		return nil
-	case prompttemplate.FieldOwnerUserID:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetOwnerUserID(v)
-		return nil
-	case prompttemplate.FieldOwnerOrgID:
-		v, ok := value.(int)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetOwnerOrgID(v)
-		return nil
-	case prompttemplate.FieldSystemPromptContent:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetSystemPromptContent(v)
-		return nil
-	case prompttemplate.FieldBootstrapPromptContent:
-		v, ok := value.(string)
-		if !ok {
-			return fmt.Errorf("unexpected type %T for field %s", value, name)
-		}
-		m.SetBootstrapPromptContent(v)
-		return nil
-	}
-	return fmt.Errorf("unknown PromptTemplate field %s", name)
-}
-
-// AddedFields returns all numeric fields that were incremented/decremented during
-// this mutation.
-func (m *PromptTemplateMutation) AddedFields() []string {
-	var fields []string
-	return fields
-}
-
-// AddedField returns the numeric value that was incremented/decremented on a field
-// with the given name. The second boolean return value indicates that this field
-// was not set, or was not defined in the schema.
-func (m *PromptTemplateMutation) AddedField(name string) (ent.Value, bool) {
-	switch name {
-	}
-	return nil, false
-}
-
-// AddField adds the value to the field with the given name. It returns an error if
-// the field is not defined in the schema, or if the type mismatched the field
-// type.
-func (m *PromptTemplateMutation) AddField(name string, value ent.Value) error {
-	switch name {
-	}
-	return fmt.Errorf("unknown PromptTemplate numeric field %s", name)
-}
-
-// ClearedFields returns all nullable fields that were cleared during this
-// mutation.
-func (m *PromptTemplateMutation) ClearedFields() []string {
-	var fields []string
-	if m.FieldCleared(prompttemplate.FieldOwnerUserID) {
-		fields = append(fields, prompttemplate.FieldOwnerUserID)
-	}
-	if m.FieldCleared(prompttemplate.FieldOwnerOrgID) {
-		fields = append(fields, prompttemplate.FieldOwnerOrgID)
-	}
-	return fields
-}
-
-// FieldCleared returns a boolean indicating if a field with the given name was
-// cleared in this mutation.
-func (m *PromptTemplateMutation) FieldCleared(name string) bool {
-	_, ok := m.clearedFields[name]
-	return ok
-}
-
-// ClearField clears the value of the field with the given name. It returns an
-// error if the field is not defined in the schema.
-func (m *PromptTemplateMutation) ClearField(name string) error {
-	switch name {
-	case prompttemplate.FieldOwnerUserID:
-		m.ClearOwnerUserID()
-		return nil
-	case prompttemplate.FieldOwnerOrgID:
-		m.ClearOwnerOrgID()
-		return nil
-	}
-	return fmt.Errorf("unknown PromptTemplate nullable field %s", name)
-}
-
-// ResetField resets all changes in the mutation for the field with the given name.
-// It returns an error if the field is not defined in the schema.
-func (m *PromptTemplateMutation) ResetField(name string) error {
-	switch name {
-	case prompttemplate.FieldCreatedAt:
-		m.ResetCreatedAt()
-		return nil
-	case prompttemplate.FieldUpdatedAt:
-		m.ResetUpdatedAt()
-		return nil
-	case prompttemplate.FieldName:
-		m.ResetName()
-		return nil
-	case prompttemplate.FieldDescription:
-		m.ResetDescription()
-		return nil
-	case prompttemplate.FieldScope:
-		m.ResetScope()
-		return nil
-	case prompttemplate.FieldOwnerUserID:
-		m.ResetOwnerUserID()
-		return nil
-	case prompttemplate.FieldOwnerOrgID:
-		m.ResetOwnerOrgID()
-		return nil
-	case prompttemplate.FieldSystemPromptContent:
-		m.ResetSystemPromptContent()
-		return nil
-	case prompttemplate.FieldBootstrapPromptContent:
-		m.ResetBootstrapPromptContent()
-		return nil
-	}
-	return fmt.Errorf("unknown PromptTemplate field %s", name)
-}
-
-// AddedEdges returns all edge names that were set/added in this mutation.
-func (m *PromptTemplateMutation) AddedEdges() []string {
-	edges := make([]string, 0, 2)
-	if m.owner_user != nil {
-		edges = append(edges, prompttemplate.EdgeOwnerUser)
-	}
-	if m.owner_org != nil {
-		edges = append(edges, prompttemplate.EdgeOwnerOrg)
-	}
-	return edges
-}
-
-// AddedIDs returns all IDs (to other nodes) that were added for the given edge
-// name in this mutation.
-func (m *PromptTemplateMutation) AddedIDs(name string) []ent.Value {
-	switch name {
-	case prompttemplate.EdgeOwnerUser:
-		if id := m.owner_user; id != nil {
-			return []ent.Value{*id}
-		}
-	case prompttemplate.EdgeOwnerOrg:
-		if id := m.owner_org; id != nil {
-			return []ent.Value{*id}
-		}
-	}
-	return nil
-}
-
-// RemovedEdges returns all edge names that were removed in this mutation.
-func (m *PromptTemplateMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 2)
-	return edges
-}
-
-// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
-// the given name in this mutation.
-func (m *PromptTemplateMutation) RemovedIDs(name string) []ent.Value {
-	return nil
-}
-
-// ClearedEdges returns all edge names that were cleared in this mutation.
-func (m *PromptTemplateMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 2)
-	if m.clearedowner_user {
-		edges = append(edges, prompttemplate.EdgeOwnerUser)
-	}
-	if m.clearedowner_org {
-		edges = append(edges, prompttemplate.EdgeOwnerOrg)
-	}
-	return edges
-}
-
-// EdgeCleared returns a boolean which indicates if the edge with the given name
-// was cleared in this mutation.
-func (m *PromptTemplateMutation) EdgeCleared(name string) bool {
-	switch name {
-	case prompttemplate.EdgeOwnerUser:
-		return m.clearedowner_user
-	case prompttemplate.EdgeOwnerOrg:
-		return m.clearedowner_org
-	}
-	return false
-}
-
-// ClearEdge clears the value of the edge with the given name. It returns an error
-// if that edge is not defined in the schema.
-func (m *PromptTemplateMutation) ClearEdge(name string) error {
-	switch name {
-	case prompttemplate.EdgeOwnerUser:
-		m.ClearOwnerUser()
-		return nil
-	case prompttemplate.EdgeOwnerOrg:
-		m.ClearOwnerOrg()
-		return nil
-	}
-	return fmt.Errorf("unknown PromptTemplate unique edge %s", name)
-}
-
-// ResetEdge resets all changes to the edge with the given name in this mutation.
-// It returns an error if the edge is not defined in the schema.
-func (m *PromptTemplateMutation) ResetEdge(name string) error {
-	switch name {
-	case prompttemplate.EdgeOwnerUser:
-		m.ResetOwnerUser()
-		return nil
-	case prompttemplate.EdgeOwnerOrg:
-		m.ResetOwnerOrg()
-		return nil
-	}
-	return fmt.Errorf("unknown PromptTemplate edge %s", name)
 }
 
 // RefreshTokenMutation represents an operation that mutates the RefreshToken nodes in the graph.
@@ -18390,6 +18421,854 @@ func (m *TranslationProfileMutation) ResetEdge(name string) error {
 	return fmt.Errorf("unknown TranslationProfile edge %s", name)
 }
 
+// TranslationPromptTemplateMutation represents an operation that mutates the TranslationPromptTemplate nodes in the graph.
+type TranslationPromptTemplateMutation struct {
+	config
+	op                    Op
+	typ                   string
+	id                    *int
+	created_at            *time.Time
+	updated_at            *time.Time
+	name                  *string
+	description           *string
+	scope                 *string
+	system_prompt_content *string
+	clearedFields         map[string]struct{}
+	owner_user            *int
+	clearedowner_user     bool
+	owner_org             *int
+	clearedowner_org      bool
+	done                  bool
+	oldValue              func(context.Context) (*TranslationPromptTemplate, error)
+	predicates            []predicate.TranslationPromptTemplate
+}
+
+var _ ent.Mutation = (*TranslationPromptTemplateMutation)(nil)
+
+// translationprompttemplateOption allows management of the mutation configuration using functional options.
+type translationprompttemplateOption func(*TranslationPromptTemplateMutation)
+
+// newTranslationPromptTemplateMutation creates new mutation for the TranslationPromptTemplate entity.
+func newTranslationPromptTemplateMutation(c config, op Op, opts ...translationprompttemplateOption) *TranslationPromptTemplateMutation {
+	m := &TranslationPromptTemplateMutation{
+		config:        c,
+		op:            op,
+		typ:           TypeTranslationPromptTemplate,
+		clearedFields: make(map[string]struct{}),
+	}
+	for _, opt := range opts {
+		opt(m)
+	}
+	return m
+}
+
+// withTranslationPromptTemplateID sets the ID field of the mutation.
+func withTranslationPromptTemplateID(id int) translationprompttemplateOption {
+	return func(m *TranslationPromptTemplateMutation) {
+		var (
+			err   error
+			once  sync.Once
+			value *TranslationPromptTemplate
+		)
+		m.oldValue = func(ctx context.Context) (*TranslationPromptTemplate, error) {
+			once.Do(func() {
+				if m.done {
+					err = errors.New("querying old values post mutation is not allowed")
+				} else {
+					value, err = m.Client().TranslationPromptTemplate.Get(ctx, id)
+				}
+			})
+			return value, err
+		}
+		m.id = &id
+	}
+}
+
+// withTranslationPromptTemplate sets the old TranslationPromptTemplate of the mutation.
+func withTranslationPromptTemplate(node *TranslationPromptTemplate) translationprompttemplateOption {
+	return func(m *TranslationPromptTemplateMutation) {
+		m.oldValue = func(context.Context) (*TranslationPromptTemplate, error) {
+			return node, nil
+		}
+		m.id = &node.ID
+	}
+}
+
+// Client returns a new `ent.Client` from the mutation. If the mutation was
+// executed in a transaction (ent.Tx), a transactional client is returned.
+func (m TranslationPromptTemplateMutation) Client() *Client {
+	client := &Client{config: m.config}
+	client.init()
+	return client
+}
+
+// Tx returns an `ent.Tx` for mutations that were executed in transactions;
+// it returns an error otherwise.
+func (m TranslationPromptTemplateMutation) Tx() (*Tx, error) {
+	if _, ok := m.driver.(*txDriver); !ok {
+		return nil, errors.New("ent: mutation is not running in a transaction")
+	}
+	tx := &Tx{config: m.config}
+	tx.init()
+	return tx, nil
+}
+
+// ID returns the ID value in the mutation. Note that the ID is only available
+// if it was provided to the builder or after it was returned from the database.
+func (m *TranslationPromptTemplateMutation) ID() (id int, exists bool) {
+	if m.id == nil {
+		return
+	}
+	return *m.id, true
+}
+
+// IDs queries the database and returns the entity ids that match the mutation's predicate.
+// That means, if the mutation is applied within a transaction with an isolation level such
+// as sql.LevelSerializable, the returned ids match the ids of the rows that will be updated
+// or updated by the mutation.
+func (m *TranslationPromptTemplateMutation) IDs(ctx context.Context) ([]int, error) {
+	switch {
+	case m.op.Is(OpUpdateOne | OpDeleteOne):
+		id, exists := m.ID()
+		if exists {
+			return []int{id}, nil
+		}
+		fallthrough
+	case m.op.Is(OpUpdate | OpDelete):
+		return m.Client().TranslationPromptTemplate.Query().Where(m.predicates...).IDs(ctx)
+	default:
+		return nil, fmt.Errorf("IDs is not allowed on %s operations", m.op)
+	}
+}
+
+// SetCreatedAt sets the "created_at" field.
+func (m *TranslationPromptTemplateMutation) SetCreatedAt(t time.Time) {
+	m.created_at = &t
+}
+
+// CreatedAt returns the value of the "created_at" field in the mutation.
+func (m *TranslationPromptTemplateMutation) CreatedAt() (r time.Time, exists bool) {
+	v := m.created_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldCreatedAt returns the old "created_at" field's value of the TranslationPromptTemplate entity.
+// If the TranslationPromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TranslationPromptTemplateMutation) OldCreatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldCreatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldCreatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldCreatedAt: %w", err)
+	}
+	return oldValue.CreatedAt, nil
+}
+
+// ResetCreatedAt resets all changes to the "created_at" field.
+func (m *TranslationPromptTemplateMutation) ResetCreatedAt() {
+	m.created_at = nil
+}
+
+// SetUpdatedAt sets the "updated_at" field.
+func (m *TranslationPromptTemplateMutation) SetUpdatedAt(t time.Time) {
+	m.updated_at = &t
+}
+
+// UpdatedAt returns the value of the "updated_at" field in the mutation.
+func (m *TranslationPromptTemplateMutation) UpdatedAt() (r time.Time, exists bool) {
+	v := m.updated_at
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldUpdatedAt returns the old "updated_at" field's value of the TranslationPromptTemplate entity.
+// If the TranslationPromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TranslationPromptTemplateMutation) OldUpdatedAt(ctx context.Context) (v time.Time, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldUpdatedAt is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldUpdatedAt requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldUpdatedAt: %w", err)
+	}
+	return oldValue.UpdatedAt, nil
+}
+
+// ResetUpdatedAt resets all changes to the "updated_at" field.
+func (m *TranslationPromptTemplateMutation) ResetUpdatedAt() {
+	m.updated_at = nil
+}
+
+// SetName sets the "name" field.
+func (m *TranslationPromptTemplateMutation) SetName(s string) {
+	m.name = &s
+}
+
+// Name returns the value of the "name" field in the mutation.
+func (m *TranslationPromptTemplateMutation) Name() (r string, exists bool) {
+	v := m.name
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldName returns the old "name" field's value of the TranslationPromptTemplate entity.
+// If the TranslationPromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TranslationPromptTemplateMutation) OldName(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldName is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldName requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldName: %w", err)
+	}
+	return oldValue.Name, nil
+}
+
+// ResetName resets all changes to the "name" field.
+func (m *TranslationPromptTemplateMutation) ResetName() {
+	m.name = nil
+}
+
+// SetDescription sets the "description" field.
+func (m *TranslationPromptTemplateMutation) SetDescription(s string) {
+	m.description = &s
+}
+
+// Description returns the value of the "description" field in the mutation.
+func (m *TranslationPromptTemplateMutation) Description() (r string, exists bool) {
+	v := m.description
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldDescription returns the old "description" field's value of the TranslationPromptTemplate entity.
+// If the TranslationPromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TranslationPromptTemplateMutation) OldDescription(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldDescription is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldDescription requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldDescription: %w", err)
+	}
+	return oldValue.Description, nil
+}
+
+// ResetDescription resets all changes to the "description" field.
+func (m *TranslationPromptTemplateMutation) ResetDescription() {
+	m.description = nil
+}
+
+// SetScope sets the "scope" field.
+func (m *TranslationPromptTemplateMutation) SetScope(s string) {
+	m.scope = &s
+}
+
+// Scope returns the value of the "scope" field in the mutation.
+func (m *TranslationPromptTemplateMutation) Scope() (r string, exists bool) {
+	v := m.scope
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldScope returns the old "scope" field's value of the TranslationPromptTemplate entity.
+// If the TranslationPromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TranslationPromptTemplateMutation) OldScope(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldScope is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldScope requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldScope: %w", err)
+	}
+	return oldValue.Scope, nil
+}
+
+// ResetScope resets all changes to the "scope" field.
+func (m *TranslationPromptTemplateMutation) ResetScope() {
+	m.scope = nil
+}
+
+// SetOwnerUserID sets the "owner_user_id" field.
+func (m *TranslationPromptTemplateMutation) SetOwnerUserID(i int) {
+	m.owner_user = &i
+}
+
+// OwnerUserID returns the value of the "owner_user_id" field in the mutation.
+func (m *TranslationPromptTemplateMutation) OwnerUserID() (r int, exists bool) {
+	v := m.owner_user
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOwnerUserID returns the old "owner_user_id" field's value of the TranslationPromptTemplate entity.
+// If the TranslationPromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TranslationPromptTemplateMutation) OldOwnerUserID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOwnerUserID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOwnerUserID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOwnerUserID: %w", err)
+	}
+	return oldValue.OwnerUserID, nil
+}
+
+// ClearOwnerUserID clears the value of the "owner_user_id" field.
+func (m *TranslationPromptTemplateMutation) ClearOwnerUserID() {
+	m.owner_user = nil
+	m.clearedFields[translationprompttemplate.FieldOwnerUserID] = struct{}{}
+}
+
+// OwnerUserIDCleared returns if the "owner_user_id" field was cleared in this mutation.
+func (m *TranslationPromptTemplateMutation) OwnerUserIDCleared() bool {
+	_, ok := m.clearedFields[translationprompttemplate.FieldOwnerUserID]
+	return ok
+}
+
+// ResetOwnerUserID resets all changes to the "owner_user_id" field.
+func (m *TranslationPromptTemplateMutation) ResetOwnerUserID() {
+	m.owner_user = nil
+	delete(m.clearedFields, translationprompttemplate.FieldOwnerUserID)
+}
+
+// SetOwnerOrgID sets the "owner_org_id" field.
+func (m *TranslationPromptTemplateMutation) SetOwnerOrgID(i int) {
+	m.owner_org = &i
+}
+
+// OwnerOrgID returns the value of the "owner_org_id" field in the mutation.
+func (m *TranslationPromptTemplateMutation) OwnerOrgID() (r int, exists bool) {
+	v := m.owner_org
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldOwnerOrgID returns the old "owner_org_id" field's value of the TranslationPromptTemplate entity.
+// If the TranslationPromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TranslationPromptTemplateMutation) OldOwnerOrgID(ctx context.Context) (v *int, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldOwnerOrgID is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldOwnerOrgID requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldOwnerOrgID: %w", err)
+	}
+	return oldValue.OwnerOrgID, nil
+}
+
+// ClearOwnerOrgID clears the value of the "owner_org_id" field.
+func (m *TranslationPromptTemplateMutation) ClearOwnerOrgID() {
+	m.owner_org = nil
+	m.clearedFields[translationprompttemplate.FieldOwnerOrgID] = struct{}{}
+}
+
+// OwnerOrgIDCleared returns if the "owner_org_id" field was cleared in this mutation.
+func (m *TranslationPromptTemplateMutation) OwnerOrgIDCleared() bool {
+	_, ok := m.clearedFields[translationprompttemplate.FieldOwnerOrgID]
+	return ok
+}
+
+// ResetOwnerOrgID resets all changes to the "owner_org_id" field.
+func (m *TranslationPromptTemplateMutation) ResetOwnerOrgID() {
+	m.owner_org = nil
+	delete(m.clearedFields, translationprompttemplate.FieldOwnerOrgID)
+}
+
+// SetSystemPromptContent sets the "system_prompt_content" field.
+func (m *TranslationPromptTemplateMutation) SetSystemPromptContent(s string) {
+	m.system_prompt_content = &s
+}
+
+// SystemPromptContent returns the value of the "system_prompt_content" field in the mutation.
+func (m *TranslationPromptTemplateMutation) SystemPromptContent() (r string, exists bool) {
+	v := m.system_prompt_content
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldSystemPromptContent returns the old "system_prompt_content" field's value of the TranslationPromptTemplate entity.
+// If the TranslationPromptTemplate object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *TranslationPromptTemplateMutation) OldSystemPromptContent(ctx context.Context) (v string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldSystemPromptContent is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldSystemPromptContent requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldSystemPromptContent: %w", err)
+	}
+	return oldValue.SystemPromptContent, nil
+}
+
+// ResetSystemPromptContent resets all changes to the "system_prompt_content" field.
+func (m *TranslationPromptTemplateMutation) ResetSystemPromptContent() {
+	m.system_prompt_content = nil
+}
+
+// ClearOwnerUser clears the "owner_user" edge to the User entity.
+func (m *TranslationPromptTemplateMutation) ClearOwnerUser() {
+	m.clearedowner_user = true
+	m.clearedFields[translationprompttemplate.FieldOwnerUserID] = struct{}{}
+}
+
+// OwnerUserCleared reports if the "owner_user" edge to the User entity was cleared.
+func (m *TranslationPromptTemplateMutation) OwnerUserCleared() bool {
+	return m.OwnerUserIDCleared() || m.clearedowner_user
+}
+
+// OwnerUserIDs returns the "owner_user" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// OwnerUserID instead. It exists only for internal usage by the builders.
+func (m *TranslationPromptTemplateMutation) OwnerUserIDs() (ids []int) {
+	if id := m.owner_user; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetOwnerUser resets all changes to the "owner_user" edge.
+func (m *TranslationPromptTemplateMutation) ResetOwnerUser() {
+	m.owner_user = nil
+	m.clearedowner_user = false
+}
+
+// ClearOwnerOrg clears the "owner_org" edge to the Organization entity.
+func (m *TranslationPromptTemplateMutation) ClearOwnerOrg() {
+	m.clearedowner_org = true
+	m.clearedFields[translationprompttemplate.FieldOwnerOrgID] = struct{}{}
+}
+
+// OwnerOrgCleared reports if the "owner_org" edge to the Organization entity was cleared.
+func (m *TranslationPromptTemplateMutation) OwnerOrgCleared() bool {
+	return m.OwnerOrgIDCleared() || m.clearedowner_org
+}
+
+// OwnerOrgIDs returns the "owner_org" edge IDs in the mutation.
+// Note that IDs always returns len(IDs) <= 1 for unique edges, and you should use
+// OwnerOrgID instead. It exists only for internal usage by the builders.
+func (m *TranslationPromptTemplateMutation) OwnerOrgIDs() (ids []int) {
+	if id := m.owner_org; id != nil {
+		ids = append(ids, *id)
+	}
+	return
+}
+
+// ResetOwnerOrg resets all changes to the "owner_org" edge.
+func (m *TranslationPromptTemplateMutation) ResetOwnerOrg() {
+	m.owner_org = nil
+	m.clearedowner_org = false
+}
+
+// Where appends a list predicates to the TranslationPromptTemplateMutation builder.
+func (m *TranslationPromptTemplateMutation) Where(ps ...predicate.TranslationPromptTemplate) {
+	m.predicates = append(m.predicates, ps...)
+}
+
+// WhereP appends storage-level predicates to the TranslationPromptTemplateMutation builder. Using this method,
+// users can use type-assertion to append predicates that do not depend on any generated package.
+func (m *TranslationPromptTemplateMutation) WhereP(ps ...func(*sql.Selector)) {
+	p := make([]predicate.TranslationPromptTemplate, len(ps))
+	for i := range ps {
+		p[i] = ps[i]
+	}
+	m.Where(p...)
+}
+
+// Op returns the operation name.
+func (m *TranslationPromptTemplateMutation) Op() Op {
+	return m.op
+}
+
+// SetOp allows setting the mutation operation.
+func (m *TranslationPromptTemplateMutation) SetOp(op Op) {
+	m.op = op
+}
+
+// Type returns the node type of this mutation (TranslationPromptTemplate).
+func (m *TranslationPromptTemplateMutation) Type() string {
+	return m.typ
+}
+
+// Fields returns all fields that were changed during this mutation. Note that in
+// order to get all numeric fields that were incremented/decremented, call
+// AddedFields().
+func (m *TranslationPromptTemplateMutation) Fields() []string {
+	fields := make([]string, 0, 8)
+	if m.created_at != nil {
+		fields = append(fields, translationprompttemplate.FieldCreatedAt)
+	}
+	if m.updated_at != nil {
+		fields = append(fields, translationprompttemplate.FieldUpdatedAt)
+	}
+	if m.name != nil {
+		fields = append(fields, translationprompttemplate.FieldName)
+	}
+	if m.description != nil {
+		fields = append(fields, translationprompttemplate.FieldDescription)
+	}
+	if m.scope != nil {
+		fields = append(fields, translationprompttemplate.FieldScope)
+	}
+	if m.owner_user != nil {
+		fields = append(fields, translationprompttemplate.FieldOwnerUserID)
+	}
+	if m.owner_org != nil {
+		fields = append(fields, translationprompttemplate.FieldOwnerOrgID)
+	}
+	if m.system_prompt_content != nil {
+		fields = append(fields, translationprompttemplate.FieldSystemPromptContent)
+	}
+	return fields
+}
+
+// Field returns the value of a field with the given name. The second boolean
+// return value indicates that this field was not set, or was not defined in the
+// schema.
+func (m *TranslationPromptTemplateMutation) Field(name string) (ent.Value, bool) {
+	switch name {
+	case translationprompttemplate.FieldCreatedAt:
+		return m.CreatedAt()
+	case translationprompttemplate.FieldUpdatedAt:
+		return m.UpdatedAt()
+	case translationprompttemplate.FieldName:
+		return m.Name()
+	case translationprompttemplate.FieldDescription:
+		return m.Description()
+	case translationprompttemplate.FieldScope:
+		return m.Scope()
+	case translationprompttemplate.FieldOwnerUserID:
+		return m.OwnerUserID()
+	case translationprompttemplate.FieldOwnerOrgID:
+		return m.OwnerOrgID()
+	case translationprompttemplate.FieldSystemPromptContent:
+		return m.SystemPromptContent()
+	}
+	return nil, false
+}
+
+// OldField returns the old value of the field from the database. An error is
+// returned if the mutation operation is not UpdateOne, or the query to the
+// database failed.
+func (m *TranslationPromptTemplateMutation) OldField(ctx context.Context, name string) (ent.Value, error) {
+	switch name {
+	case translationprompttemplate.FieldCreatedAt:
+		return m.OldCreatedAt(ctx)
+	case translationprompttemplate.FieldUpdatedAt:
+		return m.OldUpdatedAt(ctx)
+	case translationprompttemplate.FieldName:
+		return m.OldName(ctx)
+	case translationprompttemplate.FieldDescription:
+		return m.OldDescription(ctx)
+	case translationprompttemplate.FieldScope:
+		return m.OldScope(ctx)
+	case translationprompttemplate.FieldOwnerUserID:
+		return m.OldOwnerUserID(ctx)
+	case translationprompttemplate.FieldOwnerOrgID:
+		return m.OldOwnerOrgID(ctx)
+	case translationprompttemplate.FieldSystemPromptContent:
+		return m.OldSystemPromptContent(ctx)
+	}
+	return nil, fmt.Errorf("unknown TranslationPromptTemplate field %s", name)
+}
+
+// SetField sets the value of a field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *TranslationPromptTemplateMutation) SetField(name string, value ent.Value) error {
+	switch name {
+	case translationprompttemplate.FieldCreatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetCreatedAt(v)
+		return nil
+	case translationprompttemplate.FieldUpdatedAt:
+		v, ok := value.(time.Time)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetUpdatedAt(v)
+		return nil
+	case translationprompttemplate.FieldName:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetName(v)
+		return nil
+	case translationprompttemplate.FieldDescription:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetDescription(v)
+		return nil
+	case translationprompttemplate.FieldScope:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetScope(v)
+		return nil
+	case translationprompttemplate.FieldOwnerUserID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOwnerUserID(v)
+		return nil
+	case translationprompttemplate.FieldOwnerOrgID:
+		v, ok := value.(int)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetOwnerOrgID(v)
+		return nil
+	case translationprompttemplate.FieldSystemPromptContent:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetSystemPromptContent(v)
+		return nil
+	}
+	return fmt.Errorf("unknown TranslationPromptTemplate field %s", name)
+}
+
+// AddedFields returns all numeric fields that were incremented/decremented during
+// this mutation.
+func (m *TranslationPromptTemplateMutation) AddedFields() []string {
+	var fields []string
+	return fields
+}
+
+// AddedField returns the numeric value that was incremented/decremented on a field
+// with the given name. The second boolean return value indicates that this field
+// was not set, or was not defined in the schema.
+func (m *TranslationPromptTemplateMutation) AddedField(name string) (ent.Value, bool) {
+	switch name {
+	}
+	return nil, false
+}
+
+// AddField adds the value to the field with the given name. It returns an error if
+// the field is not defined in the schema, or if the type mismatched the field
+// type.
+func (m *TranslationPromptTemplateMutation) AddField(name string, value ent.Value) error {
+	switch name {
+	}
+	return fmt.Errorf("unknown TranslationPromptTemplate numeric field %s", name)
+}
+
+// ClearedFields returns all nullable fields that were cleared during this
+// mutation.
+func (m *TranslationPromptTemplateMutation) ClearedFields() []string {
+	var fields []string
+	if m.FieldCleared(translationprompttemplate.FieldOwnerUserID) {
+		fields = append(fields, translationprompttemplate.FieldOwnerUserID)
+	}
+	if m.FieldCleared(translationprompttemplate.FieldOwnerOrgID) {
+		fields = append(fields, translationprompttemplate.FieldOwnerOrgID)
+	}
+	return fields
+}
+
+// FieldCleared returns a boolean indicating if a field with the given name was
+// cleared in this mutation.
+func (m *TranslationPromptTemplateMutation) FieldCleared(name string) bool {
+	_, ok := m.clearedFields[name]
+	return ok
+}
+
+// ClearField clears the value of the field with the given name. It returns an
+// error if the field is not defined in the schema.
+func (m *TranslationPromptTemplateMutation) ClearField(name string) error {
+	switch name {
+	case translationprompttemplate.FieldOwnerUserID:
+		m.ClearOwnerUserID()
+		return nil
+	case translationprompttemplate.FieldOwnerOrgID:
+		m.ClearOwnerOrgID()
+		return nil
+	}
+	return fmt.Errorf("unknown TranslationPromptTemplate nullable field %s", name)
+}
+
+// ResetField resets all changes in the mutation for the field with the given name.
+// It returns an error if the field is not defined in the schema.
+func (m *TranslationPromptTemplateMutation) ResetField(name string) error {
+	switch name {
+	case translationprompttemplate.FieldCreatedAt:
+		m.ResetCreatedAt()
+		return nil
+	case translationprompttemplate.FieldUpdatedAt:
+		m.ResetUpdatedAt()
+		return nil
+	case translationprompttemplate.FieldName:
+		m.ResetName()
+		return nil
+	case translationprompttemplate.FieldDescription:
+		m.ResetDescription()
+		return nil
+	case translationprompttemplate.FieldScope:
+		m.ResetScope()
+		return nil
+	case translationprompttemplate.FieldOwnerUserID:
+		m.ResetOwnerUserID()
+		return nil
+	case translationprompttemplate.FieldOwnerOrgID:
+		m.ResetOwnerOrgID()
+		return nil
+	case translationprompttemplate.FieldSystemPromptContent:
+		m.ResetSystemPromptContent()
+		return nil
+	}
+	return fmt.Errorf("unknown TranslationPromptTemplate field %s", name)
+}
+
+// AddedEdges returns all edge names that were set/added in this mutation.
+func (m *TranslationPromptTemplateMutation) AddedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.owner_user != nil {
+		edges = append(edges, translationprompttemplate.EdgeOwnerUser)
+	}
+	if m.owner_org != nil {
+		edges = append(edges, translationprompttemplate.EdgeOwnerOrg)
+	}
+	return edges
+}
+
+// AddedIDs returns all IDs (to other nodes) that were added for the given edge
+// name in this mutation.
+func (m *TranslationPromptTemplateMutation) AddedIDs(name string) []ent.Value {
+	switch name {
+	case translationprompttemplate.EdgeOwnerUser:
+		if id := m.owner_user; id != nil {
+			return []ent.Value{*id}
+		}
+	case translationprompttemplate.EdgeOwnerOrg:
+		if id := m.owner_org; id != nil {
+			return []ent.Value{*id}
+		}
+	}
+	return nil
+}
+
+// RemovedEdges returns all edge names that were removed in this mutation.
+func (m *TranslationPromptTemplateMutation) RemovedEdges() []string {
+	edges := make([]string, 0, 2)
+	return edges
+}
+
+// RemovedIDs returns all IDs (to other nodes) that were removed for the edge with
+// the given name in this mutation.
+func (m *TranslationPromptTemplateMutation) RemovedIDs(name string) []ent.Value {
+	return nil
+}
+
+// ClearedEdges returns all edge names that were cleared in this mutation.
+func (m *TranslationPromptTemplateMutation) ClearedEdges() []string {
+	edges := make([]string, 0, 2)
+	if m.clearedowner_user {
+		edges = append(edges, translationprompttemplate.EdgeOwnerUser)
+	}
+	if m.clearedowner_org {
+		edges = append(edges, translationprompttemplate.EdgeOwnerOrg)
+	}
+	return edges
+}
+
+// EdgeCleared returns a boolean which indicates if the edge with the given name
+// was cleared in this mutation.
+func (m *TranslationPromptTemplateMutation) EdgeCleared(name string) bool {
+	switch name {
+	case translationprompttemplate.EdgeOwnerUser:
+		return m.clearedowner_user
+	case translationprompttemplate.EdgeOwnerOrg:
+		return m.clearedowner_org
+	}
+	return false
+}
+
+// ClearEdge clears the value of the edge with the given name. It returns an error
+// if that edge is not defined in the schema.
+func (m *TranslationPromptTemplateMutation) ClearEdge(name string) error {
+	switch name {
+	case translationprompttemplate.EdgeOwnerUser:
+		m.ClearOwnerUser()
+		return nil
+	case translationprompttemplate.EdgeOwnerOrg:
+		m.ClearOwnerOrg()
+		return nil
+	}
+	return fmt.Errorf("unknown TranslationPromptTemplate unique edge %s", name)
+}
+
+// ResetEdge resets all changes to the edge with the given name in this mutation.
+// It returns an error if the edge is not defined in the schema.
+func (m *TranslationPromptTemplateMutation) ResetEdge(name string) error {
+	switch name {
+	case translationprompttemplate.EdgeOwnerUser:
+		m.ResetOwnerUser()
+		return nil
+	case translationprompttemplate.EdgeOwnerOrg:
+		m.ResetOwnerOrg()
+		return nil
+	}
+	return fmt.Errorf("unknown TranslationPromptTemplate edge %s", name)
+}
+
 // UsageRecordMutation represents an operation that mutates the UsageRecord nodes in the graph.
 type UsageRecordMutation struct {
 	config
@@ -19439,57 +20318,60 @@ func (m *UsageRecordMutation) ResetEdge(name string) error {
 // UserMutation represents an operation that mutates the User nodes in the graph.
 type UserMutation struct {
 	config
-	op                              Op
-	typ                             string
-	id                              *int
-	created_at                      *time.Time
-	updated_at                      *time.Time
-	username                        *string
-	password_hash                   *string
-	email                           *string
-	display_name                    *string
-	role                            *string
-	active                          *bool
-	clearedFields                   map[string]struct{}
-	created_translation_jobs        map[int]struct{}
-	removedcreated_translation_jobs map[int]struct{}
-	clearedcreated_translation_jobs bool
-	reviewed_segments               map[int]struct{}
-	removedreviewed_segments        map[int]struct{}
-	clearedreviewed_segments        bool
-	refresh_tokens                  map[int]struct{}
-	removedrefresh_tokens           map[int]struct{}
-	clearedrefresh_tokens           bool
-	memberships                     map[int]struct{}
-	removedmemberships              map[int]struct{}
-	clearedmemberships              bool
-	backends                        map[int]struct{}
-	removedbackends                 map[int]struct{}
-	clearedbackends                 bool
-	owned_projects                  map[int]struct{}
-	removedowned_projects           map[int]struct{}
-	clearedowned_projects           bool
-	activity_logs                   map[int]struct{}
-	removedactivity_logs            map[int]struct{}
-	clearedactivity_logs            bool
-	usage_records                   map[int]struct{}
-	removedusage_records            map[int]struct{}
-	clearedusage_records            bool
-	prompt_templates                map[int]struct{}
-	removedprompt_templates         map[int]struct{}
-	clearedprompt_templates         bool
-	translation_profiles            map[int]struct{}
-	removedtranslation_profiles     map[int]struct{}
-	clearedtranslation_profiles     bool
-	execution_plan_templates        map[int]struct{}
-	removedexecution_plan_templates map[int]struct{}
-	clearedexecution_plan_templates bool
-	sync_tasks                      map[int]struct{}
-	removedsync_tasks               map[int]struct{}
-	clearedsync_tasks               bool
-	done                            bool
-	oldValue                        func(context.Context) (*User, error)
-	predicates                      []predicate.User
+	op                                  Op
+	typ                                 string
+	id                                  *int
+	created_at                          *time.Time
+	updated_at                          *time.Time
+	username                            *string
+	password_hash                       *string
+	email                               *string
+	display_name                        *string
+	role                                *string
+	active                              *bool
+	clearedFields                       map[string]struct{}
+	created_translation_jobs            map[int]struct{}
+	removedcreated_translation_jobs     map[int]struct{}
+	clearedcreated_translation_jobs     bool
+	reviewed_segments                   map[int]struct{}
+	removedreviewed_segments            map[int]struct{}
+	clearedreviewed_segments            bool
+	refresh_tokens                      map[int]struct{}
+	removedrefresh_tokens               map[int]struct{}
+	clearedrefresh_tokens               bool
+	memberships                         map[int]struct{}
+	removedmemberships                  map[int]struct{}
+	clearedmemberships                  bool
+	backends                            map[int]struct{}
+	removedbackends                     map[int]struct{}
+	clearedbackends                     bool
+	owned_projects                      map[int]struct{}
+	removedowned_projects               map[int]struct{}
+	clearedowned_projects               bool
+	activity_logs                       map[int]struct{}
+	removedactivity_logs                map[int]struct{}
+	clearedactivity_logs                bool
+	usage_records                       map[int]struct{}
+	removedusage_records                map[int]struct{}
+	clearedusage_records                bool
+	translation_prompt_templates        map[int]struct{}
+	removedtranslation_prompt_templates map[int]struct{}
+	clearedtranslation_prompt_templates bool
+	bootstrap_prompt_templates          map[int]struct{}
+	removedbootstrap_prompt_templates   map[int]struct{}
+	clearedbootstrap_prompt_templates   bool
+	translation_profiles                map[int]struct{}
+	removedtranslation_profiles         map[int]struct{}
+	clearedtranslation_profiles         bool
+	execution_plan_templates            map[int]struct{}
+	removedexecution_plan_templates     map[int]struct{}
+	clearedexecution_plan_templates     bool
+	sync_tasks                          map[int]struct{}
+	removedsync_tasks                   map[int]struct{}
+	clearedsync_tasks                   bool
+	done                                bool
+	oldValue                            func(context.Context) (*User, error)
+	predicates                          []predicate.User
 }
 
 var _ ent.Mutation = (*UserMutation)(nil)
@@ -20323,58 +21205,112 @@ func (m *UserMutation) ResetUsageRecords() {
 	m.removedusage_records = nil
 }
 
-// AddPromptTemplateIDs adds the "prompt_templates" edge to the PromptTemplate entity by ids.
-func (m *UserMutation) AddPromptTemplateIDs(ids ...int) {
-	if m.prompt_templates == nil {
-		m.prompt_templates = make(map[int]struct{})
+// AddTranslationPromptTemplateIDs adds the "translation_prompt_templates" edge to the TranslationPromptTemplate entity by ids.
+func (m *UserMutation) AddTranslationPromptTemplateIDs(ids ...int) {
+	if m.translation_prompt_templates == nil {
+		m.translation_prompt_templates = make(map[int]struct{})
 	}
 	for i := range ids {
-		m.prompt_templates[ids[i]] = struct{}{}
+		m.translation_prompt_templates[ids[i]] = struct{}{}
 	}
 }
 
-// ClearPromptTemplates clears the "prompt_templates" edge to the PromptTemplate entity.
-func (m *UserMutation) ClearPromptTemplates() {
-	m.clearedprompt_templates = true
+// ClearTranslationPromptTemplates clears the "translation_prompt_templates" edge to the TranslationPromptTemplate entity.
+func (m *UserMutation) ClearTranslationPromptTemplates() {
+	m.clearedtranslation_prompt_templates = true
 }
 
-// PromptTemplatesCleared reports if the "prompt_templates" edge to the PromptTemplate entity was cleared.
-func (m *UserMutation) PromptTemplatesCleared() bool {
-	return m.clearedprompt_templates
+// TranslationPromptTemplatesCleared reports if the "translation_prompt_templates" edge to the TranslationPromptTemplate entity was cleared.
+func (m *UserMutation) TranslationPromptTemplatesCleared() bool {
+	return m.clearedtranslation_prompt_templates
 }
 
-// RemovePromptTemplateIDs removes the "prompt_templates" edge to the PromptTemplate entity by IDs.
-func (m *UserMutation) RemovePromptTemplateIDs(ids ...int) {
-	if m.removedprompt_templates == nil {
-		m.removedprompt_templates = make(map[int]struct{})
+// RemoveTranslationPromptTemplateIDs removes the "translation_prompt_templates" edge to the TranslationPromptTemplate entity by IDs.
+func (m *UserMutation) RemoveTranslationPromptTemplateIDs(ids ...int) {
+	if m.removedtranslation_prompt_templates == nil {
+		m.removedtranslation_prompt_templates = make(map[int]struct{})
 	}
 	for i := range ids {
-		delete(m.prompt_templates, ids[i])
-		m.removedprompt_templates[ids[i]] = struct{}{}
+		delete(m.translation_prompt_templates, ids[i])
+		m.removedtranslation_prompt_templates[ids[i]] = struct{}{}
 	}
 }
 
-// RemovedPromptTemplates returns the removed IDs of the "prompt_templates" edge to the PromptTemplate entity.
-func (m *UserMutation) RemovedPromptTemplatesIDs() (ids []int) {
-	for id := range m.removedprompt_templates {
+// RemovedTranslationPromptTemplates returns the removed IDs of the "translation_prompt_templates" edge to the TranslationPromptTemplate entity.
+func (m *UserMutation) RemovedTranslationPromptTemplatesIDs() (ids []int) {
+	for id := range m.removedtranslation_prompt_templates {
 		ids = append(ids, id)
 	}
 	return
 }
 
-// PromptTemplatesIDs returns the "prompt_templates" edge IDs in the mutation.
-func (m *UserMutation) PromptTemplatesIDs() (ids []int) {
-	for id := range m.prompt_templates {
+// TranslationPromptTemplatesIDs returns the "translation_prompt_templates" edge IDs in the mutation.
+func (m *UserMutation) TranslationPromptTemplatesIDs() (ids []int) {
+	for id := range m.translation_prompt_templates {
 		ids = append(ids, id)
 	}
 	return
 }
 
-// ResetPromptTemplates resets all changes to the "prompt_templates" edge.
-func (m *UserMutation) ResetPromptTemplates() {
-	m.prompt_templates = nil
-	m.clearedprompt_templates = false
-	m.removedprompt_templates = nil
+// ResetTranslationPromptTemplates resets all changes to the "translation_prompt_templates" edge.
+func (m *UserMutation) ResetTranslationPromptTemplates() {
+	m.translation_prompt_templates = nil
+	m.clearedtranslation_prompt_templates = false
+	m.removedtranslation_prompt_templates = nil
+}
+
+// AddBootstrapPromptTemplateIDs adds the "bootstrap_prompt_templates" edge to the BootstrapPromptTemplate entity by ids.
+func (m *UserMutation) AddBootstrapPromptTemplateIDs(ids ...int) {
+	if m.bootstrap_prompt_templates == nil {
+		m.bootstrap_prompt_templates = make(map[int]struct{})
+	}
+	for i := range ids {
+		m.bootstrap_prompt_templates[ids[i]] = struct{}{}
+	}
+}
+
+// ClearBootstrapPromptTemplates clears the "bootstrap_prompt_templates" edge to the BootstrapPromptTemplate entity.
+func (m *UserMutation) ClearBootstrapPromptTemplates() {
+	m.clearedbootstrap_prompt_templates = true
+}
+
+// BootstrapPromptTemplatesCleared reports if the "bootstrap_prompt_templates" edge to the BootstrapPromptTemplate entity was cleared.
+func (m *UserMutation) BootstrapPromptTemplatesCleared() bool {
+	return m.clearedbootstrap_prompt_templates
+}
+
+// RemoveBootstrapPromptTemplateIDs removes the "bootstrap_prompt_templates" edge to the BootstrapPromptTemplate entity by IDs.
+func (m *UserMutation) RemoveBootstrapPromptTemplateIDs(ids ...int) {
+	if m.removedbootstrap_prompt_templates == nil {
+		m.removedbootstrap_prompt_templates = make(map[int]struct{})
+	}
+	for i := range ids {
+		delete(m.bootstrap_prompt_templates, ids[i])
+		m.removedbootstrap_prompt_templates[ids[i]] = struct{}{}
+	}
+}
+
+// RemovedBootstrapPromptTemplates returns the removed IDs of the "bootstrap_prompt_templates" edge to the BootstrapPromptTemplate entity.
+func (m *UserMutation) RemovedBootstrapPromptTemplatesIDs() (ids []int) {
+	for id := range m.removedbootstrap_prompt_templates {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// BootstrapPromptTemplatesIDs returns the "bootstrap_prompt_templates" edge IDs in the mutation.
+func (m *UserMutation) BootstrapPromptTemplatesIDs() (ids []int) {
+	for id := range m.bootstrap_prompt_templates {
+		ids = append(ids, id)
+	}
+	return
+}
+
+// ResetBootstrapPromptTemplates resets all changes to the "bootstrap_prompt_templates" edge.
+func (m *UserMutation) ResetBootstrapPromptTemplates() {
+	m.bootstrap_prompt_templates = nil
+	m.clearedbootstrap_prompt_templates = false
+	m.removedbootstrap_prompt_templates = nil
 }
 
 // AddTranslationProfileIDs adds the "translation_profiles" edge to the TranslationProfile entity by ids.
@@ -20800,7 +21736,7 @@ func (m *UserMutation) ResetField(name string) error {
 
 // AddedEdges returns all edge names that were set/added in this mutation.
 func (m *UserMutation) AddedEdges() []string {
-	edges := make([]string, 0, 12)
+	edges := make([]string, 0, 13)
 	if m.created_translation_jobs != nil {
 		edges = append(edges, user.EdgeCreatedTranslationJobs)
 	}
@@ -20825,8 +21761,11 @@ func (m *UserMutation) AddedEdges() []string {
 	if m.usage_records != nil {
 		edges = append(edges, user.EdgeUsageRecords)
 	}
-	if m.prompt_templates != nil {
-		edges = append(edges, user.EdgePromptTemplates)
+	if m.translation_prompt_templates != nil {
+		edges = append(edges, user.EdgeTranslationPromptTemplates)
+	}
+	if m.bootstrap_prompt_templates != nil {
+		edges = append(edges, user.EdgeBootstrapPromptTemplates)
 	}
 	if m.translation_profiles != nil {
 		edges = append(edges, user.EdgeTranslationProfiles)
@@ -20892,9 +21831,15 @@ func (m *UserMutation) AddedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
-	case user.EdgePromptTemplates:
-		ids := make([]ent.Value, 0, len(m.prompt_templates))
-		for id := range m.prompt_templates {
+	case user.EdgeTranslationPromptTemplates:
+		ids := make([]ent.Value, 0, len(m.translation_prompt_templates))
+		for id := range m.translation_prompt_templates {
+			ids = append(ids, id)
+		}
+		return ids
+	case user.EdgeBootstrapPromptTemplates:
+		ids := make([]ent.Value, 0, len(m.bootstrap_prompt_templates))
+		for id := range m.bootstrap_prompt_templates {
 			ids = append(ids, id)
 		}
 		return ids
@@ -20922,7 +21867,7 @@ func (m *UserMutation) AddedIDs(name string) []ent.Value {
 
 // RemovedEdges returns all edge names that were removed in this mutation.
 func (m *UserMutation) RemovedEdges() []string {
-	edges := make([]string, 0, 12)
+	edges := make([]string, 0, 13)
 	if m.removedcreated_translation_jobs != nil {
 		edges = append(edges, user.EdgeCreatedTranslationJobs)
 	}
@@ -20947,8 +21892,11 @@ func (m *UserMutation) RemovedEdges() []string {
 	if m.removedusage_records != nil {
 		edges = append(edges, user.EdgeUsageRecords)
 	}
-	if m.removedprompt_templates != nil {
-		edges = append(edges, user.EdgePromptTemplates)
+	if m.removedtranslation_prompt_templates != nil {
+		edges = append(edges, user.EdgeTranslationPromptTemplates)
+	}
+	if m.removedbootstrap_prompt_templates != nil {
+		edges = append(edges, user.EdgeBootstrapPromptTemplates)
 	}
 	if m.removedtranslation_profiles != nil {
 		edges = append(edges, user.EdgeTranslationProfiles)
@@ -21014,9 +21962,15 @@ func (m *UserMutation) RemovedIDs(name string) []ent.Value {
 			ids = append(ids, id)
 		}
 		return ids
-	case user.EdgePromptTemplates:
-		ids := make([]ent.Value, 0, len(m.removedprompt_templates))
-		for id := range m.removedprompt_templates {
+	case user.EdgeTranslationPromptTemplates:
+		ids := make([]ent.Value, 0, len(m.removedtranslation_prompt_templates))
+		for id := range m.removedtranslation_prompt_templates {
+			ids = append(ids, id)
+		}
+		return ids
+	case user.EdgeBootstrapPromptTemplates:
+		ids := make([]ent.Value, 0, len(m.removedbootstrap_prompt_templates))
+		for id := range m.removedbootstrap_prompt_templates {
 			ids = append(ids, id)
 		}
 		return ids
@@ -21044,7 +21998,7 @@ func (m *UserMutation) RemovedIDs(name string) []ent.Value {
 
 // ClearedEdges returns all edge names that were cleared in this mutation.
 func (m *UserMutation) ClearedEdges() []string {
-	edges := make([]string, 0, 12)
+	edges := make([]string, 0, 13)
 	if m.clearedcreated_translation_jobs {
 		edges = append(edges, user.EdgeCreatedTranslationJobs)
 	}
@@ -21069,8 +22023,11 @@ func (m *UserMutation) ClearedEdges() []string {
 	if m.clearedusage_records {
 		edges = append(edges, user.EdgeUsageRecords)
 	}
-	if m.clearedprompt_templates {
-		edges = append(edges, user.EdgePromptTemplates)
+	if m.clearedtranslation_prompt_templates {
+		edges = append(edges, user.EdgeTranslationPromptTemplates)
+	}
+	if m.clearedbootstrap_prompt_templates {
+		edges = append(edges, user.EdgeBootstrapPromptTemplates)
 	}
 	if m.clearedtranslation_profiles {
 		edges = append(edges, user.EdgeTranslationProfiles)
@@ -21104,8 +22061,10 @@ func (m *UserMutation) EdgeCleared(name string) bool {
 		return m.clearedactivity_logs
 	case user.EdgeUsageRecords:
 		return m.clearedusage_records
-	case user.EdgePromptTemplates:
-		return m.clearedprompt_templates
+	case user.EdgeTranslationPromptTemplates:
+		return m.clearedtranslation_prompt_templates
+	case user.EdgeBootstrapPromptTemplates:
+		return m.clearedbootstrap_prompt_templates
 	case user.EdgeTranslationProfiles:
 		return m.clearedtranslation_profiles
 	case user.EdgeExecutionPlanTemplates:
@@ -21152,8 +22111,11 @@ func (m *UserMutation) ResetEdge(name string) error {
 	case user.EdgeUsageRecords:
 		m.ResetUsageRecords()
 		return nil
-	case user.EdgePromptTemplates:
-		m.ResetPromptTemplates()
+	case user.EdgeTranslationPromptTemplates:
+		m.ResetTranslationPromptTemplates()
+		return nil
+	case user.EdgeBootstrapPromptTemplates:
+		m.ResetBootstrapPromptTemplates()
 		return nil
 	case user.EdgeTranslationProfiles:
 		m.ResetTranslationProfiles()

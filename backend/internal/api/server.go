@@ -24,35 +24,36 @@ import (
 const readinessPingTimeout = 2 * time.Second
 
 type Server struct {
-	serverCfg             *config.ServerConfig
-	logger                *slog.Logger
-	db                    *sql.DB
-	entClient             *ent.Client
-	mode                  string    // "server" | "local"
-	localUser             *ent.User // 本地模式下非 nil
-	authService           *service.AuthService
-	adminService          *service.AdminService
-	userService           *service.UserService
-	backendSvc            *service.BackendService
-	projectSvc            *service.ProjectService
-	glossarySvc           *service.GlossaryService
-	glossarySyncSvc       *service.GlossarySyncService
-	promptTemplateSvc     *service.PromptTemplateService
-	translationProfileSvc *service.TranslationProfileService
-	translationJobSvc     *service.TranslationJobService
-	executionPlanSvc      *service.ExecutionPlanService
-	reviewSvc             *service.ReviewService
-	segmentSvc            *service.SegmentService
-	statsSvc              *service.StatsService
-	auditSvc              *service.AuditService
-	resourceSvc           *service.ResourceService
-	jobStore              *filestore.LocalStore
-	dispatcher            *worker.Dispatcher
-	resMutex              *worker.ResourceMutex
-	httpServer            *http.Server
-	executionPlanHandler  *HandlerExecutionPlan
-	eventBroker           *event.Broker
-	ready                 atomic.Bool
+	serverCfg                    *config.ServerConfig
+	logger                       *slog.Logger
+	db                           *sql.DB
+	entClient                    *ent.Client
+	mode                         string    // "server" | "local"
+	localUser                    *ent.User // 本地模式下非 nil
+	authService                  *service.AuthService
+	adminService                 *service.AdminService
+	userService                  *service.UserService
+	backendSvc                   *service.BackendService
+	projectSvc                   *service.ProjectService
+	glossarySvc                  *service.GlossaryService
+	glossarySyncSvc              *service.GlossarySyncService
+	translationPromptTemplateSvc *service.TranslationPromptTemplateService
+	bootstrapPromptTemplateSvc   *service.BootstrapPromptTemplateService
+	translationProfileSvc        *service.TranslationProfileService
+	translationJobSvc            *service.TranslationJobService
+	executionPlanSvc             *service.ExecutionPlanService
+	reviewSvc                    *service.ReviewService
+	segmentSvc                   *service.SegmentService
+	statsSvc                     *service.StatsService
+	auditSvc                     *service.AuditService
+	resourceSvc                  *service.ResourceService
+	jobStore                     *filestore.LocalStore
+	dispatcher                   *worker.Dispatcher
+	resMutex                     *worker.ResourceMutex
+	httpServer                   *http.Server
+	executionPlanHandler         *HandlerExecutionPlan
+	eventBroker                  *event.Broker
+	ready                        atomic.Bool
 }
 
 func (s *Server) isLocal() bool {
@@ -113,14 +114,15 @@ func NewServer(cfg *config.ServerConfig, logger *slog.Logger, db *sql.DB, client
 	s.projectSvc = service.NewProjectService(client, s.userService)
 	s.executionPlanSvc = service.NewExecutionPlanService(client, s.userService)
 	s.glossarySvc = service.NewGlossaryService(client, s.projectSvc)
-	s.promptTemplateSvc = service.NewPromptTemplateService(client)
+	s.translationPromptTemplateSvc = service.NewTranslationPromptTemplateService(client)
+	s.bootstrapPromptTemplateSvc = service.NewBootstrapPromptTemplateService(client)
 	s.translationProfileSvc = service.NewTranslationProfileService(client)
 	jobStore, err := filestore.NewLocal(filepath.Join(cfg.DataDir, "jobs"))
 	if err != nil {
 		return nil, err
 	}
 	s.jobStore = jobStore
-	s.translationJobSvc = service.NewTranslationJobService(client, s.projectSvc, s.executionPlanSvc, s.backendSvc, s.promptTemplateSvc, s.translationProfileSvc, jobStore, s.eventBroker)
+	s.translationJobSvc = service.NewTranslationJobService(client, s.projectSvc, s.executionPlanSvc, s.backendSvc, s.translationPromptTemplateSvc, s.bootstrapPromptTemplateSvc, s.translationProfileSvc, jobStore, s.eventBroker)
 	s.executionPlanHandler = NewHandlerExecutionPlan(s.executionPlanSvc, s)
 	s.reviewSvc = service.NewReviewService(client, s.projectSvc)
 	s.segmentSvc = service.NewSegmentService(client, s.projectSvc)

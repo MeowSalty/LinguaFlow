@@ -14,16 +14,17 @@ import (
 	"entgo.io/ent/schema/field"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/activitylog"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/bootstrapprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/executionplantemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/orgmembership"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/project"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/refreshtoken"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/synctask"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationjob"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprofile"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/usagerecord"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
@@ -31,22 +32,23 @@ import (
 // UserQuery is the builder for querying User entities.
 type UserQuery struct {
 	config
-	ctx                        *QueryContext
-	order                      []user.OrderOption
-	inters                     []Interceptor
-	predicates                 []predicate.User
-	withCreatedTranslationJobs *TranslationJobQuery
-	withReviewedSegments       *SegmentQuery
-	withRefreshTokens          *RefreshTokenQuery
-	withMemberships            *OrgMembershipQuery
-	withBackends               *BackendQuery
-	withOwnedProjects          *ProjectQuery
-	withActivityLogs           *ActivityLogQuery
-	withUsageRecords           *UsageRecordQuery
-	withPromptTemplates        *PromptTemplateQuery
-	withTranslationProfiles    *TranslationProfileQuery
-	withExecutionPlanTemplates *ExecutionPlanTemplateQuery
-	withSyncTasks              *SyncTaskQuery
+	ctx                            *QueryContext
+	order                          []user.OrderOption
+	inters                         []Interceptor
+	predicates                     []predicate.User
+	withCreatedTranslationJobs     *TranslationJobQuery
+	withReviewedSegments           *SegmentQuery
+	withRefreshTokens              *RefreshTokenQuery
+	withMemberships                *OrgMembershipQuery
+	withBackends                   *BackendQuery
+	withOwnedProjects              *ProjectQuery
+	withActivityLogs               *ActivityLogQuery
+	withUsageRecords               *UsageRecordQuery
+	withTranslationPromptTemplates *TranslationPromptTemplateQuery
+	withBootstrapPromptTemplates   *BootstrapPromptTemplateQuery
+	withTranslationProfiles        *TranslationProfileQuery
+	withExecutionPlanTemplates     *ExecutionPlanTemplateQuery
+	withSyncTasks                  *SyncTaskQuery
 	// intermediate query (i.e. traversal path).
 	sql  *sql.Selector
 	path func(context.Context) (*sql.Selector, error)
@@ -259,9 +261,9 @@ func (_q *UserQuery) QueryUsageRecords() *UsageRecordQuery {
 	return query
 }
 
-// QueryPromptTemplates chains the current query on the "prompt_templates" edge.
-func (_q *UserQuery) QueryPromptTemplates() *PromptTemplateQuery {
-	query := (&PromptTemplateClient{config: _q.config}).Query()
+// QueryTranslationPromptTemplates chains the current query on the "translation_prompt_templates" edge.
+func (_q *UserQuery) QueryTranslationPromptTemplates() *TranslationPromptTemplateQuery {
+	query := (&TranslationPromptTemplateClient{config: _q.config}).Query()
 	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
 		if err := _q.prepareQuery(ctx); err != nil {
 			return nil, err
@@ -272,8 +274,30 @@ func (_q *UserQuery) QueryPromptTemplates() *PromptTemplateQuery {
 		}
 		step := sqlgraph.NewStep(
 			sqlgraph.From(user.Table, user.FieldID, selector),
-			sqlgraph.To(prompttemplate.Table, prompttemplate.FieldID),
-			sqlgraph.Edge(sqlgraph.O2M, false, user.PromptTemplatesTable, user.PromptTemplatesColumn),
+			sqlgraph.To(translationprompttemplate.Table, translationprompttemplate.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.TranslationPromptTemplatesTable, user.TranslationPromptTemplatesColumn),
+		)
+		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
+		return fromU, nil
+	}
+	return query
+}
+
+// QueryBootstrapPromptTemplates chains the current query on the "bootstrap_prompt_templates" edge.
+func (_q *UserQuery) QueryBootstrapPromptTemplates() *BootstrapPromptTemplateQuery {
+	query := (&BootstrapPromptTemplateClient{config: _q.config}).Query()
+	query.path = func(ctx context.Context) (fromU *sql.Selector, err error) {
+		if err := _q.prepareQuery(ctx); err != nil {
+			return nil, err
+		}
+		selector := _q.sqlQuery(ctx)
+		if err := selector.Err(); err != nil {
+			return nil, err
+		}
+		step := sqlgraph.NewStep(
+			sqlgraph.From(user.Table, user.FieldID, selector),
+			sqlgraph.To(bootstrapprompttemplate.Table, bootstrapprompttemplate.FieldID),
+			sqlgraph.Edge(sqlgraph.O2M, false, user.BootstrapPromptTemplatesTable, user.BootstrapPromptTemplatesColumn),
 		)
 		fromU = sqlgraph.SetNeighbors(_q.driver.Dialect(), step)
 		return fromU, nil
@@ -534,23 +558,24 @@ func (_q *UserQuery) Clone() *UserQuery {
 		return nil
 	}
 	return &UserQuery{
-		config:                     _q.config,
-		ctx:                        _q.ctx.Clone(),
-		order:                      append([]user.OrderOption{}, _q.order...),
-		inters:                     append([]Interceptor{}, _q.inters...),
-		predicates:                 append([]predicate.User{}, _q.predicates...),
-		withCreatedTranslationJobs: _q.withCreatedTranslationJobs.Clone(),
-		withReviewedSegments:       _q.withReviewedSegments.Clone(),
-		withRefreshTokens:          _q.withRefreshTokens.Clone(),
-		withMemberships:            _q.withMemberships.Clone(),
-		withBackends:               _q.withBackends.Clone(),
-		withOwnedProjects:          _q.withOwnedProjects.Clone(),
-		withActivityLogs:           _q.withActivityLogs.Clone(),
-		withUsageRecords:           _q.withUsageRecords.Clone(),
-		withPromptTemplates:        _q.withPromptTemplates.Clone(),
-		withTranslationProfiles:    _q.withTranslationProfiles.Clone(),
-		withExecutionPlanTemplates: _q.withExecutionPlanTemplates.Clone(),
-		withSyncTasks:              _q.withSyncTasks.Clone(),
+		config:                         _q.config,
+		ctx:                            _q.ctx.Clone(),
+		order:                          append([]user.OrderOption{}, _q.order...),
+		inters:                         append([]Interceptor{}, _q.inters...),
+		predicates:                     append([]predicate.User{}, _q.predicates...),
+		withCreatedTranslationJobs:     _q.withCreatedTranslationJobs.Clone(),
+		withReviewedSegments:           _q.withReviewedSegments.Clone(),
+		withRefreshTokens:              _q.withRefreshTokens.Clone(),
+		withMemberships:                _q.withMemberships.Clone(),
+		withBackends:                   _q.withBackends.Clone(),
+		withOwnedProjects:              _q.withOwnedProjects.Clone(),
+		withActivityLogs:               _q.withActivityLogs.Clone(),
+		withUsageRecords:               _q.withUsageRecords.Clone(),
+		withTranslationPromptTemplates: _q.withTranslationPromptTemplates.Clone(),
+		withBootstrapPromptTemplates:   _q.withBootstrapPromptTemplates.Clone(),
+		withTranslationProfiles:        _q.withTranslationProfiles.Clone(),
+		withExecutionPlanTemplates:     _q.withExecutionPlanTemplates.Clone(),
+		withSyncTasks:                  _q.withSyncTasks.Clone(),
 		// clone intermediate query.
 		sql:  _q.sql.Clone(),
 		path: _q.path,
@@ -645,14 +670,25 @@ func (_q *UserQuery) WithUsageRecords(opts ...func(*UsageRecordQuery)) *UserQuer
 	return _q
 }
 
-// WithPromptTemplates tells the query-builder to eager-load the nodes that are connected to
-// the "prompt_templates" edge. The optional arguments are used to configure the query builder of the edge.
-func (_q *UserQuery) WithPromptTemplates(opts ...func(*PromptTemplateQuery)) *UserQuery {
-	query := (&PromptTemplateClient{config: _q.config}).Query()
+// WithTranslationPromptTemplates tells the query-builder to eager-load the nodes that are connected to
+// the "translation_prompt_templates" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithTranslationPromptTemplates(opts ...func(*TranslationPromptTemplateQuery)) *UserQuery {
+	query := (&TranslationPromptTemplateClient{config: _q.config}).Query()
 	for _, opt := range opts {
 		opt(query)
 	}
-	_q.withPromptTemplates = query
+	_q.withTranslationPromptTemplates = query
+	return _q
+}
+
+// WithBootstrapPromptTemplates tells the query-builder to eager-load the nodes that are connected to
+// the "bootstrap_prompt_templates" edge. The optional arguments are used to configure the query builder of the edge.
+func (_q *UserQuery) WithBootstrapPromptTemplates(opts ...func(*BootstrapPromptTemplateQuery)) *UserQuery {
+	query := (&BootstrapPromptTemplateClient{config: _q.config}).Query()
+	for _, opt := range opts {
+		opt(query)
+	}
+	_q.withBootstrapPromptTemplates = query
 	return _q
 }
 
@@ -767,7 +803,7 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 	var (
 		nodes       = []*User{}
 		_spec       = _q.querySpec()
-		loadedTypes = [12]bool{
+		loadedTypes = [13]bool{
 			_q.withCreatedTranslationJobs != nil,
 			_q.withReviewedSegments != nil,
 			_q.withRefreshTokens != nil,
@@ -776,7 +812,8 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 			_q.withOwnedProjects != nil,
 			_q.withActivityLogs != nil,
 			_q.withUsageRecords != nil,
-			_q.withPromptTemplates != nil,
+			_q.withTranslationPromptTemplates != nil,
+			_q.withBootstrapPromptTemplates != nil,
 			_q.withTranslationProfiles != nil,
 			_q.withExecutionPlanTemplates != nil,
 			_q.withSyncTasks != nil,
@@ -858,10 +895,21 @@ func (_q *UserQuery) sqlAll(ctx context.Context, hooks ...queryHook) ([]*User, e
 			return nil, err
 		}
 	}
-	if query := _q.withPromptTemplates; query != nil {
-		if err := _q.loadPromptTemplates(ctx, query, nodes,
-			func(n *User) { n.Edges.PromptTemplates = []*PromptTemplate{} },
-			func(n *User, e *PromptTemplate) { n.Edges.PromptTemplates = append(n.Edges.PromptTemplates, e) }); err != nil {
+	if query := _q.withTranslationPromptTemplates; query != nil {
+		if err := _q.loadTranslationPromptTemplates(ctx, query, nodes,
+			func(n *User) { n.Edges.TranslationPromptTemplates = []*TranslationPromptTemplate{} },
+			func(n *User, e *TranslationPromptTemplate) {
+				n.Edges.TranslationPromptTemplates = append(n.Edges.TranslationPromptTemplates, e)
+			}); err != nil {
+			return nil, err
+		}
+	}
+	if query := _q.withBootstrapPromptTemplates; query != nil {
+		if err := _q.loadBootstrapPromptTemplates(ctx, query, nodes,
+			func(n *User) { n.Edges.BootstrapPromptTemplates = []*BootstrapPromptTemplate{} },
+			func(n *User, e *BootstrapPromptTemplate) {
+				n.Edges.BootstrapPromptTemplates = append(n.Edges.BootstrapPromptTemplates, e)
+			}); err != nil {
 			return nil, err
 		}
 	}
@@ -1145,7 +1193,7 @@ func (_q *UserQuery) loadUsageRecords(ctx context.Context, query *UsageRecordQue
 	}
 	return nil
 }
-func (_q *UserQuery) loadPromptTemplates(ctx context.Context, query *PromptTemplateQuery, nodes []*User, init func(*User), assign func(*User, *PromptTemplate)) error {
+func (_q *UserQuery) loadTranslationPromptTemplates(ctx context.Context, query *TranslationPromptTemplateQuery, nodes []*User, init func(*User), assign func(*User, *TranslationPromptTemplate)) error {
 	fks := make([]driver.Value, 0, len(nodes))
 	nodeids := make(map[int]*User)
 	for i := range nodes {
@@ -1156,10 +1204,43 @@ func (_q *UserQuery) loadPromptTemplates(ctx context.Context, query *PromptTempl
 		}
 	}
 	if len(query.ctx.Fields) > 0 {
-		query.ctx.AppendFieldOnce(prompttemplate.FieldOwnerUserID)
+		query.ctx.AppendFieldOnce(translationprompttemplate.FieldOwnerUserID)
 	}
-	query.Where(predicate.PromptTemplate(func(s *sql.Selector) {
-		s.Where(sql.InValues(s.C(user.PromptTemplatesColumn), fks...))
+	query.Where(predicate.TranslationPromptTemplate(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.TranslationPromptTemplatesColumn), fks...))
+	}))
+	neighbors, err := query.All(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range neighbors {
+		fk := n.OwnerUserID
+		if fk == nil {
+			return fmt.Errorf(`foreign-key "owner_user_id" is nil for node %v`, n.ID)
+		}
+		node, ok := nodeids[*fk]
+		if !ok {
+			return fmt.Errorf(`unexpected referenced foreign-key "owner_user_id" returned %v for node %v`, *fk, n.ID)
+		}
+		assign(node, n)
+	}
+	return nil
+}
+func (_q *UserQuery) loadBootstrapPromptTemplates(ctx context.Context, query *BootstrapPromptTemplateQuery, nodes []*User, init func(*User), assign func(*User, *BootstrapPromptTemplate)) error {
+	fks := make([]driver.Value, 0, len(nodes))
+	nodeids := make(map[int]*User)
+	for i := range nodes {
+		fks = append(fks, nodes[i].ID)
+		nodeids[nodes[i].ID] = nodes[i]
+		if init != nil {
+			init(nodes[i])
+		}
+	}
+	if len(query.ctx.Fields) > 0 {
+		query.ctx.AppendFieldOnce(bootstrapprompttemplate.FieldOwnerUserID)
+	}
+	query.Where(predicate.BootstrapPromptTemplate(func(s *sql.Selector) {
+		s.Where(sql.InValues(s.C(user.BootstrapPromptTemplatesColumn), fks...))
 	}))
 	neighbors, err := query.All(ctx)
 	if err != nil {

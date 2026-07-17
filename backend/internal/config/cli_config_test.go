@@ -151,7 +151,7 @@ backends:
     enabled: true
     options:
       model: gpt-4o
-prompt_templates:
+translation_prompt_templates:
   tech:
     content: "You are a technical translator."
 translation_profiles:
@@ -359,7 +359,7 @@ func TestResolveExternalReferences_ValidFile(t *testing.T) {
 // Test: Bootstrap 模板字段解析
 // ---------------------------------------------------------------------------
 
-// TestLoadCLIConfig_BootstrapContentInline 验证 bootstrap_content 内联字段正确解析。
+// TestLoadCLIConfig_BootstrapContentInline 验证 bootstrap 内联字段正确解析。
 func TestLoadCLIConfig_BootstrapContentInline(t *testing.T) {
 	yamlContent := `
 version: 1
@@ -371,10 +371,12 @@ backends:
     enabled: true
     options:
       model: gpt-4o
-prompt_templates:
+translation_prompt_templates:
   tech:
     content: "You are a technical translator."
-    bootstrap_content: "Extract domain terms from the text."
+bootstrap_prompt_templates:
+  tech-terms:
+    content: "Extract domain terms from the text."
 translation_profiles:
   default:
 execution:
@@ -398,12 +400,16 @@ execution:
 	if pt.Content != "You are a technical translator." {
 		t.Errorf("content = %q", pt.Content)
 	}
-	if pt.BootstrapContent != "Extract domain terms from the text." {
-		t.Errorf("bootstrap_content = %q, want %q", pt.BootstrapContent, "Extract domain terms from the text.")
+	bt, ok := cfg.BootstrapPromptTemplates["tech-terms"]
+	if !ok {
+		t.Fatal("expected bootstrap_prompt_template \"tech-terms\"")
+	}
+	if bt.Content != "Extract domain terms from the text." {
+		t.Errorf("bootstrap content = %q, want %q", bt.Content, "Extract domain terms from the text.")
 	}
 }
 
-// TestResolveExternalReferences_BootstrapFile 验证 bootstrap_file 外部引用正确解析。
+// TestResolveExternalReferences_BootstrapFile 验证 bootstrap 外部引用正确解析。
 func TestResolveExternalReferences_BootstrapFile(t *testing.T) {
 	dir := t.TempDir()
 	bootstrapFile := filepath.Join(dir, "bootstrap.txt")
@@ -414,8 +420,12 @@ func TestResolveExternalReferences_BootstrapFile(t *testing.T) {
 	cfg := &CLIConfig{
 		PromptTemplates: map[string]CLIConfigPromptTemplate{
 			"tech": {
-				Content:       "翻译提示词",
-				BootstrapFile: "bootstrap.txt",
+				Content: "翻译提示词",
+			},
+		},
+		BootstrapPromptTemplates: map[string]CLIConfigBootstrapTemplate{
+			"tech-bootstrap": {
+				File: "bootstrap.txt",
 			},
 		},
 		TranslationProfiles: map[string]CLIConfigTranslationProfile{},
@@ -426,14 +436,15 @@ func TestResolveExternalReferences_BootstrapFile(t *testing.T) {
 		t.Fatalf("resolveExternalReferences error: %v", err)
 	}
 
+	bt := cfg.BootstrapPromptTemplates["tech-bootstrap"]
+	if bt.Content != "Bootstrap 提示词内容" {
+		t.Errorf("bootstrap content = %q, want %q", bt.Content, "Bootstrap 提示词内容")
+	}
+	if bt.File != "" {
+		t.Errorf("bootstrap file should be cleared after resolution, got %q", bt.File)
+	}
+	// 翻译模板不受影响
 	pt := cfg.PromptTemplates["tech"]
-	if pt.BootstrapContent != "Bootstrap 提示词内容" {
-		t.Errorf("bootstrap_content = %q, want %q", pt.BootstrapContent, "Bootstrap 提示词内容")
-	}
-	if pt.BootstrapFile != "" {
-		t.Errorf("bootstrap_file should be cleared after resolution, got %q", pt.BootstrapFile)
-	}
-	// Content 不受影响
 	if pt.Content != "翻译提示词" {
 		t.Errorf("content = %q, want %q", pt.Content, "翻译提示词")
 	}
@@ -444,9 +455,10 @@ func TestResolveExternalReferences_BootstrapPathTraversal(t *testing.T) {
 	configDir := t.TempDir()
 
 	cfg := &CLIConfig{
-		PromptTemplates: map[string]CLIConfigPromptTemplate{
+		PromptTemplates: map[string]CLIConfigPromptTemplate{},
+		BootstrapPromptTemplates: map[string]CLIConfigBootstrapTemplate{
 			"evil": {
-				BootstrapFile: "../../../etc/passwd",
+				File: "../../../etc/passwd",
 			},
 		},
 		TranslationProfiles: map[string]CLIConfigTranslationProfile{},
@@ -471,9 +483,10 @@ func TestResolveExternalReferences_BootstrapAbsolutePath(t *testing.T) {
 	}
 
 	cfg := &CLIConfig{
-		PromptTemplates: map[string]CLIConfigPromptTemplate{
+		PromptTemplates: map[string]CLIConfigPromptTemplate{},
+		BootstrapPromptTemplates: map[string]CLIConfigBootstrapTemplate{
 			"evil": {
-				BootstrapFile: absPath,
+				File: absPath,
 			},
 		},
 		TranslationProfiles: map[string]CLIConfigTranslationProfile{},
@@ -495,20 +508,20 @@ func TestLoadCLIConfig_Default_BootstrapContent(t *testing.T) {
 		t.Fatalf("LoadCLIConfig(\"\") error: %v", err)
 	}
 
-	pt, ok := cfg.PromptTemplates["通用提示词"]
+	bt, ok := cfg.BootstrapPromptTemplates["通用术语抽取"]
 	if !ok {
-		t.Fatal("expected prompt_template \"通用提示词\" in PromptTemplates map")
+		t.Fatal("expected bootstrap_prompt_template \"通用术语抽取\" in BootstrapPromptTemplates map")
 	}
-	// 内置模板应从嵌入 FS 解析 bootstrap_file 为 bootstrap_content
-	if pt.BootstrapContent == "" {
-		t.Error("bootstrap_content should be resolved from embedded file, got empty")
+	// 内置模板应从嵌入 FS 解析 file 为 content
+	if bt.Content == "" {
+		t.Error("bootstrap content should be resolved from embedded file, got empty")
 	}
-	if pt.BootstrapFile != "" {
-		t.Errorf("bootstrap_file should be cleared after resolution, got %q", pt.BootstrapFile)
+	if bt.File != "" {
+		t.Errorf("bootstrap file should be cleared after resolution, got %q", bt.File)
 	}
 }
 
-// TestLoadCLIConfig_BootstrapContentPriority 验证 bootstrap_content 优先于 bootstrap_file。
+// TestLoadCLIConfig_BootstrapContentPriority 验证 bootstrap content 优先于 file。
 func TestLoadCLIConfig_BootstrapContentPriority(t *testing.T) {
 	dir := t.TempDir()
 	bootstrapFile := filepath.Join(dir, "bootstrap.txt")
@@ -519,9 +532,13 @@ func TestLoadCLIConfig_BootstrapContentPriority(t *testing.T) {
 	cfg := &CLIConfig{
 		PromptTemplates: map[string]CLIConfigPromptTemplate{
 			"tech": {
-				Content:          "翻译提示词",
-				BootstrapContent: "来自内联的 bootstrap",
-				BootstrapFile:    "bootstrap.txt",
+				Content: "翻译提示词",
+			},
+		},
+		BootstrapPromptTemplates: map[string]CLIConfigBootstrapTemplate{
+			"tech-bootstrap": {
+				Content: "来自内联的 bootstrap",
+				File:    "bootstrap.txt",
 			},
 		},
 		TranslationProfiles: map[string]CLIConfigTranslationProfile{},
@@ -532,10 +549,10 @@ func TestLoadCLIConfig_BootstrapContentPriority(t *testing.T) {
 		t.Fatalf("resolveExternalReferences error: %v", err)
 	}
 
-	pt := cfg.PromptTemplates["tech"]
-	// bootstrap_content 已有值时，不应被 bootstrap_file 覆盖
-	if pt.BootstrapContent != "来自内联的 bootstrap" {
-		t.Errorf("bootstrap_content = %q, want %q (inline should take priority)", pt.BootstrapContent, "来自内联的 bootstrap")
+	bt := cfg.BootstrapPromptTemplates["tech-bootstrap"]
+	// content 已有值时，不应被 file 覆盖
+	if bt.Content != "来自内联的 bootstrap" {
+		t.Errorf("bootstrap content = %q, want %q (inline should take priority)", bt.Content, "来自内联的 bootstrap")
 	}
 }
 

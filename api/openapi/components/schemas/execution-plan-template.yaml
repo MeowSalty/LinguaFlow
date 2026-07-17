@@ -66,7 +66,7 @@ ExecutionPlanBootstrapConfig:
       description: 自举使用的后端 ID
     prompt_template_id:
       type: integer
-      description: 自举使用的提示词模板 ID（仅用其 bootstrap_prompt_content）
+      description: 自举使用的提示词模板 ID
     batch_size:
       type: integer
       minimum: 1

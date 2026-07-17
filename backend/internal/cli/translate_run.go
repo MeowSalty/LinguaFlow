@@ -152,20 +152,13 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 	}
 
 	if cliCfg.Execution.Bootstrap.Enabled && cliCfg.Execution.Bootstrap.Template != "" {
-		pt, ok := cliCfg.PromptTemplates[cliCfg.Execution.Bootstrap.Template]
+		bt, ok := cliCfg.BootstrapPromptTemplates[cliCfg.Execution.Bootstrap.Template]
 		if !ok {
-			return nil, fmt.Errorf("prompt_templates %q not found (referenced by execution.bootstrap.template)", cliCfg.Execution.Bootstrap.Template)
+			return nil, fmt.Errorf("bootstrap_prompt_templates %q not found (referenced by execution.bootstrap.template)", cliCfg.Execution.Bootstrap.Template)
 		}
-		bootstrapContent := pt.BootstrapContent
-		if bootstrapContent == "" && pt.BootstrapFile != "" {
-			data, err := os.ReadFile(pt.BootstrapFile)
-			if err != nil {
-				return nil, fmt.Errorf("read bootstrap file %q: %w", pt.BootstrapFile, err)
-			}
-			bootstrapContent = string(data)
-		}
+		bootstrapContent := bt.Content
 		if bootstrapContent == "" {
-			return nil, fmt.Errorf("prompt_templates %q has no bootstrap_content (required when execution.bootstrap.enabled is true)",
+			return nil, fmt.Errorf("bootstrap_prompt_templates %q has no content (required when execution.bootstrap.enabled is true)",
 				cliCfg.Execution.Bootstrap.Template)
 		}
 		cfg.Glossary.Standalone.TemplateContent = bootstrapContent

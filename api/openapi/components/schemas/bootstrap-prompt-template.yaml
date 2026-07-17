@@ -1,8 +1,8 @@
-PromptTemplateScope:
+BootstrapPromptTemplateScope:
   type: string
   enum: [user, org, system]
 
-PromptTemplate:
+BootstrapPromptTemplate:
   type: object
   required: [id, name, description, scope]
   properties:
@@ -13,14 +13,14 @@ PromptTemplate:
     description:
       type: string
     scope:
-      $ref: '#/PromptTemplateScope'
+      $ref: '#/BootstrapPromptTemplateScope'
     owner_user_id:
       type: integer
     owner_org_id:
       type: integer
-    system_prompt_content:
+    content:
       type: string
-      description: 翻译提示词内容。
+      description: 术语抽取提示词内容。
     created_at:
       type: string
       format: date-time
@@ -28,16 +28,16 @@ PromptTemplate:
       type: string
       format: date-time
 
-PromptTemplateListResponse:
+BootstrapPromptTemplateListResponse:
   type: object
   required: [items]
   properties:
     items:
       type: array
       items:
-        $ref: '#/PromptTemplate'
+        $ref: '#/BootstrapPromptTemplate'
 
-CreatePromptTemplateRequest:
+CreateBootstrapPromptTemplateRequest:
   type: object
   required: [name]
   properties:
@@ -45,19 +45,19 @@ CreatePromptTemplateRequest:
       type: string
     description:
       type: string
-    system_prompt_content:
+    content:
       type: string
-      description: 翻译提示词内容。
+      description: 术语抽取提示词内容。
   additionalProperties: false
 
-UpdatePromptTemplateRequest:
+UpdateBootstrapPromptTemplateRequest:
   type: object
   properties:
     name:
       type: string
     description:
       type: string
-    system_prompt_content:
+    content:
       type: string
-      description: 翻译提示词内容。
+      description: 术语抽取提示词内容。
   additionalProperties: false

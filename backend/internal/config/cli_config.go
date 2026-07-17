@@ -35,10 +35,11 @@ type CLIConfig struct {
 	SourceLang string `yaml:"source_lang"`
 	TargetLang string `yaml:"target_lang"`
 
-	Backends            map[string]CLIConfigBackend            `yaml:"backends"`
-	PromptTemplates     map[string]CLIConfigPromptTemplate     `yaml:"prompt_templates"`
-	TranslationProfiles map[string]CLIConfigTranslationProfile `yaml:"translation_profiles"`
-	Execution           CLIConfigExecution                     `yaml:"execution"`
+	Backends                 map[string]CLIConfigBackend            `yaml:"backends"`
+	PromptTemplates          map[string]CLIConfigPromptTemplate     `yaml:"translation_prompt_templates"`
+	BootstrapPromptTemplates map[string]CLIConfigBootstrapTemplate  `yaml:"bootstrap_prompt_templates"`
+	TranslationProfiles      map[string]CLIConfigTranslationProfile `yaml:"translation_profiles"`
+	Execution                CLIConfigExecution                     `yaml:"execution"`
 
 	// Glossary 全局术语表配置，所有轮次共享。
 	Glossary          CLIConfigGlossary `yaml:"glossary"`
@@ -56,12 +57,16 @@ type CLIConfigBackend struct {
 	Options            map[string]any `yaml:"options"`
 }
 
-// CLIConfigPromptTemplate 提示词模板配置。
+// CLIConfigPromptTemplate 翻译提示词模板配置。
 type CLIConfigPromptTemplate struct {
-	Content          string `yaml:"content"`           // 翻译提示词内联内容
-	File             string `yaml:"file"`              // 翻译提示词外部文件引用（与 Content 二选一）
-	BootstrapContent string `yaml:"bootstrap_content"` // bootstrap 模板内联内容
-	BootstrapFile    string `yaml:"bootstrap_file"`    // bootstrap 模板外部文件引用（与 BootstrapContent 二选一）
+	Content string `yaml:"content"` // 翻译提示词内联内容
+	File    string `yaml:"file"`    // 翻译提示词外部文件引用（与 Content 二选一）
+}
+
+// CLIConfigBootstrapTemplate 术语抽取提示词模板配置。
+type CLIConfigBootstrapTemplate struct {
+	Content string `yaml:"content"` // 术语抽取提示词内联内容
+	File    string `yaml:"file"`    // 术语抽取提示词外部文件引用（与 Content 二选一）
 }
 
 // CLIConfigTranslationProfile 翻译策略配置。
@@ -135,6 +140,9 @@ func LoadCLIConfig(path string) (*CLIConfig, error) {
 	if cliCfg.PromptTemplates == nil {
 		cliCfg.PromptTemplates = make(map[string]CLIConfigPromptTemplate)
 	}
+	if cliCfg.BootstrapPromptTemplates == nil {
+		cliCfg.BootstrapPromptTemplates = make(map[string]CLIConfigBootstrapTemplate)
+	}
 	if cliCfg.TranslationProfiles == nil {
 		cliCfg.TranslationProfiles = make(map[string]CLIConfigTranslationProfile)
 	}
@@ -171,27 +179,30 @@ func resolveExternalReferences(cliCfg *CLIConfig, configDir string) error {
 		return fmt.Errorf("resolve config dir: %w", err)
 	}
 
-	// ── prompt_templates ──
+	// ── translation_prompt_templates ──
 	for name, pt := range cliCfg.PromptTemplates {
-		// 解析翻译提示词 file 引用
 		if pt.Content == "" && pt.File != "" {
 			content, err := readExternalFile(pt.File, absConfigDir)
 			if err != nil {
-				return fmt.Errorf("prompt_templates[%q].file: %w", name, err)
+				return fmt.Errorf("translation_prompt_templates[%q].file: %w", name, err)
 			}
 			pt.Content = content
 			pt.File = ""
 		}
-		// 解析 bootstrap 模板 file 引用
-		if pt.BootstrapContent == "" && pt.BootstrapFile != "" {
-			content, err := readExternalFile(pt.BootstrapFile, absConfigDir)
-			if err != nil {
-				return fmt.Errorf("prompt_templates[%q].bootstrap_file: %w", name, err)
-			}
-			pt.BootstrapContent = content
-			pt.BootstrapFile = ""
-		}
 		cliCfg.PromptTemplates[name] = pt
+	}
+
+	// ── bootstrap_prompt_templates ──
+	for name, bt := range cliCfg.BootstrapPromptTemplates {
+		if bt.Content == "" && bt.File != "" {
+			content, err := readExternalFile(bt.File, absConfigDir)
+			if err != nil {
+				return fmt.Errorf("bootstrap_prompt_templates[%q].file: %w", name, err)
+			}
+			bt.Content = content
+			bt.File = ""
+		}
+		cliCfg.BootstrapPromptTemplates[name] = bt
 	}
 
 	// ── translation_profiles ──
@@ -290,6 +301,9 @@ func DefaultCLIConfigFromBuiltins() *CLIConfig {
 	if cliCfg.PromptTemplates == nil {
 		cliCfg.PromptTemplates = make(map[string]CLIConfigPromptTemplate)
 	}
+	if cliCfg.BootstrapPromptTemplates == nil {
+		cliCfg.BootstrapPromptTemplates = make(map[string]CLIConfigBootstrapTemplate)
+	}
 	if cliCfg.TranslationProfiles == nil {
 		cliCfg.TranslationProfiles = make(map[string]CLIConfigTranslationProfile)
 	}
@@ -308,27 +322,30 @@ func DefaultCLIConfigFromBuiltins() *CLIConfig {
 func resolveEmbeddedReferences(cliCfg *CLIConfig) error {
 	fsys := templates.EmbeddedFS()
 
-	// ── prompt_templates ──
+	// ── translation_prompt_templates ──
 	for name, pt := range cliCfg.PromptTemplates {
-		// 解析翻译提示词 file 引用
 		if pt.Content == "" && pt.File != "" {
 			data, err := fs.ReadFile(fsys, "default/"+pt.File)
 			if err != nil {
-				return fmt.Errorf("embedded prompt_templates[%q].file %q: %w", name, pt.File, err)
+				return fmt.Errorf("embedded translation_prompt_templates[%q].file %q: %w", name, pt.File, err)
 			}
 			pt.Content = string(data)
 			pt.File = ""
 		}
-		// 解析 bootstrap 模板 file 引用
-		if pt.BootstrapContent == "" && pt.BootstrapFile != "" {
-			data, err := fs.ReadFile(fsys, "default/"+pt.BootstrapFile)
-			if err != nil {
-				return fmt.Errorf("embedded prompt_templates[%q].bootstrap_file %q: %w", name, pt.BootstrapFile, err)
-			}
-			pt.BootstrapContent = string(data)
-			pt.BootstrapFile = ""
-		}
 		cliCfg.PromptTemplates[name] = pt
+	}
+
+	// ── bootstrap_prompt_templates ──
+	for name, bt := range cliCfg.BootstrapPromptTemplates {
+		if bt.Content == "" && bt.File != "" {
+			data, err := fs.ReadFile(fsys, "default/"+bt.File)
+			if err != nil {
+				return fmt.Errorf("embedded bootstrap_prompt_templates[%q].file %q: %w", name, bt.File, err)
+			}
+			bt.Content = string(data)
+			bt.File = ""
+		}
+		cliCfg.BootstrapPromptTemplates[name] = bt
 	}
 
 	// ── translation_profiles ──
@@ -379,6 +396,9 @@ func defaultCLIConfig() *CLIConfig {
 			},
 		},
 		PromptTemplates: map[string]CLIConfigPromptTemplate{
+			"default": {}, // 空 content，使用内置默认值
+		},
+		BootstrapPromptTemplates: map[string]CLIConfigBootstrapTemplate{
 			"default": {}, // 空 content，使用内置默认值
 		},
 		TranslationProfiles: map[string]CLIConfigTranslationProfile{

@@ -36,8 +36,10 @@ const (
 	EdgeActivityLogs = "activity_logs"
 	// EdgeUsageRecords holds the string denoting the usage_records edge name in mutations.
 	EdgeUsageRecords = "usage_records"
-	// EdgePromptTemplates holds the string denoting the prompt_templates edge name in mutations.
-	EdgePromptTemplates = "prompt_templates"
+	// EdgeTranslationPromptTemplates holds the string denoting the translation_prompt_templates edge name in mutations.
+	EdgeTranslationPromptTemplates = "translation_prompt_templates"
+	// EdgeBootstrapPromptTemplates holds the string denoting the bootstrap_prompt_templates edge name in mutations.
+	EdgeBootstrapPromptTemplates = "bootstrap_prompt_templates"
 	// EdgeTranslationProfiles holds the string denoting the translation_profiles edge name in mutations.
 	EdgeTranslationProfiles = "translation_profiles"
 	// EdgeExecutionPlanTemplates holds the string denoting the execution_plan_templates edge name in mutations.
@@ -79,13 +81,20 @@ const (
 	UsageRecordsInverseTable = "usage_records"
 	// UsageRecordsColumn is the table column denoting the usage_records relation/edge.
 	UsageRecordsColumn = "organization_usage_records"
-	// PromptTemplatesTable is the table that holds the prompt_templates relation/edge.
-	PromptTemplatesTable = "prompt_templates"
-	// PromptTemplatesInverseTable is the table name for the PromptTemplate entity.
-	// It exists in this package in order to avoid circular dependency with the "prompttemplate" package.
-	PromptTemplatesInverseTable = "prompt_templates"
-	// PromptTemplatesColumn is the table column denoting the prompt_templates relation/edge.
-	PromptTemplatesColumn = "owner_org_id"
+	// TranslationPromptTemplatesTable is the table that holds the translation_prompt_templates relation/edge.
+	TranslationPromptTemplatesTable = "translation_prompt_templates"
+	// TranslationPromptTemplatesInverseTable is the table name for the TranslationPromptTemplate entity.
+	// It exists in this package in order to avoid circular dependency with the "translationprompttemplate" package.
+	TranslationPromptTemplatesInverseTable = "translation_prompt_templates"
+	// TranslationPromptTemplatesColumn is the table column denoting the translation_prompt_templates relation/edge.
+	TranslationPromptTemplatesColumn = "owner_org_id"
+	// BootstrapPromptTemplatesTable is the table that holds the bootstrap_prompt_templates relation/edge.
+	BootstrapPromptTemplatesTable = "bootstrap_prompt_templates"
+	// BootstrapPromptTemplatesInverseTable is the table name for the BootstrapPromptTemplate entity.
+	// It exists in this package in order to avoid circular dependency with the "bootstrapprompttemplate" package.
+	BootstrapPromptTemplatesInverseTable = "bootstrap_prompt_templates"
+	// BootstrapPromptTemplatesColumn is the table column denoting the bootstrap_prompt_templates relation/edge.
+	BootstrapPromptTemplatesColumn = "owner_org_id"
 	// TranslationProfilesTable is the table that holds the translation_profiles relation/edge.
 	TranslationProfilesTable = "translation_profiles"
 	// TranslationProfilesInverseTable is the table name for the TranslationProfile entity.
@@ -244,17 +253,31 @@ func ByUsageRecords(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	}
 }
 
-// ByPromptTemplatesCount orders the results by prompt_templates count.
-func ByPromptTemplatesCount(opts ...sql.OrderTermOption) OrderOption {
+// ByTranslationPromptTemplatesCount orders the results by translation_prompt_templates count.
+func ByTranslationPromptTemplatesCount(opts ...sql.OrderTermOption) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborsCount(s, newPromptTemplatesStep(), opts...)
+		sqlgraph.OrderByNeighborsCount(s, newTranslationPromptTemplatesStep(), opts...)
 	}
 }
 
-// ByPromptTemplates orders the results by prompt_templates terms.
-func ByPromptTemplates(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+// ByTranslationPromptTemplates orders the results by translation_prompt_templates terms.
+func ByTranslationPromptTemplates(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
 	return func(s *sql.Selector) {
-		sqlgraph.OrderByNeighborTerms(s, newPromptTemplatesStep(), append([]sql.OrderTerm{term}, terms...)...)
+		sqlgraph.OrderByNeighborTerms(s, newTranslationPromptTemplatesStep(), append([]sql.OrderTerm{term}, terms...)...)
+	}
+}
+
+// ByBootstrapPromptTemplatesCount orders the results by bootstrap_prompt_templates count.
+func ByBootstrapPromptTemplatesCount(opts ...sql.OrderTermOption) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborsCount(s, newBootstrapPromptTemplatesStep(), opts...)
+	}
+}
+
+// ByBootstrapPromptTemplates orders the results by bootstrap_prompt_templates terms.
+func ByBootstrapPromptTemplates(term sql.OrderTerm, terms ...sql.OrderTerm) OrderOption {
+	return func(s *sql.Selector) {
+		sqlgraph.OrderByNeighborTerms(s, newBootstrapPromptTemplatesStep(), append([]sql.OrderTerm{term}, terms...)...)
 	}
 }
 
@@ -320,11 +343,18 @@ func newUsageRecordsStep() *sqlgraph.Step {
 		sqlgraph.Edge(sqlgraph.O2M, false, UsageRecordsTable, UsageRecordsColumn),
 	)
 }
-func newPromptTemplatesStep() *sqlgraph.Step {
+func newTranslationPromptTemplatesStep() *sqlgraph.Step {
 	return sqlgraph.NewStep(
 		sqlgraph.From(Table, FieldID),
-		sqlgraph.To(PromptTemplatesInverseTable, FieldID),
-		sqlgraph.Edge(sqlgraph.O2M, false, PromptTemplatesTable, PromptTemplatesColumn),
+		sqlgraph.To(TranslationPromptTemplatesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, TranslationPromptTemplatesTable, TranslationPromptTemplatesColumn),
+	)
+}
+func newBootstrapPromptTemplatesStep() *sqlgraph.Step {
+	return sqlgraph.NewStep(
+		sqlgraph.From(Table, FieldID),
+		sqlgraph.To(BootstrapPromptTemplatesInverseTable, FieldID),
+		sqlgraph.Edge(sqlgraph.O2M, false, BootstrapPromptTemplatesTable, BootstrapPromptTemplatesColumn),
 	)
 }
 func newTranslationProfilesStep() *sqlgraph.Step {

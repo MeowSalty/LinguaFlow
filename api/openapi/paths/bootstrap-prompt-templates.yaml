@@ -1,0 +1,83 @@
+bootstrapPromptTemplates:
+  get:
+    operationId: ListBootstrapPromptTemplates
+    summary: 列出当前用户的术语抽取提示词模板
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 术语抽取提示词模板列表
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/bootstrap-prompt-template.yaml#/BootstrapPromptTemplateListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  post:
+    operationId: CreateBootstrapPromptTemplate
+    summary: 创建术语抽取提示词模板
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/bootstrap-prompt-template.yaml#/CreateBootstrapPromptTemplateRequest'
+    responses:
+      '201':
+        description: 创建成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/bootstrap-prompt-template.yaml#/BootstrapPromptTemplate'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+
+bootstrapPromptTemplateById:
+  parameters:
+    - $ref: '../base.yaml#/components/parameters/BootstrapPromptTemplateId'
+  get:
+    operationId: GetBootstrapPromptTemplate
+    summary: 获取术语抽取提示词模板详情
+    security:
+      - bearerAuth: []
+    responses:
+      '200':
+        description: 术语抽取提示词模板详情
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/bootstrap-prompt-template.yaml#/BootstrapPromptTemplate'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  put:
+    operationId: UpdateBootstrapPromptTemplate
+    summary: 更新术语抽取提示词模板
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/bootstrap-prompt-template.yaml#/UpdateBootstrapPromptTemplateRequest'
+    responses:
+      '200':
+        description: 更新成功
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/bootstrap-prompt-template.yaml#/BootstrapPromptTemplate'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
+  delete:
+    operationId: DeleteBootstrapPromptTemplate
+    summary: 删除术语抽取提示词模板
+    security:
+      - bearerAuth: []
+    responses:
+      '204':
+        description: 删除成功
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'

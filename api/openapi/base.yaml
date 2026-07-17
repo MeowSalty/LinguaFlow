@@ -101,6 +101,10 @@ paths:
     $ref: './paths/prompt-templates.yaml#/promptTemplates'
   /prompt-templates/{promptTemplateId}:
     $ref: './paths/prompt-templates.yaml#/promptTemplateById'
+  /bootstrap-prompt-templates:
+    $ref: './paths/bootstrap-prompt-templates.yaml#/bootstrapPromptTemplates'
+  /bootstrap-prompt-templates/{bootstrapPromptTemplateId}:
+    $ref: './paths/bootstrap-prompt-templates.yaml#/bootstrapPromptTemplateById'
   /translation-profiles:
     $ref: './paths/translation-profiles.yaml#/translationProfiles'
   /translation-profiles/{translationProfileId}:
@@ -142,6 +146,8 @@ components:
       $ref: './components/parameters.yaml#/EntryId'
     PromptTemplateId:
       $ref: './components/parameters.yaml#/PromptTemplateId'
+    BootstrapPromptTemplateId:
+      $ref: './components/parameters.yaml#/BootstrapPromptTemplateId'
     TranslationProfileId:
       $ref: './components/parameters.yaml#/TranslationProfileId'
     ExecutionPlanTemplateId:
@@ -296,6 +302,14 @@ components:
       $ref: './components/schemas/prompt-template.yaml#/CreatePromptTemplateRequest'
     UpdatePromptTemplateRequest:
       $ref: './components/schemas/prompt-template.yaml#/UpdatePromptTemplateRequest'
+    BootstrapPromptTemplate:
+      $ref: './components/schemas/bootstrap-prompt-template.yaml#/BootstrapPromptTemplate'
+    BootstrapPromptTemplateListResponse:
+      $ref: './components/schemas/bootstrap-prompt-template.yaml#/BootstrapPromptTemplateListResponse'
+    CreateBootstrapPromptTemplateRequest:
+      $ref: './components/schemas/bootstrap-prompt-template.yaml#/CreateBootstrapPromptTemplateRequest'
+    UpdateBootstrapPromptTemplateRequest:
+      $ref: './components/schemas/bootstrap-prompt-template.yaml#/UpdateBootstrapPromptTemplateRequest'
     TranslationProfile:
       $ref: './components/schemas/translation-profile.yaml#/TranslationProfile'
     TranslationProfileListResponse:

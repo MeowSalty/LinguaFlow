@@ -10,12 +10,12 @@ import (
 	"entgo.io/ent"
 	"entgo.io/ent/dialect/sql"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/organization"
-	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/prompttemplate"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/translationprompttemplate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
 )
 
-// PromptTemplate is the model entity for the PromptTemplate schema.
-type PromptTemplate struct {
+// TranslationPromptTemplate is the model entity for the TranslationPromptTemplate schema.
+type TranslationPromptTemplate struct {
 	config `json:"-"`
 	// ID of the ent.
 	ID int `json:"id,omitempty"`
@@ -35,16 +35,14 @@ type PromptTemplate struct {
 	OwnerOrgID *int `json:"owner_org_id,omitempty"`
 	// 翻译提示词内容
 	SystemPromptContent string `json:"system_prompt_content,omitempty"`
-	// Bootstrap 术语抽取提示词内容
-	BootstrapPromptContent string `json:"bootstrap_prompt_content,omitempty"`
 	// Edges holds the relations/edges for other nodes in the graph.
-	// The values are being populated by the PromptTemplateQuery when eager-loading is set.
-	Edges        PromptTemplateEdges `json:"edges"`
+	// The values are being populated by the TranslationPromptTemplateQuery when eager-loading is set.
+	Edges        TranslationPromptTemplateEdges `json:"edges"`
 	selectValues sql.SelectValues
 }
 
-// PromptTemplateEdges holds the relations/edges for other nodes in the graph.
-type PromptTemplateEdges struct {
+// TranslationPromptTemplateEdges holds the relations/edges for other nodes in the graph.
+type TranslationPromptTemplateEdges struct {
 	// OwnerUser holds the value of the owner_user edge.
 	OwnerUser *User `json:"owner_user,omitempty"`
 	// OwnerOrg holds the value of the owner_org edge.
@@ -56,7 +54,7 @@ type PromptTemplateEdges struct {
 
 // OwnerUserOrErr returns the OwnerUser value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
-func (e PromptTemplateEdges) OwnerUserOrErr() (*User, error) {
+func (e TranslationPromptTemplateEdges) OwnerUserOrErr() (*User, error) {
 	if e.OwnerUser != nil {
 		return e.OwnerUser, nil
 	} else if e.loadedTypes[0] {
@@ -67,7 +65,7 @@ func (e PromptTemplateEdges) OwnerUserOrErr() (*User, error) {
 
 // OwnerOrgOrErr returns the OwnerOrg value or an error if the edge
 // was not loaded in eager-loading, or loaded but was not found.
-func (e PromptTemplateEdges) OwnerOrgOrErr() (*Organization, error) {
+func (e TranslationPromptTemplateEdges) OwnerOrgOrErr() (*Organization, error) {
 	if e.OwnerOrg != nil {
 		return e.OwnerOrg, nil
 	} else if e.loadedTypes[1] {
@@ -77,15 +75,15 @@ func (e PromptTemplateEdges) OwnerOrgOrErr() (*Organization, error) {
 }
 
 // scanValues returns the types for scanning values from sql.Rows.
-func (*PromptTemplate) scanValues(columns []string) ([]any, error) {
+func (*TranslationPromptTemplate) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case prompttemplate.FieldID, prompttemplate.FieldOwnerUserID, prompttemplate.FieldOwnerOrgID:
+		case translationprompttemplate.FieldID, translationprompttemplate.FieldOwnerUserID, translationprompttemplate.FieldOwnerOrgID:
 			values[i] = new(sql.NullInt64)
-		case prompttemplate.FieldName, prompttemplate.FieldDescription, prompttemplate.FieldScope, prompttemplate.FieldSystemPromptContent, prompttemplate.FieldBootstrapPromptContent:
+		case translationprompttemplate.FieldName, translationprompttemplate.FieldDescription, translationprompttemplate.FieldScope, translationprompttemplate.FieldSystemPromptContent:
 			values[i] = new(sql.NullString)
-		case prompttemplate.FieldCreatedAt, prompttemplate.FieldUpdatedAt:
+		case translationprompttemplate.FieldCreatedAt, translationprompttemplate.FieldUpdatedAt:
 			values[i] = new(sql.NullTime)
 		default:
 			values[i] = new(sql.UnknownType)
@@ -95,74 +93,68 @@ func (*PromptTemplate) scanValues(columns []string) ([]any, error) {
 }
 
 // assignValues assigns the values that were returned from sql.Rows (after scanning)
-// to the PromptTemplate fields.
-func (_m *PromptTemplate) assignValues(columns []string, values []any) error {
+// to the TranslationPromptTemplate fields.
+func (_m *TranslationPromptTemplate) assignValues(columns []string, values []any) error {
 	if m, n := len(values), len(columns); m < n {
 		return fmt.Errorf("mismatch number of scan values: %d != %d", m, n)
 	}
 	for i := range columns {
 		switch columns[i] {
-		case prompttemplate.FieldID:
+		case translationprompttemplate.FieldID:
 			value, ok := values[i].(*sql.NullInt64)
 			if !ok {
 				return fmt.Errorf("unexpected type %T for field id", value)
 			}
 			_m.ID = int(value.Int64)
-		case prompttemplate.FieldCreatedAt:
+		case translationprompttemplate.FieldCreatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field created_at", values[i])
 			} else if value.Valid {
 				_m.CreatedAt = value.Time
 			}
-		case prompttemplate.FieldUpdatedAt:
+		case translationprompttemplate.FieldUpdatedAt:
 			if value, ok := values[i].(*sql.NullTime); !ok {
 				return fmt.Errorf("unexpected type %T for field updated_at", values[i])
 			} else if value.Valid {
 				_m.UpdatedAt = value.Time
 			}
-		case prompttemplate.FieldName:
+		case translationprompttemplate.FieldName:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field name", values[i])
 			} else if value.Valid {
 				_m.Name = value.String
 			}
-		case prompttemplate.FieldDescription:
+		case translationprompttemplate.FieldDescription:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field description", values[i])
 			} else if value.Valid {
 				_m.Description = value.String
 			}
-		case prompttemplate.FieldScope:
+		case translationprompttemplate.FieldScope:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field scope", values[i])
 			} else if value.Valid {
 				_m.Scope = value.String
 			}
-		case prompttemplate.FieldOwnerUserID:
+		case translationprompttemplate.FieldOwnerUserID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field owner_user_id", values[i])
 			} else if value.Valid {
 				_m.OwnerUserID = new(int)
 				*_m.OwnerUserID = int(value.Int64)
 			}
-		case prompttemplate.FieldOwnerOrgID:
+		case translationprompttemplate.FieldOwnerOrgID:
 			if value, ok := values[i].(*sql.NullInt64); !ok {
 				return fmt.Errorf("unexpected type %T for field owner_org_id", values[i])
 			} else if value.Valid {
 				_m.OwnerOrgID = new(int)
 				*_m.OwnerOrgID = int(value.Int64)
 			}
-		case prompttemplate.FieldSystemPromptContent:
+		case translationprompttemplate.FieldSystemPromptContent:
 			if value, ok := values[i].(*sql.NullString); !ok {
 				return fmt.Errorf("unexpected type %T for field system_prompt_content", values[i])
 			} else if value.Valid {
 				_m.SystemPromptContent = value.String
-			}
-		case prompttemplate.FieldBootstrapPromptContent:
-			if value, ok := values[i].(*sql.NullString); !ok {
-				return fmt.Errorf("unexpected type %T for field bootstrap_prompt_content", values[i])
-			} else if value.Valid {
-				_m.BootstrapPromptContent = value.String
 			}
 		default:
 			_m.selectValues.Set(columns[i], values[i])
@@ -171,44 +163,44 @@ func (_m *PromptTemplate) assignValues(columns []string, values []any) error {
 	return nil
 }
 
-// Value returns the ent.Value that was dynamically selected and assigned to the PromptTemplate.
+// Value returns the ent.Value that was dynamically selected and assigned to the TranslationPromptTemplate.
 // This includes values selected through modifiers, order, etc.
-func (_m *PromptTemplate) Value(name string) (ent.Value, error) {
+func (_m *TranslationPromptTemplate) Value(name string) (ent.Value, error) {
 	return _m.selectValues.Get(name)
 }
 
-// QueryOwnerUser queries the "owner_user" edge of the PromptTemplate entity.
-func (_m *PromptTemplate) QueryOwnerUser() *UserQuery {
-	return NewPromptTemplateClient(_m.config).QueryOwnerUser(_m)
+// QueryOwnerUser queries the "owner_user" edge of the TranslationPromptTemplate entity.
+func (_m *TranslationPromptTemplate) QueryOwnerUser() *UserQuery {
+	return NewTranslationPromptTemplateClient(_m.config).QueryOwnerUser(_m)
 }
 
-// QueryOwnerOrg queries the "owner_org" edge of the PromptTemplate entity.
-func (_m *PromptTemplate) QueryOwnerOrg() *OrganizationQuery {
-	return NewPromptTemplateClient(_m.config).QueryOwnerOrg(_m)
+// QueryOwnerOrg queries the "owner_org" edge of the TranslationPromptTemplate entity.
+func (_m *TranslationPromptTemplate) QueryOwnerOrg() *OrganizationQuery {
+	return NewTranslationPromptTemplateClient(_m.config).QueryOwnerOrg(_m)
 }
 
-// Update returns a builder for updating this PromptTemplate.
-// Note that you need to call PromptTemplate.Unwrap() before calling this method if this PromptTemplate
+// Update returns a builder for updating this TranslationPromptTemplate.
+// Note that you need to call TranslationPromptTemplate.Unwrap() before calling this method if this TranslationPromptTemplate
 // was returned from a transaction, and the transaction was committed or rolled back.
-func (_m *PromptTemplate) Update() *PromptTemplateUpdateOne {
-	return NewPromptTemplateClient(_m.config).UpdateOne(_m)
+func (_m *TranslationPromptTemplate) Update() *TranslationPromptTemplateUpdateOne {
+	return NewTranslationPromptTemplateClient(_m.config).UpdateOne(_m)
 }
 
-// Unwrap unwraps the PromptTemplate entity that was returned from a transaction after it was closed,
+// Unwrap unwraps the TranslationPromptTemplate entity that was returned from a transaction after it was closed,
 // so that all future queries will be executed through the driver which created the transaction.
-func (_m *PromptTemplate) Unwrap() *PromptTemplate {
+func (_m *TranslationPromptTemplate) Unwrap() *TranslationPromptTemplate {
 	_tx, ok := _m.config.driver.(*txDriver)
 	if !ok {
-		panic("ent: PromptTemplate is not a transactional entity")
+		panic("ent: TranslationPromptTemplate is not a transactional entity")
 	}
 	_m.config.driver = _tx.drv
 	return _m
 }
 
 // String implements the fmt.Stringer.
-func (_m *PromptTemplate) String() string {
+func (_m *TranslationPromptTemplate) String() string {
 	var builder strings.Builder
-	builder.WriteString("PromptTemplate(")
+	builder.WriteString("TranslationPromptTemplate(")
 	builder.WriteString(fmt.Sprintf("id=%v, ", _m.ID))
 	builder.WriteString("created_at=")
 	builder.WriteString(_m.CreatedAt.Format(time.ANSIC))
@@ -237,12 +229,9 @@ func (_m *PromptTemplate) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("system_prompt_content=")
 	builder.WriteString(_m.SystemPromptContent)
-	builder.WriteString(", ")
-	builder.WriteString("bootstrap_prompt_content=")
-	builder.WriteString(_m.BootstrapPromptContent)
 	builder.WriteByte(')')
 	return builder.String()
 }
 
-// PromptTemplates is a parsable slice of PromptTemplate.
-type PromptTemplates []*PromptTemplate
+// TranslationPromptTemplates is a parsable slice of TranslationPromptTemplate.
+type TranslationPromptTemplates []*TranslationPromptTemplate

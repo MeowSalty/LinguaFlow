@@ -12,6 +12,9 @@ type ActivityLog func(*sql.Selector)
 // Backend is the predicate function for backend builders.
 type Backend func(*sql.Selector)
 
+// BootstrapPromptTemplate is the predicate function for bootstrapprompttemplate builders.
+type BootstrapPromptTemplate func(*sql.Selector)
+
 // ExecutionPlanTemplate is the predicate function for executionplantemplate builders.
 type ExecutionPlanTemplate func(*sql.Selector)
 
@@ -29,9 +32,6 @@ type Organization func(*sql.Selector)
 
 // Project is the predicate function for project builders.
 type Project func(*sql.Selector)
-
-// PromptTemplate is the predicate function for prompttemplate builders.
-type PromptTemplate func(*sql.Selector)
 
 // RefreshToken is the predicate function for refreshtoken builders.
 type RefreshToken func(*sql.Selector)
@@ -59,6 +59,9 @@ type TranslationJob func(*sql.Selector)
 
 // TranslationProfile is the predicate function for translationprofile builders.
 type TranslationProfile func(*sql.Selector)
+
+// TranslationPromptTemplate is the predicate function for translationprompttemplate builders.
+type TranslationPromptTemplate func(*sql.Selector)
 
 // UsageRecord is the predicate function for usagerecord builders.
 type UsageRecord func(*sql.Selector)

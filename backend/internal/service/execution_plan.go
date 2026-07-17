@@ -134,6 +134,10 @@ func (s *ExecutionPlanService) Create(ctx context.Context, input CreateExecution
 		return nil, err
 	}
 
+	if err := validateBootstrapConfig(input.Bootstrap); err != nil {
+		return nil, err
+	}
+
 	name := strings.TrimSpace(input.Name)
 	if name == "" {
 		return nil, ErrInvalidInput
@@ -180,6 +184,12 @@ func (s *ExecutionPlanService) Update(ctx context.Context, userID, planID int, i
 
 	if input.Rounds != nil {
 		if err := validateExecutionRounds(input.Rounds); err != nil {
+			return nil, err
+		}
+	}
+
+	if input.Bootstrap != nil {
+		if err := validateBootstrapConfig(*input.Bootstrap); err != nil {
 			return nil, err
 		}
 	}
@@ -262,6 +272,29 @@ func (s *ExecutionPlanService) checkAccess(ctx context.Context, userID int, plan
 	return nil
 }
 
+// validateBootstrapConfig 校验独立自举配置的有效性。
+func validateBootstrapConfig(bs schema.ExecutionPlanBootstrapConfig) error {
+	if !bs.Enabled {
+		return nil
+	}
+	if bs.BackendID <= 0 {
+		return fmt.Errorf("%w: bootstrap.backend_id must be positive", ErrExecutionPlanConfigInvalid)
+	}
+	if bs.PromptTemplateID == 0 {
+		return fmt.Errorf("%w: bootstrap.prompt_template_id must not be zero", ErrExecutionPlanConfigInvalid)
+	}
+	if bs.PromptTemplateID < 0 && bs.PromptTemplateID != templates.BuiltinBootstrapPromptTemplateID {
+		return fmt.Errorf("%w: bootstrap.prompt_template_id %d is not a valid builtin bootstrap template", ErrExecutionPlanConfigInvalid, bs.PromptTemplateID)
+	}
+	if bs.BatchSize < 0 {
+		return fmt.Errorf("%w: bootstrap.batch_size must be >= 0", ErrExecutionPlanConfigInvalid)
+	}
+	if bs.Concurrency < 1 {
+		return fmt.Errorf("%w: bootstrap.concurrency must be >= 1", ErrExecutionPlanConfigInvalid)
+	}
+	return nil
+}
+
 // validateExecutionRounds 校验执行轮次配置的有效性。
 func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 	if len(rounds) == 0 {
@@ -277,8 +310,8 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 		if round.PromptTemplateID == 0 {
 			return fmt.Errorf("%w: rounds[%d].prompt_template_id must not be zero", ErrExecutionPlanConfigInvalid, i)
 		}
-		if round.PromptTemplateID < 0 && !templates.IsBuiltinID(round.PromptTemplateID) {
-			return fmt.Errorf("%w: rounds[%d].prompt_template_id %d is not a valid builtin template", ErrExecutionPlanConfigInvalid, i, round.PromptTemplateID)
+		if round.PromptTemplateID < 0 && round.PromptTemplateID != templates.BuiltinTranslationPromptTemplateID {
+			return fmt.Errorf("%w: rounds[%d].prompt_template_id %d is not a valid builtin translation template", ErrExecutionPlanConfigInvalid, i, round.PromptTemplateID)
 		}
 		if round.ProfileID == 0 {
 			return fmt.Errorf("%w: rounds[%d].profile_id must not be zero", ErrExecutionPlanConfigInvalid, i)
