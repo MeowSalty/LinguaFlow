@@ -11,13 +11,13 @@ import (
 
 // BootstrapData 是 bootstrap stage 渲染时的数据模型。
 type BootstrapData struct {
-	SourceLang   string
-	TargetLang   string
-	Texts        []string
-	Existing     []string
-	MaxTerms     int
-	TextMode     bool // 纯文本模式：user message 使用纯文本格式而非 JSON envelope
-	StrictSchema bool // 后端以 json_schema 强制结构时为 true；模板可省略完整 JSON 形状示例
+	SourceLang string
+	TargetLang string
+	Texts      []string
+	Existing   []string
+	MaxTerms   int
+	// Protocol 控制 system/user 协议与解析通道；由 ProtocolFromResponseMode 推导。
+	Protocol Protocol
 }
 
 // BootstrapRenderer 持有已编译的 bootstrap system 模板。user 由 Render 直接 JSON 序列化。
@@ -47,16 +47,19 @@ type bootstrapEnvelope struct {
 	Texts      []string `json:"texts"`
 }
 
-// Render 返回 (system, user, err)。TextMode 时 user 为纯文本格式，否则为 JSON。
+// Render 返回 (system, user, err)。ProtocolText 时 user 为纯文本格式，否则为 JSON。
 func (r *BootstrapRenderer) Render(d BootstrapData) (string, string, error) {
 	if d.MaxTerms < 1 {
 		d.MaxTerms = 20
+	}
+	if d.Protocol == "" {
+		d.Protocol = ProtocolJSONStrict
 	}
 	var sysBuf bytes.Buffer
 	if err := r.system.Execute(&sysBuf, d); err != nil {
 		return "", "", fmt.Errorf("prompt: execute bootstrap system: %w", err)
 	}
-	if d.TextMode {
+	if d.Protocol.IsText() {
 		return sysBuf.String(), buildBootstrapTextUser(d), nil
 	}
 	env := bootstrapEnvelope{

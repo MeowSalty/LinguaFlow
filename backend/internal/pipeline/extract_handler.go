@@ -160,15 +160,15 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 
 	existing := h.collectExisting(ctx, texts, doc, logger)
 
-	isTextMode := h.ResponseMode == "text"
+	proto := prompt.ProtocolFromResponseMode(h.ResponseMode)
+	isTextMode := proto.IsText()
 	sys, usr, err := h.Renderer.Render(prompt.BootstrapData{
-		SourceLang:   doc.SourceLang,
-		TargetLang:   doc.TargetLang,
-		Texts:        texts,
-		Existing:     existing,
-		MaxTerms:     h.calcMaxTerms(texts),
-		TextMode:     isTextMode,
-		StrictSchema: prompt.StrictSchemaFromResponseMode(h.ResponseMode),
+		SourceLang: doc.SourceLang,
+		TargetLang: doc.TargetLang,
+		Texts:      texts,
+		Existing:   existing,
+		MaxTerms:   h.calcMaxTerms(texts),
+		Protocol:   proto,
 	})
 	if err != nil {
 		logger.Warn("extract render failed", "err", err)

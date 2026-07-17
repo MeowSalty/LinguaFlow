@@ -77,23 +77,57 @@ type Data struct {
 
 	InlineBootstrap   bool // 是否在 system prompt 中追加 inline 抽取指令（mode=inline 时由 translate stage 设为 true）
 	MaxBootstrapTerms int  // inline 模式每批返回上限；仅在 InlineBootstrap=true 时有效
-	StrictSchema      bool // 后端以 json_schema 强制结构时为 true；模板可省略完整 JSON 形状示例
-	TextMode          bool // 纯文本模式：user message 使用纯文本编号格式而非 JSON envelope
+	// Protocol 控制 system/user 协议与解析通道；由 ProtocolFromResponseMode 从 response_format 推导。
+	Protocol Protocol
 
 	RubyAnnotations map[string][]RubyAnnotation // segment ID → 标注列表
 	RubyMode        string                      // "json" | "section" | ""
 }
 
-// StrictSchemaFromResponseMode 根据后端 options.response_format 判断是否由 API 强制 JSON Schema。
-// 空字符串沿用各 backend 默认（json_schema）；json_object/text/none 为 false。
-func StrictSchemaFromResponseMode(mode string) bool {
+// Protocol 是提示词与解析共用的 I/O 协议（三态，非后端 response_format 四值一一对应）。
+// 模板中可用 eq .Protocol "text"|"json_loose"|"json_strict"。
+type Protocol string
+
+const (
+	// ProtocolText：纯文本 user 与文本解析。
+	// 对应 response_format=text；请求侧强制 ResponseFormat=none。
+	ProtocolText Protocol = "text"
+
+	// ProtocolJSONLoose：JSON user/解析，且 system 中写入完整 JSON 形状示例。
+	// 对应 API 不强制 schema 的配置：response_format=json_object 或 none。
+	// none 与 json_object 在提示词层同属本态（API 侧 none 更松，仅不声明 format）。
+	ProtocolJSONLoose Protocol = "json_loose"
+
+	// ProtocolJSONStrict：JSON user/解析，省略完整形状示例（结构由 API json_schema 强制）。
+	// 对应 response_format=json_schema，以及空字符串（各 backend 默认 json_schema）。
+	ProtocolJSONStrict Protocol = "json_strict"
+)
+
+// ProtocolFromResponseMode 将后端 options.response_format 映射为提示词/解析协议。
+// 未知值按 json_loose 处理（需在 prompt 中写清形状，避免误当 schema 已约束）。
+func ProtocolFromResponseMode(mode string) Protocol {
 	switch mode {
+	case "text":
+		return ProtocolText
 	case "", "json_schema":
-		return true
+		return ProtocolJSONStrict
+	case "json_object", "none":
+		return ProtocolJSONLoose
 	default:
-		return false
+		return ProtocolJSONLoose
 	}
 }
+
+// IsText 是否为纯文本协议。
+func (p Protocol) IsText() bool { return p == ProtocolText }
+
+// IsJSON 是否为 JSON 协议（loose 或 strict）。
+func (p Protocol) IsJSON() bool {
+	return p == ProtocolJSONLoose || p == ProtocolJSONStrict
+}
+
+// OmitsJSONShape 是否可省略 system 中的完整 JSON 形状示例（仅 json_strict）。
+func (p Protocol) OmitsJSONShape() bool { return p == ProtocolJSONStrict }
 
 // HasRuby 判断当前数据中是否存在 Ruby 标注信息。
 func (d Data) HasRuby() bool {
@@ -106,7 +140,7 @@ func (d Data) HasRuby() bool {
 }
 
 // Renderer 持有已编译的 system 模板。
-// user 消息由 Render 根据 TextMode 标志直接构建，无需模板。
+// user 消息由 Render 根据 Protocol 直接构建，无需模板。
 type Renderer struct {
 	system *template.Template
 }
@@ -140,8 +174,11 @@ type userEnvelope struct {
 	RubyAnnotations map[string][]RubyAnnotation `json:"ruby_annotations,omitempty"`
 }
 
-// Render 返回 (system, user, err)。TextMode 时 user 为纯文本编号格式，否则为 JSON。
+// Render 返回 (system, user, err)。ProtocolText 时 user 为纯文本编号格式，否则为 JSON。
 func (r *Renderer) Render(d Data) (string, string, error) {
+	if d.Protocol == "" {
+		d.Protocol = ProtocolJSONStrict // 与 backend 默认 json_schema 对齐
+	}
 	segs := d.Segments
 	if len(segs) == 0 {
 		segs = []SegmentInput{{ID: SingleID, Source: d.Source, Translate: true}}
@@ -153,7 +190,7 @@ func (r *Renderer) Render(d Data) (string, string, error) {
 	}
 
 	sys := sysBuf.String()
-	if d.TextMode {
+	if d.Protocol.IsText() {
 		mode := d.RubyMode
 		if mode == "" {
 			mode = RubyModeSection

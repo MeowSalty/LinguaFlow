@@ -131,7 +131,7 @@ func TestBootstrapRenderer_TextModeUserFormat(t *testing.T) {
 		Texts:    []string{"Call Gemini API", "Use OAuth2"},
 		Existing: []string{"already-have"},
 		MaxTerms: 5,
-		TextMode: true,
+		Protocol: ProtocolText,
 	})
 	if err != nil {
 		t.Fatalf("render: %v", err)
@@ -162,7 +162,7 @@ func TestBootstrapRenderer_TextModeUserFormat(t *testing.T) {
 
 func TestBootstrapRenderer_StrictSchemaOmitsShape(t *testing.T) {
 	const tmpl = `协议
-{{- if not .StrictSchema}}
+{{- if eq .Protocol "json_loose"}}
 SHAPE:{"glossary":[]}
 {{- end}}
 `
@@ -171,7 +171,7 @@ SHAPE:{"glossary":[]}
 		t.Fatalf("renderer: %v", err)
 	}
 	sysStrict, _, err := r.Render(BootstrapData{
-		SourceLang: "en", TargetLang: "zh", Texts: []string{"x"}, MaxTerms: 3, StrictSchema: true,
+		SourceLang: "en", TargetLang: "zh", Texts: []string{"x"}, MaxTerms: 3, Protocol: ProtocolJSONStrict,
 	})
 	if err != nil {
 		t.Fatalf("render: %v", err)
@@ -180,7 +180,7 @@ SHAPE:{"glossary":[]}
 		t.Errorf("strict should omit shape:\n%s", sysStrict)
 	}
 	sysLoose, _, err := r.Render(BootstrapData{
-		SourceLang: "en", TargetLang: "zh", Texts: []string{"x"}, MaxTerms: 3, StrictSchema: false,
+		SourceLang: "en", TargetLang: "zh", Texts: []string{"x"}, MaxTerms: 3, Protocol: ProtocolJSONLoose,
 	})
 	if err != nil {
 		t.Fatalf("render: %v", err)

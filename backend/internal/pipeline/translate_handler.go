@@ -299,7 +299,7 @@ func (h *TranslateHandler) ProcessBatch(ctx context.Context, doc *Document, idxs
 	atomic.AddInt64(&doc.OutputTokens, resp.Usage.CompletionTokens)
 
 	// 解析响应
-	isTextMode := h.ResponseMode == "text"
+	isTextMode := prompt.ProtocolFromResponseMode(h.ResponseMode).IsText()
 	var res repair.Result
 	if isTextMode {
 		res = parseBatchResponseLenientText(resp.Text, wantIDs, h.Repair)
@@ -396,7 +396,8 @@ func (h *TranslateHandler) buildRequest(
 	logger *slog.Logger,
 ) (string, string, backend.Request, []string, map[int]string, []prompt.GlossaryEntry, error) {
 	renderer := h.Renderer
-	isTextMode := h.ResponseMode == "text"
+	proto := prompt.ProtocolFromResponseMode(h.ResponseMode)
+	isTextMode := proto.IsText()
 
 	glos, tmHints := h.lookupHints(ctx, doc, idxs, logger)
 
@@ -442,8 +443,7 @@ func (h *TranslateHandler) buildRequest(
 		Vars:              doc.Vars,
 		InlineBootstrap:   h.InlineBootstrap,
 		MaxBootstrapTerms: h.calcMaxBootstrapTerms(batchSources),
-		StrictSchema:      prompt.StrictSchemaFromResponseMode(h.ResponseMode),
-		TextMode:          isTextMode,
+		Protocol:          proto,
 		RubyAnnotations:   rubyAnns,
 		RubyMode:          h.RubyMode,
 	}
@@ -456,10 +456,10 @@ func (h *TranslateHandler) buildRequest(
 		System: sys,
 		User:   usr,
 	}
-	if !isTextMode {
-		req.JSONSchema = translationsSchema(wantIDs, h.InlineBootstrap, h.RubyMode != "")
-	} else {
+	if isTextMode {
 		req.ResponseFormat = "none"
+	} else {
+		req.JSONSchema = translationsSchema(wantIDs, h.InlineBootstrap, h.RubyMode != "")
 	}
 
 	return sys, usr, req, wantIDs, idMap, glos, nil
@@ -479,7 +479,7 @@ func (h *TranslateHandler) tryPromptUpgrade(
 		return resp, res, false
 	}
 
-	isTextMode := h.ResponseMode == "text"
+	isTextMode := prompt.ProtocolFromResponseMode(h.ResponseMode).IsText()
 
 	reminder := repair.BuildRetryReminder(nil, res.ParseErr, headSnippet(resp.Text, 200))
 	req2 := req
@@ -570,7 +570,7 @@ func (h *TranslateHandler) processTranslatedSegments(
 		// RubyRestore
 		if h.RubyEnabled && h.RubyRestorer != nil {
 			keepSet := kindSet(h.RubyPreserveKinds)
-			isTextMode := h.ResponseMode == "text"
+			isTextMode := prompt.ProtocolFromResponseMode(h.ResponseMode).IsText()
 			restoreSegmentRuby(ctx, seg, h.RubyRestorer, keepSet,
 				h.RubyRetryBackends, h.Retry, logger, h.Reporter, isTextMode)
 		}

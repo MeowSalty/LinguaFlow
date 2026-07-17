@@ -81,7 +81,7 @@ func TestPruneRenderer_EmptyContent(t *testing.T) {
 
 func TestPruneRenderer_StrictSchemaOmitsShape(t *testing.T) {
 	const tmpl = `协议
-{{- if not .StrictSchema}}
+{{- if eq .Protocol "json_loose"}}
 SHAPE:{"glossary":[]}
 {{- end}}
 `
@@ -90,7 +90,7 @@ SHAPE:{"glossary":[]}
 		t.Fatalf("renderer: %v", err)
 	}
 	sysStrict, _, err := r.Render(PruneData{
-		SourceLang: "en", TargetLang: "zh", StrictSchema: true,
+		SourceLang: "en", TargetLang: "zh", Protocol: ProtocolJSONStrict,
 	})
 	if err != nil {
 		t.Fatalf("render: %v", err)
@@ -99,7 +99,7 @@ SHAPE:{"glossary":[]}
 		t.Errorf("strict should omit shape:\n%s", sysStrict)
 	}
 	sysLoose, _, err := r.Render(PruneData{
-		SourceLang: "en", TargetLang: "zh", StrictSchema: false,
+		SourceLang: "en", TargetLang: "zh", Protocol: ProtocolJSONLoose,
 	})
 	if err != nil {
 		t.Fatalf("render: %v", err)
@@ -120,7 +120,7 @@ func TestPruneRenderer_TextModeUserFormat(t *testing.T) {
 			{Source: "Gemini", Target: "哈基米", Notes: "company"},
 			{Source: "API", Target: "接口", Notes: ""},
 		},
-		TextMode: true,
+		Protocol: ProtocolText,
 	})
 	if err != nil {
 		t.Fatalf("render: %v", err)

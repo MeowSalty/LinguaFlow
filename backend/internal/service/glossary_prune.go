@@ -226,9 +226,10 @@ func (s *GlossaryPruneService) Preview(ctx context.Context, actorUserID, project
 		return nil, err
 	}
 
-	// response_format 与翻译路径对齐：text vs 非 text；StrictSchema 仅 json_schema（含默认）
+	// response_format → Protocol（text / json_loose / json_strict）
 	responseMode := responseModeFromBackendOptions(backendRecord.Options)
-	isTextMode := responseMode == "text"
+	proto := prompt.ProtocolFromResponseMode(responseMode)
+	isTextMode := proto.IsText()
 
 	pruneEntries := make([]prompt.PruneEntry, 0, len(entries))
 	for _, e := range entries {
@@ -240,11 +241,10 @@ func (s *GlossaryPruneService) Preview(ctx context.Context, actorUserID, project
 	}
 
 	sys, usr, err := renderer.Render(prompt.PruneData{
-		SourceLang:   projectRow.SourceLang,
-		TargetLang:   projectRow.TargetLang,
-		Entries:      pruneEntries,
-		TextMode:     isTextMode,
-		StrictSchema: prompt.StrictSchemaFromResponseMode(responseMode),
+		SourceLang: projectRow.SourceLang,
+		TargetLang: projectRow.TargetLang,
+		Entries:    pruneEntries,
+		Protocol:   proto,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("prune: render prompt: %w", err)
