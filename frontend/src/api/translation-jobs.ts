@@ -13,8 +13,8 @@ export const fetchTranslationJobs = async (
     limit?: number
   },
   client: ApiClient = apiClient,
-): Promise<ApiSchemas['TranslationJobListResponse']> => {
-  const { data, error, response } = await client.GET('/projects/{projectId}/translation-jobs', {
+): Promise<ApiSchemas['JobListResponse']> => {
+  const { data, error, response } = await client.GET('/projects/{projectId}/jobs', {
     params: { path: { projectId }, query: params },
   })
 
@@ -29,8 +29,8 @@ export const createTranslationJob = async (
   projectId: number,
   payload?: ApiSchemas['CreateTranslationJobRequest'],
   client: ApiClient = apiClient,
-): Promise<ApiSchemas['TranslationJob']> => {
-  const { data, error, response } = await client.POST('/projects/{projectId}/translation-jobs', {
+): Promise<ApiSchemas['Job']> => {
+  const { data, error, response } = await client.POST('/projects/{projectId}/jobs', {
     params: { path: { projectId } },
     body: payload,
   })
@@ -43,11 +43,11 @@ export const createTranslationJob = async (
 }
 
 export const fetchTranslationJob = async (
-  translationJobId: number,
+  jobId: number,
   client: ApiClient = apiClient,
-): Promise<ApiSchemas['TranslationJob']> => {
-  const { data, error, response } = await client.GET('/translation-jobs/{translationJobId}', {
-    params: { path: { translationJobId } },
+): Promise<ApiSchemas['Job']> => {
+  const { data, error, response } = await client.GET('/jobs/{jobId}', {
+    params: { path: { jobId } },
   })
 
   if (!data) {
@@ -58,15 +58,12 @@ export const fetchTranslationJob = async (
 }
 
 export const cancelTranslationJob = async (
-  translationJobId: number,
+  jobId: number,
   client: ApiClient = apiClient,
-): Promise<ApiSchemas['TranslationJob']> => {
-  const { data, error, response } = await client.POST(
-    '/translation-jobs/{translationJobId}/cancel',
-    {
-      params: { path: { translationJobId } },
-    },
-  )
+): Promise<ApiSchemas['Job']> => {
+  const { data, error, response } = await client.POST('/jobs/{jobId}/cancel', {
+    params: { path: { jobId } },
+  })
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.cancelTranslationJobFailed'), error, response)
@@ -76,15 +73,12 @@ export const cancelTranslationJob = async (
 }
 
 export const retryTranslationJob = async (
-  translationJobId: number,
+  jobId: number,
   client: ApiClient = apiClient,
-): Promise<ApiSchemas['TranslationJob']> => {
-  const { data, error, response } = await client.POST(
-    '/translation-jobs/{translationJobId}/retry',
-    {
-      params: { path: { translationJobId } },
-    },
-  )
+): Promise<ApiSchemas['Job']> => {
+  const { data, error, response } = await client.POST('/jobs/{jobId}/retry', {
+    params: { path: { jobId } },
+  })
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.retryTranslationJobFailed'), error, response)
