@@ -83,6 +83,21 @@ const resultColumns = computed<DataTableColumns<SyncExecuteResourceResult>>(() =
 
 // ── 计算属性 ──
 
+/** 是否处于批量同步队列模式 */
+const isQueueMode = computed(() => glossary.syncQueueTotal > 1)
+
+/** 队列推进或影响分析中，禁止连点跳过/继续 */
+const isAdvanceBusy = computed(() => glossary.syncAdvancing || glossary.syncImpactLoading)
+
+/** 队列进度文案，如「第 2 / 5 项」 */
+const queueProgressLabel = computed(() => {
+  if (glossary.syncQueueTotal <= 1) return ''
+  return t('workspace.glossary.sync.queueProgress', {
+    current: glossary.syncQueueCurrent,
+    total: glossary.syncQueueTotal,
+  })
+})
+
 /** 对话框标题（根据步骤动态切换） */
 const dialogTitle = computed(() => {
   const step = glossary.syncStep
@@ -93,7 +108,9 @@ const dialogTitle = computed(() => {
     cancelled: t('workspace.glossary.sync.titleCancelled'),
     error: t('workspace.glossary.sync.titleError'),
   }
-  return titles[step]
+  const base = titles[step]
+  if (!isQueueMode.value) return base
+  return `${base} (${queueProgressLabel.value})`
 })
 
 /** 步骤指示器当前索引 */
@@ -121,9 +138,21 @@ const handleResourceSelectionChange = (keys: Array<number | string>): void => {
   glossary.syncSelectedResourceIds = keys as number[]
 }
 
+/**
+ * 结束当前术语交互：有队列则推进下一项，否则关闭对话框。
+ * 关闭后的 close / synced 由 show 监听统一发出，避免与 X 关闭路径重复。
+ */
+const finishOrAdvance = async (): Promise<void> => {
+  if (isAdvanceBusy.value) return
+  if (!props.projectId) {
+    glossary.closeSyncDialog()
+    return
+  }
+  await glossary.finishCurrentSyncAndAdvance(props.projectId)
+}
+
 const handleSkip = (): void => {
-  glossary.closeSyncDialog()
-  emit('close')
+  void finishOrAdvance()
 }
 
 const handleSubmitSelected = (): void => {
@@ -141,14 +170,9 @@ const handleCancel = (): void => {
   void glossary.cancelSyncTask(props.projectId)
 }
 
-/** 关闭对话框：仅在 result 状态下触发 synced 事件 */
+/** 关闭当前结果/错误/取消态：有队列则继续下一项 */
 const handleClose = (): void => {
-  const currentStep = glossary.syncStep
-  glossary.closeSyncDialog()
-  emit('close')
-  if (currentStep === 'result') {
-    emit('synced')
-  }
+  void finishOrAdvance()
 }
 
 const handleRetryImpact = (): void => {
@@ -158,10 +182,15 @@ const handleRetryImpact = (): void => {
 
 // ── 监听与清理 ──
 
-// 当对话框关闭时清理状态
+// 对话框关闭时统一清理，并在有成功同步时通知刷新 segments
 watch(show, (visible) => {
-  if (!visible) {
-    glossary.closeSyncDialog()
+  if (visible) return
+
+  const needsRefresh = glossary.syncStep === 'result' || glossary.syncQueueSyncedAny
+  glossary.closeSyncDialog()
+  emit('close')
+  if (needsRefresh) {
+    emit('synced')
   }
 })
 
@@ -229,8 +258,16 @@ onUnmounted(() => {
             {{ t('workspace.glossary.sync.noImpact') }}
           </NAlert>
           <div class="flex justify-end">
-            <NButton @click="handleSkip">
-              {{ t('workspace.common.close') }}
+            <NButton
+              :disabled="isAdvanceBusy"
+              :loading="glossary.syncAdvancing"
+              @click="handleSkip"
+            >
+              {{
+                isQueueMode
+                  ? t('workspace.glossary.sync.continueNext')
+                  : t('workspace.common.close')
+              }}
             </NButton>
           </div>
         </template>
@@ -261,11 +298,19 @@ onUnmounted(() => {
 
           <!-- 操作按钮 -->
           <div class="flex justify-end gap-3">
-            <NButton @click="handleSkip">
-              {{ t('workspace.glossary.sync.skip') }}
+            <NButton
+              :disabled="isAdvanceBusy"
+              :loading="glossary.syncAdvancing"
+              @click="handleSkip"
+            >
+              {{
+                isQueueMode
+                  ? t('workspace.glossary.sync.skipAndNext')
+                  : t('workspace.glossary.sync.skip')
+              }}
             </NButton>
             <NButton
-              :disabled="glossary.syncSelectedResourceCount === 0"
+              :disabled="isAdvanceBusy || glossary.syncSelectedResourceCount === 0"
               @click="handleSubmitSelected"
             >
               {{
@@ -274,7 +319,7 @@ onUnmounted(() => {
                 })
               }}
             </NButton>
-            <NButton type="primary" @click="handleSubmitAll">
+            <NButton type="primary" :disabled="isAdvanceBusy" @click="handleSubmitAll">
               {{ t('workspace.glossary.sync.syncAll') }}
             </NButton>
           </div>
@@ -355,8 +400,15 @@ onUnmounted(() => {
       </NAlert>
 
       <div class="flex justify-end">
-        <NButton type="primary" @click="handleClose">
-          {{ t('workspace.common.confirm') }}
+        <NButton
+          type="primary"
+          :disabled="isAdvanceBusy"
+          :loading="glossary.syncAdvancing"
+          @click="handleClose"
+        >
+          {{
+            isQueueMode ? t('workspace.glossary.sync.continueNext') : t('workspace.common.confirm')
+          }}
         </NButton>
       </div>
     </div>
@@ -387,8 +439,15 @@ onUnmounted(() => {
       </NAlert>
 
       <div class="flex justify-end">
-        <NButton type="primary" @click="handleClose">
-          {{ t('workspace.common.confirm') }}
+        <NButton
+          type="primary"
+          :disabled="isAdvanceBusy"
+          :loading="glossary.syncAdvancing"
+          @click="handleClose"
+        >
+          {{
+            isQueueMode ? t('workspace.glossary.sync.continueNext') : t('workspace.common.confirm')
+          }}
         </NButton>
       </div>
     </div>
@@ -400,8 +459,10 @@ onUnmounted(() => {
       </NAlert>
 
       <div class="flex justify-end">
-        <NButton @click="handleClose">
-          {{ t('workspace.common.close') }}
+        <NButton :disabled="isAdvanceBusy" :loading="glossary.syncAdvancing" @click="handleClose">
+          {{
+            isQueueMode ? t('workspace.glossary.sync.continueNext') : t('workspace.common.close')
+          }}
         </NButton>
       </div>
     </div>
