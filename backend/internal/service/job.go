@@ -231,7 +231,7 @@ func (s *JobService) CreateManualJob(ctx context.Context, actorUserID, projectID
 	// 4. 填充通用配置
 	snapshot.SourceLang = projectRow.SourceLang
 	snapshot.TargetLang = projectRow.TargetLang
-	snapshot.GlossaryEnabled = projectRow.GlossaryEnabled
+	snapshot.GlossaryEnabled = jobGlossaryEnabled(projectRow.GlossaryEnabled, snapshot.Rounds)
 	snapshot.AutoApprove = input.AutoApprove
 	snapshot.ExplicitSegmentSelection = len(input.SegmentGroupKeys) == 0 && len(input.SegmentIDs) > 0
 
@@ -393,7 +393,6 @@ func (s *JobService) validateAndSnapshot(
 				return nil, fmt.Errorf("rounds[%d] bootstrap_template %q has no content", i, bootstrapSnap.TemplateName)
 			}
 
-			snapshot.GlossaryEnabled = true
 			snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
 				Mode:    "extract",
 				Backend: *backendSnap,
@@ -433,6 +432,18 @@ func (s *JobService) validateAndSnapshot(
 	}
 
 	return snapshot, nil
+}
+
+func jobGlossaryEnabled(projectEnabled bool, rounds []JobRoundSnapshot) bool {
+	if projectEnabled {
+		return true
+	}
+	for _, round := range rounds {
+		if round.Mode == "extract" {
+			return true
+		}
+	}
+	return false
 }
 
 // validateBackendAccess 检查后端对项目是否可访问。

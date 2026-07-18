@@ -28,6 +28,27 @@ func TestDefaultProjectConfigNilProject(t *testing.T) {
 	}
 }
 
+func TestJobGlossaryEnabled(t *testing.T) {
+	tests := []struct {
+		name           string
+		projectEnabled bool
+		rounds         []JobRoundSnapshot
+		want           bool
+	}{
+		{name: "project enabled", projectEnabled: true, want: true},
+		{name: "extract round", rounds: []JobRoundSnapshot{{Mode: "extract"}}, want: true},
+		{name: "translate only", rounds: []JobRoundSnapshot{{Mode: "translate"}}, want: false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := jobGlossaryEnabled(tt.projectEnabled, tt.rounds); got != tt.want {
+				t.Fatalf("jobGlossaryEnabled() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestDeriveJobStatus(t *testing.T) {
 	tests := []struct {
 		name                                                  string

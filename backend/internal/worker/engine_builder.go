@@ -186,6 +186,9 @@ func buildEngineConfig(snapshot *service.JobExecutionSnapshot) *engine.Config {
 		SourceLang: snapshot.SourceLang,
 		TargetLang: snapshot.TargetLang,
 		TMEnabled:  snapshot.TMEnabled,
+		Glossary: engine.GlossaryConfig{
+			Enabled: snapshot.GlossaryEnabled,
+		},
 	}
 
 	// 从第一个翻译轮次读取策略配置
@@ -208,14 +211,11 @@ func buildEngineConfig(snapshot *service.JobExecutionSnapshot) *engine.Config {
 			Enabled:       s.Ruby.Enabled,
 			PreserveKinds: s.Ruby.PreserveKinds,
 		}
-		cfg.Glossary = engine.GlossaryConfig{
-			Enabled: snapshot.GlossaryEnabled,
-			Bootstrap: config.BootstrapConfig{
-				Enabled:                s.Glossary.Bootstrap.Enabled,
-				MaxTermsPer1000Chars:   s.Glossary.Bootstrap.MaxTermsPer1000Chars,
-				MinSourceLen:           s.Glossary.Bootstrap.MinSourceLen,
-				InlineConflictStrategy: s.Glossary.Bootstrap.InlineConflictStrategy,
-			},
+		cfg.Glossary.Bootstrap = config.BootstrapConfig{
+			Enabled:                s.Glossary.Bootstrap.Enabled,
+			MaxTermsPer1000Chars:   s.Glossary.Bootstrap.MaxTermsPer1000Chars,
+			MinSourceLen:           s.Glossary.Bootstrap.MinSourceLen,
+			InlineConflictStrategy: s.Glossary.Bootstrap.InlineConflictStrategy,
 		}
 		cfg.QA = qa.Config{
 			Enabled:        s.QA.Enabled,
