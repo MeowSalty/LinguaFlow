@@ -932,7 +932,7 @@ func (s *JobService) ListJobs(ctx context.Context, actorUserID, projectID int, o
 	}
 	q := s.client.Job.Query().Where(job.ProjectIDEQ(projectID))
 	if opts.AfterID > 0 {
-		q = q.Where(job.IDGT(opts.AfterID))
+		q = q.Where(job.IDLT(opts.AfterID))
 	}
 	if status := strings.TrimSpace(opts.Status); status != "" {
 		q = q.Where(job.StatusEQ(status))
@@ -942,7 +942,7 @@ func (s *JobService) ListJobs(ctx context.Context, actorUserID, projectID int, o
 	}
 	return q.
 		WithCreatedBy().
-		Order(ent.Asc(job.FieldID)).
+		Order(ent.Desc(job.FieldID)).
 		Limit(opts.Limit).
 		All(ctx)
 }
