@@ -271,8 +271,24 @@ body {
   background: transparent !important;
 }
 
+/* Fixed columns need opaque bg so scrolled cells don't show through */
+.lf-table .n-data-table-th--fixed-left,
+.lf-table .n-data-table-th--fixed-right {
+  background: var(--lf-surface-muted) !important;
+}
+
+.lf-table .n-data-table-td--fixed-left,
+.lf-table .n-data-table-td--fixed-right {
+  background: var(--lf-surface) !important;
+}
+
 .lf-table .n-data-table-tr:hover .n-data-table-td {
   background: rgb(16 185 129 / 0.04) !important;
+}
+
+.lf-table .n-data-table-tr:hover .n-data-table-td--fixed-left,
+.lf-table .n-data-table-tr:hover .n-data-table-td--fixed-right {
+  background: color-mix(in srgb, var(--lf-surface) 96%, rgb(16 185 129)) !important;
 }
 
 .lf-table .n-data-table-tr:last-child .n-data-table-td {
