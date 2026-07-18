@@ -155,6 +155,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     downloadResourceResult,
     toggleResourceSelection,
     setSelectedResourceIds,
+    setResourceSelection,
     clearSelectedResources,
     enterEpub,
     exitEpub,
@@ -352,6 +353,7 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     refreshEpubChapters,
     toggleResourceSelection,
     setSelectedResourceIds,
+    setResourceSelection,
     clearSelectedResources,
     reset,
   }

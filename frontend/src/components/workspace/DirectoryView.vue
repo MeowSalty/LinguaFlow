@@ -46,46 +46,74 @@ const emit = defineEmits<{
   delete: [resource: Resource]
   /** 切换资源选中状态 */
   toggleSelect: [resource: Resource]
-  /** 全选/取消全选当前目录资源 */
-  toggleSelectAll: []
+  /** 设置一组资源的选中状态 */
+  setSelection: [resourceIds: number[], selected: boolean]
 }>()
 
 const { t } = useI18n()
 
 // ── 资源多选 ──
 
-/** 当前目录中的资源列表 */
-const currentDirectoryAllResources = computed(() =>
-  props.resourceItems.map((item) => item.resource!),
-)
+/** 当前目录直接资源及全部子目录后代资源 ID */
+const currentDirectoryResourceIds = computed(() => [
+  ...new Set([
+    ...props.resourceItems.map((item) => item.resource!.id),
+    ...props.directories.flatMap((directory) => directory.descendantResourceIds ?? []),
+  ]),
+])
 
 /** 当前目录资源是否全选 */
 const isCurrentDirAllSelected = computed(
   () =>
-    currentDirectoryAllResources.value.length > 0 &&
-    currentDirectoryAllResources.value.every((r) => props.selectedIdSet.has(r.id)),
+    currentDirectoryResourceIds.value.length > 0 &&
+    currentDirectoryResourceIds.value.every((id) => props.selectedIdSet.has(id)),
 )
 
 /** 当前目录是否有部分选中 */
 const isCurrentDirIndeterminate = computed(
   () =>
     !isCurrentDirAllSelected.value &&
-    currentDirectoryAllResources.value.some((r) => props.selectedIdSet.has(r.id)),
+    currentDirectoryResourceIds.value.some((id) => props.selectedIdSet.has(id)),
+)
+
+const isDirectorySelected = (directory: DirectoryChild): boolean => {
+  const ids = directory.descendantResourceIds ?? []
+  return ids.length > 0 && ids.every((id) => props.selectedIdSet.has(id))
+}
+
+const isDirectoryIndeterminate = (directory: DirectoryChild): boolean => {
+  const ids = directory.descendantResourceIds ?? []
+  return !isDirectorySelected(directory) && ids.some((id) => props.selectedIdSet.has(id))
+}
+
+const handleCurrentDirectorySelection = (selected: boolean): void => {
+  emit('setSelection', currentDirectoryResourceIds.value, selected)
+}
+
+const handleDirectorySelection = (directory: DirectoryChild, selected: boolean): void => {
+  emit('setSelection', directory.descendantResourceIds ?? [], selected)
+}
+
+const currentDirectorySelectionAriaLabel = computed(() =>
+  isCurrentDirAllSelected.value
+    ? t('workspace.explorer.deselectCurrentDirectoryResources')
+    : t('workspace.explorer.selectCurrentDirectoryResources'),
 )
 </script>
 
 <template>
   <!-- 表头行 -->
   <div
-    v-if="resourceItems.length > 0"
+    v-if="directories.length > 0 || resourceItems.length > 0"
     class="flex items-center gap-3 border-b border-lf-border-soft px-4 py-2 text-xs font-medium text-lf-text-muted"
   >
     <NCheckbox
-      v-if="currentDirectoryAllResources.length > 0"
       :checked="isCurrentDirAllSelected"
       :indeterminate="isCurrentDirIndeterminate"
+      :disabled="currentDirectoryResourceIds.length === 0"
+      :aria-label="currentDirectorySelectionAriaLabel"
       class="shrink-0"
-      @update:checked="emit('toggleSelectAll')"
+      @update:checked="handleCurrentDirectorySelection"
     />
     <div class="w-7 shrink-0" />
     <!-- 图标占位 -->
@@ -104,7 +132,11 @@ const isCurrentDirIndeterminate = computed(
       :name="dir.name"
       :path="dir.path"
       :child-count="dir.childCount ?? 0"
+      :checked="isDirectorySelected(dir)"
+      :indeterminate="isDirectoryIndeterminate(dir)"
+      :disabled="(dir.descendantResourceIds?.length ?? 0) === 0"
       @open="emit('navigate', $event)"
+      @selection="handleDirectorySelection(dir, $event)"
     />
   </div>
 

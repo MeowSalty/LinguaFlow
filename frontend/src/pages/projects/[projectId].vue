@@ -69,7 +69,7 @@ const loadTabData = async (tab: WorkspaceTab): Promise<void> => {
 
   switch (tab) {
     case 'resources':
-      // 资源数据已通过 syncResourcesFromTree 加载
+      // 资源数据已随资源树加载同步
       break
     case 'segments':
       // 段落数据在用户选择资源时按需加载
@@ -233,7 +233,6 @@ const reloadWorkspace = async (): Promise<void> => {
     workspace.loadProject(projectId.value),
     workspace.loadResourceTree(projectId.value),
   ])
-  workspace.syncResourcesFromTree()
 
   // 重新加载当前标签页数据
   loadedTabs.clear()
