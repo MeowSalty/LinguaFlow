@@ -36,6 +36,7 @@ export interface DirectoryChild {
   path: string
   resource?: Resource
   childCount?: number
+  descendantResourceIds?: number[]
 }
 
 export interface UploadTask {
@@ -113,6 +114,25 @@ const findNodeByPath = (root: ResourceTreeNode, path: string): ResourceTreeNode 
 
   return node
 }
+
+const collectDescendantResources = (node: ResourceTreeNode): Resource[] => {
+  const result: Resource[] = []
+
+  const walk = (current: ResourceTreeNode): void => {
+    if (current.type === 'resource' && current.resource) {
+      result.push(current.resource)
+    }
+    for (const child of current.children ?? []) {
+      walk(child)
+    }
+  }
+
+  walk(node)
+  return result
+}
+
+const collectDescendantResourceIds = (node: ResourceTreeNode): number[] =>
+  collectDescendantResources(node).map((resource) => resource.id)
 
 const normalizeUploadPath = (path: string): string =>
   path.replaceAll('\\\\', '/').replace(/^\/+/, '').replace(/\/+/g, '/')
@@ -240,6 +260,7 @@ export const useResourceStore = defineStore('resource', () => {
         name: c.name,
         path: c.path,
         childCount: c.children?.length ?? 0,
+        descendantResourceIds: collectDescendantResourceIds(c),
       }))
 
     const resourceItems: DirectoryChild[] = node.children
@@ -290,6 +311,23 @@ export const useResourceStore = defineStore('resource', () => {
     selectedResourceIds.value = [...ids]
   }
 
+  /** 增量设置一组资源的选中状态 */
+  const setResourceSelection = (ids: number[], selected: boolean): void => {
+    if (ids.length === 0) {
+      return
+    }
+
+    const nextIds = new Set(selectedResourceIds.value)
+    for (const id of ids) {
+      if (selected) {
+        nextIds.add(id)
+      } else {
+        nextIds.delete(id)
+      }
+    }
+    selectedResourceIds.value = [...nextIds]
+  }
+
   /** 清除所有选中 */
   const clearSelectedResources = (): void => {
     selectedResourceIds.value = []
@@ -315,6 +353,17 @@ export const useResourceStore = defineStore('resource', () => {
 
   // ── Actions：资源树 ──
 
+  /** 刷新资源树后同步更新扁平资源列表 */
+  const syncResourcesFromTree = (): void => {
+    resources.value = resourceTree.value ? collectDescendantResources(resourceTree.value) : []
+
+    const resourceIdSet = new Set(resources.value.map((resource) => resource.id))
+    selectedResourceIds.value = selectedResourceIds.value.filter((id) => resourceIdSet.has(id))
+    if (activeResourceId.value && !resourceIdSet.has(activeResourceId.value)) {
+      activeResourceId.value = resources.value[0]?.id ?? null
+    }
+  }
+
   const loadResourceTree = async (projectId: number): Promise<void> => {
     loadingResourceTree.value = true
     resourceTreeError.value = null
@@ -322,6 +371,7 @@ export const useResourceStore = defineStore('resource', () => {
     try {
       const response = await fetchProjectResourceTree(projectId)
       resourceTree.value = response.root
+      syncResourcesFromTree()
     } catch (error) {
       resourceTreeError.value = getErrorMessage(error, t('api.errors.fetchResourceTreeFailed'))
     } finally {
@@ -387,41 +437,6 @@ export const useResourceStore = defineStore('resource', () => {
     const parts = currentPath.value.split('/')
     parts.pop()
     currentPath.value = parts.join('/')
-  }
-
-  /** 刷新资源树后同步更新扁平资源列表 */
-  const syncResourcesFromTree = (): void => {
-    if (!resourceTree.value) {
-      resources.value = []
-      return
-    }
-
-    const flat: Resource[] = []
-
-    const walk = (node: ResourceTreeNode): void => {
-      if (node.type === 'resource' && node.resource) {
-        flat.push(node.resource)
-      }
-      if (node.children) {
-        for (const child of node.children) {
-          walk(child)
-        }
-      }
-    }
-
-    walk(resourceTree.value)
-    resources.value = flat
-
-    // 同步选中和激活状态
-    selectedResourceIds.value = selectedResourceIds.value.filter((id) =>
-      resources.value.some((resource) => resource.id === id),
-    )
-    if (
-      activeResourceId.value &&
-      !resources.value.some((item) => item.id === activeResourceId.value)
-    ) {
-      activeResourceId.value = resources.value[0]?.id ?? null
-    }
   }
 
   // ── Actions：资源列表（保留用于段落 Tab 和筛选） ──
@@ -868,6 +883,7 @@ export const useResourceStore = defineStore('resource', () => {
     downloadResourceResult,
     toggleResourceSelection,
     setSelectedResourceIds,
+    setResourceSelection,
     clearSelectedResources,
     enterEpub,
     exitEpub,

@@ -357,6 +357,10 @@ const messages = {
       headerName: '名称',
       headerSegments: '段落',
       headerProgress: '进度',
+      selectCurrentDirectoryResources: '选择当前目录及所有子目录中的资源',
+      deselectCurrentDirectoryResources: '取消选择当前目录及所有子目录中的资源',
+      selectDirectoryResources: '选择文件夹“{name}”中的所有资源',
+      deselectDirectoryResources: '取消选择文件夹“{name}”中的所有资源',
     },
     resource: {
       searchPlaceholder: '搜索资源路径或文件名',

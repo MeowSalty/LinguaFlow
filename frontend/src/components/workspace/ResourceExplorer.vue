@@ -480,20 +480,8 @@ const currentViewEvents = computed(() => {
     downloadTranslated: (r: Resource) => void downloadResourceResult(r),
     delete: (r: Resource) => void deleteResource(r),
     toggleSelect: (r: Resource) => workspace.toggleResourceSelection(r.id),
-    toggleSelectAll: (): void => {
-      const allIds = resourceItems.value.map((item) => item.resource!.id)
-      const selectedSet = new Set(workspace.selectedResourceIds)
-      const allSelected = allIds.length > 0 && allIds.every((id) => selectedSet.has(id))
-      if (allSelected) {
-        const removeSet = new Set(allIds)
-        workspace.setSelectedResourceIds(
-          workspace.selectedResourceIds.filter((id: number) => !removeSet.has(id)),
-        )
-      } else {
-        const merged = new Set([...workspace.selectedResourceIds, ...allIds])
-        workspace.setSelectedResourceIds([...merged])
-      }
-    },
+    setSelection: (resourceIds: number[], selected: boolean): void =>
+      workspace.setResourceSelection(resourceIds, selected),
   }
 })
 </script>
