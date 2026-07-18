@@ -29,10 +29,10 @@ defineEmits<{
   <Transition name="slide-up">
     <div
       v-if="count > 0"
-      class="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex justify-center px-4"
+      class="pointer-events-none fixed inset-x-0 bottom-5 z-50 flex justify-center px-4"
     >
       <div
-        class="pointer-events-auto flex items-center gap-4 rounded-2xl border border-lf-border-soft bg-lf-surface px-5 py-3 shadow-lg shadow-lf-shadow-strong backdrop-blur-sm"
+        class="pointer-events-auto flex items-center gap-3 rounded-2xl border border-lf-border-soft bg-lf-surface/95 px-4 py-2.5 shadow-lg shadow-lf-shadow-strong backdrop-blur-md"
       >
         <!-- 选中数量 -->
         <NBadge :value="count" :max="99" type="success" />

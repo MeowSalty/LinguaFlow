@@ -487,10 +487,9 @@ const currentViewEvents = computed(() => {
 </script>
 
 <template>
-  <div class="space-y-4" @dragover="handleDragOver" @dragleave="handleDragLeave" @drop="handleDrop">
-    <!-- 资源路径 + 操作栏：平铺式工具栏 -->
+  <div class="space-y-3" @dragover="handleDragOver" @dragleave="handleDragLeave" @drop="handleDrop">
     <div
-      class="flex items-center gap-3 rounded-xl border border-lf-border-soft bg-lf-surface px-4 py-2.5"
+      class="flex items-center gap-2.5 rounded-xl border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2"
     >
       <NButton
         v-if="toolbarMeta.showBackButton"
@@ -564,7 +563,7 @@ const currentViewEvents = computed(() => {
     >
       <div
         v-if="dragOver"
-        class="flex items-center justify-center rounded-xl border-2 border-dashed border-brand-500/45 bg-lf-brand-soft/80 py-12 dark:border-brand-500/55 dark:bg-lf-brand-soft/70"
+        class="flex items-center justify-center rounded-xl border-2 border-dashed border-brand-500/45 bg-lf-brand-soft/80 py-8 dark:border-brand-500/55 dark:bg-lf-brand-soft/70"
       >
         <div class="text-center">
           <div
@@ -582,7 +581,7 @@ const currentViewEvents = computed(() => {
     <!-- 加载状态 -->
     <div
       v-if="workspace.loadingResourceTree"
-      class="flex items-center justify-center rounded-xl border border-dashed border-lf-border-soft bg-lf-surface-muted/60 px-6 py-12 text-center"
+      class="flex items-center justify-center rounded-xl border border-dashed border-lf-border-soft bg-lf-surface-muted/60 px-6 py-8 text-center"
     >
       <div
         class="flex h-12 w-12 items-center justify-center rounded-xl bg-lf-surface-elevated text-brand-600 shadow-sm shadow-lf-shadow dark:text-brand-100"
@@ -594,7 +593,7 @@ const currentViewEvents = computed(() => {
     <!-- 空状态 -->
     <div
       v-else-if="isEmpty && !dragOver"
-      class="rounded-xl border border-dashed border-lf-border-soft bg-lf-surface-muted/60 px-6 py-12"
+      class="rounded-xl border border-dashed border-lf-border-soft bg-lf-surface-muted/60 px-6 py-8"
     >
       <NEmpty :description="t('workspace.explorer.emptyDirectory')">
         <template #extra>

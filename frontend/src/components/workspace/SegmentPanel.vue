@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { NAlert, NButton, NEmpty, NInput, NSelect } from 'naive-ui'
 import { computed, ref, toRef } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -161,113 +161,103 @@ const handleCloseInlineComment = (): void => {
 </script>
 
 <template>
-  <div class="space-y-4 pt-3">
-    <!-- 统一工具栏 -->
-    <div class="rounded-xl border border-lf-border-soft bg-lf-surface-muted/60 p-4">
-      <div class="mb-4 flex flex-col gap-1">
-        <h3 class="text-base font-semibold text-lf-text-strong">
-          {{ t('workspace.sections.segments.title') }}
-        </h3>
-        <p class="text-sm text-lf-text-muted">
-          {{ t('workspace.sections.segments.description') }}
-        </p>
+  <div class="space-y-3">
+    <div
+      class="flex flex-col gap-2.5 rounded-xl border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2.5 xl:flex-row xl:items-center xl:justify-between"
+    >
+      <div class="flex min-w-0 flex-1 flex-col gap-2 md:flex-row md:items-center">
+        <NSelect
+          v-model:value="workspace.activeResourceId"
+          clearable
+          size="small"
+          class="md:max-w-xs"
+          :options="
+            workspace.resources.map((resource) => ({
+              label: resource.path,
+              value: resource.id,
+            }))
+          "
+          :placeholder="t('workspace.segment.resourcePlaceholder')"
+          @update:value="handleResourceChange"
+        />
+        <NSelect
+          v-if="workspace.isEpubResource"
+          :value="chapterSelectValue"
+          size="small"
+          class="md:max-w-xs"
+          :options="chapterOptions"
+          :loading="workspace.loadingSegmentGroups"
+          :placeholder="t('workspace.segment.chapterPlaceholder')"
+          @update:value="handleChapterChange"
+        />
+        <NInput
+          v-model:value="workspace.segmentSearch"
+          clearable
+          size="small"
+          class="md:max-w-xs"
+          :disabled="!workspace.activeResourceId"
+          :placeholder="t('workspace.segment.searchPlaceholder')"
+        />
+        <NSelect
+          v-model:value="workspace.segmentStatusFilter"
+          size="small"
+          class="md:w-36"
+          :disabled="!workspace.activeResourceId"
+          :options="segmentStatusOptions"
+        />
       </div>
-      <div class="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-        <div class="flex flex-1 flex-col gap-3 md:flex-row">
-          <!-- 资源选择器 -->
-          <NSelect
-            v-model:value="workspace.activeResourceId"
-            clearable
-            class="md:max-w-sm"
-            :options="
-              workspace.resources.map((resource) => ({
-                label: resource.path,
-                value: resource.id,
-              }))
-            "
-            :placeholder="t('workspace.segment.resourcePlaceholder')"
-            @update:value="handleResourceChange"
-          />
-          <!-- 章节选择器（仅 EPUB 资源时显示） -->
-          <NSelect
-            v-if="workspace.isEpubResource"
-            :value="chapterSelectValue"
-            class="md:max-w-sm"
-            :options="chapterOptions"
-            :loading="workspace.loadingSegmentGroups"
-            :placeholder="t('workspace.segment.chapterPlaceholder')"
-            @update:value="handleChapterChange"
-          />
-          <!-- 搜索 -->
-          <NInput
-            v-model:value="workspace.segmentSearch"
-            clearable
-            class="md:max-w-sm"
-            :disabled="!workspace.activeResourceId"
-            :placeholder="t('workspace.segment.searchPlaceholder')"
-          />
-          <!-- 状态筛选 -->
-          <NSelect
-            v-model:value="workspace.segmentStatusFilter"
-            class="md:w-44"
-            :disabled="!workspace.activeResourceId"
-            :options="segmentStatusOptions"
-          />
-        </div>
-        <div class="flex flex-wrap gap-3">
-          <NButton
-            secondary
-            :disabled="!workspace.activeResourceId"
-            :loading="workspace.loadingSegments"
-            @click="handleRefresh"
-          >
-            {{ t('workspace.actions.refresh') }}
-          </NButton>
-        </div>
+      <div class="flex shrink-0 items-center gap-2">
+        <NButton
+          secondary
+          size="small"
+          :disabled="!workspace.activeResourceId"
+          :loading="workspace.loadingSegments"
+          @click="handleRefresh"
+        >
+          {{ t('workspace.actions.refresh') }}
+        </NButton>
       </div>
     </div>
 
-    <!-- 错误提示 -->
     <NAlert v-if="workspace.segmentsError" type="error" :bordered="false">
       {{ workspace.segmentsError }}
     </NAlert>
 
-    <!-- 无资源选中状态 -->
     <NEmpty
       v-if="!workspace.activeResourceId"
-      class="py-12"
+      class="py-10"
       :description="t('workspace.segment.noResource')"
     />
 
-    <!-- 统一段落数据表 -->
-    <SegmentDataTable
-      v-else
-      ref="segmentDataTableRef"
-      :segments="workspace.segments"
-      :loading="workspace.loadingSegments"
-      :has-more="workspace.segmentsCursor !== null"
-      :text-render-mode="textRenderMode"
-      :show-updated-at="true"
-      :show-mobile-cards="true"
-      :show-selection="true"
-      :show-comment="true"
-      :editing-segment-ids="workspace.editingSegmentIds"
-      :inline-editing-segment-id="inlineEditingSegmentId"
-      :inline-edit-form="inlineEditForm"
-      :inline-comment-visible="inlineCommentVisible"
-      :inline-comment-text="inlineCommentText"
-      @selection-change="handleSelectionChange"
-      @translate="handleTranslate"
-      @load-more="handleLoadMore"
-      @start-inline-edit="startInlineEdit"
-      @cancel-inline-edit="cancelInlineEdit"
-      @save-inline-edit="saveInlineEdit"
-      @save-and-edit-next="handleSaveAndEditNext"
-      @open-inline-comment="openInlineComment"
-      @save-inline-comment="saveInlineComment"
-      @close-inline-comment="handleCloseInlineComment"
-      @update:inline-comment-text="handleUpdateInlineCommentText"
-      @update:inline-edit-form="handleUpdateInlineEditForm"
-    />
+    <div v-else class="lf-table overflow-hidden rounded-xl border border-lf-border-soft">
+      <SegmentDataTable
+        ref="segmentDataTableRef"
+        :segments="workspace.segments"
+        :loading="workspace.loadingSegments"
+        :has-more="workspace.segmentsCursor !== null"
+        :text-render-mode="textRenderMode"
+        :show-updated-at="true"
+        :show-mobile-cards="true"
+        :show-selection="true"
+        :show-comment="true"
+        :editing-segment-ids="workspace.editingSegmentIds"
+        :inline-editing-segment-id="inlineEditingSegmentId"
+        :inline-edit-form="inlineEditForm"
+        :inline-comment-visible="inlineCommentVisible"
+        :inline-comment-text="inlineCommentText"
+        @selection-change="handleSelectionChange"
+        @translate="handleTranslate"
+        @load-more="handleLoadMore"
+        @start-inline-edit="startInlineEdit"
+        @cancel-inline-edit="cancelInlineEdit"
+        @save-inline-edit="saveInlineEdit"
+        @save-and-edit-next="handleSaveAndEditNext"
+        @open-inline-comment="openInlineComment"
+        @save-inline-comment="saveInlineComment"
+        @close-inline-comment="handleCloseInlineComment"
+        @update:inline-comment-text="handleUpdateInlineCommentText"
+        @update:inline-edit-form="handleUpdateInlineEditForm"
+      />
+    </div>
   </div>
 </template>

@@ -105,7 +105,7 @@ const currentDirectorySelectionAriaLabel = computed(() =>
   <!-- 表头行 -->
   <div
     v-if="directories.length > 0 || resourceItems.length > 0"
-    class="flex items-center gap-3 border-b border-lf-border-soft px-4 py-2 text-xs font-medium text-lf-text-muted"
+    class="flex items-center gap-2.5 border-b border-lf-border-soft px-3 py-1.5 text-[11px] font-medium tracking-wide text-lf-text-subtle uppercase"
   >
     <NCheckbox
       :checked="isCurrentDirAllSelected"
