@@ -54,103 +54,93 @@ const handlePruneApplied = async (payload: {
 </script>
 
 <template>
-  <div class="space-y-4 pt-3">
-    <div class="rounded-xl border border-lf-border-soft bg-lf-surface-muted/60 p-4">
-      <div class="mb-4 flex flex-col gap-1">
-        <h3 class="text-base font-semibold text-lf-text-strong">
-          {{ t('workspace.sections.glossary.title') }}
-        </h3>
-        <p class="text-sm text-lf-text-muted">
-          {{ t('workspace.sections.glossary.description') }}
-        </p>
+  <div class="space-y-3">
+    <div
+      class="flex flex-col gap-2.5 rounded-xl border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between sm:gap-3"
+    >
+      <div class="flex min-w-0 flex-1 items-center gap-3">
+        <NInput
+          v-model:value="glossary.searchQuery"
+          clearable
+          size="small"
+          class="w-full sm:max-w-xs"
+          :placeholder="t('workspace.segment.searchPlaceholder')"
+        />
+        <span
+          v-if="glossary.items.length > 0"
+          class="hidden shrink-0 text-xs tabular-nums text-lf-text-muted sm:inline"
+        >
+          {{ glossary.filteredItems.length }}
+          <span class="text-lf-text-subtle">/ {{ glossary.items.length }}</span>
+        </span>
       </div>
-      <div
-        class="flex flex-col gap-2.5 rounded-xl border border-lf-border-soft bg-lf-surface px-3 py-2.5 shadow-sm shadow-lf-shadow sm:flex-row sm:items-center sm:justify-between sm:gap-3"
-      >
-        <div class="flex min-w-0 flex-1 items-center gap-3">
-          <NInput
-            v-model:value="glossary.searchQuery"
-            clearable
-            size="small"
-            class="w-full sm:max-w-xs"
-            :placeholder="t('workspace.segment.searchPlaceholder')"
-          />
-          <span
-            v-if="glossary.items.length > 0"
-            class="hidden shrink-0 text-xs tabular-nums text-lf-text-muted sm:inline"
-          >
-            {{ glossary.filteredItems.length }}
-            <span class="text-lf-text-subtle">/ {{ glossary.items.length }}</span>
-          </span>
-        </div>
-        <div class="flex shrink-0 items-center justify-end gap-0.5">
-          <NTooltip trigger="hover" placement="top">
-            <template #trigger>
-              <span class="inline-flex">
-                <NButton
-                  quaternary
-                  circle
-                  size="small"
-                  class="text-lf-text-muted hover:text-lf-text-strong"
-                  :disabled="!projectId || glossary.items.length === 0"
-                  :aria-label="t('workspace.glossary.actions.prune')"
-                  @click="pruneDrawerVisible = true"
-                >
-                  <template #icon>
-                    <NIcon size="16"><IconCarbonMagicWand /></NIcon>
-                  </template>
-                </NButton>
-              </span>
-            </template>
-            {{ t('workspace.glossary.actions.prune') }}
-          </NTooltip>
-          <NTooltip trigger="hover" placement="top">
-            <template #trigger>
-              <span class="inline-flex">
-                <NButton
-                  quaternary
-                  circle
-                  size="small"
-                  class="text-lf-text-muted hover:text-lf-text-strong"
-                  :loading="glossary.importing"
-                  :aria-label="t('workspace.glossary.actions.import')"
-                  @click="handleImport"
-                >
-                  <template #icon>
-                    <NIcon size="16"><IconCarbonUpload /></NIcon>
-                  </template>
-                </NButton>
-              </span>
-            </template>
-            {{ t('workspace.glossary.actions.import') }}
-          </NTooltip>
-          <NTooltip trigger="hover" placement="top">
-            <template #trigger>
-              <span class="inline-flex">
-                <NButton
-                  quaternary
-                  circle
-                  size="small"
-                  class="text-lf-text-muted hover:text-lf-text-strong"
-                  :aria-label="t('workspace.glossary.actions.export')"
-                  @click="handleExport"
-                >
-                  <template #icon>
-                    <NIcon size="16"><IconCarbonDownload /></NIcon>
-                  </template>
-                </NButton>
-              </span>
-            </template>
-            {{ t('workspace.glossary.actions.export') }}
-          </NTooltip>
-          <span class="mx-1.5 h-4 w-px bg-lf-border-soft" />
-          <NButton type="primary" size="small" strong @click="handleCreate">
-            <template #icon>
-              <NIcon size="16"><IconCarbonAdd /></NIcon>
-            </template>
-            {{ t('workspace.glossary.actions.create') }}
-          </NButton>
-        </div>
+      <div class="flex shrink-0 items-center justify-end gap-0.5">
+        <NTooltip trigger="hover" placement="top">
+          <template #trigger>
+            <span class="inline-flex">
+              <NButton
+                quaternary
+                circle
+                size="small"
+                class="text-lf-text-muted hover:text-lf-text-strong"
+                :disabled="!projectId || glossary.items.length === 0"
+                :aria-label="t('workspace.glossary.actions.prune')"
+                @click="pruneDrawerVisible = true"
+              >
+                <template #icon>
+                  <NIcon size="16"><IconCarbonMagicWand /></NIcon>
+                </template>
+              </NButton>
+            </span>
+          </template>
+          {{ t('workspace.glossary.actions.prune') }}
+        </NTooltip>
+        <NTooltip trigger="hover" placement="top">
+          <template #trigger>
+            <span class="inline-flex">
+              <NButton
+                quaternary
+                circle
+                size="small"
+                class="text-lf-text-muted hover:text-lf-text-strong"
+                :loading="glossary.importing"
+                :aria-label="t('workspace.glossary.actions.import')"
+                @click="handleImport"
+              >
+                <template #icon>
+                  <NIcon size="16"><IconCarbonUpload /></NIcon>
+                </template>
+              </NButton>
+            </span>
+          </template>
+          {{ t('workspace.glossary.actions.import') }}
+        </NTooltip>
+        <NTooltip trigger="hover" placement="top">
+          <template #trigger>
+            <span class="inline-flex">
+              <NButton
+                quaternary
+                circle
+                size="small"
+                class="text-lf-text-muted hover:text-lf-text-strong"
+                :aria-label="t('workspace.glossary.actions.export')"
+                @click="handleExport"
+              >
+                <template #icon>
+                  <NIcon size="16"><IconCarbonDownload /></NIcon>
+                </template>
+              </NButton>
+            </span>
+          </template>
+          {{ t('workspace.glossary.actions.export') }}
+        </NTooltip>
+        <span class="mx-1.5 h-4 w-px bg-lf-border-soft" />
+        <NButton type="primary" size="small" strong @click="handleCreate">
+          <template #icon>
+            <NIcon size="16"><IconCarbonAdd /></NIcon>
+          </template>
+          {{ t('workspace.glossary.actions.create') }}
+        </NButton>
       </div>
     </div>
 
@@ -162,25 +152,30 @@ const handlePruneApplied = async (payload: {
       {{ glossary.importError }}
     </NAlert>
 
-    <NDataTable
-      :columns="glossaryMgmt.glossaryColumns.value"
-      :data="glossary.filteredItems"
-      :loading="glossary.loading"
-      :row-key="(row: ApiSchemas['GlossaryEntry']) => row.id"
-      :scroll-x="960"
-    >
-      <template #empty>
-        <NEmpty
-          v-if="!glossary.loading && glossary.filteredItems.length === 0"
-          class="py-12"
-          :description="
-            glossary.searchQuery.trim()
-              ? t('workspace.glossary.empty.filtered')
-              : t('workspace.glossary.empty.default')
-          "
-        />
-      </template>
-    </NDataTable>
+    <div class="lf-table overflow-hidden rounded-xl border border-lf-border-soft">
+      <NDataTable
+        size="small"
+        :columns="glossaryMgmt.glossaryColumns.value"
+        :data="glossary.filteredItems"
+        :loading="glossary.loading"
+        :bordered="false"
+        :single-line="true"
+        :row-key="(row: ApiSchemas['GlossaryEntry']) => row.id"
+        :scroll-x="960"
+      >
+        <template #empty>
+          <NEmpty
+            v-if="!glossary.loading && glossary.filteredItems.length === 0"
+            class="py-10"
+            :description="
+              glossary.searchQuery.trim()
+                ? t('workspace.glossary.empty.filtered')
+                : t('workspace.glossary.empty.default')
+            "
+          />
+        </template>
+      </NDataTable>
+    </div>
 
     <GlossaryPruneDrawer
       v-if="projectId"

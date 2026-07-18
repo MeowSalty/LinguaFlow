@@ -40,56 +40,46 @@ const { isPolling } = useJobPolling({ projectId: projectIdRef, enabled: pollingE
 </script>
 
 <template>
-  <div class="space-y-4 pt-3">
-    <div class="rounded-xl border border-lf-border-soft bg-lf-surface-muted/60 p-4">
-      <div class="mb-4 flex flex-col gap-1">
-        <h3 class="text-base font-semibold text-lf-text-strong">
-          {{ t('workspace.sections.jobs.title') }}
-        </h3>
-        <p class="text-sm text-lf-text-muted">
-          {{ t('workspace.sections.jobs.description') }}
-        </p>
-      </div>
-      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <NSelect
-          v-model:value="workspace.jobStatusFilter"
-          class="w-full sm:w-36"
-          :options="jobStatusOptions"
-        />
-        <div class="flex items-center gap-3">
-          <div class="flex items-center gap-2">
-            <NSwitch v-model:value="autoRefreshEnabled" size="small" />
-            <span class="whitespace-nowrap text-xs text-lf-text-muted">
-              {{
-                autoRefreshEnabled && isPolling
-                  ? t('workspace.job.polling')
-                  : autoRefreshEnabled
-                    ? t('workspace.job.waitingJobs')
-                    : t('workspace.job.autoRefresh')
-              }}
-            </span>
-            <span
-              v-if="autoRefreshEnabled && isPolling"
-              class="inline-block h-1.5 w-1.5 animate-pulse rounded-full bg-green-500"
-            />
-            <span
-              v-else-if="autoRefreshEnabled"
-              class="inline-block h-1.5 w-1.5 rounded-full bg-gray-400"
-            />
-          </div>
-          <NButton
-            quaternary
-            circle
-            size="small"
-            :loading="workspace.loadingJobs"
-            :title="t('workspace.actions.refresh')"
-            @click="projectId && workspace.loadJobs(projectId)"
-          >
-            <template #icon>
-              <NIcon size="16"><IconCarbonRenew /></NIcon>
-            </template>
-          </NButton>
+  <div class="space-y-3">
+    <div
+      class="flex flex-col gap-2.5 rounded-xl border border-lf-border-soft bg-lf-surface-muted/50 px-3 py-2.5 sm:flex-row sm:items-center sm:justify-between"
+    >
+      <NSelect
+        v-model:value="workspace.jobStatusFilter"
+        size="small"
+        class="w-full sm:w-36"
+        :options="jobStatusOptions"
+      />
+      <div class="flex items-center gap-3">
+        <div class="flex items-center gap-2">
+          <NSwitch v-model:value="autoRefreshEnabled" size="small" />
+          <span class="whitespace-nowrap text-xs text-lf-text-muted">
+            {{
+              autoRefreshEnabled && isPolling
+                ? t('workspace.job.polling')
+                : autoRefreshEnabled
+                  ? t('workspace.job.waitingJobs')
+                  : t('workspace.job.autoRefresh')
+            }}
+          </span>
+          <span
+            v-if="autoRefreshEnabled && isPolling"
+            class="lf-status-dot lf-status-dot--active animate-pulse"
+          />
+          <span v-else-if="autoRefreshEnabled" class="lf-status-dot lf-status-dot--inactive" />
         </div>
+        <NButton
+          quaternary
+          circle
+          size="small"
+          :loading="workspace.loadingJobs"
+          :title="t('workspace.actions.refresh')"
+          @click="projectId && workspace.loadJobs(projectId)"
+        >
+          <template #icon>
+            <NIcon size="16"><IconCarbonRenew /></NIcon>
+          </template>
+        </NButton>
       </div>
     </div>
 
@@ -97,28 +87,37 @@ const { isPolling } = useJobPolling({ projectId: projectIdRef, enabled: pollingE
       {{ workspace.jobsError }}
     </NAlert>
 
-    <NDataTable
-      remote
-      :columns="jobColumns"
-      :data="workspace.jobs"
-      :loading="workspace.loadingJobs"
-      :row-key="(row: Job) => row.id"
-      :row-props="
-        (row: Job) => ({
-          class: 'cursor-pointer',
-          onClick: () => emit('detail', row),
-        })
-      "
-      :scroll-x="1180"
-    />
-    <div v-if="workspace.jobsCursor" class="flex justify-center pt-3">
-      <NButton :loading="workspace.loadingJobs" @click="workspace.loadJobs(projectId!, true)">
+    <div class="lf-table overflow-hidden rounded-xl border border-lf-border-soft">
+      <NDataTable
+        remote
+        size="small"
+        :columns="jobColumns"
+        :data="workspace.jobs"
+        :loading="workspace.loadingJobs"
+        :bordered="false"
+        :single-line="true"
+        :row-key="(row: Job) => row.id"
+        :row-props="
+          (row: Job) => ({
+            class: 'cursor-pointer',
+            onClick: () => emit('detail', row),
+          })
+        "
+        :scroll-x="1180"
+      />
+    </div>
+    <div v-if="workspace.jobsCursor" class="flex justify-center pt-1">
+      <NButton
+        size="small"
+        :loading="workspace.loadingJobs"
+        @click="workspace.loadJobs(projectId!, true)"
+      >
         {{ t('common.loadMore') }}
       </NButton>
     </div>
     <NEmpty
       v-if="!workspace.loadingJobs && workspace.jobs.length === 0"
-      class="py-12"
+      class="py-10"
       :description="t('workspace.job.empty')"
     />
   </div>

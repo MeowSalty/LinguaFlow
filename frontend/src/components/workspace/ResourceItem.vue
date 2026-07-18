@@ -197,20 +197,19 @@ const handleDropdownSelect = (key: string) => {
 <template>
   <div
     :class="[
-      'group relative overflow-hidden rounded-lg border border-transparent bg-lf-surface/80 px-4 py-2.5 transition-all hover:border-lf-border-soft hover:bg-lf-surface-elevated hover:shadow-sm hover:shadow-lf-shadow',
+      'group relative overflow-hidden rounded-lg border border-transparent bg-lf-surface/80 px-3 py-2 transition-all hover:border-lf-border-soft hover:bg-lf-surface-elevated hover:shadow-sm hover:shadow-lf-shadow',
     ]"
     @click="handleRowClick"
   >
-    <!-- 进度背景层：双重重叠进度条 -->
     <div
-      class="pointer-events-none absolute inset-y-0 left-0 bg-blue-500/10 transition-all duration-500"
+      class="pointer-events-none absolute inset-y-0 left-0 bg-lf-info/10 transition-all duration-500"
       :style="{ width: `${translatedPercent}%` }"
     />
     <div
-      class="pointer-events-none absolute inset-y-0 left-0 bg-emerald-500/10 transition-all duration-500"
+      class="pointer-events-none absolute inset-y-0 left-0 bg-brand-500/10 transition-all duration-500"
       :style="{ width: `${approvedPercent}%` }"
     />
-    <div class="flex min-h-14 items-center gap-3">
+    <div class="flex min-h-11 items-center gap-2.5">
       <NCheckbox
         :checked="props.selected"
         class="shrink-0"
@@ -274,8 +273,8 @@ const handleDropdownSelect = (key: string) => {
             >
               {{ props.resource.format || '-' }}
             </span>
-            <span class="shrink-0 text-xs text-blue-500/80"> {{ translatedPercent }}% </span>
-            <span class="shrink-0 text-xs text-emerald-500/80"> {{ approvedPercent }}% </span>
+            <span class="shrink-0 text-xs text-lf-info/80"> {{ translatedPercent }}% </span>
+            <span class="shrink-0 text-xs text-brand-500/80"> {{ approvedPercent }}% </span>
           </div>
         </div>
 

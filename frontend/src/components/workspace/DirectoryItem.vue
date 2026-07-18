@@ -28,7 +28,7 @@ const selectionAriaLabel = computed(() =>
 
 <template>
   <div
-    class="group flex min-h-14 w-full items-center gap-3 rounded-lg border border-transparent bg-lf-surface/80 px-4 py-2.5 text-left transition-all hover:border-lf-border-soft hover:bg-lf-surface-elevated hover:shadow-sm hover:shadow-lf-shadow focus:outline-none focus-visible:border-brand-500 focus-visible:ring-2 focus-visible:ring-brand-500/20"
+    class="group flex min-h-11 w-full items-center gap-2.5 rounded-lg border border-transparent bg-lf-surface/80 px-3 py-2 text-left transition-all hover:border-lf-border-soft hover:bg-lf-surface-elevated hover:shadow-sm hover:shadow-lf-shadow focus:outline-none focus-visible:border-brand-500 focus-visible:ring-2 focus-visible:ring-brand-500/20"
   >
     <NCheckbox
       :checked="checked"

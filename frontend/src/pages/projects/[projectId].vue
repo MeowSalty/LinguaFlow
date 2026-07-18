@@ -414,17 +414,17 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="space-y-5">
-    <section class="lf-page-header !p-4 sm:!px-5 sm:!py-4">
-      <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
+  <div class="space-y-3">
+    <section class="lf-page-header !px-4 !py-3 sm:!px-5">
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div class="flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1.5">
           <NButton quaternary size="small" @click="router.push('/projects')">
             <template #icon>
               <NIcon><IconCarbonArrowLeft /></NIcon>
             </template>
           </NButton>
 
-          <h1 class="truncate text-xl font-semibold tracking-tight text-lf-text-strong">
+          <h1 class="truncate text-lg font-semibold tracking-tight text-lf-text-strong">
             {{ workspace.project?.name || t('workspace.loadingProject') }}
           </h1>
 
@@ -443,7 +443,7 @@ onMounted(() => {
 
           <span class="hidden h-4 w-px bg-lf-border-soft sm:inline-block" />
           <span
-            class="hidden items-center gap-1.5 rounded-lg bg-lf-surface-muted px-2 py-1 text-sm text-lf-text-muted sm:inline-flex"
+            class="hidden items-center gap-1.5 rounded-md bg-lf-surface-muted px-2 py-0.5 text-xs text-lf-text-muted sm:inline-flex"
           >
             <IconCarbonLanguage class="h-3.5 w-3.5 text-brand-500" />
             <span class="font-medium text-lf-text-strong">{{
@@ -455,7 +455,7 @@ onMounted(() => {
             }}</span>
           </span>
           <span class="hidden h-4 w-px bg-lf-border-soft md:inline-block" />
-          <span class="hidden items-center gap-1.5 text-sm text-lf-text-muted md:inline-flex">
+          <span class="hidden items-center gap-1.5 text-xs text-lf-text-muted md:inline-flex">
             <IconCarbonTime class="h-3.5 w-3.5 text-lf-text-subtle" />
             {{
               t('workspace.updatedAt', {
@@ -495,7 +495,6 @@ onMounted(() => {
       {{ workspace.segmentsError }}
     </NAlert>
 
-    <!-- 统计指标栏 -->
     <WorkspaceMetricsBar
       :total-resources="workspace.resources.length"
       :total-segments="workspace.totalSegmentCount"
@@ -504,10 +503,15 @@ onMounted(() => {
       :running-jobs="workspace.runningJobCount"
     />
 
-    <div class="lf-panel p-4 sm:p-5">
-      <NTabs v-model:value="activeTab" animated>
+    <div class="lf-panel overflow-hidden">
+      <NTabs
+        v-model:value="activeTab"
+        type="line"
+        animated
+        class="workspace-tabs px-3 pt-1 sm:px-4"
+      >
         <NTabPane name="resources" :tab="t('workspace.tabs.resources')">
-          <div class="pt-3">
+          <div class="pb-3 pt-2">
             <ResourceExplorer
               v-if="projectId"
               :project-id="projectId"
@@ -520,25 +524,31 @@ onMounted(() => {
         </NTabPane>
 
         <NTabPane name="segments" :tab="t('workspace.tabs.segments')">
-          <SegmentPanel
-            ref="segmentPanelRef"
-            :project-id="projectId"
-            @translate="(segment) => jobMgmt.openSegmentJobDrawer(segment)"
-            @refresh="reloadSegments"
-          />
+          <div class="pb-3 pt-2">
+            <SegmentPanel
+              ref="segmentPanelRef"
+              :project-id="projectId"
+              @translate="(segment) => jobMgmt.openSegmentJobDrawer(segment)"
+              @refresh="reloadSegments"
+            />
+          </div>
         </NTabPane>
 
         <NTabPane name="jobs" :tab="t('workspace.tabs.jobs')">
-          <JobPanel
-            :project-id="projectId"
-            @detail="(job) => jobMgmt.openJobDetail(job)"
-            @cancel="(job) => jobMgmt.cancelJob(job)"
-            @retry="(job) => jobMgmt.retryJob(job)"
-          />
+          <div class="pb-3 pt-2">
+            <JobPanel
+              :project-id="projectId"
+              @detail="(job) => jobMgmt.openJobDetail(job)"
+              @cancel="(job) => jobMgmt.cancelJob(job)"
+              @retry="(job) => jobMgmt.retryJob(job)"
+            />
+          </div>
         </NTabPane>
 
         <NTabPane name="glossary" :tab="t('workspace.tabs.glossary')">
-          <GlossaryPanel :project-id="projectId" />
+          <div class="pb-3 pt-2">
+            <GlossaryPanel :project-id="projectId" />
+          </div>
         </NTabPane>
       </NTabs>
     </div>

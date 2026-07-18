@@ -279,6 +279,21 @@ body {
   border-bottom: none !important;
 }
 
+/* Workspace tabs: denser chrome */
+.workspace-tabs .n-tabs-nav {
+  padding-top: 2px;
+}
+
+.workspace-tabs .n-tabs-tab {
+  padding-top: 8px !important;
+  padding-bottom: 8px !important;
+  font-size: 13px !important;
+}
+
+.workspace-tabs .n-tab-pane {
+  padding-top: 0 !important;
+}
+
 .lf-auth-shell {
   position: relative;
   isolation: isolate;
