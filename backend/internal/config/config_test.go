@@ -1,10 +1,38 @@
 package config
 
 import (
+	"os"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
 )
+
+var databaseEnvNames = []string{
+	"LINGUAFLOW_DATABASE_DRIVER",
+	"LINGUAFLOW_DATABASE_DSN",
+	"LINGUAFLOW_DATABASE_MAX_OPEN_CONNS",
+	"LINGUAFLOW_DATABASE_MAX_IDLE_CONNS",
+	"LINGUAFLOW_DATABASE_CONN_MAX_LIFETIME",
+}
+
+func clearDatabaseEnv(t *testing.T) {
+	t.Helper()
+	for _, name := range databaseEnvNames {
+		value, ok := os.LookupEnv(name)
+		if err := os.Unsetenv(name); err != nil {
+			t.Fatalf("unset %s: %v", name, err)
+		}
+		name := name
+		t.Cleanup(func() {
+			if ok {
+				_ = os.Setenv(name, value)
+			} else {
+				_ = os.Unsetenv(name)
+			}
+		})
+	}
+}
 
 func TestValidateServerConfig_Defaults(t *testing.T) {
 	cfg := DefaultServerConfig()
@@ -65,10 +93,174 @@ func TestValidateServerConfig_InvalidMode(t *testing.T) {
 func TestValidateServerConfig_LocalMode(t *testing.T) {
 	cfg := DefaultServerConfig()
 	cfg.Mode = ModeLocal
+	cfg.Port = 0
 	if err := ValidateServerConfig(cfg); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.Mode != ModeLocal {
 		t.Fatalf("mode=%q want %q", cfg.Mode, ModeLocal)
+	}
+	if cfg.Port != 0 {
+		t.Fatalf("port=%d want 0", cfg.Port)
+	}
+}
+
+func TestDatabaseDSN_CustomSQLiteForcesForeignKeys(t *testing.T) {
+	cfg := DefaultServerConfig()
+	cfg.Database.DSN = "custom.db?_pragma=foreign_keys(0)"
+
+	got := cfg.DatabaseDSN()
+	if !strings.HasSuffix(got, "&_pragma=foreign_keys(1)") {
+		t.Fatalf("database DSN=%q does not force foreign keys", got)
+	}
+}
+
+func TestLoadServerConfig_DefaultSQLite(t *testing.T) {
+	clearDatabaseEnv(t)
+
+	cfg, err := LoadServerConfig(ModeServer)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	want := DatabaseConfig{Driver: DatabaseDriverSQLite, MaxIdleConns: 2}
+	if !reflect.DeepEqual(cfg.Database, want) {
+		t.Fatalf("database=%+v want %+v", cfg.Database, want)
+	}
+	if !strings.Contains(cfg.DatabaseDSN(), "linguaflow.db?_pragma=foreign_keys(1)&_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=synchronous(NORMAL)") {
+		t.Fatalf("unexpected SQLite DSN: %q", cfg.DatabaseDSN())
+	}
+}
+
+func TestLoadServerConfig_Postgres(t *testing.T) {
+	clearDatabaseEnv(t)
+	t.Setenv("LINGUAFLOW_DATABASE_DRIVER", DatabaseDriverPostgres)
+	t.Setenv("LINGUAFLOW_DATABASE_DSN", "postgres://localhost/linguaflow")
+	t.Setenv("LINGUAFLOW_DATABASE_MAX_OPEN_CONNS", "40")
+	t.Setenv("LINGUAFLOW_DATABASE_MAX_IDLE_CONNS", "8")
+	t.Setenv("LINGUAFLOW_DATABASE_CONN_MAX_LIFETIME", "45m")
+
+	cfg, err := LoadServerConfig(ModeServer)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	want := DatabaseConfig{
+		Driver:          DatabaseDriverPostgres,
+		DSN:             "postgres://localhost/linguaflow",
+		MaxOpenConns:    40,
+		MaxIdleConns:    8,
+		ConnMaxLifetime: 45 * time.Minute,
+	}
+	if !reflect.DeepEqual(cfg.Database, want) {
+		t.Fatalf("database=%+v want %+v", cfg.Database, want)
+	}
+}
+
+func TestLoadServerConfig_PostgresDefaults(t *testing.T) {
+	clearDatabaseEnv(t)
+	t.Setenv("LINGUAFLOW_DATABASE_DRIVER", DatabaseDriverPostgres)
+	t.Setenv("LINGUAFLOW_DATABASE_DSN", "postgres://localhost/linguaflow")
+
+	cfg, err := LoadServerConfig(ModeServer)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	want := DatabaseConfig{
+		Driver:          DatabaseDriverPostgres,
+		DSN:             "postgres://localhost/linguaflow",
+		MaxOpenConns:    25,
+		MaxIdleConns:    5,
+		ConnMaxLifetime: 30 * time.Minute,
+	}
+	if !reflect.DeepEqual(cfg.Database, want) {
+		t.Fatalf("database=%+v want %+v", cfg.Database, want)
+	}
+}
+
+func TestLoadServerConfig_LocalIgnoresDatabaseEnv(t *testing.T) {
+	clearDatabaseEnv(t)
+	t.Setenv("LINGUAFLOW_DATABASE_DRIVER", DatabaseDriverPostgres)
+	t.Setenv("LINGUAFLOW_DATABASE_DSN", "postgres://localhost/linguaflow")
+	t.Setenv("LINGUAFLOW_DATABASE_MAX_OPEN_CONNS", "invalid")
+
+	cfg, err := LoadServerConfig(ModeLocal)
+	if err != nil {
+		t.Fatalf("load local config: %v", err)
+	}
+	want := DatabaseConfig{Driver: DatabaseDriverSQLite, MaxIdleConns: 2}
+	if !reflect.DeepEqual(cfg.Database, want) {
+		t.Fatalf("database=%+v want %+v", cfg.Database, want)
+	}
+}
+
+func TestLoadServerConfig_DatabaseErrors(t *testing.T) {
+	tests := []struct {
+		name      string
+		env       map[string]string
+		wantError string
+	}{
+		{
+			name:      "postgres DSN missing",
+			env:       map[string]string{"LINGUAFLOW_DATABASE_DRIVER": DatabaseDriverPostgres},
+			wantError: "dsn is required",
+		},
+		{
+			name: "postgres DSN whitespace",
+			env: map[string]string{
+				"LINGUAFLOW_DATABASE_DRIVER": DatabaseDriverPostgres,
+				"LINGUAFLOW_DATABASE_DSN":    "   ",
+			},
+			wantError: "dsn is required",
+		},
+		{
+			name:      "unknown driver",
+			env:       map[string]string{"LINGUAFLOW_DATABASE_DRIVER": "mysql"},
+			wantError: "LINGUAFLOW_DATABASE_DRIVER",
+		},
+		{
+			name:      "invalid max open",
+			env:       map[string]string{"LINGUAFLOW_DATABASE_MAX_OPEN_CONNS": "many"},
+			wantError: "LINGUAFLOW_DATABASE_MAX_OPEN_CONNS",
+		},
+		{
+			name:      "invalid duration",
+			env:       map[string]string{"LINGUAFLOW_DATABASE_CONN_MAX_LIFETIME": "later"},
+			wantError: "LINGUAFLOW_DATABASE_CONN_MAX_LIFETIME",
+		},
+		{
+			name:      "negative max open",
+			env:       map[string]string{"LINGUAFLOW_DATABASE_MAX_OPEN_CONNS": "-1"},
+			wantError: "max_open_conns must not be negative",
+		},
+		{
+			name:      "negative max idle",
+			env:       map[string]string{"LINGUAFLOW_DATABASE_MAX_IDLE_CONNS": "-1"},
+			wantError: "max_idle_conns must not be negative",
+		},
+		{
+			name:      "negative lifetime",
+			env:       map[string]string{"LINGUAFLOW_DATABASE_CONN_MAX_LIFETIME": "-1s"},
+			wantError: "conn_max_lifetime must not be negative",
+		},
+		{
+			name: "idle exceeds open",
+			env: map[string]string{
+				"LINGUAFLOW_DATABASE_MAX_OPEN_CONNS": "2",
+				"LINGUAFLOW_DATABASE_MAX_IDLE_CONNS": "3",
+			},
+			wantError: "max_idle_conns must not exceed max_open_conns",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			clearDatabaseEnv(t)
+			for name, value := range tt.env {
+				t.Setenv(name, value)
+			}
+			_, err := LoadServerConfig(ModeServer)
+			if err == nil || !strings.Contains(err.Error(), tt.wantError) {
+				t.Fatalf("error=%v want containing %q", err, tt.wantError)
+			}
+		})
 	}
 }
