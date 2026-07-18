@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import {
   NButton,
-  NCard,
   NDrawer,
   NDrawerContent,
   NEmpty,
@@ -326,14 +325,12 @@ watch(
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="lf-page">
     <!-- 页面头部 -->
-    <NCard :bordered="false" class="overflow-hidden shadow-sm shadow-lf-shadow">
+    <section class="lf-page-header">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
         <div class="space-y-3">
-          <div
-            class="inline-flex items-center rounded-full bg-lf-brand-soft px-3 py-1 text-xs font-medium text-brand-600"
-          >
+          <div class="lf-eyebrow">
             {{ t('executionPlanTemplates.eyebrow') }}
           </div>
           <div>
@@ -354,46 +351,29 @@ watch(
           </NButton>
         </div>
       </div>
-    </NCard>
+    </section>
 
     <!-- 统计卡片 -->
     <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('executionPlanTemplates.stats.total') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ store.totalCount }}
-        </div>
-      </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('executionPlanTemplates.stats.system') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ store.systemCount }}
-        </div>
-      </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('executionPlanTemplates.stats.user') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ store.userCount }}
-        </div>
-      </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('executionPlanTemplates.stats.avgRounds') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ store.avgRoundsPerPlan }}
-        </div>
-      </NCard>
+      <div class="lf-metric">
+        <div class="lf-metric-label">{{ t('executionPlanTemplates.stats.total') }}</div>
+        <div class="lf-metric-value">{{ store.totalCount }}</div>
+      </div>
+      <div class="lf-metric">
+        <div class="lf-metric-label">{{ t('executionPlanTemplates.stats.system') }}</div>
+        <div class="lf-metric-value">{{ store.systemCount }}</div>
+      </div>
+      <div class="lf-metric">
+        <div class="lf-metric-label">{{ t('executionPlanTemplates.stats.user') }}</div>
+        <div class="lf-metric-value">{{ store.userCount }}</div>
+      </div>
+      <div class="lf-metric">
+        <div class="lf-metric-label">{{ t('executionPlanTemplates.stats.avgRounds') }}</div>
+        <div class="lf-metric-value">{{ store.avgRoundsPerPlan }}</div>
+      </div>
     </div>
 
-    <!-- 筛选栏 -->
-    <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
+    <div class="lf-panel px-4 py-3">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <NInput
           v-model:value="store.searchQuery"
@@ -412,19 +392,19 @@ watch(
           </NButton>
         </div>
       </div>
-    </NCard>
+    </div>
 
     <!-- 加载骨架屏 -->
     <div v-if="store.loading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <NCard v-for="index in 6" :key="index" :bordered="false" class="shadow-sm shadow-lf-shadow">
+      <div v-for="index in 6" :key="index" class="lf-panel p-5">
         <NSkeleton text :repeat="4" />
-      </NCard>
+      </div>
     </div>
 
     <!-- 空状态 -->
     <NEmpty
       v-else-if="store.filteredItems.length === 0"
-      class="rounded-2xl bg-lf-surface py-16 shadow-sm shadow-lf-shadow"
+      class="lf-panel py-16"
       :description="
         hasActiveFilters
           ? t('executionPlanTemplates.empty.filtered')
@@ -447,110 +427,106 @@ watch(
 
     <!-- 卡片网格 -->
     <div v-else class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <NCard
+      <div
         v-for="item in store.filteredItems"
         :key="item.id"
-        hoverable
-        :bordered="false"
-        class="group shadow-sm shadow-lf-shadow transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-lf-shadow-strong"
+        class="lf-interactive-card group flex h-full flex-col gap-4 p-5"
       >
-        <div class="flex h-full flex-col gap-4">
-          <!-- 头部：名称 + 作用域标签 -->
-          <div class="flex items-start justify-between gap-4">
-            <div class="min-w-0">
-              <h2 class="truncate text-lg font-semibold text-lf-text-strong">
-                {{ item.name }}
-              </h2>
-            </div>
-            <NTag round size="small" :type="getScopeTagType(item.scope)">
-              {{ t(`executionPlanTemplates.scopes.${item.scope}`) }}
+        <!-- 头部：名称 + 作用域标签 -->
+        <div class="flex items-start justify-between gap-4">
+          <div class="min-w-0">
+            <h2 class="truncate text-lg font-semibold text-lf-text-strong">
+              {{ item.name }}
+            </h2>
+          </div>
+          <NTag round size="small" :type="getScopeTagType(item.scope)">
+            {{ t(`executionPlanTemplates.scopes.${item.scope}`) }}
+          </NTag>
+        </div>
+
+        <!-- 描述 -->
+        <p
+          class="line-clamp-2 text-sm leading-6 text-lf-text-muted"
+          :class="{ 'italic text-lf-text-subtle': !item.description }"
+        >
+          {{ item.description || t('executionPlanTemplates.card.noDescription') }}
+        </p>
+
+        <!-- 轮次概览 -->
+        <div class="space-y-2">
+          <div class="flex items-center gap-2">
+            <NTag size="small" type="info" :bordered="false">
+              {{ item.rounds?.length ?? 0 }} {{ t('executionPlanTemplates.card.rounds') }}
             </NTag>
           </div>
-
-          <!-- 描述 -->
-          <p
-            class="line-clamp-2 text-sm leading-6 text-lf-text-muted"
-            :class="{ 'italic text-lf-text-subtle': !item.description }"
-          >
-            {{ item.description || t('executionPlanTemplates.card.noDescription') }}
-          </p>
-
-          <!-- 轮次概览 -->
-          <div class="space-y-2">
-            <div class="flex items-center gap-2">
-              <NTag size="small" type="info" :bordered="false">
-                {{ item.rounds?.length ?? 0 }} {{ t('executionPlanTemplates.card.rounds') }}
-              </NTag>
-            </div>
-            <div v-if="item.rounds?.length" class="space-y-1">
-              <div
-                v-for="(round, idx) in item.rounds.slice(0, 3)"
-                :key="idx"
-                class="flex items-center gap-2 text-xs text-lf-text-muted"
+          <div v-if="item.rounds?.length" class="space-y-1">
+            <div
+              v-for="(round, idx) in item.rounds.slice(0, 3)"
+              :key="idx"
+              class="flex items-center gap-2 text-xs text-lf-text-muted"
+            >
+              <span
+                class="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold"
+                :class="
+                  round.mode === 'translate'
+                    ? 'bg-lf-brand-soft text-brand-600'
+                    : 'bg-amber-50 text-amber-600'
+                "
               >
-                <span
-                  class="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold"
-                  :class="
-                    round.mode === 'translate'
-                      ? 'bg-lf-brand-soft text-brand-600'
-                      : 'bg-amber-50 text-amber-600'
-                  "
-                >
-                  {{ idx + 1 }}
-                </span>
-                <span class="truncate">
-                  {{
-                    round.mode === 'translate'
-                      ? t('executionPlanEditor.round.modeTranslate')
-                      : t('executionPlanEditor.round.modeExtract')
-                  }}
-                </span>
-              </div>
-              <div v-if="item.rounds.length > 3" class="text-xs text-lf-text-subtle">
-                +{{ item.rounds.length - 3 }} {{ t('executionPlanTemplates.card.moreRounds') }}
-              </div>
-            </div>
-          </div>
-
-          <!-- 底部：时间 + 操作 -->
-          <div class="mt-auto border-t border-lf-border-soft pt-4">
-            <div class="flex items-center justify-between gap-3">
-              <span class="text-xs text-lf-text-subtle">
-                {{ t('executionPlanTemplates.card.createdAt') }} {{ formatDate(item.created_at) }}
+                {{ idx + 1 }}
               </span>
-              <div class="flex items-center gap-2">
-                <NButton
-                  v-if="item.scope !== 'system'"
-                  text
-                  type="primary"
-                  class="font-medium"
-                  @click="openEditDrawer(item)"
-                >
-                  {{ t('executionPlanTemplates.actions.edit') }}
-                </NButton>
-                <NButton
-                  v-if="item.scope !== 'system'"
-                  text
-                  type="error"
-                  class="font-medium"
-                  @click="confirmDelete(item)"
-                >
-                  {{ t('executionPlanTemplates.actions.delete') }}
-                </NButton>
-                <NButton
-                  v-if="item.scope === 'system'"
-                  text
-                  type="info"
-                  class="font-medium"
-                  @click="openEditDrawer(item)"
-                >
-                  {{ t('executionPlanTemplates.actions.view') }}
-                </NButton>
-              </div>
+              <span class="truncate">
+                {{
+                  round.mode === 'translate'
+                    ? t('executionPlanEditor.round.modeTranslate')
+                    : t('executionPlanEditor.round.modeExtract')
+                }}
+              </span>
+            </div>
+            <div v-if="item.rounds.length > 3" class="text-xs text-lf-text-subtle">
+              +{{ item.rounds.length - 3 }} {{ t('executionPlanTemplates.card.moreRounds') }}
             </div>
           </div>
         </div>
-      </NCard>
+
+        <!-- 底部：时间 + 操作 -->
+        <div class="mt-auto border-t border-lf-border-soft pt-4">
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-xs text-lf-text-subtle">
+              {{ t('executionPlanTemplates.card.createdAt') }} {{ formatDate(item.created_at) }}
+            </span>
+            <div class="flex items-center gap-2">
+              <NButton
+                v-if="item.scope !== 'system'"
+                text
+                type="primary"
+                class="font-medium"
+                @click="openEditDrawer(item)"
+              >
+                {{ t('executionPlanTemplates.actions.edit') }}
+              </NButton>
+              <NButton
+                v-if="item.scope !== 'system'"
+                text
+                type="error"
+                class="font-medium"
+                @click="confirmDelete(item)"
+              >
+                {{ t('executionPlanTemplates.actions.delete') }}
+              </NButton>
+              <NButton
+                v-if="item.scope === 'system'"
+                text
+                type="info"
+                class="font-medium"
+                @click="openEditDrawer(item)"
+              >
+                {{ t('executionPlanTemplates.actions.view') }}
+              </NButton>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 创建/编辑抽屉 -->

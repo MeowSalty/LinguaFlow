@@ -2,7 +2,6 @@
 import {
   NAlert,
   NButton,
-  NCard,
   NDrawer,
   NDrawerContent,
   NForm,
@@ -416,8 +415,7 @@ onMounted(() => {
 
 <template>
   <div class="space-y-5">
-    <!-- 项目头部 -->
-    <NCard :bordered="false" class="overflow-hidden shadow-sm shadow-lf-shadow">
+    <section class="lf-page-header !p-4 sm:!px-5 sm:!py-4">
       <div class="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div class="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
           <NButton quaternary size="small" @click="router.push('/projects')">
@@ -430,7 +428,6 @@ onMounted(() => {
             {{ workspace.project?.name || t('workspace.loadingProject') }}
           </h1>
 
-          <!-- 编辑按钮 -->
           <NButton
             v-if="workspace.project"
             quaternary
@@ -445,10 +442,17 @@ onMounted(() => {
           </NButton>
 
           <span class="hidden h-4 w-px bg-lf-border-soft sm:inline-block" />
-          <span class="hidden items-center gap-1.5 text-sm text-lf-text-muted sm:inline-flex">
-            <IconCarbonLanguage class="h-3.5 w-3.5 text-lf-text-subtle" />
-            {{ workspace.project?.source_lang || '-' }} →
-            {{ workspace.project?.target_lang || '-' }}
+          <span
+            class="hidden items-center gap-1.5 rounded-lg bg-lf-surface-muted px-2 py-1 text-sm text-lf-text-muted sm:inline-flex"
+          >
+            <IconCarbonLanguage class="h-3.5 w-3.5 text-brand-500" />
+            <span class="font-medium text-lf-text-strong">{{
+              workspace.project?.source_lang || '-'
+            }}</span>
+            <span class="text-lf-text-subtle">→</span>
+            <span class="font-medium text-lf-text-strong">{{
+              workspace.project?.target_lang || '-'
+            }}</span>
           </span>
           <span class="hidden h-4 w-px bg-lf-border-soft md:inline-block" />
           <span class="hidden items-center gap-1.5 text-sm text-lf-text-muted md:inline-flex">
@@ -477,7 +481,7 @@ onMounted(() => {
           </NButton>
         </div>
       </div>
-    </NCard>
+    </section>
 
     <NAlert v-if="workspace.projectError" type="error" :bordered="false">
       {{ workspace.projectError }}
@@ -500,8 +504,7 @@ onMounted(() => {
       :running-jobs="workspace.runningJobCount"
     />
 
-    <!-- 标签页 -->
-    <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
+    <div class="lf-panel p-4 sm:p-5">
       <NTabs v-model:value="activeTab" animated>
         <NTabPane name="resources" :tab="t('workspace.tabs.resources')">
           <div class="pt-3">
@@ -538,7 +541,7 @@ onMounted(() => {
           <GlossaryPanel :project-id="projectId" />
         </NTabPane>
       </NTabs>
-    </NCard>
+    </div>
 
     <!-- 创建任务抽屉 -->
     <JobCreateDrawer

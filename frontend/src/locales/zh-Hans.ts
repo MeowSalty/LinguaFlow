@@ -131,6 +131,8 @@ const messages = {
     },
   },
   dashboard: {
+    title: '工作台',
+    subtitle: '总览调用量、令牌消耗与常用快捷入口，快速进入翻译流程。',
     stats: {
       apiCalls: 'API 调用',
       inputTokens: '输入 Token',
@@ -147,8 +149,8 @@ const messages = {
         description: '进入项目工作区',
       },
       manageOrganizations: {
-        title: '管理组织',
-        description: '管理您的组织设置',
+        title: '管理后端',
+        description: '配置模型与 API 接入',
       },
     },
     activity: {
@@ -1502,6 +1504,11 @@ const messages = {
         resetPassword: '重置密码',
         refresh: '刷新',
       },
+      stats: {
+        total: '全部用户',
+        active: '正常用户',
+        admins: '管理员',
+      },
       filters: {
         searchPlaceholder: '搜索用户名、邮箱或显示名',
         allRoles: '全部角色',
@@ -1515,7 +1522,7 @@ const messages = {
         user: '普通用户',
       },
       columns: {
-        username: '用户名',
+        username: '用户',
         email: '邮箱',
         displayName: '显示名',
         role: '角色',

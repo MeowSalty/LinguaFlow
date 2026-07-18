@@ -3,9 +3,10 @@
 @theme {
   --color-brand-50: #ecfdf5;
   --color-brand-100: #d1fae5;
-  --color-brand-500: #18a058;
-  --color-brand-600: #109554;
-  --color-brand-700: #0a7a45;
+  --color-brand-400: #34d399;
+  --color-brand-500: #10b981;
+  --color-brand-600: #059669;
+  --color-brand-700: #047857;
 
   --color-lf-bg: var(--lf-bg);
   --color-lf-bg-soft: var(--lf-bg-soft);
@@ -26,6 +27,8 @@
   --color-lf-info-soft: var(--lf-info-soft);
   --color-lf-success-soft: var(--lf-success-soft);
   --color-lf-danger-soft: var(--lf-danger-soft);
+  --color-lf-accent: var(--lf-accent);
+  --color-lf-accent-soft: var(--lf-accent-soft);
 
   /* Go template syntax highlighting */
   --color-lf-tmpl-bg: var(--lf-tmpl-bg);
@@ -38,25 +41,32 @@
 }
 
 :root {
-  --lf-bg: #f8fafc;
-  --lf-bg-soft: #f1f5f9;
+  --lf-bg: #f4f7fb;
+  --lf-bg-soft: #eef2f7;
   --lf-surface: #ffffff;
   --lf-surface-elevated: #ffffff;
-  --lf-surface-muted: #f8fafc;
+  --lf-surface-muted: #f7f9fc;
   --lf-text: #0f172a;
   --lf-text-strong: #020617;
   --lf-text-muted: #64748b;
   --lf-text-subtle: #94a3b8;
   --lf-border: #e2e8f0;
-  --lf-border-soft: #f1f5f9;
-  --lf-shadow: rgb(148 163 184 / 0.18);
-  --lf-shadow-strong: rgb(148 163 184 / 0.28);
+  --lf-border-soft: #edf2f7;
+  --lf-shadow: rgb(15 23 42 / 0.06);
+  --lf-shadow-strong: rgb(15 23 42 / 0.12);
   --lf-code-bg: #f1f5f9;
-  --lf-brand-soft: #ecfdf5;
+  --lf-brand-soft: rgb(16 185 129 / 0.1);
   --lf-info: #3b82f6;
-  --lf-info-soft: #eff6ff;
-  --lf-success-soft: #f0fdf4;
-  --lf-danger-soft: #fef2f2;
+  --lf-info-soft: rgb(59 130 246 / 0.1);
+  --lf-success-soft: rgb(16 185 129 / 0.1);
+  --lf-danger-soft: rgb(239 68 68 / 0.1);
+  --lf-accent: #6366f1;
+  --lf-accent-soft: rgb(99 102 241 / 0.1);
+  --lf-header-bg: rgb(255 255 255 / 0.82);
+  --lf-mesh-a: rgb(16 185 129 / 0.09);
+  --lf-mesh-b: rgb(59 130 246 / 0.07);
+  --lf-mesh-c: rgb(99 102 241 / 0.05);
+  --lf-grid-line: rgb(15 23 42 / 0.035);
 
   /* Go template syntax highlighting (light mode) */
   --lf-tmpl-bg: rgb(16 185 129 / 0.1);
@@ -64,30 +74,37 @@
   --lf-tmpl-keyword: #7c3aed;
   --lf-tmpl-field: #2563eb;
   --lf-tmpl-func: #0891b2;
-  --lf-tmpl-string: #16a34a;
+  --lf-tmpl-string: #059669;
   --lf-tmpl-pipe: #64748b;
 }
 
 html[data-theme='dark'] {
-  --lf-bg: #0f141a;
-  --lf-bg-soft: #151b22;
-  --lf-surface: #171d25;
-  --lf-surface-elevated: #1d2530;
-  --lf-surface-muted: #111820;
-  --lf-text: #e5e7eb;
+  --lf-bg: #0b1118;
+  --lf-bg-soft: #101821;
+  --lf-surface: #121a24;
+  --lf-surface-elevated: #172131;
+  --lf-surface-muted: #0e151e;
+  --lf-text: #e2e8f0;
   --lf-text-strong: #f8fafc;
-  --lf-text-muted: #a0aec0;
-  --lf-text-subtle: #748094;
-  --lf-border: #283241;
-  --lf-border-soft: #202938;
-  --lf-shadow: rgb(0 0 0 / 0.24);
-  --lf-shadow-strong: rgb(0 0 0 / 0.36);
-  --lf-code-bg: #202938;
-  --lf-brand-soft: rgb(24 160 88 / 0.14);
+  --lf-text-muted: #94a3b8;
+  --lf-text-subtle: #64748b;
+  --lf-border: #243041;
+  --lf-border-soft: #1a2433;
+  --lf-shadow: rgb(0 0 0 / 0.32);
+  --lf-shadow-strong: rgb(0 0 0 / 0.48);
+  --lf-code-bg: #0f1720;
+  --lf-brand-soft: rgb(16 185 129 / 0.14);
   --lf-info: #60a5fa;
-  --lf-info-soft: rgb(59 130 246 / 0.13);
-  --lf-success-soft: rgb(34 197 94 / 0.13);
-  --lf-danger-soft: rgb(239 68 68 / 0.13);
+  --lf-info-soft: rgb(59 130 246 / 0.14);
+  --lf-success-soft: rgb(16 185 129 / 0.14);
+  --lf-danger-soft: rgb(239 68 68 / 0.14);
+  --lf-accent: #818cf8;
+  --lf-accent-soft: rgb(99 102 241 / 0.16);
+  --lf-header-bg: rgb(11 17 24 / 0.78);
+  --lf-mesh-a: rgb(16 185 129 / 0.08);
+  --lf-mesh-b: rgb(59 130 246 / 0.07);
+  --lf-mesh-c: rgb(99 102 241 / 0.06);
+  --lf-grid-line: rgb(148 163 184 / 0.05);
 
   /* Go template syntax highlighting (dark mode) */
   --lf-tmpl-bg: rgb(16 185 129 / 0.12);
@@ -95,7 +112,7 @@ html[data-theme='dark'] {
   --lf-tmpl-keyword: #a78bfa;
   --lf-tmpl-field: #60a5fa;
   --lf-tmpl-func: #22d3ee;
-  --lf-tmpl-string: #4ade80;
+  --lf-tmpl-string: #34d399;
   --lf-tmpl-pipe: #94a3b8;
 }
 
@@ -108,24 +125,186 @@ body,
 body {
   margin: 0;
   font-family:
-    -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, 'Noto Sans SC',
+    Inter,
+    ui-sans-serif,
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    'Helvetica Neue',
+    Arial,
+    'Noto Sans SC',
     sans-serif;
   background: var(--lf-bg);
   color: var(--lf-text);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 * {
-  transition-property: background-color, border-color, color, box-shadow;
+  transition-property: background-color, border-color, color, box-shadow, opacity, transform;
   transition-duration: 160ms;
-  transition-timing-function: ease;
+  transition-timing-function: cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+/* ── Design system primitives ── */
+
+.lf-page {
+  @apply space-y-6;
+}
+
+.lf-page-header {
+  @apply relative overflow-hidden rounded-2xl border border-lf-border-soft bg-lf-surface p-6 shadow-sm shadow-lf-shadow;
+}
+
+.lf-page-header::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse 70% 90% at 0% 0%, var(--lf-mesh-a), transparent 55%),
+    radial-gradient(ellipse 50% 70% at 100% 0%, var(--lf-mesh-b), transparent 50%);
+  opacity: 0.9;
+}
+
+.lf-page-header > * {
+  position: relative;
+  z-index: 1;
+}
+
+.lf-eyebrow {
+  @apply inline-flex items-center rounded-full border border-brand-500/15 bg-lf-brand-soft px-3 py-1 text-xs font-medium tracking-wide text-brand-600;
+}
+
+.lf-metric {
+  @apply rounded-2xl border border-lf-border-soft bg-lf-surface p-4 shadow-sm shadow-lf-shadow;
+}
+
+.lf-metric-label {
+  @apply text-xs font-medium tracking-wide text-lf-text-muted;
+}
+
+.lf-metric-value {
+  @apply mt-2 text-2xl font-semibold tracking-tight text-lf-text-strong;
+}
+
+.lf-panel {
+  @apply rounded-2xl border border-lf-border-soft bg-lf-surface shadow-sm shadow-lf-shadow;
+}
+
+.lf-code-panel {
+  @apply rounded-xl border border-lf-border-soft bg-lf-code-bg px-3 py-2 font-mono text-xs leading-5 text-lf-text-muted;
+}
+
+.lf-interactive-card {
+  @apply rounded-2xl border border-lf-border-soft bg-lf-surface shadow-sm shadow-lf-shadow transition-all duration-200;
+  @apply hover:-translate-y-0.5 hover:border-brand-500/25 hover:shadow-lg hover:shadow-lf-shadow-strong;
+}
+
+/* Compact modern data list (Linear/Vercel style) */
+.lf-data-list {
+  @apply overflow-hidden rounded-2xl border border-lf-border-soft bg-lf-surface shadow-sm shadow-lf-shadow;
+}
+
+.lf-data-list__head {
+  @apply hidden items-center gap-4 border-b border-lf-border-soft bg-lf-surface-muted/70 px-4 py-2.5 text-[11px] font-medium tracking-wide text-lf-text-subtle uppercase md:grid;
+}
+
+.lf-data-list__row {
+  @apply grid items-center gap-3 border-b border-lf-border-soft/80 px-4 py-3.5 transition-colors last:border-b-0;
+  @apply hover:bg-lf-brand-soft/40 md:gap-4;
+}
+
+.lf-data-list__row:hover .lf-data-list__actions {
+  @apply opacity-100;
+}
+
+.lf-data-list__actions {
+  @apply flex items-center justify-end gap-1 opacity-100 transition-opacity md:opacity-0;
+}
+
+.lf-avatar {
+  @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold tracking-wide;
+  background: linear-gradient(135deg, rgb(16 185 129 / 0.18), rgb(59 130 246 / 0.14));
+  color: var(--color-brand-600);
+  box-shadow: inset 0 0 0 1px rgb(16 185 129 / 0.18);
+}
+
+.lf-status-dot {
+  @apply inline-flex h-1.5 w-1.5 rounded-full;
+}
+
+.lf-status-dot--active {
+  @apply bg-brand-500 shadow-[0_0_0_3px_rgb(16_185_129_/_0.18)];
+}
+
+.lf-status-dot--inactive {
+  @apply bg-lf-text-subtle;
+}
+
+/* Soften naive DataTable for remaining table screens */
+.lf-table .n-data-table {
+  --n-merged-th-color: transparent !important;
+  --n-merged-td-color: transparent !important;
+  --n-merged-border-color: var(--lf-border-soft) !important;
+}
+
+.lf-table .n-data-table-th {
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase !important;
+  color: var(--lf-text-subtle) !important;
+  background: var(--lf-surface-muted) !important;
+  border-bottom: 1px solid var(--lf-border-soft) !important;
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+}
+
+.lf-table .n-data-table-td {
+  border-bottom: 1px solid var(--lf-border-soft) !important;
+  padding-top: 14px !important;
+  padding-bottom: 14px !important;
+  background: transparent !important;
+}
+
+.lf-table .n-data-table-tr:hover .n-data-table-td {
+  background: rgb(16 185 129 / 0.04) !important;
+}
+
+.lf-table .n-data-table-tr:last-child .n-data-table-td {
+  border-bottom: none !important;
+}
+
+.lf-auth-shell {
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    radial-gradient(ellipse 60% 50% at 15% 20%, var(--lf-mesh-a), transparent 55%),
+    radial-gradient(ellipse 50% 45% at 85% 15%, var(--lf-mesh-b), transparent 50%),
+    radial-gradient(ellipse 40% 40% at 70% 85%, var(--lf-mesh-c), transparent 45%), var(--lf-bg);
+}
+
+.lf-auth-shell::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  background-image:
+    linear-gradient(var(--lf-grid-line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--lf-grid-line) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black, transparent 75%);
 }
 
 /* 空译文占位样式 */
 .target-empty {
   border: 1px dashed var(--lf-border-soft);
-  border-radius: 6px;
+  border-radius: 8px;
   padding: 8px 12px;
   background: var(--lf-info-soft);
   min-height: 40px;
@@ -136,7 +315,7 @@ body {
 
 /* 段落表格行视觉区分 */
 .segment-row--editing td:first-child {
-  border-left: 3px solid var(--lf-brand-soft);
+  border-left: 3px solid var(--color-brand-500);
 }
 
 .segment-row--editing td:not(.n-data-table-td--fixed-right) {

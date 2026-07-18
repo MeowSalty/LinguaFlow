@@ -149,135 +149,134 @@ const onSelectTheme = (key: string | number): void => {
 const onSelectLocale = (key: string | number): void => {
   locale.setLocale(String(key))
 }
+
+const navLinkClass =
+  'relative flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-lf-text-muted no-underline transition-colors hover:bg-lf-surface-muted hover:text-lf-text-strong'
+const navActiveClass = '!bg-lf-brand-soft !text-brand-600 font-semibold'
 </script>
 
 <template>
-  <div class="min-h-screen flex flex-col bg-lf-bg text-lf-text">
+  <div class="flex min-h-screen flex-col bg-lf-bg text-lf-text">
     <header
-      class="sticky top-0 z-10 flex h-16 items-center gap-8 border-b border-lf-border bg-lf-surface px-8 backdrop-blur"
+      class="sticky top-0 z-20 border-b border-lf-border-soft backdrop-blur-xl"
+      style="background: var(--lf-header-bg)"
     >
-      <RouterLink to="/" class="text-xl font-bold tracking-tight text-brand-500 no-underline">
-        {{ t('common.appName') }}
-      </RouterLink>
-
-      <nav class="flex items-center gap-6 text-sm" :aria-label="t('nav.main')">
+      <div class="mx-auto flex h-14 max-w-275 items-center gap-6 px-6 lg:px-8">
         <RouterLink
           to="/"
-          class="flex items-center gap-1.5 text-lf-text-muted no-underline transition-colors hover:text-brand-500"
-          active-class="!text-brand-500 font-semibold"
+          class="group inline-flex shrink-0 items-center gap-2 text-lg font-semibold tracking-tight text-lf-text-strong no-underline"
         >
-          <IconifyIcon icon="carbon:dashboard" class="text-base" />
-          {{ t('nav.dashboard') }}
-        </RouterLink>
-        <RouterLink
-          to="/projects"
-          class="flex items-center gap-1.5 text-lf-text-muted no-underline transition-colors hover:text-brand-500"
-          active-class="!text-brand-500 font-semibold"
-        >
-          <IconifyIcon icon="carbon:folder" class="text-base" />
-          {{ t('nav.projects') }}
-        </RouterLink>
-        <RouterLink
-          to="/backends"
-          class="flex items-center gap-1.5 text-lf-text-muted no-underline transition-colors hover:text-brand-500"
-          active-class="!text-brand-500 font-semibold"
-        >
-          <IconifyIcon icon="carbon:server-proxy" class="text-base" />
-          {{ t('nav.backends') }}
-        </RouterLink>
-        <NDropdown
-          trigger="hover"
-          :options="templateNavOptions"
-          placement="bottom-start"
-          @select="onSelectTemplateNav"
-        >
-          <RouterLink
-            to="/prompt-templates"
-            class="flex items-center gap-1.5 text-lf-text-muted no-underline transition-colors hover:text-brand-500"
-            :class="{ 'text-brand-500! font-semibold': isTemplateRoute }"
+          <span
+            class="flex h-7 w-7 items-center justify-center rounded-lg bg-brand-500 text-xs font-bold text-white shadow-sm shadow-brand-500/30"
           >
-            <IconifyIcon icon="carbon:settings" class="text-base" />
-            {{ t('nav.executionConfig') }}
-          </RouterLink>
-        </NDropdown>
-        <RouterLink
-          to="/changelog"
-          class="flex items-center gap-1.5 text-lf-text-muted no-underline transition-colors hover:text-brand-500"
-          active-class="!text-brand-500 font-semibold"
-        >
-          <IconifyIcon icon="carbon:catalog" class="text-base" />
-          {{ t('nav.changelog') }}
+            L
+          </span>
+          <span class="hidden sm:inline">{{ t('common.appName') }}</span>
         </RouterLink>
-        <RouterLink
-          to="/about"
-          class="flex items-center gap-1.5 text-lf-text-muted no-underline transition-colors hover:text-brand-500"
-          active-class="!text-brand-500 font-semibold"
-        >
-          <IconifyIcon icon="carbon:information" class="text-base" />
-          {{ t('nav.about') }}
-        </RouterLink>
-        <RouterLink
-          v-if="isAdmin"
-          to="/admin"
-          class="flex items-center gap-1.5 text-lf-text-muted no-underline transition-colors hover:text-brand-500"
-          :class="{ 'text-brand-500! font-semibold': isAdminRoute }"
-        >
-          <IconifyIcon icon="carbon:security" class="text-base" />
-          {{ t('nav.admin') }}
-        </RouterLink>
-      </nav>
 
-      <div class="ml-auto flex items-center gap-4">
-        <NDropdown
-          v-if="locale.hasMultipleLocales"
-          trigger="click"
-          :options="localeOptions"
-          placement="bottom-end"
-          @select="onSelectLocale"
+        <nav
+          class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto text-sm"
+          :aria-label="t('nav.main')"
         >
-          <NButton quaternary size="small">
-            {{ t('common.language') }}
-          </NButton>
-        </NDropdown>
-        <NDropdown
-          trigger="click"
-          :options="themeOptions"
-          placement="bottom-end"
-          @select="onSelectTheme"
-        >
-          <NButton quaternary circle :title="t('common.theme')" :aria-label="t('common.theme')">
-            <template #icon>
-              <IconifyIcon :icon="themeIcon" class="text-lg" />
-            </template>
-          </NButton>
-        </NDropdown>
-        <NTag v-if="service.isLocal" size="small" type="success" :bordered="false">
-          {{ t('layout.localModeBadge') }}
-        </NTag>
-        <span class="hidden text-xs text-lf-text-subtle sm:inline" :title="service.baseUrl">
-          {{ service.displayName }}
-        </span>
-        <NDropdown
-          v-if="auth.user"
-          trigger="click"
-          :options="userOptions"
-          placement="bottom-end"
-          @select="onSelectUserAction"
-        >
-          <button
-            type="button"
-            class="flex items-center gap-2 rounded-full border border-lf-border bg-lf-surface px-2 py-1 transition-colors hover:border-brand-500"
+          <RouterLink to="/" :class="[navLinkClass]" :active-class="navActiveClass">
+            <IconifyIcon icon="carbon:dashboard" class="text-base" />
+            <span class="whitespace-nowrap">{{ t('nav.dashboard') }}</span>
+          </RouterLink>
+          <RouterLink to="/projects" :class="[navLinkClass]" :active-class="navActiveClass">
+            <IconifyIcon icon="carbon:folder" class="text-base" />
+            <span class="whitespace-nowrap">{{ t('nav.projects') }}</span>
+          </RouterLink>
+          <RouterLink to="/backends" :class="[navLinkClass]" :active-class="navActiveClass">
+            <IconifyIcon icon="carbon:server-proxy" class="text-base" />
+            <span class="whitespace-nowrap">{{ t('nav.backends') }}</span>
+          </RouterLink>
+          <NDropdown
+            trigger="hover"
+            :options="templateNavOptions"
+            placement="bottom-start"
+            @select="onSelectTemplateNav"
           >
-            <NAvatar round size="small" :style="{ backgroundColor: '#18a058' }">
-              {{ initial }}
-            </NAvatar>
-            <span class="pr-2 text-sm text-lf-text">{{ displayName }}</span>
-          </button>
-        </NDropdown>
+            <RouterLink
+              to="/prompt-templates"
+              :class="[navLinkClass, { [navActiveClass]: isTemplateRoute }]"
+            >
+              <IconifyIcon icon="carbon:settings" class="text-base" />
+              <span class="whitespace-nowrap">{{ t('nav.executionConfig') }}</span>
+            </RouterLink>
+          </NDropdown>
+          <RouterLink to="/changelog" :class="[navLinkClass]" :active-class="navActiveClass">
+            <IconifyIcon icon="carbon:catalog" class="text-base" />
+            <span class="whitespace-nowrap">{{ t('nav.changelog') }}</span>
+          </RouterLink>
+          <RouterLink to="/about" :class="[navLinkClass]" :active-class="navActiveClass">
+            <IconifyIcon icon="carbon:information" class="text-base" />
+            <span class="whitespace-nowrap">{{ t('nav.about') }}</span>
+          </RouterLink>
+          <RouterLink
+            v-if="isAdmin"
+            to="/admin"
+            :class="[navLinkClass, { [navActiveClass]: isAdminRoute }]"
+          >
+            <IconifyIcon icon="carbon:security" class="text-base" />
+            <span class="whitespace-nowrap">{{ t('nav.admin') }}</span>
+          </RouterLink>
+        </nav>
+
+        <div class="ml-auto flex shrink-0 items-center gap-2 sm:gap-3">
+          <NDropdown
+            v-if="locale.hasMultipleLocales"
+            trigger="click"
+            :options="localeOptions"
+            placement="bottom-end"
+            @select="onSelectLocale"
+          >
+            <NButton quaternary size="small">
+              {{ t('common.language') }}
+            </NButton>
+          </NDropdown>
+          <NDropdown
+            trigger="click"
+            :options="themeOptions"
+            placement="bottom-end"
+            @select="onSelectTheme"
+          >
+            <NButton quaternary circle :title="t('common.theme')" :aria-label="t('common.theme')">
+              <template #icon>
+                <IconifyIcon :icon="themeIcon" class="text-lg" />
+              </template>
+            </NButton>
+          </NDropdown>
+          <NTag v-if="service.isLocal" size="small" type="success" :bordered="false">
+            {{ t('layout.localModeBadge') }}
+          </NTag>
+          <span
+            class="hidden max-w-28 truncate font-mono text-[11px] text-lf-text-subtle lg:inline"
+            :title="service.baseUrl"
+          >
+            {{ service.displayName }}
+          </span>
+          <NDropdown
+            v-if="auth.user"
+            trigger="click"
+            :options="userOptions"
+            placement="bottom-end"
+            @select="onSelectUserAction"
+          >
+            <button
+              type="button"
+              class="flex items-center gap-2 rounded-full border border-lf-border-soft bg-lf-surface px-1.5 py-1 transition-colors hover:border-brand-500/40 hover:bg-lf-surface-elevated"
+            >
+              <NAvatar round size="small" class="bg-brand-500 text-xs font-semibold text-white">
+                {{ initial }}
+              </NAvatar>
+              <span class="hidden pr-2 text-sm text-lf-text sm:inline">{{ displayName }}</span>
+            </button>
+          </NDropdown>
+        </div>
       </div>
     </header>
 
-    <main class="flex-1 px-8 py-10">
+    <main class="flex-1 px-6 py-8 lg:px-8">
       <div class="mx-auto max-w-275">
         <slot />
       </div>

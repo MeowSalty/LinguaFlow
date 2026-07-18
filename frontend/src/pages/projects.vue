@@ -259,13 +259,11 @@ watch(
 
 <template>
   <RouterView v-if="!isProjectListRoute" />
-  <div v-else class="space-y-6">
-    <NCard :bordered="false" class="overflow-hidden shadow-sm shadow-lf-shadow">
+  <div v-else class="lf-page">
+    <section class="lf-page-header">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
         <div class="space-y-3">
-          <div
-            class="inline-flex items-center rounded-full bg-lf-brand-soft px-3 py-1 text-xs font-medium text-brand-600"
-          >
+          <div class="lf-eyebrow">
             {{ t('projects.eyebrow') }}
           </div>
           <div>
@@ -286,36 +284,24 @@ watch(
           </NButton>
         </div>
       </div>
-    </NCard>
+    </section>
 
     <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('projects.stats.total') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold tracking-tight text-lf-text-strong">
-          {{ projects.projectCount }}
-        </div>
-      </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('projects.stats.languagePairs') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold tracking-tight text-lf-text-strong">
-          {{ projects.languagePairCount }}
-        </div>
-      </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('projects.stats.glossaryEnabled') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold tracking-tight text-lf-text-strong">
-          {{ projects.glossaryEnabledCount }}
-        </div>
-      </NCard>
+      <div class="lf-metric">
+        <div class="lf-metric-label">{{ t('projects.stats.total') }}</div>
+        <div class="lf-metric-value">{{ projects.projectCount }}</div>
+      </div>
+      <div class="lf-metric">
+        <div class="lf-metric-label">{{ t('projects.stats.languagePairs') }}</div>
+        <div class="lf-metric-value">{{ projects.languagePairCount }}</div>
+      </div>
+      <div class="lf-metric">
+        <div class="lf-metric-label">{{ t('projects.stats.glossaryEnabled') }}</div>
+        <div class="lf-metric-value">{{ projects.glossaryEnabledCount }}</div>
+      </div>
     </div>
 
-    <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
+    <div class="lf-panel px-4 py-3">
       <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <NInput
           v-model:value="projects.searchQuery"
@@ -327,17 +313,17 @@ watch(
           {{ t('projects.filters.reset') }}
         </NButton>
       </div>
-    </NCard>
+    </div>
 
     <div v-if="projects.loading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <NCard v-for="index in 6" :key="index" :bordered="false" class="shadow-sm shadow-lf-shadow">
+      <div v-for="index in 6" :key="index" class="lf-panel p-5">
         <NSkeleton text :repeat="5" />
-      </NCard>
+      </div>
     </div>
 
     <NEmpty
       v-else-if="projects.filteredItems.length === 0"
-      class="rounded-2xl bg-lf-surface py-16 shadow-sm shadow-lf-shadow"
+      class="lf-panel py-16"
       :description="hasActiveFilters ? t('projects.empty.filtered') : t('projects.empty.default')"
     >
       <template #extra>
@@ -354,7 +340,7 @@ watch(
       <div
         v-for="project in projects.filteredItems"
         :key="project.id"
-        class="group relative cursor-pointer overflow-hidden rounded-2xl border border-lf-border-soft bg-lf-surface shadow-sm shadow-lf-shadow transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-500/25 hover:shadow-lg hover:shadow-lf-shadow-strong focus-within:border-brand-500/30 focus-within:ring-2 focus-within:ring-brand-500/15"
+        class="lf-interactive-card group relative cursor-pointer overflow-hidden focus-within:border-brand-500/30 focus-within:ring-2 focus-within:ring-brand-500/15"
         :class="{ 'pointer-events-none opacity-60': projects.isDeletingProject(project.id) }"
         @click="openProjectWorkspace(project)"
       >

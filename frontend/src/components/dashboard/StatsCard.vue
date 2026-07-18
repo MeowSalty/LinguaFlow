@@ -1,18 +1,31 @@
 <script setup lang="ts">
 import { Icon as IconifyIcon } from '@iconify/vue'
 
-defineProps<{
-  title: string
-  value: number | string
-  icon: string
-  trend?: 'up' | 'down' | 'neutral'
-  trendValue?: string
-  loading?: boolean
-}>()
+withDefaults(
+  defineProps<{
+    title: string
+    value: number | string
+    icon: string
+    tone?: 'brand' | 'info' | 'accent' | 'neutral'
+    trend?: 'up' | 'down' | 'neutral'
+    trendValue?: string
+    loading?: boolean
+  }>(),
+  {
+    tone: 'brand',
+  },
+)
+
+const toneClass: Record<string, string> = {
+  brand: 'bg-lf-brand-soft text-brand-600',
+  info: 'bg-lf-info-soft text-lf-info',
+  accent: 'bg-lf-accent-soft text-lf-accent',
+  neutral: 'bg-lf-surface-muted text-lf-text-muted',
+}
 
 const trendColors: Record<string, string> = {
-  up: 'text-green-600',
-  down: 'text-red-600',
+  up: 'text-brand-600',
+  down: 'text-red-500',
   neutral: 'text-lf-text-subtle',
 }
 
@@ -24,29 +37,38 @@ const trendIcons: Record<string, string> = {
 </script>
 
 <template>
-  <div class="rounded-xl bg-lf-surface p-6 shadow-sm transition-shadow hover:shadow-md">
-    <!-- 加载骨架屏 -->
+  <div class="lf-metric group relative overflow-hidden">
+    <div
+      class="pointer-events-none absolute -right-6 -top-6 h-20 w-20 rounded-full opacity-40 blur-2xl transition-opacity group-hover:opacity-70"
+      :class="{
+        'bg-brand-500/30': tone === 'brand',
+        'bg-lf-info/30': tone === 'info',
+        'bg-lf-accent/30': tone === 'accent',
+        'bg-lf-text-subtle/20': tone === 'neutral',
+      }"
+    />
+
     <template v-if="loading">
       <div class="flex items-center justify-between">
-        <div class="h-4 w-20 animate-pulse rounded bg-lf-border" />
-        <div class="h-10 w-10 animate-pulse rounded-full bg-lf-border" />
+        <div class="h-4 w-20 animate-pulse rounded bg-lf-border-soft" />
+        <div class="h-10 w-10 animate-pulse rounded-xl bg-lf-border-soft" />
       </div>
-      <div class="mt-4 h-8 w-24 animate-pulse rounded bg-lf-border" />
+      <div class="mt-4 h-8 w-24 animate-pulse rounded bg-lf-border-soft" />
     </template>
 
-    <!-- 正常内容 -->
     <template v-else>
-      <div class="flex items-center justify-between">
-        <span class="text-sm text-lf-text-muted">{{ title }}</span>
+      <div class="relative flex items-center justify-between gap-3">
+        <span class="lf-metric-label">{{ title }}</span>
         <div
-          class="flex h-10 w-10 items-center justify-center rounded-full bg-lf-brand-soft text-lg"
+          class="flex h-10 w-10 items-center justify-center rounded-xl text-lg"
+          :class="toneClass[tone]"
         >
           <IconifyIcon :icon="icon" />
         </div>
       </div>
 
-      <div class="mt-4">
-        <span class="text-3xl font-bold text-lf-text-strong">
+      <div class="relative mt-3">
+        <span class="lf-metric-value !text-3xl">
           {{ typeof value === 'number' ? value.toLocaleString() : value }}
         </span>
 

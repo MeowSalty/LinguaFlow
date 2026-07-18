@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import {
   NButton,
-  NCard,
   NDrawer,
   NDrawerContent,
   NEmpty,
@@ -196,13 +195,11 @@ watch(
 </script>
 
 <template>
-  <div class="space-y-6">
-    <NCard :bordered="false" class="overflow-hidden shadow-sm shadow-lf-shadow">
+  <div class="lf-page">
+    <section class="lf-page-header">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
         <div class="space-y-3">
-          <div
-            class="inline-flex items-center rounded-full bg-lf-brand-soft px-3 py-1 text-xs font-medium text-brand-600"
-          >
+          <div class="lf-eyebrow">
             {{ t('prunePromptTemplates.eyebrow') }}
           </div>
           <div>
@@ -225,44 +222,28 @@ watch(
           </NButton>
         </div>
       </div>
-    </NCard>
+    </section>
 
     <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('prunePromptTemplates.stats.total') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ store.totalCount }}
-        </div>
-      </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('prunePromptTemplates.stats.system') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ store.systemCount }}
-        </div>
-      </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('prunePromptTemplates.stats.user') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ store.userCount }}
-        </div>
-      </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('prunePromptTemplates.stats.org') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ store.orgCount }}
-        </div>
-      </NCard>
+      <div class="lf-metric">
+        <div class="lf-metric-label">{{ t('prunePromptTemplates.stats.total') }}</div>
+        <div class="lf-metric-value">{{ store.totalCount }}</div>
+      </div>
+      <div class="lf-metric">
+        <div class="lf-metric-label">{{ t('prunePromptTemplates.stats.system') }}</div>
+        <div class="lf-metric-value">{{ store.systemCount }}</div>
+      </div>
+      <div class="lf-metric">
+        <div class="lf-metric-label">{{ t('prunePromptTemplates.stats.user') }}</div>
+        <div class="lf-metric-value">{{ store.userCount }}</div>
+      </div>
+      <div class="lf-metric">
+        <div class="lf-metric-label">{{ t('prunePromptTemplates.stats.org') }}</div>
+        <div class="lf-metric-value">{{ store.orgCount }}</div>
+      </div>
     </div>
 
-    <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
+    <div class="lf-panel px-4 py-3">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <NInput
           v-model:value="store.searchQuery"
@@ -277,17 +258,17 @@ watch(
           </NButton>
         </div>
       </div>
-    </NCard>
+    </div>
 
     <div v-if="store.loading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <NCard v-for="index in 6" :key="index" :bordered="false" class="shadow-sm shadow-lf-shadow">
+      <div v-for="index in 6" :key="index" class="lf-panel p-5">
         <NSkeleton text :repeat="4" />
-      </NCard>
+      </div>
     </div>
 
     <NEmpty
       v-else-if="store.filteredItems.length === 0"
-      class="rounded-2xl bg-lf-surface py-16 shadow-sm shadow-lf-shadow"
+      class="lf-panel py-16"
       :description="
         hasActiveFilters
           ? t('prunePromptTemplates.empty.filtered')
@@ -305,81 +286,74 @@ watch(
     </NEmpty>
 
     <div v-else class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <NCard
+      <div
         v-for="item in store.filteredItems"
         :key="item.id"
-        hoverable
-        :bordered="false"
-        class="group cursor-pointer shadow-sm shadow-lf-shadow transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-lf-shadow-strong"
+        class="lf-interactive-card group flex h-full flex-col gap-4 p-5"
         @click="openEditDrawer(item)"
       >
-        <div class="flex h-full flex-col gap-4">
-          <div class="flex items-start justify-between gap-4">
-            <div class="min-w-0">
-              <h2 class="truncate text-lg font-semibold text-lf-text-strong">
-                {{ item.name }}
-              </h2>
-            </div>
-            <NTag round size="small" :type="getScopeTagType(item.scope)">
-              {{ t(`prunePromptTemplates.scopes.${item.scope}`) }}
-            </NTag>
+        <div class="flex items-start justify-between gap-4">
+          <div class="min-w-0">
+            <h2 class="truncate text-lg font-semibold text-lf-text-strong">
+              {{ item.name }}
+            </h2>
           </div>
+          <NTag round size="small" :type="getScopeTagType(item.scope)">
+            {{ t(`prunePromptTemplates.scopes.${item.scope}`) }}
+          </NTag>
+        </div>
 
-          <p
-            class="line-clamp-2 text-sm leading-6 text-lf-text-muted"
-            :class="{ 'italic text-lf-text-subtle': !item.description }"
-          >
-            {{ item.description || t('prunePromptTemplates.card.noDescription') }}
-          </p>
+        <p
+          class="line-clamp-2 text-sm leading-6 text-lf-text-muted"
+          :class="{ 'italic text-lf-text-subtle': !item.description }"
+        >
+          {{ item.description || t('prunePromptTemplates.card.noDescription') }}
+        </p>
 
-          <div
-            v-if="item.content"
-            class="rounded-lg bg-lf-code-bg px-3 py-2 font-mono text-xs leading-5 text-lf-text-muted line-clamp-3"
-          >
-            {{ item.content }}
-          </div>
-          <p v-else class="text-xs italic text-lf-text-subtle">
-            {{ t('prunePromptTemplates.card.noContent') }}
-          </p>
+        <div v-if="item.content" class="lf-code-panel line-clamp-3">
+          {{ item.content }}
+        </div>
+        <p v-else class="text-xs italic text-lf-text-subtle">
+          {{ t('prunePromptTemplates.card.noContent') }}
+        </p>
 
-          <div class="mt-auto border-t border-lf-border-soft pt-4">
-            <div class="flex items-center justify-between gap-3">
-              <span class="text-xs text-lf-text-subtle">
-                {{ t('prunePromptTemplates.card.updatedAt') }} {{ formatDate(item.updated_at) }}
-              </span>
-              <div class="flex items-center gap-2" @click.stop>
-                <NButton
-                  v-if="item.scope !== 'system'"
-                  text
-                  type="primary"
-                  class="font-medium"
-                  @click="openEditDrawer(item)"
-                >
-                  {{ t('prunePromptTemplates.actions.edit') }}
-                </NButton>
-                <NButton
-                  v-if="item.scope !== 'system'"
-                  text
-                  type="error"
-                  class="font-medium"
-                  @click="confirmDelete(item, $event)"
-                >
-                  {{ t('prunePromptTemplates.actions.delete') }}
-                </NButton>
-                <NButton
-                  v-if="item.scope === 'system'"
-                  text
-                  type="info"
-                  class="font-medium"
-                  @click="openEditDrawer(item)"
-                >
-                  {{ t('prunePromptTemplates.actions.view') }}
-                </NButton>
-              </div>
+        <div class="mt-auto border-t border-lf-border-soft pt-4">
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-xs text-lf-text-subtle">
+              {{ t('prunePromptTemplates.card.updatedAt') }} {{ formatDate(item.updated_at) }}
+            </span>
+            <div class="flex items-center gap-2" @click.stop>
+              <NButton
+                v-if="item.scope !== 'system'"
+                text
+                type="primary"
+                class="font-medium"
+                @click="openEditDrawer(item)"
+              >
+                {{ t('prunePromptTemplates.actions.edit') }}
+              </NButton>
+              <NButton
+                v-if="item.scope !== 'system'"
+                text
+                type="error"
+                class="font-medium"
+                @click="confirmDelete(item, $event)"
+              >
+                {{ t('prunePromptTemplates.actions.delete') }}
+              </NButton>
+              <NButton
+                v-if="item.scope === 'system'"
+                text
+                type="info"
+                class="font-medium"
+                @click="openEditDrawer(item)"
+              >
+                {{ t('prunePromptTemplates.actions.view') }}
+              </NButton>
             </div>
           </div>
         </div>
-      </NCard>
+      </div>
     </div>
 
     <NDrawer v-model:show="drawerVisible" :width="640" placement="right">

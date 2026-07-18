@@ -23,35 +23,33 @@ const failedPercent = computed(() => {
 </script>
 
 <template>
-  <div class="rounded-xl bg-lf-surface p-6 shadow-sm">
-    <h2 class="text-lg font-medium text-lf-text-strong">
+  <div class="lf-panel h-full p-5">
+    <h2 class="text-sm font-semibold tracking-wide text-lf-text-strong">
       {{ t('dashboard.jobStatus.title') }}
     </h2>
 
-    <!-- 加载状态 -->
     <div v-if="stats.statsLoading" class="mt-6 space-y-4">
-      <div class="h-4 w-full animate-pulse rounded bg-lf-border" />
-      <div class="grid grid-cols-2 gap-4">
-        <div class="h-16 animate-pulse rounded bg-lf-border" />
-        <div class="h-16 animate-pulse rounded bg-lf-border" />
+      <div class="h-3 w-full animate-pulse rounded-full bg-lf-border-soft" />
+      <div class="grid grid-cols-2 gap-3">
+        <div class="h-20 animate-pulse rounded-xl bg-lf-border-soft" />
+        <div class="h-20 animate-pulse rounded-xl bg-lf-border-soft" />
       </div>
     </div>
 
-    <!-- 错误状态 -->
     <NEmpty v-else-if="stats.statsError" :description="stats.statsError" class="mt-8" />
 
-    <!-- 内容 -->
     <template v-else>
-      <!-- 进度条 -->
-      <div class="mt-6">
+      <div class="mt-5">
         <div class="flex items-center justify-between text-xs text-lf-text-muted">
           <span>{{ t('dashboard.jobStatus.total', { count: n(totalJobs) }) }}</span>
-          <span>{{ t('dashboard.jobStatus.successRate', { percent: completedPercent }) }}</span>
+          <span class="font-medium text-lf-text-strong">{{
+            t('dashboard.jobStatus.successRate', { percent: completedPercent })
+          }}</span>
         </div>
-        <div class="mt-2 h-3 w-full overflow-hidden rounded-full bg-lf-bg-soft">
+        <div class="mt-2 h-2 w-full overflow-hidden rounded-full bg-lf-border-soft">
           <div class="flex h-full">
             <div
-              class="bg-green-500 transition-all duration-500"
+              class="bg-brand-500 transition-all duration-500"
               :style="{ width: `${completedPercent}%` }"
             />
             <div
@@ -62,17 +60,20 @@ const failedPercent = computed(() => {
         </div>
       </div>
 
-      <!-- 详情卡片 -->
-      <div class="mt-6 grid grid-cols-2 gap-4">
-        <div class="rounded-lg bg-lf-success-soft p-4">
-          <div class="text-sm text-green-600">{{ t('dashboard.jobStatus.completed') }}</div>
-          <div class="mt-1 text-2xl font-bold text-green-700">
+      <div class="mt-5 grid grid-cols-2 gap-3">
+        <div class="rounded-xl border border-lf-border-soft bg-lf-success-soft p-4">
+          <div class="text-xs font-medium text-brand-600">
+            {{ t('dashboard.jobStatus.completed') }}
+          </div>
+          <div class="mt-1.5 text-2xl font-semibold tracking-tight text-lf-text-strong">
             {{ n(completedJobs) }}
           </div>
         </div>
-        <div class="rounded-lg bg-lf-danger-soft p-4">
-          <div class="text-sm text-red-600">{{ t('dashboard.jobStatus.failed') }}</div>
-          <div class="mt-1 text-2xl font-bold text-red-700">
+        <div class="rounded-xl border border-lf-border-soft bg-lf-danger-soft p-4">
+          <div class="text-xs font-medium text-red-500">
+            {{ t('dashboard.jobStatus.failed') }}
+          </div>
+          <div class="mt-1.5 text-2xl font-semibold tracking-tight text-lf-text-strong">
             {{ n(failedJobs) }}
           </div>
         </div>

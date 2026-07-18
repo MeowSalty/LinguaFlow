@@ -125,7 +125,7 @@ const onSubmit = async () => {
 
 <template>
   <BlankLayout :title="t('register.title')" :subtitle="t('register.subtitle')">
-    <NCard :bordered="false" class="shadow-lg shadow-lf-shadow">
+    <div class="lf-panel border-lf-border/80 p-6 shadow-lg shadow-lf-shadow-strong">
       <NForm
         ref="formRef"
         :model="formValue"
@@ -184,7 +184,7 @@ const onSubmit = async () => {
           {{ t('register.form.submit') }}
         </NButton>
       </NForm>
-    </NCard>
+    </div>
 
     <div class="mt-6 text-center text-xs text-lf-text-muted">
       {{ t('register.links.hasAccount') }}

@@ -357,14 +357,11 @@ watch(
 </script>
 
 <template>
-  <div class="space-y-6">
-    <!-- 页面头部 -->
-    <NCard :bordered="false" class="overflow-hidden shadow-sm shadow-lf-shadow">
+  <div class="lf-page">
+    <section class="lf-page-header">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
         <div class="space-y-3">
-          <div
-            class="inline-flex items-center rounded-full bg-lf-brand-soft px-3 py-1 text-xs font-medium text-brand-600"
-          >
+          <div class="lf-eyebrow">
             {{ t('backends.eyebrow') }}
           </div>
           <div>
@@ -385,46 +382,28 @@ watch(
           </NButton>
         </div>
       </div>
-    </NCard>
+    </section>
 
-    <!-- 统计卡片 -->
     <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('backends.stats.total') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ backends.backendCount }}
-        </div>
-      </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('backends.stats.openai') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ backends.openaiCount }}
-        </div>
-      </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('backends.stats.anthropic') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ backends.anthropicCount }}
-        </div>
-      </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('backends.stats.google') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ backends.googleCount }}
-        </div>
-      </NCard>
+      <div class="lf-metric">
+        <div class="lf-metric-label">{{ t('backends.stats.total') }}</div>
+        <div class="lf-metric-value">{{ backends.backendCount }}</div>
+      </div>
+      <div class="lf-metric">
+        <div class="lf-metric-label">{{ t('backends.stats.openai') }}</div>
+        <div class="lf-metric-value">{{ backends.openaiCount }}</div>
+      </div>
+      <div class="lf-metric">
+        <div class="lf-metric-label">{{ t('backends.stats.anthropic') }}</div>
+        <div class="lf-metric-value">{{ backends.anthropicCount }}</div>
+      </div>
+      <div class="lf-metric">
+        <div class="lf-metric-label">{{ t('backends.stats.google') }}</div>
+        <div class="lf-metric-value">{{ backends.googleCount }}</div>
+      </div>
     </div>
 
-    <!-- 筛选栏 -->
-    <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
+    <div class="lf-panel px-4 py-3">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <NInput
           v-model:value="backends.searchQuery"
@@ -443,19 +422,17 @@ watch(
           </NButton>
         </div>
       </div>
-    </NCard>
-
-    <!-- 加载骨架屏 -->
-    <div v-if="backends.loading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <NCard v-for="index in 6" :key="index" :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <NSkeleton text :repeat="4" />
-      </NCard>
     </div>
 
-    <!-- 空状态 -->
+    <div v-if="backends.loading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+      <div v-for="index in 6" :key="index" class="lf-panel p-5">
+        <NSkeleton text :repeat="4" />
+      </div>
+    </div>
+
     <NEmpty
       v-else-if="backends.filteredItems.length === 0"
-      class="rounded-2xl bg-lf-surface py-16 shadow-sm shadow-lf-shadow"
+      class="lf-panel py-16"
       :description="hasActiveFilters ? t('backends.empty.filtered') : t('backends.empty.default')"
     >
       <template #extra>
@@ -472,44 +449,37 @@ watch(
       </template>
     </NEmpty>
 
-    <!-- 后端卡片网格 -->
     <div v-else class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <NCard
+      <div
         v-for="backend in backends.filteredItems"
         :key="backend.id"
-        hoverable
-        :bordered="false"
-        class="group shadow-sm shadow-lf-shadow transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-lf-shadow-strong"
+        class="lf-interactive-card group relative overflow-hidden p-5"
       >
+        <div
+          class="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-brand-500/0 via-lf-info/70 to-lf-accent/0 opacity-0 transition-opacity group-hover:opacity-100"
+        />
         <div class="flex h-full flex-col gap-5">
-          <!-- 头部：类型标签 + 名称 + 操作 -->
           <div class="flex items-start justify-between gap-4">
             <div class="min-w-0">
-              <h2 class="truncate text-lg font-semibold text-lf-text-strong">
+              <h2 class="truncate text-lg font-semibold tracking-tight text-lf-text-strong">
                 {{ backend.name }}
               </h2>
-              <p class="mt-1 text-xs text-lf-text-subtle">ID #{{ backend.id }}</p>
+              <p class="mt-1 font-mono text-xs text-lf-text-subtle">ID #{{ backend.id }}</p>
             </div>
-            <NTag round size="small" :type="getBackendTypeTagType(backend.type)">
+            <NTag round size="small" :bordered="false" :type="getBackendTypeTagType(backend.type)">
               {{ t(`backends.types.${backend.type}`) }}
             </NTag>
           </div>
 
-          <!-- 信息区 -->
-          <div class="rounded-2xl bg-lf-surface-muted p-4">
-            <div class="flex items-center justify-between gap-3">
-              <div class="min-w-0">
-                <div class="text-xs text-lf-text-subtle">
-                  {{ t('backends.card.model') }}
-                </div>
-                <div class="mt-1 truncate font-mono text-sm font-semibold text-lf-text">
-                  {{ getModelDisplay(backend) }}
-                </div>
-              </div>
+          <div class="rounded-xl border border-lf-border-soft bg-lf-code-bg px-3.5 py-3">
+            <div class="text-[11px] font-medium tracking-wide text-lf-text-subtle uppercase">
+              {{ t('backends.card.model') }}
+            </div>
+            <div class="mt-1.5 truncate font-mono text-sm font-semibold text-lf-text-strong">
+              {{ getModelDisplay(backend) }}
             </div>
           </div>
 
-          <!-- 操作区 -->
           <div class="mt-auto border-t border-lf-border-soft pt-4">
             <div class="flex items-center justify-between gap-3">
               <NButton text type="primary" class="font-medium" @click="openEditDrawer(backend)">
@@ -527,7 +497,7 @@ watch(
             </div>
           </div>
         </div>
-      </NCard>
+      </div>
     </div>
 
     <!-- 创建/编辑抽屉 -->

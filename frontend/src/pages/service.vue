@@ -113,7 +113,7 @@ const onSubmit = async () => {
 
 <template>
   <BlankLayout :title="t('service.title')" :subtitle="t('service.subtitle')">
-    <NCard :bordered="false" class="shadow-lg shadow-lf-shadow">
+    <div class="lf-panel border-lf-border/80 p-6 shadow-lg shadow-lf-shadow-strong">
       <NForm
         ref="formRef"
         :model="formValue"
@@ -138,9 +138,9 @@ const onSubmit = async () => {
 
       <p class="mt-5 text-center text-xs text-lf-text-muted">
         {{ t('service.hints.prefix') }}
-        <code class="rounded bg-lf-code-bg px-1 py-0.5 text-lf-text">/api/v1</code>
+        <code class="rounded bg-lf-code-bg px-1 py-0.5 font-mono text-lf-text">/api/v1</code>
         {{ t('service.hints.suffix') }}
       </p>
-    </NCard>
+    </div>
   </BlankLayout>
 </template>
