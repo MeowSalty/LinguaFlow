@@ -68,6 +68,9 @@ export const useProjectsStore = defineStore('projects', () => {
         items.value.map((project) => `${project.source_lang || '-'}>${project.target_lang || '-'}`),
       ).size,
   )
+  const glossaryEnabledCount = computed(
+    () => items.value.filter((project) => project.glossary_enabled).length,
+  )
 
   const loadProjects = async (): Promise<void> => {
     loading.value = true
@@ -159,6 +162,7 @@ export const useProjectsStore = defineStore('projects', () => {
     filteredItems,
     projectCount,
     languagePairCount,
+    glossaryEnabledCount,
     loadProjects,
     createProject,
     updateProject,

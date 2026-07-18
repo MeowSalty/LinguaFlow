@@ -426,7 +426,7 @@ onMounted(() => {
             </template>
           </NButton>
 
-          <h1 class="truncate text-xl font-bold tracking-tight text-lf-text-strong">
+          <h1 class="truncate text-xl font-semibold tracking-tight text-lf-text-strong">
             {{ workspace.project?.name || t('workspace.loadingProject') }}
           </h1>
 
@@ -660,7 +660,7 @@ onMounted(() => {
     <!-- 编辑项目抽屉 -->
     <NDrawer v-model:show="editDrawerVisible" :width="420" placement="right">
       <NDrawerContent :title="t('projects.edit.title')" closable>
-        <div class="mb-4 rounded-lg bg-lf-surface-muted p-3 text-sm leading-6 text-lf-text-muted">
+        <div class="mb-6 rounded-2xl bg-lf-surface-muted p-4 text-sm leading-6 text-lf-text-muted">
           {{ t('projects.edit.description') }}
         </div>
 

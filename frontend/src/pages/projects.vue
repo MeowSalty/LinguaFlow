@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { useMessage, type DropdownOption, type FormInst, type FormRules } from 'naive-ui'
+import { NText, useMessage, type DropdownOption, type FormInst, type FormRules } from 'naive-ui'
+import { h } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import { type ApiSchemas } from '@/api/client'
@@ -201,7 +202,10 @@ const cardDropdownOptions = computed<DropdownOption[]>(() => [
   { label: t('projects.actions.jobs'), key: 'jobs' },
   { label: t('projects.actions.glossary'), key: 'glossary' },
   { type: 'divider', key: 'd1' },
-  { label: t('projects.actions.delete'), key: 'delete', props: { style: 'color: #e53e3e' } },
+  {
+    key: 'delete',
+    label: () => h(NText, { type: 'error' }, { default: () => t('projects.actions.delete') }),
+  },
 ])
 
 const handleCardDropdownSelect = (project: Project, key: string | number): void => {
@@ -284,38 +288,50 @@ watch(
       </div>
     </NCard>
 
+    <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
+        <div class="text-xs font-medium text-lf-text-muted">
+          {{ t('projects.stats.total') }}
+        </div>
+        <div class="mt-2 text-2xl font-semibold tracking-tight text-lf-text-strong">
+          {{ projects.projectCount }}
+        </div>
+      </NCard>
+      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
+        <div class="text-xs font-medium text-lf-text-muted">
+          {{ t('projects.stats.languagePairs') }}
+        </div>
+        <div class="mt-2 text-2xl font-semibold tracking-tight text-lf-text-strong">
+          {{ projects.languagePairCount }}
+        </div>
+      </NCard>
+      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
+        <div class="text-xs font-medium text-lf-text-muted">
+          {{ t('projects.stats.glossaryEnabled') }}
+        </div>
+        <div class="mt-2 text-2xl font-semibold tracking-tight text-lf-text-strong">
+          {{ projects.glossaryEnabledCount }}
+        </div>
+      </NCard>
+    </div>
+
     <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-      <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div class="flex items-center gap-4 text-sm">
-          <span class="text-lf-text-muted">
-            {{ t('projects.stats.total') }}
-            <span class="ml-1 font-semibold text-lf-text-strong">{{ projects.projectCount }}</span>
-          </span>
-          <span class="h-3.5 w-px bg-lf-border-soft" />
-          <span class="text-lf-text-muted">
-            {{ t('projects.stats.languagePairs') }}
-            <span class="ml-1 font-semibold text-lf-text-strong">{{
-              projects.languagePairCount
-            }}</span>
-          </span>
-        </div>
-        <div class="flex items-center gap-2">
-          <NInput
-            v-model:value="projects.searchQuery"
-            clearable
-            class="lg:max-w-xs"
-            :placeholder="t('projects.filters.searchPlaceholder')"
-          />
-          <NButton v-if="hasActiveFilters" quaternary @click="projects.resetFilters">
-            {{ t('projects.filters.reset') }}
-          </NButton>
-        </div>
+      <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <NInput
+          v-model:value="projects.searchQuery"
+          clearable
+          class="sm:max-w-sm"
+          :placeholder="t('projects.filters.searchPlaceholder')"
+        />
+        <NButton v-if="hasActiveFilters" quaternary @click="projects.resetFilters">
+          {{ t('projects.filters.reset') }}
+        </NButton>
       </div>
     </NCard>
 
     <div v-if="projects.loading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
       <NCard v-for="index in 6" :key="index" :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <NSkeleton text :repeat="4" />
+        <NSkeleton text :repeat="5" />
       </NCard>
     </div>
 
@@ -338,35 +354,44 @@ watch(
       <div
         v-for="project in projects.filteredItems"
         :key="project.id"
-        class="group relative cursor-pointer overflow-hidden rounded-2xl border border-lf-border-soft bg-lf-surface p-5 shadow-sm shadow-lf-shadow transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-lf-shadow-strong"
+        class="group relative cursor-pointer overflow-hidden rounded-2xl border border-lf-border-soft bg-lf-surface shadow-sm shadow-lf-shadow transition-all duration-200 hover:-translate-y-0.5 hover:border-brand-500/25 hover:shadow-lg hover:shadow-lf-shadow-strong focus-within:border-brand-500/30 focus-within:ring-2 focus-within:ring-brand-500/15"
         :class="{ 'pointer-events-none opacity-60': projects.isDeletingProject(project.id) }"
         @click="openProjectWorkspace(project)"
       >
-        <div class="flex h-full flex-col gap-3">
-          <div class="flex items-center gap-2">
-            <h2
-              class="min-w-0 flex-1 truncate text-base font-semibold text-lf-text-strong"
-              :title="project.name"
-            >
-              {{ project.name }}
-            </h2>
+        <div
+          class="absolute inset-y-0 left-0 w-0.5 bg-brand-500/0 transition-all duration-200 group-hover:bg-brand-500/70"
+        />
 
-            <NTooltip trigger="hover">
-              <template #trigger>
-                <IconCarbonBook
-                  class="h-3.5 w-3.5 shrink-0 transition-colors"
-                  :class="project.glossary_enabled ? 'text-brand-500' : 'text-lf-text-subtle/40'"
-                />
-              </template>
+        <div class="flex h-full flex-col gap-4 p-5">
+          <div class="flex items-start gap-3">
+            <div class="min-w-0 flex-1">
+              <h2
+                class="truncate text-lg font-semibold tracking-tight text-lf-text-strong"
+                :title="project.name"
+              >
+                {{ project.name }}
+              </h2>
+              <p class="mt-1 text-xs text-lf-text-subtle">
+                {{ t('projects.card.projectId', { id: project.id }) }}
+              </p>
+            </div>
+
+            <NTag
+              size="small"
+              round
+              :bordered="false"
+              :type="project.glossary_enabled ? 'success' : 'default'"
+              class="shrink-0"
+            >
               {{
                 project.glossary_enabled
                   ? t('projects.form.glossaryEnabled')
                   : t('projects.form.glossaryDisabled')
               }}
-            </NTooltip>
+            </NTag>
 
             <div
-              class="shrink-0 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+              class="shrink-0 opacity-60 transition-opacity duration-150 group-hover:opacity-100 group-focus-within:opacity-100"
               @click.stop
             >
               <NDropdown
@@ -375,7 +400,7 @@ watch(
                 placement="bottom-end"
                 @select="(key: string | number) => handleCardDropdownSelect(project, key)"
               >
-                <NButton quaternary circle size="tiny">
+                <NButton quaternary circle size="tiny" :aria-label="t('projects.actions.more')">
                   <template #icon>
                     <NIcon size="14">
                       <IconCarbonOverflowMenuHorizontal />
@@ -386,12 +411,32 @@ watch(
             </div>
           </div>
 
-          <div class="flex items-center gap-1.5 text-xs text-lf-text-muted">
-            <IconCarbonLanguage class="h-3.5 w-3.5 shrink-0 text-lf-text-subtle" />
-            <span>{{ project.source_lang || 'auto' }} → {{ project.target_lang }}</span>
-            <span class="mx-1">·</span>
-            <IconCarbonTime class="h-3.5 w-3.5 shrink-0 text-lf-text-subtle" />
-            <span>{{ formatRelativeTime(project.updated_at ?? project.created_at ?? null) }}</span>
+          <div
+            class="flex items-center gap-2 rounded-xl bg-lf-surface-muted px-3 py-2.5 text-sm text-lf-text-muted"
+          >
+            <IconCarbonLanguage class="h-4 w-4 shrink-0 text-brand-500" />
+            <span class="truncate font-medium text-lf-text-strong">
+              {{ project.source_lang || 'auto' }}
+            </span>
+            <span class="text-lf-text-subtle">→</span>
+            <span class="truncate font-medium text-lf-text-strong">
+              {{ project.target_lang }}
+            </span>
+          </div>
+
+          <div class="mt-auto border-t border-lf-border-soft pt-4">
+            <div class="flex items-center justify-between gap-3">
+              <span class="inline-flex items-center gap-1.5 text-xs text-lf-text-subtle">
+                <IconCarbonTime class="h-3.5 w-3.5 shrink-0" />
+                {{ t('projects.card.updatedAt') }}
+                {{ formatRelativeTime(project.updated_at ?? project.created_at ?? null) }}
+              </span>
+              <span
+                class="text-xs font-medium text-brand-600 opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+              >
+                {{ t('projects.card.openWorkspace') }}
+              </span>
+            </div>
           </div>
         </div>
 
@@ -452,7 +497,7 @@ watch(
               </NRadio>
               <NRadio value="organization" disabled>
                 {{ t('projects.form.orgOwner') }}
-                <NText depth="3" style="margin-left: 4px; font-size: 12px">
+                <NText depth="3" class="ml-1 text-xs">
                   ({{ t('projects.form.comingSoon') }})
                 </NText>
               </NRadio>
