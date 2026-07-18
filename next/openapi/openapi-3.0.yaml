@@ -1,0 +1,4531 @@
+openapi: 3.0.3
+info:
+  title: LinguaFlow Web Service API
+  version: 0.1.0
+servers:
+  - url: /api/v1
+paths:
+  /ping:
+    get:
+      operationId: Ping
+      summary: 无鉴权连通测试
+      security: []
+      description: 用于前端在登录前快速判断后端 HTTP 服务是否可达；不检查数据库或第三方依赖。
+      responses:
+        '200':
+          description: 服务可达
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /mode:
+    get:
+      operationId: GetMode
+      summary: 获取运行模式
+      security: []
+      description: 返回当前服务的运行模式（local 单用户本地模式 / server 多租户服务端模式），供前端决定是否跳过登录页。无需鉴权。
+      responses:
+        '200':
+          description: 当前模式
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModeResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /auth/register:
+    post:
+      operationId: RegisterAuth
+      summary: 注册用户并签发会话
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: 已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSession'
+        default:
+          $ref: '#/components/responses/Problem'
+  /auth/login:
+    post:
+      operationId: LoginAuth
+      summary: 用户登录
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: 登录成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSession'
+        default:
+          $ref: '#/components/responses/Problem'
+  /auth/refresh:
+    post:
+      operationId: RefreshAuth
+      summary: 刷新访问令牌
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RefreshRequest'
+      responses:
+        '200':
+          description: 刷新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthSession'
+        default:
+          $ref: '#/components/responses/Problem'
+  /auth/logout:
+    post:
+      operationId: LogoutAuth
+      summary: 登出并撤销刷新令牌
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
+      responses:
+        '204':
+          description: 已登出
+        default:
+          $ref: '#/components/responses/Problem'
+  /users/me:
+    get:
+      operationId: GetCurrentUser
+      summary: 获取当前用户
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 当前用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: UpdateCurrentUser
+      summary: 更新当前用户资料
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCurrentUserRequest'
+      responses:
+        '200':
+          description: 更新后的用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        default:
+          $ref: '#/components/responses/Problem'
+  /users/me/password:
+    put:
+      operationId: ChangeCurrentUserPassword
+      summary: 修改当前用户密码
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ChangePasswordRequest'
+      responses:
+        '204':
+          description: 密码已更新
+        default:
+          $ref: '#/components/responses/Problem'
+  /orgs:
+    get:
+      operationId: ListOrganizations
+      summary: 列出当前用户所属组织
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 组织列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateOrganization
+      summary: 创建组织
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationRequest'
+      responses:
+        '201':
+          description: 已创建组织
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        default:
+          $ref: '#/components/responses/Problem'
+  /orgs/{orgId}:
+    parameters:
+      - $ref: '#/components/parameters/OrgId'
+    get:
+      operationId: GetOrganization
+      summary: 获取组织详情
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 组织详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: UpdateOrganization
+      summary: 更新组织信息
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationRequest'
+      responses:
+        '200':
+          description: 更新后的组织
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        default:
+          $ref: '#/components/responses/Problem'
+  /orgs/{orgId}/members:
+    parameters:
+      - $ref: '#/components/parameters/OrgId'
+    get:
+      operationId: ListOrganizationMembers
+      summary: 获取组织成员列表
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 成员列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationMemberListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: AddOrganizationMember
+      summary: 添加组织成员
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AddOrganizationMemberRequest'
+      responses:
+        '201':
+          description: 已添加成员
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationMember'
+        default:
+          $ref: '#/components/responses/Problem'
+  /orgs/{orgId}/members/{userId}:
+    parameters:
+      - $ref: '#/components/parameters/OrgId'
+      - $ref: '#/components/parameters/UserId'
+    put:
+      operationId: UpdateOrganizationMember
+      summary: 修改组织成员角色
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateOrganizationMemberRequest'
+      responses:
+        '200':
+          description: 更新后的成员
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationMember'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteOrganizationMember
+      summary: 移除组织成员
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 已移除成员
+        default:
+          $ref: '#/components/responses/Problem'
+  /backends:
+    post:
+      operationId: CreateUserBackend
+      summary: 创建个人后端
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBackendRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Backend'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: ListUserBackends
+      summary: 列出个人后端
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 后端列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackendListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /backends/{backendId}:
+    parameters:
+      - $ref: '#/components/parameters/BackendId'
+    put:
+      operationId: UpdateUserBackend
+      summary: 更新个人后端
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBackendRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Backend'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteUserBackend
+      summary: 删除个人后端
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
+  /orgs/{orgId}/backends:
+    parameters:
+      - $ref: '#/components/parameters/OrgId'
+    post:
+      operationId: CreateOrgBackend
+      summary: 创建组织后端
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBackendRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Backend'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: ListOrgBackends
+      summary: 列出组织后端
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 后端列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BackendListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /orgs/{orgId}/backends/{backendId}:
+    parameters:
+      - $ref: '#/components/parameters/OrgId'
+      - $ref: '#/components/parameters/BackendId'
+    put:
+      operationId: UpdateOrgBackend
+      summary: 更新组织后端
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBackendRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Backend'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteOrgBackend
+      summary: 删除组织后端
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects:
+    post:
+      operationId: CreateProject
+      summary: 创建项目
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: ListProjects
+      summary: 列出项目
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 项目列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      operationId: GetProject
+      summary: 获取项目详情
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 项目详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: UpdateProject
+      summary: 更新项目
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateProjectRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteProject
+      summary: 删除项目
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
+  /orgs/{orgId}/projects:
+    parameters:
+      - $ref: '#/components/parameters/OrgId'
+    post:
+      operationId: CreateOrgProject
+      summary: 创建组织项目
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateProjectRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Project'
+        default:
+          $ref: '#/components/responses/Problem'
+    get:
+      operationId: ListOrgProjects
+      summary: 列出组织项目
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 项目列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      operationId: ListProjectResources
+      summary: 列出项目资源文件
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: format
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 资源列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: UploadProjectResources
+      summary: 上传资源文件到项目
+      description: |
+        批量上传资源文件，允许部分成功。
+        - files 与 paths 按数组下标一一对应
+        - paths 使用 / 分隔，例如 ui/common.json、admin/common.json
+        - 未提供 paths 时兼容旧客户端，使用上传文件名作为根目录资源路径
+        - 项目内资源唯一性以规范化 path 判断，而不是 filename
+        - 冲突或失败的文件不会阻断其他文件的上传，每个文件独立返回处理结果
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - files
+              properties:
+                files:
+                  type: array
+                  maxItems: 50
+                  items:
+                    type: string
+                    format: binary
+                paths:
+                  type: array
+                  description: 与 files 一一对应的项目内资源相对路径；省略时使用文件名作为根目录路径
+                  items:
+                    type: string
+      responses:
+        '200':
+          description: 批量上传结果（可能包含部分冲突或失败）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceUploadBatchResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/precheck:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      operationId: PrecheckProjectResources
+      summary: 上传资源预检
+      description: |
+        在实际上传前检查批量文件中的冲突情况，不执行任何写入操作。
+        - 检查批次内是否有重复路径
+        - 检查每个路径是否与项目已有资源冲突
+        - 返回每个文件的建议操作（create / conflict / duplicate）
+        - 前端可根据结果让用户确认冲突处理策略后再执行实际上传
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - paths
+              properties:
+                paths:
+                  type: array
+                  minItems: 1
+                  maxItems: 50
+                  items:
+                    type: string
+                  description: 待检查的项目内资源相对路径列表（不包含实际文件）
+      responses:
+        '200':
+          description: 预检结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourcePrecheckBatchResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/tree:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      operationId: GetProjectResourceTree
+      summary: 获取项目资源目录树
+      description: |
+        按资源 path 聚合生成目录树。当前目录为虚拟节点，资源身份仍由 Resource.path 唯一确定；后续可在此基础上扩展目录移动、重命名等能力。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 资源目录树
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceTreeResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      operationId: GetResource
+      summary: 获取资源详情
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 资源详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: UpdateResource
+      summary: 更新资源文件
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Resource'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: IncrementalUpdateResource
+      summary: 增量更新资源文件
+      description: |
+        上传新版本文件，系统自动对比段落变化：
+        - 相同源文本的段落保留已有译文
+        - 源文本变化的段落重置为待翻译
+        - 新增段落状态为待翻译
+        - 不再存在的段落将被删除
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 增量更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IncrementalUpdateResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteResource
+      summary: 删除资源文件及其所有段落
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/download:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      operationId: DownloadResourceFile
+      summary: 下载资源原始文件
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 资源原始文件
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/download-translated:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      operationId: DownloadTranslatedResourceFile
+      summary: 下载资源的翻译结果文件
+      description: |
+        基于资源当前所有已翻译/已编辑的 segments，渲染并下载翻译后的文件。
+        不依赖翻译任务状态，直接读取资源级别的最新翻译数据。
+        如果没有任何已翻译的段落，返回 409 Conflict。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 翻译结果文件
+          content:
+            application/octet-stream:
+              schema:
+                type: string
+                format: binary
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/segments:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      operationId: ListResourceSegments
+      summary: 列出资源段落
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - pending
+              - translated
+              - edited
+              - approved
+              - rejected
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: group_key
+          in: query
+          required: false
+          schema:
+            type: string
+          description: 按分组键过滤 segments（如 epub_file 路径），仅返回属于指定分组的 segments
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 段落列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceSegmentListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/segments/{segmentId}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/SegmentId'
+    patch:
+      operationId: UpdateResourceSegment
+      summary: 更新资源段落内容
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ResourceSegmentUpdateRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Segment'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/segments/{segmentId}/review:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+      - $ref: '#/components/parameters/SegmentId'
+    patch:
+      operationId: ReviewResourceSegment
+      summary: 审核单个段落（通过/拒绝/编辑）
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SegmentReviewRequest'
+      responses:
+        '200':
+          description: 审核成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Segment'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/segments/batch-review:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: BatchReviewResourceSegments
+      summary: 批量审核段落
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BatchReviewRequest'
+      responses:
+        '200':
+          description: 批量审核结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BatchReviewResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/segments/approve-all:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: ApproveAllResourceSegments
+      summary: 批准资源中所有已翻译/已编辑的段落
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 批准结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApproveAllResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/retranslate-rejected:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+    post:
+      operationId: RetranslateRejectedSegments
+      summary: 将资源中被拒绝的段落重置为待翻译
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 重置结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RetranslateResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/resources/{resourceId}/segments/groups:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/ResourceId'
+    get:
+      operationId: ListResourceSegmentGroups
+      summary: 列出资源段落分组（按章节）
+      description: |
+        按 meta.epub_file 将 segments 归为章节组，返回每组的统计信息。
+        适用于 EPUB 等多章节资源的分组展示。
+        非 EPUB 资源会返回一个包含所有 segments 的单一组。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 段落分组列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ResourceSegmentGroupListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/glossary:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      operationId: ListGlossaryEntries
+      summary: 列出术语条目
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 术语表列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossaryListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateGlossaryEntry
+      summary: 创建术语条目
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGlossaryEntryRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossaryEntry'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/glossary/{entryId}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/EntryId'
+    put:
+      operationId: UpdateGlossaryEntry
+      summary: 更新术语条目
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGlossaryEntryRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UpdateGlossaryEntryResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteGlossaryEntry
+      summary: 删除术语条目
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/glossary/import:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      operationId: ImportGlossaryCSV
+      summary: CSV 导入术语表
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required:
+                - file
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: 导入结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossaryImportResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/glossary/export:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      operationId: ExportGlossaryCSV
+      summary: CSV 导出术语表
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: CSV 文件
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/glossary/{entryId}/sync-impact:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/EntryId'
+    post:
+      operationId: AnalyzeGlossarySyncImpact
+      summary: 分析术语修改对已翻译内容的影响
+      description: |
+        当用户修改术语条目的 target 时，调用此 API 分析受影响的段落数量和分布。
+        仅在 target 发生变更时有意义。
+        支持 resource_ids 参数限定分析范围。
+        采用两阶段匹配：先检查 source_text 包含术语 source，再检查 target_text 包含 old_target。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GlossarySyncImpactRequest'
+      responses:
+        '200':
+          description: 影响分析结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossarySyncImpactResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/glossary/{entryId}/sync-execute:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - $ref: '#/components/parameters/EntryId'
+    post:
+      operationId: ExecuteGlossarySyncUpdate
+      summary: 提交术语同步更新异步任务
+      description: |
+        提交异步同步更新任务，将受影响段落中的旧译文替换为新译文。
+        返回任务 ID 和状态轮询端点，前端通过 GET /sync-tasks/{taskId} 查询进度。
+        替换后的段落状态将被设置为 edited，需要人工复核。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GlossarySyncExecuteRequest'
+      responses:
+        '202':
+          description: 任务已提交
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossarySyncExecuteResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/sync-tasks/{taskId}:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 同步任务 ID
+    get:
+      operationId: GetGlossarySyncTaskStatus
+      summary: 查询术语同步任务状态
+      description: |
+        查询同步更新任务的执行进度和结果。
+        前端应以 500ms 间隔轮询此端点，任务完成后停止轮询。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 任务状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossarySyncTaskStatusResponse'
+        '404':
+          description: 任务不存在
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/sync-tasks/{taskId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+      - name: taskId
+        in: path
+        required: true
+        schema:
+          type: string
+        description: 同步任务 ID
+    post:
+      operationId: CancelGlossarySyncTask
+      summary: 取消术语同步任务
+      description: |
+        取消正在执行或等待执行的同步任务。
+        pending 状态的任务直接取消；running 状态的任务在完成当前批次后停止。
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 任务已取消
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossarySyncTaskCancelResponse'
+        '409':
+          description: 任务已完成或已失败，无法取消
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/glossary/prune:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      operationId: PreviewGlossaryPrune
+      summary: 预览术语表精简建议
+      description: |
+        调用 LLM 分析项目现有术语表，返回精简建议（删除/更新分类）。
+        此为无状态同步 API，不修改任何数据。
+        响应时间取决于 LLM 后端，客户端断开连接时自动取消 LLM 调用。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GlossaryPruneRequest'
+      responses:
+        '200':
+          description: 精简建议预览
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossaryPrunePreview'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/glossary/prune/apply:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    post:
+      operationId: ApplyGlossaryPrune
+      summary: 应用术语表精简变更
+      description: |
+        应用用户从 Preview 中选中的变更。
+        逐条处理，单条失败不中断其余，返回 deleted/updated/failed 计数。
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GlossaryPruneApplyRequest'
+      responses:
+        '200':
+          description: 应用结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/GlossaryPruneApplyResult'
+        default:
+          $ref: '#/components/responses/Problem'
+  /projects/{projectId}/jobs:
+    parameters:
+      - $ref: '#/components/parameters/ProjectId'
+    get:
+      operationId: ListJobs
+      summary: 列出项目任务
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: status
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - pending
+              - running
+              - completed
+              - failed
+              - cancelled
+        - name: trigger_type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - manual
+              - file_update
+              - glossary_change
+              - web_edit
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 任务列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateJob
+      summary: 创建任务
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateJobRequest'
+      responses:
+        '202':
+          description: 任务已创建
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        default:
+          $ref: '#/components/responses/Problem'
+  /jobs/{jobId}:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    get:
+      operationId: GetJob
+      summary: 获取任务详情
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 任务详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        default:
+          $ref: '#/components/responses/Problem'
+  /jobs/{jobId}/cancel:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    post:
+      operationId: CancelJob
+      summary: 取消任务
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 取消后的任务
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        default:
+          $ref: '#/components/responses/Problem'
+  /jobs/{jobId}/retry:
+    parameters:
+      - $ref: '#/components/parameters/JobId'
+    post:
+      operationId: RetryJob
+      summary: 重试失败的资源
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 重试后的任务
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        default:
+          $ref: '#/components/responses/Problem'
+  /execution-plan-templates:
+    get:
+      operationId: ListExecutionPlanTemplates
+      summary: 列出当前用户的执行计划模板
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 执行计划模板列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionPlanTemplateListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateExecutionPlanTemplate
+      summary: 创建执行计划模板
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExecutionPlanTemplateRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionPlanTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+  /execution-plan-templates/{executionPlanTemplateId}:
+    parameters:
+      - $ref: '#/components/parameters/ExecutionPlanTemplateId'
+    get:
+      operationId: GetExecutionPlanTemplate
+      summary: 获取执行计划模板详情
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 执行计划模板详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionPlanTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: UpdateExecutionPlanTemplate
+      summary: 更新执行计划模板
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateExecutionPlanTemplateRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionPlanTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteExecutionPlanTemplate
+      summary: 删除执行计划模板
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
+  /translation-prompt-templates:
+    get:
+      operationId: ListPromptTemplates
+      summary: 列出当前用户的翻译提示词模板
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 翻译提示词模板列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationPromptTemplateListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreatePromptTemplate
+      summary: 创建翻译提示词模板
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTranslationPromptTemplateRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationPromptTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+  /translation-prompt-templates/{translationPromptTemplateId}:
+    parameters:
+      - $ref: '#/components/parameters/TranslationPromptTemplateId'
+    get:
+      operationId: GetPromptTemplate
+      summary: 获取翻译提示词模板详情
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 翻译提示词模板详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationPromptTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: UpdatePromptTemplate
+      summary: 更新翻译提示词模板
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateTranslationPromptTemplateRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationPromptTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeletePromptTemplate
+      summary: 删除翻译提示词模板
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
+  /bootstrap-prompt-templates:
+    get:
+      operationId: ListBootstrapPromptTemplates
+      summary: 列出当前用户的术语抽取提示词模板
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 术语抽取提示词模板列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BootstrapPromptTemplateListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateBootstrapPromptTemplate
+      summary: 创建术语抽取提示词模板
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateBootstrapPromptTemplateRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BootstrapPromptTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+  /bootstrap-prompt-templates/{bootstrapPromptTemplateId}:
+    parameters:
+      - $ref: '#/components/parameters/BootstrapPromptTemplateId'
+    get:
+      operationId: GetBootstrapPromptTemplate
+      summary: 获取术语抽取提示词模板详情
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 术语抽取提示词模板详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BootstrapPromptTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: UpdateBootstrapPromptTemplate
+      summary: 更新术语抽取提示词模板
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateBootstrapPromptTemplateRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BootstrapPromptTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteBootstrapPromptTemplate
+      summary: 删除术语抽取提示词模板
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
+  /prune-prompt-templates:
+    get:
+      operationId: ListPrunePromptTemplates
+      summary: 列出当前用户的术语精简提示词模板
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 术语精简提示词模板列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrunePromptTemplateListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreatePrunePromptTemplate
+      summary: 创建术语精简提示词模板
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreatePrunePromptTemplateRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrunePromptTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+  /prune-prompt-templates/{prunePromptTemplateId}:
+    parameters:
+      - $ref: '#/components/parameters/PrunePromptTemplateId'
+    get:
+      operationId: GetPrunePromptTemplate
+      summary: 获取术语精简提示词模板详情
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 术语精简提示词模板详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrunePromptTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: UpdatePrunePromptTemplate
+      summary: 更新术语精简提示词模板
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdatePrunePromptTemplateRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrunePromptTemplate'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeletePrunePromptTemplate
+      summary: 删除术语精简提示词模板
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
+  /execution-profiles:
+    get:
+      operationId: ListExecutionProfiles
+      summary: 列出当前用户的执行策略配置
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 执行策略配置列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionProfileListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: CreateExecutionProfile
+      summary: 创建执行策略配置
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateExecutionProfileRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionProfile'
+        default:
+          $ref: '#/components/responses/Problem'
+  /execution-profiles/{executionProfileId}:
+    parameters:
+      - $ref: '#/components/parameters/ExecutionProfileId'
+    get:
+      operationId: GetExecutionProfile
+      summary: 获取执行策略配置详情
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 执行策略配置详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionProfile'
+        default:
+          $ref: '#/components/responses/Problem'
+    put:
+      operationId: UpdateExecutionProfile
+      summary: 更新执行策略配置
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateExecutionProfileRequest'
+      responses:
+        '200':
+          description: 更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ExecutionProfile'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: DeleteExecutionProfile
+      summary: 删除执行策略配置
+      security:
+        - bearerAuth: []
+      responses:
+        '204':
+          description: 删除成功
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/users:
+    get:
+      operationId: AdminListUsers
+      summary: 列出所有用户
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: search
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: role
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: active
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 用户列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUserListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    post:
+      operationId: AdminCreateUser
+      summary: 创建用户
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminCreateUserRequest'
+      responses:
+        '201':
+          description: 创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/users/{userId}:
+    get:
+      operationId: AdminGetUser
+      summary: 获取用户详情
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '200':
+          description: 用户详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      operationId: AdminUpdateUser
+      summary: 更新用户
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminUpdateUserRequest'
+      responses:
+        '200':
+          description: 更新后的用户
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        default:
+          $ref: '#/components/responses/Problem'
+    delete:
+      operationId: AdminDisableUser
+      summary: 停用用户
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      responses:
+        '204':
+          description: 用户已停用
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/users/{userId}/password:
+    put:
+      operationId: AdminResetUserPassword
+      summary: 重置用户密码
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/UserId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AdminResetPasswordRequest'
+      responses:
+        '204':
+          description: 密码已重置
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/stats:
+    get:
+      operationId: AdminGetStats
+      summary: 获取全局统计
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 全局统计
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemStats'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/audit-logs:
+    get:
+      operationId: AdminListAuditLogs
+      summary: 列出审计日志
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Cursor'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: 审计日志列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminAuditLogListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /admin/settings:
+    get:
+      operationId: AdminGetSettings
+      summary: 获取系统配置
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 系统配置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemSettingsResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+    patch:
+      operationId: AdminUpdateSettings
+      summary: 更新系统配置
+      security:
+        - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateSystemSettingsRequest'
+      responses:
+        '200':
+          description: 更新后的系统配置
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SystemSettingsResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+  /stats/summary:
+    get:
+      operationId: GetStatsSummary
+      summary: 获取用量统计汇总
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 用量统计
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UsageStats'
+        default:
+          $ref: '#/components/responses/Problem'
+  /activity:
+    parameters:
+      - $ref: '#/components/parameters/Cursor'
+      - $ref: '#/components/parameters/Limit'
+    get:
+      operationId: ListActivity
+      summary: 获取活动审计日志
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: 活动审计日志
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityListResponse'
+        default:
+          $ref: '#/components/responses/Problem'
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  parameters:
+    OrgId:
+      name: orgId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    ProjectId:
+      name: projectId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    ResourceId:
+      name: resourceId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    BackendId:
+      name: backendId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    EntryId:
+      name: entryId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    TranslationPromptTemplateId:
+      name: translationPromptTemplateId
+      in: path
+      required: true
+      schema:
+        type: integer
+    BootstrapPromptTemplateId:
+      name: bootstrapPromptTemplateId
+      in: path
+      required: true
+      schema:
+        type: integer
+    PrunePromptTemplateId:
+      name: prunePromptTemplateId
+      in: path
+      required: true
+      schema:
+        type: integer
+    ExecutionProfileId:
+      name: executionProfileId
+      in: path
+      required: true
+      schema:
+        type: integer
+    ExecutionPlanTemplateId:
+      name: executionPlanTemplateId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    SegmentId:
+      name: segmentId
+      in: path
+      required: true
+      schema:
+        type: integer
+        minimum: 1
+    Cursor:
+      name: cursor
+      in: query
+      required: false
+      schema:
+        type: string
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+  responses:
+    Problem:
+      description: 错误响应
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+  schemas:
+    Problem:
+      type: object
+      required:
+        - title
+        - status
+      properties:
+        type:
+          type: string
+        title:
+          type: string
+        status:
+          type: integer
+        detail:
+          type: string
+    HealthResponse:
+      type: object
+      required:
+        - status
+      properties:
+        status:
+          type: string
+          example: ok
+        service:
+          type: string
+          example: linguaflow
+    ModeResponse:
+      type: object
+      required:
+        - mode
+      properties:
+        mode:
+          type: string
+          enum:
+            - local
+            - server
+          x-enum-varnames:
+            - ModeLocal
+            - ModeServer
+    User:
+      type: object
+      required:
+        - id
+        - username
+        - email
+        - role
+        - active
+      properties:
+        id:
+          type: integer
+        username:
+          type: string
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        role:
+          type: string
+        active:
+          type: boolean
+    RegisterRequest:
+      type: object
+      required:
+        - username
+        - password
+        - email
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+    LoginRequest:
+      type: object
+      required:
+        - username
+        - password
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+    RefreshRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+    LogoutRequest:
+      type: object
+      required:
+        - refresh_token
+      properties:
+        refresh_token:
+          type: string
+    AuthSession:
+      type: object
+      required:
+        - access_token
+        - refresh_token
+        - token_type
+        - expires_at
+        - refresh_expires_at
+        - user
+      properties:
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        token_type:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+        refresh_expires_at:
+          type: string
+          format: date-time
+        user:
+          $ref: '#/components/schemas/User'
+    UpdateCurrentUserRequest:
+      type: object
+      properties:
+        display_name:
+          type: string
+        email:
+          type: string
+          format: email
+    ChangePasswordRequest:
+      type: object
+      required:
+        - current_password
+        - new_password
+      properties:
+        current_password:
+          type: string
+        new_password:
+          type: string
+    Organization:
+      type: object
+      required:
+        - id
+        - name
+        - slug
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        slug:
+          type: string
+        display_name:
+          type: string
+        description:
+          type: string
+    OrganizationRequest:
+      type: object
+      required:
+        - name
+        - slug
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+        display_name:
+          type: string
+        description:
+          type: string
+    OrganizationListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Organization'
+    OrganizationMember:
+      type: object
+      required:
+        - id
+        - role
+        - user
+      properties:
+        id:
+          type: integer
+        role:
+          type: string
+          enum:
+            - owner
+            - admin
+            - member
+        user:
+          $ref: '#/components/schemas/User'
+    OrganizationMemberListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/OrganizationMember'
+    AddOrganizationMemberRequest:
+      type: object
+      required:
+        - username
+      properties:
+        username:
+          type: string
+        role:
+          type: string
+          enum:
+            - owner
+            - admin
+            - member
+    UpdateOrganizationMemberRequest:
+      type: object
+      required:
+        - role
+      properties:
+        role:
+          type: string
+          enum:
+            - owner
+            - admin
+            - member
+    Segment:
+      type: object
+      required:
+        - id
+        - sub_job_id
+        - segment_index
+        - source_text
+        - status
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+        sub_job_id:
+          type: integer
+        segment_index:
+          type: integer
+        source_text:
+          type: string
+        target_text:
+          type: string
+        status:
+          type: string
+          enum:
+            - pending
+            - translated
+            - edited
+            - approved
+            - rejected
+        review_comment:
+          type: string
+        reviewed_by:
+          $ref: '#/components/schemas/User'
+        quality_issues:
+          type: array
+          description: QA 检测到的质量问题列表
+          items:
+            $ref: '#/components/schemas/QualityIssue'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    QualityIssue:
+      type: object
+      required:
+        - segment_index
+        - severity
+        - code
+        - message
+      properties:
+        segment_index:
+          type: integer
+        severity:
+          type: string
+          enum:
+            - warning
+            - error
+        code:
+          type: string
+          description: 问题代码（untranslated, length_ratio, duplicate）
+        message:
+          type: string
+    UsageStats:
+      type: object
+      required:
+        - api_calls
+        - input_tokens
+        - output_tokens
+        - segment_count
+        - usage_records
+        - completed_jobs
+        - failed_jobs
+      properties:
+        api_calls:
+          type: integer
+        input_tokens:
+          type: integer
+        output_tokens:
+          type: integer
+        segment_count:
+          type: integer
+        usage_records:
+          type: integer
+        completed_jobs:
+          type: integer
+        failed_jobs:
+          type: integer
+    Resource:
+      type: object
+      required:
+        - id
+        - path
+        - name
+        - directory
+        - format
+        - total_segments
+        - translated_segments
+        - approved_segments
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+        path:
+          type: string
+          description: 项目内规范化资源相对路径，使用 / 分隔，例如 ui/common.json
+        name:
+          type: string
+          description: 资源显示名，当前等同于资源路径 basename，预留给后续可编辑显示名
+        directory:
+          type: string
+          description: 资源所在目录，根目录为空字符串
+        format:
+          type: string
+        total_segments:
+          type: integer
+        translated_segments:
+          type: integer
+          description: 已翻译段落数（含 translated、edited、approved）
+        approved_segments:
+          type: integer
+          description: 已审核通过段落数
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ResourceListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Resource'
+    ResourceTreeNode:
+      type: object
+      required:
+        - type
+        - name
+        - path
+      properties:
+        type:
+          type: string
+          enum:
+            - directory
+            - resource
+        name:
+          type: string
+        path:
+          type: string
+          description: 目录或资源的项目内规范化相对路径，根目录为空字符串
+        resource:
+          $ref: '#/components/schemas/Resource'
+        children:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceTreeNode'
+    ResourceTreeResponse:
+      type: object
+      required:
+        - root
+      properties:
+        root:
+          $ref: '#/components/schemas/ResourceTreeNode'
+    ResourceSegmentUpdateRequest:
+      type: object
+      properties:
+        source_text:
+          type: string
+        target_text:
+          type: string
+        comment:
+          type: string
+      additionalProperties: false
+    ResourceSegmentListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Segment'
+        next_cursor:
+          type: string
+    SegmentReviewRequest:
+      type: object
+      required:
+        - action
+      properties:
+        action:
+          type: string
+          enum:
+            - approve
+            - reject
+            - edit
+          description: 审核操作：approve=通过，reject=拒绝，edit=编辑译文
+        target_text:
+          type: string
+          description: 编辑译文时必填
+        comment:
+          type: string
+          description: 审核备注
+    BatchReviewRequest:
+      type: object
+      required:
+        - segment_ids
+        - action
+      properties:
+        segment_ids:
+          type: array
+          items:
+            type: integer
+          minItems: 1
+          description: 待审核的段落 ID 列表
+        action:
+          type: string
+          enum:
+            - approve
+            - reject
+          description: 批量审核操作
+        comment:
+          type: string
+          description: 审核备注
+    BatchReviewResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Segment'
+    ApproveAllResponse:
+      type: object
+      required:
+        - approved_count
+      properties:
+        approved_count:
+          type: integer
+          description: 批准的段落数
+    RetranslateResponse:
+      type: object
+      required:
+        - reset_count
+      properties:
+        reset_count:
+          type: integer
+          description: 重置为待翻译的段落数
+    IncrementalUpdateResponse:
+      type: object
+      required:
+        - resource
+        - changes
+      properties:
+        resource:
+          $ref: '#/components/schemas/Resource'
+        changes:
+          $ref: '#/components/schemas/IncrementalUpdateChanges'
+    ResourceUploadFileResult:
+      type: object
+      required:
+        - path
+        - action
+      properties:
+        path:
+          type: string
+          description: 资源项目内规范化相对路径
+        action:
+          type: string
+          enum:
+            - created
+            - conflict
+            - failed
+          description: 处理结果：created=创建成功，conflict=与已有资源冲突，failed=处理失败
+        resource:
+          $ref: '#/components/schemas/Resource'
+          description: 创建成功时返回新资源
+        existing_resource:
+          $ref: '#/components/schemas/Resource'
+          description: 冲突时返回已有资源
+        error:
+          type: string
+          description: 失败时的错误信息
+    ResourceUploadBatchResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceUploadFileResult'
+    ResourcePrecheckFileResult:
+      type: object
+      required:
+        - path
+        - action
+      properties:
+        path:
+          type: string
+          description: 资源项目内规范化相对路径
+        action:
+          type: string
+          enum:
+            - create
+            - conflict
+            - duplicate
+          description: 建议操作：create=可直接创建，conflict=与已有资源冲突，duplicate=批次内重复路径
+        existing_resource:
+          $ref: '#/components/schemas/Resource'
+          description: 冲突时返回已有资源信息
+    ResourcePrecheckBatchResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourcePrecheckFileResult'
+    ResourceSegmentGroup:
+      type: object
+      required:
+        - group_key
+        - group_title
+        - segment_count
+        - translated_count
+        - approved_count
+      properties:
+        group_key:
+          type: string
+          description: 分组键（如 epub_file 路径）
+        group_title:
+          type: string
+          description: 分组标题（如章节标题）
+        segment_count:
+          type: integer
+          description: 该组的 segment 总数
+        translated_count:
+          type: integer
+          description: 已翻译的 segment 数量
+        approved_count:
+          type: integer
+          description: 已审核通过的 segment 数量
+    ResourceSegmentGroupListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ResourceSegmentGroup'
+    CreateJobRequest:
+      type: object
+      required:
+        - execution_plan_id
+      properties:
+        execution_plan_id:
+          type: integer
+          description: 执行计划模板 ID
+        resource_ids:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+        segment_ids:
+          type: array
+          items:
+            type: integer
+            minimum: 1
+        segment_group_keys:
+          type: array
+          items:
+            type: string
+          description: |
+            按章节分组键选择 segments（仅适用于 EPUB 等多章节资源）。
+            传入 meta.epub_file 值（如 ["OEBPS/chapter1.xhtml"]），后端自动解析为对应的 segment_ids。
+            与 segment_ids 互斥，优先级：segment_group_keys > segment_ids > resource_ids。
+        segment_filter:
+          type: string
+          enum:
+            - pending_only
+            - skip_approved
+            - all
+          description: |
+            覆盖执行模板中翻译轮次的段落过滤策略（仅对翻译轮次生效）。
+            - pending_only: 仅处理 pending 和 rejected 状态的段落
+            - skip_approved: 处理除 approved 外的所有状态
+            - all: 处理所有状态的段落
+            省略时使用执行模板中的配置。
+        auto_approve:
+          type: boolean
+          default: false
+          description: 翻译完成后是否自动审批通过所有段落
+        execution_config:
+          type: object
+          additionalProperties: true
+      additionalProperties: false
+    JobResource:
+      type: object
+      required:
+        - id
+        - resource_id
+        - status
+        - segment_count
+        - completed_segments
+        - skipped_segments
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+        resource_id:
+          type: integer
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
+            - cancelled
+        segment_count:
+          type: integer
+        completed_segments:
+          type: integer
+        skipped_segments:
+          type: integer
+          description: 被系统跳过的段落数
+        output_path:
+          type: string
+        error_message:
+          type: string
+        resource:
+          $ref: '#/components/schemas/Resource'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+        current_stage:
+          type: string
+          description: 当前执行阶段名称
+        stage_total:
+          type: integer
+          description: 当前阶段的总段落数
+        stage_completed:
+          type: integer
+          description: 当前阶段已完成的段落数
+        started_at:
+          type: string
+          format: date-time
+          description: 资源开始执行的时间
+    Job:
+      type: object
+      required:
+        - id
+        - project_id
+        - execution_plan_id
+        - status
+        - trigger_type
+        - progress
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+        project_id:
+          type: integer
+        created_by:
+          type: object
+          properties:
+            id:
+              type: integer
+            username:
+              type: string
+        execution_plan_id:
+          type: integer
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
+            - cancelled
+        trigger_type:
+          type: string
+          enum:
+            - manual
+            - file_update
+            - glossary_change
+            - web_edit
+        execution_config:
+          type: object
+          additionalProperties: true
+          description: 执行配置快照（已脱敏，不含 API 密钥）
+        error_message:
+          type: string
+        progress:
+          $ref: '#/components/schemas/JobProgress'
+        job_resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobResource'
+        started_at:
+          type: string
+          format: date-time
+          description: 任务开始执行的时间
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    JobProgress:
+      type: object
+      required:
+        - total_resources
+        - completed_resources
+        - failed_resources
+        - total_segments
+        - completed_segments
+        - skipped_segments
+      properties:
+        total_resources:
+          type: integer
+        completed_resources:
+          type: integer
+        failed_resources:
+          type: integer
+        total_segments:
+          type: integer
+          description: 总段落数（创建时选中的 segment 数）
+        completed_segments:
+          type: integer
+        skipped_segments:
+          type: integer
+          description: 被系统跳过的段落数（已翻译、空文本、纯占位符等）
+        queue_position:
+          type: integer
+          nullable: true
+          description: 在队列中的位置（1-based），null 表示不在队列中
+        queue_size:
+          type: integer
+          nullable: true
+          description: 当前队列中的任务总数
+    JobListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Job'
+        next_cursor:
+          type: string
+    Activity:
+      type: object
+      required:
+        - id
+        - action
+        - resource_type
+        - created_at
+        - updated_at
+      properties:
+        id:
+          type: integer
+        action:
+          type: string
+        resource_type:
+          type: string
+        resource_id:
+          type: integer
+        message:
+          type: string
+        metadata:
+          type: object
+          additionalProperties: true
+        actor:
+          $ref: '#/components/schemas/User'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ActivityListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Activity'
+        next_cursor:
+          type: string
+    Backend:
+      type: object
+      required:
+        - id
+        - scope
+        - name
+        - type
+      properties:
+        id:
+          type: integer
+        scope:
+          type: string
+          enum:
+            - user
+            - org
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+            - openai
+            - anthropic
+            - google
+        options:
+          $ref: '#/components/schemas/BackendOptions'
+        rate_limit_per_minute:
+          type: integer
+          minimum: 0
+          default: 0
+          description: 每分钟请求限制；0 表示不限速
+        owner_user_id:
+          type: integer
+        owner_org_id:
+          type: integer
+    BackendListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Backend'
+    CreateBackendRequest:
+      type: object
+      required:
+        - name
+        - type
+        - options
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+            - openai
+            - anthropic
+            - google
+        options:
+          $ref: '#/components/schemas/BackendOptions'
+        rate_limit_per_minute:
+          type: integer
+          minimum: 0
+          default: 0
+          description: 每分钟请求限制；0 表示不限速
+      additionalProperties: false
+    UpdateBackendRequest:
+      type: object
+      required:
+        - name
+        - type
+      properties:
+        name:
+          type: string
+        type:
+          type: string
+          enum:
+            - openai
+            - anthropic
+            - google
+        options:
+          $ref: '#/components/schemas/BackendOptions'
+        rate_limit_per_minute:
+          type: integer
+          minimum: 0
+          default: 0
+          description: 每分钟请求限制；0 表示不限速
+      additionalProperties: false
+    Project:
+      type: object
+      required:
+        - id
+        - name
+        - source_lang
+        - target_lang
+        - glossary_enabled
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        owner_user_id:
+          type: integer
+        owner_org_id:
+          type: integer
+        config:
+          type: object
+          additionalProperties: true
+        glossary_enabled:
+          type: boolean
+          default: false
+          description: 是否启用术语表
+        source_lang:
+          type: string
+        target_lang:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ProjectListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Project'
+    CreateProjectRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        config:
+          type: object
+          additionalProperties: true
+        glossary_enabled:
+          type: boolean
+          default: false
+          description: 是否启用术语表
+        source_lang:
+          type: string
+        target_lang:
+          type: string
+      additionalProperties: false
+    UpdateProjectRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        config:
+          type: object
+          additionalProperties: true
+        glossary_enabled:
+          type: boolean
+          description: 是否启用术语表
+        source_lang:
+          type: string
+        target_lang:
+          type: string
+      additionalProperties: false
+    GlossaryEntry:
+      type: object
+      required:
+        - id
+        - source
+        - target
+        - case_sensitive
+      properties:
+        id:
+          type: integer
+        source:
+          type: string
+        target:
+          type: string
+        case_sensitive:
+          type: boolean
+        notes:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    GlossaryListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/GlossaryEntry'
+    CreateGlossaryEntryRequest:
+      type: object
+      required:
+        - source
+        - target
+      properties:
+        source:
+          type: string
+        target:
+          type: string
+        case_sensitive:
+          type: boolean
+          default: false
+        notes:
+          type: string
+      additionalProperties: false
+    UpdateGlossaryEntryRequest:
+      type: object
+      required:
+        - source
+        - target
+      properties:
+        source:
+          type: string
+        target:
+          type: string
+        case_sensitive:
+          type: boolean
+        notes:
+          type: string
+      additionalProperties: false
+    UpdateGlossaryEntryResponse:
+      allOf:
+        - $ref: '#/components/schemas/GlossaryEntry'
+        - type: object
+          properties:
+            target_changed:
+              type: boolean
+              description: target 字段是否发生变更
+    GlossaryImportResult:
+      type: object
+      required:
+        - added
+      properties:
+        added:
+          type: integer
+        skipped:
+          type: array
+          items:
+            type: object
+            properties:
+              line:
+                type: integer
+              source:
+                type: string
+              reason:
+                type: string
+    GlossarySyncImpactRequest:
+      type: object
+      required:
+        - old_target
+      properties:
+        old_target:
+          type: string
+          description: 修改前的旧 target 值
+        new_target:
+          type: string
+          description: 修改后的新 target 值
+        resource_ids:
+          type: array
+          items:
+            type: integer
+          description: 限定影响分析的资源范围（可选，为空则分析所有资源）
+      additionalProperties: false
+    GlossarySyncImpactResponse:
+      type: object
+      required:
+        - old_target
+        - new_target
+        - total_affected
+        - resources
+      properties:
+        old_target:
+          type: string
+        new_target:
+          type: string
+        total_affected:
+          type: integer
+        resources:
+          type: array
+          items:
+            $ref: '#/components/schemas/GlossarySyncImpactResource'
+    GlossarySyncExecuteRequest:
+      type: object
+      required:
+        - old_target
+        - new_target
+      properties:
+        old_target:
+          type: string
+        new_target:
+          type: string
+        resource_ids:
+          type: array
+          items:
+            type: integer
+          description: 限定同步的资源范围
+      additionalProperties: false
+    GlossarySyncExecuteResponse:
+      type: object
+      required:
+        - task_id
+        - status
+        - status_url
+      properties:
+        task_id:
+          type: string
+          description: 异步任务唯一标识
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
+            - cancelled
+        status_url:
+          type: string
+          description: 任务状态轮询端点
+    GlossarySyncTaskStatusResponse:
+      type: object
+      required:
+        - task_id
+        - status
+        - processed
+        - total
+      properties:
+        task_id:
+          type: string
+        status:
+          type: string
+          enum:
+            - pending
+            - running
+            - completed
+            - failed
+            - cancelled
+        processed:
+          type: integer
+          description: 已处理的段落数
+        total:
+          type: integer
+          description: 待处理的段落总数
+        result:
+          type: object
+          description: 任务完成后的结果摘要（仅 status=completed 时存在）
+          properties:
+            total_updated:
+              type: integer
+            total_skipped:
+              type: integer
+            resources:
+              type: array
+              items:
+                $ref: '#/components/schemas/GlossarySyncExecuteResourceResult'
+        error:
+          type: string
+          description: 错误信息（仅 status=failed 时存在）
+        cancelled_at:
+          type: string
+          format: date-time
+    GlossarySyncTaskCancelResponse:
+      type: object
+      required:
+        - task_id
+        - status
+      properties:
+        task_id:
+          type: string
+        status:
+          type: string
+          enum:
+            - cancelled
+    GlossaryPruneRequest:
+      type: object
+      required:
+        - backend_id
+      properties:
+        backend_id:
+          type: integer
+          description: 用于精简分析的后端 ID
+        template_id:
+          type: integer
+          description: 精简提示词模板 ID，省略或为 0 时使用内置默认模板
+      additionalProperties: false
+    GlossaryPruneSuggestion:
+      type: object
+      required:
+        - entry_id
+        - action
+        - source
+        - old_target
+        - new_target
+        - old_notes
+        - new_notes
+        - target_changed
+        - notes_changed
+      properties:
+        entry_id:
+          type: integer
+        action:
+          type: string
+          enum:
+            - delete
+            - update
+        source:
+          type: string
+        old_target:
+          type: string
+        new_target:
+          type: string
+        old_notes:
+          type: string
+        new_notes:
+          type: string
+        target_changed:
+          type: boolean
+        notes_changed:
+          type: boolean
+    GlossaryPrunePreview:
+      type: object
+      required:
+        - suggestions
+        - total
+        - to_delete
+        - to_update
+        - to_keep
+        - diagnostics
+      properties:
+        suggestions:
+          type: array
+          items:
+            $ref: '#/components/schemas/GlossaryPruneSuggestion'
+        total:
+          type: integer
+        to_delete:
+          type: integer
+        to_update:
+          type: integer
+        to_keep:
+          type: integer
+        diagnostics:
+          $ref: '#/components/schemas/GlossaryPruneDiagnostics'
+    GlossaryPruneDiagnostics:
+      type: object
+      properties:
+        backend_name:
+          type: string
+        template_name:
+          type: string
+        duration_ms:
+          type: integer
+        prompt_tokens:
+          type: integer
+        completion_tokens:
+          type: integer
+        system_prompt:
+          type: string
+          description: 发送给 LLM 的 system prompt 内容（截断至 128KB）。
+        user_message:
+          type: string
+          description: 发送给 LLM 的 user message 内容（截断至 128KB）。
+        system_truncated:
+          type: boolean
+        user_truncated:
+          type: boolean
+        system_length:
+          type: integer
+        user_length:
+          type: integer
+        received_content:
+          type: string
+          description: LLM 返回的原始响应内容（截断至 128KB）。
+        received_truncated:
+          type: boolean
+        received_length:
+          type: integer
+        entry_count:
+          type: integer
+        parsed_count:
+          type: integer
+        repaired_ops:
+          type: array
+          items:
+            type: string
+        error_type:
+          type: string
+        error_message:
+          type: string
+        http_status:
+          type: integer
+    GlossaryPruneApplyRequest:
+      type: object
+      required:
+        - changes
+      properties:
+        changes:
+          type: array
+          items:
+            type: object
+            required:
+              - entry_id
+              - action
+            properties:
+              entry_id:
+                type: integer
+              action:
+                type: string
+                enum:
+                  - delete
+                  - update
+              target:
+                type: string
+                description: 新 target（仅 action=update 时使用）
+              notes:
+                type: string
+                description: 新 notes（仅 action=update 时使用）
+      additionalProperties: false
+    GlossaryPruneApplyResult:
+      type: object
+      required:
+        - deleted
+        - updated
+        - failed
+      properties:
+        deleted:
+          type: integer
+        updated:
+          type: integer
+        failed:
+          type: integer
+    TranslationPromptTemplate:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - scope
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        scope:
+          $ref: '#/components/schemas/TranslationPromptTemplateScope'
+        owner_user_id:
+          type: integer
+        owner_org_id:
+          type: integer
+        system_prompt_content:
+          type: string
+          description: 翻译提示词内容。
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    TranslationPromptTemplateListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/TranslationPromptTemplate'
+    CreateTranslationPromptTemplateRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        system_prompt_content:
+          type: string
+          description: 翻译提示词内容。
+      additionalProperties: false
+    UpdateTranslationPromptTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        system_prompt_content:
+          type: string
+          description: 翻译提示词内容。
+      additionalProperties: false
+    BootstrapPromptTemplate:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - scope
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        scope:
+          $ref: '#/components/schemas/BootstrapPromptTemplateScope'
+        owner_user_id:
+          type: integer
+        owner_org_id:
+          type: integer
+        content:
+          type: string
+          description: 术语抽取提示词内容。
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    BootstrapPromptTemplateListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/BootstrapPromptTemplate'
+    CreateBootstrapPromptTemplateRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        content:
+          type: string
+          description: 术语抽取提示词内容。
+      additionalProperties: false
+    UpdateBootstrapPromptTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        content:
+          type: string
+          description: 术语抽取提示词内容。
+      additionalProperties: false
+    PrunePromptTemplate:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - scope
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        scope:
+          $ref: '#/components/schemas/PrunePromptTemplateScope'
+        owner_user_id:
+          type: integer
+        owner_org_id:
+          type: integer
+        content:
+          type: string
+          description: 术语精简提示词内容。
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    PrunePromptTemplateListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PrunePromptTemplate'
+    CreatePrunePromptTemplateRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        content:
+          type: string
+          description: 术语精简提示词内容。
+      additionalProperties: false
+    UpdatePrunePromptTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        content:
+          type: string
+          description: 术语精简提示词内容。
+      additionalProperties: false
+    ExecutionProfile:
+      type: object
+      required:
+        - id
+        - name
+        - description
+        - scope
+        - config
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        scope:
+          $ref: '#/components/schemas/ExecutionProfileScope'
+        owner_user_id:
+          type: integer
+        owner_org_id:
+          type: integer
+        config:
+          $ref: '#/components/schemas/ExecutionProfileConfig'
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    ExecutionProfileListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutionProfile'
+    CreateExecutionProfileRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        config:
+          $ref: '#/components/schemas/ExecutionProfileConfig'
+      additionalProperties: false
+    UpdateExecutionProfileRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        config:
+          $ref: '#/components/schemas/ExecutionProfileConfig'
+      additionalProperties: false
+    ExecutionPlanTemplate:
+      type: object
+      required:
+        - id
+        - name
+        - scope
+        - rounds
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        description:
+          type: string
+        scope:
+          $ref: '#/components/schemas/ExecutionPlanTemplateScope'
+        owner_user_id:
+          type: integer
+        owner_org_id:
+          type: integer
+        ruby_retry:
+          $ref: '#/components/schemas/ExecutionPlanRubyRetryConfig'
+        rounds:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutionRoundConfig'
+          minItems: 1
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+    AdminUserListResponse:
+      type: object
+      required:
+        - items
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+        total:
+          type: integer
+    AdminCreateUserRequest:
+      type: object
+      required:
+        - username
+        - password
+        - email
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+          minLength: 8
+        email:
+          type: string
+          format: email
+        display_name:
+          type: string
+        role:
+          type: string
+          enum:
+            - user
+            - admin
+          default: user
+    AdminUpdateUserRequest:
+      type: object
+      properties:
+        display_name:
+          type: string
+        email:
+          type: string
+          format: email
+        role:
+          type: string
+          enum:
+            - user
+            - admin
+        active:
+          type: boolean
+    AdminResetPasswordRequest:
+      type: object
+      required:
+        - new_password
+      properties:
+        new_password:
+          type: string
+          minLength: 8
+    SystemStats:
+      type: object
+      required:
+        - total_users
+        - active_users
+        - total_projects
+        - total_organizations
+        - total_jobs
+        - total_resources
+      properties:
+        total_users:
+          type: integer
+        active_users:
+          type: integer
+        total_projects:
+          type: integer
+        total_organizations:
+          type: integer
+        total_jobs:
+          type: integer
+        total_resources:
+          type: integer
+    AdminAuditLogListResponse:
+      type: object
+      required:
+        - items
+        - total
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Activity'
+        total:
+          type: integer
+    SystemSettingsResponse:
+      type: object
+      properties:
+        settings:
+          type: object
+          additionalProperties:
+            type: string
+    UpdateSystemSettingsRequest:
+      type: object
+      properties:
+        settings:
+          type: object
+          additionalProperties:
+            type: string
+    ExecutionPlanTemplateListResponse:
+      type: object
+      required:
+        - items
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutionPlanTemplate'
+    CreateExecutionPlanTemplateRequest:
+      type: object
+      required:
+        - name
+        - rounds
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        ruby_retry:
+          $ref: '#/components/schemas/ExecutionPlanRubyRetryConfig'
+        rounds:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutionRoundConfig'
+          minItems: 1
+      additionalProperties: false
+    UpdateExecutionPlanTemplateRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        ruby_retry:
+          $ref: '#/components/schemas/ExecutionPlanRubyRetryConfig'
+        rounds:
+          type: array
+          items:
+            $ref: '#/components/schemas/ExecutionRoundConfig'
+          minItems: 1
+      additionalProperties: false
+    ResponseFormat:
+      type: string
+      enum:
+        - json_schema
+        - json_object
+        - text
+        - none
+      default: json_schema
+      description: |
+        响应格式：
+        - json_schema: 强制结构化 JSON 输出（推荐）
+        - json_object: 自由 JSON 对象
+        - text: 纯文本
+        - none: 不约束格式
+    OpenAIBackendOptions:
+      type: object
+      required:
+        - api_key
+        - type
+      description: OpenAI 兼容后端选项。支持 OpenAI 官方 API 及 Azure OpenAI、Ollama、LM Studio 等兼容服务。
+      properties:
+        type:
+          type: string
+        api_key:
+          type: string
+          description: AI 服务 API 密钥
+        base_url:
+          type: string
+          description: |
+            自定义API端点URL。留空使用默认值。
+            可用于指向 Azure OpenAI / Ollama / LM Studio / 自定义网关等兼容服务。
+        model:
+          type: string
+          default: gpt-4o-mini
+          description: 模型名称。默认 gpt-4o-mini。
+        max_tokens:
+          type: integer
+          minimum: 0
+          default: 0
+          description: 最大生成 token 数。0 表示不限制。
+        timeout:
+          type: integer
+          minimum: 0
+          default: 60
+          description: 请求超时时间（秒）。0 表示不限制。
+        response_format:
+          $ref: '#/components/schemas/ResponseFormat'
+        temperature:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 2
+          description: |
+            采样温度，控制输出的随机性。
+            - 不设置: 使用 API 默认值（通常为 1.0）
+            - 0: 确定性输出（greedy decoding）
+            - 0.1-0.3: 翻译任务推荐范围
+            - 0.7-1.0: 创意写作
+        top_p:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: |
+            核采样参数，控制采样多样性。
+            - 不设置: 使用 API 默认值（通常为 1.0）
+            - 1.0: 不限制
+            - 0.9: 仅考虑累积概率前 90% 的 token
+    AnthropicBackendOptions:
+      type: object
+      required:
+        - api_key
+        - type
+      description: Anthropic Claude 后端选项。
+      properties:
+        type:
+          type: string
+        api_key:
+          type: string
+          description: AI 服务 API 密钥
+        base_url:
+          type: string
+          description: |
+            自定义API端点URL。留空使用默认值。
+        model:
+          type: string
+          default: claude-sonnet-4-5
+          description: 模型名称。默认 claude-sonnet-4-5。
+        max_tokens:
+          type: integer
+          minimum: 1
+          default: 8192
+          description: 最大生成 token 数。Anthropic 必填，默认 8192。
+        timeout:
+          type: integer
+          minimum: 0
+          default: 60
+          description: 请求超时时间（秒）。0 表示不限制。
+        response_format:
+          $ref: '#/components/schemas/ResponseFormat'
+        temperature:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: |
+            采样温度，控制输出的随机性。
+            - 不设置: 使用 API 默认值（通常为 1.0）
+            - 0: 确定性输出
+            - 0.1-0.3: 翻译任务推荐范围
+            - Anthropic范围限制为0-1
+        top_p:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: |
+            核采样参数，控制采样多样性。
+            - 不设置: 使用 API 默认值（通常为 1.0）
+            - 1.0: 不限制
+        enable_prompt_cache:
+          type: boolean
+          default: true
+          description: |
+            启用提示缓存（Prompt Caching）。
+            启用后，system prompt会被标记为ephemeral缓存断点，
+            可显著降低重复翻译任务的token消耗和延迟。
+    GoogleBackendOptions:
+      type: object
+      required:
+        - api_key
+        - type
+      description: Google Gemini 后端选项。
+      properties:
+        type:
+          type: string
+        api_key:
+          type: string
+          description: AI 服务 API 密钥
+        base_url:
+          type: string
+          description: |
+            自定义API端点URL。留空使用默认值。
+        model:
+          type: string
+          default: gemini-2.5-flash
+          description: 模型名称。默认 gemini-2.5-flash。
+        max_tokens:
+          type: integer
+          minimum: 1
+          default: 8192
+          description: 最大生成 token 数。默认 8192。
+        timeout:
+          type: integer
+          minimum: 0
+          default: 60
+          description: 请求超时时间（秒）。0 表示不限制。
+        response_format:
+          $ref: '#/components/schemas/ResponseFormat'
+        temperature:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 2
+          description: |
+            采样温度，控制输出的随机性。
+            - 不设置: 使用 API 默认值（通常为 1.0）
+            - 0: 确定性输出
+            - 0.1-0.3: 翻译任务推荐范围
+            - Google Gemini范围限制为0-2
+        top_p:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+          description: |
+            核采样参数，控制采样多样性。
+            - 不设置: 使用 API 默认值（通常为 1.0）
+            - 1.0: 不限制
+    BackendOptions:
+      oneOf:
+        - $ref: '#/components/schemas/OpenAIBackendOptions'
+        - $ref: '#/components/schemas/AnthropicBackendOptions'
+        - $ref: '#/components/schemas/GoogleBackendOptions'
+      discriminator:
+        propertyName: type
+        mapping:
+          openai: '#/components/schemas/OpenAIBackendOptions'
+          anthropic: '#/components/schemas/AnthropicBackendOptions'
+          google: '#/components/schemas/GoogleBackendOptions'
+    IncrementalUpdateChanges:
+      type: object
+      required:
+        - added
+        - updated
+        - unchanged
+        - deleted
+      properties:
+        added:
+          type: integer
+          description: 新增段落数
+        updated:
+          type: integer
+          description: 源文本变化的段落数
+        unchanged:
+          type: integer
+          description: 未变化的段落数
+        deleted:
+          type: integer
+          description: 删除的段落数
+    GlossarySyncImpactResource:
+      type: object
+      required:
+        - resource_id
+        - resource_path
+        - affected_count
+      properties:
+        resource_id:
+          type: integer
+        resource_path:
+          type: string
+        affected_count:
+          type: integer
+    GlossarySyncExecuteResourceResult:
+      type: object
+      required:
+        - resource_id
+        - resource_path
+        - updated_count
+        - skipped_count
+      properties:
+        resource_id:
+          type: integer
+        resource_path:
+          type: string
+        updated_count:
+          type: integer
+        skipped_count:
+          type: integer
+    ExecutionPlanTemplateScope:
+      type: string
+      enum:
+        - user
+        - org
+        - system
+    ExecutionPlanRubyRetryConfig:
+      type: object
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+          default: false
+          description: 是否启用注音对齐重试
+        backend_id:
+          type: integer
+          description: 注音对齐使用的后端 ID；为空或 0 时使用翻译主后端
+    TranslateSegmentFilterConfig:
+      type: object
+      description: 翻译轮次段落过滤配置，决定处理哪些翻译状态的段落。
+      properties:
+        status_filter:
+          type: string
+          enum:
+            - pending_only
+            - skip_approved
+            - all
+          default: pending_only
+          description: |
+            - pending_only: 仅处理 pending 和 rejected 状态的段落（默认，等同旧 skip_translated）
+            - skip_approved: 处理除 approved 外的所有状态（等同旧 overwrite_unapproved）
+            - all: 处理所有状态的段落（等同旧 overwrite_all）
+    RetryConfig:
+      type: object
+      properties:
+        max_attempts:
+          type: integer
+          minimum: 1
+          default: 3
+        backoff_ms:
+          type: integer
+          minimum: 0
+          default: 2000
+        jitter:
+          type: boolean
+          default: true
+    TranslateRoundConfig:
+      type: object
+      properties:
+        prompt_template_id:
+          type: integer
+          description: 翻译提示词模板 ID
+        profile_id:
+          type: integer
+          description: 策略模板 ID（ExecutionProfile 单表全局唯一）
+        batch_size:
+          type: integer
+          minimum: 0
+          description: 段落数上限；0=不限制，与 max_words_per_batch 至少填一项
+        max_words_per_batch:
+          type: integer
+          minimum: 0
+          description: 字词数上限；0=不限制，与 batch_size 至少填一项
+        fallback_shrink:
+          type: number
+          minimum: 0
+          exclusiveMinimum: true
+          maximum: 1
+          exclusiveMaximum: true
+        segment_filter:
+          $ref: '#/components/schemas/TranslateSegmentFilterConfig'
+          description: 段落过滤配置；省略时默认 pending_only
+        retry:
+          $ref: '#/components/schemas/RetryConfig'
+    ExtractRoundConfig:
+      type: object
+      properties:
+        template_id:
+          type: integer
+          description: 术语抽取提示词模板 ID（BootstrapPromptTemplate）
+        batch_size:
+          type: integer
+          minimum: 0
+          default: 20
+          description: 段落数上限；0=不限制，与 max_words_per_batch 至少填一项；两者都为 0 时不分批，全部一次发送
+        max_words_per_batch:
+          type: integer
+          minimum: 0
+          description: 字词数上限；0=不限制，与 batch_size 至少填一项；两者都为 0 时不分批，全部一次发送
+        max_terms_per_1000_chars:
+          type: number
+          minimum: 0
+          default: 25
+          description: 每 1000 字词的术语抽取上限系数
+        min_source_len:
+          type: integer
+          minimum: 1
+          default: 2
+          description: 术语源文最短字符数
+        retry:
+          $ref: '#/components/schemas/RetryConfig'
+    ExecutionRoundConfig:
+      type: object
+      required:
+        - mode
+        - backend_id
+        - concurrency
+      properties:
+        mode:
+          type: string
+          enum:
+            - translate
+            - extract
+          description: 轮次模式：translate=翻译，extract=术语抽取
+        backend_id:
+          type: integer
+          description: 后端 ID（Backend 单表全局唯一）
+        concurrency:
+          type: integer
+          minimum: 1
+        translate:
+          $ref: '#/components/schemas/TranslateRoundConfig'
+          description: 翻译模式配置（mode=translate 时必填）
+        extract:
+          $ref: '#/components/schemas/ExtractRoundConfig'
+          description: 术语抽取模式配置（mode=extract 时必填）
+    TranslationPromptTemplateScope:
+      type: string
+      enum:
+        - user
+        - org
+        - system
+    BootstrapPromptTemplateScope:
+      type: string
+      enum:
+        - user
+        - org
+        - system
+    PrunePromptTemplateScope:
+      type: string
+      enum:
+        - user
+        - org
+        - system
+    ExecutionProfileScope:
+      type: string
+      enum:
+        - user
+        - org
+        - system
+    ProfileProtectConfig:
+      type: object
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+        rules:
+          type: array
+          items:
+            type: string
+            enum:
+              - code
+              - link
+              - placeholder
+              - xml
+    ProfileRubyConfig:
+      type: object
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+        preserve_kinds:
+          type: array
+          items:
+            type: string
+            enum:
+              - phonetic
+              - semantic
+              - creative
+          default:
+            - phonetic
+            - semantic
+            - creative
+          description: 保留的注音分类列表
+    ProfilePostprocessConfig:
+      type: object
+      required:
+        - enabled
+        - trim_spaces
+      properties:
+        enabled:
+          type: boolean
+        trim_spaces:
+          type: boolean
+    ProfileRepairConfig:
+      type: object
+      required:
+        - enabled
+        - json_structural
+        - schema_aliases
+        - partial
+        - partial_threshold
+        - placeholder_normalize
+        - prompt_upgrade
+      properties:
+        enabled:
+          type: boolean
+        json_structural:
+          type: boolean
+        schema_aliases:
+          type: boolean
+        partial:
+          type: boolean
+        partial_threshold:
+          type: number
+          format: double
+          minimum: 0
+          maximum: 1
+        placeholder_normalize:
+          type: boolean
+        prompt_upgrade:
+          type: boolean
+    ProfileBootstrapConfig:
+      type: object
+      required:
+        - enabled
+        - max_terms_per_1000_chars
+        - min_source_len
+        - inline_conflict_strategy
+      properties:
+        enabled:
+          type: boolean
+          default: false
+          description: 是否启用内联自举
+        max_terms_per_1000_chars:
+          type: number
+          format: double
+          minimum: 0
+          description: 每 1000 源文字符（rune）最多抽取的术语条数（缩放系数）
+        min_source_len:
+          type: integer
+          minimum: 1
+          description: 内联自举术语源文最短字符数
+        inline_conflict_strategy:
+          type: string
+          enum:
+            - 'off'
+            - rewrite-local
+          description: 并发术语冲突处理策略
+    ProfileGlossaryConfig:
+      type: object
+      required:
+        - bootstrap
+      properties:
+        bootstrap:
+          $ref: '#/components/schemas/ProfileBootstrapConfig'
+    ProfileContextConfig:
+      type: object
+      required:
+        - enabled
+        - before
+        - after
+        - max_chars
+      properties:
+        enabled:
+          type: boolean
+          default: true
+          description: 是否启用上下文窗口
+        before:
+          type: integer
+          minimum: 0
+          default: 1
+          description: 上下文取前 N 段
+        after:
+          type: integer
+          minimum: 0
+          default: 1
+          description: 上下文取后 N 段
+        max_chars:
+          type: integer
+          minimum: 0
+          default: 0
+          description: 每个上下文段落的字符数上限，0 表示不限制
+    ProfileQAConfig:
+      type: object
+      required:
+        - enabled
+      properties:
+        enabled:
+          type: boolean
+          default: false
+          description: 是否启用翻译质量检测
+        auto_reject:
+          type: boolean
+          default: false
+          description: error 级别问题自动 reject
+        length_method:
+          type: string
+          enum:
+            - char_weight
+            - word_count
+          default: char_weight
+          description: '长度计算方式。char_weight: CJK 字符×2 拉丁字符×1；word_count: CJK 每字 1 词拉丁每词 1 词'
+        length_ratio_min:
+          type: number
+          format: double
+          minimum: 0
+          default: 0
+          description: 译文/原文最短长度比，0 表示不检测
+        length_ratio_max:
+          type: number
+          format: double
+          minimum: 0
+          default: 0
+          description: 译文/原文最长长度比，0 表示不检测
+    ExecutionProfileConfig:
+      type: object
+      required:
+        - protect
+        - postprocess
+        - repair
+        - glossary
+        - context
+      properties:
+        protect:
+          $ref: '#/components/schemas/ProfileProtectConfig'
+        ruby:
+          $ref: '#/components/schemas/ProfileRubyConfig'
+        postprocess:
+          $ref: '#/components/schemas/ProfilePostprocessConfig'
+        repair:
+          $ref: '#/components/schemas/ProfileRepairConfig'
+        glossary:
+          $ref: '#/components/schemas/ProfileGlossaryConfig'
+        context:
+          $ref: '#/components/schemas/ProfileContextConfig'
+        qa:
+          $ref: '#/components/schemas/ProfileQAConfig'
