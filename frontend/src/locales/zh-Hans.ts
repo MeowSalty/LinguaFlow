@@ -1504,6 +1504,11 @@ const messages = {
         resetPassword: '重置密码',
         refresh: '刷新',
       },
+      stats: {
+        total: '全部用户',
+        active: '正常用户',
+        admins: '管理员',
+      },
       filters: {
         searchPlaceholder: '搜索用户名、邮箱或显示名',
         allRoles: '全部角色',
@@ -1517,7 +1522,7 @@ const messages = {
         user: '普通用户',
       },
       columns: {
-        username: '用户名',
+        username: '用户',
         email: '邮箱',
         displayName: '显示名',
         role: '角色',

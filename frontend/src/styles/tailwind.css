@@ -204,6 +204,81 @@ body {
   @apply hover:-translate-y-0.5 hover:border-brand-500/25 hover:shadow-lg hover:shadow-lf-shadow-strong;
 }
 
+/* Compact modern data list (Linear/Vercel style) */
+.lf-data-list {
+  @apply overflow-hidden rounded-2xl border border-lf-border-soft bg-lf-surface shadow-sm shadow-lf-shadow;
+}
+
+.lf-data-list__head {
+  @apply hidden items-center gap-4 border-b border-lf-border-soft bg-lf-surface-muted/70 px-4 py-2.5 text-[11px] font-medium tracking-wide text-lf-text-subtle uppercase md:grid;
+}
+
+.lf-data-list__row {
+  @apply grid items-center gap-3 border-b border-lf-border-soft/80 px-4 py-3.5 transition-colors last:border-b-0;
+  @apply hover:bg-lf-brand-soft/40 md:gap-4;
+}
+
+.lf-data-list__row:hover .lf-data-list__actions {
+  @apply opacity-100;
+}
+
+.lf-data-list__actions {
+  @apply flex items-center justify-end gap-1 opacity-100 transition-opacity md:opacity-0;
+}
+
+.lf-avatar {
+  @apply flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-semibold tracking-wide;
+  background: linear-gradient(135deg, rgb(16 185 129 / 0.18), rgb(59 130 246 / 0.14));
+  color: var(--color-brand-600);
+  box-shadow: inset 0 0 0 1px rgb(16 185 129 / 0.18);
+}
+
+.lf-status-dot {
+  @apply inline-flex h-1.5 w-1.5 rounded-full;
+}
+
+.lf-status-dot--active {
+  @apply bg-brand-500 shadow-[0_0_0_3px_rgb(16_185_129_/_0.18)];
+}
+
+.lf-status-dot--inactive {
+  @apply bg-lf-text-subtle;
+}
+
+/* Soften naive DataTable for remaining table screens */
+.lf-table .n-data-table {
+  --n-merged-th-color: transparent !important;
+  --n-merged-td-color: transparent !important;
+  --n-merged-border-color: var(--lf-border-soft) !important;
+}
+
+.lf-table .n-data-table-th {
+  font-size: 11px !important;
+  font-weight: 500 !important;
+  letter-spacing: 0.04em !important;
+  text-transform: uppercase !important;
+  color: var(--lf-text-subtle) !important;
+  background: var(--lf-surface-muted) !important;
+  border-bottom: 1px solid var(--lf-border-soft) !important;
+  padding-top: 10px !important;
+  padding-bottom: 10px !important;
+}
+
+.lf-table .n-data-table-td {
+  border-bottom: 1px solid var(--lf-border-soft) !important;
+  padding-top: 14px !important;
+  padding-bottom: 14px !important;
+  background: transparent !important;
+}
+
+.lf-table .n-data-table-tr:hover .n-data-table-td {
+  background: rgb(16 185 129 / 0.04) !important;
+}
+
+.lf-table .n-data-table-tr:last-child .n-data-table-td {
+  border-bottom: none !important;
+}
+
 .lf-auth-shell {
   position: relative;
   isolation: isolate;

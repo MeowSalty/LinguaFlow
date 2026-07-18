@@ -83,9 +83,17 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => {
     DataTable: {
       borderRadius: '12px',
       thColor: isDark ? '#0e151e' : '#f7f9fc',
+      thColorModal: isDark ? '#0e151e' : '#f7f9fc',
+      thTextColor: isDark ? '#64748b' : '#94a3b8',
+      thFontWeight: '500',
       tdColor: isDark ? '#121a24' : '#ffffff',
       tdColorHover: isDark ? 'rgba(16, 185, 129, 0.06)' : 'rgba(16, 185, 129, 0.04)',
-      borderColor: isDark ? '#243041' : '#e2e8f0',
+      tdTextColor: isDark ? '#e2e8f0' : '#0f172a',
+      borderColor: isDark ? '#1a2433' : '#edf2f7',
+      thPaddingMedium: '10px 14px',
+      tdPaddingMedium: '14px',
+      thPaddingSmall: '10px 12px',
+      tdPaddingSmall: '12px',
     },
     Tabs: {
       tabBorderRadius: '10px',

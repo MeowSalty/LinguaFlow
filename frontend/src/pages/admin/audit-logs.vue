@@ -135,7 +135,7 @@ watch(
       </div>
     </section>
 
-    <div class="lf-panel overflow-hidden">
+    <div class="lf-panel lf-table overflow-hidden">
       <div v-if="admin.auditLogsLoading" class="space-y-3 p-5">
         <NSkeleton v-for="i in 5" :key="i" text :repeat="1" class="h-10" />
       </div>
@@ -146,13 +146,13 @@ watch(
         :description="t('admin.auditLogs.empty')"
       />
 
-      <div v-else class="p-2 sm:p-3">
+      <div v-else class="p-1 sm:p-2">
         <NDataTable
           :columns="columns"
           :data="admin.auditLogs"
           :bordered="false"
-          :single-line="false"
-          striped
+          :single-line="true"
+          size="small"
         />
       </div>
     </div>
