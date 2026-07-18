@@ -25,43 +25,41 @@ const approvedPercent = computed(() => {
 
 <template>
   <div
-    class="flex items-center gap-x-5 rounded-xl border border-lf-border-soft bg-lf-surface px-5 py-3 shadow-sm shadow-lf-shadow"
+    class="flex flex-wrap items-center gap-x-5 gap-y-2 rounded-xl border border-lf-border-soft bg-lf-surface px-5 py-3 shadow-sm shadow-lf-shadow"
   >
-    <!-- 资源文件 -->
     <div class="flex items-baseline gap-1.5">
-      <span class="text-lg font-semibold text-lf-text-strong">{{ totalResources }}</span>
+      <span class="text-lg font-semibold tracking-tight text-lf-text-strong">{{
+        totalResources
+      }}</span>
       <span class="text-xs text-lf-text-muted">{{ t('workspace.stats.resources') }}</span>
     </div>
 
-    <span class="h-4 w-px bg-lf-border-soft" />
+    <span class="hidden h-4 w-px bg-lf-border-soft sm:inline-block" />
 
-    <!-- 段落总数 -->
     <div class="flex items-baseline gap-1.5">
-      <span class="text-lg font-semibold text-lf-text-strong">{{
+      <span class="text-lg font-semibold tracking-tight text-lf-text-strong">{{
         totalSegments.toLocaleString()
       }}</span>
       <span class="text-xs text-lf-text-muted">{{ t('workspace.stats.segments') }}</span>
     </div>
 
-    <span class="h-4 w-px bg-lf-border-soft" />
+    <span class="hidden h-4 w-px bg-lf-border-soft sm:inline-block" />
 
-    <!-- 运行中任务 -->
     <div class="flex items-baseline gap-1.5">
-      <span class="text-lg font-semibold text-lf-text-strong">{{ runningJobs }}</span>
+      <span class="text-lg font-semibold tracking-tight text-lf-text-strong">{{
+        runningJobs
+      }}</span>
       <span class="text-xs text-lf-text-muted">{{ t('workspace.stats.runningJobs') }}</span>
     </div>
 
-    <span class="h-4 w-px bg-lf-border-soft" />
-
-    <!-- 翻译进度 -->
     <div class="ml-auto flex shrink-0 items-center gap-2.5 whitespace-nowrap">
-      <div class="relative h-1.5 w-24 overflow-hidden rounded-full bg-slate-200 dark:bg-slate-700">
+      <div class="relative h-1.5 w-24 overflow-hidden rounded-full bg-lf-border-soft">
         <div
-          class="absolute inset-y-0 left-0 rounded-full bg-blue-500 transition-all duration-500"
+          class="absolute inset-y-0 left-0 rounded-full bg-lf-info transition-all duration-500"
           :style="{ width: `${translatedPercent}%` }"
         />
         <div
-          class="absolute inset-y-0 left-0 rounded-full bg-emerald-500 transition-all duration-500"
+          class="absolute inset-y-0 left-0 rounded-full bg-brand-500 transition-all duration-500"
           :style="{ width: `${approvedPercent}%` }"
         />
       </div>

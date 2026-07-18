@@ -203,6 +203,7 @@ const messages = {
       personal: '项目级资源',
       organization: '组织级资源',
       languagePairs: '语言方向',
+      glossaryEnabled: '术语表启用',
     },
     filters: {
       searchPlaceholder: '搜索项目名称或语言代码',
@@ -233,6 +234,7 @@ const messages = {
       updatedAt: '最近更新',
       noDate: '暂无时间',
       unknownOrganization: '未知组织',
+      openWorkspace: '进入工作区',
     },
     features: {
       details: '项目详情',
