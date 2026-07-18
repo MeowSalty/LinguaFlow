@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { useI18n } from 'vue-i18n'
 
-import { useStatsStore } from '@/stores/stats'
+import ActivityFeed from '@/components/dashboard/ActivityFeed.vue'
+import JobStatusOverview from '@/components/dashboard/JobStatusOverview.vue'
 import StatsCard from '@/components/dashboard/StatsCard.vue'
+import { useStatsStore } from '@/stores/stats'
 
 const router = useRouter()
 const stats = useStatsStore()
@@ -29,7 +31,11 @@ onMounted(() => {
           </div>
         </div>
         <div class="flex flex-wrap gap-3">
-          <NButton secondary @click="stats.loadAll()">
+          <NButton
+            secondary
+            :loading="stats.statsLoading || stats.activitiesLoading"
+            @click="stats.loadAll()"
+          >
             {{ t('projects.actions.refresh') }}
           </NButton>
           <NButton
@@ -133,6 +139,15 @@ onMounted(() => {
           </div>
         </div>
       </button>
+    </div>
+
+    <div class="grid grid-cols-1 gap-4 xl:grid-cols-5">
+      <div class="xl:col-span-2">
+        <JobStatusOverview />
+      </div>
+      <div class="xl:col-span-3">
+        <ActivityFeed />
+      </div>
     </div>
   </div>
 </template>

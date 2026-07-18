@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import {
   NButton,
-  NCard,
   NDrawer,
   NDrawerContent,
   NEmpty,
@@ -305,82 +304,78 @@ watch(
 
     <!-- 卡片网格 -->
     <div v-else class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <NCard
+      <div
         v-for="item in store.filteredItems"
         :key="item.id"
-        hoverable
-        :bordered="false"
-        class="lf-interactive-card group"
+        class="lf-interactive-card group flex h-full flex-col gap-4 p-5"
         @click="openEditDrawer(item)"
       >
-        <div class="flex h-full flex-col gap-4">
-          <!-- 头部：名称 + 作用域标签 -->
-          <div class="flex items-start justify-between gap-4">
-            <div class="min-w-0">
-              <h2 class="truncate text-lg font-semibold text-lf-text-strong">
-                {{ item.name }}
-              </h2>
-            </div>
-            <NTag round size="small" :type="getScopeTagType(item.scope)">
-              {{ t(`bootstrapPromptTemplates.scopes.${item.scope}`) }}
-            </NTag>
+        <!-- 头部：名称 + 作用域标签 -->
+        <div class="flex items-start justify-between gap-4">
+          <div class="min-w-0">
+            <h2 class="truncate text-lg font-semibold text-lf-text-strong">
+              {{ item.name }}
+            </h2>
           </div>
+          <NTag round size="small" :type="getScopeTagType(item.scope)">
+            {{ t(`bootstrapPromptTemplates.scopes.${item.scope}`) }}
+          </NTag>
+        </div>
 
-          <!-- 描述 -->
-          <p
-            class="line-clamp-2 text-sm leading-6 text-lf-text-muted"
-            :class="{ 'italic text-lf-text-subtle': !item.description }"
-          >
-            {{ item.description || t('bootstrapPromptTemplates.card.noDescription') }}
-          </p>
+        <!-- 描述 -->
+        <p
+          class="line-clamp-2 text-sm leading-6 text-lf-text-muted"
+          :class="{ 'italic text-lf-text-subtle': !item.description }"
+        >
+          {{ item.description || t('bootstrapPromptTemplates.card.noDescription') }}
+        </p>
 
-          <!-- 专属摘要：内容预览 -->
-          <div v-if="item.content" class="lf-code-panel line-clamp-3">
-            {{ item.content }}
-          </div>
-          <p v-else class="text-xs italic text-lf-text-subtle">
-            {{ t('bootstrapPromptTemplates.card.noContent') }}
-          </p>
+        <!-- 专属摘要：内容预览 -->
+        <div v-if="item.content" class="lf-code-panel line-clamp-3">
+          {{ item.content }}
+        </div>
+        <p v-else class="text-xs italic text-lf-text-subtle">
+          {{ t('bootstrapPromptTemplates.card.noContent') }}
+        </p>
 
-          <!-- 底部：时间 + 操作 -->
-          <div class="mt-auto border-t border-lf-border-soft pt-4">
-            <div class="flex items-center justify-between gap-3">
-              <span class="text-xs text-lf-text-subtle">
-                {{ t('bootstrapPromptTemplates.card.updatedAt') }} {{ formatDate(item.updated_at) }}
-              </span>
-              <div class="flex items-center gap-2" @click.stop>
-                <NButton
-                  v-if="item.scope !== 'system'"
-                  text
-                  type="primary"
-                  class="font-medium"
-                  @click="openEditDrawer(item)"
-                >
-                  {{ t('bootstrapPromptTemplates.actions.edit') }}
-                </NButton>
-                <NButton
-                  v-if="item.scope !== 'system'"
-                  text
-                  type="error"
-                  class="font-medium"
-                  @click="confirmDelete(item, $event)"
-                >
-                  {{ t('bootstrapPromptTemplates.actions.delete') }}
-                </NButton>
-                <NButton
-                  v-if="item.scope === 'system'"
-                  text
-                  type="info"
-                  class="font-medium"
-                  @click="openEditDrawer(item)"
-                >
-                  {{ t('bootstrapPromptTemplates.actions.view') }}
-                </NButton>
-              </div>
+        <!-- 底部：时间 + 操作 -->
+        <div class="mt-auto border-t border-lf-border-soft pt-4">
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-xs text-lf-text-subtle">
+              {{ t('bootstrapPromptTemplates.card.updatedAt') }} {{ formatDate(item.updated_at) }}
+            </span>
+            <div class="flex items-center gap-2" @click.stop>
+              <NButton
+                v-if="item.scope !== 'system'"
+                text
+                type="primary"
+                class="font-medium"
+                @click="openEditDrawer(item)"
+              >
+                {{ t('bootstrapPromptTemplates.actions.edit') }}
+              </NButton>
+              <NButton
+                v-if="item.scope !== 'system'"
+                text
+                type="error"
+                class="font-medium"
+                @click="confirmDelete(item, $event)"
+              >
+                {{ t('bootstrapPromptTemplates.actions.delete') }}
+              </NButton>
+              <NButton
+                v-if="item.scope === 'system'"
+                text
+                type="info"
+                class="font-medium"
+                @click="openEditDrawer(item)"
+              >
+                {{ t('bootstrapPromptTemplates.actions.view') }}
+              </NButton>
             </div>
           </div>
         </div>
-      </NCard>
+      </div>
     </div>
 
     <!-- 创建/编辑抽屉 -->

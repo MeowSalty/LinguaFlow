@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import {
   NButton,
-  NCard,
   NDrawer,
   NDrawerContent,
   NEmpty,
@@ -374,93 +373,89 @@ watch(
 
     <!-- 卡片网格 -->
     <div v-else class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <NCard
+      <div
         v-for="item in store.filteredItems"
         :key="item.id"
-        hoverable
-        :bordered="false"
-        class="lf-interactive-card group"
+        class="lf-interactive-card group flex h-full flex-col gap-4 p-5"
       >
-        <div class="flex h-full flex-col gap-4">
-          <!-- 头部：名称 + 作用域标签 -->
-          <div class="flex items-start justify-between gap-4">
-            <div class="min-w-0">
-              <h2 class="truncate text-lg font-semibold text-lf-text-strong">
-                {{ item.name }}
-              </h2>
-            </div>
-            <NTag round size="small" :type="getScopeTagType(item.scope)">
-              {{ t(`executionProfiles.scopes.${item.scope}`) }}
-            </NTag>
+        <!-- 头部：名称 + 作用域标签 -->
+        <div class="flex items-start justify-between gap-4">
+          <div class="min-w-0">
+            <h2 class="truncate text-lg font-semibold text-lf-text-strong">
+              {{ item.name }}
+            </h2>
           </div>
+          <NTag round size="small" :type="getScopeTagType(item.scope)">
+            {{ t(`executionProfiles.scopes.${item.scope}`) }}
+          </NTag>
+        </div>
 
-          <!-- 描述 -->
-          <p
-            class="line-clamp-2 text-sm leading-6 text-lf-text-muted"
-            :class="{ 'italic text-lf-text-subtle': !item.description }"
-          >
-            {{ item.description || t('executionProfiles.card.noDescription') }}
-          </p>
+        <!-- 描述 -->
+        <p
+          class="line-clamp-2 text-sm leading-6 text-lf-text-muted"
+          :class="{ 'italic text-lf-text-subtle': !item.description }"
+        >
+          {{ item.description || t('executionProfiles.card.noDescription') }}
+        </p>
 
-          <!-- 专属摘要：配置特征标签 -->
-          <div class="flex flex-wrap gap-1.5">
-            <NTag v-if="item.config?.protect?.enabled" size="small" :bordered="false">
-              {{ t('executionProfiles.feature.protect') }}:
-              {{ item.config.protect.rules?.length ?? 0 }}
-            </NTag>
-            <NTag v-if="item.config?.repair?.enabled" size="small" :bordered="false">
-              {{ t('executionProfiles.feature.repair') }}
-            </NTag>
-            <NTag v-if="item.config?.postprocess?.enabled" size="small" :bordered="false">
-              {{ t('executionProfiles.feature.postprocess') }}
-            </NTag>
-            <NTag v-if="item.config?.glossary?.bootstrap?.enabled" size="small" :bordered="false">
-              {{ t('executionProfiles.feature.glossary') }}
-            </NTag>
-            <NTag v-if="item.config?.context?.enabled" size="small" :bordered="false">
-              {{ t('executionProfiles.feature.context') }}
-            </NTag>
-          </div>
+        <!-- 专属摘要：配置特征标签 -->
+        <div class="flex flex-wrap gap-1.5">
+          <NTag v-if="item.config?.protect?.enabled" size="small" :bordered="false">
+            {{ t('executionProfiles.feature.protect') }}:
+            {{ item.config.protect.rules?.length ?? 0 }}
+          </NTag>
+          <NTag v-if="item.config?.repair?.enabled" size="small" :bordered="false">
+            {{ t('executionProfiles.feature.repair') }}
+          </NTag>
+          <NTag v-if="item.config?.postprocess?.enabled" size="small" :bordered="false">
+            {{ t('executionProfiles.feature.postprocess') }}
+          </NTag>
+          <NTag v-if="item.config?.glossary?.bootstrap?.enabled" size="small" :bordered="false">
+            {{ t('executionProfiles.feature.glossary') }}
+          </NTag>
+          <NTag v-if="item.config?.context?.enabled" size="small" :bordered="false">
+            {{ t('executionProfiles.feature.context') }}
+          </NTag>
+        </div>
 
-          <!-- 底部：时间 + 操作 -->
-          <div class="mt-auto border-t border-lf-border-soft pt-4">
-            <div class="flex items-center justify-between gap-3">
-              <span class="text-xs text-lf-text-subtle">
-                {{ t('executionProfiles.card.createdAt') }} {{ formatDate(item.created_at) }}
-              </span>
-              <div class="flex items-center gap-2">
-                <NButton
-                  v-if="item.scope !== 'system'"
-                  text
-                  type="primary"
-                  class="font-medium"
-                  @click="openEditDrawer(item)"
-                >
-                  {{ t('executionProfiles.actions.edit') }}
-                </NButton>
-                <NButton
-                  v-if="item.scope !== 'system'"
-                  text
-                  type="error"
-                  class="font-medium"
-                  @click="confirmDelete(item)"
-                >
-                  {{ t('executionProfiles.actions.delete') }}
-                </NButton>
-                <NButton
-                  v-if="item.scope === 'system'"
-                  text
-                  type="info"
-                  class="font-medium"
-                  @click="openEditDrawer(item)"
-                >
-                  {{ t('executionProfiles.actions.view') }}
-                </NButton>
-              </div>
+        <!-- 底部：时间 + 操作 -->
+        <div class="mt-auto border-t border-lf-border-soft pt-4">
+          <div class="flex items-center justify-between gap-3">
+            <span class="text-xs text-lf-text-subtle">
+              {{ t('executionProfiles.card.createdAt') }} {{ formatDate(item.created_at) }}
+            </span>
+            <div class="flex items-center gap-2">
+              <NButton
+                v-if="item.scope !== 'system'"
+                text
+                type="primary"
+                class="font-medium"
+                @click="openEditDrawer(item)"
+              >
+                {{ t('executionProfiles.actions.edit') }}
+              </NButton>
+              <NButton
+                v-if="item.scope !== 'system'"
+                text
+                type="error"
+                class="font-medium"
+                @click="confirmDelete(item)"
+              >
+                {{ t('executionProfiles.actions.delete') }}
+              </NButton>
+              <NButton
+                v-if="item.scope === 'system'"
+                text
+                type="info"
+                class="font-medium"
+                @click="openEditDrawer(item)"
+              >
+                {{ t('executionProfiles.actions.view') }}
+              </NButton>
             </div>
           </div>
         </div>
-      </NCard>
+      </div>
     </div>
 
     <!-- 创建/编辑抽屉 -->

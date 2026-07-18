@@ -98,13 +98,11 @@ watch(
 </script>
 
 <template>
-  <div class="space-y-6">
-    <NCard :bordered="false" class="overflow-hidden shadow-sm shadow-lf-shadow">
+  <div class="lf-page">
+    <section class="lf-page-header">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
         <div class="space-y-3">
-          <div
-            class="inline-flex items-center rounded-full bg-lf-brand-soft px-3 py-1 text-xs font-medium text-brand-600"
-          >
+          <div class="lf-eyebrow">
             {{ t('admin.eyebrow') }}
           </div>
           <div>
@@ -130,37 +128,45 @@ watch(
           </NButton>
         </div>
       </div>
-    </NCard>
+    </section>
 
-    <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-      <div v-if="admin.settingsLoading" class="space-y-4">
+    <div class="lf-panel p-5">
+      <div class="mb-4 flex items-center justify-between gap-3">
+        <h2 class="text-sm font-semibold tracking-wide text-lf-text-strong">
+          {{ t('admin.settings.title') }}
+        </h2>
+        <span class="text-xs text-lf-text-subtle"> {{ editingSettings.length }} keys </span>
+      </div>
+
+      <div v-if="admin.settingsLoading" class="space-y-3">
         <NSkeleton v-for="i in 3" :key="i" text :repeat="1" class="h-16" />
       </div>
 
       <NEmpty
         v-else-if="editingSettings.length === 0 && !admin.settingsLoading"
-        class="py-16"
+        class="py-12"
         :description="t('admin.settings.empty')"
       />
 
-      <div v-else class="space-y-4">
+      <div v-else class="space-y-3">
         <div
           v-for="(entry, index) in editingSettings"
           :key="index"
-          class="flex items-start gap-4 rounded-xl border border-lf-border-soft bg-lf-surface-muted p-4"
+          class="flex items-start gap-3 rounded-xl border border-lf-border-soft bg-lf-surface-muted p-3.5 sm:gap-4 sm:p-4"
         >
-          <div class="flex-1 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <div class="grid flex-1 grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
-              <label class="mb-1 block text-xs text-lf-text-muted">
+              <label class="mb-1.5 block text-xs font-medium text-lf-text-muted">
                 {{ t('admin.settings.form.key') }}
               </label>
               <NInput
                 v-model:value="entry.key"
+                class="font-mono"
                 :placeholder="t('admin.settings.form.keyPlaceholder')"
               />
             </div>
             <div>
-              <label class="mb-1 block text-xs text-lf-text-muted">
+              <label class="mb-1.5 block text-xs font-medium text-lf-text-muted">
                 {{ t('admin.settings.form.value') }}
               </label>
               <NInput
@@ -176,21 +182,25 @@ watch(
           </NButton>
         </div>
       </div>
-    </NCard>
+    </div>
 
-    <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-      <h3 class="mb-4 text-lg font-semibold text-lf-text-strong">
+    <div class="lf-panel p-5">
+      <h3 class="mb-4 text-sm font-semibold tracking-wide text-lf-text-strong">
         {{ t('admin.settings.actions.addSetting') }}
       </h3>
-      <div class="flex items-end gap-4">
-        <div class="flex-1">
-          <label class="mb-1 block text-xs text-lf-text-muted">
+      <div class="flex flex-col items-stretch gap-3 sm:flex-row sm:items-end">
+        <div class="min-w-0 flex-1">
+          <label class="mb-1.5 block text-xs font-medium text-lf-text-muted">
             {{ t('admin.settings.form.key') }}
           </label>
-          <NInput v-model:value="newKey" :placeholder="t('admin.settings.form.keyPlaceholder')" />
+          <NInput
+            v-model:value="newKey"
+            class="font-mono"
+            :placeholder="t('admin.settings.form.keyPlaceholder')"
+          />
         </div>
-        <div class="flex-1">
-          <label class="mb-1 block text-xs text-lf-text-muted">
+        <div class="min-w-0 flex-1">
+          <label class="mb-1.5 block text-xs font-medium text-lf-text-muted">
             {{ t('admin.settings.form.value') }}
           </label>
           <NInput
@@ -202,6 +212,6 @@ watch(
           {{ t('admin.settings.actions.addSetting') }}
         </NButton>
       </div>
-    </NCard>
+    </div>
   </div>
 </template>

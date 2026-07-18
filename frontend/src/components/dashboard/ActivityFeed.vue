@@ -34,58 +34,60 @@ const getActionLabel = (action: string): string => {
 </script>
 
 <template>
-  <div class="rounded-xl bg-lf-surface p-6 shadow-sm">
-    <h2 class="text-lg font-medium text-lf-text-strong">
-      {{ t('dashboard.activity.title') }}
-    </h2>
+  <div class="lf-panel h-full p-5">
+    <div class="flex items-center justify-between gap-3">
+      <h2 class="text-sm font-semibold tracking-wide text-lf-text-strong">
+        {{ t('dashboard.activity.title') }}
+      </h2>
+      <span class="text-xs text-lf-text-subtle">{{ stats.activities.length }}</span>
+    </div>
 
-    <!-- 加载状态 -->
     <div v-if="stats.activitiesLoading && stats.activities.length === 0" class="mt-4 space-y-4">
       <div v-for="i in 5" :key="i" class="flex items-start gap-3">
-        <div class="mt-1 h-2 w-2 shrink-0 animate-pulse rounded-full bg-lf-border" />
-        <div class="flex-1 space-y-1">
-          <div class="h-4 w-3/4 animate-pulse rounded bg-lf-border" />
-          <div class="h-3 w-1/3 animate-pulse rounded bg-lf-border" />
+        <div class="mt-1 h-2 w-2 shrink-0 animate-pulse rounded-full bg-lf-border-soft" />
+        <div class="flex-1 space-y-1.5">
+          <div class="h-4 w-3/4 animate-pulse rounded bg-lf-border-soft" />
+          <div class="h-3 w-1/3 animate-pulse rounded bg-lf-border-soft" />
         </div>
       </div>
     </div>
 
-    <!-- 错误状态 -->
     <NEmpty v-else-if="stats.activitiesError" :description="stats.activitiesError" class="mt-8" />
 
-    <!-- 空状态 -->
     <NEmpty
       v-else-if="stats.activities.length === 0"
       :description="t('dashboard.activity.empty')"
       class="mt-8"
     />
 
-    <!-- 活动列表 -->
-    <div v-else class="mt-4 space-y-4">
+    <div v-else class="relative mt-4 space-y-4">
+      <div
+        class="absolute top-1 bottom-1 left-[3px] w-px bg-gradient-to-b from-brand-500/40 via-lf-border-soft to-transparent"
+      />
       <div
         v-for="activity in stats.activities"
         :key="activity.id"
-        class="flex items-start gap-3 transition-opacity"
+        class="relative flex items-start gap-3 pl-1"
       >
-        <!-- 圆点指示器 -->
-        <div class="mt-1.5 h-2 w-2 shrink-0 rounded-full bg-brand-500" />
+        <div
+          class="relative z-10 mt-1.5 h-2 w-2 shrink-0 rounded-full border border-brand-500 bg-lf-surface shadow-sm shadow-brand-500/20"
+        />
 
         <div class="min-w-0 flex-1">
-          <p class="text-sm text-lf-text">
-            <span v-if="activity.actor" class="font-medium">
+          <p class="text-sm leading-6 text-lf-text">
+            <span v-if="activity.actor" class="font-medium text-lf-text-strong">
               {{ activity.actor.display_name?.trim() || activity.actor.username }}
             </span>
             {{ getActionLabel(activity.action) }}
-            <span class="font-medium">{{ activity.resource_type }}</span>
+            <span class="font-mono text-xs text-lf-text-muted">{{ activity.resource_type }}</span>
             <span v-if="activity.message" class="text-lf-text-muted">
-              - {{ activity.message }}</span
+              — {{ activity.message }}</span
             >
           </p>
           <time class="text-xs text-lf-text-subtle">{{ relativeTime(activity.created_at) }}</time>
         </div>
       </div>
 
-      <!-- 加载更多 -->
       <div v-if="stats.hasMoreActivities" class="pt-2 text-center">
         <NButton
           quaternary

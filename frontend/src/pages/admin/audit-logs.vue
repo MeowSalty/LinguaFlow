@@ -78,7 +78,7 @@ const columns = computed<DataTableColumns<Activity>>(() => [
     render: (row) =>
       h(
         NTag,
-        { size: 'small', type: getActionType(row.action), round: true },
+        { size: 'small', type: getActionType(row.action), round: true, bordered: false },
         { default: () => getActionLabel(row.action) },
       ),
   },
@@ -86,7 +86,8 @@ const columns = computed<DataTableColumns<Activity>>(() => [
     title: t('admin.auditLogs.columns.resource'),
     key: 'resource_type',
     width: 160,
-    render: (row) => h('span', { class: 'text-sm text-lf-text' }, row.resource_type ?? '-'),
+    render: (row) =>
+      h('span', { class: 'font-mono text-sm text-lf-text' }, row.resource_type ?? '-'),
   },
   {
     title: t('admin.auditLogs.columns.details'),
@@ -112,13 +113,11 @@ watch(
 </script>
 
 <template>
-  <div class="space-y-6">
-    <NCard :bordered="false" class="overflow-hidden shadow-sm shadow-lf-shadow">
+  <div class="lf-page">
+    <section class="lf-page-header">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
         <div class="space-y-3">
-          <div
-            class="inline-flex items-center rounded-full bg-lf-brand-soft px-3 py-1 text-xs font-medium text-brand-600"
-          >
+          <div class="lf-eyebrow">
             {{ t('admin.eyebrow') }}
           </div>
           <div>
@@ -134,11 +133,11 @@ watch(
           {{ t('admin.auditLogs.refresh') }}
         </NButton>
       </div>
-    </NCard>
+    </section>
 
-    <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-      <div v-if="admin.auditLogsLoading" class="space-y-4">
-        <NSkeleton v-for="i in 5" :key="i" text :repeat="1" class="h-12" />
+    <div class="lf-panel overflow-hidden">
+      <div v-if="admin.auditLogsLoading" class="space-y-3 p-5">
+        <NSkeleton v-for="i in 5" :key="i" text :repeat="1" class="h-10" />
       </div>
 
       <NEmpty
@@ -147,14 +146,15 @@ watch(
         :description="t('admin.auditLogs.empty')"
       />
 
-      <NDataTable
-        v-else
-        :columns="columns"
-        :data="admin.auditLogs"
-        :bordered="false"
-        :single-line="false"
-        striped
-      />
-    </NCard>
+      <div v-else class="p-2 sm:p-3">
+        <NDataTable
+          :columns="columns"
+          :data="admin.auditLogs"
+          :bordered="false"
+          :single-line="false"
+          striped
+        />
+      </div>
+    </div>
   </div>
 </template>

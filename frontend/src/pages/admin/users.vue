@@ -276,13 +276,11 @@ watch(
 </script>
 
 <template>
-  <div class="space-y-6">
-    <NCard :bordered="false" class="overflow-hidden shadow-sm shadow-lf-shadow">
+  <div class="lf-page">
+    <section class="lf-page-header">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
         <div class="space-y-3">
-          <div
-            class="inline-flex items-center rounded-full bg-lf-brand-soft px-3 py-1 text-xs font-medium text-brand-600"
-          >
+          <div class="lf-eyebrow">
             {{ t('admin.eyebrow') }}
           </div>
           <div>
@@ -303,9 +301,9 @@ watch(
           </NButton>
         </div>
       </div>
-    </NCard>
+    </section>
 
-    <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
+    <div class="lf-panel px-4 py-3">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <NInput
           v-model:value="admin.userSearchQuery"
@@ -325,17 +323,17 @@ watch(
           </NButton>
         </div>
       </div>
-    </NCard>
+    </div>
 
     <div v-if="admin.usersLoading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <NCard v-for="index in 6" :key="index" :bordered="false" class="shadow-sm shadow-lf-shadow">
+      <div v-for="index in 6" :key="index" class="lf-panel p-5">
         <NSkeleton text :repeat="4" />
-      </NCard>
+      </div>
     </div>
 
     <NEmpty
       v-else-if="admin.filteredUsers.length === 0"
-      class="rounded-2xl bg-lf-surface py-16 shadow-sm shadow-lf-shadow"
+      class="lf-panel py-16"
       :description="
         hasActiveFilters ? t('admin.users.empty.filtered') : t('admin.users.empty.default')
       "
@@ -351,62 +349,65 @@ watch(
     </NEmpty>
 
     <div v-else class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <NCard
+      <div
         v-for="user in admin.filteredUsers"
         :key="user.id"
-        hoverable
-        :bordered="false"
-        class="group shadow-sm shadow-lf-shadow transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-lf-shadow-strong"
+        class="lf-interactive-card group flex h-full flex-col gap-4 p-5"
       >
-        <div class="flex h-full flex-col gap-4">
-          <div class="flex items-start justify-between gap-4">
-            <div class="min-w-0">
-              <h2 class="truncate text-lg font-semibold text-lf-text-strong">
-                {{ user.display_name || user.username }}
-              </h2>
-              <p class="mt-0.5 text-xs text-lf-text-subtle">@{{ user.username }}</p>
-            </div>
+        <div class="flex items-start justify-between gap-4">
+          <div class="min-w-0">
+            <h2 class="truncate text-lg font-semibold tracking-tight text-lf-text-strong">
+              {{ user.display_name || user.username }}
+            </h2>
+            <p class="mt-0.5 font-mono text-xs text-lf-text-subtle">@{{ user.username }}</p>
+          </div>
+          <div class="flex shrink-0 flex-wrap justify-end gap-2">
+            <NTag
+              round
+              size="small"
+              :bordered="false"
+              :type="user.role === 'admin' ? 'warning' : 'default'"
+            >
+              {{ t(`admin.users.roles.${user.role}`) }}
+            </NTag>
+            <NTag round size="small" :bordered="false" :type="user.active ? 'success' : 'error'">
+              {{
+                user.active ? t('admin.users.filters.active') : t('admin.users.filters.inactive')
+              }}
+            </NTag>
+          </div>
+        </div>
+
+        <div class="rounded-xl border border-lf-border-soft bg-lf-surface-muted px-3.5 py-3">
+          <div class="text-[11px] font-medium tracking-wide text-lf-text-subtle uppercase">
+            {{ t('admin.users.columns.email') }}
+          </div>
+          <div class="mt-1 truncate text-sm text-lf-text-strong">{{ user.email }}</div>
+        </div>
+
+        <div class="mt-auto border-t border-lf-border-soft pt-4">
+          <div class="flex items-center justify-between gap-2">
+            <NButton text type="primary" class="font-medium" @click="openEditDrawer(user)">
+              {{ t('admin.users.actions.edit') }}
+            </NButton>
             <div class="flex gap-2">
-              <NTag round size="small" :type="user.role === 'admin' ? 'warning' : 'default'">
-                {{ t(`admin.users.roles.${user.role}`) }}
-              </NTag>
-              <NTag round size="small" :type="user.active ? 'success' : 'error'">
-                {{
-                  user.active ? t('admin.users.filters.active') : t('admin.users.filters.inactive')
-                }}
-              </NTag>
-            </div>
-          </div>
-
-          <div class="rounded-2xl bg-lf-surface-muted p-4">
-            <div class="text-xs text-lf-text-subtle">{{ t('admin.users.columns.email') }}</div>
-            <div class="mt-1 truncate text-sm text-lf-text">{{ user.email }}</div>
-          </div>
-
-          <div class="mt-auto border-t border-lf-border-soft pt-4">
-            <div class="flex items-center justify-between gap-2">
-              <NButton text type="primary" class="font-medium" @click="openEditDrawer(user)">
-                {{ t('admin.users.actions.edit') }}
+              <NButton text size="small" @click="openResetPasswordModal(user)">
+                {{ t('admin.users.actions.resetPassword') }}
               </NButton>
-              <div class="flex gap-2">
-                <NButton text size="small" @click="openResetPasswordModal(user)">
-                  {{ t('admin.users.actions.resetPassword') }}
-                </NButton>
-                <NButton
-                  v-if="user.active"
-                  text
-                  type="error"
-                  size="small"
-                  :loading="admin.disablingUserIds.includes(user.id)"
-                  @click="confirmDisable(user)"
-                >
-                  {{ t('admin.users.actions.disable') }}
-                </NButton>
-              </div>
+              <NButton
+                v-if="user.active"
+                text
+                type="error"
+                size="small"
+                :loading="admin.disablingUserIds.includes(user.id)"
+                @click="confirmDisable(user)"
+              >
+                {{ t('admin.users.actions.disable') }}
+              </NButton>
             </div>
           </div>
         </div>
-      </NCard>
+      </div>
     </div>
 
     <NDrawer v-model:show="drawerVisible" :width="480" placement="right">
