@@ -201,14 +201,12 @@ watch(
 </script>
 
 <template>
-  <div class="space-y-6">
+  <div class="lf-page">
     <!-- 页面头部 -->
-    <NCard :bordered="false" class="overflow-hidden shadow-sm shadow-lf-shadow">
+    <section class="lf-page-header">
       <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
         <div class="space-y-3">
-          <div
-            class="inline-flex items-center rounded-full bg-lf-brand-soft px-3 py-1 text-xs font-medium text-brand-600"
-          >
+          <div class="lf-eyebrow">
             {{ t('bootstrapPromptTemplates.eyebrow') }}
           </div>
           <div>
@@ -231,46 +229,29 @@ watch(
           </NButton>
         </div>
       </div>
-    </NCard>
+    </section>
 
     <!-- 统计卡片 -->
     <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('bootstrapPromptTemplates.stats.total') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ store.totalCount }}
-        </div>
-      </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('bootstrapPromptTemplates.stats.system') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ store.systemCount }}
-        </div>
-      </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('bootstrapPromptTemplates.stats.user') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ store.userCount }}
-        </div>
-      </NCard>
-      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-        <div class="text-xs font-medium text-lf-text-muted">
-          {{ t('bootstrapPromptTemplates.stats.org') }}
-        </div>
-        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
-          {{ store.orgCount }}
-        </div>
-      </NCard>
+      <div class="lf-metric">
+        <div class="lf-metric-label">{{ t('bootstrapPromptTemplates.stats.total') }}</div>
+        <div class="lf-metric-value">{{ store.totalCount }}</div>
+      </div>
+      <div class="lf-metric">
+        <div class="lf-metric-label">{{ t('bootstrapPromptTemplates.stats.system') }}</div>
+        <div class="lf-metric-value">{{ store.systemCount }}</div>
+      </div>
+      <div class="lf-metric">
+        <div class="lf-metric-label">{{ t('bootstrapPromptTemplates.stats.user') }}</div>
+        <div class="lf-metric-value">{{ store.userCount }}</div>
+      </div>
+      <div class="lf-metric">
+        <div class="lf-metric-label">{{ t('bootstrapPromptTemplates.stats.org') }}</div>
+        <div class="lf-metric-value">{{ store.orgCount }}</div>
+      </div>
     </div>
 
-    <!-- 筛选栏 -->
-    <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
+    <div class="lf-panel px-4 py-3">
       <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
         <NInput
           v-model:value="store.searchQuery"
@@ -289,19 +270,19 @@ watch(
           </NButton>
         </div>
       </div>
-    </NCard>
+    </div>
 
     <!-- 加载骨架屏 -->
     <div v-if="store.loading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
-      <NCard v-for="index in 6" :key="index" :bordered="false" class="shadow-sm shadow-lf-shadow">
+      <div v-for="index in 6" :key="index" class="lf-panel p-5">
         <NSkeleton text :repeat="4" />
-      </NCard>
+      </div>
     </div>
 
     <!-- 空状态 -->
     <NEmpty
       v-else-if="store.filteredItems.length === 0"
-      class="rounded-2xl bg-lf-surface py-16 shadow-sm shadow-lf-shadow"
+      class="lf-panel py-16"
       :description="
         hasActiveFilters
           ? t('bootstrapPromptTemplates.empty.filtered')
@@ -329,7 +310,7 @@ watch(
         :key="item.id"
         hoverable
         :bordered="false"
-        class="group cursor-pointer shadow-sm shadow-lf-shadow transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-lf-shadow-strong"
+        class="lf-interactive-card group"
         @click="openEditDrawer(item)"
       >
         <div class="flex h-full flex-col gap-4">
@@ -354,10 +335,7 @@ watch(
           </p>
 
           <!-- 专属摘要：内容预览 -->
-          <div
-            v-if="item.content"
-            class="rounded-lg bg-lf-code-bg px-3 py-2 font-mono text-xs leading-5 text-lf-text-muted line-clamp-3"
-          >
+          <div v-if="item.content" class="lf-code-panel line-clamp-3">
             {{ item.content }}
           </div>
           <p v-else class="text-xs italic text-lf-text-subtle">

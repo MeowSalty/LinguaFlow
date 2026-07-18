@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { Icon as IconifyIcon } from '@iconify/vue'
 import { useI18n } from 'vue-i18n'
 
 const { t } = useI18n()
@@ -14,20 +15,40 @@ const formatBadges = [
 
 const features = [
   {
-    icon: 'i-lucide-folder-kanban',
+    icon: 'carbon:folder',
     title: 'about.featureProject',
     desc: 'about.featureProjectDesc',
   },
   {
-    icon: 'i-lucide-sparkles',
+    icon: 'carbon:magic-wand',
     title: 'about.featureTranslation',
     desc: 'about.featureTranslationDesc',
   },
-  { icon: 'i-lucide-layers', title: 'about.featureBatch', desc: 'about.featureBatchDesc' },
-  { icon: 'i-lucide-book-open', title: 'about.featureEpub', desc: 'about.featureEpubDesc' },
-  { icon: 'i-lucide-book-text', title: 'about.featureGlossary', desc: 'about.featureGlossaryDesc' },
-  { icon: 'i-lucide-check-circle', title: 'about.featureReview', desc: 'about.featureReviewDesc' },
-  { icon: 'i-lucide-settings', title: 'about.featureConfig', desc: 'about.featureConfigDesc' },
+  {
+    icon: 'carbon:stack',
+    title: 'about.featureBatch',
+    desc: 'about.featureBatchDesc',
+  },
+  {
+    icon: 'carbon:book',
+    title: 'about.featureEpub',
+    desc: 'about.featureEpubDesc',
+  },
+  {
+    icon: 'carbon:dictionary',
+    title: 'about.featureGlossary',
+    desc: 'about.featureGlossaryDesc',
+  },
+  {
+    icon: 'carbon:checkmark-outline',
+    title: 'about.featureReview',
+    desc: 'about.featureReviewDesc',
+  },
+  {
+    icon: 'carbon:settings',
+    title: 'about.featureConfig',
+    desc: 'about.featureConfigDesc',
+  },
 ]
 
 const techStack = [
@@ -39,53 +60,88 @@ const techStack = [
 </script>
 
 <template>
-  <div class="space-y-6">
-    <NCard :title="t('about.title')" :bordered="false" class="shadow-sm shadow-lf-shadow">
-      <p class="text-base text-lf-text leading-relaxed">
-        {{ t('about.description') }}
-      </p>
-    </NCard>
-
-    <NCard
-      :title="t('about.supportedFormats')"
-      :bordered="false"
-      class="shadow-sm shadow-lf-shadow"
-    >
-      <div class="flex flex-wrap gap-2">
-        <NTag v-for="fmt in formatBadges" :key="fmt.label" type="info" size="small">
-          {{ fmt.label }}
-          <span class="ml-1 text-xs text-lf-text-muted">{{ fmt.variants }}</span>
-        </NTag>
+  <div class="lf-page">
+    <section class="lf-page-header">
+      <div class="space-y-3">
+        <div class="lf-eyebrow">{{ t('nav.about') }}</div>
+        <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
+          {{ t('about.title') }}
+        </h1>
+        <p class="max-w-3xl text-sm leading-7 text-lf-text-muted">
+          {{ t('about.description') }}
+        </p>
       </div>
-    </NCard>
+    </section>
 
-    <NCard :title="t('about.coreFeatures')" :bordered="false" class="shadow-sm shadow-lf-shadow">
-      <div class="grid gap-4 sm:grid-cols-2">
-        <div v-for="f in features" :key="f.title" class="flex gap-3">
-          <div :class="f.icon" class="mt-0.5 h-5 w-5 shrink-0 text-lf-primary" />
-          <div>
-            <p class="text-sm font-medium text-lf-text">{{ t(f.title) }}</p>
-            <p class="text-xs text-lf-text-muted">{{ t(f.desc) }}</p>
+    <section class="lf-panel p-5">
+      <h2 class="text-sm font-semibold tracking-wide text-lf-text-strong">
+        {{ t('about.supportedFormats') }}
+      </h2>
+      <div class="mt-4 flex flex-wrap gap-2">
+        <div
+          v-for="fmt in formatBadges"
+          :key="fmt.label"
+          class="inline-flex items-center gap-2 rounded-full border border-lf-border-soft bg-lf-surface-muted px-3 py-1.5"
+        >
+          <span class="text-xs font-semibold text-lf-text-strong">{{ fmt.label }}</span>
+          <span class="font-mono text-[11px] text-lf-text-subtle">{{ fmt.variants }}</span>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2 class="mb-3 text-sm font-semibold tracking-wide text-lf-text-strong">
+        {{ t('about.coreFeatures') }}
+      </h2>
+      <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        <div
+          v-for="f in features"
+          :key="f.title"
+          class="lf-panel flex gap-3 p-4 transition-colors hover:border-brand-500/20"
+        >
+          <div
+            class="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-lf-brand-soft text-brand-600"
+          >
+            <IconifyIcon :icon="f.icon" class="text-base" />
+          </div>
+          <div class="min-w-0">
+            <p class="text-sm font-medium text-lf-text-strong">{{ t(f.title) }}</p>
+            <p class="mt-1 text-xs leading-5 text-lf-text-muted">{{ t(f.desc) }}</p>
           </div>
         </div>
       </div>
-    </NCard>
+    </section>
 
-    <NCard :title="t('about.techStack')" :bordered="false" class="shadow-sm shadow-lf-shadow">
-      <NDescriptions :column="1" label-placement="left" bordered size="small">
-        <NDescriptionsItem v-for="item in techStack" :key="item.layer" :label="t(item.layer)">
-          {{ item.tech }}
-        </NDescriptionsItem>
-      </NDescriptions>
-    </NCard>
+    <section class="grid gap-4 lg:grid-cols-2">
+      <div class="lf-panel p-5">
+        <h2 class="text-sm font-semibold tracking-wide text-lf-text-strong">
+          {{ t('about.techStack') }}
+        </h2>
+        <div class="mt-4 space-y-3">
+          <div
+            v-for="item in techStack"
+            :key="item.layer"
+            class="flex items-start justify-between gap-4 rounded-xl border border-lf-border-soft bg-lf-surface-muted px-3.5 py-3"
+          >
+            <span class="text-xs font-medium text-lf-text-muted">{{ t(item.layer) }}</span>
+            <span class="text-right font-mono text-xs text-lf-text-strong">{{ item.tech }}</span>
+          </div>
+        </div>
+      </div>
 
-    <NCard :title="t('about.license')" :bordered="false" class="shadow-sm shadow-lf-shadow">
-      <p class="text-sm text-lf-text">
-        {{ t('about.licenseDesc') }}
-      </p>
-      <p class="mt-2 text-sm text-lf-text-muted">
-        {{ t('about.licenseAgpl') }}
-      </p>
-    </NCard>
+      <div class="lf-panel p-5">
+        <h2 class="text-sm font-semibold tracking-wide text-lf-text-strong">
+          {{ t('about.license') }}
+        </h2>
+        <p class="mt-4 text-sm leading-6 text-lf-text">
+          {{ t('about.licenseDesc') }}
+        </p>
+        <p
+          class="mt-3 rounded-xl border border-lf-border-soft bg-lf-code-bg px-3.5 py-3 text-sm text-lf-text-muted"
+        >
+          {{ t('about.licenseAgpl') }}
+        </p>
+      </div>
+    </section>
   </div>
 </template>
