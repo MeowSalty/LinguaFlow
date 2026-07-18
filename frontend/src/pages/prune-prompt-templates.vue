@@ -1,9 +1,7 @@
 <script setup lang="ts">
 import {
-  NAlert,
   NButton,
   NCard,
-  NDataTable,
   NDrawer,
   NDrawerContent,
   NEmpty,
@@ -12,10 +10,9 @@ import {
   NInput,
   NModal,
   NSelect,
+  NSkeleton,
   NTag,
-  NText,
   useMessage,
-  type DataTableColumns,
   type FormInst,
   type FormRules,
   type SelectOption,
@@ -28,7 +25,14 @@ import { usePrunePromptTemplatesStore } from '@/stores/prunePromptTemplates'
 
 type PrunePromptTemplate = ApiSchemas['PrunePromptTemplate']
 type CreateRequest = ApiSchemas['CreatePrunePromptTemplateRequest']
+type UpdateRequest = ApiSchemas['UpdatePrunePromptTemplateRequest']
 type Scope = PrunePromptTemplate['scope']
+
+interface FormModel {
+  name: string
+  description: string
+  content: string
+}
 
 const store = usePrunePromptTemplatesStore()
 const message = useMessage()
@@ -37,21 +41,33 @@ const { t } = useI18n()
 const formRef = ref<FormInst | null>(null)
 const drawerVisible = ref(false)
 const editingItem = ref<PrunePromptTemplate | null>(null)
+const deleteModalVisible = ref(false)
 const deletingItem = ref<PrunePromptTemplate | null>(null)
-const formModel = reactive({ name: '', description: '', content: '' })
 
-const isSystemScope = computed(() => editingItem.value?.scope === 'system')
-const isEditMode = computed(() => editingItem.value !== null)
-const hasActiveFilters = computed(
-  () => store.searchQuery.trim().length > 0 || store.scopeFilter !== 'all',
-)
+const formModel = reactive<FormModel>({
+  name: '',
+  description: '',
+  content: '',
+})
 
-const scopeOptions = computed<SelectOption[]>(() => [
+const filterScopeOptions = computed<SelectOption[]>(() => [
   { label: t('prunePromptTemplates.filters.allScopes'), value: 'all' },
   { label: t('prunePromptTemplates.scopes.system'), value: 'system' },
   { label: t('prunePromptTemplates.scopes.user'), value: 'user' },
   { label: t('prunePromptTemplates.scopes.org'), value: 'org' },
 ])
+
+const hasActiveFilters = computed(
+  () => store.searchQuery.trim().length > 0 || store.scopeFilter !== 'all',
+)
+
+const isEditMode = computed(() => Boolean(editingItem.value))
+const isSystemScope = computed(() => editingItem.value?.scope === 'system')
+const drawerTitle = computed(() =>
+  isEditMode.value
+    ? t('prunePromptTemplates.actions.edit')
+    : t('prunePromptTemplates.actions.create'),
+)
 
 const rules = computed<FormRules>(() => ({
   name: [
@@ -63,61 +79,100 @@ const rules = computed<FormRules>(() => ({
   ],
 }))
 
-const scopeTagType = (scope: Scope): 'default' | 'info' | 'success' =>
-  scope === 'user' ? 'info' : scope === 'org' ? 'success' : 'default'
-
-const formatDate = (value?: string): string => (value ? new Date(value).toLocaleDateString() : '—')
-
-const openCreate = (): void => {
+const resetForm = (): void => {
+  formModel.name = ''
+  formModel.description = ''
+  formModel.content = ''
   editingItem.value = null
-  Object.assign(formModel, { name: '', description: '', content: '' })
+}
+
+const openCreateDrawer = (): void => {
+  resetForm()
   drawerVisible.value = true
 }
 
-const openEdit = (item: PrunePromptTemplate): void => {
+const openEditDrawer = (item: PrunePromptTemplate): void => {
   editingItem.value = item
-  Object.assign(formModel, {
-    name: item.name,
-    description: item.description ?? '',
-    content: item.content ?? '',
-  })
+  formModel.name = item.name
+  formModel.description = item.description ?? ''
+  formModel.content = item.content ?? ''
   drawerVisible.value = true
 }
 
-const submit = async (): Promise<void> => {
+const buildPayload = (): CreateRequest => {
+  const payload: CreateRequest = { name: formModel.name.trim() }
+  if (formModel.description.trim()) {
+    payload.description = formModel.description.trim()
+  }
+  if (formModel.content.trim()) {
+    payload.content = formModel.content.trim()
+  }
+  return payload
+}
+
+const onSubmit = async (): Promise<void> => {
   try {
     await formRef.value?.validate()
   } catch {
     return
   }
 
-  const payload: CreateRequest = { name: formModel.name.trim() }
-  if (formModel.description.trim()) payload.description = formModel.description.trim()
-  if (formModel.content.trim()) payload.content = formModel.content.trim()
+  const payload = buildPayload()
 
   try {
-    if (editingItem.value) {
-      await store.updateTemplate(editingItem.value.id, payload)
+    if (isEditMode.value && editingItem.value) {
+      await store.updateTemplate(editingItem.value.id, payload as UpdateRequest)
       message.success(t('prunePromptTemplates.messages.updateSuccess'))
     } else {
       await store.createTemplate(payload)
       message.success(t('prunePromptTemplates.messages.createSuccess'))
     }
     drawerVisible.value = false
+    resetForm()
   } catch {
-    // Store exposes the request error through its error state.
+    // Error is handled by the store
   }
 }
 
-const remove = async (): Promise<void> => {
+const confirmDelete = (item: PrunePromptTemplate, event?: MouseEvent): void => {
+  event?.stopPropagation()
+  if (item.scope === 'system') {
+    message.warning(t('prunePromptTemplates.messages.systemDeleteForbidden'))
+    return
+  }
+  deletingItem.value = item
+  deleteModalVisible.value = true
+}
+
+const executeDelete = async (): Promise<void> => {
   if (!deletingItem.value) return
+
   try {
     await store.deleteTemplate(deletingItem.value.id)
     message.success(t('prunePromptTemplates.messages.deleteSuccess'))
+    deleteModalVisible.value = false
     deletingItem.value = null
   } catch {
-    // Store exposes the request error through its error state.
+    // Error is handled by the store
   }
+}
+
+const getScopeTagType = (scope: Scope): 'default' | 'info' | 'success' => {
+  switch (scope) {
+    case 'system':
+      return 'default'
+    case 'user':
+      return 'info'
+    case 'org':
+      return 'success'
+    default:
+      return 'default'
+  }
+}
+
+const formatDate = (dateStr: string | undefined): string => {
+  if (!dateStr) return '—'
+  return new Date(dateStr).toLocaleDateString()
 }
 
 const resetFilters = (): void => {
@@ -125,104 +180,46 @@ const resetFilters = (): void => {
   store.scopeFilter = 'all'
 }
 
-const columns = computed<DataTableColumns<PrunePromptTemplate>>(() => [
-  {
-    title: t('prunePromptTemplates.columns.name'),
-    key: 'name',
-    minWidth: 190,
-    render: (row) => h(NText, { strong: true }, { default: () => row.name }),
-  },
-  {
-    title: t('prunePromptTemplates.columns.scope'),
-    key: 'scope',
-    width: 100,
-    render: (row) =>
-      h(
-        NTag,
-        { size: 'small', bordered: false, type: scopeTagType(row.scope) },
-        { default: () => t(`prunePromptTemplates.scopes.${row.scope}`) },
-      ),
-  },
-  {
-    title: t('prunePromptTemplates.columns.description'),
-    key: 'description',
-    minWidth: 260,
-    ellipsis: { tooltip: true },
-    render: (row) => row.description || t('prunePromptTemplates.card.noDescription'),
-  },
-  {
-    title: t('prunePromptTemplates.columns.updatedAt'),
-    key: 'updated_at',
-    width: 130,
-    render: (row) => formatDate(row.updated_at),
-  },
-  {
-    title: t('prunePromptTemplates.columns.actions'),
-    key: 'actions',
-    width: 150,
-    fixed: 'right',
-    render: (row) =>
-      h('div', { class: 'flex gap-1' }, [
-        h(
-          NButton,
-          { size: 'small', quaternary: true, type: 'primary', onClick: () => openEdit(row) },
-          {
-            default: () =>
-              t(
-                row.scope === 'system'
-                  ? 'prunePromptTemplates.actions.view'
-                  : 'prunePromptTemplates.actions.edit',
-              ),
-          },
-        ),
-        row.scope !== 'system'
-          ? h(
-              NButton,
-              {
-                size: 'small',
-                quaternary: true,
-                type: 'error',
-                loading: store.deletingIds.includes(row.id),
-                onClick: () => (deletingItem.value = row),
-              },
-              { default: () => t('prunePromptTemplates.actions.delete') },
-            )
-          : null,
-      ]),
-  },
-])
-
-onMounted(() => void store.loadTemplates())
+onMounted(() => {
+  store.loadTemplates()
+})
 
 watch(
   () => store.error,
-  (error) => {
-    if (error) message.error(error, { duration: 0, closable: true })
+  (err) => {
+    if (err) {
+      message.error(err, { duration: 0, closable: true })
+      store.error = null
+    }
   },
 )
 </script>
 
 <template>
-  <div class="space-y-5">
-    <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
-      <div class="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-        <div>
-          <div class="text-xs font-semibold uppercase text-brand-600">
+  <div class="space-y-6">
+    <NCard :bordered="false" class="overflow-hidden shadow-sm shadow-lf-shadow">
+      <div class="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+        <div class="space-y-3">
+          <div
+            class="inline-flex items-center rounded-full bg-lf-brand-soft px-3 py-1 text-xs font-medium text-brand-600"
+          >
             {{ t('prunePromptTemplates.eyebrow') }}
           </div>
-          <h1 class="mt-2 text-2xl font-semibold text-lf-text-strong">
-            {{ t('prunePromptTemplates.title') }}
-          </h1>
-          <p class="mt-2 max-w-2xl text-sm leading-6 text-lf-text-muted">
-            {{ t('prunePromptTemplates.subtitle') }}
-          </p>
+          <div>
+            <h1 class="text-3xl font-semibold tracking-tight text-lf-text-strong">
+              {{ t('prunePromptTemplates.title') }}
+            </h1>
+            <p class="mt-2 max-w-2xl text-sm leading-6 text-lf-text-muted">
+              {{ t('prunePromptTemplates.subtitle') }}
+            </p>
+          </div>
         </div>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-3">
           <NButton secondary :loading="store.loading" @click="store.loadTemplates">
             <template #icon><IconCarbonRenew /></template>
             {{ t('prunePromptTemplates.actions.refresh') }}
           </NButton>
-          <NButton type="primary" @click="openCreate">
+          <NButton type="primary" @click="openCreateDrawer">
             <template #icon><IconCarbonAdd /></template>
             {{ t('prunePromptTemplates.actions.create') }}
           </NButton>
@@ -230,64 +227,195 @@ watch(
       </div>
     </NCard>
 
-    <NAlert v-if="store.error" type="error" :bordered="false">{{ store.error }}</NAlert>
-
-    <div class="flex flex-col gap-3 md:flex-row">
-      <NInput
-        v-model:value="store.searchQuery"
-        clearable
-        :placeholder="t('prunePromptTemplates.filters.searchPlaceholder')"
-      />
-      <NSelect v-model:value="store.scopeFilter" class="md:w-48" :options="scopeOptions" />
-      <NButton v-if="hasActiveFilters" quaternary @click="resetFilters">
-        {{ t('prunePromptTemplates.filters.reset') }}
-      </NButton>
+    <div class="grid grid-cols-1 gap-4 md:grid-cols-4">
+      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
+        <div class="text-xs font-medium text-lf-text-muted">
+          {{ t('prunePromptTemplates.stats.total') }}
+        </div>
+        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
+          {{ store.totalCount }}
+        </div>
+      </NCard>
+      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
+        <div class="text-xs font-medium text-lf-text-muted">
+          {{ t('prunePromptTemplates.stats.system') }}
+        </div>
+        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
+          {{ store.systemCount }}
+        </div>
+      </NCard>
+      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
+        <div class="text-xs font-medium text-lf-text-muted">
+          {{ t('prunePromptTemplates.stats.user') }}
+        </div>
+        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
+          {{ store.userCount }}
+        </div>
+      </NCard>
+      <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
+        <div class="text-xs font-medium text-lf-text-muted">
+          {{ t('prunePromptTemplates.stats.org') }}
+        </div>
+        <div class="mt-2 text-2xl font-semibold text-lf-text-strong">
+          {{ store.orgCount }}
+        </div>
+      </NCard>
     </div>
 
-    <NDataTable
-      :columns="columns"
-      :data="store.filteredItems"
-      :loading="store.loading"
-      :row-key="(row: PrunePromptTemplate) => row.id"
-      :scroll-x="900"
-    >
-      <template #empty>
-        <NEmpty
-          class="py-14"
-          :description="
-            hasActiveFilters
-              ? t('prunePromptTemplates.empty.filtered')
-              : t('prunePromptTemplates.empty.default')
-          "
+    <NCard :bordered="false" class="shadow-sm shadow-lf-shadow">
+      <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <NInput
+          v-model:value="store.searchQuery"
+          clearable
+          class="lg:max-w-sm"
+          :placeholder="t('prunePromptTemplates.filters.searchPlaceholder')"
         />
+        <div class="flex flex-wrap gap-3">
+          <NSelect v-model:value="store.scopeFilter" class="w-44" :options="filterScopeOptions" />
+          <NButton v-if="hasActiveFilters" quaternary @click="resetFilters">
+            {{ t('prunePromptTemplates.filters.reset') }}
+          </NButton>
+        </div>
+      </div>
+    </NCard>
+
+    <div v-if="store.loading" class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+      <NCard v-for="index in 6" :key="index" :bordered="false" class="shadow-sm shadow-lf-shadow">
+        <NSkeleton text :repeat="4" />
+      </NCard>
+    </div>
+
+    <NEmpty
+      v-else-if="store.filteredItems.length === 0"
+      class="rounded-2xl bg-lf-surface py-16 shadow-sm shadow-lf-shadow"
+      :description="
+        hasActiveFilters
+          ? t('prunePromptTemplates.empty.filtered')
+          : t('prunePromptTemplates.empty.default')
+      "
+    >
+      <template #extra>
+        <NButton v-if="hasActiveFilters" secondary @click="resetFilters">
+          {{ t('prunePromptTemplates.filters.reset') }}
+        </NButton>
+        <NButton v-else type="primary" @click="openCreateDrawer">
+          {{ t('prunePromptTemplates.actions.createFirst') }}
+        </NButton>
       </template>
-    </NDataTable>
+    </NEmpty>
+
+    <div v-else class="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-3">
+      <NCard
+        v-for="item in store.filteredItems"
+        :key="item.id"
+        hoverable
+        :bordered="false"
+        class="group cursor-pointer shadow-sm shadow-lf-shadow transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-lf-shadow-strong"
+        @click="openEditDrawer(item)"
+      >
+        <div class="flex h-full flex-col gap-4">
+          <div class="flex items-start justify-between gap-4">
+            <div class="min-w-0">
+              <h2 class="truncate text-lg font-semibold text-lf-text-strong">
+                {{ item.name }}
+              </h2>
+            </div>
+            <NTag round size="small" :type="getScopeTagType(item.scope)">
+              {{ t(`prunePromptTemplates.scopes.${item.scope}`) }}
+            </NTag>
+          </div>
+
+          <p
+            class="line-clamp-2 text-sm leading-6 text-lf-text-muted"
+            :class="{ 'italic text-lf-text-subtle': !item.description }"
+          >
+            {{ item.description || t('prunePromptTemplates.card.noDescription') }}
+          </p>
+
+          <div
+            v-if="item.content"
+            class="rounded-lg bg-lf-code-bg px-3 py-2 font-mono text-xs leading-5 text-lf-text-muted line-clamp-3"
+          >
+            {{ item.content }}
+          </div>
+          <p v-else class="text-xs italic text-lf-text-subtle">
+            {{ t('prunePromptTemplates.card.noContent') }}
+          </p>
+
+          <div class="mt-auto border-t border-lf-border-soft pt-4">
+            <div class="flex items-center justify-between gap-3">
+              <span class="text-xs text-lf-text-subtle">
+                {{ t('prunePromptTemplates.card.updatedAt') }} {{ formatDate(item.updated_at) }}
+              </span>
+              <div class="flex items-center gap-2" @click.stop>
+                <NButton
+                  v-if="item.scope !== 'system'"
+                  text
+                  type="primary"
+                  class="font-medium"
+                  @click="openEditDrawer(item)"
+                >
+                  {{ t('prunePromptTemplates.actions.edit') }}
+                </NButton>
+                <NButton
+                  v-if="item.scope !== 'system'"
+                  text
+                  type="error"
+                  class="font-medium"
+                  @click="confirmDelete(item, $event)"
+                >
+                  {{ t('prunePromptTemplates.actions.delete') }}
+                </NButton>
+                <NButton
+                  v-if="item.scope === 'system'"
+                  text
+                  type="info"
+                  class="font-medium"
+                  @click="openEditDrawer(item)"
+                >
+                  {{ t('prunePromptTemplates.actions.view') }}
+                </NButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      </NCard>
+    </div>
 
     <NDrawer v-model:show="drawerVisible" :width="640" placement="right">
-      <NDrawerContent
-        :title="
-          t(
-            isEditMode
-              ? 'prunePromptTemplates.actions.edit'
-              : 'prunePromptTemplates.actions.create',
-          )
-        "
-        closable
-        :native-scrollbar="false"
-      >
-        <NForm ref="formRef" :model="formModel" :rules="rules" label-placement="top">
-          <NFormItem path="name" :label="t('prunePromptTemplates.form.name')">
-            <NInput v-model:value="formModel.name" :disabled="isSystemScope" />
+      <NDrawerContent :native-scrollbar="false">
+        <template #header>
+          <div>
+            <div class="text-lg font-semibold">{{ drawerTitle }}</div>
+          </div>
+        </template>
+
+        <NForm
+          ref="formRef"
+          :model="formModel"
+          :rules="rules"
+          label-placement="top"
+          require-mark-placement="right-hanging"
+        >
+          <NFormItem :label="t('prunePromptTemplates.form.name')" path="name">
+            <NInput
+              v-model:value="formModel.name"
+              :placeholder="t('prunePromptTemplates.form.namePlaceholder')"
+              :disabled="isSystemScope"
+            />
           </NFormItem>
-          <NFormItem path="description" :label="t('prunePromptTemplates.form.description')">
+
+          <NFormItem :label="t('prunePromptTemplates.form.description')" path="description">
             <NInput
               v-model:value="formModel.description"
               type="textarea"
+              :placeholder="t('prunePromptTemplates.form.descriptionPlaceholder')"
               :rows="3"
               :disabled="isSystemScope"
             />
           </NFormItem>
-          <NFormItem path="content" :label="t('prunePromptTemplates.form.content')">
+
+          <NFormItem :label="t('prunePromptTemplates.form.content')" path="content">
             <PromptTemplateEditor
               v-model="formModel.content"
               :disabled="isSystemScope"
@@ -296,8 +424,9 @@ watch(
             />
           </NFormItem>
         </NForm>
+
         <template #footer>
-          <div class="flex justify-end gap-2">
+          <div class="flex justify-end gap-3">
             <NButton @click="drawerVisible = false">
               {{ t('prunePromptTemplates.actions.cancel') }}
             </NButton>
@@ -305,9 +434,13 @@ watch(
               v-if="!isSystemScope"
               type="primary"
               :loading="store.creating || store.updating"
-              @click="submit"
+              @click="onSubmit"
             >
-              {{ t('prunePromptTemplates.actions.save') }}
+              {{
+                isEditMode
+                  ? t('prunePromptTemplates.actions.submitUpdate')
+                  : t('prunePromptTemplates.actions.submitCreate')
+              }}
             </NButton>
           </div>
         </template>
@@ -315,17 +448,17 @@ watch(
     </NDrawer>
 
     <NModal
-      :show="deletingItem !== null"
+      v-model:show="deleteModalVisible"
       preset="dialog"
       type="warning"
       :title="t('prunePromptTemplates.actions.confirmDelete')"
       :content="
         deletingItem ? t('prunePromptTemplates.delete.confirm', { name: deletingItem.name }) : ''
       "
-      :positive-text="t('prunePromptTemplates.actions.delete')"
+      :positive-text="t('prunePromptTemplates.actions.confirmDelete')"
       :negative-text="t('prunePromptTemplates.actions.cancel')"
-      @update:show="(show) => !show && (deletingItem = null)"
-      @positive-click="remove"
+      :loading="deletingItem ? store.deletingIds.includes(deletingItem.id) : false"
+      @positive-click="executeDelete"
     />
   </div>
 </template>

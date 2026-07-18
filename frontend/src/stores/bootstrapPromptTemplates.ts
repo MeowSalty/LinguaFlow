@@ -36,7 +36,7 @@ export const useBootstrapPromptTemplatesStore = defineStore('bootstrapPromptTemp
   // ── 计算属性 ──
   const sortedItems = computed(() =>
     [...items.value].sort(
-      (a, b) => new Date(b.created_at ?? '').getTime() - new Date(a.created_at ?? '').getTime(),
+      (a, b) => new Date(b.updated_at ?? '').getTime() - new Date(a.updated_at ?? '').getTime(),
     ),
   )
 

@@ -142,7 +142,8 @@ const onSubmit = async (): Promise<void> => {
   }
 }
 
-const confirmDelete = (item: BootstrapPromptTemplate): void => {
+const confirmDelete = (item: BootstrapPromptTemplate, event?: MouseEvent): void => {
+  event?.stopPropagation()
   if (item.scope === 'system') {
     message.warning(t('bootstrapPromptTemplates.messages.systemDeleteForbidden'))
     return
@@ -221,9 +222,11 @@ watch(
         </div>
         <div class="flex flex-wrap gap-3">
           <NButton secondary :loading="store.loading" @click="store.loadTemplates">
+            <template #icon><IconCarbonRenew /></template>
             {{ t('bootstrapPromptTemplates.actions.refresh') }}
           </NButton>
           <NButton type="primary" @click="openCreateDrawer">
+            <template #icon><IconCarbonAdd /></template>
             {{ t('bootstrapPromptTemplates.actions.create') }}
           </NButton>
         </div>
@@ -326,7 +329,8 @@ watch(
         :key="item.id"
         hoverable
         :bordered="false"
-        class="group shadow-sm shadow-lf-shadow transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-lf-shadow-strong"
+        class="group cursor-pointer shadow-sm shadow-lf-shadow transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-lf-shadow-strong"
+        @click="openEditDrawer(item)"
       >
         <div class="flex h-full flex-col gap-4">
           <!-- 头部：名称 + 作用域标签 -->
@@ -364,9 +368,9 @@ watch(
           <div class="mt-auto border-t border-lf-border-soft pt-4">
             <div class="flex items-center justify-between gap-3">
               <span class="text-xs text-lf-text-subtle">
-                {{ t('bootstrapPromptTemplates.card.createdAt') }} {{ formatDate(item.created_at) }}
+                {{ t('bootstrapPromptTemplates.card.updatedAt') }} {{ formatDate(item.updated_at) }}
               </span>
-              <div class="flex items-center gap-2">
+              <div class="flex items-center gap-2" @click.stop>
                 <NButton
                   v-if="item.scope !== 'system'"
                   text
@@ -381,7 +385,7 @@ watch(
                   text
                   type="error"
                   class="font-medium"
-                  @click="confirmDelete(item)"
+                  @click="confirmDelete(item, $event)"
                 >
                   {{ t('bootstrapPromptTemplates.actions.delete') }}
                 </NButton>
