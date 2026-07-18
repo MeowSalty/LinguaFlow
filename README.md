@@ -15,20 +15,20 @@
 
 </div>
 
-LinguaFlow 帮助你将文档、字幕、电子书等内容翻译成多种语言。上传源文件，配置 AI 后端，即可开始批量翻译。支持术语管理、翻译审核、进度追踪，让翻译工作更高效、更准确。
+LinguaFlow 帮助你将文档、字幕、电子书等内容翻译成多种语言。上传源文件，配置 AI 后端，即可开始批量翻译。支持术语管理、质量检测、翻译审核、进度追踪，让翻译工作更高效、更准确。
 
 ---
 
 ## 支持的文件格式
 
-| 格式 | 扩展名 |
-|------|--------|
-| Markdown | `.md` `.markdown` `.mdx` |
-| EPUB 电子书 | `.epub` |
-| SRT 字幕 | `.srt` |
-| VTT 字幕 | `.vtt` |
-| ASS 字幕 | `.ass` |
-| 纯文本 | `.txt` |
+| 格式        | 扩展名                   |
+| ----------- | ------------------------ |
+| Markdown    | `.md` `.markdown` `.mdx` |
+| EPUB 电子书 | `.epub`                  |
+| SRT 字幕    | `.srt`                   |
+| VTT 字幕    | `.vtt`                   |
+| ASS 字幕    | `.ass`                   |
+| 纯文本      | `.txt`                   |
 
 ---
 
@@ -71,28 +71,30 @@ LinguaFlow 帮助你将文档、字幕、电子书等内容翻译成多种语言
 
 ### 术语管理
 
-创建术语表确保专业词汇翻译一致。支持自动术语提取，让 AI 帮你发现关键术语。
+创建术语表确保专业词汇翻译一致。支持自动术语提取，让 AI 帮你发现关键术语。支持术语精简，自动识别冗余和冲突条目。
 
 - CSV 格式导入导出
 - 自动术语提取（Bootstrap）
+- 术语精简（Prune）— 诊断冗余、冲突、低质量条目
 - 术语修改后自动同步已翻译段落
 
 ### 翻译审核
 
-逐段查看翻译结果，支持行内编辑和批量审核。
+逐段查看翻译结果，支持行内编辑和批量审核。内置质量检测，自动发现翻译问题。
 
 - 按状态筛选（待翻译/已翻译/已编辑/已批准/已驳回）
-- 行内编辑译文
+- 行内编辑译文，支持键盘导航
 - 批量通过/拒绝
 - 添加备注
+- **质量检测**：自动检测长度异常、重复翻译、未翻译等常见问题
 
 ### 灵活配置
 
 自定义翻译流水线的每个环节。
 
-- **提示词模板**：定义 AI 翻译的系统指令
-- **翻译配置**：分段策略、内容保护、响应修复等
-- **执行计划**：组合后端、提示词、配置，定义多轮翻译流程
+- **提示词模板**：翻译、术语提取、术语精简三类独立模板
+- **执行配置**：分段策略、内容保护、响应修复、质量检测等
+- **执行计划**：组合后端、提示词、配置，定义模式化多轮翻译流程（翻译轮次、提取轮次）
 
 ---
 
@@ -102,9 +104,9 @@ LinguaFlow 帮助你将文档、字幕、电子书等内容翻译成多种语言
 
 启动服务后访问 Web 界面，可视化管理翻译工作。
 
-- 项目、资源、任务、术语表的完整管理
+- 项目、资源、作业、术语表的完整管理
 - 拖拽上传文件
-- 实时任务进度追踪
+- 实时作业进度追踪（SSE 事件流，支持断线重连）
 - 暗色/亮色主题切换
 
 ### 命令行工具
@@ -131,6 +133,7 @@ linguaflow translate -i docs.md -o out.md --to zh --glossary-path terms.csv
 从 [GitHub Releases](https://github.com/MeowSalty/LinguaFlow/releases) 下载对应平台的二进制文件。
 
 支持的平台：
+
 - Linux (amd64, arm64)
 - macOS (amd64, arm64)
 - Windows (amd64, arm64)
@@ -174,7 +177,7 @@ task backend:local:build
 1. **配置 AI 后端** — 在「AI 后端」页面添加你的 OpenAI/Anthropic/Google Gemini 账号
 2. **创建项目** — 在「项目」页面创建新项目，设置源语言和目标语言
 3. **上传文件** — 进入项目工作区，拖拽上传源文件
-4. **开始翻译** — 选择文件，创建翻译任务
+4. **创建作业** — 选择资源，创建翻译作业
 5. **审核译文** — 翻译完成后在「段落」标签页查看和编辑结果
 
 ### 启动服务器模式
@@ -191,14 +194,31 @@ task backend:local:build
 
 ## 技术架构
 
-| 层级 | 技术栈 |
-|------|--------|
-| 前端 | Vue 3 + TypeScript + naive-ui |
-| 后端 | Go + ent + chi |
-| 数据库 | SQLite |
-| API | OpenAPI 3.0 |
+| 层级   | 技术栈                        |
+| ------ | ----------------------------- |
+| 前端   | Vue 3 + TypeScript + naive-ui |
+| 后端   | Go + ent + chi                |
+| 数据库 | SQLite                        |
+| API    | OpenAPI 3.0                   |
 
 项目采用前后端分离架构，支持单机部署或分离部署。
+
+---
+
+## 文档
+
+详细文档请访问 [LinguaFlow 文档](https://meowsalty.github.io/LinguaFlow/)：
+
+- [快速开始](https://meowsalty.github.io/LinguaFlow/zh/guide/getting-started)
+- [安装指南](https://meowsalty.github.io/LinguaFlow/zh/guide/installation)
+- [项目管理](https://meowsalty.github.io/LinguaFlow/zh/guide/projects)
+- [翻译配置](https://meowsalty.github.io/LinguaFlow/zh/guide/translation-config)
+- [术语表](https://meowsalty.github.io/LinguaFlow/zh/guide/glossary)
+- [翻译审校](https://meowsalty.github.io/LinguaFlow/zh/guide/review)
+- [CLI 命令行](https://meowsalty.github.io/LinguaFlow/zh/guide/cli)
+- [高级功能](https://meowsalty.github.io/LinguaFlow/zh/guide/advanced)
+- [FAQ](https://meowsalty.github.io/LinguaFlow/zh/guide/faq)
+- [API 参考](https://meowsalty.github.io/LinguaFlow/zh/api/)
 
 ---
 
@@ -206,10 +226,10 @@ task backend:local:build
 
 本项目采用**双许可**模式：
 
-| 许可证 | 适用场景 | 状态 |
-|--------|----------|------|
-| [GNU AGPL v3](LICENSE) | 开源使用、个人项目、非商业用途 | ✅ 可用 |
-| 商业许可 | 商业闭源使用、私有部署 | 🚧 即将推出 |
+| 许可证                 | 适用场景                       | 状态        |
+| ---------------------- | ------------------------------ | ----------- |
+| [GNU AGPL v3](LICENSE) | 开源使用、个人项目、非商业用途 | ✅ 可用     |
+| 商业许可               | 商业闭源使用、私有部署         | 🚧 即将推出 |
 
 - **开源用户**：遵循 AGPL v3 协议，修改后的代码需开源
 - **商业用户**：如需闭源使用或私有部署，请等待商业许可上线

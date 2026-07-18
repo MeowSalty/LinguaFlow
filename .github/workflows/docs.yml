@@ -1,0 +1,144 @@
+﻿name: Deploy Docs
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'api/**'
+      - '.github/workflows/docs.yml'
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+concurrency:
+  group: docs-deploy
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 安装 pnpm
+        run: npm install -g pnpm
+
+      - name: 安装 Redocly CLI
+        run: npm install -g @redocly/cli
+
+      - name: 安装文档依赖
+        run: pnpm install
+        working-directory: docs
+
+      - name: 合并 OpenAPI 规范
+        run: redocly bundle api/openapi/base.yaml -o docs/public/openapi/openapi-3.0.yaml
+
+      - name: 获取版本信息
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "is_release=true" >> $GITHUB_OUTPUT
+          else
+            echo "version=next" >> $GITHUB_OUTPUT
+            echo "is_release=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: 构建文档
+        run: pnpm build
+        working-directory: docs
+        env:
+          DOCS_BASE: /
+
+      - name: 复制 OpenAPI 规范到版本目录（仅发布版本）
+        if: steps.version.outputs.is_release == 'true'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          mkdir -p "docs/.vitepress/dist/openapi/${VERSION}"
+          cp docs/public/openapi/openapi-3.0.yaml "docs/.vitepress/dist/openapi/${VERSION}/openapi-3.0.yaml"
+
+      - name: 部署版本化文档（仅发布版本）
+        if: steps.version.outputs.is_release == 'true'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: docs/.vitepress/dist
+          destination_dir: ${{ steps.version.outputs.version }}
+          keep_files: true
+
+      - name: 部署默认文档（仅发布版本）
+        if: steps.version.outputs.is_release == 'true'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: docs/.vitepress/dist
+          keep_files: true
+
+      - name: 部署开发文档（仅 main 分支）
+        if: steps.version.outputs.is_release == 'false'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: docs/.vitepress/dist
+          destination_dir: next
+          keep_files: true
+
+      - name: 更新版本列表（仅发布版本）
+        if: steps.version.outputs.is_release == 'true'
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          
+          # 克隆 gh-pages 分支
+          git clone --depth 1 --branch gh-pages https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git gh-pages
+          cd gh-pages
+          
+          # 读取现有版本列表
+          if [ -f versions.json ]; then
+            EXISTING=$(cat versions.json)
+          else
+            EXISTING='{"versions":[],"latest":"latest"}'
+          fi
+          
+          # 提取版本数组
+          VERSIONS=$(echo "$EXISTING" | jq -r '.versions')
+          
+          # 检查版本是否已存在
+          if echo "$VERSIONS" | jq -e "index(\"$VERSION\")" > /dev/null 2>&1; then
+            echo "Version $VERSION already exists"
+          else
+            # 添加新版本
+            ALL_VERSIONS=$(echo "$VERSIONS" | jq ". + [\"$VERSION\"]")
+            
+            # 按主版本号分组，每个主版本只保留最新版本，最多保留 3 个主版本
+            NEW_VERSIONS=$(echo "$ALL_VERSIONS" | jq -r '
+              map({version: ., major: (split(".") | .[0])}) |
+              group_by(.major) |
+              map(sort_by(.version) | last) |
+              sort_by(.major | ltrimstr("v") | tonumber) | reverse |
+              .[0:3] |
+              map(.version)
+            ')
+            
+            jq -n --argjson versions "$NEW_VERSIONS" --arg latest "$VERSION" '{"versions": $versions, "latest": $latest}' > versions.json
+          fi
+          
+          # 配置 git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # 提交更改
+          git add versions.json
+          git commit -m "chore: update versions.json with $VERSION" || true
+          git push

@@ -3,6 +3,7 @@ version: '3'
 vars:
   FRONTEND_DIR: frontend
   BACKEND_DIR: backend
+  DOCS_DIR: docs
   OPENAPI_ENTRY: api/openapi/base.yaml
   OPENAPI_SCHEMA: api/openapi/openapi-3.0.yaml
   FRONTEND_OPENAPI_TYPES: src/api/types.d.ts
@@ -78,11 +79,10 @@ tasks:
     dir: '{{.FRONTEND_DIR}}'
     sources:
       - '../{{.OPENAPI_SCHEMA}}'
-      - 'scripts/generate-openapi-types.ts'
     generates:
       - '{{.FRONTEND_OPENAPI_TYPES}}'
     cmds:
-      - node --import jiti/register scripts/generate-openapi-types.ts
+      - pnpm exec openapi-typescript ../{{.OPENAPI_SCHEMA}} -o {{.FRONTEND_OPENAPI_TYPES}}
 
   backend:install:
     desc: 下载后端 Go 模块依赖
@@ -183,3 +183,33 @@ tasks:
       - 'internal/ent/schema/**/*.go'
     cmds:
       - go generate ./internal/ent
+
+  docs:install:
+    desc: 安装文档依赖
+    dir: '{{.DOCS_DIR}}'
+    cmds:
+      - pnpm install
+
+  docs:dev:
+    desc: 启动文档开发服务器
+    deps:
+      - docs:install
+    dir: '{{.DOCS_DIR}}'
+    cmds:
+      - pnpm dev
+
+  docs:build:
+    desc: 构建文档
+    deps:
+      - docs:install
+    dir: '{{.DOCS_DIR}}'
+    cmds:
+      - pnpm build
+
+  docs:preview:
+    desc: 预览构建后的文档
+    deps:
+      - docs:build
+    dir: '{{.DOCS_DIR}}'
+    cmds:
+      - pnpm preview
