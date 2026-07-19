@@ -154,12 +154,38 @@ linguaflow local [flags]
 linguaflow serve [flags]
 ```
 
-| 参数             | 类型   | 默认值      | 描述                     |
-| ---------------- | ------ | ----------- | ------------------------ |
-| `--host`         | string | `"0.0.0.0"` | 监听地址                 |
-| `--port`         | int    | `8080`      | 监听端口                 |
-| `--data-dir`     | string | `"./data"`  | 数据目录                 |
-| `--auto-migrate` | bool   | `true`      | 启动时自动执行数据库迁移 |
+| 参数             | 类型   | 默认值      | 描述                                       |
+| ---------------- | ------ | ----------- | ------------------------------------------ |
+| `--host`         | string | `"0.0.0.0"` | 监听地址                                   |
+| `--port`         | int    | `8080`      | 监听端口                                   |
+| `--data-dir`     | string | `"./data"`  | 数据目录                                   |
+| `--auto-migrate` | bool   | `true`      | 启动时自动执行数据库迁移                   |
+| `--jwt-secret`   | string | `""`        | 覆盖 `LINGUAFLOW_JWT_SECRET`               |
+| `--cors-origins` | string | `""`        | 覆盖 `LINGUAFLOW_CORS_ORIGINS`（逗号分隔） |
+
+### 数据库配置
+
+服务器模式的数据库通过环境变量配置，不读取配置文件中的 `server` 段：
+
+| 环境变量                                | 描述                                                                        | 默认值                     |
+| --------------------------------------- | --------------------------------------------------------------------------- | -------------------------- |
+| `LINGUAFLOW_DATABASE_DRIVER`            | 数据库驱动：`sqlite` \| `postgres`                                          | `sqlite`                   |
+| `LINGUAFLOW_DATABASE_DSN`               | 数据库连接串。`postgres` 必填；`sqlite` 为空时使用 `data_dir/linguaflow.db` | -                          |
+| `LINGUAFLOW_DATABASE_MAX_OPEN_CONNS`    | 最大打开连接数                                                              | `sqlite=0` / `postgres=25` |
+| `LINGUAFLOW_DATABASE_MAX_IDLE_CONNS`    | 最大空闲连接数                                                              | `sqlite=2` / `postgres=5`  |
+| `LINGUAFLOW_DATABASE_CONN_MAX_LIFETIME` | 连接最大寿命（Go duration）                                                 | `postgres=30m`             |
+
+使用 PostgreSQL 的示例：
+
+```bash
+export LINGUAFLOW_DATABASE_DRIVER=postgres
+export LINGUAFLOW_DATABASE_DSN='postgres://user:pass@localhost:5432/linguaflow?sslmode=disable'
+linguaflow serve
+```
+
+::: warning 本地模式不支持 PostgreSQL
+`linguaflow local` 始终使用 SQLite。高并发场景请使用 `linguaflow serve` 配合 PostgreSQL。
+:::
 
 ### 管理员用户
 
@@ -183,15 +209,15 @@ linguaflow version
 
 输出格式：
 
-```
-linguaflow <版本号> (commit <提交哈希>) <系统>/<架构> <Go版本>
+```text
+linguaflow <版本号> (commit <提交哈希>) <系统>/<架构> <Go 版本>
 ```
 
 ## 配置文件
 
 LinguaFlow 支持通过配置文件进行详细配置。配置文件的加载优先级为：
 
-```
+```text
 命令行参数 > 环境变量 > 配置文件 > 内置默认值
 ```
 

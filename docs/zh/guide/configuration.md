@@ -4,7 +4,7 @@ LinguaFlow 支持通过命令行参数、环境变量和配置文件进行配置
 
 ## 配置优先级
 
-```
+```text
 命令行参数 > 环境变量 > 配置文件 > 内置默认值
 ```
 
@@ -17,6 +17,31 @@ LinguaFlow 支持通过命令行参数、环境变量和配置文件进行配置
 | `OPENAI_API_KEY`            | OpenAI API 密钥 | 默认后端配置引用   |
 | `LINGUAFLOW_ADMIN_USERNAME` | 管理员用户名    | 服务启动时自动创建 |
 | `LINGUAFLOW_ADMIN_PASSWORD` | 管理员密码      | 配合用户名使用     |
+
+### 数据库环境变量（serve 模式）
+
+服务器模式（`linguaflow serve`）的数据库通过环境变量配置，不读取 YAML 配置文件中的 `server` 段。本地模式（`linguaflow local`）始终使用 SQLite，忽略以下变量。
+
+| 变量名                                  | 描述                                                                        | 默认值                     |
+| --------------------------------------- | --------------------------------------------------------------------------- | -------------------------- |
+| `LINGUAFLOW_DATABASE_DRIVER`            | 数据库驱动：`sqlite` \| `postgres`                                          | `sqlite`                   |
+| `LINGUAFLOW_DATABASE_DSN`               | 数据库连接串。`postgres` 必填；`sqlite` 为空时使用 `data_dir/linguaflow.db` | -                          |
+| `LINGUAFLOW_DATABASE_MAX_OPEN_CONNS`    | 最大打开连接数（`database/sql` 连接池）                                     | `sqlite=0` / `postgres=25` |
+| `LINGUAFLOW_DATABASE_MAX_IDLE_CONNS`    | 最大空闲连接数                                                              | `sqlite=2` / `postgres=5`  |
+| `LINGUAFLOW_DATABASE_CONN_MAX_LIFETIME` | 连接最大寿命，Go duration 格式（如 `30m`）                                  | `postgres=30m`             |
+
+示例：
+
+```bash
+# PostgreSQL
+export LINGUAFLOW_DATABASE_DRIVER=postgres
+export LINGUAFLOW_DATABASE_DSN='postgres://user:pass@localhost:5432/linguaflow?sslmode=disable'
+linguaflow serve
+```
+
+::: tip 自动迁移与并发安全
+启用 `auto_migrate`（默认开启）时，PostgreSQL 实例会通过 `pg_advisory_lock` 串行化 schema 迁移，多个 LinguaFlow 实例可同时连接同一数据库而不会在启动阶段产生冲突。
+:::
 
 ### 配置文件中的环境变量引用
 
@@ -40,7 +65,7 @@ linguaflow init
 
 将在当前目录生成 `linguaflow.yaml` 配置文件及配套目录结构：
 
-```
+```text
 <项目根目录>/
 ├── linguaflow.yaml           # 主配置文件
 ├── prompts/
@@ -290,13 +315,14 @@ server:
 - 仅支持相对路径，不允许绝对路径
 - 路径必须在配置文件目录内（禁止 `../` 遍历）
 - 内联内容优先于文件引用
-  :::
+
+:::
 
 #### execution_profiles — 执行配置
 
 控制翻译行为，使用 map 结构，key 为配置名称。可通过 `file` 字段引用外部文件，或内联配置以下字段：
 
-**split — 分段**
+##### split — 分段
 
 | 字段        | 类型   | 默认值      | 说明           |
 | ----------- | ------ | ----------- | -------------- |
@@ -304,14 +330,14 @@ server:
 | `strategy`  | string | `paragraph` | 分段策略       |
 | `max_chars` | int    | `1200`      | 每段最大字符数 |
 
-**protect — 内容保护**
+##### protect — 内容保护
 
 | 字段      | 类型     | 默认值                           | 说明         |
 | --------- | -------- | -------------------------------- | ------------ |
 | `enabled` | bool     | `true`                           | 是否启用保护 |
 | `rules`   | []string | `[code, link, placeholder, xml]` | 保护规则列表 |
 
-**ruby — 注音标注**
+##### ruby — 注音标注
 
 | 字段             | 类型     | 说明                                                 |
 | ---------------- | -------- | ---------------------------------------------------- |
@@ -319,14 +345,14 @@ server:
 | `retry_backend`  | string   | 注音失败时的重试后端                                 |
 | `preserve_kinds` | []string | 保留的注音类型：`phonetic` / `semantic` / `creative` |
 
-**postprocess — 后处理**
+##### postprocess — 后处理
 
 | 字段          | 类型 | 默认值 | 说明           |
 | ------------- | ---- | ------ | -------------- |
 | `enabled`     | bool | `true` | 是否启用后处理 |
 | `trim_spaces` | bool | `true` | 去除多余空格   |
 
-**repair — 响应修复**
+##### repair — 响应修复
 
 | 字段                    | 类型  | 默认值 | 说明            |
 | ----------------------- | ----- | ------ | --------------- |
@@ -338,7 +364,7 @@ server:
 | `placeholder_normalize` | bool  | `true` | 占位符规范化    |
 | `prompt_upgrade`        | bool  | `true` | 提示词升级      |
 
-**bootstrap — 术语提取**
+##### bootstrap — 术语提取
 
 | 字段                       | 类型   | 默认值          | 说明                              |
 | -------------------------- | ------ | --------------- | --------------------------------- |
@@ -347,7 +373,7 @@ server:
 | `min_source_len`           | int    | `2`             | 最小源文本长度                    |
 | `inline_conflict_strategy` | string | `rewrite-local` | 冲突策略：`rewrite-local` / `off` |
 
-**context — 上下文窗口**
+##### context — 上下文窗口
 
 | 字段        | 类型 | 默认值 | 说明                         |
 | ----------- | ---- | ------ | ---------------------------- |
@@ -360,7 +386,7 @@ server:
 
 组合后端、模板和配置为翻译流水线。
 
-**bootstrap — 独立术语提取**
+##### bootstrap — 独立术语提取
 
 | 字段                  | 类型   | 说明                           |
 | --------------------- | ------ | ------------------------------ |
@@ -371,7 +397,7 @@ server:
 | `max_terms_per_batch` | int    | 每批最大术语数                 |
 | `min_source_len`      | int    | 最小源文本长度                 |
 
-**rounds — 执行轮次**
+##### rounds — 执行轮次
 
 支持两种模式的轮次：`translate`（翻译）和 `extract`（术语提取）。
 
@@ -445,18 +471,34 @@ server:
 | `refresh_token_expiry` | duration | `720h`（30 天）                 | 刷新令牌过期时间           |
 | `shutdown_timeout`     | duration | `10s`                           | 优雅关闭超时               |
 
-**server.cors — 跨域**
+##### server.cors — 跨域
 
 | 字段              | 类型     | 默认值  | 说明       |
 | ----------------- | -------- | ------- | ---------- |
 | `allowed_origins` | []string | `["*"]` | 允许的来源 |
 
-**server.registration — 注册**
+##### server.registration — 注册
 
 | 字段         | 类型 | 默认值 | 说明                       |
 | ------------ | ---- | ------ | -------------------------- |
 | `enabled`    | bool | `true` | 是否开放用户注册           |
 | `auto_admin` | bool | `true` | 首个注册用户自动成为管理员 |
+
+##### server.database — 数据库
+
+服务器模式数据库通过环境变量配置（见上方「数据库环境变量」小节），本地模式始终使用 SQLite。
+
+| 字段                | 类型     | 默认值（SQLite / PostgreSQL） | 说明                                                                  |
+| ------------------- | -------- | ----------------------------- | --------------------------------------------------------------------- |
+| `driver`            | string   | `sqlite`                      | 驱动：`sqlite` \| `postgres`                                          |
+| `dsn`               | string   | -                             | 连接串；`postgres` 必填，`sqlite` 为空时使用 `data_dir/linguaflow.db` |
+| `max_open_conns`    | int      | `0` / `25`                    | 最大打开连接数                                                        |
+| `max_idle_conns`    | int      | `2` / `5`                     | 最大空闲连接数                                                        |
+| `conn_max_lifetime` | duration | `0` / `30m`                   | 连接最大寿命                                                          |
+
+::: warning 本地模式不支持 PostgreSQL
+`linguaflow local` 始终使用 SQLite，以确保单文件、零依赖运行。多用户需求请使用 `linguaflow serve` 并切换到 PostgreSQL。
+:::
 
 ## 命令行参数
 
@@ -472,12 +514,14 @@ server:
 
 ### serve 子命令
 
-| 参数             | 类型   | 默认值 | 说明                       |
-| ---------------- | ------ | ------ | -------------------------- |
-| `--host`         | string | `""`   | 覆盖 `server.host`         |
-| `--port`         | int    | `0`    | 覆盖 `server.port`         |
-| `--data-dir`     | string | `""`   | 覆盖 `server.data_dir`     |
-| `--auto-migrate` | bool   | `true` | 覆盖 `server.auto_migrate` |
+| 参数             | 类型   | 默认值 | 说明                                       |
+| ---------------- | ------ | ------ | ------------------------------------------ |
+| `--host`         | string | `""`   | 覆盖 `server.host`                         |
+| `--port`         | int    | `0`    | 覆盖 `server.port`                         |
+| `--data-dir`     | string | `""`   | 覆盖 `server.data_dir`                     |
+| `--auto-migrate` | bool   | `true` | 覆盖 `server.auto_migrate`                 |
+| `--jwt-secret`   | string | `""`   | 覆盖 `LINGUAFLOW_JWT_SECRET`               |
+| `--cors-origins` | string | `""`   | 覆盖 `LINGUAFLOW_CORS_ORIGINS`（逗号分隔） |
 
 ### local 子命令
 
