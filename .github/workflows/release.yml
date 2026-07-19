@@ -110,27 +110,24 @@ jobs:
           mkdir -p release
           find artifacts -type f \( -name "linguaflow-*" -o -name "*.sha256" \) -exec cp {} release/ \;
 
-      - name: 生成更新日志
-        id: changelog
-        run: |
-          PREV_TAG=$(git tag --sort=-creatordate | head -2 | tail -1)
-          if [ -z "$PREV_TAG" ]; then
-            CHANGES=$(git log --oneline --no-merges)
-          else
-            CHANGES=$(git log --oneline --no-merges ${PREV_TAG}..HEAD)
-          fi
-          echo "changes<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+      - name: AI 生成更新日志
+        env:
+          AI_BASE_URL: ${{ secrets.AI_BASE_URL }}
+          AI_API_KEY: ${{ secrets.AI_API_KEY }}
+          AI_MODEL: ${{ vars.AI_MODEL }}
+          CF_ACCESS_CLIENT_ID: ${{ secrets.CF_ACCESS_CLIENT_ID }}
+          CF_ACCESS_CLIENT_SECRET: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}
+        run: node .github/scripts/generate-release-notes.mjs
 
       - name: 创建 GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          body: |
-            ## 更新内容
-            ${{ steps.changelog.outputs.changes }}
+          body_path: release-notes.md
           files: release/*
-          generate_release_notes: true
+          # AI 生成内容为非确定性输出，默认以草稿发布，人工审核后再正式发布
+          draft: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   docker:
     name: 构建并推送 Docker 镜像
