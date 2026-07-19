@@ -194,14 +194,14 @@ task backend:local:build
 
 ## 技术架构
 
-| 层级   | 技术栈                        |
-| ------ | ----------------------------- |
-| 前端   | Vue 3 + TypeScript + naive-ui |
-| 后端   | Go + ent + chi                |
-| 数据库 | SQLite                        |
-| API    | OpenAPI 3.0                   |
+| 层级   | 技术栈                                    |
+| ------ | ----------------------------------------- |
+| 前端   | Vue 3 + TypeScript + naive-ui             |
+| 后端   | Go + ent + chi                            |
+| 数据库 | SQLite（默认） / PostgreSQL（服务器模式） |
+| API    | OpenAPI 3.0                               |
 
-项目采用前后端分离架构，支持单机部署或分离部署。
+项目采用前后端分离架构，支持单机部署或分离部署。本地模式默认使用嵌入式 SQLite 开箱即用；服务器模式除 SQLite 外，还支持通过环境变量切换到 PostgreSQL 以满足高并发场景。
 
 ---
 
