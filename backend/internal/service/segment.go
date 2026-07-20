@@ -3,10 +3,15 @@ package service
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sort"
 	"strings"
 
+	"entgo.io/ent/dialect"
+	"entgo.io/ent/dialect/sql"
+
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
 )
@@ -14,6 +19,7 @@ import (
 type SegmentService struct {
 	client   *ent.Client
 	projects *ProjectService
+	dialect  string
 }
 
 type ResourceSegmentPage struct {
@@ -22,11 +28,14 @@ type ResourceSegmentPage struct {
 }
 
 type ResourceSegmentListOptions struct {
-	AfterID  int
-	Limit    int
-	Status   string
-	Search   string
-	GroupKey string
+	AfterID         int
+	Limit           int
+	Status          string
+	Search          string
+	GroupKey        string
+	QualityIssues   string
+	QualitySeverity string
+	QualityCode     string
 }
 
 type ResourceSegmentUpdateInput struct {
@@ -35,8 +44,8 @@ type ResourceSegmentUpdateInput struct {
 	Comment    *string
 }
 
-func NewSegmentService(client *ent.Client, projects *ProjectService) *SegmentService {
-	return &SegmentService{client: client, projects: projects}
+func NewSegmentService(client *ent.Client, projects *ProjectService, dialectName string) *SegmentService {
+	return &SegmentService{client: client, projects: projects, dialect: dialectName}
 }
 
 func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, projectID, resourceID int, opts ResourceSegmentListOptions) (*ResourceSegmentPage, error) {
@@ -53,6 +62,9 @@ func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, 
 	}
 	if opts.Search != "" {
 		q = q.Where(segment.Or(segment.SourceTextContains(opts.Search), segment.TargetTextContains(opts.Search)))
+	}
+	if p := buildQualityPredicate(opts, s.dialect); p != nil {
+		q = q.Where(p)
 	}
 
 	if opts.GroupKey != "" {
@@ -113,6 +125,84 @@ func (s *SegmentService) ListResourceSegments(ctx context.Context, actorUserID, 
 		page.Items = rows[:opts.Limit]
 	}
 	return page, nil
+}
+
+// buildQualityPredicate 按 quality_issues / quality_severity / quality_code 构造 SQL 谓词。
+// 非法枚举值安全降级为不过滤（返回 nil）。severity 与 code 使用独立 EXISTS（AND）。
+// SQLite 与 PostgreSQL 的 JSON 函数不同，按 dialectName 分支：SQLite 使用 JSON1
+// （json_array_length / json_each / json_extract），PostgreSQL 使用 jsonb_*
+// （jsonb_typeof / jsonb_array_length / jsonb_array_elements / ->>）。
+func buildQualityPredicate(opts ResourceSegmentListOptions, dialectName string) predicate.Segment {
+	usePostgres := dialectName == dialect.Postgres
+	var preds []predicate.Segment
+
+	switch opts.QualityIssues {
+	case "has":
+		preds = append(preds, predicate.Segment(func(s *sql.Selector) {
+			col := s.C(segment.FieldQualityIssues)
+			if usePostgres {
+				s.Where(sql.ExprP(fmt.Sprintf("jsonb_typeof(%s) = 'array' AND jsonb_array_length(%s) > 0", col, col)))
+				return
+			}
+			s.Where(sql.ExprP(fmt.Sprintf("json_array_length(%s) > 0", col)))
+		}))
+	case "none":
+		preds = append(preds, predicate.Segment(func(s *sql.Selector) {
+			col := s.C(segment.FieldQualityIssues)
+			if usePostgres {
+				s.Where(sql.ExprP(fmt.Sprintf("%s IS NULL OR (jsonb_typeof(%s) = 'array' AND jsonb_array_length(%s) = 0)", col, col, col)))
+				return
+			}
+			s.Where(sql.ExprP(fmt.Sprintf("%s IS NULL OR json_array_length(%s) = 0", col, col)))
+		}))
+	}
+
+	switch opts.QualitySeverity {
+	case "warning", "error":
+		sev := opts.QualitySeverity
+		preds = append(preds, predicate.Segment(func(s *sql.Selector) {
+			col := s.C(segment.FieldQualityIssues)
+			if usePostgres {
+				s.Where(sql.ExprP(
+					fmt.Sprintf("EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE v ->> 'severity' = ?)", col),
+					sev,
+				))
+				return
+			}
+			s.Where(sql.ExprP(
+				fmt.Sprintf("EXISTS (SELECT 1 FROM json_each(%s) WHERE json_extract(value, '$.severity') = ?)", col),
+				sev,
+			))
+		}))
+	}
+
+	switch opts.QualityCode {
+	case "untranslated", "length_ratio", "duplicate":
+		code := opts.QualityCode
+		preds = append(preds, predicate.Segment(func(s *sql.Selector) {
+			col := s.C(segment.FieldQualityIssues)
+			if usePostgres {
+				s.Where(sql.ExprP(
+					fmt.Sprintf("EXISTS (SELECT 1 FROM jsonb_array_elements(%s) AS v WHERE v ->> 'code' = ?)", col),
+					code,
+				))
+				return
+			}
+			s.Where(sql.ExprP(
+				fmt.Sprintf("EXISTS (SELECT 1 FROM json_each(%s) WHERE json_extract(value, '$.code') = ?)", col),
+				code,
+			))
+		}))
+	}
+
+	switch len(preds) {
+	case 0:
+		return nil
+	case 1:
+		return preds[0]
+	default:
+		return segment.And(preds...)
+	}
 }
 
 func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID, projectID, resourceID, segmentID int, input ResourceSegmentUpdateInput) (*ent.Segment, error) {
