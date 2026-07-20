@@ -22,6 +22,10 @@ export type SegmentStatusFilter =
   | 'rejected'
   | 'all'
 
+export type SegmentQualityIssuesFilter = 'has' | 'none' | 'all'
+export type SegmentQualitySeverityFilter = 'warning' | 'error' | 'all'
+export type SegmentQualityCodeFilter = 'untranslated' | 'length_ratio' | 'duplicate' | 'all'
+
 export interface SegmentProgress {
   pending: number
   translated: number
@@ -46,6 +50,9 @@ export const useSegmentStore = defineStore('segment', () => {
   // ── 筛选器 ──
   const segmentSearch = ref('')
   const segmentStatusFilter = ref<SegmentStatusFilter>('all')
+  const segmentQualityIssuesFilter = ref<SegmentQualityIssuesFilter>('all')
+  const segmentQualitySeverityFilter = ref<SegmentQualitySeverityFilter>('all')
+  const segmentQualityCodeFilter = ref<SegmentQualityCodeFilter>('all')
 
   // ── EPUB 章节导航状态 ──
 
@@ -120,9 +127,22 @@ export const useSegmentStore = defineStore('segment', () => {
     segmentsError.value = null
 
     try {
+      const hasQualityFilter =
+        segmentQualityIssuesFilter.value !== 'all' ||
+        segmentQualitySeverityFilter.value !== 'all' ||
+        segmentQualityCodeFilter.value !== 'all'
+
       const response = await fetchResourceSegments(projectId, resourceId, {
         status: segmentStatusFilter.value === 'all' ? undefined : segmentStatusFilter.value,
         search: segmentSearch.value.trim() || undefined,
+        quality_issues:
+          segmentQualityIssuesFilter.value === 'all' ? undefined : segmentQualityIssuesFilter.value,
+        quality_severity:
+          segmentQualitySeverityFilter.value === 'all'
+            ? undefined
+            : segmentQualitySeverityFilter.value,
+        quality_code:
+          segmentQualityCodeFilter.value === 'all' ? undefined : segmentQualityCodeFilter.value,
         cursor: append ? (segmentsCursor.value ?? undefined) : undefined,
         limit: 50,
         ...(groupKey ? { group_key: groupKey } : {}),
@@ -131,7 +151,12 @@ export const useSegmentStore = defineStore('segment', () => {
       segmentsCursor.value = response.next_cursor ?? null
 
       // 仅在无筛选条件的全量加载时更新进度缓存
-      if (!append && segmentStatusFilter.value === 'all' && !segmentSearch.value.trim()) {
+      if (
+        !append &&
+        segmentStatusFilter.value === 'all' &&
+        !segmentSearch.value.trim() &&
+        !hasQualityFilter
+      ) {
         updateSegmentProgressCache(resourceId, segments.value)
       }
     } catch (error) {
@@ -256,6 +281,9 @@ export const useSegmentStore = defineStore('segment', () => {
     segmentsError.value = null
     segmentSearch.value = ''
     segmentStatusFilter.value = 'all'
+    segmentQualityIssuesFilter.value = 'all'
+    segmentQualitySeverityFilter.value = 'all'
+    segmentQualityCodeFilter.value = 'all'
     segmentProgressCache.value = new Map()
     actionError.value = null
     resetEpubState()
@@ -270,6 +298,9 @@ export const useSegmentStore = defineStore('segment', () => {
     actionError,
     segmentSearch,
     segmentStatusFilter,
+    segmentQualityIssuesFilter,
+    segmentQualitySeverityFilter,
+    segmentQualityCodeFilter,
     segmentProgressCache,
     updateSegmentProgressCache,
     loadSegments,

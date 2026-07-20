@@ -425,6 +425,9 @@ export const fetchResourceSegments = async (
     status?: 'pending' | 'translated' | 'edited' | 'approved' | 'rejected'
     search?: string
     group_key?: string
+    quality_issues?: 'has' | 'none'
+    quality_severity?: 'warning' | 'error'
+    quality_code?: 'untranslated' | 'length_ratio' | 'duplicate'
     cursor?: string
     limit?: number
   },

@@ -3575,6 +3575,12 @@ export interface operations {
                 search?: string;
                 /** @description 按分组键过滤 segments（如 epub_file 路径），仅返回属于指定分组的 segments */
                 group_key?: string;
+                /** @description 按 quality_issues 过滤；has=仅有质量问题的段落，none=无质量问题的段落（NULL 或空数组均视为无问题） */
+                quality_issues?: "has" | "none";
+                /** @description 按 quality_issues 中的 severity 过滤；指定时隐含仅返回含匹配问题的段落 */
+                quality_severity?: "warning" | "error";
+                /** @description 按 quality_issues 中的 code 过滤；指定时隐含仅返回含匹配问题的段落 */
+                quality_code?: "untranslated" | "length_ratio" | "duplicate";
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };
