@@ -30,6 +30,13 @@ type glossaryEntryResponse struct {
 	Target        string `json:"target"`
 	CaseSensitive bool   `json:"case_sensitive"`
 	Notes         string `json:"notes,omitempty"`
+	CreatedAt     string `json:"created_at"`
+	UpdatedAt     string `json:"updated_at"`
+}
+
+type updateGlossaryEntryResponse struct {
+	glossaryEntryResponse
+	TargetChanged bool `json:"target_changed"`
 }
 
 func toGlossaryEntryResponse(e *ent.GlossaryEntry) glossaryEntryResponse {
@@ -39,6 +46,8 @@ func toGlossaryEntryResponse(e *ent.GlossaryEntry) glossaryEntryResponse {
 		Target:        e.Target,
 		CaseSensitive: e.CaseSensitive,
 		Notes:         e.Notes,
+		CreatedAt:     e.CreatedAt.Format(timeRFC3339),
+		UpdatedAt:     e.UpdatedAt.Format(timeRFC3339),
 	}
 }
 
@@ -123,16 +132,9 @@ func (s *Server) handleUpdateGlossaryEntry(w http.ResponseWriter, r *http.Reques
 		s.writeGlossaryServiceError(w, r, err)
 		return
 	}
-	entry := result.Entry
-	writeJSON(w, http.StatusOK, map[string]any{
-		"id":             entry.ID,
-		"source":         entry.Source,
-		"target":         entry.Target,
-		"case_sensitive": entry.CaseSensitive,
-		"notes":          entry.Notes,
-		"created_at":     entry.CreatedAt,
-		"updated_at":     entry.UpdatedAt,
-		"target_changed": result.TargetChanged,
+	writeJSON(w, http.StatusOK, updateGlossaryEntryResponse{
+		glossaryEntryResponse: toGlossaryEntryResponse(result.Entry),
+		TargetChanged:         result.TargetChanged,
 	})
 }
 

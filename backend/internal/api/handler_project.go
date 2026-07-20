@@ -36,6 +36,8 @@ type projectResponse struct {
 	GlossaryEnabled bool           `json:"glossary_enabled"`
 	SourceLang      string         `json:"source_lang"`
 	TargetLang      string         `json:"target_lang"`
+	CreatedAt       string         `json:"created_at"`
+	UpdatedAt       string         `json:"updated_at"`
 }
 
 func toProjectResponse(p *ent.Project) projectResponse {
@@ -48,6 +50,8 @@ func toProjectResponse(p *ent.Project) projectResponse {
 		GlossaryEnabled: p.GlossaryEnabled,
 		SourceLang:      p.SourceLang,
 		TargetLang:      p.TargetLang,
+		CreatedAt:       p.CreatedAt.Format(timeRFC3339),
+		UpdatedAt:       p.UpdatedAt.Format(timeRFC3339),
 	}
 }
 
