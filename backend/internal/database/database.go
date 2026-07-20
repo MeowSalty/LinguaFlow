@@ -97,6 +97,16 @@ func driverSettings(driver string) (string, string, error) {
 	}
 }
 
+// DialectFor 返回与配置驱动对应的 ent 方言字符串。未知驱动安全降级为 SQLite，
+// 供需要按方言分支生成 SQL 的服务层使用（例如 SegmentService 的 JSON 谓词）。
+func DialectFor(driver string) string {
+	_, entDialect, err := driverSettings(driver)
+	if err != nil {
+		return dialect.SQLite
+	}
+	return entDialect
+}
+
 func databaseError(driver, stage string, cause error) error {
 	detail := cause.Error()
 	if driver == config.DatabaseDriverPostgres {

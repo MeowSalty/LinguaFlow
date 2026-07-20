@@ -35,11 +35,14 @@ func (s *Server) handleListResourceSegments(w http.ResponseWriter, r *http.Reque
 	}
 
 	page, err := s.segmentSvc.ListResourceSegments(r.Context(), authUser.User.ID, projectID, resourceID, service.ResourceSegmentListOptions{
-		AfterID:  pageReq.AfterID,
-		Limit:    pageReq.Limit,
-		Status:   strings.TrimSpace(r.URL.Query().Get("status")),
-		Search:   strings.TrimSpace(r.URL.Query().Get("search")),
-		GroupKey: strings.TrimSpace(r.URL.Query().Get("group_key")),
+		AfterID:         pageReq.AfterID,
+		Limit:           pageReq.Limit,
+		Status:          strings.TrimSpace(r.URL.Query().Get("status")),
+		Search:          strings.TrimSpace(r.URL.Query().Get("search")),
+		GroupKey:        strings.TrimSpace(r.URL.Query().Get("group_key")),
+		QualityIssues:   strings.TrimSpace(r.URL.Query().Get("quality_issues")),
+		QualitySeverity: strings.TrimSpace(r.URL.Query().Get("quality_severity")),
+		QualityCode:     strings.TrimSpace(r.URL.Query().Get("quality_code")),
 	})
 	if err != nil {
 		s.writeReviewServiceError(w, r, err)
