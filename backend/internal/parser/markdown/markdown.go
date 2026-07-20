@@ -1,8 +1,7 @@
-// Package markdown 实现按段落分割的 Markdown parser。
+// Package markdown 实现基于 goldmark AST 的 Markdown parser。
 //
-// 位置替换策略：Parse 时记录每个 Segment 的行号范围（1-based），
-// Render 时读取原始文件行，按行号范围替换为译文。
-// 这样可以完美保留原始文件的所有格式细节（缩进、空行、换行符等）。
+// Parse 按叶子块（heading / paragraph / list item / table cell / blockquote）切段，
+// Meta 记录 md_byte_range 字节区间；Render 按区间做原始字节直通替换。
 package markdown
 
 import (
@@ -12,7 +11,8 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
-	"strings"
+	"log/slog"
+	"sort"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
@@ -25,131 +25,95 @@ func New() *Parser { return &Parser{} }
 func (*Parser) Extensions() []string { return []string{".md", ".markdown", ".mdx"} }
 
 func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error) {
-	scanner := bufio.NewScanner(r)
-	// 单行最长 1 MiB
-	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
-
-	var (
-		segments []pipeline.Segment
-		buf      strings.Builder
-		inFence  bool
-		segStart int // 当前段落起始行号（1-based）
-		lineNo   int // 当前行号（1-based）
-	)
-	flush := func(endLine int) {
-		if buf.Len() == 0 {
-			return
-		}
-		text := strings.TrimRight(buf.String(), "\n")
-		seg := pipeline.Segment{
-			ID:     shortHash(text),
-			Source: text,
-			Meta: map[string]any{
-				"pos_lines": []int{segStart, endLine},
-			},
-		}
-		segments = append(segments, seg)
-		buf.Reset()
+	raw, err := io.ReadAll(io.LimitReader(r, maxMarkdownBytes+1))
+	if err != nil {
+		return nil, fmt.Errorf("markdown: read: %w", err)
 	}
-
-	for scanner.Scan() {
-		lineNo++
-		line := scanner.Text()
-		trimmed := strings.TrimLeft(line, " \t")
-		if strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~") {
-			inFence = !inFence
-		}
-		if !inFence && strings.TrimSpace(line) == "" {
-			flush(lineNo - 1)
-			continue
-		}
-		if buf.Len() == 0 {
-			segStart = lineNo
-		}
-		buf.WriteString(line)
-		buf.WriteByte('\n')
+	if len(raw) > maxMarkdownBytes {
+		return nil, fmt.Errorf("markdown: file exceeds %d byte limit", maxMarkdownBytes)
 	}
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-	flush(lineNo)
 
 	return &pipeline.Document{
-		Segments: segments,
+		Segments: extractLeafSegments(raw),
 		Format:   "markdown",
 	}, nil
 }
 
 func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Reader, w io.Writer) error {
-	// 读取原始文件所有行
-	scanner := bufio.NewScanner(original)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1<<20)
-	var lines []string
-	for scanner.Scan() {
-		lines = append(lines, scanner.Text())
-	}
-	if err := scanner.Err(); err != nil {
+	raw, err := io.ReadAll(io.LimitReader(original, maxMarkdownBytes+1))
+	if err != nil {
 		return fmt.Errorf("markdown: read original: %w", err)
 	}
+	if len(raw) > maxMarkdownBytes {
+		return fmt.Errorf("markdown: original exceeds %d byte limit", maxMarkdownBytes)
+	}
 
-	// 构建行号 → 译文的替换区间
-	// pos_lines 是 [startLine, endLine]，1-based，inclusive
-	// 一个 segment 可能对应多行原文（如段落），替换时用译文的行替换这些行
 	type replacement struct {
-		startLine int    // 1-based inclusive
-		endLine   int    // 1-based inclusive
-		text      string // 译文（可能是多行）
+		start int
+		end   int
+		text  string
 	}
 	var replacements []replacement
 	for _, seg := range doc.Segments {
-		pos, ok := seg.Meta["pos_lines"].([]int)
+		if seg.Skip {
+			continue
+		}
+		pos, ok := seg.Meta["md_byte_range"].([]int)
 		if !ok || len(pos) < 2 {
+			continue
+		}
+		start, end := pos[0], pos[1]
+		if start < 0 || end < start || end > len(raw) {
 			continue
 		}
 		target := seg.Target
 		if target == "" {
 			target = seg.Source
 		}
+		// 防御性检查：本解析器产出的 Segment.Source 必非空（见 ast.go 的 src=="" 跳过），
+		// 但 Render 接受任意 *pipeline.Document；此处守卫可避免外部构造的空 Source/Target
+		// 段落把原始字节区间静默替换为空（即静默删除原文）。
+		if target == "" {
+			continue
+		}
 		replacements = append(replacements, replacement{
-			startLine: pos[0],
-			endLine:   pos[1],
-			text:      target,
+			start: start,
+			end:   end,
+			text:  target,
 		})
 	}
 
-	// 按行号范围替换
-	bw := bufio.NewWriter(w)
-	lineIdx := 0 // 0-based index into lines
+	sort.SliceStable(replacements, func(i, j int) bool {
+		return replacements[i].start < replacements[j].start
+	})
+
+	// 丢弃重叠区间（按排序顺序保留靠前的）。
+	filtered := replacements[:0]
+	lastEnd := 0
 	for _, rep := range replacements {
-		// 写入替换区间之前的行（原样）
-		for lineIdx < rep.startLine-1 && lineIdx < len(lines) {
-			if _, err := bw.WriteString(lines[lineIdx]); err != nil {
-				return err
-			}
-			if err := bw.WriteByte('\n'); err != nil {
-				return err
-			}
-			lineIdx++
+		if rep.start < lastEnd {
+			slog.Warn("markdown: overlapping md_byte_range, dropping",
+				"start", rep.start, "end", rep.end, "lastEnd", lastEnd)
+			continue
 		}
-		// 写入译文
+		filtered = append(filtered, rep)
+		lastEnd = rep.end
+	}
+	replacements = filtered
+
+	bw := bufio.NewWriter(w)
+	cursor := 0
+	for _, rep := range replacements {
+		if _, err := bw.Write(raw[cursor:rep.start]); err != nil {
+			return err
+		}
 		if _, err := bw.WriteString(rep.text); err != nil {
 			return err
 		}
-		if err := bw.WriteByte('\n'); err != nil {
-			return err
-		}
-		// 跳过原始行（已替换）
-		lineIdx = rep.endLine // endLine 是 1-based，所以 lineIdx 现在指向 endLine-1+1
+		cursor = rep.end
 	}
-	// 写入剩余行
-	for lineIdx < len(lines) {
-		if _, err := bw.WriteString(lines[lineIdx]); err != nil {
-			return err
-		}
-		if err := bw.WriteByte('\n'); err != nil {
-			return err
-		}
-		lineIdx++
+	if _, err := bw.Write(raw[cursor:]); err != nil {
+		return err
 	}
 	return bw.Flush()
 }
