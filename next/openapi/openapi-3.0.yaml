@@ -854,6 +854,34 @@ paths:
           schema:
             type: string
           description: 按分组键过滤 segments（如 epub_file 路径），仅返回属于指定分组的 segments
+        - name: quality_issues
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - has
+              - none
+          description: 按 quality_issues 过滤；has=仅有质量问题的段落，none=无质量问题的段落（NULL 或空数组均视为无问题）
+        - name: quality_severity
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - warning
+              - error
+          description: 按 quality_issues 中的 severity 过滤；指定时隐含仅返回含匹配问题的段落
+        - name: quality_code
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - untranslated
+              - length_ratio
+              - duplicate
+          description: 按 quality_issues 中的 code 过滤；指定时隐含仅返回含匹配问题的段落
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
       responses:
