@@ -321,7 +321,7 @@ export function useSegmentColumns(
       columns.push({
         title: t('workspace.common.updatedAt'),
         key: 'updated_at',
-        width: 90,
+        width: 95,
         render: (row) => {
           if (!row.updated_at) {
             return h('span', { class: 'text-lf-text-muted' }, t('workspace.common.noDate'))

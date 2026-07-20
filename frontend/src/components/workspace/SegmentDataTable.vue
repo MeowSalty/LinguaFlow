@@ -117,7 +117,7 @@ const columns = useSegmentColumns(configRef, deps)
 const scrollX = computed(() => {
   const base = 50 + 280 + 280 + 110 + 160 // index + source + target + status + actions
   const selection = props.showSelection ? 48 : 0
-  const updatedAt = props.showUpdatedAt ? 90 : 0
+  const updatedAt = props.showUpdatedAt ? 95 : 0
   return selection + base + updatedAt
 })
 
