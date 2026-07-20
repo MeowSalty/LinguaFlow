@@ -835,21 +835,25 @@ func diffSegments(oldSegments []*ent.Segment, newSegments []parsedResourceSegmen
 			oldQueue[key] = queue[1:]
 			matchedOldIDs[old.ID] = true
 
-			if strings.TrimSpace(old.SourceText) == strings.TrimSpace(newSeg.SourceText) {
-				// 源文本完全相同 → unchanged
+			// TrimSpace 比较仅用于匹配键：内容一致但原始字符存在差异（如首尾空白、
+			// 行尾换行）时走 updated，完全一致时才走 unchanged。
+			if old.SourceText == newSeg.SourceText {
+				// 源文本完全相同 → unchanged（仍刷新 Meta，避免字节区间漂移）
 				changes = append(changes, SegmentChange{
 					ChangeType: SegmentChangeUnchanged,
 					OldSegment: old,
 					NewIndex:   newSeg.Index,
 					NewSource:  newSeg.SourceText,
+					NewMeta:    newSeg.Meta,
 				})
 			} else {
-				// 源文本有细微差异 → updated
+				// 源文本有细微差异（如首尾空白/换行） → updated
 				changes = append(changes, SegmentChange{
 					ChangeType: SegmentChangeUpdated,
 					OldSegment: old,
 					NewIndex:   newSeg.Index,
 					NewSource:  newSeg.SourceText,
+					NewMeta:    newSeg.Meta,
 				})
 			}
 		} else {
@@ -990,21 +994,29 @@ func (s *ResourceService) applySegmentChanges(ctx context.Context, resourceID in
 	for _, c := range changes {
 		switch c.ChangeType {
 		case SegmentChangeUnchanged:
-			// 更新索引位置，保留译文
-			if _, err := s.client.Segment.UpdateOneID(c.OldSegment.ID).
-				SetSegmentIndex(c.NewIndex).
-				Save(ctx); err != nil {
+			// 更新索引位置与 Meta，保留译文
+			upd := s.client.Segment.UpdateOneID(c.OldSegment.ID).
+				SetSegmentIndex(c.NewIndex)
+			if c.NewMeta != nil {
+				metaJSON, _ := json.Marshal(c.NewMeta)
+				upd = upd.SetMeta(string(metaJSON))
+			}
+			if _, err := upd.Save(ctx); err != nil {
 				return err
 			}
 
 		case SegmentChangeUpdated:
-			// 更新索引和源文本，清空译文，重置状态
-			if _, err := s.client.Segment.UpdateOneID(c.OldSegment.ID).
+			// 更新索引、源文本与 Meta，清空译文，重置状态
+			upd := s.client.Segment.UpdateOneID(c.OldSegment.ID).
 				SetSegmentIndex(c.NewIndex).
 				SetSourceText(c.NewSource).
 				ClearTargetText().
-				SetStatus(SegmentStatusPending).
-				Save(ctx); err != nil {
+				SetStatus(SegmentStatusPending)
+			if c.NewMeta != nil {
+				metaJSON, _ := json.Marshal(c.NewMeta)
+				upd = upd.SetMeta(string(metaJSON))
+			}
+			if _, err := upd.Save(ctx); err != nil {
 				return err
 			}
 
