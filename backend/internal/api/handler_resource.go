@@ -264,9 +264,9 @@ func (s *Server) handlePrecheckProjectResources(w http.ResponseWriter, r *http.R
 		}
 		switch result.Action {
 		case "create":
-			item.Action = Create
+			item.Action = ResourcePrecheckFileResultActionCreate
 		case "conflict":
-			item.Action = Conflict
+			item.Action = ResourcePrecheckFileResultActionConflict
 			if result.ExistingResource != nil {
 				p := progressMap[result.ExistingResource.ID]
 				translated, approved := 0, 0
@@ -277,7 +277,7 @@ func (s *Server) handlePrecheckProjectResources(w http.ResponseWriter, r *http.R
 				item.ExistingResource = &gr
 			}
 		case "duplicate":
-			item.Action = Duplicate
+			item.Action = ResourcePrecheckFileResultActionDuplicate
 		}
 		respItems = append(respItems, item)
 	}
