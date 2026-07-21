@@ -48,9 +48,10 @@ const {
 } = useSegmentEditing(projectIdRef, activeResourceIdRef)
 
 // ── 文本渲染模式 ──
-const textRenderMode = computed<'plaintext' | 'html'>(() =>
-  workspace.isEpubResource ? 'html' : 'plaintext',
-)
+const textRenderMode = computed<'plaintext' | 'html'>(() => {
+  const format = workspace.activeResource?.format
+  return format === 'epub' || format === 'docx' ? 'html' : 'plaintext'
+})
 
 // ── 批量选择 ──
 const segmentDataTableRef = ref<InstanceType<typeof SegmentDataTable> | null>(null)
