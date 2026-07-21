@@ -7,6 +7,7 @@ import (
 	_ "github.com/MeowSalty/LinguaFlow/backend/internal/backend/anthropic"
 	_ "github.com/MeowSalty/LinguaFlow/backend/internal/backend/google"
 	_ "github.com/MeowSalty/LinguaFlow/backend/internal/backend/openai"
+	_ "github.com/MeowSalty/LinguaFlow/backend/internal/parser/docx"
 	_ "github.com/MeowSalty/LinguaFlow/backend/internal/parser/epub"
 	_ "github.com/MeowSalty/LinguaFlow/backend/internal/parser/jsonp"
 	_ "github.com/MeowSalty/LinguaFlow/backend/internal/parser/markdown"
