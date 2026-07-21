@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ziputil"
 )
 
 const wDocNS = `xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main"`
@@ -117,7 +118,7 @@ func roundTrip(t *testing.T, documentXML string, mutate func(*pipeline.Document)
 	if err != nil {
 		t.Fatalf("open out zip: %v", err)
 	}
-	outData, err := readZipFile(zr, documentXMLPath)
+	outData, err := ziputil.ReadEntry(zr, documentXMLPath, maxDecompressedEntrySize)
 	if err != nil {
 		t.Fatalf("read out document: %v", err)
 	}

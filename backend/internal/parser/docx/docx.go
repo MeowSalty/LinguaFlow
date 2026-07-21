@@ -9,7 +9,6 @@ package docx
 
 import (
 	"archive/zip"
-	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -18,14 +17,15 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ziputil"
 )
 
 // maxDOCXSize 是 DOCX 文件的最大允许大小（100MB）。
 const maxDOCXSize = 100 << 20
 
-// maxDecompressedEntrySize 是单个 ZIP 条目解压后的最大允许字节数。
-// 用于防御高压缩率 zip 炸弹：压缩流上限不能阻止解压后内存爆炸。
-const maxDecompressedEntrySize = 200 << 20
+// maxDecompressedEntrySize 引用共享的解压尺寸上限，用于需要全量读入内存的解析路径。
+// 原样直通的资产复制不走此限制。
+const maxDecompressedEntrySize = ziputil.MaxDecompressedEntrySize
 
 // documentXMLPath 是主文档在 ZIP 内的路径。
 const documentXMLPath = "word/document.xml"
@@ -41,21 +41,12 @@ func (*Parser) Extensions() []string { return []string{".docx"} }
 
 // Parse 将 DOCX 文件解析为 Document。
 func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error) {
-	lr := io.LimitReader(r, maxDOCXSize+1)
-	data, err := io.ReadAll(lr)
-	if err != nil {
-		return nil, fmt.Errorf("docx: read: %w", err)
-	}
-	if int64(len(data)) > maxDOCXSize {
-		return nil, fmt.Errorf("docx: file too large (max %d MB)", maxDOCXSize>>20)
-	}
-
-	zipReader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	zipReader, err := ziputil.OpenZip(r, maxDOCXSize)
 	if err != nil {
 		return nil, fmt.Errorf("docx: open zip: %w", err)
 	}
 
-	docData, err := readZipFile(zipReader, documentXMLPath)
+	docData, err := ziputil.ReadEntry(zipReader, documentXMLPath, maxDecompressedEntrySize)
 	if err != nil {
 		return nil, fmt.Errorf("docx: read %s: %w", documentXMLPath, err)
 	}
@@ -76,16 +67,7 @@ func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error)
 //
 // 仅重写 word/document.xml，其余条目原样复制。
 func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Reader, w io.Writer) error {
-	lr := io.LimitReader(original, maxDOCXSize+1)
-	data, err := io.ReadAll(lr)
-	if err != nil {
-		return fmt.Errorf("docx: read original: %w", err)
-	}
-	if int64(len(data)) > maxDOCXSize {
-		return fmt.Errorf("docx: file too large (max %d MB)", maxDOCXSize>>20)
-	}
-
-	zipReader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	zipReader, err := ziputil.OpenZip(original, maxDOCXSize)
 	if err != nil {
 		return fmt.Errorf("docx: open zip: %w", err)
 	}
@@ -98,23 +80,32 @@ func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Rea
 	for _, file := range zipReader.File {
 		clean := path.Clean(file.Name)
 		if clean == documentXMLPath || file.Name == documentXMLPath {
-			translated, err := renderDocumentXMLFromFile(file, segmentsByPath)
+			raw, err := ziputil.ReadFile(file, maxDecompressedEntrySize)
+			if err != nil {
+				// 读取 document.xml 失败（含解压超限）属于硬错误：
+				// 无法翻译则不应静默产出无译文文档。直接返回，避免
+				// 用相同限制再走一次必然失败的复制。
+				writeErr = fmt.Errorf("docx: read %s: %w", file.Name, err)
+				break
+			}
+			translated, err := renderDocumentXML(raw, segmentsByPath)
 			if err != nil {
 				slog.Error("[docx:render] renderDocumentXML failed, fallback to copy",
 					"error", err, "file", file.Name)
-				if cErr := copyZipEntry(zipWriter, file); cErr != nil {
+				if cErr := ziputil.CopyEntryUnbounded(zipWriter, file); cErr != nil {
 					writeErr = fmt.Errorf("docx: copy fallback for %s: %w", file.Name, cErr)
 					break
 				}
 				continue
 			}
-			if err := writeZipEntry(zipWriter, file.Name, translated, file.Method); err != nil {
+			if err := ziputil.WriteEntry(zipWriter, file.Name, translated, file.Method); err != nil {
 				writeErr = fmt.Errorf("docx: write translated %s: %w", file.Name, err)
 				break
 			}
 			continue
 		}
-		if err := copyZipEntry(zipWriter, file); err != nil {
+		// 非主文档条目 → 原样复制（资产不经解析，不解压进内存，无炸弹风险）
+		if err := ziputil.CopyEntryUnbounded(zipWriter, file); err != nil {
 			writeErr = fmt.Errorf("docx: copy %s: %w", file.Name, err)
 			break
 		}
@@ -126,19 +117,6 @@ func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Rea
 		}
 	}
 	return writeErr
-}
-
-func renderDocumentXMLFromFile(file *zip.File, segmentsByPath map[string][]pipeline.Segment) ([]byte, error) {
-	rc, err := file.Open()
-	if err != nil {
-		return nil, err
-	}
-	defer rc.Close()
-	raw, err := readBounded(rc)
-	if err != nil {
-		return nil, err
-	}
-	return renderDocumentXML(raw, segmentsByPath)
 }
 
 func groupSegmentsByPath(segments []pipeline.Segment) map[string][]pipeline.Segment {
@@ -155,70 +133,6 @@ func groupSegmentsByPath(segments []pipeline.Segment) map[string][]pipeline.Segm
 		m[ep] = append(m[ep], seg)
 	}
 	return m
-}
-
-func readZipFile(zr *zip.Reader, name string) ([]byte, error) {
-	clean := path.Clean(name)
-	for _, f := range zr.File {
-		if path.Clean(f.Name) == clean || f.Name == name {
-			rc, err := f.Open()
-			if err != nil {
-				return nil, err
-			}
-			data, err := readBounded(rc)
-			rc.Close()
-			return data, err
-		}
-	}
-	return nil, fmt.Errorf("entry %q not found", name)
-}
-
-func copyZipEntry(zw *zip.Writer, src *zip.File) error {
-	rc, err := src.Open()
-	if err != nil {
-		return err
-	}
-	defer rc.Close()
-	w, err := zw.CreateHeader(&src.FileHeader)
-	if err != nil {
-		return err
-	}
-	lr := io.LimitReader(rc, maxDecompressedEntrySize+1)
-	n, err := io.Copy(w, lr)
-	if err != nil {
-		return err
-	}
-	if n > maxDecompressedEntrySize {
-		return fmt.Errorf("docx: entry %q decompressed size exceeds %d bytes", src.Name, maxDecompressedEntrySize)
-	}
-	return nil
-}
-
-// readBounded 读取 r 的全部内容，但限制解压后不超过 maxDecompressedEntrySize。
-// 用于防御 zip 解压炸弹：压缩流上限无法阻止解压后内存爆炸。
-func readBounded(r io.Reader) ([]byte, error) {
-	lr := io.LimitReader(r, maxDecompressedEntrySize+1)
-	data, err := io.ReadAll(lr)
-	if err != nil {
-		return nil, err
-	}
-	if int64(len(data)) > maxDecompressedEntrySize {
-		return nil, fmt.Errorf("docx: decompressed entry exceeds %d bytes", maxDecompressedEntrySize)
-	}
-	return data, nil
-}
-
-func writeZipEntry(zw *zip.Writer, name string, data []byte, method uint16) error {
-	header := &zip.FileHeader{
-		Name:   name,
-		Method: method,
-	}
-	w, err := zw.CreateHeader(header)
-	if err != nil {
-		return err
-	}
-	_, err = w.Write(data)
-	return err
 }
 
 func init() {

@@ -12,6 +12,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/xml"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -19,10 +20,15 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ziputil"
 )
 
 // maxEPUBSize 是 EPUB 文件的最大允许大小（100MB）。
 const maxEPUBSize = 100 << 20
+
+// maxDecompressedEntrySize 引用共享的解压尺寸上限，用于需要全量读入内存的解析路径。
+// 原样直通的资产复制不走此限制。
+const maxDecompressedEntrySize = ziputil.MaxDecompressedEntrySize
 
 // Parser 实现 EPUB 格式的解析和渲染。
 type Parser struct{}
@@ -35,35 +41,25 @@ func (*Parser) Extensions() []string { return []string{".epub"} }
 
 // Parse 将 EPUB 文件解析为 Document，包含按 spine 顺序排列的 Segment 列表。
 func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error) {
-	// 1. 读取全部字节（添加 100MB 大小限制保护）
-	lr := io.LimitReader(r, maxEPUBSize+1)
-	data, err := io.ReadAll(lr)
-	if err != nil {
-		return nil, fmt.Errorf("epub: read: %w", err)
-	}
-	if int64(len(data)) > maxEPUBSize {
-		return nil, fmt.Errorf("epub: file too large (max %d MB)", maxEPUBSize>>20)
-	}
-
-	// 2. 打开 ZIP
-	zipReader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	// 1. 打开 ZIP（优先零拷贝）
+	zipReader, err := ziputil.OpenZip(r, maxEPUBSize)
 	if err != nil {
 		return nil, fmt.Errorf("epub: open zip: %w", err)
 	}
 
-	// 3. DRM 检测
+	// 2. DRM 检测
 	if err := checkDRM(zipReader); err != nil {
 		return nil, err
 	}
 
-	// 4. 解析 container.xml → 定位 OPF 文件路径
+	// 3. 解析 container.xml → 定位 OPF 文件路径
 	opfPath, err := findOPFPath(zipReader)
 	if err != nil {
 		return nil, fmt.Errorf("epub: find opf: %w", err)
 	}
 	slog.Debug("[epub:parse] opf path", "path", opfPath)
 
-	// 5. 解析 content.opf → 获取 spine 顺序和元数据
+	// 4. 解析 content.opf → 获取 spine 顺序和元数据
 	spine, err := parseSpine(zipReader, opfPath)
 	if err != nil {
 		return nil, fmt.Errorf("epub: parse spine: %w", err)
@@ -82,7 +78,7 @@ func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error)
 
 	metadata := extractMetadata(zipReader, opfPath)
 
-	// 6. 从 NCX 文件提取章节标题映射
+	// 5. 从 NCX 文件提取章节标题映射
 	ncxTitles := make(map[string]string)
 	if ncxPath, ok := findNCXPath(zipReader, opfPath); ok {
 		ncxTitles = extractNCXTitles(zipReader, ncxPath)
@@ -91,7 +87,7 @@ func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error)
 		slog.Debug("[epub:parse] no ncx file found")
 	}
 
-	// 7. 按 spine 顺序遍历 XHTML 文件
+	// 6. 按 spine 顺序遍历 XHTML 文件
 	// 先收集 XHTML TOC 标题（从目录文件中的 <a> 链接提取）
 	xhtmlTOCTitles := make(map[string]string)
 	var segments []pipeline.Segment
@@ -108,9 +104,16 @@ func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error)
 			continue
 		}
 
-		xhtmlData, err := readZipFile(zipReader, item.Href)
+		xhtmlData, err := ziputil.ReadEntry(zipReader, item.Href, maxDecompressedEntrySize)
 		if err != nil {
-			slog.Debug("[epub:parse] readZipFile failed", "href", item.Href, "error", err)
+			// 大小超限意味着章节内容会丢失，用 Warn 暴露给运维；
+			// 其他读取错误（条目缺失等）保持 Debug，与历史行为一致。
+			if isSizeLimitErr(err) {
+				slog.Warn("[epub:parse] chapter skipped due to decompressed size limit",
+					"href", item.Href, "limit", maxDecompressedEntrySize, "error", err)
+			} else {
+				slog.Debug("[epub:parse] ReadEntry failed", "href", item.Href, "error", err)
+			}
 			continue // 跳过无法读取的文件
 		}
 
@@ -155,7 +158,7 @@ func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error)
 		segments = append(segments, fileSegments...)
 	}
 
-	// 8. 处理不在 spine 中的 EPUB3 导航文件（如 navigation-documents.xhtml）
+	// 7. 处理不在 spine 中的 EPUB3 导航文件（如 navigation-documents.xhtml）
 	navFiles := findNavFiles(zipReader, opfPath)
 	for _, nav := range navFiles {
 		navHref := path.Clean(nav.Href)
@@ -165,7 +168,7 @@ func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error)
 			continue
 		}
 
-		xhtmlData, err := readZipFile(zipReader, nav.Href)
+		xhtmlData, err := ziputil.ReadEntry(zipReader, nav.Href, maxDecompressedEntrySize)
 		if err != nil {
 			slog.Debug("[epub:parse] readNavFile failed", "href", nav.Href, "error", err)
 			continue
@@ -214,17 +217,8 @@ func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error)
 // 读取原始 EPUB，按 Segment 的 element_path 或 content_hash 定位块级元素，
 // 替换为译文后重新打包为 EPUB。保持 EPUB ZIP 规范合规（mimetype 在首位且不压缩）。
 func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Reader, w io.Writer) error {
-	// 1. 读取原始 EPUB（添加大小限制保护）
-	lr := io.LimitReader(original, maxEPUBSize+1)
-	data, err := io.ReadAll(lr)
-	if err != nil {
-		return fmt.Errorf("epub: read original: %w", err)
-	}
-	if int64(len(data)) > maxEPUBSize {
-		return fmt.Errorf("epub: file too large (max %d MB)", maxEPUBSize>>20)
-	}
-
-	zipReader, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+	// 1. 打开原始 EPUB（优先零拷贝）
+	zipReader, err := ziputil.OpenZip(original, maxEPUBSize)
 	if err != nil {
 		return fmt.Errorf("epub: open zip: %w", err)
 	}
@@ -252,7 +246,6 @@ func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Rea
 
 	// 4. 创建输出 ZIP
 	zipWriter := zip.NewWriter(w)
-	defer zipWriter.Close()
 
 	// 诊断日志：输出 segmentsByFile 和 spFiles 的 key 集合
 	slog.Debug("[epub:render] spFiles keys", "keys", mapKeys(spFiles))
@@ -267,11 +260,13 @@ func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Rea
 		}
 	}
 
+	var writeErr error
 	for _, file := range zipReader.File {
 		// mimetype 必须是第一个条目且不压缩（EPUB 规范要求）
 		if file.Name == "mimetype" {
 			if err := writeMimetype(zipWriter, file); err != nil {
-				return fmt.Errorf("epub: write mimetype: %w", err)
+				writeErr = fmt.Errorf("epub: write mimetype: %w", err)
+				break
 			}
 			continue
 		}
@@ -289,27 +284,35 @@ func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Rea
 			if err != nil {
 				// 降级：写入原始内容
 				slog.Debug("[epub:render] renderXHTML failed, fallback to copy", "file", file.Name, "error", err)
-				if cErr := copyZipEntry(zipWriter, file); cErr != nil {
-					return fmt.Errorf("epub: copy fallback for %s: %w", file.Name, cErr)
+				if cErr := ziputil.CopyEntryUnbounded(zipWriter, file); cErr != nil {
+					writeErr = fmt.Errorf("epub: copy fallback for %s: %w", file.Name, cErr)
+					break
 				}
 				continue
 			}
 			slog.Debug("[epub:render] renderXHTML OK", "file", file.Name, "bytes", len(translated))
-			if err := writeZipEntry(zipWriter, file.Name, translated, file.Method); err != nil {
-				return fmt.Errorf("epub: write translated %s: %w", file.Name, err)
+			if err := ziputil.WriteEntry(zipWriter, file.Name, translated, file.Method); err != nil {
+				writeErr = fmt.Errorf("epub: write translated %s: %w", file.Name, err)
+				break
 			}
 		} else {
-			// 非章节文件 → 原样复制
+			// 非章节文件 → 原样复制（资产不经解析，不解压进内存，无炸弹风险）
 			if (inSpine || inNav) && !hasSegments {
 				slog.Debug("[epub:render] file has no segments", "path", filePath, "segmentsByFileKeys", mapStringKeys(segmentsByFile))
 			}
-			if err := copyZipEntry(zipWriter, file); err != nil {
-				return fmt.Errorf("epub: copy %s: %w", file.Name, err)
+			if err := ziputil.CopyEntryUnbounded(zipWriter, file); err != nil {
+				writeErr = fmt.Errorf("epub: copy %s: %w", file.Name, err)
+				break
 			}
 		}
 	}
 
-	return nil
+	if cErr := zipWriter.Close(); cErr != nil {
+		if writeErr == nil {
+			writeErr = fmt.Errorf("epub: close zip: %w", cErr)
+		}
+	}
+	return writeErr
 }
 
 // checkDRM 检测 EPUB 是否包含 DRM 保护。
@@ -323,18 +326,17 @@ func checkDRM(zr *zip.Reader) error {
 	return nil
 }
 
+// isSizeLimitErr 判断是否为解压尺寸超限错误（用于区分“章节被丢弃”与普通读取失败）。
+func isSizeLimitErr(err error) bool {
+	return errors.Is(err, ziputil.ErrDecompressedSizeExceeded)
+}
+
 // renderXHTML 对单个 XHTML 文件执行译文替换。
 //
 // 使用 encoding/xml 的 Token 流式处理，按 element_path 定位目标块级元素，
 // 将其子节点替换为译文。采用原始字节直通方式保留原始格式。
 func renderXHTML(file *zip.File, segments []pipeline.Segment) ([]byte, error) {
-	rc, err := file.Open()
-	if err != nil {
-		return nil, fmt.Errorf("open xhtml %s: %w", file.Name, err)
-	}
-	defer rc.Close()
-
-	raw, err := io.ReadAll(rc)
+	raw, err := ziputil.ReadFile(file, maxDecompressedEntrySize)
 	if err != nil {
 		return nil, fmt.Errorf("read xhtml %s: %w", file.Name, err)
 	}
@@ -493,13 +495,7 @@ func spineFileSet(spine []SpineItem) map[string]bool {
 
 // writeMimetype 将 mimetype 条目写入 ZIP 的第一个位置，不压缩。
 func writeMimetype(zw *zip.Writer, original *zip.File) error {
-	// 读取原始 mimetype 内容
-	rc, err := original.Open()
-	if err != nil {
-		return err
-	}
-	defer rc.Close()
-	data, err := io.ReadAll(rc)
+	data, err := ziputil.ReadFile(original, maxDecompressedEntrySize)
 	if err != nil {
 		return err
 	}
@@ -511,37 +507,6 @@ func writeMimetype(zw *zip.Writer, original *zip.File) error {
 	}
 	header.SetModTime(original.Modified)
 
-	w, err := zw.CreateHeader(header)
-	if err != nil {
-		return err
-	}
-	_, err = w.Write(data)
-	return err
-}
-
-// copyZipEntry 将 ZIP 条目原样复制到目标 ZIP。
-func copyZipEntry(zw *zip.Writer, src *zip.File) error {
-	rc, err := src.Open()
-	if err != nil {
-		return err
-	}
-	defer rc.Close()
-
-	// 使用原始文件头
-	w, err := zw.CreateHeader(&src.FileHeader)
-	if err != nil {
-		return err
-	}
-	_, err = io.Copy(w, rc)
-	return err
-}
-
-// writeZipEntry 将内容写入 ZIP 条目，使用指定的压缩方法。
-func writeZipEntry(zw *zip.Writer, name string, data []byte, method uint16) error {
-	header := &zip.FileHeader{
-		Name:   name,
-		Method: method,
-	}
 	w, err := zw.CreateHeader(header)
 	if err != nil {
 		return err
