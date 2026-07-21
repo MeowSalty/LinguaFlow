@@ -24,7 +24,7 @@ func New() *Parser { return &Parser{} }
 
 func (*Parser) Extensions() []string { return []string{".md", ".markdown", ".mdx"} }
 
-func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error) {
+func (*Parser) Parse(_ context.Context, r io.Reader, _ string) (*pipeline.Document, error) {
 	raw, err := io.ReadAll(io.LimitReader(r, maxMarkdownBytes+1))
 	if err != nil {
 		return nil, fmt.Errorf("markdown: read: %w", err)

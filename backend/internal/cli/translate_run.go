@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -343,7 +344,8 @@ func translateSingleFile(ctx context.Context, eng *engine.Engine, fj FileJob, so
 	if err != nil {
 		return fmt.Errorf("cli: open source: %w", err)
 	}
-	doc, parseErr := p.Parse(ctx, reader)
+	format := strings.TrimPrefix(strings.ToLower(filepath.Ext(fj.InputPath)), ".")
+	doc, parseErr := p.Parse(ctx, reader, format)
 	reader.Close()
 	if parseErr != nil {
 		return fmt.Errorf("cli: parse: %w", parseErr)

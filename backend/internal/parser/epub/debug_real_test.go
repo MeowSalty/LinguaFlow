@@ -86,7 +86,7 @@ import (
 // 	p := newParser()
 
 // 	// Parse
-// 	doc, err := p.Parse(context.Background(), bytes.NewReader(epubData))
+// 	doc, err := p.Parse(context.Background(), bytes.NewReader(epubData), "epub")
 // 	if err != nil {
 // 		t.Fatalf("Parse error: %v", err)
 // 	}
@@ -111,7 +111,7 @@ import (
 // 	}
 
 // 	// Re-parse
-// 	doc2, err := p.Parse(context.Background(), bytes.NewReader(rendered.Bytes()))
+// 	doc2, err := p.Parse(context.Background(), bytes.NewReader(rendered.Bytes()), "epub")
 // 	if err != nil {
 // 		t.Fatalf("Re-parse error: %v", err)
 // 	}

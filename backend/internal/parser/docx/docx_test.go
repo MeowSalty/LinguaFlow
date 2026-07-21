@@ -88,7 +88,7 @@ func parseDOCX(t *testing.T, documentXML string) *pipeline.Document {
 	t.Helper()
 	data := createTestDOCX(t, documentXML)
 	p := New()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data), "docx")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -99,7 +99,7 @@ func roundTrip(t *testing.T, documentXML string, mutate func(*pipeline.Document)
 	t.Helper()
 	data := createTestDOCX(t, documentXML)
 	p := New()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data), "docx")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}
@@ -417,7 +417,7 @@ func TestRender_FallbackCopyOnMalformed(t *testing.T) {
 	xmlIn := wrapBody(para(run("", "Hello")))
 	data := createTestDOCX(t, xmlIn)
 	p := New()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data), "docx")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -40,7 +40,7 @@ func New() *Parser { return &Parser{} }
 func (*Parser) Extensions() []string { return []string{".epub"} }
 
 // Parse 将 EPUB 文件解析为 Document，包含按 spine 顺序排列的 Segment 列表。
-func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error) {
+func (*Parser) Parse(_ context.Context, r io.Reader, _ string) (*pipeline.Document, error) {
 	// 1. 打开 ZIP（优先零拷贝）
 	zipReader, err := ziputil.OpenZip(r, maxEPUBSize)
 	if err != nil {

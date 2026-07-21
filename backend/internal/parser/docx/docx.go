@@ -40,7 +40,7 @@ func New() *Parser { return &Parser{} }
 func (*Parser) Extensions() []string { return []string{".docx"} }
 
 // Parse 将 DOCX 文件解析为 Document。
-func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error) {
+func (*Parser) Parse(_ context.Context, r io.Reader, _ string) (*pipeline.Document, error) {
 	zipReader, err := ziputil.OpenZip(r, maxDOCXSize)
 	if err != nil {
 		return nil, fmt.Errorf("docx: open zip: %w", err)
