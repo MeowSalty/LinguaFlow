@@ -61,6 +61,12 @@ OpenAIBackendOptions:
         - 不设置: 使用 API 默认值（通常为 1.0）
         - 1.0: 不限制
         - 0.9: 仅考虑累积概率前 90% 的 token
+    stream:
+      type: boolean
+      default: false
+      description: |
+        设为 true 时以流式发起请求并在内部累积为完整响应后返回，
+        适用于只接受 stream:true 的兼容网关。默认 false。
 
 AnthropicBackendOptions:
   type: object
@@ -119,6 +125,12 @@ AnthropicBackendOptions:
         启用提示缓存（Prompt Caching）。
         启用后，system prompt会被标记为ephemeral缓存断点，
         可显著降低重复翻译任务的token消耗和延迟。
+    stream:
+      type: boolean
+      default: false
+      description: |
+        设为 true 时以流式发起请求并在内部累积为完整响应后返回，
+        适用于只接受 stream:true 的兼容网关。默认 false。
 
 GoogleBackendOptions:
   type: object
@@ -170,6 +182,12 @@ GoogleBackendOptions:
         核采样参数，控制采样多样性。
         - 不设置: 使用 API 默认值（通常为 1.0）
         - 1.0: 不限制
+    stream:
+      type: boolean
+      default: false
+      description: |
+        设为 true 时以流式发起请求并在内部累积为完整响应后返回，
+        适用于只接受 stream:true 的兼容网关。默认 false。
 
 BackendOptions:
   oneOf:
