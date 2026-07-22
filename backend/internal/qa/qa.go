@@ -52,6 +52,8 @@ type Config struct {
 	LengthMethod   LengthMethod
 	LengthRatioMin float64
 	LengthRatioMax float64
+	SourceLang     string
+	TargetLang     string
 }
 
 // DefaultConfig 返回默认的 QA 配置。
@@ -85,6 +87,7 @@ func NewEngine(cfg Config, logger *slog.Logger) *Engine {
 		NewUntranslatedChecker(),
 		NewLengthRatioChecker(cfg.LengthRatioMin, cfg.LengthRatioMax, cfg.LengthMethod),
 		NewDuplicateTranslationChecker(),
+		NewSourceResidualChecker(cfg.SourceLang, cfg.TargetLang),
 	}
 	return e
 }
