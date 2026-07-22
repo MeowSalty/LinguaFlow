@@ -50,7 +50,7 @@ const {
 // ── 文本渲染模式 ──
 const textRenderMode = computed<'plaintext' | 'html'>(() => {
   const format = workspace.activeResource?.format
-  return format === 'epub' || format === 'docx' ? 'html' : 'plaintext'
+  return format === 'epub' || format === 'docx' || format === 'html' ? 'html' : 'plaintext'
 })
 
 // ── 批量选择 ──
