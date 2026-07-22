@@ -213,7 +213,7 @@ QualityIssue:
       enum: [warning, error]
     code:
       type: string
-      description: 问题代码（untranslated, length_ratio, duplicate）
+      description: 问题代码（untranslated, length_ratio, duplicate, source_residual）
     message:
       type: string
 

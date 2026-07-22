@@ -303,7 +303,7 @@ projectResourceSegments:
         required: false
         schema:
           type: string
-          enum: [untranslated, length_ratio, duplicate]
+          enum: [untranslated, length_ratio, duplicate, source_residual]
         description: 按 quality_issues 中的 code 过滤；指定时隐含仅返回含匹配问题的段落
       - $ref: '../base.yaml#/components/parameters/Cursor'
       - $ref: '../base.yaml#/components/parameters/Limit'
