@@ -6,12 +6,8 @@ import (
 	"runtime/debug"
 
 	"github.com/spf13/cobra"
-)
 
-// Version 由构建时通过 -ldflags 注入；默认值为 dev。
-var (
-	Version = "dev"
-	Commit  = "unknown"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/version"
 )
 
 func newVersionCmd() *cobra.Command {
@@ -19,7 +15,7 @@ func newVersionCmd() *cobra.Command {
 		Use:   "version",
 		Short: "打印版本信息",
 		Run: func(_ *cobra.Command, _ []string) {
-			commit := Commit
+			commit := version.Commit
 			if commit == "unknown" {
 				if info, ok := debug.ReadBuildInfo(); ok {
 					for _, s := range info.Settings {
@@ -31,7 +27,7 @@ func newVersionCmd() *cobra.Command {
 				}
 			}
 			fmt.Printf("linguaflow %s (commit %s) %s/%s %s\n",
-				Version, commit, runtime.GOOS, runtime.GOARCH, runtime.Version())
+				version.ResolvedVersion(), commit, runtime.GOOS, runtime.GOARCH, runtime.Version())
 		},
 	}
 }
