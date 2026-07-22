@@ -13,6 +13,7 @@ require (
 	github.com/jackc/pgx/v5 v5.9.2
 	github.com/oapi-codegen/runtime v1.4.0
 	github.com/openai/openai-go/v3 v3.30.0
+	github.com/pelletier/go-toml/v2 v2.3.0
 	github.com/schollz/progressbar/v3 v3.19.0
 	github.com/spf13/cobra v1.10.2
 	github.com/yuin/goldmark v1.8.2

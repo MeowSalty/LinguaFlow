@@ -3,13 +3,27 @@ package jsonp
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"strconv"
 	"strings"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
+	toml "github.com/pelletier/go-toml/v2"
+	"gopkg.in/yaml.v3"
 )
 
-// detectFormat 根据内容前导字符检测结构化格式。
+// normalizeFormat 归一化格式提示：去前导点、小写、yml→yaml；空串保持空。
+func normalizeFormat(format string) string {
+	format = strings.TrimSpace(format)
+	format = strings.TrimPrefix(format, ".")
+	format = strings.ToLower(format)
+	if format == "yml" {
+		return "yaml"
+	}
+	return format
+}
+
+// detectFormat 根据内容试解析检测结构化格式（仅在无 format 提示时兜底）。
 func detectFormat(content string) string {
 	trimmed := strings.TrimSpace(content)
 	if trimmed == "" {
@@ -18,16 +32,63 @@ func detectFormat(content string) string {
 
 	first := trimmed[0]
 	switch {
-	case first == '{' || first == '[':
+	case first == '{':
 		return "json"
+	case first == '[':
+		// JSON 数组 vs TOML [table]
+		var j any
+		if json.Unmarshal([]byte(trimmed), &j) == nil {
+			return "json"
+		}
+		var t any
+		if toml.Unmarshal([]byte(trimmed), &t) == nil {
+			return "toml"
+		}
+		return "yaml"
 	case first == '#':
-		// TOML 可能以 #（注释）或 [table] 开头
-		// YAML 也可以用 # 开头，此处保守返回 toml
-		// 若解析失败会在 Parse 中回退
-		return "toml"
+		// TOML #comment vs YAML #comment
+		var t any
+		if toml.Unmarshal([]byte(trimmed), &t) == nil {
+			return "toml"
+		}
+		return "yaml"
 	default:
+		// key = value 形似 TOML；key: value 形似 YAML
+		if preferTOMLByEquals(trimmed) {
+			var t any
+			if toml.Unmarshal([]byte(trimmed), &t) == nil {
+				return "toml"
+			}
+		}
+		var y any
+		if yaml.Unmarshal([]byte(trimmed), &y) == nil {
+			return "yaml"
+		}
+		var t any
+		if toml.Unmarshal([]byte(trimmed), &t) == nil {
+			return "toml"
+		}
 		return "yaml"
 	}
+}
+
+// preferTOMLByEquals 若存在含 = 且 = 前无 : 的行，优先尝试 TOML。
+func preferTOMLByEquals(content string) bool {
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+		eq := strings.IndexByte(line, '=')
+		if eq <= 0 {
+			continue
+		}
+		if strings.IndexByte(line[:eq], ':') >= 0 {
+			continue
+		}
+		return true
+	}
+	return false
 }
 
 // collectStrings 递归遍历树，收集所有非空字符串值为 Segment。
@@ -59,7 +120,7 @@ func collectStrings(v any, path string, segments *[]pipeline.Segment) {
 			},
 		})
 	}
-	// 其他类型（number, bool, nil）不可翻译，忽略
+	// 其他类型（number, bool, nil, time.Time）不可翻译，忽略
 }
 
 // buildTranslatedTree 递归构建翻译后的新树，不修改原始树。
@@ -88,7 +149,7 @@ func buildTranslatedTree(v any, path string, lookup map[string]string) any {
 		}
 		return val
 	default:
-		// number, bool, nil — 原样返回
+		// number, bool, nil, time.Time — 原样返回
 		return val
 	}
 }

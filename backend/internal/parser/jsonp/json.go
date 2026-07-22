@@ -6,11 +6,17 @@
 //	Render 时从原始文件重新解析为树，按 path 替换字符串值，再重新序列化。
 //	这样可以避免 Parse 时序列化信息丢失（如 YAML 注释），也不再需要 Vars["_tree"]。
 //
+// 格式选择
+//
+//	Parse 优先信任调用方传入的 format 提示（扩展名来源，去点小写）；
+//	仅当 format 为空时回退 detectFormat 内容探测。
+//	Render 使用 doc.Format；为空时同样回退 detectFormat。
+//
 // 已知限制
 //
-//   - YAML 注释无法保留（gopkg.in/yaml.v3 的 Node 类型可保留注释，
-//     但当前使用通用 interface{} 反序列化）。
-//   - TOML 格式暂未实现。
+//   - YAML / TOML 注释无法保留（通用 interface{} 反序列化）。
+//   - 键序 round-trip 后可能变化（map 序列化由库决定）。
+//   - TOML 日期时间类型（time.Time）为非字符串叶子，不进入翻译段，渲染时原样保留。
 package jsonp
 
 import (
@@ -23,6 +29,7 @@ import (
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/parser"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
+	toml "github.com/pelletier/go-toml/v2"
 	"gopkg.in/yaml.v3"
 )
 
@@ -35,20 +42,27 @@ func New() *Parser { return &Parser{} }
 // Extensions 返回支持的结构化格式扩展名。
 func (*Parser) Extensions() []string { return []string{".json", ".yaml", ".yml", ".toml"} }
 
-// Parse 读取输入，检测格式，解析为通用树并收集所有字符串叶子节点作为 Segment。
-func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error) {
+// Parse 读取输入，按 format 提示（或内容探测）解析为通用树并收集字符串叶子节点。
+func (*Parser) Parse(_ context.Context, r io.Reader, format string) (*pipeline.Document, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, fmt.Errorf("jsonp: read input: %w", err)
 	}
 	content := strings.TrimSpace(string(data))
+	fmtName := normalizeFormat(format)
 	if content == "" {
-		return &pipeline.Document{Format: "json"}, nil
+		if fmtName == "" {
+			fmtName = "json"
+		}
+		return &pipeline.Document{Format: fmtName}, nil
 	}
 
-	format := detectFormat(content)
+	if fmtName == "" {
+		fmtName = detectFormat(content)
+	}
+
 	var root any
-	switch format {
+	switch fmtName {
 	case "json":
 		if err := json.Unmarshal([]byte(content), &root); err != nil {
 			return nil, fmt.Errorf("jsonp: json parse: %w", err)
@@ -58,9 +72,11 @@ func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error)
 			return nil, fmt.Errorf("jsonp: yaml parse: %w", err)
 		}
 	case "toml":
-		return nil, fmt.Errorf("jsonp: toml not yet implemented")
+		if err := toml.Unmarshal([]byte(content), &root); err != nil {
+			return nil, fmt.Errorf("jsonp: toml parse: %w", err)
+		}
 	default:
-		return nil, fmt.Errorf("jsonp: unknown format %q", format)
+		return nil, fmt.Errorf("jsonp: unknown format %q", fmtName)
 	}
 
 	var segments []pipeline.Segment
@@ -68,7 +84,7 @@ func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error)
 
 	return &pipeline.Document{
 		Segments: segments,
-		Format:   format,
+		Format:   fmtName,
 	}, nil
 }
 
@@ -98,7 +114,11 @@ func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Rea
 		return nil
 	}
 
-	format := detectFormat(content)
+	format := normalizeFormat(strings.TrimSpace(doc.Format))
+	if format == "" {
+		format = detectFormat(content)
+	}
+
 	var root any
 	switch format {
 	case "json":
@@ -108,6 +128,10 @@ func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Rea
 	case "yaml":
 		if err := yaml.Unmarshal([]byte(content), &root); err != nil {
 			return fmt.Errorf("jsonp: yaml parse original: %w", err)
+		}
+	case "toml":
+		if err := toml.Unmarshal([]byte(content), &root); err != nil {
+			return fmt.Errorf("jsonp: toml parse original: %w", err)
 		}
 	default:
 		return fmt.Errorf("jsonp: unsupported format %q for render", format)
@@ -132,6 +156,11 @@ func (*Parser) Render(_ context.Context, doc *pipeline.Document, original io.Rea
 		enc.SetIndent(2)
 		if err := enc.Encode(translated); err != nil {
 			return fmt.Errorf("jsonp: yaml encode: %w", err)
+		}
+	case "toml":
+		enc := toml.NewEncoder(bw)
+		if err := enc.Encode(translated); err != nil {
+			return fmt.Errorf("jsonp: toml encode: %w", err)
 		}
 	}
 
