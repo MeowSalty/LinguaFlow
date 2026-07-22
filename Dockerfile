@@ -12,7 +12,10 @@ RUN go mod download
 # 复制源代码并构建
 COPY backend/ .
 
-RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /linguaflow ./cmd/linguaflow
+ARG VERSION=dev
+ARG COMMIT=unknown
+
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Version=${VERSION} -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Commit=${COMMIT}" -o /linguaflow ./cmd/linguaflow
 
 # 运行阶段 - 使用精简镜像
 FROM alpine:3.20

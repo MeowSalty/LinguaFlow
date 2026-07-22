@@ -75,11 +75,13 @@ jobs:
         env:
           GOOS: ${{ matrix.goos }}
           GOARCH: ${{ matrix.goarch }}
+          VERSION: ${{ github.ref_name }}
         run: |
           ext=""
           if [ "$GOOS" = "windows" ]; then ext=".exe"; fi
           binary_name="linguaflow-${{ matrix.goos }}-${{ matrix.goarch }}${ext}"
-          go build -ldflags="-s -w" -o "bin/${binary_name}" ./cmd/linguaflow
+          COMMIT=$(git rev-parse --short HEAD)
+          go build -ldflags="-s -w -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Version=${VERSION} -X github.com/MeowSalty/LinguaFlow/backend/internal/version.Commit=${COMMIT}" -o "bin/${binary_name}" ./cmd/linguaflow
           sha256sum "bin/${binary_name}" > "bin/${binary_name}.sha256"
         working-directory: backend
 
@@ -192,5 +194,8 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ github.ref_name }}
+            COMMIT=${{ github.sha }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
