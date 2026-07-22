@@ -987,6 +987,8 @@ const messages = {
       timeout: '超时时间（秒）',
       responseFormat: '响应格式',
       enablePromptCache: '启用 Prompt Cache',
+      stream: '流式请求',
+      streamHint: '以 stream 方式请求并在内部累积完整响应，适用于仅支持 stream:true 的兼容网关',
       rateLimitPerMinute: '每分钟请求限制',
       rateLimitPerMinutePlaceholder: '0 表示不限速',
       rateLimitPerMinuteHint: '限制每分钟发送到此后端的最大请求数，0 表示不限速',

@@ -45,6 +45,7 @@ interface BackendFormModel {
   timeout: number
   response_format: string
   enable_prompt_cache: boolean
+  stream: boolean
   rate_limit_per_minute: number
 }
 
@@ -72,6 +73,7 @@ const formModel = reactive<BackendFormModel>({
   timeout: 60,
   response_format: 'json_schema',
   enable_prompt_cache: true,
+  stream: false,
   rate_limit_per_minute: 0,
 })
 
@@ -164,6 +166,7 @@ const resetForm = (): void => {
   formModel.timeout = 60
   formModel.response_format = 'json_schema'
   formModel.enable_prompt_cache = true
+  formModel.stream = false
   formModel.rate_limit_per_minute = 0
   editingBackend.value = null
 }
@@ -196,6 +199,7 @@ const openEditDrawer = (backend: Backend): void => {
     typeof opts?.response_format === 'string' ? opts.response_format : 'json_schema'
   formModel.enable_prompt_cache =
     typeof opts?.enable_prompt_cache === 'boolean' ? opts.enable_prompt_cache : true
+  formModel.stream = typeof opts?.stream === 'boolean' ? opts.stream : false
   formModel.rate_limit_per_minute = backend.rate_limit_per_minute ?? 0
   drawerVisible.value = true
 }
@@ -230,6 +234,9 @@ const buildOptions = (): BackendOptions => {
   }
   if (isAnthropic.value && !formModel.enable_prompt_cache) {
     options.enable_prompt_cache = false
+  }
+  if (formModel.stream) {
+    options.stream = true
   }
 
   return options as BackendOptions
@@ -632,6 +639,15 @@ watch(
             path="enable_prompt_cache"
           >
             <NSwitch v-model:value="formModel.enable_prompt_cache" />
+          </NFormItem>
+
+          <NFormItem :label="t('backends.form.stream')" path="stream">
+            <NSwitch v-model:value="formModel.stream" />
+            <template #feedback>
+              <span class="text-xs text-lf-text-muted">
+                {{ t('backends.form.streamHint') }}
+              </span>
+            </template>
           </NFormItem>
 
           <NFormItem :label="t('backends.form.rateLimitPerMinute')" path="rate_limit_per_minute">
