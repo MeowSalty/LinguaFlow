@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	genai "google.golang.org/genai"
@@ -38,6 +39,7 @@ type Backend struct {
 	responseFormat string
 	temperature    *float64
 	topP           *float64
+	stream         bool
 }
 
 func (b *Backend) Name() string {
@@ -48,6 +50,98 @@ func (b *Backend) Name() string {
 }
 
 func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.Response, error) {
+	model, contents, cfg, err := b.buildCfg(req)
+	if err != nil {
+		return nil, err
+	}
+	if b.stream {
+		return b.translateStream(ctx, model, contents, cfg)
+	}
+	resp, err := b.client.Models.GenerateContent(ctx, model, contents, cfg)
+	if err != nil {
+		return nil, wrapGoogleError(err)
+	}
+	if len(resp.Candidates) == 0 {
+		return nil, errors.New("google: empty candidates")
+	}
+	// 截断会让 JSON 残缺，显式失败以触发上层 shrinkOrFallback
+	if resp.Candidates[0].FinishReason == genai.FinishReasonMaxTokens {
+		return nil, fmt.Errorf("google: response truncated (finish_reason=MAX_TOKENS), raise max_tokens")
+	}
+
+	text := resp.Text()
+	if text == "" {
+		return nil, errors.New("google: no usable content in response")
+	}
+
+	usage := backend.Usage{}
+	if um := resp.UsageMetadata; um != nil {
+		usage.PromptTokens = int64(um.PromptTokenCount)
+		usage.CompletionTokens = int64(um.CandidatesTokenCount)
+		usage.TotalTokens = int64(um.TotalTokenCount)
+	}
+
+	return &backend.Response{
+		Text:  text,
+		Usage: usage,
+		Raw:   resp,
+	}, nil
+}
+
+func (b *Backend) translateStream(ctx context.Context, model string, contents []*genai.Content, cfg *genai.GenerateContentConfig) (*backend.Response, error) {
+	// genai sendStreamRequest 在拿到响应头后就会 cancel HTTPOptions.Timeout 对应的 context，
+	// 导致 body 迭代中途失败。流式路径改用调用方 ctx 覆盖整段累积过程。
+	if b.timeout > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, b.timeout)
+		defer cancel()
+	}
+
+	var buf strings.Builder
+	var usage *genai.GenerateContentResponseUsageMetadata
+	var finish genai.FinishReason
+	var last *genai.GenerateContentResponse
+
+	for resp, err := range b.client.Models.GenerateContentStream(ctx, model, contents, cfg) {
+		if err != nil {
+			return nil, wrapGoogleError(err)
+		}
+		if t := resp.Text(); t != "" {
+			buf.WriteString(t)
+		}
+		if resp.UsageMetadata != nil {
+			usage = resp.UsageMetadata
+		}
+		if len(resp.Candidates) > 0 {
+			finish = resp.Candidates[0].FinishReason
+		}
+		last = resp
+	}
+
+	if finish == genai.FinishReasonMaxTokens {
+		return nil, fmt.Errorf("google: response truncated (finish_reason=MAX_TOKENS), raise max_tokens")
+	}
+
+	text := buf.String()
+	if text == "" {
+		return nil, errors.New("google: no usable content in response")
+	}
+
+	outUsage := backend.Usage{}
+	if usage != nil {
+		outUsage.PromptTokens = int64(usage.PromptTokenCount)
+		outUsage.CompletionTokens = int64(usage.CandidatesTokenCount)
+		outUsage.TotalTokens = int64(usage.TotalTokenCount)
+	}
+
+	return &backend.Response{
+		Text:  text,
+		Usage: outUsage,
+		Raw:   last,
+	}, nil
+}
+
+func (b *Backend) buildCfg(req backend.Request) (string, []*genai.Content, *genai.GenerateContentConfig, error) {
 	model := req.Model
 	if model == "" {
 		model = b.model
@@ -64,7 +158,7 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 	switch rf {
 	case respFmtJSONSchema, respFmtJSONObject, respFmtText, respFmtNone, "":
 	default:
-		return nil, fmt.Errorf("google: unknown response_format %q", rf)
+		return "", nil, nil, fmt.Errorf("google: unknown response_format %q", rf)
 	}
 
 	sysText := req.System
@@ -103,40 +197,8 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 		// 不约束，沿用 Gemini 默认 text/plain
 	}
 
-	resp, err := b.client.Models.GenerateContent(
-		ctx,
-		model,
-		[]*genai.Content{genai.NewContentFromText(req.User, genai.RoleUser)},
-		cfg,
-	)
-	if err != nil {
-		return nil, wrapGoogleError(err)
-	}
-	if len(resp.Candidates) == 0 {
-		return nil, errors.New("google: empty candidates")
-	}
-	// 截断会让 JSON 残缺，显式失败以触发上层 shrinkOrFallback
-	if resp.Candidates[0].FinishReason == genai.FinishReasonMaxTokens {
-		return nil, fmt.Errorf("google: response truncated (finish_reason=MAX_TOKENS), raise max_tokens")
-	}
-
-	text := resp.Text()
-	if text == "" {
-		return nil, errors.New("google: no usable content in response")
-	}
-
-	usage := backend.Usage{}
-	if um := resp.UsageMetadata; um != nil {
-		usage.PromptTokens = int64(um.PromptTokenCount)
-		usage.CompletionTokens = int64(um.CandidatesTokenCount)
-		usage.TotalTokens = int64(um.TotalTokenCount)
-	}
-
-	return &backend.Response{
-		Text:  text,
-		Usage: usage,
-		Raw:   resp,
-	}, nil
+	contents := []*genai.Content{genai.NewContentFromText(req.User, genai.RoleUser)}
+	return model, contents, cfg, nil
 }
 
 func (b *Backend) Close() error { return nil }
@@ -159,6 +221,7 @@ func wrapGoogleError(err error) error {
 //   - max_tokens (默认 8192)
 //   - timeout (默认 60s, duration 字符串)
 //   - response_format (json_schema|json_object|none, 默认 json_schema)
+//   - stream (bool，默认 false；true 时以流式发起并在内部累积)
 func factory(opts map[string]any) (backend.Backend, error) {
 	apiKey := backend.StringOpt(opts, "api_key", "")
 	if apiKey == "" {
@@ -172,11 +235,13 @@ func factory(opts map[string]any) (backend.Backend, error) {
 	}
 
 	t := backend.Int64Opt(opts, "timeout", 60)
+	stream := backend.BoolOpt(opts, "stream", false)
 	cc := &genai.ClientConfig{
 		APIKey:  apiKey,
 		Backend: genai.BackendGeminiAPI,
 	}
-	if t > 0 {
+	// 仅非流式设置 HTTPOptions.Timeout：流式下 SDK 会在 body 读完前 cancel。
+	if t > 0 && !stream {
 		timeout := time.Duration(t) * time.Second
 		cc.HTTPOptions.Timeout = &timeout
 	}
@@ -194,6 +259,7 @@ func factory(opts map[string]any) (backend.Backend, error) {
 		maxTokens:      backend.Int64Opt(opts, "max_tokens", defaultMaxTokens),
 		timeout:        time.Duration(t) * time.Second,
 		responseFormat: rf,
+		stream:         stream,
 	}
 	if v, ok := opts["temperature"].(float64); ok {
 		b.temperature = &v

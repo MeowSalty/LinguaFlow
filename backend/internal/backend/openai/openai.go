@@ -34,6 +34,7 @@ type Backend struct {
 	responseFormat string // backend 默认的响应格式：json_schema | json_object | none
 	temperature    *float64
 	topP           *float64
+	stream         bool
 }
 
 // Name 由 BackendConfig.Name 注入；这里使用 type/model 作 fallback。
@@ -45,6 +46,61 @@ func (b *Backend) Name() string {
 }
 
 func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.Response, error) {
+	params, err := b.buildParams(req)
+	if err != nil {
+		return nil, err
+	}
+	callOpts := b.callOpts()
+	if b.stream {
+		return b.translateStream(ctx, params, callOpts)
+	}
+	resp, err := b.client.Chat.Completions.New(ctx, params, callOpts...)
+	if err != nil {
+		return nil, wrapOpenAIError(err)
+	}
+	if len(resp.Choices) == 0 {
+		return nil, errors.New("openai: empty choices")
+	}
+	return &backend.Response{
+		Text: resp.Choices[0].Message.Content,
+		Usage: backend.Usage{
+			PromptTokens:     resp.Usage.PromptTokens,
+			CompletionTokens: resp.Usage.CompletionTokens,
+			TotalTokens:      resp.Usage.TotalTokens,
+		},
+		Raw: resp,
+	}, nil
+}
+
+func (b *Backend) translateStream(ctx context.Context, params openaigo.ChatCompletionNewParams, callOpts []option.RequestOption) (*backend.Response, error) {
+	params.StreamOptions = openaigo.ChatCompletionStreamOptionsParam{
+		IncludeUsage: openaigo.Bool(true),
+	}
+	stream := b.client.Chat.Completions.NewStreaming(ctx, params, callOpts...)
+	defer stream.Close()
+
+	acc := openaigo.ChatCompletionAccumulator{}
+	for stream.Next() {
+		acc.AddChunk(stream.Current())
+	}
+	if err := stream.Err(); err != nil {
+		return nil, wrapOpenAIError(err)
+	}
+	if len(acc.Choices) == 0 {
+		return nil, errors.New("openai: empty choices")
+	}
+	return &backend.Response{
+		Text: acc.Choices[0].Message.Content,
+		Usage: backend.Usage{
+			PromptTokens:     acc.Usage.PromptTokens,
+			CompletionTokens: acc.Usage.CompletionTokens,
+			TotalTokens:      acc.Usage.TotalTokens,
+		},
+		Raw: acc.ChatCompletion,
+	}, nil
+}
+
+func (b *Backend) buildParams(req backend.Request) (openaigo.ChatCompletionNewParams, error) {
 	model := req.Model
 	if model == "" {
 		model = b.model
@@ -97,29 +153,17 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 	case respFmtText, respFmtNone, "":
 		// 不设置 ResponseFormat，让网关用默认。
 	default:
-		return nil, fmt.Errorf("openai: unknown response_format %q", rf)
+		return params, fmt.Errorf("openai: unknown response_format %q", rf)
 	}
+	return params, nil
+}
 
+func (b *Backend) callOpts() []option.RequestOption {
 	callOpts := []option.RequestOption{}
 	if b.timeout > 0 {
 		callOpts = append(callOpts, option.WithRequestTimeout(b.timeout))
 	}
-	resp, err := b.client.Chat.Completions.New(ctx, params, callOpts...)
-	if err != nil {
-		return nil, wrapOpenAIError(err)
-	}
-	if len(resp.Choices) == 0 {
-		return nil, errors.New("openai: empty choices")
-	}
-	return &backend.Response{
-		Text: resp.Choices[0].Message.Content,
-		Usage: backend.Usage{
-			PromptTokens:     resp.Usage.PromptTokens,
-			CompletionTokens: resp.Usage.CompletionTokens,
-			TotalTokens:      resp.Usage.TotalTokens,
-		},
-		Raw: resp,
-	}, nil
+	return callOpts
 }
 
 func (b *Backend) Close() error { return nil }
@@ -138,7 +182,8 @@ func wrapOpenAIError(err error) error {
 
 // factory 从 BackendConfig.Options 构造实例。
 // 期望的键：api_key, base_url, model, max_tokens, timeout（duration 字符串）,
-// response_format（json_schema | json_object | none，默认 json_schema）。
+// response_format（json_schema | json_object | none，默认 json_schema）,
+// stream（bool，默认 false；true 时以流式发起并在内部累积）。
 func factory(opts map[string]any) (backend.Backend, error) {
 	apiKey, _ := opts["api_key"].(string)
 	if apiKey == "" {
@@ -159,6 +204,7 @@ func factory(opts map[string]any) (backend.Backend, error) {
 		model:          backend.StringOpt(opts, "model", "gpt-4o-mini"),
 		maxTokens:      backend.Int64Opt(opts, "max_tokens", 0),
 		responseFormat: rf,
+		stream:         backend.BoolOpt(opts, "stream", false),
 	}
 	if t := backend.Int64Opt(opts, "timeout", 60); t > 0 {
 		b.timeout = time.Duration(t) * time.Second

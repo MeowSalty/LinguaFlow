@@ -42,6 +42,7 @@ type Backend struct {
 	enablePromptCache bool
 	temperature       *float64
 	topP              *float64
+	stream            bool
 }
 
 func (b *Backend) Name() string {
@@ -52,6 +53,60 @@ func (b *Backend) Name() string {
 }
 
 func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.Response, error) {
+	params, useToolPath, err := b.buildParams(req)
+	if err != nil {
+		return nil, err
+	}
+	callOpts := b.callOpts()
+	if b.stream {
+		return b.translateStream(ctx, params, useToolPath, callOpts)
+	}
+	msg, err := b.client.Messages.New(ctx, params, callOpts...)
+	if err != nil {
+		return nil, wrapAnthropicError(err)
+	}
+	return b.responseFromMessage(msg, useToolPath)
+}
+
+func (b *Backend) translateStream(ctx context.Context, params sdk.MessageNewParams, useToolPath bool, callOpts []option.RequestOption) (*backend.Response, error) {
+	stream := b.client.Messages.NewStreaming(ctx, params, callOpts...)
+	defer stream.Close()
+
+	var msg sdk.Message
+	for stream.Next() {
+		if err := msg.Accumulate(stream.Current()); err != nil {
+			return nil, fmt.Errorf("anthropic: accumulate: %w", err)
+		}
+	}
+	if err := stream.Err(); err != nil {
+		return nil, wrapAnthropicError(err)
+	}
+	return b.responseFromMessage(&msg, useToolPath)
+}
+
+func (b *Backend) responseFromMessage(msg *sdk.Message, useToolPath bool) (*backend.Response, error) {
+	// 截断会让 tool_use 的 JSON 残缺，显式失败以触发上层 shrinkOrFallback
+	if msg.StopReason == sdk.StopReasonMaxTokens {
+		return nil, fmt.Errorf("anthropic: response truncated (stop_reason=max_tokens), raise max_tokens")
+	}
+
+	text, err := extractResponseText(msg, useToolPath)
+	if err != nil {
+		return nil, err
+	}
+
+	return &backend.Response{
+		Text: text,
+		Usage: backend.Usage{
+			PromptTokens:     msg.Usage.InputTokens,
+			CompletionTokens: msg.Usage.OutputTokens,
+			TotalTokens:      msg.Usage.InputTokens + msg.Usage.OutputTokens,
+		},
+		Raw: msg,
+	}, nil
+}
+
+func (b *Backend) buildParams(req backend.Request) (sdk.MessageNewParams, bool, error) {
 	model := req.Model
 	if model == "" {
 		model = b.model
@@ -68,7 +123,7 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 	switch rf {
 	case respFmtJSONSchema, respFmtJSONObject, respFmtText, respFmtNone, "":
 	default:
-		return nil, fmt.Errorf("anthropic: unknown response_format %q", rf)
+		return sdk.MessageNewParams{}, false, fmt.Errorf("anthropic: unknown response_format %q", rf)
 	}
 
 	sysText := req.System
@@ -114,35 +169,15 @@ func (b *Backend) Translate(ctx context.Context, req backend.Request) (*backend.
 			OfTool: &sdk.ToolChoiceToolParam{Name: toolName},
 		}
 	}
+	return params, useToolPath, nil
+}
 
+func (b *Backend) callOpts() []option.RequestOption {
 	callOpts := []option.RequestOption{}
 	if b.timeout > 0 {
 		callOpts = append(callOpts, option.WithRequestTimeout(b.timeout))
 	}
-	msg, err := b.client.Messages.New(ctx, params, callOpts...)
-	if err != nil {
-		return nil, wrapAnthropicError(err)
-	}
-
-	// 截断会让 tool_use 的 JSON 残缺，显式失败以触发上层 shrinkOrFallback
-	if msg.StopReason == sdk.StopReasonMaxTokens {
-		return nil, fmt.Errorf("anthropic: response truncated (stop_reason=max_tokens), raise max_tokens")
-	}
-
-	text, err := extractResponseText(msg, useToolPath)
-	if err != nil {
-		return nil, err
-	}
-
-	return &backend.Response{
-		Text: text,
-		Usage: backend.Usage{
-			PromptTokens:     msg.Usage.InputTokens,
-			CompletionTokens: msg.Usage.OutputTokens,
-			TotalTokens:      msg.Usage.InputTokens + msg.Usage.OutputTokens,
-		},
-		Raw: msg,
-	}, nil
+	return callOpts
 }
 
 func (b *Backend) Close() error { return nil }
@@ -228,6 +263,7 @@ func buildToolInputSchema(schema map[string]any) sdk.ToolInputSchemaParam {
 //   - timeout (默认 60s,duration 字符串)
 //   - response_format (json_schema|json_object|none，默认 json_schema)
 //   - enable_prompt_cache (bool，默认 true，启用后给 system block 加 ephemeral 缓存)
+//   - stream (bool，默认 false；true 时以流式发起并在内部累积)
 func factory(opts map[string]any) (backend.Backend, error) {
 	apiKey := backend.StringOpt(opts, "api_key", "")
 	if apiKey == "" {
@@ -249,6 +285,7 @@ func factory(opts map[string]any) (backend.Backend, error) {
 		maxTokens:         backend.Int64Opt(opts, "max_tokens", defaultMaxTokens),
 		responseFormat:    rf,
 		enablePromptCache: backend.BoolOpt(opts, "enable_prompt_cache", true),
+		stream:            backend.BoolOpt(opts, "stream", false),
 	}
 	if t := backend.Int64Opt(opts, "timeout", 60); t > 0 {
 		b.timeout = time.Duration(t) * time.Second
