@@ -24,7 +24,12 @@ export type SegmentStatusFilter =
 
 export type SegmentQualityIssuesFilter = 'has' | 'none' | 'all'
 export type SegmentQualitySeverityFilter = 'warning' | 'error' | 'all'
-export type SegmentQualityCodeFilter = 'untranslated' | 'length_ratio' | 'duplicate' | 'all'
+export type SegmentQualityCodeFilter =
+  | 'untranslated'
+  | 'length_ratio'
+  | 'duplicate'
+  | 'source_residual'
+  | 'all'
 
 export interface SegmentProgress {
   pending: number

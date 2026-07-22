@@ -112,6 +112,10 @@ const qualityCodeChips = computed(() => [
     value: 'duplicate' as const,
     label: t('workspace.segment.qualityCodes.duplicate'),
   },
+  {
+    value: 'source_residual' as const,
+    label: t('workspace.segment.qualityCodes.sourceResidual'),
+  },
 ])
 
 const hasActiveQualityFilter = computed(
