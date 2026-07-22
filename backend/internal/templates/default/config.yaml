@@ -9,6 +9,7 @@ backend:
     max_tokens: 0
     timeout: 60s
     response_format: json_schema
+    # stream: false   # 设为 true 时以流式发起请求并在内部累积，适用于只接受 stream:true 的兼容网关
 
 translation_prompt_template:
   id: -1
