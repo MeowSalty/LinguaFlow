@@ -159,6 +159,8 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 			LengthMethod:   qa.LengthMethod(firstProfile.QA.LengthMethod),
 			LengthRatioMin: firstProfile.QA.LengthRatioMin,
 			LengthRatioMax: firstProfile.QA.LengthRatioMax,
+			SourceLang:     cliCfg.SourceLang,
+			TargetLang:     cliCfg.TargetLang,
 		},
 	}
 

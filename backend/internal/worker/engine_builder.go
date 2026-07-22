@@ -224,6 +224,8 @@ func buildEngineConfig(snapshot *service.JobExecutionSnapshot) *engine.Config {
 			LengthRatioMin: s.QA.LengthRatioMin,
 			LengthRatioMax: s.QA.LengthRatioMax,
 		}
+		cfg.QA.SourceLang = snapshot.SourceLang
+		cfg.QA.TargetLang = snapshot.TargetLang
 		break
 	}
 
