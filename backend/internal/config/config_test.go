@@ -78,6 +78,52 @@ func TestValidateServerConfig_Defaults(t *testing.T) {
 	}
 }
 
+func TestDefaultServerConfig_ServeUI(t *testing.T) {
+	cfg := DefaultServerConfig()
+	if !cfg.ServeUI {
+		t.Fatal("ServeUI should default to true")
+	}
+}
+
+func TestLoadServerConfig_ServeUIEnv(t *testing.T) {
+	clearDatabaseEnv(t)
+
+	t.Run("false", func(t *testing.T) {
+		t.Setenv("LINGUAFLOW_SERVE_UI", "false")
+		cfg, err := LoadServerConfig(ModeServer)
+		if err != nil {
+			t.Fatalf("load config: %v", err)
+		}
+		if cfg.ServeUI {
+			t.Fatal("ServeUI should be false when LINGUAFLOW_SERVE_UI=false")
+		}
+	})
+
+	for _, value := range []string{"true", "1", "yes"} {
+		t.Run(value, func(t *testing.T) {
+			t.Setenv("LINGUAFLOW_SERVE_UI", value)
+			cfg, err := LoadServerConfig(ModeServer)
+			if err != nil {
+				t.Fatalf("load config: %v", err)
+			}
+			if !cfg.ServeUI {
+				t.Fatalf("ServeUI should be true when LINGUAFLOW_SERVE_UI=%q", value)
+			}
+		})
+	}
+
+	t.Run("empty keeps default", func(t *testing.T) {
+		t.Setenv("LINGUAFLOW_SERVE_UI", "")
+		cfg, err := LoadServerConfig(ModeServer)
+		if err != nil {
+			t.Fatalf("load config: %v", err)
+		}
+		if !cfg.ServeUI {
+			t.Fatal("ServeUI should remain true when LINGUAFLOW_SERVE_UI is empty")
+		}
+	})
+}
+
 func TestValidateServerConfig_InvalidMode(t *testing.T) {
 	cfg := DefaultServerConfig()
 	cfg.Mode = "invalid"

@@ -32,8 +32,8 @@ func (s *Server) newRouter() http.Handler {
 	// SSE 流式端点（不在 OpenAPI 规范中）
 	apiV1.Get("/jobs/{jobId}/stream", s.handleJobStream)
 
-	// 本地模式下挂载嵌入的前端静态资源
-	if s.isLocal() {
+	// 在开启 UI 时挂载嵌入的前端静态资源
+	if s.shouldServeUI() {
 		distSub, err := fs.Sub(web.DistFS, "dist")
 		if err == nil {
 			fileServer := http.FileServer(http.FS(distSub))

@@ -179,6 +179,7 @@ type ServerConfig struct {
 	Workers         WorkerConfig       `yaml:"workers"`
 	CORS            CORSConfig         `yaml:"cors"`
 	Registration    RegistrationConfig `yaml:"registration"`
+	ServeUI         bool               `yaml:"serve_ui"`
 }
 
 // RegistrationConfig 定义用户注册的初始默认值。
@@ -287,6 +288,7 @@ func DefaultServerConfig() *ServerConfig {
 			Enabled:   true,
 			AutoAdmin: true,
 		},
+		ServeUI: true,
 	}
 }
 

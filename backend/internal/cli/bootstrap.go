@@ -105,6 +105,7 @@ func bootstrapServer(ctx context.Context, opts BootOptions) (*api.Server, net.Li
 		"database_max_idle_conns", cfg.Database.MaxIdleConns,
 		"database_conn_max_lifetime", cfg.Database.ConnMaxLifetime,
 		"auto_migrate", cfg.AutoMigrate,
+		"serve_ui", cfg.ServeUI,
 	}
 	if cfg.Database.Driver == config.DatabaseDriverSQLite && cfg.Database.DSN == "" {
 		logArgs = append(logArgs, "database_path", cfg.DatabasePath())

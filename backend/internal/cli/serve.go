@@ -15,6 +15,8 @@ type serveOptions struct {
 	dataDir        string
 	autoMigrate    bool
 	autoMigrateSet bool
+	noUI           bool
+	noUISet        bool
 	jwtSecret      string
 	corsOrigins    string
 }
@@ -26,17 +28,22 @@ func newServeCmd(rt *appCtx) *cobra.Command {
 		Short: "启动 LinguaFlow Web Service",
 		Long: `启动 LinguaFlow Web Service。
 
+默认提供嵌入式 Web UI；使用 --no-ui 可关闭 UI，仅提供 API。
+
 数据库通过环境变量配置：
   LINGUAFLOW_DATABASE_DRIVER                 sqlite（默认）或 postgres
   LINGUAFLOW_DATABASE_DSN                    PostgreSQL 必填；SQLite 为空时使用 data_dir/linguaflow.db
   LINGUAFLOW_DATABASE_MAX_OPEN_CONNS         最大打开连接数
   LINGUAFLOW_DATABASE_MAX_IDLE_CONNS         最大空闲连接数
-  LINGUAFLOW_DATABASE_CONN_MAX_LIFETIME      连接最大寿命（Go duration）`,
+  LINGUAFLOW_DATABASE_CONN_MAX_LIFETIME      连接最大寿命（Go duration）
+  LINGUAFLOW_SERVE_UI                        是否提供 Web UI（true/1/yes，默认 true）`,
 		Example: `  linguaflow serve
   linguaflow serve --host 127.0.0.1 --port 18080
+  linguaflow serve --no-ui
   LINGUAFLOW_DATABASE_DRIVER=postgres LINGUAFLOW_DATABASE_DSN='postgres://localhost:5432/linguaflow?sslmode=disable' linguaflow serve`,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			opts.autoMigrateSet = cmd.Flags().Changed("auto-migrate")
+			opts.noUISet = cmd.Flags().Changed("no-ui")
 			return runServe(cmd.Context(), rt, opts)
 		},
 	}
@@ -45,6 +52,7 @@ func newServeCmd(rt *appCtx) *cobra.Command {
 	cmd.Flags().IntVar(&opts.port, "port", 0, "覆盖 server.port")
 	cmd.Flags().StringVar(&opts.dataDir, "data-dir", "", "覆盖 server.data_dir")
 	cmd.Flags().BoolVar(&opts.autoMigrate, "auto-migrate", true, "覆盖 server.auto_migrate")
+	cmd.Flags().BoolVar(&opts.noUI, "no-ui", false, "关闭嵌入式 Web UI（仅提供 API）")
 	cmd.Flags().StringVar(&opts.jwtSecret, "jwt-secret", "", "覆盖 LINGUAFLOW_JWT_SECRET")
 	cmd.Flags().StringVar(&opts.corsOrigins, "cors-origins", "", "覆盖 LINGUAFLOW_CORS_ORIGINS（逗号分隔）")
 	return cmd
@@ -66,6 +74,9 @@ func runServe(ctx context.Context, rt *appCtx, opts serveOptions) error {
 			}
 			if opts.autoMigrateSet {
 				cfg.AutoMigrate = opts.autoMigrate
+			}
+			if opts.noUISet {
+				cfg.ServeUI = !opts.noUI
 			}
 			if opts.jwtSecret != "" {
 				cfg.JWTSecret = opts.jwtSecret

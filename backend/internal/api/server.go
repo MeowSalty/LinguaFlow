@@ -63,6 +63,10 @@ func (s *Server) isLocal() bool {
 	return s.mode == config.ModeLocal
 }
 
+func (s *Server) shouldServeUI() bool {
+	return s.serverCfg.ServeUI
+}
+
 func (s *Server) localAuthUser() (authenticatedUser, bool) {
 	if s.isLocal() && s.localUser != nil {
 		return authenticatedUser{User: s.localUser}, true
