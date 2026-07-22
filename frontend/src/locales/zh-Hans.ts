@@ -336,6 +336,10 @@ const messages = {
     },
     filters: {
       allStatuses: '全部状态',
+      qualityLabel: '质量',
+      qualityIssuesHas: '有问题',
+      qualityIssuesNone: '无问题',
+      clearQuality: '清除',
     },
     common: {
       actions: '操作',
@@ -481,6 +485,11 @@ const messages = {
       emptyTarget: '暂无译文',
       qualityError: '错误',
       qualityWarning: '警告',
+      qualityCodes: {
+        untranslated: '未翻译',
+        lengthRatio: '长度异常',
+        duplicate: '重复译文',
+      },
       editTitle: '编辑段落',
       columns: {
         source: '原文',

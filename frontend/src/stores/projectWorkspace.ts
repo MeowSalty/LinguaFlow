@@ -21,7 +21,12 @@ export type {
   SegmentGroup,
 } from './resource'
 
-export type { SegmentStatusFilter } from './segment'
+export type {
+  SegmentStatusFilter,
+  SegmentQualityIssuesFilter,
+  SegmentQualitySeverityFilter,
+  SegmentQualityCodeFilter,
+} from './segment'
 export type { ResourceSegmentGroup } from './segment'
 export type { JobStatusFilter } from './job'
 
@@ -84,6 +89,9 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     editingSegmentIds,
     segmentSearch,
     segmentStatusFilter,
+    segmentQualityIssuesFilter,
+    segmentQualitySeverityFilter,
+    segmentQualityCodeFilter,
     segmentProgressCache,
     // EPUB 章节导航状态
     segmentGroups,
@@ -280,6 +288,9 @@ export const useProjectWorkspaceStore = defineStore('projectWorkspace', () => {
     resourceFormatFilter,
     segmentSearch,
     segmentStatusFilter,
+    segmentQualityIssuesFilter,
+    segmentQualitySeverityFilter,
+    segmentQualityCodeFilter,
     jobStatusFilter,
     // 段落进度缓存
     segmentProgressCache,
