@@ -255,7 +255,7 @@ func buildToolInputSchema(schema map[string]any) sdk.ToolInputSchemaParam {
 	return out
 }
 
-// factory 从 BackendConfig.Options 构造实例。期望的键：
+// factory 从 backend.Config 构造实例。Options 期望的键：
 //   - api_key (必填)
 //   - base_url (留空走 SDK 默认)
 //   - model (默认 claude-sonnet-4-5)
@@ -264,12 +264,18 @@ func buildToolInputSchema(schema map[string]any) sdk.ToolInputSchemaParam {
 //   - response_format (json_schema|json_object|none，默认 json_schema)
 //   - enable_prompt_cache (bool，默认 true，启用后给 system block 加 ephemeral 缓存)
 //   - stream (bool，默认 false；true 时以流式发起并在内部累积)
-func factory(opts map[string]any) (backend.Backend, error) {
+func factory(cfg backend.Config) (backend.Backend, error) {
+	opts := cfg.Options
 	apiKey := backend.StringOpt(opts, "api_key", "")
 	if apiKey == "" {
 		return nil, errors.New("anthropic: api_key is required")
 	}
-	clientOpts := []option.RequestOption{option.WithAPIKey(apiKey)}
+	clientOpts := []option.RequestOption{
+		option.WithAPIKey(apiKey),
+		option.WithHeader("User-Agent", backend.ClientUserAgent()),
+		option.WithHeader("X-Client-Name", backend.ClientName()),
+		option.WithHeader("X-Client-Version", backend.ClientVersion()),
+	}
 	if u := backend.StringOpt(opts, "base_url", ""); u != "" {
 		clientOpts = append(clientOpts, option.WithBaseURL(u))
 	}
@@ -280,6 +286,7 @@ func factory(opts map[string]any) (backend.Backend, error) {
 		return nil, fmt.Errorf("anthropic: invalid response_format %q (want json_schema|json_object|text|none)", rf)
 	}
 	b := &Backend{
+		name:              cfg.Name,
 		client:            sdk.NewClient(clientOpts...),
 		model:             backend.StringOpt(opts, "model", defaultModel),
 		maxTokens:         backend.Int64Opt(opts, "max_tokens", defaultMaxTokens),

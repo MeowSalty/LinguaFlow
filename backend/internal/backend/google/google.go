@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 	"time"
 
@@ -214,7 +215,7 @@ func wrapGoogleError(err error) error {
 	return fmt.Errorf("google: generate content: %w", err)
 }
 
-// factory 从 BackendConfig.Options 构造实例。期望的键：
+// factory 从 backend.Config 构造实例。Options 期望的键：
 //   - api_key (必填)
 //   - base_url (可选，留空走 SDK 默认 https://generativelanguage.googleapis.com/)
 //   - model (默认 gemini-2.5-flash)
@@ -222,7 +223,8 @@ func wrapGoogleError(err error) error {
 //   - timeout (默认 60s, duration 字符串)
 //   - response_format (json_schema|json_object|none, 默认 json_schema)
 //   - stream (bool，默认 false；true 时以流式发起并在内部累积)
-func factory(opts map[string]any) (backend.Backend, error) {
+func factory(cfg backend.Config) (backend.Backend, error) {
+	opts := cfg.Options
 	apiKey := backend.StringOpt(opts, "api_key", "")
 	if apiKey == "" {
 		return nil, errors.New("google: api_key is required")
@@ -236,10 +238,15 @@ func factory(opts map[string]any) (backend.Backend, error) {
 
 	t := backend.Int64Opt(opts, "timeout", 60)
 	stream := backend.BoolOpt(opts, "stream", false)
+	headers := make(http.Header)
+	headers.Set("User-Agent", backend.ClientUserAgent())
+	headers.Set("X-Client-Name", backend.ClientName())
+	headers.Set("X-Client-Version", backend.ClientVersion())
 	cc := &genai.ClientConfig{
 		APIKey:  apiKey,
 		Backend: genai.BackendGeminiAPI,
 	}
+	cc.HTTPOptions.Headers = headers
 	// 仅非流式设置 HTTPOptions.Timeout：流式下 SDK 会在 body 读完前 cancel。
 	if t > 0 && !stream {
 		timeout := time.Duration(t) * time.Second
@@ -254,6 +261,7 @@ func factory(opts map[string]any) (backend.Backend, error) {
 	}
 
 	b := &Backend{
+		name:           cfg.Name,
 		client:         client,
 		model:          backend.StringOpt(opts, "model", defaultModel),
 		maxTokens:      backend.Int64Opt(opts, "max_tokens", defaultMaxTokens),

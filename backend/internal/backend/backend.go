@@ -51,8 +51,8 @@ type Backend interface {
 	Close() error
 }
 
-// Factory 接受 BackendConfig.Options 构造后端实例。
-type Factory func(opts map[string]any) (Backend, error)
+// Factory 接受完整 Config 构造后端实例。
+type Factory func(cfg Config) (Backend, error)
 
 // ErrNotImplemented 由占位后端返回。
 var ErrNotImplemented = errors.New("backend: not implemented")
@@ -78,5 +78,5 @@ func Build(cfg Config) (Backend, error) {
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", ErrUnknownBackendType, cfg.Type)
 	}
-	return f(cfg.Options)
+	return f(cfg)
 }
