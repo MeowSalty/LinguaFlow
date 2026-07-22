@@ -250,7 +250,7 @@ func testParseSimpleEPUB(t *testing.T) {
 	})
 
 	p := newParser()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data), "epub")
 	if err != nil {
 		t.Fatalf("Parse returned error: %v", err)
 	}
@@ -279,7 +279,7 @@ func testParseMultiChapterEPUB(t *testing.T) {
 	})
 
 	p := newParser()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data), "epub")
 	if err != nil {
 		t.Fatalf("Parse returned error: %v", err)
 	}
@@ -320,7 +320,7 @@ func testParseEPUBWithInlineTags(t *testing.T) {
 	})
 
 	p := newParser()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data), "epub")
 	if err != nil {
 		t.Fatalf("Parse returned error: %v", err)
 	}
@@ -340,7 +340,7 @@ func testParseEPUBWithRuby(t *testing.T) {
 	})
 
 	p := newParser()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data), "epub")
 	if err != nil {
 		t.Fatalf("Parse returned error: %v", err)
 	}
@@ -365,7 +365,7 @@ func testParseEPUBSkipsScriptAndStyle(t *testing.T) {
 	})
 
 	p := newParser()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data), "epub")
 	if err != nil {
 		t.Fatalf("Parse returned error: %v", err)
 	}
@@ -383,7 +383,7 @@ func testParseEPUBSkipsEmptyParagraph(t *testing.T) {
 	})
 
 	p := newParser()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data), "epub")
 	if err != nil {
 		t.Fatalf("Parse returned error: %v", err)
 	}
@@ -404,7 +404,7 @@ func testParseEPUBTocNav(t *testing.T) {
 	})
 
 	p := newParser()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data), "epub")
 	if err != nil {
 		t.Fatalf("Parse returned error: %v", err)
 	}
@@ -432,7 +432,7 @@ func testParseEPUBSkipsPageListNav(t *testing.T) {
 	})
 
 	p := newParser()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data), "epub")
 	if err != nil {
 		t.Fatalf("Parse returned error: %v", err)
 	}
@@ -450,7 +450,7 @@ func testParseEPUBSkipsLandmarksNav(t *testing.T) {
 	})
 
 	p := newParser()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data), "epub")
 	if err != nil {
 		t.Fatalf("Parse returned error: %v", err)
 	}
@@ -465,7 +465,7 @@ func testParseEPUBMeta(t *testing.T) {
 	}, "メタテスト")
 
 	p := newParser()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data), "epub")
 	if err != nil {
 		t.Fatalf("Parse returned error: %v", err)
 	}
@@ -508,7 +508,7 @@ func testParseEPUBNestedXHTML(t *testing.T) {
 	})
 
 	p := newParser()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data), "epub")
 	if err != nil {
 		t.Fatalf("Parse returned error: %v", err)
 	}
@@ -543,7 +543,7 @@ func testRenderRoundTrip(t *testing.T) {
 	p := newParser()
 
 	// Parse
-	doc, err := p.Parse(context.Background(), bytes.NewReader(original))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(original), "epub")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
@@ -561,7 +561,7 @@ func testRenderRoundTrip(t *testing.T) {
 	}
 
 	// 重新 Parse 验证
-	doc2, err := p.Parse(context.Background(), bytes.NewReader(rendered.Bytes()))
+	doc2, err := p.Parse(context.Background(), bytes.NewReader(rendered.Bytes()), "epub")
 	if err != nil {
 		t.Fatalf("Re-parse error: %v", err)
 	}
@@ -580,7 +580,7 @@ func testRenderWithTranslation(t *testing.T) {
 
 	p := newParser()
 
-	doc, err := p.Parse(context.Background(), bytes.NewReader(original))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(original), "epub")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
@@ -597,7 +597,7 @@ func testRenderWithTranslation(t *testing.T) {
 	}
 
 	// 重新 Parse 验证译文在正确位置
-	doc2, err := p.Parse(context.Background(), bytes.NewReader(rendered.Bytes()))
+	doc2, err := p.Parse(context.Background(), bytes.NewReader(rendered.Bytes()), "epub")
 	if err != nil {
 		t.Fatalf("Re-parse error: %v", err)
 	}
@@ -615,7 +615,7 @@ func testRenderMimetypeFirst(t *testing.T) {
 	})
 
 	p := newParser()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(original))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(original), "epub")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
@@ -656,7 +656,7 @@ func testRenderPreservesNonXHTML(t *testing.T) {
 	})
 
 	p := newParser()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(original))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(original), "epub")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
@@ -715,7 +715,7 @@ func testRenderEmptyDocument(t *testing.T) {
 	}
 
 	// 验证输出仍然是有效的 EPUB，内容应与原始相同
-	doc2, err := p.Parse(context.Background(), bytes.NewReader(rendered.Bytes()))
+	doc2, err := p.Parse(context.Background(), bytes.NewReader(rendered.Bytes()), "epub")
 	if err != nil {
 		t.Fatalf("Re-parse error: %v", err)
 	}
@@ -764,7 +764,7 @@ func testParseDRMEpub(t *testing.T) {
 	w.Close()
 
 	p := newParser()
-	_, err := p.Parse(context.Background(), bytes.NewReader(buf.Bytes()))
+	_, err := p.Parse(context.Background(), bytes.NewReader(buf.Bytes()), "epub")
 	if err == nil {
 		t.Fatal("expected error for DRM protected EPUB, got nil")
 	}
@@ -776,7 +776,7 @@ func testParseDRMEpub(t *testing.T) {
 func testParseCorruptedZip(t *testing.T) {
 	corrupted := []byte("this is not a valid zip file content")
 	p := newParser()
-	_, err := p.Parse(context.Background(), bytes.NewReader(corrupted))
+	_, err := p.Parse(context.Background(), bytes.NewReader(corrupted), "epub")
 	if err == nil {
 		t.Fatal("expected error for corrupted ZIP, got nil")
 	}
@@ -793,7 +793,7 @@ func testParseMissingContainerXML(t *testing.T) {
 	w.Close()
 
 	p := newParser()
-	_, err := p.Parse(context.Background(), bytes.NewReader(buf.Bytes()))
+	_, err := p.Parse(context.Background(), bytes.NewReader(buf.Bytes()), "epub")
 	if err == nil {
 		t.Fatal("expected error for missing container.xml, got nil")
 	}
@@ -1580,7 +1580,7 @@ func testNCXTitlesPriority(t *testing.T) {
 	})
 
 	p := newParser()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data), "epub")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
@@ -1606,7 +1606,7 @@ func testNCXTitlesOverwriteXHTMLTitle(t *testing.T) {
 	})
 
 	p := newParser()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data), "epub")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
@@ -1696,7 +1696,7 @@ func testNCXNestedNavPoints(t *testing.T) {
 	w.Close()
 
 	p := newParser()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(buf.Bytes()))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(buf.Bytes()), "epub")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
@@ -1726,7 +1726,7 @@ func testTOCFileFixedTitle(t *testing.T) {
 	})
 
 	p := newParser()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data), "epub")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
@@ -1755,7 +1755,7 @@ func testNoNCXFallsBackToXHTMLTitle(t *testing.T) {
 	})
 
 	p := newParser()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data), "epub")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
@@ -1779,7 +1779,7 @@ func testNCXWithAnchorInSrc(t *testing.T) {
 	})
 
 	p := newParser()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(data))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(data), "epub")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}
@@ -2000,7 +2000,7 @@ func TestXHTMLTOCIntegration(t *testing.T) {
 	w.Close()
 
 	p := newParser()
-	doc, err := p.Parse(context.Background(), bytes.NewReader(buf.Bytes()))
+	doc, err := p.Parse(context.Background(), bytes.NewReader(buf.Bytes()), "epub")
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
 	}

@@ -29,7 +29,7 @@ func New() *Parser { return &Parser{} }
 // Extensions 返回支持的字幕扩展名。
 func (*Parser) Extensions() []string { return []string{".srt", ".vtt", ".ass"} }
 
-func (*Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error) {
+func (*Parser) Parse(_ context.Context, r io.Reader, _ string) (*pipeline.Document, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, fmt.Errorf("subtitle: read input: %w", err)

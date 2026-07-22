@@ -11,7 +11,7 @@ import (
 
 func parseMD(t *testing.T, src string) *pipeline.Document {
 	t.Helper()
-	doc, err := New().Parse(context.Background(), strings.NewReader(src))
+	doc, err := New().Parse(context.Background(), strings.NewReader(src), "md")
 	if err != nil {
 		t.Fatalf("Parse: %v", err)
 	}

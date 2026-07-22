@@ -528,7 +528,8 @@ func (s *ResourceService) parseResourceSegments(relPath string) ([]parsedResourc
 	}
 	defer f.Close()
 
-	doc, err := p.Parse(context.Background(), f)
+	format := strings.TrimPrefix(strings.ToLower(filepath.Ext(absPath)), ".")
+	doc, err := p.Parse(context.Background(), f, format)
 	if err != nil {
 		return nil, fmt.Errorf("parse: %w", err)
 	}

@@ -25,7 +25,7 @@ func New() *Parser { return &Parser{} }
 func (*Parser) Extensions() []string { return []string{".txt"} }
 
 // Parse 读取全部内容，自动检测格式后分发。
-func (p *Parser) Parse(_ context.Context, r io.Reader) (*pipeline.Document, error) {
+func (p *Parser) Parse(_ context.Context, r io.Reader, _ string) (*pipeline.Document, error) {
 	data, err := io.ReadAll(r)
 	if err != nil {
 		return nil, err

@@ -8,10 +8,11 @@ import (
 	"archive/zip"
 	"encoding/xml"
 	"fmt"
-	"io"
 	"log/slog"
 	"path"
 	"strings"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/ziputil"
 )
 
 // containerXML 表示 META-INF/container.xml 的结构。
@@ -49,15 +50,9 @@ type SpineItem struct {
 
 // findOPFPath 从 container.xml 定位 OPF 文件路径。
 func findOPFPath(zr *zip.Reader) (string, error) {
-	f, err := openZipFile(zr, "META-INF/container.xml")
+	data, err := ziputil.ReadEntry(zr, "META-INF/container.xml", maxDecompressedEntrySize)
 	if err != nil {
 		return "", fmt.Errorf("open container.xml: %w", err)
-	}
-	defer f.Close()
-
-	data, err := io.ReadAll(f)
-	if err != nil {
-		return "", fmt.Errorf("read container.xml: %w", err)
 	}
 
 	var c containerXML
@@ -73,15 +68,9 @@ func findOPFPath(zr *zip.Reader) (string, error) {
 // parseSpine 解析 content.opf，返回按阅读顺序排列的 spine 条目。
 // 每个 SpineItem 包含 manifest 中的 href、media-type 和 id。
 func parseSpine(zr *zip.Reader, opfPath string) ([]SpineItem, error) {
-	f, err := openZipFile(zr, opfPath)
+	data, err := ziputil.ReadEntry(zr, opfPath, maxDecompressedEntrySize)
 	if err != nil {
 		return nil, fmt.Errorf("open opf: %w", err)
-	}
-	defer f.Close()
-
-	data, err := io.ReadAll(f)
-	if err != nil {
-		return nil, fmt.Errorf("read opf: %w", err)
 	}
 
 	var pkg opfPackage
@@ -138,13 +127,7 @@ type epubMetadata struct {
 
 // extractMetadata 从 content.opf 中提取 dc:title。
 func extractMetadata(zr *zip.Reader, opfPath string) epubMetadata {
-	f, err := openZipFile(zr, opfPath)
-	if err != nil {
-		return epubMetadata{}
-	}
-	defer f.Close()
-
-	data, err := io.ReadAll(f)
+	data, err := ziputil.ReadEntry(zr, opfPath, maxDecompressedEntrySize)
 	if err != nil {
 		return epubMetadata{}
 	}
@@ -154,36 +137,6 @@ func extractMetadata(zr *zip.Reader, opfPath string) epubMetadata {
 		return epubMetadata{}
 	}
 	return epubMetadata{Title: pkg.Metadata.Title}
-}
-
-// readZipFile 读取 ZIP 内指定路径的文件内容。
-// 自动处理路径规范化（去除前导 ./ 和 /）。
-func readZipFile(zr *zip.Reader, name string) ([]byte, error) {
-	f, err := openZipFile(zr, name)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-	return io.ReadAll(f)
-}
-
-// openZipFile 打开 ZIP 内指定路径的文件，自动规范化路径。
-func openZipFile(zr *zip.Reader, name string) (io.ReadCloser, error) {
-	name = path.Clean(name)
-	// 去除前导 /
-	name = strings.TrimPrefix(name, "/")
-	for _, f := range zr.File {
-		if path.Clean(f.Name) == name {
-			return f.Open()
-		}
-	}
-	// 诊断：列出所有候选路径帮助定位不匹配
-	var candidates []string
-	for _, f := range zr.File {
-		candidates = append(candidates, path.Clean(f.Name))
-	}
-	slog.Debug("[epub:openZipFile] file not found", "name", name, "candidates", candidates)
-	return nil, fmt.Errorf("file not found in zip: %s", name)
 }
 
 // isXHTML 判断 MIME 类型是否为 XHTML。
@@ -233,13 +186,7 @@ type ncxContent struct {
 //  2. id 包含 "ncx" 的条目
 //  3. href 以 "toc.ncx" 结尾的条目
 func findNCXPath(zr *zip.Reader, opfPath string) (string, bool) {
-	f, err := openZipFile(zr, opfPath)
-	if err != nil {
-		return "", false
-	}
-	defer f.Close()
-
-	data, err := io.ReadAll(f)
+	data, err := ziputil.ReadEntry(zr, opfPath, maxDecompressedEntrySize)
 	if err != nil {
 		return "", false
 	}
@@ -280,7 +227,7 @@ func findNCXPath(zr *zip.Reader, opfPath string) (string, bool) {
 // 返回 map[content_src]title，其中 content_src 是 XHTML 文件相对于 OPF 目录的路径。
 // 例如：{"chapter1.xhtml": "第一章 开始", "chapter2.xhtml": "第二章 发展"}
 func extractNCXTitles(zr *zip.Reader, ncxPath string) map[string]string {
-	ncxData, err := readZipFile(zr, ncxPath)
+	ncxData, err := ziputil.ReadEntry(zr, ncxPath, maxDecompressedEntrySize)
 	if err != nil {
 		slog.Debug("[epub:extractNCXTitles] read ncx failed", "path", ncxPath, "error", err)
 		return nil
@@ -353,13 +300,7 @@ type NavItem struct {
 //  1. properties 属性包含 "nav" 的条目（EPUB3 标准方式）
 //  2. 文件名包含 "navigation-documents" 或 "nav" 且为 XHTML 类型的条目
 func findNavFiles(zr *zip.Reader, opfPath string) []NavItem {
-	f, err := openZipFile(zr, opfPath)
-	if err != nil {
-		return nil
-	}
-	defer f.Close()
-
-	data, err := io.ReadAll(f)
+	data, err := ziputil.ReadEntry(zr, opfPath, maxDecompressedEntrySize)
 	if err != nil {
 		return nil
 	}
