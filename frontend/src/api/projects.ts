@@ -427,7 +427,7 @@ export const fetchResourceSegments = async (
     group_key?: string
     quality_issues?: 'has' | 'none'
     quality_severity?: 'warning' | 'error'
-    quality_code?: 'untranslated' | 'length_ratio' | 'duplicate'
+    quality_code?: 'untranslated' | 'length_ratio' | 'duplicate' | 'source_residual'
     cursor?: string
     limit?: number
   },

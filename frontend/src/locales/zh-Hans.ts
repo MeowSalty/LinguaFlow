@@ -489,6 +489,7 @@ const messages = {
         untranslated: '未翻译',
         lengthRatio: '长度异常',
         duplicate: '重复译文',
+        sourceResidual: '源文残留',
       },
       editTitle: '编辑段落',
       columns: {

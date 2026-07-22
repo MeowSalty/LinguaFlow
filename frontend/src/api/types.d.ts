@@ -1424,7 +1424,7 @@ export interface components {
             segment_index: number;
             /** @enum {string} */
             severity: "warning" | "error";
-            /** @description 问题代码（untranslated, length_ratio, duplicate） */
+            /** @description 问题代码（untranslated, length_ratio, duplicate, source_residual） */
             code: string;
             message: string;
         };
@@ -3580,7 +3580,7 @@ export interface operations {
                 /** @description 按 quality_issues 中的 severity 过滤；指定时隐含仅返回含匹配问题的段落 */
                 quality_severity?: "warning" | "error";
                 /** @description 按 quality_issues 中的 code 过滤；指定时隐含仅返回含匹配问题的段落 */
-                quality_code?: "untranslated" | "length_ratio" | "duplicate";
+                quality_code?: "untranslated" | "length_ratio" | "duplicate" | "source_residual";
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };
