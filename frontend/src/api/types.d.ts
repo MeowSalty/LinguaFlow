@@ -2180,6 +2180,12 @@ export interface components {
              *     - 0.9: 仅考虑累积概率前 90% 的 token
              */
             top_p?: number;
+            /**
+             * @description 设为 true 时以流式发起请求并在内部累积为完整响应后返回，
+             *     适用于只接受 stream:true 的兼容网关。默认 false。
+             * @default false
+             */
+            stream: boolean;
         };
         /** @description Anthropic Claude 后端选项。 */
         AnthropicBackendOptions: {
@@ -2231,6 +2237,12 @@ export interface components {
              * @default true
              */
             enable_prompt_cache: boolean;
+            /**
+             * @description 设为 true 时以流式发起请求并在内部累积为完整响应后返回，
+             *     适用于只接受 stream:true 的兼容网关。默认 false。
+             * @default false
+             */
+            stream: boolean;
         };
         /** @description Google Gemini 后端选项。 */
         GoogleBackendOptions: {
@@ -2275,6 +2287,12 @@ export interface components {
              *     - 1.0: 不限制
              */
             top_p?: number;
+            /**
+             * @description 设为 true 时以流式发起请求并在内部累积为完整响应后返回，
+             *     适用于只接受 stream:true 的兼容网关。默认 false。
+             * @default false
+             */
+            stream: boolean;
         };
         BackendOptions: components["schemas"]["OpenAIBackendOptions"] | components["schemas"]["AnthropicBackendOptions"] | components["schemas"]["GoogleBackendOptions"];
         IncrementalUpdateChanges: {
