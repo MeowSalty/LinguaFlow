@@ -4337,6 +4337,30 @@ components:
           description: 术语源文最短字符数
         retry:
           $ref: '#/components/schemas/RetryConfig'
+    AdjudicateRoundConfig:
+      type: object
+      description: 质量裁决轮次配置。裁决 system prompt 内置不可见，无 prompt_template_id。
+      properties:
+        batch_size:
+          type: integer
+          minimum: 0
+          description: 段落数上限；0=不限制，与 max_words_per_batch 至少填一项
+        max_words_per_batch:
+          type: integer
+          minimum: 0
+          description: 字词数上限；0=不限制，与 batch_size 至少填一项
+        adjudicate_codes:
+          type: array
+          items:
+            type: string
+            enum:
+              - source_residual
+              - length_ratio
+          description: |
+            可裁决的质量问题 code 子集。空或不传时默认 ["source_residual"]。
+            untranslated 与 duplicate 为硬规则，不可裁决。
+        retry:
+          $ref: '#/components/schemas/RetryConfig'
     ExecutionRoundConfig:
       type: object
       required:
@@ -4349,7 +4373,8 @@ components:
           enum:
             - translate
             - extract
-          description: 轮次模式：translate=翻译，extract=术语抽取
+            - adjudicate
+          description: 轮次模式：translate=翻译，extract=术语抽取，adjudicate=质量裁决
         backend_id:
           type: integer
           description: 后端 ID（Backend 单表全局唯一）
@@ -4362,6 +4387,9 @@ components:
         extract:
           $ref: '#/components/schemas/ExtractRoundConfig'
           description: 术语抽取模式配置（mode=extract 时必填）
+        adjudicate:
+          $ref: '#/components/schemas/AdjudicateRoundConfig'
+          description: 质量裁决模式配置（mode=adjudicate 时必填）
     TranslationPromptTemplateScope:
       type: string
       enum:
