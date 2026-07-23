@@ -134,6 +134,9 @@ func applyServerEnvOverrides(cfg *ServerConfig) {
 	if v := os.Getenv("LINGUAFLOW_REGISTRATION_AUTO_ADMIN"); v != "" {
 		cfg.Registration.AutoAdmin = parseBool(v)
 	}
+	if v := os.Getenv("LINGUAFLOW_SERVE_UI"); v != "" {
+		cfg.ServeUI = parseBool(v)
+	}
 }
 
 func parseBool(v string) bool {
