@@ -20,8 +20,11 @@ import type { ApiSchemas } from '@/api/client'
 type ExecutionRoundConfig = ApiSchemas['ExecutionRoundConfig']
 type TranslateRoundConfig = NonNullable<ExecutionRoundConfig['translate']>
 type ExtractRoundConfig = NonNullable<ExecutionRoundConfig['extract']>
+type AdjudicateRoundConfig = NonNullable<ExecutionRoundConfig['adjudicate']>
 type RetryConfig = NonNullable<TranslateRoundConfig['retry']>
 type ExecutionPlanRubyRetryConfig = ApiSchemas['ExecutionPlanRubyRetryConfig']
+type RoundMode = ExecutionRoundConfig['mode']
+type AdjudicateCode = NonNullable<AdjudicateRoundConfig['adjudicate_codes']>[number]
 
 type RoundModel = ExecutionRoundConfig
 
@@ -45,6 +48,13 @@ const DEFAULT_EXTRACT: ExtractRoundConfig = {
   max_words_per_batch: 0,
   max_terms_per_1000_chars: 25.0,
   min_source_len: 2,
+  retry: { ...DEFAULT_RETRY },
+}
+
+const DEFAULT_ADJUDICATE: AdjudicateRoundConfig = {
+  batch_size: 10,
+  max_words_per_batch: 0,
+  adjudicate_codes: ['source_residual'],
   retry: { ...DEFAULT_RETRY },
 }
 
@@ -102,6 +112,23 @@ function mergeExtract(source?: Partial<ExtractRoundConfig>): ExtractRoundConfig 
   }
 }
 
+function mergeAdjudicate(source?: Partial<AdjudicateRoundConfig>): AdjudicateRoundConfig {
+  if (!source) return deepClone(DEFAULT_ADJUDICATE)
+  return {
+    batch_size: source.batch_size ?? DEFAULT_ADJUDICATE.batch_size,
+    max_words_per_batch: source.max_words_per_batch ?? DEFAULT_ADJUDICATE.max_words_per_batch,
+    adjudicate_codes:
+      source.adjudicate_codes && source.adjudicate_codes.length > 0
+        ? [...source.adjudicate_codes]
+        : [...(DEFAULT_ADJUDICATE.adjudicate_codes ?? [])],
+    retry: {
+      max_attempts: source.retry?.max_attempts ?? DEFAULT_RETRY.max_attempts,
+      backoff_ms: source.retry?.backoff_ms ?? DEFAULT_RETRY.backoff_ms,
+      jitter: source.retry?.jitter ?? DEFAULT_RETRY.jitter,
+    },
+  }
+}
+
 function mergeRound(source?: Partial<ExecutionRoundConfig>): RoundModel {
   if (!source) return deepClone(DEFAULT_ROUND)
   const mode = source.mode ?? 'translate'
@@ -111,6 +138,7 @@ function mergeRound(source?: Partial<ExecutionRoundConfig>): RoundModel {
     concurrency: source.concurrency ?? DEFAULT_ROUND.concurrency,
     translate: mode === 'translate' ? mergeTranslate(source.translate) : undefined,
     extract: mode === 'extract' ? mergeExtract(source.extract) : undefined,
+    adjudicate: mode === 'adjudicate' ? mergeAdjudicate(source.adjudicate) : undefined,
   }
 }
 
@@ -215,8 +243,9 @@ watch(
 // ─── 操作方法 ────────────────────────────────────────────────
 
 const modeOptions = computed(() => [
-  { label: t('executionPlanEditor.round.modeTranslate'), value: 'translate' },
-  { label: t('executionPlanEditor.round.modeExtract'), value: 'extract' },
+  { label: t('executionPlanEditor.round.modeTranslate'), value: 'translate' as RoundMode },
+  { label: t('executionPlanEditor.round.modeExtract'), value: 'extract' as RoundMode },
+  { label: t('executionPlanEditor.round.modeAdjudicate'), value: 'adjudicate' as RoundMode },
 ])
 
 const segmentFilterOptions = computed(() => [
@@ -225,15 +254,41 @@ const segmentFilterOptions = computed(() => [
   { label: t('executionPlanEditor.round.segmentFilterAll'), value: 'all' },
 ])
 
-const switchRoundMode = (round: RoundModel, mode: 'translate' | 'extract'): void => {
+const adjudicateCodeOptions = computed(() => [
+  {
+    label: t('executionPlanEditor.round.adjudicateCodeSourceResidual'),
+    value: 'source_residual' as AdjudicateCode,
+  },
+  {
+    label: t('executionPlanEditor.round.adjudicateCodeLengthRatio'),
+    value: 'length_ratio' as AdjudicateCode,
+  },
+])
+
+const modeBadgeClass = (mode: RoundMode): string => {
+  if (mode === 'translate') return 'bg-lf-brand-soft text-brand-600'
+  if (mode === 'extract') return 'bg-amber-50 text-amber-600'
+  return 'bg-violet-50 text-violet-600'
+}
+
+const modeLabel = (mode: RoundMode): string => {
+  if (mode === 'translate') return t('executionPlanEditor.round.modeTranslate')
+  if (mode === 'extract') return t('executionPlanEditor.round.modeExtract')
+  return t('executionPlanEditor.round.modeAdjudicate')
+}
+
+const switchRoundMode = (round: RoundModel, mode: RoundMode): void => {
   if (round.mode === mode) return
   round.mode = mode
+  round.translate = undefined
+  round.extract = undefined
+  round.adjudicate = undefined
   if (mode === 'translate') {
     round.translate = deepClone(DEFAULT_TRANSLATE)
-    round.extract = undefined
-  } else {
+  } else if (mode === 'extract') {
     round.extract = deepClone(DEFAULT_EXTRACT)
-    round.translate = undefined
+  } else {
+    round.adjudicate = deepClone(DEFAULT_ADJUDICATE)
   }
 }
 
@@ -302,20 +357,12 @@ const emitUpdate = (): void => {
         <div class="flex items-center gap-2">
           <span
             class="inline-flex h-6 w-6 items-center justify-center rounded-full text-xs font-bold"
-            :class="
-              round.mode === 'translate'
-                ? 'bg-lf-brand-soft text-brand-600'
-                : 'bg-amber-50 text-amber-600'
-            "
+            :class="modeBadgeClass(round.mode)"
           >
             {{ index + 1 }}
           </span>
           <span class="text-sm font-semibold">
-            {{
-              round.mode === 'translate'
-                ? t('executionPlanEditor.round.modeTranslate')
-                : t('executionPlanEditor.round.modeExtract')
-            }}
+            {{ modeLabel(round.mode) }}
           </span>
         </div>
       </template>
@@ -360,7 +407,7 @@ const emitUpdate = (): void => {
           :value="round.mode"
           size="small"
           :disabled="disabled"
-          @update:value="(v: 'translate' | 'extract') => switchRoundMode(round, v)"
+          @update:value="(v: RoundMode) => switchRoundMode(round, v)"
         >
           <NRadioButton
             v-for="opt in modeOptions"
@@ -686,6 +733,113 @@ const emitUpdate = (): void => {
             <div v-if="round.extract.retry" class="mt-2 flex items-center gap-2">
               <NSwitch
                 v-model:value="round.extract.retry.jitter"
+                size="small"
+                :disabled="disabled"
+              />
+              <span class="text-xs text-lf-text-subtle">
+                {{ t('executionPlanEditor.round.retryJitter') }}
+              </span>
+            </div>
+          </NCollapseItem>
+        </NCollapse>
+      </template>
+
+      <!-- 质量裁决模式配置 -->
+      <template v-if="round.mode === 'adjudicate' && round.adjudicate">
+        <div class="mt-3 rounded-lg border border-lf-border-soft bg-lf-surface-muted/40 px-3 py-2">
+          <p class="text-xs leading-5 text-lf-text-muted">
+            {{ t('executionPlanEditor.round.adjudicatePromptHint') }}
+          </p>
+        </div>
+
+        <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">
+          <div>
+            <div class="mb-1 text-xs text-lf-text-subtle">
+              {{ t('executionPlanEditor.round.adjudicateBatchSize') }}
+            </div>
+            <NInputNumber
+              v-model:value="round.adjudicate.batch_size"
+              :min="0"
+              :max="10000"
+              size="small"
+              :disabled="disabled"
+              class="w-full"
+            />
+            <div class="mt-1 text-[11px] text-lf-text-subtle">
+              {{ t('executionPlanEditor.round.adjudicateBatchSizeHint') }}
+            </div>
+          </div>
+          <div>
+            <div class="mb-1 text-xs text-lf-text-subtle">
+              {{ t('executionPlanEditor.round.adjudicateMaxWordsPerBatch') }}
+            </div>
+            <NInputNumber
+              v-model:value="round.adjudicate.max_words_per_batch"
+              :min="0"
+              :max="100000"
+              size="small"
+              :disabled="disabled"
+              class="w-full"
+            />
+            <div class="mt-1 text-[11px] text-lf-text-subtle">
+              {{ t('executionPlanEditor.round.adjudicateMaxWordsPerBatchHint') }}
+            </div>
+          </div>
+        </div>
+
+        <div class="mt-3">
+          <div class="mb-1 text-xs text-lf-text-subtle">
+            {{ t('executionPlanEditor.round.adjudicateCodes') }}
+          </div>
+          <NSelect
+            v-model:value="round.adjudicate.adjudicate_codes"
+            :options="adjudicateCodeOptions"
+            multiple
+            size="small"
+            :disabled="disabled"
+            :placeholder="t('executionPlanEditor.round.adjudicateCodesPlaceholder')"
+          />
+          <div class="mt-1 text-[11px] text-lf-text-subtle">
+            {{ t('executionPlanEditor.round.adjudicateCodesHint') }}
+          </div>
+        </div>
+
+        <NCollapse class="mt-3">
+          <NCollapseItem :title="t('executionPlanEditor.round.advancedConfig')">
+            <NGrid :cols="2" :x-gap="12" :y-gap="10">
+              <NGi>
+                <div class="mb-1 text-xs text-lf-text-subtle">
+                  {{ t('executionPlanEditor.round.retryMaxAttempts') }}
+                </div>
+                <NInputNumber
+                  v-if="round.adjudicate.retry"
+                  v-model:value="round.adjudicate.retry.max_attempts"
+                  :min="0"
+                  :max="10"
+                  size="small"
+                  :disabled="disabled"
+                  class="w-full"
+                />
+              </NGi>
+              <NGi>
+                <div class="mb-1 text-xs text-lf-text-subtle">
+                  {{ t('executionPlanEditor.round.retryBackoffMs') }}
+                </div>
+                <NInputNumber
+                  v-if="round.adjudicate.retry"
+                  v-model:value="round.adjudicate.retry.backoff_ms"
+                  :min="0"
+                  :max="60000"
+                  :step="100"
+                  size="small"
+                  :disabled="disabled"
+                  class="w-full"
+                />
+              </NGi>
+            </NGrid>
+            <div v-if="round.adjudicate.retry" class="mt-2 flex items-center gap-2">
+              <NSwitch
+                v-model:value="round.adjudicate.retry.jitter"
                 size="small"
                 :disabled="disabled"
               />

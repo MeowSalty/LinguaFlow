@@ -185,6 +185,15 @@ const validateRounds = (): boolean => {
         return false
       }
     }
+    if (round.mode === 'adjudicate' && round.adjudicate) {
+      const hasBatchSize = round.adjudicate.batch_size && round.adjudicate.batch_size > 0
+      const hasMaxWords =
+        round.adjudicate.max_words_per_batch && round.adjudicate.max_words_per_batch > 0
+      if (!hasBatchSize && !hasMaxWords) {
+        message.error(t('executionPlanTemplates.validation.roundBatchConfigRequired', { n: i + 1 }))
+        return false
+      }
+    }
   }
   return true
 }
@@ -220,6 +229,21 @@ const buildPayload = (): CreateRequest => {
             max_words_per_batch: round.extract.max_words_per_batch,
             max_terms_per_1000_chars: round.extract.max_terms_per_1000_chars,
             min_source_len: round.extract.min_source_len,
+            ...(round.extract.retry ? { retry: round.extract.retry } : {}),
+          },
+        }
+      }
+      if (round.mode === 'adjudicate' && round.adjudicate) {
+        return {
+          ...base,
+          adjudicate: {
+            batch_size: round.adjudicate.batch_size,
+            max_words_per_batch: round.adjudicate.max_words_per_batch,
+            adjudicate_codes:
+              round.adjudicate.adjudicate_codes && round.adjudicate.adjudicate_codes.length > 0
+                ? round.adjudicate.adjudicate_codes
+                : undefined,
+            ...(round.adjudicate.retry ? { retry: round.adjudicate.retry } : {}),
           },
         }
       }
@@ -299,6 +323,18 @@ const getScopeTagType = (scope: Scope): 'default' | 'info' | 'success' => {
 const formatDate = (dateStr: string | undefined): string => {
   if (!dateStr) return '—'
   return new Date(dateStr).toLocaleDateString()
+}
+
+const modeBadgeClass = (mode: ExecutionRoundConfig['mode']): string => {
+  if (mode === 'translate') return 'bg-lf-brand-soft text-brand-600'
+  if (mode === 'extract') return 'bg-amber-50 text-amber-600'
+  return 'bg-violet-50 text-violet-600'
+}
+
+const modeLabel = (mode: ExecutionRoundConfig['mode']): string => {
+  if (mode === 'translate') return t('executionPlanEditor.round.modeTranslate')
+  if (mode === 'extract') return t('executionPlanEditor.round.modeExtract')
+  return t('executionPlanEditor.round.modeAdjudicate')
 }
 
 // ── 生命周期 ──────────────────────────────────────────────────
@@ -467,20 +503,12 @@ watch(
             >
               <span
                 class="inline-flex h-5 w-5 items-center justify-center rounded-full text-[10px] font-semibold"
-                :class="
-                  round.mode === 'translate'
-                    ? 'bg-lf-brand-soft text-brand-600'
-                    : 'bg-amber-50 text-amber-600'
-                "
+                :class="modeBadgeClass(round.mode)"
               >
                 {{ idx + 1 }}
               </span>
               <span class="truncate">
-                {{
-                  round.mode === 'translate'
-                    ? t('executionPlanEditor.round.modeTranslate')
-                    : t('executionPlanEditor.round.modeExtract')
-                }}
+                {{ modeLabel(round.mode) }}
               </span>
             </div>
             <div v-if="item.rounds.length > 3" class="text-xs text-lf-text-subtle">

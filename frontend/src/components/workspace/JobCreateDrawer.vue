@@ -68,10 +68,14 @@ const handleToggleOverride = (enabled: boolean): void => {
 }
 
 const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string => {
-  const isExtract = round.mode === 'extract'
-  const batchSize = (isExtract ? round.extract?.batch_size : round.translate?.batch_size) ?? 0
-  const maxWordsPerBatch =
-    (isExtract ? round.extract?.max_words_per_batch : round.translate?.max_words_per_batch) ?? 0
+  const modeConfig =
+    round.mode === 'extract'
+      ? round.extract
+      : round.mode === 'adjudicate'
+        ? round.adjudicate
+        : round.translate
+  const batchSize = modeConfig?.batch_size ?? 0
+  const maxWordsPerBatch = modeConfig?.max_words_per_batch ?? 0
   const parts: string[] = []
   if (batchSize > 0) {
     parts.push(t('workspace.job.planPreviewBatchSegments', { batchSize }))
@@ -80,11 +84,15 @@ const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string 
     parts.push(t('workspace.job.planPreviewBatchWords', { maxWordsPerBatch }))
   }
   const batchInfo = parts.length === 0 ? t('workspace.job.planPreviewNoBatch') : parts.join(' / ')
+  const modeKey =
+    round.mode === 'extract'
+      ? 'workspace.job.planPreviewModeExtract'
+      : round.mode === 'adjudicate'
+        ? 'workspace.job.planPreviewModeAdjudicate'
+        : 'workspace.job.planPreviewModeTranslate'
   return t('workspace.job.planPreviewRoundItem', {
     index: index + 1,
-    mode: t(
-      isExtract ? 'workspace.job.planPreviewModeExtract' : 'workspace.job.planPreviewModeTranslate',
-    ),
+    mode: t(modeKey),
     batch: batchInfo,
     concurrency: round.concurrency,
   })
