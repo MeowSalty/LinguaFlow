@@ -276,7 +276,8 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 		}
 
 		if len(selectedRows) == 0 {
-			break
+			// 本轮无段可处理（如 translate pending_only 已全部译完）；继续后续 extract/adjudicate 轮
+			continue
 		}
 
 		// 构建 Document
@@ -303,9 +304,10 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 			}
 		}
 
-		// 构建 BatchHandler（翻译轮次用于持久化，抽取轮次不需要）
+		// 构建 BatchHandler（翻译/裁决轮次用于持久化，抽取轮次不需要）
 		var batchHandler func(_ context.Context, batchResult pipeline.BatchResult) error
-		if round.Mode == "translate" {
+		switch round.Mode {
+		case "translate":
 			batchHandler = func(_ context.Context, batchResult pipeline.BatchResult) error {
 				defaultStatus := service.SegmentStatusTranslated
 				if autoApprove {
@@ -364,13 +366,43 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 				}
 				return nil
 			}
+		case "adjudicate":
+			batchHandler = func(_ context.Context, batchResult pipeline.BatchResult) error {
+				completed := 0
+				failed := 0
+				for _, ts := range batchResult.Segments {
+					dbID, ok := docIndexToDBID[ts.Index]
+					if !ok {
+						continue
+					}
+					// 仅重写 quality_issues，不改 status / target
+					update := r.client.Segment.UpdateOneID(dbID).ClearQualityIssues()
+					if len(ts.Issues) > 0 {
+						update.SetQualityIssues(ts.Issues)
+					}
+					if err := update.Exec(ctx); err != nil {
+						r.logger.Warn("persist adjudicated issues failed", "segment_id", dbID, "err", err)
+						failed++
+						continue
+					}
+					completed++
+				}
+				if failed > 0 && completed == 0 {
+					return fmt.Errorf("adjudicate batch persist failed: all %d writable segments failed to write quality_issues", failed)
+				}
+				return nil
+			}
 		}
 
 		roundIdx := roundIdx // capture for closure
-		result, roundErr := eng.ExecuteRound(ctx, roundIdx, doc,
+		// 所有轮次统一用 SegmentFilter 限定任务级段落范围；
+		// adjudicate handler 的 BuildBatches 在已过滤 doc 上按 status∈{translated,edited}
+		// 且含可裁决 issue 进一步筛选，无需清空共享 doc 的 Status/Issues。
+		execOpts := []engine.ExecuteOption{
 			engine.WithSegmentFilter(segmentIndexes),
 			engine.WithBatchHandler(batchHandler),
-		)
+		}
+		result, roundErr := eng.ExecuteRound(ctx, roundIdx, doc, execOpts...)
 		if roundErr == nil {
 			lastResult = result
 		}
@@ -387,10 +419,7 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 			_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, fmt.Errorf("round %d (%s): %w", roundIdx, round.Mode, roundErr))
 			return nil
 		}
-
-		if result.UnresolvedCount == 0 {
-			break
-		}
+		// 不再因 UnresolvedCount==0 提前 break，避免跳过后续 extract/adjudicate 轮
 	}
 
 	completedQuery := r.client.Segment.Query().
@@ -437,6 +466,7 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 }
 
 // buildSegmentInputs 将 DB segments 转换为 SegmentInput 切片。
+// 额外载入 Target/Issues/Status 供裁决轮使用；translate/extract 无副作用。
 func buildSegmentInputs(rows []*ent.Segment) []pipeline.SegmentInput {
 	inputs := make([]pipeline.SegmentInput, len(rows))
 	for i, row := range rows {
@@ -444,10 +474,17 @@ func buildSegmentInputs(rows []*ent.Segment) []pipeline.SegmentInput {
 		if row.Meta != nil {
 			_ = json.Unmarshal([]byte(*row.Meta), &meta)
 		}
+		target := ""
+		if row.TargetText != nil {
+			target = *row.TargetText
+		}
 		inputs[i] = pipeline.SegmentInput{
 			ID:         strconv.Itoa(row.SegmentIndex),
 			SourceText: row.SourceText,
 			Meta:       meta,
+			TargetText: target,
+			Issues:     row.QualityIssues,
+			Status:     string(row.Status),
 		}
 	}
 	return inputs

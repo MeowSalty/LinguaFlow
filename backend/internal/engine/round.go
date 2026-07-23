@@ -8,7 +8,7 @@ import (
 )
 
 // RoundConfig 描述一轮的执行配置。
-// Translate 和 Extract 互斥，恰好一个必须非 nil。
+// Translate / Extract / Adjudicate 互斥，恰好一个必须非 nil。
 type RoundConfig struct {
 	Backend          backend.Backend
 	BatchSize        int
@@ -18,8 +18,9 @@ type RoundConfig struct {
 	Retry            backend.RetryPolicy
 	Context          *pipeline.ContextConfig
 
-	Translate *TranslateRoundConfig
-	Extract   *ExtractRoundConfig
+	Translate  *TranslateRoundConfig
+	Extract    *ExtractRoundConfig
+	Adjudicate *AdjudicateRoundConfig
 }
 
 // TranslateRoundConfig 翻译轮次的特有配置。
@@ -42,4 +43,13 @@ type ExtractRoundConfig struct {
 	MaxWordsPerBatch     int
 	Repair               repair.Options
 	ResponseMode         string
+}
+
+// AdjudicateRoundConfig 质量裁决轮次的特有配置。
+type AdjudicateRoundConfig struct {
+	Renderer        *prompt.AdjudicationRenderer
+	AdjudicateCodes []string
+	ResponseMode    string
+	// MaxBatchIndexSpan 同批段落索引跨度上限；<=0 不限制（默认关闭）。
+	MaxBatchIndexSpan int
 }

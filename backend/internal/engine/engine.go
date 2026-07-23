@@ -121,6 +121,8 @@ func (e *Engine) Close() error {
 			if len(eh.Backends) > 0 {
 				b = eh.Backends[0]
 			}
+		} else if ah, ok := r.Handler.(*pipeline.AdjudicateHandler); ok {
+			b = ah.Backend
 		}
 		if b == nil {
 			continue

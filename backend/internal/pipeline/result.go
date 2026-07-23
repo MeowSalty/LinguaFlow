@@ -3,6 +3,8 @@ package pipeline
 import (
 	"strconv"
 	"strings"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
 
 // SegmentResult 描述单个段落的翻译结果。
@@ -21,6 +23,7 @@ type TranslatedSegment struct {
 	TargetText string
 	Failed     bool
 	Meta       map[string]any
+	Issues     []qa.QualityIssue // 裁决轮：过滤后的 quality_issues；translate 轮为零值
 }
 
 // BatchResult 描述一批翻译的结果。

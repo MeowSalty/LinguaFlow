@@ -2,6 +2,8 @@
 // 独立于任何处理逻辑，供 pipeline、protect、parser 等包共同引用。
 package model
 
+import "github.com/MeowSalty/LinguaFlow/backend/internal/qa"
+
 // Segment 是文档中一个可翻译的最小单元。
 type Segment struct {
 	ID             string            // 稳定 hash（基于 Source）
@@ -12,6 +14,8 @@ type Segment struct {
 	Meta           map[string]any    // parser 注入的格式信息（块类型、行号、缩进等）
 	Skip           bool              // 增量翻译标记：true 时 translate stage 跳过
 	Translate      bool              // 上下文标记：true=需要翻译，false=仅作上下文参考
+	Issues         []qa.QualityIssue // 质量问题（裁决轮从 DB 重载；translate 轮通常为空）
+	Status         string            // 段落状态：pending/translated/edited/approved/rejected
 }
 
 // Document 是 parser 解析后的中间表示。stages 在其上原地修改。

@@ -318,8 +318,30 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 			if e.Concurrency < 1 {
 				return fmt.Errorf("%w: rounds[%d].extract.concurrency must be >= 1", ErrExecutionPlanConfigInvalid, i)
 			}
+		case "adjudicate":
+			if round.Adjudicate == nil {
+				return fmt.Errorf("%w: rounds[%d].adjudicate config required when mode=adjudicate", ErrExecutionPlanConfigInvalid, i)
+			}
+			a := round.Adjudicate
+			if a.BatchSize < 0 {
+				return fmt.Errorf("%w: rounds[%d].adjudicate.batch_size must be >= 0", ErrExecutionPlanConfigInvalid, i)
+			}
+			if a.MaxWordsPerBatch < 0 {
+				return fmt.Errorf("%w: rounds[%d].adjudicate.max_words_per_batch must be >= 0", ErrExecutionPlanConfigInvalid, i)
+			}
+			if a.BatchSize <= 0 && a.MaxWordsPerBatch <= 0 {
+				return fmt.Errorf("%w: rounds[%d].adjudicate.batch_size and max_words_per_batch cannot both be 0", ErrExecutionPlanConfigInvalid, i)
+			}
+			if a.Concurrency < 1 {
+				return fmt.Errorf("%w: rounds[%d].adjudicate.concurrency must be >= 1", ErrExecutionPlanConfigInvalid, i)
+			}
+			for _, code := range a.AdjudicateCodes {
+				if code != "source_residual" && code != "length_ratio" {
+					return fmt.Errorf("%w: rounds[%d].adjudicate.adjudicate_codes contains invalid code %q (allowed: source_residual, length_ratio)", ErrExecutionPlanConfigInvalid, i, code)
+				}
+			}
 		default:
-			return fmt.Errorf("%w: rounds[%d].mode must be 'translate' or 'extract'", ErrExecutionPlanConfigInvalid, i)
+			return fmt.Errorf("%w: rounds[%d].mode must be 'translate', 'extract' or 'adjudicate'", ErrExecutionPlanConfigInvalid, i)
 		}
 	}
 	return nil

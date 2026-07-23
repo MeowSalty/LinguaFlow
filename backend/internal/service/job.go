@@ -134,10 +134,11 @@ type ExecutionPlanRubyRetrySnapshot struct {
 
 // JobRoundSnapshot 单轮的完整执行快照。
 type JobRoundSnapshot struct {
-	Mode      string                     `json:"mode"` // "translate" | "extract"
-	Backend   BackendSnapshot            `json:"backend"`
-	Translate *JobTranslateRoundSnapshot `json:"translate,omitempty"`
-	Extract   *JobExtractRoundSnapshot   `json:"extract,omitempty"`
+	Mode       string                      `json:"mode"` // "translate" | "extract" | "adjudicate"
+	Backend    BackendSnapshot             `json:"backend"`
+	Translate  *JobTranslateRoundSnapshot  `json:"translate,omitempty"`
+	Extract    *JobExtractRoundSnapshot    `json:"extract,omitempty"`
+	Adjudicate *JobAdjudicateRoundSnapshot `json:"adjudicate,omitempty"`
 }
 
 // JobTranslateRoundSnapshot 翻译轮次快照。
@@ -161,6 +162,15 @@ type JobExtractRoundSnapshot struct {
 	MaxTermsPer1000Chars float64            `json:"max_terms_per_1000_chars"`
 	MinSourceLen         int                `json:"min_source_len"`
 	Retry                schema.RetryConfig `json:"retry"`
+}
+
+// JobAdjudicateRoundSnapshot 质量裁决轮次快照（无 prompt 字段，内置不可见）。
+type JobAdjudicateRoundSnapshot struct {
+	BatchSize        int                `json:"batch_size"`
+	MaxWordsPerBatch int                `json:"max_words_per_batch"`
+	Concurrency      int                `json:"concurrency"`
+	AdjudicateCodes  []string           `json:"adjudicate_codes,omitempty"`
+	Retry            schema.RetryConfig `json:"retry"`
 }
 
 // SegmentFilterSnapshot 翻译轮次段落过滤快照。
@@ -404,6 +414,27 @@ func (s *JobService) validateAndSnapshot(
 					MaxTermsPer1000Chars: e.MaxTermsPer1000Chars,
 					MinSourceLen:         e.MinSourceLen,
 					Retry:                e.Retry,
+				},
+			})
+
+		case "adjudicate":
+			if round.Adjudicate == nil {
+				return nil, fmt.Errorf("rounds[%d] adjudicate config is nil", i)
+			}
+			a := round.Adjudicate
+			codes := a.AdjudicateCodes
+			if len(codes) == 0 {
+				codes = []string{"source_residual"}
+			}
+			snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
+				Mode:    "adjudicate",
+				Backend: *backendSnap,
+				Adjudicate: &JobAdjudicateRoundSnapshot{
+					BatchSize:        a.BatchSize,
+					MaxWordsPerBatch: a.MaxWordsPerBatch,
+					Concurrency:      a.Concurrency,
+					AdjudicateCodes:  codes,
+					Retry:            a.Retry,
 				},
 			})
 

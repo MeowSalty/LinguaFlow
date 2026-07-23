@@ -84,6 +84,28 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 		}
 		apiRC.Extract = &extractCfg
 	}
+	if rc.Mode == "adjudicate" && rc.Adjudicate != nil {
+		a := rc.Adjudicate
+		apiRC.Concurrency = a.Concurrency
+		adjudicateCfg := AdjudicateRoundConfig{}
+		adjudicateCfg.BatchSize = &a.BatchSize
+		if a.MaxWordsPerBatch > 0 {
+			mwpb := a.MaxWordsPerBatch
+			adjudicateCfg.MaxWordsPerBatch = &mwpb
+		}
+		if len(a.AdjudicateCodes) > 0 {
+			codes := make([]AdjudicateRoundConfigAdjudicateCodes, 0, len(a.AdjudicateCodes))
+			for _, c := range a.AdjudicateCodes {
+				codes = append(codes, AdjudicateRoundConfigAdjudicateCodes(c))
+			}
+			adjudicateCfg.AdjudicateCodes = &codes
+		}
+		if a.Retry.MaxAttempts > 0 || a.Retry.BackoffMs > 0 || a.Retry.Jitter {
+			retry := toRetryConfigAPI(a.Retry)
+			adjudicateCfg.Retry = &retry
+		}
+		apiRC.Adjudicate = &adjudicateCfg
+	}
 	return apiRC
 }
 
@@ -233,6 +255,37 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 				}
 			}
 			rc.Extract = extractCfg
+		}
+		if ar.Mode == Adjudicate && ar.Adjudicate != nil {
+			a := ar.Adjudicate
+			adjudicateCfg := &schema.AdjudicateRoundConfig{
+				Concurrency: ar.Concurrency,
+			}
+			if a.BatchSize != nil {
+				adjudicateCfg.BatchSize = *a.BatchSize
+			}
+			if a.MaxWordsPerBatch != nil {
+				adjudicateCfg.MaxWordsPerBatch = *a.MaxWordsPerBatch
+			}
+			if a.AdjudicateCodes != nil {
+				codes := make([]string, 0, len(*a.AdjudicateCodes))
+				for _, c := range *a.AdjudicateCodes {
+					codes = append(codes, string(c))
+				}
+				adjudicateCfg.AdjudicateCodes = codes
+			}
+			if a.Retry != nil {
+				if a.Retry.MaxAttempts != nil {
+					adjudicateCfg.Retry.MaxAttempts = *a.Retry.MaxAttempts
+				}
+				if a.Retry.BackoffMs != nil {
+					adjudicateCfg.Retry.BackoffMs = *a.Retry.BackoffMs
+				}
+				if a.Retry.Jitter != nil {
+					adjudicateCfg.Retry.Jitter = *a.Retry.Jitter
+				}
+			}
+			rc.Adjudicate = adjudicateCfg
 		}
 		rounds = append(rounds, rc)
 	}
