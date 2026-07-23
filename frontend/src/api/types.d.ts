@@ -2382,12 +2382,25 @@ export interface components {
             min_source_len: number;
             retry?: components["schemas"]["RetryConfig"];
         };
+        /** @description 质量裁决轮次配置。裁决 system prompt 内置不可见，无 prompt_template_id。 */
+        AdjudicateRoundConfig: {
+            /** @description 段落数上限；0=不限制，与 max_words_per_batch 至少填一项 */
+            batch_size?: number;
+            /** @description 字词数上限；0=不限制，与 batch_size 至少填一项 */
+            max_words_per_batch?: number;
+            /**
+             * @description 可裁决的质量问题 code 子集。空或不传时默认 ["source_residual"]。
+             *     untranslated 与 duplicate 为硬规则，不可裁决。
+             */
+            adjudicate_codes?: ("source_residual" | "length_ratio")[];
+            retry?: components["schemas"]["RetryConfig"];
+        };
         ExecutionRoundConfig: {
             /**
-             * @description 轮次模式：translate=翻译，extract=术语抽取
+             * @description 轮次模式：translate=翻译，extract=术语抽取，adjudicate=质量裁决
              * @enum {string}
              */
-            mode: "translate" | "extract";
+            mode: "translate" | "extract" | "adjudicate";
             /** @description 后端 ID（Backend 单表全局唯一） */
             backend_id: number;
             concurrency: number;
@@ -2395,6 +2408,8 @@ export interface components {
             translate?: components["schemas"]["TranslateRoundConfig"];
             /** @description 术语抽取模式配置（mode=extract 时必填） */
             extract?: components["schemas"]["ExtractRoundConfig"];
+            /** @description 质量裁决模式配置（mode=adjudicate 时必填） */
+            adjudicate?: components["schemas"]["AdjudicateRoundConfig"];
         };
         /** @enum {string} */
         TranslationPromptTemplateScope: "user" | "org" | "system";
