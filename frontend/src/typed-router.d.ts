@@ -157,6 +157,13 @@ declare module 'vue-router/auto-routes' {
       Record<never, never>,
       | never
     >,
+    '/tools/epub-rotate': RouteRecordInfo<
+      '/tools/epub-rotate',
+      '/tools/epub-rotate',
+      Record<never, never>,
+      Record<never, never>,
+      | never
+    >,
   }
 
   /**
@@ -276,6 +283,12 @@ declare module 'vue-router/auto-routes' {
     'src/pages/service.vue': {
       routes:
         | '/service'
+      views:
+        | never
+    }
+    'src/pages/tools/epub-rotate.vue': {
+      routes:
+        | '/tools/epub-rotate'
       views:
         | never
     }
