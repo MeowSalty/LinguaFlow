@@ -43,6 +43,17 @@ const userOptions = computed<DropdownOption[]>(() => {
         ]),
     },
     { type: 'divider', key: 'divider-1' },
+    {
+      label: t('nav.changelog'),
+      key: 'changelog',
+      icon: () => h(IconifyIcon, { icon: 'carbon:catalog', class: 'text-base' }),
+    },
+    {
+      label: t('nav.about'),
+      key: 'about',
+      icon: () => h(IconifyIcon, { icon: 'carbon:information', class: 'text-base' }),
+    },
+    { type: 'divider', key: 'divider-2' },
   ]
 
   if (service.isLocal) {
@@ -93,6 +104,10 @@ const onSelectUserAction = async (key: string | number) => {
   } else if (key === 'switch-service') {
     const query = service.isLocal ? { force: '1' } : {}
     await router.push({ path: '/service', query })
+  } else if (key === 'changelog') {
+    await router.push({ path: '/changelog' })
+  } else if (key === 'about') {
+    await router.push({ path: '/about' })
   }
 }
 
@@ -189,7 +204,7 @@ const navActiveClass = '!bg-lf-brand-soft !text-brand-600 font-semibold'
         </RouterLink>
 
         <nav
-          class="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto text-sm"
+          class="flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-sm"
           :aria-label="t('nav.main')"
         >
           <RouterLink to="/" :class="[navLinkClass]" :active-class="navActiveClass">
@@ -232,14 +247,6 @@ const navActiveClass = '!bg-lf-brand-soft !text-brand-600 font-semibold'
               <span class="whitespace-nowrap">{{ t('nav.tools') }}</span>
             </RouterLink>
           </NDropdown>
-          <RouterLink to="/changelog" :class="[navLinkClass]" :active-class="navActiveClass">
-            <IconifyIcon icon="carbon:catalog" class="text-base" />
-            <span class="whitespace-nowrap">{{ t('nav.changelog') }}</span>
-          </RouterLink>
-          <RouterLink to="/about" :class="[navLinkClass]" :active-class="navActiveClass">
-            <IconifyIcon icon="carbon:information" class="text-base" />
-            <span class="whitespace-nowrap">{{ t('nav.about') }}</span>
-          </RouterLink>
           <RouterLink
             v-if="isAdmin"
             to="/admin"
@@ -278,7 +285,7 @@ const navActiveClass = '!bg-lf-brand-soft !text-brand-600 font-semibold'
             {{ t('layout.localModeBadge') }}
           </NTag>
           <span
-            class="hidden max-w-28 truncate font-mono text-[11px] text-lf-text-subtle lg:inline"
+            class="hidden max-w-28 truncate font-mono text-[11px] text-lf-text-subtle xl:inline"
             :title="service.baseUrl"
           >
             {{ service.displayName }}
