@@ -17,8 +17,9 @@ import (
 )
 
 const (
-	RoundModeTranslate = "translate"
-	RoundModeExtract   = "extract"
+	RoundModeTranslate  = "translate"
+	RoundModeExtract    = "extract"
+	RoundModeAdjudicate = "adjudicate"
 )
 
 // PostprocessConfig 是 pipeline 级别的后处理配置。

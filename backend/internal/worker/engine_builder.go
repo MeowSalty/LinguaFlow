@@ -14,6 +14,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/repair"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
 
 // buildEngineFromSnapshot 从任务快照构建引擎实例。
@@ -60,6 +61,16 @@ func (r *JobRunner) buildEngineFromSnapshot(
 				return nil, fmt.Errorf("round[%d]: mode=extract but extract config is nil", i)
 			}
 			round, err := r.buildExtractRound(rs, b)
+			if err != nil {
+				return nil, err
+			}
+			rounds = append(rounds, round)
+
+		case "adjudicate":
+			if rs.Adjudicate == nil {
+				return nil, fmt.Errorf("round[%d]: mode=adjudicate but adjudicate config is nil", i)
+			}
+			round, err := r.buildAdjudicateRound(rs, b)
 			if err != nil {
 				return nil, err
 			}
@@ -177,6 +188,32 @@ func (r *JobRunner) buildExtractRound(rs service.JobRoundSnapshot, b backend.Bac
 		ExtractMaxTermsPer1000Chars: e.MaxTermsPer1000Chars,
 		ExtractMinSourceLen:         e.MinSourceLen,
 		ExtractMaxWordsPerBatch:     e.MaxWordsPerBatch,
+	}, nil
+}
+
+// buildAdjudicateRound 从快照构建质量裁决轮次配置（prompt 取自内嵌模板）。
+func (r *JobRunner) buildAdjudicateRound(rs service.JobRoundSnapshot, b backend.Backend) (engine.Round, error) {
+	a := rs.Adjudicate
+
+	renderer, err := prompt.NewAdjudicationRenderer(templates.EmbeddedAdjudicationTemplate())
+	if err != nil {
+		return engine.Round{}, fmt.Errorf("build adjudication renderer: %w", err)
+	}
+
+	return engine.Round{
+		Backend:          b,
+		BatchSize:        a.BatchSize,
+		MaxWordsPerBatch: a.MaxWordsPerBatch,
+		Concurrency:      a.Concurrency,
+		Retry: backend.RetryPolicy{
+			MaxAttempts: a.Retry.MaxAttempts,
+			Backoff:     time.Duration(a.Retry.BackoffMs) * time.Millisecond,
+			Jitter:      a.Retry.Jitter,
+		},
+		Mode:               pipeline.RoundModeAdjudicate,
+		ResponseMode:       responseModeFromBackendOptions(rs.Backend.Options),
+		AdjudicateRenderer: renderer,
+		AdjudicateCodes:    a.AdjudicateCodes,
 	}, nil
 }
 

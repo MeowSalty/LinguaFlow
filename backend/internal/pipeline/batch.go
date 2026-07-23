@@ -84,13 +84,42 @@ func BuildContinuousPendingBatches(doc *Document, pending []int, constraint Batc
 	return batches
 }
 
-// splitByConstraint 按段落数和字词数双重约束切分一组连续段落索引。
+// BuildPackedPendingBatches 按文档顺序贪心填充批次，允许索引不连续的段落同批。
+// 适用于裁决等段落独立、无需连续上下文的场景。
+//
+// maxIndexSpan <= 0：不限制同批首尾索引跨度（默认关闭）。
+// maxIndexSpan > 0：要求同批内 max(idx)-min(idx) <= maxIndexSpan，超限则切批。
+// 段落数 / 字词数约束与 splitByConstraint 相同；单段超限仍独占一批。
+func BuildPackedPendingBatches(doc *Document, pending []int, constraint BatchConstraint, maxIndexSpan int) [][]int {
+	if len(pending) == 0 {
+		return nil
+	}
+	if maxIndexSpan <= 0 {
+		return splitByConstraint(doc, pending, constraint)
+	}
+	return splitByConstraintAndSpan(doc, pending, constraint, maxIndexSpan)
+}
+
+// splitByConstraint 按段落数和字词数双重约束切分一组段落索引（不必连续）。
 // 超限时，触发超限的段落不加入当前批次，成为下一批次的第一段。
 // 单段超限时独占一个批次（不截断），后续由 shrink 机制处理。
 func splitByConstraint(doc *Document, group []int, constraint BatchConstraint) [][]int {
-	if constraint.MaxSegments <= 0 && constraint.MaxWords <= 0 {
-		return [][]int{group}
+	return splitByConstraintAndSpan(doc, group, constraint, 0)
+}
+
+// splitByConstraintAndSpan 在 splitByConstraint 基础上可选索引跨度上限。
+// maxIndexSpan <= 0 表示不限制跨度。
+func splitByConstraintAndSpan(doc *Document, group []int, constraint BatchConstraint, maxIndexSpan int) [][]int {
+	if len(group) == 0 {
+		return nil
 	}
+	noSegLimit := constraint.MaxSegments <= 0
+	noWordLimit := constraint.MaxWords <= 0
+	noSpanLimit := maxIndexSpan <= 0
+	if noSegLimit && noWordLimit && noSpanLimit {
+		return [][]int{append([]int(nil), group...)}
+	}
+
 	var batches [][]int
 	start := 0
 	wordCount := 0
@@ -98,9 +127,10 @@ func splitByConstraint(doc *Document, group []int, constraint BatchConstraint) [
 		segWords := CountWords(doc.Segments[idx].Source)
 		if i > start {
 			segCount := i - start
-			exceedSegments := constraint.MaxSegments > 0 && segCount >= constraint.MaxSegments
-			exceedWords := constraint.MaxWords > 0 && wordCount+segWords > constraint.MaxWords
-			if exceedSegments || exceedWords {
+			exceedSegments := !noSegLimit && segCount >= constraint.MaxSegments
+			exceedWords := !noWordLimit && wordCount+segWords > constraint.MaxWords
+			exceedSpan := !noSpanLimit && idx-group[start] > maxIndexSpan
+			if exceedSegments || exceedWords || exceedSpan {
 				batches = append(batches, append([]int(nil), group[start:i]...))
 				start = i
 				wordCount = 0

@@ -50,6 +50,12 @@ type Round struct {
 	ExtractMinSourceLen         int
 	ExtractMaxWordsPerBatch     int
 	ExtractRepair               repair.Options
+
+	// 裁决轮次专用字段
+	AdjudicateRenderer *prompt.AdjudicationRenderer
+	AdjudicateCodes    []string
+	// MaxBatchIndexSpan 同批段落索引跨度上限；<=0 不限制（默认关闭，预埋）。
+	MaxBatchIndexSpan int
 }
 
 // RuntimeResources 封装可选的运行时资源。
@@ -127,6 +133,14 @@ func buildRoundConfigs(in []Round, cfg *Config) []RoundConfig {
 				ResponseMode:         r.ResponseMode,
 			}
 
+		case pipeline.RoundModeAdjudicate:
+			rc.Adjudicate = &AdjudicateRoundConfig{
+				Renderer:          r.AdjudicateRenderer,
+				AdjudicateCodes:   r.AdjudicateCodes,
+				ResponseMode:      r.ResponseMode,
+				MaxBatchIndexSpan: r.MaxBatchIndexSpan,
+			}
+
 		default:
 			// 未知模式默认为翻译
 			rc.Translate = &TranslateRoundConfig{
@@ -186,6 +200,9 @@ func buildSinglePipelineRound(
 ) (pipeline.Round, error) {
 	if rc.Extract != nil {
 		return buildExtractPipelineRound(rc, glossaryRes, logger, reporter)
+	}
+	if rc.Adjudicate != nil {
+		return buildAdjudicatePipelineRound(rc, logger, reporter)
 	}
 	return buildTranslatePipelineRound(
 		rc, glossaryRes, tmRes, rubyRestorer, rubyRetryBackends,
@@ -303,6 +320,37 @@ func buildExtractPipelineRound(
 		ResponseMode:         e.ResponseMode,
 		Logger:               logger,
 		Reporter:             reporter,
+	}
+
+	return pipeline.Round{
+		Concurrency: rc.Concurrency,
+		Retry:       rc.Retry,
+		Context:     rc.Context,
+		Handler:     handler,
+	}, nil
+}
+
+func buildAdjudicatePipelineRound(
+	rc RoundConfig,
+	logger *slog.Logger,
+	reporter progress.Reporter,
+) (pipeline.Round, error) {
+	a := rc.Adjudicate
+	if a == nil {
+		a = &AdjudicateRoundConfig{}
+	}
+
+	handler := &pipeline.AdjudicateHandler{
+		Backend:           rc.Backend,
+		Renderer:          a.Renderer,
+		BatchSize:         rc.BatchSize,
+		MaxWordsPerBatch:  rc.MaxWordsPerBatch,
+		MaxBatchIndexSpan: a.MaxBatchIndexSpan,
+		Retry:             rc.Retry,
+		ResponseMode:      a.ResponseMode,
+		AdjudicateCodes:   a.AdjudicateCodes,
+		Reporter:          reporter,
+		Logger:            logger,
 	}
 
 	return pipeline.Round{

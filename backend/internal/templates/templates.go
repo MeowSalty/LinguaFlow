@@ -59,6 +59,16 @@ func EmbeddedPruneTemplate() string {
 	return strings.TrimRight(string(data), "\n")
 }
 
+// EmbeddedAdjudicationTemplate 返回嵌入的质量裁决提示词模板内容。
+// 裁决 prompt 对用户不可见，仅供引擎内置使用。
+func EmbeddedAdjudicationTemplate() string {
+	data, err := fs.ReadFile(builtinFS, "default/prompts/default_adjudication.tmpl")
+	if err != nil {
+		panic(fmt.Sprintf("embedded prompts/default_adjudication.tmpl not found: %v", err))
+	}
+	return strings.TrimRight(string(data), "\n")
+}
+
 // EmbeddedProfileConfig 返回嵌入的默认翻译策略配置字节。
 func EmbeddedProfileConfig() []byte {
 	data, err := fs.ReadFile(builtinFS, "default/profiles/default.yaml")

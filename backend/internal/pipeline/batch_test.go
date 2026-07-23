@@ -209,3 +209,58 @@ func TestBuildContinuousPendingBatches_DiscontinuousWithWordConstraint(t *testin
 		t.Errorf("discontinuous with word constraint: got %v want %v", got, want)
 	}
 }
+
+func TestBuildPackedPendingBatches_DiscontinuousFills(t *testing.T) {
+	sources := []string{"a", "b", "c", "x", "y"}
+	doc := testDocWithSources(sources)
+	// 允许空洞：pending [0,1,2,4] 每段 1 词，MaxWords=2
+	// [0,1](2) → 切; [2,4](2) 可同批（索引不连续）
+	got := BuildPackedPendingBatches(doc, []int{0, 1, 2, 4}, wordConstraint(2), 0)
+	want := [][]int{{0, 1}, {2, 4}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("packed discontinuous: got %v want %v", got, want)
+	}
+}
+
+func TestBuildPackedPendingBatches_SegmentLimit(t *testing.T) {
+	doc := testDoc(10)
+	got := BuildPackedPendingBatches(doc, []int{0, 2, 5, 7, 9}, segConstraint(2), 0)
+	want := [][]int{{0, 2}, {5, 7}, {9}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("packed seg limit: got %v want %v", got, want)
+	}
+}
+
+func TestBuildPackedPendingBatches_MaxIndexSpan(t *testing.T) {
+	doc := testDoc(20)
+	// MaxSegments 足够大；span=3：同批 max-min 不得超过 3
+	// pending: 0,1,5,6,10
+	// [0,1] span=1 ok; +5 → 5-0=5>3 → 切; [5,6] ok; +10 → 10-5=5>3 → 切; [10]
+	got := BuildPackedPendingBatches(doc, []int{0, 1, 5, 6, 10}, segConstraint(10), 3)
+	want := [][]int{{0, 1}, {5, 6}, {10}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("packed index span: got %v want %v", got, want)
+	}
+}
+
+func TestBuildPackedPendingBatches_SpanZeroDisables(t *testing.T) {
+	doc := testDoc(20)
+	// span=0 与负值均不限制跨度，仅受段数约束
+	got := BuildPackedPendingBatches(doc, []int{0, 10, 19}, segConstraint(3), 0)
+	want := [][]int{{0, 10, 19}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("span disabled: got %v want %v", got, want)
+	}
+	got = BuildPackedPendingBatches(doc, []int{0, 10, 19}, segConstraint(3), -1)
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("span negative disabled: got %v want %v", got, want)
+	}
+}
+
+func TestBuildPackedPendingBatches_Empty(t *testing.T) {
+	doc := testDoc(1)
+	got := BuildPackedPendingBatches(doc, nil, segConstraint(5), 0)
+	if got != nil {
+		t.Errorf("empty pending: got %v want nil", got)
+	}
+}
