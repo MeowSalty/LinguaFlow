@@ -29,6 +29,13 @@ const initial = computed(() => {
   return name ? name.charAt(0).toUpperCase() : '?'
 })
 
+const serviceSummary = computed(() => {
+  if (service.isLocal) {
+    return t('layout.localModeBadge')
+  }
+  return service.displayName.trim() || service.baseUrl
+})
+
 const userOptions = computed<DropdownOption[]>(() => {
   const items: DropdownOption[] = [
     {
@@ -40,6 +47,14 @@ const userOptions = computed<DropdownOption[]>(() => {
           auth.user?.email
             ? h('div', { class: 'text-xs text-lf-text-muted mt-0.5' }, auth.user.email)
             : null,
+          h(
+            'div',
+            {
+              class: 'mt-1.5 truncate text-[11px] font-mono text-lf-text-subtle',
+              title: service.baseUrl,
+            },
+            serviceSummary.value,
+          ),
         ]),
     },
     { type: 'divider', key: 'divider-1' },
@@ -284,12 +299,6 @@ const navActiveClass = '!bg-lf-brand-soft !text-brand-600 font-semibold'
           <NTag v-if="service.isLocal" size="small" type="success" :bordered="false">
             {{ t('layout.localModeBadge') }}
           </NTag>
-          <span
-            class="hidden max-w-28 truncate font-mono text-[11px] text-lf-text-subtle xl:inline"
-            :title="service.baseUrl"
-          >
-            {{ service.displayName }}
-          </span>
           <NDropdown
             v-if="auth.user"
             trigger="click"
