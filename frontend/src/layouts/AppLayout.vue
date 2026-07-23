@@ -136,9 +136,23 @@ const isTemplateRoute = computed(() =>
   ].some((r) => route.path.startsWith(r)),
 )
 
+const toolsNavOptions = computed<DropdownOption[]>(() => [
+  {
+    label: t('nav.epubRotate'),
+    key: '/tools/epub-rotate',
+    icon: () => h(IconifyIcon, { icon: 'carbon:text-vertical-alignment', class: 'text-base' }),
+  },
+])
+
+const isToolsRoute = computed(() => route.path.startsWith('/tools'))
+
 const isAdminRoute = computed(() => route.path.startsWith('/admin'))
 
 const onSelectTemplateNav = (key: string | number): void => {
+  router.push(String(key))
+}
+
+const onSelectToolsNav = (key: string | number): void => {
   router.push(String(key))
 }
 
@@ -202,6 +216,20 @@ const navActiveClass = '!bg-lf-brand-soft !text-brand-600 font-semibold'
             >
               <IconifyIcon icon="carbon:settings" class="text-base" />
               <span class="whitespace-nowrap">{{ t('nav.executionConfig') }}</span>
+            </RouterLink>
+          </NDropdown>
+          <NDropdown
+            trigger="hover"
+            :options="toolsNavOptions"
+            placement="bottom-start"
+            @select="onSelectToolsNav"
+          >
+            <RouterLink
+              to="/tools/epub-rotate"
+              :class="[navLinkClass, { [navActiveClass]: isToolsRoute }]"
+            >
+              <IconifyIcon icon="carbon:tool-kit" class="text-base" />
+              <span class="whitespace-nowrap">{{ t('nav.tools') }}</span>
             </RouterLink>
           </NDropdown>
           <RouterLink to="/changelog" :class="[navLinkClass]" :active-class="navActiveClass">

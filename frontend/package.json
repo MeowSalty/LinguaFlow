@@ -17,6 +17,7 @@
   },
   "dependencies": {
     "@iconify/vue": "^5.0.1",
+    "fflate": "^0.8.3",
     "naive-ui": "^2.44.1",
     "openapi-fetch": "^0.17.0",
     "pinia": "^3.0.4",
