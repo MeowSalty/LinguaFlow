@@ -1,17 +1,19 @@
 # API 参考
 
-LinguaFlow 提供 RESTful API 用于翻译管理。
+LinguaFlow 提供 RESTful API，便于与外部系统集成。个人使用 Web / CLI 即可，不必先读本页。
 
 ## 基础信息
 
 | 项目 | 说明 |
 |------|------|
-| Base URL | `http://localhost:8080/api/v1` |
-| 认证方式 | Bearer Token（JWT） |
+| Base URL（本地模式） | `http://127.0.0.1:18080/api/v1` |
+| Base URL（服务器模式 / Docker 默认） | `http://localhost:8080/api/v1` |
+| 认证方式 | 本地模式通常无需认证；服务器模式为 Bearer Token（JWT） |
 | 内容类型 | `application/json` |
 
 ::: tip 认证
-服务器模式下需要 JWT 认证。本地模式下无需认证。
+- **本地模式**：免登录，适合本机调用  
+- **服务器模式（预览）**：需要 JWT；多用户能力仍在完善  
 :::
 
 ## 完整 API 文档
@@ -27,12 +29,14 @@ LinguaFlow 提供 RESTful API 用于翻译管理。
 ### 认证
 
 ```bash
-# 登录获取 Token
+# 本地模式示例（默认 18080，通常无需 Token）
+curl http://127.0.0.1:18080/api/v1/projects
+
+# 服务器模式：登录获取 Token 后再访问
 curl -X POST http://localhost:8080/api/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username": "admin", "password": "password"}'
 
-# 使用 Token 访问 API
 curl -H "Authorization: Bearer <token>" \
   http://localhost:8080/api/v1/projects
 ```

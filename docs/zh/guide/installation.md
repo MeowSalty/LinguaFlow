@@ -1,6 +1,15 @@
 # 安装部署
 
-LinguaFlow 提供多种安装方式，您可以根据自己的需求选择。
+LinguaFlow 提供多种安装方式。**个人使用推荐预编译二进制（本地模式）**；Docker / 服务器模式适合容器化或试用多用户部署。
+
+| 方式 | 默认模式 | 默认端口 | 说明 |
+| --- | --- | --- | --- |
+| 预编译二进制 / 双击运行 | 本地模式 | `18080` | 免登录，推荐上手 |
+| `linguaflow local` | 本地模式 | `18080` | 同上 |
+| Docker 镜像默认 | 服务器模式（预览） | `8080` | 需注册/登录；见下方说明 |
+| `linguaflow serve` | 服务器模式（预览） | `8080` | 功能仍在完善，勿用于生产关键业务 |
+
+跑通第一次翻译请先看 [快速开始 · Web](/zh/guide/getting-started)。
 
 ## 系统要求
 
@@ -13,6 +22,10 @@ LinguaFlow 提供多种安装方式，您可以根据自己的需求选择。
 
 ## Docker 部署
 
+::: warning 容器默认是服务器模式
+官方镜像默认执行服务器模式（端口 `8080`），与本机双击二进制进入的本地模式不同。服务器模式仍在完善中，适合试用，不建议作为生产唯一依赖。个人本机请优先使用 [预编译二进制](#预编译二进制)。
+:::
+
 ### 基本部署
 
 ```bash
@@ -23,6 +36,8 @@ docker run -d \
   -v linguaflow-data:/app/data \
   ghcr.io/meowsalty/linguaflow:latest
 ```
+
+浏览器访问 `http://localhost:8080`，按提示注册/登录后使用。
 
 ### Docker Compose
 
@@ -185,7 +200,7 @@ HuggingFace Spaces 默认使用 7860 端口，`Dockerfile.hf` 已自动配置。
 
 ## 预编译二进制
 
-从 [GitHub Releases](https://github.com/MeowSalty/LinguaFlow/releases) 下载对应平台的二进制文件。
+从 [GitHub Releases](https://github.com/MeowSalty/LinguaFlow/releases) 下载对应平台的二进制文件。**这是个人使用的推荐方式。**
 
 支持的平台：
 
@@ -200,10 +215,12 @@ HuggingFace Spaces 默认使用 7860 端口，`Dockerfile.hf` 已自动配置。
 ```bash [Linux / macOS]
 chmod +x linguaflow
 ./linguaflow
+# 本地模式，自动打开 http://127.0.0.1:18080
 ```
 
 ```powershell [Windows]
 .\linguaflow.exe
+# 或资源管理器中双击；本地模式，端口 18080
 ```
 
 :::
@@ -248,9 +265,15 @@ task frontend:dev
 
 ## 验证安装
 
-启动后访问 `http://localhost:18080`，如果看到 LinguaFlow 界面即表示安装成功。
+| 启动方式 | 验证地址 |
+| --- | --- |
+| 二进制 / `linguaflow local` | `http://127.0.0.1:18080`（端口占用时会自动递增） |
+| Docker / `linguaflow serve` | `http://localhost:8080`（或你映射的端口） |
+
+看到 Web 界面即表示安装成功。接着按 [快速开始 · Web](/zh/guide/getting-started) 配置后端并完成第一次翻译。
 
 ## 下一步
 
-- 阅读 [使用模式](/zh/guide/modes) 了解本地模式和服务器模式
-- 阅读 [配置](/zh/guide/configuration) 了解详细配置选项
+- [快速开始 · Web](/zh/guide/getting-started) — 最短使用路径
+- [使用模式](/zh/guide/modes) — 本地模式与服务器模式（预览）
+- [配置参考](/zh/guide/configuration) — 环境变量与配置文件

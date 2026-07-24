@@ -1,14 +1,18 @@
-# CLI 命令行
+# CLI 参考
 
-LinguaFlow 提供命令行工具，支持直接在终端中进行翻译操作和管理。
+LinguaFlow 命令行工具支持启动服务、生成配置与直接翻译文件。
+
+::: tip 只想马上译一个文件？
+先看 [快速开始 · CLI](/zh/guide/cli-quickstart)，本页为完整参数参考。
+:::
 
 ## 命令概览
 
 | 命令                   | 描述                                          |
 | ---------------------- | --------------------------------------------- |
 | `linguaflow`           | 默认显示帮助；双击运行时自动启动 `local` 模式 |
-| `linguaflow local`     | 启动本地单用户模式                            |
-| `linguaflow serve`     | 启动服务器多租户模式                          |
+| `linguaflow local`     | 启动本地单用户模式（推荐个人使用）            |
+| `linguaflow serve`     | 启动服务器模式（**预览**，功能仍在完善）      |
 | `linguaflow translate` | 直接翻译文件或目录                            |
 | `linguaflow init`      | 生成配置文件                                  |
 | `linguaflow version`   | 显示版本信息                                  |
@@ -152,7 +156,7 @@ linguaflow local [flags]
 
 ## serve 命令
 
-启动服务器多租户模式。
+启动服务器模式（**预览**）。多用户与权限等能力仍在完善，不建议用于生产关键业务；个人使用请优先 `local`。
 
 ```bash
 linguaflow serve [flags]
@@ -240,5 +244,6 @@ LinguaFlow 支持通过配置文件进行详细配置。配置文件的加载优
 
 ## 下一步
 
-- 阅读 [配置](/zh/guide/configuration) 了解配置文件格式
-- 阅读 [项目管理](/zh/guide/projects) 了解 Web 界面操作
+- [快速开始 · CLI](/zh/guide/cli-quickstart) — 最短命令行路径
+- [配置参考](/zh/guide/configuration) — 配置文件格式
+- [项目管理](/zh/guide/projects) — Web 界面操作
