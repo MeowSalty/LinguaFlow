@@ -171,10 +171,13 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		})
 	}
 
+	proto := prompt.ProtocolFromResponseMode(h.ResponseMode)
+	isTextMode := proto.IsText()
 	sys, usr, renderErr := h.Renderer.Render(prompt.AdjudicationData{
 		SourceLang: doc.SourceLang,
 		TargetLang: doc.TargetLang,
 		Segments:   segments,
+		Protocol:   proto,
 	})
 	if renderErr != nil {
 		logger.Error("adjudicate render failed", "err", renderErr)
@@ -192,12 +195,16 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		return h.preserveResult(doc, idxs, rep)
 	}
 
-	// handler 强制 json_schema；不支持的后端忽略该字段 → 自由文本 → 解析失败 → 保留原 issue
+	// 非 text：只挂 JSONSchema，不强制 ResponseFormat，由 backend 默认决定是否用 schema。
+	// text：强制 ResponseFormat=none，不挂 schema。
 	req := backend.Request{
-		System:         sys,
-		User:           usr,
-		ResponseFormat: "json_schema",
-		JSONSchema:     prompt.AdjudicationVerdictSchema(),
+		System: sys,
+		User:   usr,
+	}
+	if isTextMode {
+		req.ResponseFormat = "none"
+	} else {
+		req.JSONSchema = prompt.AdjudicationVerdictSchema()
 	}
 
 	callStart := time.Now()
@@ -268,7 +275,7 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 	atomic.AddInt64(&doc.InputTokens, resp.Usage.PromptTokens)
 	atomic.AddInt64(&doc.OutputTokens, resp.Usage.CompletionTokens)
 
-	verdicts, parseErr := prompt.ParseAdjudicationResponse(resp.Text)
+	verdicts, parseErr := prompt.ParseAdjudicationByMode(resp.Text, isTextMode)
 	if parseErr != nil {
 		logger.Warn("adjudicate parse failed, preserving issues",
 			"backend", h.Backend.Name(), "batch_size", len(idxs), "err", parseErr,
