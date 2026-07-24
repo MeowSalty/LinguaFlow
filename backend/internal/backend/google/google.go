@@ -281,6 +281,70 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 	return b, nil
 }
 
+// modelLister 仅凭 api_key(+base_url) 列模型，不依赖 model。
+type modelLister struct {
+	client *genai.Client
+}
+
+func modelListerFactory(opts map[string]any) (backend.ModelLister, error) {
+	apiKey := backend.StringOpt(opts, "api_key", "")
+	if apiKey == "" {
+		return nil, errors.New("google: api_key is required")
+	}
+	headers := make(http.Header)
+	headers.Set("User-Agent", backend.ClientUserAgent())
+	headers.Set("X-Client-Name", backend.ClientName())
+	headers.Set("X-Client-Version", backend.ClientVersion())
+	cc := &genai.ClientConfig{
+		APIKey:  apiKey,
+		Backend: genai.BackendGeminiAPI,
+	}
+	cc.HTTPOptions.Headers = headers
+	if u := backend.StringOpt(opts, "base_url", ""); u != "" {
+		cc.HTTPOptions.BaseURL = u
+	}
+	client, err := genai.NewClient(context.Background(), cc)
+	if err != nil {
+		return nil, fmt.Errorf("google: new client: %w", err)
+	}
+	return &modelLister{client: client}, nil
+}
+
+func (l *modelLister) ListModels(ctx context.Context) ([]backend.ModelInfo, error) {
+	out := make([]backend.ModelInfo, 0)
+	for m, err := range l.client.Models.All(ctx) {
+		if err != nil {
+			return nil, wrapGoogleModelsError(err)
+		}
+		if m == nil {
+			continue
+		}
+		id := strings.TrimPrefix(m.Name, "models/")
+		if id == "" {
+			continue
+		}
+		name := m.DisplayName
+		if name == "" {
+			name = id
+		}
+		out = append(out, backend.ModelInfo{ID: id, Name: name})
+		if len(out) >= backend.MaxModels {
+			break
+		}
+	}
+	return out, nil
+}
+
+func wrapGoogleModelsError(err error) error {
+	var apiErr *genai.APIError
+	if errors.As(err, &apiErr) {
+		return fmt.Errorf("google: list models: %w",
+			&backend.StatusError{StatusCode: apiErr.Code, Err: err})
+	}
+	return fmt.Errorf("google: list models: %w", err)
+}
+
 func init() {
 	backend.Register(TypeName, factory)
+	backend.RegisterModelLister(TypeName, modelListerFactory)
 }

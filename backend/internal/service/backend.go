@@ -306,6 +306,19 @@ func backendRecord(row *ent.Backend) *BackendRecord {
 	}
 }
 
+// ListModels 凭 api_key(+base_url) 探测上游可用模型列表，不落库。
+func (s *BackendService) ListModels(ctx context.Context, typ string, opts map[string]any) ([]backend.ModelInfo, error) {
+	typ = strings.ToLower(strings.TrimSpace(typ))
+	if !isAllowedBackendType(typ) {
+		return nil, ErrBackendTypeInvalid
+	}
+	lister, err := backend.NewModelLister(typ, cloneMap(opts))
+	if err != nil {
+		return nil, err
+	}
+	return lister.ListModels(ctx)
+}
+
 func normalizeBackendInput(input BackendInput) (BackendInput, error) {
 	name := strings.TrimSpace(input.Name)
 	typ := strings.ToLower(strings.TrimSpace(input.Type))

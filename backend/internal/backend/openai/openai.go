@@ -173,11 +173,7 @@ func (b *Backend) Close() error { return nil }
 // 使用字符串解析提取 HTTP 状态码作为兜底方案。
 // 错误格式：POST "/v1/chat/completions": 401 Unauthorized {...}
 func wrapOpenAIError(err error) error {
-	if code, ok := backend.ExtractHTTPStatusCode(err.Error()); ok {
-		return fmt.Errorf("openai: chat completion: %w",
-			&backend.StatusError{StatusCode: code, Err: err})
-	}
-	return fmt.Errorf("openai: chat completion: %w", err)
+	return backend.WrapUpstreamError("openai: chat completion", err)
 }
 
 // factory 从 backend.Config 构造实例。
@@ -229,6 +225,53 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 	return b, nil
 }
 
+// modelLister 仅凭 api_key(+base_url) 列模型，不依赖 model。
+type modelLister struct {
+	client openaigo.Client
+}
+
+func modelListerFactory(opts map[string]any) (backend.ModelLister, error) {
+	apiKey, _ := opts["api_key"].(string)
+	if apiKey == "" {
+		return nil, errors.New("openai: api_key is required")
+	}
+	clientOpts := []option.RequestOption{
+		option.WithAPIKey(apiKey),
+		option.WithHeader("User-Agent", backend.ClientUserAgent()),
+		option.WithHeader("X-Client-Name", backend.ClientName()),
+		option.WithHeader("X-Client-Version", backend.ClientVersion()),
+	}
+	if u, ok := opts["base_url"].(string); ok && u != "" {
+		clientOpts = append(clientOpts, option.WithBaseURL(u))
+	}
+	return &modelLister{client: openaigo.NewClient(clientOpts...)}, nil
+}
+
+func (l *modelLister) ListModels(ctx context.Context) ([]backend.ModelInfo, error) {
+	out := make([]backend.ModelInfo, 0)
+	iter := l.client.Models.ListAutoPaging(ctx)
+	for iter.Next() {
+		m := iter.Current()
+		id := m.ID
+		if id == "" {
+			continue
+		}
+		out = append(out, backend.ModelInfo{ID: id, Name: id})
+		if len(out) >= backend.MaxModels {
+			break
+		}
+	}
+	if err := iter.Err(); err != nil {
+		return nil, wrapOpenAIModelsError(err)
+	}
+	return out, nil
+}
+
+func wrapOpenAIModelsError(err error) error {
+	return backend.WrapUpstreamError("openai: list models", err)
+}
+
 func init() {
 	backend.Register(TypeName, factory)
+	backend.RegisterModelLister(TypeName, modelListerFactory)
 }

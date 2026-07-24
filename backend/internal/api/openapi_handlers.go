@@ -70,6 +70,10 @@ func (s *Server) DeleteOrganizationMember(w http.ResponseWriter, r *http.Request
 	s.requireAuth(http.HandlerFunc(s.handleDeleteOrgMember)).ServeHTTP(w, r)
 }
 
+func (s *Server) ListBackendModels(w http.ResponseWriter, r *http.Request) {
+	s.requireAuth(http.HandlerFunc(s.handleListBackendModels)).ServeHTTP(w, r)
+}
+
 func (s *Server) ListUserBackends(w http.ResponseWriter, r *http.Request) {
 	s.requireAuth(http.HandlerFunc(s.handleListUserBackends)).ServeHTTP(w, r)
 }
