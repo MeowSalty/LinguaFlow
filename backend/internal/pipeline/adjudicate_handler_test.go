@@ -5,6 +5,7 @@ import (
 	"errors"
 	"reflect"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
@@ -194,7 +195,7 @@ func TestAdjudicateHandler_ProcessBatch_BackendErrorPreserves(t *testing.T) {
 	}
 }
 
-func TestAdjudicateHandler_ProcessBatch_ForcesJSONSchema(t *testing.T) {
+func TestAdjudicateHandler_ProcessBatch_NonTextAttachesSchema(t *testing.T) {
 	doc := adjudicableDoc(
 		[]string{"translated"},
 		[][]qa.QualityIssue{
@@ -215,11 +216,81 @@ func TestAdjudicateHandler_ProcessBatch_ForcesJSONSchema(t *testing.T) {
 	if len(fb.requests) != 1 {
 		t.Fatalf("requests=%d want 1", len(fb.requests))
 	}
-	if fb.requests[0].ResponseFormat != "json_schema" {
-		t.Fatalf("ResponseFormat=%q want json_schema", fb.requests[0].ResponseFormat)
+	if fb.requests[0].ResponseFormat != "" {
+		t.Fatalf("ResponseFormat should be empty (backend default), got %q", fb.requests[0].ResponseFormat)
 	}
 	if fb.requests[0].JSONSchema == nil {
-		t.Fatal("JSONSchema should be set")
+		t.Fatal("JSONSchema should be set for non-text mode")
+	}
+}
+
+func TestAdjudicateHandler_ProcessBatch_TextMode(t *testing.T) {
+	doc := adjudicableDoc(
+		[]string{"translated"},
+		[][]qa.QualityIssue{
+			{
+				{Code: "source_residual", Severity: qa.SeverityWarning, Message: "residual"},
+				{Code: "untranslated", Severity: qa.SeverityError, Message: "empty"},
+			},
+		},
+	)
+	fb := &fakeBackend{
+		name:      "fake",
+		responses: []string{"[verdicts]\n0 | source_residual | false_positive | proper noun"},
+	}
+	h := &AdjudicateHandler{
+		Backend:      fb,
+		Renderer:     newAdjudicationRenderer(t),
+		BatchSize:    10,
+		ResponseMode: "text",
+		Logger:       quietLogger(),
+	}
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if result.callbackResult == nil {
+		t.Fatal("expected callbackResult")
+	}
+	if len(fb.requests) != 1 {
+		t.Fatalf("requests=%d want 1", len(fb.requests))
+	}
+	req := fb.requests[0]
+	if req.ResponseFormat != "none" {
+		t.Fatalf("ResponseFormat=%q want none", req.ResponseFormat)
+	}
+	if req.JSONSchema != nil {
+		t.Fatal("JSONSchema should be nil in text mode")
+	}
+	if !strings.Contains(req.User, "source_lang:") {
+		t.Fatalf("text user missing source_lang:\n%s", req.User)
+	}
+	if !strings.Contains(req.User, "[segment]") {
+		t.Fatalf("text user missing [segment]:\n%s", req.User)
+	}
+	if len(doc.Segments[0].Issues) != 1 || doc.Segments[0].Issues[0].Code != "untranslated" {
+		t.Fatalf("issues=%v want only untranslated retained", doc.Segments[0].Issues)
+	}
+}
+
+func TestAdjudicateHandler_ProcessBatch_TextModeJSONFallback(t *testing.T) {
+	doc := adjudicableDoc(
+		[]string{"translated"},
+		[][]qa.QualityIssue{
+			{{Code: "source_residual", Severity: qa.SeverityWarning, Message: "residual"}},
+		},
+	)
+	fb := &fakeBackend{
+		name:      "fake",
+		responses: []string{`{"verdicts":[{"id":"0","issue_code":"source_residual","verdict":"false_positive","reason":"ok"}]}`},
+	}
+	h := &AdjudicateHandler{
+		Backend:      fb,
+		Renderer:     newAdjudicationRenderer(t),
+		BatchSize:    10,
+		ResponseMode: "text",
+		Logger:       quietLogger(),
+	}
+	_ = h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if len(doc.Segments[0].Issues) != 0 {
+		t.Fatalf("issues len=%d want 0 (false_positive dismissed via JSON fallback)", len(doc.Segments[0].Issues))
 	}
 }
 
