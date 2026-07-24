@@ -244,6 +244,27 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/backends/models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * 探测可用模型列表
+         * @description 使用调用方当场提供的 api_key（及可选 base_url）向对应 AI 服务拉取可用模型列表，
+         *     用于新建/编辑后端时填充 model 字段。凭据不落库，与后端归属无关。
+         */
+        post: operations["ListBackendModels"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/backends/{backendId}": {
         parameters: {
             query?: never;
@@ -1728,6 +1749,28 @@ export interface components {
              */
             rate_limit_per_minute: number;
         };
+        /** @description 凭用户输入的凭据探测可用模型列表（不落库） */
+        ListBackendModelsRequest: {
+            /**
+             * @description 后端类型
+             * @enum {string}
+             */
+            type: "openai" | "anthropic" | "google";
+            /** @description AI 服务 API 密钥 */
+            api_key: string;
+            /** @description 自定义 API 端点 URL，留空使用默认值 */
+            base_url?: string;
+        };
+        /** @description 可用模型条目 */
+        BackendModel: {
+            /** @description 模型 ID，可直接填入后端 options.model */
+            id: string;
+            /** @description 展示名；缺失时与 id 相同 */
+            name: string;
+        };
+        BackendModelListResponse: {
+            items: components["schemas"]["BackendModel"][];
+        };
         Project: {
             id: number;
             name: string;
@@ -3004,6 +3047,31 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Backend"];
+                };
+            };
+            default: components["responses"]["Problem"];
+        };
+    };
+    ListBackendModels: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ListBackendModelsRequest"];
+            };
+        };
+        responses: {
+            /** @description 模型列表 */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BackendModelListResponse"];
                 };
             };
             default: components["responses"]["Problem"];
