@@ -92,18 +92,24 @@ docker compose up -d
 
 ### 环境变量配置
 
-| 变量名                                  | 描述                                  | 默认值                     |
-| --------------------------------------- | ------------------------------------- | -------------------------- |
-| `LINGUAFLOW_PORT`                       | 服务监听端口                          | `8080`                     |
-| `LINGUAFLOW_DATA_DIR`                   | 数据目录（SQLite 数据库文件存放于此） | `./data`                   |
-| `LINGUAFLOW_DATABASE_DRIVER`            | 数据库驱动：`sqlite` \| `postgres`    | `sqlite`                   |
-| `LINGUAFLOW_DATABASE_DSN`               | 数据库连接串；选 `postgres` 时必填    | -                          |
-| `LINGUAFLOW_DATABASE_MAX_OPEN_CONNS`    | 最大打开连接数                        | `sqlite=0` / `postgres=25` |
-| `LINGUAFLOW_DATABASE_MAX_IDLE_CONNS`    | 最大空闲连接数                        | `sqlite=2` / `postgres=5`  |
-| `LINGUAFLOW_DATABASE_CONN_MAX_LIFETIME` | 连接最大寿命（Go duration，如 `30m`） | `postgres=30m`             |
-| `LINGUAFLOW_JWT_SECRET`                 | JWT 签名密钥，生产环境务必修改        | 内置开发用密钥             |
-| `LINGUAFLOW_ADMIN_USERNAME`             | 管理员用户名                          | -                          |
-| `LINGUAFLOW_ADMIN_PASSWORD`             | 管理员密码                            | -                          |
+| 变量名                                  | 描述                                    | 默认值                     |
+| --------------------------------------- | --------------------------------------- | -------------------------- |
+| `LINGUAFLOW_PORT`                       | 服务监听端口                            | `8080`                     |
+| `LINGUAFLOW_DATA_DIR`                   | 数据目录（SQLite 数据库文件存放于此）   | `./data`                   |
+| `LINGUAFLOW_DATABASE_DRIVER`            | 数据库驱动：`sqlite` \| `postgres`      | `sqlite`                   |
+| `LINGUAFLOW_DATABASE_DSN`               | 数据库连接串；选 `postgres` 时必填      | -                          |
+| `LINGUAFLOW_DATABASE_MAX_OPEN_CONNS`    | 最大打开连接数                          | `sqlite=0` / `postgres=25` |
+| `LINGUAFLOW_DATABASE_MAX_IDLE_CONNS`    | 最大空闲连接数                          | `sqlite=2` / `postgres=5`  |
+| `LINGUAFLOW_DATABASE_CONN_MAX_LIFETIME` | 连接最大寿命（Go duration，如 `30m`）   | `postgres=30m`             |
+| `LINGUAFLOW_JWT_SECRET`                 | JWT 签名密钥，生产环境务必修改          | 内置开发用密钥             |
+| `LINGUAFLOW_SERVE_UI`                   | 是否提供嵌入式 Web UI（`true`/`false`） | `true`                     |
+| `LINGUAFLOW_CORS_ORIGINS`               | 允许的跨域来源（逗号分隔）              | -                          |
+| `LINGUAFLOW_ADMIN_USERNAME`             | 管理员用户名                            | -                          |
+| `LINGUAFLOW_ADMIN_PASSWORD`             | 管理员密码                              | -                          |
+
+::: tip 仅 API 部署
+若使用独立前端或纯 API 集成，可设置 `LINGUAFLOW_SERVE_UI=false`，或启动时加 `--no-ui`。
+:::
 
 ### 数据库配置
 

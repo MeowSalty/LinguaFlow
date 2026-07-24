@@ -12,11 +12,14 @@ LinguaFlow 支持通过命令行参数、环境变量和配置文件进行配置
 
 ### 系统环境变量
 
-| 变量名                      | 描述            | 使用场景           |
-| --------------------------- | --------------- | ------------------ |
-| `OPENAI_API_KEY`            | OpenAI API 密钥 | 默认后端配置引用   |
-| `LINGUAFLOW_ADMIN_USERNAME` | 管理员用户名    | 服务启动时自动创建 |
-| `LINGUAFLOW_ADMIN_PASSWORD` | 管理员密码      | 配合用户名使用     |
+| 变量名                      | 描述                              | 使用场景                   |
+| --------------------------- | --------------------------------- | -------------------------- |
+| `OPENAI_API_KEY`            | OpenAI API 密钥                   | 默认后端配置引用           |
+| `LINGUAFLOW_ADMIN_USERNAME` | 管理员用户名                      | 服务启动时自动创建         |
+| `LINGUAFLOW_ADMIN_PASSWORD` | 管理员密码                        | 配合用户名使用             |
+| `LINGUAFLOW_SERVE_UI`       | 是否提供 Web UI（`true`/`false`） | 服务器模式控制前端资源挂载 |
+| `LINGUAFLOW_JWT_SECRET`     | JWT 签名密钥，生产环境务必修改    | 服务器模式认证             |
+| `LINGUAFLOW_CORS_ORIGINS`   | 允许的跨域来源（逗号分隔）        | 服务器模式跨域配置         |
 
 ### 数据库环境变量（serve 模式）
 
@@ -67,12 +70,12 @@ linguaflow init
 
 ```text
 <项目根目录>/
-├── linguaflow.yaml           # 主配置文件
+├── linguaflow.yaml                      # 主配置文件
 ├── prompts/
-│   ├── default.tmpl          # 翻译提示词模板
-│   └── bootstrap_system.tmpl # 术语提取提示词模板
+│   ├── default_translation.tmpl         # 翻译提示词模板
+│   └── default_bootstrap.tmpl           # 术语提取提示词模板
 └── profiles/
-    └── default.yaml          # 默认翻译配置文件
+    └── default.yaml                     # 默认翻译策略
 ```
 
 可通过 `--path` 指定输出路径，`--force` 覆盖已有文件：
@@ -105,46 +108,30 @@ backends:
       max_tokens: 0
       timeout: 60s
       response_format: json_schema
+      # stream: false  # 兼容网关仅接受 stream:true 时开启
 
-# 提示词模板（map 结构，key 为模板名称）
-prompt_templates:
-  default:
-    content: |
-      将以下文本从 {{source_language}} 翻译为 {{target_language}}。
-      {{glossary}}
-      {{source_text}}
-    # 或引用外部文件（与 content 二选一）
-    # file: prompts/default.tmpl
+# 翻译提示词模板（map 结构，key 为模板名称）
+translation_prompt_templates:
+  通用提示词:
+    # content: |  # 内联内容
+    #   ...
+    file: prompts/default_translation.tmpl # 或引用外部文件（与 content 二选一）
 
-# Bootstrap 模板（独立术语抽取提示词，map 结构，key 为模板名称）
+# 术语抽取提示词模板
 bootstrap_prompt_templates:
-  default:
-    content: "..."
-    # 或引用外部文件
-    # file: prompts/bootstrap.tmpl
+  通用术语抽取:
+    file: prompts/default_bootstrap.tmpl
 
-# Prune 模板（术语精简提示词，map 结构，key 为模板名称）
-prune_prompt_templates:
-  default:
-    content: "..."
-    # 或引用外部文件
-    # file: prompts/prune.tmpl
-
-# 执行配置（map 结构，key 为配置名称）
-execution_profiles:
-  default:
+# 执行配置 / 翻译策略（map 结构，key 为策略名称，CLI 不支持翻译质量检测）
+translation_profiles:
+  通用策略:
     # 或引用外部文件（与以下内联字段二选一）
     # file: profiles/default.yaml
-    split:
-      enabled: true
-      strategy: paragraph
-      max_chars: 1200
     protect:
       enabled: true
       rules: [code, link, placeholder, xml]
     ruby:
       enabled: false
-      retry_backend: ""
       preserve_kinds: []
     postprocess:
       enabled: true
@@ -167,40 +154,29 @@ execution_profiles:
       before: 1
       after: 1
       max_chars: 0
-    qa:
-      enabled: true
-      length:
-        enabled: true
-        min_ratio: 0.5
-        max_ratio: 2.5
-        unit: char
-      repetition:
-        enabled: true
-      untranslated:
-        enabled: true
 
-# 执行计划
+# 执行计划（CLI：translate / extract；Web 端另支持 adjudicate）
 execution:
-  bootstrap:
-    enabled: false
-    template: <bootstrap_prompt_template_key>
-    batch_size: 20
-    concurrency: 2
-    max_terms_per_batch: 20
-    min_source_len: 2
   rounds:
     - mode: translate
-      backend: <backend_key>
-      prompt: <prompt_template_key>
-      profile: <profile_key>
-      batch_size: 1
-      max_words_per_batch: 0
-      concurrency: 4
-      fallback_shrink: 0.5
-      retry:
-        max_attempts: 3
-        backoff_ms: 2000
-        jitter: true
+      backend: openai-default
+      translate:
+        prompt: 通用提示词
+        profile: 通用策略
+        batch_size: 1
+        max_words_per_batch: 0
+        concurrency: 4
+        fallback_shrink: 0.5
+        retry:
+          max_attempts: 3
+          backoff_ms: 2000
+          jitter: true
+    # - mode: extract
+    #   backend: openai-default
+    #   extract:
+    #     template: 通用术语抽取
+    #     batch_size: 20
+    #     concurrency: 2
 
 # 术语表配置
 glossary:
@@ -238,6 +214,7 @@ server:
   service_name: linguaflow
   data_dir: ./data
   auto_migrate: true
+  serve_ui: true
   jwt_secret: dev-insecure-secret-change-me
   jwt_issuer: linguaflow
   jwt_expiry: 15m
@@ -276,14 +253,15 @@ server:
 
 **options 通用字段：**
 
-| 字段          | 类型   | 说明                        |
-| ------------- | ------ | --------------------------- |
-| `api_key`     | string | API 密钥                    |
-| `base_url`    | string | 自定义 API 端点             |
-| `model`       | string | 使用的模型                  |
-| `temperature` | float  | 生成温度                    |
-| `max_tokens`  | int    | 最大 token 数，`0` 表示自动 |
-| `timeout`     | string | 请求超时时间，如 `60s`      |
+| 字段          | 类型   | 说明                                                                                                 |
+| ------------- | ------ | ---------------------------------------------------------------------------------------------------- |
+| `api_key`     | string | API 密钥                                                                                             |
+| `base_url`    | string | 自定义 API 端点                                                                                      |
+| `model`       | string | 使用的模型                                                                                           |
+| `temperature` | float  | 生成温度                                                                                             |
+| `max_tokens`  | int    | 最大 token 数，`0` 表示自动                                                                          |
+| `timeout`     | string | 请求超时时间，如 `60s`                                                                               |
+| `stream`      | bool   | 是否以流式发起请求（内部累积为完整响应），默认 `false`。`true` 适用于只接受 `stream:true` 的兼容网关 |
 
 **各后端默认模型：**
 
@@ -293,7 +271,7 @@ server:
 | `anthropic` | `claude-sonnet-4-5` |
 | `google`    | `gemini-2.5-flash`  |
 
-#### prompt_templates — 提示词模板
+#### translation_prompt_templates — 翻译提示词模板
 
 定义翻译指令模板，使用 map 结构，key 为模板名称。
 
@@ -306,10 +284,6 @@ server:
 
 定义术语抽取指令模板，使用 map 结构，key 为模板名称。与翻译提示词模板结构相同。
 
-#### prune_prompt_templates — 术语精简模板
-
-定义术语精简分析指令模板，使用 map 结构，key 为模板名称。与翻译提示词模板结构相同。
-
 ::: tip 文件引用
 
 - 仅支持相对路径，不允许绝对路径
@@ -318,9 +292,13 @@ server:
 
 :::
 
-#### execution_profiles — 执行配置
+::: info Web 端额外资源
+术语精简提示词（Prune）与质量裁决（`adjudicate`）等能力主要在 **Web 服务端** 的资源模型中配置；CLI 配置文件以 `translate` / `extract` 轮次为主。
+:::
 
-控制翻译行为，使用 map 结构，key 为配置名称。可通过 `file` 字段引用外部文件，或内联配置以下字段：
+#### translation_profiles — 执行配置（翻译策略）
+
+控制翻译行为，使用 map 结构，key 为策略名称。可通过 `file` 字段引用外部文件，或内联配置以下字段：
 
 ##### split — 分段
 
@@ -384,36 +362,46 @@ server:
 
 #### execution — 执行计划
 
-组合后端、模板和配置为翻译流水线。
-
-##### bootstrap — 独立术语提取
-
-| 字段                  | 类型   | 说明                           |
-| --------------------- | ------ | ------------------------------ |
-| `enabled`             | bool   | 是否启用独立术语提取           |
-| `template`            | string | 使用的术语抽取模板（引用 key） |
-| `batch_size`          | int    | 批处理大小                     |
-| `concurrency`         | int    | 并发数                         |
-| `max_terms_per_batch` | int    | 每批最大术语数                 |
-| `min_source_len`      | int    | 最小源文本长度                 |
+组合后端、模板和配置为翻译流水线。CLI 配置中仅含 `rounds` 列表。
 
 ##### rounds — 执行轮次
 
-支持两种模式的轮次：`translate`（翻译）和 `extract`（术语提取）。
+CLI 支持 `translate`（翻译）与 `extract`（术语提取）。Web 执行计划模板另支持 `adjudicate`（质量裁决），详见 [高级功能 · AI 质量裁决](/zh/guide/advanced#ai-质量裁决)。
 
-| 字段                  | 类型   | 说明                                                                 |
-| --------------------- | ------ | -------------------------------------------------------------------- |
-| `mode`                | string | 轮次模式：`translate` 或 `extract`                                   |
-| `backend`             | string | 使用的 AI 后端（引用 key）                                           |
-| `prompt`              | string | 使用的提示词模板（引用 key）。翻译轮次用翻译模板，提取轮次用抽取模板 |
-| `profile`             | string | 使用的执行配置（引用 key），仅翻译轮次需要                           |
-| `batch_size`          | int    | 批处理大小                                                           |
-| `max_words_per_batch` | int    | 每批最大词数                                                         |
-| `concurrency`         | int    | 并发数                                                               |
-| `fallback_shrink`     | float  | 回退收缩比例                                                         |
-| `retry.max_attempts`  | int    | 最大重试次数                                                         |
-| `retry.backoff_ms`    | int    | 重试退避时间（毫秒）                                                 |
-| `retry.jitter`        | bool   | 是否启用退避抖动                                                     |
+| 字段        | 类型   | 说明                                     |
+| ----------- | ------ | ---------------------------------------- |
+| `mode`      | string | `translate` 或 `extract`                 |
+| `backend`   | string | 使用的 AI 后端（引用 `backends` 的 key） |
+| `translate` | object | `mode=translate` 时必填，见下表          |
+| `extract`   | object | `mode=extract` 时必填，见下表            |
+
+**translate 子配置：**
+
+| 字段                  | 类型   | 说明                                     |
+| --------------------- | ------ | ---------------------------------------- |
+| `prompt`              | string | 翻译提示词模板 key                       |
+| `profile`             | string | 执行配置 / 策略 key                      |
+| `batch_size`          | int    | 批处理大小                               |
+| `max_words_per_batch` | int    | 每批最大词数                             |
+| `concurrency`         | int    | 并发数                                   |
+| `fallback_shrink`     | float  | 回退收缩比例                             |
+| `retry.*`             | —      | `max_attempts` / `backoff_ms` / `jitter` |
+
+**extract 子配置：**
+
+| 字段                       | 类型   | 说明                   |
+| -------------------------- | ------ | ---------------------- |
+| `template`                 | string | 术语抽取提示词模板 key |
+| `batch_size`               | int    | 批处理大小             |
+| `max_words_per_batch`      | int    | 每批最大词数           |
+| `concurrency`              | int    | 并发数                 |
+| `max_terms_per_1000_chars` | float  | 每千字符术语上限系数   |
+| `min_source_len`           | int    | 术语最短源文长度       |
+| `retry.*`                  | —      | 重试配置               |
+
+::: tip Web 端质量裁决
+在 Web 服务端创建执行计划时，可增加 `adjudicate` 轮次：调用 AI 对 `source_residual`、`length_ratio` 等软规则误报降噪。提示词内置，无需选择模板。
+:::
 
 #### glossary — 术语表
 
@@ -457,19 +445,20 @@ server:
 
 仅在 `linguaflow serve` 模式下生效。
 
-| 字段                   | 类型     | 默认值                          | 说明                       |
-| ---------------------- | -------- | ------------------------------- | -------------------------- |
-| `host`                 | string   | `0.0.0.0`                       | 监听地址                   |
-| `port`                 | int      | `8080`                          | 监听端口                   |
-| `mode`                 | string   | `server`                        | 运行模式：`server`/`local` |
-| `service_name`         | string   | `linguaflow`                    | 服务名称                   |
-| `data_dir`             | string   | `./data`                        | 数据目录                   |
-| `auto_migrate`         | bool     | `true`                          | 自动数据库迁移             |
-| `jwt_secret`           | string   | `dev-insecure-secret-change-me` | JWT 签名密钥               |
-| `jwt_issuer`           | string   | `linguaflow`                    | JWT 签发者                 |
-| `jwt_expiry`           | duration | `15m`                           | JWT 过期时间               |
-| `refresh_token_expiry` | duration | `720h`（30 天）                 | 刷新令牌过期时间           |
-| `shutdown_timeout`     | duration | `10s`                           | 优雅关闭超时               |
+| 字段                   | 类型     | 默认值                          | 说明                                       |
+| ---------------------- | -------- | ------------------------------- | ------------------------------------------ |
+| `host`                 | string   | `0.0.0.0`                       | 监听地址                                   |
+| `port`                 | int      | `8080`                          | 监听端口                                   |
+| `mode`                 | string   | `server`                        | 运行模式：`server`/`local`                 |
+| `service_name`         | string   | `linguaflow`                    | 服务名称                                   |
+| `data_dir`             | string   | `./data`                        | 数据目录                                   |
+| `auto_migrate`         | bool     | `true`                          | 自动数据库迁移                             |
+| `jwt_secret`           | string   | `dev-insecure-secret-change-me` | JWT 签名密钥                               |
+| `jwt_issuer`           | string   | `linguaflow`                    | JWT 签发者                                 |
+| `jwt_expiry`           | duration | `15m`                           | JWT 过期时间                               |
+| `refresh_token_expiry` | duration | `720h`（30 天）                 | 刷新令牌过期时间                           |
+| `shutdown_timeout`     | duration | `10s`                           | 优雅关闭超时                               |
+| `serve_ui`             | bool     | `true`                          | 是否提供嵌入式 Web UI，可用 `--no-ui` 关闭 |
 
 ##### server.cors — 跨域
 
@@ -514,14 +503,15 @@ server:
 
 ### serve 子命令
 
-| 参数             | 类型   | 默认值 | 说明                                       |
-| ---------------- | ------ | ------ | ------------------------------------------ |
-| `--host`         | string | `""`   | 覆盖 `server.host`                         |
-| `--port`         | int    | `0`    | 覆盖 `server.port`                         |
-| `--data-dir`     | string | `""`   | 覆盖 `server.data_dir`                     |
-| `--auto-migrate` | bool   | `true` | 覆盖 `server.auto_migrate`                 |
-| `--jwt-secret`   | string | `""`   | 覆盖 `LINGUAFLOW_JWT_SECRET`               |
-| `--cors-origins` | string | `""`   | 覆盖 `LINGUAFLOW_CORS_ORIGINS`（逗号分隔） |
+| 参数             | 类型   | 默认值  | 说明                                       |
+| ---------------- | ------ | ------- | ------------------------------------------ |
+| `--host`         | string | `""`    | 覆盖 `server.host`                         |
+| `--port`         | int    | `0`     | 覆盖 `server.port`                         |
+| `--data-dir`     | string | `""`    | 覆盖 `server.data_dir`                     |
+| `--auto-migrate` | bool   | `true`  | 覆盖 `server.auto_migrate`                 |
+| `--no-ui`        | bool   | `false` | 关闭嵌入式 Web UI，仅提供 API              |
+| `--jwt-secret`   | string | `""`    | 覆盖 `LINGUAFLOW_JWT_SECRET`               |
+| `--cors-origins` | string | `""`    | 覆盖 `LINGUAFLOW_CORS_ORIGINS`（逗号分隔） |
 
 ### local 子命令
 
@@ -534,16 +524,16 @@ server:
 
 ### translate 子命令
 
-| 参数              | 短写 | 类型     | 默认值 | 说明                               |
-| ----------------- | ---- | -------- | ------ | ---------------------------------- |
-| `--input`         | `-i` | []string | `nil`  | 输入文件或目录（可多个）           |
-| `--output`        | `-o` | string   | `""`   | 输出文件或目录                     |
-| `--from`          |      | string   | `""`   | 源语言（覆盖配置文件）             |
-| `--to`            |      | string   | `""`   | 目标语言（覆盖配置文件）           |
-| `--glossary-path` |      | string   | `""`   | 术语表路径，设置后强制启用         |
-| `--bootstrap`     |      | string   | `""`   | 术语提取模式：`off`/`pre`/`inline` |
-| `--profile`       |      | string   | `""`   | 执行配置名称                       |
-| `--prompt`        |      | string   | `""`   | 提示词模板名称                     |
+| 参数              | 短写 | 类型     | 默认值 | 说明                                                 |
+| ----------------- | ---- | -------- | ------ | ---------------------------------------------------- |
+| `--input`         | `-i` | []string | `nil`  | 输入文件或目录（可多个）                             |
+| `--output`        | `-o` | string   | `""`   | 输出文件或目录                                       |
+| `--from`          |      | string   | `""`   | 源语言（覆盖配置文件）                               |
+| `--to`            |      | string   | `""`   | 目标语言（覆盖配置文件）                             |
+| `--glossary-path` |      | string   | `""`   | 术语表路径，设置后强制启用                           |
+| `--bootstrap`     |      | string   | `""`   | 术语提取模式：`off`/`pre`/`inline`                   |
+| `--profile`       |      | string   | `""`   | 执行配置名称（`translation_profiles` key）           |
+| `--prompt`        |      | string   | `""`   | 提示词模板名称（`translation_prompt_templates` key） |
 
 ### init 子命令
 

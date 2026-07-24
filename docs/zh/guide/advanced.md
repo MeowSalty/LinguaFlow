@@ -6,7 +6,7 @@ LinguaFlow 提供多种高级功能，帮助您优化翻译效果。
 
 上下文窗口功能为 AI 提供翻译段落前后的上下文信息，提高翻译的连贯性。
 
-### 工作原理
+### 上下文窗口工作原理
 
 翻译每段时，系统会自动附带：
 
@@ -17,7 +17,7 @@ LinguaFlow 提供多种高级功能，帮助您优化翻译效果。
 
 上下文段落仅用于参考，不会被翻译。系统会自动跳过空段落、纯占位符段落和装饰性分隔符。
 
-### 配置
+### 上下文窗口配置
 
 在翻译配置文件中设置：
 
@@ -42,7 +42,7 @@ context:
 | `placeholder` | 占位符        | `{{var}}`、`{var}`、`%s/%d/%v`、`$VAR/${VAR}` |
 | `xml`         | XML/HTML 标签 | HTML/XML 标签及其属性                         |
 
-### 配置
+### 内容保护配置
 
 ```yaml
 protect:
@@ -82,7 +82,7 @@ protect:
 - 去除代码块围栏
 - 支持从 `[glossary]` 和 `[ruby]` 段落中提取结构化数据
 
-### 配置
+### 响应修复配置
 
 ```yaml
 repair:
@@ -99,7 +99,7 @@ repair:
 
 批量翻译通过执行计划的每轮配置实现，支持将大量段落分批并发翻译。
 
-### 工作原理
+### 批量翻译工作原理
 
 1. 系统根据 `batch_size`（段落数上限）和 `max_words_per_batch`（字数上限）将段落分组
 2. 每批会自动扩展上下文窗口，确保翻译连贯性
@@ -114,7 +114,7 @@ repair:
 - 缩小后的最小批次为 1 个段落
 - 无法处理的段落会传递到下一轮
 
-### 配置
+### 批量翻译配置
 
 在执行计划的每轮中配置：
 
@@ -135,20 +135,21 @@ fallback_shrink: 0.5 # 失败时批次缩小比例，默认 0.5
 
 ### 轮次模式
 
-LinguaFlow 支持两种轮次模式：
+LinguaFlow 支持三种轮次模式：
 
-| 模式        | 说明                                                    |
-| ----------- | ------------------------------------------------------- |
-| `translate` | 翻译轮次 — 使用后端 + 翻译提示词模板 + 执行配置进行翻译 |
-| `extract`   | 提取轮次 — 使用后端 + 术语抽取提示词模板抽取术语        |
+| 模式         | 说明                                                      |
+| ------------ | --------------------------------------------------------- |
+| `translate`  | 翻译轮次 — 使用后端 + 翻译提示词模板 + 执行配置进行翻译   |
+| `extract`    | 提取轮次 — 使用后端 + 术语抽取提示词模板抽取术语          |
+| `adjudicate` | 质量裁决 — 使用后端对规则质检问题做 AI 复核（提示词内置） |
 
-翻译轮次是级联回退机制：每轮只处理前一轮**失败**的段落。提取轮次通常在翻译前执行，自动为项目术语表补充候选术语。
+翻译轮次是级联回退机制：每轮只处理前一轮**失败**的段落。提取轮次通常在翻译前执行；质量裁决轮次通常在翻译与规则质检之后执行。
 
-### 工作原理
+### 多轮翻译工作原理
 
 多轮翻译是**级联回退机制**：每轮只处理前一轮**失败**的段落，而非对成功结果进行润色。
 
-```
+```text
 Round 1 (translate): 翻译全部段落
   ├─ 成功 → 写入译文，流程结束
   └─ 失败 → 传递到 Round 2
@@ -220,34 +221,119 @@ glossary:
 
 ```yaml
 rounds:
-  - mode: translate # 轮次模式：translate（翻译）或 extract（术语提取）
-    backend_id: 1 # AI 后端 ID
-    prompt_template_id: 1 # 提示词模板 ID（翻译轮次用翻译模板，提取轮次用抽取模板）
-    profile_id: 1 # 执行配置 ID（仅翻译轮次）
-    batch_size: 10 # 批次大小
-    max_words_per_batch: 0 # 字数上限
-    concurrency: 3 # 并发数
-    fallback_shrink: 0.5 # 失败缩小比例
-    retry: # 重试配置
-      max_attempts: 3
-      backoff_ms: 2000
-      jitter: true
+  - mode: translate # translate | extract | adjudicate
+    backend_id: 1
+    concurrency: 3
+    translate: # mode=translate 时
+      prompt_template_id: 1
+      profile_id: 1
+      batch_size: 10
+      max_words_per_batch: 0
+      fallback_shrink: 0.5
+      retry:
+        max_attempts: 3
+        backoff_ms: 2000
+        jitter: true
+  - mode: adjudicate # 可选：质检降噪
+    backend_id: 1
+    concurrency: 2
+    adjudicate:
+      batch_size: 20
+      max_words_per_batch: 0
+      adjudicate_codes: [source_residual, length_ratio]
+      retry:
+        max_attempts: 3
+        backoff_ms: 2000
+        jitter: true
 ```
 
 ### 验证规则
 
 - `rounds` 列表不能为空
-- 每轮必须指定 `mode`（`translate` 或 `extract`）
-- 翻译轮次必须指定有效的 `backend_id`、`prompt_template_id`、`profile_id`
-- 提取轮次必须指定有效的 `backend_id` 和 `prompt_template_id`
+- 每轮必须指定 `mode`（`translate` / `extract` / `adjudicate`）与有效的 `backend_id`
+- 翻译轮次必须提供 `translate` 配置（含提示词模板、执行配置等）
+- 提取轮次必须提供 `extract` 配置
+- 质量裁决轮次必须提供 `adjudicate` 配置；`adjudicate_codes` 仅允许 `source_residual`、`length_ratio`
 - `concurrency` 必须 ≥ 1
 - `fallback_shrink` 必须在 [0, 1) 范围内
+
+## AI 质量裁决
+
+规则质检偏敏感，专有名词、合理中外混用等场景容易误报。**质量裁决轮次**（`adjudicate`）调用 AI 对已标出的问题逐条判定：`real`（真问题，保留）或 `false_positive`（误报，剔除）。
+
+### 可裁决与硬规则
+
+| 问题 code         | 类型   | 可否裁决 | 说明                                 |
+| ----------------- | ------ | -------- | ------------------------------------ |
+| `source_residual` | 软规则 | ✅       | 译文中残留源语脚本片段；默认纳入裁决 |
+| `length_ratio`    | 软规则 | ✅       | 译文相对原文过短或过长               |
+| `untranslated`    | 硬规则 | ❌       | 译文与原文完全一致                   |
+| `duplicate`       | 硬规则 | ❌       | 相邻段落译文重复                     |
+
+### 质量裁决工作原理
+
+1. 仅处理状态为「已翻译 / 已修改」、且 `quality_issues` 中含可裁决 code 的段落
+2. 按 `batch_size` / `max_words_per_batch` 分批，调用内置裁决提示词
+3. AI 对每条 issue 返回 `verdict` + `reason`
+4. 判定为 `false_positive` 的 issue 从段落中移除；`real` 与不可裁决的 issue 保留
+5. 解析失败或后端错误时**保留原有问题**，不盲目清空
+
+### 配置示例（Web 执行计划）
+
+在 **设置 → 执行计划** 中添加一轮，模式选「质量裁决」：
+
+- **后端**：建议使用与翻译相同或更强的模型
+- **可裁决问题**：默认「源文残留」；可同时勾选「长度异常」
+- **批次 / 并发 / 重试**：与翻译轮次类似
+
+### 配置示例（API / 结构）
+
+```yaml
+adjudicate:
+  batch_size: 20
+  max_words_per_batch: 0
+  adjudicate_codes:
+    - source_residual # 默认
+    - length_ratio # 可选
+  retry:
+    max_attempts: 3
+    backoff_ms: 2000
+    jitter: true
+```
+
+::: tip 使用建议
+
+- 裁决轮次放在翻译轮次之后，确保已有规则质检结果
+- 对专有名词密集、中日/中韩混排文档，优先开启 `source_residual` 裁决
+- 证据不足时 AI 会判 `real`（保守策略），避免漏掉真问题
+  :::
+
+## 源语残留检测
+
+质量检测引擎内置 **源语残留**（`source_residual`）检查器，基于 Unicode 脚本表检测译文中夹带的源语片段。
+
+### 分档策略
+
+| 档位   | 典型语言对                                     | 行为                            |
+| ------ | ---------------------------------------------- | ------------------------------- |
+| 强档   | ja→en 的假名、ko→en 的谚文、ru→zh 的西里尔文等 | 独立脚本在译文中几乎必为残留    |
+| 准强档 | zh→en 的汉字                                   | Han → 非 Han 目标时检测汉字残留 |
+| 中等档 | ja↔zh 等共 Han 语言对                          | 以源文汉字为锚，检测未处理片段  |
+| 弱档   | zh→ja / zh→ko                                  | 默认关闭，避免共写体系噪声      |
+
+源语言为 `auto` 时该检测不生效，需在项目中指定明确源语言。
+
+### 与审校的配合
+
+- 工作区段落列表可按 `source_residual` 筛选
+- 配合 AI 质量裁决可剔除专有名词、代码、刻意保留原文等误报
+- 整段未译仍由 `untranslated` 负责，残留检测会跳过「译文=原文」的段落
 
 ## Ruby 注释保护
 
 对于包含 Ruby 注释（振假名）的文本，LinguaFlow 可以保护注释结构不被破坏。
 
-### 工作原理
+### Ruby 保护工作原理
 
 **提取阶段（翻译前）：**
 
@@ -271,7 +357,7 @@ rounds:
 | `semantic` | 义训（释义） |
 | `creative` | 创意注音     |
 
-### 配置
+### Ruby 保护配置
 
 在执行配置中设置：
 
@@ -296,13 +382,13 @@ ruby_retry:
 
 为避免触发 AI 服务的速率限制，LinguaFlow 支持为每个后端配置请求速率。
 
-### 工作原理
+### 速率限制工作原理
 
 - 使用令牌桶算法控制请求速率
 - 每个后端独立维护限速器
 - 超过限制时自动等待，不会丢弃请求
 
-### 配置
+### 速率限制配置
 
 在后端设置中配置：
 
@@ -332,7 +418,7 @@ rate_limit_per_minute: 60 # 每分钟最大请求数，0 表示不限速
 - **随机抖动** — 实际等待时间增加 0-100% 的随机偏移，避免多请求同时重试
 - **429 专用** — 最小等待 5 秒，优先使用服务端返回的 `Retry-After` 值
 
-### 配置
+### 重试配置
 
 在执行计划的每轮中配置：
 
@@ -369,4 +455,5 @@ plugins:
 ## 下一步
 
 - 阅读 [翻译配置](/zh/guide/translation-config) 了解详细配置
+- 阅读 [翻译审校](/zh/guide/review) 了解质量检测与筛选
 - 阅读 [FAQ](/zh/guide/faq) 了解常见问题

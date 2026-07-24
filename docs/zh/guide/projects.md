@@ -89,6 +89,8 @@
 | 格式     | 扩展名                     | 说明            |
 | -------- | -------------------------- | --------------- |
 | Markdown | `.md`, `.markdown`, `.mdx` | 通用文档格式    |
+| HTML     | `.html`, `.htm`            | 标记语言文档    |
+| DOCX     | `.docx`                    | Word 文档       |
 | EPUB     | `.epub`                    | 电子书格式      |
 | SRT      | `.srt`                     | 字幕格式        |
 | VTT      | `.vtt`                     | Web 字幕格式    |
@@ -96,6 +98,7 @@
 | 纯文本   | `.txt`                     | 纯文本文件      |
 | JSON     | `.json`                    | JSON 结构化格式 |
 | YAML     | `.yaml`, `.yml`            | YAML 结构化格式 |
+| TOML     | `.toml`                    | TOML 结构化格式 |
 
 详见 [格式支持](/zh/guide/formats)。
 
