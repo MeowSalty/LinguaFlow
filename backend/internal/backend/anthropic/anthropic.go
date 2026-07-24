@@ -26,7 +26,6 @@ const (
 )
 
 const (
-	defaultModel     = "claude-sonnet-4-5"
 	defaultMaxTokens = int64(8192) // Anthropic 必填;覆盖典型批量翻译 + glossary
 	toolName         = "emit_translations"
 	toolDescription  = "Emit the translation result and any extracted glossary entries in the required structured form."
@@ -258,7 +257,7 @@ func buildToolInputSchema(schema map[string]any) sdk.ToolInputSchemaParam {
 // factory 从 backend.Config 构造实例。Options 期望的键：
 //   - api_key (必填)
 //   - base_url (留空走 SDK 默认)
-//   - model (默认 claude-sonnet-4-5)
+//   - model (必填)
 //   - max_tokens (默认 8192,Anthropic 必填)
 //   - timeout (默认 60s,duration 字符串)
 //   - response_format (json_schema|json_object|none，默认 json_schema)
@@ -269,6 +268,10 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 	apiKey := backend.StringOpt(opts, "api_key", "")
 	if apiKey == "" {
 		return nil, errors.New("anthropic: api_key is required")
+	}
+	model := backend.StringOpt(opts, "model", "")
+	if model == "" {
+		return nil, errors.New("anthropic: model is required")
 	}
 	clientOpts := []option.RequestOption{
 		option.WithAPIKey(apiKey),
@@ -288,7 +291,7 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 	b := &Backend{
 		name:              cfg.Name,
 		client:            sdk.NewClient(clientOpts...),
-		model:             backend.StringOpt(opts, "model", defaultModel),
+		model:             model,
 		maxTokens:         backend.Int64Opt(opts, "max_tokens", defaultMaxTokens),
 		responseFormat:    rf,
 		enablePromptCache: backend.BoolOpt(opts, "enable_prompt_cache", true),

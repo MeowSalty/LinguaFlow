@@ -315,13 +315,19 @@ func normalizeBackendInput(input BackendInput) (BackendInput, error) {
 	if !isAllowedBackendType(typ) {
 		return BackendInput{}, ErrBackendTypeInvalid
 	}
+	opts := cloneMap(input.Options)
+	model, _ := opts["model"].(string)
+	if strings.TrimSpace(model) == "" {
+		return BackendInput{}, ErrInvalidInput
+	}
+	opts["model"] = strings.TrimSpace(model)
 	if input.RateLimitPerMinute < 0 {
 		input.RateLimitPerMinute = 0
 	}
 	return BackendInput{
 		Name:               name,
 		Type:               typ,
-		Options:            cloneMap(input.Options),
+		Options:            opts,
 		RateLimitPerMinute: input.RateLimitPerMinute,
 	}, nil
 }

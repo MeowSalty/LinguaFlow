@@ -29,7 +29,7 @@ backends:
       api_key: ${OPENAI_API_KEY}
       # API 基础地址
       base_url: https://api.openai.com/v1
-      # 模型名称
+      # 模型名称（必填）
       model: gpt-4o-mini
       # 采样温度，范围 0-2，越低越确定
       temperature: 0.2
