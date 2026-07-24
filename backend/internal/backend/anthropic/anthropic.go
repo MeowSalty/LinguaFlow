@@ -184,11 +184,7 @@ func (b *Backend) Close() error { return nil }
 // wrapAnthropicError 将 Anthropic SDK 错误包装为 backend.StatusError。
 // 与 OpenAI 类似，apierror.Error 在 internal 包中。
 func wrapAnthropicError(err error) error {
-	if code, ok := backend.ExtractHTTPStatusCode(err.Error()); ok {
-		return fmt.Errorf("anthropic: messages: %w",
-			&backend.StatusError{StatusCode: code, Err: err})
-	}
-	return fmt.Errorf("anthropic: messages: %w", err)
+	return backend.WrapUpstreamError("anthropic: messages", err)
 }
 
 // extractResponseText 把响应内容拼成可供上层 parseBatchResponse 解析的字符串。
@@ -309,6 +305,57 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 	return b, nil
 }
 
+// modelLister 仅凭 api_key(+base_url) 列模型，不依赖 model。
+type modelLister struct {
+	client sdk.Client
+}
+
+func modelListerFactory(opts map[string]any) (backend.ModelLister, error) {
+	apiKey := backend.StringOpt(opts, "api_key", "")
+	if apiKey == "" {
+		return nil, errors.New("anthropic: api_key is required")
+	}
+	clientOpts := []option.RequestOption{
+		option.WithAPIKey(apiKey),
+		option.WithHeader("User-Agent", backend.ClientUserAgent()),
+		option.WithHeader("X-Client-Name", backend.ClientName()),
+		option.WithHeader("X-Client-Version", backend.ClientVersion()),
+	}
+	if u := backend.StringOpt(opts, "base_url", ""); u != "" {
+		clientOpts = append(clientOpts, option.WithBaseURL(u))
+	}
+	return &modelLister{client: sdk.NewClient(clientOpts...)}, nil
+}
+
+func (l *modelLister) ListModels(ctx context.Context) ([]backend.ModelInfo, error) {
+	out := make([]backend.ModelInfo, 0)
+	iter := l.client.Models.ListAutoPaging(ctx, sdk.ModelListParams{})
+	for iter.Next() {
+		m := iter.Current()
+		id := m.ID
+		if id == "" {
+			continue
+		}
+		name := m.DisplayName
+		if name == "" {
+			name = id
+		}
+		out = append(out, backend.ModelInfo{ID: id, Name: name})
+		if len(out) >= backend.MaxModels {
+			break
+		}
+	}
+	if err := iter.Err(); err != nil {
+		return nil, wrapAnthropicModelsError(err)
+	}
+	return out, nil
+}
+
+func wrapAnthropicModelsError(err error) error {
+	return backend.WrapUpstreamError("anthropic: list models", err)
+}
+
 func init() {
 	backend.Register(TypeName, factory)
+	backend.RegisterModelLister(TypeName, modelListerFactory)
 }

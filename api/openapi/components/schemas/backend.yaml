@@ -271,3 +271,41 @@ UpdateBackendRequest:
       default: 0
       description: 每分钟请求限制；0 表示不限速
   additionalProperties: false
+
+ListBackendModelsRequest:
+  type: object
+  required: [type, api_key]
+  description: 凭用户输入的凭据探测可用模型列表（不落库）
+  properties:
+    type:
+      type: string
+      enum: [openai, anthropic, google]
+      description: 后端类型
+    api_key:
+      type: string
+      description: AI 服务 API 密钥
+    base_url:
+      type: string
+      description: 自定义 API 端点 URL，留空使用默认值
+  additionalProperties: false
+
+BackendModel:
+  type: object
+  required: [id, name]
+  description: 可用模型条目
+  properties:
+    id:
+      type: string
+      description: 模型 ID，可直接填入后端 options.model
+    name:
+      type: string
+      description: 展示名；缺失时与 id 相同
+
+BackendModelListResponse:
+  type: object
+  required: [items]
+  properties:
+    items:
+      type: array
+      items:
+        $ref: '#/BackendModel'

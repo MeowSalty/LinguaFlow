@@ -63,6 +63,19 @@ func ExtractHTTPStatusCode(msg string) (int, bool) {
 	return code, true
 }
 
+// WrapUpstreamError 将上游错误统一包装为带前缀的 StatusError。
+// 当能从错误消息中解析出 HTTP 状态码时（OpenAI/Anthropic SDK 的
+// internal/apierror.Error 无法直接类型断言），附上状态码以便上层
+// 做状态码相关的判断；否则仅加前缀。翻译路径与列模型路径共用此实现。
+func WrapUpstreamError(prefix string, err error) error {
+	if code, ok := ExtractHTTPStatusCode(err.Error()); ok {
+		return fmt.Errorf("%s: %w",
+			prefix,
+			&StatusError{StatusCode: code, Err: err})
+	}
+	return fmt.Errorf("%s: %w", prefix, err)
+}
+
 // minRateLimitBackoff 是 429 错误的最小退避时间。
 // 当计算出的退避值低于此值时，强制使用此值，避免反复触发限流。
 const minRateLimitBackoff = 5 * time.Second

@@ -3,10 +3,13 @@ package api
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 )
 
@@ -312,5 +315,69 @@ func (s *Server) writeBackendServiceError(w http.ResponseWriter, r *http.Request
 		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请求参数不合法")
 	default:
 		s.writeServiceError(w, r, err)
+	}
+}
+
+type listBackendModelsRequest struct {
+	Type    string `json:"type"`
+	APIKey  string `json:"api_key"`
+	BaseURL string `json:"base_url"`
+}
+
+func (s *Server) handleListBackendModels(w http.ResponseWriter, r *http.Request) {
+	if _, ok := authUserFromContext(r.Context()); !ok {
+		s.writeProblem(w, r, http.StatusUnauthorized, "unauthorized", "认证失败")
+		return
+	}
+	var req listBackendModelsRequest
+	if !s.decodeJSON(w, r, &req) {
+		return
+	}
+	if strings.TrimSpace(req.APIKey) == "" {
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "api_key 不能为空")
+		return
+	}
+	opts := map[string]any{"api_key": strings.TrimSpace(req.APIKey)}
+	if strings.TrimSpace(req.BaseURL) != "" {
+		opts["base_url"] = strings.TrimSpace(req.BaseURL)
+	}
+	models, err := s.backendSvc.ListModels(r.Context(), req.Type, opts)
+	if err != nil {
+		s.writeBackendModelListError(w, r, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"items": toModelItems(models)})
+}
+
+func toModelItems(models []backend.ModelInfo) []map[string]string {
+	items := make([]map[string]string, 0, len(models))
+	for _, m := range models {
+		items = append(items, map[string]string{"id": m.ID, "name": m.Name})
+	}
+	return items
+}
+
+func (s *Server) writeBackendModelListError(w http.ResponseWriter, r *http.Request, err error) {
+	switch {
+	case errors.Is(err, service.ErrBackendTypeInvalid),
+		errors.Is(err, backend.ErrUnknownBackendType):
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "后端类型无效")
+	case errors.Is(err, service.ErrInvalidInput):
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "请求参数不合法")
+	default:
+		var se *backend.StatusError
+		if errors.As(err, &se) {
+			code := se.HTTPStatus()
+			// 将上游 4xx 错误统一映射为 400，避免与前端全局鉴权 401 拦截器冲突
+			// 同时在响应体中保留原始状态码和错误信息
+			if code >= 400 && code < 500 {
+				msg := fmt.Sprintf("拉取模型列表失败 (上游返回 %d: %s)", code, se.Err.Error())
+				s.writeProblem(w, r, http.StatusBadRequest, "upstream_error", msg)
+				return
+			}
+			s.writeProblem(w, r, http.StatusBadGateway, "bad_gateway", "拉取模型列表失败")
+			return
+		}
+		s.writeProblem(w, r, http.StatusBadGateway, "bad_gateway", "拉取模型列表失败")
 	}
 }

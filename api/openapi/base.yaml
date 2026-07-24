@@ -31,6 +31,8 @@ paths:
     $ref: './paths/organizations.yaml#/organizationMemberByUserId'
   /backends:
     $ref: './paths/backends.yaml#/userBackends'
+  /backends/models:
+    $ref: './paths/backends.yaml#/userBackendModels'
   /backends/{backendId}:
     $ref: './paths/backends.yaml#/userBackendById'
   /orgs/{orgId}/backends:
@@ -272,6 +274,12 @@ components:
       $ref: './components/schemas/backend.yaml#/CreateBackendRequest'
     UpdateBackendRequest:
       $ref: './components/schemas/backend.yaml#/UpdateBackendRequest'
+    ListBackendModelsRequest:
+      $ref: './components/schemas/backend.yaml#/ListBackendModelsRequest'
+    BackendModel:
+      $ref: './components/schemas/backend.yaml#/BackendModel'
+    BackendModelListResponse:
+      $ref: './components/schemas/backend.yaml#/BackendModelListResponse'
     Project:
       $ref: './components/schemas/project.yaml#/Project'
     ProjectListResponse:

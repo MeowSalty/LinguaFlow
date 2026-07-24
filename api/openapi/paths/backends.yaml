@@ -140,3 +140,28 @@ orgBackendById:
         description: 删除成功
       default:
         $ref: '../base.yaml#/components/responses/Problem'
+
+userBackendModels:
+  post:
+    operationId: ListBackendModels
+    summary: 探测可用模型列表
+    description: |
+      使用调用方当场提供的 api_key（及可选 base_url）向对应 AI 服务拉取可用模型列表，
+      用于新建/编辑后端时填充 model 字段。凭据不落库，与后端归属无关。
+    security:
+      - bearerAuth: []
+    requestBody:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '../components/schemas/backend.yaml#/ListBackendModelsRequest'
+    responses:
+      '200':
+        description: 模型列表
+        content:
+          application/json:
+            schema:
+              $ref: '../components/schemas/backend.yaml#/BackendModelListResponse'
+      default:
+        $ref: '../base.yaml#/components/responses/Problem'
