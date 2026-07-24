@@ -230,11 +230,12 @@ task backend:local:build
 - [使用模式](https://meowsalty.github.io/LinguaFlow/zh/guide/modes)
 - [项目管理](https://meowsalty.github.io/LinguaFlow/zh/guide/projects)
 - [格式支持](https://meowsalty.github.io/LinguaFlow/zh/guide/formats)
-- [翻译配置](https://meowsalty.github.io/LinguaFlow/zh/guide/translation-config)
+- [翻译配置 · 使用](https://meowsalty.github.io/LinguaFlow/zh/guide/translation-config)
+- [翻译配置 · 参考](https://meowsalty.github.io/LinguaFlow/zh/guide/translation-config-reference)
 - [术语表](https://meowsalty.github.io/LinguaFlow/zh/guide/glossary)
 - [翻译审校](https://meowsalty.github.io/LinguaFlow/zh/guide/review)
 - [CLI 参考](https://meowsalty.github.io/LinguaFlow/zh/guide/cli)
-- [高级功能](https://meowsalty.github.io/LinguaFlow/zh/guide/advanced)（含 AI 质量裁决）
+- [流水线与原理](https://meowsalty.github.io/LinguaFlow/zh/guide/pipeline)（含 AI 质量裁决）
 - [FAQ](https://meowsalty.github.io/LinguaFlow/zh/guide/faq)
 - [API 参考](https://meowsalty.github.io/LinguaFlow/zh/api/)
 
