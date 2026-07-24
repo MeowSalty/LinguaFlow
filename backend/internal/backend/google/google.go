@@ -27,7 +27,6 @@ const (
 )
 
 const (
-	defaultModel     = "gemini-2.5-flash"
 	defaultMaxTokens = int64(8192) // 与 anthropic 取齐;覆盖批量翻译 + glossary 自举的典型输出量
 )
 
@@ -218,7 +217,7 @@ func wrapGoogleError(err error) error {
 // factory 从 backend.Config 构造实例。Options 期望的键：
 //   - api_key (必填)
 //   - base_url (可选，留空走 SDK 默认 https://generativelanguage.googleapis.com/)
-//   - model (默认 gemini-2.5-flash)
+//   - model (必填)
 //   - max_tokens (默认 8192)
 //   - timeout (默认 60s, duration 字符串)
 //   - response_format (json_schema|json_object|none, 默认 json_schema)
@@ -228,6 +227,10 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 	apiKey := backend.StringOpt(opts, "api_key", "")
 	if apiKey == "" {
 		return nil, errors.New("google: api_key is required")
+	}
+	model := backend.StringOpt(opts, "model", "")
+	if model == "" {
+		return nil, errors.New("google: model is required")
 	}
 	rf := backend.StringOpt(opts, "response_format", respFmtJSONSchema)
 	switch rf {
@@ -263,7 +266,7 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 	b := &Backend{
 		name:           cfg.Name,
 		client:         client,
-		model:          backend.StringOpt(opts, "model", defaultModel),
+		model:          model,
 		maxTokens:      backend.Int64Opt(opts, "max_tokens", defaultMaxTokens),
 		timeout:        time.Duration(t) * time.Second,
 		responseFormat: rf,

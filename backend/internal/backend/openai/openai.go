@@ -181,7 +181,7 @@ func wrapOpenAIError(err error) error {
 }
 
 // factory 从 backend.Config 构造实例。
-// Options 期望的键：api_key, base_url, model, max_tokens, timeout（duration 字符串）,
+// Options 期望的键：api_key, base_url, model（必填）, max_tokens, timeout（duration 字符串）,
 // response_format（json_schema | json_object | none，默认 json_schema）,
 // stream（bool，默认 false；true 时以流式发起并在内部累积）。
 func factory(cfg backend.Config) (backend.Backend, error) {
@@ -189,6 +189,10 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 	apiKey, _ := opts["api_key"].(string)
 	if apiKey == "" {
 		return nil, errors.New("openai: api_key is required")
+	}
+	model := backend.StringOpt(opts, "model", "")
+	if model == "" {
+		return nil, errors.New("openai: model is required")
 	}
 	clientOpts := []option.RequestOption{
 		option.WithAPIKey(apiKey),
@@ -208,7 +212,7 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 	b := &Backend{
 		name:           cfg.Name,
 		client:         openaigo.NewClient(clientOpts...),
-		model:          backend.StringOpt(opts, "model", "gpt-4o-mini"),
+		model:          model,
 		maxTokens:      backend.Int64Opt(opts, "max_tokens", 0),
 		responseFormat: rf,
 		stream:         backend.BoolOpt(opts, "stream", false),
