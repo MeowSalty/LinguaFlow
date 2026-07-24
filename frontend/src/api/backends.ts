@@ -7,6 +7,7 @@ import { buildRequestFailureError } from './utils'
 type Backend = ApiSchemas['Backend']
 type CreateBackendPayload = ApiSchemas['CreateBackendRequest']
 type UpdateBackendPayload = ApiSchemas['UpdateBackendRequest']
+type ListBackendModelsPayload = ApiSchemas['ListBackendModelsRequest']
 
 export const fetchBackends = async (
   client: ApiClient = apiClient,
@@ -15,6 +16,21 @@ export const fetchBackends = async (
 
   if (!data) {
     throw buildRequestFailureError(t('api.errors.fetchBackendsFailed'), error, response)
+  }
+
+  return data
+}
+
+export const listBackendModels = async (
+  payload: ListBackendModelsPayload,
+  client: ApiClient = apiClient,
+): Promise<ApiSchemas['BackendModelListResponse']> => {
+  const { data, error, response } = await client.POST('/backends/models', {
+    body: payload,
+  })
+
+  if (!data) {
+    throw buildRequestFailureError(t('api.errors.listBackendModelsFailed'), error, response)
   }
 
   return data

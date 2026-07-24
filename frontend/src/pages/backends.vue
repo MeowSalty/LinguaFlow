@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import {
   NButton,
+  NDivider,
   NDropdown,
   NDrawer,
   NDrawerContent,
@@ -21,9 +22,10 @@ import {
   type FormRules,
   type SelectOption,
 } from 'naive-ui'
+import { h } from 'vue'
 import { useI18n } from 'vue-i18n'
 
-import { type ApiSchemas } from '@/api/client'
+import { listBackendModels, type ApiSchemas } from '@/api/client'
 import { useBackendsStore } from '@/stores/backends'
 
 type Backend = ApiSchemas['Backend']
@@ -57,6 +59,9 @@ const drawerVisible = ref(false)
 const editingBackend = ref<Backend | null>(null)
 const deleteModalVisible = ref(false)
 const deletingBackend = ref<Backend | null>(null)
+const modelOptions = ref<SelectOption[]>([])
+const fetchingModels = ref(false)
+let modelFetchGeneration = 0
 
 const formModel = reactive<BackendFormModel>({
   name: '',
@@ -110,14 +115,128 @@ const submitting = computed(() => backends.creating || backends.updating)
 
 const requiresApiKey = computed(() => Boolean(formModel.type))
 const isAnthropic = computed(() => formModel.type === 'anthropic')
+const canFetchModels = computed(
+  () => Boolean(formModel.type) && formModel.api_key.trim().length > 0,
+)
+const hasModelOptions = computed(() => modelOptions.value.length > 0)
 
 const temperatureMax = computed(() => (formModel.type === 'anthropic' ? 1 : 2))
 const maxTokensMin = computed(() => (formModel.type === 'openai' ? 0 : 1))
 const maxTokensDefault = computed(() => (formModel.type === 'openai' ? 0 : 8192))
 
+const invalidateModelProbe = (): void => {
+  modelFetchGeneration += 1
+  modelOptions.value = []
+  fetchingModels.value = false
+}
+
+const extractJsonPayload = (raw: string): Record<string, unknown> | null => {
+  const match = /\{[\s\S]*\}/u.exec(raw)
+  if (!match?.[0]) {
+    return null
+  }
+
+  try {
+    const parsed: unknown = JSON.parse(match[0])
+    return parsed && typeof parsed === 'object' ? (parsed as Record<string, unknown>) : null
+  } catch {
+    return null
+  }
+}
+
+const sanitizeProbeErrorDetail = (raw: string): string => {
+  const payload = extractJsonPayload(raw)
+  const payloadMessage =
+    payload && typeof payload.message === 'string'
+      ? payload.message
+      : payload && typeof payload.error === 'string'
+        ? payload.error
+        : payload && typeof payload.detail === 'string'
+          ? payload.detail
+          : null
+
+  let detail = (payloadMessage ?? raw)
+    .replace(/https?:\/\/\S+/giu, '')
+    .replace(/\s*\{[\s\S]*\}\s*/gu, ' ')
+    .replace(/\b(?:api[_-]?key|token|authorization)\s*[:=]\s*\S+/giu, '')
+    .replace(/\s+/gu, ' ')
+    .trim()
+
+  detail = detail
+    .replace(/^拉取模型列表失败[（(]?/u, '')
+    .replace(/^listBackendModelsFailed[（(]?/u, '')
+    .replace(/[）)]$/u, '')
+    .replace(/^上游返回\s*/u, '')
+    .replace(/^\d{3}\s*/u, '')
+    .replace(/^GET\s*/iu, '')
+    .replace(/^:\s*/u, '')
+    .trim()
+
+  if (!detail) {
+    return ''
+  }
+
+  if (detail.length > 180) {
+    return `${detail.slice(0, 180)}…`
+  }
+
+  return detail
+}
+
+const resolveModelProbeErrorSummary = (raw: string): string => {
+  if (/401|unauthorized|authentication|invalid.*api.?key|api.?key.*invalid/i.test(raw)) {
+    return t('backends.form.fetchModelsAuthFailed')
+  }
+  if (/403|forbidden/i.test(raw)) {
+    return t('backends.form.fetchModelsForbidden')
+  }
+  if (/404|not\s*found/i.test(raw)) {
+    return t('backends.form.fetchModelsNotFound')
+  }
+  if (/timeout|timed\s*out|econnrefused|network|fetch failed|failed to fetch/i.test(raw)) {
+    return t('backends.form.fetchModelsNetworkFailed')
+  }
+  return t('api.errors.listBackendModelsFailed')
+}
+
+const showModelProbeError = (error: unknown): void => {
+  const raw =
+    error instanceof Error && error.message.trim()
+      ? error.message.trim()
+      : t('api.errors.listBackendModelsFailed')
+  const summary = resolveModelProbeErrorSummary(raw)
+  const detail = sanitizeProbeErrorDetail(raw)
+
+  if (!detail || detail === summary) {
+    message.error(summary, { duration: 0, closable: true })
+    return
+  }
+
+  message.error(
+    () =>
+      h('div', { class: 'max-w-md space-y-1' }, [
+        h('div', { class: 'font-medium leading-5' }, summary),
+        h('div', { class: 'text-xs leading-5 opacity-80 break-words' }, detail),
+      ]),
+    { duration: 0, closable: true },
+  )
+}
+
+const filterModelOption = (pattern: string, option: SelectOption): boolean => {
+  const query = pattern.trim().toLowerCase()
+  if (!query) {
+    return true
+  }
+
+  const label = typeof option.label === 'string' ? option.label.toLowerCase() : ''
+  const value = option.value == null ? '' : String(option.value).toLowerCase()
+  return label.includes(query) || value.includes(query)
+}
+
 watch(
   () => formModel.type,
   () => {
+    invalidateModelProbe()
     if (formModel.temperature > temperatureMax.value) {
       formModel.temperature = temperatureMax.value
     }
@@ -126,6 +245,19 @@ watch(
     }
   },
 )
+
+watch(
+  () => [formModel.api_key, formModel.base_url] as const,
+  () => {
+    invalidateModelProbe()
+  },
+)
+
+watch(drawerVisible, (visible) => {
+  if (!visible) {
+    invalidateModelProbe()
+  }
+})
 
 const rules = computed<FormRules>(() => ({
   name: [
@@ -176,6 +308,69 @@ const resetForm = (): void => {
   formModel.stream = false
   formModel.rate_limit_per_minute = 0
   editingBackend.value = null
+  invalidateModelProbe()
+}
+
+const handleFetchModels = async (): Promise<void> => {
+  if (!formModel.type) {
+    message.warning(t('backends.form.fetchModelsNeedCredentials'))
+    return
+  }
+
+  if (!formModel.api_key.trim()) {
+    message.warning(t('backends.form.fetchModelsNeedCredentials'))
+    return
+  }
+
+  const requestType = formModel.type
+  const requestApiKey = formModel.api_key.trim()
+  const requestBaseUrl = formModel.base_url.trim()
+  const generation = ++modelFetchGeneration
+
+  fetchingModels.value = true
+  try {
+    const response = await listBackendModels({
+      type: requestType,
+      api_key: requestApiKey,
+      ...(requestBaseUrl ? { base_url: requestBaseUrl } : {}),
+    })
+
+    if (generation !== modelFetchGeneration) {
+      return
+    }
+
+    if (
+      formModel.type !== requestType ||
+      formModel.api_key.trim() !== requestApiKey ||
+      formModel.base_url.trim() !== requestBaseUrl
+    ) {
+      return
+    }
+
+    const options = response.items.map((item) => ({
+      label: item.name && item.name !== item.id ? `${item.name} (${item.id})` : item.id,
+      value: item.id,
+    }))
+    modelOptions.value = options
+
+    if (options.length === 0) {
+      message.info(t('backends.form.fetchModelsEmpty'))
+    } else {
+      message.success(t('backends.form.fetchModelsSuccess', { count: options.length }))
+      if (!formModel.model.trim() && options[0]?.value) {
+        formModel.model = String(options[0].value)
+      }
+    }
+  } catch (fetchError) {
+    if (generation !== modelFetchGeneration) {
+      return
+    }
+    showModelProbeError(fetchError)
+  } finally {
+    if (generation === modelFetchGeneration) {
+      fetchingModels.value = false
+    }
+  }
 }
 
 const openCreateDrawer = (): void => {
@@ -208,6 +403,7 @@ const openEditDrawer = (backend: Backend): void => {
     typeof opts?.enable_prompt_cache === 'boolean' ? opts.enable_prompt_cache : true
   formModel.stream = typeof opts?.stream === 'boolean' ? opts.stream : false
   formModel.rate_limit_per_minute = backend.rate_limit_per_minute ?? 0
+  invalidateModelProbe()
   drawerVisible.value = true
 }
 
@@ -551,10 +747,33 @@ watch(
           </NFormItem>
 
           <NFormItem :label="t('backends.form.model')" path="model">
-            <NInput
-              v-model:value="formModel.model"
-              :placeholder="t('backends.form.modelPlaceholder')"
-            />
+            <div class="flex w-full flex-col gap-2">
+              <div class="flex w-full items-center gap-2">
+                <NSelect
+                  class="min-w-0 flex-1"
+                  clearable
+                  filterable
+                  tag
+                  :show-arrow="hasModelOptions"
+                  :value="formModel.model || null"
+                  :options="modelOptions"
+                  :filter="filterModelOption"
+                  :placeholder="t('backends.form.modelPlaceholder')"
+                  @update:value="(value) => (formModel.model = value == null ? '' : String(value))"
+                />
+                <NButton
+                  secondary
+                  :loading="fetchingModels"
+                  :disabled="!canFetchModels || fetchingModels"
+                  @click="handleFetchModels"
+                >
+                  {{ t('backends.form.fetchModels') }}
+                </NButton>
+              </div>
+              <p class="text-xs leading-5 text-lf-text-muted">
+                {{ t('backends.form.fetchModelsHint') }}
+              </p>
+            </div>
           </NFormItem>
 
           <NFormItem :label="t('backends.form.temperature')" path="temperature">
