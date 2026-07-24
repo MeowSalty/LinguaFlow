@@ -60,11 +60,11 @@ LinguaFlow 帮助你将文档、字幕、电子书等内容翻译成多种语言
 
 ### 批量处理
 
-一次翻译整个目录的文件，支持并发处理和增量更新。
+一次翻译整个目录的文件，支持增量更新；每个文件内部可按段落分批并发调用模型。
 
 - 拖拽上传文件或文件夹
 - 增量更新：保留已有译文，仅翻译新增内容
-- 并发翻译，充分利用多核性能
+- 文件内段落分批并发（目录/资源之间按顺序处理）
 - 实时进度追踪，预估剩余时间
 
 ### EPUB / DOCX / HTML
@@ -223,14 +223,17 @@ task backend:local:build
 
 详细文档请访问 [LinguaFlow 文档](https://meowsalty.github.io/LinguaFlow/)：
 
-- [快速开始](https://meowsalty.github.io/LinguaFlow/zh/guide/getting-started)
-- [安装指南](https://meowsalty.github.io/LinguaFlow/zh/guide/installation)
+- [快速开始 · Web](https://meowsalty.github.io/LinguaFlow/zh/guide/getting-started)
+- [快速开始 · CLI](https://meowsalty.github.io/LinguaFlow/zh/guide/cli-quickstart)
+- [核心概念](https://meowsalty.github.io/LinguaFlow/zh/guide/concepts)
+- [安装部署](https://meowsalty.github.io/LinguaFlow/zh/guide/installation)
+- [使用模式](https://meowsalty.github.io/LinguaFlow/zh/guide/modes)
 - [项目管理](https://meowsalty.github.io/LinguaFlow/zh/guide/projects)
 - [格式支持](https://meowsalty.github.io/LinguaFlow/zh/guide/formats)
 - [翻译配置](https://meowsalty.github.io/LinguaFlow/zh/guide/translation-config)
 - [术语表](https://meowsalty.github.io/LinguaFlow/zh/guide/glossary)
 - [翻译审校](https://meowsalty.github.io/LinguaFlow/zh/guide/review)
-- [CLI 命令行](https://meowsalty.github.io/LinguaFlow/zh/guide/cli)
+- [CLI 参考](https://meowsalty.github.io/LinguaFlow/zh/guide/cli)
 - [高级功能](https://meowsalty.github.io/LinguaFlow/zh/guide/advanced)（含 AI 质量裁决）
 - [FAQ](https://meowsalty.github.io/LinguaFlow/zh/guide/faq)
 - [API 参考](https://meowsalty.github.io/LinguaFlow/zh/api/)
