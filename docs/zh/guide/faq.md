@@ -42,14 +42,35 @@ docker logs linguaflow  # 查看日志
 - 提供更多上下文信息
 - 尝试不同的 AI 模型
 - 使用多轮翻译流水线
+- 启用质量检测 + AI 质量裁决，先降噪再人工审校
+
+### 兼容网关要求 stream:true？
+
+在 AI 后端选项中开启 **流式请求**（`stream: true`）。请求以流式发起，服务端内部累积为完整响应后再处理，对外行为不变。OpenAI / Anthropic / Google 三类后端均支持。
+
+### 源语残留误报很多？
+
+源语残留检测偏敏感（专有名词、代码、刻意保留原文等可能被标出）。可：
+
+1. 在执行计划中增加 **质量裁决**（`adjudicate`）轮次，对 `source_residual` 做 AI 复核
+2. 在段落列表中按 `source_residual` 筛选后人工确认
+3. 确保项目源语言不是 `auto`（`auto` 时残留检测不生效，但指定错误语言也会影响规则）
 
 ## 文件格式
+
+### 支持哪些格式？
+
+Markdown、HTML、DOCX、EPUB、SRT/VTT/ASS 字幕、JSON/YAML/TOML、纯文本等。详见 [格式支持](/zh/guide/formats)。
 
 ### EPUB 翻译后排版混乱？
 
 - 确认 EPUB 文件格式是否标准
 - 尝试按章节分批翻译
 - 检查是否有特殊格式需要保护
+
+### DOCX 部分内容未翻译？
+
+当前主要处理主文档 `word/document.xml` 中的段落。页眉页脚、批注、SmartArt、图表等可能不在翻译范围内，翻译后请用 Word 打开校对。
 
 ### 字幕文件时间码被修改？
 
@@ -62,8 +83,8 @@ LinguaFlow 会自动保护时间码，如果发现时间码被修改：
 
 ### 数据存储在哪里？
 
-- **本地模式** — SQLite 数据库文件，默认在 `./data/linguaflow.db`
-- **服务器模式** — 同上，可通过 `--db` 参数指定路径
+- **本地模式** — SQLite，默认在系统用户配置目录下的 `LinguaFlow`（如 Windows `%APPDATA%\LinguaFlow`）
+- **服务器模式** — 默认 `./data/linguaflow.db`；可用 `--data-dir` 或环境变量指定；PostgreSQL 时数据在数据库中，但任务/资源相关本地文件仍在默认或者指定的服务端本地数据根目录下
 
 ### 如何备份数据？
 

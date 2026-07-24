@@ -44,16 +44,16 @@ linguaflow translate -i input.md -o output.md --to zh
 
 ### 参数说明
 
-| 参数              | 短写 | 类型     | 默认值   | 描述                                                   |
-| ----------------- | ---- | -------- | -------- | ------------------------------------------------------ |
-| `--input`         | `-i` | string[] | 必填     | 输入文件或目录路径，可传多个                           |
-| `--output`        | `-o` | string   | 必填     | 输出路径（单文件为文件路径，多文件/目录为目录路径）    |
-| `--to`            |      | string   | `"zh"`   | 目标语言代码                                           |
-| `--from`          |      | string   | `"auto"` | 源语言代码（默认自动检测）                             |
-| `--glossary-path` |      | string   | `""`     | 术语表 CSV 路径                                        |
-| `--bootstrap`     |      | string   | `""`     | 术语自举模式：`off` \| `pre` \| `inline`               |
-| `--profile`       |      | string   | `""`     | 执行配置名称（引用配置中 `execution_profiles` 的 key） |
-| `--prompt`        |      | string   | `""`     | 提示词模板名称（引用配置中 `prompt_templates` 的 key） |
+| 参数              | 短写 | 类型     | 默认值   | 描述                                                               |
+| ----------------- | ---- | -------- | -------- | ------------------------------------------------------------------ |
+| `--input`         | `-i` | string[] | 必填     | 输入文件或目录路径，可传多个                                       |
+| `--output`        | `-o` | string   | 必填     | 输出路径（单文件为文件路径，多文件/目录为目录路径）                |
+| `--to`            |      | string   | `"zh"`   | 目标语言代码                                                       |
+| `--from`          |      | string   | `"auto"` | 源语言代码（默认自动检测）                                         |
+| `--glossary-path` |      | string   | `""`     | 术语表 CSV 路径                                                    |
+| `--bootstrap`     |      | string   | `""`     | 术语自举模式：`off` \| `pre` \| `inline`                           |
+| `--profile`       |      | string   | `""`     | 执行配置名称（引用配置中 `translation_profiles` 的 key）           |
+| `--prompt`        |      | string   | `""`     | 提示词模板名称（引用配置中 `translation_prompt_templates` 的 key） |
 
 ### 示例
 
@@ -94,14 +94,17 @@ linguaflow translate -i docs.md -o out.md --to zh --profile technical
 翻译命令支持以下文件格式：
 
 - Markdown (`.md`, `.markdown`, `.mdx`)
+- HTML (`.html`, `.htm`)
+- DOCX (`.docx`)
 - SRT 字幕 (`.srt`)
 - VTT 字幕 (`.vtt`)
 - ASS 字幕 (`.ass`)
 - EPUB 电子书 (`.epub`)
 - JSON (`.json`)
 - YAML (`.yaml`, `.yml`)
+- TOML (`.toml`)
 - 纯文本 (`.txt`)
-- XUnity Text (`.txt`)
+- XUnity Text (`.txt`，`key=value` 格式自动识别)
 
 目录扫描时，不支持的文件会被自动跳过，并在翻译结束后输出统计摘要（成功/失败/跳过数量）。批量翻译如有失败文件，程序将以非零退出码退出。
 
@@ -121,7 +124,8 @@ linguaflow init [flags]
 执行后会生成以下内容：
 
 - `linguaflow.yaml` — 主配置文件（含注释说明）
-- `prompts/default.tmpl` — 默认提示词模板
+- `prompts/default_translation.tmpl` — 默认翻译提示词模板
+- `prompts/default_bootstrap.tmpl` — 默认术语抽取提示词模板
 - `profiles/default.yaml` — 默认执行配置
 
 ## local 命令
@@ -160,8 +164,17 @@ linguaflow serve [flags]
 | `--port`         | int    | `8080`      | 监听端口                                   |
 | `--data-dir`     | string | `"./data"`  | 数据目录                                   |
 | `--auto-migrate` | bool   | `true`      | 启动时自动执行数据库迁移                   |
+| `--no-ui`        | bool   | `false`     | 关闭嵌入式 Web UI，仅提供 API              |
 | `--jwt-secret`   | string | `""`        | 覆盖 `LINGUAFLOW_JWT_SECRET`               |
 | `--cors-origins` | string | `""`        | 覆盖 `LINGUAFLOW_CORS_ORIGINS`（逗号分隔） |
+
+默认提供嵌入式 Web UI。仅需 API 时：
+
+```bash
+linguaflow serve --no-ui
+# 或
+LINGUAFLOW_SERVE_UI=false linguaflow serve
+```
 
 ### 数据库配置
 

@@ -4,7 +4,7 @@ layout: home
 hero:
   name: LinguaFlow
   text: AI 驱动的多语言翻译工作台
-  tagline: 支持文档、电子书、字幕等多种格式，集成 OpenAI / Anthropic / Google Gemini，一站式完成多语言翻译
+  tagline: 文档 · 电子书 · 字幕 · Word · 配置文件，一站式完成多语言翻译与审校
   actions:
     - theme: brand
       text: 快速开始
@@ -19,29 +19,29 @@ hero:
 features:
   - icon: 📄
     title: 多格式支持
-    details: 支持 Markdown、EPUB 电子书、SRT/VTT/ASS 字幕、纯文本等多种文件格式的翻译
+    details: Markdown、HTML、DOCX、EPUB、SRT/VTT/ASS 字幕、JSON/YAML/TOML、纯文本，结构保留、按格式精准回写
   - icon: 🤖
     title: 多 AI 后端
-    details: 集成 OpenAI、Anthropic Claude、Google Gemini，灵活切换和组合 AI 翻译引擎
+    details: OpenAI / Anthropic / Google Gemini，兼容 Azure、Ollama、LM Studio 等网关；支持流式请求适配
   - icon: 📚
-    title: EPUB 电子书翻译
-    details: 按章节浏览和翻译，保留原始格式，逐章追踪翻译进度
+    title: EPUB 与文档翻译
+    details: EPUB 按章节浏览与翻译，DOCX/HTML 保留结构，Markdown 基于 AST 精准切段
   - icon: 📋
     title: 术语表管理
-    details: 创建和管理术语表，支持 CSV 导入导出，自动提取术语确保翻译一致性，支持术语精简清理冗余条目
+    details: 项目级术语表、CSV 导入导出，自动术语提取（Bootstrap）与术语精简（Prune）
   - icon: 🔍
-    title: 翻译审校与质量检测
-    details: 逐段审校、内联编辑、批量审批/拒绝，自动检测长度/重复/未译等常见问题
+    title: 质量检测与 AI 裁决
+    details: 长度异常、重复、未译、源语残留自动检测；质量裁决轮次调用 AI 剔除规则误报
   - icon: ⚡
     title: 批量翻译
-    details: 上传整个目录，增量翻译保留已有译文，实时进度追踪与 ETA 预估
+    details: 拖拽上传、增量更新保留已有译文，并发翻译与实时进度 / ETA 预估
   - icon: 🔧
-    title: 灵活配置
-    details: 自定义翻译/术语提取/术语精简三类提示词模板、执行配置、模式化执行计划
+    title: 灵活流水线
+    details: 自定义提示词、执行配置与模式化执行计划（翻译 / 术语提取 / 质量裁决）
   - icon: 💻
-    title: 双模式运行
-    details: Web UI 可视化管理 + CLI 命令行自动化，满足不同使用场景
+    title: Web + CLI
+    details: 嵌入式 Web UI 可视化管理，CLI 一键批量翻译；服务器模式可 --no-ui 仅暴露 API
   - icon: 🐳
-    title: 容器化部署
-    details: 支持 Docker 一键部署，提供本地单用户和服务器多租户两种运行模式
+    title: 开箱即用
+    details: 单二进制 / Docker 部署，本地模式零配置，服务器模式支持 SQLite 与 PostgreSQL
 ---

@@ -24,10 +24,15 @@ LinguaFlow 帮助你将文档、字幕、电子书等内容翻译成多种语言
 | 格式        | 扩展名                   |
 | ----------- | ------------------------ |
 | Markdown    | `.md` `.markdown` `.mdx` |
+| HTML        | `.html` `.htm`           |
+| DOCX 文档   | `.docx`                  |
 | EPUB 电子书 | `.epub`                  |
 | SRT 字幕    | `.srt`                   |
 | VTT 字幕    | `.vtt`                   |
 | ASS 字幕    | `.ass`                   |
+| JSON        | `.json`                  |
+| YAML        | `.yaml` `.yml`           |
+| TOML        | `.toml`                  |
 | 纯文本      | `.txt`                   |
 
 ---
@@ -47,6 +52,8 @@ LinguaFlow 帮助你将文档、字幕、电子书等内容翻译成多种语言
 集成主流 AI 翻译服务，支持自定义翻译策略和提示词。
 
 - 支持 OpenAI、Anthropic、Google Gemini
+- 兼容 Azure OpenAI、Ollama、LM Studio 等 OpenAI API 兼容服务
+- 流式请求模式（`stream`），适配只接受 `stream:true` 的兼容网关，内部累积为完整响应后返回
 - 自动检测源语言
 - 上下文感知，保持段落间连贯性
 - 代码块、链接、占位符等特殊内容自动保护
@@ -60,14 +67,13 @@ LinguaFlow 帮助你将文档、字幕、电子书等内容翻译成多种语言
 - 并发翻译，充分利用多核性能
 - 实时进度追踪，预估剩余时间
 
-### EPUB 电子书
+### EPUB / DOCX / HTML
 
-专门针对 EPUB 电子书的翻译支持。
+针对电子书与办公文档的专用支持。
 
-- 按章节浏览和翻译
-- 章节级翻译进度追踪
-- HTML 内容预览
-- 保留原始格式和结构
+- **EPUB**：按章节浏览与翻译、章节级进度、HTML 内容预览
+- **DOCX**：直接解析 Word ZIP + XML，保留样式外壳
+- **HTML**：按块级元素切段，结构字节级回写
 
 ### 术语管理
 
@@ -83,10 +89,11 @@ LinguaFlow 帮助你将文档、字幕、电子书等内容翻译成多种语言
 逐段查看翻译结果，支持行内编辑和批量审核。内置质量检测，自动发现翻译问题。
 
 - 按状态筛选（待翻译/已翻译/已编辑/已批准/已驳回）
+- 按质量问题筛选（长度异常、重复翻译、未翻译、源语残留）
 - 行内编辑译文，支持键盘导航
 - 批量通过/拒绝
 - 添加备注
-- **质量检测**：自动检测长度异常、重复翻译、未翻译等常见问题
+- **质量检测**：自动检测长度异常、重复翻译、未翻译、源语残留等常见问题
 
 ### 灵活配置
 
@@ -94,7 +101,11 @@ LinguaFlow 帮助你将文档、字幕、电子书等内容翻译成多种语言
 
 - **提示词模板**：翻译、术语提取、术语精简三类独立模板
 - **执行配置**：分段策略、内容保护、响应修复、质量检测等
-- **执行计划**：组合后端、提示词、配置，定义模式化多轮翻译流程（翻译轮次、提取轮次）
+- **执行计划**：组合后端、提示词、配置，定义模式化多轮翻译流程（翻译轮次、提取轮次、质量裁决轮次）
+
+### AI 质量裁决
+
+规则质检偏敏感，难免误报。质量裁决轮次（`adjudicate`）调用 AI 对已标出的问题逐条复核，剔除明确误报、保留需人工复核的真问题，实现质检降噪。可裁决 `source_residual`（源语残留）与 `length_ratio`（长度异常）两类软规则；`untranslated`（未翻译）与 `duplicate`（重复翻译）为硬规则，不可裁决。
 
 ---
 
@@ -102,7 +113,7 @@ LinguaFlow 帮助你将文档、字幕、电子书等内容翻译成多种语言
 
 ### Web 界面
 
-启动服务后访问 Web 界面，可视化管理翻译工作。
+启动服务后访问 Web 界面，可视化管理翻译工作。本地模式默认嵌入前端静态资源；服务器模式下可选用 `--no-ui` 关闭嵌入式 Web UI，仅暴露 API 供第三方前端调用。
 
 - 项目、资源、作业、术语表的完整管理
 - 拖拽上传文件
@@ -188,6 +199,9 @@ task backend:local:build
 
 ```bash
 ./bin/linguaflow serve
+
+# 仅提供 API，关闭嵌入式 Web UI
+./bin/linguaflow serve --no-ui
 ```
 
 ---
@@ -212,11 +226,12 @@ task backend:local:build
 - [快速开始](https://meowsalty.github.io/LinguaFlow/zh/guide/getting-started)
 - [安装指南](https://meowsalty.github.io/LinguaFlow/zh/guide/installation)
 - [项目管理](https://meowsalty.github.io/LinguaFlow/zh/guide/projects)
+- [格式支持](https://meowsalty.github.io/LinguaFlow/zh/guide/formats)
 - [翻译配置](https://meowsalty.github.io/LinguaFlow/zh/guide/translation-config)
 - [术语表](https://meowsalty.github.io/LinguaFlow/zh/guide/glossary)
 - [翻译审校](https://meowsalty.github.io/LinguaFlow/zh/guide/review)
 - [CLI 命令行](https://meowsalty.github.io/LinguaFlow/zh/guide/cli)
-- [高级功能](https://meowsalty.github.io/LinguaFlow/zh/guide/advanced)
+- [高级功能](https://meowsalty.github.io/LinguaFlow/zh/guide/advanced)（含 AI 质量裁决）
 - [FAQ](https://meowsalty.github.io/LinguaFlow/zh/guide/faq)
 - [API 参考](https://meowsalty.github.io/LinguaFlow/zh/api/)
 
