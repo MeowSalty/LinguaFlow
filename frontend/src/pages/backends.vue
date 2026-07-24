@@ -149,6 +149,13 @@ const rules = computed<FormRules>(() => ({
       trigger: ['input', 'blur'],
     },
   ],
+  model: [
+    {
+      required: true,
+      message: t('backends.validation.modelRequired'),
+      trigger: ['input', 'blur'],
+    },
+  ],
 }))
 
 const resetForm = (): void => {
@@ -214,9 +221,7 @@ const buildOptions = (): BackendOptions => {
   if (formModel.base_url.trim()) {
     options.base_url = formModel.base_url.trim()
   }
-  if (formModel.model.trim()) {
-    options.model = formModel.model.trim()
-  }
+  options.model = formModel.model.trim()
   if (formModel.temperatureEnabled) {
     options.temperature = formModel.temperature
   }
@@ -317,20 +322,7 @@ const getModelDisplay = (backend: Backend): string => {
   if (typeof opts?.model === 'string' && opts.model) {
     return opts.model
   }
-  switch (backend.type) {
-    case 'openai': {
-      return 'gpt-4o-mini'
-    }
-    case 'anthropic': {
-      return 'claude-sonnet-4-5'
-    }
-    case 'google': {
-      return 'gemini-2.5-flash'
-    }
-    default: {
-      return '-'
-    }
-  }
+  return '-'
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
