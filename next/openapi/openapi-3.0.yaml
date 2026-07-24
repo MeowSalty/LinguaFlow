@@ -3082,6 +3082,7 @@ components:
       required:
         - name
         - type
+        - options
       properties:
         name:
           type: string
@@ -3997,6 +3998,7 @@ components:
       required:
         - api_key
         - type
+        - model
       description: OpenAI 兼容后端选项。支持 OpenAI 官方 API 及 Azure OpenAI、Ollama、LM Studio 等兼容服务。
       properties:
         type:
@@ -4011,8 +4013,8 @@ components:
             可用于指向 Azure OpenAI / Ollama / LM Studio / 自定义网关等兼容服务。
         model:
           type: string
-          default: gpt-4o-mini
-          description: 模型名称。默认 gpt-4o-mini。
+          minLength: 1
+          description: 模型名称（必填）。须为所选服务实际可用的模型 ID。
         max_tokens:
           type: integer
           minimum: 0
@@ -4057,6 +4059,7 @@ components:
       required:
         - api_key
         - type
+        - model
       description: Anthropic Claude 后端选项。
       properties:
         type:
@@ -4070,8 +4073,8 @@ components:
             自定义API端点URL。留空使用默认值。
         model:
           type: string
-          default: claude-sonnet-4-5
-          description: 模型名称。默认 claude-sonnet-4-5。
+          minLength: 1
+          description: 模型名称（必填）。须为 Anthropic 实际可用的模型 ID。
         max_tokens:
           type: integer
           minimum: 1
@@ -4122,6 +4125,7 @@ components:
       required:
         - api_key
         - type
+        - model
       description: Google Gemini 后端选项。
       properties:
         type:
@@ -4135,8 +4139,8 @@ components:
             自定义API端点URL。留空使用默认值。
         model:
           type: string
-          default: gemini-2.5-flash
-          description: 模型名称。默认 gemini-2.5-flash。
+          minLength: 1
+          description: 模型名称（必填）。须为 Google Gemini 实际可用的模型 ID。
         max_tokens:
           type: integer
           minimum: 1
