@@ -1721,7 +1721,7 @@ export interface components {
             name: string;
             /** @enum {string} */
             type: "openai" | "anthropic" | "google";
-            options?: components["schemas"]["BackendOptions"];
+            options: components["schemas"]["BackendOptions"];
             /**
              * @description 每分钟请求限制；0 表示不限速
              * @default 0
@@ -2147,10 +2147,7 @@ export interface components {
              *     可用于指向 Azure OpenAI / Ollama / LM Studio / 自定义网关等兼容服务。
              */
             base_url?: string;
-            /**
-             * @description 模型名称。默认 gpt-4o-mini。
-             * @default gpt-4o-mini
-             */
+            /** @description 模型名称（必填）。须为所选服务实际可用的模型 ID。 */
             model: string;
             /**
              * @description 最大生成 token 数。0 表示不限制。
@@ -2198,10 +2195,7 @@ export interface components {
             api_key: string;
             /** @description 自定义API端点URL。留空使用默认值。 */
             base_url?: string;
-            /**
-             * @description 模型名称。默认 claude-sonnet-4-5。
-             * @default claude-sonnet-4-5
-             */
+            /** @description 模型名称（必填）。须为 Anthropic 实际可用的模型 ID。 */
             model: string;
             /**
              * @description 最大生成 token 数。Anthropic 必填，默认 8192。
@@ -2255,10 +2249,7 @@ export interface components {
             api_key: string;
             /** @description 自定义API端点URL。留空使用默认值。 */
             base_url?: string;
-            /**
-             * @description 模型名称。默认 gemini-2.5-flash。
-             * @default gemini-2.5-flash
-             */
+            /** @description 模型名称（必填）。须为 Google Gemini 实际可用的模型 ID。 */
             model: string;
             /**
              * @description 最大生成 token 数。默认 8192。

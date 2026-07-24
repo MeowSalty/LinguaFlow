@@ -1021,7 +1021,7 @@ const messages = {
       baseUrl: 'Base URL（可选）',
       baseUrlPlaceholder: '留空使用官方地址',
       model: '模型',
-      modelPlaceholder: '留空使用默认模型',
+      modelPlaceholder: '例如：gpt-4o-mini',
       temperature: 'Temperature',
       topP: 'Top P',
       useApiDefault: '使用 API 默认值',
@@ -1040,6 +1040,7 @@ const messages = {
       nameRequired: '请输入后端名称',
       typeRequired: '请选择后端类型',
       apiKeyRequired: '请输入 API Key',
+      modelRequired: '请输入模型名称',
     },
     messages: {
       createSuccess: '后端创建成功',
