@@ -196,6 +196,6 @@ EPUB 格式文件具有专用的虚拟目录结构和章节导航，支持按章
 
 ## 下一步
 
-- 阅读 [翻译配置](/zh/guide/translation-config) 了解如何优化翻译效果
+- 阅读 [翻译配置 · 使用](/zh/guide/translation-config) 了解如何优化翻译效果
 - 阅读 [术语表管理](/zh/guide/glossary) 了解术语管理
 - 阅读 [翻译审校](/zh/guide/review) 了解翻译质量控制

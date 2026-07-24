@@ -54,7 +54,7 @@ HTML 格式保留标签结构，仅翻译文本节点。
 :::
 
 ::: tip
-含 `<ruby>` 注音的 HTML 可配合执行配置中的 Ruby 注音处理（详见 [高级功能](/zh/guide/advanced)）。
+含 `<ruby>` 注音的 HTML 可配合执行配置中的 Ruby 注音处理（详见 [流水线与原理 · Ruby](/zh/guide/pipeline#ruby-注音)）。
 :::
 
 ## DOCX
@@ -223,4 +223,4 @@ TOML 注释在翻译过程中可能无法保留（通用反序列化机制限制
 ## 下一步
 
 - 阅读 [项目管理](/zh/guide/projects) 了解如何上传和管理文件
-- 阅读 [翻译配置](/zh/guide/translation-config) 了解翻译配置选项
+- 阅读 [翻译配置 · 使用](/zh/guide/translation-config) 了解如何配置翻译

@@ -51,12 +51,18 @@ export default defineConfig({
               ],
             },
             {
-              text: '配置与进阶',
+              text: '深入配置',
               items: [
-                { text: '翻译配置', link: '/zh/guide/translation-config' },
-                { text: '高级功能', link: '/zh/guide/advanced' },
-                { text: '配置参考', link: '/zh/guide/configuration' },
-                { text: 'CLI 参考', link: '/zh/guide/cli' },
+                { text: '翻译配置 · 使用', link: '/zh/guide/translation-config' },
+                { text: '翻译配置 · 参考', link: '/zh/guide/translation-config-reference' },
+                { text: '流水线与原理', link: '/zh/guide/pipeline' },
+              ],
+            },
+            {
+              text: '参考',
+              items: [
+                { text: '配置文件与环境变量', link: '/zh/guide/configuration' },
+                { text: 'CLI 命令参考', link: '/zh/guide/cli' },
                 { text: '常见问题', link: '/zh/guide/faq' },
               ],
             },

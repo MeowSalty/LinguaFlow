@@ -65,7 +65,7 @@ docker logs linguaflow  # 查看日志
 
 源语残留检测偏敏感（专有名词、代码、刻意保留原文等可能被标出）。可：
 
-1. 在执行计划中增加 **质量裁决**（`adjudicate`）轮次，对 `source_residual` 做 AI 复核
+1. 在执行计划中增加 **质量裁决**（`adjudicate`）轮次，对 `source_residual` 做 AI 复核（见 [流水线与原理](/zh/guide/pipeline#规则质检与-ai-质量裁决)）
 2. 在段落列表中按 `source_residual` 筛选后人工确认
 3. 确保项目源语言不是 `auto`（`auto` 时残留检测不生效，但指定错误语言也会影响规则）
 
@@ -128,7 +128,7 @@ cp ./data/linguaflow.db ./backup/linguaflow_backup.db
 - **内置默认**多为 `batch_size: 1`（稳妥、好排错），对当前大上下文模型来说**偏保守**，不是能力上限。
 - **日常吞吐**：短段可试 `8`～`20` 段/批；普通文档可试 `4`～`10`。
 - **更推荐**同时设 `max_words_per_batch`（与 `batch_size` 双重约束，任一到顶切批），避免「段数看起来不多、实际源文很长」。
-- 批次过大时更常见的是 JSON/漏段/占位符问题，而不只是上下文不够。详见 [快速开始 · Web](/zh/guide/getting-started#批次怎么设) 与 [高级功能 · 批量翻译](/zh/guide/advanced#批量翻译)。
+- 批次过大时更常见的是 JSON/漏段/占位符问题，而不只是上下文不够。详见 [快速开始 · Web](/zh/guide/getting-started#批次怎么设) 与 [流水线与原理 · 批量与并发](/zh/guide/pipeline#批量与并发)。
 
 ### 支持多少并发翻译？
 

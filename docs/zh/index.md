@@ -103,7 +103,7 @@ linguaflow translate -i README.md -o README_zh.md --to zh
 | 终端批量翻译 | [快速开始 · CLI](/zh/guide/cli-quickstart) |
 | 项目 / 作业 / 执行计划是什么 | [核心概念](/zh/guide/concepts) |
 | 安装方式与部署 | [安装部署](/zh/guide/installation) |
-| 完整命令与配置项 | [CLI 参考](/zh/guide/cli) · [配置参考](/zh/guide/configuration) |
+| 完整命令与配置项 | [CLI 命令参考](/zh/guide/cli) · [配置文件与环境变量](/zh/guide/configuration) |
 | 接口集成 | [API 概述](/zh/api/) |
 
 ::: tip 推荐使用路径

@@ -105,66 +105,28 @@ volumes:
 docker compose up -d
 ```
 
-### 环境变量配置
+### 环境变量与数据库（摘要）
 
-| 变量名                                  | 描述                                    | 默认值                     |
-| --------------------------------------- | --------------------------------------- | -------------------------- |
-| `LINGUAFLOW_PORT`                       | 服务监听端口                            | `8080`                     |
-| `LINGUAFLOW_DATA_DIR`                   | 数据目录（SQLite 数据库文件存放于此）   | `./data`                   |
-| `LINGUAFLOW_DATABASE_DRIVER`            | 数据库驱动：`sqlite` \| `postgres`      | `sqlite`                   |
-| `LINGUAFLOW_DATABASE_DSN`               | 数据库连接串；选 `postgres` 时必填      | -                          |
-| `LINGUAFLOW_DATABASE_MAX_OPEN_CONNS`    | 最大打开连接数                          | `sqlite=0` / `postgres=25` |
-| `LINGUAFLOW_DATABASE_MAX_IDLE_CONNS`    | 最大空闲连接数                          | `sqlite=2` / `postgres=5`  |
-| `LINGUAFLOW_DATABASE_CONN_MAX_LIFETIME` | 连接最大寿命（Go duration，如 `30m`）   | `postgres=30m`             |
-| `LINGUAFLOW_JWT_SECRET`                 | JWT 签名密钥，生产环境务必修改          | 内置开发用密钥             |
-| `LINGUAFLOW_SERVE_UI`                   | 是否提供嵌入式 Web UI（`true`/`false`） | `true`                     |
-| `LINGUAFLOW_CORS_ORIGINS`               | 允许的跨域来源（逗号分隔）              | -                          |
-| `LINGUAFLOW_ADMIN_USERNAME`             | 管理员用户名                            | -                          |
-| `LINGUAFLOW_ADMIN_PASSWORD`             | 管理员密码                              | -                          |
+Compose 示例中常用变量：
 
-::: tip 仅 API 部署
-若使用独立前端或纯 API 集成，可设置 `LINGUAFLOW_SERVE_UI=false`，或启动时加 `--no-ui`。
-:::
+| 变量 | 用途 |
+| --- | --- |
+| `LINGUAFLOW_DATA_DIR` | 数据目录（SQLite 文件等） |
+| `LINGUAFLOW_JWT_SECRET` | JWT 密钥（务必改掉默认值） |
+| `LINGUAFLOW_DATABASE_DRIVER` / `DSN` | 切换 PostgreSQL 时使用 |
+| `LINGUAFLOW_SERVE_UI` | `false` 时仅 API（也可用 `--no-ui`） |
+| `LINGUAFLOW_ADMIN_USERNAME` / `PASSWORD` | 启动时管理员账户 |
 
-### 数据库配置
+**完整环境变量表、连接池参数与配置文件字段** 只维护在一处：
 
-LinguaFlow 支持 **SQLite** 和 **PostgreSQL** 两种数据库：
+→ [配置文件与环境变量](/zh/guide/configuration)
 
-| 驱动       | 适用模式              | 说明                                                  |
-| ---------- | --------------------- | ----------------------------------------------------- |
-| `sqlite`   | 本地模式 / 服务器模式 | 默认驱动，零配置，单文件部署；本地模式强制使用 SQLite |
-| `postgres` | 仅服务器模式          | 高并发场景；需自行准备 PostgreSQL 实例                |
+| 驱动 | 说明 |
+| --- | --- |
+| `sqlite`（默认） | 本地模式强制使用；服务器模式也可 |
+| `postgres` | 仅服务器模式；需自备实例 |
 
-#### SQLite（默认）
-
-无需额外配置，数据库文件自动创建在 `data_dir/linguaflow.db`，并启用外键、WAL 日志和忙等待。若需指向自定义路径，可通过环境变量间接控制：
-
-```bash
-export LINGUAFLOW_DATA_DIR=/var/lib/linguaflow
-linguaflow serve
-```
-
-#### PostgreSQL
-
-通过环境变量切换到 PostgreSQL：
-
-```bash
-export LINGUAFLOW_DATABASE_DRIVER=postgres
-export LINGUAFLOW_DATABASE_DSN='postgres://user:password@localhost:5432/linguaflow?sslmode=disable'
-linguaflow serve
-```
-
-::: tip 连接串格式
-`LINGUAFLOW_DATABASE_DSN` 使用 PostgreSQL 标准 URI，例如 `postgres://user:pass@host:5432/dbname?sslmode=require`，也支持键值对形式 `host=... user=... password=... dbname=... sslmode=...`。
-:::
-
-::: warning 本地模式不支持 PostgreSQL
-`linguaflow local` 始终使用 SQLite，以便单文件零依赖运行。多用户需求请使用 `linguaflow serve`。
-:::
-
-::: tip 自动迁移与并发安全
-启用 `auto_migrate`（默认开启）时，PostgreSQL 实例会通过 `pg_advisory_lock` 串行化 schema 迁移，多个 LinguaFlow 实例可同时连接同一数据库而不会在启动阶段产生冲突。
-:::
+本地模式始终 SQLite，不读 PostgreSQL 相关变量。
 
 ### HuggingFace Spaces 部署
 
@@ -276,4 +238,4 @@ task frontend:dev
 
 - [快速开始 · Web](/zh/guide/getting-started) — 最短使用路径
 - [使用模式](/zh/guide/modes) — 本地模式与服务器模式（预览）
-- [配置参考](/zh/guide/configuration) — 环境变量与配置文件
+- [配置文件与环境变量](/zh/guide/configuration) — 完整配置参考

@@ -70,7 +70,7 @@ Web 里点「翻译」时，必须选择一份 **执行计划**。它回答：
 
 **第一次使用**：只建「单轮翻译 + 内置通用提示词/策略」即可，见 [快速开始 · Web](/zh/guide/getting-started)。
 
-进阶组合（提取 → 翻译 → 裁决）见 [翻译配置](/zh/guide/translation-config)。
+进阶组合（提取 → 翻译 → 裁决）见 [翻译配置 · 使用](/zh/guide/translation-config)。
 
 ## 段落状态（审校）
 
@@ -98,4 +98,4 @@ Web 里点「翻译」时，必须选择一份 **执行计划**。它回答：
 1. [快速开始 · Web](/zh/guide/getting-started) 或 [快速开始 · CLI](/zh/guide/cli-quickstart)  
 2. 本页（建立地图）  
 3. [项目管理](/zh/guide/projects) → [术语表](/zh/guide/glossary) → [审校](/zh/guide/review)  
-4. 需要调优时再读 [翻译配置](/zh/guide/translation-config) 与 [高级功能](/zh/guide/advanced)  
+4. 需要调优时再读 [翻译配置 · 使用](/zh/guide/translation-config)、[翻译配置 · 参考](/zh/guide/translation-config-reference) 与 [流水线与原理](/zh/guide/pipeline)  

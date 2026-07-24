@@ -2,7 +2,7 @@
 
 目标：不启动 Web，用命令行完成一次文件翻译。适合脚本、CI 或批量目录处理。
 
-完整参数与子命令见 [CLI 命令行](/zh/guide/cli)；配置文件字段见 [配置](/zh/guide/configuration)。
+完整参数与子命令见 [CLI 命令参考](/zh/guide/cli)；配置文件字段见 [配置文件与环境变量](/zh/guide/configuration)。
 
 ## 前置条件
 
@@ -113,11 +113,11 @@ linguaflow translate -i in.md -o out.md --to zh -v
 | 审校 | 需自行编辑输出文件 | 段落审校、状态、质检 |
 | 典型用途 | 批处理、脚本、CI | 交互翻译与质检 |
 
-两者能力有重叠，但 **质量裁决（adjudicate）等部分能力以 Web 执行计划为主**。详见 [翻译配置](/zh/guide/translation-config)。
+两者能力有重叠，但 **质量裁决（adjudicate）等部分能力以 Web 执行计划为主**。详见 [翻译配置 · 使用](/zh/guide/translation-config)。
 
 ## 下一步
 
-- [CLI 命令行](/zh/guide/cli) — 全部子命令与参数  
-- [配置](/zh/guide/configuration) — 配置文件结构说明  
+- [CLI 命令参考](/zh/guide/cli) — 全部子命令与参数  
+- [配置文件与环境变量](/zh/guide/configuration) — 配置文件结构说明  
 - [快速开始 · Web](/zh/guide/getting-started) — 可视化流程  
 - [核心概念](/zh/guide/concepts) — 术语对照  
