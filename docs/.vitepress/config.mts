@@ -22,35 +22,47 @@ export default defineConfig({
       themeConfig: {
         nav: [
           { text: '首页', link: '/zh/' },
-          { text: '指南', link: '/zh/guide/getting-started' },
+          {
+            text: '指南',
+            link: '/zh/guide/getting-started',
+            activeMatch: '/zh/guide/',
+          },
           { text: 'API', link: '/zh/api/' },
         ],
         sidebar: {
           '/zh/guide/': [
             {
-              text: '入门',
+              text: '开始使用',
               items: [
-                { text: '快速开始', link: '/zh/guide/getting-started' },
+                { text: '快速开始 · Web', link: '/zh/guide/getting-started' },
+                { text: '快速开始 · CLI', link: '/zh/guide/cli-quickstart' },
+                { text: '核心概念', link: '/zh/guide/concepts' },
                 { text: '安装部署', link: '/zh/guide/installation' },
                 { text: '使用模式', link: '/zh/guide/modes' },
-                { text: '配置', link: '/zh/guide/configuration' },
               ],
             },
             {
-              text: '使用指南',
+              text: '日常使用',
               items: [
-                { text: 'CLI 命令行', link: '/zh/guide/cli' },
                 { text: '项目管理', link: '/zh/guide/projects' },
-                { text: '翻译配置', link: '/zh/guide/translation-config' },
                 { text: '术语表管理', link: '/zh/guide/glossary' },
                 { text: '翻译审校', link: '/zh/guide/review' },
                 { text: '格式支持', link: '/zh/guide/formats' },
               ],
             },
             {
-              text: '进阶',
+              text: '深入配置',
               items: [
-                { text: '高级功能', link: '/zh/guide/advanced' },
+                { text: '翻译配置 · 使用', link: '/zh/guide/translation-config' },
+                { text: '翻译配置 · 参考', link: '/zh/guide/translation-config-reference' },
+                { text: '流水线与原理', link: '/zh/guide/pipeline' },
+              ],
+            },
+            {
+              text: '参考',
+              items: [
+                { text: '配置文件与环境变量', link: '/zh/guide/configuration' },
+                { text: 'CLI 命令参考', link: '/zh/guide/cli' },
                 { text: '常见问题', link: '/zh/guide/faq' },
               ],
             },
@@ -68,6 +80,18 @@ export default defineConfig({
           message: '基于 GNU AGPL v3 许可证发布',
           copyright: '© 2026-present LinguaFlow',
         },
+        outline: {
+          label: '本页目录',
+        },
+        docFooter: {
+          prev: '上一页',
+          next: '下一页',
+        },
+        returnToTopLabel: '回到顶部',
+        sidebarMenuLabel: '菜单',
+        darkModeSwitchLabel: '主题',
+        lightModeSwitchTitle: '切换到浅色',
+        darkModeSwitchTitle: '切换到深色',
       },
     },
     en: {
@@ -80,32 +104,14 @@ export default defineConfig({
           { text: 'API', link: '/en/api/' },
         ],
         sidebar: {
+          // English pages are incomplete; only list existing routes to avoid 404s.
+          // Full docs are available in Chinese under /zh/.
           '/en/guide/': [
             {
               text: 'Getting Started',
               items: [
                 { text: 'Quick Start', link: '/en/guide/getting-started' },
-                { text: 'Installation', link: '/en/guide/installation' },
-                { text: 'Modes', link: '/en/guide/modes' },
                 { text: 'Configuration', link: '/en/guide/configuration' },
-              ],
-            },
-            {
-              text: 'User Guide',
-              items: [
-                { text: 'CLI', link: '/en/guide/cli' },
-                { text: 'Project Management', link: '/en/guide/projects' },
-                { text: 'Translation Config', link: '/en/guide/translation-config' },
-                { text: 'Glossary', link: '/en/guide/glossary' },
-                { text: 'Review', link: '/en/guide/review' },
-                { text: 'Formats', link: '/en/guide/formats' },
-              ],
-            },
-            {
-              text: 'Advanced',
-              items: [
-                { text: 'Advanced Features', link: '/en/guide/advanced' },
-                { text: 'FAQ', link: '/en/guide/faq' },
               ],
             },
           ],
@@ -135,10 +141,32 @@ export default defineConfig({
 
     search: {
       provider: 'local',
+      options: {
+        locales: {
+          zh: {
+            translations: {
+              button: {
+                buttonText: '搜索',
+                buttonAriaLabel: '搜索文档',
+              },
+              modal: {
+                noResultsText: '没有相关结果',
+                resetButtonTitle: '清除查询',
+                footer: {
+                  selectText: '选择',
+                  navigateText: '切换',
+                  closeText: '关闭',
+                },
+              },
+            },
+          },
+        },
+      },
     },
 
     editLink: {
       pattern: 'https://github.com/MeowSalty/LinguaFlow/edit/main/docs/:path',
+      text: '在 GitHub 上编辑此页',
     },
   },
 })

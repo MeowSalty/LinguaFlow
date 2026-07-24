@@ -1,14 +1,18 @@
-# CLI 命令行
+# CLI 命令参考
 
-LinguaFlow 提供命令行工具，支持直接在终端中进行翻译操作和管理。
+LinguaFlow 命令行工具支持启动服务、生成配置与直接翻译文件。
+
+::: tip 只想马上译一个文件？
+先看 [快速开始 · CLI](/zh/guide/cli-quickstart)，本页为完整参数参考。配置文件字段见 [配置文件与环境变量](/zh/guide/configuration)。
+:::
 
 ## 命令概览
 
 | 命令                   | 描述                                          |
 | ---------------------- | --------------------------------------------- |
 | `linguaflow`           | 默认显示帮助；双击运行时自动启动 `local` 模式 |
-| `linguaflow local`     | 启动本地单用户模式                            |
-| `linguaflow serve`     | 启动服务器多租户模式                          |
+| `linguaflow local`     | 启动本地单用户模式（推荐个人使用）            |
+| `linguaflow serve`     | 启动服务器模式（**预览**，功能仍在完善）      |
 | `linguaflow translate` | 直接翻译文件或目录                            |
 | `linguaflow init`      | 生成配置文件                                  |
 | `linguaflow version`   | 显示版本信息                                  |
@@ -152,7 +156,7 @@ linguaflow local [flags]
 
 ## serve 命令
 
-启动服务器多租户模式。
+启动服务器模式（**预览**）。多用户与权限等能力仍在完善，不建议用于生产关键业务；个人使用请优先 `local`。
 
 ```bash
 linguaflow serve [flags]
@@ -176,41 +180,23 @@ linguaflow serve --no-ui
 LINGUAFLOW_SERVE_UI=false linguaflow serve
 ```
 
-### 数据库配置
+### 数据库与管理员（摘要）
 
-服务器模式的数据库通过环境变量配置，不读取配置文件中的 `server` 段：
-
-| 环境变量                                | 描述                                                                        | 默认值                     |
-| --------------------------------------- | --------------------------------------------------------------------------- | -------------------------- |
-| `LINGUAFLOW_DATABASE_DRIVER`            | 数据库驱动：`sqlite` \| `postgres`                                          | `sqlite`                   |
-| `LINGUAFLOW_DATABASE_DSN`               | 数据库连接串。`postgres` 必填；`sqlite` 为空时使用 `data_dir/linguaflow.db` | -                          |
-| `LINGUAFLOW_DATABASE_MAX_OPEN_CONNS`    | 最大打开连接数                                                              | `sqlite=0` / `postgres=25` |
-| `LINGUAFLOW_DATABASE_MAX_IDLE_CONNS`    | 最大空闲连接数                                                              | `sqlite=2` / `postgres=5`  |
-| `LINGUAFLOW_DATABASE_CONN_MAX_LIFETIME` | 连接最大寿命（Go duration）                                                 | `postgres=30m`             |
-
-使用 PostgreSQL 的示例：
+服务器模式数据库与管理员账户通过环境变量配置（不读 YAML 里的 `server.database` 段）。本地模式始终 SQLite。
 
 ```bash
+# PostgreSQL 示例（serve · 预览）
 export LINGUAFLOW_DATABASE_DRIVER=postgres
 export LINGUAFLOW_DATABASE_DSN='postgres://user:pass@localhost:5432/linguaflow?sslmode=disable'
-linguaflow serve
-```
 
-::: warning 本地模式不支持 PostgreSQL
-`linguaflow local` 始终使用 SQLite。高并发场景请使用 `linguaflow serve` 配合 PostgreSQL。
-:::
-
-### 管理员用户
-
-通过环境变量可在启动时自动创建管理员用户：
-
-```bash
+# 可选：启动时管理员
 export LINGUAFLOW_ADMIN_USERNAME=admin
 export LINGUAFLOW_ADMIN_PASSWORD=your-password
+
 linguaflow serve
 ```
 
-如果指定的用户名已存在，则将其提升为管理员；如果不存在，则同时需要设置 `LINGUAFLOW_ADMIN_PASSWORD` 才能创建。
+完整变量表见 [配置文件与环境变量 · 数据库](/zh/guide/configuration#数据库环境变量-serve-模式)。
 
 ## version 命令
 
@@ -236,9 +222,10 @@ LinguaFlow 支持通过配置文件进行详细配置。配置文件的加载优
 
 配置文件中的所有字符串值支持环境变量扩展，语法为 `${ENV_VAR}` 或 `${ENV_VAR:-默认值}`。
 
-使用 `linguaflow init` 生成配置文件模板，详见 [配置](/zh/guide/configuration)。
+使用 `linguaflow init` 生成配置文件模板，详见 [配置文件与环境变量](/zh/guide/configuration)。
 
 ## 下一步
 
-- 阅读 [配置](/zh/guide/configuration) 了解配置文件格式
-- 阅读 [项目管理](/zh/guide/projects) 了解 Web 界面操作
+- [快速开始 · CLI](/zh/guide/cli-quickstart) — 最短命令行路径
+- [配置文件与环境变量](/zh/guide/configuration) — 配置文件格式
+- [项目管理](/zh/guide/projects) — Web 界面操作
