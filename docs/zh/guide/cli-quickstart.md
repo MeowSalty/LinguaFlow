@@ -33,7 +33,7 @@ linguaflow init
 
 编辑 `linguaflow.yaml`，至少保证：
 
-1. `backends` 中有一个启用的后端，且 `options.api_key` 有效
+1. `backends` 中有一个启用的后端，且 `options.api_key` 与 `options.model` 均有效
 2. `execution.rounds` 中有一轮 `mode: translate`，并引用该后端与默认提示词/策略
 
 推荐用环境变量，避免把密钥写进文件：
@@ -51,7 +51,8 @@ backends:
     enabled: true
     options:
       api_key: ${OPENAI_API_KEY}
-      model: gpt-4o-mini
+      model: gpt-4o-mini # 按账号实际可用模型修改
+      # thinking_level: off  # 可选：off | low | medium | high
 ```
 
 `linguaflow init` 生成的模板已包含类似结构，按注释改模型与密钥即可。

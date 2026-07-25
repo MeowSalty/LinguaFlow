@@ -72,15 +72,16 @@ docker run --rm -p 8080:8080 ghcr.io/meowsalty/linguaflow:latest
 2. 点击 **添加后端**
 3. 选择提供商并填写：
 
-   | 提供商        | 类型        | 常用默认模型        |
+   | 提供商        | 类型        | 示例模型            |
    | ------------- | ----------- | ------------------- |
    | OpenAI        | `openai`    | `gpt-4o-mini`       |
    | Anthropic     | `anthropic` | `claude-sonnet-4-5` |
    | Google Gemini | `google`    | `gemini-2.5-flash`  |
 
-4. 填入 **API Key**（必填）
-5. 如需代理或本地模型（Ollama、LM Studio、Azure 等），填写兼容的 **Base URL**
-6. 保存
+4. 填入 **API Key**（必填）与 **模型**（必填）
+5. 推荐：点击 **探测模型**，用当前 Key / Base URL 拉取可用列表后选择模型 ID
+6. 如需代理或本地模型（Ollama、LM Studio、Azure 等），填写兼容的 **Base URL** 后再探测或手填模型
+7. 保存
 
 ![添加 AI 后端](../../public/images/ai-backend.png)
 
@@ -89,7 +90,7 @@ OpenAI 类型可对接 OpenAI 兼容接口，例如 Ollama：`http://localhost:1
 :::
 
 ::: tip 本步成功标准
-「AI 后端」列表中能看到刚添加的条目，状态可用。
+「AI 后端」列表中能看到刚添加的条目，且已指定明确的模型名。
 :::
 
 ---

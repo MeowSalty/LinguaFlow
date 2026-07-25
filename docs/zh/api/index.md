@@ -76,6 +76,22 @@ curl -s -X POST http://127.0.0.1:18080/api/v1/projects \
 curl -s http://127.0.0.1:18080/api/v1/backends
 ```
 
+### 6. 探测可用模型列表
+
+使用当场提供的凭据向服务商拉取模型列表（**不落库**），用于填写创建后端时的 `options.model`：
+
+```bash
+curl -s -X POST http://127.0.0.1:18080/api/v1/backends/models \
+  -H "Content-Type: application/json" \
+  -d '{"type":"openai","api_key":"sk-...","base_url":""}'
+```
+
+成功时返回 `items` 数组，每项含 `id`（可直接写入 `model`）与 `name`。`type` 为 `openai` / `anthropic` / `google`；`base_url` 可选。
+
+::: tip 创建后端时
+`CreateBackendRequest` / `UpdateBackendRequest` 的 `options` 与其中的 `model` 均为 **必填**，不再有隐式默认模型名。
+:::
+
 上传资源、创建作业等涉及 multipart 或较长请求体，建议直接对照 **Redoc** 中的对应接口与示例。
 
 ## 错误码
