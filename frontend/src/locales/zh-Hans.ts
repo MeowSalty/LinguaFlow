@@ -992,6 +992,7 @@ const messages = {
     },
     card: {
       model: '模型',
+      thinking: '思考强度',
       personal: '个人',
     },
     empty: {
@@ -1034,8 +1035,23 @@ const messages = {
       temperature: 'Temperature',
       topP: 'Top P',
       useApiDefault: '使用 API 默认值',
+      thinkingLevel: '思考强度',
+      thinkingLevelPlaceholder: '选择思考强度',
+      thinkingLevelHint:
+        'off 表示不参与思考控制，沿用模型/网关默认；low/medium/high 仅对支持推理的模型生效。',
+      thinkingLevelAnthropicHint:
+        'Anthropic 开启思考后会忽略 Temperature / Top P，且思考预算与输出共用 Max Tokens。',
+      thinkingLevels: {
+        off: '关闭（默认）',
+        low: '低',
+        medium: '中',
+        high: '高',
+      },
+      samplingIgnoredByThinking: '开启思考后由服务端忽略',
       maxTokens: 'Max Tokens',
       maxTokensPlaceholder: '0 表示不限制',
+      maxTokensThinkingHint:
+        '思考与最终输出共用同一 Max Tokens 池（约 low 25% / medium 50% / high 75% 给思考），建议适当提高上限。',
       timeout: '超时时间（秒）',
       responseFormat: '响应格式',
       enablePromptCache: '启用 Prompt Cache',

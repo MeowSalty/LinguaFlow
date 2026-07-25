@@ -2176,6 +2176,14 @@ export interface components {
          * @enum {string}
          */
         ResponseFormat: "json_schema" | "json_object" | "text" | "none";
+        /**
+         * @description 统一思考强度档位。off = LinguaFlow 不参与思考控制、不传任何 thinking 字段，
+         *     沿用模型/网关默认（默认值，零回归；注意：默认开思考的推理模型在 off 下仍会思考，此为 by design）。
+         *     low/medium/high 由各适配层映射为厂商原生参数。仅对支持推理的模型生效。
+         * @default off
+         * @enum {string}
+         */
+        ThinkingLevel: "off" | "low" | "medium" | "high";
         /** @description OpenAI 兼容后端选项。支持 OpenAI 官方 API 及 Azure OpenAI、Ollama、LM Studio 等兼容服务。 */
         OpenAIBackendOptions: {
             /**
@@ -2226,6 +2234,8 @@ export interface components {
              * @default false
              */
             stream: boolean;
+            /** @description 思考强度档位（统一语义）；off=不参与思考控制。 */
+            thinking_level?: components["schemas"]["ThinkingLevel"];
         };
         /** @description Anthropic Claude 后端选项。 */
         AnthropicBackendOptions: {
@@ -2280,6 +2290,12 @@ export interface components {
              * @default false
              */
             stream: boolean;
+            /**
+             * @description 思考强度档位（统一语义）；off=不参与思考控制。Anthropic 开启时会忽略 temperature/top_p，
+             *     且 budget_tokens 与最终输出共用同一个 max_tokens 池（按 low/medium/high ≈ 25%/50%/75% 切分给思考），
+             *     请按需抬高 max_tokens 以同时容纳思考与批量翻译输出。
+             */
+            thinking_level?: components["schemas"]["ThinkingLevel"];
         };
         /** @description Google Gemini 后端选项。 */
         GoogleBackendOptions: {
@@ -2327,6 +2343,8 @@ export interface components {
              * @default false
              */
             stream: boolean;
+            /** @description 思考强度档位（统一语义）；off=不参与思考控制。 */
+            thinking_level?: components["schemas"]["ThinkingLevel"];
         };
         BackendOptions: components["schemas"]["OpenAIBackendOptions"] | components["schemas"]["AnthropicBackendOptions"] | components["schemas"]["GoogleBackendOptions"];
         IncrementalUpdateChanges: {
