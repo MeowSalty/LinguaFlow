@@ -9,6 +9,15 @@ ResponseFormat:
     - text: 纯文本
     - none: 不约束格式
 
+ThinkingLevel:
+  type: string
+  enum: [off, low, medium, high]
+  default: off
+  description: |
+    统一思考强度档位。off = LinguaFlow 不参与思考控制、不传任何 thinking 字段，
+    沿用模型/网关默认（默认值，零回归；注意：默认开思考的推理模型在 off 下仍会思考，此为 by design）。
+    low/medium/high 由各适配层映射为厂商原生参数。仅对支持推理的模型生效。
+
 OpenAIBackendOptions:
   type: object
   required: [api_key, type, model]
@@ -67,6 +76,9 @@ OpenAIBackendOptions:
       description: |
         设为 true 时以流式发起请求并在内部累积为完整响应后返回，
         适用于只接受 stream:true 的兼容网关。默认 false。
+    thinking_level:
+      $ref: '#/ThinkingLevel'
+      description: 思考强度档位（统一语义）；off=不参与思考控制。
 
 AnthropicBackendOptions:
   type: object
@@ -131,6 +143,12 @@ AnthropicBackendOptions:
       description: |
         设为 true 时以流式发起请求并在内部累积为完整响应后返回，
         适用于只接受 stream:true 的兼容网关。默认 false。
+    thinking_level:
+      $ref: '#/ThinkingLevel'
+      description: |
+        思考强度档位（统一语义）；off=不参与思考控制。Anthropic 开启时会忽略 temperature/top_p，
+        且 budget_tokens 与最终输出共用同一个 max_tokens 池（按 low/medium/high ≈ 25%/50%/75% 切分给思考），
+        请按需抬高 max_tokens 以同时容纳思考与批量翻译输出。
 
 GoogleBackendOptions:
   type: object
@@ -188,6 +206,9 @@ GoogleBackendOptions:
       description: |
         设为 true 时以流式发起请求并在内部累积为完整响应后返回，
         适用于只接受 stream:true 的兼容网关。默认 false。
+    thinking_level:
+      $ref: '#/ThinkingLevel'
+      description: 思考强度档位（统一语义）；off=不参与思考控制。
 
 BackendOptions:
   oneOf:
