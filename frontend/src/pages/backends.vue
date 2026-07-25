@@ -31,6 +31,9 @@ import { useBackendsStore } from '@/stores/backends'
 type Backend = ApiSchemas['Backend']
 type BackendType = Backend['type']
 type BackendOptions = ApiSchemas['BackendOptions']
+type ThinkingLevel = ApiSchemas['ThinkingLevel']
+
+const THINKING_LEVELS: ThinkingLevel[] = ['off', 'low', 'medium', 'high']
 
 interface BackendFormModel {
   name: string
@@ -48,6 +51,7 @@ interface BackendFormModel {
   response_format: string
   enable_prompt_cache: boolean
   stream: boolean
+  thinking_level: ThinkingLevel
   rate_limit_per_minute: number
 }
 
@@ -79,6 +83,7 @@ const formModel = reactive<BackendFormModel>({
   response_format: 'json_schema',
   enable_prompt_cache: true,
   stream: false,
+  thinking_level: 'off',
   rate_limit_per_minute: 0,
 })
 
@@ -100,6 +105,13 @@ const responseFormatOptions = computed<SelectOption[]>(() => [
   { label: 'none', value: 'none' },
 ])
 
+const thinkingLevelOptions = computed<SelectOption[]>(() =>
+  THINKING_LEVELS.map((level) => ({
+    label: t(`backends.form.thinkingLevels.${level}`),
+    value: level,
+  })),
+)
+
 const hasActiveFilters = computed(
   () => backends.searchQuery.trim().length > 0 || backends.typeFilter !== 'all',
 )
@@ -115,6 +127,8 @@ const submitting = computed(() => backends.creating || backends.updating)
 
 const requiresApiKey = computed(() => Boolean(formModel.type))
 const isAnthropic = computed(() => formModel.type === 'anthropic')
+const isThinkingEnabled = computed(() => formModel.thinking_level !== 'off')
+const samplingControlsDisabled = computed(() => isAnthropic.value && isThinkingEnabled.value)
 const canFetchModels = computed(
   () => Boolean(formModel.type) && formModel.api_key.trim().length > 0,
 )
@@ -123,6 +137,11 @@ const hasModelOptions = computed(() => modelOptions.value.length > 0)
 const temperatureMax = computed(() => (formModel.type === 'anthropic' ? 1 : 2))
 const maxTokensMin = computed(() => (formModel.type === 'openai' ? 0 : 1))
 const maxTokensDefault = computed(() => (formModel.type === 'openai' ? 0 : 8192))
+
+const parseThinkingLevel = (value: unknown): ThinkingLevel =>
+  typeof value === 'string' && (THINKING_LEVELS as string[]).includes(value)
+    ? (value as ThinkingLevel)
+    : 'off'
 
 const invalidateModelProbe = (): void => {
   modelFetchGeneration += 1
@@ -306,6 +325,7 @@ const resetForm = (): void => {
   formModel.response_format = 'json_schema'
   formModel.enable_prompt_cache = true
   formModel.stream = false
+  formModel.thinking_level = 'off'
   formModel.rate_limit_per_minute = 0
   editingBackend.value = null
   invalidateModelProbe()
@@ -402,6 +422,7 @@ const openEditDrawer = (backend: Backend): void => {
   formModel.enable_prompt_cache =
     typeof opts?.enable_prompt_cache === 'boolean' ? opts.enable_prompt_cache : true
   formModel.stream = typeof opts?.stream === 'boolean' ? opts.stream : false
+  formModel.thinking_level = parseThinkingLevel(opts?.thinking_level)
   formModel.rate_limit_per_minute = backend.rate_limit_per_minute ?? 0
   invalidateModelProbe()
   drawerVisible.value = true
@@ -418,10 +439,10 @@ const buildOptions = (): BackendOptions => {
     options.base_url = formModel.base_url.trim()
   }
   options.model = formModel.model.trim()
-  if (formModel.temperatureEnabled) {
+  if (!samplingControlsDisabled.value && formModel.temperatureEnabled) {
     options.temperature = formModel.temperature
   }
-  if (formModel.top_pEnabled) {
+  if (!samplingControlsDisabled.value && formModel.top_pEnabled) {
     options.top_p = formModel.top_p
   }
   if (formModel.maxTokensEnabled) {
@@ -438,6 +459,9 @@ const buildOptions = (): BackendOptions => {
   }
   if (formModel.stream) {
     options.stream = true
+  }
+  if (formModel.thinking_level !== 'off') {
+    options.thinking_level = formModel.thinking_level
   }
 
   return options as BackendOptions
@@ -519,6 +543,11 @@ const getModelDisplay = (backend: Backend): string => {
     return opts.model
   }
   return '-'
+}
+
+const getThinkingLevelDisplay = (backend: Backend): ThinkingLevel => {
+  const opts = backend.options as Record<string, unknown> | undefined
+  return parseThinkingLevel(opts?.thinking_level)
 }
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
@@ -666,12 +695,23 @@ watch(
             </NTag>
           </div>
 
-          <div class="rounded-xl border border-lf-border-soft bg-lf-code-bg px-3.5 py-3">
-            <div class="text-[11px] font-medium tracking-wide text-lf-text-subtle uppercase">
-              {{ t('backends.card.model') }}
+          <div class="space-y-3">
+            <div class="rounded-xl border border-lf-border-soft bg-lf-code-bg px-3.5 py-3">
+              <div class="text-[11px] font-medium tracking-wide text-lf-text-subtle uppercase">
+                {{ t('backends.card.model') }}
+              </div>
+              <div class="mt-1.5 truncate font-mono text-sm font-semibold text-lf-text-strong">
+                {{ getModelDisplay(backend) }}
+              </div>
             </div>
-            <div class="mt-1.5 truncate font-mono text-sm font-semibold text-lf-text-strong">
-              {{ getModelDisplay(backend) }}
+            <div
+              v-if="getThinkingLevelDisplay(backend) !== 'off'"
+              class="flex items-center justify-between rounded-xl border border-lf-border-soft px-3.5 py-2.5"
+            >
+              <span class="text-xs text-lf-text-muted">{{ t('backends.card.thinking') }}</span>
+              <NTag size="small" round :bordered="false" type="info">
+                {{ t(`backends.form.thinkingLevels.${getThinkingLevelDisplay(backend)}`) }}
+              </NTag>
             </div>
           </div>
 
@@ -776,31 +816,60 @@ watch(
             </div>
           </NFormItem>
 
+          <NFormItem :label="t('backends.form.thinkingLevel')" path="thinking_level">
+            <div class="flex w-full flex-col gap-2">
+              <NSelect
+                v-model:value="formModel.thinking_level"
+                :options="thinkingLevelOptions"
+                :placeholder="t('backends.form.thinkingLevelPlaceholder')"
+              />
+              <p class="text-xs leading-5 text-lf-text-muted">
+                {{
+                  isAnthropic && isThinkingEnabled
+                    ? t('backends.form.thinkingLevelAnthropicHint')
+                    : t('backends.form.thinkingLevelHint')
+                }}
+              </p>
+            </div>
+          </NFormItem>
+
           <NFormItem :label="t('backends.form.temperature')" path="temperature">
-            <div class="flex w-full items-center gap-3">
-              <NSwitch v-model:value="formModel.temperatureEnabled" />
-              <template v-if="formModel.temperatureEnabled">
-                <NSlider
-                  v-model:value="formModel.temperature"
-                  :min="0"
-                  :max="temperatureMax"
-                  :step="0.1"
-                  class="flex-1"
+            <div class="flex w-full flex-col gap-2">
+              <div class="flex w-full items-center gap-3">
+                <NSwitch
+                  v-model:value="formModel.temperatureEnabled"
+                  :disabled="samplingControlsDisabled"
                 />
-                <span class="w-10 text-right font-mono text-sm text-lf-text">
-                  {{ formModel.temperature.toFixed(1) }}
+                <template v-if="!samplingControlsDisabled && formModel.temperatureEnabled">
+                  <NSlider
+                    v-model:value="formModel.temperature"
+                    :min="0"
+                    :max="temperatureMax"
+                    :step="0.1"
+                    class="flex-1"
+                  />
+                  <span class="w-10 text-right font-mono text-sm text-lf-text">
+                    {{ formModel.temperature.toFixed(1) }}
+                  </span>
+                </template>
+                <span v-else class="text-xs text-lf-text-muted">
+                  {{
+                    samplingControlsDisabled
+                      ? t('backends.form.samplingIgnoredByThinking')
+                      : t('backends.form.useApiDefault')
+                  }}
                 </span>
-              </template>
-              <span v-else class="text-xs text-lf-text-muted">
-                {{ t('backends.form.useApiDefault') }}
-              </span>
+              </div>
             </div>
           </NFormItem>
 
           <NFormItem :label="t('backends.form.topP')" path="top_p">
             <div class="flex w-full items-center gap-3">
-              <NSwitch v-model:value="formModel.top_pEnabled" />
-              <template v-if="formModel.top_pEnabled">
+              <NSwitch
+                v-model:value="formModel.top_pEnabled"
+                :disabled="samplingControlsDisabled"
+              />
+              <template v-if="!samplingControlsDisabled && formModel.top_pEnabled">
                 <NSlider
                   v-model:value="formModel.top_p"
                   :min="0"
@@ -813,26 +882,38 @@ watch(
                 </span>
               </template>
               <span v-else class="text-xs text-lf-text-muted">
-                {{ t('backends.form.useApiDefault') }}
+                {{
+                  samplingControlsDisabled
+                    ? t('backends.form.samplingIgnoredByThinking')
+                    : t('backends.form.useApiDefault')
+                }}
               </span>
             </div>
           </NFormItem>
 
           <NFormItem :label="t('backends.form.maxTokens')" path="max_tokens">
-            <div class="flex w-full items-center gap-3">
-              <NSwitch v-model:value="formModel.maxTokensEnabled" />
-              <template v-if="formModel.maxTokensEnabled">
-                <NInputNumber
-                  v-model:value="formModel.max_tokens"
-                  :min="maxTokensMin"
-                  :max="1000000"
-                  :placeholder="t('backends.form.maxTokensPlaceholder')"
-                  class="flex-1"
-                />
-              </template>
-              <span v-else class="text-xs text-lf-text-muted">
-                {{ t('backends.form.useApiDefault') }}
-              </span>
+            <div class="flex w-full flex-col gap-2">
+              <div class="flex w-full items-center gap-3">
+                <NSwitch v-model:value="formModel.maxTokensEnabled" />
+                <template v-if="formModel.maxTokensEnabled">
+                  <NInputNumber
+                    v-model:value="formModel.max_tokens"
+                    :min="maxTokensMin"
+                    :max="1000000"
+                    :placeholder="t('backends.form.maxTokensPlaceholder')"
+                    class="flex-1"
+                  />
+                </template>
+                <span v-else class="text-xs text-lf-text-muted">
+                  {{ t('backends.form.useApiDefault') }}
+                </span>
+              </div>
+              <p
+                v-if="isAnthropic && isThinkingEnabled"
+                class="text-xs leading-5 text-lf-text-muted"
+              >
+                {{ t('backends.form.maxTokensThinkingHint') }}
+              </p>
             </div>
           </NFormItem>
 
