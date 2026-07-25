@@ -35,6 +35,7 @@ type Backend struct {
 	temperature    *float64
 	topP           *float64
 	stream         bool
+	thinking       backend.ThinkingLevel
 }
 
 // Name 由 BackendConfig.Name 注入；这里使用 type/model 作 fallback。
@@ -155,6 +156,10 @@ func (b *Backend) buildParams(req backend.Request) (openaigo.ChatCompletionNewPa
 	default:
 		return params, fmt.Errorf("openai: unknown response_format %q", rf)
 	}
+	if b.thinking.Enabled() {
+		// low/medium/high 与 shared.ReasoningEffort 字面一致；off 不传字段（零回归）。
+		params.ReasoningEffort = shared.ReasoningEffort(b.thinking)
+	}
 	return params, nil
 }
 
@@ -179,7 +184,8 @@ func wrapOpenAIError(err error) error {
 // factory 从 backend.Config 构造实例。
 // Options 期望的键：api_key, base_url, model（必填）, max_tokens, timeout（duration 字符串）,
 // response_format（json_schema | json_object | none，默认 json_schema）,
-// stream（bool，默认 false；true 时以流式发起并在内部累积）。
+// stream（bool，默认 false；true 时以流式发起并在内部累积）,
+// thinking_level（off|low|medium|high，默认 off；off=不传 reasoning_effort）。
 func factory(cfg backend.Config) (backend.Backend, error) {
 	opts := cfg.Options
 	apiKey, _ := opts["api_key"].(string)
@@ -205,6 +211,10 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 	default:
 		return nil, fmt.Errorf("openai: invalid response_format %q (want json_schema|json_object|text|none)", rf)
 	}
+	thinking, err := backend.ParseThinkingLevel(opts)
+	if err != nil {
+		return nil, fmt.Errorf("openai: %w", err)
+	}
 	b := &Backend{
 		name:           cfg.Name,
 		client:         openaigo.NewClient(clientOpts...),
@@ -212,6 +222,7 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 		maxTokens:      backend.Int64Opt(opts, "max_tokens", 0),
 		responseFormat: rf,
 		stream:         backend.BoolOpt(opts, "stream", false),
+		thinking:       thinking,
 	}
 	if t := backend.Int64Opt(opts, "timeout", 60); t > 0 {
 		b.timeout = time.Duration(t) * time.Second

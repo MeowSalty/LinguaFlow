@@ -42,6 +42,7 @@ type Backend struct {
 	temperature       *float64
 	topP              *float64
 	stream            bool
+	thinking          backend.ThinkingLevel
 }
 
 func (b *Backend) Name() string {
@@ -86,6 +87,11 @@ func (b *Backend) translateStream(ctx context.Context, params sdk.MessageNewPara
 func (b *Backend) responseFromMessage(msg *sdk.Message, useToolPath bool) (*backend.Response, error) {
 	// 截断会让 tool_use 的 JSON 残缺，显式失败以触发上层 shrinkOrFallback
 	if msg.StopReason == sdk.StopReasonMaxTokens {
+		if b.thinking.Enabled() {
+			// thinking 开启时 budget_tokens 与最终输出共用 max_tokens 池：
+			// 截断可能源于思考预算挤占输出，提示用户从三处可调方向定位。
+			return nil, fmt.Errorf("anthropic: response truncated (stop_reason=max_tokens); thinking_level=%s shares max_tokens between thinking budget and output — raise max_tokens, lower thinking_level, or shrink batch_size", b.thinking)
+		}
 		return nil, fmt.Errorf("anthropic: response truncated (stop_reason=max_tokens), raise max_tokens")
 	}
 
@@ -144,15 +150,24 @@ func (b *Backend) buildParams(req backend.Request) (sdk.MessageNewParams, bool, 
 			sdk.NewUserMessage(sdk.NewTextBlock(req.User)),
 		},
 	}
-	if req.Temperature != nil {
-		params.Temperature = sdk.Float(*req.Temperature)
-	} else if b.temperature != nil {
-		params.Temperature = sdk.Float(*b.temperature)
-	}
-	if req.TopP != nil {
-		params.TopP = sdk.Float(*req.TopP)
-	} else if b.topP != nil {
-		params.TopP = sdk.Float(*b.topP)
+	// 开启 thinking 时 API 拒绝非默认 temperature/top_p，整段跳过采样参数。
+	if b.thinking.Enabled() {
+		budget, err := anthropicThinkingBudget(b.thinking, maxTok)
+		if err != nil {
+			return sdk.MessageNewParams{}, false, err
+		}
+		params.Thinking = sdk.ThinkingConfigParamOfEnabled(budget)
+	} else {
+		if req.Temperature != nil {
+			params.Temperature = sdk.Float(*req.Temperature)
+		} else if b.temperature != nil {
+			params.Temperature = sdk.Float(*b.temperature)
+		}
+		if req.TopP != nil {
+			params.TopP = sdk.Float(*req.TopP)
+		} else if b.topP != nil {
+			params.TopP = sdk.Float(*b.topP)
+		}
 	}
 
 	useToolPath := rf == respFmtJSONSchema && req.JSONSchema != nil
@@ -169,6 +184,43 @@ func (b *Backend) buildParams(req backend.Request) (sdk.MessageNewParams, bool, 
 		}
 	}
 	return params, useToolPath, nil
+}
+
+// anthropicThinkingBudget 按档位比例计算 budget_tokens（≥1024 且 < maxTokens）。
+//
+// 设计原则：透明遵从用户配置，不做输出预留。
+// Anthropic 的 budget_tokens 与最终文本/tool JSON 共用同一个 max_tokens 池，
+// 这是 API 的客观约束。用户设置 max_tokens 即承担对该池的分配责任；
+// 代码按 thinking_level 字面 ratio 切分，不引入与实际输入大小无关的固定预留
+// （固定预留只会制造"程序已保证输出"的安全错觉：大输入时输出需求可能远超预留，
+//
+//	仍会截断，却让用户放松对 batch_size / max_tokens 的主动调优）。
+//
+// 截断保护由 responseFromMessage 的可定位错误信息承担（见 stop_reason=max_tokens 分支）。
+func anthropicThinkingBudget(level backend.ThinkingLevel, maxTokens int64) (int64, error) {
+	minBudget := int64(1024)
+	if maxTokens <= minBudget {
+		return 0, fmt.Errorf("anthropic: thinking_level requires max_tokens > %d", minBudget)
+	}
+	var ratio float64
+	switch level {
+	case backend.ThinkingLow:
+		ratio = 0.25
+	case backend.ThinkingMedium:
+		ratio = 0.50
+	case backend.ThinkingHigh:
+		ratio = 0.75
+	default:
+		return 0, fmt.Errorf("anthropic: unexpected thinking_level %q", level)
+	}
+	budget := int64(float64(maxTokens) * ratio)
+	if budget < minBudget {
+		budget = minBudget
+	}
+	if budget > maxTokens-1 {
+		budget = maxTokens - 1
+	}
+	return budget, nil
 }
 
 func (b *Backend) callOpts() []option.RequestOption {
@@ -259,6 +311,7 @@ func buildToolInputSchema(schema map[string]any) sdk.ToolInputSchemaParam {
 //   - response_format (json_schema|json_object|none，默认 json_schema)
 //   - enable_prompt_cache (bool，默认 true，启用后给 system block 加 ephemeral 缓存)
 //   - stream (bool，默认 false；true 时以流式发起并在内部累积)
+//   - thinking_level (off|low|medium|high，默认 off；开启时忽略 temperature/top_p)
 func factory(cfg backend.Config) (backend.Backend, error) {
 	opts := cfg.Options
 	apiKey := backend.StringOpt(opts, "api_key", "")
@@ -284,6 +337,10 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 	default:
 		return nil, fmt.Errorf("anthropic: invalid response_format %q (want json_schema|json_object|text|none)", rf)
 	}
+	thinking, err := backend.ParseThinkingLevel(opts)
+	if err != nil {
+		return nil, fmt.Errorf("anthropic: %w", err)
+	}
 	b := &Backend{
 		name:              cfg.Name,
 		client:            sdk.NewClient(clientOpts...),
@@ -292,6 +349,7 @@ func factory(cfg backend.Config) (backend.Backend, error) {
 		responseFormat:    rf,
 		enablePromptCache: backend.BoolOpt(opts, "enable_prompt_cache", true),
 		stream:            backend.BoolOpt(opts, "stream", false),
+		thinking:          thinking,
 	}
 	if t := backend.Int64Opt(opts, "timeout", 60); t > 0 {
 		b.timeout = time.Duration(t) * time.Second
