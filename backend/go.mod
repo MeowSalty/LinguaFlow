@@ -6,7 +6,7 @@ require (
 	entgo.io/ent v0.14.5
 	github.com/anthropics/anthropic-sdk-go v1.33.0
 	github.com/getkin/kin-openapi v0.133.0
-	github.com/go-chi/chi/v5 v5.2.4
+	github.com/go-chi/chi/v5 v5.3.0
 	github.com/go-chi/cors v1.2.2
 	github.com/golang-jwt/jwt/v5 v5.2.2
 	github.com/inconshreveable/mousetrap v1.1.0
