@@ -153,7 +153,7 @@ Round 2：只处理 Round 1 失败的段落
 2. 分批调用 **内置** 裁决提示词
 3. 解析失败时 **保留原问题**，不清空
 
-**建议：** 放在翻译轮次之后；专有名词多的文档优先开 `source_residual`。配置见 [翻译配置 · 使用](/zh/guide/translation-config#进阶组合)。
+**建议：** 放在翻译轮次之后；专有名词多的文档优先开 `source_residual`。配置见 [翻译配置 · 使用](/zh/guide/translation-config#进阶组合)；协议细节见 [翻译配置 · 参考 · adjudicate](/zh/guide/translation-config-reference#adjudicate)。
 
 ---
 

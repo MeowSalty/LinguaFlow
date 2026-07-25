@@ -78,6 +78,24 @@ docker logs linguaflow  # 查看日志
 - 使用自定义 **Base URL** 时，确认路径是否要求 `/v1` 等后缀
 - 环境变量引用（如 `${OPENAI_API_KEY}`）在进程启动前是否已 export
 
+### 保存后端提示模型必填 / 找不到默认模型？
+
+`model` 字段 **没有隐式默认值**，必须显式填写服务商实际可用的模型 ID。Web 中可先填 API Key（与可选 Base URL），再点 **探测模型** 从列表中选择。CLI 请在 `linguaflow.yaml` 的 `options.model` 中写明，例如 `gpt-4o-mini`。
+
+### 探测模型失败？
+
+- **认证失败**：Key 无效或未授权该接口
+- **404 / 模型列表不可用**：Base URL 路径不对，或兼容网关未实现 list models
+- **网络错误**：检查 Base URL、代理与防火墙
+- 探测失败时仍可 **手动输入** 模型 ID 后保存
+
+### 思考强度该怎么设？
+
+- 默认 **关闭（off）**：不传思考参数，沿用模型/网关默认；多数翻译场景够用
+- 需要更强推理时再开 **低 / 中 / 高**（仅对支持思考的模型有意义）
+- **Anthropic**：开启后忽略 Temperature/Top P，且思考与输出共用 Max Tokens；批量翻译建议提高 Max Tokens，截断时可降思考档位或减小批次
+- 详见 [翻译配置 · 参考 · 思考强度](/zh/guide/translation-config-reference#思考强度-thinking_level)
+
 ### 翻译速度很慢？
 
 - 检查到 AI 服务的网络延迟与带宽
@@ -125,6 +143,7 @@ Markdown、HTML、DOCX、EPUB、SRT/VTT/ASS 字幕、JSON/YAML/TOML、纯文本�
 - 尝试按章节分批翻译
 - 检查是否有特殊格式需要保护
 - 用阅读器打开导出文件核对样式
+- 横竖排不符合阅读习惯时，可用 Web **工具 → EPUB 横竖排转换** 在本机统一全书方向（不上传服务器），见 [格式支持 · EPUB 横竖排](/zh/guide/formats#epub-横竖排转换-工具)
 
 ### DOCX 部分内容未翻译？
 

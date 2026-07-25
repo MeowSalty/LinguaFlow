@@ -112,12 +112,13 @@ backends:
     options:
       api_key: ${OPENAI_API_KEY}
       base_url: https://api.openai.com/v1
-      model: gpt-4o-mini
+      model: gpt-4o-mini # 必填，无内置默认
       temperature: 0.2
       max_tokens: 0
       timeout: 60s
       response_format: json_schema
       # stream: false  # 兼容网关仅接受 stream:true 时开启
+      # thinking_level: off  # off | low | medium | high
 
 # 翻译提示词模板（map 结构，key 为模板名称）
 translation_prompt_templates:
@@ -262,23 +263,33 @@ server:
 
 **options 通用字段：**
 
-| 字段          | 类型   | 说明                                                                                                 |
-| ------------- | ------ | ---------------------------------------------------------------------------------------------------- |
-| `api_key`     | string | API 密钥                                                                                             |
-| `base_url`    | string | 自定义 API 端点                                                                                      |
-| `model`       | string | 使用的模型                                                                                           |
-| `temperature` | float  | 生成温度                                                                                             |
-| `max_tokens`  | int    | 最大 token 数，`0` 表示自动                                                                          |
-| `timeout`     | string | 请求超时时间，如 `60s`                                                                               |
-| `stream`      | bool   | 是否以流式发起请求（内部累积为完整响应），默认 `false`。`true` 适用于只接受 `stream:true` 的兼容网关 |
+| 字段             | 类型   | 说明                                                                                                 |
+| ---------------- | ------ | ---------------------------------------------------------------------------------------------------- |
+| `api_key`        | string | API 密钥（必填）                                                                                     |
+| `base_url`       | string | 自定义 API 端点                                                                                      |
+| `model`          | string | 使用的模型                                                                                           |
+| `temperature`    | float  | 生成温度                                                                                             |
+| `max_tokens`     | int    | 最大 token 数，`0` 表示自动（Anthropic 默认常为 `8192`）                                             |
+| `timeout`        | string | 请求超时时间，如 `60s`                                                                               |
+| `stream`         | bool   | 是否以流式发起请求（内部累积为完整响应），默认 `false`。`true` 适用于只接受 `stream:true` 的兼容网关 |
+| `thinking_level` | string | 思考强度：`off`（默认）/ `low` / `medium` / `high`，见下表                                           |
 
-**各后端默认模型：**
+**示例模型名：**
 
-| 后端类型    | 默认模型            |
+| 后端类型    | 常用示例            |
 | ----------- | ------------------- |
 | `openai`    | `gpt-4o-mini`       |
 | `anthropic` | `claude-sonnet-4-5` |
 | `google`    | `gemini-2.5-flash`  |
+
+**thinking_level 说明：**
+
+| 值                        | 行为                                                                                                                                                                 |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `off`                     | 不向厂商传思考相关字段，沿用模型/网关默认                                                                                                                            |
+| `low` / `medium` / `high` | 开启思考；OpenAI → `reasoning_effort`；Anthropic → thinking budget（与输出共用 `max_tokens`，开启后忽略 temperature/top_p）；Google → `ThinkingConfig.ThinkingLevel` |
+
+Web 端还可使用「探测模型」接口按凭据拉取列表；字段细节见 [翻译配置 · 参考 · AI 后端](/zh/guide/translation-config-reference#ai-后端)。
 
 #### translation_prompt_templates — 翻译提示词模板
 

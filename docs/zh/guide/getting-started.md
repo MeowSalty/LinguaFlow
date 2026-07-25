@@ -32,8 +32,6 @@ chmod +x linguaflow
 
 浏览器应自动打开 **本地模式** 界面：`http://127.0.0.1:18080`（若端口被占用会自动尝试后续端口）。
 
-![本地模式主界面](../../public/images/local-home.png.png)
-
 ::: tip 本步成功标准
 浏览器能打开 LinguaFlow 界面，且无需登录即可进入主页面（本地模式）。
 :::
@@ -72,24 +70,23 @@ docker run --rm -p 8080:8080 ghcr.io/meowsalty/linguaflow:latest
 2. 点击 **添加后端**
 3. 选择提供商并填写：
 
-   | 提供商        | 类型        | 常用默认模型        |
+   | 提供商        | 类型        | 示例模型            |
    | ------------- | ----------- | ------------------- |
    | OpenAI        | `openai`    | `gpt-4o-mini`       |
    | Anthropic     | `anthropic` | `claude-sonnet-4-5` |
    | Google Gemini | `google`    | `gemini-2.5-flash`  |
 
-4. 填入 **API Key**（必填）
-5. 如需代理或本地模型（Ollama、LM Studio、Azure 等），填写兼容的 **Base URL**
-6. 保存
-
-![添加 AI 后端](../../public/images/ai-backend.png)
+4. 填入 **API Key**（必填）与 **模型**（必填）
+5. 推荐：点击 **探测模型**，用当前 Key / Base URL 拉取可用列表后选择模型 ID
+6. 如需代理或本地模型（Ollama、LM Studio、Azure 等），填写兼容的 **Base URL** 后再探测或手填模型
+7. 保存
 
 ::: tip 本地模型
 OpenAI 类型可对接 OpenAI 兼容接口，例如 Ollama：`http://localhost:11434/v1`。部分网关仅接受流式请求时，在后端选项中开启 **流式请求**。
 :::
 
 ::: tip 本步成功标准
-「AI 后端」列表中能看到刚添加的条目，状态可用。
+「AI 后端」列表中能看到刚添加的条目，且已指定明确的模型名。
 :::
 
 ---
@@ -159,10 +156,6 @@ OpenAI 类型可对接 OpenAI 兼容接口，例如 Ollama：`http://localhost:1
 
 等待解析完成（资源列表出现该文件即可）。
 
-> **界面示意（占位）** · 项目工作区 · 资源  
-> 资源列表显示文件名、格式与解析状态；支持拖拽上传。顶部有项目语言方向与统计。  
-> _待补截图：`docs/public/images/workspace-resources.png`_
-
 支持的格式一览见 [格式支持](/zh/guide/formats)。
 
 ::: tip 本步成功标准
@@ -179,10 +172,6 @@ OpenAI 类型可对接 OpenAI 兼容接口，例如 Ollama：`http://localhost:1
 4. 其余选项可保持默认（首次不必开「自动审批」）
 5. 点击 **开始翻译**
 6. 在 **作业** 标签查看进度；完成后打开 **段落** 标签查看原文与译文
-
-> **界面示意（占位）** · 作业进度与段落结果  
-> 「作业」标签显示进度 / ETA；完成后在「段落」中左右对照原文与译文。  
-> _待补截图：`docs/public/images/job-and-segments.png`_
 
 ::: tip 第一次成功的标志（请逐项确认）
 
