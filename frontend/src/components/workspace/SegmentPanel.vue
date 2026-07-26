@@ -116,6 +116,18 @@ const qualityCodeChips = computed(() => [
     value: 'source_residual' as const,
     label: t('workspace.segment.qualityCodes.sourceResidual'),
   },
+  {
+    value: 'calque' as const,
+    label: t('workspace.segment.qualityCodes.calque'),
+  },
+  {
+    value: 'term_fidelity' as const,
+    label: t('workspace.segment.qualityCodes.termFidelity'),
+  },
+  {
+    value: 'naturalness' as const,
+    label: t('workspace.segment.qualityCodes.naturalness'),
+  },
 ])
 
 const hasActiveQualityFilter = computed(

@@ -1445,9 +1445,11 @@ export interface components {
             segment_index: number;
             /** @enum {string} */
             severity: "warning" | "error";
-            /** @description 问题代码（untranslated, length_ratio, duplicate, source_residual） */
+            /** @description 问题代码（untranslated, length_ratio, duplicate, source_residual, calque, term_fidelity, naturalness） */
             code: string;
             message: string;
+            /** @description 问题在目标/源文本中的跨度；片段级问题可省略 */
+            span?: components["schemas"]["QualityIssueSpan"];
         };
         UsageStats: {
             api_calls: number;
@@ -2356,6 +2358,14 @@ export interface components {
             unchanged: number;
             /** @description 删除的段落数 */
             deleted: number;
+        };
+        QualityIssueSpan: {
+            /** @description 触发问题的精确文本片段 */
+            matched_text: string;
+            /** @description 目标文本中的起始偏移（按字符/rune）；定位失败时省略 */
+            target_start?: number;
+            /** @description 目标文本中的结束偏移（按字符/rune，半开区间）；定位失败时省略 */
+            target_end?: number;
         };
         GlossarySyncImpactResource: {
             resource_id: number;

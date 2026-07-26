@@ -526,11 +526,15 @@ const messages = {
       emptyTarget: '暂无译文',
       qualityError: '错误',
       qualityWarning: '警告',
+      qualityMatched: '片段：{text}',
       qualityCodes: {
         untranslated: '未翻译',
         lengthRatio: '长度异常',
         duplicate: '重复译文',
         sourceResidual: '源文残留',
+        calque: '仿译',
+        termFidelity: '术语偏差',
+        naturalness: '自然度',
       },
       editTitle: '编辑段落',
       columns: {

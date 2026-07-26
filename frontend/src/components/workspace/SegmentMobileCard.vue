@@ -5,8 +5,10 @@ import IconCarbonChat from '~icons/carbon/chat'
 
 import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
+import { formatQualityIssueTooltip, getQualityCodeLabel } from '@/composables/useQualityIssues'
 import { formatDate, getSegmentStatusLabel, statusTagType } from '@/composables/useWorkspaceUtils'
 import HtmlContent from '@/components/workspace/HtmlContent.vue'
+import QualityHighlightedText from '@/components/workspace/QualityHighlightedText.vue'
 import { t } from '@/i18n'
 
 type Segment = ApiSchemas['Segment']
@@ -44,17 +46,18 @@ const emit = defineEmits<{
       <span class="text-xs text-lf-text-muted">#{{ segment.segment_index }}</span>
       <div class="flex items-center gap-1">
         <template v-if="segment.quality_issues?.length">
-          <NTooltip v-for="issue in segment.quality_issues" :key="issue.code">
+          <NTooltip
+            v-for="(issue, issueIndex) in segment.quality_issues"
+            :key="`${issue.code}-${issue.span?.matched_text ?? issueIndex}`"
+          >
             <template #trigger>
               <NTag size="small" :type="issue.severity === 'error' ? 'error' : 'warning'" round>
-                {{
-                  issue.severity === 'error'
-                    ? t('workspace.segment.qualityError')
-                    : t('workspace.segment.qualityWarning')
-                }}
+                {{ getQualityCodeLabel(issue.code) }}
               </NTag>
             </template>
-            {{ issue.message }}
+            <div class="whitespace-pre-line text-xs leading-relaxed">
+              {{ formatQualityIssueTooltip(issue) }}
+            </div>
           </NTooltip>
         </template>
         <NTag size="small" :type="statusTagType(segment.status)">
@@ -88,7 +91,11 @@ const emit = defineEmits<{
           :content="segment.target_text"
           :max-lines="4"
         />
-        <span v-else-if="segment.target_text">{{ segment.target_text }}</span>
+        <QualityHighlightedText
+          v-else-if="segment.target_text"
+          :text="segment.target_text"
+          :issues="segment.quality_issues"
+        />
         <div v-else class="target-empty">
           <NText depth="3">{{ t('workspace.segment.emptyTarget') }}</NText>
         </div>
