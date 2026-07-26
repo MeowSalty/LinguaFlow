@@ -194,6 +194,15 @@ const validateRounds = (): boolean => {
         return false
       }
     }
+    if (round.mode === 'semantic_qa' && round.semantic_qa) {
+      const hasBatchSize = round.semantic_qa.batch_size && round.semantic_qa.batch_size > 0
+      const hasMaxWords =
+        round.semantic_qa.max_words_per_batch && round.semantic_qa.max_words_per_batch > 0
+      if (!hasBatchSize && !hasMaxWords) {
+        message.error(t('executionPlanTemplates.validation.roundBatchConfigRequired', { n: i + 1 }))
+        return false
+      }
+    }
   }
   return true
 }
@@ -244,6 +253,16 @@ const buildPayload = (): CreateRequest => {
                 ? round.adjudicate.adjudicate_codes
                 : undefined,
             ...(round.adjudicate.retry ? { retry: round.adjudicate.retry } : {}),
+          },
+        }
+      }
+      if (round.mode === 'semantic_qa' && round.semantic_qa) {
+        return {
+          ...base,
+          semantic_qa: {
+            batch_size: round.semantic_qa.batch_size,
+            max_words_per_batch: round.semantic_qa.max_words_per_batch,
+            ...(round.semantic_qa.retry ? { retry: round.semantic_qa.retry } : {}),
           },
         }
       }
@@ -328,13 +347,15 @@ const formatDate = (dateStr: string | undefined): string => {
 const modeBadgeClass = (mode: ExecutionRoundConfig['mode']): string => {
   if (mode === 'translate') return 'bg-lf-brand-soft text-brand-600'
   if (mode === 'extract') return 'bg-amber-50 text-amber-600'
-  return 'bg-violet-50 text-violet-600'
+  if (mode === 'adjudicate') return 'bg-violet-50 text-violet-600'
+  return 'bg-emerald-50 text-emerald-600'
 }
 
 const modeLabel = (mode: ExecutionRoundConfig['mode']): string => {
   if (mode === 'translate') return t('executionPlanEditor.round.modeTranslate')
   if (mode === 'extract') return t('executionPlanEditor.round.modeExtract')
-  return t('executionPlanEditor.round.modeAdjudicate')
+  if (mode === 'adjudicate') return t('executionPlanEditor.round.modeAdjudicate')
+  return t('executionPlanEditor.round.modeSemanticQA')
 }
 
 // ── 生命周期 ──────────────────────────────────────────────────

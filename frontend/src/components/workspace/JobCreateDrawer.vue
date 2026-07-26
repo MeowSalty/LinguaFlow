@@ -73,7 +73,9 @@ const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string 
       ? round.extract
       : round.mode === 'adjudicate'
         ? round.adjudicate
-        : round.translate
+        : round.mode === 'semantic_qa'
+          ? round.semantic_qa
+          : round.translate
   const batchSize = modeConfig?.batch_size ?? 0
   const maxWordsPerBatch = modeConfig?.max_words_per_batch ?? 0
   const parts: string[] = []
@@ -89,7 +91,9 @@ const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string 
       ? 'workspace.job.planPreviewModeExtract'
       : round.mode === 'adjudicate'
         ? 'workspace.job.planPreviewModeAdjudicate'
-        : 'workspace.job.planPreviewModeTranslate'
+        : round.mode === 'semantic_qa'
+          ? 'workspace.job.planPreviewModeSemanticQA'
+          : 'workspace.job.planPreviewModeTranslate'
   return t('workspace.job.planPreviewRoundItem', {
     index: index + 1,
     mode: t(modeKey),
