@@ -69,6 +69,16 @@ func EmbeddedAdjudicationTemplate() string {
 	return strings.TrimRight(string(data), "\n")
 }
 
+// EmbeddedSemanticQATemplate 返回嵌入的语义质检提示词模板内容。
+// 语义质检 prompt 对用户不可见，仅供引擎内置使用。
+func EmbeddedSemanticQATemplate() string {
+	data, err := fs.ReadFile(builtinFS, "default/prompts/default_semantic_qa.tmpl")
+	if err != nil {
+		panic(fmt.Sprintf("embedded prompts/default_semantic_qa.tmpl not found: %v", err))
+	}
+	return strings.TrimRight(string(data), "\n")
+}
+
 // EmbeddedProfileConfig 返回嵌入的默认翻译策略配置字节。
 func EmbeddedProfileConfig() []byte {
 	data, err := fs.ReadFile(builtinFS, "default/profiles/default.yaml")

@@ -134,11 +134,12 @@ type ExecutionPlanRubyRetrySnapshot struct {
 
 // JobRoundSnapshot 单轮的完整执行快照。
 type JobRoundSnapshot struct {
-	Mode       string                      `json:"mode"` // "translate" | "extract" | "adjudicate"
+	Mode       string                      `json:"mode"` // "translate" | "extract" | "adjudicate" | "semantic_qa"
 	Backend    BackendSnapshot             `json:"backend"`
 	Translate  *JobTranslateRoundSnapshot  `json:"translate,omitempty"`
 	Extract    *JobExtractRoundSnapshot    `json:"extract,omitempty"`
 	Adjudicate *JobAdjudicateRoundSnapshot `json:"adjudicate,omitempty"`
+	SemanticQA *JobSemanticQARoundSnapshot `json:"semantic_qa,omitempty"`
 }
 
 // JobTranslateRoundSnapshot 翻译轮次快照。
@@ -170,6 +171,14 @@ type JobAdjudicateRoundSnapshot struct {
 	MaxWordsPerBatch int                `json:"max_words_per_batch"`
 	Concurrency      int                `json:"concurrency"`
 	AdjudicateCodes  []string           `json:"adjudicate_codes,omitempty"`
+	Retry            schema.RetryConfig `json:"retry"`
+}
+
+// JobSemanticQARoundSnapshot 语义质检轮次快照（无 prompt 字段，内置不可见）。
+type JobSemanticQARoundSnapshot struct {
+	BatchSize        int                `json:"batch_size"`
+	MaxWordsPerBatch int                `json:"max_words_per_batch"`
+	Concurrency      int                `json:"concurrency"`
 	Retry            schema.RetryConfig `json:"retry"`
 }
 
@@ -435,6 +444,22 @@ func (s *JobService) validateAndSnapshot(
 					Concurrency:      a.Concurrency,
 					AdjudicateCodes:  codes,
 					Retry:            a.Retry,
+				},
+			})
+
+		case "semantic_qa":
+			if round.SemanticQA == nil {
+				return nil, fmt.Errorf("rounds[%d] semantic_qa config is nil", i)
+			}
+			s := round.SemanticQA
+			snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
+				Mode:    "semantic_qa",
+				Backend: *backendSnap,
+				SemanticQA: &JobSemanticQARoundSnapshot{
+					BatchSize:        s.BatchSize,
+					MaxWordsPerBatch: s.MaxWordsPerBatch,
+					Concurrency:      s.Concurrency,
+					Retry:            s.Retry,
 				},
 			})
 

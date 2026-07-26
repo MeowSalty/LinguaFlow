@@ -106,6 +106,21 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 		}
 		apiRC.Adjudicate = &adjudicateCfg
 	}
+	if rc.Mode == "semantic_qa" && rc.SemanticQA != nil {
+		s := rc.SemanticQA
+		apiRC.Concurrency = s.Concurrency
+		semanticQACfg := SemanticQARoundConfig{}
+		semanticQACfg.BatchSize = &s.BatchSize
+		if s.MaxWordsPerBatch > 0 {
+			mwpb := s.MaxWordsPerBatch
+			semanticQACfg.MaxWordsPerBatch = &mwpb
+		}
+		if s.Retry.MaxAttempts > 0 || s.Retry.BackoffMs > 0 || s.Retry.Jitter {
+			retry := toRetryConfigAPI(s.Retry)
+			semanticQACfg.Retry = &retry
+		}
+		apiRC.SemanticQa = &semanticQACfg
+	}
 	return apiRC
 }
 
@@ -286,6 +301,30 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 				}
 			}
 			rc.Adjudicate = adjudicateCfg
+		}
+		if ar.Mode == SemanticQa && ar.SemanticQa != nil {
+			s := ar.SemanticQa
+			semanticQACfg := &schema.SemanticQARoundConfig{
+				Concurrency: ar.Concurrency,
+			}
+			if s.BatchSize != nil {
+				semanticQACfg.BatchSize = *s.BatchSize
+			}
+			if s.MaxWordsPerBatch != nil {
+				semanticQACfg.MaxWordsPerBatch = *s.MaxWordsPerBatch
+			}
+			if s.Retry != nil {
+				if s.Retry.MaxAttempts != nil {
+					semanticQACfg.Retry.MaxAttempts = *s.Retry.MaxAttempts
+				}
+				if s.Retry.BackoffMs != nil {
+					semanticQACfg.Retry.BackoffMs = *s.Retry.BackoffMs
+				}
+				if s.Retry.Jitter != nil {
+					semanticQACfg.Retry.Jitter = *s.Retry.Jitter
+				}
+			}
+			rc.SemanticQA = semanticQACfg
 		}
 		rounds = append(rounds, rc)
 	}

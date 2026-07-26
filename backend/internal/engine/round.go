@@ -8,7 +8,7 @@ import (
 )
 
 // RoundConfig 描述一轮的执行配置。
-// Translate / Extract / Adjudicate 互斥，恰好一个必须非 nil。
+// Translate / Extract / Adjudicate / SemanticQA 互斥，恰好一个必须非 nil。
 type RoundConfig struct {
 	Backend          backend.Backend
 	BatchSize        int
@@ -21,6 +21,7 @@ type RoundConfig struct {
 	Translate  *TranslateRoundConfig
 	Extract    *ExtractRoundConfig
 	Adjudicate *AdjudicateRoundConfig
+	SemanticQA *SemanticQARoundConfig
 }
 
 // TranslateRoundConfig 翻译轮次的特有配置。
@@ -50,6 +51,14 @@ type AdjudicateRoundConfig struct {
 	Renderer        *prompt.AdjudicationRenderer
 	AdjudicateCodes []string
 	ResponseMode    string
+	// MaxBatchIndexSpan 同批段落索引跨度上限；<=0 不限制（默认关闭）。
+	MaxBatchIndexSpan int
+}
+
+// SemanticQARoundConfig 语义质检轮次的特有配置。
+type SemanticQARoundConfig struct {
+	Renderer     *prompt.SemanticQARenderer
+	ResponseMode string
 	// MaxBatchIndexSpan 同批段落索引跨度上限；<=0 不限制（默认关闭）。
 	MaxBatchIndexSpan int
 }

@@ -8,11 +8,12 @@ import (
 
 // ExecutionRoundConfig 单轮执行配置。
 type ExecutionRoundConfig struct {
-	Mode       string                 `json:"mode"                 yaml:"mode"` // "translate" | "extract" | "adjudicate"
-	BackendID  int                    `json:"backend_id"           yaml:"backend_id"`
-	Translate  *TranslateRoundConfig  `json:"translate,omitempty"  yaml:"translate,omitempty"`
-	Extract    *ExtractRoundConfig    `json:"extract,omitempty"    yaml:"extract,omitempty"`
-	Adjudicate *AdjudicateRoundConfig `json:"adjudicate,omitempty" yaml:"adjudicate,omitempty"`
+	Mode       string                 `json:"mode"                  yaml:"mode"` // "translate" | "extract" | "adjudicate" | "semantic_qa"
+	BackendID  int                    `json:"backend_id"            yaml:"backend_id"`
+	Translate  *TranslateRoundConfig  `json:"translate,omitempty"   yaml:"translate,omitempty"`
+	Extract    *ExtractRoundConfig    `json:"extract,omitempty"     yaml:"extract,omitempty"`
+	Adjudicate *AdjudicateRoundConfig `json:"adjudicate,omitempty"  yaml:"adjudicate,omitempty"`
+	SemanticQA *SemanticQARoundConfig `json:"semantic_qa,omitempty" yaml:"semantic_qa,omitempty"`
 }
 
 // TranslateSegmentFilterConfig 翻译轮次段落过滤配置。
@@ -50,6 +51,15 @@ type AdjudicateRoundConfig struct {
 	MaxWordsPerBatch int         `json:"max_words_per_batch" yaml:"max_words_per_batch"`
 	Concurrency      int         `json:"concurrency"         yaml:"concurrency"`
 	AdjudicateCodes  []string    `json:"adjudicate_codes"    yaml:"adjudicate_codes"` // 可裁决 code；空=默认 ["source_residual"]
+	Retry            RetryConfig `json:"retry"               yaml:"retry"`
+}
+
+// SemanticQARoundConfig 语义质检轮次配置。
+// 无 PromptTemplateID：语义质检 prompt 内置不可见。
+type SemanticQARoundConfig struct {
+	BatchSize        int         `json:"batch_size"          yaml:"batch_size"`
+	MaxWordsPerBatch int         `json:"max_words_per_batch" yaml:"max_words_per_batch"`
+	Concurrency      int         `json:"concurrency"         yaml:"concurrency"`
 	Retry            RetryConfig `json:"retry"               yaml:"retry"`
 }
 

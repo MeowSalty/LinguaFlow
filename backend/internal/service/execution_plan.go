@@ -340,8 +340,25 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 					return fmt.Errorf("%w: rounds[%d].adjudicate.adjudicate_codes contains invalid code %q (allowed: source_residual, length_ratio)", ErrExecutionPlanConfigInvalid, i, code)
 				}
 			}
+		case "semantic_qa":
+			if round.SemanticQA == nil {
+				return fmt.Errorf("%w: rounds[%d].semantic_qa config required when mode=semantic_qa", ErrExecutionPlanConfigInvalid, i)
+			}
+			s := round.SemanticQA
+			if s.BatchSize < 0 {
+				return fmt.Errorf("%w: rounds[%d].semantic_qa.batch_size must be >= 0", ErrExecutionPlanConfigInvalid, i)
+			}
+			if s.MaxWordsPerBatch < 0 {
+				return fmt.Errorf("%w: rounds[%d].semantic_qa.max_words_per_batch must be >= 0", ErrExecutionPlanConfigInvalid, i)
+			}
+			if s.BatchSize <= 0 && s.MaxWordsPerBatch <= 0 {
+				return fmt.Errorf("%w: rounds[%d].semantic_qa.batch_size and max_words_per_batch cannot both be 0", ErrExecutionPlanConfigInvalid, i)
+			}
+			if s.Concurrency < 1 {
+				return fmt.Errorf("%w: rounds[%d].semantic_qa.concurrency must be >= 1", ErrExecutionPlanConfigInvalid, i)
+			}
 		default:
-			return fmt.Errorf("%w: rounds[%d].mode must be 'translate', 'extract' or 'adjudicate'", ErrExecutionPlanConfigInvalid, i)
+			return fmt.Errorf("%w: rounds[%d].mode must be 'translate', 'extract', 'adjudicate' or 'semantic_qa'", ErrExecutionPlanConfigInvalid, i)
 		}
 	}
 	return nil

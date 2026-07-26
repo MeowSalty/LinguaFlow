@@ -1,0 +1,355 @@
+package pipeline
+
+import (
+	"context"
+	"errors"
+	"reflect"
+	"strconv"
+	"strings"
+	"testing"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
+)
+
+const testSemanticQATmpl = `Semantic QA for {{.SourceLang}} → {{.TargetLang}}. Reply as JSON: {"issues":[...]}`
+
+func newSemanticQARenderer(t *testing.T) *prompt.SemanticQARenderer {
+	t.Helper()
+	r, err := prompt.NewSemanticQARenderer(testSemanticQATmpl)
+	if err != nil {
+		t.Fatalf("semantic_qa renderer: %v", err)
+	}
+	return r
+}
+
+func semanticQADoc(statuses []string, targets []string) *Document {
+	segs := make([]Segment, len(statuses))
+	for i := range segs {
+		target := "你好世界"
+		if targets != nil {
+			target = targets[i]
+		}
+		segs[i] = Segment{
+			ID:     strconv.Itoa(i),
+			Source: "hello world",
+			Target: target,
+			Status: statuses[i],
+		}
+	}
+	return &Document{
+		SourceLang: "en",
+		TargetLang: "zh",
+		Segments:   segs,
+		Vars:       map[string]any{},
+	}
+}
+
+func TestSemanticQAHandler_BuildBatches_SelectsTranslatedEdited(t *testing.T) {
+	doc := semanticQADoc(
+		[]string{"translated", "approved", "edited", "pending", "rejected"},
+		nil,
+	)
+	h := &SemanticQAHandler{
+		Backend:   &fakeBackend{name: "fake"},
+		Renderer:  newSemanticQARenderer(t),
+		BatchSize: 10,
+		Logger:    quietLogger(),
+	}
+	batches, err := h.BuildBatches(context.Background(), doc)
+	if err != nil {
+		t.Fatalf("BuildBatches: %v", err)
+	}
+	if len(batches) != 1 || len(batches[0]) != 2 || batches[0][0] != 0 || batches[0][1] != 2 {
+		t.Fatalf("batches=%v want [[0 2]]", batches)
+	}
+}
+
+func TestSemanticQAHandler_BuildBatches_SkipsEmptyTarget(t *testing.T) {
+	doc := semanticQADoc(
+		[]string{"translated", "translated"},
+		[]string{"你好", ""},
+	)
+	h := &SemanticQAHandler{
+		Backend:   &fakeBackend{name: "fake"},
+		Renderer:  newSemanticQARenderer(t),
+		BatchSize: 10,
+		Logger:    quietLogger(),
+	}
+	batches, err := h.BuildBatches(context.Background(), doc)
+	if err != nil {
+		t.Fatalf("BuildBatches: %v", err)
+	}
+	if len(batches) != 1 || !reflect.DeepEqual(batches[0], []int{0}) {
+		t.Fatalf("batches=%v want [[0]]", batches)
+	}
+}
+
+func TestSemanticQAHandler_ProcessBatch_ProducesIssues(t *testing.T) {
+	doc := semanticQADoc([]string{"translated"}, nil)
+	// 预置一条规则 issue，确认 handler 回调只带新产出
+	doc.Segments[0].Issues = []qa.QualityIssue{
+		{Code: "source_residual", Severity: qa.SeverityWarning, Message: "residual"},
+	}
+	fb := &fakeBackend{
+		name:      "fake",
+		responses: []string{`{"issues":[{"id":"0","code":"calque","message":"借译"}]}`},
+	}
+	h := &SemanticQAHandler{
+		Backend:   fb,
+		Renderer:  newSemanticQARenderer(t),
+		BatchSize: 10,
+		Logger:    quietLogger(),
+	}
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if result.callbackResult == nil {
+		t.Fatal("expected callbackResult")
+	}
+	cb := result.callbackResult.Segments
+	if len(cb) != 1 || len(cb[0].Issues) != 1 || cb[0].Issues[0].Code != "calque" {
+		t.Fatalf("callback issues=%v want only new calque", cb)
+	}
+	if cb[0].Issues[0].Severity != qa.SeverityWarning {
+		t.Fatalf("severity=%v want warning", cb[0].Issues[0].Severity)
+	}
+	// 内存 doc 应追加
+	if len(doc.Segments[0].Issues) != 2 {
+		t.Fatalf("doc issues len=%d want 2 (existing + new)", len(doc.Segments[0].Issues))
+	}
+}
+
+func TestSemanticQAHandler_ProcessBatch_EmptyIssuesMarksSegmentProcessed(t *testing.T) {
+	doc := semanticQADoc([]string{"translated"}, nil)
+	fb := &fakeBackend{name: "fake", responses: []string{`{"issues":[]}`}}
+	h := &SemanticQAHandler{
+		Backend:   fb,
+		Renderer:  newSemanticQARenderer(t),
+		BatchSize: 10,
+		Logger:    quietLogger(),
+	}
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if result.callbackResult == nil {
+		t.Fatal("expected callbackResult")
+	}
+	if result.callbackResult.Segments[0].Issues == nil {
+		t.Fatal("successful empty scan must return a non-nil issue slice")
+	}
+}
+
+func TestSemanticQAHandler_ProcessBatch_ParseFailureProducesNone(t *testing.T) {
+	doc := semanticQADoc([]string{"translated"}, nil)
+	doc.Segments[0].Issues = []qa.QualityIssue{
+		{Code: "source_residual", Severity: qa.SeverityWarning, Message: "residual"},
+	}
+	fb := &fakeBackend{name: "fake", responses: []string{`not json at all`}}
+	h := &SemanticQAHandler{
+		Backend:   fb,
+		Renderer:  newSemanticQARenderer(t),
+		BatchSize: 10,
+		Logger:    quietLogger(),
+	}
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if len(doc.Segments[0].Issues) != 1 {
+		t.Fatalf("doc issues len=%d want 1 preserved", len(doc.Segments[0].Issues))
+	}
+	if result.callbackResult == nil || len(result.callbackResult.Segments[0].Issues) != 0 {
+		t.Fatal("callback should carry empty new issues on parse failure")
+	}
+	if result.callbackResult.Segments[0].Issues != nil {
+		t.Fatal("parse failure must return nil issues so persistence is skipped")
+	}
+}
+
+func TestSemanticQAHandler_ProcessBatch_BackendErrorProducesNone(t *testing.T) {
+	doc := semanticQADoc([]string{"translated"}, nil)
+	doc.Segments[0].Issues = []qa.QualityIssue{
+		{Code: "source_residual", Severity: qa.SeverityWarning, Message: "residual"},
+	}
+	fb := &fakeBackend{name: "fake", errs: []error{errors.New("network down")}}
+	h := &SemanticQAHandler{
+		Backend:   fb,
+		Renderer:  newSemanticQARenderer(t),
+		BatchSize: 10,
+		Logger:    quietLogger(),
+	}
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if len(doc.Segments[0].Issues) != 1 {
+		t.Fatalf("doc issues len=%d want 1 preserved", len(doc.Segments[0].Issues))
+	}
+	if result.callbackResult == nil || len(result.callbackResult.Segments[0].Issues) != 0 {
+		t.Fatal("callback should carry empty new issues on backend error")
+	}
+}
+
+func TestSemanticQAHandler_ProcessBatch_NonTextAttachesSchema(t *testing.T) {
+	doc := semanticQADoc([]string{"translated"}, nil)
+	fb := &fakeBackend{
+		name:      "fake",
+		responses: []string{`{"issues":[]}`},
+	}
+	h := &SemanticQAHandler{
+		Backend:   fb,
+		Renderer:  newSemanticQARenderer(t),
+		BatchSize: 10,
+		Logger:    quietLogger(),
+	}
+	_ = h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if len(fb.requests) != 1 {
+		t.Fatalf("requests=%d want 1", len(fb.requests))
+	}
+	if fb.requests[0].ResponseFormat != "" {
+		t.Fatalf("ResponseFormat should be empty, got %q", fb.requests[0].ResponseFormat)
+	}
+	if fb.requests[0].JSONSchema == nil {
+		t.Fatal("JSONSchema should be set for non-text mode")
+	}
+}
+
+func TestSemanticQAHandler_ProcessBatch_TextMode(t *testing.T) {
+	doc := semanticQADoc([]string{"translated"}, nil)
+	fb := &fakeBackend{
+		name:      "fake",
+		responses: []string{"[issues]\n0 | calque | 借译"},
+	}
+	h := &SemanticQAHandler{
+		Backend:      fb,
+		Renderer:     newSemanticQARenderer(t),
+		BatchSize:    10,
+		ResponseMode: "text",
+		Logger:       quietLogger(),
+	}
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if result.callbackResult == nil {
+		t.Fatal("expected callbackResult")
+	}
+	if len(fb.requests) != 1 {
+		t.Fatalf("requests=%d want 1", len(fb.requests))
+	}
+	req := fb.requests[0]
+	if req.ResponseFormat != "none" {
+		t.Fatalf("ResponseFormat=%q want none", req.ResponseFormat)
+	}
+	if req.JSONSchema != nil {
+		t.Fatal("JSONSchema should be nil in text mode")
+	}
+	if !strings.Contains(req.User, "source_lang:") {
+		t.Fatalf("text user missing source_lang:\n%s", req.User)
+	}
+	if !strings.Contains(req.User, "[segment]") {
+		t.Fatalf("text user missing [segment]:\n%s", req.User)
+	}
+	if len(result.callbackResult.Segments[0].Issues) != 1 ||
+		result.callbackResult.Segments[0].Issues[0].Code != "calque" {
+		t.Fatalf("callback issues=%v", result.callbackResult.Segments[0].Issues)
+	}
+}
+
+func TestSemanticQAHandler_ProcessBatch_TextModeJSONFallback(t *testing.T) {
+	doc := semanticQADoc([]string{"translated"}, nil)
+	fb := &fakeBackend{
+		name:      "fake",
+		responses: []string{`{"issues":[{"id":"0","code":"naturalness","message":"生硬"}]}`},
+	}
+	h := &SemanticQAHandler{
+		Backend:      fb,
+		Renderer:     newSemanticQARenderer(t),
+		BatchSize:    10,
+		ResponseMode: "text",
+		Logger:       quietLogger(),
+	}
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if result.callbackResult == nil || len(result.callbackResult.Segments[0].Issues) != 1 {
+		t.Fatalf("want 1 issue via JSON fallback, got %#v", result.callbackResult)
+	}
+	if result.callbackResult.Segments[0].Issues[0].Code != "naturalness" {
+		t.Fatalf("code=%q", result.callbackResult.Segments[0].Issues[0].Code)
+	}
+}
+
+func TestSemanticQAHandler_BuildBatches_PackedDiscontinuous(t *testing.T) {
+	doc := semanticQADoc(
+		[]string{"translated", "approved", "translated", "pending", "edited"},
+		nil,
+	)
+	h := &SemanticQAHandler{
+		Backend:   &fakeBackend{name: "fake"},
+		Renderer:  newSemanticQARenderer(t),
+		BatchSize: 10,
+		Logger:    quietLogger(),
+	}
+	batches, err := h.BuildBatches(context.Background(), doc)
+	if err != nil {
+		t.Fatalf("BuildBatches: %v", err)
+	}
+	if len(batches) != 1 || !reflect.DeepEqual(batches[0], []int{0, 2, 4}) {
+		t.Fatalf("batches=%v want [[0 2 4]]", batches)
+	}
+}
+
+func TestSemanticQAHandler_BuildBatches_MaxBatchIndexSpan(t *testing.T) {
+	doc := semanticQADoc(
+		[]string{"translated", "translated", "translated", "translated", "translated"},
+		nil,
+	)
+	h := &SemanticQAHandler{
+		Backend:           &fakeBackend{name: "fake"},
+		Renderer:          newSemanticQARenderer(t),
+		BatchSize:         10,
+		MaxBatchIndexSpan: 2,
+		Logger:            quietLogger(),
+	}
+	batches, err := h.BuildBatches(context.Background(), doc)
+	if err != nil {
+		t.Fatalf("BuildBatches: %v", err)
+	}
+	want := [][]int{{0, 1, 2}, {3, 4}}
+	if !reflect.DeepEqual(batches, want) {
+		t.Fatalf("batches=%v want %v", batches, want)
+	}
+}
+
+func TestSemanticQAHandler_BuildBatches_CountsSourceAndTargetWords(t *testing.T) {
+	doc := semanticQADoc([]string{"translated", "translated"}, nil)
+	h := &SemanticQAHandler{
+		Backend:          &fakeBackend{name: "fake"},
+		Renderer:         newSemanticQARenderer(t),
+		BatchSize:        10,
+		MaxWordsPerBatch: 6,
+		Logger:           quietLogger(),
+	}
+	batches, err := h.BuildBatches(context.Background(), doc)
+	if err != nil {
+		t.Fatalf("BuildBatches: %v", err)
+	}
+	want := [][]int{{0}, {1}}
+	if !reflect.DeepEqual(batches, want) {
+		t.Fatalf("batches=%v want %v", batches, want)
+	}
+}
+
+func TestSemanticQAHandler_ProcessBatch_MultipleIssuesPerSegment(t *testing.T) {
+	doc := semanticQADoc([]string{"translated"}, nil)
+	fb := &fakeBackend{
+		name: "fake",
+		responses: []string{`{"issues":[
+			{"id":"0","code":"calque","message":"借译"},
+			{"id":"0","code":"term_fidelity","message":"术语"}
+		]}`},
+	}
+	h := &SemanticQAHandler{
+		Backend:   fb,
+		Renderer:  newSemanticQARenderer(t),
+		BatchSize: 10,
+		Logger:    quietLogger(),
+	}
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if result.callbackResult == nil {
+		t.Fatal("expected callbackResult")
+	}
+	if len(result.callbackResult.Segments[0].Issues) != 2 {
+		t.Fatalf("want 2 issues, got %v", result.callbackResult.Segments[0].Issues)
+	}
+}
+
+var _ backend.Backend = (*fakeBackend)(nil)

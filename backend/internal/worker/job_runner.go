@@ -19,6 +19,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
@@ -392,6 +393,63 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 				}
 				return nil
 			}
+		case "semantic_qa":
+			batchHandler = func(batchCtx context.Context, batchResult pipeline.BatchResult) error {
+				resultsByDBID := make(map[int]pipeline.TranslatedSegment, len(batchResult.Segments))
+				dbIDs := make([]int, 0, len(batchResult.Segments))
+				for _, ts := range batchResult.Segments {
+					if ts.Issues == nil {
+						continue
+					}
+					dbID, ok := docIndexToDBID[ts.Index]
+					if !ok {
+						continue
+					}
+					resultsByDBID[dbID] = ts
+					dbIDs = append(dbIDs, dbID)
+				}
+				if len(dbIDs) == 0 {
+					return nil
+				}
+
+				rows, err := r.client.Segment.Query().Where(segment.IDIn(dbIDs...)).All(batchCtx)
+				if err != nil {
+					return fmt.Errorf("load semantic_qa batch segments: %w", err)
+				}
+
+				completed := 0
+				failed := 0
+				for _, row := range rows {
+					ts, ok := resultsByDBID[row.ID]
+					if !ok {
+						continue
+					}
+					merged := mergeSemanticQAIssues(row.QualityIssues, ts.Issues)
+					updated, err := r.client.Segment.Update().
+						Where(
+							segment.IDEQ(row.ID),
+							segment.UpdatedAtEQ(row.UpdatedAt),
+							segment.StatusIn(service.SegmentStatusTranslated, service.SegmentStatusEdited),
+							segment.TargetTextEQ(ts.TargetText),
+						).
+						SetQualityIssues(merged).
+						Save(batchCtx)
+					if err != nil {
+						r.logger.Warn("persist semantic_qa issues failed", "segment_id", row.ID, "err", err)
+						failed++
+						continue
+					}
+					if updated == 0 {
+						r.logger.Info("skip stale semantic_qa result", "segment_id", row.ID)
+						continue
+					}
+					completed++
+				}
+				if failed > 0 && completed == 0 {
+					return fmt.Errorf("semantic_qa batch persist failed: all %d writable segments failed to write quality_issues", failed)
+				}
+				return nil
+			}
 		}
 
 		roundIdx := roundIdx // capture for closure
@@ -463,6 +521,16 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 	}
 
 	return r.jobs.MarkJobResourceCompleted(ctx, job.ID, item.ID, "", completedCount, skippedCount)
+}
+
+func mergeSemanticQAIssues(existing, fresh []qa.QualityIssue) []qa.QualityIssue {
+	merged := make([]qa.QualityIssue, 0, len(existing)+len(fresh))
+	for _, issue := range existing {
+		if !prompt.IsSemanticQACode(issue.Code) {
+			merged = append(merged, issue)
+		}
+	}
+	return append(merged, fresh...)
 }
 
 // buildSegmentInputs 将 DB segments 转换为 SegmentInput 切片。
