@@ -60,7 +60,8 @@ jobs:
         run: pnpm build
         working-directory: docs
         env:
-          DOCS_BASE: /
+          # GitHub Pages 项目站路径：https://meowsalty.github.io/LinguaFlow/
+          DOCS_BASE: /LinguaFlow/
 
       - name: 复制 OpenAPI 规范到版本目录（仅发布版本）
         if: steps.version.outputs.is_release == 'true'
