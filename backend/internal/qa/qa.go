@@ -2,7 +2,10 @@ package qa
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
+	"strings"
+	"unicode/utf8"
 )
 
 // IssueSeverity 表示质量问题的严重程度。
@@ -23,12 +26,113 @@ const (
 	LengthMethodWordCount LengthMethod = "word_count"
 )
 
+// Span 描述质量问题在目标文本中的跨度。
+// MatchedText 为触发问题的精确文本；TargetStart/TargetEnd 为可选的字符偏移（按 rune 计）。
+type Span struct {
+	MatchedText string `json:"matched_text"`
+	TargetStart *int   `json:"target_start,omitempty"`
+	TargetEnd   *int   `json:"target_end,omitempty"`
+}
+
 // QualityIssue 是持久化到数据库的质量问题记录。
 type QualityIssue struct {
 	SegmentIndex int           `json:"segment_index"`
 	Severity     IssueSeverity `json:"severity"`
 	Code         string        `json:"code"`
 	Message      string        `json:"message"`
+	Span         *Span         `json:"span,omitempty"`
+}
+
+// Fingerprint 返回问题指纹 (code, matched_text)。无跨度时 matched_text 为空。
+func Fingerprint(issue QualityIssue) string {
+	matchedText := ""
+	if issue.Span != nil {
+		matchedText = issue.Span.MatchedText
+	}
+	return fmt.Sprintf("%s:%s", issue.Code, matchedText)
+}
+
+// MatchedText 返回问题的匹配文本；无跨度时为空字符串。
+func MatchedText(issue QualityIssue) string {
+	if issue.Span == nil {
+		return ""
+	}
+	return issue.Span.MatchedText
+}
+
+// DedupIssues 按 (code, matched_text) 去重，保留首次出现。
+func DedupIssues(issues []QualityIssue) []QualityIssue {
+	if len(issues) == 0 {
+		return issues
+	}
+	seen := make(map[string]struct{}, len(issues))
+	out := make([]QualityIssue, 0, len(issues))
+	for _, iss := range issues {
+		fp := Fingerprint(iss)
+		if _, ok := seen[fp]; ok {
+			continue
+		}
+		seen[fp] = struct{}{}
+		out = append(out, iss)
+	}
+	return out
+}
+
+// LocateSpan 在 target 中定位 matchedText 的首次出现，返回带偏移的 Span。
+// 定位失败时仍返回仅含 MatchedText 的 Span（偏移为 nil）。
+func LocateSpan(target, matchedText string) *Span {
+	matchedText = strings.TrimSpace(matchedText)
+	if matchedText == "" {
+		return nil
+	}
+	span := &Span{MatchedText: matchedText}
+	idx := strings.Index(target, matchedText)
+	endByte := idx + len(matchedText)
+	if idx < 0 {
+		// 大小写转换可能改变 UTF-8 字节长度，因此必须在原文 rune 边界上匹配。
+		var ok bool
+		idx, endByte, ok = equalFoldSpan(target, matchedText)
+		if !ok {
+			return span
+		}
+		matchedText = target[idx:endByte]
+		span.MatchedText = matchedText
+	}
+	start := utf8RuneOffset(target, idx)
+	end := start + utf8.RuneCountInString(target[idx:endByte])
+	span.TargetStart = &start
+	span.TargetEnd = &end
+	return span
+}
+
+func equalFoldSpan(target, matchedText string) (int, int, bool) {
+	matchedRunes := utf8.RuneCountInString(matchedText)
+	for start := range target {
+		end := start
+		for range matchedRunes {
+			if end >= len(target) {
+				end = -1
+				break
+			}
+			_, size := utf8.DecodeRuneInString(target[end:])
+			end += size
+		}
+		if end >= 0 && strings.EqualFold(target[start:end], matchedText) {
+			return start, end, true
+		}
+	}
+	return 0, 0, false
+}
+
+// utf8RuneOffset 将字节偏移转换为 rune 偏移。
+func utf8RuneOffset(s string, byteIdx int) int {
+	if byteIdx <= 0 {
+		return 0
+	}
+	if byteIdx >= len(s) {
+		return utf8.RuneCountInString(s)
+	}
+	return utf8.RuneCountInString(s[:byteIdx])
 }
 
 // CheckInput 是单个段落的检测输入。

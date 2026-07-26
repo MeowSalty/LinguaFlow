@@ -94,7 +94,7 @@ func TestSemanticQAHandler_ProcessBatch_ProducesIssues(t *testing.T) {
 	}
 	fb := &fakeBackend{
 		name:      "fake",
-		responses: []string{`{"issues":[{"id":"0","code":"calque","message":"借译"}]}`},
+		responses: []string{`{"issues":[{"id":"0","code":"calque","message":"借译","snippet":"hello world"}]}`},
 	}
 	h := &SemanticQAHandler{
 		Backend:   fb,
@@ -333,8 +333,9 @@ func TestSemanticQAHandler_ProcessBatch_MultipleIssuesPerSegment(t *testing.T) {
 	fb := &fakeBackend{
 		name: "fake",
 		responses: []string{`{"issues":[
-			{"id":"0","code":"calque","message":"借译"},
-			{"id":"0","code":"term_fidelity","message":"术语"}
+			{"id":"0","code":"calque","message":"借译","snippet":"hello"},
+			{"id":"0","code":"term_fidelity","message":"术语","snippet":"world"},
+			{"id":"0","code":"calque","message":"重复","snippet":"hello"}
 		]}`},
 	}
 	h := &SemanticQAHandler{
@@ -347,8 +348,43 @@ func TestSemanticQAHandler_ProcessBatch_MultipleIssuesPerSegment(t *testing.T) {
 	if result.callbackResult == nil {
 		t.Fatal("expected callbackResult")
 	}
+	// 相同 (code, matched_text) 去重后剩 2 条
 	if len(result.callbackResult.Segments[0].Issues) != 2 {
-		t.Fatalf("want 2 issues, got %v", result.callbackResult.Segments[0].Issues)
+		t.Fatalf("want 2 issues after dedup, got %v", result.callbackResult.Segments[0].Issues)
+	}
+}
+
+func TestSemanticQAHandler_ProcessBatch_SameCodeDifferentSnippets(t *testing.T) {
+	doc := semanticQADoc([]string{"translated"}, nil)
+	doc.Segments[0].Target = "foo bar baz"
+	fb := &fakeBackend{
+		name: "fake",
+		responses: []string{`{"issues":[
+			{"id":"0","code":"calque","message":"a","snippet":"foo"},
+			{"id":"0","code":"calque","message":"b","snippet":"bar"}
+		]}`},
+	}
+	h := &SemanticQAHandler{
+		Backend:   fb,
+		Renderer:  newSemanticQARenderer(t),
+		BatchSize: 10,
+		Logger:    quietLogger(),
+	}
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if result.callbackResult == nil {
+		t.Fatal("expected callbackResult")
+	}
+	issues := result.callbackResult.Segments[0].Issues
+	if len(issues) != 2 {
+		t.Fatalf("want 2 distinct calque issues, got %v", issues)
+	}
+	for _, iss := range issues {
+		if iss.Span == nil || iss.Span.MatchedText == "" {
+			t.Fatalf("expected span, got %#v", iss)
+		}
+		if iss.Span.TargetStart == nil {
+			t.Fatalf("expected target offsets for %q", iss.Span.MatchedText)
+		}
 	}
 }
 

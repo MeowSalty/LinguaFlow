@@ -103,18 +103,18 @@ func TestSemanticQAIssueSchema_Strict(t *testing.T) {
 		t.Error("item additionalProperties should be false")
 	}
 	req, _ := item["required"].([]string)
-	if len(req) != 3 {
-		t.Errorf("item required should list 3 props, got %#v", req)
+	if len(req) != 4 {
+		t.Errorf("item required should list 4 props, got %#v", req)
 	}
 }
 
 func TestParseSemanticQAResponse_OK(t *testing.T) {
-	resp := `{"issues":[{"id":"1","code":"calque","message":"和制汉语安堵感"}]}`
+	resp := `{"issues":[{"id":"1","code":"calque","message":"和制汉语安堵感","snippet":"安堵感"}]}`
 	got, err := ParseSemanticQAResponse(resp)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if len(got) != 1 || got[0].Code != "calque" {
+	if len(got) != 1 || got[0].Code != "calque" || got[0].Snippet != "安堵感" {
 		t.Fatalf("got=%#v", got)
 	}
 }
@@ -149,7 +149,7 @@ func TestParseSemanticQAResponse_FiltersIllegalCode(t *testing.T) {
 }
 
 func TestParseSemanticQAByMode_TextIssues(t *testing.T) {
-	resp := "[issues]\n1 | calque | 安堵感借译\n1 | term_fidelity | 术语不一致\n2 | naturalness | 不自然"
+	resp := "[issues]\n1 | calque | 安堵感 | 安堵感借译\n1 | term_fidelity | 术语A | 术语不一致\n2 | naturalness | 整句 | 不自然"
 	got, err := ParseSemanticQAByMode(resp, true)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
@@ -157,10 +157,10 @@ func TestParseSemanticQAByMode_TextIssues(t *testing.T) {
 	if len(got) != 3 {
 		t.Fatalf("got len=%d want 3: %#v", len(got), got)
 	}
-	if got[0].ID != "1" || got[0].Code != "calque" || got[0].Message != "安堵感借译" {
+	if got[0].ID != "1" || got[0].Code != "calque" || got[0].Snippet != "安堵感" || got[0].Message != "安堵感借译" {
 		t.Errorf("first=%#v", got[0])
 	}
-	if got[2].ID != "2" || got[2].Code != "naturalness" {
+	if got[2].ID != "2" || got[2].Code != "naturalness" || got[2].Snippet != "整句" {
 		t.Errorf("third=%#v", got[2])
 	}
 }
@@ -216,13 +216,24 @@ func TestParseSemanticQAByMode_TextFiltersIllegalCode(t *testing.T) {
 }
 
 func TestParseSemanticQAByMode_TextMessageWithPipe(t *testing.T) {
-	resp := "[issues]\n1 | calque | a | b | c"
+	resp := "[issues]\n1 | calque | snip | a | b | c"
 	got, err := ParseSemanticQAByMode(resp, true)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
 	}
-	if len(got) != 1 || got[0].Message != "a | b | c" {
+	if len(got) != 1 || got[0].Snippet != "snip" || got[0].Message != "a | b | c" {
 		t.Fatalf("message with pipes got=%#v", got)
+	}
+}
+
+func TestParseSemanticQAByMode_TextLegacyThreeFields(t *testing.T) {
+	resp := "[issues]\n1 | calque | only message"
+	got, err := ParseSemanticQAByMode(resp, true)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(got) != 1 || got[0].Snippet != "" || got[0].Message != "only message" {
+		t.Fatalf("legacy three-field got=%#v", got)
 	}
 }
 

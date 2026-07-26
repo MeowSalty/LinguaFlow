@@ -16,16 +16,16 @@
 ## 协议
 
 {{- if eq .Protocol "text"}}
-- 用户消息是纯文本格式，包含 source_lang、target_lang，以及若干 [segment] 块；每块含 id、source、target 与 issues 列表（每行 `code: message`）。
-- 你的回复必须是纯文本：先输出 [verdicts]，然后每行一条判定，格式为 id | issue_code | verdict | reason。
-- id 与 issue_code 必须与输入一致；verdict 只能是 `real` 或 `false_positive`；reason 为简短中文说明。
+- 用户消息是纯文本格式，包含 source_lang、target_lang，以及若干 [segment] 块；每块含 id、source、target 与 issues 列表（每行 `code | matched_text: message`）。
+- 你的回复必须是纯文本：先输出 [verdicts]，然后每行一条判定，格式为 id | issue_code | matched_text | verdict | reason。
+- id、issue_code、matched_text 必须与输入一致（片段级问题 matched_text 可为空）；verdict 只能是 `real` 或 `false_positive`；reason 为简短中文说明。
 {{- else}}
 - 用户消息是一个 JSON 对象，包含 task、source_lang、target_lang、segments 字段。
-- 每个 segment 含 id、source、target、issues（每项 code + message）。
-- 你的回复必须是一个 JSON 对象，顶层含 "verdicts" 数组；每项含 id、issue_code、verdict、reason。
-- id 与 issue_code 必须与输入一致；verdict 只能是 `real` 或 `false_positive`；reason 为简短中文说明。
+- 每个 segment 含 id、source、target、issues（每项 code + message + matched_text）。
+- 你的回复必须是一个 JSON 对象，顶层含 "verdicts" 数组；每项含 id、issue_code、matched_text、verdict、reason。
+- id、issue_code、matched_text 必须与输入一致（片段级问题 matched_text 可为空字符串）；verdict 只能是 `real` 或 `false_positive`；reason 为简短中文说明。
 {{- if eq .Protocol "json_loose"}}
-- 输出 JSON 结构如下：{"verdicts":[{"id":"...","issue_code":"...","verdict":"real|false_positive","reason":"..."}, ...]}。
+- 输出 JSON 结构如下：{"verdicts":[{"id":"...","issue_code":"...","matched_text":"...","verdict":"real|false_positive","reason":"..."}, ...]}。
 {{- end}}
 {{- end}}
 
@@ -33,10 +33,10 @@
 
 {{- if eq .Protocol "text"}}
 1. 仅输出纯文本 [verdicts] 段，无 markdown 围栏（不要 ```）、无额外文字、无解释说明。
-2. 对用户消息中列出的每一条 issue 都必须给出一条 verdict；不要遗漏，不要编造输入中不存在的 (id, issue_code)。
+2. 对用户消息中列出的每一条 issue 都必须给出一条 verdict；不要遗漏，不要编造输入中不存在的 (id, issue_code, matched_text)。
 {{- else}}
 1. 仅输出 JSON 对象，无 markdown 围栏（不要 ```json）、无额外文字、无解释说明。
-2. 对用户消息中列出的每一条 issue 都必须给出一条 verdict；不要遗漏，不要编造输入中不存在的 (id, issue_code)。
+2. 对用户消息中列出的每一条 issue 都必须给出一条 verdict；不要遗漏，不要编造输入中不存在的 (id, issue_code, matched_text)。
 {{- if eq .Protocol "json_loose"}}
    即 {"verdicts":[...]}。
 {{- end}}

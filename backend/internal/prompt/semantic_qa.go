@@ -111,6 +111,8 @@ type SemanticQAIssue struct {
 	ID      string `json:"id"`
 	Code    string `json:"code"`
 	Message string `json:"message"`
+	// Snippet 触发问题的精确源/目标文本片段；用于跨度级去重与裁决。
+	Snippet string `json:"snippet,omitempty"`
 }
 
 // allowedSemanticQACodes 本次支持的语义 issue code。
@@ -128,7 +130,7 @@ func IsSemanticQACode(code string) bool {
 
 // SemanticQAIssueSchema 返回 OpenAI 严格 JSON schema：
 //
-//	{issues:[{id,code,message}]}
+//	{issues:[{id,code,message,snippet}]}
 func SemanticQAIssueSchema() map[string]any {
 	itemProps := map[string]any{
 		"id": map[string]any{"type": "string"},
@@ -137,6 +139,7 @@ func SemanticQAIssueSchema() map[string]any {
 			"enum": []string{"calque", "term_fidelity", "naturalness"},
 		},
 		"message": map[string]any{"type": "string"},
+		"snippet": map[string]any{"type": "string"},
 	}
 	return map[string]any{
 		"type": "object",
@@ -146,7 +149,7 @@ func SemanticQAIssueSchema() map[string]any {
 				"items": map[string]any{
 					"type":                 "object",
 					"properties":           itemProps,
-					"required":             []string{"id", "code", "message"},
+					"required":             []string{"id", "code", "message", "snippet"},
 					"additionalProperties": false,
 				},
 			},
@@ -174,6 +177,7 @@ func ParseSemanticQAResponse(text string) ([]SemanticQAIssue, error) {
 		iss.ID = strings.TrimSpace(iss.ID)
 		iss.Code = strings.TrimSpace(iss.Code)
 		iss.Message = strings.TrimSpace(iss.Message)
+		iss.Snippet = strings.TrimSpace(iss.Snippet)
 		if iss.ID == "" || iss.Code == "" {
 			continue
 		}
@@ -201,9 +205,10 @@ func ParseSemanticQAByMode(text string, isTextMode bool) ([]SemanticQAIssue, err
 // parseSemanticQATextIssues 解析 text 协议语义质检输出：
 //
 //	[issues]
-//	id | code | message
+//	id | code | snippet | message
 //
-// message 含 | 时取前两段为 id/code，剩余并入 message。
+// 兼容旧三字段 id | code | message（snippet 为空）。
+// message/snippet 含 | 时：四段及以上取前三段为 id/code/snippet，剩余并入 message。
 func parseSemanticQATextIssues(text string) ([]SemanticQAIssue, bool) {
 	text = stripAdjudicationCodeFence(text)
 	lines := strings.Split(text, "\n")
@@ -250,10 +255,19 @@ func parseSemanticQAIssueLine(line string) *SemanticQAIssue {
 	}
 	id := strings.TrimSpace(parts[0])
 	code := strings.TrimSpace(parts[1])
+	snippet := ""
 	message := ""
-	if len(parts) > 2 {
-		rest := make([]string, 0, len(parts)-2)
-		for _, p := range parts[2:] {
+	switch {
+	case len(parts) == 2:
+		// id | code
+	case len(parts) == 3:
+		// 兼容旧格式：id | code | message
+		message = strings.TrimSpace(parts[2])
+	default:
+		// id | code | snippet | message...
+		snippet = strings.TrimSpace(parts[2])
+		rest := make([]string, 0, len(parts)-3)
+		for _, p := range parts[3:] {
 			rest = append(rest, strings.TrimSpace(p))
 		}
 		message = strings.Join(rest, " | ")
@@ -268,5 +282,6 @@ func parseSemanticQAIssueLine(line string) *SemanticQAIssue {
 		ID:      id,
 		Code:    code,
 		Message: message,
+		Snippet: snippet,
 	}
 }

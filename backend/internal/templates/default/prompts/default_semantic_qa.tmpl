@@ -26,17 +26,19 @@
 
 {{- if eq .Protocol "text"}}
 - 用户消息是纯文本格式，包含 source_lang、target_lang，以及若干 [segment] 块；每块含 id、source、target。
-- 你的回复必须是纯文本：先输出 [issues]，然后每行一条问题，格式为 id | code | message。
-- id 必须与输入 segment 的 id 一致；code 只能是 `calque`、`term_fidelity` 或 `naturalness`；message 为简短中文说明。
-- 无问题时只输出 [issues]（其后无行）即可。
+- 你的回复必须是纯文本：先输出 [issues]，然后每行一条问题，格式为 id | code | snippet | message。
+- id 必须与输入 segment 的 id 一致；code 只能是 `calque`、`term_fidelity` 或 `naturalness`。
+- snippet 必须是触发问题的**精确**源文或译文子串（从输入中原样摘录，便于定位与去重）；message 为简短中文说明。
+- 同一 code 在不同 snippet 上应各报一条；无问题时只输出 [issues]（其后无行）即可。
 {{- else}}
 - 用户消息是一个 JSON 对象，包含 task、source_lang、target_lang、segments 字段。
 - 每个 segment 含 id、source、target。
-- 你的回复必须是一个 JSON 对象，顶层含 "issues" 数组；每项含 id、code、message。
-- id 必须与输入 segment 的 id 一致；code 只能是 `calque`、`term_fidelity` 或 `naturalness`；message 为简短中文说明。
-- 无问题时输出 {"issues":[]}。
+- 你的回复必须是一个 JSON 对象，顶层含 "issues" 数组；每项含 id、code、message、snippet。
+- id 必须与输入 segment 的 id 一致；code 只能是 `calque`、`term_fidelity` 或 `naturalness`。
+- snippet 必须是触发问题的**精确**源文或译文子串（从输入中原样摘录，便于定位与去重）；message 为简短中文说明。
+- 同一 code 在不同 snippet 上应各报一条；无问题时输出 {"issues":[]}。
 {{- if eq .Protocol "json_loose"}}
-- 输出 JSON 结构如下：{"issues":[{"id":"...","code":"calque|term_fidelity|naturalness","message":"..."}, ...]}。
+- 输出 JSON 结构如下：{"issues":[{"id":"...","code":"calque|term_fidelity|naturalness","message":"...","snippet":"..."}, ...]}。
 {{- end}}
 {{- end}}
 
@@ -44,10 +46,10 @@
 
 {{- if eq .Protocol "text"}}
 1. 仅输出纯文本 [issues] 段，无 markdown 围栏（不要 ```）、无额外文字、无解释说明。
-2. 不要编造输入中不存在的 id；不要输出上述排除类问题。
+2. 不要编造输入中不存在的 id；不要输出上述排除类问题；snippet 须能在对应 segment 的 source 或 target 中找到。
 {{- else}}
 1. 仅输出 JSON 对象，无 markdown 围栏（不要 ```json）、无额外文字、无解释说明。
-2. 不要编造输入中不存在的 id；不要输出上述排除类问题。
+2. 不要编造输入中不存在的 id；不要输出上述排除类问题；snippet 须能在对应 segment 的 source 或 target 中找到。
 {{- if eq .Protocol "json_loose"}}
    即 {"issues":[...]}。
 {{- end}}

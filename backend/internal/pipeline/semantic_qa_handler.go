@@ -253,13 +253,35 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		return h.preserveResult(doc, idxs, rep)
 	}
 
-	// id → []issue
+	// id → []issue（snippet → Span；定位失败仍保留 MatchedText）
 	byID := make(map[string][]qa.QualityIssue, len(idxs))
+	segByID := make(map[string]*Segment, len(idxs))
+	for _, idx := range idxs {
+		segByID[doc.Segments[idx].ID] = &doc.Segments[idx]
+	}
 	for _, iss := range issues {
+		var span *qa.Span
+		if iss.Snippet != "" {
+			if seg, ok := segByID[iss.ID]; ok {
+				// 优先在译文中定位，其次源文
+				span = qa.LocateSpan(seg.Target, iss.Snippet)
+				if span == nil || span.TargetStart == nil {
+					if srcSpan := qa.LocateSpan(seg.Source, iss.Snippet); srcSpan != nil {
+						// 源文命中：只保留 MatchedText（偏移相对源文，不写入 target_*）
+						span = &qa.Span{MatchedText: srcSpan.MatchedText}
+					} else if span == nil {
+						span = &qa.Span{MatchedText: iss.Snippet}
+					}
+				}
+			} else {
+				span = &qa.Span{MatchedText: iss.Snippet}
+			}
+		}
 		byID[iss.ID] = append(byID[iss.ID], qa.QualityIssue{
 			Code:     iss.Code,
 			Message:  iss.Message,
 			Severity: qa.SeverityWarning,
+			Span:     span,
 		})
 	}
 
@@ -268,7 +290,7 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 	for _, idx := range idxs {
 		seg := &doc.Segments[idx]
 		// 非 nil 空切片表示本段已成功扫描且没有问题；nil 留给失败路径表示不写库。
-		newIssues := append([]qa.QualityIssue{}, byID[seg.ID]...)
+		newIssues := qa.DedupIssues(append([]qa.QualityIssue{}, byID[seg.ID]...))
 		for i := range newIssues {
 			newIssues[i].SegmentIndex = idx
 		}

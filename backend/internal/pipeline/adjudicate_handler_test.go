@@ -350,6 +350,61 @@ func TestAdjudicateHandler_BuildBatches_MaxBatchIndexSpan(t *testing.T) {
 	}
 }
 
+func TestAdjudicateHandler_ProcessBatch_MatchedTextSelectiveDismiss(t *testing.T) {
+	doc := adjudicableDoc(
+		[]string{"translated"},
+		[][]qa.QualityIssue{
+			{
+				{Code: "source_residual", Severity: qa.SeverityWarning, Message: "a", Span: &qa.Span{MatchedText: "foo"}},
+				{Code: "source_residual", Severity: qa.SeverityWarning, Message: "b", Span: &qa.Span{MatchedText: "bar"}},
+			},
+		},
+	)
+	fb := &fakeBackend{
+		name: "fake",
+		responses: []string{`{"verdicts":[
+			{"id":"0","issue_code":"source_residual","matched_text":"foo","verdict":"false_positive","reason":"ok"},
+			{"id":"0","issue_code":"source_residual","matched_text":"bar","verdict":"real","reason":"keep"}
+		]}`},
+	}
+	h := &AdjudicateHandler{
+		Backend:   fb,
+		Renderer:  newAdjudicationRenderer(t),
+		BatchSize: 10,
+		Logger:    quietLogger(),
+	}
+	_ = h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if len(doc.Segments[0].Issues) != 1 || qa.MatchedText(doc.Segments[0].Issues[0]) != "bar" {
+		t.Fatalf("issues=%#v want only bar retained", doc.Segments[0].Issues)
+	}
+}
+
+func TestAdjudicateHandler_ProcessBatch_MatchedTextMissingKeepsMultipleIssues(t *testing.T) {
+	doc := adjudicableDoc(
+		[]string{"translated"},
+		[][]qa.QualityIssue{
+			{
+				{Code: "source_residual", Severity: qa.SeverityWarning, Message: "a", Span: &qa.Span{MatchedText: "foo"}},
+				{Code: "source_residual", Severity: qa.SeverityWarning, Message: "b", Span: &qa.Span{MatchedText: "bar"}},
+			},
+		},
+	)
+	fb := &fakeBackend{
+		name:      "fake",
+		responses: []string{`{"verdicts":[{"id":"0","issue_code":"source_residual","matched_text":"","verdict":"false_positive","reason":"missing identity"}]}`},
+	}
+	h := &AdjudicateHandler{
+		Backend:   fb,
+		Renderer:  newAdjudicationRenderer(t),
+		BatchSize: 10,
+		Logger:    quietLogger(),
+	}
+	_ = h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if len(doc.Segments[0].Issues) != 2 {
+		t.Fatalf("issues=%#v want both retained", doc.Segments[0].Issues)
+	}
+}
+
 func TestAdjudicateHandler_AdjudicateCodes_OnlyLengthRatio(t *testing.T) {
 	doc := adjudicableDoc(
 		[]string{"translated"},

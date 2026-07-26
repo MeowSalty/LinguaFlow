@@ -402,3 +402,72 @@ func TestLengthRatioChecker_EmptyMethodDefaultsToCharWeight(t *testing.T) {
 		t.Errorf("empty method should default to char_weight, got %d issues", len(issues))
 	}
 }
+
+func TestFingerprint(t *testing.T) {
+	if got := Fingerprint(QualityIssue{Code: "length_ratio"}); got != "length_ratio:" {
+		t.Errorf("nil span: got %q", got)
+	}
+	if got := Fingerprint(QualityIssue{Code: "calque", Span: &Span{MatchedText: ""}}); got != "calque:" {
+		t.Errorf("empty matched: got %q", got)
+	}
+	if got := Fingerprint(QualityIssue{Code: "source_residual", Span: &Span{MatchedText: "テスト"}}); got != "source_residual:テスト" {
+		t.Errorf("with span: got %q", got)
+	}
+}
+
+func TestDedupIssues(t *testing.T) {
+	issues := []QualityIssue{
+		{Code: "calque", Message: "a", Span: &Span{MatchedText: "foo"}},
+		{Code: "calque", Message: "b", Span: &Span{MatchedText: "foo"}}, // dup
+		{Code: "calque", Message: "c", Span: &Span{MatchedText: "bar"}},
+		{Code: "naturalness", Message: "d"},
+		{Code: "naturalness", Message: "e"}, // dup segment-level
+	}
+	got := DedupIssues(issues)
+	if len(got) != 3 {
+		t.Fatalf("len=%d want 3: %#v", len(got), got)
+	}
+	if got[0].Message != "a" || MatchedText(got[1]) != "bar" || got[2].Code != "naturalness" {
+		t.Errorf("dedup order/content: %#v", got)
+	}
+}
+
+func TestLocateSpan(t *testing.T) {
+	span := LocateSpan("Hello テスト world", "テスト")
+	if span == nil || span.MatchedText != "テスト" {
+		t.Fatalf("span=%#v", span)
+	}
+	if span.TargetStart == nil || span.TargetEnd == nil {
+		t.Fatal("expected offsets")
+	}
+	if *span.TargetStart != 6 || *span.TargetEnd != 9 {
+		t.Errorf("offsets start=%d end=%d want 6,9", *span.TargetStart, *span.TargetEnd)
+	}
+
+	missing := LocateSpan("hello", "テスト")
+	if missing == nil || missing.MatchedText != "テスト" {
+		t.Fatalf("missing locate should still store text: %#v", missing)
+	}
+	if missing.TargetStart != nil || missing.TargetEnd != nil {
+		t.Error("missing locate should leave offsets nil")
+	}
+
+	if LocateSpan("hello", "") != nil || LocateSpan("hello", "  ") != nil {
+		t.Error("empty matched should return nil")
+	}
+}
+
+func TestLocateSpan_EqualFoldPreservesOriginalByteOffsets(t *testing.T) {
+	span := LocateSpan("ȺX", "x")
+	if span == nil || span.MatchedText != "X" {
+		t.Fatalf("span=%#v", span)
+	}
+	if span.TargetStart == nil || span.TargetEnd == nil || *span.TargetStart != 1 || *span.TargetEnd != 2 {
+		t.Fatalf("offsets=%#v want 1,2", span)
+	}
+
+	span = LocateSpan("Ⱥ", "ⱥ")
+	if span == nil || span.MatchedText != "Ⱥ" {
+		t.Fatalf("case-folded span=%#v", span)
+	}
+}
