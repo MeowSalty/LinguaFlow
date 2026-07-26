@@ -106,14 +106,29 @@ AdjudicateRoundConfig:
     retry:
       $ref: '#/RetryConfig'
 
+SemanticQARoundConfig:
+  type: object
+  description: 语义质检轮次配置。system prompt 内置不可见，无 prompt_template_id；产出 warning 级语义 issue 直接进人审。
+  properties:
+    batch_size:
+      type: integer
+      minimum: 0
+      description: 段落数上限；0=不限制，与 max_words_per_batch 至少填一项
+    max_words_per_batch:
+      type: integer
+      minimum: 0
+      description: 字词数上限；0=不限制，与 batch_size 至少填一项
+    retry:
+      $ref: '#/RetryConfig'
+
 ExecutionRoundConfig:
   type: object
   required: [mode, backend_id, concurrency]
   properties:
     mode:
       type: string
-      enum: [translate, extract, adjudicate]
-      description: 轮次模式：translate=翻译，extract=术语抽取，adjudicate=质量裁决
+      enum: [translate, extract, adjudicate, semantic_qa]
+      description: 轮次模式：translate=翻译，extract=术语抽取，adjudicate=质量裁决，semantic_qa=语义质检
     backend_id:
       type: integer
       description: 后端 ID（Backend 单表全局唯一）
@@ -129,6 +144,9 @@ ExecutionRoundConfig:
     adjudicate:
       $ref: '#/AdjudicateRoundConfig'
       description: 质量裁决模式配置（mode=adjudicate 时必填）
+    semantic_qa:
+      $ref: '#/SemanticQARoundConfig'
+      description: 语义质检模式配置（mode=semantic_qa 时必填）
 
 ExecutionPlanTemplateScope:
   type: string
