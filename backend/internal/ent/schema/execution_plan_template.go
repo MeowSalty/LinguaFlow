@@ -60,6 +60,8 @@ type SemanticQARoundConfig struct {
 	BatchSize        int         `json:"batch_size"          yaml:"batch_size"`
 	MaxWordsPerBatch int         `json:"max_words_per_batch" yaml:"max_words_per_batch"`
 	Concurrency      int         `json:"concurrency"         yaml:"concurrency"`
+	SegmentScope     string      `json:"segment_scope,omitempty" yaml:"segment_scope,omitempty"` // "all"(默认) | "with_issues" | "with_issue_codes"
+	IssueCodes       []string    `json:"issue_codes,omitempty"  yaml:"issue_codes,omitempty"`    // 仅 with_issue_codes 生效；配置时至少一个
 	Retry            RetryConfig `json:"retry"               yaml:"retry"`
 }
 

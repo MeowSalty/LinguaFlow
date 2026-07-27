@@ -59,6 +59,8 @@ type Round struct {
 
 	// 语义质检轮次专用字段
 	SemanticQARenderer *prompt.SemanticQARenderer
+	SegmentScope       string   // "all"(默认) | "with_issues" | "with_issue_codes"
+	IssueCodes         []string // 仅 with_issue_codes 生效
 }
 
 // RuntimeResources 封装可选的运行时资源。
@@ -149,6 +151,8 @@ func buildRoundConfigs(in []Round, cfg *Config) []RoundConfig {
 				Renderer:          r.SemanticQARenderer,
 				ResponseMode:      r.ResponseMode,
 				MaxBatchIndexSpan: r.MaxBatchIndexSpan,
+				SegmentScope:      r.SegmentScope,
+				IssueCodes:        r.IssueCodes,
 			}
 
 		default:
@@ -392,6 +396,8 @@ func buildSemanticQAPipelineRound(
 		MaxBatchIndexSpan: s.MaxBatchIndexSpan,
 		Retry:             rc.Retry,
 		ResponseMode:      s.ResponseMode,
+		SegmentScope:      s.SegmentScope,
+		IssueCodes:        s.IssueCodes,
 		Reporter:          reporter,
 		Logger:            logger,
 	}

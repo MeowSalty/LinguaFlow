@@ -115,6 +115,17 @@ func toExecutionRoundConfigAPI(rc schema.ExecutionRoundConfig) ExecutionRoundCon
 			mwpb := s.MaxWordsPerBatch
 			semanticQACfg.MaxWordsPerBatch = &mwpb
 		}
+		if s.SegmentScope != "" {
+			ss := SemanticQARoundConfigSegmentScope(s.SegmentScope)
+			semanticQACfg.SegmentScope = &ss
+		}
+		if len(s.IssueCodes) > 0 {
+			codes := make([]SemanticQARoundConfigIssueCodes, 0, len(s.IssueCodes))
+			for _, c := range s.IssueCodes {
+				codes = append(codes, SemanticQARoundConfigIssueCodes(c))
+			}
+			semanticQACfg.IssueCodes = &codes
+		}
 		if s.Retry.MaxAttempts > 0 || s.Retry.BackoffMs > 0 || s.Retry.Jitter {
 			retry := toRetryConfigAPI(s.Retry)
 			semanticQACfg.Retry = &retry
@@ -312,6 +323,16 @@ func toExecutionPlanRoundsAPI(apiRounds []ExecutionRoundConfig) []schema.Executi
 			}
 			if s.MaxWordsPerBatch != nil {
 				semanticQACfg.MaxWordsPerBatch = *s.MaxWordsPerBatch
+			}
+			if s.SegmentScope != nil {
+				semanticQACfg.SegmentScope = string(*s.SegmentScope)
+			}
+			if s.IssueCodes != nil {
+				codes := make([]string, 0, len(*s.IssueCodes))
+				for _, c := range *s.IssueCodes {
+					codes = append(codes, string(c))
+				}
+				semanticQACfg.IssueCodes = codes
 			}
 			if s.Retry != nil {
 				if s.Retry.MaxAttempts != nil {

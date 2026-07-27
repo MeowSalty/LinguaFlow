@@ -249,6 +249,8 @@ func (r *JobRunner) buildSemanticQARound(rs service.JobRoundSnapshot, b backend.
 		Mode:               pipeline.RoundModeSemanticQA,
 		ResponseMode:       responseModeFromBackendOptions(rs.Backend.Options),
 		SemanticQARenderer: renderer,
+		SegmentScope:       s.SegmentScope,
+		IssueCodes:         s.IssueCodes,
 	}, nil
 }
 

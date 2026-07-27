@@ -61,4 +61,6 @@ type SemanticQARoundConfig struct {
 	ResponseMode string
 	// MaxBatchIndexSpan 同批段落索引跨度上限；<=0 不限制（默认关闭）。
 	MaxBatchIndexSpan int
+	SegmentScope      string
+	IssueCodes        []string
 }

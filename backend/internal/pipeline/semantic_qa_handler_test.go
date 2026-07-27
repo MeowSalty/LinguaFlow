@@ -32,10 +32,11 @@ func semanticQADoc(statuses []string, targets []string) *Document {
 			target = targets[i]
 		}
 		segs[i] = Segment{
-			ID:     strconv.Itoa(i),
-			Source: "hello world",
-			Target: target,
-			Status: statuses[i],
+			ID:        strconv.Itoa(i),
+			Source:    "hello world",
+			Target:    target,
+			Status:    statuses[i],
+			Translate: true,
 		}
 	}
 	return &Document{
@@ -84,6 +85,103 @@ func TestSemanticQAHandler_BuildBatches_SkipsEmptyTarget(t *testing.T) {
 	if len(batches) != 1 || !reflect.DeepEqual(batches[0], []int{0}) {
 		t.Fatalf("batches=%v want [[0]]", batches)
 	}
+}
+
+func TestSemanticQAHandler_BuildBatches_SegmentScope(t *testing.T) {
+	doc := semanticQADoc(
+		[]string{"translated", "translated", "translated", "pending", "translated"},
+		[]string{"你好", "世界", "测试", "忽略", ""},
+	)
+	doc.Segments[0].Issues = []qa.QualityIssue{{Code: "source_residual", Message: "residual"}}
+	doc.Segments[1].Issues = []qa.QualityIssue{{Code: "calque", Message: "calque"}}
+	// seg 2: no issues; seg 3: pending; seg 4: empty target
+
+	base := func(scope string, codes []string) *SemanticQAHandler {
+		return &SemanticQAHandler{
+			Backend:      &fakeBackend{name: "fake"},
+			Renderer:     newSemanticQARenderer(t),
+			BatchSize:    10,
+			SegmentScope: scope,
+			IssueCodes:   codes,
+			Logger:       quietLogger(),
+		}
+	}
+
+	t.Run("scope all includes segments without issues", func(t *testing.T) {
+		batches, err := base("all", nil).BuildBatches(context.Background(), doc)
+		if err != nil {
+			t.Fatalf("BuildBatches: %v", err)
+		}
+		if len(batches) != 1 || !reflect.DeepEqual(batches[0], []int{0, 1, 2}) {
+			t.Fatalf("batches=%v want [[0 1 2]]", batches)
+		}
+	})
+
+	t.Run("scope with_issues skips clean segments", func(t *testing.T) {
+		batches, err := base("with_issues", nil).BuildBatches(context.Background(), doc)
+		if err != nil {
+			t.Fatalf("BuildBatches: %v", err)
+		}
+		if len(batches) != 1 || !reflect.DeepEqual(batches[0], []int{0, 1}) {
+			t.Fatalf("batches=%v want [[0 1]]", batches)
+		}
+	})
+
+	t.Run("scope with_issue_codes filters by code", func(t *testing.T) {
+		batches, err := base("with_issue_codes", []string{"source_residual"}).BuildBatches(context.Background(), doc)
+		if err != nil {
+			t.Fatalf("BuildBatches: %v", err)
+		}
+		if len(batches) != 1 || !reflect.DeepEqual(batches[0], []int{0}) {
+			t.Fatalf("batches=%v want [[0]]", batches)
+		}
+	})
+
+	t.Run("scope with_issue_codes empty codes selects none", func(t *testing.T) {
+		batches, err := base("with_issue_codes", nil).BuildBatches(context.Background(), doc)
+		if err != nil {
+			t.Fatalf("BuildBatches: %v", err)
+		}
+		if batches != nil {
+			t.Fatalf("batches=%v want nil", batches)
+		}
+	})
+
+	t.Run("unknown scope falls back to all", func(t *testing.T) {
+		batches, err := base("weird", nil).BuildBatches(context.Background(), doc)
+		if err != nil {
+			t.Fatalf("BuildBatches: %v", err)
+		}
+		if len(batches) != 1 || !reflect.DeepEqual(batches[0], []int{0, 1, 2}) {
+			t.Fatalf("batches=%v want [[0 1 2]]", batches)
+		}
+	})
+
+	t.Run("empty scope defaults to all", func(t *testing.T) {
+		batches, err := base("", nil).BuildBatches(context.Background(), doc)
+		if err != nil {
+			t.Fatalf("BuildBatches: %v", err)
+		}
+		if len(batches) != 1 || !reflect.DeepEqual(batches[0], []int{0, 1, 2}) {
+			t.Fatalf("batches=%v want [[0 1 2]]", batches)
+		}
+	})
+
+	t.Run("scope intersects task segment selection", func(t *testing.T) {
+		selectedDoc := semanticQADoc(
+			[]string{"translated", "translated"},
+			[]string{"已选择", "未选择"},
+		)
+		selectedDoc.Segments[1].Translate = false
+
+		batches, err := base("all", nil).BuildBatches(context.Background(), selectedDoc)
+		if err != nil {
+			t.Fatalf("BuildBatches: %v", err)
+		}
+		if len(batches) != 1 || !reflect.DeepEqual(batches[0], []int{0}) {
+			t.Fatalf("batches=%v want [[0]]", batches)
+		}
+	})
 }
 
 func TestSemanticQAHandler_ProcessBatch_ProducesIssues(t *testing.T) {

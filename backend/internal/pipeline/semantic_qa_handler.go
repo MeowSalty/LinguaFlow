@@ -23,6 +23,8 @@ type SemanticQAHandler struct {
 	MaxBatchIndexSpan int
 	Retry             backend.RetryPolicy
 	ResponseMode      string
+	SegmentScope      string   // "all"(默认) | "with_issues" | "with_issue_codes"
+	IssueCodes        []string // 仅 with_issue_codes 生效
 	Reporter          progress.Reporter
 	Logger            *slog.Logger
 }
@@ -59,7 +61,41 @@ func (h *SemanticQAHandler) emitBatchOutcome(evt progress.BatchEvent) {
 	obs.OnBatchEvent(evt)
 }
 
-// BuildBatches 选 status∈{translated,edited} 且 Target 非空的段，按约束分批。
+func (h *SemanticQAHandler) segmentScope() string {
+	if h.SegmentScope == "" {
+		return "all"
+	}
+	return h.SegmentScope
+}
+
+func (h *SemanticQAHandler) issueCodeSet() map[string]struct{} {
+	set := make(map[string]struct{}, len(h.IssueCodes))
+	for _, c := range h.IssueCodes {
+		set[c] = struct{}{}
+	}
+	return set
+}
+
+// segmentInScope 判断段是否落入当前 scope（前置 status∈{translated,edited} 且 Target 非空已由调用方保证）。
+func segmentInScope(seg Segment, scope string, codes map[string]struct{}) bool {
+	switch scope {
+	case "all":
+		return true
+	case "with_issues":
+		return len(seg.Issues) > 0
+	case "with_issue_codes":
+		for _, iss := range seg.Issues {
+			if _, ok := codes[iss.Code]; ok {
+				return true
+			}
+		}
+		return false
+	default:
+		return true // 未知 scope 兜底为 all
+	}
+}
+
+// BuildBatches 选 status∈{translated,edited} 且 Target 非空、并落入 segment_scope 的段，按约束分批。
 func (h *SemanticQAHandler) BuildBatches(_ context.Context, doc *Document) ([][]int, error) {
 	logger := h.logger()
 	if h.Renderer == nil {
@@ -71,13 +107,21 @@ func (h *SemanticQAHandler) BuildBatches(_ context.Context, doc *Document) ([][]
 		return nil, nil
 	}
 
+	codes := h.issueCodeSet()
+	scope := h.segmentScope()
 	var pending []int
 	for i := range doc.Segments {
 		seg := &doc.Segments[i]
+		if !seg.Translate {
+			continue
+		}
 		if seg.Status != "translated" && seg.Status != "edited" {
 			continue
 		}
 		if seg.Target == "" {
+			continue
+		}
+		if !segmentInScope(*seg, scope, codes) {
 			continue
 		}
 		pending = append(pending, i)

@@ -179,7 +179,24 @@ type JobSemanticQARoundSnapshot struct {
 	BatchSize        int                `json:"batch_size"`
 	MaxWordsPerBatch int                `json:"max_words_per_batch"`
 	Concurrency      int                `json:"concurrency"`
+	SegmentScope     string             `json:"segment_scope,omitempty"` // 物化后的 scope（空 → "all"）
+	IssueCodes       []string           `json:"issue_codes,omitempty"`   // 仅 with_issue_codes 有效
 	Retry            schema.RetryConfig `json:"retry"`
+}
+
+func snapshotSemanticQARound(s *schema.SemanticQARoundConfig) *JobSemanticQARoundSnapshot {
+	scope := s.SegmentScope
+	if scope == "" {
+		scope = "all"
+	}
+	return &JobSemanticQARoundSnapshot{
+		BatchSize:        s.BatchSize,
+		MaxWordsPerBatch: s.MaxWordsPerBatch,
+		Concurrency:      s.Concurrency,
+		SegmentScope:     scope,
+		IssueCodes:       append([]string(nil), s.IssueCodes...),
+		Retry:            s.Retry,
+	}
 }
 
 // SegmentFilterSnapshot 翻译轮次段落过滤快照。
@@ -451,16 +468,10 @@ func (s *JobService) validateAndSnapshot(
 			if round.SemanticQA == nil {
 				return nil, fmt.Errorf("rounds[%d] semantic_qa config is nil", i)
 			}
-			s := round.SemanticQA
 			snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
-				Mode:    "semantic_qa",
-				Backend: *backendSnap,
-				SemanticQA: &JobSemanticQARoundSnapshot{
-					BatchSize:        s.BatchSize,
-					MaxWordsPerBatch: s.MaxWordsPerBatch,
-					Concurrency:      s.Concurrency,
-					Retry:            s.Retry,
-				},
+				Mode:       "semantic_qa",
+				Backend:    *backendSnap,
+				SemanticQA: snapshotSemanticQARound(round.SemanticQA),
 			})
 
 		default:
