@@ -999,6 +999,9 @@ const messages = {
       default: '暂无 AI 后端，添加一个后端开始使用翻译服务。',
       filtered: '没有找到符合条件的后端。',
     },
+    actions: {
+      copy: '复制',
+    },
     create: {
       title: '添加 AI 后端',
       description: '选择后端类型并填写配置信息。API Key 等敏感信息将安全存储。',
@@ -1006,6 +1009,9 @@ const messages = {
     edit: {
       title: '编辑 AI 后端',
       description: '更新后端配置信息。修改后立即生效。',
+    },
+    copy: {
+      name: '{name} 副本',
     },
     delete: {
       confirm: '确定要删除后端「{name}」吗？此操作无法撤销。',
