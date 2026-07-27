@@ -202,6 +202,15 @@ const validateRounds = (): boolean => {
         message.error(t('executionPlanTemplates.validation.roundBatchConfigRequired', { n: i + 1 }))
         return false
       }
+      if (
+        round.semantic_qa.segment_scope === 'with_issue_codes' &&
+        (!round.semantic_qa.issue_codes || round.semantic_qa.issue_codes.length === 0)
+      ) {
+        message.error(
+          t('executionPlanTemplates.validation.roundSemanticQAIssueCodesRequired', { n: i + 1 }),
+        )
+        return false
+      }
     }
   }
   return true
@@ -257,11 +266,18 @@ const buildPayload = (): CreateRequest => {
         }
       }
       if (round.mode === 'semantic_qa' && round.semantic_qa) {
+        const segmentScope = round.semantic_qa.segment_scope ?? 'all'
         return {
           ...base,
           semantic_qa: {
             batch_size: round.semantic_qa.batch_size,
             max_words_per_batch: round.semantic_qa.max_words_per_batch,
+            segment_scope: segmentScope,
+            ...(segmentScope === 'with_issue_codes' &&
+            round.semantic_qa.issue_codes &&
+            round.semantic_qa.issue_codes.length > 0
+              ? { issue_codes: round.semantic_qa.issue_codes }
+              : {}),
             ...(round.semantic_qa.retry ? { retry: round.semantic_qa.retry } : {}),
           },
         }

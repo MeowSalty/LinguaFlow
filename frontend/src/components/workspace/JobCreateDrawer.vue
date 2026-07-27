@@ -85,6 +85,16 @@ const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string 
   if (maxWordsPerBatch > 0) {
     parts.push(t('workspace.job.planPreviewBatchWords', { maxWordsPerBatch }))
   }
+  if (round.mode === 'semantic_qa' && round.semantic_qa) {
+    const scope = round.semantic_qa.segment_scope ?? 'all'
+    const scopeLabel =
+      scope === 'with_issues'
+        ? t('executionPlanEditor.round.semanticQASegmentScopeWithIssues')
+        : scope === 'with_issue_codes'
+          ? t('executionPlanEditor.round.semanticQASegmentScopeWithIssueCodes')
+          : t('executionPlanEditor.round.semanticQASegmentScopeAll')
+    parts.push(scopeLabel)
+  }
   const batchInfo = parts.length === 0 ? t('workspace.job.planPreviewNoBatch') : parts.join(' / ')
   const modeKey =
     round.mode === 'extract'

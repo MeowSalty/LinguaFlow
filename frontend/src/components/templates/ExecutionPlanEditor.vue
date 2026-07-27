@@ -26,6 +26,8 @@ type RetryConfig = NonNullable<TranslateRoundConfig['retry']>
 type ExecutionPlanRubyRetryConfig = ApiSchemas['ExecutionPlanRubyRetryConfig']
 type RoundMode = ExecutionRoundConfig['mode']
 type AdjudicateCode = NonNullable<AdjudicateRoundConfig['adjudicate_codes']>[number]
+type SemanticQASegmentScope = SemanticQARoundConfig['segment_scope']
+type SemanticQAIssueCode = NonNullable<SemanticQARoundConfig['issue_codes']>[number]
 
 type RoundModel = ExecutionRoundConfig
 
@@ -62,6 +64,8 @@ const DEFAULT_ADJUDICATE: AdjudicateRoundConfig = {
 const DEFAULT_SEMANTIC_QA: SemanticQARoundConfig = {
   batch_size: 10,
   max_words_per_batch: 0,
+  segment_scope: 'all',
+  issue_codes: undefined,
   retry: { ...DEFAULT_RETRY },
 }
 
@@ -138,9 +142,15 @@ function mergeAdjudicate(source?: Partial<AdjudicateRoundConfig>): AdjudicateRou
 
 function mergeSemanticQA(source?: Partial<SemanticQARoundConfig>): SemanticQARoundConfig {
   if (!source) return deepClone(DEFAULT_SEMANTIC_QA)
+  const segmentScope = source.segment_scope ?? DEFAULT_SEMANTIC_QA.segment_scope
   return {
     batch_size: source.batch_size ?? DEFAULT_SEMANTIC_QA.batch_size,
     max_words_per_batch: source.max_words_per_batch ?? DEFAULT_SEMANTIC_QA.max_words_per_batch,
+    segment_scope: segmentScope,
+    issue_codes:
+      segmentScope === 'with_issue_codes' && source.issue_codes && source.issue_codes.length > 0
+        ? [...source.issue_codes]
+        : undefined,
     retry: {
       max_attempts: source.retry?.max_attempts ?? DEFAULT_RETRY.max_attempts,
       backoff_ms: source.retry?.backoff_ms ?? DEFAULT_RETRY.backoff_ms,
@@ -286,6 +296,62 @@ const adjudicateCodeOptions = computed(() => [
     value: 'length_ratio' as AdjudicateCode,
   },
 ])
+
+const semanticQASegmentScopeOptions = computed(() => [
+  {
+    label: t('executionPlanEditor.round.semanticQASegmentScopeAll'),
+    value: 'all' as SemanticQASegmentScope,
+  },
+  {
+    label: t('executionPlanEditor.round.semanticQASegmentScopeWithIssues'),
+    value: 'with_issues' as SemanticQASegmentScope,
+  },
+  {
+    label: t('executionPlanEditor.round.semanticQASegmentScopeWithIssueCodes'),
+    value: 'with_issue_codes' as SemanticQASegmentScope,
+  },
+])
+
+const semanticQAIssueCodeOptions = computed(() => [
+  {
+    label: t('workspace.segment.qualityCodes.sourceResidual'),
+    value: 'source_residual' as SemanticQAIssueCode,
+  },
+  {
+    label: t('workspace.segment.qualityCodes.lengthRatio'),
+    value: 'length_ratio' as SemanticQAIssueCode,
+  },
+  {
+    label: t('workspace.segment.qualityCodes.untranslated'),
+    value: 'untranslated' as SemanticQAIssueCode,
+  },
+  {
+    label: t('workspace.segment.qualityCodes.duplicate'),
+    value: 'duplicate' as SemanticQAIssueCode,
+  },
+  {
+    label: t('workspace.segment.qualityCodes.calque'),
+    value: 'calque' as SemanticQAIssueCode,
+  },
+  {
+    label: t('workspace.segment.qualityCodes.termFidelity'),
+    value: 'term_fidelity' as SemanticQAIssueCode,
+  },
+  {
+    label: t('workspace.segment.qualityCodes.naturalness'),
+    value: 'naturalness' as SemanticQAIssueCode,
+  },
+])
+
+const onSemanticQASegmentScopeChange = (round: RoundModel, scope: SemanticQASegmentScope): void => {
+  if (!round.semantic_qa) return
+  round.semantic_qa.segment_scope = scope
+  if (scope !== 'with_issue_codes') {
+    round.semantic_qa.issue_codes = undefined
+  } else if (!round.semantic_qa.issue_codes || round.semantic_qa.issue_codes.length === 0) {
+    round.semantic_qa.issue_codes = ['source_residual']
+  }
+}
 
 const modeBadgeClass = (mode: RoundMode): string => {
   if (mode === 'translate') return 'bg-lf-brand-soft text-brand-600'
@@ -884,6 +950,42 @@ const emitUpdate = (): void => {
           <p class="text-xs leading-5 text-lf-text-muted">
             {{ t('executionPlanEditor.round.semanticQAPromptHint') }}
           </p>
+        </div>
+
+        <div class="mt-3">
+          <div class="mb-1 text-xs text-lf-text-subtle">
+            {{ t('executionPlanEditor.round.semanticQASegmentScope') }}
+          </div>
+          <NSelect
+            :value="round.semantic_qa.segment_scope"
+            :options="semanticQASegmentScopeOptions"
+            size="small"
+            :disabled="disabled"
+            :placeholder="t('executionPlanEditor.round.semanticQASegmentScopePlaceholder')"
+            @update:value="
+              (val: SemanticQASegmentScope) => onSemanticQASegmentScopeChange(round, val)
+            "
+          />
+          <div class="mt-1 text-[11px] leading-4 text-lf-text-subtle">
+            {{ t('executionPlanEditor.round.semanticQASegmentScopeHint') }}
+          </div>
+        </div>
+
+        <div v-if="round.semantic_qa.segment_scope === 'with_issue_codes'" class="mt-3">
+          <div class="mb-1 text-xs text-lf-text-subtle">
+            {{ t('executionPlanEditor.round.semanticQAIssueCodes') }}
+          </div>
+          <NSelect
+            v-model:value="round.semantic_qa.issue_codes"
+            :options="semanticQAIssueCodeOptions"
+            multiple
+            size="small"
+            :disabled="disabled"
+            :placeholder="t('executionPlanEditor.round.semanticQAIssueCodesPlaceholder')"
+          />
+          <div class="mt-1 text-[11px] leading-4 text-lf-text-subtle">
+            {{ t('executionPlanEditor.round.semanticQAIssueCodesHint') }}
+          </div>
         </div>
 
         <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-2">

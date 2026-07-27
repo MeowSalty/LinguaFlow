@@ -1456,6 +1456,7 @@ const messages = {
       roundBatchSizeRequired: '轮次 {n}：请设置批次大小',
       roundBatchConfigRequired: '轮次 {n}：批次大小和每批字词数至少填一项',
       roundConcurrencyRequired: '轮次 {n}：请设置并发数',
+      roundSemanticQAIssueCodesRequired: '轮次 {n}：按问题代码筛选时至少选择一个问题代码',
     },
     messages: {
       createSuccess: '执行计划模板创建成功',
@@ -1530,6 +1531,16 @@ const messages = {
       adjudicateCodeLengthRatio: '长度异常',
       semanticQAPromptHint:
         '语义质检 system prompt 内置不可见，无需选择提示词模板；产出 warning 级语义问题直接进人审。',
+      semanticQASegmentScope: '段落扫描范围',
+      semanticQASegmentScopePlaceholder: '选择扫描范围',
+      semanticQASegmentScopeHint:
+        '控制语义质检覆盖哪些段落。缩小范围可降低成本，未扫描段落保留原有语义问题。',
+      semanticQASegmentScopeAll: '全部译文段落',
+      semanticQASegmentScopeWithIssues: '仅有问题的段落',
+      semanticQASegmentScopeWithIssueCodes: '按问题代码筛选',
+      semanticQAIssueCodes: '问题代码筛选',
+      semanticQAIssueCodesPlaceholder: '选择要匹配的问题代码',
+      semanticQAIssueCodesHint: '仅扫描包含所选问题代码的段落，适合成本敏感的高价值子集。',
       semanticQABatchSize: '段落数上限',
       semanticQABatchSizeHint: '0=不限制，与字词数上限至少填一项',
       semanticQAMaxWordsPerBatch: '字词数上限',

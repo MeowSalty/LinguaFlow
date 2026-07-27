@@ -2453,6 +2453,21 @@ export interface components {
             batch_size?: number;
             /** @description 字词数上限；0=不限制，与 batch_size 至少填一项 */
             max_words_per_batch?: number;
+            /**
+             * @description 段落扫描范围：
+             *     - all（默认）：扫描全部 translated/edited 且译文非空的段，完整语义覆盖。
+             *     - with_issues：仅扫描带任意 issue 的段。
+             *     - with_issue_codes：仅扫描含 issue_codes 声明 code 的段（用于成本敏感的高价值子集，如 ja↔zh 假同源）。
+             *     范围与任务级 segment_ids 取交集。scope≠all 时未扫段保留其原语义 issue。
+             * @default all
+             * @enum {string}
+             */
+            segment_scope: "all" | "with_issues" | "with_issue_codes";
+            /**
+             * @description 仅 segment_scope=with_issue_codes 时生效，必须列出至少一个要匹配的 issue code。
+             *     允许全部 7 个 issue code（规则 + 语义皆可作筛选键）。
+             */
+            issue_codes?: ("source_residual" | "length_ratio" | "untranslated" | "duplicate" | "calque" | "term_fidelity" | "naturalness")[];
             retry?: components["schemas"]["RetryConfig"];
         };
         ExecutionRoundConfig: {
