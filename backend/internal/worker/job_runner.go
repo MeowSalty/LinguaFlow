@@ -424,16 +424,7 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 					if !ok {
 						continue
 					}
-					merged := mergeSemanticQAIssues(row.QualityIssues, ts.Issues)
-					updated, err := r.client.Segment.Update().
-						Where(
-							segment.IDEQ(row.ID),
-							segment.UpdatedAtEQ(row.UpdatedAt),
-							segment.StatusIn(service.SegmentStatusTranslated, service.SegmentStatusEdited),
-							segment.TargetTextEQ(ts.TargetText),
-						).
-						SetQualityIssues(merged).
-						Save(batchCtx)
+					updated, err := persistSemanticQASegmentIssues(batchCtx, r.client, row, ts.TargetText, ts.Issues)
 					if err != nil {
 						r.logger.Warn("persist semantic_qa issues failed", "segment_id", row.ID, "err", err)
 						failed++
@@ -531,6 +522,28 @@ func mergeSemanticQAIssues(existing, fresh []qa.QualityIssue) []qa.QualityIssue 
 		}
 	}
 	return append(merged, fresh...)
+}
+
+// persistSemanticQASegmentIssues 对单个段落执行 CAS 写入语义质检结果。
+//
+// CAS 保护：仅当段落仍处于可质检状态（translated/edited）且译文未被改动
+// （当前 targetText 仍等于扫描时看到的 targetText）时才写入，避免覆盖
+// 审核态（approved/rejected）或已被改写的新译文。
+//
+// 不使用 UpdatedAtEQ：SQLite TEXT 时间列在 ent/modernc 往返时存在精度/
+// 格式差异，会导致 WHERE 恒匹配 0 行而静默丢弃所有结果。
+//
+// 返回实际更新行数（0 表示 CAS 未命中，调用方据此跳过并记日志）。
+func persistSemanticQASegmentIssues(ctx context.Context, c *ent.Client, row *ent.Segment, targetText string, fresh []qa.QualityIssue) (int, error) {
+	merged := mergeSemanticQAIssues(row.QualityIssues, fresh)
+	return c.Segment.Update().
+		Where(
+			segment.IDEQ(row.ID),
+			segment.StatusIn(service.SegmentStatusTranslated, service.SegmentStatusEdited),
+			segment.TargetTextEQ(targetText),
+		).
+		SetQualityIssues(merged).
+		Save(ctx)
 }
 
 // buildSegmentInputs 将 DB segments 转换为 SegmentInput 切片。
