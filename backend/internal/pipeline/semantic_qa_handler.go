@@ -214,8 +214,11 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 	callStart := time.Now()
 	resp, callErr := h.Backend.Translate(ctx, req)
 	if callErr != nil {
-		// 外部中断（ctx 取消/超时）不计入扫描失败。
-		if errors.Is(callErr, context.Canceled) || errors.Is(callErr, context.DeadlineExceeded) {
+		// 外部中断：Canceled，或 DeadlineExceeded 且父 ctx 已死（job 取消/外层 deadline）。
+		// 本地 backend timeout 产出 DeadlineExceeded 但父 ctx 仍活，不走此分支。
+		isExternalInterrupt := errors.Is(callErr, context.Canceled) ||
+			(errors.Is(callErr, context.DeadlineExceeded) && ctx.Err() != nil)
+		if isExternalInterrupt {
 			logger.Info("semantic_qa backend interrupted by context",
 				"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
 			h.emitBatchOutcome(progress.BatchEvent{
@@ -234,6 +237,10 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			return h.preserveResult(doc, idxs, rep)
 		}
 
+		// 本地 backend timeout：父 ctx 仍活，按可重试 backend 错误处理。
+		// IsRetryable 对 DeadlineExceeded 恒返 false，须在此主动闸为可重试。
+		isLocalTimeout := errors.Is(callErr, context.DeadlineExceeded) && ctx.Err() == nil
+
 		h.emitBatchOutcome(progress.BatchEvent{
 			Stage:         RoundModeSemanticQA,
 			SegmentIDs:    segmentIDStrings(idxs),
@@ -248,12 +255,18 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			HTTPStatus:    httpStatusFromErr(callErr),
 		})
 
-		// 5xx / 429 / 裸网络错误可退避重试；401/403 等 4xx 立即终态。
-		// 401/403 计入扫描失败（真实配置/权限问题）；ctx 取消不计入。
-		if backend.IsRetryable(callErr) && canRetry {
-			logger.Warn("semantic_qa backend retryable error, will backoff and retry",
-				"backend", h.Backend.Name(), "batch_size", len(idxs),
-				"attempt", attempt, "err", callErr)
+		// 本地超时 / 5xx / 429 / 裸网络错误可退避重试；401/403 等 4xx 立即终态。
+		// 401/403 计入扫描失败（真实配置/权限问题）；外部中断不计入。
+		if (isLocalTimeout || backend.IsRetryable(callErr)) && canRetry {
+			if isLocalTimeout {
+				logger.Warn("semantic_qa backend local timeout, will backoff and retry",
+					"backend", h.Backend.Name(), "batch_size", len(idxs),
+					"attempt", attempt, "err", callErr)
+			} else {
+				logger.Warn("semantic_qa backend retryable error, will backoff and retry",
+					"backend", h.Backend.Name(), "batch_size", len(idxs),
+					"attempt", attempt, "err", callErr)
+			}
 			wait := backoffDuration(attempt, h.Retry, callErr)
 			timer := time.NewTimer(wait)
 			select {
@@ -266,9 +279,15 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			return batchResult{retry: &batchJob{idxs: idxs, attempt: attempt + 1}}
 		}
 
-		logger.Warn("semantic_qa backend failed terminally, producing no issues",
-			"backend", h.Backend.Name(), "batch_size", len(idxs),
-			"attempt", attempt, "err", callErr)
+		if isLocalTimeout {
+			logger.Warn("semantic_qa backend local timeout exhausted, producing no issues",
+				"backend", h.Backend.Name(), "batch_size", len(idxs),
+				"attempt", attempt, "err", callErr)
+		} else {
+			logger.Warn("semantic_qa backend failed terminally, producing no issues",
+				"backend", h.Backend.Name(), "batch_size", len(idxs),
+				"attempt", attempt, "err", callErr)
+		}
 		return h.terminalFailure(doc, idxs, rep)
 	}
 

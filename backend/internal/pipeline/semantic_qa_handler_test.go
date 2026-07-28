@@ -419,6 +419,97 @@ func TestSemanticQAHandler_ProcessBatch_CtxCancelNotCounted(t *testing.T) {
 	_ = cancel
 }
 
+func TestSemanticQAHandler_ProcessBatch_LocalTimeoutRetries(t *testing.T) {
+	doc := semanticQADoc([]string{"translated"}, nil)
+	fb := &fakeBackend{name: "fake", errs: []error{context.DeadlineExceeded}}
+	h := &SemanticQAHandler{
+		Backend:  fb,
+		Renderer: newSemanticQARenderer(t),
+		Retry: backend.RetryPolicy{
+			MaxAttempts: 2,
+			Backoff:     time.Millisecond, // minRateLimitBackoff 仍生效，接受 ~5s 等待
+		},
+		Logger: quietLogger(),
+	}
+	// 父 ctx 仍活：本地 backend timeout 应按可重试处理。
+	start := time.Now()
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if result.retry == nil || result.retry.attempt != 1 {
+		t.Fatalf("local timeout retry=%v want attempt=1 (elapsed=%s)", result.retry, time.Since(start))
+	}
+	if result.callbackResult != nil {
+		t.Fatal("retry path must not produce callbackResult")
+	}
+	if result.failedSegments != nil {
+		t.Fatalf("retry path must not set failedSegments, got %v", result.failedSegments)
+	}
+}
+
+func TestSemanticQAHandler_ProcessBatch_LocalTimeoutExhausts(t *testing.T) {
+	doc := semanticQADoc([]string{"translated"}, nil)
+	fb := &fakeBackend{name: "fake", errs: []error{context.DeadlineExceeded}}
+	h := &SemanticQAHandler{
+		Backend:  fb,
+		Renderer: newSemanticQARenderer(t),
+		Retry: backend.RetryPolicy{
+			MaxAttempts: 1,
+			Backoff:     time.Millisecond,
+		},
+		Logger: quietLogger(),
+	}
+
+	// attempt 0 → retry（会等 minRateLimitBackoff ~5s）
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if result.retry == nil || result.retry.attempt != 1 {
+		t.Fatalf("attempt0 retry=%v want attempt=1", result.retry)
+	}
+
+	// attempt == MaxAttempts → 终态，计入扫描失败（不触发第二次 5s 等待）
+	fb2 := &fakeBackend{name: "fake", errs: []error{context.DeadlineExceeded}}
+	h.Backend = fb2
+	result = h.ProcessBatch(context.Background(), doc, []int{0}, 1, quietLogger())
+	if result.retry != nil {
+		t.Fatalf("exhausted must not retry, got %v", result.retry)
+	}
+	if !reflect.DeepEqual(result.failedSegments, []int{0}) {
+		t.Fatalf("failedSegments=%v want [0]", result.failedSegments)
+	}
+	if result.callbackResult == nil || result.callbackResult.Segments[0].Issues != nil {
+		t.Fatal("exhausted must preserve with nil issues")
+	}
+}
+
+func TestSemanticQAHandler_ProcessBatch_ParentDeadlineNotCounted(t *testing.T) {
+	doc := semanticQADoc([]string{"translated"}, nil)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond)
+	defer cancel()
+	// Windows 定时器分辨率可能 >1ms，轮询直至父 deadline 过期。
+	deadline := time.Now().Add(200 * time.Millisecond)
+	for ctx.Err() == nil {
+		if time.Now().After(deadline) {
+			t.Fatal("parent ctx should already be expired")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	fb := &fakeBackend{name: "fake", errs: []error{context.DeadlineExceeded}}
+	h := &SemanticQAHandler{
+		Backend:  fb,
+		Renderer: newSemanticQARenderer(t),
+		Retry:    backend.RetryPolicy{MaxAttempts: 2},
+		Logger:   quietLogger(),
+	}
+	result := h.ProcessBatch(ctx, doc, []int{0}, 0, quietLogger())
+	if result.retry != nil {
+		t.Fatalf("parent deadline must not retry, got %v", result.retry)
+	}
+	if result.failedSegments != nil {
+		t.Fatalf("parent deadline must not count as scan failure, failedSegments=%v", result.failedSegments)
+	}
+	if result.callbackResult == nil || result.callbackResult.Segments[0].Issues != nil {
+		t.Fatal("parent deadline must preserve with nil issues")
+	}
+}
+
 func TestSemanticQAHandler_ProcessBatch_NonTextAttachesSchema(t *testing.T) {
 	doc := semanticQADoc([]string{"translated"}, nil)
 	fb := &fakeBackend{
