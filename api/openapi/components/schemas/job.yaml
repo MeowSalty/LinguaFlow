@@ -90,6 +90,9 @@ JobResource:
       type: string
     error_message:
       type: string
+    warning_message:
+      type: string
+      description: 软警告信息（如 semantic_qa 扫描失败）；资源状态仍为 completed
     resource:
       $ref: './resource.yaml#/Resource'
     created_at:
