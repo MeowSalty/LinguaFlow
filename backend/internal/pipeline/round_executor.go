@@ -40,12 +40,17 @@ type batchResult struct {
 	missing        []int        // 需要 round 级重新分批
 	retry          *batchJob    // 需要重新入队（缩批或退避后重试）
 	callbackResult *BatchResult // 可选，供 BatchHandler 回调使用
+	failedSegments []int        // 终态扫描失败的段索引（如 semantic_qa）；不计入 Unresolved
 }
 
 // RunRoundResult 是 RunRound 的返回结果。
 type RunRoundResult struct {
 	// Unresolved 是所有批次处理后仍未解决的索引。
 	Unresolved []int
+	// FailedSegments 是终态扫描失败的段索引（如 semantic_qa）。
+	FailedSegments []int
+	// FailedBatches 是终态失败的批次数。
+	FailedBatches int
 }
 
 // RunRound 是通用的并发批次执行引擎。完全不知道段落、翻译等概念。
@@ -93,6 +98,8 @@ func RunRound(
 
 	var nextPending []int
 	var missingSegs []int
+	var failedSegments []int
+	var failedBatches int
 
 	// 启动 worker pool
 	var wg sync.WaitGroup
@@ -153,6 +160,10 @@ func RunRound(
 		case result := <-results:
 			pendingMu.Lock()
 			nextPending = append(nextPending, result.unresolved...)
+			if len(result.failedSegments) > 0 {
+				failedSegments = append(failedSegments, result.failedSegments...)
+				failedBatches++
+			}
 			pendingMu.Unlock()
 
 			if result.retry != nil && result.retry.attempt < totalAttempts {
@@ -207,7 +218,11 @@ cleanup:
 		return RunRoundResult{}, err
 	}
 
-	return RunRoundResult{Unresolved: nextPending}, nil
+	return RunRoundResult{
+		Unresolved:     nextPending,
+		FailedSegments: failedSegments,
+		FailedBatches:  failedBatches,
+	}, nil
 }
 
 // runMissingRetry 对缺失段进行 round 级重试。

@@ -7164,6 +7164,7 @@ type JobResourceMutation struct {
 	addskipped_segments   *int
 	output_path           *string
 	error_message         *string
+	warning_message       *string
 	current_stage         *string
 	stage_total           *int
 	addstage_total        *int
@@ -7703,6 +7704,55 @@ func (m *JobResourceMutation) ResetErrorMessage() {
 	delete(m.clearedFields, jobresource.FieldErrorMessage)
 }
 
+// SetWarningMessage sets the "warning_message" field.
+func (m *JobResourceMutation) SetWarningMessage(s string) {
+	m.warning_message = &s
+}
+
+// WarningMessage returns the value of the "warning_message" field in the mutation.
+func (m *JobResourceMutation) WarningMessage() (r string, exists bool) {
+	v := m.warning_message
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldWarningMessage returns the old "warning_message" field's value of the JobResource entity.
+// If the JobResource object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *JobResourceMutation) OldWarningMessage(ctx context.Context) (v *string, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldWarningMessage is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldWarningMessage requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldWarningMessage: %w", err)
+	}
+	return oldValue.WarningMessage, nil
+}
+
+// ClearWarningMessage clears the value of the "warning_message" field.
+func (m *JobResourceMutation) ClearWarningMessage() {
+	m.warning_message = nil
+	m.clearedFields[jobresource.FieldWarningMessage] = struct{}{}
+}
+
+// WarningMessageCleared returns if the "warning_message" field was cleared in this mutation.
+func (m *JobResourceMutation) WarningMessageCleared() bool {
+	_, ok := m.clearedFields[jobresource.FieldWarningMessage]
+	return ok
+}
+
+// ResetWarningMessage resets all changes to the "warning_message" field.
+func (m *JobResourceMutation) ResetWarningMessage() {
+	m.warning_message = nil
+	delete(m.clearedFields, jobresource.FieldWarningMessage)
+}
+
 // SetCurrentStage sets the "current_stage" field.
 func (m *JobResourceMutation) SetCurrentStage(s string) {
 	m.current_stage = &s
@@ -8025,7 +8075,7 @@ func (m *JobResourceMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *JobResourceMutation) Fields() []string {
-	fields := make([]string, 0, 13)
+	fields := make([]string, 0, 14)
 	if m.created_at != nil {
 		fields = append(fields, jobresource.FieldCreatedAt)
 	}
@@ -8052,6 +8102,9 @@ func (m *JobResourceMutation) Fields() []string {
 	}
 	if m.error_message != nil {
 		fields = append(fields, jobresource.FieldErrorMessage)
+	}
+	if m.warning_message != nil {
+		fields = append(fields, jobresource.FieldWarningMessage)
 	}
 	if m.current_stage != nil {
 		fields = append(fields, jobresource.FieldCurrentStage)
@@ -8091,6 +8144,8 @@ func (m *JobResourceMutation) Field(name string) (ent.Value, bool) {
 		return m.OutputPath()
 	case jobresource.FieldErrorMessage:
 		return m.ErrorMessage()
+	case jobresource.FieldWarningMessage:
+		return m.WarningMessage()
 	case jobresource.FieldCurrentStage:
 		return m.CurrentStage()
 	case jobresource.FieldStageTotal:
@@ -8126,6 +8181,8 @@ func (m *JobResourceMutation) OldField(ctx context.Context, name string) (ent.Va
 		return m.OldOutputPath(ctx)
 	case jobresource.FieldErrorMessage:
 		return m.OldErrorMessage(ctx)
+	case jobresource.FieldWarningMessage:
+		return m.OldWarningMessage(ctx)
 	case jobresource.FieldCurrentStage:
 		return m.OldCurrentStage(ctx)
 	case jobresource.FieldStageTotal:
@@ -8205,6 +8262,13 @@ func (m *JobResourceMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetErrorMessage(v)
+		return nil
+	case jobresource.FieldWarningMessage:
+		v, ok := value.(string)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetWarningMessage(v)
 		return nil
 	case jobresource.FieldCurrentStage:
 		v, ok := value.(string)
@@ -8333,6 +8397,9 @@ func (m *JobResourceMutation) ClearedFields() []string {
 	if m.FieldCleared(jobresource.FieldErrorMessage) {
 		fields = append(fields, jobresource.FieldErrorMessage)
 	}
+	if m.FieldCleared(jobresource.FieldWarningMessage) {
+		fields = append(fields, jobresource.FieldWarningMessage)
+	}
 	if m.FieldCleared(jobresource.FieldCurrentStage) {
 		fields = append(fields, jobresource.FieldCurrentStage)
 	}
@@ -8358,6 +8425,9 @@ func (m *JobResourceMutation) ClearField(name string) error {
 		return nil
 	case jobresource.FieldErrorMessage:
 		m.ClearErrorMessage()
+		return nil
+	case jobresource.FieldWarningMessage:
+		m.ClearWarningMessage()
 		return nil
 	case jobresource.FieldCurrentStage:
 		m.ClearCurrentStage()
@@ -8399,6 +8469,9 @@ func (m *JobResourceMutation) ResetField(name string) error {
 		return nil
 	case jobresource.FieldErrorMessage:
 		m.ResetErrorMessage()
+		return nil
+	case jobresource.FieldWarningMessage:
+		m.ResetWarningMessage()
 		return nil
 	case jobresource.FieldCurrentStage:
 		m.ResetCurrentStage()

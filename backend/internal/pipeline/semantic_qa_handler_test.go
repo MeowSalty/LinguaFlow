@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/MeowSalty/LinguaFlow/backend/internal/backend"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
@@ -246,16 +247,41 @@ func TestSemanticQAHandler_ProcessBatch_ParseFailureProducesNone(t *testing.T) {
 		Renderer:  newSemanticQARenderer(t),
 		BatchSize: 10,
 		Logger:    quietLogger(),
+		// MaxAttempts=0 → canRetry=false → 终态
 	}
 	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
 	if len(doc.Segments[0].Issues) != 1 {
 		t.Fatalf("doc issues len=%d want 1 preserved", len(doc.Segments[0].Issues))
 	}
-	if result.callbackResult == nil || len(result.callbackResult.Segments[0].Issues) != 0 {
-		t.Fatal("callback should carry empty new issues on parse failure")
-	}
-	if result.callbackResult.Segments[0].Issues != nil {
+	if result.callbackResult == nil || result.callbackResult.Segments[0].Issues != nil {
 		t.Fatal("parse failure must return nil issues so persistence is skipped")
+	}
+	if result.retry != nil {
+		t.Fatal("parse failure with MaxAttempts=0 must not retry")
+	}
+	if !reflect.DeepEqual(result.failedSegments, []int{0}) {
+		t.Fatalf("failedSegments=%v want [0]", result.failedSegments)
+	}
+}
+
+func TestSemanticQAHandler_ProcessBatch_ParseFailureRetries(t *testing.T) {
+	doc := semanticQADoc([]string{"translated"}, nil)
+	fb := &fakeBackend{name: "fake", responses: []string{`not json at all`}}
+	h := &SemanticQAHandler{
+		Backend:  fb,
+		Renderer: newSemanticQARenderer(t),
+		Retry:    backend.RetryPolicy{MaxAttempts: 2},
+		Logger:   quietLogger(),
+	}
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if result.retry == nil || result.retry.attempt != 1 {
+		t.Fatalf("retry=%v want attempt=1", result.retry)
+	}
+	if result.callbackResult != nil {
+		t.Fatal("retry path must not produce callbackResult")
+	}
+	if result.failedSegments != nil {
+		t.Fatalf("retry path must not set failedSegments, got %v", result.failedSegments)
 	}
 }
 
@@ -270,14 +296,127 @@ func TestSemanticQAHandler_ProcessBatch_BackendErrorProducesNone(t *testing.T) {
 		Renderer:  newSemanticQARenderer(t),
 		BatchSize: 10,
 		Logger:    quietLogger(),
+		// MaxAttempts=0 + 裸网络错误 → 终态
 	}
 	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
 	if len(doc.Segments[0].Issues) != 1 {
 		t.Fatalf("doc issues len=%d want 1 preserved", len(doc.Segments[0].Issues))
 	}
-	if result.callbackResult == nil || len(result.callbackResult.Segments[0].Issues) != 0 {
-		t.Fatal("callback should carry empty new issues on backend error")
+	if result.callbackResult == nil || result.callbackResult.Segments[0].Issues != nil {
+		t.Fatal("callback should carry nil issues on backend error")
 	}
+	if result.retry != nil {
+		t.Fatal("MaxAttempts=0 must not retry")
+	}
+	if !reflect.DeepEqual(result.failedSegments, []int{0}) {
+		t.Fatalf("failedSegments=%v want [0]", result.failedSegments)
+	}
+}
+
+func TestSemanticQAHandler_ProcessBatch_NetworkErrorRetries(t *testing.T) {
+	doc := semanticQADoc([]string{"translated"}, nil)
+	fb := &fakeBackend{name: "fake", errs: []error{errors.New("network down")}}
+	h := &SemanticQAHandler{
+		Backend:  fb,
+		Renderer: newSemanticQARenderer(t),
+		Retry: backend.RetryPolicy{
+			MaxAttempts: 2,
+			Backoff:     time.Millisecond, // 缩短测试时间；minRateLimitBackoff 仍会生效
+		},
+		Logger: quietLogger(),
+	}
+	// 覆盖 minRateLimitBackoff 的等待：用短 backoff 仍会至少等 5s；测试里接受。
+	// 为避免 5s 等待，改用 StatusError 500 测重试路径（同 IsRetryable）。
+	// 本用例验证裸网络错误 + canRetry → retry。
+	start := time.Now()
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if result.retry == nil || result.retry.attempt != 1 {
+		t.Fatalf("retry=%v want attempt=1 (elapsed=%s)", result.retry, time.Since(start))
+	}
+	if result.callbackResult != nil {
+		t.Fatal("retry path must not produce callbackResult")
+	}
+	if result.failedSegments != nil {
+		t.Fatalf("retry path must not set failedSegments, got %v", result.failedSegments)
+	}
+}
+
+func TestSemanticQAHandler_ProcessBatch_5xxRetriesAndExhausts(t *testing.T) {
+	doc := semanticQADoc([]string{"translated"}, nil)
+	err500 := &backend.StatusError{StatusCode: 500, Err: errors.New("internal")}
+	fb := &fakeBackend{name: "fake", errs: []error{err500}}
+	h := &SemanticQAHandler{
+		Backend:  fb,
+		Renderer: newSemanticQARenderer(t),
+		Retry: backend.RetryPolicy{
+			MaxAttempts: 1,
+			Backoff:     time.Millisecond,
+		},
+		Logger: quietLogger(),
+	}
+
+	// attempt 0 → retry
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if result.retry == nil || result.retry.attempt != 1 {
+		t.Fatalf("attempt0 retry=%v want attempt=1", result.retry)
+	}
+
+	// attempt == MaxAttempts → 终态
+	fb2 := &fakeBackend{name: "fake", errs: []error{err500}}
+	h.Backend = fb2
+	result = h.ProcessBatch(context.Background(), doc, []int{0}, 1, quietLogger())
+	if result.retry != nil {
+		t.Fatalf("exhausted must not retry, got %v", result.retry)
+	}
+	if !reflect.DeepEqual(result.failedSegments, []int{0}) {
+		t.Fatalf("failedSegments=%v want [0]", result.failedSegments)
+	}
+	if result.callbackResult == nil || result.callbackResult.Segments[0].Issues != nil {
+		t.Fatal("exhausted must preserve with nil issues")
+	}
+}
+
+func TestSemanticQAHandler_ProcessBatch_401Terminal(t *testing.T) {
+	doc := semanticQADoc([]string{"translated"}, nil)
+	err401 := &backend.StatusError{StatusCode: 401, Err: errors.New("unauthorized")}
+	fb := &fakeBackend{name: "fake", errs: []error{err401}}
+	h := &SemanticQAHandler{
+		Backend:  fb,
+		Renderer: newSemanticQARenderer(t),
+		Retry:    backend.RetryPolicy{MaxAttempts: 5},
+		Logger:   quietLogger(),
+	}
+	result := h.ProcessBatch(context.Background(), doc, []int{0}, 0, quietLogger())
+	if result.retry != nil {
+		t.Fatalf("401 must not retry, got %v", result.retry)
+	}
+	if !reflect.DeepEqual(result.failedSegments, []int{0}) {
+		t.Fatalf("failedSegments=%v want [0]", result.failedSegments)
+	}
+}
+
+func TestSemanticQAHandler_ProcessBatch_CtxCancelNotCounted(t *testing.T) {
+	doc := semanticQADoc([]string{"translated"}, nil)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	fb := &fakeBackend{name: "fake", errs: []error{context.Canceled}}
+	h := &SemanticQAHandler{
+		Backend:  fb,
+		Renderer: newSemanticQARenderer(t),
+		Retry:    backend.RetryPolicy{MaxAttempts: 2},
+		Logger:   quietLogger(),
+	}
+	result := h.ProcessBatch(ctx, doc, []int{0}, 0, quietLogger())
+	if result.retry != nil {
+		t.Fatalf("ctx cancel must not retry, got %v", result.retry)
+	}
+	if result.failedSegments != nil {
+		t.Fatalf("ctx cancel must not count as scan failure, failedSegments=%v", result.failedSegments)
+	}
+	if result.callbackResult == nil || result.callbackResult.Segments[0].Issues != nil {
+		t.Fatal("ctx cancel must preserve with nil issues")
+	}
+	_ = cancel
 }
 
 func TestSemanticQAHandler_ProcessBatch_NonTextAttachesSchema(t *testing.T) {

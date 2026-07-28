@@ -2,6 +2,7 @@ package pipeline
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"sync/atomic"
 	"time"
@@ -156,11 +157,15 @@ func (h *SemanticQAHandler) BuildBatches(_ context.Context, doc *Document) ([][]
 }
 
 // ProcessBatch 渲染语义质检 prompt → 调用 LLM → 解析 issues。
-// 失败/解析失败一律不产出新 issue（callback Issues 为空，batchHandler 跳过）。
+// 失败时 Issues==nil（batchHandler 跳过写库）；终态扫描失败额外设置 failedSegments。
+// 不变量：h.Retry.MaxAttempts 与 round.Retry.MaxAttempts 同源，handler 自限重试，
+// 终态失败时不再返回 retry，executor exhausted 分支对 semantic_qa 永不触发。
 func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idxs []int, attempt int, logger *slog.Logger) batchResult {
 	batchStart := time.Now()
 	rep := h.reporter()
 	tried := []string{h.Backend.Name()}
+	// canRetry：attempt 从 0 起，MaxAttempts 为额外重试次数，与 executor totalAttempts=MaxAttempts+1 一致。
+	canRetry := attempt < h.Retry.MaxAttempts
 
 	segments := make([]prompt.SemanticQASegment, 0, len(idxs))
 	for _, idx := range idxs {
@@ -193,7 +198,7 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			ErrorType:     "render_error",
 			ErrorMessage:  renderErr.Error(),
 		})
-		return h.preserveResult(doc, idxs, rep)
+		return h.terminalFailure(doc, idxs, rep)
 	}
 
 	req := backend.Request{
@@ -209,8 +214,9 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 	callStart := time.Now()
 	resp, callErr := h.Backend.Translate(ctx, req)
 	if callErr != nil {
-		if isFatalBackendError(callErr) {
-			logger.Error("semantic_qa backend fatal error",
+		// 外部中断（ctx 取消/超时）不计入扫描失败。
+		if errors.Is(callErr, context.Canceled) || errors.Is(callErr, context.DeadlineExceeded) {
+			logger.Info("semantic_qa backend interrupted by context",
 				"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
 			h.emitBatchOutcome(progress.BatchEvent{
 				Stage:         RoundModeSemanticQA,
@@ -227,34 +233,7 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			})
 			return h.preserveResult(doc, idxs, rep)
 		}
-		if isRetryableByBackoff(callErr) {
-			logger.Warn("semantic_qa rate limit, will backoff and retry",
-				"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
-			h.emitBatchOutcome(progress.BatchEvent{
-				Stage:         RoundModeSemanticQA,
-				SegmentIDs:    segmentIDStrings(idxs),
-				SegmentCount:  len(idxs),
-				BackendName:   h.Backend.Name(),
-				Status:        "failed",
-				DurationMs:    time.Since(callStart).Milliseconds(),
-				SentContent:   usr,
-				TriedBackends: tried,
-				ErrorType:     "backend_error",
-				ErrorMessage:  callErr.Error(),
-				HTTPStatus:    httpStatusFromErr(callErr),
-			})
-			wait := backoffDuration(attempt, h.Retry, callErr)
-			timer := time.NewTimer(wait)
-			select {
-			case <-ctx.Done():
-				timer.Stop()
-				return h.preserveResult(doc, idxs, rep)
-			case <-timer.C:
-			}
-			return batchResult{retry: &batchJob{idxs: idxs, attempt: attempt + 1}}
-		}
-		logger.Warn("semantic_qa backend failed, producing no issues",
-			"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
+
 		h.emitBatchOutcome(progress.BatchEvent{
 			Stage:         RoundModeSemanticQA,
 			SegmentIDs:    segmentIDStrings(idxs),
@@ -268,7 +247,29 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			ErrorMessage:  callErr.Error(),
 			HTTPStatus:    httpStatusFromErr(callErr),
 		})
-		return h.preserveResult(doc, idxs, rep)
+
+		// 5xx / 429 / 裸网络错误可退避重试；401/403 等 4xx 立即终态。
+		// 401/403 计入扫描失败（真实配置/权限问题）；ctx 取消不计入。
+		if backend.IsRetryable(callErr) && canRetry {
+			logger.Warn("semantic_qa backend retryable error, will backoff and retry",
+				"backend", h.Backend.Name(), "batch_size", len(idxs),
+				"attempt", attempt, "err", callErr)
+			wait := backoffDuration(attempt, h.Retry, callErr)
+			timer := time.NewTimer(wait)
+			select {
+			case <-ctx.Done():
+				timer.Stop()
+				// 退避期间取消：不计入扫描失败。
+				return h.preserveResult(doc, idxs, rep)
+			case <-timer.C:
+			}
+			return batchResult{retry: &batchJob{idxs: idxs, attempt: attempt + 1}}
+		}
+
+		logger.Warn("semantic_qa backend failed terminally, producing no issues",
+			"backend", h.Backend.Name(), "batch_size", len(idxs),
+			"attempt", attempt, "err", callErr)
+		return h.terminalFailure(doc, idxs, rep)
 	}
 
 	atomic.AddInt64(&doc.InputTokens, resp.Usage.PromptTokens)
@@ -276,9 +277,9 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 
 	issues, parseErr := prompt.ParseSemanticQAByMode(resp.Text, isTextMode)
 	if parseErr != nil {
-		logger.Warn("semantic_qa parse failed, producing no issues",
+		logger.Warn("semantic_qa parse failed",
 			"backend", h.Backend.Name(), "batch_size", len(idxs), "err", parseErr,
-			"resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200))
+			"attempt", attempt, "resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200))
 		h.emitBatchOutcome(progress.BatchEvent{
 			Stage:           RoundModeSemanticQA,
 			SegmentIDs:      segmentIDStrings(idxs),
@@ -294,7 +295,11 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			ErrorType:       "parse_error",
 			ErrorMessage:    parseErr.Error(),
 		})
-		return h.preserveResult(doc, idxs, rep)
+		// parse 失败立即再入队（无退避）；受 MaxAttempts 上界约束。
+		if canRetry {
+			return batchResult{retry: &batchJob{idxs: idxs, attempt: attempt + 1}}
+		}
+		return h.terminalFailure(doc, idxs, rep)
 	}
 
 	// id → []issue（snippet → Span；定位失败仍保留 MatchedText）
@@ -379,7 +384,8 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 	}
 }
 
-// preserveResult 不产出新 issue（Issues 为空），batchHandler 跳过写库，原 issue 保留。
+// preserveResult 不产出新 issue（Issues 为 nil），batchHandler 跳过写库，原 issue 保留。
+// 不设置 failedSegments（用于 ctx 取消等外部中断，不计入扫描失败）。
 func (h *SemanticQAHandler) preserveResult(doc *Document, idxs []int, rep progress.Reporter) batchResult {
 	callbackSegs := make([]TranslatedSegment, 0, len(idxs))
 	for _, idx := range idxs {
@@ -396,4 +402,12 @@ func (h *SemanticQAHandler) preserveResult(doc *Document, idxs []int, rep progre
 	return batchResult{
 		callbackResult: &BatchResult{Segments: callbackSegs},
 	}
+}
+
+// terminalFailure 在 preserveResult 基础上标记 failedSegments，供 RunRound 累计为软警告。
+// 依赖 h.Retry 与 round.Retry 同源，故不再返回 retry。
+func (h *SemanticQAHandler) terminalFailure(doc *Document, idxs []int, rep progress.Reporter) batchResult {
+	pr := h.preserveResult(doc, idxs, rep)
+	pr.failedSegments = idxs
+	return pr
 }

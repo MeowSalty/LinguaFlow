@@ -244,6 +244,7 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 	var mu sync.Mutex
 	completedCount := 0
 	var lastResult pipeline.TranslateResult
+	var semanticQAWarning string
 
 	// 段落来源标记：仅 segment_ids 手动选择时跳过默认过滤
 	isExplicitSelection := snapshot.ExplicitSegmentSelection
@@ -454,6 +455,18 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 		result, roundErr := eng.ExecuteRound(ctx, roundIdx, doc, execOpts...)
 		if roundErr == nil {
 			lastResult = result
+			// semantic_qa 终态扫描失败转软警告，不阻塞资源 completed。
+			if round.Mode == "semantic_qa" && result.FailedBatchCount > 0 {
+				semanticQAWarning = fmt.Sprintf(
+					"语义质检未完全成功：%d 个批次、%d 个段落扫描失败",
+					result.FailedBatchCount, result.FailedSegmentCount,
+				)
+				r.logger.Warn("semantic_qa finished with soft failures",
+					"resource_id", item.ID,
+					"failed_batches", result.FailedBatchCount,
+					"failed_segments", result.FailedSegmentCount,
+				)
+			}
 		}
 
 		if roundErr != nil {
@@ -511,7 +524,7 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 		return nil
 	}
 
-	return r.jobs.MarkJobResourceCompleted(ctx, job.ID, item.ID, "", completedCount, skippedCount)
+	return r.jobs.MarkJobResourceCompleted(ctx, job.ID, item.ID, "", completedCount, skippedCount, semanticQAWarning)
 }
 
 func mergeSemanticQAIssues(existing, fresh []qa.QualityIssue) []qa.QualityIssue {

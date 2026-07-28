@@ -371,17 +371,17 @@ func init() {
 	// jobresource.SkippedSegmentsValidator is a validator for the "skipped_segments" field. It is called by the builders before save.
 	jobresource.SkippedSegmentsValidator = jobresourceDescSkippedSegments.Validators[0].(func(int) error)
 	// jobresourceDescCurrentStage is the schema descriptor for current_stage field.
-	jobresourceDescCurrentStage := jobresourceFields[7].Descriptor()
+	jobresourceDescCurrentStage := jobresourceFields[8].Descriptor()
 	// jobresource.DefaultCurrentStage holds the default value on creation for the current_stage field.
 	jobresource.DefaultCurrentStage = jobresourceDescCurrentStage.Default.(string)
 	// jobresourceDescStageTotal is the schema descriptor for stage_total field.
-	jobresourceDescStageTotal := jobresourceFields[8].Descriptor()
+	jobresourceDescStageTotal := jobresourceFields[9].Descriptor()
 	// jobresource.DefaultStageTotal holds the default value on creation for the stage_total field.
 	jobresource.DefaultStageTotal = jobresourceDescStageTotal.Default.(int)
 	// jobresource.StageTotalValidator is a validator for the "stage_total" field. It is called by the builders before save.
 	jobresource.StageTotalValidator = jobresourceDescStageTotal.Validators[0].(func(int) error)
 	// jobresourceDescStageCompleted is the schema descriptor for stage_completed field.
-	jobresourceDescStageCompleted := jobresourceFields[9].Descriptor()
+	jobresourceDescStageCompleted := jobresourceFields[10].Descriptor()
 	// jobresource.DefaultStageCompleted holds the default value on creation for the stage_completed field.
 	jobresource.DefaultStageCompleted = jobresourceDescStageCompleted.Default.(int)
 	// jobresource.StageCompletedValidator is a validator for the "stage_completed" field. It is called by the builders before save.

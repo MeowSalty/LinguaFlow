@@ -166,6 +166,26 @@ func (_u *JobResourceUpdate) ClearErrorMessage() *JobResourceUpdate {
 	return _u
 }
 
+// SetWarningMessage sets the "warning_message" field.
+func (_u *JobResourceUpdate) SetWarningMessage(v string) *JobResourceUpdate {
+	_u.mutation.SetWarningMessage(v)
+	return _u
+}
+
+// SetNillableWarningMessage sets the "warning_message" field if the given value is not nil.
+func (_u *JobResourceUpdate) SetNillableWarningMessage(v *string) *JobResourceUpdate {
+	if v != nil {
+		_u.SetWarningMessage(*v)
+	}
+	return _u
+}
+
+// ClearWarningMessage clears the value of the "warning_message" field.
+func (_u *JobResourceUpdate) ClearWarningMessage() *JobResourceUpdate {
+	_u.mutation.ClearWarningMessage()
+	return _u
+}
+
 // SetCurrentStage sets the "current_stage" field.
 func (_u *JobResourceUpdate) SetCurrentStage(v string) *JobResourceUpdate {
 	_u.mutation.SetCurrentStage(v)
@@ -415,6 +435,12 @@ func (_u *JobResourceUpdate) sqlSave(ctx context.Context) (_node int, err error)
 	if _u.mutation.ErrorMessageCleared() {
 		_spec.ClearField(jobresource.FieldErrorMessage, field.TypeString)
 	}
+	if value, ok := _u.mutation.WarningMessage(); ok {
+		_spec.SetField(jobresource.FieldWarningMessage, field.TypeString, value)
+	}
+	if _u.mutation.WarningMessageCleared() {
+		_spec.ClearField(jobresource.FieldWarningMessage, field.TypeString)
+	}
 	if value, ok := _u.mutation.CurrentStage(); ok {
 		_spec.SetField(jobresource.FieldCurrentStage, field.TypeString, value)
 	}
@@ -649,6 +675,26 @@ func (_u *JobResourceUpdateOne) SetNillableErrorMessage(v *string) *JobResourceU
 // ClearErrorMessage clears the value of the "error_message" field.
 func (_u *JobResourceUpdateOne) ClearErrorMessage() *JobResourceUpdateOne {
 	_u.mutation.ClearErrorMessage()
+	return _u
+}
+
+// SetWarningMessage sets the "warning_message" field.
+func (_u *JobResourceUpdateOne) SetWarningMessage(v string) *JobResourceUpdateOne {
+	_u.mutation.SetWarningMessage(v)
+	return _u
+}
+
+// SetNillableWarningMessage sets the "warning_message" field if the given value is not nil.
+func (_u *JobResourceUpdateOne) SetNillableWarningMessage(v *string) *JobResourceUpdateOne {
+	if v != nil {
+		_u.SetWarningMessage(*v)
+	}
+	return _u
+}
+
+// ClearWarningMessage clears the value of the "warning_message" field.
+func (_u *JobResourceUpdateOne) ClearWarningMessage() *JobResourceUpdateOne {
+	_u.mutation.ClearWarningMessage()
 	return _u
 }
 
@@ -930,6 +976,12 @@ func (_u *JobResourceUpdateOne) sqlSave(ctx context.Context) (_node *JobResource
 	}
 	if _u.mutation.ErrorMessageCleared() {
 		_spec.ClearField(jobresource.FieldErrorMessage, field.TypeString)
+	}
+	if value, ok := _u.mutation.WarningMessage(); ok {
+		_spec.SetField(jobresource.FieldWarningMessage, field.TypeString, value)
+	}
+	if _u.mutation.WarningMessageCleared() {
+		_spec.ClearField(jobresource.FieldWarningMessage, field.TypeString)
 	}
 	if value, ok := _u.mutation.CurrentStage(); ok {
 		_spec.SetField(jobresource.FieldCurrentStage, field.TypeString, value)

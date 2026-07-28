@@ -140,6 +140,20 @@ func (_c *JobResourceCreate) SetNillableErrorMessage(v *string) *JobResourceCrea
 	return _c
 }
 
+// SetWarningMessage sets the "warning_message" field.
+func (_c *JobResourceCreate) SetWarningMessage(v string) *JobResourceCreate {
+	_c.mutation.SetWarningMessage(v)
+	return _c
+}
+
+// SetNillableWarningMessage sets the "warning_message" field if the given value is not nil.
+func (_c *JobResourceCreate) SetNillableWarningMessage(v *string) *JobResourceCreate {
+	if v != nil {
+		_c.SetWarningMessage(*v)
+	}
+	return _c
+}
+
 // SetCurrentStage sets the "current_stage" field.
 func (_c *JobResourceCreate) SetCurrentStage(v string) *JobResourceCreate {
 	_c.mutation.SetCurrentStage(v)
@@ -416,6 +430,10 @@ func (_c *JobResourceCreate) createSpec() (*JobResource, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.ErrorMessage(); ok {
 		_spec.SetField(jobresource.FieldErrorMessage, field.TypeString, value)
 		_node.ErrorMessage = &value
+	}
+	if value, ok := _c.mutation.WarningMessage(); ok {
+		_spec.SetField(jobresource.FieldWarningMessage, field.TypeString, value)
+		_node.WarningMessage = &value
 	}
 	if value, ok := _c.mutation.CurrentStage(); ok {
 		_spec.SetField(jobresource.FieldCurrentStage, field.TypeString, value)

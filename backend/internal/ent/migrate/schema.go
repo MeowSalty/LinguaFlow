@@ -290,6 +290,7 @@ var (
 		{Name: "skipped_segments", Type: field.TypeInt, Default: 0},
 		{Name: "output_path", Type: field.TypeString, Nullable: true},
 		{Name: "error_message", Type: field.TypeString, Nullable: true},
+		{Name: "warning_message", Type: field.TypeString, Nullable: true},
 		{Name: "current_stage", Type: field.TypeString, Nullable: true, Default: ""},
 		{Name: "stage_total", Type: field.TypeInt, Default: 0},
 		{Name: "stage_completed", Type: field.TypeInt, Default: 0},
@@ -305,13 +306,13 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "job_resources_jobs_job_resources",
-				Columns:    []*schema.Column{JobResourcesColumns[14]},
+				Columns:    []*schema.Column{JobResourcesColumns[15]},
 				RefColumns: []*schema.Column{JobsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
 			{
 				Symbol:     "job_resources_resources_job_resources",
-				Columns:    []*schema.Column{JobResourcesColumns[15]},
+				Columns:    []*schema.Column{JobResourcesColumns[16]},
 				RefColumns: []*schema.Column{ResourcesColumns[0]},
 				OnDelete:   schema.NoAction,
 			},

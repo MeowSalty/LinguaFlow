@@ -32,6 +32,8 @@ const (
 	FieldOutputPath = "output_path"
 	// FieldErrorMessage holds the string denoting the error_message field in the database.
 	FieldErrorMessage = "error_message"
+	// FieldWarningMessage holds the string denoting the warning_message field in the database.
+	FieldWarningMessage = "warning_message"
 	// FieldCurrentStage holds the string denoting the current_stage field in the database.
 	FieldCurrentStage = "current_stage"
 	// FieldStageTotal holds the string denoting the stage_total field in the database.
@@ -74,6 +76,7 @@ var Columns = []string{
 	FieldSkippedSegments,
 	FieldOutputPath,
 	FieldErrorMessage,
+	FieldWarningMessage,
 	FieldCurrentStage,
 	FieldStageTotal,
 	FieldStageCompleted,
@@ -183,6 +186,11 @@ func ByOutputPath(opts ...sql.OrderTermOption) OrderOption {
 // ByErrorMessage orders the results by the error_message field.
 func ByErrorMessage(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldErrorMessage, opts...).ToFunc()
+}
+
+// ByWarningMessage orders the results by the warning_message field.
+func ByWarningMessage(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldWarningMessage, opts...).ToFunc()
 }
 
 // ByCurrentStage orders the results by the current_stage field.

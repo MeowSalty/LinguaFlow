@@ -759,20 +759,29 @@ func (s *JobService) MarkJobResourceRunning(ctx context.Context, jobID, jobResou
 	return nil
 }
 
-func (s *JobService) MarkJobResourceCompleted(ctx context.Context, jobID, jobResourceID int, outputPath string, completedSegments, skippedSegments int) error {
-	if err := s.client.JobResource.UpdateOneID(jobResourceID).
+func (s *JobService) MarkJobResourceCompleted(ctx context.Context, jobID, jobResourceID int, outputPath string, completedSegments, skippedSegments int, warning string) error {
+	update := s.client.JobResource.UpdateOneID(jobResourceID).
 		SetStatus(JobResourceStatusCompleted).
 		SetOutputPath(strings.TrimSpace(outputPath)).
 		SetCompletedSegments(completedSegments).
 		SetSkippedSegments(skippedSegments).
-		ClearErrorMessage().
-		Exec(ctx); err != nil {
+		ClearErrorMessage()
+	warning = strings.TrimSpace(warning)
+	if warning != "" {
+		update.SetWarningMessage(warning)
+	} else {
+		update.ClearWarningMessage()
+	}
+	if err := update.Exec(ctx); err != nil {
 		if ent.IsNotFound(err) {
 			return ErrJobResourceNotFound
 		}
 		return err
 	}
 	s.publishEvent(jobID, "resource_completed", "info", "", fmt.Sprintf("资源处理完成 (%d 段)", completedSegments))
+	if warning != "" {
+		s.publishEvent(jobID, "resource_warning", "warning", "", warning)
+	}
 	return nil
 }
 
@@ -840,6 +849,7 @@ func (s *JobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent
 		SetStatus(JobResourceStatusPending).
 		SetSkippedSegments(0).
 		ClearErrorMessage().
+		ClearWarningMessage().
 		Exec(ctx); err != nil {
 		return nil, err
 	}
@@ -952,6 +962,18 @@ func (s *JobService) ReconcileJob(ctx context.Context, jobID int) error {
 	switch status {
 	case JobStatusCompleted:
 		s.publishEvent(jobID, "job_completed", "info", "", "任务完成")
+		// 聚合资源级软警告为 job_warning（不改变 completed 状态）。
+		var warnings []string
+		for _, item := range current.Edges.JobResources {
+			if item.WarningMessage != nil {
+				if msg := strings.TrimSpace(*item.WarningMessage); msg != "" {
+					warnings = append(warnings, msg)
+				}
+			}
+		}
+		if len(warnings) > 0 {
+			s.publishEvent(jobID, "job_warning", "warning", "", strings.Join(warnings, "; "))
+		}
 	case JobStatusFailed:
 		errMsg := "任务失败"
 		if firstFailure != nil {

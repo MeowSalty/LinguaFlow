@@ -95,6 +95,11 @@ func ErrorMessage(v string) predicate.JobResource {
 	return predicate.JobResource(sql.FieldEQ(FieldErrorMessage, v))
 }
 
+// WarningMessage applies equality check predicate on the "warning_message" field. It's identical to WarningMessageEQ.
+func WarningMessage(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldEQ(FieldWarningMessage, v))
+}
+
 // CurrentStage applies equality check predicate on the "current_stage" field. It's identical to CurrentStageEQ.
 func CurrentStage(v string) predicate.JobResource {
 	return predicate.JobResource(sql.FieldEQ(FieldCurrentStage, v))
@@ -528,6 +533,81 @@ func ErrorMessageEqualFold(v string) predicate.JobResource {
 // ErrorMessageContainsFold applies the ContainsFold predicate on the "error_message" field.
 func ErrorMessageContainsFold(v string) predicate.JobResource {
 	return predicate.JobResource(sql.FieldContainsFold(FieldErrorMessage, v))
+}
+
+// WarningMessageEQ applies the EQ predicate on the "warning_message" field.
+func WarningMessageEQ(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldEQ(FieldWarningMessage, v))
+}
+
+// WarningMessageNEQ applies the NEQ predicate on the "warning_message" field.
+func WarningMessageNEQ(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldNEQ(FieldWarningMessage, v))
+}
+
+// WarningMessageIn applies the In predicate on the "warning_message" field.
+func WarningMessageIn(vs ...string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldIn(FieldWarningMessage, vs...))
+}
+
+// WarningMessageNotIn applies the NotIn predicate on the "warning_message" field.
+func WarningMessageNotIn(vs ...string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldNotIn(FieldWarningMessage, vs...))
+}
+
+// WarningMessageGT applies the GT predicate on the "warning_message" field.
+func WarningMessageGT(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldGT(FieldWarningMessage, v))
+}
+
+// WarningMessageGTE applies the GTE predicate on the "warning_message" field.
+func WarningMessageGTE(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldGTE(FieldWarningMessage, v))
+}
+
+// WarningMessageLT applies the LT predicate on the "warning_message" field.
+func WarningMessageLT(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldLT(FieldWarningMessage, v))
+}
+
+// WarningMessageLTE applies the LTE predicate on the "warning_message" field.
+func WarningMessageLTE(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldLTE(FieldWarningMessage, v))
+}
+
+// WarningMessageContains applies the Contains predicate on the "warning_message" field.
+func WarningMessageContains(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldContains(FieldWarningMessage, v))
+}
+
+// WarningMessageHasPrefix applies the HasPrefix predicate on the "warning_message" field.
+func WarningMessageHasPrefix(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldHasPrefix(FieldWarningMessage, v))
+}
+
+// WarningMessageHasSuffix applies the HasSuffix predicate on the "warning_message" field.
+func WarningMessageHasSuffix(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldHasSuffix(FieldWarningMessage, v))
+}
+
+// WarningMessageIsNil applies the IsNil predicate on the "warning_message" field.
+func WarningMessageIsNil() predicate.JobResource {
+	return predicate.JobResource(sql.FieldIsNull(FieldWarningMessage))
+}
+
+// WarningMessageNotNil applies the NotNil predicate on the "warning_message" field.
+func WarningMessageNotNil() predicate.JobResource {
+	return predicate.JobResource(sql.FieldNotNull(FieldWarningMessage))
+}
+
+// WarningMessageEqualFold applies the EqualFold predicate on the "warning_message" field.
+func WarningMessageEqualFold(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldEqualFold(FieldWarningMessage, v))
+}
+
+// WarningMessageContainsFold applies the ContainsFold predicate on the "warning_message" field.
+func WarningMessageContainsFold(v string) predicate.JobResource {
+	return predicate.JobResource(sql.FieldContainsFold(FieldWarningMessage, v))
 }
 
 // CurrentStageEQ applies the EQ predicate on the "current_stage" field.
