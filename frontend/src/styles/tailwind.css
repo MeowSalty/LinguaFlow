@@ -372,3 +372,39 @@ body {
 .segment-row--rejected td:not(.n-data-table-td--fixed-right) {
   background: var(--lf-danger-soft) !important;
 }
+
+/* ── Quality issue span highlights ── */
+
+.quality-highlighted-text {
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.quality-span {
+  border-radius: 0.2em;
+  padding: 0 0.12em;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.quality-span--warning {
+  background: rgb(245 158 11 / 0.22);
+  color: inherit;
+  box-shadow: inset 0 -1px 0 0 rgb(245 158 11 / 0.45);
+}
+
+.quality-span--error {
+  background: rgb(239 68 68 / 0.18);
+  color: inherit;
+  box-shadow: inset 0 -1px 0 0 rgb(239 68 68 / 0.5);
+}
+
+.dark .quality-span--warning {
+  background: rgb(245 158 11 / 0.28);
+  box-shadow: inset 0 -1px 0 0 rgb(251 191 36 / 0.55);
+}
+
+.dark .quality-span--error {
+  background: rgb(239 68 68 / 0.28);
+  box-shadow: inset 0 -1px 0 0 rgb(248 113 113 / 0.55);
+}
