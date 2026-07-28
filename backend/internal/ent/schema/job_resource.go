@@ -31,6 +31,8 @@ func (JobResource) Fields() []ent.Field {
 			Comment("输出文件路径"),
 		field.String("error_message").Optional().Nillable().
 			Comment("翻译错误信息"),
+		field.String("warning_message").Optional().Nillable().
+			Comment("软警告信息（如 semantic_qa 扫描失败）；资源状态仍为 completed"),
 		field.String("current_stage").Optional().Default("").
 			Comment("当前执行阶段名称：translate, bootstrap 等"),
 		field.Int("stage_total").Default(0).NonNegative().

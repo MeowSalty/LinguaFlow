@@ -19,6 +19,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/pipeline"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/progress"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/prompt"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/service"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/store/filestore"
@@ -243,6 +244,7 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 	var mu sync.Mutex
 	completedCount := 0
 	var lastResult pipeline.TranslateResult
+	var semanticQAWarning string
 
 	// 段落来源标记：仅 segment_ids 手动选择时跳过默认过滤
 	isExplicitSelection := snapshot.ExplicitSegmentSelection
@@ -392,6 +394,54 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 				}
 				return nil
 			}
+		case "semantic_qa":
+			batchHandler = func(batchCtx context.Context, batchResult pipeline.BatchResult) error {
+				resultsByDBID := make(map[int]pipeline.TranslatedSegment, len(batchResult.Segments))
+				dbIDs := make([]int, 0, len(batchResult.Segments))
+				for _, ts := range batchResult.Segments {
+					if ts.Issues == nil {
+						continue
+					}
+					dbID, ok := docIndexToDBID[ts.Index]
+					if !ok {
+						continue
+					}
+					resultsByDBID[dbID] = ts
+					dbIDs = append(dbIDs, dbID)
+				}
+				if len(dbIDs) == 0 {
+					return nil
+				}
+
+				rows, err := r.client.Segment.Query().Where(segment.IDIn(dbIDs...)).All(batchCtx)
+				if err != nil {
+					return fmt.Errorf("load semantic_qa batch segments: %w", err)
+				}
+
+				completed := 0
+				failed := 0
+				for _, row := range rows {
+					ts, ok := resultsByDBID[row.ID]
+					if !ok {
+						continue
+					}
+					updated, err := persistSemanticQASegmentIssues(batchCtx, r.client, row, ts.TargetText, ts.Issues)
+					if err != nil {
+						r.logger.Warn("persist semantic_qa issues failed", "segment_id", row.ID, "err", err)
+						failed++
+						continue
+					}
+					if updated == 0 {
+						r.logger.Info("skip stale semantic_qa result", "segment_id", row.ID)
+						continue
+					}
+					completed++
+				}
+				if failed > 0 && completed == 0 {
+					return fmt.Errorf("semantic_qa batch persist failed: all %d writable segments failed to write quality_issues", failed)
+				}
+				return nil
+			}
 		}
 
 		roundIdx := roundIdx // capture for closure
@@ -405,6 +455,18 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 		result, roundErr := eng.ExecuteRound(ctx, roundIdx, doc, execOpts...)
 		if roundErr == nil {
 			lastResult = result
+			// semantic_qa 终态扫描失败转软警告，不阻塞资源 completed。
+			if round.Mode == "semantic_qa" && result.FailedBatchCount > 0 {
+				semanticQAWarning = fmt.Sprintf(
+					"语义质检未完全成功：%d 个批次、%d 个段落扫描失败",
+					result.FailedBatchCount, result.FailedSegmentCount,
+				)
+				r.logger.Warn("semantic_qa finished with soft failures",
+					"resource_id", item.ID,
+					"failed_batches", result.FailedBatchCount,
+					"failed_segments", result.FailedSegmentCount,
+				)
+			}
 		}
 
 		if roundErr != nil {
@@ -462,7 +524,39 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 		return nil
 	}
 
-	return r.jobs.MarkJobResourceCompleted(ctx, job.ID, item.ID, "", completedCount, skippedCount)
+	return r.jobs.MarkJobResourceCompleted(ctx, job.ID, item.ID, "", completedCount, skippedCount, semanticQAWarning)
+}
+
+func mergeSemanticQAIssues(existing, fresh []qa.QualityIssue) []qa.QualityIssue {
+	merged := make([]qa.QualityIssue, 0, len(existing)+len(fresh))
+	for _, issue := range existing {
+		if !prompt.IsSemanticQACode(issue.Code) {
+			merged = append(merged, issue)
+		}
+	}
+	return append(merged, fresh...)
+}
+
+// persistSemanticQASegmentIssues 对单个段落执行 CAS 写入语义质检结果。
+//
+// CAS 保护：仅当段落仍处于可质检状态（translated/edited）且译文未被改动
+// （当前 targetText 仍等于扫描时看到的 targetText）时才写入，避免覆盖
+// 审核态（approved/rejected）或已被改写的新译文。
+//
+// 不使用 UpdatedAtEQ：SQLite TEXT 时间列在 ent/modernc 往返时存在精度/
+// 格式差异，会导致 WHERE 恒匹配 0 行而静默丢弃所有结果。
+//
+// 返回实际更新行数（0 表示 CAS 未命中，调用方据此跳过并记日志）。
+func persistSemanticQASegmentIssues(ctx context.Context, c *ent.Client, row *ent.Segment, targetText string, fresh []qa.QualityIssue) (int, error) {
+	merged := mergeSemanticQAIssues(row.QualityIssues, fresh)
+	return c.Segment.Update().
+		Where(
+			segment.IDEQ(row.ID),
+			segment.StatusIn(service.SegmentStatusTranslated, service.SegmentStatusEdited),
+			segment.TargetTextEQ(targetText),
+		).
+		SetQualityIssues(merged).
+		Save(ctx)
 }
 
 // buildSegmentInputs 将 DB segments 转换为 SegmentInput 切片。

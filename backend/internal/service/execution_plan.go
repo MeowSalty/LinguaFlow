@@ -340,8 +340,47 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 					return fmt.Errorf("%w: rounds[%d].adjudicate.adjudicate_codes contains invalid code %q (allowed: source_residual, length_ratio)", ErrExecutionPlanConfigInvalid, i, code)
 				}
 			}
+		case "semantic_qa":
+			if round.SemanticQA == nil {
+				return fmt.Errorf("%w: rounds[%d].semantic_qa config required when mode=semantic_qa", ErrExecutionPlanConfigInvalid, i)
+			}
+			s := round.SemanticQA
+			if s.BatchSize < 0 {
+				return fmt.Errorf("%w: rounds[%d].semantic_qa.batch_size must be >= 0", ErrExecutionPlanConfigInvalid, i)
+			}
+			if s.MaxWordsPerBatch < 0 {
+				return fmt.Errorf("%w: rounds[%d].semantic_qa.max_words_per_batch must be >= 0", ErrExecutionPlanConfigInvalid, i)
+			}
+			if s.BatchSize <= 0 && s.MaxWordsPerBatch <= 0 {
+				return fmt.Errorf("%w: rounds[%d].semantic_qa.batch_size and max_words_per_batch cannot both be 0", ErrExecutionPlanConfigInvalid, i)
+			}
+			if s.Concurrency < 1 {
+				return fmt.Errorf("%w: rounds[%d].semantic_qa.concurrency must be >= 1", ErrExecutionPlanConfigInvalid, i)
+			}
+			scope := s.SegmentScope
+			if scope == "" {
+				scope = "all"
+			}
+			switch scope {
+			case "all", "with_issues", "with_issue_codes":
+				// ok
+			default:
+				return fmt.Errorf("%w: rounds[%d].semantic_qa.segment_scope must be 'all', 'with_issues' or 'with_issue_codes'", ErrExecutionPlanConfigInvalid, i)
+			}
+			if scope == "with_issue_codes" && len(s.IssueCodes) == 0 {
+				return fmt.Errorf("%w: rounds[%d].semantic_qa.issue_codes must contain at least one code when segment_scope is 'with_issue_codes'", ErrExecutionPlanConfigInvalid, i)
+			}
+			allowedIssueCodes := map[string]struct{}{
+				"source_residual": {}, "length_ratio": {}, "untranslated": {}, "duplicate": {},
+				"calque": {}, "term_fidelity": {}, "naturalness": {},
+			}
+			for _, code := range s.IssueCodes {
+				if _, ok := allowedIssueCodes[code]; !ok {
+					return fmt.Errorf("%w: rounds[%d].semantic_qa.issue_codes contains invalid code %q", ErrExecutionPlanConfigInvalid, i, code)
+				}
+			}
 		default:
-			return fmt.Errorf("%w: rounds[%d].mode must be 'translate', 'extract' or 'adjudicate'", ErrExecutionPlanConfigInvalid, i)
+			return fmt.Errorf("%w: rounds[%d].mode must be 'translate', 'extract', 'adjudicate' or 'semantic_qa'", ErrExecutionPlanConfigInvalid, i)
 		}
 	}
 	return nil

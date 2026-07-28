@@ -287,4 +287,34 @@ func assertResidualIssue(t *testing.T, issue QualityIssue, index int) {
 	if issue.SegmentIndex != index {
 		t.Errorf("index=%d, want %d", issue.SegmentIndex, index)
 	}
+	if issue.Span == nil || issue.Span.MatchedText == "" {
+		t.Errorf("expected non-empty Span.MatchedText, got %#v", issue.Span)
+	}
+}
+
+func TestSourceResidual_MultipleHitsSeparateIssues(t *testing.T) {
+	c := NewSourceResidualChecker("ja", "en")
+	issues := c.Check(context.Background(), []CheckInput{
+		{Index: 0, SourceText: "テストと漢字", TargetText: "left テスト mid テスト right"},
+	})
+	if len(issues) < 1 {
+		t.Fatalf("want at least 1 issue, got %d", len(issues))
+	}
+	// 同一 matched_text 去重后仍可能只有 1 条；换不同残留
+	issues = c.Check(context.Background(), []CheckInput{
+		{Index: 0, SourceText: "あいうとカタカナ", TargetText: "x あいう y カタカナ z"},
+	})
+	if len(issues) != 2 {
+		t.Fatalf("want 2 issues for distinct residuals, got %d: %#v", len(issues), issues)
+	}
+	for _, iss := range issues {
+		assertResidualIssue(t, iss, 0)
+	}
+	fps := map[string]struct{}{}
+	for _, iss := range issues {
+		fps[Fingerprint(iss)] = struct{}{}
+	}
+	if len(fps) != 2 {
+		t.Errorf("want 2 distinct fingerprints, got %v", fps)
+	}
 }

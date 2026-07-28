@@ -123,6 +123,8 @@ func (e *Engine) Close() error {
 			}
 		} else if ah, ok := r.Handler.(*pipeline.AdjudicateHandler); ok {
 			b = ah.Backend
+		} else if sh, ok := r.Handler.(*pipeline.SemanticQAHandler); ok {
+			b = sh.Backend
 		}
 		if b == nil {
 			continue

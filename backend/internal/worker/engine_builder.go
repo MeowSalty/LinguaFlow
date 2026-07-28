@@ -76,6 +76,16 @@ func (r *JobRunner) buildEngineFromSnapshot(
 			}
 			rounds = append(rounds, round)
 
+		case "semantic_qa":
+			if rs.SemanticQA == nil {
+				return nil, fmt.Errorf("round[%d]: mode=semantic_qa but semantic_qa config is nil", i)
+			}
+			round, err := r.buildSemanticQARound(rs, b)
+			if err != nil {
+				return nil, err
+			}
+			rounds = append(rounds, round)
+
 		default:
 			return nil, fmt.Errorf("round[%d]: unsupported mode %q", i, rs.Mode)
 		}
@@ -214,6 +224,33 @@ func (r *JobRunner) buildAdjudicateRound(rs service.JobRoundSnapshot, b backend.
 		ResponseMode:       responseModeFromBackendOptions(rs.Backend.Options),
 		AdjudicateRenderer: renderer,
 		AdjudicateCodes:    a.AdjudicateCodes,
+	}, nil
+}
+
+// buildSemanticQARound 从快照构建语义质检轮次配置（prompt 取自内嵌模板）。
+func (r *JobRunner) buildSemanticQARound(rs service.JobRoundSnapshot, b backend.Backend) (engine.Round, error) {
+	s := rs.SemanticQA
+
+	renderer, err := prompt.NewSemanticQARenderer(templates.EmbeddedSemanticQATemplate())
+	if err != nil {
+		return engine.Round{}, fmt.Errorf("build semantic_qa renderer: %w", err)
+	}
+
+	return engine.Round{
+		Backend:          b,
+		BatchSize:        s.BatchSize,
+		MaxWordsPerBatch: s.MaxWordsPerBatch,
+		Concurrency:      s.Concurrency,
+		Retry: backend.RetryPolicy{
+			MaxAttempts: s.Retry.MaxAttempts,
+			Backoff:     time.Duration(s.Retry.BackoffMs) * time.Millisecond,
+			Jitter:      s.Retry.Jitter,
+		},
+		Mode:               pipeline.RoundModeSemanticQA,
+		ResponseMode:       responseModeFromBackendOptions(rs.Backend.Options),
+		SemanticQARenderer: renderer,
+		SegmentScope:       s.SegmentScope,
+		IssueCodes:         s.IssueCodes,
 	}, nil
 }
 

@@ -150,7 +150,7 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 	codes := adjudicateCodeSet(h.adjudicateCodes())
 	tried := []string{h.Backend.Name()}
 
-	// 构建裁决输入（仅可裁决 issue 子集）
+	// 构建裁决输入（仅可裁决 issue 子集；含 matched_text 以区分同 code 多实例）
 	segments := make([]prompt.AdjudicationSegment, 0, len(idxs))
 	for _, idx := range idxs {
 		seg := &doc.Segments[idx]
@@ -158,8 +158,9 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		for _, iss := range seg.Issues {
 			if _, ok := codes[iss.Code]; ok {
 				issues = append(issues, prompt.AdjudicationIssue{
-					Code:    iss.Code,
-					Message: iss.Message,
+					Code:        iss.Code,
+					Message:     iss.Message,
+					MatchedText: qa.MatchedText(iss),
 				})
 			}
 		}
@@ -298,10 +299,10 @@ func (h *AdjudicateHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		return h.preserveResult(doc, idxs, rep)
 	}
 
-	// (id, issue_code) → verdict
+	// (id, issue_code, matched_text) → verdict
 	verdictMap := make(map[string]string, len(verdicts))
 	for _, v := range verdicts {
-		key := v.ID + "\x00" + v.IssueCode
+		key := adjudicationKey(v.ID, v.IssueCode, v.MatchedText)
 		verdictMap[key] = v.Verdict
 	}
 
@@ -367,7 +368,13 @@ func (h *AdjudicateHandler) preserveResult(doc *Document, idxs []int, rep progre
 	}
 }
 
+// adjudicationKey 构建 (segment_id, code, matched_text) 裁决键。
+func adjudicationKey(segID, code, matchedText string) string {
+	return segID + "\x00" + code + "\x00" + matchedText
+}
+
 // filterIssuesByVerdicts 仅剔除可裁决且 verdict==false_positive 的 issue；其余保留。
+// 优先按 (id, code, matched_text) 匹配；若该段该 code 仅有一条 issue，则允许回退到空 matched_text 裁决。
 func filterIssuesByVerdicts(
 	issues []qa.QualityIssue,
 	segID string,
@@ -378,21 +385,32 @@ func filterIssuesByVerdicts(
 	if len(issues) == 0 {
 		return nil
 	}
+	issueCounts := make(map[string]int, len(codes))
+	for _, iss := range issues {
+		if _, adjudicable := codes[iss.Code]; adjudicable {
+			issueCounts[iss.Code]++
+		}
+	}
 	out := make([]qa.QualityIssue, 0, len(issues))
 	for _, iss := range issues {
 		if _, adjudicable := codes[iss.Code]; !adjudicable {
 			out = append(out, iss)
 			continue
 		}
-		key := segID + "\x00" + iss.Code
+		mt := qa.MatchedText(iss)
+		key := adjudicationKey(segID, iss.Code, mt)
 		v, ok := verdictMap[key]
+		if !ok && mt != "" && issueCounts[iss.Code] == 1 {
+			// 单实例兼容：LLM 未回传 matched_text 时，用空 matched_text 键。
+			v, ok = verdictMap[adjudicationKey(segID, iss.Code, "")]
+		}
 		if !ok || v != "false_positive" {
 			// 缺失 / real / 其他 → 保留
 			out = append(out, iss)
 			continue
 		}
 		logger.Info("adjudicate dismissed false_positive",
-			"segment_id", segID, "code", iss.Code, "message", iss.Message)
+			"segment_id", segID, "code", iss.Code, "matched_text", mt, "message", iss.Message)
 	}
 	return out
 }

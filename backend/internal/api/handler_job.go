@@ -31,6 +31,7 @@ type jobResourceResponse struct {
 	SkippedSegments   int               `json:"skipped_segments"`
 	OutputPath        string            `json:"output_path,omitempty"`
 	ErrorMessage      *string           `json:"error_message,omitempty"`
+	WarningMessage    *string           `json:"warning_message,omitempty"`
 	Resource          *resourceResponse `json:"resource,omitempty"`
 	CurrentStage      string            `json:"current_stage,omitempty"`
 	StageTotal        int               `json:"stage_total,omitempty"`
@@ -314,6 +315,7 @@ func toJobResourceResponse(row *ent.JobResource) jobResourceResponse {
 		SkippedSegments:   row.SkippedSegments,
 		OutputPath:        row.OutputPath,
 		ErrorMessage:      row.ErrorMessage,
+		WarningMessage:    row.WarningMessage,
 		CurrentStage:      row.CurrentStage,
 		StageTotal:        row.StageTotal,
 		StageCompleted:    row.StageCompleted,

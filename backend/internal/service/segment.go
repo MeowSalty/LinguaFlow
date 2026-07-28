@@ -177,7 +177,7 @@ func buildQualityPredicate(opts ResourceSegmentListOptions, dialectName string) 
 	}
 
 	switch opts.QualityCode {
-	case "untranslated", "length_ratio", "duplicate":
+	case "untranslated", "length_ratio", "duplicate", "source_residual", "calque", "term_fidelity", "naturalness":
 		code := opts.QualityCode
 		preds = append(preds, predicate.Segment(func(s *sql.Selector) {
 			col := s.C(segment.FieldQualityIssues)

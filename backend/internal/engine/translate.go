@@ -55,15 +55,17 @@ func (e *Engine) ExecuteRound(ctx context.Context, roundIdx int, doc *pipeline.D
 	roundResult := buildRoundResult(doc)
 	roundResult.InputTokens = atomic.LoadInt64(&doc.InputTokens)
 	roundResult.OutputTokens = atomic.LoadInt64(&doc.OutputTokens)
+	roundResult.FailedBatchCount = result.FailedBatches
+	roundResult.FailedSegmentCount = len(result.FailedSegments)
 
 	e.logger.Info("execute round done",
 		"round", roundIdx,
 		"mode", handler.ModeName(),
 		"segments", len(doc.Segments),
 		"unresolved", roundResult.UnresolvedCount,
+		"failed_batches", roundResult.FailedBatchCount,
+		"failed_segments", roundResult.FailedSegmentCount,
 		"duration", time.Since(start).Round(time.Millisecond))
-
-	_ = result // RunRound 的 Unresolved 已通过 Finalize 写入 doc.Vars
 
 	return roundResult, nil
 }

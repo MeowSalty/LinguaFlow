@@ -80,18 +80,31 @@ func (c *SourceResidualChecker) Check(_ context.Context, segments []CheckInput) 
 		}
 		cleanedTgt := stripPlaceholders(tgt)
 		cleanedSrc := stripPlaceholders(src)
+		// 在原始目标文本上定位偏移（占位符剥离仅用于命中判定）
+		rawTgt := seg.TargetText
+		seen := make(map[string]struct{})
 		for _, rule := range c.rules {
 			hits := collectResidualHits(cleanedSrc, cleanedTgt, rule)
-			if len(hits) == 0 {
-				continue
+			for _, hit := range hits {
+				if _, ok := seen[hit]; ok {
+					continue
+				}
+				seen[hit] = struct{}{}
+				span := LocateSpan(rawTgt, hit)
+				if span == nil {
+					span = &Span{MatchedText: hit}
+				}
+				issues = append(issues, QualityIssue{
+					SegmentIndex: seg.Index,
+					Severity:     SeverityWarning,
+					Code:         "source_residual",
+					Message:      fmt.Sprintf("译文残留源语片段：%s", hit),
+					Span:         span,
+				})
 			}
-			issues = append(issues, QualityIssue{
-				SegmentIndex: seg.Index,
-				Severity:     SeverityWarning,
-				Code:         "source_residual",
-				Message:      fmt.Sprintf("译文残留源语片段：%s", strings.Join(hits, " / ")),
-			})
-			break // 同段报一次即可
+			if len(hits) > 0 {
+				break // 同段只应用首个命中规则档
+			}
 		}
 	}
 	return issues

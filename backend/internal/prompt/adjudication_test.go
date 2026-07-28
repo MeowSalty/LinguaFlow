@@ -102,8 +102,8 @@ func TestAdjudicationRenderer_TextUser(t *testing.T) {
 	if !strings.Contains(usr, "target: 你好 Hello") {
 		t.Errorf("missing target:\n%s", usr)
 	}
-	if !strings.Contains(usr, "- source_residual: residual text") {
-		t.Errorf("missing issue line:\n%s", usr)
+	if !strings.Contains(usr, "- source_residual | : residual text") {
+		t.Errorf("missing issue line with empty matched_text:\n%s", usr)
 	}
 }
 
@@ -123,8 +123,8 @@ func TestAdjudicationVerdictSchema_Strict(t *testing.T) {
 		t.Error("item additionalProperties should be false")
 	}
 	req, _ := item["required"].([]string)
-	if len(req) != 4 {
-		t.Errorf("item required should list 4 props, got %#v", req)
+	if len(req) != 5 {
+		t.Errorf("item required should list 5 props, got %#v", req)
 	}
 }
 
@@ -158,7 +158,7 @@ func TestParseAdjudicationResponse_NoJSON(t *testing.T) {
 }
 
 func TestParseAdjudicationByMode_TextVerdicts(t *testing.T) {
-	resp := "[verdicts]\n1 | source_residual | false_positive | proper noun\n2 | length_ratio | real | too short"
+	resp := "[verdicts]\n1 | source_residual | テスト | false_positive | proper noun\n2 | length_ratio |  | real | too short"
 	got, err := ParseAdjudicationByMode(resp, true)
 	if err != nil {
 		t.Fatalf("parse: %v", err)
@@ -166,11 +166,22 @@ func TestParseAdjudicationByMode_TextVerdicts(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("got len=%d want 2: %#v", len(got), got)
 	}
-	if got[0].ID != "1" || got[0].Verdict != "false_positive" || got[0].Reason != "proper noun" {
+	if got[0].ID != "1" || got[0].Verdict != "false_positive" || got[0].MatchedText != "テスト" || got[0].Reason != "proper noun" {
 		t.Errorf("first=%#v", got[0])
 	}
 	if got[1].ID != "2" || got[1].IssueCode != "length_ratio" || got[1].Verdict != "real" {
 		t.Errorf("second=%#v", got[1])
+	}
+}
+
+func TestParseAdjudicationByMode_TextLegacyFourFields(t *testing.T) {
+	resp := "[verdicts]\n1 | source_residual | false_positive | proper noun"
+	got, err := ParseAdjudicationByMode(resp, true)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(got) != 1 || got[0].MatchedText != "" || got[0].Verdict != "false_positive" {
+		t.Fatalf("legacy four-field got=%#v", got)
 	}
 }
 

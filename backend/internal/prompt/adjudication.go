@@ -11,8 +11,9 @@ import (
 
 // AdjudicationIssue 是裁决输入中的单条规则问题。
 type AdjudicationIssue struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
+	Code        string `json:"code"`
+	Message     string `json:"message"`
+	MatchedText string `json:"matched_text,omitempty"`
 }
 
 // AdjudicationSegment 是裁决输入中的单个段落。
@@ -92,7 +93,7 @@ func (r *AdjudicationRenderer) Render(d AdjudicationData) (string, string, error
 //	source: ...
 //	target: ...
 //	issues:
-//	- code: message
+//	- code | matched_text: message
 func buildAdjudicationTextUser(d AdjudicationData) string {
 	var sb strings.Builder
 	sb.WriteString("source_lang: ")
@@ -115,6 +116,8 @@ func buildAdjudicationTextUser(d AdjudicationData) string {
 		for _, iss := range seg.Issues {
 			sb.WriteString("- ")
 			sb.WriteString(iss.Code)
+			sb.WriteString(" | ")
+			sb.WriteString(iss.MatchedText)
 			sb.WriteString(": ")
 			sb.WriteString(iss.Message)
 			sb.WriteByte(10)
@@ -125,15 +128,16 @@ func buildAdjudicationTextUser(d AdjudicationData) string {
 
 // AdjudicationVerdict 是 LLM 对单条 issue 的裁决结果。
 type AdjudicationVerdict struct {
-	ID        string `json:"id"`
-	IssueCode string `json:"issue_code"`
-	Verdict   string `json:"verdict"` // "real" | "false_positive"
-	Reason    string `json:"reason"`
+	ID          string `json:"id"`
+	IssueCode   string `json:"issue_code"`
+	MatchedText string `json:"matched_text,omitempty"`
+	Verdict     string `json:"verdict"` // "real" | "false_positive"
+	Reason      string `json:"reason"`
 }
 
 // AdjudicationVerdictSchema 返回 OpenAI 严格 JSON schema：
 //
-//	{verdicts:[{id,issue_code,verdict,reason}]}
+//	{verdicts:[{id,issue_code,matched_text,verdict,reason}]}
 func AdjudicationVerdictSchema() map[string]any {
 	itemProps := map[string]any{
 		"id": map[string]any{"type": "string"},
@@ -141,6 +145,7 @@ func AdjudicationVerdictSchema() map[string]any {
 			"type": "string",
 			"enum": []string{"source_residual", "length_ratio"},
 		},
+		"matched_text": map[string]any{"type": "string"},
 		"verdict": map[string]any{
 			"type": "string",
 			"enum": []string{"real", "false_positive"},
@@ -155,7 +160,7 @@ func AdjudicationVerdictSchema() map[string]any {
 				"items": map[string]any{
 					"type":                 "object",
 					"properties":           itemProps,
-					"required":             []string{"id", "issue_code", "verdict", "reason"},
+					"required":             []string{"id", "issue_code", "matched_text", "verdict", "reason"},
 					"additionalProperties": false,
 				},
 			},
@@ -182,6 +187,7 @@ func ParseAdjudicationResponse(text string) ([]AdjudicationVerdict, error) {
 	for _, v := range env.Verdicts {
 		v.ID = strings.TrimSpace(v.ID)
 		v.IssueCode = strings.TrimSpace(v.IssueCode)
+		v.MatchedText = strings.TrimSpace(v.MatchedText)
 		v.Verdict = strings.TrimSpace(v.Verdict)
 		v.Reason = strings.TrimSpace(v.Reason)
 		if v.ID == "" || v.IssueCode == "" {
@@ -208,9 +214,10 @@ func ParseAdjudicationByMode(text string, isTextMode bool) ([]AdjudicationVerdic
 // parseAdjudicationTextVerdicts 解析 text 协议裁决输出：
 //
 //	[verdicts]
-//	id | issue_code | verdict | reason
+//	id | issue_code | matched_text | verdict | reason
 //
-// reason 含 | 时取前三段为 id/issue_code/verdict，剩余并入 reason。
+// 兼容旧四字段 id | issue_code | verdict | reason（matched_text 为空）。
+// reason 含 | 时：五段及以上取前四段为 id/issue_code/matched_text/verdict，剩余并入 reason。
 func parseAdjudicationTextVerdicts(text string) []AdjudicationVerdict {
 	text = stripAdjudicationCodeFence(text)
 	lines := strings.Split(text, "\n")
@@ -253,15 +260,43 @@ func parseAdjudicationVerdictLine(line string) *AdjudicationVerdict {
 	}
 	id := strings.TrimSpace(parts[0])
 	issueCode := strings.TrimSpace(parts[1])
-	verdict := strings.TrimSpace(parts[2])
+	matchedText := ""
+	verdict := ""
 	reason := ""
-	if len(parts) > 3 {
-		rest := make([]string, 0, len(parts)-3)
-		for _, p := range parts[3:] {
-			rest = append(rest, strings.TrimSpace(p))
+
+	// 探测 verdict 字段位置：第 3 或第 4 列
+	if len(parts) >= 4 {
+		p2 := strings.TrimSpace(parts[2])
+		p3 := strings.TrimSpace(parts[3])
+		if p2 == "real" || p2 == "false_positive" {
+			// 旧格式：id | code | verdict | reason...
+			verdict = p2
+			if len(parts) > 3 {
+				rest := make([]string, 0, len(parts)-3)
+				for _, p := range parts[3:] {
+					rest = append(rest, strings.TrimSpace(p))
+				}
+				reason = strings.Join(rest, " | ")
+			}
+		} else if p3 == "real" || p3 == "false_positive" {
+			// 新格式：id | code | matched_text | verdict | reason...
+			matchedText = p2
+			verdict = p3
+			if len(parts) > 4 {
+				rest := make([]string, 0, len(parts)-4)
+				for _, p := range parts[4:] {
+					rest = append(rest, strings.TrimSpace(p))
+				}
+				reason = strings.Join(rest, " | ")
+			}
+		} else {
+			return nil
 		}
-		reason = strings.Join(rest, " | ")
+	} else {
+		// 三段：id | code | verdict
+		verdict = strings.TrimSpace(parts[2])
 	}
+
 	if id == "" || issueCode == "" {
 		return nil
 	}
@@ -269,10 +304,11 @@ func parseAdjudicationVerdictLine(line string) *AdjudicationVerdict {
 		return nil
 	}
 	return &AdjudicationVerdict{
-		ID:        id,
-		IssueCode: issueCode,
-		Verdict:   verdict,
-		Reason:    reason,
+		ID:          id,
+		IssueCode:   issueCode,
+		MatchedText: matchedText,
+		Verdict:     verdict,
+		Reason:      reason,
 	}
 }
 

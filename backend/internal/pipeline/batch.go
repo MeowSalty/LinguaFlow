@@ -9,6 +9,7 @@ import "sort"
 type BatchConstraint struct {
 	MaxSegments int // 段落数上限（原 BatchSize）
 	MaxWords    int // 字词数上限（0=不限制）
+	WordCount   func(Segment) int
 }
 
 // BuildContextAwareBatches 根据上下文窗口合并重叠段落的 batch。
@@ -125,6 +126,9 @@ func splitByConstraintAndSpan(doc *Document, group []int, constraint BatchConstr
 	wordCount := 0
 	for i, idx := range group {
 		segWords := CountWords(doc.Segments[idx].Source)
+		if constraint.WordCount != nil {
+			segWords = constraint.WordCount(doc.Segments[idx])
+		}
 		if i > start {
 			segCount := i - start
 			exceedSegments := !noSegLimit && segCount >= constraint.MaxSegments

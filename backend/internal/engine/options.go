@@ -56,6 +56,11 @@ type Round struct {
 	AdjudicateCodes    []string
 	// MaxBatchIndexSpan 同批段落索引跨度上限；<=0 不限制（默认关闭，预埋）。
 	MaxBatchIndexSpan int
+
+	// 语义质检轮次专用字段
+	SemanticQARenderer *prompt.SemanticQARenderer
+	SegmentScope       string   // "all"(默认) | "with_issues" | "with_issue_codes"
+	IssueCodes         []string // 仅 with_issue_codes 生效
 }
 
 // RuntimeResources 封装可选的运行时资源。
@@ -141,6 +146,15 @@ func buildRoundConfigs(in []Round, cfg *Config) []RoundConfig {
 				MaxBatchIndexSpan: r.MaxBatchIndexSpan,
 			}
 
+		case pipeline.RoundModeSemanticQA:
+			rc.SemanticQA = &SemanticQARoundConfig{
+				Renderer:          r.SemanticQARenderer,
+				ResponseMode:      r.ResponseMode,
+				MaxBatchIndexSpan: r.MaxBatchIndexSpan,
+				SegmentScope:      r.SegmentScope,
+				IssueCodes:        r.IssueCodes,
+			}
+
 		default:
 			// 未知模式默认为翻译
 			rc.Translate = &TranslateRoundConfig{
@@ -203,6 +217,9 @@ func buildSinglePipelineRound(
 	}
 	if rc.Adjudicate != nil {
 		return buildAdjudicatePipelineRound(rc, logger, reporter)
+	}
+	if rc.SemanticQA != nil {
+		return buildSemanticQAPipelineRound(rc, logger, reporter)
 	}
 	return buildTranslatePipelineRound(
 		rc, glossaryRes, tmRes, rubyRestorer, rubyRetryBackends,
@@ -349,6 +366,38 @@ func buildAdjudicatePipelineRound(
 		Retry:             rc.Retry,
 		ResponseMode:      a.ResponseMode,
 		AdjudicateCodes:   a.AdjudicateCodes,
+		Reporter:          reporter,
+		Logger:            logger,
+	}
+
+	return pipeline.Round{
+		Concurrency: rc.Concurrency,
+		Retry:       rc.Retry,
+		Context:     rc.Context,
+		Handler:     handler,
+	}, nil
+}
+
+func buildSemanticQAPipelineRound(
+	rc RoundConfig,
+	logger *slog.Logger,
+	reporter progress.Reporter,
+) (pipeline.Round, error) {
+	s := rc.SemanticQA
+	if s == nil {
+		s = &SemanticQARoundConfig{}
+	}
+
+	handler := &pipeline.SemanticQAHandler{
+		Backend:           rc.Backend,
+		Renderer:          s.Renderer,
+		BatchSize:         rc.BatchSize,
+		MaxWordsPerBatch:  rc.MaxWordsPerBatch,
+		MaxBatchIndexSpan: s.MaxBatchIndexSpan,
+		Retry:             rc.Retry,
+		ResponseMode:      s.ResponseMode,
+		SegmentScope:      s.SegmentScope,
+		IssueCodes:        s.IssueCodes,
 		Reporter:          reporter,
 		Logger:            logger,
 	}

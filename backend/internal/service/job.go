@@ -134,11 +134,12 @@ type ExecutionPlanRubyRetrySnapshot struct {
 
 // JobRoundSnapshot 单轮的完整执行快照。
 type JobRoundSnapshot struct {
-	Mode       string                      `json:"mode"` // "translate" | "extract" | "adjudicate"
+	Mode       string                      `json:"mode"` // "translate" | "extract" | "adjudicate" | "semantic_qa"
 	Backend    BackendSnapshot             `json:"backend"`
 	Translate  *JobTranslateRoundSnapshot  `json:"translate,omitempty"`
 	Extract    *JobExtractRoundSnapshot    `json:"extract,omitempty"`
 	Adjudicate *JobAdjudicateRoundSnapshot `json:"adjudicate,omitempty"`
+	SemanticQA *JobSemanticQARoundSnapshot `json:"semantic_qa,omitempty"`
 }
 
 // JobTranslateRoundSnapshot 翻译轮次快照。
@@ -171,6 +172,31 @@ type JobAdjudicateRoundSnapshot struct {
 	Concurrency      int                `json:"concurrency"`
 	AdjudicateCodes  []string           `json:"adjudicate_codes,omitempty"`
 	Retry            schema.RetryConfig `json:"retry"`
+}
+
+// JobSemanticQARoundSnapshot 语义质检轮次快照（无 prompt 字段，内置不可见）。
+type JobSemanticQARoundSnapshot struct {
+	BatchSize        int                `json:"batch_size"`
+	MaxWordsPerBatch int                `json:"max_words_per_batch"`
+	Concurrency      int                `json:"concurrency"`
+	SegmentScope     string             `json:"segment_scope,omitempty"` // 物化后的 scope（空 → "all"）
+	IssueCodes       []string           `json:"issue_codes,omitempty"`   // 仅 with_issue_codes 有效
+	Retry            schema.RetryConfig `json:"retry"`
+}
+
+func snapshotSemanticQARound(s *schema.SemanticQARoundConfig) *JobSemanticQARoundSnapshot {
+	scope := s.SegmentScope
+	if scope == "" {
+		scope = "all"
+	}
+	return &JobSemanticQARoundSnapshot{
+		BatchSize:        s.BatchSize,
+		MaxWordsPerBatch: s.MaxWordsPerBatch,
+		Concurrency:      s.Concurrency,
+		SegmentScope:     scope,
+		IssueCodes:       append([]string(nil), s.IssueCodes...),
+		Retry:            s.Retry,
+	}
 }
 
 // SegmentFilterSnapshot 翻译轮次段落过滤快照。
@@ -436,6 +462,16 @@ func (s *JobService) validateAndSnapshot(
 					AdjudicateCodes:  codes,
 					Retry:            a.Retry,
 				},
+			})
+
+		case "semantic_qa":
+			if round.SemanticQA == nil {
+				return nil, fmt.Errorf("rounds[%d] semantic_qa config is nil", i)
+			}
+			snapshot.Rounds = append(snapshot.Rounds, JobRoundSnapshot{
+				Mode:       "semantic_qa",
+				Backend:    *backendSnap,
+				SemanticQA: snapshotSemanticQARound(round.SemanticQA),
 			})
 
 		default:
@@ -723,20 +759,29 @@ func (s *JobService) MarkJobResourceRunning(ctx context.Context, jobID, jobResou
 	return nil
 }
 
-func (s *JobService) MarkJobResourceCompleted(ctx context.Context, jobID, jobResourceID int, outputPath string, completedSegments, skippedSegments int) error {
-	if err := s.client.JobResource.UpdateOneID(jobResourceID).
+func (s *JobService) MarkJobResourceCompleted(ctx context.Context, jobID, jobResourceID int, outputPath string, completedSegments, skippedSegments int, warning string) error {
+	update := s.client.JobResource.UpdateOneID(jobResourceID).
 		SetStatus(JobResourceStatusCompleted).
 		SetOutputPath(strings.TrimSpace(outputPath)).
 		SetCompletedSegments(completedSegments).
 		SetSkippedSegments(skippedSegments).
-		ClearErrorMessage().
-		Exec(ctx); err != nil {
+		ClearErrorMessage()
+	warning = strings.TrimSpace(warning)
+	if warning != "" {
+		update.SetWarningMessage(warning)
+	} else {
+		update.ClearWarningMessage()
+	}
+	if err := update.Exec(ctx); err != nil {
 		if ent.IsNotFound(err) {
 			return ErrJobResourceNotFound
 		}
 		return err
 	}
 	s.publishEvent(jobID, "resource_completed", "info", "", fmt.Sprintf("资源处理完成 (%d 段)", completedSegments))
+	if warning != "" {
+		s.publishEvent(jobID, "resource_warning", "warning", "", warning)
+	}
 	return nil
 }
 
@@ -804,6 +849,7 @@ func (s *JobService) RetryJob(ctx context.Context, actorUserID, jobID int) (*ent
 		SetStatus(JobResourceStatusPending).
 		SetSkippedSegments(0).
 		ClearErrorMessage().
+		ClearWarningMessage().
 		Exec(ctx); err != nil {
 		return nil, err
 	}
@@ -916,6 +962,18 @@ func (s *JobService) ReconcileJob(ctx context.Context, jobID int) error {
 	switch status {
 	case JobStatusCompleted:
 		s.publishEvent(jobID, "job_completed", "info", "", "任务完成")
+		// 聚合资源级软警告为 job_warning（不改变 completed 状态）。
+		var warnings []string
+		for _, item := range current.Edges.JobResources {
+			if item.WarningMessage != nil {
+				if msg := strings.TrimSpace(*item.WarningMessage); msg != "" {
+					warnings = append(warnings, msg)
+				}
+			}
+		}
+		if len(warnings) > 0 {
+			s.publishEvent(jobID, "job_warning", "warning", "", strings.Join(warnings, "; "))
+		}
 	case JobStatusFailed:
 		errMsg := "任务失败"
 		if firstFailure != nil {

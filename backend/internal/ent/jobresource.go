@@ -38,6 +38,8 @@ type JobResource struct {
 	OutputPath string `json:"output_path,omitempty"`
 	// 翻译错误信息
 	ErrorMessage *string `json:"error_message,omitempty"`
+	// 软警告信息（如 semantic_qa 扫描失败）；资源状态仍为 completed
+	WarningMessage *string `json:"warning_message,omitempty"`
 	// 当前执行阶段名称：translate, bootstrap 等
 	CurrentStage string `json:"current_stage,omitempty"`
 	// 当前阶段的总段落数（StageStart 时写入）
@@ -96,7 +98,7 @@ func (*JobResource) scanValues(columns []string) ([]any, error) {
 			values[i] = new([]byte)
 		case jobresource.FieldID, jobresource.FieldSegmentCount, jobresource.FieldCompletedSegments, jobresource.FieldSkippedSegments, jobresource.FieldStageTotal, jobresource.FieldStageCompleted:
 			values[i] = new(sql.NullInt64)
-		case jobresource.FieldStatus, jobresource.FieldOutputPath, jobresource.FieldErrorMessage, jobresource.FieldCurrentStage:
+		case jobresource.FieldStatus, jobresource.FieldOutputPath, jobresource.FieldErrorMessage, jobresource.FieldWarningMessage, jobresource.FieldCurrentStage:
 			values[i] = new(sql.NullString)
 		case jobresource.FieldCreatedAt, jobresource.FieldUpdatedAt, jobresource.FieldStartedAt:
 			values[i] = new(sql.NullTime)
@@ -181,6 +183,13 @@ func (_m *JobResource) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.ErrorMessage = new(string)
 				*_m.ErrorMessage = value.String
+			}
+		case jobresource.FieldWarningMessage:
+			if value, ok := values[i].(*sql.NullString); !ok {
+				return fmt.Errorf("unexpected type %T for field warning_message", values[i])
+			} else if value.Valid {
+				_m.WarningMessage = new(string)
+				*_m.WarningMessage = value.String
 			}
 		case jobresource.FieldCurrentStage:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -293,6 +302,11 @@ func (_m *JobResource) String() string {
 	builder.WriteString(", ")
 	if v := _m.ErrorMessage; v != nil {
 		builder.WriteString("error_message=")
+		builder.WriteString(*v)
+	}
+	builder.WriteString(", ")
+	if v := _m.WarningMessage; v != nil {
+		builder.WriteString("warning_message=")
 		builder.WriteString(*v)
 	}
 	builder.WriteString(", ")
