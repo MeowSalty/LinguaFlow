@@ -47,6 +47,7 @@ interface BackendFormModel {
   top_p: number
   maxTokensEnabled: boolean
   max_tokens: number
+  timeoutEnabled: boolean
   timeout: number
   response_format: string
   enable_prompt_cache: boolean
@@ -79,6 +80,7 @@ const formModel = reactive<BackendFormModel>({
   top_p: 1.0,
   maxTokensEnabled: false,
   max_tokens: 0,
+  timeoutEnabled: true,
   timeout: 60,
   response_format: 'json_schema',
   enable_prompt_cache: true,
@@ -321,6 +323,7 @@ const resetForm = (): void => {
   formModel.top_p = 1.0
   formModel.maxTokensEnabled = false
   formModel.max_tokens = 0
+  formModel.timeoutEnabled = true
   formModel.timeout = 60
   formModel.response_format = 'json_schema'
   formModel.enable_prompt_cache = true
@@ -415,7 +418,9 @@ const fillFormFromBackend = (backend: Backend): void => {
     typeof opts?.max_tokens === 'number'
       ? Math.max(opts.max_tokens, maxTokensMin.value)
       : maxTokensDefault.value
-  formModel.timeout = typeof opts?.timeout === 'number' ? opts.timeout : 60
+  const timeout = typeof opts?.timeout === 'number' ? opts.timeout : 60
+  formModel.timeoutEnabled = timeout > 0
+  formModel.timeout = timeout > 0 ? timeout : 60
   formModel.response_format =
     typeof opts?.response_format === 'string' ? opts.response_format : 'json_schema'
   formModel.enable_prompt_cache =
@@ -460,9 +465,7 @@ const buildOptions = (): BackendOptions => {
   if (formModel.maxTokensEnabled) {
     options.max_tokens = formModel.max_tokens
   }
-  if (formModel.timeout !== 60) {
-    options.timeout = formModel.timeout
-  }
+  options.timeout = formModel.timeoutEnabled ? formModel.timeout : 0
   if (formModel.response_format !== 'json_schema') {
     options.response_format = formModel.response_format
   }
@@ -933,7 +936,20 @@ watch(
           </NFormItem>
 
           <NFormItem :label="t('backends.form.timeout')" path="timeout">
-            <NInputNumber v-model:value="formModel.timeout" :min="1" :max="600" class="w-full" />
+            <div class="flex w-full items-center gap-3">
+              <NSwitch v-model:value="formModel.timeoutEnabled" />
+              <template v-if="formModel.timeoutEnabled">
+                <NInputNumber
+                  v-model:value="formModel.timeout"
+                  :min="1"
+                  :placeholder="t('backends.form.timeoutPlaceholder')"
+                  class="flex-1"
+                />
+              </template>
+              <span v-else class="text-xs text-lf-text-muted">
+                {{ t('backends.form.timeoutUnlimited') }}
+              </span>
+            </div>
           </NFormItem>
 
           <NFormItem :label="t('backends.form.responseFormat')" path="response_format">

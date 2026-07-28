@@ -440,22 +440,12 @@ export const fetchResourceSegments = async (
   },
   client: ApiClient = apiClient,
 ): Promise<ApiSchemas['ResourceSegmentListResponse']> => {
-  // quality_code 含语义质检新 code；OpenAPI 查询枚举尚未同步扩展时做兼容断言
   const { data, error, response } = await client.GET(
     '/projects/{projectId}/resources/{resourceId}/segments',
     {
       params: {
         path: { projectId, resourceId },
-        query: params as {
-          status?: 'pending' | 'translated' | 'edited' | 'approved' | 'rejected'
-          search?: string
-          group_key?: string
-          quality_issues?: 'has' | 'none'
-          quality_severity?: 'warning' | 'error'
-          quality_code?: 'untranslated' | 'length_ratio' | 'duplicate' | 'source_residual'
-          cursor?: string
-          limit?: number
-        },
+        query: params,
       },
     },
   )

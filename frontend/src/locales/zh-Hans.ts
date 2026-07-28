@@ -1071,6 +1071,8 @@ const messages = {
       maxTokensThinkingHint:
         '思考与最终输出共用同一 Max Tokens 池（约 low 25% / medium 50% / high 75% 给思考），建议适当提高上限。',
       timeout: '超时时间（秒）',
+      timeoutPlaceholder: '例如：60',
+      timeoutUnlimited: '不限制',
       responseFormat: '响应格式',
       enablePromptCache: '启用 Prompt Cache',
       stream: '流式请求',
