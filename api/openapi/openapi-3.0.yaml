@@ -906,6 +906,9 @@ paths:
               - length_ratio
               - duplicate
               - source_residual
+              - calque
+              - term_fidelity
+              - naturalness
           description: 按 quality_issues 中的 code 过滤；指定时隐含仅返回含匹配问题的段落
         - $ref: '#/components/parameters/Cursor'
         - $ref: '#/components/parameters/Limit'
