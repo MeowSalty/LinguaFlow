@@ -606,8 +606,13 @@ const messages = {
         skipped: '跳过',
         trigger: '触发方式',
         error: '错误信息',
+        remark: '备注',
         stage: '阶段',
         startedAt: '开始时间',
+      },
+      warnings: {
+        badge: '{count} 项警告',
+        summary: '{count} 个资源完成时出现软警告（任务状态仍为已完成）',
       },
       actions: {
         create: '创建任务',
@@ -669,6 +674,7 @@ const messages = {
         completed: '已完成',
         skipped: '已跳过',
         failed: '已失败',
+        warned: '有警告',
         total: '总计',
       },
       // 事件日志

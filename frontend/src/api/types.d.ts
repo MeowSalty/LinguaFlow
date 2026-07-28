@@ -1625,6 +1625,8 @@ export interface components {
             skipped_segments: number;
             output_path?: string;
             error_message?: string;
+            /** @description 软警告信息（如 semantic_qa 扫描失败）；资源状态仍为 completed */
+            warning_message?: string;
             resource?: components["schemas"]["Resource"];
             /** Format: date-time */
             created_at: string;
