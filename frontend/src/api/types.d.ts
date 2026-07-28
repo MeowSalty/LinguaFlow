@@ -2447,12 +2447,35 @@ export interface components {
             adjudicate_codes?: ("source_residual" | "length_ratio")[];
             retry?: components["schemas"]["RetryConfig"];
         };
-        ExecutionRoundConfig: {
+        /** @description 语义质检轮次配置。system prompt 内置不可见，无 prompt_template_id；产出 warning 级语义 issue 直接进人审。 */
+        SemanticQARoundConfig: {
+            /** @description 段落数上限；0=不限制，与 max_words_per_batch 至少填一项 */
+            batch_size?: number;
+            /** @description 字词数上限；0=不限制，与 batch_size 至少填一项 */
+            max_words_per_batch?: number;
             /**
-             * @description 轮次模式：translate=翻译，extract=术语抽取，adjudicate=质量裁决
+             * @description 段落扫描范围：
+             *     - all（默认）：扫描全部 translated/edited 且译文非空的段，完整语义覆盖。
+             *     - with_issues：仅扫描带任意 issue 的段。
+             *     - with_issue_codes：仅扫描含 issue_codes 声明 code 的段（用于成本敏感的高价值子集，如 ja↔zh 假同源）。
+             *     范围与任务级 segment_ids 取交集。scope≠all 时未扫段保留其原语义 issue。
+             * @default all
              * @enum {string}
              */
-            mode: "translate" | "extract" | "adjudicate";
+            segment_scope: "all" | "with_issues" | "with_issue_codes";
+            /**
+             * @description 仅 segment_scope=with_issue_codes 时生效，必须列出至少一个要匹配的 issue code。
+             *     允许全部 7 个 issue code（规则 + 语义皆可作筛选键）。
+             */
+            issue_codes?: ("source_residual" | "length_ratio" | "untranslated" | "duplicate" | "calque" | "term_fidelity" | "naturalness")[];
+            retry?: components["schemas"]["RetryConfig"];
+        };
+        ExecutionRoundConfig: {
+            /**
+             * @description 轮次模式：translate=翻译，extract=术语抽取，adjudicate=质量裁决，semantic_qa=语义质检
+             * @enum {string}
+             */
+            mode: "translate" | "extract" | "adjudicate" | "semantic_qa";
             /** @description 后端 ID（Backend 单表全局唯一） */
             backend_id: number;
             concurrency: number;
@@ -2462,6 +2485,8 @@ export interface components {
             extract?: components["schemas"]["ExtractRoundConfig"];
             /** @description 质量裁决模式配置（mode=adjudicate 时必填） */
             adjudicate?: components["schemas"]["AdjudicateRoundConfig"];
+            /** @description 语义质检模式配置（mode=semantic_qa 时必填） */
+            semantic_qa?: components["schemas"]["SemanticQARoundConfig"];
         };
         /** @enum {string} */
         TranslationPromptTemplateScope: "user" | "org" | "system";

@@ -4456,6 +4456,49 @@ components:
             untranslated 与 duplicate 为硬规则，不可裁决。
         retry:
           $ref: '#/components/schemas/RetryConfig'
+    SemanticQARoundConfig:
+      type: object
+      description: 语义质检轮次配置。system prompt 内置不可见，无 prompt_template_id；产出 warning 级语义 issue 直接进人审。
+      properties:
+        batch_size:
+          type: integer
+          minimum: 0
+          description: 段落数上限；0=不限制，与 max_words_per_batch 至少填一项
+        max_words_per_batch:
+          type: integer
+          minimum: 0
+          description: 字词数上限；0=不限制，与 batch_size 至少填一项
+        segment_scope:
+          type: string
+          enum:
+            - all
+            - with_issues
+            - with_issue_codes
+          default: all
+          description: |
+            段落扫描范围：
+            - all（默认）：扫描全部 translated/edited 且译文非空的段，完整语义覆盖。
+            - with_issues：仅扫描带任意 issue 的段。
+            - with_issue_codes：仅扫描含 issue_codes 声明 code 的段（用于成本敏感的高价值子集，如 ja↔zh 假同源）。
+            范围与任务级 segment_ids 取交集。scope≠all 时未扫段保留其原语义 issue。
+        issue_codes:
+          type: array
+          minItems: 1
+          items:
+            type: string
+            enum:
+              - source_residual
+              - length_ratio
+              - untranslated
+              - duplicate
+              - calque
+              - term_fidelity
+              - naturalness
+          description: |
+            仅 segment_scope=with_issue_codes 时生效，必须列出至少一个要匹配的 issue code。
+            允许全部 7 个 issue code（规则 + 语义皆可作筛选键）。
+        retry:
+          $ref: '#/components/schemas/RetryConfig'
     ExecutionRoundConfig:
       type: object
       required:
@@ -4469,7 +4512,8 @@ components:
             - translate
             - extract
             - adjudicate
-          description: 轮次模式：translate=翻译，extract=术语抽取，adjudicate=质量裁决
+            - semantic_qa
+          description: 轮次模式：translate=翻译，extract=术语抽取，adjudicate=质量裁决，semantic_qa=语义质检
         backend_id:
           type: integer
           description: 后端 ID（Backend 单表全局唯一）
@@ -4485,6 +4529,9 @@ components:
         adjudicate:
           $ref: '#/components/schemas/AdjudicateRoundConfig'
           description: 质量裁决模式配置（mode=adjudicate 时必填）
+        semantic_qa:
+          $ref: '#/components/schemas/SemanticQARoundConfig'
+          description: 语义质检模式配置（mode=semantic_qa 时必填）
     TranslationPromptTemplateScope:
       type: string
       enum:

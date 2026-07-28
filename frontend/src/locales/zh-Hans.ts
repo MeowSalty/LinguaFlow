@@ -589,6 +589,7 @@ const messages = {
       planPreviewModeTranslate: '翻译',
       planPreviewModeExtract: '术语抽取',
       planPreviewModeAdjudicate: '质量裁决',
+      planPreviewModeSemanticQA: '语义质检',
       confirmSummary:
         '将使用「{planName}」为 {resourceCount} 个资源（{segmentCount} 个段落）创建任务。',
       segmentFilter: {
@@ -637,6 +638,7 @@ const messages = {
         extract: '术语提取',
         translate: '翻译',
         adjudicate: '质量裁决',
+        semantic_qa: '语义质检',
         review: '审校',
         finalize: '收尾',
         ruby_alignment: '注音对齐',
@@ -1454,6 +1456,7 @@ const messages = {
       roundBatchSizeRequired: '轮次 {n}：请设置批次大小',
       roundBatchConfigRequired: '轮次 {n}：批次大小和每批字词数至少填一项',
       roundConcurrencyRequired: '轮次 {n}：请设置并发数',
+      roundSemanticQAIssueCodesRequired: '轮次 {n}：按问题代码筛选时至少选择一个问题代码',
     },
     messages: {
       createSuccess: '执行计划模板创建成功',
@@ -1484,6 +1487,7 @@ const messages = {
       modeTranslate: '翻译',
       modeExtract: '术语抽取',
       modeAdjudicate: '质量裁决',
+      modeSemanticQA: '语义质检',
       backend: 'AI 后端',
       backendPlaceholder: '选择后端',
       concurrency: '并发数',
@@ -1525,6 +1529,22 @@ const messages = {
       adjudicateCodesHint: '未翻译与重复译文为硬规则，不可裁决。空则默认源文残留。',
       adjudicateCodeSourceResidual: '源文残留',
       adjudicateCodeLengthRatio: '长度异常',
+      semanticQAPromptHint:
+        '语义质检 system prompt 内置不可见，无需选择提示词模板；产出 warning 级语义问题直接进人审。',
+      semanticQASegmentScope: '段落扫描范围',
+      semanticQASegmentScopePlaceholder: '选择扫描范围',
+      semanticQASegmentScopeHint:
+        '控制语义质检覆盖哪些段落。缩小范围可降低成本，未扫描段落保留原有语义问题。',
+      semanticQASegmentScopeAll: '全部译文段落',
+      semanticQASegmentScopeWithIssues: '仅有问题的段落',
+      semanticQASegmentScopeWithIssueCodes: '按问题代码筛选',
+      semanticQAIssueCodes: '问题代码筛选',
+      semanticQAIssueCodesPlaceholder: '选择要匹配的问题代码',
+      semanticQAIssueCodesHint: '仅扫描包含所选问题代码的段落，适合成本敏感的高价值子集。',
+      semanticQABatchSize: '段落数上限',
+      semanticQABatchSizeHint: '0=不限制，与字词数上限至少填一项',
+      semanticQAMaxWordsPerBatch: '字词数上限',
+      semanticQAMaxWordsPerBatchHint: '0=不限制，与段落数上限至少填一项',
     },
     actions: {
       addRound: '添加轮次',
