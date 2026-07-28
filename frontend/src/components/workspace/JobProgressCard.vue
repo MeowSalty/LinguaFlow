@@ -40,6 +40,12 @@ const skippedPct = computed(() => {
 
 const hasFailures = computed(() => props.job.progress.failed_resources > 0)
 
+const warnedResourceCount = computed(
+  () => (props.job.job_resources ?? []).filter((r) => !!r.warning_message?.trim()).length,
+)
+
+const hasWarnings = computed(() => warnedResourceCount.value > 0)
+
 const failedPct = computed(() => {
   if (!hasFailures.value) return 0
   const { total_segments, completed_segments, skipped_segments } = props.job.progress
@@ -52,10 +58,13 @@ const isTerminal = computed(() => ['completed', 'failed', 'cancelled'].includes(
 
 const showSkipped = computed(() => props.job.progress.skipped_segments > 0)
 
-const showStatsRow = computed(() => showSkipped.value || hasFailures.value)
+const showStatsRow = computed(() => showSkipped.value || hasFailures.value || hasWarnings.value)
 
 const barColor = computed(() => {
-  if (props.job.status === 'completed' && !hasFailures.value) return 'bg-green-500'
+  if (props.job.status === 'completed' && !hasFailures.value && !hasWarnings.value)
+    return 'bg-green-500'
+  if (props.job.status === 'completed' && hasWarnings.value && !hasFailures.value)
+    return 'bg-amber-500'
   if (props.job.status === 'failed') return 'bg-red-500'
   return 'bg-brand-500'
 })
@@ -76,8 +85,8 @@ const speedText = computed(() => {
     class="rounded-xl border border-lf-border-soft bg-linear-to-br from-lf-surface to-lf-surface-muted p-4 space-y-3"
     :class="{
       'border-l-3 border-brand-500': job.status === 'running',
-      'border-l-3 border-green-500': job.status === 'completed' && !hasFailures,
-      'border-l-3 border-amber-500': job.status === 'completed' && hasFailures,
+      'border-l-3 border-green-500': job.status === 'completed' && !hasFailures && !hasWarnings,
+      'border-l-3 border-amber-500': job.status === 'completed' && (hasFailures || hasWarnings),
       'border-l-3 border-red-500': job.status === 'failed',
     }"
   >
@@ -87,6 +96,10 @@ const speedText = computed(() => {
         <!-- 状态标签 -->
         <NTag size="tiny" round :type="statusTagType(job.status)">
           {{ getJobStatusLabel(job.status) }}
+        </NTag>
+
+        <NTag v-if="hasWarnings" size="tiny" round :bordered="false" type="warning">
+          {{ t('workspace.job.warnings.badge', { count: warnedResourceCount }) }}
         </NTag>
 
         <!-- 队列位置（pending 时显示） -->
@@ -157,6 +170,13 @@ const speedText = computed(() => {
         {{ t('workspace.job.stats.failed') }}
         <span class="font-mono tabular-nums font-medium text-lf-text-strong">
           {{ job.progress.failed_resources }}
+        </span>
+      </span>
+      <span v-if="hasWarnings" class="flex items-center gap-1 text-lf-text-muted">
+        <span class="inline-block h-2 w-2 rounded-full bg-amber-400" />
+        {{ t('workspace.job.stats.warned') }}
+        <span class="font-mono tabular-nums font-medium text-lf-text-strong">
+          {{ warnedResourceCount }}
         </span>
       </span>
       <span v-if="showSkipped" class="flex items-center gap-1 text-lf-text-muted">

@@ -401,8 +401,7 @@ const openCreateDrawer = (): void => {
   drawerVisible.value = true
 }
 
-const openEditDrawer = (backend: Backend): void => {
-  editingBackend.value = backend
+const fillFormFromBackend = (backend: Backend): void => {
   formModel.name = backend.name
   formModel.type = backend.type
   const opts = backend.options as Record<string, unknown> | undefined
@@ -429,6 +428,19 @@ const openEditDrawer = (backend: Backend): void => {
   formModel.stream = typeof opts?.stream === 'boolean' ? opts.stream : false
   formModel.thinking_level = parseThinkingLevel(opts?.thinking_level)
   formModel.rate_limit_per_minute = backend.rate_limit_per_minute ?? 0
+}
+
+const openEditDrawer = (backend: Backend): void => {
+  editingBackend.value = backend
+  fillFormFromBackend(backend)
+  invalidateModelProbe()
+  drawerVisible.value = true
+}
+
+const openCopyDrawer = (backend: Backend): void => {
+  editingBackend.value = null
+  fillFormFromBackend(backend)
+  formModel.name = t('backends.copy.name', { name: backend.name })
   invalidateModelProbe()
   drawerVisible.value = true
 }
@@ -556,6 +568,7 @@ const getThinkingLevelDisplay = (backend: Backend): ThinkingLevel => {
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 const buildCardActions = (backend: Backend): DropdownOption[] => [
   { label: t('projects.actions.edit'), key: 'edit' },
+  { label: t('backends.actions.copy'), key: 'copy' },
   { type: 'divider', key: 'divider' },
   { label: t('projects.actions.delete'), key: 'delete' },
 ]
@@ -563,6 +576,8 @@ const buildCardActions = (backend: Backend): DropdownOption[] => [
 const handleCardAction = (backend: Backend, key: string | number): void => {
   if (key === 'edit') {
     openEditDrawer(backend)
+  } else if (key === 'copy') {
+    openCopyDrawer(backend)
   } else if (key === 'delete') {
     confirmDelete(backend)
   }

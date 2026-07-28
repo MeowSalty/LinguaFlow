@@ -15,6 +15,10 @@ import IconCarbonError from '~icons/carbon/error'
 
 import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
+import {
+  formatQualityIssueTooltip,
+  renderQualityHighlightedText,
+} from '@/composables/useQualityIssues'
 import { getSegmentStatusLabel, statusTagType } from '@/composables/useWorkspaceUtils'
 import HtmlContent from '@/components/workspace/HtmlContent.vue'
 import { t } from '@/i18n'
@@ -198,7 +202,7 @@ export function useSegmentColumns(
           } else if (config.value.textRenderMode === 'html') {
             elements.push(h(HtmlContent, { content: row.target_text, maxLines: 4 }))
           } else {
-            elements.push(h('span', null, row.target_text))
+            elements.push(renderQualityHighlightedText(row.target_text, row.quality_issues))
           }
         }
 
@@ -211,7 +215,7 @@ export function useSegmentColumns(
             metaElements.push(
               h(
                 NTooltip,
-                {},
+                { style: { maxWidth: '320px' } },
                 {
                   trigger: () =>
                     h(
@@ -219,7 +223,12 @@ export function useSegmentColumns(
                       { size: 14, color: isError ? '#d03050' : '#f0a020' },
                       { default: () => h(isError ? IconCarbonError : IconCarbonWarning) },
                     ),
-                  default: () => issue.message,
+                  default: () =>
+                    h(
+                      'div',
+                      { class: 'whitespace-pre-line text-xs leading-relaxed' },
+                      formatQualityIssueTooltip(issue),
+                    ),
                 },
               ),
             )

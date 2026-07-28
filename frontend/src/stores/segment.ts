@@ -29,6 +29,9 @@ export type SegmentQualityCodeFilter =
   | 'length_ratio'
   | 'duplicate'
   | 'source_residual'
+  | 'calque'
+  | 'term_fidelity'
+  | 'naturalness'
   | 'all'
 
 export interface SegmentProgress {

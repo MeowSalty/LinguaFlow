@@ -73,7 +73,9 @@ const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string 
       ? round.extract
       : round.mode === 'adjudicate'
         ? round.adjudicate
-        : round.translate
+        : round.mode === 'semantic_qa'
+          ? round.semantic_qa
+          : round.translate
   const batchSize = modeConfig?.batch_size ?? 0
   const maxWordsPerBatch = modeConfig?.max_words_per_batch ?? 0
   const parts: string[] = []
@@ -83,13 +85,25 @@ const formatRoundSummary = (round: ExecutionRoundConfig, index: number): string 
   if (maxWordsPerBatch > 0) {
     parts.push(t('workspace.job.planPreviewBatchWords', { maxWordsPerBatch }))
   }
+  if (round.mode === 'semantic_qa' && round.semantic_qa) {
+    const scope = round.semantic_qa.segment_scope ?? 'all'
+    const scopeLabel =
+      scope === 'with_issues'
+        ? t('executionPlanEditor.round.semanticQASegmentScopeWithIssues')
+        : scope === 'with_issue_codes'
+          ? t('executionPlanEditor.round.semanticQASegmentScopeWithIssueCodes')
+          : t('executionPlanEditor.round.semanticQASegmentScopeAll')
+    parts.push(scopeLabel)
+  }
   const batchInfo = parts.length === 0 ? t('workspace.job.planPreviewNoBatch') : parts.join(' / ')
   const modeKey =
     round.mode === 'extract'
       ? 'workspace.job.planPreviewModeExtract'
       : round.mode === 'adjudicate'
         ? 'workspace.job.planPreviewModeAdjudicate'
-        : 'workspace.job.planPreviewModeTranslate'
+        : round.mode === 'semantic_qa'
+          ? 'workspace.job.planPreviewModeSemanticQA'
+          : 'workspace.job.planPreviewModeTranslate'
   return t('workspace.job.planPreviewRoundItem', {
     index: index + 1,
     mode: t(modeKey),
