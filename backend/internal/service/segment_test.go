@@ -41,6 +41,10 @@ func TestBuildQualityPredicateNonNilForValidFilters(t *testing.T) {
 		{QualityCode: "untranslated"},
 		{QualityCode: "length_ratio"},
 		{QualityCode: "duplicate"},
+		{QualityCode: "source_residual"},
+		{QualityCode: "calque"},
+		{QualityCode: "term_fidelity"},
+		{QualityCode: "naturalness"},
 		{QualitySeverity: "error", QualityCode: "duplicate"},
 	}
 	for _, opts := range cases {
@@ -74,6 +78,22 @@ func TestListResourceSegmentsQualityFilter(t *testing.T) {
 		{SegmentIndex: 4, Severity: qa.SeverityWarning, Code: "duplicate", Message: "dup"},
 		{SegmentIndex: 4, Severity: qa.SeverityError, Code: "untranslated", Message: "empty"},
 	})
+	// 5: warning + source_residual
+	createTestSegment(t, client, res.ID, 5, "src5", []qa.QualityIssue{
+		{SegmentIndex: 5, Severity: qa.SeverityWarning, Code: "source_residual", Message: "residual"},
+	})
+	// 6: warning + calque
+	createTestSegment(t, client, res.ID, 6, "src6", []qa.QualityIssue{
+		{SegmentIndex: 6, Severity: qa.SeverityWarning, Code: "calque", Message: "calque"},
+	})
+	// 7: warning + term_fidelity
+	createTestSegment(t, client, res.ID, 7, "src7", []qa.QualityIssue{
+		{SegmentIndex: 7, Severity: qa.SeverityWarning, Code: "term_fidelity", Message: "term"},
+	})
+	// 8: warning + naturalness
+	createTestSegment(t, client, res.ID, 8, "src8", []qa.QualityIssue{
+		{SegmentIndex: 8, Severity: qa.SeverityWarning, Code: "naturalness", Message: "awkward"},
+	})
 
 	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite)
 
@@ -98,14 +118,14 @@ func TestListResourceSegmentsQualityFilter(t *testing.T) {
 	}
 
 	t.Run("has", func(t *testing.T) {
-		assertIndexes(t, ResourceSegmentListOptions{QualityIssues: "has", Limit: 50}, []int{2, 3, 4})
+		assertIndexes(t, ResourceSegmentListOptions{QualityIssues: "has", Limit: 50}, []int{2, 3, 4, 5, 6, 7, 8})
 	})
 	t.Run("none", func(t *testing.T) {
 		// NULL and [] both count as none
 		assertIndexes(t, ResourceSegmentListOptions{QualityIssues: "none", Limit: 50}, []int{0, 1})
 	})
 	t.Run("severity_warning", func(t *testing.T) {
-		assertIndexes(t, ResourceSegmentListOptions{QualitySeverity: "warning", Limit: 50}, []int{2, 4})
+		assertIndexes(t, ResourceSegmentListOptions{QualitySeverity: "warning", Limit: 50}, []int{2, 4, 5, 6, 7, 8})
 	})
 	t.Run("severity_error", func(t *testing.T) {
 		assertIndexes(t, ResourceSegmentListOptions{QualitySeverity: "error", Limit: 50}, []int{3, 4})
@@ -118,6 +138,18 @@ func TestListResourceSegmentsQualityFilter(t *testing.T) {
 	})
 	t.Run("code_duplicate", func(t *testing.T) {
 		assertIndexes(t, ResourceSegmentListOptions{QualityCode: "duplicate", Limit: 50}, []int{4})
+	})
+	t.Run("code_source_residual", func(t *testing.T) {
+		assertIndexes(t, ResourceSegmentListOptions{QualityCode: "source_residual", Limit: 50}, []int{5})
+	})
+	t.Run("code_calque", func(t *testing.T) {
+		assertIndexes(t, ResourceSegmentListOptions{QualityCode: "calque", Limit: 50}, []int{6})
+	})
+	t.Run("code_term_fidelity", func(t *testing.T) {
+		assertIndexes(t, ResourceSegmentListOptions{QualityCode: "term_fidelity", Limit: 50}, []int{7})
+	})
+	t.Run("code_naturalness", func(t *testing.T) {
+		assertIndexes(t, ResourceSegmentListOptions{QualityCode: "naturalness", Limit: 50}, []int{8})
 	})
 	t.Run("severity_and_code_independent_exists", func(t *testing.T) {
 		// segment 4 has (warning, duplicate) and (error, untranslated) on different issues.
@@ -134,10 +166,10 @@ func TestListResourceSegmentsQualityFilter(t *testing.T) {
 			QualityIssues: "has",
 			AfterID:       2,
 			Limit:         50,
-		}, []int{3, 4})
+		}, []int{3, 4, 5, 6, 7, 8})
 	})
 	t.Run("invalid_ignored", func(t *testing.T) {
-		assertIndexes(t, ResourceSegmentListOptions{QualityIssues: "maybe", Limit: 50}, []int{0, 1, 2, 3, 4})
+		assertIndexes(t, ResourceSegmentListOptions{QualityIssues: "maybe", Limit: 50}, []int{0, 1, 2, 3, 4, 5, 6, 7, 8})
 	})
 }
 
