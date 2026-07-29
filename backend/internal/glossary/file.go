@@ -16,7 +16,7 @@ import (
 )
 
 // csvHeader 是 FileGlossary 写出的固定首行。Load 时若首行与之大小写无关相等则跳过。
-var csvHeader = []string{"source", "target", "case_sensitive", "notes"}
+var csvHeader = []string{"source", "target", "case_sensitive", "forbidden", "mandatory", "notes"}
 
 // FileGlossary 是 CSV 文件后端的术语表。
 //
@@ -29,7 +29,7 @@ type FileGlossary struct {
 	path     string
 	mu       sync.RWMutex
 	entries  []Entry
-	bySource map[string]int // 规范化 source → entries 下标
+	bySource map[string]int // 推荐条目按 source、禁译条目按 source+target 去重
 	dirty    bool           // Add 过且尚未 Save
 }
 
@@ -63,6 +63,7 @@ func LoadFile(path string) (*FileGlossary, error) {
 	r.TrimLeadingSpace = true
 
 	first := true
+	extendedFormat := false
 	logger := slog.Default()
 	for lineNo := 1; ; lineNo++ {
 		rec, rerr := r.Read()
@@ -75,6 +76,7 @@ func LoadFile(path string) (*FileGlossary, error) {
 		if first {
 			first = false
 			if isHeader(rec) {
+				extendedFormat = len(rec) >= 6 && strings.EqualFold(strings.TrimSpace(rec[3]), "forbidden")
 				continue
 			}
 		}
@@ -93,8 +95,22 @@ func LoadFile(path string) (*FileGlossary, error) {
 		if len(rec) >= 3 {
 			e.CaseSensitive = parseBool(rec[2])
 		}
-		if len(rec) >= 4 {
-			e.Notes = strings.TrimSpace(rec[3])
+		if extendedFormat || len(rec) >= 6 {
+			if len(rec) >= 4 {
+				e.Forbidden = parseBool(rec[3])
+			}
+			e.Mandatory = true
+			if len(rec) >= 5 {
+				e.Mandatory = parseBool(rec[4])
+			}
+			if len(rec) >= 6 {
+				e.Notes = strings.TrimSpace(rec[5])
+			}
+		} else {
+			e.Mandatory = true
+			if len(rec) >= 4 {
+				e.Notes = strings.TrimSpace(rec[3])
+			}
 		}
 		g.addLocked(e)
 	}
@@ -203,7 +219,7 @@ func (g *FileGlossary) Save(_ context.Context) error {
 		return fmt.Errorf("glossary: write header: %w", err)
 	}
 	for _, e := range snapshot {
-		rec := []string{e.Source, e.Target, boolStr(e.CaseSensitive), e.Notes}
+		rec := []string{e.Source, e.Target, boolStr(e.CaseSensitive), boolStr(e.Forbidden), boolStr(e.Mandatory), e.Notes}
 		if err := w.Write(rec); err != nil {
 			_ = tmp.Close()
 			removeTmp()
@@ -276,14 +292,14 @@ func (g *FileGlossary) sortLocked() {
 	}
 }
 
-// normKey 规范化用于查重的 key：CaseSensitive=false 时统一小写。
-// 同一 source 同时存在 case_sensitive=true 与 false 两条会按 case_sensitive=true 保留，
-// 不区分大小写那条因 lower(source) 与之冲突可能不同——按规范化结果决定。
+// normKey 规范化用于查重的 key。推荐条目每个 source 只保留一条；
+// 禁译条目允许同一 source 下存在多个 target。
 func normKey(e Entry) string {
-	if e.CaseSensitive {
-		return "S:" + e.Source
+	source := strings.ToLower(strings.TrimSpace(e.Source))
+	if e.Forbidden {
+		return "F:" + source + "\x00" + e.Target
 	}
-	return "I:" + strings.ToLower(e.Source)
+	return "R:" + source
 }
 
 func parseBool(s string) bool {

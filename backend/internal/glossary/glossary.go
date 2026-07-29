@@ -9,6 +9,8 @@ type Entry struct {
 	Source        string
 	Target        string
 	CaseSensitive bool
+	Forbidden     bool
+	Mandatory     bool
 	Notes         string
 }
 
