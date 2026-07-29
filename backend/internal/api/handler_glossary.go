@@ -14,6 +14,8 @@ type createGlossaryEntryRequest struct {
 	Source        string `json:"source"`
 	Target        string `json:"target"`
 	CaseSensitive bool   `json:"case_sensitive"`
+	Forbidden     bool   `json:"forbidden"`
+	Mandatory     *bool  `json:"mandatory"`
 	Notes         string `json:"notes"`
 }
 
@@ -21,6 +23,8 @@ type updateGlossaryEntryRequest struct {
 	Source        string `json:"source"`
 	Target        string `json:"target"`
 	CaseSensitive bool   `json:"case_sensitive"`
+	Forbidden     *bool  `json:"forbidden"`
+	Mandatory     *bool  `json:"mandatory"`
 	Notes         string `json:"notes"`
 }
 
@@ -29,6 +33,8 @@ type glossaryEntryResponse struct {
 	Source        string `json:"source"`
 	Target        string `json:"target"`
 	CaseSensitive bool   `json:"case_sensitive"`
+	Forbidden     bool   `json:"forbidden"`
+	Mandatory     bool   `json:"mandatory"`
 	Notes         string `json:"notes,omitempty"`
 	CreatedAt     string `json:"created_at"`
 	UpdatedAt     string `json:"updated_at"`
@@ -45,6 +51,8 @@ func toGlossaryEntryResponse(e *ent.GlossaryEntry) glossaryEntryResponse {
 		Source:        e.Source,
 		Target:        e.Target,
 		CaseSensitive: e.CaseSensitive,
+		Forbidden:     e.Forbidden,
+		Mandatory:     e.Mandatory,
 		Notes:         e.Notes,
 		CreatedAt:     e.CreatedAt.Format(timeRFC3339),
 		UpdatedAt:     e.UpdatedAt.Format(timeRFC3339),
@@ -95,6 +103,8 @@ func (s *Server) handleCreateGlossaryEntry(w http.ResponseWriter, r *http.Reques
 		Source:        req.Source,
 		Target:        req.Target,
 		CaseSensitive: req.CaseSensitive,
+		Forbidden:     req.Forbidden,
+		Mandatory:     req.Mandatory,
 		Notes:         req.Notes,
 	})
 	if err != nil {
@@ -122,10 +132,25 @@ func (s *Server) handleUpdateGlossaryEntry(w http.ResponseWriter, r *http.Reques
 	if !s.decodeJSON(w, r, &req) {
 		return
 	}
+	existing, err := s.glossarySvc.GetEntry(r.Context(), authUser.User.ID, projectID, entryID)
+	if err != nil {
+		s.writeGlossaryServiceError(w, r, err)
+		return
+	}
+	forbidden := existing.Forbidden
+	if req.Forbidden != nil {
+		forbidden = *req.Forbidden
+	}
+	mandatory := existing.Mandatory
+	if req.Mandatory != nil {
+		mandatory = *req.Mandatory
+	}
 	result, err := s.glossarySvc.UpdateEntry(r.Context(), authUser.User.ID, projectID, entryID, service.GlossaryEntryInput{
 		Source:        req.Source,
 		Target:        req.Target,
 		CaseSensitive: req.CaseSensitive,
+		Forbidden:     forbidden,
+		Mandatory:     &mandatory,
 		Notes:         req.Notes,
 	})
 	if err != nil {

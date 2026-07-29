@@ -82,6 +82,18 @@ func profileConfigToResponse(c *schema.ExecutionProfileConfigData) ExecutionProf
 		rubyConfig.PreserveKinds = &pk
 	}
 
+	qaConfig := &ProfileQAConfig{
+		Enabled:        c.QA.Enabled,
+		AutoReject:     &c.QA.AutoReject,
+		LengthMethod:   (*ProfileQAConfigLengthMethod)(&c.QA.LengthMethod),
+		LengthRatioMin: &c.QA.LengthRatioMin,
+		LengthRatioMax: &c.QA.LengthRatioMax,
+	}
+	if c.QA.Checks != nil {
+		checks := append([]string(nil), c.QA.Checks...)
+		qaConfig.Checks = &checks
+	}
+
 	return ExecutionProfileConfig{
 		Protect: ProfileProtectConfig{
 			Enabled: c.Protect.Enabled,
@@ -115,13 +127,7 @@ func profileConfigToResponse(c *schema.ExecutionProfileConfigData) ExecutionProf
 			After:    c.Context.After,
 			MaxChars: c.Context.MaxChars,
 		},
-		Qa: &ProfileQAConfig{
-			Enabled:        c.QA.Enabled,
-			AutoReject:     &c.QA.AutoReject,
-			LengthMethod:   (*ProfileQAConfigLengthMethod)(&c.QA.LengthMethod),
-			LengthRatioMin: &c.QA.LengthRatioMin,
-			LengthRatioMax: &c.QA.LengthRatioMax,
-		},
+		Qa: qaConfig,
 	}
 }
 
@@ -152,6 +158,9 @@ func parseProfileConfig(c *ExecutionProfileConfig) *schema.ExecutionProfileConfi
 		qa.Enabled = c.Qa.Enabled
 		if c.Qa.AutoReject != nil {
 			qa.AutoReject = *c.Qa.AutoReject
+		}
+		if c.Qa.Checks != nil {
+			qa.Checks = append([]string(nil), (*c.Qa.Checks)...)
 		}
 		if c.Qa.LengthMethod != nil {
 			qa.LengthMethod = string(*c.Qa.LengthMethod)
@@ -245,6 +254,9 @@ func mergeProfileConfig(existing *schema.ExecutionProfileConfigData, incoming *E
 		merged.QA.Enabled = incoming.Qa.Enabled
 		if incoming.Qa.AutoReject != nil {
 			merged.QA.AutoReject = *incoming.Qa.AutoReject
+		}
+		if incoming.Qa.Checks != nil {
+			merged.QA.Checks = append([]string(nil), (*incoming.Qa.Checks)...)
 		}
 		if incoming.Qa.LengthMethod != nil {
 			merged.QA.LengthMethod = string(*incoming.Qa.LengthMethod)
