@@ -6,6 +6,8 @@ import {
   NGrid,
   NGi,
   NInputNumber,
+  NRadio,
+  NRadioGroup,
   NSelect,
   NSwitch,
 } from 'naive-ui'
@@ -48,6 +50,7 @@ const CONFIG_DEFAULTS: ExecutionProfileConfig = {
   qa: {
     enabled: false,
     auto_reject: false,
+    checks: undefined,
     length_method: 'char_weight',
     length_ratio_min: 0,
     length_ratio_max: 0,
@@ -81,6 +84,7 @@ function mergeConfig(source?: Partial<ExecutionProfileConfig>): ExecutionProfile
     qa: {
       enabled: source.qa?.enabled ?? CONFIG_DEFAULTS.qa!.enabled,
       auto_reject: source.qa?.auto_reject ?? CONFIG_DEFAULTS.qa!.auto_reject,
+      checks: source.qa?.checks ?? CONFIG_DEFAULTS.qa!.checks,
       length_method: source.qa?.length_method ?? CONFIG_DEFAULTS.qa!.length_method,
       length_ratio_min: source.qa?.length_ratio_min ?? CONFIG_DEFAULTS.qa!.length_ratio_min,
       length_ratio_max: source.qa?.length_ratio_max ?? CONFIG_DEFAULTS.qa!.length_ratio_max,
@@ -158,6 +162,52 @@ const lengthMethodOptions = computed(() => [
   { label: t('profileConfigEditor.qa.lengthMethodCharWeight'), value: 'char_weight' },
   { label: t('profileConfigEditor.qa.lengthMethodWordCount'), value: 'word_count' },
 ])
+
+// 可用的确定性 checker 列表（与后端一致）
+const QA_CHECKS = [
+  'untranslated',
+  'length_ratio',
+  'duplicate',
+  'source_residual',
+  'punctuation_pairing',
+  'whitespace_irregular',
+  'repeated_space',
+  'width_mix',
+  'number_mismatch',
+  'url_email_mismatch',
+  'subtitle_line_count',
+  'forbidden_term',
+  'term_inconsistency',
+  'leftover_placeholder',
+  'xml_tag_mismatch',
+  'duplicate_source_divergence',
+] as const
+
+type QACheckName = (typeof QA_CHECKS)[number]
+
+const checkOptions = computed(() =>
+  QA_CHECKS.map((value) => ({ value, label: t(`profileConfigEditor.qa.checks.${value}`) })),
+)
+
+// checks 模式：true = 全部（省略），false = 自定义
+const checksModeAll = computed<boolean>({
+  get: () => !configModel.value.qa?.checks,
+  set: (val: boolean) => {
+    if (!configModel.value.qa) return
+    configModel.value.qa.checks = val ? undefined : ([...QA_CHECKS] as QACheckName[])
+  },
+})
+
+// 自定义模式下的选中值（与 configModel.qa.checks 双向同步）
+const selectedChecks = computed<QACheckName[]>({
+  get: () => (configModel.value.qa?.checks ?? []) as QACheckName[],
+  set: (val: QACheckName[]) => {
+    if (!configModel.value.qa) return
+    configModel.value.qa.checks = val.length ? (val as QACheckName[]) : undefined
+    // 若用户清空了所有选项，切回「全部」模式以避免提交空数组被误解
+    if (val.length === 0) checksModeAll.value = true
+  },
+})
 
 const lengthRatioError = computed(() => {
   const qa = configModel.value.qa
@@ -524,6 +574,53 @@ defineExpose({ lengthRatioError })
               size="small"
               :disabled="disabled || !configModel.qa!.enabled"
             />
+          </div>
+          <!-- 确定性检查项 -->
+          <div class="mt-3 rounded-lg border border-lf-border-soft bg-lf-surface-muted/40 p-3">
+            <div class="mb-2 flex items-center justify-between">
+              <span class="text-xs font-medium text-lf-text-strong">
+                {{ t('profileConfigEditor.qa.checksTitle') }}
+              </span>
+              <NRadioGroup
+                :value="checksModeAll ? 'all' : 'custom'"
+                size="small"
+                :disabled="disabled || !configModel.qa!.enabled"
+                @update:value="
+                  (val: string) => {
+                    checksModeAll = val === 'all'
+                  }
+                "
+              >
+                <NRadio value="all">{{ t('profileConfigEditor.qa.checksAll') }}</NRadio>
+                <NRadio value="custom">{{ t('profileConfigEditor.qa.checksCustom') }}</NRadio>
+              </NRadioGroup>
+            </div>
+            <div v-if="checksModeAll" class="text-xs text-lf-text-subtle">
+              {{ t('profileConfigEditor.qa.checksAllHint') }}
+            </div>
+            <div v-else>
+              <div class="mb-1 text-xs text-lf-text-subtle">
+                {{ t('profileConfigEditor.qa.checksHint') }}
+              </div>
+              <NCheckboxGroup
+                :value="selectedChecks"
+                :disabled="disabled || !configModel.qa!.enabled"
+                @update:value="
+                  (val: Array<string | number>) => {
+                    selectedChecks = val as QACheckName[]
+                  }
+                "
+              >
+                <div class="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-3">
+                  <NCheckbox
+                    v-for="opt in checkOptions"
+                    :key="opt.value"
+                    :value="opt.value"
+                    :label="opt.label"
+                  />
+                </div>
+              </NCheckboxGroup>
+            </div>
           </div>
           <div class="mt-2">
             <div class="mb-1 text-xs text-lf-text-subtle">
