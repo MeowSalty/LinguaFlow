@@ -3270,6 +3270,12 @@ components:
           type: string
         case_sensitive:
           type: boolean
+        forbidden:
+          type: boolean
+          description: 是否为禁译条目；命中源词且译文包含 target 时产生 error
+        mandatory:
+          type: boolean
+          description: 推荐译法是否为强制术语；仅影响非禁译条目的严重级
         notes:
           type: string
         created_at:
@@ -3300,6 +3306,12 @@ components:
         case_sensitive:
           type: boolean
           default: false
+        forbidden:
+          type: boolean
+          default: false
+        mandatory:
+          type: boolean
+          default: true
         notes:
           type: string
       additionalProperties: false
@@ -3314,6 +3326,10 @@ components:
         target:
           type: string
         case_sensitive:
+          type: boolean
+        forbidden:
+          type: boolean
+        mandatory:
           type: boolean
         notes:
           type: string
@@ -4727,6 +4743,11 @@ components:
           type: boolean
           default: false
           description: error 级别问题自动 reject
+        checks:
+          type: array
+          items:
+            type: string
+          description: 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、whitespace_irregular、repeated_space、width_mix、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence
         length_method:
           type: string
           enum:
