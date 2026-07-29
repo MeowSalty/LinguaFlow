@@ -15,11 +15,23 @@
 - 译文相对原文过短或过长（`length_ratio`）
 - 整段未译、空译文（`untranslated`）
 - 重复译文（`duplicate`）
+- 标点配对异常（`punctuation_pairing`）
+- 零宽字符、NBSP、tab 等异常空白（`whitespace_irregular`）
+- 连续空格与 CJK 字符间空格（`repeated_space`）
+- 全角/半角混用（`width_mix`）
+- 数字不一致（`number_mismatch`）
+- URL 或邮箱不一致（`url_email_mismatch`）
+- 字幕行数不一致（`subtitle_line_count`）
+- 词表推荐译法不一致（`term_inconsistency`）
+- 命中词表禁译项（`forbidden_term`）
+- 占位符残留或守恒失败（`leftover_placeholder`）
+- XML 标签不一致（`xml_tag_mismatch`）
+- 相同原文出现不同译文（`duplicate_source_divergence`）
 
 ## 聚焦问题类型
 
 - `calque`：逐字/逐结构借译，照搬源语搭配、构词或句式到目标语，目标语中不自然或语义偏移。
-- `term_fidelity`：关键术语译法不忠实、前后不一致，或明显误译专有/领域术语。
+- `term_fidelity`：仅报告词表外术语的语义误译，以及非词表称呼的前后漂移；词表锚定的一致性与禁译由规则 QA 负责。
 - `naturalness`：语义虽可理解但表达极不自然，明显是生硬直译，目标语母语者读起来别扭。
 
 ## 协议

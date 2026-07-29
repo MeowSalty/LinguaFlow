@@ -46,11 +46,12 @@ type PostprocessConfig struct {
 
 // QAConfig 控制翻译质量检测的行为。
 type QAConfig struct {
-	Enabled        bool    `yaml:"enabled"`
-	AutoReject     bool    `yaml:"auto_reject"`
-	LengthMethod   string  `yaml:"length_method"`
-	LengthRatioMin float64 `yaml:"length_ratio_min"`
-	LengthRatioMax float64 `yaml:"length_ratio_max"`
+	Enabled        bool     `yaml:"enabled"`
+	AutoReject     bool     `yaml:"auto_reject"`
+	Checks         []string `yaml:"checks,omitempty"`
+	LengthMethod   string   `yaml:"length_method"`
+	LengthRatioMin float64  `yaml:"length_ratio_min"`
+	LengthRatioMax float64  `yaml:"length_ratio_max"`
 }
 
 // ContextConfig 控制翻译上下文窗口。

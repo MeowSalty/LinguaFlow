@@ -156,6 +156,7 @@ func buildEngineFromCLIConfig(cliCfg *config.CLIConfig) (*engine.Options, error)
 		QA: qa.Config{
 			Enabled:        firstProfile.QA.Enabled,
 			AutoReject:     firstProfile.QA.AutoReject,
+			Checks:         firstProfile.QA.Checks,
 			LengthMethod:   qa.LengthMethod(firstProfile.QA.LengthMethod),
 			LengthRatioMin: firstProfile.QA.LengthRatioMin,
 			LengthRatioMax: firstProfile.QA.LengthRatioMax,

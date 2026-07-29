@@ -41,6 +41,49 @@ func TestFileGlossary_LoadSaveRoundTrip(t *testing.T) {
 	if g2.Len() != 2 {
 		t.Fatalf("reload want 2, got %d", g2.Len())
 	}
+	hits, err := g2.Lookup(context.Background(), "LinguaFlow", "", "")
+	if err != nil || len(hits) != 1 || !hits[0].Mandatory || hits[0].Forbidden {
+		t.Fatalf("legacy CSV defaults not preserved: hits=%#v err=%v", hits, err)
+	}
+}
+
+func TestFileGlossary_ExtendedCSVAndForbiddenMultiplicity(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "g.csv")
+	content := "source,target,case_sensitive,forbidden,mandatory,notes\n" +
+		"API,接口,false,false,true,recommended\n" +
+		"API,应用接口,false,true,true,banned one\n" +
+		"API,应用程序接口,false,true,false,banned two\n"
+	if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	g, err := LoadFile(path)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if g.Len() != 3 {
+		t.Fatalf("want recommendation plus two forbidden entries, got %d", g.Len())
+	}
+	hits, _ := g.Lookup(context.Background(), "API", "", "")
+	if len(hits) != 3 {
+		t.Fatalf("want 3 hits, got %#v", hits)
+	}
+}
+
+func TestFileGlossary_AddAllowsForbiddenTargetsButOneRecommendation(t *testing.T) {
+	g := NewMemory()
+	res, err := g.Add(context.Background(),
+		Entry{Source: "API", Target: "接口", Mandatory: true},
+		Entry{Source: "API", Target: "应用接口", Forbidden: true},
+		Entry{Source: "API", Target: "应用程序接口", Forbidden: true},
+	)
+	if err != nil || len(res.Added) != 3 {
+		t.Fatalf("initial add: result=%#v err=%v", res, err)
+	}
+	res, err = g.Add(context.Background(), Entry{Source: "api", Target: "端点"})
+	if err != nil || len(res.Skipped) != 1 || g.Len() != 3 {
+		t.Fatalf("second recommendation should conflict: result=%#v err=%v len=%d", res, err, g.Len())
+	}
 }
 
 func TestFileGlossary_LookupCaseSensitivity(t *testing.T) {

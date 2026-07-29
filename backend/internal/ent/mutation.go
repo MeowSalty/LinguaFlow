@@ -4564,6 +4564,8 @@ type GlossaryEntryMutation struct {
 	source            *string
 	target            *string
 	case_sensitive    *bool
+	forbidden         *bool
+	mandatory         *bool
 	notes             *string
 	clearedFields     map[string]struct{}
 	project           *int
@@ -4890,6 +4892,78 @@ func (m *GlossaryEntryMutation) ResetCaseSensitive() {
 	m.case_sensitive = nil
 }
 
+// SetForbidden sets the "forbidden" field.
+func (m *GlossaryEntryMutation) SetForbidden(b bool) {
+	m.forbidden = &b
+}
+
+// Forbidden returns the value of the "forbidden" field in the mutation.
+func (m *GlossaryEntryMutation) Forbidden() (r bool, exists bool) {
+	v := m.forbidden
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldForbidden returns the old "forbidden" field's value of the GlossaryEntry entity.
+// If the GlossaryEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GlossaryEntryMutation) OldForbidden(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldForbidden is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldForbidden requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldForbidden: %w", err)
+	}
+	return oldValue.Forbidden, nil
+}
+
+// ResetForbidden resets all changes to the "forbidden" field.
+func (m *GlossaryEntryMutation) ResetForbidden() {
+	m.forbidden = nil
+}
+
+// SetMandatory sets the "mandatory" field.
+func (m *GlossaryEntryMutation) SetMandatory(b bool) {
+	m.mandatory = &b
+}
+
+// Mandatory returns the value of the "mandatory" field in the mutation.
+func (m *GlossaryEntryMutation) Mandatory() (r bool, exists bool) {
+	v := m.mandatory
+	if v == nil {
+		return
+	}
+	return *v, true
+}
+
+// OldMandatory returns the old "mandatory" field's value of the GlossaryEntry entity.
+// If the GlossaryEntry object wasn't provided to the builder, the object is fetched from the database.
+// An error is returned if the mutation operation is not UpdateOne, or the database query fails.
+func (m *GlossaryEntryMutation) OldMandatory(ctx context.Context) (v bool, err error) {
+	if !m.op.Is(OpUpdateOne) {
+		return v, errors.New("OldMandatory is only allowed on UpdateOne operations")
+	}
+	if m.id == nil || m.oldValue == nil {
+		return v, errors.New("OldMandatory requires an ID field in the mutation")
+	}
+	oldValue, err := m.oldValue(ctx)
+	if err != nil {
+		return v, fmt.Errorf("querying old value for OldMandatory: %w", err)
+	}
+	return oldValue.Mandatory, nil
+}
+
+// ResetMandatory resets all changes to the "mandatory" field.
+func (m *GlossaryEntryMutation) ResetMandatory() {
+	m.mandatory = nil
+}
+
 // SetNotes sets the "notes" field.
 func (m *GlossaryEntryMutation) SetNotes(s string) {
 	m.notes = &s
@@ -5090,7 +5164,7 @@ func (m *GlossaryEntryMutation) Type() string {
 // order to get all numeric fields that were incremented/decremented, call
 // AddedFields().
 func (m *GlossaryEntryMutation) Fields() []string {
-	fields := make([]string, 0, 8)
+	fields := make([]string, 0, 10)
 	if m.created_at != nil {
 		fields = append(fields, glossaryentry.FieldCreatedAt)
 	}
@@ -5108,6 +5182,12 @@ func (m *GlossaryEntryMutation) Fields() []string {
 	}
 	if m.case_sensitive != nil {
 		fields = append(fields, glossaryentry.FieldCaseSensitive)
+	}
+	if m.forbidden != nil {
+		fields = append(fields, glossaryentry.FieldForbidden)
+	}
+	if m.mandatory != nil {
+		fields = append(fields, glossaryentry.FieldMandatory)
 	}
 	if m.notes != nil {
 		fields = append(fields, glossaryentry.FieldNotes)
@@ -5135,6 +5215,10 @@ func (m *GlossaryEntryMutation) Field(name string) (ent.Value, bool) {
 		return m.Target()
 	case glossaryentry.FieldCaseSensitive:
 		return m.CaseSensitive()
+	case glossaryentry.FieldForbidden:
+		return m.Forbidden()
+	case glossaryentry.FieldMandatory:
+		return m.Mandatory()
 	case glossaryentry.FieldNotes:
 		return m.Notes()
 	case glossaryentry.FieldProjectID:
@@ -5160,6 +5244,10 @@ func (m *GlossaryEntryMutation) OldField(ctx context.Context, name string) (ent.
 		return m.OldTarget(ctx)
 	case glossaryentry.FieldCaseSensitive:
 		return m.OldCaseSensitive(ctx)
+	case glossaryentry.FieldForbidden:
+		return m.OldForbidden(ctx)
+	case glossaryentry.FieldMandatory:
+		return m.OldMandatory(ctx)
 	case glossaryentry.FieldNotes:
 		return m.OldNotes(ctx)
 	case glossaryentry.FieldProjectID:
@@ -5214,6 +5302,20 @@ func (m *GlossaryEntryMutation) SetField(name string, value ent.Value) error {
 			return fmt.Errorf("unexpected type %T for field %s", value, name)
 		}
 		m.SetCaseSensitive(v)
+		return nil
+	case glossaryentry.FieldForbidden:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetForbidden(v)
+		return nil
+	case glossaryentry.FieldMandatory:
+		v, ok := value.(bool)
+		if !ok {
+			return fmt.Errorf("unexpected type %T for field %s", value, name)
+		}
+		m.SetMandatory(v)
 		return nil
 	case glossaryentry.FieldNotes:
 		v, ok := value.(string)
@@ -5307,6 +5409,12 @@ func (m *GlossaryEntryMutation) ResetField(name string) error {
 		return nil
 	case glossaryentry.FieldCaseSensitive:
 		m.ResetCaseSensitive()
+		return nil
+	case glossaryentry.FieldForbidden:
+		m.ResetForbidden()
+		return nil
+	case glossaryentry.FieldMandatory:
+		m.ResetMandatory()
 		return nil
 	case glossaryentry.FieldNotes:
 		m.ResetNotes()

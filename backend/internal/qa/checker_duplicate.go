@@ -13,7 +13,7 @@ func NewDuplicateTranslationChecker() *DuplicateTranslationChecker {
 	return &DuplicateTranslationChecker{}
 }
 
-func (c *DuplicateTranslationChecker) Name() string { return "duplicate" }
+func (c *DuplicateTranslationChecker) Name() string { return CheckDuplicate }
 
 func (c *DuplicateTranslationChecker) Check(_ context.Context, segments []CheckInput) []QualityIssue {
 	type entry struct {

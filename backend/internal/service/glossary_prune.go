@@ -525,10 +525,13 @@ func (s *GlossaryPruneService) applyUpdate(ctx context.Context, actorUserID, pro
 		}
 		return err
 	}
+	mandatory := true
 	_, err = s.glossary.UpdateEntry(ctx, actorUserID, projectID, entryID, GlossaryEntryInput{
 		Source:        entry.Source,
 		Target:        target,
 		CaseSensitive: entry.CaseSensitive,
+		Forbidden:     entry.Forbidden,
+		Mandatory:     &mandatory,
 		Notes:         notes,
 	})
 	return err

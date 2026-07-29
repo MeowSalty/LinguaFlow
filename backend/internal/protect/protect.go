@@ -147,17 +147,9 @@ func restoreAll(text string, protected map[string]string) string {
 
 // MissingPlaceholders 返回 seg.Protected 中未出现在 seg.Target 里的占位符 key。
 // 用于 translate 阶段在 LLM 返回后做完整性校验。结果按 key 升序排序，便于日志稳定输出。
+// 内部委托 PlaceholderViolations，仅取 missing 子集以保持调用方兼容。
 func MissingPlaceholders(seg *model.Segment) []string {
-	if len(seg.Protected) == 0 {
-		return nil
-	}
-	var missing []string
-	for k := range seg.Protected {
-		if !strings.Contains(seg.Target, k) {
-			missing = append(missing, k)
-		}
-	}
-	sort.Strings(missing)
+	missing, _, _ := PlaceholderViolations(seg)
 	return missing
 }
 

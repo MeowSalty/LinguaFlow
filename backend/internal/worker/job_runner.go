@@ -217,15 +217,17 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 	cfg := buildEngineConfig(snapshot)
 	autoApprove := snapshot.AutoApprove
 
-	var qaEngine *qa.Engine
-	if cfg.QA.Enabled {
-		qaEngine = qa.NewEngine(cfg.QA, r.logger)
-	}
-
-	runtimeGlossary, err := r.buildRuntimeGlossary(exec.Project, cfg.Glossary.Enabled)
+	runtimeGlossary, err := r.buildRuntimeGlossary(ctx, exec.Project, cfg.Glossary.Enabled)
 	if err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
+	}
+	var qaEngine *qa.Engine
+	if cfg.QA.Enabled {
+		qaCfg := cfg.QA
+		qaCfg.Glossary = runtimeGlossary
+		qaCfg.Format = res.Format
+		qaEngine = qa.NewEngine(qaCfg, r.logger)
 	}
 	memory, err := r.buildRuntimeTM(exec.Project, cfg.TMEnabled)
 	if err != nil {
@@ -248,6 +250,12 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 
 	// 段落来源标记：仅 segment_ids 手动选择时跳过默认过滤
 	isExplicitSelection := snapshot.ExplicitSegmentSelection
+	lastTranslateRoundIdx := -1
+	for i := range snapshot.Rounds {
+		if snapshot.Rounds[i].Mode == "translate" {
+			lastTranslateRoundIdx = i
+		}
+	}
 
 	// 轮次循环
 	for roundIdx := range snapshot.Rounds {
@@ -279,6 +287,12 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 
 		if len(selectedRows) == 0 {
 			// 本轮无段可处理（如 translate pending_only 已全部译完）；继续后续 extract/adjudicate 轮
+			if roundIdx == lastTranslateRoundIdx && duplicateSourceDivergenceEnabled(cfg.QA) {
+				if err := r.persistDuplicateSourceDivergence(ctx, res.ID); err != nil {
+					_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
+					return nil
+				}
+			}
 			continue
 		}
 
@@ -455,6 +469,11 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 		result, roundErr := eng.ExecuteRound(ctx, roundIdx, doc, execOpts...)
 		if roundErr == nil {
 			lastResult = result
+			if roundIdx == lastTranslateRoundIdx && duplicateSourceDivergenceEnabled(cfg.QA) {
+				if err := r.persistDuplicateSourceDivergence(ctx, res.ID); err != nil {
+					roundErr = err
+				}
+			}
 			// semantic_qa 终态扫描失败转软警告，不阻塞资源 completed。
 			if round.Mode == "semantic_qa" && result.FailedBatchCount > 0 {
 				semanticQAWarning = fmt.Sprintf(
@@ -597,12 +616,97 @@ func buildQACheckInputs(batchResult pipeline.BatchResult) []qa.CheckInput {
 	return inputs
 }
 
+func duplicateSourceDivergenceEnabled(cfg qa.Config) bool {
+	if !cfg.Enabled {
+		return false
+	}
+	if cfg.Checks == nil {
+		return true
+	}
+	for _, name := range cfg.Checks {
+		if name == qa.CodeDuplicateSourceDivergence {
+			return true
+		}
+	}
+	return false
+}
+
+// persistDuplicateSourceDivergence 在最后一个翻译轮次后执行全文同文异译检查。
+// 仅合并 quality_issues，不改写译文或审核状态。
+func (r *JobRunner) persistDuplicateSourceDivergence(ctx context.Context, resourceID int) error {
+	_, rows, err := r.loadSegments(ctx, resourceID, nil)
+	if err != nil {
+		return fmt.Errorf("load segments for duplicate source QA: %w", err)
+	}
+	inputs := make([]qa.CheckInput, 0, len(rows))
+	for _, row := range rows {
+		target := ""
+		if row.TargetText != nil {
+			target = *row.TargetText
+		}
+		inputs = append(inputs, qa.CheckInput{
+			Index:      row.SegmentIndex,
+			SourceText: row.SourceText,
+			TargetText: target,
+		})
+	}
+
+	issuesByIndex := make(map[int][]qa.QualityIssue)
+	for _, issue := range qa.CheckDuplicateSourceDivergence(inputs) {
+		issuesByIndex[issue.SegmentIndex] = append(issuesByIndex[issue.SegmentIndex], issue)
+	}
+	for _, row := range rows {
+		merged, changed := replaceQualityIssuesByCode(
+			row.QualityIssues,
+			issuesByIndex[row.SegmentIndex],
+			qa.CodeDuplicateSourceDivergence,
+		)
+		if !changed {
+			continue
+		}
+		if err := r.client.Segment.UpdateOneID(row.ID).SetQualityIssues(merged).Exec(ctx); err != nil {
+			return fmt.Errorf("persist duplicate source QA for segment %d: %w", row.ID, err)
+		}
+	}
+	return nil
+}
+
+func mergeQualityIssuesByFingerprint(existing, fresh []qa.QualityIssue) []qa.QualityIssue {
+	merged := make([]qa.QualityIssue, 0, len(existing)+len(fresh))
+	seen := make(map[string]struct{}, len(existing)+len(fresh))
+	for _, issue := range append(append([]qa.QualityIssue(nil), existing...), fresh...) {
+		fp := qa.Fingerprint(issue)
+		if _, ok := seen[fp]; ok {
+			continue
+		}
+		seen[fp] = struct{}{}
+		merged = append(merged, issue)
+	}
+	return merged
+}
+
+func replaceQualityIssuesByCode(existing, fresh []qa.QualityIssue, code string) ([]qa.QualityIssue, bool) {
+	kept := make([]qa.QualityIssue, 0, len(existing)+len(fresh))
+	changed := len(fresh) > 0
+	for _, issue := range existing {
+		if issue.Code == code {
+			changed = true
+			continue
+		}
+		kept = append(kept, issue)
+	}
+	if !changed {
+		return existing, false
+	}
+	return mergeQualityIssuesByFingerprint(kept, fresh), true
+}
+
 // buildRuntimeGlossary 根据配置构建运行时术语表，未启用则返回空实现。
-func (r *JobRunner) buildRuntimeGlossary(projectRow *ent.Project, enabled bool) (glossary.Glossary, error) {
+func (r *JobRunner) buildRuntimeGlossary(ctx context.Context, projectRow *ent.Project, enabled bool) (glossary.Glossary, error) {
 	if !enabled {
 		return glossary.Nop{}, nil
 	}
-	return service.NewDatabaseGlossary(r.client, projectRow)
+	return service.NewDatabaseGlossary(ctx, r.client, projectRow)
 }
 
 // buildRuntimeTM 根据配置构建运行时翻译记忆，未启用则返回空实现。

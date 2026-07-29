@@ -56,6 +56,8 @@ func seedGlossaryEntries(t *testing.T, client *ent.Client, projectID int, entrie
 			SetSource(n.Source).
 			SetTarget(n.Target).
 			SetCaseSensitive(n.CaseSensitive).
+			SetForbidden(n.Forbidden).
+			SetMandatory(*n.Mandatory).
 			SetNotes(n.Notes).
 			Save(context.Background())
 		if err != nil {
@@ -258,9 +260,10 @@ func TestApply_DeleteAndUpdate(t *testing.T) {
 	u := createTestUser(t, client, "pruneuser")
 	p := createTestProject(t, client, "prune-proj", u.ID)
 
+	soft := false
 	entries := seedGlossaryEntries(t, client, p.ID, []GlossaryEntryInput{
 		{Source: "DeleteMe", Target: "删除我", Notes: ""},
-		{Source: "UpdateMe", Target: "旧译", Notes: "旧注"},
+		{Source: "UpdateMe", Target: "旧译", Mandatory: &soft, Notes: "旧注"},
 		{Source: "KeepMe", Target: "保留", Notes: ""},
 	})
 
@@ -285,6 +288,9 @@ func TestApply_DeleteAndUpdate(t *testing.T) {
 	updated, _ := client.GlossaryEntry.Get(ctx, entries[1].ID)
 	if updated.Target != "新译" || updated.Notes != "新注" {
 		t.Errorf("update mismatch: target=%q notes=%q", updated.Target, updated.Notes)
+	}
+	if !updated.Mandatory {
+		t.Error("prune update should promote a soft term to mandatory")
 	}
 	// source 和 case_sensitive 应保留
 	if updated.Source != "UpdateMe" {

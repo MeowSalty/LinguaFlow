@@ -2,6 +2,7 @@ package schema
 
 import (
 	"entgo.io/ent"
+	"entgo.io/ent/dialect/entsql"
 	"entgo.io/ent/schema/edge"
 	"entgo.io/ent/schema/field"
 	"entgo.io/ent/schema/index"
@@ -21,6 +22,8 @@ func (GlossaryEntry) Fields() []ent.Field {
 		field.String("source").NotEmpty(),
 		field.String("target").NotEmpty(),
 		field.Bool("case_sensitive").Default(false),
+		field.Bool("forbidden").Default(false),
+		field.Bool("mandatory").Default(true),
 		field.String("notes").Optional(),
 		field.Int("project_id").Positive(),
 	}
@@ -39,6 +42,11 @@ func (GlossaryEntry) Edges() []ent.Edge {
 
 func (GlossaryEntry) Indexes() []ent.Index {
 	return []ent.Index{
-		index.Fields("project_id", "source_key").Unique(),
+		index.Fields("project_id", "source_key").
+			Unique().
+			Annotations(entsql.IndexWhere("forbidden = false")),
+		index.Fields("project_id", "source_key", "target").
+			Unique().
+			Annotations(entsql.IndexWhere("forbidden = true")),
 	}
 }

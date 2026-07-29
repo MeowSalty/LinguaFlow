@@ -46,6 +46,93 @@ func TestMergeSemanticQAIssuesEmptyScanClearsPriorSemanticIssues(t *testing.T) {
 	}
 }
 
+func TestMergeQualityIssuesByFingerprint(t *testing.T) {
+	existing := []qa.QualityIssue{{Code: "source_residual", Span: &qa.Span{MatchedText: "x"}}}
+	fresh := []qa.QualityIssue{
+		{Code: "source_residual", Span: &qa.Span{MatchedText: "x"}},
+		{Code: qa.CodeDuplicateSourceDivergence},
+	}
+	got := mergeQualityIssuesByFingerprint(existing, fresh)
+	if len(got) != 2 || got[1].Code != qa.CodeDuplicateSourceDivergence {
+		t.Fatalf("unexpected merge: %#v", got)
+	}
+}
+
+func TestDuplicateSourceDivergenceEnabled(t *testing.T) {
+	if !duplicateSourceDivergenceEnabled(qa.Config{Enabled: true}) {
+		t.Fatal("nil checks should enable document checks")
+	}
+	if duplicateSourceDivergenceEnabled(qa.Config{Enabled: true, Checks: []string{qa.CheckUntranslated}}) {
+		t.Fatal("explicit checker list should filter document check")
+	}
+	if !duplicateSourceDivergenceEnabled(qa.Config{Enabled: true, Checks: []string{qa.CodeDuplicateSourceDivergence}}) {
+		t.Fatal("explicit document checker should be enabled")
+	}
+}
+
+func TestPersistDuplicateSourceDivergenceMergesWithoutChangingStatus(t *testing.T) {
+	client := newSemanticQATestClient(t)
+	ctx := context.Background()
+	resource, err := client.Resource.Create().
+		SetPath("sample.srt").
+		SetFormat("srt").
+		SetStoragePath("sample.srt").
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create resource: %v", err)
+	}
+	first, err := client.Segment.Create().
+		SetResourceID(resource.ID).
+		SetSegmentIndex(0).
+		SetSourceText("Same source").
+		SetTargetText("译文一").
+		SetStatus(segment.StatusApproved).
+		SetQualityIssues([]qa.QualityIssue{{Code: "source_residual", Severity: qa.SeverityWarning}}).
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create first segment: %v", err)
+	}
+	second, err := client.Segment.Create().
+		SetResourceID(resource.ID).
+		SetSegmentIndex(1).
+		SetSourceText("  Same   source ").
+		SetTargetText("译文二").
+		SetStatus(segment.StatusTranslated).
+		Save(ctx)
+	if err != nil {
+		t.Fatalf("create second segment: %v", err)
+	}
+
+	runner := &JobRunner{client: client}
+	if err := runner.persistDuplicateSourceDivergence(ctx, resource.ID); err != nil {
+		t.Fatalf("persist divergence: %v", err)
+	}
+
+	afterFirst, _ := client.Segment.Get(ctx, first.ID)
+	afterSecond, _ := client.Segment.Get(ctx, second.ID)
+	if afterFirst.Status != segment.StatusApproved || len(afterFirst.QualityIssues) != 1 {
+		t.Fatalf("first segment changed unexpectedly: status=%s issues=%#v", afterFirst.Status, afterFirst.QualityIssues)
+	}
+	if afterSecond.Status != segment.StatusTranslated || len(afterSecond.QualityIssues) != 1 || afterSecond.QualityIssues[0].Code != qa.CodeDuplicateSourceDivergence {
+		t.Fatalf("second segment not merged correctly: status=%s issues=%#v", afterSecond.Status, afterSecond.QualityIssues)
+	}
+
+	if err := client.Segment.UpdateOneID(first.ID).SetTargetText("译文二").Exec(ctx); err != nil {
+		t.Fatalf("make translations consistent: %v", err)
+	}
+	if err := runner.persistDuplicateSourceDivergence(ctx, resource.ID); err != nil {
+		t.Fatalf("replace divergence after translations converge: %v", err)
+	}
+	afterFirst, _ = client.Segment.Get(ctx, first.ID)
+	afterSecond, _ = client.Segment.Get(ctx, second.ID)
+	if len(afterFirst.QualityIssues) != 1 || afterFirst.QualityIssues[0].Code != "source_residual" {
+		t.Fatalf("unrelated issue changed unexpectedly: %#v", afterFirst.QualityIssues)
+	}
+	if len(afterSecond.QualityIssues) != 0 {
+		t.Fatalf("stale divergence issue was not cleared: %#v", afterSecond.QualityIssues)
+	}
+}
+
 func TestSemanticQACASPersistsIssues(t *testing.T) {
 	client := newSemanticQATestClient(t)
 	ctx := context.Background()

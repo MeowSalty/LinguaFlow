@@ -82,6 +82,34 @@ func (_c *GlossaryEntryCreate) SetNillableCaseSensitive(v *bool) *GlossaryEntryC
 	return _c
 }
 
+// SetForbidden sets the "forbidden" field.
+func (_c *GlossaryEntryCreate) SetForbidden(v bool) *GlossaryEntryCreate {
+	_c.mutation.SetForbidden(v)
+	return _c
+}
+
+// SetNillableForbidden sets the "forbidden" field if the given value is not nil.
+func (_c *GlossaryEntryCreate) SetNillableForbidden(v *bool) *GlossaryEntryCreate {
+	if v != nil {
+		_c.SetForbidden(*v)
+	}
+	return _c
+}
+
+// SetMandatory sets the "mandatory" field.
+func (_c *GlossaryEntryCreate) SetMandatory(v bool) *GlossaryEntryCreate {
+	_c.mutation.SetMandatory(v)
+	return _c
+}
+
+// SetNillableMandatory sets the "mandatory" field if the given value is not nil.
+func (_c *GlossaryEntryCreate) SetNillableMandatory(v *bool) *GlossaryEntryCreate {
+	if v != nil {
+		_c.SetMandatory(*v)
+	}
+	return _c
+}
+
 // SetNotes sets the "notes" field.
 func (_c *GlossaryEntryCreate) SetNotes(v string) *GlossaryEntryCreate {
 	_c.mutation.SetNotes(v)
@@ -169,6 +197,14 @@ func (_c *GlossaryEntryCreate) defaults() {
 		v := glossaryentry.DefaultCaseSensitive
 		_c.mutation.SetCaseSensitive(v)
 	}
+	if _, ok := _c.mutation.Forbidden(); !ok {
+		v := glossaryentry.DefaultForbidden
+		_c.mutation.SetForbidden(v)
+	}
+	if _, ok := _c.mutation.Mandatory(); !ok {
+		v := glossaryentry.DefaultMandatory
+		_c.mutation.SetMandatory(v)
+	}
 }
 
 // check runs all checks and user-defined validators on the builder.
@@ -205,6 +241,12 @@ func (_c *GlossaryEntryCreate) check() error {
 	}
 	if _, ok := _c.mutation.CaseSensitive(); !ok {
 		return &ValidationError{Name: "case_sensitive", err: errors.New(`ent: missing required field "GlossaryEntry.case_sensitive"`)}
+	}
+	if _, ok := _c.mutation.Forbidden(); !ok {
+		return &ValidationError{Name: "forbidden", err: errors.New(`ent: missing required field "GlossaryEntry.forbidden"`)}
+	}
+	if _, ok := _c.mutation.Mandatory(); !ok {
+		return &ValidationError{Name: "mandatory", err: errors.New(`ent: missing required field "GlossaryEntry.mandatory"`)}
 	}
 	if _, ok := _c.mutation.ProjectID(); !ok {
 		return &ValidationError{Name: "project_id", err: errors.New(`ent: missing required field "GlossaryEntry.project_id"`)}
@@ -266,6 +308,14 @@ func (_c *GlossaryEntryCreate) createSpec() (*GlossaryEntry, *sqlgraph.CreateSpe
 	if value, ok := _c.mutation.CaseSensitive(); ok {
 		_spec.SetField(glossaryentry.FieldCaseSensitive, field.TypeBool, value)
 		_node.CaseSensitive = value
+	}
+	if value, ok := _c.mutation.Forbidden(); ok {
+		_spec.SetField(glossaryentry.FieldForbidden, field.TypeBool, value)
+		_node.Forbidden = value
+	}
+	if value, ok := _c.mutation.Mandatory(); ok {
+		_spec.SetField(glossaryentry.FieldMandatory, field.TypeBool, value)
+		_node.Mandatory = value
 	}
 	if value, ok := _c.mutation.Notes(); ok {
 		_spec.SetField(glossaryentry.FieldNotes, field.TypeString, value)

@@ -33,7 +33,7 @@ func NewLengthRatioChecker(minRatio, maxRatio float64, method LengthMethod) *Len
 	return &LengthRatioChecker{minRatio: minRatio, maxRatio: maxRatio, method: method}
 }
 
-func (c *LengthRatioChecker) Name() string { return "length_ratio" }
+func (c *LengthRatioChecker) Name() string { return CheckLengthRatio }
 
 func (c *LengthRatioChecker) Check(_ context.Context, segments []CheckInput) []QualityIssue {
 	var issues []QualityIssue

@@ -248,8 +248,16 @@ func init() {
 	glossaryentryDescCaseSensitive := glossaryentryFields[3].Descriptor()
 	// glossaryentry.DefaultCaseSensitive holds the default value on creation for the case_sensitive field.
 	glossaryentry.DefaultCaseSensitive = glossaryentryDescCaseSensitive.Default.(bool)
+	// glossaryentryDescForbidden is the schema descriptor for forbidden field.
+	glossaryentryDescForbidden := glossaryentryFields[4].Descriptor()
+	// glossaryentry.DefaultForbidden holds the default value on creation for the forbidden field.
+	glossaryentry.DefaultForbidden = glossaryentryDescForbidden.Default.(bool)
+	// glossaryentryDescMandatory is the schema descriptor for mandatory field.
+	glossaryentryDescMandatory := glossaryentryFields[5].Descriptor()
+	// glossaryentry.DefaultMandatory holds the default value on creation for the mandatory field.
+	glossaryentry.DefaultMandatory = glossaryentryDescMandatory.Default.(bool)
 	// glossaryentryDescProjectID is the schema descriptor for project_id field.
-	glossaryentryDescProjectID := glossaryentryFields[5].Descriptor()
+	glossaryentryDescProjectID := glossaryentryFields[7].Descriptor()
 	// glossaryentry.ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
 	glossaryentry.ProjectIDValidator = glossaryentryDescProjectID.Validators[0].(func(int) error)
 	jobMixin := schema.Job{}.Mixin()

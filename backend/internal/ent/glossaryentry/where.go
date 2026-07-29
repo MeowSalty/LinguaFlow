@@ -85,6 +85,16 @@ func CaseSensitive(v bool) predicate.GlossaryEntry {
 	return predicate.GlossaryEntry(sql.FieldEQ(FieldCaseSensitive, v))
 }
 
+// Forbidden applies equality check predicate on the "forbidden" field. It's identical to ForbiddenEQ.
+func Forbidden(v bool) predicate.GlossaryEntry {
+	return predicate.GlossaryEntry(sql.FieldEQ(FieldForbidden, v))
+}
+
+// Mandatory applies equality check predicate on the "mandatory" field. It's identical to MandatoryEQ.
+func Mandatory(v bool) predicate.GlossaryEntry {
+	return predicate.GlossaryEntry(sql.FieldEQ(FieldMandatory, v))
+}
+
 // Notes applies equality check predicate on the "notes" field. It's identical to NotesEQ.
 func Notes(v string) predicate.GlossaryEntry {
 	return predicate.GlossaryEntry(sql.FieldEQ(FieldNotes, v))
@@ -378,6 +388,26 @@ func CaseSensitiveEQ(v bool) predicate.GlossaryEntry {
 // CaseSensitiveNEQ applies the NEQ predicate on the "case_sensitive" field.
 func CaseSensitiveNEQ(v bool) predicate.GlossaryEntry {
 	return predicate.GlossaryEntry(sql.FieldNEQ(FieldCaseSensitive, v))
+}
+
+// ForbiddenEQ applies the EQ predicate on the "forbidden" field.
+func ForbiddenEQ(v bool) predicate.GlossaryEntry {
+	return predicate.GlossaryEntry(sql.FieldEQ(FieldForbidden, v))
+}
+
+// ForbiddenNEQ applies the NEQ predicate on the "forbidden" field.
+func ForbiddenNEQ(v bool) predicate.GlossaryEntry {
+	return predicate.GlossaryEntry(sql.FieldNEQ(FieldForbidden, v))
+}
+
+// MandatoryEQ applies the EQ predicate on the "mandatory" field.
+func MandatoryEQ(v bool) predicate.GlossaryEntry {
+	return predicate.GlossaryEntry(sql.FieldEQ(FieldMandatory, v))
+}
+
+// MandatoryNEQ applies the NEQ predicate on the "mandatory" field.
+func MandatoryNEQ(v bool) predicate.GlossaryEntry {
+	return predicate.GlossaryEntry(sql.FieldNEQ(FieldMandatory, v))
 }
 
 // NotesEQ applies the EQ predicate on the "notes" field.
