@@ -20,7 +20,7 @@ var (
 	ErrGlossaryEntryExists   = errors.New("glossary entry already exists")
 )
 
-var glossaryCSVHeader = []string{"source", "target", "case_sensitive", "notes"}
+var glossaryCSVHeader = []string{"source", "target", "case_sensitive", "forbidden", "mandatory", "notes"}
 
 type GlossaryService struct {
 	client   *ent.Client
@@ -31,6 +31,8 @@ type GlossaryEntryInput struct {
 	Source        string
 	Target        string
 	CaseSensitive bool
+	Forbidden     bool
+	Mandatory     *bool
 	Notes         string
 }
 
@@ -111,11 +113,29 @@ func (s *GlossaryService) UpdateEntry(ctx context.Context, actorUserID, projectI
 		return nil, err
 	}
 	oldTarget := oldEntry.Target
+	conflictQuery := s.client.GlossaryEntry.Query().Where(
+		glossaryentry.ProjectIDEQ(projectID),
+		glossaryentry.IDNEQ(oldEntry.ID),
+		glossaryentry.SourceKeyEQ(glossarySourceKey(normalized.Source)),
+		glossaryentry.ForbiddenEQ(normalized.Forbidden),
+	)
+	if normalized.Forbidden {
+		conflictQuery = conflictQuery.Where(glossaryentry.TargetEQ(normalized.Target))
+	}
+	conflict, err := conflictQuery.Exist(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if conflict {
+		return nil, ErrGlossaryEntryExists
+	}
 	updated, err := s.client.GlossaryEntry.UpdateOneID(oldEntry.ID).
 		SetSource(normalized.Source).
 		SetSourceKey(glossarySourceKey(normalized.Source)).
 		SetTarget(normalized.Target).
 		SetCaseSensitive(normalized.CaseSensitive).
+		SetForbidden(normalized.Forbidden).
+		SetMandatory(*normalized.Mandatory).
 		SetNotes(normalized.Notes).
 		Save(ctx)
 	if err != nil {
@@ -192,7 +212,12 @@ func (s *GlossaryService) ImportCSV(ctx context.Context, actorUserID, projectID 
 		if len(rec) >= 3 {
 			input.CaseSensitive = parseGlossaryBool(rec[2])
 		}
-		if len(rec) >= 4 {
+		if len(rec) >= 6 {
+			input.Forbidden = parseGlossaryBool(rec[3])
+			mandatory := parseGlossaryBool(rec[4])
+			input.Mandatory = &mandatory
+			input.Notes = strings.TrimSpace(rec[5])
+		} else if len(rec) >= 4 {
 			input.Notes = strings.TrimSpace(rec[3])
 		}
 		normalized, normErr := normalizeGlossaryEntryInput(input)
@@ -230,6 +255,8 @@ func (s *GlossaryService) ExportCSV(ctx context.Context, actorUserID, projectID 
 			entry.Source,
 			entry.Target,
 			formatGlossaryBool(entry.CaseSensitive),
+			formatGlossaryBool(entry.Forbidden),
+			formatGlossaryBool(entry.Mandatory),
 			entry.Notes,
 		}); err != nil {
 			return err
@@ -240,12 +267,29 @@ func (s *GlossaryService) ExportCSV(ctx context.Context, actorUserID, projectID 
 }
 
 func createGlossaryEntry(ctx context.Context, client *ent.Client, projectID int, input GlossaryEntryInput) (*ent.GlossaryEntry, error) {
+	existsQuery := client.GlossaryEntry.Query().Where(
+		glossaryentry.ProjectIDEQ(projectID),
+		glossaryentry.SourceKeyEQ(glossarySourceKey(input.Source)),
+		glossaryentry.ForbiddenEQ(input.Forbidden),
+	)
+	if input.Forbidden {
+		existsQuery = existsQuery.Where(glossaryentry.TargetEQ(input.Target))
+	}
+	exists, err := existsQuery.Exist(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if exists {
+		return nil, ErrGlossaryEntryExists
+	}
 	created, err := client.GlossaryEntry.Create().
 		SetProjectID(projectID).
 		SetSourceKey(glossarySourceKey(input.Source)).
 		SetSource(input.Source).
 		SetTarget(input.Target).
 		SetCaseSensitive(input.CaseSensitive).
+		SetForbidden(input.Forbidden).
+		SetMandatory(*input.Mandatory).
 		SetNotes(input.Notes).
 		Save(ctx)
 	if err != nil {
@@ -263,10 +307,16 @@ func normalizeGlossaryEntryInput(input GlossaryEntryInput) (GlossaryEntryInput, 
 	if source == "" || target == "" {
 		return GlossaryEntryInput{}, ErrInvalidInput
 	}
+	mandatory := true
+	if input.Mandatory != nil {
+		mandatory = *input.Mandatory
+	}
 	return GlossaryEntryInput{
 		Source:        source,
 		Target:        target,
 		CaseSensitive: input.CaseSensitive,
+		Forbidden:     input.Forbidden,
+		Mandatory:     &mandatory,
 		Notes:         strings.TrimSpace(input.Notes),
 	}, nil
 }
