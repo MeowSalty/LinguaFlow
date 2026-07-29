@@ -427,7 +427,14 @@ export const fetchResourceSegments = async (
     group_key?: string
     quality_issues?: 'has' | 'none'
     quality_severity?: 'warning' | 'error'
-    quality_code?: 'untranslated' | 'length_ratio' | 'duplicate' | 'source_residual'
+    quality_code?:
+      | 'untranslated'
+      | 'length_ratio'
+      | 'duplicate'
+      | 'source_residual'
+      | 'calque'
+      | 'term_fidelity'
+      | 'naturalness'
     cursor?: string
     limit?: number
   },
@@ -436,7 +443,10 @@ export const fetchResourceSegments = async (
   const { data, error, response } = await client.GET(
     '/projects/{projectId}/resources/{resourceId}/segments',
     {
-      params: { path: { projectId, resourceId }, query: params },
+      params: {
+        path: { projectId, resourceId },
+        query: params,
+      },
     },
   )
 

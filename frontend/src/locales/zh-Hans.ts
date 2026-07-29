@@ -526,11 +526,15 @@ const messages = {
       emptyTarget: '暂无译文',
       qualityError: '错误',
       qualityWarning: '警告',
+      qualityMatched: '片段：{text}',
       qualityCodes: {
         untranslated: '未翻译',
         lengthRatio: '长度异常',
         duplicate: '重复译文',
         sourceResidual: '源文残留',
+        calque: '仿译',
+        termFidelity: '术语偏差',
+        naturalness: '自然度',
       },
       editTitle: '编辑段落',
       columns: {
@@ -589,6 +593,7 @@ const messages = {
       planPreviewModeTranslate: '翻译',
       planPreviewModeExtract: '术语抽取',
       planPreviewModeAdjudicate: '质量裁决',
+      planPreviewModeSemanticQA: '语义质检',
       confirmSummary:
         '将使用「{planName}」为 {resourceCount} 个资源（{segmentCount} 个段落）创建任务。',
       segmentFilter: {
@@ -606,8 +611,13 @@ const messages = {
         skipped: '跳过',
         trigger: '触发方式',
         error: '错误信息',
+        remark: '备注',
         stage: '阶段',
         startedAt: '开始时间',
+      },
+      warnings: {
+        badge: '{count} 项警告',
+        summary: '{count} 个资源完成时出现软警告（任务状态仍为已完成）',
       },
       actions: {
         create: '创建任务',
@@ -637,6 +647,7 @@ const messages = {
         extract: '术语提取',
         translate: '翻译',
         adjudicate: '质量裁决',
+        semantic_qa: '语义质检',
         review: '审校',
         finalize: '收尾',
         ruby_alignment: '注音对齐',
@@ -669,6 +680,7 @@ const messages = {
         completed: '已完成',
         skipped: '已跳过',
         failed: '已失败',
+        warned: '有警告',
         total: '总计',
       },
       // 事件日志
@@ -999,6 +1011,9 @@ const messages = {
       default: '暂无 AI 后端，添加一个后端开始使用翻译服务。',
       filtered: '没有找到符合条件的后端。',
     },
+    actions: {
+      copy: '复制',
+    },
     create: {
       title: '添加 AI 后端',
       description: '选择后端类型并填写配置信息。API Key 等敏感信息将安全存储。',
@@ -1006,6 +1021,9 @@ const messages = {
     edit: {
       title: '编辑 AI 后端',
       description: '更新后端配置信息。修改后立即生效。',
+    },
+    copy: {
+      name: '{name} 副本',
     },
     delete: {
       confirm: '确定要删除后端「{name}」吗？此操作无法撤销。',
@@ -1053,6 +1071,8 @@ const messages = {
       maxTokensThinkingHint:
         '思考与最终输出共用同一 Max Tokens 池（约 low 25% / medium 50% / high 75% 给思考），建议适当提高上限。',
       timeout: '超时时间（秒）',
+      timeoutPlaceholder: '例如：60',
+      timeoutUnlimited: '不限制',
       responseFormat: '响应格式',
       enablePromptCache: '启用 Prompt Cache',
       stream: '流式请求',
@@ -1454,6 +1474,7 @@ const messages = {
       roundBatchSizeRequired: '轮次 {n}：请设置批次大小',
       roundBatchConfigRequired: '轮次 {n}：批次大小和每批字词数至少填一项',
       roundConcurrencyRequired: '轮次 {n}：请设置并发数',
+      roundSemanticQAIssueCodesRequired: '轮次 {n}：按问题代码筛选时至少选择一个问题代码',
     },
     messages: {
       createSuccess: '执行计划模板创建成功',
@@ -1484,6 +1505,7 @@ const messages = {
       modeTranslate: '翻译',
       modeExtract: '术语抽取',
       modeAdjudicate: '质量裁决',
+      modeSemanticQA: '语义质检',
       backend: 'AI 后端',
       backendPlaceholder: '选择后端',
       concurrency: '并发数',
@@ -1525,6 +1547,22 @@ const messages = {
       adjudicateCodesHint: '未翻译与重复译文为硬规则，不可裁决。空则默认源文残留。',
       adjudicateCodeSourceResidual: '源文残留',
       adjudicateCodeLengthRatio: '长度异常',
+      semanticQAPromptHint:
+        '语义质检 system prompt 内置不可见，无需选择提示词模板；产出 warning 级语义问题直接进人审。',
+      semanticQASegmentScope: '段落扫描范围',
+      semanticQASegmentScopePlaceholder: '选择扫描范围',
+      semanticQASegmentScopeHint:
+        '控制语义质检覆盖哪些段落。缩小范围可降低成本，未扫描段落保留原有语义问题。',
+      semanticQASegmentScopeAll: '全部译文段落',
+      semanticQASegmentScopeWithIssues: '仅有问题的段落',
+      semanticQASegmentScopeWithIssueCodes: '按问题代码筛选',
+      semanticQAIssueCodes: '问题代码筛选',
+      semanticQAIssueCodesPlaceholder: '选择要匹配的问题代码',
+      semanticQAIssueCodesHint: '仅扫描包含所选问题代码的段落，适合成本敏感的高价值子集。',
+      semanticQABatchSize: '段落数上限',
+      semanticQABatchSizeHint: '0=不限制，与字词数上限至少填一项',
+      semanticQAMaxWordsPerBatch: '字词数上限',
+      semanticQAMaxWordsPerBatchHint: '0=不限制，与段落数上限至少填一项',
     },
     actions: {
       addRound: '添加轮次',

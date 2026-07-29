@@ -1445,9 +1445,11 @@ export interface components {
             segment_index: number;
             /** @enum {string} */
             severity: "warning" | "error";
-            /** @description 问题代码（untranslated, length_ratio, duplicate, source_residual） */
+            /** @description 问题代码（untranslated, length_ratio, duplicate, source_residual, calque, term_fidelity, naturalness） */
             code: string;
             message: string;
+            /** @description 问题在目标/源文本中的跨度；片段级问题可省略 */
+            span?: components["schemas"]["QualityIssueSpan"];
         };
         UsageStats: {
             api_calls: number;
@@ -1625,6 +1627,8 @@ export interface components {
             skipped_segments: number;
             output_path?: string;
             error_message?: string;
+            /** @description 软警告信息（如 semantic_qa 扫描失败）；资源状态仍为 completed */
+            warning_message?: string;
             resource?: components["schemas"]["Resource"];
             /** Format: date-time */
             created_at: string;
@@ -2357,6 +2361,14 @@ export interface components {
             /** @description 删除的段落数 */
             deleted: number;
         };
+        QualityIssueSpan: {
+            /** @description 触发问题的精确文本片段 */
+            matched_text: string;
+            /** @description 目标文本中的起始偏移（按字符/rune）；定位失败时省略 */
+            target_start?: number;
+            /** @description 目标文本中的结束偏移（按字符/rune，半开区间）；定位失败时省略 */
+            target_end?: number;
+        };
         GlossarySyncImpactResource: {
             resource_id: number;
             resource_path: string;
@@ -2447,12 +2459,35 @@ export interface components {
             adjudicate_codes?: ("source_residual" | "length_ratio")[];
             retry?: components["schemas"]["RetryConfig"];
         };
-        ExecutionRoundConfig: {
+        /** @description 语义质检轮次配置。system prompt 内置不可见，无 prompt_template_id；产出 warning 级语义 issue 直接进人审。 */
+        SemanticQARoundConfig: {
+            /** @description 段落数上限；0=不限制，与 max_words_per_batch 至少填一项 */
+            batch_size?: number;
+            /** @description 字词数上限；0=不限制，与 batch_size 至少填一项 */
+            max_words_per_batch?: number;
             /**
-             * @description 轮次模式：translate=翻译，extract=术语抽取，adjudicate=质量裁决
+             * @description 段落扫描范围：
+             *     - all（默认）：扫描全部 translated/edited 且译文非空的段，完整语义覆盖。
+             *     - with_issues：仅扫描带任意 issue 的段。
+             *     - with_issue_codes：仅扫描含 issue_codes 声明 code 的段（用于成本敏感的高价值子集，如 ja↔zh 假同源）。
+             *     范围与任务级 segment_ids 取交集。scope≠all 时未扫段保留其原语义 issue。
+             * @default all
              * @enum {string}
              */
-            mode: "translate" | "extract" | "adjudicate";
+            segment_scope: "all" | "with_issues" | "with_issue_codes";
+            /**
+             * @description 仅 segment_scope=with_issue_codes 时生效，必须列出至少一个要匹配的 issue code。
+             *     允许全部 7 个 issue code（规则 + 语义皆可作筛选键）。
+             */
+            issue_codes?: ("source_residual" | "length_ratio" | "untranslated" | "duplicate" | "calque" | "term_fidelity" | "naturalness")[];
+            retry?: components["schemas"]["RetryConfig"];
+        };
+        ExecutionRoundConfig: {
+            /**
+             * @description 轮次模式：translate=翻译，extract=术语抽取，adjudicate=质量裁决，semantic_qa=语义质检
+             * @enum {string}
+             */
+            mode: "translate" | "extract" | "adjudicate" | "semantic_qa";
             /** @description 后端 ID（Backend 单表全局唯一） */
             backend_id: number;
             concurrency: number;
@@ -2462,6 +2497,8 @@ export interface components {
             extract?: components["schemas"]["ExtractRoundConfig"];
             /** @description 质量裁决模式配置（mode=adjudicate 时必填） */
             adjudicate?: components["schemas"]["AdjudicateRoundConfig"];
+            /** @description 语义质检模式配置（mode=semantic_qa 时必填） */
+            semantic_qa?: components["schemas"]["SemanticQARoundConfig"];
         };
         /** @enum {string} */
         TranslationPromptTemplateScope: "user" | "org" | "system";
@@ -3690,7 +3727,7 @@ export interface operations {
                 /** @description 按 quality_issues 中的 severity 过滤；指定时隐含仅返回含匹配问题的段落 */
                 quality_severity?: "warning" | "error";
                 /** @description 按 quality_issues 中的 code 过滤；指定时隐含仅返回含匹配问题的段落 */
-                quality_code?: "untranslated" | "length_ratio" | "duplicate" | "source_residual";
+                quality_code?: "untranslated" | "length_ratio" | "duplicate" | "source_residual" | "calque" | "term_fidelity" | "naturalness";
                 cursor?: components["parameters"]["Cursor"];
                 limit?: components["parameters"]["Limit"];
             };
