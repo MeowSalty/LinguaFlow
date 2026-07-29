@@ -30,6 +30,10 @@ type GlossaryEntry struct {
 	Target string `json:"target,omitempty"`
 	// CaseSensitive holds the value of the "case_sensitive" field.
 	CaseSensitive bool `json:"case_sensitive,omitempty"`
+	// Forbidden holds the value of the "forbidden" field.
+	Forbidden bool `json:"forbidden,omitempty"`
+	// Mandatory holds the value of the "mandatory" field.
+	Mandatory bool `json:"mandatory,omitempty"`
 	// Notes holds the value of the "notes" field.
 	Notes string `json:"notes,omitempty"`
 	// ProjectID holds the value of the "project_id" field.
@@ -76,7 +80,7 @@ func (*GlossaryEntry) scanValues(columns []string) ([]any, error) {
 	values := make([]any, len(columns))
 	for i := range columns {
 		switch columns[i] {
-		case glossaryentry.FieldCaseSensitive:
+		case glossaryentry.FieldCaseSensitive, glossaryentry.FieldForbidden, glossaryentry.FieldMandatory:
 			values[i] = new(sql.NullBool)
 		case glossaryentry.FieldID, glossaryentry.FieldProjectID:
 			values[i] = new(sql.NullInt64)
@@ -140,6 +144,18 @@ func (_m *GlossaryEntry) assignValues(columns []string, values []any) error {
 				return fmt.Errorf("unexpected type %T for field case_sensitive", values[i])
 			} else if value.Valid {
 				_m.CaseSensitive = value.Bool
+			}
+		case glossaryentry.FieldForbidden:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field forbidden", values[i])
+			} else if value.Valid {
+				_m.Forbidden = value.Bool
+			}
+		case glossaryentry.FieldMandatory:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field mandatory", values[i])
+			} else if value.Valid {
+				_m.Mandatory = value.Bool
 			}
 		case glossaryentry.FieldNotes:
 			if value, ok := values[i].(*sql.NullString); !ok {
@@ -216,6 +232,12 @@ func (_m *GlossaryEntry) String() string {
 	builder.WriteString(", ")
 	builder.WriteString("case_sensitive=")
 	builder.WriteString(fmt.Sprintf("%v", _m.CaseSensitive))
+	builder.WriteString(", ")
+	builder.WriteString("forbidden=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Forbidden))
+	builder.WriteString(", ")
+	builder.WriteString("mandatory=")
+	builder.WriteString(fmt.Sprintf("%v", _m.Mandatory))
 	builder.WriteString(", ")
 	builder.WriteString("notes=")
 	builder.WriteString(_m.Notes)

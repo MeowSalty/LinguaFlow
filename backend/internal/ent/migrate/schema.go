@@ -206,6 +206,8 @@ var (
 		{Name: "source", Type: field.TypeString},
 		{Name: "target", Type: field.TypeString},
 		{Name: "case_sensitive", Type: field.TypeBool, Default: false},
+		{Name: "forbidden", Type: field.TypeBool, Default: false},
+		{Name: "mandatory", Type: field.TypeBool, Default: true},
 		{Name: "notes", Type: field.TypeString, Nullable: true},
 		{Name: "project_id", Type: field.TypeInt},
 	}
@@ -217,7 +219,7 @@ var (
 		ForeignKeys: []*schema.ForeignKey{
 			{
 				Symbol:     "glossary_entries_projects_glossary_entries",
-				Columns:    []*schema.Column{GlossaryEntriesColumns[8]},
+				Columns:    []*schema.Column{GlossaryEntriesColumns[10]},
 				RefColumns: []*schema.Column{ProjectsColumns[0]},
 				OnDelete:   schema.NoAction,
 			},
@@ -226,7 +228,18 @@ var (
 			{
 				Name:    "glossaryentry_project_id_source_key",
 				Unique:  true,
-				Columns: []*schema.Column{GlossaryEntriesColumns[8], GlossaryEntriesColumns[3]},
+				Columns: []*schema.Column{GlossaryEntriesColumns[10], GlossaryEntriesColumns[3]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "forbidden = false",
+				},
+			},
+			{
+				Name:    "glossaryentry_project_id_source_key_target",
+				Unique:  true,
+				Columns: []*schema.Column{GlossaryEntriesColumns[10], GlossaryEntriesColumns[3], GlossaryEntriesColumns[5]},
+				Annotation: &entsql.IndexAnnotation{
+					Where: "forbidden = true",
+				},
 			},
 		},
 	}

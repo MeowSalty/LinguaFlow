@@ -26,6 +26,10 @@ const (
 	FieldTarget = "target"
 	// FieldCaseSensitive holds the string denoting the case_sensitive field in the database.
 	FieldCaseSensitive = "case_sensitive"
+	// FieldForbidden holds the string denoting the forbidden field in the database.
+	FieldForbidden = "forbidden"
+	// FieldMandatory holds the string denoting the mandatory field in the database.
+	FieldMandatory = "mandatory"
 	// FieldNotes holds the string denoting the notes field in the database.
 	FieldNotes = "notes"
 	// FieldProjectID holds the string denoting the project_id field in the database.
@@ -61,6 +65,8 @@ var Columns = []string{
 	FieldSource,
 	FieldTarget,
 	FieldCaseSensitive,
+	FieldForbidden,
+	FieldMandatory,
 	FieldNotes,
 	FieldProjectID,
 }
@@ -90,6 +96,10 @@ var (
 	TargetValidator func(string) error
 	// DefaultCaseSensitive holds the default value on creation for the "case_sensitive" field.
 	DefaultCaseSensitive bool
+	// DefaultForbidden holds the default value on creation for the "forbidden" field.
+	DefaultForbidden bool
+	// DefaultMandatory holds the default value on creation for the "mandatory" field.
+	DefaultMandatory bool
 	// ProjectIDValidator is a validator for the "project_id" field. It is called by the builders before save.
 	ProjectIDValidator func(int) error
 )
@@ -130,6 +140,16 @@ func ByTarget(opts ...sql.OrderTermOption) OrderOption {
 // ByCaseSensitive orders the results by the case_sensitive field.
 func ByCaseSensitive(opts ...sql.OrderTermOption) OrderOption {
 	return sql.OrderByField(FieldCaseSensitive, opts...).ToFunc()
+}
+
+// ByForbidden orders the results by the forbidden field.
+func ByForbidden(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldForbidden, opts...).ToFunc()
+}
+
+// ByMandatory orders the results by the mandatory field.
+func ByMandatory(opts ...sql.OrderTermOption) OrderOption {
+	return sql.OrderByField(FieldMandatory, opts...).ToFunc()
 }
 
 // ByNotes orders the results by the notes field.

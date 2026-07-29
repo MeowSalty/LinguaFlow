@@ -92,6 +92,34 @@ func (_u *GlossaryEntryUpdate) SetNillableCaseSensitive(v *bool) *GlossaryEntryU
 	return _u
 }
 
+// SetForbidden sets the "forbidden" field.
+func (_u *GlossaryEntryUpdate) SetForbidden(v bool) *GlossaryEntryUpdate {
+	_u.mutation.SetForbidden(v)
+	return _u
+}
+
+// SetNillableForbidden sets the "forbidden" field if the given value is not nil.
+func (_u *GlossaryEntryUpdate) SetNillableForbidden(v *bool) *GlossaryEntryUpdate {
+	if v != nil {
+		_u.SetForbidden(*v)
+	}
+	return _u
+}
+
+// SetMandatory sets the "mandatory" field.
+func (_u *GlossaryEntryUpdate) SetMandatory(v bool) *GlossaryEntryUpdate {
+	_u.mutation.SetMandatory(v)
+	return _u
+}
+
+// SetNillableMandatory sets the "mandatory" field if the given value is not nil.
+func (_u *GlossaryEntryUpdate) SetNillableMandatory(v *bool) *GlossaryEntryUpdate {
+	if v != nil {
+		_u.SetMandatory(*v)
+	}
+	return _u
+}
+
 // SetNotes sets the "notes" field.
 func (_u *GlossaryEntryUpdate) SetNotes(v string) *GlossaryEntryUpdate {
 	_u.mutation.SetNotes(v)
@@ -269,6 +297,12 @@ func (_u *GlossaryEntryUpdate) sqlSave(ctx context.Context) (_node int, err erro
 	if value, ok := _u.mutation.CaseSensitive(); ok {
 		_spec.SetField(glossaryentry.FieldCaseSensitive, field.TypeBool, value)
 	}
+	if value, ok := _u.mutation.Forbidden(); ok {
+		_spec.SetField(glossaryentry.FieldForbidden, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.Mandatory(); ok {
+		_spec.SetField(glossaryentry.FieldMandatory, field.TypeBool, value)
+	}
 	if value, ok := _u.mutation.Notes(); ok {
 		_spec.SetField(glossaryentry.FieldNotes, field.TypeString, value)
 	}
@@ -427,6 +461,34 @@ func (_u *GlossaryEntryUpdateOne) SetCaseSensitive(v bool) *GlossaryEntryUpdateO
 func (_u *GlossaryEntryUpdateOne) SetNillableCaseSensitive(v *bool) *GlossaryEntryUpdateOne {
 	if v != nil {
 		_u.SetCaseSensitive(*v)
+	}
+	return _u
+}
+
+// SetForbidden sets the "forbidden" field.
+func (_u *GlossaryEntryUpdateOne) SetForbidden(v bool) *GlossaryEntryUpdateOne {
+	_u.mutation.SetForbidden(v)
+	return _u
+}
+
+// SetNillableForbidden sets the "forbidden" field if the given value is not nil.
+func (_u *GlossaryEntryUpdateOne) SetNillableForbidden(v *bool) *GlossaryEntryUpdateOne {
+	if v != nil {
+		_u.SetForbidden(*v)
+	}
+	return _u
+}
+
+// SetMandatory sets the "mandatory" field.
+func (_u *GlossaryEntryUpdateOne) SetMandatory(v bool) *GlossaryEntryUpdateOne {
+	_u.mutation.SetMandatory(v)
+	return _u
+}
+
+// SetNillableMandatory sets the "mandatory" field if the given value is not nil.
+func (_u *GlossaryEntryUpdateOne) SetNillableMandatory(v *bool) *GlossaryEntryUpdateOne {
+	if v != nil {
+		_u.SetMandatory(*v)
 	}
 	return _u
 }
@@ -637,6 +699,12 @@ func (_u *GlossaryEntryUpdateOne) sqlSave(ctx context.Context) (_node *GlossaryE
 	}
 	if value, ok := _u.mutation.CaseSensitive(); ok {
 		_spec.SetField(glossaryentry.FieldCaseSensitive, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.Forbidden(); ok {
+		_spec.SetField(glossaryentry.FieldForbidden, field.TypeBool, value)
+	}
+	if value, ok := _u.mutation.Mandatory(); ok {
+		_spec.SetField(glossaryentry.FieldMandatory, field.TypeBool, value)
 	}
 	if value, ok := _u.mutation.Notes(); ok {
 		_spec.SetField(glossaryentry.FieldNotes, field.TypeString, value)
