@@ -547,9 +547,13 @@ func (h *TranslateHandler) processTranslatedSegments(
 			}
 		}
 		seg.Target = text
-		if missingPH := protect.MissingPlaceholders(seg); len(missingPH) > 0 {
-			logger.Warn("batch segment placeholders missing",
-				"seg", seg.ID, "missing", missingPH)
+		missingPH, duplicatedPH, inventedPH := protect.PlaceholderViolations(seg)
+		if len(missingPH) > 0 || len(duplicatedPH) > 0 || len(inventedPH) > 0 {
+			logger.Warn("batch segment placeholder integrity violation",
+				"seg", seg.ID,
+				"missing", missingPH,
+				"duplicated", duplicatedPH,
+				"invented", inventedPH)
 			seg.Target = ""
 			unresolved = append(unresolved, idx)
 			continue
@@ -610,6 +614,9 @@ func (h *TranslateHandler) lookupHints(ctx context.Context, doc *Document, idxs 
 				logger.Warn("glossary lookup failed", "err", err, "seg", seg.ID)
 			}
 			for _, hit := range hits {
+				if hit.Forbidden {
+					continue
+				}
 				key := hit.Source + "\x00" + hit.Target
 				if _, ok := glosMap[key]; !ok {
 					glosOrder = append(glosOrder, key)
@@ -668,9 +675,10 @@ func (h *TranslateHandler) absorbInlineGlossary(
 			continue
 		}
 		candidates = append(candidates, glossary.Entry{
-			Source: e.Source,
-			Target: e.Target,
-			Notes:  e.Notes,
+			Source:    e.Source,
+			Target:    e.Target,
+			Mandatory: false,
+			Notes:     e.Notes,
 		})
 	}
 	if len(candidates) == 0 {

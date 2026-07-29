@@ -234,9 +234,10 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 				continue
 			}
 			candidates = append(candidates, glossary.Entry{
-				Source: e.Source,
-				Target: e.Target,
-				Notes:  e.Notes,
+				Source:    e.Source,
+				Target:    e.Target,
+				Mandatory: false,
+				Notes:     e.Notes,
 			})
 		}
 		res, addErr := h.Glossary.Add(ctx, candidates...)
@@ -311,6 +312,9 @@ func (h *ExtractHandler) collectExisting(ctx context.Context, texts []string, do
 			continue
 		}
 		for _, hit := range hits {
+			if hit.Forbidden {
+				continue
+			}
 			if _, dup := seen[hit.Source]; dup {
 				continue
 			}

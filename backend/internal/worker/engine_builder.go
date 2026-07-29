@@ -294,6 +294,7 @@ func buildEngineConfig(snapshot *service.JobExecutionSnapshot) *engine.Config {
 		cfg.QA = qa.Config{
 			Enabled:        s.QA.Enabled,
 			AutoReject:     s.QA.AutoReject,
+			Checks:         s.QA.Checks,
 			LengthMethod:   qa.LengthMethod(s.QA.LengthMethod),
 			LengthRatioMin: s.QA.LengthRatioMin,
 			LengthRatioMax: s.QA.LengthRatioMax,

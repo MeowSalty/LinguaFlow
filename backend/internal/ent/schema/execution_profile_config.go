@@ -66,11 +66,12 @@ type ProfileContextConfig struct {
 
 // ProfileQAConfig 质量检测配置。
 type ProfileQAConfig struct {
-	Enabled        bool    `json:"enabled"          yaml:"enabled"`
-	AutoReject     bool    `json:"auto_reject"      yaml:"auto_reject"`
-	LengthMethod   string  `json:"length_method"    yaml:"length_method"`
-	LengthRatioMin float64 `json:"length_ratio_min" yaml:"length_ratio_min"`
-	LengthRatioMax float64 `json:"length_ratio_max" yaml:"length_ratio_max"`
+	Enabled        bool     `json:"enabled"          yaml:"enabled"`
+	AutoReject     bool     `json:"auto_reject"      yaml:"auto_reject"`
+	Checks         []string `json:"checks,omitempty" yaml:"checks,omitempty"`
+	LengthMethod   string   `json:"length_method"    yaml:"length_method"`
+	LengthRatioMin float64  `json:"length_ratio_min" yaml:"length_ratio_min"`
+	LengthRatioMax float64  `json:"length_ratio_max" yaml:"length_ratio_max"`
 }
 
 // DefaultProfileConfig 返回默认的执行策略配置。
