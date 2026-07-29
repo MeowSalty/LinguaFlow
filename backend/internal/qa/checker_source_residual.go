@@ -62,7 +62,7 @@ func NewSourceResidualChecker(srcLang, tgtLang string) *SourceResidualChecker {
 	}
 }
 
-func (c *SourceResidualChecker) Name() string { return "source_residual" }
+func (c *SourceResidualChecker) Name() string { return CheckSourceResidual }
 
 func (c *SourceResidualChecker) Check(_ context.Context, segments []CheckInput) []QualityIssue {
 	if len(c.rules) == 0 {

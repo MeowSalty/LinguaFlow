@@ -14,7 +14,7 @@ func NewUntranslatedChecker() *UntranslatedChecker {
 	return &UntranslatedChecker{}
 }
 
-func (c *UntranslatedChecker) Name() string { return "untranslated" }
+func (c *UntranslatedChecker) Name() string { return CheckUntranslated }
 
 func (c *UntranslatedChecker) Check(_ context.Context, segments []CheckInput) []QualityIssue {
 	var issues []QualityIssue

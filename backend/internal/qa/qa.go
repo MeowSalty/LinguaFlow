@@ -6,6 +6,8 @@ import (
 	"log/slog"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/glossary"
 )
 
 // IssueSeverity 表示质量问题的严重程度。
@@ -25,6 +27,47 @@ const (
 	// LengthMethodWordCount 语义单元计数：CJK 每字 1 词，拉丁每词 1 词。
 	LengthMethodWordCount LengthMethod = "word_count"
 )
+
+// 全部确定性 checker 名称常量（与 Checker.Name() / issue code 对齐）。
+const (
+	CheckUntranslated             = "untranslated"
+	CheckLengthRatio              = "length_ratio"
+	CheckDuplicate                = "duplicate"
+	CheckSourceResidual           = "source_residual"
+	CheckPunctuationPairing       = "punctuation_pairing"
+	CheckWhitespaceIrregular      = "whitespace_irregular"
+	CheckRepeatedSpace            = "repeated_space"
+	CheckWidthMix                 = "width_mix"
+	CheckNumberMismatch           = "number_mismatch"
+	CheckURLEmailMismatch         = "url_email_mismatch"
+	CheckSubtitleLineCount        = "subtitle_line_count"
+	CheckForbiddenTerm            = "forbidden_term"
+	CheckTermInconsistency        = "term_inconsistency"
+	CheckLeftoverPlaceholder      = "leftover_placeholder"
+	CheckXMLTagMismatch           = "xml_tag_mismatch"
+	CodeDuplicateSourceDivergence = "duplicate_source_divergence"
+)
+
+// AllCheckerNames 返回全部可配置的 per-batch checker 名称（不含文档级）。
+func AllCheckerNames() []string {
+	return []string{
+		CheckUntranslated,
+		CheckLengthRatio,
+		CheckDuplicate,
+		CheckSourceResidual,
+		CheckPunctuationPairing,
+		CheckWhitespaceIrregular,
+		CheckRepeatedSpace,
+		CheckWidthMix,
+		CheckNumberMismatch,
+		CheckURLEmailMismatch,
+		CheckSubtitleLineCount,
+		CheckForbiddenTerm,
+		CheckTermInconsistency,
+		CheckLeftoverPlaceholder,
+		CheckXMLTagMismatch,
+	}
+}
 
 // Span 描述质量问题在目标文本中的跨度。
 // MatchedText 为触发问题的精确文本；TargetStart/TargetEnd 为可选的字符偏移（按 rune 计）。
@@ -158,6 +201,12 @@ type Config struct {
 	LengthRatioMax float64
 	SourceLang     string
 	TargetLang     string
+	// Checks 为 nil 时启用全部 per-batch checker；非 nil 时按 Checker.Name() 精确过滤。
+	Checks []string
+	// Format 为资源格式（如 srt/ass/vtt/txt），供字幕行数等格式相关检测使用。
+	Format string
+	// Glossary 由 worker 注入；nil 时术语类 checker 跳过。
+	Glossary glossary.Glossary
 }
 
 // DefaultConfig 返回默认的 QA 配置。
@@ -179,6 +228,7 @@ type Engine struct {
 }
 
 // NewEngine 创建一个新的 QA 引擎。
+// Checks 为 nil 时注册全部 checker；非 nil 时仅注册名单中的 checker（按 Name 精确匹配）。
 func NewEngine(cfg Config, logger *slog.Logger) *Engine {
 	if logger == nil {
 		logger = slog.Default()
@@ -187,13 +237,42 @@ func NewEngine(cfg Config, logger *slog.Logger) *Engine {
 		config: cfg,
 		logger: logger,
 	}
-	e.checkers = []Checker{
+	all := buildAllCheckers(cfg)
+	if cfg.Checks == nil {
+		e.checkers = all
+		return e
+	}
+	allow := make(map[string]struct{}, len(cfg.Checks))
+	for _, name := range cfg.Checks {
+		allow[name] = struct{}{}
+	}
+	e.checkers = make([]Checker, 0, len(cfg.Checks))
+	for _, c := range all {
+		if _, ok := allow[c.Name()]; ok {
+			e.checkers = append(e.checkers, c)
+		}
+	}
+	return e
+}
+
+func buildAllCheckers(cfg Config) []Checker {
+	return []Checker{
 		NewUntranslatedChecker(),
 		NewLengthRatioChecker(cfg.LengthRatioMin, cfg.LengthRatioMax, cfg.LengthMethod),
 		NewDuplicateTranslationChecker(),
 		NewSourceResidualChecker(cfg.SourceLang, cfg.TargetLang),
+		NewPunctuationPairingChecker(cfg.TargetLang),
+		NewWhitespaceIrregularChecker(),
+		NewRepeatedSpaceChecker(cfg.TargetLang),
+		NewWidthMixChecker(cfg.TargetLang),
+		NewNumberMismatchChecker(),
+		NewURLEmailMismatchChecker(),
+		NewSubtitleLineCountChecker(cfg.Format),
+		NewForbiddenTermChecker(cfg.Glossary, cfg.SourceLang, cfg.TargetLang),
+		NewTermInconsistencyChecker(cfg.Glossary, cfg.SourceLang, cfg.TargetLang),
+		NewLeftoverPlaceholderChecker(),
+		NewXMLTagMismatchChecker(),
 	}
-	return e
 }
 
 // Run 对所有段落运行全部检测器，返回发现的质量问题。
