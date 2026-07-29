@@ -161,7 +161,7 @@ const handlePruneApplied = async (payload: {
         :bordered="false"
         :single-line="true"
         :row-key="(row: ApiSchemas['GlossaryEntry']) => row.id"
-        :scroll-x="960"
+        :scroll-x="1080"
       >
         <template #empty>
           <NEmpty

@@ -9,6 +9,7 @@ import {
   NForm,
   NFormItem,
   NInput,
+  NSwitch,
 } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
@@ -33,6 +34,8 @@ const emit = defineEmits<{
   close: []
   'update:formSource': [value: string]
   'update:formTarget': [value: string]
+  'update:formForbidden': [value: boolean]
+  'update:formMandatory': [value: boolean]
   'update:formCaseSensitive': [value: boolean]
   'update:formNotes': [value: string]
 }>()
@@ -66,6 +69,31 @@ const emit = defineEmits<{
           >
             {{ t('workspace.glossary.form.caseSensitive') }}
           </NCheckbox>
+        </NFormItem>
+        <NFormItem :label="t('workspace.glossary.form.forbidden')">
+          <div class="flex w-full items-center justify-between">
+            <span class="text-xs text-lf-text-subtle">{{
+              t('workspace.glossary.form.forbiddenHint')
+            }}</span>
+            <NSwitch
+              :value="form.forbidden"
+              size="small"
+              @update:value="(val: boolean) => emit('update:formForbidden', val)"
+            />
+          </div>
+        </NFormItem>
+        <NFormItem :label="t('workspace.glossary.form.mandatory')">
+          <div class="flex w-full items-center justify-between">
+            <span class="text-xs text-lf-text-subtle">{{
+              t('workspace.glossary.form.mandatoryHint')
+            }}</span>
+            <NSwitch
+              :value="form.mandatory"
+              size="small"
+              :disabled="form.forbidden"
+              @update:value="(val: boolean) => emit('update:formMandatory', val)"
+            />
+          </div>
         </NFormItem>
         <NFormItem :label="t('workspace.glossary.form.notes')">
           <NInput

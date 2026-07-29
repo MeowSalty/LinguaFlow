@@ -787,6 +787,7 @@ const messages = {
       columns: {
         source: '源术语',
         target: '目标译文',
+        type: '类型',
         caseSensitive: '区分大小写',
         notes: '备注',
       },
@@ -795,9 +796,18 @@ const messages = {
         sourcePlaceholder: '输入源语言术语',
         target: '目标译文',
         targetPlaceholder: '输入目标语言译文',
+        forbidden: '禁译条目',
+        forbiddenHint: '命中源词且译文包含目标词时产生错误',
+        mandatory: '强制术语',
+        mandatoryHint: '推荐译法标记为强制术语；仅影响非禁译条目的严重级',
         caseSensitive: '区分大小写',
         notes: '备注',
         notesPlaceholder: '可选，添加备注说明',
+      },
+      type: {
+        forbidden: '禁译',
+        mandatory: '强制',
+        normal: '普通',
       },
       validation: {
         sourceRequired: '请输入源术语',

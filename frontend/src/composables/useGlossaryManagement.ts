@@ -12,6 +12,8 @@ type GlossaryEntry = ApiSchemas['GlossaryEntry']
 export interface GlossaryFormModel {
   source: string
   target: string
+  forbidden: boolean
+  mandatory: boolean
   case_sensitive: boolean
   notes: string
 }
@@ -35,6 +37,8 @@ export function useGlossaryManagement(projectId: Ref<number | null>) {
   const glossaryForm = reactive<GlossaryFormModel>({
     source: '',
     target: '',
+    forbidden: false,
+    mandatory: true,
     case_sensitive: false,
     notes: '',
   })
@@ -83,6 +87,32 @@ export function useGlossaryManagement(projectId: Ref<number | null>) {
       key: 'target',
       minWidth: 180,
       ellipsis: { tooltip: true },
+    },
+    {
+      title: t('workspace.glossary.columns.type'),
+      key: 'type',
+      width: 110,
+      render: (row) => {
+        if (row.forbidden) {
+          return h(
+            NTag,
+            { size: 'small', type: 'error', bordered: false },
+            { default: () => t('workspace.glossary.type.forbidden') },
+          )
+        }
+        if (row.mandatory === false) {
+          return h(
+            NTag,
+            { size: 'small', type: 'default', bordered: false },
+            { default: () => t('workspace.glossary.type.normal') },
+          )
+        }
+        return h(
+          NTag,
+          { size: 'small', type: 'success', bordered: false },
+          { default: () => t('workspace.glossary.type.mandatory') },
+        )
+      },
     },
     {
       title: t('workspace.glossary.columns.caseSensitive'),
@@ -146,6 +176,8 @@ export function useGlossaryManagement(projectId: Ref<number | null>) {
   const resetGlossaryForm = (): void => {
     glossaryForm.source = ''
     glossaryForm.target = ''
+    glossaryForm.forbidden = false
+    glossaryForm.mandatory = true
     glossaryForm.case_sensitive = false
     glossaryForm.notes = ''
   }
@@ -160,6 +192,8 @@ export function useGlossaryManagement(projectId: Ref<number | null>) {
     editingGlossaryEntry.value = entry
     glossaryForm.source = entry.source
     glossaryForm.target = entry.target
+    glossaryForm.forbidden = entry.forbidden ?? false
+    glossaryForm.mandatory = entry.mandatory ?? true
     glossaryForm.case_sensitive = entry.case_sensitive
     glossaryForm.notes = entry.notes ?? ''
     glossaryDrawerVisible.value = true
@@ -192,6 +226,8 @@ export function useGlossaryManagement(projectId: Ref<number | null>) {
           {
             source,
             target: newTarget,
+            forbidden: glossaryForm.forbidden,
+            mandatory: glossaryForm.forbidden ? undefined : glossaryForm.mandatory,
             case_sensitive: glossaryForm.case_sensitive,
             notes: glossaryForm.notes.trim() || undefined,
           },
@@ -210,6 +246,8 @@ export function useGlossaryManagement(projectId: Ref<number | null>) {
         await glossary.createEntry(projectId.value, {
           source: glossaryForm.source.trim(),
           target: glossaryForm.target.trim(),
+          forbidden: glossaryForm.forbidden,
+          mandatory: glossaryForm.forbidden ? false : glossaryForm.mandatory,
           case_sensitive: glossaryForm.case_sensitive,
           notes: glossaryForm.notes.trim() || undefined,
         })
