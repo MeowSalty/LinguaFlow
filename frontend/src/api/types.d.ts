@@ -1826,6 +1826,10 @@ export interface components {
             source: string;
             target: string;
             case_sensitive: boolean;
+            /** @description 是否为禁译条目；命中源词且译文包含 target 时产生 error */
+            forbidden?: boolean;
+            /** @description 推荐译法是否为强制术语；仅影响非禁译条目的严重级 */
+            mandatory?: boolean;
             notes?: string;
             /** Format: date-time */
             created_at?: string;
@@ -1840,12 +1844,18 @@ export interface components {
             target: string;
             /** @default false */
             case_sensitive: boolean;
+            /** @default false */
+            forbidden: boolean;
+            /** @default true */
+            mandatory: boolean;
             notes?: string;
         };
         UpdateGlossaryEntryRequest: {
             source: string;
             target: string;
             case_sensitive?: boolean;
+            forbidden?: boolean;
+            mandatory?: boolean;
             notes?: string;
         };
         UpdateGlossaryEntryResponse: components["schemas"]["GlossaryEntry"] & {
@@ -2593,6 +2603,8 @@ export interface components {
              * @default false
              */
             auto_reject: boolean;
+            /** @description 启用的确定性 checker 名称；省略表示全部开启。可用值：untranslated、length_ratio、duplicate、source_residual、punctuation_pairing、whitespace_irregular、repeated_space、width_mix、number_mismatch、url_email_mismatch、subtitle_line_count、forbidden_term、term_inconsistency、leftover_placeholder、xml_tag_mismatch、duplicate_source_divergence */
+            checks?: string[];
             /**
              * @description 长度计算方式。char_weight: CJK 字符×2 拉丁字符×1；word_count: CJK 每字 1 词拉丁每词 1 词
              * @default char_weight
