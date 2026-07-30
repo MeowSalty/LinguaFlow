@@ -232,7 +232,7 @@ export function useSegmentColumns(
             metaElements.push(
               h(
                 NTooltip,
-                { style: { maxWidth: '320px' } },
+                { style: { maxWidth: '320px' }, placement: 'bottom' },
                 {
                   trigger: () =>
                     h(
