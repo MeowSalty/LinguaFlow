@@ -227,7 +227,7 @@ func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID,
 		if source == "" {
 			return nil, ErrInvalidInput
 		}
-		update.SetSourceText(source).ClearTargetText().SetStatus(SegmentStatusPending)
+		update.SetSourceText(source).ClearTargetText().ClearQualityIssues().SetStatus(SegmentStatusPending)
 		changed = true
 		sourceChanged = true
 	}
@@ -236,7 +236,7 @@ func (s *SegmentService) UpdateResourceSegment(ctx context.Context, actorUserID,
 		if target == "" {
 			return nil, ErrInvalidInput
 		}
-		update.SetTargetText(target).SetStatus(SegmentStatusEdited).SetReviewedByID(actorUserID)
+		update.SetTargetText(target).SetStatus(SegmentStatusEdited).SetReviewedByID(actorUserID).ClearQualityIssues()
 		changed = true
 		targetChanged = true
 	}
