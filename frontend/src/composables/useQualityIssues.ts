@@ -173,7 +173,7 @@ export const renderQualityHighlightedText = (text: string, issues?: QualityIssue
 
 // ── HTML 模式高亮 ──
 
-/** 与 HtmlContent.vue 一致的危险标签黑名单（解析时整体剔除，含子树） */
+/** 危险标签黑名单：解析时整体剔除对应标签子树（含内容），防止 XSS */
 const HTML_BLOCKED_TAGS = new Set([
   'script',
   'style',
@@ -467,6 +467,18 @@ const domNodeToVNode = (node: Node, ctx: DomToVNodeContext): string | VNode | nu
     if (rendered != null) children.push(rendered)
   }
   return h(tag, sanitizeElementProps(el), children)
+}
+
+/** 将桌面端共享 hover 键 `${segmentId}:${issueIndex}` 转为组件契约所需的数字索引 */
+export const resolveActiveIssueIndex = (
+  hoveredKey: string | null,
+  segmentId: number,
+): number | null => {
+  if (!hoveredKey) return null
+  const prefix = `${segmentId}:`
+  if (!hoveredKey.startsWith(prefix)) return null
+  const idx = Number(hoveredKey.slice(prefix.length))
+  return Number.isFinite(idx) ? idx : null
 }
 
 /**

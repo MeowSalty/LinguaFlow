@@ -430,7 +430,7 @@ body {
   box-shadow: inset 0 -2px 0 0 rgb(248 113 113 / 0.9);
 }
 
-/* HTML 模式高亮容器：与 HtmlContent.vue 内联样式保持一致（全局，因 VNode 渲染无 scoped 属性） */
+/* HTML 模式高亮容器：HTML 内联标签样式的唯一来源（全局，因 VNode 渲染无 scoped 属性） */
 .quality-html-content strong,
 .quality-html-content b {
   font-weight: 600;

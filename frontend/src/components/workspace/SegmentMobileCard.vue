@@ -5,14 +5,9 @@ import IconCarbonChat from '~icons/carbon/chat'
 
 import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
-import {
-  formatQualityIssueTooltip,
-  getQualityCodeLabel,
-  renderQualityHighlightedHtml,
-} from '@/composables/useQualityIssues'
+import { formatQualityIssueTooltip, getQualityCodeLabel } from '@/composables/useQualityIssues'
 import { formatDate, getSegmentStatusLabel, statusTagType } from '@/composables/useWorkspaceUtils'
-import HtmlContent from '@/components/workspace/HtmlContent.vue'
-import QualityHighlightedText from '@/components/workspace/QualityHighlightedText.vue'
+import SegmentTextDisplay from '@/components/workspace/SegmentTextDisplay.vue'
 import { t } from '@/i18n'
 
 type Segment = ApiSchemas['Segment']
@@ -35,17 +30,6 @@ const toggleIssueHighlight = (issueIndex: number): void => {
   if (props.textRenderMode !== 'html') return
   activeIssueIndex.value = activeIssueIndex.value === issueIndex ? null : issueIndex
 }
-
-const highlightedTargetVNode = computed(() => {
-  if (props.textRenderMode !== 'html') return null
-  if (!props.segment.target_text || !props.segment.quality_issues?.length) return null
-  return renderQualityHighlightedHtml(
-    props.segment.target_text,
-    props.segment.quality_issues,
-    activeIssueIndex.value,
-    4,
-  )
-})
 
 const emit = defineEmits<{
   startEdit: [segment: Segment]
@@ -97,8 +81,7 @@ const emit = defineEmits<{
     <!-- 源文本 -->
     <div>
       <p class="mb-1 text-xs text-lf-text-muted">{{ t('workspace.segment.columns.source') }}</p>
-      <HtmlContent v-if="textRenderMode === 'html'" :content="segment.source_text" :max-lines="4" />
-      <span v-else>{{ segment.source_text }}</span>
+      <SegmentTextDisplay :text="segment.source_text" :mode="textRenderMode" :max-lines="4" />
     </div>
 
     <!-- 译文 -->
@@ -114,16 +97,13 @@ const emit = defineEmits<{
         />
       </div>
       <template v-else>
-        <component :is="highlightedTargetVNode" v-if="highlightedTargetVNode" />
-        <HtmlContent
-          v-else-if="segment.target_text && textRenderMode === 'html'"
-          :content="segment.target_text"
-          :max-lines="4"
-        />
-        <QualityHighlightedText
-          v-else-if="segment.target_text"
+        <SegmentTextDisplay
+          v-if="segment.target_text"
           :text="segment.target_text"
           :issues="segment.quality_issues"
+          :mode="textRenderMode"
+          :active-issue-index="activeIssueIndex"
+          :max-lines="4"
         />
         <div v-else class="target-empty">
           <NText depth="3">{{ t('workspace.segment.emptyTarget') }}</NText>
