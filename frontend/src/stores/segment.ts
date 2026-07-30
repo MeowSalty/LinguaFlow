@@ -7,6 +7,7 @@ import {
   updateResourceSegment as updateResourceSegmentRequest,
 } from '@/api/client'
 import { fetchSegmentGroups, type ResourceSegmentGroup } from '@/api/epub'
+import type { ResourceSegmentQualityCode } from '@/api/projects'
 import { t } from '@/i18n'
 
 export type { ResourceSegmentGroup }
@@ -24,15 +25,7 @@ export type SegmentStatusFilter =
 
 export type SegmentQualityIssuesFilter = 'has' | 'none' | 'all'
 export type SegmentQualitySeverityFilter = 'warning' | 'error' | 'all'
-export type SegmentQualityCodeFilter =
-  | 'untranslated'
-  | 'length_ratio'
-  | 'duplicate'
-  | 'source_residual'
-  | 'calque'
-  | 'term_fidelity'
-  | 'naturalness'
-  | 'all'
+export type SegmentQualityCodeFilter = ResourceSegmentQualityCode | 'all'
 
 export interface SegmentProgress {
   pending: number

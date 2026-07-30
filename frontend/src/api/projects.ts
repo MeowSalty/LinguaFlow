@@ -1,6 +1,6 @@
 import { t } from '@/i18n'
 
-import type { ApiClient, ApiSchemas } from './client'
+import type { ApiClient, ApiPaths, ApiSchemas } from './client'
 import { apiClient } from './client'
 import {
   buildFilesFormData,
@@ -22,6 +22,12 @@ export interface ResourceConflictError extends Error {
   readonly status: 409
   readonly conflictData: ApiSchemas['Problem']
 }
+
+export type FetchResourceSegmentsParams = NonNullable<
+  ApiPaths['/projects/{projectId}/resources/{resourceId}/segments']['get']['parameters']['query']
+>
+
+export type ResourceSegmentQualityCode = NonNullable<FetchResourceSegmentsParams['quality_code']>
 
 export const isResourceConflictError = (error: unknown): error is ResourceConflictError =>
   error instanceof Error &&
@@ -421,23 +427,7 @@ export const fetchProjectResourceTree = async (
 export const fetchResourceSegments = async (
   projectId: number,
   resourceId: number,
-  params?: {
-    status?: 'pending' | 'translated' | 'edited' | 'approved' | 'rejected'
-    search?: string
-    group_key?: string
-    quality_issues?: 'has' | 'none'
-    quality_severity?: 'warning' | 'error'
-    quality_code?:
-      | 'untranslated'
-      | 'length_ratio'
-      | 'duplicate'
-      | 'source_residual'
-      | 'calque'
-      | 'term_fidelity'
-      | 'naturalness'
-    cursor?: string
-    limit?: number
-  },
+  params?: FetchResourceSegmentsParams,
   client: ApiClient = apiClient,
 ): Promise<ApiSchemas['ResourceSegmentListResponse']> => {
   const { data, error, response } = await client.GET(

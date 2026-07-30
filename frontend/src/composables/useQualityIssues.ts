@@ -2,19 +2,13 @@ import type { VNode } from 'vue'
 import { h } from 'vue'
 
 import type { ApiSchemas } from '@/api/client'
+import type { ResourceSegmentQualityCode } from '@/api/projects'
 import { t } from '@/i18n'
 
 export type QualityIssue = ApiSchemas['QualityIssue']
 export type QualityIssueSpan = ApiSchemas['QualityIssueSpan']
 
-export type QualityCode =
-  | 'untranslated'
-  | 'length_ratio'
-  | 'duplicate'
-  | 'source_residual'
-  | 'calque'
-  | 'term_fidelity'
-  | 'naturalness'
+export type QualityCode = ResourceSegmentQualityCode
 
 export interface QualityHighlightRange {
   start: number
@@ -22,7 +16,7 @@ export interface QualityHighlightRange {
   severity: 'warning' | 'error'
 }
 
-const QUALITY_CODE_I18N_KEYS: Record<string, string> = {
+const QUALITY_CODE_I18N_KEYS: Record<QualityCode, string> = {
   untranslated: 'untranslated',
   length_ratio: 'lengthRatio',
   duplicate: 'duplicate',
@@ -30,11 +24,19 @@ const QUALITY_CODE_I18N_KEYS: Record<string, string> = {
   calque: 'calque',
   term_fidelity: 'termFidelity',
   naturalness: 'naturalness',
+  mistranslation: 'mistranslation',
+  omission: 'omission',
+  addition: 'addition',
+  grammar: 'grammar',
+  register: 'register',
 }
+
+export const QUALITY_CODES = Object.keys(QUALITY_CODE_I18N_KEYS) as QualityCode[]
 
 /** 将 snake_case 问题代码转为 i18n 键名 */
 export const qualityCodeToI18nKey = (code: string): string =>
-  QUALITY_CODE_I18N_KEYS[code] ?? code.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase())
+  QUALITY_CODE_I18N_KEYS[code as QualityCode] ??
+  code.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase())
 
 export const getQualityCodeLabel = (code: string): string => {
   const key = `workspace.segment.qualityCodes.${qualityCodeToI18nKey(code)}`

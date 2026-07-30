@@ -4,6 +4,7 @@ import { computed, ref, toRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
+import { getQualityCodeLabel, QUALITY_CODES } from '@/composables/useQualityIssues'
 import { useSegmentEditing } from '@/composables/useSegmentEditing'
 import {
   type SegmentQualityCodeFilter,
@@ -99,36 +100,9 @@ const qualitySeverityChips = computed(() => [
   },
 ])
 
-const qualityCodeChips = computed(() => [
-  {
-    value: 'untranslated' as const,
-    label: t('workspace.segment.qualityCodes.untranslated'),
-  },
-  {
-    value: 'length_ratio' as const,
-    label: t('workspace.segment.qualityCodes.lengthRatio'),
-  },
-  {
-    value: 'duplicate' as const,
-    label: t('workspace.segment.qualityCodes.duplicate'),
-  },
-  {
-    value: 'source_residual' as const,
-    label: t('workspace.segment.qualityCodes.sourceResidual'),
-  },
-  {
-    value: 'calque' as const,
-    label: t('workspace.segment.qualityCodes.calque'),
-  },
-  {
-    value: 'term_fidelity' as const,
-    label: t('workspace.segment.qualityCodes.termFidelity'),
-  },
-  {
-    value: 'naturalness' as const,
-    label: t('workspace.segment.qualityCodes.naturalness'),
-  },
-])
+const qualityCodeChips = computed(() =>
+  QUALITY_CODES.map((value) => ({ value, label: getQualityCodeLabel(value) })),
+)
 
 const hasActiveQualityFilter = computed(
   () =>
