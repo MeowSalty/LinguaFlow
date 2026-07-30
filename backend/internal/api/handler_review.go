@@ -33,9 +33,8 @@ type segmentListResponse struct {
 }
 
 type segmentReviewRequest struct {
-	Action     string  `json:"action"`
-	TargetText *string `json:"target_text"`
-	Comment    *string `json:"comment"`
+	Action  string  `json:"action"`
+	Comment *string `json:"comment"`
 }
 
 type batchReviewRequest struct {
@@ -104,7 +103,7 @@ func toSegmentResponse(row *ent.Segment) segmentResponse {
 	return resp
 }
 
-// handleReviewSegment 审核单个段落（通过/拒绝/编辑）。
+// handleReviewSegment 审核单个段落（通过/拒绝）。
 func (s *Server) handleReviewSegment(w http.ResponseWriter, r *http.Request) {
 	authUser, ok := authUserFromContext(r.Context())
 	if !ok {
@@ -156,25 +155,8 @@ func (s *Server) handleReviewSegment(w http.ResponseWriter, r *http.Request) {
 		_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "segment.reject", ResourceType: "segment", ResourceID: segmentID, Message: "审批拒绝段落"})
 		writeJSON(w, http.StatusOK, toSegmentResponse(updated))
 
-	case "edit":
-		if req.TargetText == nil {
-			s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "编辑操作需要 target_text")
-			return
-		}
-		comment := ""
-		if req.Comment != nil {
-			comment = *req.Comment
-		}
-		updated, err := s.reviewSvc.EditSegment(r.Context(), authUser.User.ID, projectID, resourceID, segmentID, service.SegmentEditInput{TargetText: *req.TargetText, Comment: comment})
-		if err != nil {
-			s.writeReviewServiceError(w, r, err)
-			return
-		}
-		_ = s.auditSvc.Record(r.Context(), service.AuditEvent{ActorUserID: authUser.User.ID, Action: "segment.edit", ResourceType: "segment", ResourceID: segmentID, Message: "编辑段落译文"})
-		writeJSON(w, http.StatusOK, toSegmentResponse(updated))
-
 	default:
-		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "action 必须是 approve, reject 或 edit")
+		s.writeProblem(w, r, http.StatusBadRequest, "invalid_input", "action 必须是 approve 或 reject")
 	}
 }
 

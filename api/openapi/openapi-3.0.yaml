@@ -953,7 +953,7 @@ paths:
       - $ref: '#/components/parameters/SegmentId'
     patch:
       operationId: ReviewResourceSegment
-      summary: 审核单个段落（通过/拒绝/编辑）
+      summary: 审核单个段落（通过/拒绝）
       security:
         - bearerAuth: []
       requestBody:
@@ -2634,11 +2634,7 @@ components:
           enum:
             - approve
             - reject
-            - edit
-          description: 审核操作：approve=通过，reject=拒绝，edit=编辑译文
-        target_text:
-          type: string
-          description: 编辑译文时必填
+          description: 审核操作：approve=通过，reject=拒绝
         comment:
           type: string
           description: 审核备注
