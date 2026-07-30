@@ -48,6 +48,86 @@ const (
 	CodeDuplicateSourceDivergence = "duplicate_source_divergence"
 )
 
+// 语义质检（semantic QA）维护的 issue code 权威清单。
+// 是 prompt 解析白名单、JSON schema enum、执行计划校验与段落列表过滤的单一来源。
+const (
+	IssueCodeCalque         = "calque"
+	IssueCodeTermFidelity   = "term_fidelity"
+	IssueCodeNaturalness    = "naturalness"
+	IssueCodeMistranslation = "mistranslation"
+	IssueCodeOmission       = "omission"
+	IssueCodeAddition       = "addition"
+	IssueCodeGrammar        = "grammar"
+	IssueCodeRegister       = "register"
+)
+
+// SemanticQACodes 返回语义质检维护的全部 issue code。
+// 新增语义 code 时只需在此处追加，下游所有枚举点（解析白名单、schema enum、
+// 执行计划校验、段落列表过滤）将自动同步，避免多点硬编码漂移。
+func SemanticQACodes() []string {
+	return []string{
+		IssueCodeCalque,
+		IssueCodeTermFidelity,
+		IssueCodeNaturalness,
+		IssueCodeMistranslation,
+		IssueCodeOmission,
+		IssueCodeAddition,
+		IssueCodeGrammar,
+		IssueCodeRegister,
+	}
+}
+
+// semanticQACodeSet 是 SemanticQACodes 的 set 视图，供高频判定复用。
+var semanticQACodeSet = func() map[string]struct{} {
+	set := make(map[string]struct{}, 8)
+	for _, c := range SemanticQACodes() {
+		set[c] = struct{}{}
+	}
+	return set
+}()
+
+// IsSemanticQACode 报告 code 是否由语义质检轮次维护。
+func IsSemanticQACode(code string) bool {
+	_, ok := semanticQACodeSet[code]
+	return ok
+}
+
+// FilterableIssueCodes 返回执行计划 issue_codes 与段落列表 quality_code
+// 接受的全部 issue code（语义 code + 可作筛选键的部分规则 code）。
+func FilterableIssueCodes() []string {
+	return []string{
+		CheckSourceResidual,
+		CheckLengthRatio,
+		CheckUntranslated,
+		CheckDuplicate,
+		IssueCodeCalque,
+		IssueCodeTermFidelity,
+		IssueCodeNaturalness,
+		IssueCodeMistranslation,
+		IssueCodeOmission,
+		IssueCodeAddition,
+		IssueCodeGrammar,
+		IssueCodeRegister,
+	}
+}
+
+// filterableIssueCodeSet 是 FilterableIssueCodes 的 set 视图，供高频判定复用。
+var filterableIssueCodeSet = func() map[string]struct{} {
+	codes := FilterableIssueCodes()
+	set := make(map[string]struct{}, len(codes))
+	for _, c := range codes {
+		set[c] = struct{}{}
+	}
+	return set
+}()
+
+// IsFilterableIssueCode 报告 code 是否可作为执行计划 issue_codes 或
+// 段落列表 quality_code 的合法筛选值。
+func IsFilterableIssueCode(code string) bool {
+	_, ok := filterableIssueCodeSet[code]
+	return ok
+}
+
 // AllCheckerNames 返回全部可配置的 per-batch checker 名称（不含文档级）。
 func AllCheckerNames() []string {
 	return []string{
