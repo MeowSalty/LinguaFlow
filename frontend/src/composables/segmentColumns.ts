@@ -17,6 +17,7 @@ import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
 import {
   formatQualityIssueTooltip,
+  renderQualityHighlightedHtml,
   renderQualityHighlightedText,
 } from '@/composables/useQualityIssues'
 import { getSegmentStatusLabel, statusTagType } from '@/composables/useWorkspaceUtils'
@@ -69,6 +70,10 @@ export interface SegmentColumnDeps {
   // ── 外部状态 ──
   editingSegmentIds: Ref<number[]>
   onTranslate: (segment: Segment) => void
+
+  // ── 质量问题高亮联动（HTML 模式） ──
+  /** 当前悬停的问题，格式 `${segmentId}:${issueIndex}` */
+  hoveredIssueKey: Ref<string | null>
 }
 
 /**
@@ -200,7 +205,25 @@ export function useSegmentColumns(
               ]),
             )
           } else if (config.value.textRenderMode === 'html') {
-            elements.push(h(HtmlContent, { content: row.target_text, maxLines: 4 }))
+            if (row.quality_issues?.length) {
+              // 有质量问题时走 VNode 高亮渲染，支持图标 hover 联动强调
+              const hoveredKey = deps.hoveredIssueKey.value
+              const rowPrefix = `${row.id}:`
+              const activeIssueIndex =
+                hoveredKey && hoveredKey.startsWith(rowPrefix)
+                  ? Number(hoveredKey.slice(rowPrefix.length))
+                  : null
+              elements.push(
+                renderQualityHighlightedHtml(
+                  row.target_text,
+                  row.quality_issues,
+                  activeIssueIndex,
+                  4,
+                ),
+              )
+            } else {
+              elements.push(h(HtmlContent, { content: row.target_text, maxLines: 4 }))
+            }
           } else {
             elements.push(renderQualityHighlightedText(row.target_text, row.quality_issues))
           }
@@ -210,8 +233,23 @@ export function useSegmentColumns(
         const metaElements: VNode[] = []
 
         if (row.quality_issues && row.quality_issues.length > 0) {
-          for (const issue of row.quality_issues) {
+          // HTML 模式下悬停图标联动强调对应高亮区间
+          const linkable = config.value.textRenderMode === 'html'
+          row.quality_issues.forEach((issue, issueIndex) => {
             const isError = issue.severity === 'error'
+            const issueKey = `${row.id}:${issueIndex}`
+            const hoverProps = linkable
+              ? {
+                  onMouseenter: () => {
+                    deps.hoveredIssueKey.value = issueKey
+                  },
+                  onMouseleave: () => {
+                    if (deps.hoveredIssueKey.value === issueKey) {
+                      deps.hoveredIssueKey.value = null
+                    }
+                  },
+                }
+              : {}
             metaElements.push(
               h(
                 NTooltip,
@@ -220,7 +258,7 @@ export function useSegmentColumns(
                   trigger: () =>
                     h(
                       NIcon,
-                      { size: 14, color: isError ? '#d03050' : '#f0a020' },
+                      { size: 14, color: isError ? '#d03050' : '#f0a020', ...hoverProps },
                       { default: () => h(isError ? IconCarbonError : IconCarbonWarning) },
                     ),
                   default: () =>
@@ -232,7 +270,7 @@ export function useSegmentColumns(
                 },
               ),
             )
-          }
+          })
         }
 
         if (

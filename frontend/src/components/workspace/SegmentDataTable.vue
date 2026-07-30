@@ -58,6 +58,9 @@ const configRef = toRef(config)
 // ── 原文 HTML 源码切换 ──
 const showSourceHtml = ref(false)
 
+// ── 质量问题高亮联动（HTML 模式） ──
+const hoveredIssueKey = ref<string | null>(null)
+
 const toggleSourceHtml = (): void => {
   showSourceHtml.value = !showSourceHtml.value
 }
@@ -90,6 +93,8 @@ const deps: SegmentColumnDeps = {
 
   showSourceHtml,
   toggleSourceHtml,
+
+  hoveredIssueKey,
 
   startInlineEdit: (segment) => emit('startInlineEdit', segment),
   cancelInlineEdit: () => emit('cancelInlineEdit'),

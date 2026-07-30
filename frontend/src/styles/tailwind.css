@@ -408,3 +408,51 @@ body {
   background: rgb(239 68 68 / 0.28);
   box-shadow: inset 0 -1px 0 0 rgb(248 113 113 / 0.55);
 }
+
+/* hover/tap 联动强调：加深刻度与下划线，凸显当前问题的精确边界 */
+.quality-span--active.quality-span--warning {
+  background: rgb(245 158 11 / 0.42);
+  box-shadow: inset 0 -2px 0 0 rgb(217 119 6 / 0.9);
+}
+
+.quality-span--active.quality-span--error {
+  background: rgb(239 68 68 / 0.36);
+  box-shadow: inset 0 -2px 0 0 rgb(220 38 38 / 0.9);
+}
+
+.dark .quality-span--active.quality-span--warning {
+  background: rgb(245 158 11 / 0.45);
+  box-shadow: inset 0 -2px 0 0 rgb(251 191 36 / 0.9);
+}
+
+.dark .quality-span--active.quality-span--error {
+  background: rgb(239 68 68 / 0.42);
+  box-shadow: inset 0 -2px 0 0 rgb(248 113 113 / 0.9);
+}
+
+/* HTML 模式高亮容器：与 HtmlContent.vue 内联样式保持一致（全局，因 VNode 渲染无 scoped 属性） */
+.quality-html-content strong,
+.quality-html-content b {
+  font-weight: 600;
+  color: var(--lf-text-strong, inherit);
+}
+
+.quality-html-content em,
+.quality-html-content i {
+  font-style: italic;
+}
+
+.quality-html-content ruby {
+  ruby-align: center;
+}
+
+.quality-html-content rt {
+  font-size: 0.7em;
+  color: var(--lf-text-muted, #999);
+}
+
+.quality-html-content a {
+  color: var(--color-brand-500, #3b82f6);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
