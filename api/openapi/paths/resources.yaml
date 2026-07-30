@@ -350,7 +350,7 @@ projectResourceSegmentReview:
     - $ref: '../base.yaml#/components/parameters/SegmentId'
   patch:
     operationId: ReviewResourceSegment
-    summary: 审核单个段落（通过/拒绝/编辑）
+    summary: 审核单个段落（通过/拒绝）
     security:
       - bearerAuth: []
     requestBody:

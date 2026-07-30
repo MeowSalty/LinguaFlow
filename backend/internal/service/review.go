@@ -30,11 +30,6 @@ type ReviewService struct {
 	projects *ProjectService
 }
 
-type SegmentEditInput struct {
-	TargetText string
-	Comment    string
-}
-
 type SegmentDecisionInput struct {
 	Comment string
 }
@@ -52,34 +47,6 @@ type SegmentPage struct {
 
 func NewReviewService(client *ent.Client, projects *ProjectService) *ReviewService {
 	return &ReviewService{client: client, projects: projects}
-}
-
-// EditSegment 编辑段落的译文。
-func (s *ReviewService) EditSegment(ctx context.Context, actorUserID, projectID, resourceID, segmentID int, input SegmentEditInput) (*ent.Segment, error) {
-	if strings.TrimSpace(input.TargetText) == "" {
-		return nil, ErrInvalidInput
-	}
-	if _, err := s.authorizeSegment(ctx, actorUserID, projectID, resourceID, segmentID, true); err != nil {
-		return nil, err
-	}
-	update := s.client.Segment.UpdateOneID(segmentID).
-		SetTargetText(input.TargetText).
-		SetStatus(SegmentStatusEdited).
-		SetReviewedByID(actorUserID).
-		ClearQualityIssues()
-	if strings.TrimSpace(input.Comment) == "" {
-		update.ClearReviewComment()
-	} else {
-		update.SetReviewComment(strings.TrimSpace(input.Comment))
-	}
-	updated, err := update.Save(ctx)
-	if err != nil {
-		if ent.IsNotFound(err) {
-			return nil, ErrSegmentNotFound
-		}
-		return nil, err
-	}
-	return s.client.Segment.Query().Where(segment.IDEQ(updated.ID)).WithReviewedBy().WithResource().Only(ctx)
 }
 
 // ApproveSegment 审批通过单个段落。
