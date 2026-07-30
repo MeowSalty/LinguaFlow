@@ -5,7 +5,11 @@ import IconCarbonChat from '~icons/carbon/chat'
 
 import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
-import { formatQualityIssueTooltip, getQualityCodeLabel } from '@/composables/useQualityIssues'
+import {
+  formatQualityIssueTooltip,
+  getQualityCodeLabel,
+  renderQualityHighlightedHtml,
+} from '@/composables/useQualityIssues'
 import { formatDate, getSegmentStatusLabel, statusTagType } from '@/composables/useWorkspaceUtils'
 import HtmlContent from '@/components/workspace/HtmlContent.vue'
 import QualityHighlightedText from '@/components/workspace/QualityHighlightedText.vue'
@@ -13,7 +17,7 @@ import { t } from '@/i18n'
 
 type Segment = ApiSchemas['Segment']
 
-defineProps<{
+const props = defineProps<{
   segment: Segment
   textRenderMode: 'plaintext' | 'html'
   showUpdatedAt: boolean
@@ -24,6 +28,24 @@ defineProps<{
   isCommentVisible: boolean
   commentText: string
 }>()
+
+const activeIssueIndex = ref<number | null>(null)
+
+const toggleIssueHighlight = (issueIndex: number): void => {
+  if (props.textRenderMode !== 'html') return
+  activeIssueIndex.value = activeIssueIndex.value === issueIndex ? null : issueIndex
+}
+
+const highlightedTargetVNode = computed(() => {
+  if (props.textRenderMode !== 'html') return null
+  if (!props.segment.target_text || !props.segment.quality_issues?.length) return null
+  return renderQualityHighlightedHtml(
+    props.segment.target_text,
+    props.segment.quality_issues,
+    activeIssueIndex.value,
+    4,
+  )
+})
 
 const emit = defineEmits<{
   startEdit: [segment: Segment]
@@ -51,7 +73,13 @@ const emit = defineEmits<{
             :key="`${issue.code}-${issue.span?.matched_text ?? issueIndex}`"
           >
             <template #trigger>
-              <NTag size="small" :type="issue.severity === 'error' ? 'error' : 'warning'" round>
+              <NTag
+                size="small"
+                :type="issue.severity === 'error' ? 'error' : 'warning'"
+                round
+                :class="{ 'cursor-pointer': textRenderMode === 'html' }"
+                @click="toggleIssueHighlight(issueIndex)"
+              >
                 {{ getQualityCodeLabel(issue.code) }}
               </NTag>
             </template>
@@ -86,8 +114,9 @@ const emit = defineEmits<{
         />
       </div>
       <template v-else>
+        <component :is="highlightedTargetVNode" v-if="highlightedTargetVNode" />
         <HtmlContent
-          v-if="segment.target_text && textRenderMode === 'html'"
+          v-else-if="segment.target_text && textRenderMode === 'html'"
           :content="segment.target_text"
           :max-lines="4"
         />
