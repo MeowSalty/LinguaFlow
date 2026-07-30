@@ -216,7 +216,7 @@ QualityIssue:
       enum: [warning, error]
     code:
       type: string
-      description: 问题代码（untranslated, length_ratio, duplicate, source_residual, calque, term_fidelity, naturalness）
+      description: 问题代码（untranslated, length_ratio, duplicate, source_residual, calque, term_fidelity, naturalness, mistranslation, omission, addition, grammar, register）
     message:
       type: string
     span:

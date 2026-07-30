@@ -535,6 +535,11 @@ const messages = {
         calque: '仿译',
         termFidelity: '术语偏差',
         naturalness: '自然度',
+        mistranslation: '误译',
+        omission: '漏译',
+        addition: '增译',
+        grammar: '语法',
+        register: '语域',
       },
       editTitle: '编辑段落',
       columns: {

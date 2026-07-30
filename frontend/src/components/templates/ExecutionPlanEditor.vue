@@ -16,6 +16,7 @@ import type { SelectOption } from 'naive-ui'
 import { useI18n } from 'vue-i18n'
 
 import type { ApiSchemas } from '@/api/client'
+import { getQualityCodeLabel, QUALITY_CODES } from '@/composables/useQualityIssues'
 
 type ExecutionRoundConfig = ApiSchemas['ExecutionRoundConfig']
 type TranslateRoundConfig = NonNullable<ExecutionRoundConfig['translate']>
@@ -312,36 +313,14 @@ const semanticQASegmentScopeOptions = computed(() => [
   },
 ])
 
-const semanticQAIssueCodeOptions = computed(() => [
-  {
-    label: t('workspace.segment.qualityCodes.sourceResidual'),
-    value: 'source_residual' as SemanticQAIssueCode,
-  },
-  {
-    label: t('workspace.segment.qualityCodes.lengthRatio'),
-    value: 'length_ratio' as SemanticQAIssueCode,
-  },
-  {
-    label: t('workspace.segment.qualityCodes.untranslated'),
-    value: 'untranslated' as SemanticQAIssueCode,
-  },
-  {
-    label: t('workspace.segment.qualityCodes.duplicate'),
-    value: 'duplicate' as SemanticQAIssueCode,
-  },
-  {
-    label: t('workspace.segment.qualityCodes.calque'),
-    value: 'calque' as SemanticQAIssueCode,
-  },
-  {
-    label: t('workspace.segment.qualityCodes.termFidelity'),
-    value: 'term_fidelity' as SemanticQAIssueCode,
-  },
-  {
-    label: t('workspace.segment.qualityCodes.naturalness'),
-    value: 'naturalness' as SemanticQAIssueCode,
-  },
-])
+const semanticQAIssueCodes: SemanticQAIssueCode[] = QUALITY_CODES
+
+const semanticQAIssueCodeOptions = computed(() =>
+  semanticQAIssueCodes.map((value) => ({
+    label: getQualityCodeLabel(value),
+    value,
+  })),
+)
 
 const onSemanticQASegmentScopeChange = (round: RoundModel, scope: SemanticQASegmentScope): void => {
   if (!round.semantic_qa) return
