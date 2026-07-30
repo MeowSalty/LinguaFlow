@@ -15,13 +15,9 @@ import IconCarbonError from '~icons/carbon/error'
 
 import type { ApiSchemas } from '@/api/client'
 import type { SegmentFormModel } from '@/composables/useSegmentEditing'
-import {
-  formatQualityIssueTooltip,
-  renderQualityHighlightedHtml,
-  renderQualityHighlightedText,
-} from '@/composables/useQualityIssues'
+import { formatQualityIssueTooltip, resolveActiveIssueIndex } from '@/composables/useQualityIssues'
 import { getSegmentStatusLabel, statusTagType } from '@/composables/useWorkspaceUtils'
-import HtmlContent from '@/components/workspace/HtmlContent.vue'
+import SegmentTextDisplay from '@/components/workspace/SegmentTextDisplay.vue'
 import { t } from '@/i18n'
 
 type Segment = ApiSchemas['Segment']
@@ -112,24 +108,20 @@ export function useSegmentColumns(
       key: 'source_text',
       minWidth: 280,
       render: (row) => {
-        if (config.value.textRenderMode !== 'html') {
-          return row.source_text
-        }
-
         const isEditing = deps.inlineEditingSegmentId.value === row.id
-        const hasHtmlTags = /<[a-z][\s\S]*>/i.test(row.source_text)
+        const hasHtmlTags =
+          config.value.textRenderMode === 'html' && /<[a-z][\s\S]*>/i.test(row.source_text)
 
         const elements: VNode[] = []
 
-        // 渲染后的 HTML
         elements.push(
-          h(HtmlContent, {
-            content: row.source_text,
+          h(SegmentTextDisplay, {
+            text: row.source_text,
+            mode: config.value.textRenderMode,
             maxLines: isEditing ? 6 : 4,
           }),
         )
 
-        // 编辑态且包含 HTML 标签时，显示切换按钮
         if (isEditing && hasHtmlTags) {
           elements.push(
             h('div', { class: 'mt-1.5' }, [
@@ -158,7 +150,6 @@ export function useSegmentColumns(
             ]),
           )
 
-          // 原始 HTML 源码
           if (deps.showSourceHtml.value) {
             elements.push(
               h(
@@ -197,35 +188,23 @@ export function useSegmentColumns(
             }),
           )
         } else {
-          // 非编辑态：译文展示
           if (!row.target_text) {
             elements.push(
               h('div', { class: 'target-empty' }, [
                 h(NText, { depth: 3 }, { default: () => t('workspace.segment.emptyTarget') }),
               ]),
             )
-          } else if (config.value.textRenderMode === 'html') {
-            if (row.quality_issues?.length) {
-              // 有质量问题时走 VNode 高亮渲染，支持图标 hover 联动强调
-              const hoveredKey = deps.hoveredIssueKey.value
-              const rowPrefix = `${row.id}:`
-              const activeIssueIndex =
-                hoveredKey && hoveredKey.startsWith(rowPrefix)
-                  ? Number(hoveredKey.slice(rowPrefix.length))
-                  : null
-              elements.push(
-                renderQualityHighlightedHtml(
-                  row.target_text,
-                  row.quality_issues,
-                  activeIssueIndex,
-                  4,
-                ),
-              )
-            } else {
-              elements.push(h(HtmlContent, { content: row.target_text, maxLines: 4 }))
-            }
           } else {
-            elements.push(renderQualityHighlightedText(row.target_text, row.quality_issues))
+            const activeIssueIndex = resolveActiveIssueIndex(deps.hoveredIssueKey.value, row.id)
+            elements.push(
+              h(SegmentTextDisplay, {
+                text: row.target_text,
+                issues: row.quality_issues,
+                mode: config.value.textRenderMode,
+                activeIssueIndex,
+                maxLines: 4,
+              }),
+            )
           }
         }
 
@@ -253,7 +232,7 @@ export function useSegmentColumns(
             metaElements.push(
               h(
                 NTooltip,
-                { style: { maxWidth: '320px' } },
+                { style: { maxWidth: '320px' }, placement: 'bottom' },
                 {
                   trigger: () =>
                     h(
