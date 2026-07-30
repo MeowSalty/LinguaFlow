@@ -621,6 +621,8 @@ onMounted(() => {
       @close="glossaryMgmt.closeGlossaryDrawer()"
       @update:form-source="(val) => (glossaryMgmt.glossaryForm.source = val)"
       @update:form-target="(val) => (glossaryMgmt.glossaryForm.target = val)"
+      @update:form-forbidden="(val) => (glossaryMgmt.glossaryForm.forbidden = val)"
+      @update:form-mandatory="(val) => (glossaryMgmt.glossaryForm.mandatory = val)"
       @update:form-case-sensitive="(val) => (glossaryMgmt.glossaryForm.case_sensitive = val)"
       @update:form-notes="(val) => (glossaryMgmt.glossaryForm.notes = val)"
     />

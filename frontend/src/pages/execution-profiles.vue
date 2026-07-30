@@ -64,6 +64,7 @@ const CONFIG_DEFAULTS: ExecutionProfileConfig = {
   qa: {
     enabled: false,
     auto_reject: false,
+    checks: undefined,
     length_method: 'char_weight',
     length_ratio_min: 0,
     length_ratio_max: 0,
@@ -151,6 +152,7 @@ function extractConfig(profile: ExecutionProfile): ExecutionProfileConfig {
     qa: {
       enabled: src.qa?.enabled ?? CONFIG_DEFAULTS.qa!.enabled,
       auto_reject: src.qa?.auto_reject ?? CONFIG_DEFAULTS.qa!.auto_reject,
+      checks: src.qa?.checks ?? CONFIG_DEFAULTS.qa!.checks,
       length_method: src.qa?.length_method ?? CONFIG_DEFAULTS.qa!.length_method,
       length_ratio_min: src.qa?.length_ratio_min ?? CONFIG_DEFAULTS.qa!.length_ratio_min,
       length_ratio_max: src.qa?.length_ratio_max ?? CONFIG_DEFAULTS.qa!.length_ratio_max,
