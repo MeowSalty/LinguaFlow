@@ -28,6 +28,7 @@ type SemanticQAHandler struct {
 	IssueCodes        []string // 仅 with_issue_codes 生效
 	Reporter          progress.Reporter
 	Logger            *slog.Logger
+	RoundIndex        int // execution plan round index, set by caller
 }
 
 func (h *SemanticQAHandler) ModeName() string { return RoundModeSemanticQA }
@@ -189,7 +190,7 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		logger.Error("semantic_qa render failed", "err", renderErr)
 		h.emitBatchOutcome(progress.BatchEvent{
 			Stage:         RoundModeSemanticQA,
-			SegmentIDs:    segmentIDStrings(idxs),
+			SegmentIDs:    segmentIDStringsFromDoc(doc, idxs),
 			SegmentCount:  len(idxs),
 			BackendName:   h.Backend.Name(),
 			Status:        "failed",
@@ -197,6 +198,7 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			TriedBackends: tried,
 			ErrorType:     "render_error",
 			ErrorMessage:  renderErr.Error(),
+			RoundIndex:    h.RoundIndex,
 		})
 		return h.terminalFailure(doc, idxs, rep)
 	}
@@ -222,17 +224,23 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			logger.Info("semantic_qa backend interrupted by context",
 				"backend", h.Backend.Name(), "batch_size", len(idxs), "err", callErr)
 			h.emitBatchOutcome(progress.BatchEvent{
-				Stage:         RoundModeSemanticQA,
-				SegmentIDs:    segmentIDStrings(idxs),
-				SegmentCount:  len(idxs),
-				BackendName:   h.Backend.Name(),
-				Status:        "failed",
-				DurationMs:    time.Since(callStart).Milliseconds(),
-				SentContent:   usr,
-				TriedBackends: tried,
-				ErrorType:     "backend_error",
-				ErrorMessage:  callErr.Error(),
-				HTTPStatus:    httpStatusFromErr(callErr),
+				Stage:          RoundModeSemanticQA,
+				SegmentIDs:     segmentIDStringsFromDoc(doc, idxs),
+				SegmentCount:   len(idxs),
+				BackendName:    h.Backend.Name(),
+				Status:         "failed",
+				DurationMs:     time.Since(callStart).Milliseconds(),
+				SentContent:    usr,
+				TriedBackends:  tried,
+				ErrorType:      "backend_error",
+				ErrorMessage:   callErr.Error(),
+				HTTPStatus:     httpStatusFromErr(callErr),
+				RoundIndex:     h.RoundIndex,
+				Attempt:        attempt,
+				SystemPrompt:   sys,
+				UserMessage:    usr,
+				ResponseFormat: req.ResponseFormat,
+				JSONSchema:     req.JSONSchema,
 			})
 			return h.preserveResult(doc, idxs, rep)
 		}
@@ -242,17 +250,23 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		isLocalTimeout := errors.Is(callErr, context.DeadlineExceeded) && ctx.Err() == nil
 
 		h.emitBatchOutcome(progress.BatchEvent{
-			Stage:         RoundModeSemanticQA,
-			SegmentIDs:    segmentIDStrings(idxs),
-			SegmentCount:  len(idxs),
-			BackendName:   h.Backend.Name(),
-			Status:        "failed",
-			DurationMs:    time.Since(callStart).Milliseconds(),
-			SentContent:   usr,
-			TriedBackends: tried,
-			ErrorType:     "backend_error",
-			ErrorMessage:  callErr.Error(),
-			HTTPStatus:    httpStatusFromErr(callErr),
+			Stage:          RoundModeSemanticQA,
+			SegmentIDs:     segmentIDStringsFromDoc(doc, idxs),
+			SegmentCount:   len(idxs),
+			BackendName:    h.Backend.Name(),
+			Status:         "failed",
+			DurationMs:     time.Since(callStart).Milliseconds(),
+			SentContent:    usr,
+			TriedBackends:  tried,
+			ErrorType:      "backend_error",
+			ErrorMessage:   callErr.Error(),
+			HTTPStatus:     httpStatusFromErr(callErr),
+			RoundIndex:     h.RoundIndex,
+			Attempt:        attempt,
+			SystemPrompt:   sys,
+			UserMessage:    usr,
+			ResponseFormat: req.ResponseFormat,
+			JSONSchema:     req.JSONSchema,
 		})
 
 		// 本地超时 / 5xx / 429 / 裸网络错误可退避重试；401/403 等 4xx 立即终态。
@@ -301,7 +315,7 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			"attempt", attempt, "resp_len", len(resp.Text), "resp_head", headSnippet(resp.Text, 200))
 		h.emitBatchOutcome(progress.BatchEvent{
 			Stage:           RoundModeSemanticQA,
-			SegmentIDs:      segmentIDStrings(idxs),
+			SegmentIDs:      segmentIDStringsFromDoc(doc, idxs),
 			SegmentCount:    len(idxs),
 			BackendName:     h.Backend.Name(),
 			Status:          "failed",
@@ -313,6 +327,13 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 			TriedBackends:   tried,
 			ErrorType:       "parse_error",
 			ErrorMessage:    parseErr.Error(),
+			RoundIndex:      h.RoundIndex,
+			Attempt:         attempt,
+			SystemPrompt:    sys,
+			UserMessage:     usr,
+			ResponseFormat:  req.ResponseFormat,
+			JSONSchema:      req.JSONSchema,
+			ResponseContent: resp.Text,
 		})
 		// parse 失败立即再入队（无退避）；受 MaxAttempts 上界约束。
 		if canRetry {
@@ -386,7 +407,7 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 
 	h.emitBatchOutcome(progress.BatchEvent{
 		Stage:           RoundModeSemanticQA,
-		SegmentIDs:      segmentIDStrings(idxs),
+		SegmentIDs:      segmentIDStringsFromDoc(doc, idxs),
 		SegmentCount:    len(idxs),
 		BackendName:     h.Backend.Name(),
 		Status:          "success",
@@ -396,6 +417,13 @@ func (h *SemanticQAHandler) ProcessBatch(ctx context.Context, doc *Document, idx
 		SentContent:     usr,
 		ReceivedContent: resp.Text,
 		TriedBackends:   tried,
+		RoundIndex:      h.RoundIndex,
+		Attempt:         attempt,
+		SystemPrompt:    sys,
+		UserMessage:     usr,
+		ResponseFormat:  req.ResponseFormat,
+		JSONSchema:      req.JSONSchema,
+		ResponseContent: resp.Text,
 	})
 
 	return batchResult{

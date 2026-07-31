@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -36,6 +35,8 @@ type ExtractHandler struct {
 
 	totalBatches  atomic.Int64
 	failedBatches atomic.Int64
+
+	RoundIndex int // execution plan round index, set by caller
 }
 
 func (h *ExtractHandler) ModeName() string { return "extract" }
@@ -174,12 +175,13 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 		logger.Warn("extract render failed", "err", err)
 		h.emitBatchOutcome(progress.BatchEvent{
 			Stage:        "extract",
-			SegmentIDs:   segmentIDStrings(idxs),
+			SegmentIDs:   segmentIDStringsFromDoc(doc, idxs),
 			SegmentCount: len(idxs),
 			Status:       "failed",
 			DurationMs:   time.Since(start).Milliseconds(),
 			ErrorType:    "render_error",
 			ErrorMessage: err.Error(),
+			RoundIndex:   h.RoundIndex,
 		})
 		for range idxs {
 			rep.SegmentDone()
@@ -262,15 +264,22 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 		}
 		h.emitBatchOutcome(progress.BatchEvent{
 			Stage:           "extract",
-			SegmentIDs:      segmentIDStrings(idxs),
+			SegmentIDs:      segmentIDStringsFromDoc(doc, idxs),
 			SegmentCount:    len(idxs),
 			BackendName:     b.Name(),
 			Status:          status,
 			DurationMs:      time.Since(start).Milliseconds(),
 			InputTokens:     resp.Usage.PromptTokens,
 			OutputTokens:    resp.Usage.CompletionTokens,
+			SentContent:     usr,
 			ReceivedContent: resp.Text,
 			AddedGlossary:   toBootstrapEntries(res.Added),
+			RoundIndex:      h.RoundIndex,
+			SystemPrompt:    sys,
+			UserMessage:     usr,
+			ResponseFormat:  req.ResponseFormat,
+			JSONSchema:      req.JSONSchema,
+			ResponseContent: resp.Text,
 		})
 
 		for range idxs {
@@ -283,13 +292,18 @@ func (h *ExtractHandler) ProcessBatch(ctx context.Context, doc *Document, idxs [
 		logger.Warn("extract batch failed (all backends exhausted)", "err", lastErr)
 	}
 	h.emitBatchOutcome(progress.BatchEvent{
-		Stage:        "extract",
-		SegmentIDs:   segmentIDStrings(idxs),
-		SegmentCount: len(idxs),
-		Status:       "failed",
-		DurationMs:   time.Since(start).Milliseconds(),
-		ErrorType:    "backend_error",
-		ErrorMessage: lastErr.Error(),
+		Stage:          "extract",
+		SegmentIDs:     segmentIDStringsFromDoc(doc, idxs),
+		SegmentCount:   len(idxs),
+		Status:         "failed",
+		DurationMs:     time.Since(start).Milliseconds(),
+		ErrorType:      "backend_error",
+		ErrorMessage:   lastErr.Error(),
+		RoundIndex:     h.RoundIndex,
+		SystemPrompt:   sys,
+		UserMessage:    usr,
+		ResponseFormat: req.ResponseFormat,
+		JSONSchema:     req.JSONSchema,
 	})
 	for range idxs {
 		rep.SegmentDone()
@@ -337,15 +351,6 @@ func (h *ExtractHandler) calcMaxTerms(texts []string) int {
 	}
 	maxTerms := int(math.Ceil(float64(totalWords) / 1000.0 * coeff))
 	return max(maxTerms, 1)
-}
-
-// segmentIDStrings 将段落索引切片转为字符串切片。
-func segmentIDStrings(idxs []int) []string {
-	out := make([]string, len(idxs))
-	for i, idx := range idxs {
-		out[i] = strconv.Itoa(idx)
-	}
-	return out
 }
 
 // toBootstrapEntries 将 glossary.Entry 转换为 prompt.BootstrapEntry。

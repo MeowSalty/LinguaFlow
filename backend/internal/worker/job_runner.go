@@ -214,29 +214,30 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 		return nil
 	}
 
-	cfg := buildEngineConfig(snapshot)
+	engineCfg := BuildEngineConfig(snapshot)
 	autoApprove := snapshot.AutoApprove
 
-	runtimeGlossary, err := r.buildRuntimeGlossary(ctx, exec.Project, cfg.Glossary.Enabled)
+	runtimeGlossary, err := r.buildRuntimeGlossary(ctx, exec.Project, engineCfg.Glossary.Enabled)
 	if err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
 	var qaEngine *qa.Engine
-	if cfg.QA.Enabled {
-		qaCfg := cfg.QA
+	if engineCfg.QA.Enabled {
+		qaCfg := engineCfg.QA
 		qaCfg.Glossary = runtimeGlossary
 		qaCfg.Format = res.Format
 		qaEngine = qa.NewEngine(qaCfg, r.logger)
 	}
-	memory, err := r.buildRuntimeTM(exec.Project, cfg.TMEnabled)
+	memory, err := r.buildRuntimeTM(exec.Project, engineCfg.TMEnabled)
 	if err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
 	}
 
+	factory := NewEngineFactory(r.logger, r.limiterPool)
 	resources := engine.RuntimeResources{Glossary: runtimeGlossary, TM: memory}
-	eng, err := r.buildEngineFromSnapshot(ctx, snapshot, resources, reporter)
+	eng, err := factory.BuildEngine(ctx, snapshot, resources, reporter)
 	if err != nil {
 		_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 		return nil
@@ -287,7 +288,7 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 
 		if len(selectedRows) == 0 {
 			// 本轮无段可处理（如 translate pending_only 已全部译完）；继续后续 extract/adjudicate 轮
-			if roundIdx == lastTranslateRoundIdx && duplicateSourceDivergenceEnabled(cfg.QA) {
+			if roundIdx == lastTranslateRoundIdx && duplicateSourceDivergenceEnabled(engineCfg.QA) {
 				if err := r.persistDuplicateSourceDivergence(ctx, res.ID); err != nil {
 					_ = r.jobs.MarkJobResourceFailed(ctx, job.ID, item.ID, err)
 					return nil
@@ -351,7 +352,7 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 					segIssues := qa.IssuesFor(ts.Index, allIssues)
 
 					segStatus := defaultStatus
-					if qa.HasErrors(segIssues) && cfg.QA.AutoReject {
+					if qa.HasErrors(segIssues) && engineCfg.QA.AutoReject {
 						segStatus = service.SegmentStatusRejected
 					}
 
@@ -469,7 +470,7 @@ func (r *JobRunner) processJobResource(ctx context.Context, exec *service.JobExe
 		result, roundErr := eng.ExecuteRound(ctx, roundIdx, doc, execOpts...)
 		if roundErr == nil {
 			lastResult = result
-			if roundIdx == lastTranslateRoundIdx && duplicateSourceDivergenceEnabled(cfg.QA) {
+			if roundIdx == lastTranslateRoundIdx && duplicateSourceDivergenceEnabled(engineCfg.QA) {
 				if err := r.persistDuplicateSourceDivergence(ctx, res.ID); err != nil {
 					roundErr = err
 				}

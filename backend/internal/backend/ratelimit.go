@@ -271,6 +271,8 @@ func (b *RateLimitedBackend) Translate(ctx context.Context, req Request) (*Respo
 	return b.inner.Translate(ctx, req)
 }
 
+func (b *RateLimitedBackend) Backend() Backend { return b.inner }
+
 func (b *RateLimitedBackend) Close() error {
 	return b.inner.Close()
 }

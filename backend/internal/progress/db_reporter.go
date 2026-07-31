@@ -293,6 +293,18 @@ func (r *DBReporter) OnBatchEvent(batchEvent BatchEvent) {
 	if batchEvent.HTTPStatus > 0 {
 		metadata["http_status"] = batchEvent.HTTPStatus
 	}
+	if batchEvent.RoundIndex > 0 {
+		metadata["round_index"] = batchEvent.RoundIndex
+	}
+	if batchEvent.Attempt > 0 {
+		metadata["attempt"] = batchEvent.Attempt
+	}
+	if batchEvent.ResponseFormat != "" {
+		metadata["response_format"] = batchEvent.ResponseFormat
+	}
+	if len(batchEvent.JSONSchema) > 0 {
+		metadata["json_schema"] = batchEvent.JSONSchema
+	}
 	r.broker.Publish(r.jobID, event.Event{
 		Type:      "batch",
 		JobID:     r.jobID,

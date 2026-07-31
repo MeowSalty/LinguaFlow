@@ -57,6 +57,15 @@ type BatchEvent struct {
 	HTTPStatus      int                     `json:"http_status,omitempty"`
 	TriedBackends   []string                `json:"tried_backends,omitempty"`
 	ShrinkAttempted bool                    `json:"shrink_attempted,omitempty"`
+
+	// Diagnostic fields for preview response.
+	RoundIndex      int            `json:"round_index,omitempty"`
+	Attempt         int            `json:"attempt,omitempty"`
+	SystemPrompt    string         `json:"system_prompt,omitempty"`
+	UserMessage     string         `json:"user_message,omitempty"`
+	ResponseFormat  string         `json:"response_format,omitempty"`
+	JSONSchema      map[string]any `json:"json_schema,omitempty"`
+	ResponseContent string         `json:"response_content,omitempty"`
 }
 
 // BatchObserver is an optional interface that a Reporter may implement

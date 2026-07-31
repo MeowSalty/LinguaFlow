@@ -17,7 +17,7 @@ func TestBuildEngineConfigExtractOnlyKeepsGlossaryEnabled(t *testing.T) {
 		},
 	}
 
-	cfg := buildEngineConfig(snapshot)
+	cfg := BuildEngineConfig(snapshot)
 	if !cfg.Glossary.Enabled {
 		t.Fatal("extract-only snapshot lost glossary enabled state")
 	}
@@ -36,7 +36,7 @@ func TestBuildEngineConfigTranslateKeepsGlossarySettings(t *testing.T) {
 		},
 	}
 
-	cfg := buildEngineConfig(snapshot)
+	cfg := BuildEngineConfig(snapshot)
 	if !cfg.Glossary.Enabled {
 		t.Fatal("translate snapshot lost glossary enabled state")
 	}

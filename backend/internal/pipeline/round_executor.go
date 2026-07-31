@@ -7,7 +7,6 @@ import (
 	"math"
 	"math/rand"
 	"sort"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -307,13 +306,13 @@ func uniqueInts(sorted []int) []int {
 	return sorted[:j+1]
 }
 
-// pendingSegmentIDStrings 将索引切片转为字符串切片。
-func pendingSegmentIDStrings(pendingIdxs []int) []string {
-	segIDs := make([]string, len(pendingIdxs))
-	for i, idx := range pendingIdxs {
-		segIDs[i] = strconv.Itoa(idx)
+// segmentIDStringsFromDoc 使用 doc 中稳定的 Segment.ID 标识段落。
+func segmentIDStringsFromDoc(doc *Document, idxs []int) []string {
+	out := make([]string, len(idxs))
+	for i, idx := range idxs {
+		out[i] = doc.Segments[idx].ID
 	}
-	return segIDs
+	return out
 }
 
 // httpStatusFromErr 从错误中提取 HTTP 状态码。
