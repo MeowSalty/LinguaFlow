@@ -14,6 +14,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/resource"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/segment"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
 
 type SegmentService struct {
@@ -176,8 +177,7 @@ func buildQualityPredicate(opts ResourceSegmentListOptions, dialectName string) 
 		}))
 	}
 
-	switch opts.QualityCode {
-	case "untranslated", "length_ratio", "duplicate", "source_residual", "calque", "term_fidelity", "naturalness":
+	if qa.IsFilterableIssueCode(opts.QualityCode) {
 		code := opts.QualityCode
 		preds = append(preds, predicate.Segment(func(s *sql.Selector) {
 			col := s.C(segment.FieldQualityIssues)

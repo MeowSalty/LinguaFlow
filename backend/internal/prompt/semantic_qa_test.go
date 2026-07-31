@@ -244,3 +244,112 @@ func TestParseSemanticQAByMode_NonTextUsesJSON(t *testing.T) {
 		t.Fatal("non-text mode should require JSON")
 	}
 }
+
+func TestSemanticQAIssueSchema_IncludesNewCodes(t *testing.T) {
+	s := SemanticQAIssueSchema()
+	props := s["properties"].(map[string]any)
+	arr := props["issues"].(map[string]any)
+	item := arr["items"].(map[string]any)
+	itemProps := item["properties"].(map[string]any)
+	code := itemProps["code"].(map[string]any)
+	enum, _ := code["enum"].([]string)
+	want := map[string]bool{
+		"calque": false, "term_fidelity": false, "naturalness": false,
+		"mistranslation": false, "omission": false, "addition": false,
+		"grammar": false, "register": false,
+	}
+	for _, c := range enum {
+		if _, ok := want[c]; ok {
+			want[c] = true
+		}
+	}
+	for c, found := range want {
+		if !found {
+			t.Errorf("schema enum missing %q: %#v", c, enum)
+		}
+	}
+}
+
+func TestParseSemanticQAResponse_NewCodes(t *testing.T) {
+	resp := `{"issues":[
+		{"id":"1","code":"mistranslation","message":"误译","snippet":"x"},
+		{"id":"2","code":"omission","message":"漏译","snippet":"y"},
+		{"id":"3","code":"addition","message":"添译","snippet":"z"},
+		{"id":"4","code":"grammar","message":"语法","snippet":"w"},
+		{"id":"5","code":"register","message":"语体","snippet":"v"}
+	]}`
+	got, err := ParseSemanticQAResponse(resp)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(got) != 5 {
+		t.Fatalf("got len=%d want 5: %#v", len(got), got)
+	}
+	want := []string{"mistranslation", "omission", "addition", "grammar", "register"}
+	for i, w := range want {
+		if got[i].Code != w {
+			t.Errorf("got[%d].Code=%q want %q", i, got[i].Code, w)
+		}
+	}
+}
+
+func TestParseSemanticQAResponse_NewCodesMixedWithRuleCodes(t *testing.T) {
+	resp := `{"issues":[
+		{"id":"1","code":"source_residual","message":"规则不报"},
+		{"id":"1","code":"length_ratio","message":"规则不报"},
+		{"id":"1","code":"mistranslation","message":"语义误译","snippet":"x"},
+		{"id":"2","code":"untranslated","message":"规则不报"}
+	]}`
+	got, err := ParseSemanticQAResponse(resp)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(got) != 1 || got[0].Code != "mistranslation" || got[0].Snippet != "x" {
+		t.Fatalf("want only mistranslation, got=%#v", got)
+	}
+}
+
+func TestParseSemanticQAByMode_TextNewCodes(t *testing.T) {
+	resp := "[issues]\n" +
+		"1 | mistranslation | 误译段 | 一般语义误译\n" +
+		"1 | omission | 漏译段 | 丢失分句\n" +
+		"2 | grammar | 语法段 | 主谓不一致\n" +
+		"3 | source_residual | 残留 | 规则不报"
+	got, err := ParseSemanticQAByMode(resp, true)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("got len=%d want 3: %#v", len(got), got)
+	}
+	want := []string{"mistranslation", "omission", "grammar"}
+	for i, w := range want {
+		if got[i].Code != w {
+			t.Errorf("got[%d].Code=%q want %q", i, got[i].Code, w)
+		}
+	}
+	if got[0].ID != "1" || got[0].Snippet != "误译段" || got[0].Message != "一般语义误译" {
+		t.Errorf("first=%#v", got[0])
+	}
+}
+
+func TestParseSemanticQAByMode_TextSameSegmentMultipleDefects(t *testing.T) {
+	resp := "[issues]\n" +
+		"1 | calque | 结构借译 | 逐结构借译\n" +
+		"1 | mistranslation | 主动误译 | 语义取错\n" +
+		"1 | grammar | 主谓不一致 | 语法错"
+	got, err := ParseSemanticQAByMode(resp, true)
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if len(got) != 3 {
+		t.Fatalf("same segment distinct defects should each report: got=%#v", got)
+	}
+	seen := map[string]string{}
+	for _, iss := range got {
+		seen[iss.Code] = iss.Snippet
+	}
+	if len(seen) != 3 {
+		t.Fatalf("expected 3 distinct codes: %#v", seen)
+	}
+}

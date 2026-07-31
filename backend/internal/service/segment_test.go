@@ -45,6 +45,11 @@ func TestBuildQualityPredicateNonNilForValidFilters(t *testing.T) {
 		{QualityCode: "calque"},
 		{QualityCode: "term_fidelity"},
 		{QualityCode: "naturalness"},
+		{QualityCode: "mistranslation"},
+		{QualityCode: "omission"},
+		{QualityCode: "addition"},
+		{QualityCode: "grammar"},
+		{QualityCode: "register"},
 		{QualitySeverity: "error", QualityCode: "duplicate"},
 	}
 	for _, opts := range cases {
@@ -170,6 +175,52 @@ func TestListResourceSegmentsQualityFilter(t *testing.T) {
 	})
 	t.Run("invalid_ignored", func(t *testing.T) {
 		assertIndexes(t, ResourceSegmentListOptions{QualityIssues: "maybe", Limit: 50}, []int{0, 1, 2, 3, 4, 5, 6, 7, 8})
+	})
+}
+
+func TestListResourceSegmentsQualityFilterNewSemanticCodes(t *testing.T) {
+	client := testClient(t)
+	ctx := context.Background()
+	user := createTestUser(t, client, "seg-qa-new-user")
+	project := createTestProject(t, client, "seg-qa-new-proj", user.ID)
+	res := createTestResource(t, client, project.ID, "chapters/new.txt")
+
+	codes := []string{"mistranslation", "omission", "addition", "grammar", "register"}
+	for i, code := range codes {
+		createTestSegment(t, client, res.ID, i, "src"+code, []qa.QualityIssue{
+			{SegmentIndex: i, Severity: qa.SeverityWarning, Code: code, Message: code},
+		})
+	}
+
+	svc := NewSegmentService(client, NewProjectService(client, nil), dialect.SQLite)
+
+	assertIndexes := func(t *testing.T, opts ResourceSegmentListOptions, want []int) {
+		t.Helper()
+		page, err := svc.ListResourceSegments(ctx, user.ID, project.ID, res.ID, opts)
+		if err != nil {
+			t.Fatalf("ListResourceSegments: %v", err)
+		}
+		got := make([]int, 0, len(page.Items))
+		for _, row := range page.Items {
+			got = append(got, row.SegmentIndex)
+		}
+		if len(got) != len(want) {
+			t.Fatalf("indexes=%v want %v", got, want)
+		}
+		for i := range want {
+			if got[i] != want[i] {
+				t.Fatalf("indexes=%v want %v", got, want)
+			}
+		}
+	}
+
+	for i, code := range codes {
+		t.Run("code_"+code, func(t *testing.T) {
+			assertIndexes(t, ResourceSegmentListOptions{QualityCode: code, Limit: 50}, []int{i})
+		})
+	}
+	t.Run("all_has", func(t *testing.T) {
+		assertIndexes(t, ResourceSegmentListOptions{QualityIssues: "has", Limit: 50}, []int{0, 1, 2, 3, 4})
 	})
 }
 

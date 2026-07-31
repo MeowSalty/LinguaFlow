@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strings"
 	"text/template"
+
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 )
 
 // SemanticQASegment 是语义质检输入中的单个段落。
@@ -115,12 +117,15 @@ type SemanticQAIssue struct {
 	Snippet string `json:"snippet,omitempty"`
 }
 
-// allowedSemanticQACodes 本次支持的语义 issue code。
-var allowedSemanticQACodes = map[string]struct{}{
-	"calque":        {},
-	"term_fidelity": {},
-	"naturalness":   {},
-}
+// allowedSemanticQACodes 本次支持的语义 issue code，派生自 qa.SemanticQACodes()。
+var allowedSemanticQACodes = func() map[string]struct{} {
+	codes := qa.SemanticQACodes()
+	set := make(map[string]struct{}, len(codes))
+	for _, c := range codes {
+		set[c] = struct{}{}
+	}
+	return set
+}()
 
 // IsSemanticQACode 报告 code 是否由语义质检轮次维护。
 func IsSemanticQACode(code string) bool {
@@ -136,7 +141,7 @@ func SemanticQAIssueSchema() map[string]any {
 		"id": map[string]any{"type": "string"},
 		"code": map[string]any{
 			"type": "string",
-			"enum": []string{"calque", "term_fidelity", "naturalness"},
+			"enum": qa.SemanticQACodes(),
 		},
 		"message": map[string]any{"type": "string"},
 		"snippet": map[string]any{"type": "string"},

@@ -133,6 +133,38 @@ func TestValidateExecutionRounds_SemanticQA(t *testing.T) {
 		}
 	})
 
+	t.Run("with_issue_codes and new semantic codes", func(t *testing.T) {
+		err := validateExecutionRounds([]schema.ExecutionRoundConfig{{
+			Mode:      "semantic_qa",
+			BackendID: 1,
+			SemanticQA: &schema.SemanticQARoundConfig{
+				BatchSize:    10,
+				Concurrency:  1,
+				SegmentScope: "with_issue_codes",
+				IssueCodes:   []string{"mistranslation", "omission", "addition", "grammar", "register"},
+			},
+		}})
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+	})
+
+	t.Run("with_issue_codes mixed rule and new codes", func(t *testing.T) {
+		err := validateExecutionRounds([]schema.ExecutionRoundConfig{{
+			Mode:      "semantic_qa",
+			BackendID: 1,
+			SemanticQA: &schema.SemanticQARoundConfig{
+				BatchSize:    10,
+				Concurrency:  1,
+				SegmentScope: "with_issue_codes",
+				IssueCodes:   []string{"untranslated", "mistranslation", "calque", "register"},
+			},
+		}})
+		if err != nil {
+			t.Fatalf("unexpected err: %v", err)
+		}
+	})
+
 	t.Run("with_issue_codes requires codes", func(t *testing.T) {
 		err := validateExecutionRounds([]schema.ExecutionRoundConfig{{
 			Mode:      "semantic_qa",

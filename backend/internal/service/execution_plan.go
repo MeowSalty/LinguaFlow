@@ -14,6 +14,7 @@ import (
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/predicate"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/schema"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/ent/user"
+	"github.com/MeowSalty/LinguaFlow/backend/internal/qa"
 	"github.com/MeowSalty/LinguaFlow/backend/internal/templates"
 )
 
@@ -370,12 +371,8 @@ func validateExecutionRounds(rounds []schema.ExecutionRoundConfig) error {
 			if scope == "with_issue_codes" && len(s.IssueCodes) == 0 {
 				return fmt.Errorf("%w: rounds[%d].semantic_qa.issue_codes must contain at least one code when segment_scope is 'with_issue_codes'", ErrExecutionPlanConfigInvalid, i)
 			}
-			allowedIssueCodes := map[string]struct{}{
-				"source_residual": {}, "length_ratio": {}, "untranslated": {}, "duplicate": {},
-				"calque": {}, "term_fidelity": {}, "naturalness": {},
-			}
 			for _, code := range s.IssueCodes {
-				if _, ok := allowedIssueCodes[code]; !ok {
+				if !qa.IsFilterableIssueCode(code) {
 					return fmt.Errorf("%w: rounds[%d].semantic_qa.issue_codes contains invalid code %q", ErrExecutionPlanConfigInvalid, i, code)
 				}
 			}
