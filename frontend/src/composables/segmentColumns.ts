@@ -118,7 +118,6 @@ export function useSegmentColumns(
           h(SegmentTextDisplay, {
             text: row.source_text,
             mode: config.value.textRenderMode,
-            maxLines: isEditing ? 6 : 4,
           }),
         )
 
@@ -202,7 +201,6 @@ export function useSegmentColumns(
                 issues: row.quality_issues,
                 mode: config.value.textRenderMode,
                 activeIssueIndex,
-                maxLines: 4,
               }),
             )
           }
